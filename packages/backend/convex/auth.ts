@@ -17,13 +17,23 @@ export const authComponent = createClient<DataModel, typeof schema>(
 );
 
 export const createAuthOptions = (ctx: GenericCtx<DataModel>) => {
+  const siteUrl = process.env.SITE_URL ?? "http://localhost:3000";
+
   return {
     appName: "Arbor Live Portal",
-    baseURL: process.env.SITE_URL,
+    baseURL: siteUrl,
+    trustedOrigins: [siteUrl, "http://localhost:3000", "http://127.0.0.1:3000"],
     secret: process.env.BETTER_AUTH_SECRET,
     database: authComponent.adapter(ctx),
     emailAndPassword: {
       enabled: true,
+      disableSignUp: true,
+      async sendResetPassword({ url, user }) {
+        // Dev-friendly placeholder: wire this to your email provider next.
+        console.log(
+          `[better-auth] Reset password link for ${user.email}: ${url}`,
+        );
+      },
     },
     plugins: [convex({ authConfig }), admin(), organization()],
   } satisfies BetterAuthOptions;
