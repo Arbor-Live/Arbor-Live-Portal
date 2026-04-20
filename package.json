@@ -1,0 +1,15 @@
+{
+  "name": "arbor-live-portal",
+  "private": true,
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "dev:web": "pnpm --filter web dev",
+    "dev:backend": "pnpm --filter backend dev",
+    "codegen:backend": "pnpm --filter backend codegen",
+    "auth:generate": "pnpm --filter backend auth:generate",
+    "dev": "pnpm -r --parallel --stream dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck"
+  }
+}

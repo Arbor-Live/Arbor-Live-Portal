@@ -1,0 +1,35 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# env files
+.env
+.env.local
+.env.*.local
+apps/*/.env
+apps/*/.env.local
+packages/*/.env
+packages/*/.env.local
+
+# next.js
+.next/
+out/
+
+# convex
+packages/backend/.convex/
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# system/editor
+.DS_Store
+.idea/
+.vscode/
+
+# build artifacts
+dist/
+coverage/
