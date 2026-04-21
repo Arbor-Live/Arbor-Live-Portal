@@ -17,6 +17,8 @@ import type * as inventoryCategories from "../inventoryCategories.js";
 import type * as inventoryItems from "../inventoryItems.js";
 import type * as inventoryPackages from "../inventoryPackages.js";
 import type * as inventoryTypes from "../inventoryTypes.js";
+import type * as lostFoundSettings from "../lostFoundSettings.js";
+import type * as publicInventory from "../publicInventory.js";
 import type * as storageLocations from "../storageLocations.js";
 
 import type {
@@ -35,6 +37,8 @@ declare const fullApi: ApiFromModules<{
   inventoryItems: typeof inventoryItems;
   inventoryPackages: typeof inventoryPackages;
   inventoryTypes: typeof inventoryTypes;
+  lostFoundSettings: typeof lostFoundSettings;
+  publicInventory: typeof publicInventory;
   storageLocations: typeof storageLocations;
 }>;
 

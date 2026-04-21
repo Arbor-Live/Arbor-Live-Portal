@@ -1,6 +1,29 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { mutation, query, type MutationCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
+
+async function cascadeLocationToDescendants(
+  ctx: MutationCtx,
+  rootItemId: Id<"inventoryItems">,
+  storageLocationId: Id<"storageLocations"> | undefined,
+) {
+  const queue: Id<"inventoryItems">[] = [rootItemId];
+  while (queue.length > 0) {
+    const currentId = queue.shift()!;
+    const children = await ctx.db
+      .query("inventoryItems")
+      .withIndex("by_containedInAssetId", (q) => q.eq("containedInAssetId", currentId))
+      .collect();
+
+    for (const child of children) {
+      await ctx.db.patch(child._id, {
+        storageLocationId,
+        updatedAt: Date.now(),
+      });
+      queue.push(child._id);
+    }
+  }
+}
 
 export const list = query({
   args: {
@@ -74,17 +97,20 @@ export const create = mutation({
       const location = await ctx.db.get(args.storageLocationId);
       if (!location) throw new Error("Storage location not found.");
     }
+    let inheritedContainerLocationId: Id<"storageLocations"> | undefined;
     if (args.containedInAssetId) {
       const container = await ctx.db.get(args.containedInAssetId);
       if (!container) throw new Error("Container asset not found.");
+      inheritedContainerLocationId = container.storageLocationId;
     }
+    const effectiveStorageLocationId = inheritedContainerLocationId ?? args.storageLocationId;
 
     const now = Date.now();
     return await ctx.db.insert("inventoryItems", {
       assetId: args.assetId.trim(),
       serialNumber: args.serialNumber?.trim(),
       typeId: args.typeId,
-      storageLocationId: args.storageLocationId,
+      storageLocationId: effectiveStorageLocationId,
       containedInAssetId: args.containedInAssetId,
       status: args.status?.trim(),
       notes: args.notes?.trim(),
@@ -127,9 +153,11 @@ export const update = mutation({
     if (args.containedInAssetId === args.id) {
       throw new Error("Asset cannot contain itself.");
     }
+    let inheritedContainerLocationId: Id<"storageLocations"> | undefined;
     if (args.containedInAssetId) {
       const container = await ctx.db.get(args.containedInAssetId);
       if (!container) throw new Error("Container asset not found.");
+      inheritedContainerLocationId = container.storageLocationId;
       let pointer: Id<"inventoryItems"> | undefined = args.containedInAssetId;
       while (pointer) {
         if (pointer === args.id) {
@@ -139,17 +167,20 @@ export const update = mutation({
         pointer = next?.containedInAssetId;
       }
     }
+    const effectiveStorageLocationId = inheritedContainerLocationId ?? args.storageLocationId;
 
     await ctx.db.patch(args.id, {
       assetId: args.assetId.trim(),
       serialNumber: args.serialNumber?.trim(),
       typeId: args.typeId,
-      storageLocationId: args.storageLocationId,
+      storageLocationId: effectiveStorageLocationId,
       containedInAssetId: args.containedInAssetId,
       status: args.status?.trim(),
       notes: args.notes?.trim(),
       updatedAt: Date.now(),
     });
+
+    await cascadeLocationToDescendants(ctx, args.id, effectiveStorageLocationId);
   },
 });
 
@@ -178,9 +209,11 @@ export const setContainer = mutation({
     if (args.containedInAssetId === args.id) {
       throw new Error("Asset cannot contain itself.");
     }
+    let inheritedContainerLocationId: Id<"storageLocations"> | undefined;
     if (args.containedInAssetId) {
       const container = await ctx.db.get(args.containedInAssetId);
       if (!container) throw new Error("Container asset not found.");
+      inheritedContainerLocationId = container.storageLocationId;
       let pointer: Id<"inventoryItems"> | undefined = args.containedInAssetId;
       while (pointer) {
         if (pointer === args.id) {
@@ -192,7 +225,14 @@ export const setContainer = mutation({
     }
     await ctx.db.patch(args.id, {
       containedInAssetId: args.containedInAssetId,
+      storageLocationId: inheritedContainerLocationId ?? existing.storageLocationId,
       updatedAt: Date.now(),
     });
+
+    await cascadeLocationToDescendants(
+      ctx,
+      args.id,
+      inheritedContainerLocationId ?? existing.storageLocationId,
+    );
   },
 });

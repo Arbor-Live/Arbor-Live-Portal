@@ -7,6 +7,38 @@ const packageItemInput = v.object({
   quantity: v.number(),
 });
 
+const publicBucketValue = v.union(
+  v.literal("lighting"),
+  v.literal("sound"),
+  v.literal("environmental"),
+  v.literal("staging"),
+  v.literal("misc"),
+);
+
+function normalizePublicSlug(raw: string | undefined) {
+  const slug = raw?.trim().toLowerCase();
+  if (!slug) return undefined;
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
+    throw new Error("Public slug must be lowercase letters/numbers with single dashes.");
+  }
+  return slug;
+}
+
+async function assertUniquePackagePublicSlug(
+  ctx: MutationCtx,
+  slug: string | undefined,
+  excludeId?: string,
+) {
+  if (!slug) return;
+  const match = await ctx.db
+    .query("inventoryPackages")
+    .withIndex("by_publicSlug", (q) => q.eq("publicSlug", slug))
+    .unique();
+  if (match && (!excludeId || match._id !== excludeId)) {
+    throw new Error("Public slug is already in use by another package.");
+  }
+}
+
 export const list = query({
   args: {},
   handler: async (ctx) => {
@@ -34,11 +66,17 @@ export const list = query({
             if (!normalRate) return acc;
             return acc + row.quantity * normalRate;
           }, 0);
+          const estimatedSubsidizedRentalValueUsd = hydratedRows.reduce((acc, row) => {
+            const subsidizedRate = row.type?.subsidizedRentalPriceUsd;
+            if (!subsidizedRate) return acc;
+            return acc + row.quantity * subsidizedRate;
+          }, 0);
 
           return {
             ...pkg,
             items: hydratedRows,
             estimatedRentalValueUsd,
+            estimatedSubsidizedRentalValueUsd,
           };
         }),
     );
@@ -64,18 +102,49 @@ export const create = mutation({
     name: v.string(),
     description: v.optional(v.string()),
     packagePriceCents: v.number(),
+    subsidizedPackagePriceUsd: v.optional(v.number()),
+    nonSubsidizedPackagePriceUsd: v.optional(v.number()),
     active: v.optional(v.boolean()),
+    publicListing: v.optional(v.boolean()),
+    publicBucket: v.optional(publicBucketValue),
+    publicHeroImageUrl: v.optional(v.string()),
+    publicSlug: v.optional(v.string()),
     items: v.array(packageItemInput),
   },
   handler: async (ctx, args) => {
     await validatePackageItems(ctx, args.items);
     const now = Date.now();
+    const publicListing = args.publicListing ?? false;
+    const publicSlug = normalizePublicSlug(args.publicSlug);
+    if (publicSlug) {
+      await assertUniquePackagePublicSlug(ctx, publicSlug);
+    }
+    if (publicListing && publicSlug) {
+      const typeSlug = await ctx.db
+        .query("inventoryTypes")
+        .withIndex("by_publicSlug", (q) => q.eq("publicSlug", publicSlug))
+        .unique();
+      if (typeSlug) {
+        throw new Error("Public slug is already in use by an inventory type.");
+      }
+    }
+    if (publicListing) {
+      if (!args.publicBucket) {
+        throw new Error("Choose a public browse section for this package.");
+      }
+    }
 
     const packageId = await ctx.db.insert("inventoryPackages", {
       name: args.name.trim(),
       description: args.description?.trim(),
       packagePriceCents: args.packagePriceCents,
+      subsidizedPackagePriceUsd: args.subsidizedPackagePriceUsd,
+      nonSubsidizedPackagePriceUsd: args.nonSubsidizedPackagePriceUsd,
       active: args.active ?? true,
+      publicListing,
+      publicBucket: publicListing ? args.publicBucket : undefined,
+      publicHeroImageUrl: args.publicHeroImageUrl?.trim(),
+      publicSlug,
       createdAt: now,
       updatedAt: now,
     });
@@ -100,7 +169,13 @@ export const update = mutation({
     name: v.string(),
     description: v.optional(v.string()),
     packagePriceCents: v.number(),
+    subsidizedPackagePriceUsd: v.optional(v.number()),
+    nonSubsidizedPackagePriceUsd: v.optional(v.number()),
     active: v.boolean(),
+    publicListing: v.optional(v.boolean()),
+    publicBucket: v.optional(publicBucketValue),
+    publicHeroImageUrl: v.optional(v.string()),
+    publicSlug: v.optional(v.string()),
     items: v.array(packageItemInput),
   },
   handler: async (ctx, args) => {
@@ -109,11 +184,39 @@ export const update = mutation({
     await validatePackageItems(ctx, args.items);
 
     const now = Date.now();
+    const publicListing = args.publicListing ?? existing.publicListing ?? false;
+    const publicSlug =
+      args.publicSlug === undefined ? existing.publicSlug : normalizePublicSlug(args.publicSlug);
+    if (publicSlug) {
+      await assertUniquePackagePublicSlug(ctx, publicSlug, args.id);
+    }
+    if (publicListing && publicSlug) {
+      const typeSlug = await ctx.db
+        .query("inventoryTypes")
+        .withIndex("by_publicSlug", (q) => q.eq("publicSlug", publicSlug))
+        .unique();
+      if (typeSlug) {
+        throw new Error("Public slug is already in use by an inventory type.");
+      }
+    }
+    if (publicListing) {
+      const nextBucket = args.publicBucket ?? existing.publicBucket;
+      if (!nextBucket) {
+        throw new Error("Choose a public browse section for this package.");
+      }
+    }
+
     await ctx.db.patch(args.id, {
       name: args.name.trim(),
       description: args.description?.trim(),
       packagePriceCents: args.packagePriceCents,
+      subsidizedPackagePriceUsd: args.subsidizedPackagePriceUsd,
+      nonSubsidizedPackagePriceUsd: args.nonSubsidizedPackagePriceUsd,
       active: args.active,
+      publicListing,
+      publicBucket: publicListing ? (args.publicBucket ?? existing.publicBucket) : undefined,
+      publicHeroImageUrl: args.publicHeroImageUrl?.trim(),
+      publicSlug,
       updatedAt: now,
     });
 
