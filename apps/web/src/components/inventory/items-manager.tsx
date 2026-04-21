@@ -1,0 +1,419 @@
+"use client";
+
+import { useMemo, useRef, useState } from "react";
+import { useMutation, useQuery } from "convex/react";
+import { api } from "@/lib/convex-api";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { toCategoryOptions } from "./constants";
+import { SearchableSelect } from "./searchable-select";
+
+const defaultForm = {
+  assetId: "",
+  serialNumber: "",
+  typeId: "",
+  storageLocationId: "",
+  containedInAssetId: "",
+  status: "",
+  notes: "",
+};
+
+function formatTypeDisplay(type: { manufacturer?: string; name: string; model: string } | null | undefined) {
+  if (!type) return "Unknown type";
+  const maker = type.manufacturer?.trim();
+  const sameNameModel = type.name.trim().toLowerCase() === type.model.trim().toLowerCase();
+  const core = sameNameModel ? type.name : `${type.name} / ${type.model}`;
+  return maker ? `${maker} ${core}` : core;
+}
+
+export function ItemsManager() {
+  const siteBase = (process.env.NEXT_PUBLIC_SITE_URL ?? "").replace(/\/$/, "");
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("");
+  const [sortBy, setSortBy] = useState<"assetId" | "category" | "location">("assetId");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState(defaultForm);
+  const rowRefs = useRef(new Map<string, HTMLTableRowElement>());
+
+  const categories = useQuery(api.inventoryCategories.list, { activeOnly: true });
+  const items = useQuery(api.inventoryItems.list, {
+    search: search || undefined,
+    category: category || undefined,
+  });
+  const types = useQuery(api.inventoryTypes.list, {});
+  const locations = useQuery(api.storageLocations.list, {});
+  const createItem = useMutation(api.inventoryItems.create);
+  const updateItem = useMutation(api.inventoryItems.update);
+  const removeItem = useMutation(api.inventoryItems.remove);
+  const sortedItems = useMemo(() => {
+    const rows = [...(items ?? [])];
+    rows.sort((a, b) => {
+      const direction = sortDir === "asc" ? 1 : -1;
+      if (sortBy === "category") {
+        return (a.type?.category ?? "").localeCompare(b.type?.category ?? "") * direction;
+      }
+      if (sortBy === "location") {
+        return (a.location?.path ?? "").localeCompare(b.location?.path ?? "") * direction;
+      }
+      return a.assetId.localeCompare(b.assetId) * direction;
+    });
+    return rows;
+  }, [items, sortBy, sortDir]);
+  const itemLookup = useMemo(() => {
+    const map = new Map<
+      string,
+      { assetId: string; name: string; category: string }
+    >();
+    for (const item of sortedItems) {
+      map.set(item._id, {
+        assetId: item.assetId,
+        name: `${item.type?.name ?? "Unknown"} ${item.type?.model ?? ""}`.trim(),
+        category: item.type?.category ?? "unknown",
+      });
+    }
+    return map;
+  }, [sortedItems]);
+
+  async function submit() {
+    const payload = {
+      assetId: form.assetId,
+      serialNumber: form.serialNumber || undefined,
+      typeId: form.typeId as never,
+      storageLocationId: form.storageLocationId ? (form.storageLocationId as never) : undefined,
+      containedInAssetId: form.containedInAssetId ? (form.containedInAssetId as never) : undefined,
+      status: form.status || undefined,
+      notes: form.notes || undefined,
+    };
+    if (editingId) {
+      await updateItem({ id: editingId as never, ...payload });
+    } else {
+      await createItem(payload);
+    }
+    setEditingId(null);
+    setForm(defaultForm);
+  }
+
+  async function bulkDeleteSelected() {
+    await Promise.all(selectedIds.map((id) => removeItem({ id: id as never })));
+    setSelectedIds([]);
+  }
+
+  function scrollToItemRow(itemId: string) {
+    const row = rowRefs.current.get(itemId);
+    if (!row) return;
+    row.scrollIntoView({ behavior: "smooth", block: "center" });
+    row.classList.add("bg-muted/70");
+    window.setTimeout(() => row.classList.remove("bg-muted/70"), 1200);
+  }
+
+  function renderItemChip(itemId: string, fallbackAssetId?: string) {
+    const details = itemLookup.get(itemId);
+    const assetLabel = details?.assetId ?? fallbackAssetId ?? "Unknown";
+    return (
+      <button
+        type="button"
+        className="group relative rounded border px-1.5 py-0.5 text-xs hover:bg-muted"
+        onClick={() => scrollToItemRow(itemId)}
+      >
+        {assetLabel}
+        <div className="pointer-events-none absolute bottom-full left-0 z-20 mb-1 hidden w-56 rounded-md border bg-popover p-2 text-left text-xs text-popover-foreground shadow-md group-hover:block">
+          <p className="font-medium">{assetLabel}</p>
+          <p className="text-muted-foreground">{details?.name ?? "Item details unavailable"}</p>
+          <p className="text-muted-foreground capitalize">{details?.category ?? "unknown"}</p>
+        </div>
+      </button>
+    );
+  }
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-3">
+      <Card className="lg:col-span-2">
+        <CardHeader>
+          <CardTitle>Inventory Items</CardTitle>
+          <div className="flex flex-wrap gap-2">
+            <Input
+              placeholder="Search by asset ID, serial, model"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+            <select
+              className="h-9 rounded-md border bg-background px-3 text-sm"
+              value={category}
+              onChange={(event) => setCategory(event.target.value)}
+            >
+              <option value="">All Categories</option>
+              {toCategoryOptions(categories).map((entry) => (
+                <option key={entry.value} value={entry.value}>
+                  {entry.label}
+                </option>
+              ))}
+            </select>
+            <select
+              className="h-9 rounded-md border bg-background px-3 text-sm"
+              value={sortBy}
+              onChange={(event) => setSortBy(event.target.value as typeof sortBy)}
+            >
+              <option value="assetId">Sort: Asset ID</option>
+              <option value="category">Sort: Category</option>
+              <option value="location">Sort: Location</option>
+            </select>
+            <select
+              className="h-9 rounded-md border bg-background px-3 text-sm"
+              value={sortDir}
+              onChange={(event) => setSortDir(event.target.value as typeof sortDir)}
+            >
+              <option value="asc">Asc</option>
+              <option value="desc">Desc</option>
+            </select>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={!selectedIds.length}
+              onClick={() => void bulkDeleteSelected()}
+            >
+              Delete Selected ({selectedIds.length})
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="overflow-auto rounded-md border">
+            <table className="min-w-full text-sm">
+              <thead className="bg-muted/50">
+                <tr>
+                  <th className="p-2 text-left">
+                    <input
+                      type="checkbox"
+                      checked={sortedItems.length > 0 && selectedIds.length === sortedItems.length}
+                      onChange={(event) =>
+                        setSelectedIds(event.target.checked ? sortedItems.map((item) => item._id) : [])
+                      }
+                    />
+                  </th>
+                  <th className="p-2 text-left">Asset</th>
+                  <th className="p-2 text-left">Type</th>
+                  <th className="p-2 text-left">Location</th>
+                  <th className="p-2 text-left">Container</th>
+                  <th className="p-2 text-left">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortedItems.map((item) => (
+                  <tr
+                    key={item._id}
+                    className="border-t align-top transition-colors"
+                    ref={(element) => {
+                      if (!element) {
+                        rowRefs.current.delete(item._id);
+                        return;
+                      }
+                      rowRefs.current.set(item._id, element);
+                    }}
+                  >
+                    <td className="p-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(item._id)}
+                        onChange={(event) =>
+                          setSelectedIds((prev) =>
+                            event.target.checked
+                              ? [...prev, item._id]
+                              : prev.filter((id) => id !== item._id),
+                          )
+                        }
+                      />
+                    </td>
+                    <td className="p-2">
+                      <div className="font-medium">{item.assetId}</div>
+                      <div className="text-xs text-muted-foreground">Serial: {item.serialNumber || "-"}</div>
+                      <div className="mt-1 text-xs">
+                        <a
+                          className="underline"
+                          href={`${siteBase}/e/${encodeURIComponent(item.assetId)}`}
+                          target="_blank"
+                        >
+                          Public /e link
+                        </a>
+                      </div>
+                    </td>
+                    <td className="p-2">
+                      {formatTypeDisplay(item.type)}
+                      <div className="text-xs text-muted-foreground">{item.type?.category}</div>
+                    </td>
+                    <td className="p-2">{item.location?.path || "-"}</td>
+                    <td className="p-2">
+                      <div>
+                        In:{" "}
+                        {item.containedInAsset
+                          ? renderItemChip(item.containedInAsset._id, item.containedInAsset.assetId)
+                          : "-"}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        Contains: {item.containedAssets?.length ?? 0}
+                      </div>
+                      {item.containedAssets?.length ? (
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {item.containedAssets.map((child) => (
+                            <span key={child._id}>
+                              {renderItemChip(child._id, child.assetId)}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                    </td>
+                    <td className="p-2">
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setEditingId(item._id);
+                            setForm({
+                              assetId: item.assetId,
+                              serialNumber: item.serialNumber ?? "",
+                              typeId: item.typeId,
+                              storageLocationId: item.storageLocationId ?? "",
+                              containedInAssetId: item.containedInAssetId ?? "",
+                              status: item.status ?? "",
+                              notes: item.notes ?? "",
+                            });
+                          }}
+                        >
+                          Edit
+                        </Button>
+                        <Button size="sm" variant="destructive" onClick={() => void removeItem({ id: item._id })}>
+                          Delete
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{editingId ? "Edit Item" : "Create Item"}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="space-y-2">
+            <Label>Asset ID</Label>
+            <Input
+              value={form.assetId}
+              onChange={(event) => setForm((prev) => ({ ...prev, assetId: event.target.value }))}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Serial Number</Label>
+            <Input
+              value={form.serialNumber}
+              onChange={(event) =>
+                setForm((prev) => ({ ...prev, serialNumber: event.target.value }))
+              }
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Type</Label>
+            <SearchableSelect
+              value={form.typeId}
+              onChange={(nextValue) => setForm((prev) => ({ ...prev, typeId: nextValue }))}
+              options={(types ?? []).map((type) => ({
+                value: type._id,
+                label: `${type.name} - ${type.model}`,
+              }))}
+              placeholder="Search types..."
+              emptyLabel="Select type"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Storage Location</Label>
+            <SearchableSelect
+              value={form.storageLocationId}
+              onChange={(nextValue) =>
+                setForm((prev) => ({ ...prev, storageLocationId: nextValue }))
+              }
+              options={[
+                { value: "", label: "Unassigned" },
+                ...(locations ?? []).map((location) => ({
+                  value: location._id,
+                  label: location.path,
+                })),
+              ]}
+              placeholder="Search storage locations..."
+              emptyLabel="Unassigned"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Contained In Asset</Label>
+            <SearchableSelect
+              value={form.containedInAssetId}
+              onChange={(nextValue) =>
+                setForm((prev) => ({ ...prev, containedInAssetId: nextValue }))
+              }
+              options={[
+                { value: "", label: "Not contained" },
+                ...(items ?? [])
+                  .filter((item) => item._id !== editingId)
+                  .map((item) => ({
+                    value: item._id,
+                    label: `${item.assetId} - ${formatTypeDisplay(item.type)}`,
+                  })),
+              ]}
+              placeholder="Search container assets..."
+              emptyLabel="Not contained"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Status</Label>
+            <Input
+              value={form.status}
+              onChange={(event) => setForm((prev) => ({ ...prev, status: event.target.value }))}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Notes</Label>
+            <textarea
+              className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm"
+              value={form.notes}
+              onChange={(event) => setForm((prev) => ({ ...prev, notes: event.target.value }))}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Public finder URL:{" "}
+            <span className="font-mono">
+              {siteBase || "(set NEXT_PUBLIC_SITE_URL)"}/e/{form.assetId || "ASSETID"}
+            </span>
+            . Global return instructions are configured under{" "}
+            <a className="underline" href="/dashboard/inventory/lost-found">
+              Inventory → Lost &amp; Found
+            </a>
+            .
+          </p>
+          <div className="flex gap-2">
+            <Button type="button" onClick={() => void submit()}>
+              {editingId ? "Update" : "Create"}
+            </Button>
+            {editingId ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setEditingId(null);
+                  setForm(defaultForm);
+                }}
+              >
+                Cancel
+              </Button>
+            ) : null}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
