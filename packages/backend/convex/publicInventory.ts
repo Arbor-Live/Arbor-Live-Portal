@@ -50,6 +50,8 @@ function sanitizeTypeForPublic(type: Doc<"inventoryTypes">, includeProfile: bool
   const shared = {
     _id: type._id,
     name: type.name,
+    model: type.model,
+    manufacturer: type.manufacturer,
     category: type.category,
     description,
     capabilities: type.capabilities,
@@ -64,8 +66,6 @@ function sanitizeTypeForPublic(type: Doc<"inventoryTypes">, includeProfile: bool
 
   return {
     ...shared,
-    model: type.model,
-    manufacturer: type.manufacturer,
     manualUrls: type.manualUrls,
     tips: type.tips,
     iconImageUrl: type.iconImageUrl,

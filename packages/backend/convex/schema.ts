@@ -28,6 +28,32 @@ const categoryMetadataValue = v.object({
   ),
 });
 
+const invoiceGroupTypeValue = v.union(
+  v.literal("vso"),
+  v.literal("house"),
+  v.literal("department"),
+  v.literal("individual"),
+);
+
+const invoiceStatusValue = v.union(
+  v.literal("draft"),
+  v.literal("finalized"),
+  v.literal("void"),
+);
+
+const equipmentPricingModeValue = v.union(v.literal("subsidized"), v.literal("nonSubsidized"));
+const crewRateModeValue = v.union(v.literal("normal"), v.literal("ot"));
+const discountTypeValue = v.union(v.literal("amount"), v.literal("percent"));
+
+const invoiceLineSectionValue = v.union(
+  v.literal("equipment_package"),
+  v.literal("equipment_type"),
+  v.literal("external_rental"),
+  v.literal("artist"),
+  v.literal("crew"),
+  v.literal("fee"),
+);
+
 export default defineSchema({
   inventoryCategories: defineTable({
     key: v.string(),
@@ -147,4 +173,133 @@ export default defineSchema({
     .index("by_packageId", ["packageId"])
     .index("by_typeId", ["typeId"])
     .index("by_package_and_type", ["packageId", "typeId"]),
+
+  invoiceGroups: defineTable({
+    name: v.string(),
+    type: invoiceGroupTypeValue,
+    active: v.boolean(),
+    lastUsedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_name", ["name"])
+    .index("by_active", ["active"])
+    .index("by_lastUsedAt", ["lastUsedAt"])
+    .index("by_type_and_name", ["type", "name"]),
+
+  invoiceContacts: defineTable({
+    groupId: v.optional(v.id("invoiceGroups")),
+    name: v.string(),
+    email: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    active: v.boolean(),
+    lastUsedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_name", ["name"])
+    .index("by_groupId", ["groupId"])
+    .index("by_active", ["active"])
+    .index("by_lastUsedAt", ["lastUsedAt"])
+    .index("by_groupId_and_name", ["groupId", "name"]),
+
+  invoiceSettings: defineTable({
+    key: v.string(),
+    crewNormalRateUsd: v.optional(v.number()),
+    crewOtRateUsd: v.optional(v.number()),
+    updatedAt: v.number(),
+  }).index("by_key", ["key"]),
+
+  invoiceFeeDefinitions: defineTable({
+    key: v.string(),
+    label: v.string(),
+    description: v.optional(v.string()),
+    defaultAmountUsd: v.optional(v.number()),
+    active: v.boolean(),
+    sortOrder: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_key", ["key"])
+    .index("by_active", ["active"])
+    .index("by_sortOrder", ["sortOrder"]),
+
+  invoices: defineTable({
+    invoiceNumber: v.string(),
+    status: invoiceStatusValue,
+    issueDate: v.string(),
+    dueDate: v.optional(v.string()),
+    managerUserId: v.string(),
+    managerName: v.string(),
+    managerEmail: v.optional(v.string()),
+
+    groupId: v.optional(v.id("invoiceGroups")),
+    contactId: v.optional(v.id("invoiceContacts")),
+    clientGroupName: v.optional(v.string()),
+    clientGroupType: v.optional(invoiceGroupTypeValue),
+    clientContactName: v.optional(v.string()),
+    clientEmail: v.optional(v.string()),
+    clientPhone: v.optional(v.string()),
+    clientAddressLine1: v.optional(v.string()),
+    clientAddressLine2: v.optional(v.string()),
+    clientCity: v.optional(v.string()),
+    clientState: v.optional(v.string()),
+    clientPostalCode: v.optional(v.string()),
+
+    equipmentPricingMode: equipmentPricingModeValue,
+    crewRateMode: crewRateModeValue,
+    discountType: discountTypeValue,
+    discountValue: v.number(),
+    discountAmountUsd: v.number(),
+    discountWarning: v.optional(v.string()),
+
+    equipmentSubtotalUsd: v.number(),
+    externalRentalsSubtotalUsd: v.number(),
+    artistsSubtotalUsd: v.number(),
+    crewSubtotalUsd: v.number(),
+    feesSubtotalUsd: v.number(),
+    subtotalUsd: v.number(),
+    totalUsd: v.number(),
+
+    notes: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_invoiceNumber", ["invoiceNumber"])
+    .index("by_status", ["status"])
+    .index("by_managerUserId", ["managerUserId"])
+    .index("by_issueDate", ["issueDate"])
+    .index("by_createdAt", ["createdAt"]),
+
+  invoiceLineItems: defineTable({
+    invoiceId: v.id("invoices"),
+    section: invoiceLineSectionValue,
+    order: v.number(),
+    provider: v.optional(v.string()),
+    label: v.string(),
+    notes: v.optional(v.string()),
+    quantity: v.number(),
+    rateUsd: v.number(),
+    amountUsd: v.number(),
+    packageId: v.optional(v.id("inventoryPackages")),
+    typeId: v.optional(v.id("inventoryTypes")),
+    feeDefinitionId: v.optional(v.id("invoiceFeeDefinitions")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_invoiceId", ["invoiceId"])
+    .index("by_invoiceId_and_order", ["invoiceId", "order"])
+    .index("by_invoiceId_and_section", ["invoiceId", "section"]),
+
+  invoiceExports: defineTable({
+    invoiceId: v.id("invoices"),
+    format: v.union(v.literal("pdf")),
+    generatedByUserId: v.string(),
+    generatedByName: v.optional(v.string()),
+    fileName: v.string(),
+    downloadUrl: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_invoiceId", ["invoiceId"])
+    .index("by_invoiceId_and_createdAt", ["invoiceId", "createdAt"]),
 });

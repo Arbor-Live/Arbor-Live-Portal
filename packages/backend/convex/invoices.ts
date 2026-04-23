@@ -1,0 +1,453 @@
+import { v } from "convex/values";
+import type { Doc, Id } from "./_generated/dataModel";
+import { components } from "./_generated/api";
+import { mutation, query, type MutationCtx } from "./_generated/server";
+
+const equipmentPricingModeValue = v.union(v.literal("subsidized"), v.literal("nonSubsidized"));
+const crewRateModeValue = v.union(v.literal("normal"), v.literal("ot"));
+const discountTypeValue = v.union(v.literal("amount"), v.literal("percent"));
+
+const groupTypeValue = v.union(
+  v.literal("vso"),
+  v.literal("house"),
+  v.literal("department"),
+  v.literal("individual"),
+);
+
+const lineSectionValue = v.union(
+  v.literal("equipment_package"),
+  v.literal("equipment_type"),
+  v.literal("external_rental"),
+  v.literal("artist"),
+  v.literal("crew"),
+  v.literal("fee"),
+);
+
+const lineItemInput = v.object({
+  section: lineSectionValue,
+  order: v.number(),
+  provider: v.optional(v.string()),
+  label: v.string(),
+  notes: v.optional(v.string()),
+  quantity: v.number(),
+  rateUsd: v.number(),
+  packageId: v.optional(v.id("inventoryPackages")),
+  typeId: v.optional(v.id("inventoryTypes")),
+  feeDefinitionId: v.optional(v.id("invoiceFeeDefinitions")),
+});
+
+type LineInput = {
+  section: Doc<"invoiceLineItems">["section"];
+  order: number;
+  provider?: string;
+  label: string;
+  notes?: string;
+  quantity: number;
+  rateUsd: number;
+  packageId?: Id<"inventoryPackages">;
+  typeId?: Id<"inventoryTypes">;
+  feeDefinitionId?: Id<"invoiceFeeDefinitions">;
+};
+
+function trimOptional(raw: string | undefined) {
+  const out = raw?.trim();
+  return out ? out : undefined;
+}
+
+function invoiceNumber() {
+  const stamp = Date.now().toString().slice(-8);
+  return `INV-${stamp}`;
+}
+
+async function computeLineAmount(
+  ctx: MutationCtx,
+  line: LineInput,
+  equipmentPricingMode: "subsidized" | "nonSubsidized",
+  crewRateMode: "normal" | "ot",
+  crewRates: { normal: number; ot: number },
+) {
+  if (line.quantity < 0) throw new Error("Line quantity cannot be negative.");
+  let rate = line.rateUsd;
+
+  if (line.section === "equipment_package" && line.packageId) {
+    const pkg = await ctx.db.get(line.packageId);
+    if (!pkg) throw new Error("Package line references a missing package.");
+    rate =
+      equipmentPricingMode === "subsidized"
+        ? (pkg.subsidizedPackagePriceUsd ?? pkg.nonSubsidizedPackagePriceUsd ?? pkg.packagePriceCents / 100)
+        : (pkg.nonSubsidizedPackagePriceUsd ?? pkg.packagePriceCents / 100);
+  }
+
+  if (line.section === "equipment_type" && line.typeId) {
+    const type = await ctx.db.get(line.typeId);
+    if (!type) throw new Error("Type line references a missing type.");
+    rate =
+      equipmentPricingMode === "subsidized"
+        ? (type.subsidizedRentalPriceUsd ?? type.nonSubsidizedRentalPriceUsd ?? type.rentalPriceUsd ?? 0)
+        : (type.nonSubsidizedRentalPriceUsd ?? type.rentalPriceUsd ?? 0);
+  }
+
+  if (line.section === "crew") {
+    rate = crewRateMode === "ot" ? crewRates.ot : crewRates.normal;
+  }
+
+  const amount = Number((Math.max(0, line.quantity) * Math.max(0, rate)).toFixed(2));
+  return { rate, amount };
+}
+
+async function computeTotals(
+  ctx: MutationCtx,
+  lineItems: LineInput[],
+  equipmentPricingMode: "subsidized" | "nonSubsidized",
+  crewRateMode: "normal" | "ot",
+  discountType: "amount" | "percent",
+  discountValue: number,
+) {
+  const settings = await ctx.db.query("invoiceSettings").withIndex("by_key", (q) => q.eq("key", "default")).unique();
+  const crewRates = {
+    normal: settings?.crewNormalRateUsd ?? 0,
+    ot: settings?.crewOtRateUsd ?? settings?.crewNormalRateUsd ?? 0,
+  };
+
+  let equipmentSubtotalUsd = 0;
+  let externalRentalsSubtotalUsd = 0;
+  let artistsSubtotalUsd = 0;
+  let crewSubtotalUsd = 0;
+  let feesSubtotalUsd = 0;
+
+  const normalized: Array<LineInput & { rateUsd: number; amountUsd: number }> = [];
+  for (const line of lineItems) {
+    const { rate, amount } = await computeLineAmount(
+      ctx,
+      line,
+      equipmentPricingMode,
+      crewRateMode,
+      crewRates,
+    );
+    normalized.push({ ...line, rateUsd: rate, amountUsd: amount });
+    if (line.section === "equipment_package" || line.section === "equipment_type") equipmentSubtotalUsd += amount;
+    else if (line.section === "external_rental") externalRentalsSubtotalUsd += amount;
+    else if (line.section === "artist") artistsSubtotalUsd += amount;
+    else if (line.section === "crew") crewSubtotalUsd += amount;
+    else if (line.section === "fee") feesSubtotalUsd += amount;
+  }
+
+  const subtotalUsd = Number(
+    (equipmentSubtotalUsd + externalRentalsSubtotalUsd + artistsSubtotalUsd + crewSubtotalUsd + feesSubtotalUsd).toFixed(2),
+  );
+
+  const discountAmountUsd =
+    discountType === "percent"
+      ? Number((subtotalUsd * Math.max(0, discountValue) / 100).toFixed(2))
+      : Number(Math.max(0, discountValue).toFixed(2));
+  const totalUsd = Number(Math.max(0, subtotalUsd - discountAmountUsd).toFixed(2));
+  const discountWarning =
+    discountAmountUsd > equipmentSubtotalUsd
+      ? "Discount exceeds equipment rental subtotal."
+      : undefined;
+
+  return {
+    normalized,
+    equipmentSubtotalUsd: Number(equipmentSubtotalUsd.toFixed(2)),
+    externalRentalsSubtotalUsd: Number(externalRentalsSubtotalUsd.toFixed(2)),
+    artistsSubtotalUsd: Number(artistsSubtotalUsd.toFixed(2)),
+    crewSubtotalUsd: Number(crewSubtotalUsd.toFixed(2)),
+    feesSubtotalUsd: Number(feesSubtotalUsd.toFixed(2)),
+    subtotalUsd,
+    discountAmountUsd,
+    totalUsd,
+    discountWarning,
+  };
+}
+
+async function replaceLineItems(
+  ctx: MutationCtx,
+  invoiceId: Id<"invoices">,
+  rows: Array<LineInput & { rateUsd: number; amountUsd: number }>,
+) {
+  const existing = await ctx.db
+    .query("invoiceLineItems")
+    .withIndex("by_invoiceId", (q) => q.eq("invoiceId", invoiceId))
+    .take(500);
+  for (const row of existing) {
+    await ctx.db.delete(row._id);
+  }
+  const now = Date.now();
+  for (const row of rows.sort((a, b) => a.order - b.order)) {
+    await ctx.db.insert("invoiceLineItems", {
+      invoiceId,
+      section: row.section,
+      order: row.order,
+      provider: trimOptional(row.provider),
+      label: row.label.trim(),
+      notes: trimOptional(row.notes),
+      quantity: row.quantity,
+      rateUsd: row.rateUsd,
+      amountUsd: row.amountUsd,
+      packageId: row.packageId,
+      typeId: row.typeId,
+      feeDefinitionId: row.feeDefinitionId,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+}
+
+export const listManagers = query({
+  args: {},
+  handler: async (ctx) => {
+    const result = await ctx.runQuery(components.betterAuth.adapter.findMany, {
+      model: "user",
+      paginationOpts: { cursor: null, numItems: 200 },
+    });
+    const users = (result?.page ?? []) as Array<{
+      _id?: string;
+      id?: string;
+      name?: string;
+      email?: string;
+      role?: string | null;
+    }>;
+    return users
+      .map((user) => ({
+        id: user.id ?? user._id ?? "",
+        name: user.name ?? user.email ?? "Unknown user",
+        email: user.email,
+        role: user.role ?? undefined,
+      }))
+      .filter((u) => Boolean(u.id))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  },
+});
+
+export const list = query({
+  args: { status: v.optional(v.union(v.literal("draft"), v.literal("finalized"), v.literal("void"))) },
+  handler: async (ctx, args) => {
+    const rows = args.status
+      ? await ctx.db.query("invoices").withIndex("by_status", (q) => q.eq("status", args.status!)).take(200)
+      : await ctx.db.query("invoices").take(200);
+    return rows.sort((a, b) => b.createdAt - a.createdAt);
+  },
+});
+
+export const get = query({
+  args: { id: v.id("invoices") },
+  handler: async (ctx, args) => {
+    const invoice = await ctx.db.get(args.id);
+    if (!invoice) return null;
+    const lineItems = await ctx.db
+      .query("invoiceLineItems")
+      .withIndex("by_invoiceId_and_order", (q) => q.eq("invoiceId", args.id))
+      .take(500);
+    return { invoice, lineItems };
+  },
+});
+
+export const createDraft = mutation({
+  args: {
+    issueDate: v.string(),
+    dueDate: v.optional(v.string()),
+    managerUserId: v.string(),
+    managerName: v.string(),
+    managerEmail: v.optional(v.string()),
+    groupId: v.optional(v.id("invoiceGroups")),
+    contactId: v.optional(v.id("invoiceContacts")),
+    clientGroupName: v.optional(v.string()),
+    clientGroupType: v.optional(groupTypeValue),
+    clientContactName: v.optional(v.string()),
+    clientEmail: v.optional(v.string()),
+    clientPhone: v.optional(v.string()),
+    clientAddressLine1: v.optional(v.string()),
+    clientAddressLine2: v.optional(v.string()),
+    clientCity: v.optional(v.string()),
+    clientState: v.optional(v.string()),
+    clientPostalCode: v.optional(v.string()),
+    equipmentPricingMode: equipmentPricingModeValue,
+    crewRateMode: crewRateModeValue,
+    discountType: discountTypeValue,
+    discountValue: v.number(),
+    notes: v.optional(v.string()),
+    lineItems: v.array(lineItemInput),
+  },
+  handler: async (ctx, args) => {
+    const totals = await computeTotals(
+      ctx,
+      args.lineItems as LineInput[],
+      args.equipmentPricingMode,
+      args.crewRateMode,
+      args.discountType,
+      args.discountValue,
+    );
+    const now = Date.now();
+    const id = await ctx.db.insert("invoices", {
+      invoiceNumber: invoiceNumber(),
+      status: "draft",
+      issueDate: args.issueDate,
+      dueDate: trimOptional(args.dueDate),
+      managerUserId: args.managerUserId,
+      managerName: args.managerName.trim(),
+      managerEmail: trimOptional(args.managerEmail),
+      groupId: args.groupId,
+      contactId: args.contactId,
+      clientGroupName: trimOptional(args.clientGroupName),
+      clientGroupType: args.clientGroupType,
+      clientContactName: trimOptional(args.clientContactName),
+      clientEmail: trimOptional(args.clientEmail),
+      clientPhone: trimOptional(args.clientPhone),
+      clientAddressLine1: trimOptional(args.clientAddressLine1),
+      clientAddressLine2: trimOptional(args.clientAddressLine2),
+      clientCity: trimOptional(args.clientCity),
+      clientState: trimOptional(args.clientState),
+      clientPostalCode: trimOptional(args.clientPostalCode),
+      equipmentPricingMode: args.equipmentPricingMode,
+      crewRateMode: args.crewRateMode,
+      discountType: args.discountType,
+      discountValue: Math.max(0, args.discountValue),
+      discountAmountUsd: totals.discountAmountUsd,
+      discountWarning: totals.discountWarning,
+      equipmentSubtotalUsd: totals.equipmentSubtotalUsd,
+      externalRentalsSubtotalUsd: totals.externalRentalsSubtotalUsd,
+      artistsSubtotalUsd: totals.artistsSubtotalUsd,
+      crewSubtotalUsd: totals.crewSubtotalUsd,
+      feesSubtotalUsd: totals.feesSubtotalUsd,
+      subtotalUsd: totals.subtotalUsd,
+      totalUsd: totals.totalUsd,
+      notes: trimOptional(args.notes),
+      createdAt: now,
+      updatedAt: now,
+    });
+    await replaceLineItems(ctx, id, totals.normalized);
+    if (args.groupId) await ctx.db.patch(args.groupId, { lastUsedAt: now, updatedAt: now });
+    if (args.contactId) await ctx.db.patch(args.contactId, { lastUsedAt: now, updatedAt: now });
+    return { id, warning: totals.discountWarning };
+  },
+});
+
+export const updateDraft = mutation({
+  args: {
+    id: v.id("invoices"),
+    issueDate: v.string(),
+    dueDate: v.optional(v.string()),
+    managerUserId: v.string(),
+    managerName: v.string(),
+    managerEmail: v.optional(v.string()),
+    groupId: v.optional(v.id("invoiceGroups")),
+    contactId: v.optional(v.id("invoiceContacts")),
+    clientGroupName: v.optional(v.string()),
+    clientGroupType: v.optional(groupTypeValue),
+    clientContactName: v.optional(v.string()),
+    clientEmail: v.optional(v.string()),
+    clientPhone: v.optional(v.string()),
+    clientAddressLine1: v.optional(v.string()),
+    clientAddressLine2: v.optional(v.string()),
+    clientCity: v.optional(v.string()),
+    clientState: v.optional(v.string()),
+    clientPostalCode: v.optional(v.string()),
+    equipmentPricingMode: equipmentPricingModeValue,
+    crewRateMode: crewRateModeValue,
+    discountType: discountTypeValue,
+    discountValue: v.number(),
+    notes: v.optional(v.string()),
+    lineItems: v.array(lineItemInput),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db.get(args.id);
+    if (!existing) throw new Error("Invoice not found.");
+    const totals = await computeTotals(
+      ctx,
+      args.lineItems as LineInput[],
+      args.equipmentPricingMode,
+      args.crewRateMode,
+      args.discountType,
+      args.discountValue,
+    );
+    const now = Date.now();
+    await ctx.db.patch(args.id, {
+      issueDate: args.issueDate,
+      dueDate: trimOptional(args.dueDate),
+      managerUserId: args.managerUserId,
+      managerName: args.managerName.trim(),
+      managerEmail: trimOptional(args.managerEmail),
+      groupId: args.groupId,
+      contactId: args.contactId,
+      clientGroupName: trimOptional(args.clientGroupName),
+      clientGroupType: args.clientGroupType,
+      clientContactName: trimOptional(args.clientContactName),
+      clientEmail: trimOptional(args.clientEmail),
+      clientPhone: trimOptional(args.clientPhone),
+      clientAddressLine1: trimOptional(args.clientAddressLine1),
+      clientAddressLine2: trimOptional(args.clientAddressLine2),
+      clientCity: trimOptional(args.clientCity),
+      clientState: trimOptional(args.clientState),
+      clientPostalCode: trimOptional(args.clientPostalCode),
+      equipmentPricingMode: args.equipmentPricingMode,
+      crewRateMode: args.crewRateMode,
+      discountType: args.discountType,
+      discountValue: Math.max(0, args.discountValue),
+      discountAmountUsd: totals.discountAmountUsd,
+      discountWarning: totals.discountWarning,
+      equipmentSubtotalUsd: totals.equipmentSubtotalUsd,
+      externalRentalsSubtotalUsd: totals.externalRentalsSubtotalUsd,
+      artistsSubtotalUsd: totals.artistsSubtotalUsd,
+      crewSubtotalUsd: totals.crewSubtotalUsd,
+      feesSubtotalUsd: totals.feesSubtotalUsd,
+      subtotalUsd: totals.subtotalUsd,
+      totalUsd: totals.totalUsd,
+      notes: trimOptional(args.notes),
+      updatedAt: now,
+    });
+    await replaceLineItems(ctx, args.id, totals.normalized);
+    if (args.groupId) await ctx.db.patch(args.groupId, { lastUsedAt: now, updatedAt: now });
+    if (args.contactId) await ctx.db.patch(args.contactId, { lastUsedAt: now, updatedAt: now });
+    return { id: args.id, warning: totals.discountWarning };
+  },
+});
+
+export const recalculateTotals = mutation({
+  args: { id: v.id("invoices") },
+  handler: async (ctx, args) => {
+    const invoice = await ctx.db.get(args.id);
+    if (!invoice) throw new Error("Invoice not found.");
+    const lineItems = await ctx.db.query("invoiceLineItems").withIndex("by_invoiceId", (q) => q.eq("invoiceId", args.id)).take(500);
+    const totals = await computeTotals(
+      ctx,
+      lineItems.map((line) => ({
+        section: line.section,
+        order: line.order,
+        provider: line.provider,
+        label: line.label,
+        notes: line.notes,
+        quantity: line.quantity,
+        rateUsd: line.rateUsd,
+        packageId: line.packageId,
+        typeId: line.typeId,
+        feeDefinitionId: line.feeDefinitionId,
+      })),
+      invoice.equipmentPricingMode,
+      invoice.crewRateMode,
+      invoice.discountType,
+      invoice.discountValue,
+    );
+    await ctx.db.patch(args.id, {
+      discountAmountUsd: totals.discountAmountUsd,
+      discountWarning: totals.discountWarning,
+      equipmentSubtotalUsd: totals.equipmentSubtotalUsd,
+      externalRentalsSubtotalUsd: totals.externalRentalsSubtotalUsd,
+      artistsSubtotalUsd: totals.artistsSubtotalUsd,
+      crewSubtotalUsd: totals.crewSubtotalUsd,
+      feesSubtotalUsd: totals.feesSubtotalUsd,
+      subtotalUsd: totals.subtotalUsd,
+      totalUsd: totals.totalUsd,
+      updatedAt: Date.now(),
+    });
+    return { warning: totals.discountWarning };
+  },
+});
+
+export const finalize = mutation({
+  args: { id: v.id("invoices") },
+  handler: async (ctx, args) => {
+    const invoice = await ctx.db.get(args.id);
+    if (!invoice) throw new Error("Invoice not found.");
+    await ctx.db.patch(args.id, { status: "finalized", updatedAt: Date.now() });
+  },
+});

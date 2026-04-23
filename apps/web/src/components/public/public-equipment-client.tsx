@@ -12,6 +12,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 type PublicTypeSummary = {
   _id: string;
   name: string;
+  model?: string;
+  manufacturer?: string;
   category: string;
   description?: string;
   capabilities: string[];
@@ -79,22 +81,32 @@ export function PublicEquipmentClient({ assetId }: { assetId: string }) {
 
   const type = data.type as PublicTypeSummary | PublicTypeProfile;
   const showProfile = isPublicTypeProfile(type);
+  const displayModelName = `${type.manufacturer ? `${type.manufacturer} ` : ""}${type.name}${
+    type.model ? ` · ${type.model}` : ""
+  }`;
 
   return (
     <PublicSiteChrome>
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Found equipment</h1>
-          <p className="text-sm text-muted-foreground">
-            Asset ID: <span className="font-mono">{data.assetId}</span>
-            {data.serialNumber ? (
-              <>
-                {" "}
-                · Serial: <span className="font-mono">{data.serialNumber}</span>
-              </>
-            ) : null}
-          </p>
-        </div>
+      <div className="space-y-8">
+        <Card className="overflow-hidden border-primary/20">
+          <CardContent className="grid gap-6 p-6 sm:grid-cols-[1fr_auto] sm:items-end">
+            <div className="space-y-2">
+              <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Asset Record</p>
+              <p className="text-2xl font-semibold tracking-tight sm:text-3xl">{displayModelName}</p>
+              <p className="text-sm text-muted-foreground">Category: {type.category}</p>
+            </div>
+            <div className="rounded-lg border bg-muted/30 px-4 py-3 text-right">
+              <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Asset ID</p>
+              <p className="font-mono text-base font-semibold">{data.assetId}</p>
+              {data.serialNumber ? (
+                <>
+                  <p className="mt-2 text-xs uppercase tracking-[0.12em] text-muted-foreground">Serial</p>
+                  <p className="font-mono text-sm">{data.serialNumber}</p>
+                </>
+              ) : null}
+            </div>
+          </CardContent>
+        </Card>
 
         <Card>
           <CardHeader>
@@ -129,44 +141,37 @@ export function PublicEquipmentClient({ assetId }: { assetId: string }) {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Model</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm">
-            <div>
-              <p className="text-lg font-medium">
-                {showProfile && type.manufacturer ? `${type.manufacturer} ` : ""}
-                {type.name}
-                {showProfile && type.model ? ` · ${type.model}` : ""}
-              </p>
-              <p className="text-xs text-muted-foreground">Category: {type.category}</p>
-            </div>
-
-            {type.description ? (
-              <div>
-                <p className="text-sm font-medium">Description</p>
-                <MarkdownContent className="text-muted-foreground">{type.description}</MarkdownContent>
-              </div>
-            ) : null}
-
-            {type.capabilities.length ? (
-              <div>
-                <p className="text-sm font-medium">Capabilities</p>
-                <div className="mt-1 flex flex-wrap gap-1">
-                  {type.capabilities.map((key) => (
-                    <span
-                      key={key}
-                      className="rounded-full border bg-muted/40 px-2 py-0.5 text-xs text-muted-foreground"
-                    >
-                      {labelByKey.get(key) ?? key}
-                    </span>
-                  ))}
+        {type.description || type.capabilities.length ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Overview</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              {type.description ? (
+                <div>
+                  <p className="text-sm font-medium">Description</p>
+                  <MarkdownContent className="text-muted-foreground">{type.description}</MarkdownContent>
                 </div>
-              </div>
-            ) : null}
-          </CardContent>
-        </Card>
+              ) : null}
+
+              {type.capabilities.length ? (
+                <div>
+                  <p className="text-sm font-medium">Capabilities</p>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {type.capabilities.map((key) => (
+                      <span
+                        key={key}
+                        className="rounded-full border bg-muted/40 px-2 py-0.5 text-xs text-muted-foreground"
+                      >
+                        {labelByKey.get(key) ?? key}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </CardContent>
+          </Card>
+        ) : null}
 
         {!showProfile ? (
           <Card>

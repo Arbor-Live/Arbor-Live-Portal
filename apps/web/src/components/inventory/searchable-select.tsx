@@ -15,12 +15,16 @@ export function SearchableSelect({
   options,
   placeholder,
   emptyLabel,
+  onCreate,
+  createLabel,
 }: {
   value: string;
   onChange: (value: string) => void;
   options: Option[];
   placeholder: string;
   emptyLabel?: string;
+  onCreate?: (query: string) => void;
+  createLabel?: string;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -77,6 +81,11 @@ export function SearchableSelect({
     if (!lowered) return options;
     return options.filter((option) => option.label.toLowerCase().includes(lowered));
   }, [options, query]);
+  const normalizedQuery = query.trim().toLowerCase();
+  const canCreate =
+    Boolean(onCreate) &&
+    normalizedQuery.length > 0 &&
+    !options.some((option) => option.label.trim().toLowerCase() === normalizedQuery);
 
   return (
     <div className="relative" ref={rootRef}>
@@ -126,6 +135,19 @@ export function SearchableSelect({
                 ) : (
                   <p className="px-2 py-1 text-xs text-muted-foreground">No matches.</p>
                 )}
+                {canCreate ? (
+                  <button
+                    type="button"
+                    className="mt-1 block w-full rounded border px-2 py-1 text-left text-sm hover:bg-muted"
+                    onClick={() => {
+                      onCreate?.(query.trim());
+                      setOpen(false);
+                      setQuery("");
+                    }}
+                  >
+                    {createLabel ?? "New"}: &quot;{query.trim()}&quot;
+                  </button>
+                ) : null}
               </div>
             </div>,
             document.body,

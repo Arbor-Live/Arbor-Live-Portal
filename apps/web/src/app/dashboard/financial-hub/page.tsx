@@ -5,6 +5,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
 
 export default function FinancialHubPage() {
   return (
@@ -16,6 +18,14 @@ export default function FinancialHubPage() {
             Centralize invoices, settlements, and payments across operations.
           </CardDescription>
         </CardHeader>
+        <CardContent className="flex gap-2">
+          <Button asChild>
+            <Link href="/dashboard/financial-hub/invoices">Open Invoices</Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href="/dashboard/financial-hub/invoices/new">Create Invoice</Link>
+          </Button>
+        </CardContent>
       </Card>
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
