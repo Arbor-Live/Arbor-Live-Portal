@@ -54,9 +54,49 @@ function trimOptional(raw: string | undefined) {
   return out ? out : undefined;
 }
 
-function invoiceNumber() {
-  const stamp = Date.now().toString().slice(-8);
-  return `INV-${stamp}`;
+async function allocateInvoiceNumber(ctx: MutationCtx) {
+  const SPACE = 10_000_000; // 7 digits
+  const MULTIPLIER = 2_345_671; // coprime with SPACE (not divisible by 2 or 5)
+  const OFFSET = 7_654_321;
+  const encode = (n: number) => (n * MULTIPLIER + OFFSET) % SPACE;
+
+  const now = Date.now();
+  const key = "default";
+  const existing = await ctx.db.query("invoiceCounters").withIndex("by_key", (q) => q.eq("key", key)).unique();
+  if (!existing) {
+    await ctx.db.insert("invoiceCounters", {
+      key,
+      nextNumber: 2,
+      updatedAt: now,
+    });
+    return `AL-${String(encode(1)).padStart(7, "0")}`;
+  }
+  const current = Math.max(1, Math.floor(existing.nextNumber));
+  await ctx.db.patch(existing._id, {
+    nextNumber: current + 1,
+    updatedAt: now,
+  });
+  // Non-sequential public number over a 7-digit space.
+  // This is a bijection modulo 10,000,000, so values are unique for counters 1..10,000,000.
+  return `AL-${String(encode(current)).padStart(7, "0")}`;
+}
+
+function makePublicApprovalToken() {
+  const partA = crypto.randomUUID().replaceAll("-", "");
+  const partB = crypto.randomUUID().replaceAll("-", "");
+  return `quote_${partA}.${partB}`;
+}
+
+async function generateUniquePublicApprovalToken(ctx: MutationCtx) {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const token = makePublicApprovalToken();
+    const existing = await ctx.db
+      .query("invoices")
+      .withIndex("by_publicApprovalToken", (q) => q.eq("publicApprovalToken", token))
+      .unique();
+    if (!existing) return token;
+  }
+  throw new Error("Unable to generate public quote token.");
 }
 
 async function computeLineAmount(
@@ -242,6 +282,107 @@ export const get = query({
   },
 });
 
+export const getPublicQuoteByToken = query({
+  args: { token: v.string() },
+  handler: async (ctx, args) => {
+    const invoice = await ctx.db
+      .query("invoices")
+      .withIndex("by_publicApprovalToken", (q) => q.eq("publicApprovalToken", args.token))
+      .unique();
+    if (!invoice) return null;
+    if (invoice.publicApprovalTokenExpiresAt && invoice.publicApprovalTokenExpiresAt < Date.now()) return null;
+    if (invoice.status === "void") return null;
+
+    const lineItems = await ctx.db
+      .query("invoiceLineItems")
+      .withIndex("by_invoiceId_and_order", (q) => q.eq("invoiceId", invoice._id))
+      .take(500);
+    const selectedTerms = invoice.termsId ? await ctx.db.get(invoice.termsId) : null;
+    const fallbackSettings = await ctx.db.query("invoiceSettings").withIndex("by_key", (q) => q.eq("key", "default")).unique();
+    const globalTermsMarkdown = selectedTerms?.markdown ?? fallbackSettings?.termsAndConditionsMarkdown ?? "";
+    const globalTermsVersion = selectedTerms?.version ?? fallbackSettings?.termsVersion ?? "v1";
+    const combinedTermsMarkdown = invoice.additionalTermsMarkdown
+      ? `${globalTermsMarkdown}\n\n---\n\n## Additional Terms\n\n${invoice.additionalTermsMarkdown}`
+      : globalTermsMarkdown;
+    const linkedEvent = await ctx.db
+      .query("events")
+      .withIndex("by_invoiceId", (q) => q.eq("invoiceId", invoice._id))
+      .unique();
+    const eventAssignments = linkedEvent
+      ? await ctx.db
+          .query("eventPeopleAssignments")
+          .withIndex("by_eventId", (q) => q.eq("eventId", linkedEvent._id))
+          .take(500)
+      : [];
+    const eventShifts = linkedEvent
+      ? await ctx.db
+          .query("eventCrewShifts")
+          .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", linkedEvent._id))
+          .take(500)
+      : [];
+    const eventArtifacts = linkedEvent
+      ? await ctx.db
+          .query("eventArtifacts")
+          .withIndex("by_eventId", (q) => q.eq("eventId", linkedEvent._id))
+          .take(500)
+      : [];
+    return {
+      invoice: {
+        _id: invoice._id,
+        invoiceNumber: invoice.invoiceNumber,
+        issueDate: invoice.issueDate,
+        dueDate: invoice.dueDate,
+        managerName: invoice.managerName,
+        managerEmail: invoice.managerEmail,
+        clientGroupName: invoice.clientGroupName,
+        clientContactName: invoice.clientContactName,
+        clientEmail: invoice.clientEmail,
+        clientPhone: invoice.clientPhone,
+        clientAddressLine1: invoice.clientAddressLine1,
+        clientAddressLine2: invoice.clientAddressLine2,
+        clientCity: invoice.clientCity,
+        clientState: invoice.clientState,
+        clientPostalCode: invoice.clientPostalCode,
+        notes: invoice.notes,
+        equipmentSubtotalUsd: invoice.equipmentSubtotalUsd,
+        externalRentalsSubtotalUsd: invoice.externalRentalsSubtotalUsd,
+        artistsSubtotalUsd: invoice.artistsSubtotalUsd,
+        crewSubtotalUsd: invoice.crewSubtotalUsd,
+        feesSubtotalUsd: invoice.feesSubtotalUsd,
+        subtotalUsd: invoice.subtotalUsd,
+        discountAmountUsd: invoice.discountAmountUsd,
+        totalUsd: invoice.totalUsd,
+        clientApprovalStatus: invoice.clientApprovalStatus ?? "pending",
+        approvedAt: invoice.approvedAt,
+        changesRequestedAt: invoice.changesRequestedAt,
+        clientApprovalNote: invoice.clientApprovalNote,
+        termsVersionAccepted: invoice.termsVersionAccepted,
+        termsAcceptedAt: invoice.termsAcceptedAt,
+        termsId: invoice.termsId,
+        additionalTermsMarkdown: invoice.additionalTermsMarkdown,
+      },
+      lineItems,
+      termsAndConditionsMarkdown: combinedTermsMarkdown,
+      termsVersion: globalTermsVersion,
+      event: linkedEvent
+        ? {
+            id: linkedEvent._id,
+            title: linkedEvent.title,
+            status: linkedEvent.status,
+            venueName: linkedEvent.venueName,
+            eventType: linkedEvent.eventType,
+            host: linkedEvent.host,
+            startAt: linkedEvent.startAt,
+            endAt: linkedEvent.endAt,
+            assignments: eventAssignments,
+            shifts: eventShifts,
+            artifacts: eventArtifacts,
+          }
+        : null,
+    };
+  },
+});
+
 export const createDraft = mutation({
   args: {
     issueDate: v.string(),
@@ -266,9 +407,12 @@ export const createDraft = mutation({
     discountType: discountTypeValue,
     discountValue: v.number(),
     notes: v.optional(v.string()),
+    termsId: v.optional(v.id("invoiceTerms")),
+    additionalTermsMarkdown: v.optional(v.string()),
     lineItems: v.array(lineItemInput),
   },
   handler: async (ctx, args) => {
+    const publicApprovalToken = await generateUniquePublicApprovalToken(ctx);
     const totals = await computeTotals(
       ctx,
       args.lineItems as LineInput[],
@@ -279,7 +423,7 @@ export const createDraft = mutation({
     );
     const now = Date.now();
     const id = await ctx.db.insert("invoices", {
-      invoiceNumber: invoiceNumber(),
+      invoiceNumber: await allocateInvoiceNumber(ctx),
       status: "draft",
       issueDate: args.issueDate,
       dueDate: trimOptional(args.dueDate),
@@ -312,13 +456,23 @@ export const createDraft = mutation({
       subtotalUsd: totals.subtotalUsd,
       totalUsd: totals.totalUsd,
       notes: trimOptional(args.notes),
+      termsId: args.termsId,
+      additionalTermsMarkdown: trimOptional(args.additionalTermsMarkdown),
+      clientApprovalStatus: "pending",
+      publicApprovalToken,
+      publicApprovalTokenExpiresAt: undefined,
+      approvedAt: undefined,
+      changesRequestedAt: undefined,
+      clientApprovalNote: undefined,
+      termsVersionAccepted: undefined,
+      termsAcceptedAt: undefined,
       createdAt: now,
       updatedAt: now,
     });
     await replaceLineItems(ctx, id, totals.normalized);
     if (args.groupId) await ctx.db.patch(args.groupId, { lastUsedAt: now, updatedAt: now });
     if (args.contactId) await ctx.db.patch(args.contactId, { lastUsedAt: now, updatedAt: now });
-    return { id, warning: totals.discountWarning };
+    return { id, warning: totals.discountWarning, publicApprovalToken };
   },
 });
 
@@ -347,11 +501,14 @@ export const updateDraft = mutation({
     discountType: discountTypeValue,
     discountValue: v.number(),
     notes: v.optional(v.string()),
+    termsId: v.optional(v.id("invoiceTerms")),
+    additionalTermsMarkdown: v.optional(v.string()),
     lineItems: v.array(lineItemInput),
   },
   handler: async (ctx, args) => {
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Invoice not found.");
+    const publicApprovalToken = existing.publicApprovalToken || (await generateUniquePublicApprovalToken(ctx));
     const totals = await computeTotals(
       ctx,
       args.lineItems as LineInput[],
@@ -393,12 +550,104 @@ export const updateDraft = mutation({
       subtotalUsd: totals.subtotalUsd,
       totalUsd: totals.totalUsd,
       notes: trimOptional(args.notes),
+      termsId: args.termsId,
+      additionalTermsMarkdown: trimOptional(args.additionalTermsMarkdown),
+      publicApprovalToken,
       updatedAt: now,
     });
     await replaceLineItems(ctx, args.id, totals.normalized);
     if (args.groupId) await ctx.db.patch(args.groupId, { lastUsedAt: now, updatedAt: now });
     if (args.contactId) await ctx.db.patch(args.contactId, { lastUsedAt: now, updatedAt: now });
     return { id: args.id, warning: totals.discountWarning };
+  },
+});
+
+export const regeneratePublicApprovalToken = mutation({
+  args: { id: v.id("invoices") },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db.get(args.id);
+    if (!existing) throw new Error("Invoice not found.");
+    const token = await generateUniquePublicApprovalToken(ctx);
+    await ctx.db.patch(args.id, {
+      publicApprovalToken: token,
+      publicApprovalTokenExpiresAt: undefined,
+      updatedAt: Date.now(),
+    });
+    return { token };
+  },
+});
+
+export const approveByToken = mutation({
+  args: { token: v.string(), acceptTerms: v.boolean() },
+  handler: async (ctx, args) => {
+    if (!args.acceptTerms) throw new Error("Terms must be accepted.");
+    const invoice = await ctx.db
+      .query("invoices")
+      .withIndex("by_publicApprovalToken", (q) => q.eq("publicApprovalToken", args.token))
+      .unique();
+    if (!invoice) throw new Error("Quote not found.");
+    if (invoice.publicApprovalTokenExpiresAt && invoice.publicApprovalTokenExpiresAt < Date.now()) {
+      throw new Error("Quote not found.");
+    }
+    if (invoice.status === "void") throw new Error("Quote not found.");
+    if ((invoice.clientApprovalStatus ?? "pending") !== "pending") throw new Error("Quote decision already submitted.");
+
+    const now = Date.now();
+    const selectedTerms = invoice.termsId ? await ctx.db.get(invoice.termsId) : null;
+    const fallbackSettings = await ctx.db.query("invoiceSettings").withIndex("by_key", (q) => q.eq("key", "default")).unique();
+    await ctx.db.patch(invoice._id, {
+      clientApprovalStatus: "approved",
+      approvedAt: now,
+      termsAcceptedAt: now,
+      termsVersionAccepted: selectedTerms?.version ?? fallbackSettings?.termsVersion ?? "v1",
+      updatedAt: now,
+    });
+    return { ok: true };
+  },
+});
+
+export const requestChangesByToken = mutation({
+  args: { token: v.string(), note: v.string() },
+  handler: async (ctx, args) => {
+    const note = args.note.trim();
+    if (!note) throw new Error("Please include a note.");
+    const invoice = await ctx.db
+      .query("invoices")
+      .withIndex("by_publicApprovalToken", (q) => q.eq("publicApprovalToken", args.token))
+      .unique();
+    if (!invoice) throw new Error("Quote not found.");
+    if (invoice.publicApprovalTokenExpiresAt && invoice.publicApprovalTokenExpiresAt < Date.now()) {
+      throw new Error("Quote not found.");
+    }
+    if (invoice.status === "void") throw new Error("Quote not found.");
+    if ((invoice.clientApprovalStatus ?? "pending") !== "pending") throw new Error("Quote decision already submitted.");
+
+    const now = Date.now();
+    await ctx.db.patch(invoice._id, {
+      clientApprovalStatus: "changes_requested",
+      changesRequestedAt: now,
+      clientApprovalNote: note,
+      updatedAt: now,
+    });
+    return { ok: true };
+  },
+});
+
+export const resetApprovalToPending = mutation({
+  args: { id: v.id("invoices") },
+  handler: async (ctx, args) => {
+    const invoice = await ctx.db.get(args.id);
+    if (!invoice) throw new Error("Invoice not found.");
+    await ctx.db.patch(args.id, {
+      clientApprovalStatus: "pending",
+      approvedAt: undefined,
+      changesRequestedAt: undefined,
+      clientApprovalNote: undefined,
+      termsVersionAccepted: undefined,
+      termsAcceptedAt: undefined,
+      updatedAt: Date.now(),
+    });
+    return { ok: true };
   },
 });
 

@@ -1,10 +1,10 @@
 import {
   Card,
-  CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { EventDatabaseManager } from "@/components/events/event-database-manager";
 
 export default function EventsPage() {
   return (
@@ -13,30 +13,11 @@ export default function EventsPage() {
         <CardHeader>
           <CardTitle>Events</CardTitle>
           <CardDescription>
-            Manage upcoming shows, venue details, and event timelines.
+            Manage event lifecycle data, shifts, artifacts, and expense-linked crew hours.
           </CardDescription>
         </CardHeader>
       </Card>
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardTitle>Upcoming</CardTitle>
-          </CardHeader>
-          <CardContent className="text-muted-foreground">Coming soon.</CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Drafts</CardTitle>
-          </CardHeader>
-          <CardContent className="text-muted-foreground">Coming soon.</CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Calendar</CardTitle>
-          </CardHeader>
-          <CardContent className="text-muted-foreground">Coming soon.</CardContent>
-        </Card>
-      </div>
+      <EventDatabaseManager />
     </div>
   );
 }

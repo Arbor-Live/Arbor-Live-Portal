@@ -28,6 +28,12 @@ export function InvoicePrintView({ invoiceId }: { invoiceId: Id<"invoices"> }) {
   if (data === undefined) return <p className="text-sm text-muted-foreground">Loading…</p>;
   if (!data || !sections) return <p className="text-sm text-muted-foreground">Invoice not found.</p>;
   const invoice = data.invoice;
+  const digitalQuoteUrl =
+    invoice.publicApprovalToken && typeof window !== "undefined"
+      ? `${window.location.origin}/public/quote/${invoice.publicApprovalToken}`
+      : invoice.publicApprovalToken
+        ? `/public/quote/${invoice.publicApprovalToken}`
+        : null;
 
   async function onPrint() {
     await createExport({
@@ -44,6 +50,10 @@ export function InvoicePrintView({ invoiceId }: { invoiceId: Id<"invoices"> }) {
     <div className="invoice-print-root space-y-4 print:space-y-2">
       <style jsx global>{`
         @media print {
+          @page {
+            size: auto;
+            margin: 0.4in;
+          }
           body * {
             visibility: hidden;
           }
@@ -57,6 +67,20 @@ export function InvoicePrintView({ invoiceId }: { invoiceId: Id<"invoices"> }) {
             top: 0;
             width: 100%;
           }
+          .invoice-print-root {
+            gap: 0.4rem !important;
+          }
+          .invoice-print-root [data-slot="card"] {
+            box-shadow: none !important;
+          }
+          .invoice-print-root [data-slot="card-header"] {
+            padding-top: 0.6rem !important;
+            padding-bottom: 0.45rem !important;
+          }
+          .invoice-print-root [data-slot="card-content"] {
+            padding-top: 0.45rem !important;
+            padding-bottom: 0.5rem !important;
+          }
         }
       `}</style>
 
@@ -67,13 +91,13 @@ export function InvoicePrintView({ invoiceId }: { invoiceId: Id<"invoices"> }) {
 
       <Card>
         <CardHeader>
-          <div className="grid gap-4 md:grid-cols-[auto_1fr] md:items-start">
+          <div className="flex items-start justify-between gap-4 rounded-xl border border-primary/20 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent p-4">
             <img
               src="/logo.svg"
               alt="Arbor Live logo"
               className="h-12 w-auto brightness-0 dark:invert"
             />
-            <div className="space-y-1 text-sm">
+            <div className="space-y-1 self-start text-right text-sm">
               <CardTitle className="text-xl">Arbor Live</CardTitle>
               <p>Office of Student Engagement</p>
               <p>
@@ -96,6 +120,15 @@ export function InvoicePrintView({ invoiceId }: { invoiceId: Id<"invoices"> }) {
             {data.invoice.dueDate ? <p><span className="font-medium">Due date:</span> {data.invoice.dueDate}</p> : null}
             <p><span className="font-medium">Manager:</span> {data.invoice.managerName}</p>
             {data.invoice.managerEmail ? <p><span className="font-medium">Manager email:</span> {data.invoice.managerEmail}</p> : null}
+            <p><span className="font-medium">Quote status:</span> {data.invoice.clientApprovalStatus ?? "pending"}</p>
+            {digitalQuoteUrl ? (
+              <p className="break-all">
+                <span className="font-medium">Live quote:</span>{" "}
+                <a className="underline" href={digitalQuoteUrl} target="_blank" rel="noreferrer">
+                  {digitalQuoteUrl}
+                </a>
+              </p>
+            ) : null}
           </div>
           <div className="space-y-1 print:space-y-0.5">
             <p className="font-medium">Contact Details</p>
@@ -132,15 +165,17 @@ export function InvoicePrintView({ invoiceId }: { invoiceId: Id<"invoices"> }) {
 
       <Card>
         <CardHeader><CardTitle>Totals</CardTitle></CardHeader>
-        <CardContent className="grid gap-1 text-sm md:grid-cols-2">
+        <CardContent className="grid gap-1.5 text-sm md:grid-cols-2">
           <p>Equipment: {currency(data.invoice.equipmentSubtotalUsd)}</p>
           <p>External rentals: {currency(data.invoice.externalRentalsSubtotalUsd)}</p>
           <p>Artists: {currency(data.invoice.artistsSubtotalUsd)}</p>
           <p>Crew: {currency(data.invoice.crewSubtotalUsd)}</p>
           <p>Fees: {currency(data.invoice.feesSubtotalUsd)}</p>
-          <p>Subtotal: {currency(data.invoice.subtotalUsd)}</p>
-          <p>Discount: -{currency(data.invoice.discountAmountUsd)}</p>
-          <p className="font-semibold">Total: {currency(data.invoice.totalUsd)}</p>
+          <p className="font-medium">Subtotal: {currency(data.invoice.subtotalUsd)}</p>
+          <p className="font-medium text-amber-700 dark:text-amber-300">Discount: -{currency(data.invoice.discountAmountUsd)}</p>
+          <p className="rounded-md border border-primary/30 bg-primary/10 px-2 py-1 text-base font-semibold">
+            Total: {currency(data.invoice.totalUsd)}
+          </p>
         </CardContent>
       </Card>
     </div>
@@ -157,17 +192,17 @@ function SectionTable({
   showProvider?: boolean;
 }) {
   return (
-    <Card>
-      <CardHeader><CardTitle>{title}</CardTitle></CardHeader>
+    <Card className="overflow-hidden">
+      <CardHeader className="border-b bg-muted/30"><CardTitle className="text-lg">{title}</CardTitle></CardHeader>
       <CardContent>
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b">
-              {showProvider ? <th className="p-2 text-left">Provider</th> : null}
-              <th className="p-2 text-left">Item</th>
-              <th className="p-2 text-left">Qty</th>
-              <th className="p-2 text-left">Rate</th>
-              <th className="p-2 text-left">Amount</th>
+            <tr className="border-b bg-muted/20">
+              {showProvider ? <th className="p-2 text-left font-medium">Provider</th> : null}
+              <th className="p-2 text-left font-medium">Item</th>
+              <th className="p-2 text-right font-medium">Qty</th>
+              <th className="p-2 text-right font-medium">Rate</th>
+              <th className="p-2 text-right font-medium">Amount</th>
             </tr>
           </thead>
           <tbody>
@@ -175,9 +210,9 @@ function SectionTable({
               <tr key={row._id} className="border-b align-top">
                 {showProvider ? <td className="p-2">{row.provider || "—"}</td> : null}
                 <td className="p-2">{row.label}</td>
-                <td className="p-2">{row.quantity}</td>
-                <td className="p-2">{currency(row.rateUsd)}</td>
-                <td className="p-2">{currency(row.amountUsd)}</td>
+                <td className="p-2 text-right">{row.quantity}</td>
+                <td className="p-2 text-right tabular-nums">{currency(row.rateUsd)}</td>
+                <td className="p-2 text-right font-medium tabular-nums">{currency(row.amountUsd)}</td>
               </tr>
             ))}
           </tbody>

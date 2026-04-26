@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
@@ -37,6 +37,7 @@ export function InvoiceEditor({
   const managerList = useQuery(api.invoices.listManagers, {});
   const groups = useQuery(api.invoiceGroups.list, { activeOnly: true });
   const feeDefinitions = useQuery(api.invoiceFeeDefinitions.list, { activeOnly: true });
+  const termsDefinitions = useQuery(api.invoiceTerms.list, { activeOnly: true });
   const settings = useQuery(api.invoiceSettings.get, {});
   const packages = useQuery(api.inventoryPackages.list, {});
   const types = useQuery(api.inventoryTypes.list, {});
@@ -49,6 +50,9 @@ export function InvoiceEditor({
   const createDraft = useMutation(api.invoices.createDraft);
   const updateDraft = useMutation(api.invoices.updateDraft);
   const finalizeInvoice = useMutation(api.invoices.finalize);
+  const regeneratePublicApprovalToken = useMutation(api.invoices.regeneratePublicApprovalToken);
+  const resetApprovalToPending = useMutation(api.invoices.resetApprovalToPending);
+  const createTermsDefinition = useMutation(api.invoiceTerms.create);
   const createGroup = useMutation(api.invoiceGroups.create);
   const createContact = useMutation(api.invoiceContacts.create);
 
@@ -81,7 +85,15 @@ export function InvoiceEditor({
   const [saveWarning, setSaveWarning] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [autoSaveState, setAutoSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [autoSaveError, setAutoSaveError] = useState<string | null>(null);
   const [activeInvoiceId, setActiveInvoiceId] = useState<Id<"invoices"> | undefined>(invoiceId);
+  const [approvalToken, setApprovalToken] = useState("");
+  const [termsId, setTermsId] = useState("");
+  const [additionalTermsMarkdown, setAdditionalTermsMarkdown] = useState("");
+  const [newTermsLabel, setNewTermsLabel] = useState("");
+  const [newTermsVersion, setNewTermsVersion] = useState("v1");
+  const [newTermsMarkdown, setNewTermsMarkdown] = useState("");
   const [groupModalOpen, setGroupModalOpen] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
   const [newGroupType, setNewGroupType] = useState<"vso" | "house" | "department" | "individual">("department");
@@ -89,6 +101,13 @@ export function InvoiceEditor({
   const [newContactName, setNewContactName] = useState("");
   const [newContactEmail, setNewContactEmail] = useState("");
   const [newContactPhone, setNewContactPhone] = useState("");
+
+  const lastSavedSignatureRef = useRef("");
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveRequestIdRef = useRef(0);
+  const suppressAutoSaveOnceRef = useRef(false);
+  const persistDraftRef = useRef<(mode: "manual" | "auto") => Promise<boolean>>(async () => false);
+  const reapprovalDecisionRef = useRef<null | boolean>(null);
 
   const managerOptions = useMemo(
     () =>
@@ -143,8 +162,10 @@ export function InvoiceEditor({
   useEffect(() => {
     if (!invoiceData) return;
     const { invoice, lineItems } = invoiceData;
+    suppressAutoSaveOnceRef.current = true;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setActiveInvoiceId(invoice._id);
+    setApprovalToken(invoice.publicApprovalToken ?? "");
     setIssueDate(invoice.issueDate);
     setDueDate(invoice.dueDate ?? "");
     setManagerUserId(invoice.managerUserId);
@@ -167,6 +188,8 @@ export function InvoiceEditor({
     setDiscountType(invoice.discountType);
     setDiscountValue(invoice.discountValue.toString());
     setNotes(invoice.notes ?? "");
+    setTermsId(invoice.termsId ?? "");
+    setAdditionalTermsMarkdown(invoice.additionalTermsMarkdown ?? "");
 
     setEquipmentPackages(
       lineItems
@@ -208,6 +231,45 @@ export function InvoiceEditor({
           rateUsd: row.rateUsd.toString(),
         })),
     );
+    lastSavedSignatureRef.current = JSON.stringify({
+      issueDate: invoice.issueDate,
+      dueDate: invoice.dueDate ?? "",
+      managerUserId: invoice.managerUserId,
+      managerName: invoice.managerName,
+      managerEmail: invoice.managerEmail ?? "",
+      groupId: invoice.groupId ?? "",
+      contactId: invoice.contactId ?? "",
+      clientGroupName: invoice.clientGroupName ?? "",
+      clientGroupType: invoice.clientGroupType ?? "",
+      clientContactName: invoice.clientContactName ?? "",
+      clientEmail: invoice.clientEmail ?? "",
+      clientPhone: invoice.clientPhone ?? "",
+      clientAddressLine1: invoice.clientAddressLine1 ?? "",
+      clientAddressLine2: invoice.clientAddressLine2 ?? "",
+      clientCity: invoice.clientCity ?? "",
+      clientState: invoice.clientState ?? "",
+      clientPostalCode: invoice.clientPostalCode ?? "",
+      equipmentPricingMode: invoice.equipmentPricingMode,
+      crewRateMode: invoice.crewRateMode,
+      discountType: invoice.discountType,
+      discountValue: invoice.discountValue,
+      notes: invoice.notes ?? "",
+      termsId: invoice.termsId ?? "",
+      additionalTermsMarkdown: invoice.additionalTermsMarkdown ?? "",
+      lineItems: lineItems.map((row) => ({
+        section: row.section,
+        order: row.order,
+        provider: row.provider ?? "",
+        label: row.label,
+        notes: row.notes ?? "",
+        quantity: row.quantity,
+        rateUsd: row.rateUsd,
+        packageId: row.packageId ?? "",
+        typeId: row.typeId ?? "",
+        feeDefinitionId: row.feeDefinitionId ?? "",
+      })),
+    });
+    reapprovalDecisionRef.current = null;
   }, [invoiceData]);
 
   function onManagerChange(userId: string) {
@@ -368,60 +430,145 @@ export function InvoiceEditor({
     return rows;
   }
 
-  async function save() {
-    if (!managerUserId || !managerName.trim()) {
-      window.alert("Select a manager.");
-      return;
-    }
+  function buildPayload() {
+    if (!managerUserId || !managerName.trim()) return null;
     const lineItems = buildLineItems();
-    if (!lineItems.length) {
-      window.alert("Add at least one line item.");
-      return;
+    if (!lineItems.length) return null;
+    return {
+      issueDate,
+      dueDate: dueDate || undefined,
+      managerUserId,
+      managerName,
+      managerEmail: managerEmail || undefined,
+      groupId: groupId ? (groupId as Id<"invoiceGroups">) : undefined,
+      contactId: contactId ? (contactId as Id<"invoiceContacts">) : undefined,
+      clientGroupName: clientGroupName || undefined,
+      clientGroupType: clientGroupType || undefined,
+      clientContactName: clientContactName || undefined,
+      clientEmail: clientEmail || undefined,
+      clientPhone: clientPhone || undefined,
+      clientAddressLine1: clientAddressLine1 || undefined,
+      clientAddressLine2: clientAddressLine2 || undefined,
+      clientCity: clientCity || undefined,
+      clientState: clientState || undefined,
+      clientPostalCode: clientPostalCode || undefined,
+      equipmentPricingMode,
+      crewRateMode,
+      discountType,
+      discountValue: Number(discountValue || "0"),
+      notes: notes || undefined,
+      termsId: termsId ? (termsId as Id<"invoiceTerms">) : undefined,
+      additionalTermsMarkdown: additionalTermsMarkdown || undefined,
+      lineItems,
+    };
+  }
+
+  async function persistDraft(mode: "manual" | "auto") {
+    const payload = buildPayload();
+    if (!payload) {
+      if (mode === "manual") window.alert("Select a manager and add at least one line item.");
+      return false;
     }
-    setSaving(true);
-    setSaveMessage(null);
+
+    const signature = JSON.stringify(payload);
+    if (mode === "auto" && signature === lastSavedSignatureRef.current) return true;
+    const approvedQuoteEdited =
+      invoiceData?.invoice?.clientApprovalStatus === "approved" &&
+      signature !== lastSavedSignatureRef.current;
+
+    if (approvedQuoteEdited && reapprovalDecisionRef.current === null) {
+      if (mode === "auto") {
+        // Avoid surprise popups during background save. Require an explicit save click.
+        setAutoSaveState("idle");
+        setAutoSaveError("Manual save required: decide whether client re-approval is needed.");
+        return false;
+      }
+      reapprovalDecisionRef.current = window.confirm(
+        "This quote was already approved and has changed. Require client approval again?",
+      );
+    }
+
+    const requestId = ++saveRequestIdRef.current;
+    if (mode === "manual") {
+      setSaving(true);
+      setSaveMessage(null);
+    } else {
+      setAutoSaveState("saving");
+      setAutoSaveError(null);
+    }
     setSaveWarning(null);
+
     try {
-      const payload = {
-        issueDate,
-        dueDate: dueDate || undefined,
-        managerUserId,
-        managerName,
-        managerEmail: managerEmail || undefined,
-        groupId: groupId ? (groupId as Id<"invoiceGroups">) : undefined,
-        contactId: contactId ? (contactId as Id<"invoiceContacts">) : undefined,
-        clientGroupName: clientGroupName || undefined,
-        clientGroupType: clientGroupType || undefined,
-        clientContactName: clientContactName || undefined,
-        clientEmail: clientEmail || undefined,
-        clientPhone: clientPhone || undefined,
-        clientAddressLine1: clientAddressLine1 || undefined,
-        clientAddressLine2: clientAddressLine2 || undefined,
-        clientCity: clientCity || undefined,
-        clientState: clientState || undefined,
-        clientPostalCode: clientPostalCode || undefined,
-        equipmentPricingMode,
-        crewRateMode,
-        discountType,
-        discountValue: Number(discountValue || "0"),
-        notes: notes || undefined,
-        lineItems,
-      };
       if (activeInvoiceId) {
         const result = await updateDraft({ id: activeInvoiceId, ...payload });
         setSaveWarning(result.warning ?? null);
-        setSaveMessage("Invoice updated.");
+        if (approvedQuoteEdited && reapprovalDecisionRef.current) {
+          await resetApprovalToPending({ id: activeInvoiceId });
+          setSaveMessage("Quote updated and reset to pending approval.");
+        }
       } else {
         const result = await createDraft(payload);
         setActiveInvoiceId(result.id);
-        setSaveWarning(result.warning ?? null);
-        setSaveMessage("Invoice draft created.");
+        setApprovalToken(result.publicApprovalToken ?? "");
       }
+      lastSavedSignatureRef.current = signature;
+      if (requestId === saveRequestIdRef.current) {
+        if (mode === "manual") setSaveMessage("Invoice saved.");
+        setAutoSaveState("saved");
+      }
+      return true;
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : "Could not save invoice.");
+      const message = error instanceof Error ? error.message : "Could not save invoice.";
+      if (mode === "manual") window.alert(message);
+      if (requestId === saveRequestIdRef.current) {
+        setAutoSaveState("error");
+        setAutoSaveError(message);
+      }
+      return false;
     } finally {
-      setSaving(false);
+      if (mode === "manual") setSaving(false);
     }
+  }
+
+  async function save() {
+    await persistDraft("manual");
+  }
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    persistDraftRef.current = persistDraft;
+  }, [persistDraft]);
+
+  async function regenerateToken() {
+    if (!activeInvoiceId) return;
+    if (!window.confirm("Regenerate the public quote token? Old links will stop working.")) return;
+    const result = await regeneratePublicApprovalToken({ id: activeInvoiceId });
+    setApprovalToken(result.token);
+    setSaveMessage("Public quote link regenerated.");
+  }
+
+  async function resetQuoteToPending() {
+    if (!activeInvoiceId) return;
+    await resetApprovalToPending({ id: activeInvoiceId });
+    setSaveMessage("Quote status reset to pending.");
+  }
+
+  async function createGlobalTerms() {
+    if (!newTermsLabel.trim() || !newTermsMarkdown.trim()) {
+      window.alert("Provide terms label and markdown.");
+      return;
+    }
+    const createdId = await createTermsDefinition({
+      label: newTermsLabel.trim(),
+      version: newTermsVersion.trim() || "v1",
+      markdown: newTermsMarkdown.trim(),
+      active: true,
+    });
+    setTermsId(createdId);
+    setNewTermsLabel("");
+    setNewTermsVersion("v1");
+    setNewTermsMarkdown("");
+    setSaveMessage("Global terms template created.");
   }
 
   async function finalize() {
@@ -429,6 +576,53 @@ export function InvoiceEditor({
     await finalizeInvoice({ id: activeInvoiceId });
     setSaveMessage("Invoice finalized.");
   }
+
+  useEffect(() => {
+    if (suppressAutoSaveOnceRef.current) {
+      suppressAutoSaveOnceRef.current = false;
+      return;
+    }
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(() => {
+      void persistDraftRef.current("auto");
+    }, 1000);
+    return () => {
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    };
+  }, [
+    issueDate,
+    dueDate,
+    managerUserId,
+    managerName,
+    managerEmail,
+    groupId,
+    contactId,
+    clientGroupName,
+    clientGroupType,
+    clientContactName,
+    clientEmail,
+    clientPhone,
+    clientAddressLine1,
+    clientAddressLine2,
+    clientCity,
+    clientState,
+    clientPostalCode,
+    equipmentPricingMode,
+    crewRateMode,
+    discountType,
+    discountValue,
+    notes,
+    termsId,
+    additionalTermsMarkdown,
+    equipmentPackages,
+    equipmentTypes,
+    externalRentals,
+    artists,
+    crewRows,
+    fees,
+  ]);
+
+  const origin = typeof window === "undefined" ? "" : window.location.origin;
 
   return (
     <div className="space-y-4">
@@ -456,6 +650,23 @@ export function InvoiceEditor({
 
       {saveMessage ? <p className="text-sm text-primary">{saveMessage}</p> : null}
       {saveWarning ? <p className="text-sm text-amber-600">{saveWarning}</p> : null}
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <span>
+          {autoSaveState === "saving"
+            ? "Saving..."
+            : autoSaveState === "saved"
+              ? "Saved just now"
+              : autoSaveState === "error"
+                ? "Auto-save failed"
+                : "Auto-save idle"}
+        </span>
+        {autoSaveState === "error" ? (
+          <Button type="button" variant="outline" size="sm" onClick={() => void persistDraft("auto")}>
+            Retry
+          </Button>
+        ) : null}
+        {autoSaveError ? <span className="text-amber-600">{autoSaveError}</span> : null}
+      </div>
 
       <Card>
         <CardHeader><CardTitle>General</CardTitle></CardHeader>
@@ -491,6 +702,98 @@ export function InvoiceEditor({
               <option value="normal">Normal</option>
               <option value="ot">OT</option>
             </select>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Client Quote Approval</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex flex-wrap gap-2">
+            <Input
+              readOnly
+              value={
+                approvalToken && origin
+                  ? `${origin}/public/quote/${approvalToken}`
+                  : "Save draft once to generate the public quote link."
+              }
+            />
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!approvalToken || !origin}
+              onClick={() => {
+                if (!approvalToken || !origin) return;
+                void navigator.clipboard.writeText(`${origin}/public/quote/${approvalToken}`);
+              }}
+            >
+              Copy Link
+            </Button>
+            <Button type="button" variant="outline" disabled={!activeInvoiceId} onClick={() => void regenerateToken()}>
+              Regenerate Token
+            </Button>
+            {invoiceData?.invoice?.clientApprovalStatus === "changes_requested" ? (
+              <Button type="button" variant="outline" onClick={() => void resetQuoteToPending()}>
+                Reset To Pending
+              </Button>
+            ) : null}
+          </div>
+          {invoiceData?.invoice ? (
+            <div className="text-sm text-muted-foreground">
+              Status: {invoiceData.invoice.clientApprovalStatus}
+              {invoiceData.invoice.approvedAt ? ` • Approved at ${new Date(invoiceData.invoice.approvedAt).toLocaleString()}` : ""}
+              {invoiceData.invoice.changesRequestedAt
+                ? ` • Changes requested at ${new Date(invoiceData.invoice.changesRequestedAt).toLocaleString()}`
+                : ""}
+              {invoiceData.invoice.clientApprovalNote ? ` • Note: ${invoiceData.invoice.clientApprovalNote}` : ""}
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Quote Terms & Conditions</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          <div className="space-y-2">
+            <Label>Global terms template</Label>
+            <select
+              className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+              value={termsId}
+              onChange={(e) => setTermsId(e.target.value)}
+            >
+              <option value="">Default terms (from global settings)</option>
+              {(termsDefinitions ?? []).map((row) => (
+                <option key={row._id} value={row._id}>
+                  {row.label} ({row.version})
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <Label>Additional terms (invoice-specific)</Label>
+            <textarea
+              className="min-h-28 w-full rounded-md border bg-background px-3 py-2 text-sm"
+              value={additionalTermsMarkdown}
+              onChange={(e) => setAdditionalTermsMarkdown(e.target.value)}
+            />
+          </div>
+          <div className="rounded-md border p-3">
+            <p className="mb-2 text-sm font-medium">Create global terms template</p>
+            <div className="grid gap-2 md:grid-cols-2">
+              <Input placeholder="Label" value={newTermsLabel} onChange={(e) => setNewTermsLabel(e.target.value)} />
+              <Input placeholder="Version" value={newTermsVersion} onChange={(e) => setNewTermsVersion(e.target.value)} />
+              <div className="md:col-span-2">
+                <textarea
+                  className="min-h-20 w-full rounded-md border bg-background px-3 py-2 text-sm"
+                  placeholder="Global terms markdown"
+                  value={newTermsMarkdown}
+                  onChange={(e) => setNewTermsMarkdown(e.target.value)}
+                />
+              </div>
+            </div>
+            <Button type="button" variant="outline" className="mt-2" onClick={() => void createGlobalTerms()}>
+              Add Global Terms
+            </Button>
           </div>
         </CardContent>
       </Card>

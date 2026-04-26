@@ -7,6 +7,7 @@ import {
 } from "@/components/ui/card";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { FinancialHubSettings } from "@/components/financial/financial-hub-settings";
 
 export default function FinancialHubPage() {
   return (
@@ -47,6 +48,7 @@ export default function FinancialHubPage() {
           <CardContent className="text-muted-foreground">Coming soon.</CardContent>
         </Card>
       </div>
+      <FinancialHubSettings />
     </div>
   );
 }
