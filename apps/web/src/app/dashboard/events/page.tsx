@@ -4,7 +4,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { EventDatabaseManager } from "@/components/events/event-database-manager";
+import { EventsListClient } from "@/components/events/events-list-client";
 
 export default function EventsPage() {
   return (
@@ -13,11 +13,11 @@ export default function EventsPage() {
         <CardHeader>
           <CardTitle>Events</CardTitle>
           <CardDescription>
-            Manage event lifecycle data, shifts, artifacts, and expense-linked crew hours.
+            Browse events, filter quickly, and jump into dedicated edit workspaces.
           </CardDescription>
         </CardHeader>
       </Card>
-      <EventDatabaseManager />
+      <EventsListClient />
     </div>
   );
 }

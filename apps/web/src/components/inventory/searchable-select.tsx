@@ -4,9 +4,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Input } from "@/components/ui/input";
 
-type Option = {
+export type SearchableSelectOption = {
   value: string;
   label: string;
+  description?: string;
+  keywords?: string;
+  icon?: string;
+  avatarUrl?: string;
 };
 
 export function SearchableSelect({
@@ -17,14 +21,18 @@ export function SearchableSelect({
   emptyLabel,
   onCreate,
   createLabel,
+  renderOption,
+  renderSelected,
 }: {
   value: string;
   onChange: (value: string) => void;
-  options: Option[];
+  options: SearchableSelectOption[];
   placeholder: string;
   emptyLabel?: string;
   onCreate?: (query: string) => void;
   createLabel?: string;
+  renderOption?: (option: SearchableSelectOption) => React.ReactNode;
+  renderSelected?: (option: SearchableSelectOption | undefined) => React.ReactNode;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -79,7 +87,9 @@ export function SearchableSelect({
   const filtered = useMemo(() => {
     const lowered = query.trim().toLowerCase();
     if (!lowered) return options;
-    return options.filter((option) => option.label.toLowerCase().includes(lowered));
+    return options.filter((option) =>
+      `${option.label} ${option.description ?? ""} ${option.keywords ?? ""}`.toLowerCase().includes(lowered),
+    );
   }, [options, query]);
   const normalizedQuery = query.trim().toLowerCase();
   const canCreate =
@@ -92,18 +102,20 @@ export function SearchableSelect({
       <button
         ref={triggerRef}
         type="button"
-        className="h-9 w-full rounded-md border bg-background px-3 text-left text-sm"
+        className="h-9 w-full min-w-0 rounded-none border border-input bg-transparent px-3 py-2 text-left text-sm transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-input/50 disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-1 aria-invalid:ring-destructive/20 dark:bg-input/30 dark:disabled:bg-input/80 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40"
         onClick={() => setOpen((prev) => !prev)}
       >
-        <span className="block truncate">
-          {selected?.label ?? emptyLabel ?? "Select option"}
-        </span>
+        {renderSelected ? (
+          renderSelected(selected)
+        ) : (
+          <span className="block truncate">{selected?.label ?? emptyLabel ?? "Select option"}</span>
+        )}
       </button>
       {open && menuPosition
         ? createPortal(
             <div
               ref={menuRef}
-              className="z-[100] rounded-md border bg-popover p-2 shadow-md"
+              className="z-[100] rounded-none border border-input bg-background p-2 shadow-md"
               style={{
                 position: "fixed",
                 top: menuPosition.top,
@@ -122,14 +134,23 @@ export function SearchableSelect({
                     <button
                       key={option.value}
                       type="button"
-                      className="block w-full rounded px-2 py-1 text-left text-sm break-words hover:bg-muted"
+                      className="block w-full rounded-none px-2 py-1 text-left text-sm break-words hover:bg-muted"
                       onClick={() => {
                         onChange(option.value);
                         setOpen(false);
                         setQuery("");
                       }}
                     >
-                      {option.label}
+                      {renderOption ? (
+                        renderOption(option)
+                      ) : (
+                        <div className="min-w-0">
+                          <p className="truncate">{option.label}</p>
+                          {option.description ? (
+                            <p className="truncate text-xs text-muted-foreground">{option.description}</p>
+                          ) : null}
+                        </div>
+                      )}
                     </button>
                   ))
                 ) : (
@@ -138,7 +159,7 @@ export function SearchableSelect({
                 {canCreate ? (
                   <button
                     type="button"
-                    className="mt-1 block w-full rounded border px-2 py-1 text-left text-sm hover:bg-muted"
+                    className="mt-1 block w-full rounded-none border border-input px-2 py-1 text-left text-sm hover:bg-muted"
                     onClick={() => {
                       onCreate?.(query.trim());
                       setOpen(false);

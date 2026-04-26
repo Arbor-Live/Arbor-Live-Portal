@@ -395,12 +395,16 @@ export default defineSchema({
     requiresShowWindow: v.boolean(),
     venueName: v.optional(v.string()),
     eventType: v.optional(v.string()),
+    teamsInterested: v.optional(v.array(v.string())),
     category: v.optional(v.string()),
     host: v.optional(v.string()),
     expectedTurnout: v.optional(v.number()),
     budgetUsd: v.optional(v.number()),
     dayOfLeadUserId: v.optional(v.string()),
     eventManagerUserId: v.optional(v.string()),
+    crewCostUsd: v.optional(v.number()),
+    bandsCostUsd: v.optional(v.number()),
+    externalRentalsCostUsd: v.optional(v.number()),
     notes: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -446,6 +450,7 @@ export default defineSchema({
 
   eventCrewShifts: defineTable({
     eventId: v.id("events"),
+    scheduleBlockId: v.optional(v.id("eventScheduleBlocks")),
     expenseReportId: v.optional(v.id("eventExpenseReports")),
     role: v.string(),
     personName: v.optional(v.string()),
@@ -461,6 +466,7 @@ export default defineSchema({
   })
     .index("by_eventId", ["eventId"])
     .index("by_eventId_and_startsAt", ["eventId", "startsAt"])
+    .index("by_scheduleBlockId", ["scheduleBlockId"])
     .index("by_expenseReportId", ["expenseReportId"]),
 
   eventPeopleAssignments: defineTable({

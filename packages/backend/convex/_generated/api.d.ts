@@ -12,6 +12,7 @@ import type * as auth from "../auth.js";
 import type * as bootstrap from "../bootstrap.js";
 import type * as capabilityDefinitions from "../capabilityDefinitions.js";
 import type * as eventArtifacts from "../eventArtifacts.js";
+import type * as eventAssignments from "../eventAssignments.js";
 import type * as eventCrew from "../eventCrew.js";
 import type * as eventExpenses from "../eventExpenses.js";
 import type * as eventSchedule from "../eventSchedule.js";
@@ -44,6 +45,7 @@ declare const fullApi: ApiFromModules<{
   bootstrap: typeof bootstrap;
   capabilityDefinitions: typeof capabilityDefinitions;
   eventArtifacts: typeof eventArtifacts;
+  eventAssignments: typeof eventAssignments;
   eventCrew: typeof eventCrew;
   eventExpenses: typeof eventExpenses;
   eventSchedule: typeof eventSchedule;

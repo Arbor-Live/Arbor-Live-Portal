@@ -34,8 +34,14 @@ export const upsertBlocks = mutation({
     ),
   },
   handler: async (ctx, args) => {
+    const event = await ctx.db.get(args.eventId);
+    if (!event) throw new Error("Event not found.");
     for (const block of args.blocks) {
       if (block.endsAt <= block.startsAt) throw new Error("Schedule block end must be after start.");
+      if (block.dayIndex < 0) throw new Error("Schedule block day index cannot be negative.");
+      if (!event.spansMultipleDays && block.dayIndex !== 0) {
+        throw new Error("Single-day events only allow day index 0.");
+      }
     }
     const sorted = [...args.blocks].sort((a, b) => a.startsAt - b.startsAt);
     for (let i = 1; i < sorted.length; i += 1) {

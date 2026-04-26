@@ -21,6 +21,7 @@ export const upsertShifts = mutation({
     shifts: v.array(
       v.object({
         id: v.optional(v.id("eventCrewShifts")),
+        scheduleBlockId: v.optional(v.id("eventScheduleBlocks")),
         expenseReportId: v.optional(v.id("eventExpenseReports")),
         role: v.string(),
         personName: v.optional(v.string()),
@@ -43,6 +44,12 @@ export const upsertShifts = mutation({
         const report = await ctx.db.get(shift.expenseReportId);
         if (!report || report.eventId !== args.eventId) throw new Error("Shift has invalid expense report link.");
       }
+      if (shift.scheduleBlockId) {
+        const block = await ctx.db.get(shift.scheduleBlockId);
+        if (!block || block.eventId !== args.eventId) {
+          throw new Error("Shift has invalid schedule block link.");
+        }
+      }
     }
 
     const existing = await ctx.db
@@ -59,6 +66,7 @@ export const upsertShifts = mutation({
       const hours = hoursBetween(shift.startsAt, shift.endsAt);
       if (shift.id) {
         await ctx.db.patch(shift.id, {
+          scheduleBlockId: shift.scheduleBlockId,
           expenseReportId: shift.expenseReportId,
           role: shift.role.trim(),
           personName: shift.personName?.trim() || undefined,
@@ -74,6 +82,7 @@ export const upsertShifts = mutation({
       } else {
         await ctx.db.insert("eventCrewShifts", {
           eventId: args.eventId,
+          scheduleBlockId: shift.scheduleBlockId,
           expenseReportId: shift.expenseReportId,
           role: shift.role.trim(),
           personName: shift.personName?.trim() || undefined,

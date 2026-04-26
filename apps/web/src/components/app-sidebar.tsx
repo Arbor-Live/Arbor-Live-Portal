@@ -57,6 +57,11 @@ const financialHubSubItems = [
   { title: "Create Invoice", url: "/dashboard/financial-hub/invoices/new" },
 ]
 
+const eventsSubItems = [
+  { title: "Overview", url: "/dashboard/events" },
+  { title: "Create Event", url: "/dashboard/events/new" },
+]
+
 const secondaryItems = [
   { title: "Support", url: "#", icon: <LifebuoyIcon /> },
   { title: "Feedback", url: "#", icon: <PaperPlaneTiltIcon /> },
@@ -111,6 +116,26 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
                           isActive={
                             pathname === subItem.url ||
                             (subItem.url !== "/dashboard/inventory" &&
+                              pathname.startsWith(`${subItem.url}/`))
+                          }
+                        >
+                          <Link href={subItem.url}>
+                            <span>{subItem.title}</span>
+                          </Link>
+                        </SidebarMenuSubButton>
+                      </SidebarMenuSubItem>
+                    ))}
+                  </SidebarMenuSub>
+                ) : null}
+                {item.url === "/dashboard/events" ? (
+                  <SidebarMenuSub>
+                    {eventsSubItems.map((subItem) => (
+                      <SidebarMenuSubItem key={subItem.url}>
+                        <SidebarMenuSubButton
+                          asChild
+                          isActive={
+                            pathname === subItem.url ||
+                            (subItem.url !== "/dashboard/events" &&
                               pathname.startsWith(`${subItem.url}/`))
                           }
                         >

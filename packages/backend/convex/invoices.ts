@@ -246,6 +246,7 @@ export const listManagers = query({
       name?: string;
       email?: string;
       role?: string | null;
+      image?: string | null;
     }>;
     return users
       .map((user) => ({
@@ -253,6 +254,7 @@ export const listManagers = query({
         name: user.name ?? user.email ?? "Unknown user",
         email: user.email,
         role: user.role ?? undefined,
+        image: user.image ?? undefined,
       }))
       .filter((u) => Boolean(u.id))
       .sort((a, b) => a.name.localeCompare(b.name));
