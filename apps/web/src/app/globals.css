@@ -292,4 +292,97 @@
   .app-date-time-calendar .react-datepicker__triangle {
     display: none !important;
   }
+
+  .fc {
+    --fc-border-color: var(--border);
+    --fc-page-bg-color: var(--card);
+    --fc-neutral-bg-color: var(--muted);
+    --fc-list-event-hover-bg-color: var(--muted);
+    --fc-today-bg-color: color-mix(in oklch, var(--primary) 8%, transparent);
+    --fc-button-bg-color: var(--primary);
+    --fc-button-border-color: var(--primary);
+    --fc-button-hover-bg-color: color-mix(in oklch, var(--primary) 88%, black 12%);
+    --fc-button-hover-border-color: color-mix(in oklch, var(--primary) 88%, black 12%);
+    --fc-button-active-bg-color: color-mix(in oklch, var(--primary) 80%, black 20%);
+    --fc-button-active-border-color: color-mix(in oklch, var(--primary) 80%, black 20%);
+  }
+
+  .fc .fc-scrollgrid {
+    border-radius: 0.75rem;
+    overflow: hidden;
+    border-color: var(--border);
+  }
+
+  .fc .fc-col-header-cell {
+    background: color-mix(in oklch, var(--card) 88%, var(--muted) 12%);
+  }
+
+  .fc .fc-daygrid-day,
+  .fc .fc-timegrid-slot,
+  .fc .fc-timegrid-axis,
+  .fc .fc-col-header-cell {
+    border-color: color-mix(in oklch, var(--border) 80%, transparent);
+  }
+
+  .fc .fc-timegrid-slot-label,
+  .fc .fc-col-header-cell-cushion,
+  .fc .fc-toolbar-title {
+    color: var(--foreground);
+  }
+
+  .fc .fc-timegrid-slot-label {
+    font-size: 0.75rem;
+    opacity: 0.85;
+  }
+
+  .fc .fc-day-today {
+    background: color-mix(in oklch, var(--primary) 8%, transparent) !important;
+  }
+
+  .fc .fc-event {
+    border-width: 1px;
+    border-radius: 0.5rem;
+    box-shadow: none;
+  }
+
+  .fc .fc-event-main,
+  .fc .fc-event-time,
+  .fc .fc-event-title {
+    color: var(--foreground) !important;
+  }
+
+  .fc .fc-event-title,
+  .fc .fc-event-time,
+  .fc .fc-event-main-frame {
+    white-space: normal !important;
+  }
+
+  .fc .fc-event-title {
+    font-weight: 600;
+  }
+
+  .fc .fc-event:hover {
+    filter: brightness(0.97);
+  }
+
+  .fc .fc-timegrid-now-indicator-line {
+    border-color: color-mix(in oklch, var(--primary) 90%, transparent);
+  }
+
+  .fc .fc-timegrid-now-indicator-arrow {
+    border-top-color: color-mix(in oklch, var(--primary) 90%, transparent);
+    border-bottom-color: color-mix(in oklch, var(--primary) 90%, transparent);
+  }
+
+  .fc .fc-toolbar-title {
+    font-size: 1rem;
+    font-weight: 600;
+  }
+
+  .fc .fc-button {
+    border-radius: 0.5rem;
+    box-shadow: none;
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
 }

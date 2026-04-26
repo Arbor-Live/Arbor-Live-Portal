@@ -33,6 +33,7 @@ import type * as invoices from "../invoices.js";
 import type * as lostFoundSettings from "../lostFoundSettings.js";
 import type * as publicInventory from "../publicInventory.js";
 import type * as storageLocations from "../storageLocations.js";
+import type * as users from "../users.js";
 
 import type {
   ApiFromModules,
@@ -66,6 +67,7 @@ declare const fullApi: ApiFromModules<{
   lostFoundSettings: typeof lostFoundSettings;
   publicInventory: typeof publicInventory;
   storageLocations: typeof storageLocations;
+  users: typeof users;
 }>;
 
 /**

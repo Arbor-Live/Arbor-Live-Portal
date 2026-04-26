@@ -5,6 +5,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { UserRatesAdminClient } from "@/components/users/user-rates-admin-client";
 
 export default function UsersPage() {
   return (
@@ -37,6 +38,7 @@ export default function UsersPage() {
           <CardContent className="text-muted-foreground">Coming soon.</CardContent>
         </Card>
       </div>
+      <UserRatesAdminClient />
     </div>
   );
 }

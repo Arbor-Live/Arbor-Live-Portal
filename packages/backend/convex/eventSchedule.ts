@@ -24,6 +24,7 @@ export const upsertBlocks = mutation({
     blocks: v.array(
       v.object({
         id: v.optional(v.id("eventScheduleBlocks")),
+        clientId: v.optional(v.string()),
         blockType: blockTypeValue,
         label: v.string(),
         dayIndex: v.number(),
@@ -60,6 +61,16 @@ export const upsertBlocks = mutation({
     }
 
     const now = Date.now();
+    const savedBlocks: Array<{
+      id: string;
+      clientId?: string;
+      blockType: "setup" | "show" | "strike" | "custom";
+      label: string;
+      dayIndex: number;
+      startsAt: number;
+      endsAt: number;
+      notes?: string;
+    }> = [];
     for (const block of args.blocks) {
       if (block.id) {
         await ctx.db.patch(block.id, {
@@ -71,8 +82,18 @@ export const upsertBlocks = mutation({
           notes: block.notes?.trim() || undefined,
           updatedAt: now,
         });
+        savedBlocks.push({
+          id: block.id,
+          clientId: block.clientId,
+          blockType: block.blockType,
+          label: block.label.trim(),
+          dayIndex: block.dayIndex,
+          startsAt: block.startsAt,
+          endsAt: block.endsAt,
+          notes: block.notes?.trim() || undefined,
+        });
       } else {
-        await ctx.db.insert("eventScheduleBlocks", {
+        const insertedId = await ctx.db.insert("eventScheduleBlocks", {
           eventId: args.eventId,
           blockType: block.blockType,
           label: block.label.trim(),
@@ -83,7 +104,18 @@ export const upsertBlocks = mutation({
           createdAt: now,
           updatedAt: now,
         });
+        savedBlocks.push({
+          id: insertedId,
+          clientId: block.clientId,
+          blockType: block.blockType,
+          label: block.label.trim(),
+          dayIndex: block.dayIndex,
+          startsAt: block.startsAt,
+          endsAt: block.endsAt,
+          notes: block.notes?.trim() || undefined,
+        });
       }
     }
+    return savedBlocks;
   },
 });

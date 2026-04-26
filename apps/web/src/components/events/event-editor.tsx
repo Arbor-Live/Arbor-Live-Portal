@@ -20,22 +20,35 @@ import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { SearchableSelect, type SearchableSelectOption } from "@/components/inventory/searchable-select";
 import { EventTimelineScheduler, type TimelineBlockDraft } from "@/components/events/event-timeline-scheduler";
+import { UserSelect, type UserSelectOption } from "@/components/users/user-select";
 import { authClient } from "@/lib/auth-client";
 
 type EventStatus = "draft" | "active" | "completed" | "cancelled";
-type EventType = "Crewed Event" | "Rental with Crew" | "Dry Rental" | "Services Only";
+type EventType = "Crewed Event" | "Rental with Crew" | "Dry Hire" | "Services Only";
+type StoredEventType = EventType | "Dry Rental";
 type EventTeam = "Design" | "Marketing" | "Lighting" | "Sound" | "Operations";
+type ShiftDraft = {
+  id?: Id<"eventCrewShifts">;
+  scheduleBlockId?: Id<"eventScheduleBlocks">;
+  scheduleBlockRef?: string;
+  expenseReportId?: Id<"eventExpenseReports">;
+  role: string;
+  userId?: string;
+  personName: string;
+  startsAt: string;
+  endsAt: string;
+  postedToExpense: boolean;
+  notes: string;
+};
 
-const EVENT_TYPES: EventType[] = ["Crewed Event", "Rental with Crew", "Dry Rental", "Services Only"];
+const EVENT_TYPES: EventType[] = ["Crewed Event", "Rental with Crew", "Dry Hire", "Services Only"];
 const EVENT_TEAMS: EventTeam[] = ["Design", "Marketing", "Lighting", "Sound", "Operations"];
-const EVENT_TIMEZONE = "America/Los_Angeles";
 const EVENT_TYPE_ICONS: Record<EventType, Icon> = {
   "Crewed Event": FilmSlateIcon,
   "Rental with Crew": TruckIcon,
-  "Dry Rental": PackageIcon,
+  "Dry Hire": PackageIcon,
   "Services Only": WrenchIcon,
 };
 const TEAM_ICONS: Record<EventTeam, Icon> = {
@@ -56,8 +69,51 @@ function toLocalDateTimeInput(value: number | Date) {
   return `${y}-${m}-${d}T${hh}:${mm}`;
 }
 
-const tabs = ["overview", "schedule", "crew", "artifacts", "expenses"] as const;
+function formatCurrency(value: number) {
+  return `$${value.toFixed(2)}`;
+}
+
+function formatHours(value: number) {
+  return `${value.toFixed(2)}h`;
+}
+
+function formatDateTime(value: number) {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
+const tabs = ["overview", "schedule", "artifacts", "expenses"] as const;
 type TabId = (typeof tabs)[number];
+const TAB_LABELS: Record<TabId, string> = {
+  overview: "Overview",
+  schedule: "Schedule",
+  artifacts: "Artifacts",
+  expenses: "Expenses",
+};
+
+function normalizeEventType(value: StoredEventType | undefined): EventType {
+  if (value === "Dry Rental") return "Dry Hire";
+  return value ?? "Crewed Event";
+}
+
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "data" in error &&
+    typeof (error as { data?: { message?: unknown } }).data?.message === "string"
+  ) {
+    return (error as { data: { message: string } }).data.message;
+  }
+  return "Something went wrong while saving. Please try again.";
+}
 
 export function EventEditor({ eventId }: { eventId?: Id<"events"> }) {
   const router = useRouter();
@@ -70,7 +126,6 @@ export function EventEditor({ eventId }: { eventId?: Id<"events"> }) {
   const updateEvent = useMutation(api.events.update);
   const upsertBlocks = useMutation(api.eventSchedule.upsertBlocks);
   const upsertShifts = useMutation(api.eventCrew.upsertShifts);
-  const upsertAssignments = useMutation(api.eventAssignments.upsertAssignments);
   const createArtifact = useMutation(api.eventArtifacts.create);
 
   const [activeTab, setActiveTab] = useState<TabId>("overview");
@@ -91,35 +146,47 @@ export function EventEditor({ eventId }: { eventId?: Id<"events"> }) {
   const [externalRentalsCostUsd, setExternalRentalsCostUsd] = useState("0");
   const [notes, setNotes] = useState("");
   const [blocks, setBlocks] = useState<TimelineBlockDraft[]>([]);
-  const [shifts, setShifts] = useState<
-    Array<{
-      id?: Id<"eventCrewShifts">;
-      scheduleBlockId?: Id<"eventScheduleBlocks">;
-      expenseReportId?: Id<"eventExpenseReports">;
-      role: string;
-      personName: string;
-      startsAt: string;
-      endsAt: string;
-      postedToExpense: boolean;
-      notes: string;
-    }>
-  >([]);
-  const [assignments, setAssignments] = useState<
-    Array<{
-      id?: Id<"eventPeopleAssignments">;
-      assignmentType: "event_manager" | "day_of_lead" | "crew" | "performer" | "support" | "contact";
-      roleLabel: string;
-      personName: string;
-      contactEmail: string;
-      contactPhone: string;
-      notes: string;
-    }>
-  >([]);
+  const [shifts, setShifts] = useState<ShiftDraft[]>([]);
+  const [selectedCrewUserId, setSelectedCrewUserId] = useState("");
   const [artifactType, setArtifactType] = useState<"note" | "instruction" | "document" | "pull_list">("note");
   const [artifactTitle, setArtifactTitle] = useState("");
   const [artifactMarkdown, setArtifactMarkdown] = useState("");
   const [message, setMessage] = useState<string | null>(null);
+  const [messageTone, setMessageTone] = useState<"success" | "error">("success");
   const hydratedEventIdRef = useRef<string | null>(null);
+  const localBlockCounterRef = useRef(0);
+
+  function makeLocalBlockRef() {
+    localBlockCounterRef.current += 1;
+    return `local-block-${localBlockCounterRef.current}`;
+  }
+
+  function withStableBlockRefs(nextBlocks: TimelineBlockDraft[]) {
+    return nextBlocks.map((block) =>
+      block.id || block.clientId
+        ? block
+        : {
+            ...block,
+            clientId: makeLocalBlockRef(),
+          },
+    );
+  }
+
+  function getBlockRef(block: TimelineBlockDraft) {
+    return block.id ?? block.clientId;
+  }
+
+  function mapPersistedBlockIdByRef(inputBlocks: TimelineBlockDraft[]) {
+    const result = new Map<string, Id<"eventScheduleBlocks">>();
+    for (const block of inputBlocks) {
+      if (!block.id) continue;
+      if (block.clientId) {
+        result.set(block.clientId, block.id as Id<"eventScheduleBlocks">);
+      }
+      result.set(block.id, block.id as Id<"eventScheduleBlocks">);
+    }
+    return result;
+  }
 
   useEffect(() => {
     if (!eventData?.event) return;
@@ -132,7 +199,7 @@ export function EventEditor({ eventId }: { eventId?: Id<"events"> }) {
     setEndAt(toLocalDateTimeInput(eventData.event.endAt));
     setEndAtTouched(true);
     setVenueName(eventData.event.venueName ?? "");
-    setEventType((eventData.event.eventType as EventType | undefined) ?? "Crewed Event");
+    setEventType(normalizeEventType(eventData.event.eventType as StoredEventType | undefined));
     setTeamsInterested((eventData.event.teamsInterested as EventTeam[] | undefined) ?? []);
     setHost(eventData.event.host ?? "");
     setManagerUserId(eventData.event.eventManagerUserId ?? "");
@@ -144,6 +211,7 @@ export function EventEditor({ eventId }: { eventId?: Id<"events"> }) {
     setBlocks(
       eventData.blocks.map((row) => ({
         id: row._id,
+        clientId: row._id,
         blockType: row.blockType,
         label: row.label,
         dayIndex: row.dayIndex,
@@ -156,8 +224,10 @@ export function EventEditor({ eventId }: { eventId?: Id<"events"> }) {
       eventData.shifts.map((row) => ({
         id: row._id,
         scheduleBlockId: row.scheduleBlockId,
+        scheduleBlockRef: row.scheduleBlockId,
         expenseReportId: row.expenseReportId,
         role: row.role,
+        userId: row.userId ?? undefined,
         personName: row.personName ?? "",
         startsAt: toLocalDateTimeInput(row.startsAt),
         endsAt: toLocalDateTimeInput(row.endsAt),
@@ -165,18 +235,15 @@ export function EventEditor({ eventId }: { eventId?: Id<"events"> }) {
         notes: row.notes ?? "",
       })),
     );
-    setAssignments(
-      eventData.assignments.map((row) => ({
-        id: row._id,
-        assignmentType: row.assignmentType,
-        roleLabel: row.roleLabel ?? "",
-        personName: row.personName,
-        contactEmail: row.contactEmail ?? "",
-        contactPhone: row.contactPhone ?? "",
-        notes: row.notes ?? "",
-      })),
-    );
   }, [eventData]);
+
+  const hideSchedule = eventType === "Services Only";
+  const visibleTabs = useMemo(
+    () => tabs.filter((tab) => !(hideSchedule && tab === "schedule")),
+    [hideSchedule],
+  );
+
+  const resolvedActiveTab: TabId = visibleTabs.includes(activeTab) ? activeTab : "overview";
 
   const dayCount = useMemo(() => {
     if (!startAt || !endAt) return 1;
@@ -237,19 +304,23 @@ export function EventEditor({ eventId }: { eventId?: Id<"events"> }) {
     }
     return base.sort((a, b) => a.label.localeCompare(b.label));
   }, [managerList, session.data?.user]);
-
-  function initials(value?: string) {
-    if (!value) return "U";
-    return value
-      .split(" ")
-      .map((part) => part[0])
-      .join("")
-      .slice(0, 2)
-      .toUpperCase();
-  }
+  const userSelectOptions: UserSelectOption[] = useMemo(
+    () =>
+      userOptions.map((option) => ({
+        ...option,
+        role: option.description,
+        email: option.description,
+      })),
+    [userOptions],
+  );
+  const selectedCrewUserOption = useMemo(
+    () => userOptions.find((option) => option.value === selectedCrewUserId),
+    [selectedCrewUserId, userOptions],
+  );
 
   async function saveCore() {
     if (!title.trim() || !startAt || !endAt) {
+      setMessageTone("error");
       setMessage("Title, start, and end are required.");
       return;
     }
@@ -259,75 +330,139 @@ export function EventEditor({ eventId }: { eventId?: Id<"events"> }) {
       invoiceId: invoiceId ? (invoiceId as Id<"invoices">) : undefined,
       startAt: new Date(startAt).getTime(),
       endAt: new Date(endAt).getTime(),
-      timezone: EVENT_TIMEZONE,
       venueName: venueName || undefined,
       eventType: eventType || undefined,
       teamsInterested: teamsInterested.length > 0 ? teamsInterested : undefined,
       host: host || undefined,
       eventManagerUserId: managerUserId || undefined,
       dayOfLeadUserId: dayOfLeadUserId || undefined,
-      crewCostUsd: Number(crewCostUsd || "0"),
       bandsCostUsd: Number(bandsCostUsd || "0"),
       externalRentalsCostUsd: Number(externalRentalsCostUsd || "0"),
       notes: notes || undefined,
     };
-    if (isCreate) {
-      const id = await createEvent({ ...payload, visibility: "internal" });
-      router.replace(`/dashboard/events/${id}`);
-      return;
+    try {
+      if (isCreate) {
+        const id = await createEvent({ ...payload, visibility: "internal" });
+        router.replace(`/dashboard/events/${id}`);
+        return;
+      }
+      await updateEvent({ id: eventId!, ...payload });
+      setMessageTone("success");
+      setMessage("Overview saved.");
+    } catch (error) {
+      setMessageTone("error");
+      setMessage(`Overview error: ${getErrorMessage(error)}`);
     }
-    await updateEvent({ id: eventId!, ...payload });
-    setMessage("Event details saved.");
   }
 
   async function saveSchedule() {
     if (!eventId) return;
-    await upsertBlocks({
-      eventId,
-      blocks: blocks.map((row) => ({
-        id: row.id as Id<"eventScheduleBlocks"> | undefined,
-        blockType: row.blockType,
-        label: row.label,
-        dayIndex: row.dayIndex,
-        startsAt: new Date(row.startsAt).getTime(),
-        endsAt: new Date(row.endsAt).getTime(),
-        notes: row.notes || undefined,
-      })),
-    });
-    setMessage("Schedule saved.");
+    try {
+      const blocksWithRefs = withStableBlockRefs(blocks);
+      const savedBlocks = await upsertBlocks({
+        eventId,
+        blocks: blocksWithRefs.map((row) => ({
+          id: row.id as Id<"eventScheduleBlocks"> | undefined,
+          clientId: row.clientId,
+          blockType: row.blockType,
+          label: row.label,
+          dayIndex: row.dayIndex,
+          startsAt: new Date(row.startsAt).getTime(),
+          endsAt: new Date(row.endsAt).getTime(),
+          notes: row.notes || undefined,
+        })),
+      });
+      setBlocks(
+        savedBlocks.map((row) => ({
+          id: row.id,
+          clientId: row.clientId ?? row.id,
+          blockType: row.blockType,
+          label: row.label,
+          dayIndex: row.dayIndex,
+          startsAt: toLocalDateTimeInput(row.startsAt),
+          endsAt: toLocalDateTimeInput(row.endsAt),
+          notes: row.notes ?? "",
+        })),
+      );
+      const persistedBlockIdByRef = mapPersistedBlockIdByRef(
+        savedBlocks.map((row) => ({
+          id: row.id,
+          clientId: row.clientId ?? row.id,
+          blockType: row.blockType,
+          label: row.label,
+          dayIndex: row.dayIndex,
+          startsAt: toLocalDateTimeInput(row.startsAt),
+          endsAt: toLocalDateTimeInput(row.endsAt),
+          notes: row.notes ?? "",
+        })),
+      );
+      setShifts((prev) =>
+        prev.map((shift) => {
+          const persistedId =
+            shift.scheduleBlockId ??
+            (shift.scheduleBlockRef ? persistedBlockIdByRef.get(shift.scheduleBlockRef) : undefined);
+          return {
+            ...shift,
+            scheduleBlockId: persistedId,
+            scheduleBlockRef: shift.scheduleBlockRef ?? persistedId,
+          };
+        }),
+      );
+      setMessageTone("success");
+      setMessage("Schedule saved.");
+    } catch (error) {
+      setMessageTone("error");
+      setMessage(`Schedule error: ${getErrorMessage(error)}`);
+      throw error;
+    }
   }
 
   async function saveShifts() {
     if (!eventId) return;
-    const validBlockIds = new Set(blocks.map((block) => block.id).filter(Boolean));
-    await upsertShifts({
-      eventId,
-      shifts: shifts.map((row) => ({
-        id: row.id,
-        expenseReportId: row.expenseReportId,
-        scheduleBlockId: row.scheduleBlockId && validBlockIds.has(row.scheduleBlockId) ? row.scheduleBlockId : undefined,
-        role: row.role,
-        personName: row.personName || undefined,
-        startsAt: new Date(row.startsAt).getTime(),
-        endsAt: new Date(row.endsAt).getTime(),
-        postedToExpense: row.postedToExpense,
-        notes: row.notes || undefined,
-      })),
-    });
-    setMessage("Crew shifts saved.");
+    try {
+      const persistedBlockIdByRef = mapPersistedBlockIdByRef(blocks);
+      const validBlockIds = new Set(blocks.map((block) => block.id).filter(Boolean));
+      await upsertShifts({
+        eventId,
+        shifts: shifts.map((row) => ({
+          id: row.id,
+          expenseReportId: row.expenseReportId,
+          scheduleBlockId:
+            (row.scheduleBlockId && validBlockIds.has(row.scheduleBlockId)
+              ? row.scheduleBlockId
+              : row.scheduleBlockRef
+                ? persistedBlockIdByRef.get(row.scheduleBlockRef)
+                : undefined) ?? undefined,
+          role: row.role,
+          userId: row.userId || undefined,
+          personName: row.personName || undefined,
+          startsAt: new Date(row.startsAt).getTime(),
+          endsAt: new Date(row.endsAt).getTime(),
+          postedToExpense: row.postedToExpense,
+          notes: row.notes || undefined,
+        })),
+      });
+      setMessageTone("success");
+      setMessage("Schedule personnel saved.");
+    } catch (error) {
+      setMessageTone("error");
+      setMessage(`Schedule personnel error: ${getErrorMessage(error)}`);
+      throw error;
+    }
   }
 
-  function addPersonnelShift(block: TimelineBlockDraft) {
-    if (!block.id) {
-      setMessage("Save schedule first so this block can be assigned personnel.");
-      return;
-    }
+  function addPersonnelShift(block: TimelineBlockDraft, options?: { userId?: string }) {
+    const blockRef = getBlockRef(block);
+    const selectedUser =
+      options?.userId ? userOptions.find((option) => option.value === options.userId) : undefined;
     setShifts((prev) => [
       ...prev,
       {
-        scheduleBlockId: block.id as Id<"eventScheduleBlocks">,
+        scheduleBlockId: block.id as Id<"eventScheduleBlocks"> | undefined,
+        scheduleBlockRef: blockRef,
         role: "",
-        personName: "",
+        userId: selectedUser?.value,
+        personName: selectedUser?.label ?? "",
         startsAt: block.startsAt,
         endsAt: block.endsAt,
         postedToExpense: false,
@@ -337,39 +472,39 @@ export function EventEditor({ eventId }: { eventId?: Id<"events"> }) {
   }
 
   async function saveScheduleAndPersonnel() {
-    await saveSchedule();
-    if (!eventId) return;
-    await saveShifts();
-    setMessage("Schedule and assigned personnel saved.");
-  }
-
-  async function saveAssignments() {
-    if (!eventId) return;
-    await upsertAssignments({
-      eventId,
-      assignments: assignments.map((row) => ({
-        id: row.id,
-        assignmentType: row.assignmentType,
-        roleLabel: row.roleLabel || undefined,
-        personName: row.personName,
-        contactEmail: row.contactEmail || undefined,
-        contactPhone: row.contactPhone || undefined,
-        notes: row.notes || undefined,
-      })),
-    });
-    setMessage("Assignments saved.");
+    try {
+      await saveSchedule();
+      if (!eventId) return;
+      await saveShifts();
+      setMessageTone("success");
+      setMessage("Schedule and assigned personnel saved.");
+    } catch {
+      // Individual save handlers already set section-specific messages.
+    }
   }
 
   const currentEventId = eventId ?? eventData?.event?._id;
+  const computedCrewCost = useQuery(
+    api.eventCrew.getComputedCrewCost,
+    currentEventId ? { eventId: currentEventId } : "skip",
+  );
+  const quickAddDisabled = !startAt || !endAt;
+  const quickAddDisabledReason = quickAddDisabled ? "Set event start and end first." : undefined;
+  const quickAddLabel =
+    eventType === "Dry Hire"
+      ? "Quick Add: Delivery + Return"
+      : eventType === "Rental with Crew"
+        ? "Quick Add: Setup + Strike"
+        : "Quick Add: Setup + Show + Strike";
 
   return (
     <div className="space-y-4">
       <Card>
         <CardHeader><CardTitle>{isCreate ? "Create Event" : "Edit Event"}</CardTitle></CardHeader>
         <CardContent className="flex flex-wrap gap-2">
-          {tabs.map((tab) => (
-            <Button key={tab} type="button" variant={activeTab === tab ? "default" : "outline"} onClick={() => setActiveTab(tab)}>
-              {tab}
+          {visibleTabs.map((tab) => (
+            <Button key={tab} type="button" variant={resolvedActiveTab === tab ? "default" : "outline"} onClick={() => setActiveTab(tab)}>
+              {TAB_LABELS[tab]}
             </Button>
           ))}
           <Button type="button" onClick={() => void saveCore()} className="ml-auto">
@@ -378,9 +513,13 @@ export function EventEditor({ eventId }: { eventId?: Id<"events"> }) {
         </CardContent>
       </Card>
 
-      {message ? <p className="text-sm text-primary">{message}</p> : null}
+      {message ? (
+        <p className={`rounded-md border px-3 py-2 text-sm ${messageTone === "error" ? "border-rose-500/40 bg-rose-500/10 text-rose-800" : "border-emerald-500/40 bg-emerald-500/10 text-emerald-800"}`}>
+          {message}
+        </p>
+      ) : null}
 
-      {activeTab === "overview" ? (
+      {resolvedActiveTab === "overview" ? (
         <Card>
           <CardHeader><CardTitle>Overview</CardTitle></CardHeader>
           <CardContent className="grid gap-3 md:grid-cols-3">
@@ -493,80 +632,20 @@ export function EventEditor({ eventId }: { eventId?: Id<"events"> }) {
             </div>
             <div className="space-y-1">
               <Label>Event Manager User ID</Label>
-              <SearchableSelect
+              <UserSelect
                 value={managerUserId}
                 onChange={setManagerUserId}
-                options={userOptions}
-                placeholder="Search users..."
+                options={userSelectOptions}
                 emptyLabel="Select event manager"
-                renderOption={(option) => (
-                  <div className="flex items-center gap-2">
-                    <Avatar size="sm">
-                      <AvatarImage src={option.avatarUrl} alt={option.label} />
-                      <AvatarFallback>{initials(option.label)}</AvatarFallback>
-                    </Avatar>
-                    <div className="min-w-0">
-                      <p className="truncate">{option.label}</p>
-                      {option.description ? (
-                        <p className="truncate text-xs text-muted-foreground">{option.description}</p>
-                      ) : null}
-                    </div>
-                  </div>
-                )}
-                renderSelected={(option) => (
-                  <div className="flex items-center gap-2">
-                    {option ? (
-                      <>
-                        <Avatar size="sm">
-                          <AvatarImage src={option.avatarUrl} alt={option.label} />
-                          <AvatarFallback>{initials(option.label)}</AvatarFallback>
-                        </Avatar>
-                        <span className="truncate">{option.label}</span>
-                      </>
-                    ) : (
-                      <span className="truncate text-muted-foreground">Select event manager</span>
-                    )}
-                  </div>
-                )}
               />
             </div>
             <div className="space-y-1">
               <Label>Day-Of Lead User ID</Label>
-              <SearchableSelect
+              <UserSelect
                 value={dayOfLeadUserId}
                 onChange={setDayOfLeadUserId}
-                options={userOptions}
-                placeholder="Search users..."
+                options={userSelectOptions}
                 emptyLabel="Select day-of lead"
-                renderOption={(option) => (
-                  <div className="flex items-center gap-2">
-                    <Avatar size="sm">
-                      <AvatarImage src={option.avatarUrl} alt={option.label} />
-                      <AvatarFallback>{initials(option.label)}</AvatarFallback>
-                    </Avatar>
-                    <div className="min-w-0">
-                      <p className="truncate">{option.label}</p>
-                      {option.description ? (
-                        <p className="truncate text-xs text-muted-foreground">{option.description}</p>
-                      ) : null}
-                    </div>
-                  </div>
-                )}
-                renderSelected={(option) => (
-                  <div className="flex items-center gap-2">
-                    {option ? (
-                      <>
-                        <Avatar size="sm">
-                          <AvatarImage src={option.avatarUrl} alt={option.label} />
-                          <AvatarFallback>{initials(option.label)}</AvatarFallback>
-                        </Avatar>
-                        <span className="truncate">{option.label}</span>
-                      </>
-                    ) : (
-                      <span className="truncate text-muted-foreground">Select day-of lead</span>
-                    )}
-                  </div>
-                )}
               />
             </div>
             <div className="space-y-1 md:col-span-3">
@@ -577,19 +656,25 @@ export function EventEditor({ eventId }: { eventId?: Id<"events"> }) {
         </Card>
       ) : null}
 
-      {activeTab === "schedule" ? (
+      {resolvedActiveTab === "schedule" ? (
         <Card>
           <CardHeader><CardTitle>Schedule</CardTitle></CardHeader>
           <CardContent className="space-y-3">
             <EventTimelineScheduler
               dayCount={dayCount}
               blocks={blocks}
-              onChange={setBlocks}
-              onAddPreset={(preset) => {
-                const showStart = startAt ? new Date(startAt) : new Date();
-                const showEnd = endAt ? new Date(endAt) : new Date(showStart.getTime() + 3 * 60 * 60 * 1000);
+              onChange={(next) => setBlocks(withStableBlockRefs(next))}
+              quickAddLabel={quickAddLabel}
+              quickAddDisabled={quickAddDisabled}
+              quickAddDisabledReason={quickAddDisabledReason}
+              onQuickAdd={() => {
+                if (quickAddDisabled) return;
+                const showStart = new Date(startAt);
+                const showEnd = new Date(endAt);
                 const setupStart = new Date(showStart.getTime() - 3 * 60 * 60 * 1000);
                 const strikeEnd = new Date(showEnd.getTime() + 2 * 60 * 60 * 1000);
+                const deliveryStart = new Date(showStart.getTime() - 2 * 60 * 60 * 1000);
+                const returnEnd = new Date(showEnd.getTime() + 2 * 60 * 60 * 1000);
                 const anchorDayStart = new Date(
                   showStart.getFullYear(),
                   showStart.getMonth(),
@@ -604,75 +689,130 @@ export function EventEditor({ eventId }: { eventId?: Id<"events"> }) {
                   0,
                   Math.floor((showEnd.getTime() - anchorDayStart) / (24 * 60 * 60 * 1000)),
                 );
-                if (preset === "full") {
-                  setBlocks([
+                const deliveryDayIndex = Math.max(
+                  0,
+                  Math.floor((deliveryStart.getTime() - anchorDayStart) / (24 * 60 * 60 * 1000)),
+                );
+                const returnDayIndex = Math.max(
+                  0,
+                  Math.floor((showEnd.getTime() - anchorDayStart) / (24 * 60 * 60 * 1000)),
+                );
+
+                if (eventType === "Dry Hire") {
+                  setBlocks(
+                    withStableBlockRefs([
                     {
                       blockType: "setup",
-                      label: "Setup",
-                      dayIndex: setupDayIndex,
-                      startsAt: toLocalDateTimeInput(setupStart),
-                      endsAt: toLocalDateTimeInput(showStart),
-                      notes: "",
-                    },
-                    {
-                      blockType: "show",
-                      label: "Show",
-                      dayIndex: showDayIndex,
-                      startsAt: toLocalDateTimeInput(showStart),
-                      endsAt: toLocalDateTimeInput(showEnd),
-                      notes: "",
-                    },
-                    {
-                      blockType: "strike",
-                      label: "Strike",
-                      dayIndex: strikeDayIndex,
-                      startsAt: toLocalDateTimeInput(showEnd),
-                      endsAt: toLocalDateTimeInput(strikeEnd),
-                      notes: "",
-                    },
-                  ]);
-                } else {
-                  setBlocks([
-                    {
-                      blockType: "setup",
-                      label: "Setup",
-                      dayIndex: setupDayIndex,
-                      startsAt: toLocalDateTimeInput(setupStart),
+                      label: "Delivery Slot",
+                      dayIndex: deliveryDayIndex,
+                      startsAt: toLocalDateTimeInput(deliveryStart),
                       endsAt: toLocalDateTimeInput(showStart),
                       notes: "",
                     },
                     {
                       blockType: "strike",
-                      label: "Strike",
-                      dayIndex: strikeDayIndex,
+                      label: "Return Slot",
+                      dayIndex: returnDayIndex,
                       startsAt: toLocalDateTimeInput(showEnd),
-                      endsAt: toLocalDateTimeInput(strikeEnd),
+                      endsAt: toLocalDateTimeInput(returnEnd),
                       notes: "",
                     },
-                  ]);
+                    ]),
+                  );
+                  return;
                 }
+
+                const baseBlocks: TimelineBlockDraft[] = [
+                  {
+                    blockType: "setup",
+                    label: "Setup",
+                    dayIndex: setupDayIndex,
+                    startsAt: toLocalDateTimeInput(setupStart),
+                    endsAt: toLocalDateTimeInput(showStart),
+                    notes: "",
+                  },
+                  {
+                    blockType: "strike",
+                    label: "Strike",
+                    dayIndex: strikeDayIndex,
+                    startsAt: toLocalDateTimeInput(showEnd),
+                    endsAt: toLocalDateTimeInput(strikeEnd),
+                    notes: "",
+                  },
+                ];
+
+                if (eventType === "Crewed Event") {
+                  baseBlocks.splice(1, 0, {
+                    blockType: "show",
+                    label: "Show",
+                    dayIndex: showDayIndex,
+                    startsAt: toLocalDateTimeInput(showStart),
+                    endsAt: toLocalDateTimeInput(showEnd),
+                    notes: "",
+                  });
+                }
+
+                setBlocks(withStableBlockRefs(baseBlocks));
               }}
             />
             <div className="space-y-2 rounded-md border p-3">
+              <p className="text-sm font-medium">Quick assign crew user</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="min-w-[260px] flex-1">
+                  <UserSelect
+                    value={selectedCrewUserId}
+                    onChange={(value) => setSelectedCrewUserId(value)}
+                    options={userSelectOptions}
+                    emptyLabel="Select crew user"
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!selectedCrewUserId}
+                  onClick={() => setSelectedCrewUserId("")}
+                >
+                  Clear Selected User
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {selectedCrewUserOption
+                  ? `Selected: ${selectedCrewUserOption.label}. Use this to quickly add the same crew member across multiple schedule blocks.`
+                  : "Select a crew user, then use Add Shift for Selected User on each block."}
+              </p>
+            </div>
+            <div className="space-y-2 rounded-md border p-3">
               <p className="text-sm font-medium">Assigned Personnel by Block</p>
               {blocks.map((block, blockIndex) => {
-                const blockId = block.id as Id<"eventScheduleBlocks"> | undefined;
-                const blockShifts = shifts.filter((shift) => shift.scheduleBlockId === blockId);
+                const blockRef = getBlockRef(block);
+                const blockShifts = shifts.filter((shift) => shift.scheduleBlockRef === blockRef);
                 return (
-                  <div key={block.id ?? `block-assignment-${blockIndex}`} className="space-y-2 rounded-md border p-2">
+                  <div key={blockRef ?? `block-assignment-${blockIndex}`} className="space-y-2 rounded-md border p-2">
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-sm font-medium">
                         {block.label || `Block ${blockIndex + 1}`} ({block.blockType})
                       </p>
-                      <Button type="button" variant="outline" size="sm" onClick={() => addPersonnelShift(block)}>
-                        Add Personnel
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="default"
+                          size="sm"
+                          disabled={!selectedCrewUserId}
+                          onClick={() => addPersonnelShift(block, { userId: selectedCrewUserId })}
+                        >
+                          Add Shift for Selected User
+                        </Button>
+                        <Button type="button" variant="outline" size="sm" onClick={() => addPersonnelShift(block)}>
+                          Add Empty Shift
+                        </Button>
+                      </div>
                     </div>
                     {blockShifts.length ? (
                       blockShifts.map((row, rowIndex) => {
                         const shiftIndex = shifts.findIndex((entry) => entry === row);
                         return (
-                          <div key={row.id ?? `${block.id ?? blockIndex}-shift-${rowIndex}`} className="grid gap-2 md:grid-cols-6">
+                          <div key={row.id ?? `${blockRef ?? blockIndex}-shift-${rowIndex}`} className="grid gap-2 md:grid-cols-6">
                             <Input
                               placeholder="Role"
                               value={row.role}
@@ -682,16 +822,24 @@ export function EventEditor({ eventId }: { eventId?: Id<"events"> }) {
                                 )
                               }
                             />
-                            <Input
-                              placeholder="Person"
-                              value={row.personName}
-                              onChange={(e) =>
+                            <UserSelect
+                              value={row.userId ?? ""}
+                              onChange={(value) =>
                                 setShifts((prev) =>
                                   prev.map((shift, i) =>
-                                    i === shiftIndex ? { ...shift, personName: e.target.value } : shift,
+                                    i === shiftIndex
+                                      ? {
+                                          ...shift,
+                                          userId: value || undefined,
+                                          personName:
+                                            userOptions.find((option) => option.value === value)?.label ?? shift.personName,
+                                        }
+                                      : shift,
                                   ),
                                 )
                               }
+                              options={userSelectOptions}
+                              emptyLabel="Select crew user"
                             />
                             <DateTimePicker
                               value={row.startsAt}
@@ -741,7 +889,7 @@ export function EventEditor({ eventId }: { eventId?: Id<"events"> }) {
                   </div>
                 );
               })}
-              {shifts.some((shift) => !shift.scheduleBlockId) ? (
+              {shifts.some((shift) => !shift.scheduleBlockRef) ? (
                 <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-700">
                   Some legacy shifts are not assigned to a schedule block yet. Assign them by adding personnel on a block.
                 </div>
@@ -754,73 +902,7 @@ export function EventEditor({ eventId }: { eventId?: Id<"events"> }) {
         </Card>
       ) : null}
 
-      {activeTab === "crew" ? (
-        <Card>
-          <CardHeader><CardTitle>Crew & Assignments</CardTitle></CardHeader>
-          <CardContent className="space-y-2">
-            <p className="text-sm font-medium">Assignments</p>
-            {assignments.map((row, index) => (
-              <div key={row.id ?? `assignment-${index}`} className="grid gap-2 md:grid-cols-7">
-                <SearchableSelect
-                  value={row.assignmentType}
-                  onChange={(value) =>
-                    setAssignments((prev) =>
-                      prev.map((entry, i) =>
-                        i === index
-                          ? {
-                              ...entry,
-                              assignmentType: value as typeof row.assignmentType,
-                            }
-                          : entry,
-                      ),
-                    )
-                  }
-                  options={[
-                    { value: "event_manager", label: "event_manager" },
-                    { value: "day_of_lead", label: "day_of_lead" },
-                    { value: "crew", label: "crew" },
-                    { value: "performer", label: "performer" },
-                    { value: "support", label: "support" },
-                    { value: "contact", label: "contact" },
-                  ]}
-                  placeholder="Search assignment type..."
-                  emptyLabel="Select assignment type"
-                />
-                <Input placeholder="Role label" value={row.roleLabel} onChange={(e) => setAssignments((prev) => prev.map((entry, i) => (i === index ? { ...entry, roleLabel: e.target.value } : entry)))} />
-                <Input placeholder="Person name" value={row.personName} onChange={(e) => setAssignments((prev) => prev.map((entry, i) => (i === index ? { ...entry, personName: e.target.value } : entry)))} />
-                <Input placeholder="Email" value={row.contactEmail} onChange={(e) => setAssignments((prev) => prev.map((entry, i) => (i === index ? { ...entry, contactEmail: e.target.value } : entry)))} />
-                <Input placeholder="Phone" value={row.contactPhone} onChange={(e) => setAssignments((prev) => prev.map((entry, i) => (i === index ? { ...entry, contactPhone: e.target.value } : entry)))} />
-                <Input placeholder="Notes" value={row.notes} onChange={(e) => setAssignments((prev) => prev.map((entry, i) => (i === index ? { ...entry, notes: e.target.value } : entry)))} />
-                <Button type="button" variant="outline" onClick={() => setAssignments((prev) => prev.filter((_, i) => i !== index))}>
-                  Remove
-                </Button>
-              </div>
-            ))}
-            <div className="mb-3 flex gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() =>
-                  setAssignments((prev) => [
-                    ...prev,
-                    { assignmentType: "support", roleLabel: "", personName: "", contactEmail: "", contactPhone: "", notes: "" },
-                  ])
-                }
-              >
-                Add Assignment
-              </Button>
-              <Button type="button" disabled={!eventId} onClick={() => void saveAssignments()}>
-                Save Assignments
-              </Button>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Crew shifts are now managed per schedule block in the Schedule tab.
-            </p>
-          </CardContent>
-        </Card>
-      ) : null}
-
-      {activeTab === "artifacts" ? (
+      {resolvedActiveTab === "artifacts" ? (
         <Card>
           <CardHeader><CardTitle>Artifacts</CardTitle></CardHeader>
           <CardContent className="space-y-3">
@@ -870,17 +952,26 @@ export function EventEditor({ eventId }: { eventId?: Id<"events"> }) {
         </Card>
       ) : null}
 
-      {activeTab === "expenses" ? (
+      {resolvedActiveTab === "expenses" ? (
         <Card>
           <CardHeader><CardTitle>Event Costs</CardTitle></CardHeader>
-          <CardContent className="space-y-2">
+          <CardContent className="space-y-3">
             <p className="text-xs text-muted-foreground">
-              Costs are tracked directly on the event. Bands and external rentals are placeholders for now.
+              Crew costs are auto-calculated from assigned users in schedule shifts:
+              each user uses their hourly rate, and hours beyond 8/day are billed at 1.5x.
             </p>
-            <div className="grid gap-2 md:grid-cols-3">
+            <div className="grid gap-2 md:grid-cols-4">
               <div className="space-y-1">
                 <Label>Crew Cost (USD)</Label>
-                <Input value={crewCostUsd} onChange={(e) => setCrewCostUsd(e.target.value)} />
+                <Input value={computedCrewCost ? computedCrewCost.totalCostUsd.toFixed(2) : crewCostUsd} readOnly />
+              </div>
+              <div className="space-y-1">
+                <Label>Regular Hours</Label>
+                <Input value={computedCrewCost ? computedCrewCost.totalRegularHours.toFixed(2) : "0.00"} readOnly />
+              </div>
+              <div className="space-y-1">
+                <Label>Overtime Hours</Label>
+                <Input value={computedCrewCost ? computedCrewCost.totalOvertimeHours.toFixed(2) : "0.00"} readOnly />
               </div>
               <div className="space-y-1">
                 <Label>Bands Cost (USD)</Label>
@@ -894,6 +985,81 @@ export function EventEditor({ eventId }: { eventId?: Id<"events"> }) {
                 />
               </div>
             </div>
+            {computedCrewCost?.missingRateUsers?.length ? (
+              <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-xs text-amber-800">
+                Missing hourly rates for: {computedCrewCost.missingRateUsers.join(", ")}. These rows are included at
+                $0.00 until a base rate is added.
+              </div>
+            ) : null}
+            {computedCrewCost ? (
+              <div className="space-y-3 rounded-md border p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-medium">Crew Expense Breakdown by Schedule Block</p>
+                  <p className="text-xs text-muted-foreground">
+                    OT multiplier: {computedCrewCost.overtimeMultiplier.toFixed(2)}x
+                  </p>
+                </div>
+                {computedCrewCost.byScheduleBlock.length ? (
+                  <div className="space-y-3">
+                    {computedCrewCost.byScheduleBlock.map((block, index) => (
+                      <div key={block.scheduleBlockId ?? `${block.blockLabel}-${index}`} className="rounded-md border">
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b px-3 py-2">
+                          <div>
+                            <p className="text-sm font-medium">
+                              {block.blockLabel}
+                              {block.blockType ? ` (${block.blockType})` : ""}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Regular {formatHours(block.regularHours)} • OT {formatHours(block.overtimeHours)}
+                            </p>
+                          </div>
+                          <p className="text-sm font-semibold">{formatCurrency(block.subtotalUsd)}</p>
+                        </div>
+                        <div className="overflow-x-auto">
+                          <table className="min-w-full text-xs">
+                            <thead>
+                              <tr className="border-b bg-muted/30 text-left">
+                                <th className="px-3 py-2 font-medium">Crew</th>
+                                <th className="px-3 py-2 font-medium">Role</th>
+                                <th className="px-3 py-2 font-medium">Shift</th>
+                                <th className="px-3 py-2 font-medium">Hours (Reg / OT)</th>
+                                <th className="px-3 py-2 font-medium">Rate (Base / OT)</th>
+                                <th className="px-3 py-2 font-medium text-right">Subtotal</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {block.rows.map((row) => (
+                                <tr key={row.shiftId} className="border-b last:border-b-0">
+                                  <td className="px-3 py-2">
+                                    <p>{row.name}</p>
+                                    {row.missingRate ? (
+                                      <p className="text-[11px] text-amber-700">Missing base rate</p>
+                                    ) : null}
+                                  </td>
+                                  <td className="px-3 py-2">{row.role || "—"}</td>
+                                  <td className="px-3 py-2">
+                                    {formatDateTime(row.startsAt)} - {formatDateTime(row.endsAt)}
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    {formatHours(row.regularHours)} / {formatHours(row.overtimeHours)}
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    {formatCurrency(row.baseRateUsd)} / {formatCurrency(row.overtimeRateUsd)}
+                                  </td>
+                                  <td className="px-3 py-2 text-right">{formatCurrency(row.subtotalUsd)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">No schedule-linked crew shifts found yet.</p>
+                )}
+              </div>
+            ) : null}
             <Button type="button" onClick={() => void saveCore()}>
               Save Event Costs
             </Button>

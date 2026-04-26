@@ -1,9 +1,11 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { components } from "./_generated/api";
 
 const eventTypeValue = v.union(
   v.literal("Crewed Event"),
   v.literal("Rental with Crew"),
+  v.literal("Dry Hire"),
   v.literal("Dry Rental"),
   v.literal("Services Only"),
 );
@@ -26,6 +28,14 @@ function makePublicToken() {
   return `evt_${crypto.randomUUID().replaceAll("-", "")}${crypto.randomUUID().replaceAll("-", "")}`;
 }
 
+type AuthUserRecord = {
+  id?: string;
+  _id?: string;
+  name?: string;
+  email?: string;
+  image?: string | null;
+};
+
 export const list = query({
   args: {
     status: v.optional(v.union(v.literal("draft"), v.literal("active"), v.literal("completed"), v.literal("cancelled"))),
@@ -47,6 +57,97 @@ export const list = query({
       return haystack.includes(q);
     });
     return rows.sort((a, b) => b.startAt - a.startAt);
+  },
+});
+
+export const listForDashboard = query({
+  args: {
+    status: v.optional(v.union(v.literal("draft"), v.literal("active"), v.literal("completed"), v.literal("cancelled"))),
+    query: v.optional(v.string()),
+    linkedInvoiceOnly: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const baseRows = args.status
+      ? await ctx.db.query("events").withIndex("by_status", (q) => q.eq("status", args.status!)).take(200)
+      : await ctx.db.query("events").withIndex("by_createdAt").take(200);
+    const q = args.query?.trim().toLowerCase();
+    const rows = baseRows.filter((row) => {
+      if (args.linkedInvoiceOnly && !row.invoiceId) return false;
+      if (!q) return true;
+      const haystack = [row.title, row.venueName, row.eventType, row.host, ...(row.teamsInterested ?? [])]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(q);
+    });
+
+    const sortedRows = rows.sort((a, b) => b.startAt - a.startAt);
+    const withSchedule = [];
+    for (const row of sortedRows) {
+      const blocks = await ctx.db
+        .query("eventScheduleBlocks")
+        .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", row._id))
+        .take(200);
+      const shifts = await ctx.db
+        .query("eventCrewShifts")
+        .withIndex("by_eventId", (q) => q.eq("eventId", row._id))
+        .take(500);
+      const assignedCrewCount = new Set(
+        shifts
+          .map((shift) => shift.userId?.trim())
+          .filter((userId): userId is string => Boolean(userId)),
+      ).size;
+      const assignedCrewUserIds = Array.from(
+        new Set(
+          shifts
+            .map((shift) => shift.userId?.trim())
+            .filter((userId): userId is string => Boolean(userId)),
+        ),
+      );
+      const assignedCrew = [];
+      for (const userId of assignedCrewUserIds) {
+        const userById = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
+          model: "user",
+          where: [{ field: "id", value: userId }],
+        })) as AuthUserRecord | null;
+        const userByDocId = !userById
+          ? ((await ctx.runQuery(components.betterAuth.adapter.findOne, {
+              model: "user",
+              where: [{ field: "_id", value: userId }],
+            })) as AuthUserRecord | null)
+          : null;
+        const user = userById ?? userByDocId;
+        assignedCrew.push({
+          userId,
+          name: user?.name ?? user?.email ?? userId,
+          email: user?.email ?? "",
+          image: user?.image ?? undefined,
+        });
+      }
+      const setupBlock = blocks.find((block) => block.blockType === "setup");
+      const showBlock = blocks.find((block) => block.blockType === "show");
+      const strikeBlock = blocks.find((block) => block.blockType === "strike");
+      const blockSummaries = blocks
+        .sort((a, b) => a.startsAt - b.startsAt)
+        .map((block) => ({
+          blockType: block.blockType,
+          label: block.label,
+          startsAt: block.startsAt,
+          endsAt: block.endsAt,
+        }));
+      withSchedule.push({
+        ...row,
+        assignedCrewCount,
+        assignedCrew,
+        scheduleSummary: {
+          setupAt: setupBlock?.startsAt,
+          showAt: showBlock?.startsAt ?? row.startAt,
+          strikeAt: strikeBlock?.startsAt,
+          blocks: blockSummaries,
+        },
+      });
+    }
+    return withSchedule;
   },
 });
 

@@ -4,7 +4,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { EventsListClient } from "@/components/events/events-list-client";
+import { EventsMainPageClient } from "@/components/events/events-main-page-client";
 
 export default function EventsPage() {
   return (
@@ -13,11 +13,11 @@ export default function EventsPage() {
         <CardHeader>
           <CardTitle>Events</CardTitle>
           <CardDescription>
-            Browse events, filter quickly, and jump into dedicated edit workspaces.
+            Track your event calendar and monitor upcoming event states in one place.
           </CardDescription>
         </CardHeader>
       </Card>
-      <EventsListClient />
+      <EventsMainPageClient />
     </div>
   );
 }

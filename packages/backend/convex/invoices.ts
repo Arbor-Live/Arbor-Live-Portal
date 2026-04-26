@@ -248,6 +248,8 @@ export const listManagers = query({
       role?: string | null;
       image?: string | null;
     }>;
+    const rates = await ctx.db.query("userCompensationRates").withIndex("by_updatedAt").take(1000);
+    const rateByUserId = new Map(rates.map((rate) => [rate.userId, rate.hourlyRateUsd]));
     return users
       .map((user) => ({
         id: user.id ?? user._id ?? "",
@@ -255,6 +257,7 @@ export const listManagers = query({
         email: user.email,
         role: user.role ?? undefined,
         image: user.image ?? undefined,
+        hourlyRateUsd: rateByUserId.get(user.id ?? user._id ?? "") ?? undefined,
       }))
       .filter((u) => Boolean(u.id))
       .sort((a, b) => a.name.localeCompare(b.name));

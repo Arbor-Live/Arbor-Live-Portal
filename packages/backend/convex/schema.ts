@@ -416,6 +416,16 @@ export default defineSchema({
     .index("by_startAt", ["startAt"])
     .index("by_createdAt", ["createdAt"]),
 
+  userCompensationRates: defineTable({
+    userId: v.string(),
+    hourlyRateUsd: v.number(),
+    updatedByUserId: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_updatedAt", ["updatedAt"]),
+
   eventScheduleBlocks: defineTable({
     eventId: v.id("events"),
     blockType: eventTimelineBlockTypeValue,

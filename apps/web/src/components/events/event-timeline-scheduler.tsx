@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 
 export type TimelineBlockDraft = {
   id?: string;
+  clientId?: string;
   blockType: "setup" | "show" | "strike" | "custom";
   label: string;
   dayIndex: number;
@@ -80,12 +81,18 @@ export function EventTimelineScheduler({
   dayCount,
   blocks,
   onChange,
-  onAddPreset,
+  onQuickAdd,
+  quickAddLabel,
+  quickAddDisabled,
+  quickAddDisabledReason,
 }: {
   dayCount: number;
   blocks: TimelineBlockDraft[];
   onChange: (next: TimelineBlockDraft[]) => void;
-  onAddPreset: (preset: "full" | "setupStrike") => void;
+  onQuickAdd: () => void;
+  quickAddLabel: string;
+  quickAddDisabled?: boolean;
+  quickAddDisabledReason?: string;
 }) {
   const dragRef = useRef<{
     index: number;
@@ -174,11 +181,15 @@ export function EventTimelineScheduler({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap gap-2">
-        <Button type="button" variant="outline" onClick={() => onAddPreset("full")}>
-          Quick Add: Setup + Show + Strike
-        </Button>
-        <Button type="button" variant="outline" onClick={() => onAddPreset("setupStrike")}>
-          Quick Add: Setup + Strike Only
+        <Button
+          type="button"
+          variant="outline"
+          disabled={quickAddDisabled}
+          title={quickAddDisabled ? quickAddDisabledReason : undefined}
+          className={quickAddDisabled ? "opacity-40 blur-[0.5px]" : undefined}
+          onClick={onQuickAdd}
+        >
+          {quickAddLabel}
         </Button>
         <Button
           type="button"
