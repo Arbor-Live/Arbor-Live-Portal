@@ -107,15 +107,22 @@ async function resolveOrCreateOrganization(ctx: MutationCtx, name: string) {
   return { id: getRecordId(created), name, slug };
 }
 
+function resolveOrganizationType(
+  organization: OrganizationRow | undefined,
+  profile?: { organizationType: "arbor_internal" | "band" } | null,
+): "arbor_internal" | "band" {
+  if (isArborOrganization(organization)) return "arbor_internal";
+  return profile?.organizationType ?? "band";
+}
+
 async function getOrganizationType(ctx: QueryCtx | MutationCtx, organizationId: string) {
   const profile = await ctx.db
     .query("organizationProfiles")
     .withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId))
     .unique();
-  if (profile?.organizationType) return profile.organizationType;
   const organizations = await getAllOrganizations(ctx);
   const organization = organizations.find((entry) => getRecordId(entry) === organizationId);
-  return isArborOrganization(organization) ? "arbor_internal" : "band";
+  return resolveOrganizationType(organization, profile);
 }
 
 async function ensureUserProfileDefaults(
@@ -230,7 +237,7 @@ export const listOrganizationsAdmin = query({
         id: getRecordId(org),
         name: org.name ?? "Unnamed organization",
         slug: org.slug ?? "",
-        organizationType: profileByOrgId.get(getRecordId(org))?.organizationType ?? "band",
+        organizationType: resolveOrganizationType(org, profileByOrgId.get(getRecordId(org))),
       }))
       .filter((org) => Boolean(org.id))
       .sort((a, b) => a.name.localeCompare(b.name));
@@ -248,7 +255,7 @@ export const listBandOrganizationsAdmin = query({
       .map((organization) => {
         const organizationId = getRecordId(organization);
         const profile = profileByOrgId.get(organizationId);
-        const inferredType = profile?.organizationType ?? (isArborOrganization(organization) ? "arbor_internal" : "band");
+        const inferredType = resolveOrganizationType(organization, profile);
         return {
           organizationId,
           name: organization.name ?? "Organization",
@@ -372,7 +379,10 @@ export const listMyOrganizations = query({
           name: organization?.name ?? "Organization",
           slug: organization?.slug ?? "",
           role: membership.role,
-          organizationType: profileByOrgId.get(membership.organizationId)?.organizationType ?? "band",
+          organizationType: resolveOrganizationType(
+            organization,
+            profileByOrgId.get(membership.organizationId),
+          ),
         };
       })
       .sort((a, b) => a.name.localeCompare(b.name));

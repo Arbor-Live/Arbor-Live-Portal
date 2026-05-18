@@ -7,7 +7,13 @@ import { useState, type ComponentProps } from "react"
 import { authClient } from "@/lib/auth-client"
 import { useMutation, useQuery } from "convex/react"
 import { api } from "@/lib/convex-api"
-import { SearchableSelect } from "@/components/inventory/searchable-select"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import {
   Collapsible,
   CollapsibleContent,
@@ -114,7 +120,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
 
   return (
     <Sidebar variant="inset" {...props}>
-      <SidebarHeader>
+      <SidebarHeader className="relative z-20 shrink-0">
         <div className="px-2 py-2">
           <Link href="/dashboard/events" className="flex items-center">
             <Image
@@ -127,22 +133,29 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
             />
           </Link>
         </div>
-        <div className="px-2 pb-2">
+        <div className="relative z-20 px-2 pb-2">
           <p className="mb-1 text-xs text-muted-foreground">Active organization</p>
-          <SearchableSelect
-            value={activeOrganization?.organizationId ?? ""}
-            onChange={(value) => {
-              if (!value) return
+          <Select
+            value={activeOrganization?.organizationId}
+            onValueChange={(value) => {
               void setActiveOrganization({ organizationId: value })
             }}
-            options={(myOrganizations ?? []).map((org) => ({
-              value: org.organizationId,
-              label: org.name,
-              description: org.organizationType === "arbor_internal" ? "Arbor Internal" : "Band",
-            }))}
-            placeholder="Search organizations..."
-            emptyLabel="Select active organization"
-          />
+            disabled={!myOrganizations?.length || !activeOrganization?.organizationId}
+          >
+            <SelectTrigger className="w-full bg-background">
+              <SelectValue placeholder="Select active organization" />
+            </SelectTrigger>
+            <SelectContent>
+              {(myOrganizations ?? []).map((org) => (
+                <SelectItem key={org.organizationId} value={org.organizationId}>
+                  {org.name}
+                  <span className="ml-2 text-xs text-muted-foreground">
+                    {org.organizationType === "arbor_internal" ? "Arbor Internal" : "Band"}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </SidebarHeader>
       <SidebarContent>

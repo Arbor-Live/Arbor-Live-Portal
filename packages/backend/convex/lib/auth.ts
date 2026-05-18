@@ -124,7 +124,10 @@ export async function getActiveOrganizationContextOrNull(
     organizationId: selectedOrganizationId,
     organizationName: org?.name ?? "Organization",
     organizationSlug: org?.slug ?? "",
-    organizationType: orgProfile?.organizationType ?? deriveOrganizationType(org),
+    organizationType:
+      deriveOrganizationType(org) === "arbor_internal"
+        ? "arbor_internal"
+        : (orgProfile?.organizationType ?? "band"),
   };
 }
 
