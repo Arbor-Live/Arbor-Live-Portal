@@ -14,7 +14,7 @@ import { authClient } from "@/lib/auth-client";
 type EquipmentRow = { refId: string; quantity: string };
 type ExternalRentalRow = { provider: string; label: string; quantity: string; rateUsd: string };
 type ArtistRow = { label: string; quantity: string; rateUsd: string };
-type CrewRow = { label: string; quantity: string };
+type CrewRow = { label: string; quantity: string; rateUsd?: string };
 type FeeRow = { feeDefinitionId: string; label: string; quantity: string; rateUsd: string };
 
 const groupTypeLabels: Record<string, string> = {
@@ -72,7 +72,7 @@ export function InvoiceEditor({
   const [clientState, setClientState] = useState("");
   const [clientPostalCode, setClientPostalCode] = useState("");
   const [equipmentPricingMode, setEquipmentPricingMode] = useState<"subsidized" | "nonSubsidized">("nonSubsidized");
-  const [crewRateMode, setCrewRateMode] = useState<"normal" | "ot">("normal");
+  const [crewRateMode, setCrewRateMode] = useState<"normal" | "lead" | "custom">("normal");
   const [discountType, setDiscountType] = useState<"amount" | "percent">("amount");
   const [discountValue, setDiscountValue] = useState("0");
   const [notes, setNotes] = useState("");
@@ -88,6 +88,10 @@ export function InvoiceEditor({
   const [autoSaveState, setAutoSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [autoSaveError, setAutoSaveError] = useState<string | null>(null);
   const [activeInvoiceId, setActiveInvoiceId] = useState<Id<"invoices"> | undefined>(invoiceId);
+  const linkedEvent = useQuery(
+    api.events.getByInvoiceId,
+    activeInvoiceId ? { invoiceId: activeInvoiceId } : "skip",
+  );
   const [approvalToken, setApprovalToken] = useState("");
   const [termsId, setTermsId] = useState("");
   const [additionalTermsMarkdown, setAdditionalTermsMarkdown] = useState("");
@@ -184,7 +188,7 @@ export function InvoiceEditor({
     setClientState(invoice.clientState ?? "");
     setClientPostalCode(invoice.clientPostalCode ?? "");
     setEquipmentPricingMode(invoice.equipmentPricingMode);
-    setCrewRateMode(invoice.crewRateMode);
+    setCrewRateMode(invoice.crewRateMode === "ot" ? "lead" : invoice.crewRateMode);
     setDiscountType(invoice.discountType);
     setDiscountValue(invoice.discountValue.toString());
     setNotes(invoice.notes ?? "");
@@ -219,7 +223,7 @@ export function InvoiceEditor({
     setCrewRows(
       lineItems
         .filter((row) => row.section === "crew")
-        .map((row) => ({ label: row.label, quantity: row.quantity.toString() })),
+        .map((row) => ({ label: row.label, quantity: row.quantity.toString(), rateUsd: row.rateUsd.toString() })),
     );
     setFees(
       lineItems
@@ -408,12 +412,18 @@ export function InvoiceEditor({
     }
     for (const row of crewRows) {
       if (!row.label.trim() || Number(row.quantity) <= 0) continue;
+      const derivedCrewRate =
+        crewRateMode === "custom"
+          ? Number(row.rateUsd || "0")
+          : crewRateMode === "lead"
+            ? (settings?.crewLeadRateUsd ?? settings?.crewOtRateUsd ?? settings?.crewNormalRateUsd ?? 0)
+            : (settings?.crewNormalRateUsd ?? 0);
       rows.push({
         section: "crew",
         order: order++,
         label: row.label.trim(),
         quantity: Number(row.quantity),
-        rateUsd: crewRateMode === "ot" ? (settings?.crewOtRateUsd ?? 0) : (settings?.crewNormalRateUsd ?? 0),
+        rateUsd: derivedCrewRate,
       });
     }
     for (const row of fees) {
@@ -577,6 +587,41 @@ export function InvoiceEditor({
     setSaveMessage("Invoice finalized.");
   }
 
+  function loadCrewFromLinkedEvent() {
+    if (!linkedEvent) {
+      window.alert("No linked event found for this invoice.");
+      return;
+    }
+    const blockLabelById = new Map(
+      (linkedEvent.blocks ?? []).map((block) => [block._id, block.label || block.blockType]),
+    );
+
+    const assignmentRows: CrewRow[] = (linkedEvent.assignments ?? [])
+      .filter((assignment) => assignment.assignmentType === "crew")
+      .map((assignment) => ({
+        label: assignment.roleLabel?.trim() || assignment.personName || "Crew Assignment",
+        quantity: "1",
+      }));
+
+    const shiftRows: CrewRow[] = (linkedEvent.shifts ?? []).map((shift) => {
+      const blockLabel = shift.scheduleBlockId ? blockLabelById.get(shift.scheduleBlockId) : undefined;
+      const role = shift.role?.trim() || shift.personName?.trim() || "Crew Shift";
+      const label = blockLabel ? `${blockLabel} — ${role}` : role;
+      return {
+        label,
+        quantity: String(Math.max(0, Number(shift.hours ?? 0))),
+      };
+    });
+
+    const merged = [...assignmentRows, ...shiftRows].filter((row) => row.label.trim().length > 0);
+    if (!merged.length) {
+      window.alert("No crew assignments or shifts found on the linked event.");
+      return;
+    }
+    setCrewRows(merged);
+    setSaveMessage("Loaded crew rows from linked event blocks and assignments.");
+  }
+
   useEffect(() => {
     if (suppressAutoSaveOnceRef.current) {
       suppressAutoSaveOnceRef.current = false;
@@ -632,6 +677,11 @@ export function InvoiceEditor({
           <p className="text-sm text-muted-foreground">Build invoice sections and export a print-ready PDF.</p>
         </div>
         <div className="flex gap-2">
+          {linkedEvent ? (
+            <Button type="button" variant="outline" asChild>
+              <Link href={`/dashboard/events/${linkedEvent._id}`}>Open Linked Event</Link>
+            </Button>
+          ) : null}
           {activeInvoiceId ? (
             <Button type="button" variant="outline" asChild>
               <Link href={`/dashboard/financial-hub/invoices/${activeInvoiceId}/print`}>Print / PDF</Link>
@@ -698,9 +748,14 @@ export function InvoiceEditor({
           </div>
           <div className="space-y-2">
             <Label>Crew rate mode</Label>
-            <select className="h-9 w-full rounded-md border bg-background px-3 text-sm" value={crewRateMode} onChange={(e) => setCrewRateMode(e.target.value as "normal" | "ot")}>
+            <select
+              className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+              value={crewRateMode}
+              onChange={(e) => setCrewRateMode(e.target.value as "normal" | "lead" | "custom")}
+            >
               <option value="normal">Normal</option>
-              <option value="ot">OT</option>
+              <option value="lead">Lead</option>
+              <option value="custom">Custom</option>
             </select>
           </div>
         </CardContent>
@@ -854,7 +909,13 @@ export function InvoiceEditor({
       <SectionEquipmentTypes rows={equipmentTypes} setRows={setEquipmentTypes} options={typeOptions} />
       <SectionExternalRentals rows={externalRentals} setRows={setExternalRentals} />
       <SectionArtists rows={artists} setRows={setArtists} />
-      <SectionCrew rows={crewRows} setRows={setCrewRows} rateMode={crewRateMode} />
+      <SectionCrew
+        rows={crewRows}
+        setRows={setCrewRows}
+        rateMode={crewRateMode}
+        canLoadFromEvent={Boolean(linkedEvent)}
+        onLoadFromEvent={loadCrewFromLinkedEvent}
+      />
       <SectionFees rows={fees} setRows={setFees} options={feeDefinitions ?? []} />
 
       <Card>
@@ -1064,23 +1125,61 @@ function SectionCrew({
   rows,
   setRows,
   rateMode,
+  canLoadFromEvent,
+  onLoadFromEvent,
 }: {
   rows: CrewRow[];
   setRows: Dispatch<SetStateAction<CrewRow[]>>;
-  rateMode: "normal" | "ot";
+  rateMode: "normal" | "lead" | "custom";
+  canLoadFromEvent: boolean;
+  onLoadFromEvent: () => void;
 }) {
   return (
     <Card>
-      <CardHeader><CardTitle>Crew ({rateMode === "ot" ? "OT" : "Normal"} rates from settings)</CardTitle></CardHeader>
+      <CardHeader>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <CardTitle>
+            Crew (
+            {rateMode === "custom" ? "Custom rate per row" : rateMode === "lead" ? "Lead rate from settings" : "Normal rate from settings"}
+            )
+          </CardTitle>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={!canLoadFromEvent}
+            onClick={onLoadFromEvent}
+          >
+            Load Crew from Event
+          </Button>
+        </div>
+      </CardHeader>
       <CardContent className="space-y-2">
         {rows.map((row, idx) => (
-          <div key={`crew-${idx}`} className="grid gap-2 md:grid-cols-3">
+          <div key={`crew-${idx}`} className={`grid gap-2 ${rateMode === "custom" ? "md:grid-cols-4" : "md:grid-cols-3"}`}>
             <Input placeholder="Crew role" value={row.label} onChange={(e) => setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, label: e.target.value } : r)))} />
             <Input placeholder="Qty/hours" value={row.quantity} onChange={(e) => setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, quantity: e.target.value } : r)))} />
+            {rateMode === "custom" ? (
+              <Input
+                placeholder="Rate (USD)"
+                value={row.rateUsd ?? "0"}
+                onChange={(e) =>
+                  setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, rateUsd: e.target.value } : r)))
+                }
+              />
+            ) : null}
             <Button type="button" variant="outline" onClick={() => setRows((prev) => prev.filter((_, i) => i !== idx))}>Remove</Button>
           </div>
         ))}
-        <Button type="button" variant="outline" onClick={() => setRows((prev) => [...prev, { label: "", quantity: "1" }])}>Add crew row</Button>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() =>
+            setRows((prev) => [...prev, { label: "", quantity: "1", rateUsd: rateMode === "custom" ? "0" : undefined }])
+          }
+        >
+          Add crew row
+        </Button>
       </CardContent>
     </Card>
   );

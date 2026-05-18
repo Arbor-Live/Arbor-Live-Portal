@@ -1,4 +1,4 @@
-import { PublicEventLifecycleClient } from "@/components/public/public-event-lifecycle-client";
+import { redirect } from "next/navigation";
 
 export default async function PublicQuotePage({
   params,
@@ -6,5 +6,5 @@ export default async function PublicQuotePage({
   params: Promise<{ token: string }>;
 }) {
   const { token } = await params;
-  return <PublicEventLifecycleClient token={token} />;
+  redirect(`/public/event/${token}`);
 }

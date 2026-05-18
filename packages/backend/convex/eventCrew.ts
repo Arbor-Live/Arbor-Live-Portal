@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { components } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
+import { requireAuth } from "./lib/auth";
 
 function hoursBetween(start: number, end: number) {
   return Number(((end - start) / 3_600_000).toFixed(2));
@@ -187,6 +188,7 @@ async function calculateCrewCost(ctx: QueryCtx | MutationCtx, eventId: Id<"event
 export const listByEvent = query({
   args: { eventId: v.id("events") },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     return await ctx.db
       .query("eventCrewShifts")
       .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", args.eventId))
@@ -197,6 +199,7 @@ export const listByEvent = query({
 export const getComputedCrewCost = query({
   args: { eventId: v.id("events") },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     return await calculateCrewCost(ctx, args.eventId);
   },
 });
@@ -221,6 +224,7 @@ export const upsertShifts = mutation({
     ),
   },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     for (const shift of args.shifts) {
       if (shift.endsAt <= shift.startsAt) throw new Error("Shift end must be after shift start.");
       if (shift.postedToExpense && !shift.expenseReportId) {
@@ -306,5 +310,46 @@ export const upsertShifts = mutation({
       crewCostUsd: costs.totalCostUsd,
       updatedAt: now,
     });
+  },
+});
+
+export const deleteUnassignedShifts = mutation({
+  args: { eventId: v.id("events") },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+
+    const existing = await ctx.db
+      .query("eventCrewShifts")
+      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+      .take(500);
+    const legacy = existing.filter((row) => !row.scheduleBlockId);
+    for (const row of legacy) {
+      await ctx.db.delete(row._id);
+    }
+
+    const now = Date.now();
+    const reports = await ctx.db
+      .query("eventExpenseReports")
+      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+      .take(100);
+    for (const report of reports) {
+      const reportShifts = await ctx.db
+        .query("eventCrewShifts")
+        .withIndex("by_expenseReportId", (q) => q.eq("expenseReportId", report._id))
+        .take(500);
+      const totalHours = Number(reportShifts.reduce((acc, row) => acc + row.hours, 0).toFixed(2));
+      await ctx.db.patch(report._id, {
+        totalHours,
+        updatedAt: now,
+      });
+    }
+
+    const costs = await calculateCrewCost(ctx, args.eventId);
+    await ctx.db.patch(args.eventId, {
+      crewCostUsd: costs.totalCostUsd,
+      updatedAt: now,
+    });
+
+    return { deletedCount: legacy.length };
   },
 });

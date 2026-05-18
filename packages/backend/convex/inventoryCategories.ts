@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { requireAdmin, requireAuth } from "./lib/auth";
 
 const publicBucketValue = v.union(
   v.literal("lighting"),
@@ -51,6 +52,7 @@ function normalizeKey(key: string) {
 export const list = query({
   args: { activeOnly: v.optional(v.boolean()) },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     const categories = args.activeOnly
       ? await ctx.db
           .query("inventoryCategories")
@@ -70,6 +72,7 @@ export const list = query({
 export const ensureDefaults = mutation({
   args: {},
   handler: async (ctx) => {
+    await requireAdmin(ctx);
     const now = Date.now();
     for (const category of DEFAULT_CATEGORIES) {
       const existing = await ctx.db
@@ -105,6 +108,7 @@ export const create = mutation({
     active: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
+    await requireAdmin(ctx);
     const key = normalizeKey(args.key);
     if (!key) throw new Error("Category key is required.");
 
@@ -136,6 +140,7 @@ export const update = mutation({
     active: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
+    await requireAdmin(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Category not found.");
 
@@ -159,6 +164,7 @@ export const update = mutation({
 export const remove = mutation({
   args: { id: v.id("inventoryCategories") },
   handler: async (ctx, args) => {
+    await requireAdmin(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Category not found.");
 

@@ -1,16 +1,19 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { requireAdmin, requireAuth } from "./lib/auth";
 
 const settingsKey = "default";
 
 export const get = query({
   args: {},
   handler: async (ctx) => {
+    await requireAuth(ctx);
     const existing = await ctx.db.query("invoiceSettings").withIndex("by_key", (q) => q.eq("key", settingsKey)).unique();
     return (
       existing ?? {
         key: settingsKey,
         crewNormalRateUsd: 0,
+        crewLeadRateUsd: 0,
         crewOtRateUsd: 0,
         termsAndConditionsMarkdown: "",
         termsVersion: "v1",
@@ -23,17 +26,20 @@ export const get = query({
 export const update = mutation({
   args: {
     crewNormalRateUsd: v.optional(v.number()),
+    crewLeadRateUsd: v.optional(v.number()),
     crewOtRateUsd: v.optional(v.number()),
     termsAndConditionsMarkdown: v.optional(v.string()),
     termsVersion: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    await requireAdmin(ctx);
     const now = Date.now();
     const existing = await ctx.db.query("invoiceSettings").withIndex("by_key", (q) => q.eq("key", settingsKey)).unique();
     if (!existing) {
       return await ctx.db.insert("invoiceSettings", {
         key: settingsKey,
         crewNormalRateUsd: args.crewNormalRateUsd,
+        crewLeadRateUsd: args.crewLeadRateUsd,
         crewOtRateUsd: args.crewOtRateUsd,
         termsAndConditionsMarkdown: args.termsAndConditionsMarkdown?.trim() || "",
         termsVersion: args.termsVersion?.trim() || "v1",
@@ -42,6 +48,7 @@ export const update = mutation({
     }
     await ctx.db.patch(existing._id, {
       crewNormalRateUsd: args.crewNormalRateUsd ?? existing.crewNormalRateUsd,
+      crewLeadRateUsd: args.crewLeadRateUsd ?? existing.crewLeadRateUsd,
       crewOtRateUsd: args.crewOtRateUsd ?? existing.crewOtRateUsd,
       termsAndConditionsMarkdown:
         args.termsAndConditionsMarkdown?.trim() ?? existing.termsAndConditionsMarkdown,

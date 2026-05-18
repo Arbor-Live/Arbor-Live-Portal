@@ -47,7 +47,12 @@ const clientApprovalStatusValue = v.union(
 );
 
 const equipmentPricingModeValue = v.union(v.literal("subsidized"), v.literal("nonSubsidized"));
-const crewRateModeValue = v.union(v.literal("normal"), v.literal("ot"));
+const crewRateModeValue = v.union(
+  v.literal("normal"),
+  v.literal("lead"),
+  v.literal("custom"),
+  v.literal("ot"),
+);
 const discountTypeValue = v.union(v.literal("amount"), v.literal("percent"));
 
 const invoiceLineSectionValue = v.union(
@@ -83,6 +88,15 @@ const eventAssignmentTypeValue = v.union(
   v.literal("support"),
   v.literal("contact"),
 );
+
+const userTeamValue = v.union(
+  v.literal("Sound"),
+  v.literal("Lights"),
+  v.literal("Design"),
+  v.literal("Marketing"),
+  v.literal("Operations"),
+);
+const organizationTypeValue = v.union(v.literal("arbor_internal"), v.literal("band"));
 
 const eventArtifactTypeValue = v.union(
   v.literal("note"),
@@ -250,6 +264,7 @@ export default defineSchema({
   invoiceSettings: defineTable({
     key: v.string(),
     crewNormalRateUsd: v.optional(v.number()),
+    crewLeadRateUsd: v.optional(v.number()),
     crewOtRateUsd: v.optional(v.number()),
     termsAndConditionsMarkdown: v.optional(v.string()),
     termsVersion: v.optional(v.string()),
@@ -425,6 +440,54 @@ export default defineSchema({
   })
     .index("by_userId", ["userId"])
     .index("by_updatedAt", ["updatedAt"]),
+
+  userAdminProfiles: defineTable({
+    userId: v.string(),
+    title: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    active: v.boolean(),
+    teams: v.array(userTeamValue),
+    defaultOrganizationId: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_active", ["active"])
+    .index("by_defaultOrganizationId", ["defaultOrganizationId"]),
+
+  userOrganizationMemberships: defineTable({
+    userId: v.string(),
+    organizationId: v.string(),
+    role: v.string(),
+    active: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_organizationId", ["organizationId"])
+    .index("by_userId_and_organizationId", ["userId", "organizationId"]),
+
+  organizationProfiles: defineTable({
+    organizationId: v.string(),
+    organizationType: organizationTypeValue,
+    displayName: v.optional(v.string()),
+    bio: v.optional(v.string()),
+    performerHourlyRateUsd: v.optional(v.number()),
+    publicWebsiteUrl: v.optional(v.string()),
+    publicInstagramUrl: v.optional(v.string()),
+    publicYoutubeUrl: v.optional(v.string()),
+    updatedAt: v.number(),
+  })
+    .index("by_organizationId", ["organizationId"])
+    .index("by_organizationType", ["organizationType"]),
+
+  userActiveOrganizations: defineTable({
+    userId: v.string(),
+    organizationId: v.string(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_organizationId", ["organizationId"]),
 
   eventScheduleBlocks: defineTable({
     eventId: v.id("events"),

@@ -3,8 +3,16 @@
 import Link from "next/link"
 import Image from "next/image"
 import { usePathname } from "next/navigation"
-import type { ComponentProps } from "react"
+import { useState, type ComponentProps } from "react"
 import { authClient } from "@/lib/auth-client"
+import { useMutation, useQuery } from "convex/react"
+import { api } from "@/lib/convex-api"
+import { SearchableSelect } from "@/components/inventory/searchable-select"
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
 import { NavSecondary } from "@/components/nav-secondary"
 import { NavUser } from "@/components/nav-user"
 import {
@@ -13,6 +21,7 @@ import {
   SidebarFooter,
   SidebarHeader,
   SidebarMenu,
+  SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarMenuSub,
@@ -21,6 +30,7 @@ import {
 } from "@/components/ui/sidebar"
 import {
   CalendarDotsIcon,
+  CaretRightIcon,
   CurrencyDollarIcon,
   UsersIcon,
   GuitarIcon,
@@ -62,6 +72,20 @@ const eventsSubItems = [
   { title: "Create Event", url: "/dashboard/events/new" },
 ]
 
+const usersSubItems = [
+  { title: "Overview", url: "/dashboard/users" },
+  { title: "Access & Invites", url: "/dashboard/users/access" },
+  { title: "Organizations", url: "/dashboard/users/organizations" },
+  { title: "Crew Rates", url: "/dashboard/users/crew-rates" },
+]
+
+const sectionSubItems: Record<string, { title: string; url: string }[]> = {
+  "/dashboard/events": eventsSubItems,
+  "/dashboard/financial-hub": financialHubSubItems,
+  "/dashboard/inventory": inventorySubItems,
+  "/dashboard/users": usersSubItems,
+}
+
 const secondaryItems = [
   { title: "Support", url: "#", icon: <LifebuoyIcon /> },
   { title: "Feedback", url: "#", icon: <PaperPlaneTiltIcon /> },
@@ -70,10 +94,23 @@ const secondaryItems = [
 export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
   const pathname = usePathname()
   const { data } = authClient.useSession()
+  const activeOrganization = useQuery(api.users.getActiveOrganization, {})
+  const myOrganizations = useQuery(api.users.listMyOrganizations, {})
+  const setActiveOrganization = useMutation(api.users.setActiveOrganization)
 
   const userName = data?.user?.name ?? "Unknown user"
   const userEmail = data?.user?.email ?? "No email"
-  const orgName = "Arbor Live"
+  const orgName = activeOrganization?.name ?? "No active org"
+  const isBandContext = activeOrganization?.organizationType === "band"
+  const scopedNavItems = navItems.filter((item) =>
+    isBandContext
+      ? item.url !== "/dashboard/events" &&
+        item.url !== "/dashboard/financial-hub" &&
+        item.url !== "/dashboard/inventory" &&
+        item.url !== "/dashboard/users"
+      : true,
+  )
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({})
 
   return (
     <Sidebar variant="inset" {...props}>
@@ -90,84 +127,98 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
             />
           </Link>
         </div>
+        <div className="px-2 pb-2">
+          <p className="mb-1 text-xs text-muted-foreground">Active organization</p>
+          <SearchableSelect
+            value={activeOrganization?.organizationId ?? ""}
+            onChange={(value) => {
+              if (!value) return
+              void setActiveOrganization({ organizationId: value })
+            }}
+            options={(myOrganizations ?? []).map((org) => ({
+              value: org.organizationId,
+              label: org.name,
+              description: org.organizationType === "arbor_internal" ? "Arbor Internal" : "Band",
+            }))}
+            placeholder="Search organizations..."
+            emptyLabel="Select active organization"
+          />
+        </div>
       </SidebarHeader>
       <SidebarContent>
         <SidebarMenu>
-          {navItems.map((item) => {
+          {scopedNavItems.map((item) => {
             const Icon = item.icon
+            const subItems = sectionSubItems[item.url]
+            const hasCollapsibleSubItems = Boolean(subItems && subItems.length > 1)
+            const isParentActive =
+              pathname === item.url || pathname.startsWith(`${item.url}/`)
             return (
-              <SidebarMenuItem key={item.url}>
-                <SidebarMenuButton
-                  asChild
-                  isActive={pathname === item.url || (item.url === "/dashboard/inventory" && pathname.startsWith("/dashboard/inventory/"))}
-                  className="text-sm"
-                >
-                  <Link href={item.url}>
-                    <Icon />
-                    <span>{item.title}</span>
-                  </Link>
-                </SidebarMenuButton>
-                {item.url === "/dashboard/inventory" ? (
-                  <SidebarMenuSub>
-                    {inventorySubItems.map((subItem) => (
-                      <SidebarMenuSubItem key={subItem.url}>
-                        <SidebarMenuSubButton
-                          asChild
-                          isActive={
-                            pathname === subItem.url ||
-                            (subItem.url !== "/dashboard/inventory" &&
-                              pathname.startsWith(`${subItem.url}/`))
-                          }
+              <Collapsible
+                key={item.url}
+                asChild
+                open={
+                  hasCollapsibleSubItems
+                    ? isParentActive || (openSections[item.url] ?? false)
+                    : true
+                }
+                onOpenChange={(isOpen) => {
+                  if (!hasCollapsibleSubItems) return
+                  // Avoid no-op state updates, which can cause update loops in controlled collapsibles.
+                  setOpenSections((prev) => {
+                    if (prev[item.url] === isOpen) return prev
+                    return { ...prev, [item.url]: isOpen }
+                  })
+                }}
+              >
+                <SidebarMenuItem>
+                  {hasCollapsibleSubItems ? (
+                    <>
+                      <CollapsibleTrigger asChild>
+                        <SidebarMenuButton isActive={isParentActive} className="text-sm">
+                          <Icon />
+                          <span>{item.title}</span>
+                        </SidebarMenuButton>
+                      </CollapsibleTrigger>
+                      <CollapsibleTrigger asChild>
+                        <SidebarMenuAction
+                          className="data-[state=open]:rotate-90"
+                          aria-label={`Toggle ${item.title}`}
                         >
-                          <Link href={subItem.url}>
-                            <span>{subItem.title}</span>
-                          </Link>
-                        </SidebarMenuSubButton>
-                      </SidebarMenuSubItem>
-                    ))}
-                  </SidebarMenuSub>
-                ) : null}
-                {item.url === "/dashboard/events" ? (
-                  <SidebarMenuSub>
-                    {eventsSubItems.map((subItem) => (
-                      <SidebarMenuSubItem key={subItem.url}>
-                        <SidebarMenuSubButton
-                          asChild
-                          isActive={
-                            pathname === subItem.url ||
-                            (subItem.url !== "/dashboard/events" &&
-                              pathname.startsWith(`${subItem.url}/`))
-                          }
-                        >
-                          <Link href={subItem.url}>
-                            <span>{subItem.title}</span>
-                          </Link>
-                        </SidebarMenuSubButton>
-                      </SidebarMenuSubItem>
-                    ))}
-                  </SidebarMenuSub>
-                ) : null}
-                {item.url === "/dashboard/financial-hub" ? (
-                  <SidebarMenuSub>
-                    {financialHubSubItems.map((subItem) => (
-                      <SidebarMenuSubItem key={subItem.url}>
-                        <SidebarMenuSubButton
-                          asChild
-                          isActive={
-                            pathname === subItem.url ||
-                            (subItem.url !== "/dashboard/financial-hub" &&
-                              pathname.startsWith(`${subItem.url}/`))
-                          }
-                        >
-                          <Link href={subItem.url}>
-                            <span>{subItem.title}</span>
-                          </Link>
-                        </SidebarMenuSubButton>
-                      </SidebarMenuSubItem>
-                    ))}
-                  </SidebarMenuSub>
-                ) : null}
-              </SidebarMenuItem>
+                          <CaretRightIcon />
+                        </SidebarMenuAction>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <SidebarMenuSub>
+                          {subItems?.map((subItem) => (
+                            <SidebarMenuSubItem key={subItem.url}>
+                              <SidebarMenuSubButton
+                                asChild
+                                isActive={
+                                  pathname === subItem.url ||
+                                  (subItem.url !== item.url &&
+                                    pathname.startsWith(`${subItem.url}/`))
+                                }
+                              >
+                                <Link href={subItem.url}>
+                                  <span>{subItem.title}</span>
+                                </Link>
+                              </SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                          ))}
+                        </SidebarMenuSub>
+                      </CollapsibleContent>
+                    </>
+                  ) : (
+                    <SidebarMenuButton asChild isActive={isParentActive} className="text-sm">
+                      <Link href={item.url}>
+                        <Icon />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  )}
+                </SidebarMenuItem>
+              </Collapsible>
             )
           })}
         </SidebarMenu>

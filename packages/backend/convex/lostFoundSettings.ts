@@ -1,9 +1,11 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { requireAdmin, requireAuth } from "./lib/auth";
 
 export const get = query({
   args: {},
   handler: async (ctx) => {
+    await requireAuth(ctx);
     return await ctx.db.query("lostFoundSettings").first();
   },
 });
@@ -15,6 +17,7 @@ export const update = mutation({
     infoUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    await requireAdmin(ctx);
     const existing = await ctx.db.query("lostFoundSettings").first();
     const now = Date.now();
     const payload = {

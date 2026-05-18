@@ -4,22 +4,22 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { EventsMainPageClient } from "@/components/events/events-main-page-client";
 import { ArborOnlyGuard } from "@/components/org-context-guard";
+import { UsersManagementClient } from "@/components/users/users-management-client";
 
-export default function EventsPage() {
+export default function UsersOrganizationsPage() {
   return (
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle>Events</CardTitle>
+          <CardTitle>Organization Management</CardTitle>
           <CardDescription>
-            Track your event calendar and monitor upcoming event states in one place.
+            Manage organizations and edit band org profile details from an admin birds-eye view.
           </CardDescription>
         </CardHeader>
       </Card>
       <ArborOnlyGuard>
-        <EventsMainPageClient />
+        <UsersManagementClient view="organizations" />
       </ArborOnlyGuard>
     </div>
   );

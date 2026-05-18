@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { requireAuth } from "./lib/auth";
 
 const statusValue = v.union(
   v.literal("draft"),
@@ -11,6 +12,7 @@ const statusValue = v.union(
 export const listByEvent = query({
   args: { eventId: v.id("events") },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     return await ctx.db
       .query("eventExpenseReports")
       .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
@@ -26,6 +28,7 @@ export const create = mutation({
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     const now = Date.now();
     return await ctx.db.insert("eventExpenseReports", {
       eventId: args.eventId,
@@ -49,6 +52,7 @@ export const update = mutation({
     totalAmountUsd: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Expense report not found.");
     const now = Date.now();

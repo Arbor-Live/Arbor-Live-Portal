@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { requireAdmin, requireAuth } from "./lib/auth";
 
 function normalizeKey(raw: string) {
   return raw
@@ -12,6 +13,7 @@ function normalizeKey(raw: string) {
 export const list = query({
   args: { activeOnly: v.optional(v.boolean()) },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     const rows = args.activeOnly
       ? await ctx.db.query("invoiceFeeDefinitions").withIndex("by_active", (q) => q.eq("active", true)).take(300)
       : await ctx.db.query("invoiceFeeDefinitions").take(300);
@@ -34,6 +36,7 @@ export const create = mutation({
     sortOrder: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    await requireAdmin(ctx);
     const key = normalizeKey(args.key);
     if (!key) throw new Error("Fee key is required.");
     const existing = await ctx.db.query("invoiceFeeDefinitions").withIndex("by_key", (q) => q.eq("key", key)).unique();
@@ -62,6 +65,7 @@ export const update = mutation({
     sortOrder: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    await requireAdmin(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Fee definition not found.");
     await ctx.db.patch(args.id, {
@@ -78,6 +82,7 @@ export const update = mutation({
 export const remove = mutation({
   args: { id: v.id("invoiceFeeDefinitions") },
   handler: async (ctx, args) => {
+    await requireAdmin(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Fee definition not found.");
     await ctx.db.delete(args.id);

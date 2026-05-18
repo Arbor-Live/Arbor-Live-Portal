@@ -1,9 +1,11 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { requireAdmin, requireAuth } from "./lib/auth";
 
 export const list = query({
   args: { activeOnly: v.optional(v.boolean()) },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     const capabilities = args.activeOnly
       ? await ctx.db
           .query("capabilityDefinitions")
@@ -30,6 +32,7 @@ export const create = mutation({
     active: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
+    await requireAdmin(ctx);
     const existing = await ctx.db
       .query("capabilityDefinitions")
       .withIndex("by_key", (q) => q.eq("key", args.key))
@@ -60,6 +63,7 @@ export const update = mutation({
     active: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
+    await requireAdmin(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Capability definition not found.");
 
@@ -77,6 +81,7 @@ export const update = mutation({
 export const remove = mutation({
   args: { id: v.id("capabilityDefinitions") },
   handler: async (ctx, args) => {
+    await requireAdmin(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Capability definition not found.");
     await ctx.db.delete(args.id);

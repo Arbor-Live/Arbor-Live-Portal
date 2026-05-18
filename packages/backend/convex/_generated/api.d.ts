@@ -30,6 +30,7 @@ import type * as invoicePdf from "../invoicePdf.js";
 import type * as invoiceSettings from "../invoiceSettings.js";
 import type * as invoiceTerms from "../invoiceTerms.js";
 import type * as invoices from "../invoices.js";
+import type * as lib_auth from "../lib/auth.js";
 import type * as lostFoundSettings from "../lostFoundSettings.js";
 import type * as publicInventory from "../publicInventory.js";
 import type * as storageLocations from "../storageLocations.js";
@@ -64,6 +65,7 @@ declare const fullApi: ApiFromModules<{
   invoiceSettings: typeof invoiceSettings;
   invoiceTerms: typeof invoiceTerms;
   invoices: typeof invoices;
+  "lib/auth": typeof lib_auth;
   lostFoundSettings: typeof lostFoundSettings;
   publicInventory: typeof publicInventory;
   storageLocations: typeof storageLocations;

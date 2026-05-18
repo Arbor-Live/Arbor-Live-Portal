@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { requireAuth } from "./lib/auth";
 
 const blockTypeValue = v.union(
   v.literal("setup"),
@@ -11,6 +12,7 @@ const blockTypeValue = v.union(
 export const listByEvent = query({
   args: { eventId: v.id("events") },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     return await ctx.db
       .query("eventScheduleBlocks")
       .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", args.eventId))
@@ -35,6 +37,7 @@ export const upsertBlocks = mutation({
     ),
   },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     const event = await ctx.db.get(args.eventId);
     if (!event) throw new Error("Event not found.");
     for (const block of args.blocks) {

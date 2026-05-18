@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { requireAuth } from "./lib/auth";
 
 const groupTypeValue = v.union(
   v.literal("vso"),
@@ -16,6 +17,7 @@ export const list = query({
     includeStale: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     const rows = args.activeOnly
       ? await ctx.db.query("invoiceGroups").withIndex("by_active", (q) => q.eq("active", true)).take(500)
       : await ctx.db.query("invoiceGroups").take(500);
@@ -35,6 +37,7 @@ export const create = mutation({
     active: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     const now = Date.now();
     const name = args.name.trim();
     if (!name) throw new Error("Group name is required.");
@@ -56,6 +59,7 @@ export const update = mutation({
     active: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Group not found.");
     const nextName = args.name?.trim();
@@ -71,6 +75,7 @@ export const update = mutation({
 export const archive = mutation({
   args: { id: v.id("invoiceGroups") },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Group not found.");
     await ctx.db.patch(args.id, { active: false, updatedAt: Date.now() });

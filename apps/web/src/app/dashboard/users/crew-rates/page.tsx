@@ -4,22 +4,22 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { EventsMainPageClient } from "@/components/events/events-main-page-client";
 import { ArborOnlyGuard } from "@/components/org-context-guard";
+import { UserRatesAdminClient } from "@/components/users/user-rates-admin-client";
 
-export default function EventsPage() {
+export default function CrewRatesPage() {
   return (
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle>Events</CardTitle>
+          <CardTitle>Crew Rates</CardTitle>
           <CardDescription>
-            Track your event calendar and monitor upcoming event states in one place.
+            Admin-only hourly rates used to calculate event crew costs and overtime.
           </CardDescription>
         </CardHeader>
       </Card>
       <ArborOnlyGuard>
-        <EventsMainPageClient />
+        <UserRatesAdminClient />
       </ArborOnlyGuard>
     </div>
   );

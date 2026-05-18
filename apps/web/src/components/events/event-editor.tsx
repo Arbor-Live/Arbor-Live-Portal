@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
@@ -126,6 +127,7 @@ export function EventEditor({ eventId }: { eventId?: Id<"events"> }) {
   const updateEvent = useMutation(api.events.update);
   const upsertBlocks = useMutation(api.eventSchedule.upsertBlocks);
   const upsertShifts = useMutation(api.eventCrew.upsertShifts);
+  const deleteUnassignedShifts = useMutation(api.eventCrew.deleteUnassignedShifts);
   const createArtifact = useMutation(api.eventArtifacts.create);
 
   const [activeTab, setActiveTab] = useState<TabId>("overview");
@@ -483,11 +485,38 @@ export function EventEditor({ eventId }: { eventId?: Id<"events"> }) {
     }
   }
 
+  async function removeLegacyUnassignedShifts() {
+    if (!eventId) return;
+    const shouldDelete = window.confirm(
+      "Delete all legacy shifts that are not assigned to any schedule block?",
+    );
+    if (!shouldDelete) return;
+    try {
+      const result = await deleteUnassignedShifts({ eventId });
+      setShifts((prev) => prev.filter((shift) => shift.scheduleBlockRef));
+      setMessageTone("success");
+      setMessage(`Deleted ${result.deletedCount} legacy unassigned shift${result.deletedCount === 1 ? "" : "s"}.`);
+    } catch (error) {
+      setMessageTone("error");
+      setMessage(getErrorMessage(error));
+    }
+  }
+
   const currentEventId = eventId ?? eventData?.event?._id;
   const computedCrewCost = useQuery(
     api.eventCrew.getComputedCrewCost,
     currentEventId ? { eventId: currentEventId } : "skip",
   );
+  const linkedInvoice = useMemo(
+    () => (invoiceId ? (invoices ?? []).find((row) => row._id === invoiceId) ?? null : null),
+    [invoiceId, invoices],
+  );
+  const crewCostTotal = computedCrewCost?.totalCostUsd ?? Number(crewCostUsd || "0");
+  const bandsCostTotal = Number(bandsCostUsd || "0");
+  const externalRentalsCostTotal = Number(externalRentalsCostUsd || "0");
+  const totalEventCostUsd = crewCostTotal + bandsCostTotal + externalRentalsCostTotal;
+  const billedTotalUsd = linkedInvoice?.totalUsd ?? null;
+  const profitLossUsd = billedTotalUsd !== null ? billedTotalUsd - totalEventCostUsd : null;
   const quickAddDisabled = !startAt || !endAt;
   const quickAddDisabledReason = quickAddDisabled ? "Set event start and end first." : undefined;
   const quickAddLabel =
@@ -546,6 +575,11 @@ export function EventEditor({ eventId }: { eventId?: Id<"events"> }) {
                 placeholder="Search invoice..."
                 emptyLabel="No linked invoice"
               />
+              {invoiceId ? (
+                <Button asChild type="button" variant="outline" size="sm" className="mt-2">
+                  <Link href={`/dashboard/financial-hub/invoices/${invoiceId}`}>Open Linked Invoice</Link>
+                </Button>
+              ) : null}
             </div>
             <div className="space-y-1">
               <Label>Start</Label>
@@ -890,8 +924,14 @@ export function EventEditor({ eventId }: { eventId?: Id<"events"> }) {
                 );
               })}
               {shifts.some((shift) => !shift.scheduleBlockRef) ? (
-                <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-700">
-                  Some legacy shifts are not assigned to a schedule block yet. Assign them by adding personnel on a block.
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-700">
+                  <span>
+                    Some legacy shifts are not assigned to a schedule block yet. Assign them by adding personnel on a
+                    block.
+                  </span>
+                  <Button type="button" variant="outline" size="sm" onClick={() => void removeLegacyUnassignedShifts()}>
+                    Delete Legacy Unassigned Shifts
+                  </Button>
                 </div>
               ) : null}
             </div>
@@ -985,10 +1025,47 @@ export function EventEditor({ eventId }: { eventId?: Id<"events"> }) {
                 />
               </div>
             </div>
+            {linkedInvoice ? (
+              <div className="rounded-md border p-3">
+                <p className="text-sm font-medium">Linked Invoice Margin</p>
+                <div className="mt-2 grid gap-2 md:grid-cols-3">
+                  <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
+                    <p className="text-xs text-muted-foreground">Total Billed</p>
+                    <p className="font-semibold">${billedTotalUsd!.toFixed(2)}</p>
+                  </div>
+                  <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
+                    <p className="text-xs text-muted-foreground">Total Event Cost</p>
+                    <p className="font-semibold">${totalEventCostUsd.toFixed(2)}</p>
+                  </div>
+                  <div
+                    className={`rounded-md border px-3 py-2 text-sm ${
+                      (profitLossUsd ?? 0) >= 0
+                        ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-800"
+                        : "border-rose-500/40 bg-rose-500/10 text-rose-800"
+                    }`}
+                  >
+                    <p className="text-xs">Profit / Loss</p>
+                    <p className="font-semibold">${(profitLossUsd ?? 0).toFixed(2)}</p>
+                  </div>
+                </div>
+              </div>
+            ) : invoiceId ? (
+              <p className="text-xs text-muted-foreground">
+                Linked invoice not loaded yet. Margin will appear once invoice data is available.
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Link an invoice in Overview to view billed total vs event cost margin.
+              </p>
+            )}
             {computedCrewCost?.missingRateUsers?.length ? (
               <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-xs text-amber-800">
                 Missing hourly rates for: {computedCrewCost.missingRateUsers.join(", ")}. These rows are included at
-                $0.00 until a base rate is added.
+                $0.00 until a base rate is added.{" "}
+                <Link href="/dashboard/users/crew-rates" className="underline underline-offset-2">
+                  Manage crew rates
+                </Link>
+                .
               </div>
             ) : null}
             {computedCrewCost ? (

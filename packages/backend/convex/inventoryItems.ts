@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
+import { requireAuth } from "./lib/auth";
 
 async function cascadeLocationToDescendants(
   ctx: MutationCtx,
@@ -31,6 +32,7 @@ export const list = query({
     search: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     const items = await ctx.db.query("inventoryItems").collect();
     const loweredSearch = args.search?.trim().toLowerCase();
 
@@ -84,6 +86,7 @@ export const create = mutation({
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     const existingAsset = await ctx.db
       .query("inventoryItems")
       .withIndex("by_assetId", (q) => q.eq("assetId", args.assetId.trim()))
@@ -132,6 +135,7 @@ export const update = mutation({
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Inventory item not found.");
 
@@ -187,6 +191,7 @@ export const update = mutation({
 export const remove = mutation({
   args: { id: v.id("inventoryItems") },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Inventory item not found.");
     const children = await ctx.db
@@ -204,6 +209,7 @@ export const setContainer = mutation({
     containedInAssetId: v.optional(v.id("inventoryItems")),
   },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Inventory item not found.");
     if (args.containedInAssetId === args.id) {

@@ -1,9 +1,11 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { requireAdmin, requireAuth } from "./lib/auth";
 
 export const list = query({
   args: { activeOnly: v.optional(v.boolean()) },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     const rows = args.activeOnly
       ? await ctx.db.query("invoiceTerms").withIndex("by_active", (q) => q.eq("active", true)).take(200)
       : await ctx.db.query("invoiceTerms").take(200);
@@ -19,6 +21,7 @@ export const create = mutation({
     active: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
+    await requireAdmin(ctx);
     const now = Date.now();
     return await ctx.db.insert("invoiceTerms", {
       label: args.label.trim(),
@@ -40,6 +43,7 @@ export const update = mutation({
     active: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
+    await requireAdmin(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Terms not found.");
     await ctx.db.patch(args.id, {
@@ -55,6 +59,7 @@ export const update = mutation({
 export const remove = mutation({
   args: { id: v.id("invoiceTerms") },
   handler: async (ctx, args) => {
+    await requireAdmin(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Terms not found.");
     await ctx.db.delete(args.id);

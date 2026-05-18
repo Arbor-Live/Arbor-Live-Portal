@@ -38,8 +38,6 @@ export function InvoicePrintView({ invoiceId }: { invoiceId: Id<"invoices"> }) {
   async function onPrint() {
     await createExport({
       invoiceId,
-      generatedByUserId: invoice.managerUserId,
-      generatedByName: invoice.managerName,
       fileName: `${invoice.invoiceNumber}.pdf`,
       downloadUrl: undefined,
     });

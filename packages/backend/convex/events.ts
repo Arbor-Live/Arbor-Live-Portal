@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { components } from "./_generated/api";
+import { requireArborInternalContext, requireAuth } from "./lib/auth";
 
 const eventTypeValue = v.union(
   v.literal("Crewed Event"),
@@ -43,6 +44,8 @@ export const list = query({
     linkedInvoiceOnly: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
     const baseRows = args.status
       ? await ctx.db.query("events").withIndex("by_status", (q) => q.eq("status", args.status!)).take(200)
       : await ctx.db.query("events").withIndex("by_createdAt").take(200);
@@ -67,6 +70,8 @@ export const listForDashboard = query({
     linkedInvoiceOnly: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
     const baseRows = args.status
       ? await ctx.db.query("events").withIndex("by_status", (q) => q.eq("status", args.status!)).take(200)
       : await ctx.db.query("events").withIndex("by_createdAt").take(200);
@@ -82,48 +87,68 @@ export const listForDashboard = query({
     });
 
     const sortedRows = rows.sort((a, b) => b.startAt - a.startAt);
-    const withSchedule = [];
-    for (const row of sortedRows) {
-      const blocks = await ctx.db
-        .query("eventScheduleBlocks")
-        .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", row._id))
-        .take(200);
-      const shifts = await ctx.db
-        .query("eventCrewShifts")
-        .withIndex("by_eventId", (q) => q.eq("eventId", row._id))
-        .take(500);
-      const assignedCrewCount = new Set(
-        shifts
+
+    const perEventBlocks = await Promise.all(
+      sortedRows.map((row) =>
+        ctx.db
+          .query("eventScheduleBlocks")
+          .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", row._id))
+          .take(200),
+      ),
+    );
+    const perEventShifts = await Promise.all(
+      sortedRows.map((row) =>
+        ctx.db
+          .query("eventCrewShifts")
+          .withIndex("by_eventId", (q) => q.eq("eventId", row._id))
+          .take(500),
+      ),
+    );
+
+    const allUserIds = Array.from(
+      new Set(
+        perEventShifts
+          .flat()
           .map((shift) => shift.userId?.trim())
           .filter((userId): userId is string => Boolean(userId)),
-      ).size;
-      const assignedCrewUserIds = Array.from(
+      ),
+    );
+
+    // Fetch every referenced crew member in a single batched call. Better-auth's
+    // adapter has a fast _id+in path that resolves each id with ctx.db.get(),
+    // avoiding the unindexed scan triggered by `field: "id"`.
+    const userByKey = new Map<string, AuthUserRecord>();
+    if (allUserIds.length > 0) {
+      const usersResult = await ctx.runQuery(components.betterAuth.adapter.findMany, {
+        model: "user",
+        where: [{ field: "_id", operator: "in", value: allUserIds }],
+        paginationOpts: { cursor: null, numItems: allUserIds.length },
+      });
+      for (const user of (usersResult?.page ?? []) as AuthUserRecord[]) {
+        const key = user.id ?? user._id;
+        if (key) userByKey.set(key, user);
+      }
+    }
+
+    return sortedRows.map((row, index) => {
+      const blocks = perEventBlocks[index] ?? [];
+      const shifts = perEventShifts[index] ?? [];
+      const eventUserIds = Array.from(
         new Set(
           shifts
             .map((shift) => shift.userId?.trim())
             .filter((userId): userId is string => Boolean(userId)),
         ),
       );
-      const assignedCrew = [];
-      for (const userId of assignedCrewUserIds) {
-        const userById = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
-          model: "user",
-          where: [{ field: "id", value: userId }],
-        })) as AuthUserRecord | null;
-        const userByDocId = !userById
-          ? ((await ctx.runQuery(components.betterAuth.adapter.findOne, {
-              model: "user",
-              where: [{ field: "_id", value: userId }],
-            })) as AuthUserRecord | null)
-          : null;
-        const user = userById ?? userByDocId;
-        assignedCrew.push({
+      const assignedCrew = eventUserIds.map((userId) => {
+        const user = userByKey.get(userId);
+        return {
           userId,
           name: user?.name ?? user?.email ?? userId,
           email: user?.email ?? "",
           image: user?.image ?? undefined,
-        });
-      }
+        };
+      });
       const setupBlock = blocks.find((block) => block.blockType === "setup");
       const showBlock = blocks.find((block) => block.blockType === "show");
       const strikeBlock = blocks.find((block) => block.blockType === "strike");
@@ -135,9 +160,9 @@ export const listForDashboard = query({
           startsAt: block.startsAt,
           endsAt: block.endsAt,
         }));
-      withSchedule.push({
+      return {
         ...row,
-        assignedCrewCount,
+        assignedCrewCount: eventUserIds.length,
         assignedCrew,
         scheduleSummary: {
           setupAt: setupBlock?.startsAt,
@@ -145,15 +170,16 @@ export const listForDashboard = query({
           strikeAt: strikeBlock?.startsAt,
           blocks: blockSummaries,
         },
-      });
-    }
-    return withSchedule;
+      };
+    });
   },
 });
 
 export const get = query({
   args: { id: v.id("events") },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
     const event = await ctx.db.get(args.id);
     if (!event) return null;
     const blocks = await ctx.db
@@ -177,6 +203,41 @@ export const get = query({
       .withIndex("by_eventId", (q) => q.eq("eventId", args.id))
       .take(100);
     return { event, blocks, shifts, assignments, artifacts, expenseReports };
+  },
+});
+
+export const getByInvoiceId = query({
+  args: { invoiceId: v.id("invoices") },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    const event = await ctx.db
+      .query("events")
+      .withIndex("by_invoiceId", (q) => q.eq("invoiceId", args.invoiceId))
+      .unique();
+    if (!event) return null;
+    const blocks = await ctx.db
+      .query("eventScheduleBlocks")
+      .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", event._id))
+      .take(500);
+    const assignments = await ctx.db
+      .query("eventPeopleAssignments")
+      .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
+      .take(500);
+    const shifts = await ctx.db
+      .query("eventCrewShifts")
+      .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", event._id))
+      .take(500);
+    return {
+      _id: event._id,
+      title: event.title,
+      status: event.status,
+      startAt: event.startAt,
+      endAt: event.endAt,
+      blocks,
+      assignments,
+      shifts,
+    };
   },
 });
 
@@ -204,6 +265,8 @@ export const create = mutation({
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
     if (args.endAt <= args.startAt) throw new Error("Event end time must be after start time.");
     const now = Date.now();
     const spansMultipleDays = new Date(args.startAt).toDateString() !== new Date(args.endAt).toDateString();
@@ -264,6 +327,8 @@ export const update = mutation({
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Event not found.");
     const startAt = args.startAt ?? existing.startAt;
@@ -306,6 +371,8 @@ export const setStatus = mutation({
     status: v.union(v.literal("draft"), v.literal("active"), v.literal("completed"), v.literal("cancelled")),
   },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Event not found.");
     await ctx.db.patch(args.id, { status: args.status, updatedAt: Date.now() });
@@ -315,6 +382,8 @@ export const setStatus = mutation({
 export const duplicate = mutation({
   args: { id: v.id("events") },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Event not found.");
     const now = Date.now();

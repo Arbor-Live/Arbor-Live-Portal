@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
+import { requireAuth } from "./lib/auth";
 
 function normalizeName(name: string) {
   return name.trim();
@@ -9,6 +10,7 @@ function normalizeName(name: string) {
 export const list = query({
   args: {},
   handler: async (ctx) => {
+    await requireAuth(ctx);
     const locations = await ctx.db
       .query("storageLocations")
       .withIndex("by_path")
@@ -20,6 +22,7 @@ export const list = query({
 export const get = query({
   args: { id: v.id("storageLocations") },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     return await ctx.db.get(args.id);
   },
 });
@@ -30,6 +33,7 @@ export const create = mutation({
     parentId: v.optional(v.id("storageLocations")),
   },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     const now = Date.now();
     const name = normalizeName(args.name);
 
@@ -71,6 +75,7 @@ export const update = mutation({
     parentId: v.optional(v.id("storageLocations")),
   },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Storage location not found.");
 
@@ -120,6 +125,7 @@ export const update = mutation({
 export const remove = mutation({
   args: { id: v.id("storageLocations") },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Storage location not found.");
 

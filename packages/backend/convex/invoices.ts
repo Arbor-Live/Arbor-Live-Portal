@@ -2,9 +2,15 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { components } from "./_generated/api";
 import { mutation, query, type MutationCtx } from "./_generated/server";
+import { isAdmin, requireArborInternalContext, requireAuth } from "./lib/auth";
 
 const equipmentPricingModeValue = v.union(v.literal("subsidized"), v.literal("nonSubsidized"));
-const crewRateModeValue = v.union(v.literal("normal"), v.literal("ot"));
+const crewRateModeValue = v.union(
+  v.literal("normal"),
+  v.literal("lead"),
+  v.literal("custom"),
+  v.literal("ot"),
+);
 const discountTypeValue = v.union(v.literal("amount"), v.literal("percent"));
 
 const groupTypeValue = v.union(
@@ -103,8 +109,8 @@ async function computeLineAmount(
   ctx: MutationCtx,
   line: LineInput,
   equipmentPricingMode: "subsidized" | "nonSubsidized",
-  crewRateMode: "normal" | "ot",
-  crewRates: { normal: number; ot: number },
+  crewRateMode: "normal" | "lead" | "custom" | "ot",
+  crewRates: { normal: number; lead: number; ot: number },
 ) {
   if (line.quantity < 0) throw new Error("Line quantity cannot be negative.");
   let rate = line.rateUsd;
@@ -128,7 +134,13 @@ async function computeLineAmount(
   }
 
   if (line.section === "crew") {
-    rate = crewRateMode === "ot" ? crewRates.ot : crewRates.normal;
+    if (crewRateMode === "custom") {
+      rate = line.rateUsd;
+    } else if (crewRateMode === "lead" || crewRateMode === "ot") {
+      rate = crewRates.lead;
+    } else {
+      rate = crewRates.normal;
+    }
   }
 
   const amount = Number((Math.max(0, line.quantity) * Math.max(0, rate)).toFixed(2));
@@ -139,13 +151,14 @@ async function computeTotals(
   ctx: MutationCtx,
   lineItems: LineInput[],
   equipmentPricingMode: "subsidized" | "nonSubsidized",
-  crewRateMode: "normal" | "ot",
+  crewRateMode: "normal" | "lead" | "custom" | "ot",
   discountType: "amount" | "percent",
   discountValue: number,
 ) {
   const settings = await ctx.db.query("invoiceSettings").withIndex("by_key", (q) => q.eq("key", "default")).unique();
   const crewRates = {
     normal: settings?.crewNormalRateUsd ?? 0,
+    lead: settings?.crewLeadRateUsd ?? settings?.crewOtRateUsd ?? settings?.crewNormalRateUsd ?? 0,
     ot: settings?.crewOtRateUsd ?? settings?.crewNormalRateUsd ?? 0,
   };
 
@@ -236,6 +249,8 @@ async function replaceLineItems(
 export const listManagers = query({
   args: {},
   handler: async (ctx) => {
+    const currentUser = await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
     const result = await ctx.runQuery(components.betterAuth.adapter.findMany, {
       model: "user",
       paginationOpts: { cursor: null, numItems: 200 },
@@ -248,8 +263,14 @@ export const listManagers = query({
       role?: string | null;
       image?: string | null;
     }>;
-    const rates = await ctx.db.query("userCompensationRates").withIndex("by_updatedAt").take(1000);
-    const rateByUserId = new Map(rates.map((rate) => [rate.userId, rate.hourlyRateUsd]));
+    const showRates = isAdmin(currentUser);
+    const rateByUserId = showRates
+      ? new Map(
+          (await ctx.db.query("userCompensationRates").withIndex("by_updatedAt").take(1000)).map(
+            (rate) => [rate.userId, rate.hourlyRateUsd],
+          ),
+        )
+      : null;
     return users
       .map((user) => ({
         id: user.id ?? user._id ?? "",
@@ -257,7 +278,7 @@ export const listManagers = query({
         email: user.email,
         role: user.role ?? undefined,
         image: user.image ?? undefined,
-        hourlyRateUsd: rateByUserId.get(user.id ?? user._id ?? "") ?? undefined,
+        hourlyRateUsd: rateByUserId?.get(user.id ?? user._id ?? "") ?? undefined,
       }))
       .filter((u) => Boolean(u.id))
       .sort((a, b) => a.name.localeCompare(b.name));
@@ -267,6 +288,8 @@ export const listManagers = query({
 export const list = query({
   args: { status: v.optional(v.union(v.literal("draft"), v.literal("finalized"), v.literal("void"))) },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
     const rows = args.status
       ? await ctx.db.query("invoices").withIndex("by_status", (q) => q.eq("status", args.status!)).take(200)
       : await ctx.db.query("invoices").take(200);
@@ -277,6 +300,8 @@ export const list = query({
 export const get = query({
   args: { id: v.id("invoices") },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
     const invoice = await ctx.db.get(args.id);
     if (!invoice) return null;
     const lineItems = await ctx.db
@@ -317,6 +342,12 @@ export const getPublicQuoteByToken = query({
       ? await ctx.db
           .query("eventPeopleAssignments")
           .withIndex("by_eventId", (q) => q.eq("eventId", linkedEvent._id))
+          .take(500)
+      : [];
+    const eventScheduleBlocks = linkedEvent
+      ? await ctx.db
+          .query("eventScheduleBlocks")
+          .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", linkedEvent._id))
           .take(500)
       : [];
     const eventShifts = linkedEvent
@@ -370,7 +401,11 @@ export const getPublicQuoteByToken = query({
       termsAndConditionsMarkdown: combinedTermsMarkdown,
       termsVersion: globalTermsVersion,
       event: linkedEvent
-        ? {
+        ? (() => {
+            const eventManagerAssignment = eventAssignments.find((row) => row.assignmentType === "event_manager");
+            const dayOfLeadAssignment = eventAssignments.find((row) => row.assignmentType === "day_of_lead");
+            const crewAssignments = eventAssignments.filter((row) => row.assignmentType === "crew");
+            return {
             id: linkedEvent._id,
             title: linkedEvent.title,
             status: linkedEvent.status,
@@ -380,9 +415,30 @@ export const getPublicQuoteByToken = query({
             startAt: linkedEvent.startAt,
             endAt: linkedEvent.endAt,
             assignments: eventAssignments,
+            scheduleBlocks: eventScheduleBlocks,
+            contacts: {
+              manager: {
+                name: eventManagerAssignment?.personName ?? invoice.managerName,
+                email: eventManagerAssignment?.contactEmail ?? invoice.managerEmail ?? undefined,
+                phone: eventManagerAssignment?.contactPhone ?? undefined,
+              },
+              dayOfLead: dayOfLeadAssignment
+                ? {
+                    name: dayOfLeadAssignment.personName,
+                    email: dayOfLeadAssignment.contactEmail ?? undefined,
+                    phone: dayOfLeadAssignment.contactPhone ?? undefined,
+                  }
+                : null,
+            },
+            crewRoster: crewAssignments.map((row) => ({
+              name: row.personName,
+              role: row.roleLabel ?? undefined,
+              email: row.contactEmail ?? undefined,
+            })),
             shifts: eventShifts,
             artifacts: eventArtifacts,
-          }
+          };
+          })()
         : null,
     };
   },
@@ -417,6 +473,8 @@ export const createDraft = mutation({
     lineItems: v.array(lineItemInput),
   },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
     const publicApprovalToken = await generateUniquePublicApprovalToken(ctx);
     const totals = await computeTotals(
       ctx,
@@ -511,6 +569,8 @@ export const updateDraft = mutation({
     lineItems: v.array(lineItemInput),
   },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Invoice not found.");
     const publicApprovalToken = existing.publicApprovalToken || (await generateUniquePublicApprovalToken(ctx));
@@ -570,6 +630,8 @@ export const updateDraft = mutation({
 export const regeneratePublicApprovalToken = mutation({
   args: { id: v.id("invoices") },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Invoice not found.");
     const token = await generateUniquePublicApprovalToken(ctx);
@@ -641,6 +703,8 @@ export const requestChangesByToken = mutation({
 export const resetApprovalToPending = mutation({
   args: { id: v.id("invoices") },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
     const invoice = await ctx.db.get(args.id);
     if (!invoice) throw new Error("Invoice not found.");
     await ctx.db.patch(args.id, {
@@ -659,6 +723,8 @@ export const resetApprovalToPending = mutation({
 export const recalculateTotals = mutation({
   args: { id: v.id("invoices") },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
     const invoice = await ctx.db.get(args.id);
     if (!invoice) throw new Error("Invoice not found.");
     const lineItems = await ctx.db.query("invoiceLineItems").withIndex("by_invoiceId", (q) => q.eq("invoiceId", args.id)).take(500);
@@ -700,6 +766,8 @@ export const recalculateTotals = mutation({
 export const finalize = mutation({
   args: { id: v.id("invoices") },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
     const invoice = await ctx.db.get(args.id);
     if (!invoice) throw new Error("Invoice not found.");
     await ctx.db.patch(args.id, { status: "finalized", updatedAt: Date.now() });

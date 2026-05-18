@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { requireAuth } from "./lib/auth";
 
 const artifactTypeValue = v.union(
   v.literal("note"),
@@ -11,6 +12,7 @@ const artifactTypeValue = v.union(
 export const listByEvent = query({
   args: { eventId: v.id("events"), artifactType: v.optional(artifactTypeValue) },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     if (args.artifactType) {
       const rows = await ctx.db
         .query("eventArtifacts")
@@ -38,6 +40,7 @@ export const create = mutation({
     storageFileId: v.optional(v.id("_storage")),
   },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     const now = Date.now();
     return await ctx.db.insert("eventArtifacts", {
       eventId: args.eventId,
@@ -64,6 +67,7 @@ export const update = mutation({
     active: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Artifact not found.");
     await ctx.db.patch(args.id, {
@@ -81,6 +85,7 @@ export const update = mutation({
 export const remove = mutation({
   args: { id: v.id("eventArtifacts") },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Artifact not found.");
     await ctx.db.delete(args.id);

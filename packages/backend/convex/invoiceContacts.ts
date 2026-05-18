@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { requireAuth } from "./lib/auth";
 
 const staleCutoffMs = 365 * 24 * 60 * 60 * 1000;
 
@@ -10,6 +11,7 @@ export const list = query({
     includeStale: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     const base = args.groupId
       ? await ctx.db
           .query("invoiceContacts")
@@ -38,6 +40,7 @@ export const create = mutation({
     active: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     const now = Date.now();
     const name = args.name.trim();
     if (!name) throw new Error("Contact name is required.");
@@ -63,6 +66,7 @@ export const update = mutation({
     active: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Contact not found.");
     const name = args.name?.trim();
@@ -80,6 +84,7 @@ export const update = mutation({
 export const archive = mutation({
   args: { id: v.id("invoiceContacts") },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Contact not found.");
     await ctx.db.patch(args.id, { active: false, updatedAt: Date.now() });

@@ -87,36 +87,35 @@ export function EventsCalendarView({ events }: { events: DashboardEvent[] }) {
   const [view, setView] = useState<"timeGridWeek" | "dayGridMonth">("timeGridWeek");
   const calendarEvents = useMemo<EventInput[]>(
     () =>
-      events.flatMap((row) => {
+      events.flatMap<EventInput>((row) => {
         const blocks = row.scheduleSummary?.blocks ?? [];
         if (!blocks.length) {
           const colors = getEventColors(row);
-          return [
-            {
-              id: row._id,
-              title: row.title,
-              start: row.startAt,
-              end: row.endAt,
-              backgroundColor: colors.backgroundColor,
-              borderColor: colors.borderColor,
-              extendedProps: {
-                eventType: row.eventType,
-                status: row.status,
-                venueName: row.venueName,
-                assignedCrewCount: row.assignedCrewCount ?? 0,
-                assignedCrew: row.assignedCrew ?? [],
-                setupAt: row.scheduleSummary?.setupAt,
-                showAt: row.scheduleSummary?.showAt,
-                strikeAt: row.scheduleSummary?.strikeAt,
-                blocks: [],
-                isBlockEvent: false,
-              },
+          const fallbackEvent: EventInput = {
+            id: row._id,
+            title: row.title,
+            start: row.startAt,
+            end: row.endAt,
+            backgroundColor: colors.backgroundColor,
+            borderColor: colors.borderColor,
+            extendedProps: {
+              eventType: row.eventType,
+              status: row.status,
+              venueName: row.venueName,
+              assignedCrewCount: row.assignedCrewCount ?? 0,
+              assignedCrew: row.assignedCrew ?? [],
+              setupAt: row.scheduleSummary?.setupAt,
+              showAt: row.scheduleSummary?.showAt,
+              strikeAt: row.scheduleSummary?.strikeAt,
+              blocks: [],
+              isBlockEvent: false,
             },
-          ];
+          };
+          return [fallbackEvent];
         }
         return blocks.map((block, index) => {
           const colors = getBlockColors(block.blockType);
-          return {
+          const blockEvent: EventInput = {
             id: `${row._id}-${block.blockType}-${index}`,
             title: block.label?.trim() || block.blockType || row.title,
             start: block.startsAt,
@@ -133,6 +132,7 @@ export function EventsCalendarView({ events }: { events: DashboardEvent[] }) {
               isBlockEvent: true,
             },
           };
+          return blockEvent;
         });
       }),
     [events],
@@ -202,44 +202,42 @@ export function EventsCalendarView({ events }: { events: DashboardEvent[] }) {
               return (
                 <div className="space-y-1 px-1 py-0.5">
                   <p className="text-xs font-semibold leading-tight break-words whitespace-normal">
-                    {(arg.event.extendedProps.parentTitle as string | undefined) ?? "Event"} · {arg.event.title}
+                    {(arg.event.extendedProps.parentTitle as string | undefined) ?? "Event"} {arg.event.title}
                   </p>
                   <p className="text-[11px] leading-tight opacity-90">{range}</p>
                   {venueName ? <p className="line-clamp-1 text-[11px] leading-tight opacity-90">{venueName}</p> : null}
-                  <div className="flex items-center gap-1">
-                    <TooltipProvider delayDuration={120}>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <div>
-                            <AvatarGroup className="items-center">
-                              {crew.slice(0, 3).map((member) => (
-                                <Avatar key={member.userId} size="sm">
-                                  <AvatarImage src={member.image} alt={member.name} />
-                                  <AvatarFallback>{initials(member.name)}</AvatarFallback>
-                                </Avatar>
-                              ))}
-                              {crewCount > 3 ? <AvatarGroupCount>+{crewCount - 3}</AvatarGroupCount> : null}
-                            </AvatarGroup>
-                          </div>
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="max-w-sm p-2">
-                          <div className="space-y-1">
-                            {crew.length ? (
-                              crew.map((member) => (
-                                <p key={`crew-${member.userId}`} className="text-xs">
-                                  {member.name}
-                                  {member.email ? ` (${member.email})` : ""}
-                                </p>
-                              ))
-                            ) : (
-                              <p className="text-xs">No assigned crew yet.</p>
-                            )}
-                          </div>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                    <p className="text-[11px] leading-tight opacity-90">{crewCount} crew</p>
-                  </div>
+                  <TooltipProvider delayDuration={120}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="inline-flex items-center gap-1">
+                          <AvatarGroup className="items-center">
+                            {crew.slice(0, 3).map((member) => (
+                              <Avatar key={member.userId} size="sm">
+                                <AvatarImage src={member.image} alt={member.name} />
+                                <AvatarFallback>{initials(member.name)}</AvatarFallback>
+                              </Avatar>
+                            ))}
+                            {crewCount > 3 ? <AvatarGroupCount>+{crewCount - 3}</AvatarGroupCount> : null}
+                          </AvatarGroup>
+                          <p className="text-[11px] leading-tight opacity-90">{crewCount} crew</p>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-sm p-2">
+                        <div className="space-y-1">
+                          {crew.length ? (
+                            crew.map((member) => (
+                              <p key={`crew-${member.userId}`} className="text-xs">
+                                {member.name}
+                                {member.email ? ` (${member.email})` : ""}
+                              </p>
+                            ))
+                          ) : (
+                            <p className="text-xs">No assigned crew yet.</p>
+                          )}
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 </div>
               );
             }

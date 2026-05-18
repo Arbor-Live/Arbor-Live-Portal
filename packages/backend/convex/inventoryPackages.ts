@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
+import { requireAuth } from "./lib/auth";
 
 const packageItemInput = v.object({
   typeId: v.id("inventoryTypes"),
@@ -42,6 +43,7 @@ async function assertUniquePackagePublicSlug(
 export const list = query({
   args: {},
   handler: async (ctx) => {
+    await requireAuth(ctx);
     const packages = await ctx.db.query("inventoryPackages").collect();
 
     return await Promise.all(
@@ -112,6 +114,7 @@ export const create = mutation({
     items: v.array(packageItemInput),
   },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     await validatePackageItems(ctx, args.items);
     const now = Date.now();
     const publicListing = args.publicListing ?? false;
@@ -179,6 +182,7 @@ export const update = mutation({
     items: v.array(packageItemInput),
   },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Package not found.");
     await validatePackageItems(ctx, args.items);
@@ -243,6 +247,7 @@ export const update = mutation({
 export const remove = mutation({
   args: { id: v.id("inventoryPackages") },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Package not found.");
 

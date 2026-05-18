@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx } from "./_generated/server";
+import { requireAuth } from "./lib/auth";
 
 type InventoryCategoryMetadata = Doc<"inventoryTypes">["categoryMetadata"];
 
@@ -122,6 +123,7 @@ export const list = query({
     search: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     const types = args.category
       ? await ctx.db
           .query("inventoryTypes")
@@ -149,6 +151,7 @@ export const list = query({
 export const get = query({
   args: { id: v.id("inventoryTypes") },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     return await ctx.db.get(args.id);
   },
 });
@@ -175,6 +178,7 @@ export const create = mutation({
     publicSlug: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     const now = Date.now();
     const capabilities = (args.capabilities ?? []).map((cap) => cap.trim().toLowerCase());
     await validateCapabilities(ctx, capabilities);
@@ -251,6 +255,7 @@ export const update = mutation({
     publicSlug: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Type not found.");
 
@@ -316,6 +321,7 @@ export const update = mutation({
 export const remove = mutation({
   args: { id: v.id("inventoryTypes") },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Type not found.");
 
