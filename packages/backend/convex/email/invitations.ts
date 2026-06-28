@@ -153,6 +153,46 @@ export async function scheduleUserInviteEmail(
   });
 }
 
+export async function updatePendingInviteDetails(
+  ctx: MutationCtx,
+  invitationId: string,
+  args: { role: string; teams?: string[] },
+) {
+  const pending = await ctx.db
+    .query("pendingUserInvites")
+    .withIndex("by_invitationId", (q) => q.eq("invitationId", invitationId))
+    .unique();
+  if (!pending) return;
+  const patch: { role: string; teams?: string[] } = { role: args.role };
+  if (args.teams !== undefined) {
+    patch.teams = args.teams;
+  }
+  await ctx.db.patch(pending._id, patch);
+}
+
+export async function revokePendingInvite(ctx: MutationCtx, invitationId: string) {
+  const pending = await ctx.db
+    .query("pendingUserInvites")
+    .withIndex("by_invitationId", (q) => q.eq("invitationId", invitationId))
+    .unique();
+  if (pending) {
+    await ctx.db.delete(pending._id);
+  }
+}
+
+export async function markInvitationCancelled(ctx: MutationCtx, invitationId: string) {
+  await ctx.runMutation(components.betterAuth.adapter.updateOne, {
+    input: {
+      model: "invitation",
+      where: [{ field: "_id", value: invitationId }],
+      update: {
+        status: "cancelled",
+      },
+    },
+  });
+  await revokePendingInvite(ctx, invitationId);
+}
+
 export async function markInvitationAccepted(ctx: MutationCtx, invitationId: string) {
   await ctx.runMutation(components.betterAuth.adapter.updateOne, {
     input: {

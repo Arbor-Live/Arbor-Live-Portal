@@ -12,7 +12,9 @@ import {
 } from "./lib/auth";
 import {
   markInvitationAccepted,
+  markInvitationCancelled,
   scheduleUserInviteEmail,
+  updatePendingInviteDetails,
 } from "./email/invitations";
 
 const USER_TEAMS = ["Sound", "Lights", "Design", "Marketing", "Operations"] as const;
@@ -564,22 +566,31 @@ export const listInvitationsAdmin = query({
       paginationOpts: { cursor: null, numItems: 2000 },
     });
     const invites = (result?.page ?? []) as InvitationRow[];
+    const pendingInvites = await ctx.db.query("pendingUserInvites").take(2000);
+    const pendingByInvitationId = new Map(
+      pendingInvites.map((row) => [row.invitationId, row]),
+    );
     return invites
-      .map((invite) => ({
-        id: getRecordId(invite),
-        email: invite.email ?? "",
-        role: invite.role ?? "member",
-        status: invite.status ?? "pending",
-        organizationId: invite.organizationId ?? "",
-        organizationName: orgById.get(invite.organizationId ?? "")?.name ?? "Unknown organization",
-        inviterName:
-          inviterById.get(invite.inviterId ?? "")?.name ??
-          inviterById.get(invite.inviterId ?? "")?.email ??
-          invite.inviterId ??
-          "Unknown",
-        createdAt: invite.createdAt ?? 0,
-        expiresAt: invite.expiresAt ?? 0,
-      }))
+      .map((invite) => {
+        const inviteId = getRecordId(invite);
+        const pending = pendingByInvitationId.get(inviteId);
+        return {
+          id: inviteId,
+          email: invite.email ?? "",
+          role: invite.role ?? "member",
+          status: invite.status ?? "pending",
+          organizationId: invite.organizationId ?? "",
+          organizationName: orgById.get(invite.organizationId ?? "")?.name ?? "Unknown organization",
+          inviterName:
+            inviterById.get(invite.inviterId ?? "")?.name ??
+            inviterById.get(invite.inviterId ?? "")?.email ??
+            invite.inviterId ??
+            "Unknown",
+          createdAt: invite.createdAt ?? 0,
+          expiresAt: invite.expiresAt ?? 0,
+          teams: (pending?.teams ?? []) as UserTeam[],
+        };
+      })
       .filter((invite) => Boolean(invite.id))
       .filter((invite) => (args.organizationId ? invite.organizationId === args.organizationId : true))
       .filter((invite) => (args.status ? invite.status === args.status : true))
@@ -704,6 +715,74 @@ async function userExistsForInvite(ctx: MutationCtx | QueryCtx, email: string) {
   })) as AuthUser | null;
   return Boolean(user);
 }
+
+async function getInvitationById(ctx: MutationCtx | QueryCtx, invitationId: string) {
+  const invitesResult = await ctx.runQuery(components.betterAuth.adapter.findMany, {
+    model: "invitation",
+    paginationOpts: { cursor: null, numItems: 2000 },
+  });
+  const invite = ((invitesResult?.page ?? []) as InvitationRow[]).find(
+    (row) => getRecordId(row) === invitationId,
+  );
+  if (!invite) throw new Error("Invitation not found.");
+  return invite;
+}
+
+export const updateInviteAdmin = mutation({
+  args: {
+    invitationId: v.string(),
+    role: v.optional(v.string()),
+    teams: v.optional(v.array(userTeamValue)),
+  },
+  returns: v.object({ ok: v.boolean() }),
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    const invite = await getInvitationById(ctx, args.invitationId);
+    if (invite.status !== "pending") {
+      throw new Error("Only pending invitations can be edited.");
+    }
+    if (!invite.email || !invite.organizationId) {
+      throw new Error("Invitation is missing required details.");
+    }
+
+    const nextRole = await normalizeMembershipRole(
+      ctx,
+      invite.organizationId,
+      args.role ?? invite.role ?? "member",
+    );
+    const nextTeams = args.teams;
+
+    await ctx.runMutation(components.betterAuth.adapter.updateOne, {
+      input: {
+        model: "invitation",
+        where: [{ field: "_id", value: args.invitationId }],
+        update: {
+          role: nextRole,
+        },
+      },
+    });
+    await updatePendingInviteDetails(ctx, args.invitationId, {
+      role: nextRole,
+      teams: nextTeams,
+    });
+
+    return { ok: true };
+  },
+});
+
+export const cancelInviteAdmin = mutation({
+  args: { invitationId: v.string() },
+  returns: v.object({ ok: v.boolean() }),
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    const invite = await getInvitationById(ctx, args.invitationId);
+    if (invite.status !== "pending") {
+      throw new Error("Only pending invitations can be cancelled.");
+    }
+    await markInvitationCancelled(ctx, args.invitationId);
+    return { ok: true };
+  },
+});
 
 export const createUserAdmin = mutation({
   args: {

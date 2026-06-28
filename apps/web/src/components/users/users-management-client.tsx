@@ -49,6 +49,8 @@ export function UsersManagementClient({
   const updateBandOrganizationProfileAdmin = useMutation(api.users.updateBandOrganizationProfileAdmin);
   const inviteUser = useMutation(api.users.inviteUserAdmin);
   const resendInvite = useMutation(api.users.resendInviteAdmin);
+  const updateInvite = useMutation(api.users.updateInviteAdmin);
+  const cancelInvite = useMutation(api.users.cancelInviteAdmin);
   const createUser = useMutation(api.users.createUserAdmin);
   const updateUser = useMutation(api.users.updateUserAdmin);
   const addMembership = useMutation(api.users.addUserOrganizationMembershipAdmin);
@@ -61,6 +63,13 @@ export function UsersManagementClient({
   const [inviteRole, setInviteRole] = useState("member");
   const [inviteTeams, setInviteTeams] = useState<TeamOption[]>([]);
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
+  const [editingInvite, setEditingInvite] = useState<{
+    id: string;
+    email: string;
+    organizationId: string;
+    role: string;
+    teams: TeamOption[];
+  } | null>(null);
   const [createName, setCreateName] = useState("");
   const [createTitle, setCreateTitle] = useState("");
   const [createEmail, setCreateEmail] = useState("");
@@ -155,6 +164,33 @@ export function UsersManagementClient({
     setInviteTeams([]);
     setInviteModalOpen(false);
     setMessage("Invite sent.");
+  }
+
+  function openEditInvite(invite: NonNullable<typeof invitations>[number]) {
+    setEditingInvite({
+      id: invite.id,
+      email: invite.email,
+      organizationId: invite.organizationId,
+      role: invite.role,
+      teams: (invite.teams ?? []) as TeamOption[],
+    });
+  }
+
+  async function onSaveInviteEdit() {
+    if (!editingInvite) return;
+    await updateInvite({
+      invitationId: editingInvite.id,
+      role: editingInvite.role,
+      teams: isArborOrg(editingInvite.organizationId) ? editingInvite.teams : undefined,
+    });
+    setEditingInvite(null);
+    setMessage("Invitation updated.");
+  }
+
+  async function onCancelInvite(invite: NonNullable<typeof invitations>[number]) {
+    if (!window.confirm(`Cancel the invitation for ${invite.email}?`)) return;
+    await cancelInvite({ invitationId: invite.id });
+    setMessage(`Invitation cancelled for ${invite.email}.`);
   }
 
   async function onCreateUser() {
@@ -800,9 +836,38 @@ export function UsersManagementClient({
                     <td className="px-3 py-2">{invite.role}</td>
                     <td className="px-3 py-2">{invite.status}</td>
                     <td className="px-3 py-2">
-                      <Button type="button" variant="outline" size="sm" onClick={() => void resendInvite({ invitationId: invite.id })}>
-                        Resend
-                      </Button>
+                      <div className="flex flex-wrap gap-2">
+                        {invite.status === "pending" ? (
+                          <>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openEditInvite(invite)}
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => void resendInvite({ invitationId: invite.id })}
+                            >
+                              Resend
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => void onCancelInvite(invite)}
+                            >
+                              Cancel
+                            </Button>
+                          </>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -862,6 +927,70 @@ export function UsersManagementClient({
                 </Button>
                 <Button type="button" variant="outline" onClick={() => setInviteModalOpen(false)}>
                   Cancel
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      ) : null}
+
+      {showAccess && editingInvite ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+          <Card className="w-full max-w-lg">
+            <CardHeader>
+              <CardTitle>Edit Invitation</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="space-y-1">
+                <Label>Email</Label>
+                <Input value={editingInvite.email} disabled readOnly />
+              </div>
+              <div className="space-y-1">
+                <Label>Role</Label>
+                <Select
+                  value={editingInvite.role}
+                  onValueChange={(value) =>
+                    setEditingInvite((prev) => (prev ? { ...prev, role: value } : prev))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {getRoleOptionsForOrg(editingInvite.organizationId).map((option) => (
+                      <SelectItem key={`edit-invite-role-${option.value}`} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {isArborOrg(editingInvite.organizationId) ? (
+                <div className="flex flex-wrap gap-3">
+                  {TEAM_OPTIONS.map((team) => (
+                    <label key={`edit-invite-${team}`} className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={editingInvite.teams.includes(team)}
+                        onChange={() =>
+                          setEditingInvite((prev) =>
+                            prev
+                              ? { ...prev, teams: toggleTeam(prev.teams, team) }
+                              : prev,
+                          )
+                        }
+                      />
+                      {team}
+                    </label>
+                  ))}
+                </div>
+              ) : null}
+              <div className="flex gap-2">
+                <Button type="button" onClick={() => void onSaveInviteEdit()}>
+                  Save changes
+                </Button>
+                <Button type="button" variant="outline" onClick={() => setEditingInvite(null)}>
+                  Close
                 </Button>
               </div>
             </CardContent>
