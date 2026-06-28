@@ -1,16 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
 import { EventStateBadges } from "@/components/events/event-state-badges";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
+  ADMIN_CREW_SCHEDULING_DEFAULT_WEEKS,
+  adminSchedulingRangeFromDateInputs,
   crewResponseBadgeClass,
   formatCrewResponseLabel,
   formatEventDateTime,
+  getDefaultAdminSchedulingDateInputs,
 } from "@/lib/crew-availability";
 import { formatEventStatusLabel, normalizeEventStatus } from "@/lib/event-status";
 
@@ -23,17 +27,71 @@ function initials(name: string) {
 }
 
 export function CrewSchedulingDashboard() {
+  const defaultDates = useMemo(() => getDefaultAdminSchedulingDateInputs(), []);
   const [unconfirmedOnly, setUnconfirmedOnly] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [now] = useState(() => Date.now());
+  const [startDate, setStartDate] = useState(defaultDates.startDate);
+  const [endDate, setEndDate] = useState(defaultDates.endDate);
 
-  const rows = useQuery(api.eventCrewAvailability.listForAdminOverview, {
-    now,
-    unconfirmedOnly,
-  });
+  const range = useMemo(
+    () => adminSchedulingRangeFromDateInputs(startDate, endDate),
+    [startDate, endDate],
+  );
+
+  const rows = useQuery(
+    api.eventCrewAvailability.listForAdminOverview,
+    range
+      ? {
+          rangeStart: range.rangeStart,
+          rangeEnd: range.rangeEnd,
+          unconfirmedOnly,
+        }
+      : "skip",
+  );
+
+  function resetToDefaultRange() {
+    const defaults = getDefaultAdminSchedulingDateInputs();
+    setStartDate(defaults.startDate);
+    setEndDate(defaults.endDate);
+  }
 
   return (
     <div className="space-y-3">
+      <div className="space-y-2 rounded-md border p-3">
+        <p className="text-sm font-medium">Date range</p>
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="space-y-1">
+            <p className="text-xs text-muted-foreground">From</p>
+            <Input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="w-[160px]"
+            />
+          </div>
+          <div className="space-y-1">
+            <p className="text-xs text-muted-foreground">To</p>
+            <Input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="w-[160px]"
+            />
+          </div>
+          <Button type="button" variant="outline" size="sm" onClick={resetToDefaultRange}>
+            Next {ADMIN_CREW_SCHEDULING_DEFAULT_WEEKS} weeks
+          </Button>
+        </div>
+        {!range ? (
+          <p className="text-xs text-destructive">Choose a valid start and end date.</p>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            Showing crewed events overlapping {formatEventDateTime(range.rangeStart)} –{" "}
+            {formatEventDateTime(range.rangeEnd)}.
+          </p>
+        )}
+      </div>
+
       <div className="flex flex-wrap items-center gap-2">
         <label className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
           <input
@@ -48,11 +106,15 @@ export function CrewSchedulingDashboard() {
         </p>
       </div>
 
-      {!rows ? <p className="text-sm text-muted-foreground">Loading crew scheduling...</p> : null}
+      {!range ? null : !rows ? (
+        <p className="text-sm text-muted-foreground">Loading crew scheduling...</p>
+      ) : null}
 
-      {rows && rows.length === 0 ? (
+      {range && rows && rows.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          {unconfirmedOnly ? "No unconfirmed crewed events in the upcoming window." : "No upcoming crewed events found."}
+          {unconfirmedOnly
+            ? "No unconfirmed crewed events in this date range."
+            : "No crewed events found in this date range."}
         </p>
       ) : null}
 

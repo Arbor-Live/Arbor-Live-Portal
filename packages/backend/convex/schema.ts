@@ -423,12 +423,74 @@ export default defineSchema({
     .index("by_invoiceId", ["invoiceId"])
     .index("by_invoiceId_and_createdAt", ["invoiceId", "createdAt"]),
 
+  eventSeries: defineTable({
+    title: v.string(),
+    status: v.union(v.literal("active"), v.literal("paused"), v.literal("ended")),
+    anchorStartAt: v.number(),
+    anchorEndAt: v.number(),
+    intervalWeeks: v.number(),
+    occurrenceCount: v.optional(v.number()),
+    seriesEndAt: v.optional(v.number()),
+    timezone: v.string(),
+    requiresShowWindow: v.boolean(),
+    venueName: v.optional(v.string()),
+    eventType: v.optional(v.string()),
+    teamsInterested: v.optional(v.array(v.string())),
+    category: v.optional(v.string()),
+    host: v.optional(v.string()),
+    expectedTurnout: v.optional(v.number()),
+    budgetUsd: v.optional(v.number()),
+    occurrenceBandsCostUsd: v.optional(v.number()),
+    occurrenceExternalRentalsCostUsd: v.optional(v.number()),
+    occurrenceOtherCostUsd: v.optional(v.number()),
+    occurrenceBudgetCrewCostUsd: v.optional(v.number()),
+    budgetCrewHourlyRateUsd: v.optional(v.number()),
+    seriesBandsCostUsd: v.optional(v.number()),
+    seriesExternalRentalsCostUsd: v.optional(v.number()),
+    seriesOtherCostUsd: v.optional(v.number()),
+    dayOfLeadUserId: v.optional(v.string()),
+    eventManagerUserId: v.optional(v.string()),
+    rentalFulfillmentMode: v.optional(rentalFulfillmentModeValue),
+    notes: v.optional(v.string()),
+    blockTemplates: v.optional(
+      v.array(
+        v.object({
+          blockType: eventTimelineBlockTypeValue,
+          label: v.string(),
+          dayIndex: v.number(),
+          offsetMs: v.number(),
+          durationMs: v.number(),
+          notes: v.optional(v.string()),
+        }),
+      ),
+    ),
+    shiftTemplates: v.optional(
+      v.array(
+        v.object({
+          role: v.string(),
+          blockTemplateIndex: v.number(),
+          offsetMs: v.number(),
+          durationMs: v.number(),
+          estimatedHourlyRateUsd: v.optional(v.number()),
+          notes: v.optional(v.string()),
+        }),
+      ),
+    ),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_status", ["status"])
+    .index("by_createdAt", ["createdAt"]),
+
   events: defineTable({
     title: v.string(),
     status: eventStatusValue,
     visibility: eventVisibilityValue,
     invoiceId: v.optional(v.id("invoices")),
     publicToken: v.optional(v.string()),
+    seriesId: v.optional(v.id("eventSeries")),
+    occurrenceIndex: v.optional(v.number()),
+    seriesDetached: v.optional(v.boolean()),
     startAt: v.number(),
     endAt: v.number(),
     timezone: v.string(),
@@ -448,6 +510,7 @@ export default defineSchema({
     crewCostUsd: v.optional(v.number()),
     bandsCostUsd: v.optional(v.number()),
     externalRentalsCostUsd: v.optional(v.number()),
+    otherCostUsd: v.optional(v.number()),
     rentalFulfillmentMode: v.optional(rentalFulfillmentModeValue),
     notes: v.optional(v.string()),
     createdAt: v.number(),
@@ -458,7 +521,8 @@ export default defineSchema({
     .index("by_invoiceId", ["invoiceId"])
     .index("by_publicToken", ["publicToken"])
     .index("by_startAt", ["startAt"])
-    .index("by_createdAt", ["createdAt"]),
+    .index("by_createdAt", ["createdAt"])
+    .index("by_seriesId_and_occurrenceIndex", ["seriesId", "occurrenceIndex"]),
 
   userCompensationRates: defineTable({
     userId: v.string(),
@@ -561,6 +625,7 @@ export default defineSchema({
     startsAt: v.number(),
     endsAt: v.number(),
     hours: v.number(),
+    estimatedHourlyRateUsd: v.optional(v.number()),
     postedToExpense: v.boolean(),
     notes: v.optional(v.string()),
     createdAt: v.number(),

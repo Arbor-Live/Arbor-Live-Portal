@@ -14,7 +14,7 @@ export default function CrewSchedulingPage() {
         <CardHeader>
           <CardTitle>Crew Scheduling</CardTitle>
           <CardDescription>
-            Upcoming events that still need crew assigned, with availability response counts from team-matched crew.
+            Crewed events in your selected date range (default: next two weeks), with availability response counts from team-matched crew.
           </CardDescription>
         </CardHeader>
       </Card>

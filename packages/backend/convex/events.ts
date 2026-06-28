@@ -8,6 +8,7 @@ import {
   syncEventStatusForLinkedInvoice,
 } from "./lib/eventStatus";
 import { RENTAL_EVENT_TYPES, enrichPullListItems, summarizePullList } from "./eventPullLists";
+import { propagateOverviewToSeriesOccurrences, type SeriesEditScope } from "./lib/eventSeriesGeneration";
 
 const eventTypeValue = v.union(
   v.literal("Crewed Event"),
@@ -27,6 +28,8 @@ const eventTeamValue = v.union(
 const EVENT_TIMEZONE = "America/Los_Angeles";
 
 const rentalFulfillmentModeValue = v.union(v.literal("delivery"), v.literal("will_call"));
+
+const seriesEditScopeValue = v.union(v.literal("this"), v.literal("future"), v.literal("all"));
 
 function trimOptional(value: string | undefined) {
   const out = value?.trim();
@@ -134,6 +137,29 @@ export const listForDashboard = query({
       ),
     );
 
+    const seriesIds = Array.from(
+      new Set(sortedRows.map((row) => row.seriesId).filter((id): id is NonNullable<typeof id> => Boolean(id))),
+    );
+    const seriesById = new Map<
+      string,
+      { title: string; occurrenceCount?: number; totalOccurrences: number }
+    >();
+    await Promise.all(
+      seriesIds.map(async (seriesId) => {
+        const series = await ctx.db.get(seriesId);
+        if (!series) return;
+        const occurrences = await ctx.db
+          .query("events")
+          .withIndex("by_seriesId_and_occurrenceIndex", (q) => q.eq("seriesId", seriesId))
+          .take(200);
+        seriesById.set(seriesId, {
+          title: series.title,
+          occurrenceCount: series.occurrenceCount,
+          totalOccurrences: series.occurrenceCount ?? occurrences.length,
+        });
+      }),
+    );
+
     const allUserIds = Array.from(
       new Set(
         perEventShifts
@@ -190,8 +216,16 @@ export const listForDashboard = query({
           startsAt: block.startsAt,
           endsAt: block.endsAt,
         }));
+      const seriesInfo = row.seriesId ? seriesById.get(row.seriesId) : undefined;
+      const occurrenceNumber =
+        row.occurrenceIndex !== undefined ? row.occurrenceIndex + 1 : undefined;
       return {
         ...row,
+        seriesTitle: seriesInfo?.title,
+        occurrenceLabel:
+          seriesInfo && occurrenceNumber !== undefined
+            ? `${occurrenceNumber} of ${seriesInfo.totalOccurrences}`
+            : undefined,
         assignedCrewCount: eventUserIds.length,
         assignedCrew,
         pullListSummary: summarizePullList(pullListItems),
@@ -241,6 +275,33 @@ export const get = query({
     const enrichedPullList = await enrichPullListItems(ctx, sortedPullList);
     return {
       event: { ...event, status: normalizeEventStatus(event.status) },
+      series:
+        event.seriesId !== undefined
+          ? await (async () => {
+              const series = await ctx.db.get(event.seriesId!);
+              if (!series) return null;
+              const siblings = await ctx.db
+                .query("events")
+                .withIndex("by_seriesId_and_occurrenceIndex", (q) => q.eq("seriesId", event.seriesId!))
+                .take(200);
+              return {
+                _id: series._id,
+                title: series.title,
+                status: series.status,
+                intervalWeeks: series.intervalWeeks,
+                totalOccurrences: series.occurrenceCount ?? siblings.length,
+                occurrenceIndex: event.occurrenceIndex,
+                seriesDetached: event.seriesDetached ?? false,
+                budgetUsd: series.budgetUsd,
+                occurrenceBandsCostUsd: series.occurrenceBandsCostUsd,
+                occurrenceExternalRentalsCostUsd: series.occurrenceExternalRentalsCostUsd,
+                occurrenceOtherCostUsd: series.occurrenceOtherCostUsd,
+                seriesBandsCostUsd: series.seriesBandsCostUsd,
+                seriesExternalRentalsCostUsd: series.seriesExternalRentalsCostUsd,
+                seriesOtherCostUsd: series.seriesOtherCostUsd,
+              };
+            })()
+          : null,
       blocks,
       shifts,
       assignments,
@@ -307,6 +368,7 @@ export const create = mutation({
     crewCostUsd: v.optional(v.number()),
     bandsCostUsd: v.optional(v.number()),
     externalRentalsCostUsd: v.optional(v.number()),
+    otherCostUsd: v.optional(v.number()),
     rentalFulfillmentMode: v.optional(rentalFulfillmentModeValue),
     notes: v.optional(v.string()),
   },
@@ -342,6 +404,7 @@ export const create = mutation({
       crewCostUsd: args.crewCostUsd,
       bandsCostUsd: args.bandsCostUsd,
       externalRentalsCostUsd: args.externalRentalsCostUsd,
+      otherCostUsd: args.otherCostUsd,
       rentalFulfillmentMode: resolveRentalFulfillmentMode(args.eventType, args.rentalFulfillmentMode),
       notes: trimOptional(args.notes),
       createdAt: now,
@@ -357,6 +420,7 @@ export const create = mutation({
 export const update = mutation({
   args: {
     id: v.id("events"),
+    editScope: v.optional(seriesEditScopeValue),
     title: v.optional(v.string()),
     status: v.optional(eventStatusValue),
     visibility: v.optional(v.union(v.literal("internal"), v.literal("public"))),
@@ -376,6 +440,7 @@ export const update = mutation({
     crewCostUsd: v.optional(v.number()),
     bandsCostUsd: v.optional(v.number()),
     externalRentalsCostUsd: v.optional(v.number()),
+    otherCostUsd: v.optional(v.number()),
     rentalFulfillmentMode: v.optional(rentalFulfillmentModeValue),
     notes: v.optional(v.string()),
   },
@@ -395,7 +460,8 @@ export const update = mutation({
         : resolveRentalFulfillmentMode(nextEventType, existing.rentalFulfillmentMode);
     const nextInvoiceId = args.invoiceId !== undefined ? args.invoiceId : existing.invoiceId;
     const nextStatus = normalizeEventStatus(args.status ?? existing.status);
-    await ctx.db.patch(args.id, {
+    const now = Date.now();
+    const patch = {
       title: args.title?.trim() ?? existing.title,
       status: nextStatus,
       visibility: args.visibility ?? existing.visibility,
@@ -419,10 +485,70 @@ export const update = mutation({
       crewCostUsd: args.crewCostUsd ?? existing.crewCostUsd,
       bandsCostUsd: args.bandsCostUsd ?? existing.bandsCostUsd,
       externalRentalsCostUsd: args.externalRentalsCostUsd ?? existing.externalRentalsCostUsd,
+      otherCostUsd: args.otherCostUsd ?? existing.otherCostUsd,
       rentalFulfillmentMode: nextRentalFulfillmentMode,
       notes: args.notes?.trim() ?? existing.notes,
-      updatedAt: Date.now(),
-    });
+      updatedAt: now,
+    };
+
+    const scope = (args.editScope ?? "this") as SeriesEditScope;
+    const hasSeries = Boolean(existing.seriesId);
+
+    if (hasSeries && existing.seriesId && scope !== "this") {
+      const series = await ctx.db.get(existing.seriesId);
+      if (!series) throw new Error("Linked event series not found.");
+      const referenceIndex = existing.occurrenceIndex ?? 0;
+      const nextAnchorStartAt =
+        referenceIndex === 0 && args.startAt !== undefined ? args.startAt : series.anchorStartAt;
+      const nextAnchorEndAt =
+        referenceIndex === 0 && args.endAt !== undefined
+          ? args.endAt
+          : args.startAt !== undefined && args.endAt !== undefined && referenceIndex === 0
+            ? args.endAt
+            : series.anchorEndAt;
+
+      await ctx.db.patch(existing.seriesId, {
+        title: patch.title,
+        anchorStartAt: nextAnchorStartAt,
+        anchorEndAt: nextAnchorEndAt,
+        requiresShowWindow: patch.requiresShowWindow,
+        venueName: patch.venueName,
+        eventType: patch.eventType,
+        teamsInterested: patch.teamsInterested,
+        category: patch.category,
+        host: patch.host,
+        expectedTurnout: patch.expectedTurnout,
+        budgetUsd: patch.budgetUsd,
+        occurrenceBandsCostUsd:
+          args.bandsCostUsd !== undefined ? args.bandsCostUsd : series.occurrenceBandsCostUsd,
+        occurrenceExternalRentalsCostUsd:
+          args.externalRentalsCostUsd !== undefined
+            ? args.externalRentalsCostUsd
+            : series.occurrenceExternalRentalsCostUsd,
+        occurrenceOtherCostUsd:
+          args.otherCostUsd !== undefined ? args.otherCostUsd : series.occurrenceOtherCostUsd,
+        dayOfLeadUserId: patch.dayOfLeadUserId,
+        eventManagerUserId: patch.eventManagerUserId,
+        rentalFulfillmentMode: patch.rentalFulfillmentMode,
+        notes: patch.notes,
+        updatedAt: now,
+      });
+      const updatedSeries = await ctx.db.get(existing.seriesId);
+      if (!updatedSeries) throw new Error("Linked event series not found.");
+      await propagateOverviewToSeriesOccurrences(
+        ctx,
+        updatedSeries,
+        referenceIndex,
+        scope,
+        now,
+      );
+    } else {
+      await ctx.db.patch(args.id, {
+        ...patch,
+        seriesDetached: hasSeries && scope === "this" ? true : existing.seriesDetached,
+      });
+    }
+
     if (nextInvoiceId) {
       await syncEventStatusForLinkedInvoice(ctx, args.id, nextInvoiceId, nextStatus);
     }
@@ -479,6 +605,7 @@ export const duplicate = mutation({
       crewCostUsd: existing.crewCostUsd,
       bandsCostUsd: existing.bandsCostUsd,
       externalRentalsCostUsd: existing.externalRentalsCostUsd,
+      otherCostUsd: existing.otherCostUsd,
       rentalFulfillmentMode: existing.rentalFulfillmentMode,
       notes: existing.notes,
       createdAt: now,

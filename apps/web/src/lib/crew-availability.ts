@@ -2,6 +2,62 @@ export type CrewAvailabilityResponseStatus = "yes" | "partial" | "only_if_necess
 
 export const DEFAULT_AVAILABILITY_WEEKS = 3;
 export const EXTENDED_AVAILABILITY_WEEKS = 12;
+export const ADMIN_CREW_SCHEDULING_DEFAULT_WEEKS = 2;
+
+export function toLocalDateInput(date: Date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+export function startOfLocalDay(date: Date) {
+  const copy = new Date(date);
+  copy.setHours(0, 0, 0, 0);
+  return copy.getTime();
+}
+
+export function endOfLocalDay(date: Date) {
+  const copy = new Date(date);
+  copy.setHours(23, 59, 59, 999);
+  return copy.getTime();
+}
+
+export function parseLocalDateInput(value: string) {
+  if (!value) return null;
+  const date = new Date(`${value}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+export function getDefaultAdminSchedulingDateInputs() {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + ADMIN_CREW_SCHEDULING_DEFAULT_WEEKS * 7);
+  return {
+    startDate: toLocalDateInput(start),
+    endDate: toLocalDateInput(end),
+  };
+}
+
+export function adminSchedulingRangeFromDateInputs(startDate: string, endDate: string) {
+  const start = parseLocalDateInput(startDate);
+  const end = parseLocalDateInput(endDate);
+  if (!start || !end) return null;
+  return {
+    rangeStart: startOfLocalDay(start),
+    rangeEnd: endOfLocalDay(end),
+  };
+}
+
+export function getDefaultAdminSchedulingRange() {
+  const { startDate, endDate } = getDefaultAdminSchedulingDateInputs();
+  const range = adminSchedulingRangeFromDateInputs(startDate, endDate);
+  if (!range) {
+    throw new Error("Invalid default admin scheduling range");
+  }
+  return range;
+}
 
 export function formatCrewResponseLabel(status: CrewAvailabilityResponseStatus): string {
   switch (status) {

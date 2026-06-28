@@ -139,15 +139,17 @@ function aggregateResponses(responses: Doc<"eventCrewAvailabilityResponses">[]) 
 function buildResponsePeople(
   responses: Doc<"eventCrewAvailabilityResponses">[],
   userByKey: Map<string, AuthUserRecord>,
-  options?: { includePrivateStatuses?: boolean },
+  options?: { includePrivateStatuses?: boolean; excludeUserIds?: Set<string> },
 ) {
   const includePrivate = options?.includePrivateStatuses ?? false;
+  const excludeUserIds = options?.excludeUserIds;
   return responses
     .filter(
       (response) =>
-        includePrivate ||
-        response.responseStatus === "yes" ||
-        response.responseStatus === "partial",
+        !excludeUserIds?.has(response.userId) &&
+        (includePrivate ||
+          response.responseStatus === "yes" ||
+          response.responseStatus === "partial"),
     )
     .map((response) => ({
       ...toUserSummary(response.userId, userByKey),
@@ -192,20 +194,29 @@ async function getCurrentUserProfile(ctx: QueryCtx, userId: string) {
     .unique();
 }
 
+function isCrewedEventInRange(
+  event: Doc<"events">,
+  rangeStart: number,
+  rangeEnd: number,
+) {
+  const status = normalizeEventStatus(event.status);
+  if (status === "cancelled") return false;
+  if (!isCrewedEventType(event.eventType)) return false;
+  return event.startAt <= rangeEnd && event.endAt >= rangeStart;
+}
+
 function isUpcomingCrewedEvent(
   event: Doc<"events">,
   now: number,
   windowEnd: number,
 ) {
-  const status = normalizeEventStatus(event.status);
-  if (status === "cancelled") return false;
-  if (!isCrewedEventType(event.eventType)) return false;
-  return event.startAt >= now && event.startAt <= windowEnd;
+  return isCrewedEventInRange(event, now, windowEnd);
 }
 
 export const listForAdminOverview = query({
   args: {
-    now: v.number(),
+    rangeStart: v.number(),
+    rangeEnd: v.number(),
     unconfirmedOnly: v.optional(v.boolean()),
   },
   returns: v.array(
@@ -241,7 +252,9 @@ export const listForAdminOverview = query({
     await requireArborInternalContext(ctx);
 
     const unconfirmedOnly = args.unconfirmedOnly ?? true;
-    const windowEnd = args.now + weeksToMs(DEFAULT_AVAILABILITY_WEEKS * 4);
+    if (args.rangeEnd < args.rangeStart) {
+      throw new Error("Date range end must be on or after the start.");
+    }
 
     const events = await ctx.db
       .query("events")
@@ -249,7 +262,7 @@ export const listForAdminOverview = query({
       .take(300);
 
     const upcomingCrewed = events
-      .filter((event) => isUpcomingCrewedEvent(event, args.now, windowEnd))
+      .filter((event) => isCrewedEventInRange(event, args.rangeStart, args.rangeEnd))
       .sort((a, b) => a.startAt - b.startAt);
 
     const crewProfiles = await getActiveCrewProfiles(ctx);
@@ -446,7 +459,9 @@ export const listForCrewMember = query({
             notes: block.notes,
           })),
         assignedCrew: assignedUserIds.map((id) => toUserSummary(id, userByKey)),
-        interestedCrew: buildResponsePeople(responses, userByKey),
+        interestedCrew: buildResponsePeople(responses, userByKey, {
+          excludeUserIds: new Set(assignedUserIds),
+        }),
         unavailableCounts: {
           no: responseCounts.no,
           onlyIfNecessary: responseCounts.onlyIfNecessary,
@@ -595,7 +610,9 @@ export const getEventForCrewResponse = query({
           notes: block.notes,
         })),
       assignedCrew: assignedUserIds.map((id) => toUserSummary(id, userByKey)),
-      interestedCrew: buildResponsePeople(bundle.responses, userByKey),
+      interestedCrew: buildResponsePeople(bundle.responses, userByKey, {
+        excludeUserIds: new Set(assignedUserIds),
+      }),
       unavailableCounts: {
         no: responseCounts.no,
         onlyIfNecessary: responseCounts.onlyIfNecessary,

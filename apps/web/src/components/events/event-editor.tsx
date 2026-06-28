@@ -39,6 +39,13 @@ import {
   getEventEditorTabPath,
   type EventEditorTabId,
 } from "@/lib/event-editor-tabs";
+import {
+  computeOccurrenceStarts,
+  formatOccurrencePreview,
+  SERIES_EDIT_SCOPE_LABELS,
+  type RecurrenceEndMode,
+  type SeriesEditScope,
+} from "@/lib/event-series";
 
 type EventType = "Crewed Event" | "Rental with Crew" | "Dry Hire" | "Services Only";
 type StoredEventType = EventType | "Dry Rental";
@@ -148,6 +155,7 @@ export function EventEditor({
   const invoices = useQuery(api.invoices.list, {});
   const managerList = useQuery(api.invoices.listManagers, {});
   const createEvent = useMutation(api.events.create);
+  const createEventSeries = useMutation(api.eventSeries.create);
   const updateEvent = useMutation(api.events.update);
   const upsertBlocks = useMutation(api.eventSchedule.upsertBlocks);
   const upsertShifts = useMutation(api.eventCrew.upsertShifts);
@@ -170,6 +178,7 @@ export function EventEditor({
   const [crewCostUsd, setCrewCostUsd] = useState("0");
   const [bandsCostUsd, setBandsCostUsd] = useState("0");
   const [externalRentalsCostUsd, setExternalRentalsCostUsd] = useState("0");
+  const [otherCostUsd, setOtherCostUsd] = useState("0");
   const [notes, setNotes] = useState("");
   const [blocks, setBlocks] = useState<TimelineBlockDraft[]>([]);
   const [shifts, setShifts] = useState<ShiftDraft[]>([]);
@@ -179,6 +188,12 @@ export function EventEditor({
   const [artifactMarkdown, setArtifactMarkdown] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [messageTone, setMessageTone] = useState<"success" | "error">("success");
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [intervalWeeks, setIntervalWeeks] = useState("1");
+  const [recurrenceEndMode, setRecurrenceEndMode] = useState<RecurrenceEndMode>("count");
+  const [occurrenceCount, setOccurrenceCount] = useState("10");
+  const [seriesEndAt, setSeriesEndAt] = useState("");
+  const [editScopeModalOpen, setEditScopeModalOpen] = useState(false);
   const hydratedEventIdRef = useRef<string | null>(null);
   const localBlockCounterRef = useRef(0);
 
@@ -238,6 +253,7 @@ export function EventEditor({
     setCrewCostUsd((eventData.event.crewCostUsd ?? 0).toString());
     setBandsCostUsd((eventData.event.bandsCostUsd ?? 0).toString());
     setExternalRentalsCostUsd((eventData.event.externalRentalsCostUsd ?? 0).toString());
+    setOtherCostUsd((eventData.event.otherCostUsd ?? 0).toString());
     setNotes(eventData.event.notes ?? "");
     setBlocks(
       eventData.blocks.map((row) => ({
@@ -360,13 +376,37 @@ export function EventEditor({
     [selectedCrewUserId, userOptions],
   );
 
-  async function saveCore() {
-    if (!title.trim() || !startAt || !endAt) {
-      setMessageTone("error");
-      setMessage("Title, start, and end are required.");
-      return;
+  const recurrencePreview = useMemo(() => {
+    if (!isCreate || !isRecurring || !startAt) return { starts: [] as number[], error: null as string | null };
+    try {
+      const anchorStartAt = new Date(startAt).getTime();
+      const parsedInterval = Number(intervalWeeks);
+      if (!Number.isFinite(parsedInterval) || parsedInterval < 1) {
+        return { starts: [] as number[], error: "Interval must be at least 1 week." };
+      }
+      const starts = computeOccurrenceStarts({
+        anchorStartAt,
+        intervalWeeks: parsedInterval,
+        occurrenceCount:
+          recurrenceEndMode === "count" ? Number(occurrenceCount || "0") : undefined,
+        seriesEndAt:
+          recurrenceEndMode === "date" && seriesEndAt
+            ? new Date(`${seriesEndAt}T23:59:59`).getTime()
+            : undefined,
+      });
+      return { starts, error: null };
+    } catch (error) {
+      return {
+        starts: [] as number[],
+        error: error instanceof Error ? error.message : "Invalid recurrence settings.",
+      };
     }
-    const payload = {
+  }, [isCreate, isRecurring, startAt, intervalWeeks, recurrenceEndMode, occurrenceCount, seriesEndAt]);
+
+  const seriesMeta = eventData?.series ?? null;
+
+  function buildOverviewPayload() {
+    return {
       title: title.trim(),
       status,
       invoiceId: invoiceId ? (invoiceId as Id<"invoices">) : undefined,
@@ -381,17 +421,89 @@ export function EventEditor({
       dayOfLeadUserId: dayOfLeadUserId || undefined,
       bandsCostUsd: Number(bandsCostUsd || "0"),
       externalRentalsCostUsd: Number(externalRentalsCostUsd || "0"),
+      otherCostUsd: Number(otherCostUsd || "0"),
       notes: notes || undefined,
     };
-    try {
-      if (isCreate) {
-        const id = await createEvent({ ...payload, visibility: "internal" });
-        router.replace(getEventEditorTabPath(String(id), resolvedActiveTab));
+  }
+
+  async function persistOverview(editScope?: SeriesEditScope) {
+    const payload = buildOverviewPayload();
+    if (isCreate) {
+      if (isRecurring) {
+        const parsedInterval = Number(intervalWeeks);
+        if (!Number.isFinite(parsedInterval) || parsedInterval < 1) {
+          throw new Error("Interval must be at least 1 week.");
+        }
+        const result = await createEventSeries({
+          title: payload.title,
+          startAt: payload.startAt,
+          endAt: payload.endAt,
+          intervalWeeks: parsedInterval,
+          occurrenceCount:
+            recurrenceEndMode === "count" ? Number(occurrenceCount || "0") : undefined,
+          seriesEndAt:
+            recurrenceEndMode === "date" && seriesEndAt
+              ? new Date(`${seriesEndAt}T23:59:59`).getTime()
+              : undefined,
+          venueName: payload.venueName,
+          eventType: payload.eventType,
+          rentalFulfillmentMode: payload.rentalFulfillmentMode,
+          teamsInterested: payload.teamsInterested,
+          host: payload.host,
+          eventManagerUserId: payload.eventManagerUserId,
+          dayOfLeadUserId: payload.dayOfLeadUserId,
+          notes: payload.notes,
+        });
+        router.replace(getEventEditorTabPath(String(result.firstEventId), resolvedActiveTab));
         return;
       }
-      await updateEvent({ id: eventId!, ...payload });
-      setMessageTone("success");
-      setMessage("Overview saved.");
+      const id = await createEvent({ ...payload, visibility: "internal" });
+      router.replace(getEventEditorTabPath(String(id), resolvedActiveTab));
+      return;
+    }
+    await updateEvent({
+      id: eventId!,
+      ...payload,
+      editScope: seriesMeta && editScope ? editScope : undefined,
+    });
+    setMessageTone("success");
+    setMessage("Overview saved.");
+  }
+
+  async function saveCore() {
+    if (!title.trim() || !startAt || !endAt) {
+      setMessageTone("error");
+      setMessage("Title, start, and end are required.");
+      return;
+    }
+    if (isCreate && isRecurring) {
+      if (recurrencePreview.error) {
+        setMessageTone("error");
+        setMessage(recurrencePreview.error);
+        return;
+      }
+      if (recurrencePreview.starts.length === 0) {
+        setMessageTone("error");
+        setMessage("Add valid recurrence settings to preview at least one occurrence.");
+        return;
+      }
+    }
+    try {
+      if (!isCreate && seriesMeta && !seriesMeta.seriesDetached) {
+        setEditScopeModalOpen(true);
+        return;
+      }
+      await persistOverview("this");
+    } catch (error) {
+      setMessageTone("error");
+      setMessage(`Overview error: ${getErrorMessage(error)}`);
+    }
+  }
+
+  async function confirmEditScope(scope: SeriesEditScope) {
+    setEditScopeModalOpen(false);
+    try {
+      await persistOverview(scope);
     } catch (error) {
       setMessageTone("error");
       setMessage(`Overview error: ${getErrorMessage(error)}`);
@@ -571,7 +683,12 @@ export function EventEditor({
   const crewCostTotal = computedCrewCost?.totalCostUsd ?? Number(crewCostUsd || "0");
   const bandsCostTotal = Number(bandsCostUsd || "0");
   const externalRentalsCostTotal = Number(externalRentalsCostUsd || "0");
-  const totalEventCostUsd = crewCostTotal + bandsCostTotal + externalRentalsCostTotal;
+  const otherCostTotal = Number(otherCostUsd || "0");
+  const totalEventCostUsd = crewCostTotal + bandsCostTotal + externalRentalsCostTotal + otherCostTotal;
+  const seriesRecurringTotalUsd =
+    (seriesMeta?.seriesBandsCostUsd ?? 0) +
+    (seriesMeta?.seriesExternalRentalsCostUsd ?? 0) +
+    (seriesMeta?.seriesOtherCostUsd ?? 0);
   const billedTotalUsd = linkedInvoice?.totalUsd ?? null;
   const profitLossUsd = billedTotalUsd !== null ? billedTotalUsd - totalEventCostUsd : null;
   const quickAddDisabled = !startAt || !endAt;
@@ -601,7 +718,19 @@ export function EventEditor({
   return (
     <div className="space-y-4">
       <Card>
-        <CardHeader><CardTitle>{isCreate ? "Create Event" : "Edit Event"}</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle>{isCreate ? "Create Event" : "Edit Event"}</CardTitle>
+          {seriesMeta ? (
+            <p className="text-sm text-muted-foreground">
+              Recurring · occurrence {(seriesMeta.occurrenceIndex ?? 0) + 1} of {seriesMeta.totalOccurrences}
+              {seriesMeta.seriesDetached ? " · detached from series updates" : ""}
+              {" · "}
+              <Link href={`/dashboard/events/series/${seriesMeta._id}`} className="underline">
+                View series
+              </Link>
+            </p>
+          ) : null}
+        </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
           {visibleTabs.map((tab) => (
             <Button
@@ -613,7 +742,7 @@ export function EventEditor({
             </Button>
           ))}
           <Button type="button" onClick={() => void saveCore()} className="ml-auto">
-            {isCreate ? "Create Event" : "Save Event"}
+            {isCreate ? (isRecurring ? "Create Series" : "Create Event") : "Save Event"}
           </Button>
         </CardContent>
       </Card>
@@ -779,6 +908,88 @@ export function EventEditor({
               <Label>Notes</Label>
               <textarea className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm" value={notes} onChange={(e) => setNotes(e.target.value)} />
             </div>
+            {isCreate ? (
+              <div className="space-y-3 md:col-span-3 rounded-md border p-3">
+                <label className="flex items-center gap-2 text-sm font-medium">
+                  <input
+                    type="checkbox"
+                    checked={isRecurring}
+                    onChange={(event) => setIsRecurring(event.target.checked)}
+                  />
+                  Recurring event series
+                </label>
+                {isRecurring ? (
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <div className="space-y-1">
+                      <Label>Repeat every</Label>
+                      <SearchableSelect
+                        value={intervalWeeks}
+                        onChange={setIntervalWeeks}
+                        options={[
+                          { value: "1", label: "Weekly" },
+                          { value: "2", label: "Every 2 weeks" },
+                          { value: "3", label: "Every 3 weeks" },
+                          { value: "4", label: "Every 4 weeks" },
+                        ]}
+                        placeholder="Interval..."
+                        emptyLabel="Select interval"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Ends</Label>
+                      <SearchableSelect
+                        value={recurrenceEndMode}
+                        onChange={(value) => setRecurrenceEndMode(value as RecurrenceEndMode)}
+                        options={[
+                          { value: "count", label: "After N occurrences" },
+                          { value: "date", label: "On end date" },
+                        ]}
+                        placeholder="End mode..."
+                        emptyLabel="Select end mode"
+                      />
+                    </div>
+                    {recurrenceEndMode === "count" ? (
+                      <div className="space-y-1">
+                        <Label>Occurrence count</Label>
+                        <Input
+                          type="number"
+                          min={1}
+                          value={occurrenceCount}
+                          onChange={(event) => setOccurrenceCount(event.target.value)}
+                        />
+                        <p className="text-xs text-muted-foreground">A quarter is typically about 10 weeks.</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-1">
+                        <Label>Series end date</Label>
+                        <Input
+                          type="date"
+                          value={seriesEndAt}
+                          onChange={(event) => setSeriesEndAt(event.target.value)}
+                        />
+                      </div>
+                    )}
+                    <div className="md:col-span-3 space-y-2">
+                      <Label>Preview ({recurrencePreview.starts.length} occurrences)</Label>
+                      {recurrencePreview.error ? (
+                        <p className="text-sm text-rose-700">{recurrencePreview.error}</p>
+                      ) : (
+                        <ul className="max-h-40 overflow-y-auto rounded-md border divide-y text-sm">
+                          {recurrencePreview.starts.map((occurrenceStart, index) => (
+                            <li key={occurrenceStart} className="px-3 py-2">
+                              {index + 1}. {formatOccurrencePreview(occurrenceStart)}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      <p className="text-xs text-muted-foreground">
+                        Crew scheduling stays separate for each generated occurrence.
+                      </p>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </CardContent>
         </Card>
       ) : null}
@@ -787,6 +998,11 @@ export function EventEditor({
         <Card>
           <CardHeader><CardTitle>Schedule</CardTitle></CardHeader>
           <CardContent className="space-y-3">
+            {seriesMeta ? (
+              <p className="rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">
+                Crew is scheduled separately for each occurrence in this series.
+              </p>
+            ) : null}
             {eventId && (eventType === "Crewed Event" || eventType === "Rental with Crew") ? (
               <EventScheduleCrewAssignPanel
                 eventId={eventId}
@@ -1141,6 +1357,26 @@ export function EventEditor({
         <Card>
           <CardHeader><CardTitle>Event Costs</CardTitle></CardHeader>
           <CardContent className="space-y-3">
+            {seriesMeta ? (
+              <div className="rounded-md border border-dashed p-3 space-y-2">
+                <p className="text-sm font-medium">Recurring series costs</p>
+                <p className="text-xs text-muted-foreground">
+                  Per-occurrence template defaults and series-wide costs are managed on the{" "}
+                  <Link href={`/dashboard/events/series/${seriesMeta._id}`} className="underline">
+                    series page
+                  </Link>
+                  . Crew cost remains unique to each occurrence.
+                </p>
+                <div className="grid gap-2 md:grid-cols-4 text-sm">
+                  <p>Template bands / event: ${(seriesMeta.occurrenceBandsCostUsd ?? 0).toFixed(2)}</p>
+                  <p>
+                    Template external / event: ${(seriesMeta.occurrenceExternalRentalsCostUsd ?? 0).toFixed(2)}
+                  </p>
+                  <p>Template other / event: ${(seriesMeta.occurrenceOtherCostUsd ?? 0).toFixed(2)}</p>
+                  <p>Series-wide recurring: ${seriesRecurringTotalUsd.toFixed(2)}</p>
+                </div>
+              </div>
+            ) : null}
             <p className="text-xs text-muted-foreground">
               Crew costs are auto-calculated from assigned users in schedule shifts:
               each user uses their hourly rate, and hours beyond 8/day are billed at 1.5x.
@@ -1161,6 +1397,9 @@ export function EventEditor({
               <div className="space-y-1">
                 <Label>Bands Cost (USD)</Label>
                 <Input value={bandsCostUsd} onChange={(e) => setBandsCostUsd(e.target.value)} />
+                {seriesMeta ? (
+                  <p className="text-xs text-muted-foreground">This occurrence only unless you choose a series scope on save.</p>
+                ) : null}
               </div>
               <div className="space-y-1">
                 <Label>External Rentals Cost (USD)</Label>
@@ -1168,6 +1407,10 @@ export function EventEditor({
                   value={externalRentalsCostUsd}
                   onChange={(e) => setExternalRentalsCostUsd(e.target.value)}
                 />
+              </div>
+              <div className="space-y-1">
+                <Label>Other Costs (USD)</Label>
+                <Input value={otherCostUsd} onChange={(e) => setOtherCostUsd(e.target.value)} />
               </div>
             </div>
             {linkedInvoice ? (
@@ -1287,6 +1530,31 @@ export function EventEditor({
             </Button>
           </CardContent>
         </Card>
+      ) : null}
+
+      {editScopeModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+          <Card className="w-full max-w-md">
+            <CardHeader>
+              <CardTitle>Apply changes to series?</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                This event is part of a recurring series. Crew scheduling is never updated in bulk.
+              </p>
+              <div className="flex flex-col gap-2">
+                {(Object.keys(SERIES_EDIT_SCOPE_LABELS) as SeriesEditScope[]).map((scope) => (
+                  <Button key={scope} type="button" variant="outline" onClick={() => void confirmEditScope(scope)}>
+                    {SERIES_EDIT_SCOPE_LABELS[scope]}
+                  </Button>
+                ))}
+                <Button type="button" variant="ghost" onClick={() => setEditScopeModalOpen(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       ) : null}
     </div>
   );

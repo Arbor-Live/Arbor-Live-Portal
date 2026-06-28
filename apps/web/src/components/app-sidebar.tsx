@@ -7,6 +7,7 @@ import { useState, type ComponentProps } from "react"
 import { authClient } from "@/lib/auth-client"
 import { useMutation, useQuery } from "convex/react"
 import { api } from "@/lib/convex-api"
+import { getDefaultAdminSchedulingRange } from "@/lib/crew-availability"
 import {
   Select,
   SelectContent,
@@ -103,6 +104,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
   const pathname = usePathname()
   const { data } = authClient.useSession()
   const [now] = useState(() => Date.now())
+  const [adminSchedulingRange] = useState(() => getDefaultAdminSchedulingRange())
   const activeOrganization = useQuery(api.users.getActiveOrganization, {})
   const myOrganizations = useQuery(api.users.listMyOrganizations, {})
   const setActiveOrganization = useMutation(api.users.setActiveOrganization)
@@ -112,7 +114,13 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
   )
   const unconfirmedCrewCount = useQuery(
     api.eventCrewAvailability.listForAdminOverview,
-    activeOrganization?.organizationType === "arbor_internal" ? { now, unconfirmedOnly: true } : "skip",
+    activeOrganization?.organizationType === "arbor_internal"
+      ? {
+          rangeStart: adminSchedulingRange.rangeStart,
+          rangeEnd: adminSchedulingRange.rangeEnd,
+          unconfirmedOnly: true,
+        }
+      : "skip",
   )
 
   const userName = data?.user?.name ?? "Unknown user"
