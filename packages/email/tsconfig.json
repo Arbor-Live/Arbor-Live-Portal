@@ -7,8 +7,7 @@
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "allowSyntheticDefaultImports": true,
-    "types": ["node"]
+    "allowSyntheticDefaultImports": true
   },
-  "include": ["convex/**/*.ts", "convex/**/*.tsx"]
+  "include": ["emails/**/*.tsx", "src/**/*.ts", "lib/**/*.ts"]
 }

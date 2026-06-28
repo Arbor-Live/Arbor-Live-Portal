@@ -683,6 +683,27 @@ export default defineSchema({
     .index("by_eventId_and_artifactType", ["eventId", "artifactType"]),
 
   // Phase 2: eventPullListAssetAssignments (pullListItemId, inventoryItemId, checkedOutAt)
+  emailNotifications: defineTable({
+    template: v.union(
+      v.literal("event_cancelled"),
+      v.literal("schedule_published"),
+      v.literal("schedule_reminder"),
+    ),
+    status: v.union(v.literal("queued"), v.literal("sent"), v.literal("failed")),
+    to: v.string(),
+    subject: v.string(),
+    eventId: v.optional(v.id("events")),
+    idempotencyKey: v.string(),
+    payload: v.any(),
+    resendId: v.optional(v.string()),
+    error: v.optional(v.string()),
+    createdAt: v.number(),
+    sentAt: v.optional(v.number()),
+  })
+    .index("by_status", ["status"])
+    .index("by_idempotencyKey", ["idempotencyKey"])
+    .index("by_eventId", ["eventId"]),
+
   eventPullListItems: defineTable({
     eventId: v.id("events"),
     lineKind: v.optional(eventPullListLineKindValue),

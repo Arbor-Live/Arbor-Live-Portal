@@ -1,0 +1,26 @@
+{
+  "name": "@arbor/email",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./render": "./src/render.ts",
+    "./types": "./src/types.ts"
+  },
+  "scripts": {
+    "dev": "email dev --dir emails",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@react-email/components": "^1.0.12",
+    "@react-email/render": "^2.0.9",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "react-email": "^6.6.5",
+    "typescript": "^5.9.3"
+  }
+}

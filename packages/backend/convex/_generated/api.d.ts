@@ -11,6 +11,14 @@
 import type * as auth from "../auth.js";
 import type * as bootstrap from "../bootstrap.js";
 import type * as capabilityDefinitions from "../capabilityDefinitions.js";
+import type * as crons from "../crons.js";
+import type * as email_constants from "../email/constants.js";
+import type * as email_enqueue from "../email/enqueue.js";
+import type * as email_recipients from "../email/recipients.js";
+import type * as email_reminders from "../email/reminders.js";
+import type * as email_send from "../email/send.js";
+import type * as email_templates from "../email/templates.js";
+import type * as email_triggers from "../email/triggers.js";
 import type * as eventArtifacts from "../eventArtifacts.js";
 import type * as eventAssignments from "../eventAssignments.js";
 import type * as eventCrew from "../eventCrew.js";
@@ -54,6 +62,14 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   bootstrap: typeof bootstrap;
   capabilityDefinitions: typeof capabilityDefinitions;
+  crons: typeof crons;
+  "email/constants": typeof email_constants;
+  "email/enqueue": typeof email_enqueue;
+  "email/recipients": typeof email_recipients;
+  "email/reminders": typeof email_reminders;
+  "email/send": typeof email_send;
+  "email/templates": typeof email_templates;
+  "email/triggers": typeof email_triggers;
   eventArtifacts: typeof eventArtifacts;
   eventAssignments: typeof eventAssignments;
   eventCrew: typeof eventCrew;
@@ -116,4 +132,5 @@ export declare const internal: FilterApi<
 
 export declare const components: {
   betterAuth: import("../betterAuth/_generated/component.js").ComponentApi<"betterAuth">;
+  resend: import("@convex-dev/resend/_generated/component.js").ComponentApi<"resend">;
 };

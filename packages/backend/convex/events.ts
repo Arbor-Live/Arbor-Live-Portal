@@ -9,6 +9,7 @@ import {
 } from "./lib/eventStatus";
 import { RENTAL_EVENT_TYPES, enrichPullListItems, summarizePullList } from "./eventPullLists";
 import { propagateOverviewToSeriesOccurrences, type SeriesEditScope } from "./lib/eventSeriesGeneration";
+import { scheduleEventCancelledEmails } from "./email/triggers";
 
 const eventTypeValue = v.union(
   v.literal("Crewed Event"),
@@ -460,6 +461,7 @@ export const update = mutation({
         : resolveRentalFulfillmentMode(nextEventType, existing.rentalFulfillmentMode);
     const nextInvoiceId = args.invoiceId !== undefined ? args.invoiceId : existing.invoiceId;
     const nextStatus = normalizeEventStatus(args.status ?? existing.status);
+    const wasCancelled = normalizeEventStatus(existing.status) === "cancelled";
     const now = Date.now();
     const patch = {
       title: args.title?.trim() ?? existing.title,
@@ -552,6 +554,10 @@ export const update = mutation({
     if (nextInvoiceId) {
       await syncEventStatusForLinkedInvoice(ctx, args.id, nextInvoiceId, nextStatus);
     }
+
+    if (nextStatus === "cancelled" && !wasCancelled) {
+      await scheduleEventCancelledEmails(ctx, args.id, now);
+    }
   },
 });
 
@@ -565,10 +571,16 @@ export const setStatus = mutation({
     await requireArborInternalContext(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Event not found.");
+    const wasCancelled = normalizeEventStatus(existing.status) === "cancelled";
+    const nextStatus = normalizeEventStatus(args.status);
+    const now = Date.now();
     await ctx.db.patch(args.id, {
-      status: normalizeEventStatus(args.status),
-      updatedAt: Date.now(),
+      status: nextStatus,
+      updatedAt: now,
     });
+    if (nextStatus === "cancelled" && !wasCancelled) {
+      await scheduleEventCancelledEmails(ctx, args.id, now);
+    }
   },
 });
 

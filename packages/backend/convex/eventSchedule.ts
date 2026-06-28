@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireAuth } from "./lib/auth";
+import { scheduleSchedulePublishedEmails } from "./email/triggers";
 
 const blockTypeValue = v.union(
   v.literal("setup"),
@@ -118,6 +119,9 @@ export const upsertBlocks = mutation({
           notes: block.notes?.trim() || undefined,
         });
       }
+    }
+    if (savedBlocks.length > 0) {
+      await scheduleSchedulePublishedEmails(ctx, args.eventId, `${savedBlocks.length}:${now}`);
     }
     return savedBlocks;
   },
