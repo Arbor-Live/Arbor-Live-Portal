@@ -1,6 +1,12 @@
 "use client";
 
-type EventStatus = "draft" | "active" | "completed" | "cancelled";
+import {
+  eventStatusBadgeTone,
+  formatEventStatusLabel,
+  normalizeEventStatus,
+  type EventStatus,
+} from "@/lib/event-status";
+
 type LifecycleState = "upcoming" | "live" | "wrap" | "done" | "cancelled";
 
 function badgeClassName(tone: "neutral" | "blue" | "emerald" | "amber" | "rose") {
@@ -12,17 +18,10 @@ function badgeClassName(tone: "neutral" | "blue" | "emerald" | "amber" | "rose")
 }
 
 function StatusBadge({ status }: { status: EventStatus }) {
-  const tone =
-    status === "cancelled"
-      ? "rose"
-      : status === "completed"
-        ? "emerald"
-        : status === "active"
-          ? "blue"
-          : "neutral";
+  const tone = eventStatusBadgeTone(status);
   return (
     <span className={`rounded-full border px-2 py-0.5 text-xs font-medium ${badgeClassName(tone)}`}>
-      {status[0].toUpperCase() + status.slice(1)}
+      {formatEventStatusLabel(status)}
     </span>
   );
 }
@@ -51,15 +50,16 @@ export function getDerivedLifecycleState({
   endAt,
   now = Date.now(),
 }: {
-  status: EventStatus;
+  status: string;
   startAt: number;
   endAt: number;
   now?: number;
 }): LifecycleState {
-  if (status === "cancelled") return "cancelled";
-  if (status === "completed") return "done";
+  const normalized = normalizeEventStatus(status);
+  if (normalized === "cancelled") return "cancelled";
   if (now < startAt) return "upcoming";
   if (now >= startAt && now < endAt) return "live";
+  if (now >= endAt) return "done";
   return "wrap";
 }
 
@@ -68,14 +68,15 @@ export function EventStateBadges({
   startAt,
   endAt,
 }: {
-  status: EventStatus;
+  status: string;
   startAt: number;
   endAt: number;
 }) {
-  const lifecycle = getDerivedLifecycleState({ status, startAt, endAt });
+  const normalizedStatus = normalizeEventStatus(status);
+  const lifecycle = getDerivedLifecycleState({ status: normalizedStatus, startAt, endAt });
   return (
     <div className="flex flex-wrap gap-2">
-      <StatusBadge status={status} />
+      <StatusBadge status={normalizedStatus} />
       <LifecycleBadge lifecycle={lifecycle} />
     </div>
   );

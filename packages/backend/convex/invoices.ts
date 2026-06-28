@@ -3,6 +3,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { components } from "./_generated/api";
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import { isAdmin, requireArborInternalContext, requireAuth } from "./lib/auth";
+import { syncLinkedEventStatusFromInvoice } from "./lib/eventStatus";
 
 const equipmentPricingModeValue = v.union(v.literal("subsidized"), v.literal("nonSubsidized"));
 const crewRateModeValue = v.union(
@@ -669,6 +670,7 @@ export const approveByToken = mutation({
       termsVersionAccepted: selectedTerms?.version ?? fallbackSettings?.termsVersion ?? "v1",
       updatedAt: now,
     });
+    await syncLinkedEventStatusFromInvoice(ctx, invoice._id, "approved");
     return { ok: true };
   },
 });
@@ -696,6 +698,7 @@ export const requestChangesByToken = mutation({
       clientApprovalNote: note,
       updatedAt: now,
     });
+    await syncLinkedEventStatusFromInvoice(ctx, invoice._id, "changes_requested");
     return { ok: true };
   },
 });
@@ -716,6 +719,7 @@ export const resetApprovalToPending = mutation({
       termsAcceptedAt: undefined,
       updatedAt: Date.now(),
     });
+    await syncLinkedEventStatusFromInvoice(ctx, args.id, "pending");
     return { ok: true };
   },
 });

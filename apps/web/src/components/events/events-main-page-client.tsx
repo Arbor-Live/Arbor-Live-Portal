@@ -9,8 +9,8 @@ import { EventsUpcomingView } from "@/components/events/events-upcoming-view";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { EVENT_STATUS_FILTER_OPTIONS, type EventStatus } from "@/lib/event-status";
 
-type EventStatus = "draft" | "active" | "completed" | "cancelled";
 type EventsView = "calendar" | "upcoming";
 
 export function EventsMainPageClient() {
@@ -38,13 +38,7 @@ export function EventsMainPageClient() {
           <SearchableSelect
             value={status}
             onChange={(value) => setStatus(value as "" | EventStatus)}
-            options={[
-              { value: "", label: "All Statuses" },
-              { value: "draft", label: "Draft" },
-              { value: "active", label: "Active" },
-              { value: "completed", label: "Completed" },
-              { value: "cancelled", label: "Cancelled" },
-            ]}
+            options={EVENT_STATUS_FILTER_OPTIONS}
             placeholder="Search status..."
             emptyLabel="All statuses"
           />

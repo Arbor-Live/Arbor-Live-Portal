@@ -4,15 +4,21 @@ import Link from "next/link";
 import { EventStateBadges, getDerivedLifecycleState } from "@/components/events/event-state-badges";
 import { Button } from "@/components/ui/button";
 
+import { normalizeEventStatus } from "@/lib/event-status";
+
 type DashboardEvent = {
   _id: string;
   title: string;
-  status: "draft" | "active" | "completed" | "cancelled";
+  status: string;
   eventType?: string;
   venueName?: string;
   assignedCrewCount?: number;
   startAt: number;
   endAt: number;
+  pullListSummary?: {
+    totalLines: number;
+    totalPieces: number;
+  };
   scheduleSummary?: {
     setupAt?: number;
     showAt?: number;
@@ -56,6 +62,11 @@ export function EventsUpcomingView({ events }: { events: DashboardEvent[] }) {
                 {row.eventType ? <span className="rounded bg-muted px-2 py-0.5">{row.eventType}</span> : null}
                 {row.venueName ? <span className="rounded bg-muted px-2 py-0.5">{row.venueName}</span> : null}
                 <span className="rounded bg-muted px-2 py-0.5">Crew {row.assignedCrewCount ?? 0}</span>
+                {row.pullListSummary && row.pullListSummary.totalLines > 0 ? (
+                  <span className="rounded bg-muted px-2 py-0.5">
+                    Pull list {row.pullListSummary.totalLines} · {row.pullListSummary.totalPieces} pcs
+                  </span>
+                ) : null}
                 {row.scheduleSummary?.setupAt ? (
                   <span className="rounded bg-muted px-2 py-0.5">Call {formatDateTime(row.scheduleSummary.setupAt)}</span>
                 ) : null}

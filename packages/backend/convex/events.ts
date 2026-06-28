@@ -2,6 +2,12 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { components } from "./_generated/api";
 import { requireArborInternalContext, requireAuth } from "./lib/auth";
+import {
+  eventStatusValue,
+  normalizeEventStatus,
+  syncEventStatusForLinkedInvoice,
+} from "./lib/eventStatus";
+import { RENTAL_EVENT_TYPES, enrichPullListItems, summarizePullList } from "./eventPullLists";
 
 const eventTypeValue = v.union(
   v.literal("Crewed Event"),
@@ -20,6 +26,8 @@ const eventTeamValue = v.union(
 );
 const EVENT_TIMEZONE = "America/Los_Angeles";
 
+const rentalFulfillmentModeValue = v.union(v.literal("delivery"), v.literal("will_call"));
+
 function trimOptional(value: string | undefined) {
   const out = value?.trim();
   return out ? out : undefined;
@@ -27,6 +35,15 @@ function trimOptional(value: string | undefined) {
 
 function makePublicToken() {
   return `evt_${crypto.randomUUID().replaceAll("-", "")}${crypto.randomUUID().replaceAll("-", "")}`;
+}
+
+function resolveRentalFulfillmentMode(
+  eventType: string | undefined,
+  rentalFulfillmentMode: "delivery" | "will_call" | "pickup" | undefined,
+) {
+  if (!eventType || !RENTAL_EVENT_TYPES.has(eventType)) return undefined;
+  if (rentalFulfillmentMode === "pickup") return "delivery";
+  return rentalFulfillmentMode;
 }
 
 type AuthUserRecord = {
@@ -39,52 +56,56 @@ type AuthUserRecord = {
 
 export const list = query({
   args: {
-    status: v.optional(v.union(v.literal("draft"), v.literal("active"), v.literal("completed"), v.literal("cancelled"))),
+    status: v.optional(eventStatusValue),
     query: v.optional(v.string()),
     linkedInvoiceOnly: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
-    const baseRows = args.status
-      ? await ctx.db.query("events").withIndex("by_status", (q) => q.eq("status", args.status!)).take(200)
-      : await ctx.db.query("events").withIndex("by_createdAt").take(200);
+    const filterStatus = args.status ? normalizeEventStatus(args.status) : undefined;
+    const baseRows = await ctx.db.query("events").withIndex("by_createdAt").take(200);
     const q = args.query?.trim().toLowerCase();
-    const rows = baseRows.filter((row) => {
-      if (args.linkedInvoiceOnly && !row.invoiceId) return false;
-      if (!q) return true;
-      const haystack = [row.title, row.venueName, row.eventType, row.host, ...(row.teamsInterested ?? [])]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      return haystack.includes(q);
-    });
+    const rows = baseRows
+      .map((row) => ({ ...row, status: normalizeEventStatus(row.status) }))
+      .filter((row) => {
+        if (filterStatus && row.status !== filterStatus) return false;
+        if (args.linkedInvoiceOnly && !row.invoiceId) return false;
+        if (!q) return true;
+        const haystack = [row.title, row.venueName, row.eventType, row.host, ...(row.teamsInterested ?? [])]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return haystack.includes(q);
+      });
     return rows.sort((a, b) => b.startAt - a.startAt);
   },
 });
 
 export const listForDashboard = query({
   args: {
-    status: v.optional(v.union(v.literal("draft"), v.literal("active"), v.literal("completed"), v.literal("cancelled"))),
+    status: v.optional(eventStatusValue),
     query: v.optional(v.string()),
     linkedInvoiceOnly: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
-    const baseRows = args.status
-      ? await ctx.db.query("events").withIndex("by_status", (q) => q.eq("status", args.status!)).take(200)
-      : await ctx.db.query("events").withIndex("by_createdAt").take(200);
+    const filterStatus = args.status ? normalizeEventStatus(args.status) : undefined;
+    const baseRows = await ctx.db.query("events").withIndex("by_createdAt").take(200);
     const q = args.query?.trim().toLowerCase();
-    const rows = baseRows.filter((row) => {
-      if (args.linkedInvoiceOnly && !row.invoiceId) return false;
-      if (!q) return true;
-      const haystack = [row.title, row.venueName, row.eventType, row.host, ...(row.teamsInterested ?? [])]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      return haystack.includes(q);
-    });
+    const rows = baseRows
+      .map((row) => ({ ...row, status: normalizeEventStatus(row.status) }))
+      .filter((row) => {
+        if (filterStatus && row.status !== filterStatus) return false;
+        if (args.linkedInvoiceOnly && !row.invoiceId) return false;
+        if (!q) return true;
+        const haystack = [row.title, row.venueName, row.eventType, row.host, ...(row.teamsInterested ?? [])]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return haystack.includes(q);
+      });
 
     const sortedRows = rows.sort((a, b) => b.startAt - a.startAt);
 
@@ -100,6 +121,14 @@ export const listForDashboard = query({
       sortedRows.map((row) =>
         ctx.db
           .query("eventCrewShifts")
+          .withIndex("by_eventId", (q) => q.eq("eventId", row._id))
+          .take(500),
+      ),
+    );
+    const perEventPullList = await Promise.all(
+      sortedRows.map((row) =>
+        ctx.db
+          .query("eventPullListItems")
           .withIndex("by_eventId", (q) => q.eq("eventId", row._id))
           .take(500),
       ),
@@ -133,6 +162,7 @@ export const listForDashboard = query({
     return sortedRows.map((row, index) => {
       const blocks = perEventBlocks[index] ?? [];
       const shifts = perEventShifts[index] ?? [];
+      const pullListItems = perEventPullList[index] ?? [];
       const eventUserIds = Array.from(
         new Set(
           shifts
@@ -164,6 +194,7 @@ export const listForDashboard = query({
         ...row,
         assignedCrewCount: eventUserIds.length,
         assignedCrew,
+        pullListSummary: summarizePullList(pullListItems),
         scheduleSummary: {
           setupAt: setupBlock?.startsAt,
           showAt: showBlock?.startsAt ?? row.startAt,
@@ -202,7 +233,21 @@ export const get = query({
       .query("eventExpenseReports")
       .withIndex("by_eventId", (q) => q.eq("eventId", args.id))
       .take(100);
-    return { event, blocks, shifts, assignments, artifacts, expenseReports };
+    const pullListItems = await ctx.db
+      .query("eventPullListItems")
+      .withIndex("by_eventId", (q) => q.eq("eventId", args.id))
+      .take(500);
+    const sortedPullList = pullListItems.sort((a, b) => a.sortOrder - b.sortOrder || a.createdAt - b.createdAt);
+    const enrichedPullList = await enrichPullListItems(ctx, sortedPullList);
+    return {
+      event: { ...event, status: normalizeEventStatus(event.status) },
+      blocks,
+      shifts,
+      assignments,
+      artifacts,
+      expenseReports,
+      pullListItems: enrichedPullList,
+    };
   },
 });
 
@@ -244,7 +289,7 @@ export const getByInvoiceId = query({
 export const create = mutation({
   args: {
     title: v.string(),
-    status: v.optional(v.union(v.literal("draft"), v.literal("active"), v.literal("completed"), v.literal("cancelled"))),
+    status: v.optional(eventStatusValue),
     visibility: v.optional(v.union(v.literal("internal"), v.literal("public"))),
     invoiceId: v.optional(v.id("invoices")),
     startAt: v.number(),
@@ -262,6 +307,7 @@ export const create = mutation({
     crewCostUsd: v.optional(v.number()),
     bandsCostUsd: v.optional(v.number()),
     externalRentalsCostUsd: v.optional(v.number()),
+    rentalFulfillmentMode: v.optional(rentalFulfillmentModeValue),
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -270,9 +316,10 @@ export const create = mutation({
     if (args.endAt <= args.startAt) throw new Error("Event end time must be after start time.");
     const now = Date.now();
     const spansMultipleDays = new Date(args.startAt).toDateString() !== new Date(args.endAt).toDateString();
-    return await ctx.db.insert("events", {
+    const initialStatus = normalizeEventStatus(args.status);
+    const eventId = await ctx.db.insert("events", {
       title: args.title.trim(),
-      status: args.status ?? "draft",
+      status: initialStatus,
       visibility: args.visibility ?? "internal",
       invoiceId: args.invoiceId,
       publicToken: makePublicToken(),
@@ -295,10 +342,15 @@ export const create = mutation({
       crewCostUsd: args.crewCostUsd,
       bandsCostUsd: args.bandsCostUsd,
       externalRentalsCostUsd: args.externalRentalsCostUsd,
+      rentalFulfillmentMode: resolveRentalFulfillmentMode(args.eventType, args.rentalFulfillmentMode),
       notes: trimOptional(args.notes),
       createdAt: now,
       updatedAt: now,
     });
+    if (args.invoiceId) {
+      await syncEventStatusForLinkedInvoice(ctx, eventId, args.invoiceId, initialStatus);
+    }
+    return eventId;
   },
 });
 
@@ -306,7 +358,7 @@ export const update = mutation({
   args: {
     id: v.id("events"),
     title: v.optional(v.string()),
-    status: v.optional(v.union(v.literal("draft"), v.literal("active"), v.literal("completed"), v.literal("cancelled"))),
+    status: v.optional(eventStatusValue),
     visibility: v.optional(v.union(v.literal("internal"), v.literal("public"))),
     invoiceId: v.optional(v.id("invoices")),
     startAt: v.optional(v.number()),
@@ -324,6 +376,7 @@ export const update = mutation({
     crewCostUsd: v.optional(v.number()),
     bandsCostUsd: v.optional(v.number()),
     externalRentalsCostUsd: v.optional(v.number()),
+    rentalFulfillmentMode: v.optional(rentalFulfillmentModeValue),
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -335,11 +388,18 @@ export const update = mutation({
     const endAt = args.endAt ?? existing.endAt;
     if (endAt <= startAt) throw new Error("Event end time must be after start time.");
     const spansMultipleDays = new Date(startAt).toDateString() !== new Date(endAt).toDateString();
+    const nextEventType = args.eventType ?? existing.eventType;
+    const nextRentalFulfillmentMode =
+      args.rentalFulfillmentMode !== undefined
+        ? resolveRentalFulfillmentMode(nextEventType, args.rentalFulfillmentMode)
+        : resolveRentalFulfillmentMode(nextEventType, existing.rentalFulfillmentMode);
+    const nextInvoiceId = args.invoiceId !== undefined ? args.invoiceId : existing.invoiceId;
+    const nextStatus = normalizeEventStatus(args.status ?? existing.status);
     await ctx.db.patch(args.id, {
       title: args.title?.trim() ?? existing.title,
-      status: args.status ?? existing.status,
+      status: nextStatus,
       visibility: args.visibility ?? existing.visibility,
-      invoiceId: args.invoiceId ?? existing.invoiceId,
+      invoiceId: nextInvoiceId,
       startAt,
       endAt,
       timezone: EVENT_TIMEZONE,
@@ -359,23 +419,30 @@ export const update = mutation({
       crewCostUsd: args.crewCostUsd ?? existing.crewCostUsd,
       bandsCostUsd: args.bandsCostUsd ?? existing.bandsCostUsd,
       externalRentalsCostUsd: args.externalRentalsCostUsd ?? existing.externalRentalsCostUsd,
+      rentalFulfillmentMode: nextRentalFulfillmentMode,
       notes: args.notes?.trim() ?? existing.notes,
       updatedAt: Date.now(),
     });
+    if (nextInvoiceId) {
+      await syncEventStatusForLinkedInvoice(ctx, args.id, nextInvoiceId, nextStatus);
+    }
   },
 });
 
 export const setStatus = mutation({
   args: {
     id: v.id("events"),
-    status: v.union(v.literal("draft"), v.literal("active"), v.literal("completed"), v.literal("cancelled")),
+    status: eventStatusValue,
   },
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Event not found.");
-    await ctx.db.patch(args.id, { status: args.status, updatedAt: Date.now() });
+    await ctx.db.patch(args.id, {
+      status: normalizeEventStatus(args.status),
+      updatedAt: Date.now(),
+    });
   },
 });
 
@@ -389,7 +456,7 @@ export const duplicate = mutation({
     const now = Date.now();
     const newId = await ctx.db.insert("events", {
       title: `${existing.title} (Copy)`,
-      status: "draft",
+      status: "tentative",
       visibility: existing.visibility,
       invoiceId: existing.invoiceId,
       publicToken: makePublicToken(),
@@ -412,10 +479,35 @@ export const duplicate = mutation({
       crewCostUsd: existing.crewCostUsd,
       bandsCostUsd: existing.bandsCostUsd,
       externalRentalsCostUsd: existing.externalRentalsCostUsd,
+      rentalFulfillmentMode: existing.rentalFulfillmentMode,
       notes: existing.notes,
       createdAt: now,
       updatedAt: now,
     });
+    const pullListItems = await ctx.db
+      .query("eventPullListItems")
+      .withIndex("by_eventId", (q) => q.eq("eventId", args.id))
+      .take(500);
+    for (const item of pullListItems) {
+      await ctx.db.insert("eventPullListItems", {
+        eventId: newId,
+        lineKind: item.lineKind ?? (item.packageId ? "package" : "type"),
+        typeId: item.typeId,
+        packageId: item.packageId,
+        label: item.label,
+        quantityRequired: item.quantityRequired,
+        quantityPulled: 0,
+        quantityCheckedOut: 0,
+        source: item.source,
+        sourcePackageId: item.sourcePackageId,
+        sourceInvoiceLineKey: item.sourceInvoiceLineKey,
+        sortOrder: item.sortOrder,
+        notes: item.notes,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+    await syncEventStatusForLinkedInvoice(ctx, newId, existing.invoiceId, "tentative");
     const blocks = await ctx.db
       .query("eventScheduleBlocks")
       .withIndex("by_eventId", (q) => q.eq("eventId", args.id))

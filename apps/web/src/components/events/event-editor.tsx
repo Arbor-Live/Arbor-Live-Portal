@@ -22,13 +22,19 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect, type SearchableSelectOption } from "@/components/inventory/searchable-select";
+import { EventPullList, mapPullListRow, type PullListItemDraft } from "@/components/events/event-pull-list";
 import { EventTimelineScheduler, type TimelineBlockDraft } from "@/components/events/event-timeline-scheduler";
 import { UserSelect, type UserSelectOption } from "@/components/users/user-select";
 import { authClient } from "@/lib/auth-client";
+import {
+  EVENT_STATUS_EDITOR_OPTIONS,
+  normalizeEventStatus,
+  type EventStatus,
+} from "@/lib/event-status";
 
-type EventStatus = "draft" | "active" | "completed" | "cancelled";
 type EventType = "Crewed Event" | "Rental with Crew" | "Dry Hire" | "Services Only";
 type StoredEventType = EventType | "Dry Rental";
+type RentalFulfillmentMode = "delivery" | "will_call";
 type EventTeam = "Design" | "Marketing" | "Lighting" | "Sound" | "Operations";
 type ShiftDraft = {
   id?: Id<"eventCrewShifts">;
@@ -87,14 +93,28 @@ function formatDateTime(value: number) {
   }).format(new Date(value));
 }
 
-const tabs = ["overview", "schedule", "artifacts", "expenses"] as const;
+const tabs = ["overview", "schedule", "equipment", "artifacts", "expenses"] as const;
 type TabId = (typeof tabs)[number];
 const TAB_LABELS: Record<TabId, string> = {
   overview: "Overview",
   schedule: "Schedule",
+  equipment: "Pull List",
   artifacts: "Artifacts",
   expenses: "Expenses",
 };
+
+const RENTAL_EVENT_TYPES: EventType[] = ["Dry Hire", "Rental with Crew"];
+const FULFILLMENT_OPTIONS: SearchableSelectOption[] = [
+  { value: "delivery", label: "Delivery" },
+  { value: "will_call", label: "Will-call" },
+];
+
+function normalizeFulfillmentMode(
+  value: RentalFulfillmentMode | "pickup" | "" | undefined,
+): RentalFulfillmentMode {
+  if (value === "pickup" || value === "delivery") return "delivery";
+  return value === "will_call" ? "will_call" : "delivery";
+}
 
 function normalizeEventType(value: StoredEventType | undefined): EventType {
   if (value === "Dry Rental") return "Dry Hire";
@@ -132,13 +152,14 @@ export function EventEditor({ eventId }: { eventId?: Id<"events"> }) {
 
   const [activeTab, setActiveTab] = useState<TabId>("overview");
   const [title, setTitle] = useState("");
-  const [status, setStatus] = useState<EventStatus>("draft");
+  const [status, setStatus] = useState<EventStatus>("tentative");
   const [invoiceId, setInvoiceId] = useState("");
   const [startAt, setStartAt] = useState("");
   const [endAt, setEndAt] = useState("");
   const [endAtTouched, setEndAtTouched] = useState(false);
   const [venueName, setVenueName] = useState("");
   const [eventType, setEventType] = useState<EventType>("Crewed Event");
+  const [rentalFulfillmentMode, setRentalFulfillmentMode] = useState<RentalFulfillmentMode>("delivery");
   const [teamsInterested, setTeamsInterested] = useState<EventTeam[]>([]);
   const [host, setHost] = useState("");
   const [managerUserId, setManagerUserId] = useState("");
@@ -195,13 +216,18 @@ export function EventEditor({ eventId }: { eventId?: Id<"events"> }) {
     if (hydratedEventIdRef.current === eventData.event._id) return;
     hydratedEventIdRef.current = eventData.event._id;
     setTitle(eventData.event.title);
-    setStatus(eventData.event.status);
+    setStatus(normalizeEventStatus(eventData.event.status));
     setInvoiceId(eventData.event.invoiceId ?? "");
     setStartAt(toLocalDateTimeInput(eventData.event.startAt));
     setEndAt(toLocalDateTimeInput(eventData.event.endAt));
     setEndAtTouched(true);
     setVenueName(eventData.event.venueName ?? "");
     setEventType(normalizeEventType(eventData.event.eventType as StoredEventType | undefined));
+    setRentalFulfillmentMode(
+      normalizeFulfillmentMode(
+        eventData.event.rentalFulfillmentMode as RentalFulfillmentMode | "pickup" | undefined,
+      ),
+    );
     setTeamsInterested((eventData.event.teamsInterested as EventTeam[] | undefined) ?? []);
     setHost(eventData.event.host ?? "");
     setManagerUserId(eventData.event.eventManagerUserId ?? "");
@@ -240,9 +266,16 @@ export function EventEditor({ eventId }: { eventId?: Id<"events"> }) {
   }, [eventData]);
 
   const hideSchedule = eventType === "Services Only";
+  const hideEquipment = eventType === "Services Only";
+  const showFulfillmentPicker = RENTAL_EVENT_TYPES.includes(eventType);
   const visibleTabs = useMemo(
-    () => tabs.filter((tab) => !(hideSchedule && tab === "schedule")),
-    [hideSchedule],
+    () =>
+      tabs.filter((tab) => {
+        if (hideSchedule && tab === "schedule") return false;
+        if (hideEquipment && tab === "equipment") return false;
+        return true;
+      }),
+    [hideSchedule, hideEquipment],
   );
 
   const resolvedActiveTab: TabId = visibleTabs.includes(activeTab) ? activeTab : "overview";
@@ -256,12 +289,11 @@ export function EventEditor({ eventId }: { eventId?: Id<"events"> }) {
   }, [startAt, endAt]);
 
   const statusOptions: SearchableSelectOption[] = useMemo(
-    () => [
-      { value: "draft", label: "draft" },
-      { value: "active", label: "active" },
-      { value: "completed", label: "completed" },
-      { value: "cancelled", label: "cancelled" },
-    ],
+    () =>
+      EVENT_STATUS_EDITOR_OPTIONS.map((option) => ({
+        value: option.value,
+        label: option.label,
+      })),
     [],
   );
 
@@ -334,6 +366,7 @@ export function EventEditor({ eventId }: { eventId?: Id<"events"> }) {
       endAt: new Date(endAt).getTime(),
       venueName: venueName || undefined,
       eventType: eventType || undefined,
+      rentalFulfillmentMode: showFulfillmentPicker ? rentalFulfillmentMode : undefined,
       teamsInterested: teamsInterested.length > 0 ? teamsInterested : undefined,
       host: host || undefined,
       eventManagerUserId: managerUserId || undefined,
@@ -521,10 +554,25 @@ export function EventEditor({ eventId }: { eventId?: Id<"events"> }) {
   const quickAddDisabledReason = quickAddDisabled ? "Set event start and end first." : undefined;
   const quickAddLabel =
     eventType === "Dry Hire"
-      ? "Quick Add: Delivery + Return"
+      ? rentalFulfillmentMode === "will_call"
+        ? "Quick Add: Check-out + Return"
+        : "Quick Add: Drop-off + Pickup"
       : eventType === "Rental with Crew"
         ? "Quick Add: Setup + Strike"
         : "Quick Add: Setup + Show + Strike";
+
+  const pullListInitialItems: PullListItemDraft[] = useMemo(
+    () => (eventData?.pullListItems ?? []).map((row) => mapPullListRow(row)),
+    [eventData?.pullListItems],
+  );
+
+  const pullListSyncKey = useMemo(
+    () =>
+      pullListInitialItems
+        .map((row) => `${row.id ?? "new"}:${row.lineKind}:${row.typeId ?? row.packageId}:${row.quantityRequired}`)
+        .join("|"),
+    [pullListInitialItems],
+  );
 
   return (
     <div className="space-y-4">
@@ -565,6 +613,11 @@ export function EventEditor({ eventId }: { eventId?: Id<"events"> }) {
                 placeholder="Search status..."
                 emptyLabel="Select status"
               />
+              {linkedInvoice?.clientApprovalStatus === "approved" && status === "tentative" ? (
+                <p className="text-xs text-muted-foreground">
+                  Quote is approved — status will move to Logistics when you save.
+                </p>
+              ) : null}
             </div>
             <div className="space-y-1">
               <Label>Linked Invoice (optional)</Label>
@@ -636,6 +689,18 @@ export function EventEditor({ eventId }: { eventId?: Id<"events"> }) {
                 }}
               />
             </div>
+            {showFulfillmentPicker ? (
+              <div className="space-y-1">
+                <Label>Fulfillment</Label>
+                <SearchableSelect
+                  value={rentalFulfillmentMode}
+                  onChange={(value) => setRentalFulfillmentMode(value as RentalFulfillmentMode)}
+                  options={FULFILLMENT_OPTIONS}
+                  placeholder="Search fulfillment..."
+                  emptyLabel="Select fulfillment"
+                />
+              </div>
+            ) : null}
             <div className="space-y-1">
               <Label>Host</Label>
               <Input value={host} onChange={(e) => setHost(e.target.value)} />
@@ -733,24 +798,28 @@ export function EventEditor({ eventId }: { eventId?: Id<"events"> }) {
                 );
 
                 if (eventType === "Dry Hire") {
+                  const outboundLabel =
+                    rentalFulfillmentMode === "will_call" ? "Check-out Window" : "Drop-off Window";
+                  const returnLabel =
+                    rentalFulfillmentMode === "will_call" ? "Return Window" : "Pickup Window";
                   setBlocks(
                     withStableBlockRefs([
-                    {
-                      blockType: "setup",
-                      label: "Delivery Slot",
-                      dayIndex: deliveryDayIndex,
-                      startsAt: toLocalDateTimeInput(deliveryStart),
-                      endsAt: toLocalDateTimeInput(showStart),
-                      notes: "",
-                    },
-                    {
-                      blockType: "strike",
-                      label: "Return Slot",
-                      dayIndex: returnDayIndex,
-                      startsAt: toLocalDateTimeInput(showEnd),
-                      endsAt: toLocalDateTimeInput(returnEnd),
-                      notes: "",
-                    },
+                      {
+                        blockType: "setup",
+                        label: outboundLabel,
+                        dayIndex: deliveryDayIndex,
+                        startsAt: toLocalDateTimeInput(deliveryStart),
+                        endsAt: toLocalDateTimeInput(showStart),
+                        notes: "",
+                      },
+                      {
+                        blockType: "strike",
+                        label: returnLabel,
+                        dayIndex: returnDayIndex,
+                        startsAt: toLocalDateTimeInput(showEnd),
+                        endsAt: toLocalDateTimeInput(returnEnd),
+                        notes: "",
+                      },
                     ]),
                   );
                   return;
@@ -938,6 +1007,36 @@ export function EventEditor({ eventId }: { eventId?: Id<"events"> }) {
             <Button type="button" disabled={!eventId} onClick={() => void saveScheduleAndPersonnel()}>
               Save Schedule & Personnel
             </Button>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {resolvedActiveTab === "equipment" ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Pull List</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {!currentEventId ? (
+              <p className="text-sm text-muted-foreground">Save the event first to manage equipment.</p>
+            ) : (
+              <EventPullList
+                key={pullListSyncKey}
+                eventId={currentEventId}
+                eventType={eventType}
+                rentalFulfillmentMode={rentalFulfillmentMode}
+                invoiceId={invoiceId ? (invoiceId as Id<"invoices">) : undefined}
+                initialItems={pullListInitialItems}
+                onSaved={(text) => {
+                  setMessageTone("success");
+                  setMessage(text);
+                }}
+                onError={(text) => {
+                  setMessageTone("error");
+                  setMessage(text);
+                }}
+              />
+            )}
           </CardContent>
         </Card>
       ) : null}

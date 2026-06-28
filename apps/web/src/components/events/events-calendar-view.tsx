@@ -11,10 +11,12 @@ import type { EventInput } from "@fullcalendar/core/index.js";
 import { Avatar, AvatarFallback, AvatarGroup, AvatarGroupCount, AvatarImage } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
+import { normalizeEventStatus } from "@/lib/event-status";
+
 type DashboardEvent = {
   _id: string;
   title: string;
-  status: "draft" | "active" | "completed" | "cancelled";
+  status: string;
   eventType?: string;
   venueName?: string;
   assignedCrewCount?: number;
@@ -67,8 +69,11 @@ function initials(value: string) {
 }
 
 function getEventColors(row: DashboardEvent) {
-  if (row.status === "cancelled") return { backgroundColor: "#fda4af33", borderColor: "#f43f5e" };
-  if (row.status === "completed") return { backgroundColor: "#6ee7b733", borderColor: "#10b981" };
+  const status = normalizeEventStatus(row.status);
+  if (status === "cancelled") return { backgroundColor: "#fda4af33", borderColor: "#f43f5e" };
+  if (status === "ready") return { backgroundColor: "#6ee7b733", borderColor: "#10b981" };
+  if (status === "scheduling") return { backgroundColor: "#93c5fd33", borderColor: "#3b82f6" };
+  if (status === "logistics") return { backgroundColor: "#fcd34d33", borderColor: "#f59e0b" };
   if (row.eventType === "Dry Hire") return { backgroundColor: "#fcd34d33", borderColor: "#f59e0b" };
   if (row.eventType === "Rental with Crew") return { backgroundColor: "#93c5fd33", borderColor: "#3b82f6" };
   if (row.eventType === "Services Only") return { backgroundColor: "#d8b4fe33", borderColor: "#a855f7" };
@@ -100,7 +105,7 @@ export function EventsCalendarView({ events }: { events: DashboardEvent[] }) {
             borderColor: colors.borderColor,
             extendedProps: {
               eventType: row.eventType,
-              status: row.status,
+              status: normalizeEventStatus(row.status),
               venueName: row.venueName,
               assignedCrewCount: row.assignedCrewCount ?? 0,
               assignedCrew: row.assignedCrew ?? [],

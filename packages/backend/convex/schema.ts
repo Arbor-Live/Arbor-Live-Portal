@@ -65,10 +65,14 @@ const invoiceLineSectionValue = v.union(
 );
 
 const eventStatusValue = v.union(
+  v.literal("tentative"),
+  v.literal("logistics"),
+  v.literal("scheduling"),
+  v.literal("ready"),
+  v.literal("cancelled"),
   v.literal("draft"),
   v.literal("active"),
   v.literal("completed"),
-  v.literal("cancelled"),
 );
 
 const eventVisibilityValue = v.union(v.literal("internal"), v.literal("public"));
@@ -111,6 +115,16 @@ const eventExpenseStatusValue = v.union(
   v.literal("approved"),
   v.literal("paid"),
 );
+
+const rentalFulfillmentModeValue = v.union(v.literal("delivery"), v.literal("will_call"));
+
+const eventPullListSourceValue = v.union(
+  v.literal("manual"),
+  v.literal("invoice_package"),
+  v.literal("invoice_type"),
+);
+
+const eventPullListLineKindValue = v.union(v.literal("type"), v.literal("package"));
 
 export default defineSchema({
   inventoryCategories: defineTable({
@@ -420,6 +434,7 @@ export default defineSchema({
     crewCostUsd: v.optional(v.number()),
     bandsCostUsd: v.optional(v.number()),
     externalRentalsCostUsd: v.optional(v.number()),
+    rentalFulfillmentMode: v.optional(rentalFulfillmentModeValue),
     notes: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -573,4 +588,26 @@ export default defineSchema({
     .index("by_eventId", ["eventId"])
     .index("by_artifactType", ["artifactType"])
     .index("by_eventId_and_artifactType", ["eventId", "artifactType"]),
+
+  // Phase 2: eventPullListAssetAssignments (pullListItemId, inventoryItemId, checkedOutAt)
+  eventPullListItems: defineTable({
+    eventId: v.id("events"),
+    lineKind: v.optional(eventPullListLineKindValue),
+    typeId: v.optional(v.id("inventoryTypes")),
+    packageId: v.optional(v.id("inventoryPackages")),
+    label: v.string(),
+    quantityRequired: v.number(),
+    quantityPulled: v.number(),
+    quantityCheckedOut: v.number(),
+    source: eventPullListSourceValue,
+    sourcePackageId: v.optional(v.id("inventoryPackages")),
+    sourceInvoiceLineKey: v.optional(v.string()),
+    sortOrder: v.number(),
+    notes: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_eventId", ["eventId"])
+    .index("by_eventId_and_sortOrder", ["eventId", "sortOrder"])
+    .index("by_packageId", ["packageId"]),
 });
