@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { SearchableSelect, type SearchableSelectOption } from "@/components/inventory/searchable-select";
 import { EventPullList, mapPullListRow, type PullListItemDraft } from "@/components/events/event-pull-list";
 import { EventTimelineScheduler, type TimelineBlockDraft } from "@/components/events/event-timeline-scheduler";
+import { EventScheduleCrewAssignPanel } from "@/components/events/event-availability-summary";
 import { UserSelect, type UserSelectOption } from "@/components/users/user-select";
 import { authClient } from "@/lib/auth-client";
 import {
@@ -31,6 +32,13 @@ import {
   normalizeEventStatus,
   type EventStatus,
 } from "@/lib/event-status";
+import { getAvailabilityNotesForDisplay } from "@/lib/crew-availability";
+import {
+  EVENT_EDITOR_TAB_LABELS,
+  EVENT_EDITOR_TABS,
+  getEventEditorTabPath,
+  type EventEditorTabId,
+} from "@/lib/event-editor-tabs";
 
 type EventType = "Crewed Event" | "Rental with Crew" | "Dry Hire" | "Services Only";
 type StoredEventType = EventType | "Dry Rental";
@@ -93,16 +101,6 @@ function formatDateTime(value: number) {
   }).format(new Date(value));
 }
 
-const tabs = ["overview", "schedule", "equipment", "artifacts", "expenses"] as const;
-type TabId = (typeof tabs)[number];
-const TAB_LABELS: Record<TabId, string> = {
-  overview: "Overview",
-  schedule: "Schedule",
-  equipment: "Pull List",
-  artifacts: "Artifacts",
-  expenses: "Expenses",
-};
-
 const RENTAL_EVENT_TYPES: EventType[] = ["Dry Hire", "Rental with Crew"];
 const FULFILLMENT_OPTIONS: SearchableSelectOption[] = [
   { value: "delivery", label: "Delivery" },
@@ -136,7 +134,13 @@ function getErrorMessage(error: unknown) {
   return "Something went wrong while saving. Please try again.";
 }
 
-export function EventEditor({ eventId }: { eventId?: Id<"events"> }) {
+export function EventEditor({
+  eventId,
+  activeTab = "overview",
+}: {
+  eventId?: Id<"events">;
+  activeTab?: EventEditorTabId;
+}) {
   const router = useRouter();
   const session = authClient.useSession();
   const isCreate = !eventId;
@@ -150,7 +154,6 @@ export function EventEditor({ eventId }: { eventId?: Id<"events"> }) {
   const deleteUnassignedShifts = useMutation(api.eventCrew.deleteUnassignedShifts);
   const createArtifact = useMutation(api.eventArtifacts.create);
 
-  const [activeTab, setActiveTab] = useState<TabId>("overview");
   const [title, setTitle] = useState("");
   const [status, setStatus] = useState<EventStatus>("tentative");
   const [invoiceId, setInvoiceId] = useState("");
@@ -270,7 +273,7 @@ export function EventEditor({ eventId }: { eventId?: Id<"events"> }) {
   const showFulfillmentPicker = RENTAL_EVENT_TYPES.includes(eventType);
   const visibleTabs = useMemo(
     () =>
-      tabs.filter((tab) => {
+      EVENT_EDITOR_TABS.filter((tab) => {
         if (hideSchedule && tab === "schedule") return false;
         if (hideEquipment && tab === "equipment") return false;
         return true;
@@ -278,7 +281,12 @@ export function EventEditor({ eventId }: { eventId?: Id<"events"> }) {
     [hideSchedule, hideEquipment],
   );
 
-  const resolvedActiveTab: TabId = visibleTabs.includes(activeTab) ? activeTab : "overview";
+  const resolvedActiveTab: EventEditorTabId = visibleTabs.includes(activeTab) ? activeTab : "overview";
+
+  useEffect(() => {
+    if (visibleTabs.includes(activeTab)) return;
+    router.replace(getEventEditorTabPath(eventId, "overview"));
+  }, [activeTab, visibleTabs, eventId, router]);
 
   const dayCount = useMemo(() => {
     if (!startAt || !endAt) return 1;
@@ -378,7 +386,7 @@ export function EventEditor({ eventId }: { eventId?: Id<"events"> }) {
     try {
       if (isCreate) {
         const id = await createEvent({ ...payload, visibility: "internal" });
-        router.replace(`/dashboard/events/${id}`);
+        router.replace(getEventEditorTabPath(String(id), resolvedActiveTab));
         return;
       }
       await updateEvent({ id: eventId!, ...payload });
@@ -473,7 +481,7 @@ export function EventEditor({ eventId }: { eventId?: Id<"events"> }) {
           personName: row.personName || undefined,
           startsAt: new Date(row.startsAt).getTime(),
           endsAt: new Date(row.endsAt).getTime(),
-          postedToExpense: row.postedToExpense,
+          postedToExpense: row.expenseReportId ? row.postedToExpense : false,
           notes: row.notes || undefined,
         })),
       });
@@ -540,6 +548,22 @@ export function EventEditor({ eventId }: { eventId?: Id<"events"> }) {
     api.eventCrew.getComputedCrewCost,
     currentEventId ? { eventId: currentEventId } : "skip",
   );
+  const availabilitySummary = useQuery(
+    api.eventCrewAvailability.getSummaryForEvent,
+    currentEventId && (eventType === "Crewed Event" || eventType === "Rental with Crew")
+      ? { eventId: currentEventId }
+      : "skip",
+  );
+  const availabilityByUserId = useMemo(() => {
+    const map = new Map<
+      string,
+      NonNullable<typeof availabilitySummary>["assignableResponders"][number]
+    >();
+    for (const responder of availabilitySummary?.assignableResponders ?? []) {
+      map.set(responder.userId, responder);
+    }
+    return map;
+  }, [availabilitySummary]);
   const linkedInvoice = useMemo(
     () => (invoiceId ? (invoices ?? []).find((row) => row._id === invoiceId) ?? null : null),
     [invoiceId, invoices],
@@ -580,8 +604,12 @@ export function EventEditor({ eventId }: { eventId?: Id<"events"> }) {
         <CardHeader><CardTitle>{isCreate ? "Create Event" : "Edit Event"}</CardTitle></CardHeader>
         <CardContent className="flex flex-wrap gap-2">
           {visibleTabs.map((tab) => (
-            <Button key={tab} type="button" variant={resolvedActiveTab === tab ? "default" : "outline"} onClick={() => setActiveTab(tab)}>
-              {TAB_LABELS[tab]}
+            <Button
+              key={tab}
+              asChild
+              variant={resolvedActiveTab === tab ? "default" : "outline"}
+            >
+              <Link href={getEventEditorTabPath(eventId, tab)}>{EVENT_EDITOR_TAB_LABELS[tab]}</Link>
             </Button>
           ))}
           <Button type="button" onClick={() => void saveCore()} className="ml-auto">
@@ -759,6 +787,15 @@ export function EventEditor({ eventId }: { eventId?: Id<"events"> }) {
         <Card>
           <CardHeader><CardTitle>Schedule</CardTitle></CardHeader>
           <CardContent className="space-y-3">
+            {eventId && (eventType === "Crewed Event" || eventType === "Rental with Crew") ? (
+              <EventScheduleCrewAssignPanel
+                eventId={eventId}
+                blocks={blocks}
+                shifts={shifts}
+                onShiftsChange={setShifts}
+                getBlockRef={getBlockRef}
+              />
+            ) : null}
             <EventTimelineScheduler
               dayCount={dayCount}
               blocks={blocks}
@@ -914,8 +951,17 @@ export function EventEditor({ eventId }: { eventId?: Id<"events"> }) {
                     {blockShifts.length ? (
                       blockShifts.map((row, rowIndex) => {
                         const shiftIndex = shifts.findIndex((entry) => entry === row);
+                        const availabilityNotes = row.userId
+                          ? getAvailabilityNotesForDisplay(availabilityByUserId.get(row.userId), {
+                              scheduleBlockId: row.scheduleBlockId,
+                            })
+                          : [];
                         return (
-                          <div key={row.id ?? `${blockRef ?? blockIndex}-shift-${rowIndex}`} className="grid gap-2 md:grid-cols-6">
+                          <div
+                            key={row.id ?? `${blockRef ?? blockIndex}-shift-${rowIndex}`}
+                            className="space-y-1"
+                          >
+                          <div className="grid gap-2 md:grid-cols-6">
                             <Input
                               placeholder="Role"
                               value={row.role}
@@ -962,20 +1008,6 @@ export function EventEditor({ eventId }: { eventId?: Id<"events"> }) {
                               }
                               placeholder="Shift end"
                             />
-                            <label className="flex items-center gap-2 rounded-md border px-3 text-sm">
-                              <input
-                                type="checkbox"
-                                checked={row.postedToExpense}
-                                onChange={(e) =>
-                                  setShifts((prev) =>
-                                    prev.map((shift, i) =>
-                                      i === shiftIndex ? { ...shift, postedToExpense: e.target.checked } : shift,
-                                    ),
-                                  )
-                                }
-                              />
-                              Posted
-                            </label>
                             <Button
                               type="button"
                               variant="outline"
@@ -983,6 +1015,20 @@ export function EventEditor({ eventId }: { eventId?: Id<"events"> }) {
                             >
                               Remove
                             </Button>
+                          </div>
+                          {availabilityNotes.length > 0 ? (
+                            <div className="rounded-md border border-dashed bg-muted/30 px-2 py-1.5">
+                              <p className="text-[11px] font-medium text-muted-foreground">Availability note</p>
+                              {availabilityNotes.map((line, noteIndex) => (
+                                <p
+                                  key={noteIndex}
+                                  className="text-xs text-muted-foreground italic whitespace-pre-wrap"
+                                >
+                                  {line}
+                                </p>
+                              ))}
+                            </div>
+                          ) : null}
                           </div>
                         );
                       })

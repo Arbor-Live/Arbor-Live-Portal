@@ -1,5 +1,3 @@
-import { EventEditor } from "@/components/events/event-editor";
-
-export default function NewEventPage() {
-  return <EventEditor />;
+export default function NewEventOverviewPage() {
+  return null;
 }

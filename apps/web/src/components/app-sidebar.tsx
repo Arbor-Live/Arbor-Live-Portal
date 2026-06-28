@@ -75,6 +75,8 @@ const financialHubSubItems = [
 
 const eventsSubItems = [
   { title: "Overview", url: "/dashboard/events" },
+  { title: "Crew Scheduling", url: "/dashboard/events/crew-scheduling" },
+  { title: "My Availability", url: "/dashboard/events/my-availability" },
   { title: "Create Event", url: "/dashboard/events/new" },
 ]
 
@@ -100,14 +102,24 @@ const secondaryItems = [
 export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
   const pathname = usePathname()
   const { data } = authClient.useSession()
+  const [now] = useState(() => Date.now())
   const activeOrganization = useQuery(api.users.getActiveOrganization, {})
   const myOrganizations = useQuery(api.users.listMyOrganizations, {})
   const setActiveOrganization = useMutation(api.users.setActiveOrganization)
+  const pendingAvailabilityCount = useQuery(
+    api.eventCrewAvailability.getMyPendingAvailabilityCount,
+    activeOrganization?.organizationType === "arbor_internal" ? { now } : "skip",
+  )
+  const unconfirmedCrewCount = useQuery(
+    api.eventCrewAvailability.listForAdminOverview,
+    activeOrganization?.organizationType === "arbor_internal" ? { now, unconfirmedOnly: true } : "skip",
+  )
 
   const userName = data?.user?.name ?? "Unknown user"
   const userEmail = data?.user?.email ?? "No email"
   const orgName = activeOrganization?.name ?? "No active org"
   const isBandContext = activeOrganization?.organizationType === "band"
+  const unconfirmedEventCount = unconfirmedCrewCount?.length ?? 0
   const scopedNavItems = navItems.filter((item) =>
     isBandContext
       ? item.url !== "/dashboard/events" &&
@@ -215,6 +227,19 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
                               >
                                 <Link href={subItem.url}>
                                   <span>{subItem.title}</span>
+                                  {subItem.url === "/dashboard/events/my-availability" &&
+                                  pendingAvailabilityCount &&
+                                  pendingAvailabilityCount > 0 ? (
+                                    <span className="ml-auto rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+                                      {pendingAvailabilityCount}
+                                    </span>
+                                  ) : null}
+                                  {subItem.url === "/dashboard/events/crew-scheduling" &&
+                                  unconfirmedEventCount > 0 ? (
+                                    <span className="ml-auto rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+                                      {unconfirmedEventCount}
+                                    </span>
+                                  ) : null}
                                 </Link>
                               </SidebarMenuSubButton>
                             </SidebarMenuSubItem>

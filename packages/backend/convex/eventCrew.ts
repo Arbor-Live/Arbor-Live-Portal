@@ -227,9 +227,6 @@ export const upsertShifts = mutation({
     await requireAuth(ctx);
     for (const shift of args.shifts) {
       if (shift.endsAt <= shift.startsAt) throw new Error("Shift end must be after shift start.");
-      if (shift.postedToExpense && !shift.expenseReportId) {
-        throw new Error("Posted shifts must be linked to an expense report.");
-      }
       if (shift.expenseReportId) {
         const report = await ctx.db.get(shift.expenseReportId);
         if (!report || report.eventId !== args.eventId) throw new Error("Shift has invalid expense report link.");
@@ -254,6 +251,7 @@ export const upsertShifts = mutation({
     const now = Date.now();
     for (const shift of args.shifts) {
       const hours = hoursBetween(shift.startsAt, shift.endsAt);
+      const postedToExpense = shift.postedToExpense && !!shift.expenseReportId;
       if (shift.id) {
         await ctx.db.patch(shift.id, {
           scheduleBlockId: shift.scheduleBlockId,
@@ -265,7 +263,7 @@ export const upsertShifts = mutation({
           startsAt: shift.startsAt,
           endsAt: shift.endsAt,
           hours,
-          postedToExpense: shift.postedToExpense,
+          postedToExpense,
           notes: shift.notes?.trim() || undefined,
           updatedAt: now,
         });
@@ -281,7 +279,7 @@ export const upsertShifts = mutation({
           startsAt: shift.startsAt,
           endsAt: shift.endsAt,
           hours,
-          postedToExpense: shift.postedToExpense,
+          postedToExpense,
           notes: shift.notes?.trim() || undefined,
           createdAt: now,
           updatedAt: now,

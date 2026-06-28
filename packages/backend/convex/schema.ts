@@ -118,6 +118,20 @@ const eventExpenseStatusValue = v.union(
 
 const rentalFulfillmentModeValue = v.union(v.literal("delivery"), v.literal("will_call"));
 
+const crewAvailabilityResponseStatusValue = v.union(
+  v.literal("yes"),
+  v.literal("partial"),
+  v.literal("only_if_necessary"),
+  v.literal("no"),
+);
+
+const crewAvailabilityPartialWindowValue = v.object({
+  scheduleBlockId: v.optional(v.id("eventScheduleBlocks")),
+  startsAt: v.number(),
+  endsAt: v.number(),
+  notes: v.optional(v.string()),
+});
+
 const eventPullListSourceValue = v.union(
   v.literal("manual"),
   v.literal("invoice_package"),
@@ -556,6 +570,20 @@ export default defineSchema({
     .index("by_eventId_and_startsAt", ["eventId", "startsAt"])
     .index("by_scheduleBlockId", ["scheduleBlockId"])
     .index("by_expenseReportId", ["expenseReportId"]),
+
+  eventCrewAvailabilityResponses: defineTable({
+    eventId: v.id("events"),
+    userId: v.string(),
+    responseStatus: crewAvailabilityResponseStatusValue,
+    partialWindows: v.optional(v.array(crewAvailabilityPartialWindowValue)),
+    notes: v.optional(v.string()),
+    respondedAt: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_eventId", ["eventId"])
+    .index("by_userId", ["userId"])
+    .index("by_eventId_and_userId", ["eventId", "userId"]),
 
   eventPeopleAssignments: defineTable({
     eventId: v.id("events"),
