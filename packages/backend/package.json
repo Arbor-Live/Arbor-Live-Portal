@@ -2,6 +2,10 @@
   "name": "backend",
   "private": true,
   "type": "module",
+  "exports": {
+    "./convex/_generated/api": "./convex/_generated/api.js",
+    "./convex/_generated/dataModel": "./convex/_generated/dataModel.d.ts"
+  },
   "scripts": {
     "dev": "convex dev",
     "codegen": "convex codegen",
