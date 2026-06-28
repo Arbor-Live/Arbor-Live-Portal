@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "convex dev",
+    "build": "pnpm --dir ../../apps/web run build",
     "codegen": "convex codegen",
     "auth:generate": "cd convex/betterAuth && better-auth generate -y",
     "deploy": "convex deploy",
