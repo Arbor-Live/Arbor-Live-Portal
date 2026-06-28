@@ -157,12 +157,95 @@ export const bootstrapAdmin = mutation({
       });
     }
 
+    const organizationType = orgSlug === "arbor-live" ? "arbor_internal" : "band";
+    const existingOrgProfile = await ctx.db
+      .query("organizationProfiles")
+      .withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId))
+      .unique();
+    if (existingOrgProfile) {
+      await ctx.db.patch(existingOrgProfile._id, {
+        organizationType,
+        displayName: existingOrgProfile.displayName ?? organizationName,
+        updatedAt: now,
+      });
+    } else {
+      await ctx.db.insert("organizationProfiles", {
+        organizationId,
+        organizationType,
+        displayName: organizationName,
+        updatedAt: now,
+      });
+    }
+
+    const existingAppMembership = await ctx.db
+      .query("userOrganizationMemberships")
+      .withIndex("by_userId_and_organizationId", (q) =>
+        q.eq("userId", userId).eq("organizationId", organizationId),
+      )
+      .unique();
+    if (existingAppMembership) {
+      await ctx.db.patch(existingAppMembership._id, {
+        role: "admin",
+        active: true,
+        updatedAt: now,
+      });
+    } else {
+      await ctx.db.insert("userOrganizationMemberships", {
+        userId,
+        organizationId,
+        role: "admin",
+        active: true,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    const existingUserProfile = await ctx.db
+      .query("userAdminProfiles")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .unique();
+    if (existingUserProfile) {
+      await ctx.db.patch(existingUserProfile._id, {
+        active: true,
+        defaultOrganizationId: organizationId,
+        updatedAt: now,
+      });
+    } else {
+      await ctx.db.insert("userAdminProfiles", {
+        userId,
+        active: true,
+        teams: [],
+        defaultOrganizationId: organizationId,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    const existingActiveOrg = await ctx.db
+      .query("userActiveOrganizations")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .unique();
+    if (existingActiveOrg) {
+      await ctx.db.patch(existingActiveOrg._id, {
+        organizationId,
+        updatedAt: now,
+      });
+    } else {
+      await ctx.db.insert("userActiveOrganizations", {
+        userId,
+        organizationId,
+        updatedAt: now,
+      });
+    }
+
     return {
       ok: true,
       email: args.email,
       role: "admin",
+      organizationId,
       organizationName,
       organizationSlug: orgSlug,
+      organizationType,
     };
   },
 });
