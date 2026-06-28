@@ -9,5 +9,5 @@
     "skipLibCheck": true,
     "allowSyntheticDefaultImports": true
   },
-  "include": ["emails/**/*.tsx", "src/**/*.ts", "lib/**/*.ts"]
+  "include": ["emails/**/*.tsx", "emails/**/*.ts", "src/**/*.ts", "lib/**/*.ts"]
 }

@@ -12,8 +12,10 @@ import type * as auth from "../auth.js";
 import type * as bootstrap from "../bootstrap.js";
 import type * as capabilityDefinitions from "../capabilityDefinitions.js";
 import type * as crons from "../crons.js";
+import type * as email_authEmails from "../email/authEmails.js";
 import type * as email_constants from "../email/constants.js";
 import type * as email_enqueue from "../email/enqueue.js";
+import type * as email_invitations from "../email/invitations.js";
 import type * as email_recipients from "../email/recipients.js";
 import type * as email_reminders from "../email/reminders.js";
 import type * as email_send from "../email/send.js";
@@ -50,6 +52,7 @@ import type * as lib_eventStatus from "../lib/eventStatus.js";
 import type * as lostFoundSettings from "../lostFoundSettings.js";
 import type * as publicInventory from "../publicInventory.js";
 import type * as storageLocations from "../storageLocations.js";
+import type * as userInvites from "../userInvites.js";
 import type * as users from "../users.js";
 
 import type {
@@ -63,8 +66,10 @@ declare const fullApi: ApiFromModules<{
   bootstrap: typeof bootstrap;
   capabilityDefinitions: typeof capabilityDefinitions;
   crons: typeof crons;
+  "email/authEmails": typeof email_authEmails;
   "email/constants": typeof email_constants;
   "email/enqueue": typeof email_enqueue;
+  "email/invitations": typeof email_invitations;
   "email/recipients": typeof email_recipients;
   "email/reminders": typeof email_reminders;
   "email/send": typeof email_send;
@@ -101,6 +106,7 @@ declare const fullApi: ApiFromModules<{
   lostFoundSettings: typeof lostFoundSettings;
   publicInventory: typeof publicInventory;
   storageLocations: typeof storageLocations;
+  userInvites: typeof userInvites;
   users: typeof users;
 }>;
 

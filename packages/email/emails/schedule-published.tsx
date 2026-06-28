@@ -1,5 +1,13 @@
-import { Section, Text } from "@react-email/components";
-import { CtaButton, EmailLayout, EventDetailsSection } from "./components/email-layout";
+import { Text } from "@react-email/components";
+import {
+  BodyCopy,
+  CtaButton,
+  EmailLayout,
+  EmailSignOff,
+  EventDetailsSection,
+  InfoCard,
+} from "./components/email-layout";
+import { brand } from "./components/brand-theme";
 import type { SchedulePublishedEmailProps } from "../src/types";
 
 export function SchedulePublishedEmail({
@@ -10,60 +18,49 @@ export function SchedulePublishedEmail({
   recipientName,
   blockSummaries,
 }: SchedulePublishedEmailProps) {
-  const greeting = recipientName ? `Hi ${recipientName},` : "Hi,";
+  const greeting = recipientName ? `Hi ${recipientName},` : "Hi!";
 
   return (
-    <EmailLayout preview={`Schedule published for ${eventTitle}`} heading="Schedule published">
-      <Text style={textStyle}>{greeting}</Text>
-      <Text style={textStyle}>
+    <EmailLayout preview={`Schedule published for ${eventTitle}`} heading="Schedule Published">
+      <BodyCopy>{greeting}</BodyCopy>
+      <BodyCopy>
         The schedule for this event has been updated. Review the timeline below and confirm your
         assignments in Arbor Live.
-      </Text>
+      </BodyCopy>
       <EventDetailsSection
         eventTitle={eventTitle}
         venueName={venueName}
         dateRangeLabel={dateRangeLabel}
       />
       {blockSummaries.length > 0 ? (
-        <Section style={listStyle}>
-          <Text style={listHeadingStyle}>Schedule blocks</Text>
+        <InfoCard>
+          <Text style={cardHeadingStyle}>Schedule Blocks</Text>
           {blockSummaries.map((summary: string) => (
-            <Text key={summary} style={listItemStyle}>
+            <Text key={summary} style={cardLineStyle}>
               • {summary}
             </Text>
           ))}
-        </Section>
+        </InfoCard>
       ) : null}
       <CtaButton href={eventUrl} label="View schedule" />
+      <EmailSignOff />
     </EmailLayout>
   );
 }
 
 export default SchedulePublishedEmail;
 
-const textStyle = {
-  color: "#3f3f46",
-  fontSize: "15px",
-  lineHeight: "1.6",
-  margin: "0 0 16px",
+const cardHeadingStyle = {
+  color: brand.text,
+  fontSize: "18px",
+  fontWeight: "700",
+  lineHeight: "1.3",
+  margin: "0 0 12px",
 };
 
-const listStyle = {
-  marginBottom: "24px",
-};
-
-const listHeadingStyle = {
-  color: "#71717a",
-  fontSize: "12px",
-  fontWeight: "600",
-  letterSpacing: "0.04em",
-  margin: "0 0 8px",
-  textTransform: "uppercase" as const,
-};
-
-const listItemStyle = {
-  color: "#18181b",
+const cardLineStyle = {
+  color: brand.text,
   fontSize: "14px",
-  lineHeight: "1.5",
+  lineHeight: "22px",
   margin: "0 0 6px",
 };

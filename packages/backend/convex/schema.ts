@@ -683,11 +683,26 @@ export default defineSchema({
     .index("by_eventId_and_artifactType", ["eventId", "artifactType"]),
 
   // Phase 2: eventPullListAssetAssignments (pullListItemId, inventoryItemId, checkedOutAt)
+  pendingUserInvites: defineTable({
+    invitationId: v.string(),
+    token: v.string(),
+    email: v.string(),
+    organizationId: v.string(),
+    role: v.string(),
+    teams: v.optional(v.array(v.string())),
+    expiresAt: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_token", ["token"])
+    .index("by_invitationId", ["invitationId"]),
+
   emailNotifications: defineTable({
     template: v.union(
       v.literal("event_cancelled"),
       v.literal("schedule_published"),
       v.literal("schedule_reminder"),
+      v.literal("user_invite"),
+      v.literal("password_reset"),
     ),
     status: v.union(v.literal("queued"), v.literal("sent"), v.literal("failed")),
     to: v.string(),

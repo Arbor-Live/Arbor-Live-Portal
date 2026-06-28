@@ -737,7 +737,30 @@ export function UsersManagementClient({
         <CardHeader>
           <CardTitle>Invitations</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-2">
+        <CardContent className="space-y-3">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="min-w-[220px] flex-1 space-y-1">
+              <Label>Organization</Label>
+              <Select value={resolvedOrgId} onValueChange={setSelectedOrganizationId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select organization" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(orgOptions ?? []).map((org) => (
+                    <SelectItem key={`invite-org-${org.id}`} value={org.id}>
+                      {org.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button type="button" onClick={() => setInviteModalOpen(true)}>
+              Invite User
+            </Button>
+            <Button type="button" variant="outline" onClick={() => setCreateModalOpen(true)}>
+              Create User
+            </Button>
+          </div>
           <div className="max-w-[240px] space-y-1">
             <Label>Status Filter</Label>
             <Select

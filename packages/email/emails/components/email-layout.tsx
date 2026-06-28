@@ -6,67 +6,133 @@ import {
   Heading,
   Hr,
   Html,
+  Img,
   Link,
   Preview,
   Section,
   Text,
 } from "@react-email/components";
 import type { ReactNode } from "react";
+import { ARBOR_LOGO_URL, bodyText, brand, mutedText } from "./brand-theme";
 
 type EmailLayoutProps = {
   preview: string;
   heading: string;
   children: ReactNode;
+  alignHeading?: "left" | "center";
 };
 
-export function EmailLayout({ preview, heading, children }: EmailLayoutProps) {
+export function EmailLayout({
+  preview,
+  heading,
+  children,
+  alignHeading = "center",
+}: EmailLayoutProps) {
+  const year = new Date().getFullYear();
+
   return (
     <Html>
       <Head />
       <Preview>{preview}</Preview>
-      <Body style={bodyStyle}>
+      <Body style={outerBodyStyle}>
         <Container style={containerStyle}>
-          <Section style={headerStyle}>
-            <Text style={brandStyle}>Arbor Live</Text>
+          <Section style={logoSectionStyle}>
+            <Img
+              src={ARBOR_LOGO_URL}
+              alt="Arbor Live"
+              width="200"
+              style={logoStyle}
+            />
           </Section>
-          <Heading style={headingStyle}>{heading}</Heading>
-          {children}
+
+          <Section style={contentSectionStyle}>
+            <Heading style={{ ...headingStyle, textAlign: alignHeading }}>{heading}</Heading>
+            {children}
+          </Section>
+
           <Hr style={hrStyle} />
-          <Text style={footerStyle}>
-            Arbor Notifications ·{" "}
-            <Link href="https://arbor.st" style={linkStyle}>
-              arbor.st
-            </Link>
-          </Text>
+
+          <Section style={footerSectionStyle}>
+            <Text style={footerLineStyle}>
+              <Link href="https://arbor.st" style={footerLinkStyle}>
+                Arbor Live
+              </Link>
+              {" • "}Stanford University
+            </Text>
+            <Text style={footerLineStyle}>
+              Stanford&apos;s student-run live event production company
+            </Text>
+            <Text style={footerLineStyle}>
+              <Link href="https://arbor.st/feedback" style={footerLinkStyle}>
+                Contact Us
+              </Link>
+              {" • "}© {year} Arbor Live
+            </Text>
+          </Section>
         </Container>
       </Body>
     </Html>
   );
 }
 
+export function BodyCopy({ children }: { children: ReactNode }) {
+  return <Text style={bodyText}>{children}</Text>;
+}
+
+export function MutedCopy({ children }: { children: ReactNode }) {
+  return <Text style={mutedText}>{children}</Text>;
+}
+
 export function EventDetailsSection({
   eventTitle,
   venueName,
   dateRangeLabel,
+  title = "Event Summary",
 }: {
   eventTitle: string;
   venueName?: string;
   dateRangeLabel: string;
+  title?: string;
 }) {
   return (
-    <Section style={detailsStyle}>
-      <Text style={detailLabelStyle}>Event</Text>
-      <Text style={detailValueStyle}>{eventTitle}</Text>
-      <Text style={detailLabelStyle}>When</Text>
-      <Text style={detailValueStyle}>{dateRangeLabel}</Text>
+    <Section style={highlightBoxStyle}>
+      <Heading as="h2" style={highlightHeadingStyle}>
+        {title}
+      </Heading>
+      <Text style={highlightLineStyle}>
+        <strong>Event:</strong> {eventTitle}
+      </Text>
+      <Text style={highlightLineStyle}>
+        <strong>Date &amp; Time:</strong> {dateRangeLabel}
+      </Text>
       {venueName ? (
-        <>
-          <Text style={detailLabelStyle}>Venue</Text>
-          <Text style={detailValueStyle}>{venueName}</Text>
-        </>
+        <Text style={highlightLineStyle}>
+          <strong>Venue:</strong> {venueName}
+        </Text>
       ) : null}
     </Section>
   );
+}
+
+export function HighlightBox({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <Section style={highlightBoxStyle}>
+      <Heading as="h2" style={highlightHeadingStyle}>
+        {title}
+      </Heading>
+      {children}
+    </Section>
+  );
+}
+
+export function InfoCard({ children }: { children: ReactNode }) {
+  return <Section style={infoCardStyle}>{children}</Section>;
 }
 
 export function CtaButton({ href, label }: { href: string; label: string }) {
@@ -79,91 +145,130 @@ export function CtaButton({ href, label }: { href: string; label: string }) {
   );
 }
 
-const bodyStyle = {
-  backgroundColor: "#f4f4f5",
-  fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+export function EmailSignOff() {
+  return (
+    <Text style={signOffStyle}>
+      Best regards,
+      <br />
+      The Arbor Live Team
+    </Text>
+  );
+}
+
+const outerBodyStyle = {
+  backgroundColor: brand.background,
+  fontFamily: brand.fontFamily,
   margin: "0",
   padding: "24px 0",
 };
 
 const containerStyle = {
-  backgroundColor: "#ffffff",
-  border: "1px solid #e4e4e7",
+  backgroundColor: brand.background,
   borderRadius: "8px",
   margin: "0 auto",
-  maxWidth: "560px",
-  padding: "32px",
+  maxWidth: brand.maxWidth,
+  overflow: "hidden" as const,
 };
 
-const headerStyle = {
-  marginBottom: "8px",
+const logoSectionStyle = {
+  padding: "32px 32px 16px",
+  textAlign: "center" as const,
 };
 
-const brandStyle = {
-  color: "#18181b",
-  fontSize: "14px",
-  fontWeight: "600",
-  letterSpacing: "0.04em",
-  margin: "0",
-  textTransform: "uppercase" as const,
+const logoStyle = {
+  display: "block",
+  margin: "0 auto",
+  maxWidth: "200px",
+  width: "40%",
+  height: "auto",
+};
+
+const contentSectionStyle = {
+  padding: "0 32px 32px",
 };
 
 const headingStyle = {
-  color: "#18181b",
-  fontSize: "24px",
-  fontWeight: "600",
-  lineHeight: "1.3",
+  color: brand.text,
+  fontSize: "28px",
+  fontWeight: "700",
+  lineHeight: "1.25",
   margin: "0 0 24px",
 };
 
-const detailsStyle = {
-  marginBottom: "24px",
+const highlightBoxStyle = {
+  backgroundColor: brand.accent,
+  borderRadius: "8px",
+  margin: "0 0 32px",
+  padding: "24px",
 };
 
-const detailLabelStyle = {
-  color: "#71717a",
-  fontSize: "12px",
-  fontWeight: "600",
-  letterSpacing: "0.04em",
-  margin: "0 0 4px",
-  textTransform: "uppercase" as const,
-};
-
-const detailValueStyle = {
-  color: "#18181b",
-  fontSize: "15px",
-  lineHeight: "1.5",
+const highlightHeadingStyle = {
+  color: brand.accentText,
+  fontSize: "20px",
+  fontWeight: "700",
+  lineHeight: "1.3",
   margin: "0 0 16px",
 };
 
+const highlightLineStyle = {
+  color: brand.accentText,
+  fontSize: "14px",
+  lineHeight: "24px",
+  margin: "0 0 8px",
+};
+
+const infoCardStyle = {
+  border: `1px solid ${brand.border}`,
+  borderRadius: "8px",
+  margin: "0 0 24px",
+  padding: "16px",
+};
+
 const ctaSectionStyle = {
-  marginBottom: "24px",
+  margin: "0 0 24px",
+  textAlign: "center" as const,
 };
 
 const buttonStyle = {
-  backgroundColor: "#18181b",
-  borderRadius: "6px",
-  color: "#ffffff",
+  backgroundColor: brand.accent,
+  borderRadius: "8px",
+  color: brand.accentText,
   display: "inline-block",
-  fontSize: "14px",
+  fontSize: "15px",
   fontWeight: "600",
-  padding: "12px 20px",
+  padding: "14px 28px",
   textDecoration: "none",
 };
 
 const hrStyle = {
-  borderColor: "#e4e4e7",
-  margin: "24px 0",
+  borderColor: brand.border,
+  borderTop: `1px solid ${brand.border}`,
+  margin: "0 32px 0",
 };
 
-const footerStyle = {
-  color: "#a1a1aa",
+const footerSectionStyle = {
+  padding: "0 32px 32px",
+};
+
+const footerLineStyle = {
+  color: brand.text,
   fontSize: "12px",
-  lineHeight: "1.5",
+  lineHeight: "24px",
   margin: "0",
+  textAlign: "center" as const,
 };
 
-const linkStyle = {
-  color: "#71717a",
+const footerLinkStyle = {
+  color: brand.accent,
   textDecoration: "underline",
 };
+
+const signOffStyle = {
+  color: brand.text,
+  fontSize: "16px",
+  lineHeight: "24px",
+  margin: "0 0 8px",
+};
+
+// Re-export for templates that need inline tweaks
+export { bodyText, mutedText } from "./brand-theme";

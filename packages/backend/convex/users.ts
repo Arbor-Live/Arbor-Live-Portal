@@ -10,6 +10,10 @@ import {
   requireBandContext,
   type AuthUser,
 } from "./lib/auth";
+import {
+  markInvitationAccepted,
+  scheduleUserInviteEmail,
+} from "./email/invitations";
 
 const USER_TEAMS = ["Sound", "Lights", "Design", "Marketing", "Operations"] as const;
 const userTeamValue = v.union(
@@ -634,7 +638,22 @@ export const inviteUserAdmin = mutation({
       });
     }
 
-    return { invitationId: getRecordId(created), email, expiresAt };
+    const invitationId = getRecordId(created);
+    if (existingUserId) {
+      await markInvitationAccepted(ctx, invitationId);
+    }
+    await scheduleUserInviteEmail(ctx, {
+      invitationId,
+      email,
+      organizationId: args.organizationId,
+      role: membershipRole,
+      inviterId: adminId,
+      expiresAt,
+      teams: args.teams,
+      isExistingUser: Boolean(existingUserId),
+    });
+
+    return { invitationId, email, expiresAt };
   },
 });
 
@@ -664,9 +683,27 @@ export const resendInviteAdmin = mutation({
         },
       },
     });
+    await scheduleUserInviteEmail(ctx, {
+      invitationId: args.invitationId,
+      email: invite.email,
+      organizationId: invite.organizationId ?? "",
+      role: invite.role ?? "member",
+      inviterId: invite.inviterId ?? "",
+      expiresAt,
+      isExistingUser: await userExistsForInvite(ctx, invite.email),
+      resendKey: String(now),
+    });
     return { ok: true, expiresAt };
   },
 });
+
+async function userExistsForInvite(ctx: MutationCtx | QueryCtx, email: string) {
+  const user = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
+    model: "user",
+    where: [{ field: "email", value: email }],
+  })) as AuthUser | null;
+  return Boolean(user);
+}
 
 export const createUserAdmin = mutation({
   args: {
@@ -1072,6 +1109,7 @@ export const inviteMemberToActiveOrganization = mutation({
     const now = Date.now();
     const email = args.email.trim().toLowerCase();
     if (!email) throw new Error("Email is required.");
+    const expiresAt = now + 14 * 24 * 60 * 60 * 1000;
     const created = await ctx.runMutation(components.betterAuth.adapter.create, {
       input: {
         model: "invitation",
@@ -1080,13 +1118,37 @@ export const inviteMemberToActiveOrganization = mutation({
           email,
           role: args.role,
           status: "pending",
-          expiresAt: now + 14 * 24 * 60 * 60 * 1000,
+          expiresAt,
           createdAt: now,
           inviterId: adminId,
         },
       },
     });
-    return { invitationId: getRecordId(created as { id?: string; _id?: string }) };
+    const invitationId = getRecordId(created as { id?: string; _id?: string });
+    const existingUser = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
+      model: "user",
+      where: [{ field: "email", value: email }],
+    })) as AuthUser | null;
+    const existingUserId = existingUser ? getUserId(existingUser) : "";
+    if (existingUserId) {
+      await upsertOrgMembership(ctx, {
+        userId: existingUserId,
+        organizationId: context.organizationId,
+        role: args.role,
+        active: true,
+      });
+      await markInvitationAccepted(ctx, invitationId);
+    }
+    await scheduleUserInviteEmail(ctx, {
+      invitationId,
+      email,
+      organizationId: context.organizationId,
+      role: args.role,
+      inviterId: adminId,
+      expiresAt,
+      isExistingUser: Boolean(existingUserId),
+    });
+    return { invitationId };
   },
 });
 

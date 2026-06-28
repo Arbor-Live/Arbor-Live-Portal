@@ -3,7 +3,7 @@ import { convex } from "@convex-dev/better-auth/plugins";
 import type { GenericCtx } from "@convex-dev/better-auth/utils";
 import { betterAuth, type BetterAuthOptions } from "better-auth";
 import { admin, organization } from "better-auth/plugins";
-import { components } from "./_generated/api";
+import { components, internal } from "./_generated/api";
 import type { DataModel } from "./_generated/dataModel";
 import authConfig from "./auth.config";
 import schema from "./betterAuth/schema";
@@ -29,10 +29,15 @@ export const createAuthOptions = (ctx: GenericCtx<DataModel>) => {
       enabled: true,
       disableSignUp: true,
       async sendResetPassword({ url, user }) {
-        // Dev-friendly placeholder: wire this to your email provider next.
-        console.log(
-          `[better-auth] Reset password link for ${user.email}: ${url}`,
-        );
+        if ("runMutation" in ctx && typeof ctx.runMutation === "function") {
+          await ctx.runMutation(internal.email.authEmails.enqueuePasswordReset, {
+            to: user.email,
+            resetUrl: url,
+            recipientName: user.name ?? undefined,
+          });
+          return;
+        }
+        console.log(`[better-auth] Reset password link for ${user.email}: ${url}`);
       },
     },
     plugins: [convex({ authConfig }), admin(), organization()],
