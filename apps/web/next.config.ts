@@ -4,7 +4,7 @@ import path from "path";
 const repoRoot = path.join(__dirname, "../..");
 
 const nextConfig: NextConfig = {
-  transpilePackages: ["backend"],
+  transpilePackages: ["backend", "@arbor/invoice-document"],
   turbopack: {
     root: repoRoot,
   },

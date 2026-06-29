@@ -263,6 +263,7 @@ export default defineSchema({
   invoiceGroups: defineTable({
     name: v.string(),
     type: invoiceGroupTypeValue,
+    equipmentPricingMode: v.optional(equipmentPricingModeValue),
     active: v.boolean(),
     lastUsedAt: v.optional(v.number()),
     createdAt: v.number(),
@@ -275,7 +276,10 @@ export default defineSchema({
 
   invoiceContacts: defineTable({
     groupId: v.optional(v.id("invoiceGroups")),
-    name: v.string(),
+    /** @deprecated Migrated to firstName/lastName. */
+    name: v.optional(v.string()),
+    firstName: v.optional(v.string()),
+    lastName: v.optional(v.string()),
     email: v.optional(v.string()),
     phone: v.optional(v.string()),
     active: v.boolean(),
@@ -283,11 +287,11 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   })
-    .index("by_name", ["name"])
+    .index("by_email", ["email"])
     .index("by_groupId", ["groupId"])
     .index("by_active", ["active"])
     .index("by_lastUsedAt", ["lastUsedAt"])
-    .index("by_groupId_and_name", ["groupId", "name"]),
+    .index("by_groupId_and_lastName", ["groupId", "lastName"]),
 
   invoiceSettings: defineTable({
     key: v.string(),
@@ -312,12 +316,6 @@ export default defineSchema({
     .index("by_key", ["key"])
     .index("by_active", ["active"])
     .index("by_sortOrder", ["sortOrder"]),
-
-  invoiceCounters: defineTable({
-    key: v.string(),
-    nextNumber: v.number(),
-    updatedAt: v.number(),
-  }).index("by_key", ["key"]),
 
   invoiceTerms: defineTable({
     label: v.string(),
@@ -376,6 +374,8 @@ export default defineSchema({
     clientApprovalStatus: v.optional(clientApprovalStatusValue),
     publicApprovalToken: v.optional(v.string()),
     publicApprovalTokenExpiresAt: v.optional(v.number()),
+    sourceEventRequestId: v.optional(v.id("eventRequests")),
+    clientReviewReadyAt: v.optional(v.number()),
     approvedAt: v.optional(v.number()),
     changesRequestedAt: v.optional(v.number()),
     clientApprovalNote: v.optional(v.string()),
@@ -389,6 +389,7 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_clientApprovalStatus", ["clientApprovalStatus"])
     .index("by_publicApprovalToken", ["publicApprovalToken"])
+    .index("by_sourceEventRequestId", ["sourceEventRequestId"])
     .index("by_managerUserId", ["managerUserId"])
     .index("by_issueDate", ["issueDate"])
     .index("by_createdAt", ["createdAt"]),
@@ -705,9 +706,13 @@ export default defineSchema({
       v.literal("schedule_reminder"),
       v.literal("user_invite"),
       v.literal("password_reset"),
+      v.literal("booking_request_received"),
+      v.literal("booking_quote_ready"),
     ),
     status: v.union(v.literal("queued"), v.literal("sent"), v.literal("failed")),
     to: v.string(),
+    cc: v.optional(v.array(v.string())),
+    replyTo: v.optional(v.array(v.string())),
     subject: v.string(),
     eventId: v.optional(v.id("events")),
     idempotencyKey: v.string(),
@@ -720,6 +725,59 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_idempotencyKey", ["idempotencyKey"])
     .index("by_eventId", ["eventId"]),
+
+
+  eventRequests: defineTable({
+    status: v.union(
+      v.literal("submitted"),
+      v.literal("in_review"),
+      v.literal("converted"),
+      v.literal("declined"),
+    ),
+    requestNumber: v.optional(v.string()),
+    publicToken: v.optional(v.string()),
+    firstName: v.string(),
+    lastName: v.string(),
+    email: v.string(),
+    phone: v.string(),
+    organization: v.optional(v.string()),
+    sponsorType: v.string(),
+    invoiceContactId: v.optional(v.id("invoiceContacts")),
+    invoiceGroupId: v.optional(v.id("invoiceGroups")),
+    requestContext: v.optional(v.string()),
+    venueName: v.optional(v.string()),
+    venueAddress: v.optional(v.string()),
+    eventDateText: v.string(),
+    eventStartTimeText: v.string(),
+    eventEndTimeText: v.string(),
+    earliestSetupText: v.string(),
+    eventStartAtMs: v.optional(v.number()),
+    eventEndAtMs: v.optional(v.number()),
+    setupAtMs: v.optional(v.number()),
+    flexibleSetupTime: v.optional(v.boolean()),
+    eventName: v.optional(v.string()),
+    eventCategory: v.string(),
+    crewOrRental: v.optional(v.string()),
+    servicesNeeded: v.array(v.string()),
+    productionTier: v.optional(v.string()),
+    eventDescription: v.optional(v.string()),
+    expectedTurnout: v.number(),
+    existingEquipment: v.optional(v.string()),
+    lightingPreference: v.optional(v.string()),
+    additionalNotes: v.optional(v.string()),
+    convertedEventId: v.optional(v.id("events")),
+    linkedInvoiceId: v.optional(v.id("invoices")),
+    reviewedByUserId: v.optional(v.string()),
+    staffNotes: v.optional(v.string()),
+    submittedAt: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_status_and_submittedAt", ["status", "submittedAt"])
+    .index("by_email", ["email"])
+    .index("by_publicToken", ["publicToken"])
+    .index("by_requestNumber", ["requestNumber"])
+    .index("by_linkedInvoiceId", ["linkedInvoiceId"]),
 
   eventPullListItems: defineTable({
     eventId: v.id("events"),

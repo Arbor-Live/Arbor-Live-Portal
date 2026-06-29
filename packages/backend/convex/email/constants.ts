@@ -10,7 +10,9 @@ export type EmailTemplate =
   | "schedule_published"
   | "schedule_reminder"
   | "user_invite"
-  | "password_reset";
+  | "password_reset"
+  | "booking_request_received"
+  | "booking_quote_ready";
 
 export function eventDashboardUrl(eventId: string) {
   return `${SITE_URL}/dashboard/events/${eventId}`;
@@ -58,6 +60,10 @@ export function signInUrl(email?: string) {
   return `${SITE_URL}/sign-in?email=${encodeURIComponent(email)}`;
 }
 
+export function requestTrackingUrl(token: string) {
+  return `${SITE_URL}/public/request/track/${encodeURIComponent(token)}`;
+}
+
 export function formatInviteExpiry(expiresAt: number, timezone: string = EVENT_TIMEZONE) {
   return new Date(expiresAt).toLocaleString("en-US", {
     timeZone: timezone,
@@ -82,6 +88,10 @@ export function subjectForTemplate(template: EmailTemplate, context: string) {
       return `You're invited to ${context}`;
     case "password_reset":
       return "Reset your Arbor Live password";
+    case "booking_request_received":
+      return `Request received: ${context}`;
+    case "booking_quote_ready":
+      return `Your quote is ready: ${context}`;
   }
 }
 

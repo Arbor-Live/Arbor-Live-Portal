@@ -84,11 +84,14 @@ const inventorySubItems: NavSubItem[] = [
 const financialHubSubItems: NavSubItem[] = [
   { title: "Overview", url: "/dashboard/financial-hub" },
   { title: "Invoices", url: "/dashboard/financial-hub/invoices" },
+  { title: "Host Organizations", url: "/dashboard/financial-hub/organizations" },
+  { title: "Managers", url: "/dashboard/financial-hub/managers" },
   { title: "Create Invoice", url: "/dashboard/financial-hub/invoices/new" },
 ]
 
 const eventsSubItems: NavSubItem[] = [
   { title: "Overview", url: "/dashboard/events" },
+  { title: "Booking Requests", url: "/dashboard/events/requests" },
   { title: "Crew Scheduling", url: "/dashboard/events/crew-scheduling", adminOnly: true },
   { title: "My Availability", url: "/dashboard/events/my-availability" },
   { title: "Create Event", url: "/dashboard/events/new", adminOnly: true },

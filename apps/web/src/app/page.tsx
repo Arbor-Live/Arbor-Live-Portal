@@ -20,6 +20,9 @@ export default async function Home() {
         <Link className="rounded-lg border px-4 py-3 text-sm font-medium hover:bg-muted" href="/public/types">
           Browse model types
         </Link>
+        <Link className="rounded-lg border px-4 py-3 text-sm font-medium hover:bg-muted" href="/public/request">
+          Request booking
+        </Link>
         <Link className="rounded-lg border px-4 py-3 text-sm font-medium hover:bg-muted" href="/sign-in">
           Staff sign-in
         </Link>

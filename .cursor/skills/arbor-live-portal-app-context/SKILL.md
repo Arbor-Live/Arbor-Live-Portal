@@ -66,7 +66,8 @@ Use this skill to quickly align with how this app is built and avoid regressions
 - In UI, costs are edited as part of event record, not via report creation workflows.
 
 ## Invoice and Public Quote Context
-- Invoice numbers use `AL-` with non-sequential 7-digit numeric id logic in backend.
+- Invoice numbers use `ALINV-` with a 7-character nanoid suffix (e.g. `ALINV-4K8Z2NP`).
+- Booking request numbers use `ALREQ-` with the same suffix format.
 - Public quote link token workflow exists on invoices (`publicApprovalToken`).
 - Quote approval status is unified for table display.
 

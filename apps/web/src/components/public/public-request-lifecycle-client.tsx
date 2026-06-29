@@ -1,0 +1,278 @@
+"use client";
+
+import { useState } from "react";
+import { useMutation, useQuery } from "convex/react";
+import { api } from "@/lib/convex-api";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PublicEventHeader } from "@/components/public/public-event-header";
+import { PublicEventSchedule } from "@/components/public/public-event-schedule";
+import { PublicEventCrew } from "@/components/public/public-event-crew";
+import { PublicEventContacts } from "@/components/public/public-event-contacts";
+import { PublicQuoteFinancials } from "@/components/public/public-quote-financials";
+import { PublicQuoteTermsApproval } from "@/components/public/public-quote-terms-approval";
+
+const STATUS_LABELS: Record<string, string> = {
+  submitted: "Submitted",
+  converted: "Quote in progress",
+  declined: "Declined",
+};
+
+type LifecycleStep = {
+  key: string;
+  label: string;
+  complete: boolean;
+  active: boolean;
+};
+
+function buildLifecycleSteps(request: {
+  status: string;
+  quote?: {
+    readyForClientReview: boolean;
+    clientApprovalStatus: "pending" | "approved" | "changes_requested";
+  };
+}): LifecycleStep[] {
+  if (request.status === "declined") {
+    return [{ key: "declined", label: "Request declined", complete: true, active: true }];
+  }
+
+  const quoteReady = request.quote?.readyForClientReview ?? false;
+  const quoteApproved = request.quote?.clientApprovalStatus === "approved";
+
+  return [
+    {
+      key: "submitted",
+      label: "Request received",
+      complete: true,
+      active: request.status === "submitted",
+    },
+    {
+      key: "quote",
+      label: quoteReady ? "Quote ready for your review" : "Quote being prepared",
+      complete: quoteReady || quoteApproved,
+      active: request.status === "converted" && !quoteReady && !quoteApproved,
+    },
+    {
+      key: "approved",
+      label: "Quote approved — logistics planning",
+      complete: quoteApproved,
+      active: quoteReady && !quoteApproved,
+    },
+  ];
+}
+
+export function PublicRequestLifecycleClient({ token }: { token: string }) {
+  const request = useQuery(api.eventRequests.getPublicRequestByToken, { token });
+  const quoteData = useQuery(api.eventRequests.getPublicRequestQuoteByToken, { token });
+  const approve = useMutation(api.eventRequests.approveQuoteByRequestToken);
+  const requestChanges = useMutation(api.eventRequests.requestQuoteChangesByRequestToken);
+  const [acceptTerms, setAcceptTerms] = useState(false);
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  if (request === undefined) {
+    return <p className="text-sm text-muted-foreground">Loading your request...</p>;
+  }
+  if (!request) {
+    return <p className="text-sm text-muted-foreground">This request link is invalid or expired.</p>;
+  }
+
+  const lifecycleSteps = buildLifecycleSteps(request);
+  const isDeclined = request.status === "declined";
+  const quoteLocked = quoteData ? quoteData.invoice.clientApprovalStatus !== "pending" : false;
+  const linkedEvent = quoteData?.event ?? null;
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>Request {request.requestNumber}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm">
+          <p>
+            Status:{" "}
+            <span className="font-medium">{STATUS_LABELS[request.status] ?? request.status}</span>
+          </p>
+          <p className="text-muted-foreground">
+            Submitted {new Date(request.submittedAt).toLocaleString()}
+          </p>
+          <p>
+            {request.firstName} {request.lastName} · {request.email}
+          </p>
+          {request.organization ? <p>Organization: {request.organization}</p> : null}
+          <p>
+            {request.eventName ? (
+              <>
+                <span className="font-medium">{request.eventName}</span>
+                <span className="text-muted-foreground"> · {request.eventCategory}</span>
+              </>
+            ) : (
+              request.eventCategory
+            )}
+            {" · "}
+            {request.eventDateText}
+          </p>
+          <p>
+            {request.eventStartTimeText} – {request.eventEndTimeText}
+          </p>
+          {request.quote ? (
+            <p>
+              Quote {request.quote.invoiceNumber}
+              {request.quote.readyForClientReview
+                ? request.quote.clientApprovalStatus === "approved"
+                  ? " · Approved"
+                  : request.quote.clientApprovalStatus === "changes_requested"
+                    ? " · Changes requested"
+                    : " · Ready for your review"
+                : " · Being prepared"}
+            </p>
+          ) : null}
+          {request.expectedTurnout >= 200 ? (
+            <p className="rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-amber-800">
+              Major event ({request.expectedTurnout} guests) — our team will follow up with additional
+              coordination steps.
+            </p>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Request lifecycle</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {isDeclined ? (
+            <p className="text-sm text-muted-foreground">
+              This request was declined. Contact arborlive@stanford.edu if you have questions.
+            </p>
+          ) : (
+            lifecycleSteps.map((step, index) => (
+              <div key={step.key} className="flex items-center gap-3 text-sm">
+                <span
+                  className={`flex size-6 items-center justify-center rounded-full border text-xs ${
+                    step.complete
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : step.active
+                        ? "border-primary text-primary"
+                        : "text-muted-foreground"
+                  }`}
+                >
+                  {index + 1}
+                </span>
+                <span className={step.complete || step.active ? "font-medium" : "text-muted-foreground"}>
+                  {step.label}
+                </span>
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
+
+      {quoteData ? (
+        <>
+          <Card>
+            <CardHeader>
+              <CardTitle>Quote {quoteData.invoice.invoiceNumber}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              <p>Issued: {quoteData.invoice.issueDate}</p>
+              {quoteData.invoice.clientGroupName ? <p>Group: {quoteData.invoice.clientGroupName}</p> : null}
+              {quoteData.invoice.clientContactName ? <p>Contact: {quoteData.invoice.clientContactName}</p> : null}
+              <p className="text-base font-semibold">Total: ${quoteData.invoice.totalUsd.toFixed(2)}</p>
+              <p className="text-muted-foreground">Status: {quoteData.invoice.clientApprovalStatus}</p>
+              {quoteData.invoice.clientApprovalNote ? (
+                <p>Change request note: {quoteData.invoice.clientApprovalNote}</p>
+              ) : null}
+            </CardContent>
+          </Card>
+
+          {linkedEvent ? (
+            <>
+              <PublicEventHeader
+                title={linkedEvent.title}
+                eventType={linkedEvent.eventType ?? undefined}
+                venueName={linkedEvent.venueName ?? undefined}
+                host={linkedEvent.host ?? undefined}
+                startAt={linkedEvent.startAt}
+                endAt={linkedEvent.endAt}
+                status={linkedEvent.status}
+              />
+              <PublicEventContacts
+                manager={linkedEvent.contacts.manager}
+                dayOfLead={linkedEvent.contacts.dayOfLead}
+              />
+              <PublicEventSchedule blocks={linkedEvent.scheduleBlocks} />
+              <PublicEventCrew crew={linkedEvent.crewRoster} />
+            </>
+          ) : null}
+
+          <PublicQuoteFinancials
+            lineItems={quoteData.lineItems}
+            totals={{
+              equipmentSubtotalUsd: quoteData.invoice.equipmentSubtotalUsd,
+              externalRentalsSubtotalUsd: quoteData.invoice.externalRentalsSubtotalUsd,
+              artistsSubtotalUsd: quoteData.invoice.artistsSubtotalUsd,
+              crewSubtotalUsd: quoteData.invoice.crewSubtotalUsd,
+              feesSubtotalUsd: quoteData.invoice.feesSubtotalUsd,
+              subtotalUsd: quoteData.invoice.subtotalUsd,
+              discountAmountUsd: quoteData.invoice.discountAmountUsd,
+              totalUsd: quoteData.invoice.totalUsd,
+            }}
+          />
+
+          {quoteData.invoice.notes ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>Quote Notes</CardTitle>
+              </CardHeader>
+              <CardContent className="text-sm whitespace-pre-wrap">{quoteData.invoice.notes}</CardContent>
+            </Card>
+          ) : null}
+
+          <PublicQuoteTermsApproval
+            termsAndConditionsMarkdown={quoteData.termsAndConditionsMarkdown}
+            termsVersion={quoteData.termsVersion}
+            acceptTerms={acceptTerms}
+            setAcceptTerms={setAcceptTerms}
+            locked={quoteLocked}
+            saving={saving}
+            onApprove={async () => {
+              setSaving(true);
+              setMessage(null);
+              try {
+                await approve({ token, acceptTerms: true });
+                setMessage("Quote approved. Thank you.");
+              } catch (error) {
+                setMessage(error instanceof Error ? error.message : "Could not submit approval.");
+              } finally {
+                setSaving(false);
+              }
+            }}
+            note={note}
+            setNote={setNote}
+            onRequestChanges={async () => {
+              setSaving(true);
+              setMessage(null);
+              try {
+                await requestChanges({ token, note: note.trim() });
+                setMessage("Change request submitted.");
+              } catch (error) {
+                setMessage(error instanceof Error ? error.message : "Could not submit change request.");
+              } finally {
+                setSaving(false);
+              }
+            }}
+          />
+
+          {message ? <p className="text-sm text-primary">{message}</p> : null}
+        </>
+      ) : request.quote && !request.quote.readyForClientReview ? (
+        <Card>
+          <CardContent className="py-6 text-sm text-muted-foreground">
+            Your quote is being prepared. You will see the full quote here when it is ready for review.
+          </CardContent>
+        </Card>
+      ) : null}
+    </div>
+  );
+}

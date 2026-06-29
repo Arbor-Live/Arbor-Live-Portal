@@ -27,3 +27,22 @@ export type PasswordResetEmailProps = {
   recipientName?: string;
   resetUrl: string;
 };
+
+export type BookingRequestReceivedEmailProps = {
+  recipientName?: string;
+  requestNumber: string;
+  eventName: string;
+  eventDateText: string;
+  trackingUrl: string;
+};
+
+export type BookingQuoteReadyEmailProps = {
+  recipientName?: string;
+  requestNumber: string;
+  eventName?: string;
+  invoiceNumber: string;
+  quoteTotalUsd: number;
+  trackingUrl: string;
+  managerName: string;
+  managerEmail?: string;
+};

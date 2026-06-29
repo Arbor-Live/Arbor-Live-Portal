@@ -10,6 +10,8 @@ const emailTemplateValue = v.union(
   v.literal("schedule_reminder"),
   v.literal("user_invite"),
   v.literal("password_reset"),
+  v.literal("booking_request_received"),
+  v.literal("booking_quote_ready"),
 );
 
 const emailStatusValue = v.union(
@@ -23,6 +25,8 @@ export async function enqueueEmail(
   args: {
     template: EmailTemplate;
     to: string;
+    cc?: string[];
+    replyTo?: string[];
     subject: string;
     eventId?: Id<"events">;
     idempotencyKey: string;
@@ -33,12 +37,30 @@ export async function enqueueEmail(
     .query("emailNotifications")
     .withIndex("by_idempotencyKey", (q) => q.eq("idempotencyKey", args.idempotencyKey))
     .unique();
-  if (existing) return existing._id;
+  if (existing) {
+    if (existing.status === "failed") {
+      await ctx.db.patch(existing._id, {
+        status: "queued",
+        error: undefined,
+        to: args.to,
+        cc: args.cc?.length ? args.cc : undefined,
+        replyTo: args.replyTo?.length ? args.replyTo : undefined,
+        subject: args.subject,
+        payload: args.payload,
+      });
+      await ctx.scheduler.runAfter(0, internal.email.send.sendQueuedEmail, {
+        notificationId: existing._id,
+      });
+    }
+    return existing._id;
+  }
 
   const notificationId = await ctx.db.insert("emailNotifications", {
     template: args.template,
     status: "queued",
     to: args.to,
+    cc: args.cc?.length ? args.cc : undefined,
+    replyTo: args.replyTo?.length ? args.replyTo : undefined,
     subject: args.subject,
     eventId: args.eventId,
     idempotencyKey: args.idempotencyKey,
@@ -61,6 +83,8 @@ export const getNotification = internalQuery({
       template: emailTemplateValue,
       status: emailStatusValue,
       to: v.string(),
+      cc: v.optional(v.array(v.string())),
+      replyTo: v.optional(v.array(v.string())),
       subject: v.string(),
       payload: v.any(),
     }),
@@ -74,6 +98,8 @@ export const getNotification = internalQuery({
       template: row.template,
       status: row.status,
       to: row.to,
+      cc: row.cc,
+      replyTo: row.replyTo,
       subject: row.subject,
       payload: row.payload,
     };

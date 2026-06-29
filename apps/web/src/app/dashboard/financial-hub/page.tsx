@@ -21,9 +21,15 @@ export default function FinancialHubPage() {
               Centralize invoices, settlements, and payments across operations.
             </CardDescription>
           </CardHeader>
-          <CardContent className="flex gap-2">
+          <CardContent className="flex flex-wrap gap-2">
             <Button asChild>
               <Link href="/dashboard/financial-hub/invoices">Open Invoices</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/dashboard/financial-hub/organizations">Host Organizations</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/dashboard/financial-hub/managers">Managers</Link>
             </Button>
             <Button asChild variant="outline">
               <Link href="/dashboard/financial-hub/invoices/new">Create Invoice</Link>

@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
+import { AdminCascadeDeleteDialog } from "@/components/admin/admin-cascade-delete-dialog";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,20 +18,26 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
+import { InvoiceLinkedEventCrewSection } from "@/components/financial/invoice-linked-event-crew";
+import {
+  mergeEventCrewWithManualRows,
+  type InvoiceCrewRow,
+} from "@/lib/invoice-crew-from-event";
 import { CaretDownIcon } from "@phosphor-icons/react";
 
 type EquipmentRow = { refId: string; quantity: string };
 type ExternalRentalRow = { provider: string; label: string; quantity: string; rateUsd: string };
 type ArtistRow = { label: string; quantity: string; rateUsd: string };
-type CrewRow = { label: string; quantity: string; rateUsd?: string };
+type CrewRow = InvoiceCrewRow;
 type FeeRow = { feeDefinitionId: string; label: string; quantity: string; rateUsd: string };
 
-const groupTypeLabels: Record<string, string> = {
-  vso: "VSO",
-  house: "House",
-  department: "Department",
-  individual: "Individual",
-};
+import {
+  INVOICE_GROUP_TYPE_LABELS,
+  EQUIPMENT_PRICING_MODE_LABELS,
+  EQUIPMENT_PRICING_MODE_OPTIONS,
+  type EquipmentPricingMode,
+} from "@/lib/invoice-group-labels";
+import { formatContactFullName, splitContactName } from "@/lib/contact-name";
 
 export function InvoiceEditor({
   invoiceId,
@@ -38,6 +46,8 @@ export function InvoiceEditor({
   invoiceId?: Id<"invoices">;
   initialIssueDate?: string;
 }) {
+  const router = useRouter();
+  const viewer = useQuery(api.users.getViewer, {});
   const [groupId, setGroupId] = useState("");
   const [contactId, setContactId] = useState("");
   const session = authClient.useSession();
@@ -56,21 +66,20 @@ export function InvoiceEditor({
 
   const createDraft = useMutation(api.invoices.createDraft);
   const updateDraft = useMutation(api.invoices.updateDraft);
-  const finalizeInvoice = useMutation(api.invoices.finalize);
+  const markReadyForClientReview = useMutation(api.invoices.markReadyForClientReview);
+  const withdrawFromClientReview = useMutation(api.invoices.withdrawFromClientReview);
   const regeneratePublicApprovalToken = useMutation(api.invoices.regeneratePublicApprovalToken);
   const resetApprovalToPending = useMutation(api.invoices.resetApprovalToPending);
   const createTermsDefinition = useMutation(api.invoiceTerms.create);
   const createGroup = useMutation(api.invoiceGroups.create);
   const createContact = useMutation(api.invoiceContacts.create);
+  const deleteInvoiceAdmin = useMutation(api.adminDeletes.deleteInvoiceAdmin);
 
   const [issueDate, setIssueDate] = useState(initialIssueDate ?? "");
   const [dueDate, setDueDate] = useState("");
   const [managerUserId, setManagerUserId] = useState("");
   const [managerName, setManagerName] = useState("");
   const [managerEmail, setManagerEmail] = useState("");
-  const [clientGroupName, setClientGroupName] = useState("");
-  const [clientGroupType, setClientGroupType] = useState<"" | "vso" | "house" | "department" | "individual">("");
-  const [clientContactName, setClientContactName] = useState("");
   const [clientEmail, setClientEmail] = useState("");
   const [clientPhone, setClientPhone] = useState("");
   const [clientAddressLine1, setClientAddressLine1] = useState("");
@@ -95,10 +104,20 @@ export function InvoiceEditor({
   const [autoSaveState, setAutoSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [autoSaveError, setAutoSaveError] = useState<string | null>(null);
   const [activeInvoiceId, setActiveInvoiceId] = useState<Id<"invoices"> | undefined>(invoiceId);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const linkedEvent = useQuery(
     api.events.getByInvoiceId,
     activeInvoiceId ? { invoiceId: activeInvoiceId } : "skip",
   );
+  const sourceRequest = useQuery(
+    api.eventRequests.getByLinkedInvoiceId,
+    activeInvoiceId ?? invoiceId ? { invoiceId: (activeInvoiceId ?? invoiceId)! } : "skip",
+  );
+  const deletePreview = useQuery(
+    api.adminDeletes.previewInvoiceDeletion,
+    deleteOpen && (activeInvoiceId ?? invoiceId) ? { id: (activeInvoiceId ?? invoiceId)! } : "skip",
+  );
+  const isAdmin = viewer?.isAdmin ?? false;
   const [approvalToken, setApprovalToken] = useState("");
   const [termsIds, setTermsIds] = useState<Id<"invoiceTerms">[]>([]);
   const [additionalTermsMarkdown, setAdditionalTermsMarkdown] = useState("");
@@ -108,8 +127,11 @@ export function InvoiceEditor({
   const [groupModalOpen, setGroupModalOpen] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
   const [newGroupType, setNewGroupType] = useState<"vso" | "house" | "department" | "individual">("department");
+  const [newGroupEquipmentPricingMode, setNewGroupEquipmentPricingMode] =
+    useState<EquipmentPricingMode>("subsidized");
   const [contactModalOpen, setContactModalOpen] = useState(false);
-  const [newContactName, setNewContactName] = useState("");
+  const [newContactFirstName, setNewContactFirstName] = useState("");
+  const [newContactLastName, setNewContactLastName] = useState("");
   const [newContactEmail, setNewContactEmail] = useState("");
   const [newContactPhone, setNewContactPhone] = useState("");
 
@@ -117,6 +139,10 @@ export function InvoiceEditor({
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveRequestIdRef = useRef(0);
   const suppressAutoSaveOnceRef = useRef(false);
+  const hasHydratedFromServerRef = useRef(false);
+  const crewBootstrappedRef = useRef(false);
+  const savedCrewSnapshotRef = useRef<CrewRow[]>([]);
+  const [invoiceFieldsHydrated, setInvoiceFieldsHydrated] = useState(false);
   const persistDraftRef = useRef<(mode: "manual" | "auto") => Promise<boolean>>(async () => false);
   const reapprovalDecisionRef = useRef<null | boolean>(null);
 
@@ -141,18 +167,56 @@ export function InvoiceEditor({
     () =>
       (groups ?? []).map((g) => ({
         value: g._id,
-        label: `${g.name} (${groupTypeLabels[g.type] ?? g.type})`,
+        label: `${g.name} (${INVOICE_GROUP_TYPE_LABELS[g.type] ?? g.type})`,
       })),
     [groups],
   );
+  const selectedGroup = useMemo(
+    () => (groups ?? []).find((group) => group._id === groupId),
+    [groups, groupId],
+  );
+  const selectedContact = useMemo(
+    () => (contacts ?? []).find((contact) => contact._id === contactId),
+    [contacts, contactId],
+  );
   const contactOptions = useMemo(
     () =>
-      (contacts ?? []).map((c) => ({
-        value: c._id,
-        label: c.email ? `${c.name} (${c.email})` : c.name,
-      })),
+      (contacts ?? []).map((c) => {
+        const fullName = formatContactFullName(c.firstName, c.lastName);
+        return {
+          value: c._id,
+          label: c.email ? `${fullName} (${c.email})` : fullName,
+        };
+      }),
     [contacts],
   );
+
+  const defaultCrewHourlyRateUsd = useMemo(() => {
+    if (crewRateMode === "lead") {
+      return settings?.crewLeadRateUsd ?? settings?.crewOtRateUsd ?? settings?.crewNormalRateUsd ?? 0;
+    }
+    if (crewRateMode === "custom") {
+      return settings?.crewNormalRateUsd ?? 0;
+    }
+    return settings?.crewNormalRateUsd ?? 0;
+  }, [crewRateMode, settings]);
+
+  const handleEventCrewRowsChange = useCallback((eventRows: InvoiceCrewRow[]) => {
+    if (!crewBootstrappedRef.current) return;
+    setCrewRows((current) => mergeEventCrewWithManualRows(eventRows, current));
+  }, []);
+
+  const setManualCrewRows = useCallback((updater: SetStateAction<CrewRow[]>) => {
+    setCrewRows((current) => {
+      const eventRows = current.filter((row) => row.source === "event");
+      const prevManual = current.filter((row) => row.source === "manual");
+      const nextManual = typeof updater === "function" ? updater(prevManual) : updater;
+      return [
+        ...eventRows,
+        ...nextManual.map((row) => ({ ...row, source: "manual" as const })),
+      ];
+    });
+  }, []);
 
   useEffect(() => {
     if (!managerUserId && session.data?.user?.id) {
@@ -171,8 +235,20 @@ export function InvoiceEditor({
   }, [issueDate, invoiceId]);
 
   useEffect(() => {
-    if (!invoiceData) return;
+    hasHydratedFromServerRef.current = false;
+    crewBootstrappedRef.current = false;
+    savedCrewSnapshotRef.current = [];
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setInvoiceFieldsHydrated(false);
+  }, [invoiceId]);
+
+  useEffect(() => {
+    if (!invoiceData || !invoiceId) return;
+    if (invoiceData.invoice._id !== invoiceId) return;
+    if (hasHydratedFromServerRef.current) return;
+
     const { invoice, lineItems } = invoiceData;
+    hasHydratedFromServerRef.current = true;
     suppressAutoSaveOnceRef.current = true;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setActiveInvoiceId(invoice._id);
@@ -184,9 +260,6 @@ export function InvoiceEditor({
     setManagerEmail(invoice.managerEmail ?? "");
     setGroupId(invoice.groupId ?? "");
     setContactId(invoice.contactId ?? "");
-    setClientGroupName(invoice.clientGroupName ?? "");
-    setClientGroupType((invoice.clientGroupType as typeof clientGroupType) ?? "");
-    setClientContactName(invoice.clientContactName ?? "");
     setClientEmail(invoice.clientEmail ?? "");
     setClientPhone(invoice.clientPhone ?? "");
     setClientAddressLine1(invoice.clientAddressLine1 ?? "");
@@ -233,11 +306,12 @@ export function InvoiceEditor({
         .filter((row) => row.section === "artist")
         .map((row) => ({ label: row.label, quantity: row.quantity.toString(), rateUsd: row.rateUsd.toString() })),
     );
-    setCrewRows(
-      lineItems
-        .filter((row) => row.section === "crew")
-        .map((row) => ({ label: row.label, quantity: row.quantity.toString(), rateUsd: row.rateUsd.toString() })),
-    );
+    const savedCrewRows = lineItems.filter((row) => row.section === "crew");
+    savedCrewSnapshotRef.current = savedCrewRows.map((row) => ({
+      label: row.label,
+      quantity: row.quantity.toString(),
+      rateUsd: row.rateUsd.toString(),
+    }));
     setFees(
       lineItems
         .filter((row) => row.section === "fee")
@@ -292,7 +366,33 @@ export function InvoiceEditor({
       })),
     });
     reapprovalDecisionRef.current = null;
-  }, [invoiceData]);
+    setInvoiceFieldsHydrated(true);
+  }, [invoiceData, invoiceId]);
+
+  useEffect(() => {
+    if (!invoiceId) {
+      crewBootstrappedRef.current = true;
+    }
+  }, [invoiceId]);
+
+  useEffect(() => {
+    if (invoiceId && !invoiceFieldsHydrated) return;
+    if (crewBootstrappedRef.current) return;
+    if (activeInvoiceId && linkedEvent === undefined) return;
+
+    crewBootstrappedRef.current = true;
+
+    if (linkedEvent) {
+      // Crew lines for linked events come from the event schedule editor, not saved invoice rows.
+      return;
+    }
+
+    if (savedCrewSnapshotRef.current.length) {
+      suppressAutoSaveOnceRef.current = true;
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setCrewRows(savedCrewSnapshotRef.current);
+    }
+  }, [invoiceId, invoiceFieldsHydrated, linkedEvent, activeInvoiceId]);
 
   function onManagerChange(userId: string) {
     setManagerUserId(userId);
@@ -308,8 +408,9 @@ export function InvoiceEditor({
     setContactId("");
     const selected = (groups ?? []).find((g) => g._id === nextGroupId);
     if (selected) {
-      setClientGroupName(selected.name);
-      setClientGroupType(selected.type);
+      setClientEmail("");
+      setClientPhone("");
+      setEquipmentPricingMode(selected.equipmentPricingMode ?? "subsidized");
     }
   }
 
@@ -317,7 +418,6 @@ export function InvoiceEditor({
     setContactId(nextContactId);
     const selected = (contacts ?? []).find((c) => c._id === nextContactId);
     if (selected) {
-      setClientContactName(selected.name);
       setClientEmail(selected.email ?? "");
       setClientPhone(selected.phone ?? "");
     }
@@ -333,6 +433,7 @@ export function InvoiceEditor({
     const id = await createGroup({
       name: newGroupName.trim(),
       type: newGroupType,
+      equipmentPricingMode: newGroupEquipmentPricingMode,
       active: true,
     });
     setGroupModalOpen(false);
@@ -342,29 +443,33 @@ export function InvoiceEditor({
 
   function openCreateContact(prefill: string) {
     if (!groupId) {
-      window.alert("Select a group first so the client/contact can be linked.");
+      window.alert("Select a host first so the client/contact can be linked.");
       return;
     }
-    setNewContactName(prefill);
+    const { firstName, lastName } = splitContactName(prefill);
+    setNewContactFirstName(firstName);
+    setNewContactLastName(lastName);
     setContactModalOpen(true);
   }
 
   async function submitCreateContact() {
     if (!groupId) {
-      window.alert("Select a group first.");
+      window.alert("Select a host first.");
       return;
     }
-    if (!newContactName.trim()) return;
+    if (!newContactFirstName.trim() || !newContactLastName.trim()) return;
     const id = await createContact({
       groupId: groupId as Id<"invoiceGroups">,
-      name: newContactName.trim(),
+      firstName: newContactFirstName.trim(),
+      lastName: newContactLastName.trim(),
       email: newContactEmail.trim() || undefined,
       phone: newContactPhone.trim() || undefined,
       active: true,
     });
     setContactModalOpen(false);
     onContactChange(id);
-    setNewContactName("");
+    setNewContactFirstName("");
+    setNewContactLastName("");
     setNewContactEmail("");
     setNewContactPhone("");
   }
@@ -462,6 +567,8 @@ export function InvoiceEditor({
     if (!managerUserId || !managerName.trim()) return null;
     const lineItems = buildLineItems();
     if (!lineItems.length) return null;
+    const hostGroup = (groups ?? []).find((group) => group._id === groupId);
+    const hostContact = (contacts ?? []).find((contact) => contact._id === contactId);
     return {
       issueDate,
       dueDate: dueDate || undefined,
@@ -470,9 +577,11 @@ export function InvoiceEditor({
       managerEmail: managerEmail || undefined,
       groupId: groupId ? (groupId as Id<"invoiceGroups">) : undefined,
       contactId: contactId ? (contactId as Id<"invoiceContacts">) : undefined,
-      clientGroupName: clientGroupName || undefined,
-      clientGroupType: clientGroupType || undefined,
-      clientContactName: clientContactName || undefined,
+      clientGroupName: hostGroup?.name,
+      clientGroupType: hostGroup?.type,
+      clientContactName: hostContact
+        ? formatContactFullName(hostContact.firstName, hostContact.lastName)
+        : undefined,
       clientEmail: clientEmail || undefined,
       clientPhone: clientPhone || undefined,
       clientAddressLine1: clientAddressLine1 || undefined,
@@ -599,45 +708,16 @@ export function InvoiceEditor({
     setSaveMessage("Global terms template created.");
   }
 
-  async function finalize() {
+  async function markReadyOnRequestPortal() {
     if (!activeInvoiceId) return;
-    await finalizeInvoice({ id: activeInvoiceId });
-    setSaveMessage("Invoice finalized.");
+    await markReadyForClientReview({ id: activeInvoiceId });
+    setSaveMessage("Quote is ready for client review on the request portal.");
   }
 
-  function loadCrewFromLinkedEvent() {
-    if (!linkedEvent) {
-      window.alert("No linked event found for this invoice.");
-      return;
-    }
-    const blockLabelById = new Map(
-      (linkedEvent.blocks ?? []).map((block) => [block._id, block.label || block.blockType]),
-    );
-
-    const assignmentRows: CrewRow[] = (linkedEvent.assignments ?? [])
-      .filter((assignment) => assignment.assignmentType === "crew")
-      .map((assignment) => ({
-        label: assignment.roleLabel?.trim() || assignment.personName || "Crew Assignment",
-        quantity: "1",
-      }));
-
-    const shiftRows: CrewRow[] = (linkedEvent.shifts ?? []).map((shift) => {
-      const blockLabel = shift.scheduleBlockId ? blockLabelById.get(shift.scheduleBlockId) : undefined;
-      const role = shift.role?.trim() || shift.personName?.trim() || "Crew Shift";
-      const label = blockLabel ? `${blockLabel} — ${role}` : role;
-      return {
-        label,
-        quantity: String(Math.max(0, Number(shift.hours ?? 0))),
-      };
-    });
-
-    const merged = [...assignmentRows, ...shiftRows].filter((row) => row.label.trim().length > 0);
-    if (!merged.length) {
-      window.alert("No crew assignments or shifts found on the linked event.");
-      return;
-    }
-    setCrewRows(merged);
-    setSaveMessage("Loaded crew rows from linked event blocks and assignments.");
+  async function withdrawFromRequestPortal() {
+    if (!activeInvoiceId) return;
+    await withdrawFromClientReview({ id: activeInvoiceId });
+    setSaveMessage("Quote withdrawn from the request portal for editing.");
   }
 
   useEffect(() => {
@@ -660,9 +740,6 @@ export function InvoiceEditor({
     managerEmail,
     groupId,
     contactId,
-    clientGroupName,
-    clientGroupType,
-    clientContactName,
     clientEmail,
     clientPhone,
     clientAddressLine1,
@@ -686,8 +763,16 @@ export function InvoiceEditor({
   ]);
 
   const linkedEvents = linkedEvent?.linkedEvents ?? [];
+  const isRequestLinkedQuote = Boolean(invoiceData?.invoice?.sourceEventRequestId);
+  const requestPortalReady = Boolean(invoiceData?.invoice?.clientReviewReadyAt);
 
   const origin = typeof window === "undefined" ? "" : window.location.origin;
+  const requestPortalUrl =
+    sourceRequest?.publicToken && origin
+      ? `${origin}/public/request/track/${sourceRequest.publicToken}`
+      : sourceRequest?.publicToken
+        ? `/public/request/track/${sourceRequest.publicToken}`
+        : "";
 
   return (
     <div className="space-y-4">
@@ -728,9 +813,9 @@ export function InvoiceEditor({
               <Link href={`/dashboard/financial-hub/invoices/${activeInvoiceId}/print`}>Print / PDF</Link>
             </Button>
           ) : null}
-          {activeInvoiceId ? (
-            <Button type="button" variant="outline" onClick={() => void finalize()}>
-              Finalize
+          {activeInvoiceId && isAdmin ? (
+            <Button type="button" variant="destructive" onClick={() => setDeleteOpen(true)}>
+              Delete quote
             </Button>
           ) : null}
           <Button type="button" onClick={() => void save()} disabled={saving}>
@@ -738,6 +823,78 @@ export function InvoiceEditor({
           </Button>
         </div>
       </div>
+
+      {sourceRequest ? (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between gap-2">
+            <CardTitle>Booking request {sourceRequest.requestNumber}</CardTitle>
+            <Button type="button" variant="outline" size="sm" asChild>
+              <Link href={`/dashboard/events/requests/${sourceRequest._id}`}>Open request</Link>
+            </Button>
+          </CardHeader>
+          <CardContent className="grid gap-2 text-sm md:grid-cols-2">
+            <p>
+              <span className="font-medium">Contact:</span> {sourceRequest.firstName} {sourceRequest.lastName} ·{" "}
+              {sourceRequest.email} · {sourceRequest.phone}
+            </p>
+            <p>
+              <span className="font-medium">Sponsor:</span> {sourceRequest.sponsorType}
+              {sourceRequest.organization ? ` · ${sourceRequest.organization}` : ""}
+            </p>
+            <p>
+              <span className="font-medium">Event:</span>{" "}
+              {sourceRequest.eventName ? (
+                <>
+                  {sourceRequest.eventName} · {sourceRequest.eventCategory}
+                </>
+              ) : (
+                sourceRequest.eventCategory
+              )}{" "}
+              · {sourceRequest.eventDateText}
+            </p>
+            <p>
+              <span className="font-medium">Times:</span> {sourceRequest.eventStartTimeText} –{" "}
+              {sourceRequest.eventEndTimeText}
+            </p>
+            <p>
+              <span className="font-medium">Setup:</span> {sourceRequest.earliestSetupText}
+              {sourceRequest.flexibleSetupTime ? " (flexible)" : ""}
+            </p>
+            <p>
+              <span className="font-medium">Venue:</span> {sourceRequest.venueName ?? "—"}
+              {sourceRequest.venueAddress ? ` · ${sourceRequest.venueAddress}` : ""}
+            </p>
+            <p>
+              <span className="font-medium">Services:</span>{" "}
+              {[sourceRequest.crewOrRental, ...sourceRequest.servicesNeeded].filter(Boolean).join(", ")}
+            </p>
+            <p>
+              <span className="font-medium">Turnout:</span> {sourceRequest.expectedTurnout}
+              {sourceRequest.productionTier ? ` · ${sourceRequest.productionTier}` : ""}
+            </p>
+            {sourceRequest.eventDescription ? (
+              <p className="md:col-span-2 whitespace-pre-wrap">
+                <span className="font-medium">Description:</span> {sourceRequest.eventDescription}
+              </p>
+            ) : null}
+            {sourceRequest.existingEquipment ? (
+              <p className="md:col-span-2 whitespace-pre-wrap">
+                <span className="font-medium">Existing equipment:</span> {sourceRequest.existingEquipment}
+              </p>
+            ) : null}
+            {sourceRequest.lightingPreference ? (
+              <p>
+                <span className="font-medium">Lighting:</span> {sourceRequest.lightingPreference}
+              </p>
+            ) : null}
+            {sourceRequest.additionalNotes ? (
+              <p className="md:col-span-2 whitespace-pre-wrap">
+                <span className="font-medium">Client notes:</span> {sourceRequest.additionalNotes}
+              </p>
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
 
       {saveMessage ? <p className="text-sm text-primary">{saveMessage}</p> : null}
       {saveWarning ? <p className="text-sm text-amber-600">{saveWarning}</p> : null}
@@ -783,9 +940,19 @@ export function InvoiceEditor({
           <div className="space-y-2">
             <Label>Equipment pricing</Label>
             <select className="h-9 w-full rounded-md border bg-background px-3 text-sm" value={equipmentPricingMode} onChange={(e) => setEquipmentPricingMode(e.target.value as "subsidized" | "nonSubsidized")}>
-              <option value="subsidized">Subsidized</option>
-              <option value="nonSubsidized">Non-Subsidized</option>
+              {EQUIPMENT_PRICING_MODE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
             </select>
+            {selectedGroup ? (
+              <p className="text-xs text-muted-foreground">
+                Default from host:{" "}
+                {EQUIPMENT_PRICING_MODE_LABELS[selectedGroup.equipmentPricingMode ?? "subsidized"]}. You can
+                override per invoice.
+              </p>
+            ) : null}
           </div>
           <div className="space-y-2">
             <Label>Crew rate mode</Label>
@@ -802,50 +969,111 @@ export function InvoiceEditor({
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader><CardTitle>Client Quote Approval</CardTitle></CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex flex-wrap gap-2">
-            <Input
-              readOnly
-              value={
-                approvalToken && origin
-                  ? `${origin}/public/quote/${approvalToken}`
-                  : "Save draft once to generate the public quote link."
-              }
-            />
-            <Button
-              type="button"
-              variant="outline"
-              disabled={!approvalToken || !origin}
-              onClick={() => {
-                if (!approvalToken || !origin) return;
-                void navigator.clipboard.writeText(`${origin}/public/quote/${approvalToken}`);
-              }}
-            >
-              Copy Link
-            </Button>
-            <Button type="button" variant="outline" disabled={!activeInvoiceId} onClick={() => void regenerateToken()}>
-              Regenerate Token
-            </Button>
+      {isRequestLinkedQuote ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Request portal review</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              This quote is linked to a booking request. Clients review and approve it on the request portal —
+              no standalone approval link is generated.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Input
+                readOnly
+                value={requestPortalUrl || "Save the quote once to load the request portal link."}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!requestPortalUrl}
+                onClick={() => {
+                  if (!requestPortalUrl) return;
+                  void navigator.clipboard.writeText(requestPortalUrl);
+                }}
+              >
+                Copy portal link
+              </Button>
+              {requestPortalReady ? (
+                <Button type="button" variant="outline" onClick={() => void withdrawFromRequestPortal()}>
+                  Withdraw from portal
+                </Button>
+              ) : (
+                <Button type="button" onClick={() => void markReadyOnRequestPortal()}>
+                  Ready for client review
+                </Button>
+              )}
+            </div>
+            {invoiceData?.invoice ? (
+              <div className="text-sm text-muted-foreground">
+                Portal status: {requestPortalReady ? "Visible to client" : "Not published yet"}
+                {" · "}
+                Approval: {invoiceData.invoice.clientApprovalStatus}
+                {invoiceData.invoice.approvedAt
+                  ? ` · Approved at ${new Date(invoiceData.invoice.approvedAt).toLocaleString()}`
+                  : ""}
+                {invoiceData.invoice.changesRequestedAt
+                  ? ` · Changes requested at ${new Date(invoiceData.invoice.changesRequestedAt).toLocaleString()}`
+                  : ""}
+                {invoiceData.invoice.clientApprovalNote
+                  ? ` · Note: ${invoiceData.invoice.clientApprovalNote}`
+                  : ""}
+              </div>
+            ) : null}
             {invoiceData?.invoice?.clientApprovalStatus === "changes_requested" ? (
               <Button type="button" variant="outline" onClick={() => void resetQuoteToPending()}>
-                Reset To Pending
+                Reset to pending
               </Button>
             ) : null}
-          </div>
-          {invoiceData?.invoice ? (
-            <div className="text-sm text-muted-foreground">
-              Status: {invoiceData.invoice.clientApprovalStatus}
-              {invoiceData.invoice.approvedAt ? ` • Approved at ${new Date(invoiceData.invoice.approvedAt).toLocaleString()}` : ""}
-              {invoiceData.invoice.changesRequestedAt
-                ? ` • Changes requested at ${new Date(invoiceData.invoice.changesRequestedAt).toLocaleString()}`
-                : ""}
-              {invoiceData.invoice.clientApprovalNote ? ` • Note: ${invoiceData.invoice.clientApprovalNote}` : ""}
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardHeader><CardTitle>Client Quote Approval</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex flex-wrap gap-2">
+              <Input
+                readOnly
+                value={
+                  approvalToken && origin
+                    ? `${origin}/public/quote/${approvalToken}`
+                    : "Save draft once to generate the public quote link."
+                }
+              />
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!approvalToken || !origin}
+                onClick={() => {
+                  if (!approvalToken || !origin) return;
+                  void navigator.clipboard.writeText(`${origin}/public/quote/${approvalToken}`);
+                }}
+              >
+                Copy Link
+              </Button>
+              <Button type="button" variant="outline" disabled={!activeInvoiceId} onClick={() => void regenerateToken()}>
+                Regenerate Token
+              </Button>
+              {invoiceData?.invoice?.clientApprovalStatus === "changes_requested" ? (
+                <Button type="button" variant="outline" onClick={() => void resetQuoteToPending()}>
+                  Reset To Pending
+                </Button>
+              ) : null}
             </div>
-          ) : null}
-        </CardContent>
-      </Card>
+            {invoiceData?.invoice ? (
+              <div className="text-sm text-muted-foreground">
+                Status: {invoiceData.invoice.clientApprovalStatus}
+                {invoiceData.invoice.approvedAt ? ` • Approved at ${new Date(invoiceData.invoice.approvedAt).toLocaleString()}` : ""}
+                {invoiceData.invoice.changesRequestedAt
+                  ? ` • Changes requested at ${new Date(invoiceData.invoice.changesRequestedAt).toLocaleString()}`
+                  : ""}
+                {invoiceData.invoice.clientApprovalNote ? ` • Note: ${invoiceData.invoice.clientApprovalNote}` : ""}
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader><CardTitle>Quote Terms & Conditions</CardTitle></CardHeader>
@@ -915,15 +1143,15 @@ export function InvoiceEditor({
         <CardHeader><CardTitle>Client</CardTitle></CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-3">
           <div className="space-y-2">
-            <Label>Group</Label>
+            <Label>Host</Label>
             <SearchableSelect
               value={groupId}
               onChange={onGroupChange}
               options={groupOptions}
-              placeholder="Search groups..."
-              emptyLabel="Select group"
+              placeholder="Search hosts..."
+              emptyLabel="Select host"
               onCreate={openCreateGroup}
-              createLabel="New Group"
+              createLabel="New Host"
             />
           </div>
           <div className="space-y-2">
@@ -932,27 +1160,34 @@ export function InvoiceEditor({
               value={contactId}
               onChange={onContactChange}
               options={contactOptions}
-              placeholder={groupId ? "Search contacts..." : "Select group first"}
-              emptyLabel={groupId ? "Select contact" : "Select group first"}
+              placeholder={groupId ? "Search contacts..." : "Select host first"}
+              emptyLabel={groupId ? "Select contact" : "Select host first"}
               onCreate={openCreateContact}
               createLabel="New Client"
             />
             {!groupId ? (
-              <p className="text-xs text-muted-foreground">Clients are linked to a group. Select a group first.</p>
+              <p className="text-xs text-muted-foreground">Clients are linked to a host. Select a host first.</p>
             ) : null}
           </div>
-          <div className="space-y-2">
-            <Label>Group type</Label>
-            <select className="h-9 w-full rounded-md border bg-background px-3 text-sm" value={clientGroupType} onChange={(e) => setClientGroupType(e.target.value as typeof clientGroupType)}>
-              <option value="">Select type</option>
-              <option value="vso">VSO</option>
-              <option value="house">House</option>
-              <option value="department">Department</option>
-              <option value="individual">Individual</option>
-            </select>
-          </div>
-          <Input placeholder="Group name" value={clientGroupName} onChange={(e) => setClientGroupName(e.target.value)} />
-          <Input placeholder="Contact name" value={clientContactName} onChange={(e) => setClientContactName(e.target.value)} />
+          {selectedGroup ? (
+            <div className="space-y-1 rounded-md border bg-muted/30 p-3 text-sm">
+              <p className="font-medium">{selectedGroup.name}</p>
+              <p className="text-muted-foreground">
+                {INVOICE_GROUP_TYPE_LABELS[selectedGroup.type] ?? selectedGroup.type}
+                {" · "}
+                {EQUIPMENT_PRICING_MODE_LABELS[selectedGroup.equipmentPricingMode ?? "subsidized"]}
+              </p>
+              {selectedContact ? (
+                <p className="text-muted-foreground">
+                  Contact: {formatContactFullName(selectedContact.firstName, selectedContact.lastName)}
+                </p>
+              ) : null}
+            </div>
+          ) : (
+            <div className="flex items-center rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+              Select a host to link this invoice.
+            </div>
+          )}
           <Input placeholder="Email" value={clientEmail} onChange={(e) => setClientEmail(e.target.value)} />
           <Input placeholder="Phone" value={clientPhone} onChange={(e) => setClientPhone(e.target.value)} />
           <Input placeholder="Address line 1" value={clientAddressLine1} onChange={(e) => setClientAddressLine1(e.target.value)} />
@@ -967,13 +1202,23 @@ export function InvoiceEditor({
       <SectionEquipmentTypes rows={equipmentTypes} setRows={setEquipmentTypes} options={typeOptions} />
       <SectionExternalRentals rows={externalRentals} setRows={setExternalRentals} />
       <SectionArtists rows={artists} setRows={setArtists} />
-      <SectionCrew
-        rows={crewRows}
-        setRows={setCrewRows}
-        rateMode={crewRateMode}
-        canLoadFromEvent={Boolean(linkedEvent)}
-        onLoadFromEvent={loadCrewFromLinkedEvent}
-      />
+      {linkedEvent ? (
+        <>
+          <InvoiceLinkedEventCrewSection
+            eventId={linkedEvent._id}
+            defaultCrewHourlyRateUsd={defaultCrewHourlyRateUsd}
+            onEventCrewRowsChange={handleEventCrewRowsChange}
+            onMessage={setSaveMessage}
+          />
+          <SectionAdditionalCrewHours
+            rows={crewRows.filter((row) => row.source === "manual")}
+            setRows={setManualCrewRows}
+            rateMode={crewRateMode}
+          />
+        </>
+      ) : (
+        <SectionCrew rows={crewRows} setRows={setCrewRows} rateMode={crewRateMode} />
+      )}
       <SectionFees rows={fees} setRows={setFees} options={feeDefinitions ?? []} />
 
       <Card>
@@ -1016,7 +1261,7 @@ export function InvoiceEditor({
       {groupModalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
           <Card className="w-full max-w-md">
-            <CardHeader><CardTitle>New Group</CardTitle></CardHeader>
+            <CardHeader><CardTitle>New Host</CardTitle></CardHeader>
             <CardContent className="space-y-3">
               <div className="space-y-2">
                 <Label>Name</Label>
@@ -1035,8 +1280,24 @@ export function InvoiceEditor({
                   <option value="individual">Individual</option>
                 </select>
               </div>
+              <div className="space-y-2">
+                <Label>Equipment pricing</Label>
+                <select
+                  className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                  value={newGroupEquipmentPricingMode}
+                  onChange={(e) =>
+                    setNewGroupEquipmentPricingMode(e.target.value as EquipmentPricingMode)
+                  }
+                >
+                  {EQUIPMENT_PRICING_MODE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div className="flex gap-2">
-                <Button type="button" onClick={() => void submitCreateGroup()}>Create Group</Button>
+                <Button type="button" onClick={() => void submitCreateGroup()}>Create Host</Button>
                 <Button type="button" variant="outline" onClick={() => setGroupModalOpen(false)}>Cancel</Button>
               </div>
             </CardContent>
@@ -1050,11 +1311,15 @@ export function InvoiceEditor({
             <CardHeader><CardTitle>New Client</CardTitle></CardHeader>
             <CardContent className="space-y-3">
               <p className="text-xs text-muted-foreground">
-                Linked to group: <span className="font-medium">{clientGroupName || "Selected group"}</span>
+                Linked to host: <span className="font-medium">{selectedGroup?.name || "Selected host"}</span>
               </p>
               <div className="space-y-2">
-                <Label>Name</Label>
-                <Input value={newContactName} onChange={(e) => setNewContactName(e.target.value)} />
+                <Label>First name</Label>
+                <Input value={newContactFirstName} onChange={(e) => setNewContactFirstName(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Last name</Label>
+                <Input value={newContactLastName} onChange={(e) => setNewContactLastName(e.target.value)} />
               </div>
               <div className="space-y-2">
                 <Label>Email</Label>
@@ -1072,6 +1337,19 @@ export function InvoiceEditor({
           </Card>
         </div>
       ) : null}
+
+      <AdminCascadeDeleteDialog
+        open={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        entityName="quote"
+        preview={deletePreview ?? null}
+        onConfirm={async (cascade) => {
+          const id = activeInvoiceId ?? invoiceId;
+          if (!id) return;
+          await deleteInvoiceAdmin({ id, cascade });
+          router.push("/dashboard/financial-hub/invoices");
+        }}
+      />
     </div>
   );
 }
@@ -1183,34 +1461,22 @@ function SectionCrew({
   rows,
   setRows,
   rateMode,
-  canLoadFromEvent,
-  onLoadFromEvent,
 }: {
   rows: CrewRow[];
   setRows: Dispatch<SetStateAction<CrewRow[]>>;
   rateMode: "normal" | "lead" | "custom";
-  canLoadFromEvent: boolean;
-  onLoadFromEvent: () => void;
 }) {
   return (
     <Card>
       <CardHeader>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <CardTitle>
-            Crew (
-            {rateMode === "custom" ? "Custom rate per row" : rateMode === "lead" ? "Lead rate from settings" : "Normal rate from settings"}
-            )
-          </CardTitle>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={!canLoadFromEvent}
-            onClick={onLoadFromEvent}
-          >
-            Load Crew from Event
-          </Button>
-        </div>
+        <CardTitle>
+          Crew (
+          {rateMode === "custom" ? "Custom rate per row" : rateMode === "lead" ? "Lead rate from settings" : "Normal rate from settings"}
+          )
+        </CardTitle>
+        <p className="text-sm text-muted-foreground">
+          Link an event to this invoice to edit crew schedule blocks and slots inline.
+        </p>
       </CardHeader>
       <CardContent className="space-y-2">
         {rows.map((row, idx) => (
@@ -1233,10 +1499,64 @@ function SectionCrew({
           type="button"
           variant="outline"
           onClick={() =>
-            setRows((prev) => [...prev, { label: "", quantity: "1", rateUsd: rateMode === "custom" ? "0" : undefined }])
+            setRows((prev) => [
+              ...prev,
+              { label: "", quantity: "1", rateUsd: rateMode === "custom" ? "0" : undefined },
+            ])
           }
         >
           Add crew row
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+function SectionAdditionalCrewHours({
+  rows,
+  setRows,
+  rateMode,
+}: {
+  rows: CrewRow[];
+  setRows: Dispatch<SetStateAction<CrewRow[]>>;
+  rateMode: "normal" | "lead" | "custom";
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Additional billable hours</CardTitle>
+        <p className="text-sm text-muted-foreground">
+          Add extra crew hours on top of the linked event schedule. Open event slots use the invoice default crew rate.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {rows.map((row, idx) => (
+          <div key={`crew-manual-${idx}`} className={`grid gap-2 ${rateMode === "custom" ? "md:grid-cols-4" : "md:grid-cols-3"}`}>
+            <Input placeholder="Description" value={row.label} onChange={(e) => setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, label: e.target.value } : r)))} />
+            <Input placeholder="Hours" value={row.quantity} onChange={(e) => setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, quantity: e.target.value } : r)))} />
+            {rateMode === "custom" ? (
+              <Input
+                placeholder="Rate (USD)"
+                value={row.rateUsd ?? "0"}
+                onChange={(e) =>
+                  setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, rateUsd: e.target.value } : r)))
+                }
+              />
+            ) : null}
+            <Button type="button" variant="outline" onClick={() => setRows((prev) => prev.filter((_, i) => i !== idx))}>Remove</Button>
+          </div>
+        ))}
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() =>
+            setRows((prev) => [
+              ...prev,
+              { label: "", quantity: "1", rateUsd: rateMode === "custom" ? "0" : undefined, source: "manual" },
+            ])
+          }
+        >
+          Add additional hours
         </Button>
       </CardContent>
     </Card>
