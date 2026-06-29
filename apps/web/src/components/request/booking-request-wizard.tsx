@@ -331,21 +331,11 @@ export function BookingRequestWizard() {
               showNext
               nextLabel={currentStep.id === "additionalNotes" ? "Submit" : "Next"}
               isSubmitting={isSubmitting}
+              skippable={currentStep.skippable}
               onBack={goBack}
               onNext={() => void goNext()}
+              onSkip={skipStep}
             />
-          ) : null}
-
-          {currentStep.skippable ? (
-            <div className="pt-2 text-center">
-              <button
-                type="button"
-                className="text-sm text-muted-foreground underline-offset-4 hover:underline"
-                onClick={skipStep}
-              >
-                Skip
-              </button>
-            </div>
           ) : null}
         </form>
       </FormProvider>
@@ -410,6 +400,15 @@ function StepBody({
       );
     case "eventSchedule":
       return <EventScheduleField />;
+    case "eventName":
+      return (
+        <TextField
+          name="eventName"
+          label="What is the name for your event?"
+          placeholder="Spring Concert 2026"
+          autoFocus
+        />
+      );
     case "eventCategory":
       return (
         <SingleChoiceField

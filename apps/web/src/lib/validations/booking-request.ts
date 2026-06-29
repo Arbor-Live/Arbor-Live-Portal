@@ -1,6 +1,7 @@
 import { z } from "zod";
 
-export const STANFORD_EMAIL_PATTERN = /^[^\s@]+@(?:stanford\.edu|alumni\.stanford\.edu)$/i;
+export const STANFORD_EMAIL_PATTERN =
+  /^[^\s@]+@(?:stanford\.edu|alumni\.stanford\.edu)$/i;
 
 export function isStanfordEmail(email: string) {
   return STANFORD_EMAIL_PATTERN.test(email.trim());
@@ -33,7 +34,7 @@ export const ADDON_SERVICE_OPTIONS = [
 ] as const;
 
 export const PRODUCTION_TIER_OPTIONS = [
-  "Premium / High-Impact: A fully bespoke experience with custom lighting design, high-fidelity sound reinforcement, and dedicated technical planning to create a \"wow\" factor.",
+  'Premium / High-Impact: A fully bespoke experience with custom lighting design, high-fidelity sound reinforcement, and dedicated technical planning to create a "wow" factor.',
   "Professional / Polished: A high-standard setup focused on clarity and atmosphere. Ideal for events that need to look and sound seamless, reliable, and professional.",
   "Essential / Functional: A clean, straightforward setup providing high-quality basics (clear audio and standard lighting) to ensure the event's core needs are met.",
 ] as const;
@@ -47,7 +48,11 @@ export const LIGHTING_TIER_OPTIONS = [
 export const STANDARD_LIGHTING =
   "Standard Lighting - Some more lighting that is themed to your event, with a more reactive experience to the music";
 
-export const REQUEST_CONTEXT_OPTIONS = ["group", "personal", "new_group"] as const;
+export const REQUEST_CONTEXT_OPTIONS = [
+  "group",
+  "personal",
+  "new_group",
+] as const;
 
 export function combineDateAndTime(date: string, time: string): number | null {
   if (!date || !time) return null;
@@ -68,7 +73,10 @@ export function formatLongDate(date: string) {
 export function formatDisplayTime(time: string) {
   const parsed = new Date(`1970-01-01T${time}:00`);
   if (Number.isNaN(parsed.getTime())) return time;
-  return parsed.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  return parsed.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 export function getTurnoutTier(count: number) {
@@ -115,7 +123,9 @@ export const bookingRequestSchema = z
     requestContext: z.enum(REQUEST_CONTEXT_OPTIONS).optional(),
     invoiceContactId: z.string().trim().optional(),
     invoiceGroupId: z.string().trim().optional(),
-    sponsorType: z.enum(SPONSOR_TYPE_OPTIONS, { message: "Select a sponsor type" }),
+    sponsorType: z.enum(SPONSOR_TYPE_OPTIONS, {
+      message: "Select a sponsor type",
+    }),
     sponsorTypeOther: z.string().trim().optional(),
     venueName: z.string().trim().optional(),
     venueAddress: z.string().trim().optional(),
@@ -124,9 +134,14 @@ export const bookingRequestSchema = z
     eventEndTime: z.string().trim().min(1, "End time is required"),
     setupTime: z.string().trim().optional(),
     flexibleSetupTime: z.boolean(),
-    eventCategory: z.enum(EVENT_CATEGORY_OPTIONS, { message: "Select an event type" }),
+    eventName: z.string().trim().min(1, "Event name is required"),
+    eventCategory: z.enum(EVENT_CATEGORY_OPTIONS, {
+      message: "Select an event type",
+    }),
     eventCategoryOther: z.string().trim().optional(),
-    crewOrRental: z.enum(CREW_OR_RENTAL_OPTIONS, { message: "Select crewed or rental" }),
+    crewOrRental: z.enum(CREW_OR_RENTAL_OPTIONS, {
+      message: "Select crewed or rental",
+    }),
     servicesNeeded: z.array(z.enum(ADDON_SERVICE_OPTIONS)),
     productionTier: z.enum(PRODUCTION_TIER_OPTIONS).optional(),
     eventDescription: z.string().trim().optional(),
@@ -163,13 +178,23 @@ export const bookingRequestSchema = z
 
     const startMs = combineDateAndTime(data.eventDate, data.eventStartTime);
     const endMs = combineDateAndTime(data.eventDate, data.eventEndTime);
-    const setupMs = data.setupTime ? combineDateAndTime(data.eventDate, data.setupTime) : null;
+    const setupMs = data.setupTime
+      ? combineDateAndTime(data.eventDate, data.setupTime)
+      : null;
 
     if (!startMs) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Invalid start time", path: ["eventStartTime"] });
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Invalid start time",
+        path: ["eventStartTime"],
+      });
     }
     if (!endMs) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Invalid end time", path: ["eventEndTime"] });
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Invalid end time",
+        path: ["eventEndTime"],
+      });
     }
     if (startMs && endMs && endMs <= startMs) {
       ctx.addIssue({
@@ -216,6 +241,7 @@ export const bookingRequestDefaultValues: BookingRequestFormValues = {
   eventEndTime: "22:00",
   setupTime: "15:00",
   flexibleSetupTime: false,
+  eventName: "",
   eventCategory: "Live Bands",
   eventCategoryOther: "",
   crewOrRental: "Crewed",
@@ -236,6 +262,7 @@ export type BookingRequestStepId =
   | "sponsorType"
   | "venue"
   | "eventSchedule"
+  | "eventName"
   | "eventCategory"
   | "services"
   | "productionTier"
@@ -265,7 +292,8 @@ const BASE_STEPS: BookingRequestStepConfig[] = [
   {
     id: "email",
     headline: "What's your Stanford email?",
-    subheader: "We'll use this to look up your contact info and send updates about your request.",
+    subheader:
+      "We'll use this to look up your contact info and send updates about your request.",
     fields: ["email"],
   },
   {
@@ -297,7 +325,18 @@ const BASE_STEPS: BookingRequestStepConfig[] = [
     headline: "When is your event?",
     subheader:
       "Pick your event date and times. Events requested with less than seven days' notice may have limited availability and overtime rates.",
-    fields: ["eventDate", "eventStartTime", "eventEndTime", "setupTime", "flexibleSetupTime"],
+    fields: [
+      "eventDate",
+      "eventStartTime",
+      "eventEndTime",
+      "setupTime",
+      "flexibleSetupTime",
+    ],
+  },
+  {
+    id: "eventName",
+    headline: "What is the name for your event?",
+    fields: ["eventName"],
   },
   {
     id: "eventCategory",
@@ -308,12 +347,14 @@ const BASE_STEPS: BookingRequestStepConfig[] = [
   {
     id: "services",
     headline: "What services do you need from us?",
-    subheader: "Start with crewed or rental, then choose the production areas you need.",
+    subheader:
+      "Start with crewed or rental, then choose the production areas you need.",
     fields: ["crewOrRental", "servicesNeeded"],
   },
   {
     id: "productionTier",
-    headline: "Please select the option that best describes your ideal event production value",
+    headline:
+      "Please select the option that best describes your ideal event production value",
     fields: ["productionTier"],
     skippable: true,
   },
@@ -349,7 +390,8 @@ const BASE_STEPS: BookingRequestStepConfig[] = [
   {
     id: "additionalNotes",
     headline: "Any other notes?",
-    subheader: "Have we missed anything or do you want to let us know about something?",
+    subheader:
+      "Have we missed anything or do you want to let us know about something?",
     fields: ["additionalNotes"],
     skippable: true,
   },
@@ -391,8 +433,10 @@ export function toSubmitPayload(values: BookingRequestFormValues) {
     ? "Flexible setup time"
     : formatDisplayTime(values.setupTime ?? "");
 
-  const eventStartAtMs = combineDateAndTime(values.eventDate, values.eventStartTime) ?? undefined;
-  const eventEndAtMs = combineDateAndTime(values.eventDate, values.eventEndTime) ?? undefined;
+  const eventStartAtMs =
+    combineDateAndTime(values.eventDate, values.eventStartTime) ?? undefined;
+  const eventEndAtMs =
+    combineDateAndTime(values.eventDate, values.eventEndTime) ?? undefined;
   const setupAtMs = values.setupTime
     ? combineDateAndTime(values.eventDate, values.setupTime) ?? undefined
     : undefined;
@@ -420,6 +464,7 @@ export function toSubmitPayload(values: BookingRequestFormValues) {
     eventEndAtMs,
     setupAtMs,
     flexibleSetupTime: values.flexibleSetupTime,
+    eventName: values.eventName.trim(),
     eventCategory,
     crewOrRental: values.crewOrRental,
     servicesNeeded,

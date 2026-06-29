@@ -1,0 +1,233 @@
+import type { Doc, Id } from "../_generated/dataModel";
+import type { MutationCtx, QueryCtx } from "../_generated/server";
+import { syncLinkedEventStatusFromInvoice } from "./eventStatus";
+import { listEventsByInvoiceId } from "./invoiceEvents";
+
+function resolveInvoiceTermsIds(invoice: Doc<"invoices">): Id<"invoiceTerms">[] {
+  if (invoice.termsIds && invoice.termsIds.length > 0) return invoice.termsIds;
+  if (invoice.termsId) return [invoice.termsId];
+  return [];
+}
+
+function combineTermsMarkdown(terms: Doc<"invoiceTerms">[]) {
+  if (!terms.length) return "";
+  if (terms.length === 1) return terms[0].markdown;
+  return terms.map((term) => `## ${term.label} (${term.version})\n\n${term.markdown}`).join("\n\n---\n\n");
+}
+
+export async function loadInvoiceTerms(ctx: QueryCtx | MutationCtx, invoice: Doc<"invoices">) {
+  const fallbackSettings = await ctx.db
+    .query("invoiceSettings")
+    .withIndex("by_key", (q) => q.eq("key", "default"))
+    .unique();
+  const termsIds = resolveInvoiceTermsIds(invoice);
+  if (!termsIds.length) {
+    return {
+      markdown: fallbackSettings?.termsAndConditionsMarkdown ?? "",
+      version: fallbackSettings?.termsVersion ?? "v1",
+    };
+  }
+
+  const selectedTerms = (
+    await Promise.all(termsIds.map((termsId) => ctx.db.get(termsId)))
+  ).filter((term): term is Doc<"invoiceTerms"> => term !== null);
+
+  if (!selectedTerms.length) {
+    return {
+      markdown: fallbackSettings?.termsAndConditionsMarkdown ?? "",
+      version: fallbackSettings?.termsVersion ?? "v1",
+    };
+  }
+
+  return {
+    markdown: combineTermsMarkdown(selectedTerms),
+    version: selectedTerms.map((term) => term.version).join(", "),
+  };
+}
+
+export async function loadPublicQuoteView(ctx: QueryCtx, invoice: Doc<"invoices">) {
+  const lineItems = await ctx.db
+    .query("invoiceLineItems")
+    .withIndex("by_invoiceId_and_order", (q) => q.eq("invoiceId", invoice._id))
+    .take(500);
+  const { markdown: globalTermsMarkdown, version: globalTermsVersion } = await loadInvoiceTerms(ctx, invoice);
+  const combinedTermsMarkdown = invoice.additionalTermsMarkdown
+    ? `${globalTermsMarkdown}\n\n---\n\n## Additional Terms\n\n${invoice.additionalTermsMarkdown}`
+    : globalTermsMarkdown;
+  const linkedEvents = await listEventsByInvoiceId(ctx, invoice._id);
+  const linkedEvent = linkedEvents[0] ?? null;
+  const eventIds = linkedEvents.map((event) => event._id);
+  const eventAssignments = linkedEvent
+    ? (
+        await Promise.all(
+          eventIds.map((eventId) =>
+            ctx.db
+              .query("eventPeopleAssignments")
+              .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
+              .take(500),
+          ),
+        )
+      ).flat()
+    : [];
+  const eventScheduleBlocks = linkedEvent
+    ? (
+        await Promise.all(
+          eventIds.map((eventId) =>
+            ctx.db
+              .query("eventScheduleBlocks")
+              .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", eventId))
+              .take(500),
+          ),
+        )
+      ).flat()
+    : [];
+  const eventShifts = linkedEvent
+    ? (
+        await Promise.all(
+          eventIds.map((eventId) =>
+            ctx.db
+              .query("eventCrewShifts")
+              .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", eventId))
+              .take(500),
+          ),
+        )
+      ).flat()
+    : [];
+  const eventArtifacts = linkedEvent
+    ? (
+        await Promise.all(
+          eventIds.map((eventId) =>
+            ctx.db
+              .query("eventArtifacts")
+              .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
+              .take(500),
+          ),
+        )
+      ).flat()
+    : [];
+
+  return {
+    invoice: {
+      _id: invoice._id,
+      invoiceNumber: invoice.invoiceNumber,
+      issueDate: invoice.issueDate,
+      dueDate: invoice.dueDate,
+      managerName: invoice.managerName,
+      managerEmail: invoice.managerEmail,
+      clientGroupName: invoice.clientGroupName,
+      clientContactName: invoice.clientContactName,
+      clientEmail: invoice.clientEmail,
+      clientPhone: invoice.clientPhone,
+      clientAddressLine1: invoice.clientAddressLine1,
+      clientAddressLine2: invoice.clientAddressLine2,
+      clientCity: invoice.clientCity,
+      clientState: invoice.clientState,
+      clientPostalCode: invoice.clientPostalCode,
+      notes: invoice.notes,
+      equipmentSubtotalUsd: invoice.equipmentSubtotalUsd,
+      externalRentalsSubtotalUsd: invoice.externalRentalsSubtotalUsd,
+      artistsSubtotalUsd: invoice.artistsSubtotalUsd,
+      crewSubtotalUsd: invoice.crewSubtotalUsd,
+      feesSubtotalUsd: invoice.feesSubtotalUsd,
+      subtotalUsd: invoice.subtotalUsd,
+      discountAmountUsd: invoice.discountAmountUsd,
+      totalUsd: invoice.totalUsd,
+      clientApprovalStatus: invoice.clientApprovalStatus ?? "pending",
+      approvedAt: invoice.approvedAt,
+      changesRequestedAt: invoice.changesRequestedAt,
+      clientApprovalNote: invoice.clientApprovalNote,
+      termsVersionAccepted: invoice.termsVersionAccepted,
+      termsAcceptedAt: invoice.termsAcceptedAt,
+      termsIds: resolveInvoiceTermsIds(invoice),
+      additionalTermsMarkdown: invoice.additionalTermsMarkdown,
+    },
+    lineItems,
+    termsAndConditionsMarkdown: combinedTermsMarkdown,
+    termsVersion: globalTermsVersion,
+    event: linkedEvent
+      ? (() => {
+          const eventManagerAssignment = eventAssignments.find((row) => row.assignmentType === "event_manager");
+          const dayOfLeadAssignment = eventAssignments.find((row) => row.assignmentType === "day_of_lead");
+          const crewAssignments = eventAssignments.filter((row) => row.assignmentType === "crew");
+          return {
+            id: linkedEvent._id,
+            title: linkedEvent.title,
+            status: linkedEvent.status,
+            venueName: linkedEvent.venueName,
+            eventType: linkedEvent.eventType,
+            host: linkedEvent.host,
+            startAt: linkedEvent.startAt,
+            endAt: linkedEvent.endAt,
+            assignments: eventAssignments,
+            scheduleBlocks: eventScheduleBlocks,
+            contacts: {
+              manager: {
+                name: eventManagerAssignment?.personName ?? invoice.managerName,
+                email: eventManagerAssignment?.contactEmail ?? invoice.managerEmail ?? undefined,
+                phone: eventManagerAssignment?.contactPhone ?? undefined,
+              },
+              dayOfLead: dayOfLeadAssignment
+                ? {
+                    name: dayOfLeadAssignment.personName,
+                    email: dayOfLeadAssignment.contactEmail ?? undefined,
+                    phone: dayOfLeadAssignment.contactPhone ?? undefined,
+                  }
+                : null,
+            },
+            crewRoster: crewAssignments.map((row) => ({
+              name: row.personName,
+              role: row.roleLabel ?? undefined,
+              email: row.contactEmail ?? undefined,
+            })),
+            shifts: eventShifts,
+            artifacts: eventArtifacts,
+          };
+        })()
+      : null,
+  };
+}
+
+export async function approveInvoiceQuote(
+  ctx: MutationCtx,
+  invoice: Doc<"invoices">,
+  acceptTerms: boolean,
+) {
+  if (!acceptTerms) throw new Error("Terms must be accepted.");
+  if (invoice.status === "void") throw new Error("Quote not found.");
+  if ((invoice.clientApprovalStatus ?? "pending") !== "pending") {
+    throw new Error("Quote decision already submitted.");
+  }
+
+  const now = Date.now();
+  const { version: termsVersion } = await loadInvoiceTerms(ctx, invoice);
+  await ctx.db.patch(invoice._id, {
+    clientApprovalStatus: "approved",
+    approvedAt: now,
+    termsAcceptedAt: now,
+    termsVersionAccepted: termsVersion,
+    updatedAt: now,
+  });
+  await syncLinkedEventStatusFromInvoice(ctx, invoice._id, "approved");
+}
+
+export async function requestInvoiceQuoteChanges(
+  ctx: MutationCtx,
+  invoice: Doc<"invoices">,
+  note: string,
+) {
+  const trimmed = note.trim();
+  if (!trimmed) throw new Error("Please include a note.");
+  if (invoice.status === "void") throw new Error("Quote not found.");
+  if ((invoice.clientApprovalStatus ?? "pending") !== "pending") {
+    throw new Error("Quote decision already submitted.");
+  }
+
+  const now = Date.now();
+  await ctx.db.patch(invoice._id, {
+    clientApprovalStatus: "changes_requested",
+    changesRequestedAt: now,
+    clientApprovalNote: trimmed,
+    updatedAt: now,
+  });
+  await syncLinkedEventStatusFromInvoice(ctx, invoice._id, "changes_requested");
+}

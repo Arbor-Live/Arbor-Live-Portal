@@ -3,6 +3,13 @@ import { mutation, query } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import { getUserId, requireArborInternalContext, requireAuth } from "./lib/auth";
 import { normalizeEventStatus } from "./lib/eventStatus";
+import { createDraftInvoiceFromBookingRequest } from "./lib/bookingRequestQuote";
+import {
+  approveInvoiceQuote,
+  loadPublicQuoteView,
+  requestInvoiceQuoteChanges,
+} from "./lib/publicQuoteView";
+import { allocateRequestNumber } from "./lib/publicReferenceIds";
 
 const EVENT_TIMEZONE = "America/Los_Angeles";
 
@@ -34,6 +41,7 @@ const submitPublicArgs = {
   eventEndAtMs: v.optional(v.number()),
   setupAtMs: v.optional(v.number()),
   flexibleSetupTime: v.optional(v.boolean()),
+  eventName: v.string(),
   eventCategory: v.string(),
   crewOrRental: v.string(),
   servicesNeeded: v.array(v.string()),
@@ -59,6 +67,7 @@ const publicRequestShape = {
   eventStartTimeText: v.string(),
   eventEndTimeText: v.string(),
   earliestSetupText: v.string(),
+  eventName: v.optional(v.string()),
   eventCategory: v.string(),
   crewOrRental: v.optional(v.string()),
   servicesNeeded: v.array(v.string()),
@@ -68,6 +77,18 @@ const publicRequestShape = {
   submittedAt: v.number(),
   convertedEventId: v.optional(v.id("events")),
   linkedInvoiceId: v.optional(v.id("invoices")),
+  quote: v.optional(
+    v.object({
+      invoiceNumber: v.string(),
+      status: v.union(v.literal("draft"), v.literal("finalized"), v.literal("void")),
+      clientApprovalStatus: v.union(
+        v.literal("pending"),
+        v.literal("approved"),
+        v.literal("changes_requested"),
+      ),
+      readyForClientReview: v.boolean(),
+    }),
+  ),
 };
 
 function trimOptional(value: string | undefined) {
@@ -85,19 +106,6 @@ function makePublicToken() {
 
 function makeEventPublicToken() {
   return `evt_${crypto.randomUUID().replaceAll("-", "")}${crypto.randomUUID().replaceAll("-", "")}`;
-}
-
-async function allocateRequestNumber(ctx: MutationCtx) {
-  for (let attempt = 0; attempt < 8; attempt += 1) {
-    const suffix = String(Math.floor(1000000 + Math.random() * 9000000));
-    const requestNumber = `AL-REQ-${suffix}`;
-    const existing = await ctx.db
-      .query("eventRequests")
-      .withIndex("by_requestNumber", (q) => q.eq("requestNumber", requestNumber))
-      .unique();
-    if (!existing) return requestNumber;
-  }
-  throw new Error("Unable to allocate request number.");
 }
 
 async function generateUniquePublicToken(ctx: MutationCtx) {
@@ -159,6 +167,7 @@ function inferEventType(crewOrRental: string | undefined, servicesNeeded: string
 
 function buildConversionNotes(request: {
   requestNumber: string;
+  eventName?: string;
   eventDateText: string;
   eventStartTimeText: string;
   eventEndTimeText: string;
@@ -185,6 +194,7 @@ function buildConversionNotes(request: {
     `Phone: ${request.phone}`,
     `Sponsor type: ${request.sponsorType}`,
   ];
+  if (request.eventName?.trim()) lines.push(`Event name: ${request.eventName.trim()}`);
   if (request.crewOrRental) lines.push(`Crew / rental: ${request.crewOrRental}`);
   lines.push(
     "",
@@ -294,6 +304,24 @@ export const getPublicRequestByToken = query({
       .unique();
     if (!request) return null;
 
+    let quote: {
+      invoiceNumber: string;
+      status: "draft" | "finalized" | "void";
+      clientApprovalStatus: "pending" | "approved" | "changes_requested";
+      readyForClientReview: boolean;
+    } | undefined;
+    if (request.linkedInvoiceId) {
+      const invoice = await ctx.db.get(request.linkedInvoiceId);
+      if (invoice) {
+        quote = {
+          invoiceNumber: invoice.invoiceNumber,
+          status: invoice.status,
+          clientApprovalStatus: invoice.clientApprovalStatus ?? "pending",
+          readyForClientReview: Boolean(invoice.clientReviewReadyAt),
+        };
+      }
+    }
+
     return {
       requestNumber: request.requestNumber ?? `LEGACY-${request._id}`,
       status: request.status,
@@ -308,6 +336,7 @@ export const getPublicRequestByToken = query({
       eventStartTimeText: request.eventStartTimeText,
       eventEndTimeText: request.eventEndTimeText,
       earliestSetupText: request.earliestSetupText,
+      eventName: request.eventName,
       eventCategory: request.eventCategory,
       crewOrRental: request.crewOrRental,
       servicesNeeded: request.servicesNeeded,
@@ -317,7 +346,62 @@ export const getPublicRequestByToken = query({
       submittedAt: request.submittedAt,
       convertedEventId: request.convertedEventId,
       linkedInvoiceId: request.linkedInvoiceId,
+      quote,
     };
+  },
+});
+
+export const getPublicRequestQuoteByToken = query({
+  args: { token: v.string() },
+  handler: async (ctx, args) => {
+    const request = await ctx.db
+      .query("eventRequests")
+      .withIndex("by_publicToken", (q) => q.eq("publicToken", args.token))
+      .unique();
+    if (!request?.linkedInvoiceId) return null;
+
+    const invoice = await ctx.db.get(request.linkedInvoiceId);
+    if (!invoice || invoice.status === "void" || !invoice.clientReviewReadyAt) return null;
+
+    return await loadPublicQuoteView(ctx, invoice);
+  },
+});
+
+export const approveQuoteByRequestToken = mutation({
+  args: { token: v.string(), acceptTerms: v.boolean() },
+  returns: v.object({ ok: v.literal(true) }),
+  handler: async (ctx, args) => {
+    const request = await ctx.db
+      .query("eventRequests")
+      .withIndex("by_publicToken", (q) => q.eq("publicToken", args.token))
+      .unique();
+    if (!request?.linkedInvoiceId) throw new Error("Quote not found.");
+
+    const invoice = await ctx.db.get(request.linkedInvoiceId);
+    if (!invoice || invoice.status === "void" || !invoice.clientReviewReadyAt) {
+      throw new Error("Quote is not ready for review yet.");
+    }
+    await approveInvoiceQuote(ctx, invoice, args.acceptTerms);
+    return { ok: true as const };
+  },
+});
+
+export const requestQuoteChangesByRequestToken = mutation({
+  args: { token: v.string(), note: v.string() },
+  returns: v.object({ ok: v.literal(true) }),
+  handler: async (ctx, args) => {
+    const request = await ctx.db
+      .query("eventRequests")
+      .withIndex("by_publicToken", (q) => q.eq("publicToken", args.token))
+      .unique();
+    if (!request?.linkedInvoiceId) throw new Error("Quote not found.");
+
+    const invoice = await ctx.db.get(request.linkedInvoiceId);
+    if (!invoice || invoice.status === "void" || !invoice.clientReviewReadyAt) {
+      throw new Error("Quote is not ready for review yet.");
+    }
+    await requestInvoiceQuoteChanges(ctx, invoice, args.note);
+    return { ok: true as const };
   },
 });
 
@@ -350,6 +434,10 @@ export const submitPublic = mutation({
     }
     if (!args.eventCategory.trim()) {
       throw new Error("Event type is required.");
+    }
+    const eventName = args.eventName.trim();
+    if (!eventName) {
+      throw new Error("Event name is required.");
     }
     if (!args.crewOrRental.trim()) {
       throw new Error("Please select crewed or rental.");
@@ -392,6 +480,7 @@ export const submitPublic = mutation({
       eventEndAtMs: args.eventEndAtMs,
       setupAtMs: args.setupAtMs,
       flexibleSetupTime: args.flexibleSetupTime,
+      eventName,
       eventCategory: args.eventCategory.trim(),
       crewOrRental: args.crewOrRental.trim(),
       servicesNeeded: args.servicesNeeded,
@@ -427,6 +516,7 @@ export const list = query({
       sponsorType: v.string(),
       venueName: v.optional(v.string()),
       eventDateText: v.string(),
+      eventName: v.optional(v.string()),
       expectedTurnout: v.number(),
       eventCategory: v.string(),
       submittedAt: v.number(),
@@ -456,6 +546,7 @@ export const list = query({
       sponsorType: row.sponsorType,
       venueName: row.venueName,
       eventDateText: row.eventDateText,
+      eventName: row.eventName,
       expectedTurnout: row.expectedTurnout,
       eventCategory: row.eventCategory,
       submittedAt: row.submittedAt,
@@ -492,6 +583,7 @@ export const get = query({
       eventEndAtMs: v.optional(v.number()),
       setupAtMs: v.optional(v.number()),
       flexibleSetupTime: v.optional(v.boolean()),
+      eventName: v.optional(v.string()),
       eventCategory: v.string(),
       crewOrRental: v.optional(v.string()),
       servicesNeeded: v.array(v.string()),
@@ -524,6 +616,82 @@ export const get = query({
   },
 });
 
+export const getByLinkedInvoiceId = query({
+  args: { invoiceId: v.id("invoices") },
+  returns: v.union(
+    v.object({
+      _id: v.id("eventRequests"),
+      requestNumber: v.string(),
+      publicToken: v.string(),
+      status: eventRequestStatusValue,
+      firstName: v.string(),
+      lastName: v.string(),
+      email: v.string(),
+      phone: v.string(),
+      organization: v.optional(v.string()),
+      sponsorType: v.string(),
+      venueName: v.optional(v.string()),
+      venueAddress: v.optional(v.string()),
+      eventDateText: v.string(),
+      eventStartTimeText: v.string(),
+      eventEndTimeText: v.string(),
+      earliestSetupText: v.string(),
+      eventName: v.optional(v.string()),
+      flexibleSetupTime: v.optional(v.boolean()),
+      eventCategory: v.string(),
+      crewOrRental: v.optional(v.string()),
+      servicesNeeded: v.array(v.string()),
+      productionTier: v.optional(v.string()),
+      eventDescription: v.optional(v.string()),
+      expectedTurnout: v.number(),
+      existingEquipment: v.optional(v.string()),
+      lightingPreference: v.optional(v.string()),
+      additionalNotes: v.optional(v.string()),
+      convertedEventId: v.optional(v.id("events")),
+    }),
+    v.null(),
+  ),
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    const row = await ctx.db
+      .query("eventRequests")
+      .withIndex("by_linkedInvoiceId", (q) => q.eq("linkedInvoiceId", args.invoiceId))
+      .unique();
+    if (!row) return null;
+    return {
+      _id: row._id,
+      requestNumber: row.requestNumber ?? `LEGACY-${row._id}`,
+      publicToken: row.publicToken ?? "",
+      status: row.status,
+      firstName: row.firstName,
+      lastName: row.lastName,
+      email: row.email,
+      phone: row.phone,
+      organization: row.organization,
+      sponsorType: row.sponsorType,
+      venueName: row.venueName,
+      venueAddress: row.venueAddress,
+      eventDateText: row.eventDateText,
+      eventStartTimeText: row.eventStartTimeText,
+      eventEndTimeText: row.eventEndTimeText,
+      earliestSetupText: row.earliestSetupText,
+      eventName: row.eventName,
+      flexibleSetupTime: row.flexibleSetupTime,
+      eventCategory: row.eventCategory,
+      crewOrRental: row.crewOrRental,
+      servicesNeeded: row.servicesNeeded,
+      productionTier: row.productionTier,
+      eventDescription: row.eventDescription,
+      expectedTurnout: row.expectedTurnout,
+      existingEquipment: row.existingEquipment,
+      lightingPreference: row.lightingPreference,
+      additionalNotes: row.additionalNotes,
+      convertedEventId: row.convertedEventId,
+    };
+  },
+});
+
 export const updateStatus = mutation({
   args: {
     id: v.id("eventRequests"),
@@ -552,25 +720,59 @@ export const updateStatus = mutation({
 
 export const convertToEvent = mutation({
   args: { id: v.id("eventRequests") },
-  returns: v.object({ eventId: v.id("events") }),
+  returns: v.object({
+    eventId: v.id("events"),
+    invoiceId: v.id("invoices"),
+  }),
   handler: async (ctx, args) => {
     const user = await requireAuth(ctx);
     await requireArborInternalContext(ctx);
     const request = await ctx.db.get(args.id);
     if (!request) throw new Error("Request not found.");
-    if (request.convertedEventId) {
-      return { eventId: request.convertedEventId };
+
+    if (request.convertedEventId && request.linkedInvoiceId) {
+      return {
+        eventId: request.convertedEventId,
+        invoiceId: request.linkedInvoiceId,
+      };
     }
+
+    const managerUserId = getUserId(user);
+    const managerName = user.name?.trim() || user.email || "Arbor Live";
+    const { invoiceId } = await createDraftInvoiceFromBookingRequest(ctx, {
+      request,
+      managerUserId,
+      managerName,
+      managerEmail: user.email,
+    });
 
     const startAt = request.eventStartAtMs ?? defaultPlaceholderTimes().startAt;
     const endAt = request.eventEndAtMs ?? defaultPlaceholderTimes().endAt;
     const teamsInterested = mapServicesToTeams(request.crewOrRental, request.servicesNeeded);
     const eventType = inferEventType(request.crewOrRental, request.servicesNeeded);
     const title =
+      request.eventName?.trim() ||
       request.venueName?.trim() ||
       `${request.eventCategory} — ${request.firstName} ${request.lastName}`;
     const host = request.organization?.trim() || request.sponsorType;
     const now = Date.now();
+
+    if (request.convertedEventId) {
+      await ctx.db.patch(request.convertedEventId, {
+        invoiceId,
+        updatedAt: now,
+      });
+      await ctx.db.patch(args.id, {
+        status: "converted",
+        linkedInvoiceId: invoiceId,
+        reviewedByUserId: managerUserId,
+        updatedAt: now,
+      });
+      return {
+        eventId: request.convertedEventId,
+        invoiceId,
+      };
+    }
 
     const eventId = await ctx.db.insert("events", {
       title,
@@ -596,6 +798,7 @@ export const convertToEvent = mutation({
       category: request.eventCategory,
       host,
       expectedTurnout: request.expectedTurnout,
+      invoiceId,
       notes: buildConversionNotes({
         ...request,
         requestNumber: request.requestNumber ?? `LEGACY-${request._id}`,
@@ -607,10 +810,11 @@ export const convertToEvent = mutation({
     await ctx.db.patch(args.id, {
       status: "converted",
       convertedEventId: eventId,
-      reviewedByUserId: getUserId(user),
+      linkedInvoiceId: invoiceId,
+      reviewedByUserId: managerUserId,
       updatedAt: now,
     });
 
-    return { eventId };
+    return { eventId, invoiceId };
   },
 });

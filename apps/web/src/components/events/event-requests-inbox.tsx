@@ -68,7 +68,14 @@ export function EventRequestsInbox() {
                   {row.email} · {row.phone}
                 </p>
                 <p className="mt-1 text-sm">
-                  {row.eventCategory}
+                  {row.eventName ? (
+                    <>
+                      <span className="font-medium">{row.eventName}</span>
+                      <span className="text-muted-foreground"> · {row.eventCategory}</span>
+                    </>
+                  ) : (
+                    row.eventCategory
+                  )}
                   {row.venueName ? ` · ${row.venueName}` : ""}
                 </p>
                 <p className="text-xs text-muted-foreground">Event date: {row.eventDateText}</p>

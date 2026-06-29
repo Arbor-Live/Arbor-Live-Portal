@@ -314,12 +314,6 @@ export default defineSchema({
     .index("by_active", ["active"])
     .index("by_sortOrder", ["sortOrder"]),
 
-  invoiceCounters: defineTable({
-    key: v.string(),
-    nextNumber: v.number(),
-    updatedAt: v.number(),
-  }).index("by_key", ["key"]),
-
   invoiceTerms: defineTable({
     label: v.string(),
     version: v.string(),
@@ -377,6 +371,8 @@ export default defineSchema({
     clientApprovalStatus: v.optional(clientApprovalStatusValue),
     publicApprovalToken: v.optional(v.string()),
     publicApprovalTokenExpiresAt: v.optional(v.number()),
+    sourceEventRequestId: v.optional(v.id("eventRequests")),
+    clientReviewReadyAt: v.optional(v.number()),
     approvedAt: v.optional(v.number()),
     changesRequestedAt: v.optional(v.number()),
     clientApprovalNote: v.optional(v.string()),
@@ -390,6 +386,7 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_clientApprovalStatus", ["clientApprovalStatus"])
     .index("by_publicApprovalToken", ["publicApprovalToken"])
+    .index("by_sourceEventRequestId", ["sourceEventRequestId"])
     .index("by_managerUserId", ["managerUserId"])
     .index("by_issueDate", ["issueDate"])
     .index("by_createdAt", ["createdAt"]),
@@ -751,6 +748,7 @@ export default defineSchema({
     eventEndAtMs: v.optional(v.number()),
     setupAtMs: v.optional(v.number()),
     flexibleSetupTime: v.optional(v.boolean()),
+    eventName: v.optional(v.string()),
     eventCategory: v.string(),
     crewOrRental: v.optional(v.string()),
     servicesNeeded: v.array(v.string()),
@@ -771,7 +769,8 @@ export default defineSchema({
     .index("by_status_and_submittedAt", ["status", "submittedAt"])
     .index("by_email", ["email"])
     .index("by_publicToken", ["publicToken"])
-    .index("by_requestNumber", ["requestNumber"]),
+    .index("by_requestNumber", ["requestNumber"])
+    .index("by_linkedInvoiceId", ["linkedInvoiceId"]),
 
   eventPullListItems: defineTable({
     eventId: v.id("events"),

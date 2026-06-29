@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as adminDeletes from "../adminDeletes.js";
 import type * as auth from "../auth.js";
 import type * as bootstrap from "../bootstrap.js";
 import type * as capabilityDefinitions from "../capabilityDefinitions.js";
@@ -45,13 +46,18 @@ import type * as invoiceSettings from "../invoiceSettings.js";
 import type * as invoiceTerms from "../invoiceTerms.js";
 import type * as invoices from "../invoices.js";
 import type * as lib_auth from "../lib/auth.js";
+import type * as lib_bookingChainDelete from "../lib/bookingChainDelete.js";
+import type * as lib_bookingRequestQuote from "../lib/bookingRequestQuote.js";
 import type * as lib_crewCost from "../lib/crewCost.js";
 import type * as lib_crewTeams from "../lib/crewTeams.js";
 import type * as lib_eventSeriesCosts from "../lib/eventSeriesCosts.js";
 import type * as lib_eventSeriesGeneration from "../lib/eventSeriesGeneration.js";
 import type * as lib_eventStatus from "../lib/eventStatus.js";
 import type * as lib_invoiceEvents from "../lib/invoiceEvents.js";
+import type * as lib_publicQuoteView from "../lib/publicQuoteView.js";
+import type * as lib_publicReferenceIds from "../lib/publicReferenceIds.js";
 import type * as lostFoundSettings from "../lostFoundSettings.js";
+import type * as migrations_referenceIds from "../migrations/referenceIds.js";
 import type * as publicInventory from "../publicInventory.js";
 import type * as storageLocations from "../storageLocations.js";
 import type * as userInvites from "../userInvites.js";
@@ -64,6 +70,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  adminDeletes: typeof adminDeletes;
   auth: typeof auth;
   bootstrap: typeof bootstrap;
   capabilityDefinitions: typeof capabilityDefinitions;
@@ -101,13 +108,18 @@ declare const fullApi: ApiFromModules<{
   invoiceTerms: typeof invoiceTerms;
   invoices: typeof invoices;
   "lib/auth": typeof lib_auth;
+  "lib/bookingChainDelete": typeof lib_bookingChainDelete;
+  "lib/bookingRequestQuote": typeof lib_bookingRequestQuote;
   "lib/crewCost": typeof lib_crewCost;
   "lib/crewTeams": typeof lib_crewTeams;
   "lib/eventSeriesCosts": typeof lib_eventSeriesCosts;
   "lib/eventSeriesGeneration": typeof lib_eventSeriesGeneration;
   "lib/eventStatus": typeof lib_eventStatus;
   "lib/invoiceEvents": typeof lib_invoiceEvents;
+  "lib/publicQuoteView": typeof lib_publicQuoteView;
+  "lib/publicReferenceIds": typeof lib_publicReferenceIds;
   lostFoundSettings: typeof lostFoundSettings;
+  "migrations/referenceIds": typeof migrations_referenceIds;
   publicInventory: typeof publicInventory;
   storageLocations: typeof storageLocations;
   userInvites: typeof userInvites;

@@ -157,7 +157,7 @@ export function InvoicePrintView({ invoiceId }: { invoiceId: Id<"invoices"> }) {
           <div className="my-2 border-t" />
           <p className="font-medium">iJournal PTA</p>
           <p>PTA: <span className="font-medium">1056598-1-ZBABS</span></p>
-          <p>Approver: <span className="font-medium">O’Niel Patrick</span></p>
+          <p>Approver: <span className="font-medium">O’Neal Patrick</span></p>
         </CardContent>
       </Card>
 

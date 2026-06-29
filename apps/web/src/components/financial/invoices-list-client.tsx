@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useQuery } from "convex/react";
-import { api } from "@/lib/convex-api";
+import { useState } from "react";
+import { useMutation, useQuery } from "convex/react";
+import { api, type Id } from "@/lib/convex-api";
+import { AdminCascadeDeleteDialog } from "@/components/admin/admin-cascade-delete-dialog";
 import { Button } from "@/components/ui/button";
 
 function displayStatus(invoice: {
@@ -17,7 +19,16 @@ function displayStatus(invoice: {
 }
 
 export function InvoicesListClient() {
+  const viewer = useQuery(api.users.getViewer, {});
   const rows = useQuery(api.invoices.list, {});
+  const deleteInvoiceAdmin = useMutation(api.adminDeletes.deleteInvoiceAdmin);
+  const [deleteInvoiceId, setDeleteInvoiceId] = useState<Id<"invoices"> | null>(null);
+  const deletePreview = useQuery(
+    api.adminDeletes.previewInvoiceDeletion,
+    deleteInvoiceId ? { id: deleteInvoiceId } : "skip",
+  );
+  const isAdmin = viewer?.isAdmin ?? false;
+
   if (rows === undefined) return <p className="p-2 text-muted-foreground">Loading…</p>;
 
   return (
@@ -42,7 +53,7 @@ export function InvoicesListClient() {
               <td className="p-2">{invoice.issueDate}</td>
               <td className="p-2">${invoice.totalUsd.toFixed(2)}</td>
               <td className="p-2">
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <Button asChild size="sm" variant="outline">
                     <Link href={`/dashboard/financial-hub/invoices/${invoice._id}`}>Open</Link>
                   </Button>
@@ -56,6 +67,16 @@ export function InvoicesListClient() {
                       </Link>
                     </Button>
                   ) : null}
+                  {isAdmin ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => setDeleteInvoiceId(invoice._id)}
+                    >
+                      Delete
+                    </Button>
+                  ) : null}
                 </div>
               </td>
             </tr>
@@ -63,6 +84,18 @@ export function InvoicesListClient() {
         </tbody>
       </table>
       {!rows.length ? <p className="p-2 text-muted-foreground">No invoices yet.</p> : null}
+
+      <AdminCascadeDeleteDialog
+        open={deleteInvoiceId !== null}
+        onClose={() => setDeleteInvoiceId(null)}
+        entityName="quote"
+        preview={deletePreview ?? null}
+        onConfirm={async (cascade) => {
+          if (!deleteInvoiceId) return;
+          await deleteInvoiceAdmin({ id: deleteInvoiceId, cascade });
+          setDeleteInvoiceId(null);
+        }}
+      />
     </>
   );
 }
