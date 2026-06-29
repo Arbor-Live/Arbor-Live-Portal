@@ -1,8 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useState } from "react";
+import { useState } from "react";
 import { authClient } from "@/lib/auth-client";
+import { FormSaveBar } from "@/components/forms";
+import { Form } from "@/components/ui/form";
+import { TextFormField } from "@/components/forms/text-form-field";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,38 +15,37 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { useConvexForm } from "@/hooks/use-convex-form";
+import {
+  forgotPasswordSchema,
+  type ForgotPasswordFormValues,
+} from "@/lib/validations/auth";
 
 export default function ForgotPasswordPage() {
-  const [email, setEmail] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setError(null);
-    setSuccess(null);
-    setIsLoading(true);
+  const form = useConvexForm<ForgotPasswordFormValues>({
+    schema: forgotPasswordSchema,
+    defaultValues: { email: "" },
+    mode: "onTouched",
+  });
 
+  const onSubmit = form.submitMutation(async (values) => {
+    setSuccess(null);
     const result = await authClient.requestPasswordReset({
-      email,
+      email: values.email,
       redirectTo: `${window.location.origin}/reset-password`,
     });
-
-    setIsLoading(false);
-
     if (result.error) {
-      setError(result.error.message ?? "Unable to request reset.");
-      return;
+      throw new Error(result.error.message ?? "Unable to request reset.");
     }
-
     setSuccess("If your email exists, a reset link has been sent.");
-  };
+    form.reset(values);
+    return result;
+  });
 
   return (
-    <div className="mx-auto flex min-h-[80vh] w-full max-w-md items-center px-6">
+    <div className="mx-auto flex min-h-[80vh] w-full max-w-md items-center px-6 pb-20">
       <Card className="w-full">
         <CardHeader>
           <CardTitle>Reset your password</CardTitle>
@@ -52,39 +54,42 @@ export default function ForgotPasswordPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <form onSubmit={onSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                required
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-              />
-            </div>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <TextFormField name="email" label="Email" type="email" />
 
-            {error ? (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            ) : null}
-            {success ? (
-              <Alert>
-                <AlertDescription>{success}</AlertDescription>
-              </Alert>
-            ) : null}
+              {success ? (
+                <Alert>
+                  <AlertDescription>{success}</AlertDescription>
+                </Alert>
+              ) : null}
 
-            <Button type="submit" disabled={isLoading} className="w-full">
-              {isLoading ? "Sending..." : "Send reset link"}
-            </Button>
-          </form>
+              <Button
+                type="submit"
+                disabled={form.saveStatus === "saving"}
+                className="w-full"
+              >
+                {form.saveStatus === "saving" ? "Sending..." : "Send reset link"}
+              </Button>
+            </form>
+          </Form>
 
           <Button asChild variant="link" className="px-0">
             <Link href="/sign-in">Back to sign in</Link>
           </Button>
         </CardContent>
       </Card>
+
+      <FormSaveBar
+        tier="C"
+        saveStatus={form.saveStatus}
+        saveError={form.saveError}
+        isDirty={form.formState.isDirty}
+        saveLabel="Send reset link"
+        onSave={() => void form.handleSubmit(onSubmit)()}
+        onDiscard={() => form.reset()}
+        onRetry={() => void form.handleSubmit(onSubmit)()}
+      />
     </div>
   );
 }

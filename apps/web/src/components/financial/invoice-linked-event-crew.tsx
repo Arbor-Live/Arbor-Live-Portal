@@ -28,6 +28,9 @@ import {
 } from "@/lib/event-schedule-draft";
 import { getEventEditorTabPath } from "@/lib/event-editor-tabs";
 import { buildCrewRowsFromShifts, type InvoiceCrewRow } from "@/lib/invoice-crew-from-event";
+import { FormSaveBar } from "@/components/forms";
+import { getConvexErrorMessage } from "@/lib/convex-error";
+import type { SaveStatus } from "@/hooks/use-convex-form";
 
 type EventType = "Crewed Event" | "Rental with Crew" | "Dry Hire" | "Services Only";
 type StoredEventType = EventType | "Dry Rental";
@@ -43,11 +46,6 @@ function normalizeFulfillmentMode(
 ): RentalFulfillmentMode {
   if (value === "pickup" || value === "delivery") return "delivery";
   return value === "will_call" ? "will_call" : "delivery";
-}
-
-function getErrorMessage(error: unknown) {
-  if (error instanceof Error && error.message) return error.message;
-  return "Something went wrong while saving. Please try again.";
 }
 
 function shiftsFromEventRows(
@@ -111,6 +109,7 @@ export function InvoiceLinkedEventCrewSection({
   const [selectedCrewUserId, setSelectedCrewUserId] = useState("");
   const [saving, setSaving] = useState(false);
   const [autoSaveState, setAutoSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [autoSaveError, setAutoSaveError] = useState<string | null>(null);
 
   const eventType = normalizeEventType(eventData?.event.eventType as StoredEventType | undefined);
   const rentalFulfillmentMode = normalizeFulfillmentMode(
@@ -213,7 +212,10 @@ export function InvoiceLinkedEventCrewSection({
       if (mode === "auto" && signature === lastSavedSignatureRef.current) return true;
 
       if (mode === "manual") setSaving(true);
-      else setAutoSaveState("saving");
+      else {
+        setAutoSaveState("saving");
+        setAutoSaveError(null);
+      }
 
       try {
         const blocksWithRefs = withStableBlockRefs(draftBlocks, localBlockCounterRef);
@@ -262,12 +264,16 @@ export function InvoiceLinkedEventCrewSection({
           onMessage?.("Event schedule and crew slots saved.");
         } else {
           setAutoSaveState("saved");
+          setAutoSaveError(null);
         }
         return true;
       } catch (error) {
-        const message = getErrorMessage(error);
+        const message = getConvexErrorMessage(error);
         if (mode === "manual") onMessage?.(message);
-        else setAutoSaveState("error");
+        else {
+          setAutoSaveState("error");
+          setAutoSaveError(message);
+        }
         return false;
       } finally {
         if (mode === "manual") setSaving(false);
@@ -341,7 +347,7 @@ export function InvoiceLinkedEventCrewSection({
       suppressAutoSaveOnceRef.current = true;
       onMessage?.(`Deleted ${result.deletedCount} unlinked shift${result.deletedCount === 1 ? "" : "s"}.`);
     } catch (error) {
-      onMessage?.(getErrorMessage(error));
+      onMessage?.(getConvexErrorMessage(error));
     }
   }
 
@@ -449,19 +455,16 @@ export function InvoiceLinkedEventCrewSection({
     );
   }
 
+  const barSaveStatus: SaveStatus =
+    saving ? "saving" : autoSaveState === "idle" ? "idle" : autoSaveState;
+
   return (
+    <>
     <Card>
       <CardHeader>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <CardTitle>Crew Schedule</CardTitle>
           <div className="flex items-center gap-2">
-            {autoSaveState === "saving" ? (
-              <span className="text-xs text-muted-foreground">Saving schedule...</span>
-            ) : autoSaveState === "saved" ? (
-              <span className="text-xs text-muted-foreground">Schedule saved</span>
-            ) : autoSaveState === "error" ? (
-              <span className="text-xs text-rose-600">Schedule save failed</span>
-            ) : null}
             <Button asChild variant="outline" size="sm">
               <Link href={getEventEditorTabPath(eventId, "schedule")}>Open in event editor</Link>
             </Button>
@@ -600,5 +603,17 @@ export function InvoiceLinkedEventCrewSection({
         </Button>
       </CardContent>
     </Card>
+
+    <FormSaveBar
+      tier="B"
+      saveStatus={barSaveStatus}
+      saveError={autoSaveError}
+      isDirty={barSaveStatus !== "idle"}
+      isSubmitting={saving}
+      saveLabel="Save schedule now"
+      onSave={() => void saveScheduleAndPersonnel()}
+      onRetry={() => void persistDraftRef.current("auto")}
+    />
+    </>
   );
 }

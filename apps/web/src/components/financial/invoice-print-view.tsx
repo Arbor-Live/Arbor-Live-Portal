@@ -61,6 +61,7 @@ export function InvoicePrintView({ invoiceId }: { invoiceId: Id<"invoices"> }) {
   const invoiceNumber = data.invoice.invoiceNumber;
 
   async function onPrint() {
+    if (!data) return;
     await createExport({
       invoiceId,
       fileName: `${invoiceNumber}.pdf`,

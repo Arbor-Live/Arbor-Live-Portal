@@ -1,32 +1,26 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useFormContext, type FieldPath } from "react-hook-form";
+import { useFormContext, type FieldPath, type FieldValues } from "react-hook-form";
 import { CheckIcon } from "@phosphor-icons/react";
-import type { BookingRequestFormValues } from "@/lib/validations/booking-request";
 
-type SingleChoiceFieldProps<T extends string> = {
-  name: FieldPath<BookingRequestFormValues>;
-  options: readonly T[];
-  otherFieldName?: FieldPath<BookingRequestFormValues>;
-  otherTriggerValue?: T;
+type SingleChoiceFieldProps<T extends FieldValues, O extends string> = {
+  name: FieldPath<T>;
+  options: readonly O[];
+  otherFieldName?: FieldPath<T>;
+  otherTriggerValue?: O;
   otherPlaceholder?: string;
 };
 
-export function SingleChoiceField<T extends string>({
+export function SingleChoiceField<T extends FieldValues, O extends string>({
   name,
   options,
   otherFieldName,
   otherTriggerValue,
   otherPlaceholder = "Please specify",
-}: SingleChoiceFieldProps<T>) {
-  const {
-    watch,
-    setValue,
-    register,
-    getFieldState,
-  } = useFormContext<BookingRequestFormValues>();
-  const value = watch(name) as T | undefined;
+}: SingleChoiceFieldProps<T, O>) {
+  const { watch, setValue, register, getFieldState } = useFormContext<T>();
+  const value = watch(name) as O | undefined;
   const error = getFieldState(name).error?.message;
   const otherError = otherFieldName ? getFieldState(otherFieldName).error?.message : undefined;
 

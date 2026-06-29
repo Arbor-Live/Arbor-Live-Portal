@@ -1,28 +1,29 @@
 "use client";
 
-import { useFormContext, type FieldPath } from "react-hook-form";
+import { useFormContext, type FieldPath, type FieldValues } from "react-hook-form";
 import { Label } from "@/components/ui/label";
-import type { BookingRequestFormValues } from "@/lib/validations/booking-request";
 
-type TextareaFieldProps = {
-  name: FieldPath<BookingRequestFormValues>;
+type TextareaFieldProps<T extends FieldValues> = {
+  name: FieldPath<T>;
   label: string;
   placeholder?: string;
   autoFocus?: boolean;
 };
 
-export function TextareaField({ name, label, placeholder, autoFocus }: TextareaFieldProps) {
-  const {
-    register,
-    getFieldState,
-  } = useFormContext<BookingRequestFormValues>();
+export function TextareaField<T extends FieldValues>({
+  name,
+  label,
+  placeholder,
+  autoFocus,
+}: TextareaFieldProps<T>) {
+  const { register, getFieldState } = useFormContext<T>();
   const error = getFieldState(name).error?.message;
 
   return (
     <div className="space-y-2">
-      <Label htmlFor={name}>{label}</Label>
+      <Label htmlFor={String(name)}>{label}</Label>
       <textarea
-        id={name}
+        id={String(name)}
         placeholder={placeholder}
         autoFocus={autoFocus}
         aria-invalid={Boolean(error)}

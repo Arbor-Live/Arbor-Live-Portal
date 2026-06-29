@@ -1,12 +1,21 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
+import { FormSaveBar } from "@/components/forms";
+import { Form } from "@/components/ui/form";
+import { TextFormField } from "@/components/forms/text-form-field";
+import { TextareaFormField } from "@/components/forms/textarea-form-field";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useConvexForm } from "@/hooks/use-convex-form";
+import {
+  inventoryTypeSchema,
+  type InventoryTypeFormValues,
+} from "@/lib/validations/inventory";
 import { formatCurrency, toCategoryOptions } from "./constants";
 import { SearchableSelect } from "./searchable-select";
 
@@ -24,7 +33,7 @@ function gdtfResourcesFromDb(gdtf?: { title: string; url: string }[]): ResourceR
   return gdtf?.length ? gdtf.map((r) => ({ title: r.title, url: r.url })) : [emptyResourceRow()];
 }
 
-const defaultForm = {
+const defaultTypeValues: InventoryTypeFormValues = {
   name: "",
   description: "",
   model: "",
@@ -36,13 +45,99 @@ const defaultForm = {
   manualResources: [emptyResourceRow()],
   lightingGdtfResources: [emptyResourceRow()],
   tips: "",
-  capabilities: [] as string[],
+  capabilities: [],
   iconImageUrl: "",
   promoImageUrl: "",
   publicListing: false,
   publicProfile: false,
   publicSlug: "",
 };
+
+function toTypeFormValues(row: {
+  name: string;
+  description?: string;
+  model: string;
+  manufacturer?: string;
+  category: string;
+  msrpUsd?: number;
+  subsidizedRentalPriceUsd?: number;
+  nonSubsidizedRentalPriceUsd?: number;
+  rentalPriceUsd?: number;
+  manualUrls: { title: string; url: string }[];
+  categoryMetadata?: { lighting?: { gdtfUrls?: { title: string; url: string }[] } };
+  tips?: string;
+  capabilities: string[];
+  iconImageUrl?: string;
+  promoImageUrl?: string;
+  publicListing?: boolean;
+  publicProfile?: boolean;
+  publicSlug?: string;
+}): InventoryTypeFormValues {
+  return {
+    name: row.name,
+    description: row.description ?? "",
+    model: row.model,
+    manufacturer: row.manufacturer ?? "",
+    category: row.category,
+    msrpUsd: row.msrpUsd?.toString() ?? "",
+    subsidizedRentalPriceUsd: row.subsidizedRentalPriceUsd?.toString() ?? "",
+    nonSubsidizedRentalPriceUsd:
+      (row.nonSubsidizedRentalPriceUsd ?? row.rentalPriceUsd)?.toString() ?? "",
+    manualResources: manualResourcesFromDb(row.manualUrls),
+    lightingGdtfResources: gdtfResourcesFromDb(row.categoryMetadata?.lighting?.gdtfUrls),
+    tips: row.tips ?? "",
+    capabilities: row.capabilities,
+    iconImageUrl: row.iconImageUrl ?? "",
+    promoImageUrl: row.promoImageUrl ?? "",
+    publicListing: Boolean(row.publicListing),
+    publicProfile: Boolean(row.publicProfile),
+    publicSlug: row.publicSlug ?? "",
+  };
+}
+
+function buildTypePayload(
+  values: InventoryTypeFormValues,
+  editingRow?: { categoryMetadata?: { lighting?: Record<string, unknown> } },
+) {
+  const manualUrls = values.manualResources
+    .filter((row) => row.url.trim())
+    .map((row) => ({ title: row.title.trim() || "Manual", url: row.url.trim() }));
+
+  const categoryMetadata =
+    values.category === "lighting"
+      ? {
+          lighting: {
+            ...(editingRow?.categoryMetadata?.lighting ?? {}),
+            gdtfUrls: values.lightingGdtfResources
+              .filter((row) => row.url.trim())
+              .map((row) => ({ title: row.title.trim() || "GDTF", url: row.url.trim() })),
+          },
+        }
+      : {};
+
+  const toOptionalNumber = (value: string | number | "" | undefined) =>
+    value === "" || value === undefined ? undefined : Number(value);
+
+  return {
+    name: values.name,
+    description: values.description || undefined,
+    model: values.model,
+    manufacturer: values.manufacturer || undefined,
+    category: values.category,
+    msrpUsd: toOptionalNumber(values.msrpUsd),
+    subsidizedRentalPriceUsd: toOptionalNumber(values.subsidizedRentalPriceUsd),
+    nonSubsidizedRentalPriceUsd: toOptionalNumber(values.nonSubsidizedRentalPriceUsd),
+    manualUrls,
+    tips: values.tips || undefined,
+    capabilities: values.capabilities.map((entry) => entry.trim().toLowerCase()).filter(Boolean),
+    iconImageUrl: values.iconImageUrl || undefined,
+    promoImageUrl: values.promoImageUrl || undefined,
+    publicListing: values.publicListing,
+    publicProfile: values.publicProfile,
+    publicSlug: values.publicSlug?.trim() || undefined,
+    categoryMetadata,
+  };
+}
 
 function formatTypeDisplay(type: {
   manufacturer?: string;
@@ -62,11 +157,16 @@ export function TypesManager() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState<"name" | "category" | "msrp" | "normal">("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-  const [form, setForm] = useState(defaultForm);
   const [capabilityForm, setCapabilityForm] = useState({ key: "", label: "", category: "" });
   const [categoryForm, setCategoryForm] = useState({ key: "", label: "", publicBucket: "" });
   const [capabilityPickerOpen, setCapabilityPickerOpen] = useState(false);
   const [capabilityQuery, setCapabilityQuery] = useState("");
+
+  const typeForm = useConvexForm<InventoryTypeFormValues>({
+    schema: inventoryTypeSchema,
+    defaultValues: defaultTypeValues,
+    mode: editingId ? "onChange" : "onTouched",
+  });
 
   const categories = useQuery(api.inventoryCategories.list, { activeOnly: false });
   const types = useQuery(api.inventoryTypes.list, {
@@ -125,88 +225,56 @@ export function TypesManager() {
     setCategoryForm({ key: "", label: "", publicBucket: "" });
   }
 
-  async function submitType() {
-    const editingRow = editingId ? rows.find((r) => r._id === editingId) : undefined;
+  const editingRow = editingId ? rows.find((r) => r._id === editingId) : undefined;
 
-    const manualUrls = form.manualResources
-      .filter((row) => row.url.trim())
-      .map((row) => ({ title: row.title.trim() || "Manual", url: row.url.trim() }));
-
-    const categoryMetadata =
-      form.category === "lighting"
-        ? {
-            lighting: {
-              ...(editingRow?.categoryMetadata?.lighting ?? {}),
-              gdtfUrls: form.lightingGdtfResources
-                .filter((row) => row.url.trim())
-                .map((row) => ({ title: row.title.trim() || "GDTF", url: row.url.trim() })),
-            },
-          }
-        : {};
-
-    const payload = {
-      name: form.name,
-      description: form.description || undefined,
-      model: form.model,
-      manufacturer: form.manufacturer || undefined,
-      category: form.category,
-      msrpUsd: form.msrpUsd ? Number(form.msrpUsd) : undefined,
-      subsidizedRentalPriceUsd: form.subsidizedRentalPriceUsd
-        ? Number(form.subsidizedRentalPriceUsd)
-        : undefined,
-      nonSubsidizedRentalPriceUsd: form.nonSubsidizedRentalPriceUsd
-        ? Number(form.nonSubsidizedRentalPriceUsd)
-        : undefined,
-      manualUrls,
-      tips: form.tips || undefined,
-      capabilities: form.capabilities
-        .map((entry) => entry.trim().toLowerCase())
-        .filter(Boolean),
-      iconImageUrl: form.iconImageUrl || undefined,
-      promoImageUrl: form.promoImageUrl || undefined,
-      publicListing: form.publicListing,
-      publicProfile: form.publicProfile,
-      publicSlug: form.publicSlug.trim() || undefined,
-      categoryMetadata,
-    };
-
+  const persistType = async (values: InventoryTypeFormValues) => {
+    const payload = buildTypePayload(values, editingRow);
     if (editingId) {
       await updateType({ id: editingId as never, ...payload });
     } else {
       await createType(payload);
+      typeForm.reset(defaultTypeValues);
+      typeForm.resetSaveState();
     }
-    setEditingId(null);
-    setForm(defaultForm);
-  }
+  };
+
+  const onSubmitType = typeForm.submitMutation(persistType);
+
+  const watchedType = typeForm.watch();
+  useEffect(() => {
+    if (!editingId) return;
+    typeForm.debouncedAutoSave(persistType, {
+      delayMs: 1000,
+      enabled: typeForm.formState.isDirty,
+    });
+  }, [watchedType, editingId, typeForm]);
 
   function beginEdit(row: (typeof rows)[number]) {
     setEditingId(row._id);
-    setForm({
-      name: row.name,
-      description: row.description ?? "",
-      model: row.model,
-      manufacturer: row.manufacturer ?? "",
-      category: row.category,
-      msrpUsd: row.msrpUsd?.toString() ?? "",
-      subsidizedRentalPriceUsd: row.subsidizedRentalPriceUsd?.toString() ?? "",
-      nonSubsidizedRentalPriceUsd:
-        (row.nonSubsidizedRentalPriceUsd ?? row.rentalPriceUsd)?.toString() ?? "",
-      manualResources: manualResourcesFromDb(row.manualUrls),
-      lightingGdtfResources: gdtfResourcesFromDb(row.categoryMetadata?.lighting?.gdtfUrls),
-      tips: row.tips ?? "",
-      capabilities: row.capabilities,
-      iconImageUrl: row.iconImageUrl ?? "",
-      promoImageUrl: row.promoImageUrl ?? "",
-      publicListing: Boolean(row.publicListing),
-      publicProfile: Boolean(row.publicProfile),
-      publicSlug: row.publicSlug ?? "",
-    });
+    const values = toTypeFormValues(row);
+    typeForm.reset(values);
+    typeForm.suppressNextAutoSave();
+    typeForm.resetSaveState();
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    typeForm.reset(defaultTypeValues);
+    typeForm.resetSaveState();
   }
 
   async function bulkDeleteSelected() {
     await Promise.all(selectedIds.map((id) => deleteType({ id: id as never })));
     setSelectedIds([]);
   }
+
+  const typeValues = typeForm.watch();
+  const setTypeField = <K extends keyof InventoryTypeFormValues>(
+    key: K,
+    value: InventoryTypeFormValues[K],
+  ) => {
+    typeForm.setValue(key, value as never, { shouldDirty: true });
+  };
 
   return (
     <div className="grid gap-4 lg:grid-cols-3">
@@ -334,336 +402,318 @@ export function TypesManager() {
       </Card>
 
       <div className="space-y-4">
-        <Card>
+        <Card className={editingId ? "pb-20" : undefined}>
           <CardHeader>
             <CardTitle>{editingId ? "Edit Type" : "Create Type"}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="space-y-2">
-              <Label>Name</Label>
-              <Input value={form.name} onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))} />
-            </div>
-            <div className="space-y-2">
-              <Label>Model</Label>
-              <Input value={form.model} onChange={(event) => setForm((prev) => ({ ...prev, model: event.target.value }))} />
-            </div>
-            <div className="space-y-2">
-              <Label>Manufacturer</Label>
-              <Input value={form.manufacturer} onChange={(event) => setForm((prev) => ({ ...prev, manufacturer: event.target.value }))} />
-            </div>
-            <div className="space-y-2">
-              <Label>Category</Label>
-              <SearchableSelect
-                value={form.category}
-                onChange={(nextValue) => setForm((prev) => ({ ...prev, category: nextValue }))}
-                options={categoryOptions.map((category) => ({
-                  value: category.value,
-                  label: category.label,
-                }))}
-                placeholder="Search categories..."
-                emptyLabel="Select category"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Description</Label>
-              <textarea
-                className="min-h-28 w-full rounded-md border bg-background px-3 py-2 text-sm"
-                value={form.description}
-                onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))}
-                placeholder="Supports Markdown (headings, lists, links, …)"
-              />
-              <p className="text-xs text-muted-foreground">
-                Shown on public model listings when this type is publicly listed. Multi-line; Markdown supported.
-              </p>
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              <div className="space-y-2">
-                <Label>MSRP (USD)</Label>
-                <Input value={form.msrpUsd} onChange={(event) => setForm((prev) => ({ ...prev, msrpUsd: event.target.value }))} />
-              </div>
-              <div className="space-y-2">
-                <Label>Subsidized (5%) USD</Label>
-                <Input value={form.subsidizedRentalPriceUsd} onChange={(event) => setForm((prev) => ({ ...prev, subsidizedRentalPriceUsd: event.target.value }))} />
-              </div>
-              <div className="space-y-2">
-                <Label>Normal (10%) USD</Label>
-                <Input value={form.nonSubsidizedRentalPriceUsd} onChange={(event) => setForm((prev) => ({ ...prev, nonSubsidizedRentalPriceUsd: event.target.value }))} />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Capabilities</Label>
-              <div className="relative">
-                <button
-                  type="button"
-                  className="h-9 w-full rounded-md border bg-background px-3 text-left text-sm"
-                  onClick={() => setCapabilityPickerOpen((prev) => !prev)}
-                >
-                  {form.capabilities.length
-                    ? `${form.capabilities.length} selected`
-                    : "Select capabilities"}
-                </button>
-                {capabilityPickerOpen ? (
-                  <div className="absolute z-30 mt-1 w-full rounded-md border bg-popover p-2 shadow-md">
-                    <Input
-                      placeholder="Search capabilities..."
-                      value={capabilityQuery}
-                      onChange={(event) => setCapabilityQuery(event.target.value)}
-                    />
-                    <div className="mt-2 max-h-44 space-y-1 overflow-auto">
-                      {filteredCapabilityOptions.map((option) => (
-                        <label
-                          key={option._id}
-                          className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm hover:bg-muted"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={form.capabilities.includes(option.key)}
-                            onChange={(event) =>
-                              setForm((prev) => ({
-                                ...prev,
-                                capabilities: event.target.checked
-                                  ? [...prev.capabilities, option.key]
-                                  : prev.capabilities.filter((entry) => entry !== option.key),
-                              }))
-                            }
-                          />
-                          <span>{option.label}</span>
-                          <span className="text-xs text-muted-foreground">({option.key})</span>
-                        </label>
-                      ))}
-                      {!filteredCapabilityOptions.length ? (
-                        <p className="px-2 py-1 text-xs text-muted-foreground">No capabilities found.</p>
-                      ) : null}
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-              {form.capabilities.length ? (
-                <div className="flex flex-wrap gap-1">
-                  {form.capabilities.map((capability) => (
-                    <button
-                      key={capability}
-                      type="button"
-                      className="rounded border px-2 py-0.5 text-xs hover:bg-muted"
-                      onClick={() =>
-                        setForm((prev) => ({
-                          ...prev,
-                          capabilities: prev.capabilities.filter((entry) => entry !== capability),
-                        }))
-                      }
-                    >
-                      {capability} x
-                    </button>
-                  ))}
+            <Form {...typeForm}>
+              <form onSubmit={typeForm.handleSubmit(onSubmitType)} className="space-y-3">
+                <TextFormField name="name" label="Name" />
+                <TextFormField name="model" label="Model" />
+                <TextFormField name="manufacturer" label="Manufacturer" />
+                <div className="space-y-2">
+                  <Label>Category</Label>
+                  <SearchableSelect
+                    value={typeValues.category}
+                    onChange={(nextValue) => setTypeField("category", nextValue)}
+                    options={categoryOptions.map((category) => ({
+                      value: category.value,
+                      label: category.label,
+                    }))}
+                    placeholder="Search categories..."
+                    emptyLabel="Select category"
+                  />
                 </div>
-              ) : null}
-            </div>
-            <div className="space-y-2">
-              <Label>Resources — manuals &amp; documentation</Label>
-              <p className="text-xs text-muted-foreground">
-                A title and URL for each link (e.g. Manual, DMX reference).
-              </p>
-              {form.manualResources.map((resourceRow, index) => (
-                <div key={`manual-${index}`} className="flex flex-wrap items-center gap-2">
-                  <Input
-                    placeholder="Title"
-                    className="w-full max-w-[220px]"
-                    value={resourceRow.title}
-                    onChange={(event) =>
-                      setForm((prev) => ({
-                        ...prev,
-                        manualResources: prev.manualResources.map((current, currentIndex) =>
-                          currentIndex === index
-                            ? { ...current, title: event.target.value }
-                            : current,
-                        ),
-                      }))
-                    }
-                  />
-                  <Input
-                    placeholder="https://…"
-                    className="min-w-0 flex-1"
-                    value={resourceRow.url}
-                    onChange={(event) =>
-                      setForm((prev) => ({
-                        ...prev,
-                        manualResources: prev.manualResources.map((current, currentIndex) =>
-                          currentIndex === index
-                            ? { ...current, url: event.target.value }
-                            : current,
-                        ),
-                      }))
-                    }
-                  />
+                <TextareaFormField
+                  name="description"
+                  label="Description"
+                  placeholder="Supports Markdown (headings, lists, links, …)"
+                />
+                <p className="-mt-2 text-xs text-muted-foreground">
+                  Shown on public model listings when this type is publicly listed. Multi-line; Markdown supported.
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  <TextFormField name="msrpUsd" label="MSRP (USD)" type="number" />
+                  <TextFormField name="subsidizedRentalPriceUsd" label="Subsidized (5%) USD" type="number" />
+                  <TextFormField name="nonSubsidizedRentalPriceUsd" label="Normal (10%) USD" type="number" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Capabilities</Label>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      className="h-9 w-full rounded-md border bg-background px-3 text-left text-sm"
+                      onClick={() => setCapabilityPickerOpen((prev) => !prev)}
+                    >
+                      {typeValues.capabilities.length
+                        ? `${typeValues.capabilities.length} selected`
+                        : "Select capabilities"}
+                    </button>
+                    {capabilityPickerOpen ? (
+                      <div className="absolute z-30 mt-1 w-full rounded-md border bg-popover p-2 shadow-md">
+                        <Input
+                          placeholder="Search capabilities..."
+                          value={capabilityQuery}
+                          onChange={(event) => setCapabilityQuery(event.target.value)}
+                        />
+                        <div className="mt-2 max-h-44 space-y-1 overflow-auto">
+                          {filteredCapabilityOptions.map((option) => (
+                            <label
+                              key={option._id}
+                              className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm hover:bg-muted"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={typeValues.capabilities.includes(option.key)}
+                                onChange={(event) =>
+                                  setTypeField(
+                                    "capabilities",
+                                    event.target.checked
+                                      ? [...typeValues.capabilities, option.key]
+                                      : typeValues.capabilities.filter((entry) => entry !== option.key),
+                                  )
+                                }
+                              />
+                              <span>{option.label}</span>
+                              <span className="text-xs text-muted-foreground">({option.key})</span>
+                            </label>
+                          ))}
+                          {!filteredCapabilityOptions.length ? (
+                            <p className="px-2 py-1 text-xs text-muted-foreground">No capabilities found.</p>
+                          ) : null}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                  {typeValues.capabilities.length ? (
+                    <div className="flex flex-wrap gap-1">
+                      {typeValues.capabilities.map((capability) => (
+                        <button
+                          key={capability}
+                          type="button"
+                          className="rounded border px-2 py-0.5 text-xs hover:bg-muted"
+                          onClick={() =>
+                            setTypeField(
+                              "capabilities",
+                              typeValues.capabilities.filter((entry) => entry !== capability),
+                            )
+                          }
+                        >
+                          {capability} x
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+                <div className="space-y-2">
+                  <Label>Resources — manuals &amp; documentation</Label>
+                  <p className="text-xs text-muted-foreground">
+                    A title and URL for each link (e.g. Manual, DMX reference).
+                  </p>
+                  {typeValues.manualResources.map((resourceRow, index) => (
+                    <div key={`manual-${index}`} className="flex flex-wrap items-center gap-2">
+                      <Input
+                        placeholder="Title"
+                        className="w-full max-w-[220px]"
+                        value={resourceRow.title}
+                        onChange={(event) =>
+                          setTypeField(
+                            "manualResources",
+                            typeValues.manualResources.map((current, currentIndex) =>
+                              currentIndex === index
+                                ? { ...current, title: event.target.value }
+                                : current,
+                            ),
+                          )
+                        }
+                      />
+                      <Input
+                        placeholder="https://…"
+                        className="min-w-0 flex-1"
+                        value={resourceRow.url}
+                        onChange={(event) =>
+                          setTypeField(
+                            "manualResources",
+                            typeValues.manualResources.map((current, currentIndex) =>
+                              currentIndex === index
+                                ? { ...current, url: event.target.value }
+                                : current,
+                            ),
+                          )
+                        }
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setTypeField(
+                            "manualResources",
+                            typeValues.manualResources.filter((_, i) => i !== index),
+                          )
+                        }
+                        disabled={typeValues.manualResources.length <= 1}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  ))}
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
                     onClick={() =>
-                      setForm((prev) => ({
-                        ...prev,
-                        manualResources: prev.manualResources.filter((_, i) => i !== index),
-                      }))
+                      setTypeField("manualResources", [
+                        ...typeValues.manualResources,
+                        emptyResourceRow(),
+                      ])
                     }
-                    disabled={form.manualResources.length <= 1}
                   >
-                    Remove
+                    Add link
                   </Button>
                 </div>
-              ))}
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  setForm((prev) => ({
-                    ...prev,
-                    manualResources: [...prev.manualResources, emptyResourceRow()],
-                  }))
-                }
-              >
-                Add link
-              </Button>
-            </div>
-            {form.category === "lighting" ? (
-              <div className="space-y-2">
-                <Label>Resources — GDTF &amp; fixture links</Label>
-                <p className="text-xs text-muted-foreground">Title and URL for each GDTF or fixture library link.</p>
-                {form.lightingGdtfResources.map((resourceRow, index) => (
-                  <div key={`gdtf-${index}`} className="flex flex-wrap items-center gap-2">
-                    <Input
-                      placeholder="Title"
-                      className="w-full max-w-[220px]"
-                      value={resourceRow.title}
-                      onChange={(event) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          lightingGdtfResources: prev.lightingGdtfResources.map((current, currentIndex) =>
-                            currentIndex === index
-                              ? { ...current, title: event.target.value }
-                              : current,
-                          ),
-                        }))
-                      }
-                    />
-                    <Input
-                      placeholder="https://…"
-                      className="min-w-0 flex-1"
-                      value={resourceRow.url}
-                      onChange={(event) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          lightingGdtfResources: prev.lightingGdtfResources.map((current, currentIndex) =>
-                            currentIndex === index
-                              ? { ...current, url: event.target.value }
-                              : current,
-                          ),
-                        }))
-                      }
-                    />
+                {typeValues.category === "lighting" ? (
+                  <div className="space-y-2">
+                    <Label>Resources — GDTF &amp; fixture links</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Title and URL for each GDTF or fixture library link.
+                    </p>
+                    {typeValues.lightingGdtfResources.map((resourceRow, index) => (
+                      <div key={`gdtf-${index}`} className="flex flex-wrap items-center gap-2">
+                        <Input
+                          placeholder="Title"
+                          className="w-full max-w-[220px]"
+                          value={resourceRow.title}
+                          onChange={(event) =>
+                            setTypeField(
+                              "lightingGdtfResources",
+                              typeValues.lightingGdtfResources.map((current, currentIndex) =>
+                                currentIndex === index
+                                  ? { ...current, title: event.target.value }
+                                  : current,
+                              ),
+                            )
+                          }
+                        />
+                        <Input
+                          placeholder="https://…"
+                          className="min-w-0 flex-1"
+                          value={resourceRow.url}
+                          onChange={(event) =>
+                            setTypeField(
+                              "lightingGdtfResources",
+                              typeValues.lightingGdtfResources.map((current, currentIndex) =>
+                                currentIndex === index
+                                  ? { ...current, url: event.target.value }
+                                  : current,
+                              ),
+                            )
+                          }
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            setTypeField(
+                              "lightingGdtfResources",
+                              typeValues.lightingGdtfResources.filter((_, i) => i !== index),
+                            )
+                          }
+                          disabled={typeValues.lightingGdtfResources.length <= 1}
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    ))}
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
                       onClick={() =>
-                        setForm((prev) => ({
-                          ...prev,
-                          lightingGdtfResources: prev.lightingGdtfResources.filter((_, i) => i !== index),
-                        }))
+                        setTypeField("lightingGdtfResources", [
+                          ...typeValues.lightingGdtfResources,
+                          emptyResourceRow(),
+                        ])
                       }
-                      disabled={form.lightingGdtfResources.length <= 1}
                     >
-                      Remove
+                      Add link
                     </Button>
                   </div>
-                ))}
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    setForm((prev) => ({
-                      ...prev,
-                      lightingGdtfResources: [...prev.lightingGdtfResources, emptyResourceRow()],
-                    }))
-                  }
-                >
-                  Add link
-                </Button>
-              </div>
-            ) : null}
-            <div className="space-y-2">
-              <Label>Tips</Label>
-              <textarea
-                className="min-h-28 w-full rounded-md border bg-background px-3 py-2 text-sm"
-                value={form.tips}
-                onChange={(event) => setForm((prev) => ({ ...prev, tips: event.target.value }))}
-                placeholder="Supports Markdown"
-              />
-              <p className="text-xs text-muted-foreground">
-                Shown when full public profile is enabled. Multi-line; Markdown supported.
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label>Icon Image URL</Label>
-              <Input value={form.iconImageUrl} onChange={(event) => setForm((prev) => ({ ...prev, iconImageUrl: event.target.value }))} />
-            </div>
-            <div className="space-y-2">
-              <Label>Promo Image URL</Label>
-              <Input value={form.promoImageUrl} onChange={(event) => setForm((prev) => ({ ...prev, promoImageUrl: event.target.value }))} />
-            </div>
-            <div className="rounded-md border p-3 space-y-3">
-              <p className="text-sm font-medium">Public sharing</p>
-              <p className="text-xs text-muted-foreground">
-                Public listings appear on the unauthenticated browse pages, grouped by each category&apos;s public bucket.
-                Full public profiles unlock manuals/GDTF/images on public pages (including Lost &amp; Found when enabled on
-                the item).
-              </p>
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={form.publicListing}
-                  onChange={(event) => setForm((prev) => ({ ...prev, publicListing: event.target.checked }))}
-                />
-                List publicly
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={form.publicProfile}
-                  onChange={(event) => setForm((prev) => ({ ...prev, publicProfile: event.target.checked }))}
-                />
-                Share full public profile (manuals, images, GDTF metadata)
-              </label>
-              <div className="space-y-2">
-                <Label>Optional public slug (for direct links)</Label>
-                <Input
-                  value={form.publicSlug}
-                  onChange={(event) => setForm((prev) => ({ ...prev, publicSlug: event.target.value }))}
-                  placeholder="e.g. clay-paky-mythos2"
-                />
-                <p className="text-xs text-muted-foreground">Lowercase letters/numbers with dashes only.</p>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <Button type="button" onClick={() => void submitType()}>
-                {editingId ? "Update" : "Create"}
-              </Button>
-              {editingId ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setEditingId(null);
-                    setForm(defaultForm);
-                  }}
-                >
-                  Cancel
-                </Button>
-              ) : null}
-            </div>
+                ) : null}
+                <TextareaFormField name="tips" label="Tips" placeholder="Supports Markdown" />
+                <p className="-mt-2 text-xs text-muted-foreground">
+                  Shown when full public profile is enabled. Multi-line; Markdown supported.
+                </p>
+                <TextFormField name="iconImageUrl" label="Icon Image URL" />
+                <TextFormField name="promoImageUrl" label="Promo Image URL" />
+                <div className="space-y-3 rounded-md border p-3">
+                  <p className="text-sm font-medium">Public sharing</p>
+                  <p className="text-xs text-muted-foreground">
+                    Public listings appear on the unauthenticated browse pages, grouped by each category&apos;s public
+                    bucket. Full public profiles unlock manuals/GDTF/images on public pages (including Lost &amp; Found
+                    when enabled on the item).
+                  </p>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={typeValues.publicListing}
+                      onChange={(event) => setTypeField("publicListing", event.target.checked)}
+                    />
+                    List publicly
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={typeValues.publicProfile}
+                      onChange={(event) => setTypeField("publicProfile", event.target.checked)}
+                    />
+                    Share full public profile (manuals, images, GDTF metadata)
+                  </label>
+                  <TextFormField
+                    name="publicSlug"
+                    label="Optional public slug (for direct links)"
+                    placeholder="e.g. clay-paky-mythos2"
+                  />
+                  <p className="-mt-2 text-xs text-muted-foreground">
+                    Lowercase letters/numbers with dashes only.
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  {!editingId ? (
+                    <Button type="submit" disabled={typeForm.saveStatus === "saving"}>
+                      Create
+                    </Button>
+                  ) : null}
+                  {editingId ? (
+                    <Button type="button" variant="outline" onClick={cancelEdit}>
+                      Cancel
+                    </Button>
+                  ) : null}
+                </div>
+              </form>
+            </Form>
           </CardContent>
         </Card>
+
+        <FormSaveBar
+          tier={editingId ? "B" : "C"}
+          saveStatus={typeForm.saveStatus}
+          saveError={typeForm.saveError}
+          isDirty={typeForm.formState.isDirty}
+          saveLabel={editingId ? "Save" : "Create"}
+          onSave={() => void typeForm.handleSubmit(onSubmitType)()}
+          onDiscard={() => {
+            if (editingId && editingRow) {
+              typeForm.reset(toTypeFormValues(editingRow));
+            } else {
+              typeForm.reset(defaultTypeValues);
+            }
+            typeForm.resetSaveState();
+          }}
+          onRetry={() => void typeForm.handleSubmit(onSubmitType)()}
+        />
 
         <Card>
           <CardHeader>

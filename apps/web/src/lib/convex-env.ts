@@ -1,37 +1,27 @@
-function readFirstEnv(...keys: string[]): string | undefined {
-  for (const key of keys) {
-    const value = process.env[key]?.trim();
-    if (value) return value;
-  }
-  return undefined;
+function trimEnv(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
 }
 
-export function getConvexCloudUrl(): string {
-  const url = readFirstEnv("NEXT_PUBLIC_CONVEX_URL", "CONVEX_URL", "CONVEX_CLOUD_URL");
-  if (!url) {
-    throw new Error(
-      "NEXT_PUBLIC_CONVEX_URL is not set. Set it in Vercel or run `npx convex dev` locally.",
-    );
-  }
-  return url;
+/**
+ * Next.js only inlines `process.env.NEXT_PUBLIC_*` for static property access.
+ * Do not read these through dynamic keys (`process.env[key]`).
+ */
+function readConvexCloudUrl(): string | undefined {
+  return (
+    trimEnv(process.env.NEXT_PUBLIC_CONVEX_URL) ??
+    trimEnv(process.env.CONVEX_URL) ??
+    trimEnv(process.env.CONVEX_CLOUD_URL)
+  );
 }
 
-export function getConvexSiteUrl(): string {
-  const explicit = readFirstEnv("NEXT_PUBLIC_CONVEX_SITE_URL", "CONVEX_SITE_URL");
-  if (explicit) {
-    if (explicit.endsWith(".convex.cloud")) {
-      throw new Error(
-        "NEXT_PUBLIC_CONVEX_SITE_URL must end in .convex.site, not .convex.cloud.",
-      );
-    }
-    return explicit;
-  }
-
-  const cloudUrl = readFirstEnv("NEXT_PUBLIC_CONVEX_URL", "CONVEX_URL", "CONVEX_CLOUD_URL");
+function readConvexSiteUrl(cloudUrl: string | undefined): string | undefined {
+  const explicit =
+    trimEnv(process.env.NEXT_PUBLIC_CONVEX_SITE_URL) ?? trimEnv(process.env.CONVEX_SITE_URL);
+  if (explicit) return explicit;
   if (cloudUrl?.endsWith(".convex.cloud")) {
     return cloudUrl.replace(/\.convex\.cloud$/, ".convex.site");
   }
-
   if (cloudUrl) {
     try {
       const parsed = new URL(cloudUrl);
@@ -43,8 +33,32 @@ export function getConvexSiteUrl(): string {
         }
       }
     } catch {
-      // Fall through to the error below.
+      // Fall through.
     }
+  }
+  return undefined;
+}
+
+export function getConvexCloudUrl(): string {
+  const url = readConvexCloudUrl();
+  if (!url) {
+    throw new Error(
+      "Convex URL is not configured. Set NEXT_PUBLIC_CONVEX_URL in Vercel (Preview + Production), or run `npx convex dev` locally.",
+    );
+  }
+  return url;
+}
+
+export function getConvexSiteUrl(): string {
+  const cloudUrl = readConvexCloudUrl();
+  const siteUrl = readConvexSiteUrl(cloudUrl);
+  if (siteUrl) {
+    if (siteUrl.endsWith(".convex.cloud")) {
+      throw new Error(
+        "NEXT_PUBLIC_CONVEX_SITE_URL must end in .convex.site, not .convex.cloud.",
+      );
+    }
+    return siteUrl;
   }
 
   throw new Error(
