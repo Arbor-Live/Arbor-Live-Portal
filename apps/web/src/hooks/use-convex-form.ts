@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   useForm,
@@ -145,16 +145,28 @@ export function useConvexForm<T extends FieldValues>({
     };
   }, []);
 
-  return {
-    ...form,
-    saveStatus,
-    saveError,
-    setSaveStatus,
-    setSaveError,
-    submitMutation,
-    runMutation,
-    resetSaveState,
-    debouncedAutoSave,
-    suppressNextAutoSave,
-  };
+  return useMemo(
+    () => ({
+      ...form,
+      saveStatus,
+      saveError,
+      setSaveStatus,
+      setSaveError,
+      submitMutation,
+      runMutation,
+      resetSaveState,
+      debouncedAutoSave,
+      suppressNextAutoSave,
+    }),
+    [
+      form,
+      saveStatus,
+      saveError,
+      submitMutation,
+      runMutation,
+      resetSaveState,
+      debouncedAutoSave,
+      suppressNextAutoSave,
+    ],
+  );
 }

@@ -144,6 +144,7 @@ export function EventPullList({
     defaultValues: toFormValues(initialItems),
     mode: "onChange",
   });
+  const { reset, suppressNextAutoSave, debouncedAutoSave, watch, formState } = form;
 
   const initialSyncKey = useMemo(
     () =>
@@ -155,9 +156,9 @@ export function EventPullList({
 
   useEffect(() => {
     setItems(initialItems);
-    form.reset(toFormValues(initialItems));
-    form.suppressNextAutoSave();
-  }, [initialSyncKey, initialItems, form]);
+    reset(toFormValues(initialItems));
+    suppressNextAutoSave();
+  }, [initialSyncKey, initialItems, reset, suppressNextAutoSave]);
 
   const typeOptions: SearchableSelectOption[] = useMemo(
     () =>
@@ -241,13 +242,13 @@ export function EventPullList({
         })),
       });
       setItems(nextItems);
-      form.reset(toFormValues(nextItems));
-      form.suppressNextAutoSave();
+      reset(toFormValues(nextItems));
+      suppressNextAutoSave();
       onSaved?.(
         `${successMessage} (${result.totalLines} line${result.totalLines === 1 ? "" : "s"}, ${formatQty(result.totalPieces)} piece${result.totalPieces === 1 ? "" : "s"}).`,
       );
     },
-    [eventId, form, onSaved, upsertItems],
+    [eventId, onSaved, reset, suppressNextAutoSave, upsertItems],
   );
 
   const debouncedPersist = useCallback(
@@ -258,14 +259,14 @@ export function EventPullList({
     [items, persistItems],
   );
 
-  const watched = form.watch();
+  const watched = watch();
   useEffect(() => {
     if (!showManage) return;
-    form.debouncedAutoSave(debouncedPersist, {
+    debouncedAutoSave(debouncedPersist, {
       delayMs: 1000,
-      enabled: form.formState.isDirty,
+      enabled: formState.isDirty,
     });
-  }, [watched, form, showManage, debouncedPersist]);
+  }, [watched, debouncedAutoSave, showManage, debouncedPersist, formState.isDirty]);
 
   async function handleScaffold() {
     if (!eventId) return;
