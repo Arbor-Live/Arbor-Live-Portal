@@ -122,20 +122,6 @@ async function generateUniquePublicToken(ctx: MutationCtx) {
   throw new Error("Unable to allocate tracking token.");
 }
 
-function mapGroupTypeToSponsor(type: string) {
-  switch (type) {
-    case "department":
-      return "Stanford Department";
-    case "house":
-      return "Stanford House / Greek Life";
-    case "individual":
-      return "Individual Stanford Affiliate";
-    case "vso":
-    default:
-      return "Large Voulunteer Student Organization";
-  }
-}
-
 function mapServicesToTeams(
   crewOrRental: string | undefined,
   servicesNeeded: string[],
