@@ -49,6 +49,7 @@ import type * as lib_crewTeams from "../lib/crewTeams.js";
 import type * as lib_eventSeriesCosts from "../lib/eventSeriesCosts.js";
 import type * as lib_eventSeriesGeneration from "../lib/eventSeriesGeneration.js";
 import type * as lib_eventStatus from "../lib/eventStatus.js";
+import type * as lib_invoiceEvents from "../lib/invoiceEvents.js";
 import type * as lostFoundSettings from "../lostFoundSettings.js";
 import type * as publicInventory from "../publicInventory.js";
 import type * as storageLocations from "../storageLocations.js";
@@ -103,6 +104,7 @@ declare const fullApi: ApiFromModules<{
   "lib/eventSeriesCosts": typeof lib_eventSeriesCosts;
   "lib/eventSeriesGeneration": typeof lib_eventSeriesGeneration;
   "lib/eventStatus": typeof lib_eventStatus;
+  "lib/invoiceEvents": typeof lib_invoiceEvents;
   lostFoundSettings: typeof lostFoundSettings;
   publicInventory: typeof publicInventory;
   storageLocations: typeof storageLocations;

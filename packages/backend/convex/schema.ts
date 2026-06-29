@@ -368,6 +368,8 @@ export default defineSchema({
     totalUsd: v.number(),
 
     notes: v.optional(v.string()),
+    termsIds: v.optional(v.array(v.id("invoiceTerms"))),
+    /** @deprecated Use termsIds. Kept for existing invoices until backfilled. */
     termsId: v.optional(v.id("invoiceTerms")),
     additionalTermsMarkdown: v.optional(v.string()),
 

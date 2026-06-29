@@ -7,9 +7,16 @@ import { api, type Id } from "@/lib/convex-api";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
+import { CaretDownIcon } from "@phosphor-icons/react";
 
 type EquipmentRow = { refId: string; quantity: string };
 type ExternalRentalRow = { provider: string; label: string; quantity: string; rateUsd: string };
@@ -93,7 +100,7 @@ export function InvoiceEditor({
     activeInvoiceId ? { invoiceId: activeInvoiceId } : "skip",
   );
   const [approvalToken, setApprovalToken] = useState("");
-  const [termsId, setTermsId] = useState("");
+  const [termsIds, setTermsIds] = useState<Id<"invoiceTerms">[]>([]);
   const [additionalTermsMarkdown, setAdditionalTermsMarkdown] = useState("");
   const [newTermsLabel, setNewTermsLabel] = useState("");
   const [newTermsVersion, setNewTermsVersion] = useState("v1");
@@ -192,7 +199,13 @@ export function InvoiceEditor({
     setDiscountType(invoice.discountType);
     setDiscountValue(invoice.discountValue.toString());
     setNotes(invoice.notes ?? "");
-    setTermsId(invoice.termsId ?? "");
+    setTermsIds(
+      invoice.termsIds?.length
+        ? invoice.termsIds
+        : invoice.termsId
+          ? [invoice.termsId]
+          : [],
+    );
     setAdditionalTermsMarkdown(invoice.additionalTermsMarkdown ?? "");
 
     setEquipmentPackages(
@@ -258,7 +271,12 @@ export function InvoiceEditor({
       discountType: invoice.discountType,
       discountValue: invoice.discountValue,
       notes: invoice.notes ?? "",
-      termsId: invoice.termsId ?? "",
+      termsIds:
+        invoice.termsIds?.length
+          ? invoice.termsIds
+          : invoice.termsId
+            ? [invoice.termsId]
+            : [],
       additionalTermsMarkdown: invoice.additionalTermsMarkdown ?? "",
       lineItems: lineItems.map((row) => ({
         section: row.section,
@@ -467,7 +485,7 @@ export function InvoiceEditor({
       discountType,
       discountValue: Number(discountValue || "0"),
       notes: notes || undefined,
-      termsId: termsId ? (termsId as Id<"invoiceTerms">) : undefined,
+      termsIds: termsIds.length ? termsIds : undefined,
       additionalTermsMarkdown: additionalTermsMarkdown || undefined,
       lineItems,
     };
@@ -574,7 +592,7 @@ export function InvoiceEditor({
       markdown: newTermsMarkdown.trim(),
       active: true,
     });
-    setTermsId(createdId);
+    setTermsIds((current) => [...current, createdId]);
     setNewTermsLabel("");
     setNewTermsVersion("v1");
     setNewTermsMarkdown("");
@@ -657,7 +675,7 @@ export function InvoiceEditor({
     discountType,
     discountValue,
     notes,
-    termsId,
+    termsIds,
     additionalTermsMarkdown,
     equipmentPackages,
     equipmentTypes,
@@ -666,6 +684,8 @@ export function InvoiceEditor({
     crewRows,
     fees,
   ]);
+
+  const linkedEvents = linkedEvent?.linkedEvents ?? [];
 
   const origin = typeof window === "undefined" ? "" : window.location.origin;
 
@@ -677,10 +697,31 @@ export function InvoiceEditor({
           <p className="text-sm text-muted-foreground">Build invoice sections and export a print-ready PDF.</p>
         </div>
         <div className="flex gap-2">
-          {linkedEvent ? (
+          {linkedEvents.length === 1 ? (
             <Button type="button" variant="outline" asChild>
-              <Link href={`/dashboard/events/${linkedEvent._id}`}>Open Linked Event</Link>
+              <Link href={`/dashboard/events/${linkedEvents[0]._id}`}>Open Linked Event</Link>
             </Button>
+          ) : linkedEvents.length > 1 ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button type="button" variant="outline">
+                  Linked Events ({linkedEvents.length})
+                  <CaretDownIcon className="size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-72">
+                {linkedEvents.map((event) => (
+                  <DropdownMenuItem key={event._id} asChild>
+                    <Link href={`/dashboard/events/${event._id}`} className="flex flex-col items-start gap-0.5">
+                      <span className="font-medium">{event.title}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(event.startAt).toLocaleString()} – {new Date(event.endAt).toLocaleString()}
+                      </span>
+                    </Link>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           ) : null}
           {activeInvoiceId ? (
             <Button type="button" variant="outline" asChild>
@@ -810,19 +851,36 @@ export function InvoiceEditor({
         <CardHeader><CardTitle>Quote Terms & Conditions</CardTitle></CardHeader>
         <CardContent className="space-y-3">
           <div className="space-y-2">
-            <Label>Global terms template</Label>
-            <select
-              className="h-9 w-full rounded-md border bg-background px-3 text-sm"
-              value={termsId}
-              onChange={(e) => setTermsId(e.target.value)}
-            >
-              <option value="">Default terms (from global settings)</option>
-              {(termsDefinitions ?? []).map((row) => (
-                <option key={row._id} value={row._id}>
-                  {row.label} ({row.version})
-                </option>
-              ))}
-            </select>
+            <Label>Global terms templates</Label>
+            <p className="text-xs text-muted-foreground">
+              Select one or more templates. Leave all unchecked to use default terms from global settings.
+            </p>
+            <div className="space-y-2 rounded-md border p-3">
+              {(termsDefinitions ?? []).length ? (
+                (termsDefinitions ?? []).map((row) => {
+                  const checked = termsIds.includes(row._id);
+                  return (
+                    <label key={row._id} className="flex cursor-pointer items-start gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5"
+                        checked={checked}
+                        onChange={() => {
+                          setTermsIds((current) =>
+                            checked ? current.filter((id) => id !== row._id) : [...current, row._id],
+                          );
+                        }}
+                      />
+                      <span>
+                        {row.label} ({row.version})
+                      </span>
+                    </label>
+                  );
+                })
+              ) : (
+                <p className="text-sm text-muted-foreground">No global terms templates yet.</p>
+              )}
+            </div>
           </div>
           <div className="space-y-2">
             <Label>Additional terms (invoice-specific)</Label>

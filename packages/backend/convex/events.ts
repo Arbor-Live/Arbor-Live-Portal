@@ -7,6 +7,7 @@ import {
   normalizeEventStatus,
   syncEventStatusForLinkedInvoice,
 } from "./lib/eventStatus";
+import { listEventsByInvoiceId } from "./lib/invoiceEvents";
 import { RENTAL_EVENT_TYPES, enrichPullListItems, summarizePullList } from "./eventPullLists";
 import { propagateOverviewToSeriesOccurrences, type SeriesEditScope } from "./lib/eventSeriesGeneration";
 import { scheduleEventCancelledEmails } from "./email/triggers";
@@ -318,32 +319,58 @@ export const getByInvoiceId = query({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
-    const event = await ctx.db
-      .query("events")
-      .withIndex("by_invoiceId", (q) => q.eq("invoiceId", args.invoiceId))
-      .unique();
+    const linkedEvents = await listEventsByInvoiceId(ctx, args.invoiceId);
+    const event = linkedEvents[0];
     if (!event) return null;
-    const blocks = await ctx.db
-      .query("eventScheduleBlocks")
-      .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", event._id))
-      .take(500);
-    const assignments = await ctx.db
-      .query("eventPeopleAssignments")
-      .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
-      .take(500);
-    const shifts = await ctx.db
-      .query("eventCrewShifts")
-      .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", event._id))
-      .take(500);
+
+    const eventIds = linkedEvents.map((row) => row._id);
+    const blocks = (
+      await Promise.all(
+        eventIds.map((eventId) =>
+          ctx.db
+            .query("eventScheduleBlocks")
+            .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", eventId))
+            .take(500),
+        ),
+      )
+    ).flat();
+    const assignments = (
+      await Promise.all(
+        eventIds.map((eventId) =>
+          ctx.db
+            .query("eventPeopleAssignments")
+            .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
+            .take(500),
+        ),
+      )
+    ).flat();
+    const shifts = (
+      await Promise.all(
+        eventIds.map((eventId) =>
+          ctx.db
+            .query("eventCrewShifts")
+            .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", eventId))
+            .take(500),
+        ),
+      )
+    ).flat();
+
     return {
       _id: event._id,
-      title: event.title,
+      title: linkedEvents.length > 1 ? `${event.title} (+${linkedEvents.length - 1} more)` : event.title,
       status: event.status,
       startAt: event.startAt,
-      endAt: event.endAt,
+      endAt: linkedEvents[linkedEvents.length - 1]?.endAt ?? event.endAt,
       blocks,
       assignments,
       shifts,
+      linkedEvents: linkedEvents.map((row) => ({
+        _id: row._id,
+        title: row.title,
+        status: row.status,
+        startAt: row.startAt,
+        endAt: row.endAt,
+      })),
     };
   },
 });

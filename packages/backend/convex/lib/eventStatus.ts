@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
+import { listEventsByInvoiceId } from "./invoiceEvents";
 
 export const EVENT_PIPELINE_STATUSES = [
   "tentative",
@@ -57,25 +58,25 @@ export async function syncLinkedEventStatusFromInvoice(
   invoiceId: Id<"invoices">,
   clientApprovalStatus: string | undefined,
 ) {
-  const event = await ctx.db
-    .query("events")
-    .withIndex("by_invoiceId", (q) => q.eq("invoiceId", invoiceId))
-    .unique();
-  if (!event) return;
+  const events = await listEventsByInvoiceId(ctx, invoiceId);
+  if (!events.length) return;
 
-  const status = normalizeEventStatus(event.status);
   const now = Date.now();
 
-  if (isQuoteApproved(clientApprovalStatus) && status === "tentative") {
-    await ctx.db.patch(event._id, { status: "logistics", updatedAt: now });
-    return;
-  }
+  for (const event of events) {
+    const status = normalizeEventStatus(event.status);
 
-  if (
-    (clientApprovalStatus === "pending" || clientApprovalStatus === "changes_requested") &&
-    status === "logistics"
-  ) {
-    await ctx.db.patch(event._id, { status: "tentative", updatedAt: now });
+    if (isQuoteApproved(clientApprovalStatus) && status === "tentative") {
+      await ctx.db.patch(event._id, { status: "logistics", updatedAt: now });
+      continue;
+    }
+
+    if (
+      (clientApprovalStatus === "pending" || clientApprovalStatus === "changes_requested") &&
+      status === "logistics"
+    ) {
+      await ctx.db.patch(event._id, { status: "tentative", updatedAt: now });
+    }
   }
 }
 

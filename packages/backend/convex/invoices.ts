@@ -1,9 +1,10 @@
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { components } from "./_generated/api";
-import { mutation, query, type MutationCtx } from "./_generated/server";
+import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { isAdmin, requireArborInternalContext, requireAuth } from "./lib/auth";
 import { syncLinkedEventStatusFromInvoice } from "./lib/eventStatus";
+import { listEventsByInvoiceId } from "./lib/invoiceEvents";
 
 const equipmentPricingModeValue = v.union(v.literal("subsidized"), v.literal("nonSubsidized"));
 const crewRateModeValue = v.union(
@@ -59,6 +60,63 @@ type LineInput = {
 function trimOptional(raw: string | undefined) {
   const out = raw?.trim();
   return out ? out : undefined;
+}
+
+function resolveInvoiceTermsIds(invoice: Doc<"invoices">): Id<"invoiceTerms">[] {
+  if (invoice.termsIds && invoice.termsIds.length > 0) return invoice.termsIds;
+  if (invoice.termsId) return [invoice.termsId];
+  return [];
+}
+
+function normalizeTermsIds(termsIds: Id<"invoiceTerms">[] | undefined) {
+  if (!termsIds?.length) return undefined;
+  const seen = new Set<Id<"invoiceTerms">>();
+  const normalized: Id<"invoiceTerms">[] = [];
+  for (const id of termsIds) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    normalized.push(id);
+  }
+  return normalized.length ? normalized : undefined;
+}
+
+function combineTermsMarkdown(terms: Doc<"invoiceTerms">[]) {
+  if (!terms.length) return "";
+  if (terms.length === 1) return terms[0].markdown;
+  return terms.map((term) => `## ${term.label} (${term.version})\n\n${term.markdown}`).join("\n\n---\n\n");
+}
+
+async function loadInvoiceTerms(
+  ctx: QueryCtx | MutationCtx,
+  invoice: Doc<"invoices">,
+) {
+  const fallbackSettings = await ctx.db
+    .query("invoiceSettings")
+    .withIndex("by_key", (q) => q.eq("key", "default"))
+    .unique();
+  const termsIds = resolveInvoiceTermsIds(invoice);
+  if (!termsIds.length) {
+    return {
+      markdown: fallbackSettings?.termsAndConditionsMarkdown ?? "",
+      version: fallbackSettings?.termsVersion ?? "v1",
+    };
+  }
+
+  const selectedTerms = (
+    await Promise.all(termsIds.map((termsId) => ctx.db.get(termsId)))
+  ).filter((term): term is Doc<"invoiceTerms"> => term !== null);
+
+  if (!selectedTerms.length) {
+    return {
+      markdown: fallbackSettings?.termsAndConditionsMarkdown ?? "",
+      version: fallbackSettings?.termsVersion ?? "v1",
+    };
+  }
+
+  return {
+    markdown: combineTermsMarkdown(selectedTerms),
+    version: selectedTerms.map((term) => term.version).join(", "),
+  };
 }
 
 async function allocateInvoiceNumber(ctx: MutationCtx) {
@@ -328,40 +386,60 @@ export const getPublicQuoteByToken = query({
       .query("invoiceLineItems")
       .withIndex("by_invoiceId_and_order", (q) => q.eq("invoiceId", invoice._id))
       .take(500);
-    const selectedTerms = invoice.termsId ? await ctx.db.get(invoice.termsId) : null;
-    const fallbackSettings = await ctx.db.query("invoiceSettings").withIndex("by_key", (q) => q.eq("key", "default")).unique();
-    const globalTermsMarkdown = selectedTerms?.markdown ?? fallbackSettings?.termsAndConditionsMarkdown ?? "";
-    const globalTermsVersion = selectedTerms?.version ?? fallbackSettings?.termsVersion ?? "v1";
+    const { markdown: globalTermsMarkdown, version: globalTermsVersion } = await loadInvoiceTerms(ctx, invoice);
     const combinedTermsMarkdown = invoice.additionalTermsMarkdown
       ? `${globalTermsMarkdown}\n\n---\n\n## Additional Terms\n\n${invoice.additionalTermsMarkdown}`
       : globalTermsMarkdown;
-    const linkedEvent = await ctx.db
-      .query("events")
-      .withIndex("by_invoiceId", (q) => q.eq("invoiceId", invoice._id))
-      .unique();
+    const linkedEvents = await listEventsByInvoiceId(ctx, invoice._id);
+    const linkedEvent = linkedEvents[0] ?? null;
+    const eventIds = linkedEvents.map((event) => event._id);
     const eventAssignments = linkedEvent
-      ? await ctx.db
-          .query("eventPeopleAssignments")
-          .withIndex("by_eventId", (q) => q.eq("eventId", linkedEvent._id))
-          .take(500)
+      ? (
+          await Promise.all(
+            eventIds.map((eventId) =>
+              ctx.db
+                .query("eventPeopleAssignments")
+                .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
+                .take(500),
+            ),
+          )
+        ).flat()
       : [];
     const eventScheduleBlocks = linkedEvent
-      ? await ctx.db
-          .query("eventScheduleBlocks")
-          .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", linkedEvent._id))
-          .take(500)
+      ? (
+          await Promise.all(
+            eventIds.map((eventId) =>
+              ctx.db
+                .query("eventScheduleBlocks")
+                .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", eventId))
+                .take(500),
+            ),
+          )
+        ).flat()
       : [];
     const eventShifts = linkedEvent
-      ? await ctx.db
-          .query("eventCrewShifts")
-          .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", linkedEvent._id))
-          .take(500)
+      ? (
+          await Promise.all(
+            eventIds.map((eventId) =>
+              ctx.db
+                .query("eventCrewShifts")
+                .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", eventId))
+                .take(500),
+            ),
+          )
+        ).flat()
       : [];
     const eventArtifacts = linkedEvent
-      ? await ctx.db
-          .query("eventArtifacts")
-          .withIndex("by_eventId", (q) => q.eq("eventId", linkedEvent._id))
-          .take(500)
+      ? (
+          await Promise.all(
+            eventIds.map((eventId) =>
+              ctx.db
+                .query("eventArtifacts")
+                .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
+                .take(500),
+            ),
+          )
+        ).flat()
       : [];
     return {
       invoice: {
@@ -395,7 +473,7 @@ export const getPublicQuoteByToken = query({
         clientApprovalNote: invoice.clientApprovalNote,
         termsVersionAccepted: invoice.termsVersionAccepted,
         termsAcceptedAt: invoice.termsAcceptedAt,
-        termsId: invoice.termsId,
+        termsIds: resolveInvoiceTermsIds(invoice),
         additionalTermsMarkdown: invoice.additionalTermsMarkdown,
       },
       lineItems,
@@ -469,7 +547,7 @@ export const createDraft = mutation({
     discountType: discountTypeValue,
     discountValue: v.number(),
     notes: v.optional(v.string()),
-    termsId: v.optional(v.id("invoiceTerms")),
+    termsIds: v.optional(v.array(v.id("invoiceTerms"))),
     additionalTermsMarkdown: v.optional(v.string()),
     lineItems: v.array(lineItemInput),
   },
@@ -477,6 +555,7 @@ export const createDraft = mutation({
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
     const publicApprovalToken = await generateUniquePublicApprovalToken(ctx);
+    const normalizedTermsIds = normalizeTermsIds(args.termsIds);
     const totals = await computeTotals(
       ctx,
       args.lineItems as LineInput[],
@@ -520,7 +599,8 @@ export const createDraft = mutation({
       subtotalUsd: totals.subtotalUsd,
       totalUsd: totals.totalUsd,
       notes: trimOptional(args.notes),
-      termsId: args.termsId,
+      termsIds: normalizedTermsIds,
+      termsId: undefined,
       additionalTermsMarkdown: trimOptional(args.additionalTermsMarkdown),
       clientApprovalStatus: "pending",
       publicApprovalToken,
@@ -565,7 +645,7 @@ export const updateDraft = mutation({
     discountType: discountTypeValue,
     discountValue: v.number(),
     notes: v.optional(v.string()),
-    termsId: v.optional(v.id("invoiceTerms")),
+    termsIds: v.optional(v.array(v.id("invoiceTerms"))),
     additionalTermsMarkdown: v.optional(v.string()),
     lineItems: v.array(lineItemInput),
   },
@@ -575,6 +655,7 @@ export const updateDraft = mutation({
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Invoice not found.");
     const publicApprovalToken = existing.publicApprovalToken || (await generateUniquePublicApprovalToken(ctx));
+    const normalizedTermsIds = normalizeTermsIds(args.termsIds);
     const totals = await computeTotals(
       ctx,
       args.lineItems as LineInput[],
@@ -616,7 +697,8 @@ export const updateDraft = mutation({
       subtotalUsd: totals.subtotalUsd,
       totalUsd: totals.totalUsd,
       notes: trimOptional(args.notes),
-      termsId: args.termsId,
+      termsIds: normalizedTermsIds,
+      termsId: undefined,
       additionalTermsMarkdown: trimOptional(args.additionalTermsMarkdown),
       publicApprovalToken,
       updatedAt: now,
@@ -661,13 +743,12 @@ export const approveByToken = mutation({
     if ((invoice.clientApprovalStatus ?? "pending") !== "pending") throw new Error("Quote decision already submitted.");
 
     const now = Date.now();
-    const selectedTerms = invoice.termsId ? await ctx.db.get(invoice.termsId) : null;
-    const fallbackSettings = await ctx.db.query("invoiceSettings").withIndex("by_key", (q) => q.eq("key", "default")).unique();
+    const { version: termsVersion } = await loadInvoiceTerms(ctx, invoice);
     await ctx.db.patch(invoice._id, {
       clientApprovalStatus: "approved",
       approvedAt: now,
       termsAcceptedAt: now,
-      termsVersionAccepted: selectedTerms?.version ?? fallbackSettings?.termsVersion ?? "v1",
+      termsVersionAccepted: termsVersion,
       updatedAt: now,
     });
     await syncLinkedEventStatusFromInvoice(ctx, invoice._id, "approved");
