@@ -37,19 +37,17 @@ function loadEnvDir(dir: string, files: string[]) {
 // Turbopack root is the monorepo; load env from the web app and Convex backend.
 loadEnvDir(webDir, [".env", ".env.local", ".env.development", ".env.development.local"]);
 loadEnvDir(backendDir, [".env", ".env.local"]);
-
-function readEnv(...keys: string[]): string | undefined {
-  for (const key of keys) {
-    const value = process.env[key]?.trim();
-    if (value) return value;
-  }
-  return undefined;
-}
+loadEnvFile(path.join(webDir, ".env.production.local"));
 
 /** Convex CLI sets CONVEX_URL during `convex deploy --cmd`; expose it to the Next.js bundle. */
-const convexCloudUrl = readEnv("NEXT_PUBLIC_CONVEX_URL", "CONVEX_URL", "CONVEX_CLOUD_URL");
+const convexCloudUrl =
+  process.env.NEXT_PUBLIC_CONVEX_URL?.trim() ||
+  process.env.CONVEX_URL?.trim() ||
+  process.env.CONVEX_CLOUD_URL?.trim() ||
+  undefined;
 const convexSiteUrl =
-  readEnv("NEXT_PUBLIC_CONVEX_SITE_URL", "CONVEX_SITE_URL") ??
+  process.env.NEXT_PUBLIC_CONVEX_SITE_URL?.trim() ||
+  process.env.CONVEX_SITE_URL?.trim() ||
   (convexCloudUrl?.endsWith(".convex.cloud")
     ? convexCloudUrl.replace(/\.convex\.cloud$/, ".convex.site")
     : undefined);
