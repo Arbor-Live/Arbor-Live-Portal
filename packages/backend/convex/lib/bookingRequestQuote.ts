@@ -40,26 +40,15 @@ export async function resolveClientGroupName(
   return request.sponsorType.trim() || undefined;
 }
 
-export function buildInvoiceNotesFromRequest(request: {
-  requestNumber: string;
-  eventName?: string;
-  eventCategory: string;
-  eventDateText: string;
-  venueName?: string;
-  productionTier?: string;
-  crewOrRental?: string;
-  servicesNeeded: string[];
-}): string {
-  const lines = [`Booking request ${request.requestNumber}`];
-  if (request.eventName?.trim()) lines.push(request.eventName.trim());
-  lines.push(`${request.eventCategory} · ${request.eventDateText}`);
-  if (request.venueName) lines.push(`Venue: ${request.venueName}`);
-  if (request.crewOrRental) lines.push(`Crew / rental: ${request.crewOrRental}`);
-  if (request.servicesNeeded.length) {
-    lines.push(`Services: ${request.servicesNeeded.join(", ")}`);
+export async function resolveEquipmentPricingMode(
+  ctx: MutationCtx,
+  request: Pick<Doc<"eventRequests">, "invoiceGroupId">,
+): Promise<"subsidized" | "nonSubsidized"> {
+  if (request.invoiceGroupId) {
+    const group = await ctx.db.get(request.invoiceGroupId);
+    if (group?.equipmentPricingMode) return group.equipmentPricingMode;
   }
-  if (request.productionTier) lines.push(`Production tier: ${request.productionTier}`);
-  return lines.join("\n");
+  return "subsidized";
 }
 
 function pacificIssueDate(now = Date.now()) {
@@ -81,9 +70,9 @@ export async function createDraftInvoiceFromBookingRequest(
   },
 ): Promise<{ invoiceId: Id<"invoices"> }> {
   const { request } = args;
-  const requestNumber = request.requestNumber ?? `LEGACY-${request._id}`;
   const clientGroupType = await resolveClientGroupType(ctx, request);
   const clientGroupName = await resolveClientGroupName(ctx, request);
+  const equipmentPricingMode = await resolveEquipmentPricingMode(ctx, request);
   const now = Date.now();
 
   const invoiceId = await ctx.db.insert("invoices", {
@@ -106,7 +95,7 @@ export async function createDraftInvoiceFromBookingRequest(
     clientCity: undefined,
     clientState: undefined,
     clientPostalCode: undefined,
-    equipmentPricingMode: "subsidized",
+    equipmentPricingMode,
     crewRateMode: "normal",
     discountType: "amount",
     discountValue: 0,
@@ -119,16 +108,7 @@ export async function createDraftInvoiceFromBookingRequest(
     feesSubtotalUsd: 0,
     subtotalUsd: 0,
     totalUsd: 0,
-    notes: buildInvoiceNotesFromRequest({
-      requestNumber,
-      eventName: request.eventName,
-      eventCategory: request.eventCategory,
-      eventDateText: request.eventDateText,
-      venueName: request.venueName,
-      productionTier: request.productionTier,
-      crewOrRental: request.crewOrRental,
-      servicesNeeded: request.servicesNeeded,
-    }),
+    notes: undefined,
     termsIds: undefined,
     termsId: undefined,
     additionalTermsMarkdown: undefined,

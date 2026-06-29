@@ -12,6 +12,8 @@ const invoiceDocumentValidator = v.object({
     clientContactName: v.optional(v.string()),
     clientEmail: v.optional(v.string()),
     clientPhone: v.optional(v.string()),
+    clientApprovalStatus: v.optional(v.string()),
+    digitalQuoteUrl: v.optional(v.string()),
     equipmentSubtotalUsd: v.number(),
     externalRentalsSubtotalUsd: v.number(),
     artistsSubtotalUsd: v.number(),
@@ -24,6 +26,7 @@ const invoiceDocumentValidator = v.object({
   }),
   lineItems: v.array(
     v.object({
+      id: v.string(),
       section: v.string(),
       provider: v.optional(v.string()),
       label: v.string(),
@@ -55,6 +58,8 @@ export const getInvoiceDocument = internalQuery({
         clientContactName: invoice.clientContactName,
         clientEmail: invoice.clientEmail,
         clientPhone: invoice.clientPhone,
+        clientApprovalStatus: invoice.clientApprovalStatus,
+        digitalQuoteUrl: undefined,
         equipmentSubtotalUsd: invoice.equipmentSubtotalUsd,
         externalRentalsSubtotalUsd: invoice.externalRentalsSubtotalUsd,
         artistsSubtotalUsd: invoice.artistsSubtotalUsd,
@@ -66,6 +71,7 @@ export const getInvoiceDocument = internalQuery({
         notes: invoice.notes,
       },
       lineItems: lineItems.map((row) => ({
+        id: row._id,
         section: row.section,
         provider: row.provider,
         label: row.label,

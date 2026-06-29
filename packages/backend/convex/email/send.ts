@@ -6,9 +6,9 @@ import { v } from "convex/values";
 import type { Id } from "../_generated/dataModel";
 import { components, internal } from "../_generated/api";
 import { internalAction } from "../_generated/server";
+import { renderInvoicePdfBuffer } from "@arbor/invoice-document/pdf";
 import { EMAIL_FROM } from "./constants";
 import { renderEmailHtml } from "./templates";
-import { generateInvoicePdfBuffer } from "../lib/invoicePdfGenerate";
 
 export const resendClient = new Resend(components.resend, {
   testMode: process.env.EMAIL_TEST_MODE === "true",
@@ -57,7 +57,7 @@ export const sendQueuedEmail = internalAction({
           throw new Error("Invoice not found for quote email attachment.");
         }
 
-        const pdfBuffer = await generateInvoicePdfBuffer(document);
+        const pdfBuffer = await renderInvoicePdfBuffer(document);
         const fileName = `${payload.invoiceNumber}.pdf`;
         const resendSdk = getResendSdk();
 

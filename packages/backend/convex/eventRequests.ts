@@ -121,14 +121,7 @@ async function generateUniquePublicToken(ctx: MutationCtx) {
   throw new Error("Unable to allocate tracking token.");
 }
 
-function splitContactName(name: string) {
-  const parts = name.trim().split(/\s+/);
-  if (parts.length === 0) return { firstName: "", lastName: "" };
-  if (parts.length === 1) return { firstName: parts[0] ?? "", lastName: "" };
-  return { firstName: parts[0] ?? "", lastName: parts.slice(1).join(" ") };
-}
-
-function mapGroupTypeToSponsor(type: string) {
+import { resolveContactNameParts } from "./lib/contactName";
   switch (type) {
     case "department":
       return "Stanford Department";
@@ -164,60 +157,6 @@ function inferEventType(crewOrRental: string | undefined, servicesNeeded: string
   if (crewOrRental === "Crewed") return "Crewed Event";
   if (hasSoundOrLighting) return "Dry Rental";
   return "Services Only";
-}
-
-function buildConversionNotes(request: {
-  requestNumber: string;
-  eventName?: string;
-  eventDateText: string;
-  eventStartTimeText: string;
-  eventEndTimeText: string;
-  earliestSetupText: string;
-  flexibleSetupTime?: boolean;
-  venueAddress?: string;
-  sponsorType: string;
-  crewOrRental?: string;
-  productionTier?: string;
-  eventDescription?: string;
-  existingEquipment?: string;
-  lightingPreference?: string;
-  additionalNotes?: string;
-  email: string;
-  phone: string;
-  firstName: string;
-  lastName: string;
-}): string {
-  const lines = [
-    `Converted from booking request ${request.requestNumber}.`,
-    "",
-    `Contact: ${request.firstName} ${request.lastName}`,
-    `Email: ${request.email}`,
-    `Phone: ${request.phone}`,
-    `Sponsor type: ${request.sponsorType}`,
-  ];
-  if (request.eventName?.trim()) lines.push(`Event name: ${request.eventName.trim()}`);
-  if (request.crewOrRental) lines.push(`Crew / rental: ${request.crewOrRental}`);
-  lines.push(
-    "",
-    `Event date: ${request.eventDateText}`,
-    `Start time: ${request.eventStartTimeText}`,
-    `End time: ${request.eventEndTimeText}`,
-    `Earliest setup: ${request.earliestSetupText}`,
-  );
-  if (request.flexibleSetupTime) lines.push("Flexible setup time: yes");
-  if (request.venueAddress) lines.push(`Venue address: ${request.venueAddress}`);
-  if (request.productionTier) lines.push(`Production tier: ${request.productionTier}`);
-  if (request.lightingPreference) lines.push(`Lighting: ${request.lightingPreference}`);
-  if (request.eventDescription) {
-    lines.push("", "Event description:", request.eventDescription);
-  }
-  if (request.existingEquipment) {
-    lines.push("", "Existing equipment:", request.existingEquipment);
-  }
-  if (request.additionalNotes) {
-    lines.push("", "Additional notes:", request.additionalNotes);
-  }
-  return lines.join("\n");
 }
 
 function defaultPlaceholderTimes() {
@@ -265,7 +204,7 @@ export const lookupContactByEmail = query({
     }
 
     const primary = activeContacts[0]!;
-    const { firstName, lastName } = splitContactName(primary.name);
+    const { firstName, lastName } = resolveContactNameParts(primary);
     const groups = (
       await Promise.all(
         activeContacts.map(async (contact) => {
@@ -806,10 +745,6 @@ export const convertToEvent = mutation({
       host,
       expectedTurnout: request.expectedTurnout,
       invoiceId,
-      notes: buildConversionNotes({
-        ...request,
-        requestNumber: request.requestNumber ?? `LEGACY-${request._id}`,
-      }),
       createdAt: now,
       updatedAt: now,
     });

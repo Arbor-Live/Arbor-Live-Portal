@@ -263,6 +263,7 @@ export default defineSchema({
   invoiceGroups: defineTable({
     name: v.string(),
     type: invoiceGroupTypeValue,
+    equipmentPricingMode: v.optional(equipmentPricingModeValue),
     active: v.boolean(),
     lastUsedAt: v.optional(v.number()),
     createdAt: v.number(),
@@ -275,7 +276,10 @@ export default defineSchema({
 
   invoiceContacts: defineTable({
     groupId: v.optional(v.id("invoiceGroups")),
-    name: v.string(),
+    /** @deprecated Migrated to firstName/lastName. */
+    name: v.optional(v.string()),
+    firstName: v.optional(v.string()),
+    lastName: v.optional(v.string()),
     email: v.optional(v.string()),
     phone: v.optional(v.string()),
     active: v.boolean(),
@@ -283,12 +287,11 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   })
-    .index("by_name", ["name"])
     .index("by_email", ["email"])
     .index("by_groupId", ["groupId"])
     .index("by_active", ["active"])
     .index("by_lastUsedAt", ["lastUsedAt"])
-    .index("by_groupId_and_name", ["groupId", "name"]),
+    .index("by_groupId_and_lastName", ["groupId", "lastName"]),
 
   invoiceSettings: defineTable({
     key: v.string(),

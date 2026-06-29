@@ -1,0 +1,24 @@
+{
+  "name": "@arbor/invoice-document",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./web": "./src/web.ts",
+    "./pdf": "./src/render-pdf.tsx",
+    "./types": "./src/types.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@react-pdf/renderer": "^4.3.0",
+    "react": "^19.2.5"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "@types/react": "^19.2.14",
+    "typescript": "^5.9.3"
+  }
+}

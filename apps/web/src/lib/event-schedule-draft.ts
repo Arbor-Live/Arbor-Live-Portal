@@ -148,3 +148,69 @@ export function buildQuickAddScheduleBlocks(args: {
 export function shiftHours(shift: Pick<EventShiftDraft, "startsAt" | "endsAt">) {
   return hoursBetweenLocal(shift.startsAt, shift.endsAt);
 }
+
+export function shiftBelongsToBlock(shift: EventShiftDraft, block: TimelineBlockDraft) {
+  const blockRef = getBlockRef(block);
+  if (blockRef && shift.scheduleBlockRef === blockRef) return true;
+  if (block.id && shift.scheduleBlockId === block.id) return true;
+  if (block.id && shift.scheduleBlockRef === block.id) return true;
+  return false;
+}
+
+export function timelineBlocksFromSaved(
+  savedBlocks: Array<{
+    id: string;
+    clientId?: string;
+    blockType: TimelineBlockDraft["blockType"];
+    label: string;
+    dayIndex: number;
+    startsAt: number;
+    endsAt: number;
+    notes?: string;
+  }>,
+): TimelineBlockDraft[] {
+  return savedBlocks.map((row) => ({
+    id: row.id,
+    clientId: row.clientId ?? row.id,
+    blockType: row.blockType,
+    label: row.label,
+    dayIndex: row.dayIndex,
+    startsAt: toLocalDateTimeInput(row.startsAt),
+    endsAt: toLocalDateTimeInput(row.endsAt),
+    notes: row.notes ?? "",
+  }));
+}
+
+export function attachShiftsToPersistedBlocks(
+  shifts: EventShiftDraft[],
+  blocks: TimelineBlockDraft[],
+): EventShiftDraft[] {
+  const persistedBlockIdByRef = mapPersistedBlockIdByRef(blocks);
+  return shifts.map((shift) => {
+    const persistedId =
+      (shift.scheduleBlockId && blocks.some((block) => block.id === shift.scheduleBlockId)
+        ? shift.scheduleBlockId
+        : undefined) ??
+      (shift.scheduleBlockRef ? persistedBlockIdByRef.get(shift.scheduleBlockRef) : undefined);
+    return {
+      ...shift,
+      scheduleBlockId: persistedId,
+      scheduleBlockRef: persistedId ?? shift.scheduleBlockRef,
+    };
+  });
+}
+
+export function resolveShiftScheduleBlockId(
+  shift: EventShiftDraft,
+  blocks: TimelineBlockDraft[],
+) {
+  const persistedBlockIdByRef = mapPersistedBlockIdByRef(blocks);
+  const validBlockIds = new Set(blocks.map((block) => block.id).filter(Boolean));
+  return (
+    (shift.scheduleBlockId && validBlockIds.has(shift.scheduleBlockId)
+      ? shift.scheduleBlockId
+      : shift.scheduleBlockRef
+        ? persistedBlockIdByRef.get(shift.scheduleBlockRef)
+        : undefined) ?? undefined
+  );
+}

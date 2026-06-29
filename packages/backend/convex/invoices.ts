@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { components } from "./_generated/api";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
-import { isAdmin, requireArborInternalContext, requireAuth } from "./lib/auth";
+import { isAdmin, requireAdmin, requireArborInternalContext, requireAuth } from "./lib/auth";
 import { syncLinkedEventStatusFromInvoice } from "./lib/eventStatus";
 import { listEventsByInvoiceId } from "./lib/invoiceEvents";
 import {
@@ -281,6 +281,54 @@ export const listManagers = query({
         hourlyRateUsd: rateByUserId?.get(user.id ?? user._id ?? "") ?? undefined,
       }))
       .filter((u) => Boolean(u.id))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  },
+});
+
+export const listInvoiceManagersForAdmin = query({
+  args: {},
+  returns: v.array(
+    v.object({
+      id: v.string(),
+      name: v.string(),
+      email: v.optional(v.string()),
+      role: v.optional(v.string()),
+      title: v.string(),
+      phone: v.string(),
+      active: v.boolean(),
+    }),
+  ),
+  handler: async (ctx) => {
+    await requireAdmin(ctx);
+    await requireArborInternalContext(ctx);
+    const result = await ctx.runQuery(components.betterAuth.adapter.findMany, {
+      model: "user",
+      paginationOpts: { cursor: null, numItems: 200 },
+    });
+    const users = (result?.page ?? []) as Array<{
+      _id?: string;
+      id?: string;
+      name?: string;
+      email?: string;
+      role?: string | null;
+    }>;
+    const profiles = await ctx.db.query("userAdminProfiles").withIndex("by_active").take(2000);
+    const profileByUserId = new Map(profiles.map((profile) => [profile.userId, profile]));
+    return users
+      .map((user) => {
+        const id = user.id ?? user._id ?? "";
+        const profile = profileByUserId.get(id);
+        return {
+          id,
+          name: user.name ?? user.email ?? "Unknown user",
+          email: user.email,
+          role: user.role ?? undefined,
+          title: profile?.title ?? "",
+          phone: profile?.phone ?? "",
+          active: profile?.active ?? true,
+        };
+      })
+      .filter((user) => Boolean(user.id))
       .sort((a, b) => a.name.localeCompare(b.name));
   },
 });

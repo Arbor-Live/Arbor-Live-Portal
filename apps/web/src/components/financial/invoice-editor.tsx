@@ -20,7 +20,6 @@ import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
 import { InvoiceLinkedEventCrewSection } from "@/components/financial/invoice-linked-event-crew";
 import {
-  buildCrewRowsFromLinkedEvent,
   mergeEventCrewWithManualRows,
   type InvoiceCrewRow,
 } from "@/lib/invoice-crew-from-event";
@@ -32,12 +31,13 @@ type ArtistRow = { label: string; quantity: string; rateUsd: string };
 type CrewRow = InvoiceCrewRow;
 type FeeRow = { feeDefinitionId: string; label: string; quantity: string; rateUsd: string };
 
-const groupTypeLabels: Record<string, string> = {
-  vso: "VSO",
-  house: "House",
-  department: "Department",
-  individual: "Individual",
-};
+import {
+  INVOICE_GROUP_TYPE_LABELS,
+  EQUIPMENT_PRICING_MODE_LABELS,
+  EQUIPMENT_PRICING_MODE_OPTIONS,
+  type EquipmentPricingMode,
+} from "@/lib/invoice-group-labels";
+import { formatContactFullName, splitContactName } from "@/lib/contact-name";
 
 export function InvoiceEditor({
   invoiceId,
@@ -80,9 +80,6 @@ export function InvoiceEditor({
   const [managerUserId, setManagerUserId] = useState("");
   const [managerName, setManagerName] = useState("");
   const [managerEmail, setManagerEmail] = useState("");
-  const [clientGroupName, setClientGroupName] = useState("");
-  const [clientGroupType, setClientGroupType] = useState<"" | "vso" | "house" | "department" | "individual">("");
-  const [clientContactName, setClientContactName] = useState("");
   const [clientEmail, setClientEmail] = useState("");
   const [clientPhone, setClientPhone] = useState("");
   const [clientAddressLine1, setClientAddressLine1] = useState("");
@@ -130,8 +127,11 @@ export function InvoiceEditor({
   const [groupModalOpen, setGroupModalOpen] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
   const [newGroupType, setNewGroupType] = useState<"vso" | "house" | "department" | "individual">("department");
+  const [newGroupEquipmentPricingMode, setNewGroupEquipmentPricingMode] =
+    useState<EquipmentPricingMode>("subsidized");
   const [contactModalOpen, setContactModalOpen] = useState(false);
-  const [newContactName, setNewContactName] = useState("");
+  const [newContactFirstName, setNewContactFirstName] = useState("");
+  const [newContactLastName, setNewContactLastName] = useState("");
   const [newContactEmail, setNewContactEmail] = useState("");
   const [newContactPhone, setNewContactPhone] = useState("");
 
@@ -167,16 +167,27 @@ export function InvoiceEditor({
     () =>
       (groups ?? []).map((g) => ({
         value: g._id,
-        label: `${g.name} (${groupTypeLabels[g.type] ?? g.type})`,
+        label: `${g.name} (${INVOICE_GROUP_TYPE_LABELS[g.type] ?? g.type})`,
       })),
     [groups],
   );
+  const selectedGroup = useMemo(
+    () => (groups ?? []).find((group) => group._id === groupId),
+    [groups, groupId],
+  );
+  const selectedContact = useMemo(
+    () => (contacts ?? []).find((contact) => contact._id === contactId),
+    [contacts, contactId],
+  );
   const contactOptions = useMemo(
     () =>
-      (contacts ?? []).map((c) => ({
-        value: c._id,
-        label: c.email ? `${c.name} (${c.email})` : c.name,
-      })),
+      (contacts ?? []).map((c) => {
+        const fullName = formatContactFullName(c.firstName, c.lastName);
+        return {
+          value: c._id,
+          label: c.email ? `${fullName} (${c.email})` : fullName,
+        };
+      }),
     [contacts],
   );
 
@@ -249,9 +260,6 @@ export function InvoiceEditor({
     setManagerEmail(invoice.managerEmail ?? "");
     setGroupId(invoice.groupId ?? "");
     setContactId(invoice.contactId ?? "");
-    setClientGroupName(invoice.clientGroupName ?? "");
-    setClientGroupType((invoice.clientGroupType as typeof clientGroupType) ?? "");
-    setClientContactName(invoice.clientContactName ?? "");
     setClientEmail(invoice.clientEmail ?? "");
     setClientPhone(invoice.clientPhone ?? "");
     setClientAddressLine1(invoice.clientAddressLine1 ?? "");
@@ -375,20 +383,7 @@ export function InvoiceEditor({
     crewBootstrappedRef.current = true;
 
     if (linkedEvent) {
-      const eventRows = buildCrewRowsFromLinkedEvent(linkedEvent);
-      const manualRows = savedCrewSnapshotRef.current
-        .filter(
-          (saved) =>
-            !eventRows.some(
-              (event) =>
-                event.label === saved.label &&
-                Math.abs(Number(event.quantity) - Number(saved.quantity)) < 0.01,
-            ),
-        )
-        .map((row) => ({ ...row, source: "manual" as const }));
-      suppressAutoSaveOnceRef.current = true;
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setCrewRows([...eventRows, ...manualRows]);
+      // Crew lines for linked events come from the event schedule editor, not saved invoice rows.
       return;
     }
 
@@ -413,8 +408,9 @@ export function InvoiceEditor({
     setContactId("");
     const selected = (groups ?? []).find((g) => g._id === nextGroupId);
     if (selected) {
-      setClientGroupName(selected.name);
-      setClientGroupType(selected.type);
+      setClientEmail("");
+      setClientPhone("");
+      setEquipmentPricingMode(selected.equipmentPricingMode ?? "subsidized");
     }
   }
 
@@ -422,7 +418,6 @@ export function InvoiceEditor({
     setContactId(nextContactId);
     const selected = (contacts ?? []).find((c) => c._id === nextContactId);
     if (selected) {
-      setClientContactName(selected.name);
       setClientEmail(selected.email ?? "");
       setClientPhone(selected.phone ?? "");
     }
@@ -438,6 +433,7 @@ export function InvoiceEditor({
     const id = await createGroup({
       name: newGroupName.trim(),
       type: newGroupType,
+      equipmentPricingMode: newGroupEquipmentPricingMode,
       active: true,
     });
     setGroupModalOpen(false);
@@ -447,29 +443,33 @@ export function InvoiceEditor({
 
   function openCreateContact(prefill: string) {
     if (!groupId) {
-      window.alert("Select a group first so the client/contact can be linked.");
+      window.alert("Select a host first so the client/contact can be linked.");
       return;
     }
-    setNewContactName(prefill);
+    const { firstName, lastName } = splitContactName(prefill);
+    setNewContactFirstName(firstName);
+    setNewContactLastName(lastName);
     setContactModalOpen(true);
   }
 
   async function submitCreateContact() {
     if (!groupId) {
-      window.alert("Select a group first.");
+      window.alert("Select a host first.");
       return;
     }
-    if (!newContactName.trim()) return;
+    if (!newContactFirstName.trim() || !newContactLastName.trim()) return;
     const id = await createContact({
       groupId: groupId as Id<"invoiceGroups">,
-      name: newContactName.trim(),
+      firstName: newContactFirstName.trim(),
+      lastName: newContactLastName.trim(),
       email: newContactEmail.trim() || undefined,
       phone: newContactPhone.trim() || undefined,
       active: true,
     });
     setContactModalOpen(false);
     onContactChange(id);
-    setNewContactName("");
+    setNewContactFirstName("");
+    setNewContactLastName("");
     setNewContactEmail("");
     setNewContactPhone("");
   }
@@ -567,6 +567,8 @@ export function InvoiceEditor({
     if (!managerUserId || !managerName.trim()) return null;
     const lineItems = buildLineItems();
     if (!lineItems.length) return null;
+    const hostGroup = (groups ?? []).find((group) => group._id === groupId);
+    const hostContact = (contacts ?? []).find((contact) => contact._id === contactId);
     return {
       issueDate,
       dueDate: dueDate || undefined,
@@ -575,9 +577,11 @@ export function InvoiceEditor({
       managerEmail: managerEmail || undefined,
       groupId: groupId ? (groupId as Id<"invoiceGroups">) : undefined,
       contactId: contactId ? (contactId as Id<"invoiceContacts">) : undefined,
-      clientGroupName: clientGroupName || undefined,
-      clientGroupType: clientGroupType || undefined,
-      clientContactName: clientContactName || undefined,
+      clientGroupName: hostGroup?.name,
+      clientGroupType: hostGroup?.type,
+      clientContactName: hostContact
+        ? formatContactFullName(hostContact.firstName, hostContact.lastName)
+        : undefined,
       clientEmail: clientEmail || undefined,
       clientPhone: clientPhone || undefined,
       clientAddressLine1: clientAddressLine1 || undefined,
@@ -736,9 +740,6 @@ export function InvoiceEditor({
     managerEmail,
     groupId,
     contactId,
-    clientGroupName,
-    clientGroupType,
-    clientContactName,
     clientEmail,
     clientPhone,
     clientAddressLine1,
@@ -939,9 +940,19 @@ export function InvoiceEditor({
           <div className="space-y-2">
             <Label>Equipment pricing</Label>
             <select className="h-9 w-full rounded-md border bg-background px-3 text-sm" value={equipmentPricingMode} onChange={(e) => setEquipmentPricingMode(e.target.value as "subsidized" | "nonSubsidized")}>
-              <option value="subsidized">Subsidized</option>
-              <option value="nonSubsidized">Non-Subsidized</option>
+              {EQUIPMENT_PRICING_MODE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
             </select>
+            {selectedGroup ? (
+              <p className="text-xs text-muted-foreground">
+                Default from host:{" "}
+                {EQUIPMENT_PRICING_MODE_LABELS[selectedGroup.equipmentPricingMode ?? "subsidized"]}. You can
+                override per invoice.
+              </p>
+            ) : null}
           </div>
           <div className="space-y-2">
             <Label>Crew rate mode</Label>
@@ -1132,15 +1143,15 @@ export function InvoiceEditor({
         <CardHeader><CardTitle>Client</CardTitle></CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-3">
           <div className="space-y-2">
-            <Label>Group</Label>
+            <Label>Host</Label>
             <SearchableSelect
               value={groupId}
               onChange={onGroupChange}
               options={groupOptions}
-              placeholder="Search groups..."
-              emptyLabel="Select group"
+              placeholder="Search hosts..."
+              emptyLabel="Select host"
               onCreate={openCreateGroup}
-              createLabel="New Group"
+              createLabel="New Host"
             />
           </div>
           <div className="space-y-2">
@@ -1149,27 +1160,34 @@ export function InvoiceEditor({
               value={contactId}
               onChange={onContactChange}
               options={contactOptions}
-              placeholder={groupId ? "Search contacts..." : "Select group first"}
-              emptyLabel={groupId ? "Select contact" : "Select group first"}
+              placeholder={groupId ? "Search contacts..." : "Select host first"}
+              emptyLabel={groupId ? "Select contact" : "Select host first"}
               onCreate={openCreateContact}
               createLabel="New Client"
             />
             {!groupId ? (
-              <p className="text-xs text-muted-foreground">Clients are linked to a group. Select a group first.</p>
+              <p className="text-xs text-muted-foreground">Clients are linked to a host. Select a host first.</p>
             ) : null}
           </div>
-          <div className="space-y-2">
-            <Label>Group type</Label>
-            <select className="h-9 w-full rounded-md border bg-background px-3 text-sm" value={clientGroupType} onChange={(e) => setClientGroupType(e.target.value as typeof clientGroupType)}>
-              <option value="">Select type</option>
-              <option value="vso">VSO</option>
-              <option value="house">House</option>
-              <option value="department">Department</option>
-              <option value="individual">Individual</option>
-            </select>
-          </div>
-          <Input placeholder="Group name" value={clientGroupName} onChange={(e) => setClientGroupName(e.target.value)} />
-          <Input placeholder="Contact name" value={clientContactName} onChange={(e) => setClientContactName(e.target.value)} />
+          {selectedGroup ? (
+            <div className="space-y-1 rounded-md border bg-muted/30 p-3 text-sm">
+              <p className="font-medium">{selectedGroup.name}</p>
+              <p className="text-muted-foreground">
+                {INVOICE_GROUP_TYPE_LABELS[selectedGroup.type] ?? selectedGroup.type}
+                {" · "}
+                {EQUIPMENT_PRICING_MODE_LABELS[selectedGroup.equipmentPricingMode ?? "subsidized"]}
+              </p>
+              {selectedContact ? (
+                <p className="text-muted-foreground">
+                  Contact: {formatContactFullName(selectedContact.firstName, selectedContact.lastName)}
+                </p>
+              ) : null}
+            </div>
+          ) : (
+            <div className="flex items-center rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+              Select a host to link this invoice.
+            </div>
+          )}
           <Input placeholder="Email" value={clientEmail} onChange={(e) => setClientEmail(e.target.value)} />
           <Input placeholder="Phone" value={clientPhone} onChange={(e) => setClientPhone(e.target.value)} />
           <Input placeholder="Address line 1" value={clientAddressLine1} onChange={(e) => setClientAddressLine1(e.target.value)} />
@@ -1243,7 +1261,7 @@ export function InvoiceEditor({
       {groupModalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
           <Card className="w-full max-w-md">
-            <CardHeader><CardTitle>New Group</CardTitle></CardHeader>
+            <CardHeader><CardTitle>New Host</CardTitle></CardHeader>
             <CardContent className="space-y-3">
               <div className="space-y-2">
                 <Label>Name</Label>
@@ -1262,8 +1280,24 @@ export function InvoiceEditor({
                   <option value="individual">Individual</option>
                 </select>
               </div>
+              <div className="space-y-2">
+                <Label>Equipment pricing</Label>
+                <select
+                  className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                  value={newGroupEquipmentPricingMode}
+                  onChange={(e) =>
+                    setNewGroupEquipmentPricingMode(e.target.value as EquipmentPricingMode)
+                  }
+                >
+                  {EQUIPMENT_PRICING_MODE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div className="flex gap-2">
-                <Button type="button" onClick={() => void submitCreateGroup()}>Create Group</Button>
+                <Button type="button" onClick={() => void submitCreateGroup()}>Create Host</Button>
                 <Button type="button" variant="outline" onClick={() => setGroupModalOpen(false)}>Cancel</Button>
               </div>
             </CardContent>
@@ -1277,11 +1311,15 @@ export function InvoiceEditor({
             <CardHeader><CardTitle>New Client</CardTitle></CardHeader>
             <CardContent className="space-y-3">
               <p className="text-xs text-muted-foreground">
-                Linked to group: <span className="font-medium">{clientGroupName || "Selected group"}</span>
+                Linked to host: <span className="font-medium">{selectedGroup?.name || "Selected host"}</span>
               </p>
               <div className="space-y-2">
-                <Label>Name</Label>
-                <Input value={newContactName} onChange={(e) => setNewContactName(e.target.value)} />
+                <Label>First name</Label>
+                <Input value={newContactFirstName} onChange={(e) => setNewContactFirstName(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Last name</Label>
+                <Input value={newContactLastName} onChange={(e) => setNewContactLastName(e.target.value)} />
               </div>
               <div className="space-y-2">
                 <Label>Email</Label>
