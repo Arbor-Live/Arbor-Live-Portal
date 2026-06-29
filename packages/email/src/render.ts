@@ -1,10 +1,14 @@
 import { render } from "@react-email/render";
+import { BookingQuoteReadyEmail } from "../emails/booking-quote-ready";
+import { BookingRequestReceivedEmail } from "../emails/booking-request-received";
 import { EventCancelledEmail } from "../emails/event-cancelled";
 import { PasswordResetEmail } from "../emails/password-reset";
 import { SchedulePublishedEmail } from "../emails/schedule-published";
 import { ScheduleReminderEmail } from "../emails/schedule-reminder";
 import { UserInviteEmail } from "../emails/user-invite";
 import type {
+  BookingQuoteReadyEmailProps,
+  BookingRequestReceivedEmailProps,
   EventEmailProps,
   PasswordResetEmailProps,
   SchedulePublishedEmailProps,
@@ -30,4 +34,12 @@ export async function renderUserInviteEmail(props: UserInviteEmailProps) {
 
 export async function renderPasswordResetEmail(props: PasswordResetEmailProps) {
   return render(PasswordResetEmail(props));
+}
+
+export async function renderBookingRequestReceivedEmail(props: BookingRequestReceivedEmailProps) {
+  return render(BookingRequestReceivedEmail(props));
+}
+
+export async function renderBookingQuoteReadyEmail(props: BookingQuoteReadyEmailProps) {
+  return render(BookingQuoteReadyEmail(props));
 }

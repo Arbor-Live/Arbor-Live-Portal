@@ -1,4 +1,6 @@
 import {
+  renderBookingQuoteReadyEmail,
+  renderBookingRequestReceivedEmail,
   renderEventCancelledEmail,
   renderPasswordResetEmail,
   renderSchedulePublishedEmail,
@@ -6,6 +8,8 @@ import {
   renderUserInviteEmail,
 } from "@arbor/email/render";
 import type {
+  BookingQuoteReadyEmailProps,
+  BookingRequestReceivedEmailProps,
   EventEmailProps,
   PasswordResetEmailProps,
   SchedulePublishedEmailProps,
@@ -26,5 +30,9 @@ export async function renderEmailHtml(template: EmailTemplate, payload: unknown)
       return renderUserInviteEmail(payload as UserInviteEmailProps);
     case "password_reset":
       return renderPasswordResetEmail(payload as PasswordResetEmailProps);
+    case "booking_request_received":
+      return renderBookingRequestReceivedEmail(payload as BookingRequestReceivedEmailProps);
+    case "booking_quote_ready":
+      return renderBookingQuoteReadyEmail(payload as BookingQuoteReadyEmailProps);
   }
 }

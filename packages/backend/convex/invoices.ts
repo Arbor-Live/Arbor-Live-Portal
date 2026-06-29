@@ -11,6 +11,7 @@ import {
   requestInvoiceQuoteChanges,
 } from "./lib/publicQuoteView";
 import { allocateInvoiceNumber } from "./lib/publicReferenceIds";
+import { scheduleBookingQuoteReadyEmail } from "./email/bookingRequestEmails";
 
 const equipmentPricingModeValue = v.union(v.literal("subsidized"), v.literal("nonSubsidized"));
 const crewRateModeValue = v.union(
@@ -667,6 +668,25 @@ export const markReadyForClientReview = mutation({
       clientReviewReadyAt: now,
       updatedAt: now,
     });
+
+    const updatedInvoice = await ctx.db.get(args.id);
+    if (updatedInvoice?.sourceEventRequestId) {
+      const request = await ctx.db.get(updatedInvoice.sourceEventRequestId);
+      if (request) {
+        await scheduleBookingQuoteReadyEmail(ctx, {
+          request,
+          invoice: {
+            _id: updatedInvoice._id,
+            invoiceNumber: updatedInvoice.invoiceNumber,
+            totalUsd: updatedInvoice.totalUsd,
+            managerName: updatedInvoice.managerName,
+            managerEmail: updatedInvoice.managerEmail,
+            clientReviewReadyAt: now,
+          },
+        });
+      }
+    }
+
     return null;
   },
 });

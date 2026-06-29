@@ -1,0 +1,78 @@
+import { v } from "convex/values";
+import { internalQuery } from "../_generated/server";
+
+const invoiceDocumentValidator = v.object({
+  invoice: v.object({
+    invoiceNumber: v.string(),
+    issueDate: v.string(),
+    dueDate: v.optional(v.string()),
+    managerName: v.string(),
+    managerEmail: v.optional(v.string()),
+    clientGroupName: v.optional(v.string()),
+    clientContactName: v.optional(v.string()),
+    clientEmail: v.optional(v.string()),
+    clientPhone: v.optional(v.string()),
+    equipmentSubtotalUsd: v.number(),
+    externalRentalsSubtotalUsd: v.number(),
+    artistsSubtotalUsd: v.number(),
+    crewSubtotalUsd: v.number(),
+    feesSubtotalUsd: v.number(),
+    subtotalUsd: v.number(),
+    discountAmountUsd: v.number(),
+    totalUsd: v.number(),
+    notes: v.optional(v.string()),
+  }),
+  lineItems: v.array(
+    v.object({
+      section: v.string(),
+      provider: v.optional(v.string()),
+      label: v.string(),
+      quantity: v.number(),
+      rateUsd: v.number(),
+      amountUsd: v.number(),
+    }),
+  ),
+});
+
+export const getInvoiceDocument = internalQuery({
+  args: { invoiceId: v.id("invoices") },
+  returns: v.union(invoiceDocumentValidator, v.null()),
+  handler: async (ctx, args) => {
+    const invoice = await ctx.db.get(args.invoiceId);
+    if (!invoice || invoice.status === "void") return null;
+    const lineItems = await ctx.db
+      .query("invoiceLineItems")
+      .withIndex("by_invoiceId_and_order", (q) => q.eq("invoiceId", args.invoiceId))
+      .take(500);
+    return {
+      invoice: {
+        invoiceNumber: invoice.invoiceNumber,
+        issueDate: invoice.issueDate,
+        dueDate: invoice.dueDate,
+        managerName: invoice.managerName,
+        managerEmail: invoice.managerEmail,
+        clientGroupName: invoice.clientGroupName,
+        clientContactName: invoice.clientContactName,
+        clientEmail: invoice.clientEmail,
+        clientPhone: invoice.clientPhone,
+        equipmentSubtotalUsd: invoice.equipmentSubtotalUsd,
+        externalRentalsSubtotalUsd: invoice.externalRentalsSubtotalUsd,
+        artistsSubtotalUsd: invoice.artistsSubtotalUsd,
+        crewSubtotalUsd: invoice.crewSubtotalUsd,
+        feesSubtotalUsd: invoice.feesSubtotalUsd,
+        subtotalUsd: invoice.subtotalUsd,
+        discountAmountUsd: invoice.discountAmountUsd,
+        totalUsd: invoice.totalUsd,
+        notes: invoice.notes,
+      },
+      lineItems: lineItems.map((row) => ({
+        section: row.section,
+        provider: row.provider,
+        label: row.label,
+        quantity: row.quantity,
+        rateUsd: row.rateUsd,
+        amountUsd: row.amountUsd,
+      })),
+    };
+  },
+});

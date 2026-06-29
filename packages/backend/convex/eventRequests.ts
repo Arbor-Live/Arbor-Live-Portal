@@ -9,6 +9,7 @@ import {
   loadPublicQuoteView,
   requestInvoiceQuoteChanges,
 } from "./lib/publicQuoteView";
+import { scheduleBookingRequestReceivedEmail } from "./email/bookingRequestEmails";
 import { allocateRequestNumber } from "./lib/publicReferenceIds";
 
 const EVENT_TIMEZONE = "America/Los_Angeles";
@@ -494,6 +495,12 @@ export const submitPublic = mutation({
       createdAt: now,
       updatedAt: now,
     });
+
+    const inserted = await ctx.db.get(id);
+    if (inserted) {
+      await scheduleBookingRequestReceivedEmail(ctx, inserted);
+    }
+
     return { id, publicToken, requestNumber };
   },
 });
