@@ -3,7 +3,7 @@ import { mutation, query } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import { getUserId, requireArborInternalContext, requireAuth } from "./lib/auth";
 import { normalizeEventStatus } from "./lib/eventStatus";
-import { createDraftInvoiceFromBookingRequest } from "./lib/bookingRequestQuote";
+import { createDraftInvoiceFromBookingRequest, mapGroupTypeToSponsor } from "./lib/bookingRequestQuote";
 import {
   approveInvoiceQuote,
   loadPublicQuoteView,
@@ -11,6 +11,7 @@ import {
 } from "./lib/publicQuoteView";
 import { scheduleBookingRequestReceivedEmail } from "./email/bookingRequestEmails";
 import { allocateRequestNumber } from "./lib/publicReferenceIds";
+import { resolveContactNameParts } from "./lib/contactName";
 
 const EVENT_TIMEZONE = "America/Los_Angeles";
 
@@ -119,20 +120,6 @@ async function generateUniquePublicToken(ctx: MutationCtx) {
     if (!existing) return token;
   }
   throw new Error("Unable to allocate tracking token.");
-}
-
-import { resolveContactNameParts } from "./lib/contactName";
-  switch (type) {
-    case "department":
-      return "Stanford Department";
-    case "house":
-      return "Stanford House / Greek Life";
-    case "individual":
-      return "Individual Stanford Affiliate";
-    case "vso":
-    default:
-      return "Large Voulunteer Student Organization";
-  }
 }
 
 function mapServicesToTeams(
