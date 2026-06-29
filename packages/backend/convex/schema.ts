@@ -284,6 +284,7 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_name", ["name"])
+    .index("by_email", ["email"])
     .index("by_groupId", ["groupId"])
     .index("by_active", ["active"])
     .index("by_lastUsedAt", ["lastUsedAt"])
@@ -720,6 +721,57 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_idempotencyKey", ["idempotencyKey"])
     .index("by_eventId", ["eventId"]),
+
+
+  eventRequests: defineTable({
+    status: v.union(
+      v.literal("submitted"),
+      v.literal("in_review"),
+      v.literal("converted"),
+      v.literal("declined"),
+    ),
+    requestNumber: v.optional(v.string()),
+    publicToken: v.optional(v.string()),
+    firstName: v.string(),
+    lastName: v.string(),
+    email: v.string(),
+    phone: v.string(),
+    organization: v.optional(v.string()),
+    sponsorType: v.string(),
+    invoiceContactId: v.optional(v.id("invoiceContacts")),
+    invoiceGroupId: v.optional(v.id("invoiceGroups")),
+    requestContext: v.optional(v.string()),
+    venueName: v.optional(v.string()),
+    venueAddress: v.optional(v.string()),
+    eventDateText: v.string(),
+    eventStartTimeText: v.string(),
+    eventEndTimeText: v.string(),
+    earliestSetupText: v.string(),
+    eventStartAtMs: v.optional(v.number()),
+    eventEndAtMs: v.optional(v.number()),
+    setupAtMs: v.optional(v.number()),
+    flexibleSetupTime: v.optional(v.boolean()),
+    eventCategory: v.string(),
+    crewOrRental: v.optional(v.string()),
+    servicesNeeded: v.array(v.string()),
+    productionTier: v.optional(v.string()),
+    eventDescription: v.optional(v.string()),
+    expectedTurnout: v.number(),
+    existingEquipment: v.optional(v.string()),
+    lightingPreference: v.optional(v.string()),
+    additionalNotes: v.optional(v.string()),
+    convertedEventId: v.optional(v.id("events")),
+    linkedInvoiceId: v.optional(v.id("invoices")),
+    reviewedByUserId: v.optional(v.string()),
+    staffNotes: v.optional(v.string()),
+    submittedAt: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_status_and_submittedAt", ["status", "submittedAt"])
+    .index("by_email", ["email"])
+    .index("by_publicToken", ["publicToken"])
+    .index("by_requestNumber", ["requestNumber"]),
 
   eventPullListItems: defineTable({
     eventId: v.id("events"),

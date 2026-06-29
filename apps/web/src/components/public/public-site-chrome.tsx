@@ -26,6 +26,9 @@ export function PublicSiteChrome({ children }: { children: React.ReactNode }) {
             <Link className="rounded-md border px-3 py-1 hover:bg-muted" href="/public/types">
               Types
             </Link>
+            <Link className="rounded-md border px-3 py-1 hover:bg-muted" href="/public/request">
+              Request booking
+            </Link>
             <Link className="rounded-md border px-3 py-1 hover:bg-muted" href="/sign-in">
               Staff sign-in
             </Link>

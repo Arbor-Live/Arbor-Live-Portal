@@ -1,0 +1,435 @@
+import { z } from "zod";
+
+export const STANFORD_EMAIL_PATTERN = /^[^\s@]+@(?:stanford\.edu|alumni\.stanford\.edu)$/i;
+
+export function isStanfordEmail(email: string) {
+  return STANFORD_EMAIL_PATTERN.test(email.trim());
+}
+
+export const SPONSOR_TYPE_OPTIONS = [
+  "Stanford Department",
+  "Large Voulunteer Student Organization",
+  "Small Voulunteer Student Organization",
+  "Stanford House / Greek Life",
+  "Individual Stanford Affiliate",
+  "Other",
+] as const;
+
+export const EVENT_CATEGORY_OPTIONS = [
+  "Live Bands",
+  "DJ",
+  "Speaker Event",
+  "Other",
+] as const;
+
+export const CREW_OR_RENTAL_OPTIONS = ["Crewed", "Rental"] as const;
+
+export const ADDON_SERVICE_OPTIONS = [
+  "Sound",
+  "Lighting",
+  "Staging",
+  "Collaboration",
+  "Scheduling",
+] as const;
+
+export const PRODUCTION_TIER_OPTIONS = [
+  "Premium / High-Impact: A fully bespoke experience with custom lighting design, high-fidelity sound reinforcement, and dedicated technical planning to create a \"wow\" factor.",
+  "Professional / Polished: A high-standard setup focused on clarity and atmosphere. Ideal for events that need to look and sound seamless, reliable, and professional.",
+  "Essential / Functional: A clean, straightforward setup providing high-quality basics (clear audio and standard lighting) to ensure the event's core needs are met.",
+] as const;
+
+export const LIGHTING_TIER_OPTIONS = [
+  "Basic Lighting - Making sure people can see where they are going",
+  "Standard Lighting - Some more lighting that is themed to your event, with a more reactive experience to the music",
+  "Professional Lighting - Involves more fancy lighting, such as moving heads and light bars, but is more expensive",
+] as const;
+
+export const STANDARD_LIGHTING =
+  "Standard Lighting - Some more lighting that is themed to your event, with a more reactive experience to the music";
+
+export const REQUEST_CONTEXT_OPTIONS = ["group", "personal", "new_group"] as const;
+
+export function combineDateAndTime(date: string, time: string): number | null {
+  if (!date || !time) return null;
+  const parsed = new Date(`${date}T${time}:00`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.getTime();
+}
+
+export function formatLongDate(date: string) {
+  const parsed = new Date(`${date}T12:00:00`);
+  if (Number.isNaN(parsed.getTime())) return date;
+  return parsed.toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+export function formatDisplayTime(time: string) {
+  const parsed = new Date(`1970-01-01T${time}:00`);
+  if (Number.isNaN(parsed.getTime())) return time;
+  return parsed.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+}
+
+export function getTurnoutTier(count: number) {
+  if (count < 50) {
+    return {
+      label: "Small and cozy",
+      description: "Less than 50 guests",
+      people: Math.min(Math.max(count, 8), 12),
+    };
+  }
+  if (count < 100) {
+    return {
+      label: "Medium",
+      description: "50 to 100 guests",
+      people: 18,
+    };
+  }
+  if (count < 200) {
+    return {
+      label: "Large",
+      description: "100 to 200 guests",
+      people: 28,
+    };
+  }
+  return {
+    label: "Major event",
+    description: "200+ guests — additional coordination after your request",
+    people: 40,
+  };
+}
+
+export const bookingRequestSchema = z
+  .object({
+    website: z.string().max(0).optional(),
+    email: z
+      .string()
+      .trim()
+      .email("Enter a valid email address")
+      .refine(isStanfordEmail, "Use your @stanford.edu email address"),
+    firstName: z.string().trim().min(1, "First name is required"),
+    lastName: z.string().trim().min(1, "Last name is required"),
+    phone: z.string().trim().min(1, "Phone is required"),
+    organization: z.string().trim().optional(),
+    requestContext: z.enum(REQUEST_CONTEXT_OPTIONS).optional(),
+    invoiceContactId: z.string().trim().optional(),
+    invoiceGroupId: z.string().trim().optional(),
+    sponsorType: z.enum(SPONSOR_TYPE_OPTIONS, { message: "Select a sponsor type" }),
+    sponsorTypeOther: z.string().trim().optional(),
+    venueName: z.string().trim().optional(),
+    venueAddress: z.string().trim().optional(),
+    eventDate: z.string().trim().min(1, "Event date is required"),
+    eventStartTime: z.string().trim().min(1, "Start time is required"),
+    eventEndTime: z.string().trim().min(1, "End time is required"),
+    setupTime: z.string().trim().optional(),
+    flexibleSetupTime: z.boolean(),
+    eventCategory: z.enum(EVENT_CATEGORY_OPTIONS, { message: "Select an event type" }),
+    eventCategoryOther: z.string().trim().optional(),
+    crewOrRental: z.enum(CREW_OR_RENTAL_OPTIONS, { message: "Select crewed or rental" }),
+    servicesNeeded: z.array(z.enum(ADDON_SERVICE_OPTIONS)),
+    productionTier: z.enum(PRODUCTION_TIER_OPTIONS).optional(),
+    eventDescription: z.string().trim().optional(),
+    expectedTurnout: z
+      .number({ message: "Enter expected turnout" })
+      .int("Turnout must be a whole number")
+      .positive("Turnout must be greater than zero"),
+    existingEquipment: z.string().trim().optional(),
+    lightingPreference: z.enum(LIGHTING_TIER_OPTIONS).optional(),
+    additionalNotes: z.string().trim().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.sponsorType === "Other" && !data.sponsorTypeOther?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Please describe who is sponsoring this event",
+        path: ["sponsorTypeOther"],
+      });
+    }
+    if (data.eventCategory === "Other" && !data.eventCategoryOther?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Please describe your event type",
+        path: ["eventCategoryOther"],
+      });
+    }
+    if (!data.flexibleSetupTime && !data.setupTime?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Setup time is required unless flexible",
+        path: ["setupTime"],
+      });
+    }
+
+    const startMs = combineDateAndTime(data.eventDate, data.eventStartTime);
+    const endMs = combineDateAndTime(data.eventDate, data.eventEndTime);
+    const setupMs = data.setupTime ? combineDateAndTime(data.eventDate, data.setupTime) : null;
+
+    if (!startMs) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Invalid start time", path: ["eventStartTime"] });
+    }
+    if (!endMs) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Invalid end time", path: ["eventEndTime"] });
+    }
+    if (startMs && endMs && endMs <= startMs) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "End time must be after start time",
+        path: ["eventEndTime"],
+      });
+    }
+    if (!data.flexibleSetupTime && setupMs && startMs && setupMs >= startMs) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Setup must be before event start",
+        path: ["setupTime"],
+      });
+    }
+
+    if (data.servicesNeeded.includes("Lighting") && !data.lightingPreference) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Select a lighting tier",
+        path: ["lightingPreference"],
+      });
+    }
+  });
+
+export type BookingRequestFormValues = z.infer<typeof bookingRequestSchema>;
+
+export const bookingRequestDefaultValues: BookingRequestFormValues = {
+  website: "",
+  email: "",
+  firstName: "",
+  lastName: "",
+  phone: "",
+  organization: "",
+  requestContext: undefined,
+  invoiceContactId: "",
+  invoiceGroupId: "",
+  sponsorType: "Stanford Department",
+  sponsorTypeOther: "",
+  venueName: "",
+  venueAddress: "",
+  eventDate: "",
+  eventStartTime: "18:00",
+  eventEndTime: "22:00",
+  setupTime: "15:00",
+  flexibleSetupTime: false,
+  eventCategory: "Live Bands",
+  eventCategoryOther: "",
+  crewOrRental: "Crewed",
+  servicesNeeded: [],
+  productionTier: undefined,
+  eventDescription: "",
+  expectedTurnout: 100,
+  existingEquipment: "",
+  lightingPreference: STANDARD_LIGHTING,
+  additionalNotes: "",
+};
+
+export type BookingRequestStepId =
+  | "welcome"
+  | "email"
+  | "returningUser"
+  | "contact"
+  | "sponsorType"
+  | "venue"
+  | "eventSchedule"
+  | "eventCategory"
+  | "services"
+  | "productionTier"
+  | "lighting"
+  | "eventDescription"
+  | "expectedTurnout"
+  | "existingEquipment"
+  | "additionalNotes"
+  | "thankYou";
+
+export type BookingRequestStepConfig = {
+  id: BookingRequestStepId;
+  headline: string;
+  subheader?: string;
+  fields: Array<keyof BookingRequestFormValues>;
+  skippable?: boolean;
+};
+
+const BASE_STEPS: BookingRequestStepConfig[] = [
+  {
+    id: "welcome",
+    headline: "Welcome!",
+    subheader:
+      "Thank you for your interest in booking Arbor Live for your event! This form will provide us with all the information we need to ensure your event's success. Once you have completed this form, a member of our team will contact you with the next steps.\n\nEst. response time: 1-5 days\n\nIf you need a response ASAP, please email us at arborlive@stanford.edu",
+    fields: [],
+  },
+  {
+    id: "email",
+    headline: "What's your Stanford email?",
+    subheader: "We'll use this to look up your contact info and send updates about your request.",
+    fields: ["email"],
+  },
+  {
+    id: "returningUser",
+    headline: "Welcome back!",
+    subheader: "Who are you filling out this request for?",
+    fields: ["requestContext", "invoiceGroupId"],
+  },
+  {
+    id: "contact",
+    headline: "Let's get started!",
+    subheader: "Let us know the best way to reach you.",
+    fields: ["firstName", "lastName", "phone"],
+  },
+  {
+    id: "sponsorType",
+    headline: "What best describes who is running/sponsoring this event?",
+    fields: ["sponsorType", "sponsorTypeOther"],
+  },
+  {
+    id: "venue",
+    headline: "Where is the event happening?",
+    subheader:
+      "If you do not know yet, leave empty. Off-campus events may have additional fees.",
+    fields: ["venueName", "venueAddress"],
+  },
+  {
+    id: "eventSchedule",
+    headline: "When is your event?",
+    subheader:
+      "Pick your event date and times. Events requested with less than seven days' notice may have limited availability and overtime rates.",
+    fields: ["eventDate", "eventStartTime", "eventEndTime", "setupTime", "flexibleSetupTime"],
+  },
+  {
+    id: "eventCategory",
+    headline: "What type of event are you running?",
+    subheader: "This will help us dial in your necessities",
+    fields: ["eventCategory", "eventCategoryOther"],
+  },
+  {
+    id: "services",
+    headline: "What services do you need from us?",
+    subheader: "Start with crewed or rental, then choose the production areas you need.",
+    fields: ["crewOrRental", "servicesNeeded"],
+  },
+  {
+    id: "productionTier",
+    headline: "Please select the option that best describes your ideal event production value",
+    fields: ["productionTier"],
+    skippable: true,
+  },
+  {
+    id: "lighting",
+    headline: "What lighting tier do you want?",
+    subheader: "If your event happens at night we strongly recommend lighting.",
+    fields: ["lightingPreference"],
+  },
+  {
+    id: "eventDescription",
+    headline: "Describe your event",
+    subheader:
+      "Tell us a little about your event! What kind of vibe are you looking for? What will be happening during the event?",
+    fields: ["eventDescription"],
+    skippable: true,
+  },
+  {
+    id: "expectedTurnout",
+    headline: "Expected turnout",
+    subheader:
+      "How many people are you expecting? This helps us gauge what we need to bring.",
+    fields: ["expectedTurnout"],
+  },
+  {
+    id: "existingEquipment",
+    headline: "What equipment do you already have?",
+    subheader:
+      "If you already have equipment, please let us know here so we can exclude it from the quote.",
+    fields: ["existingEquipment"],
+    skippable: true,
+  },
+  {
+    id: "additionalNotes",
+    headline: "Any other notes?",
+    subheader: "Have we missed anything or do you want to let us know about something?",
+    fields: ["additionalNotes"],
+    skippable: true,
+  },
+  {
+    id: "thankYou",
+    headline: "Thank you!",
+    subheader: "We will get back to you soon!",
+    fields: [],
+  },
+];
+
+export function getActiveSteps(options: {
+  showReturningUser: boolean;
+  skipSponsor: boolean;
+  includeLighting: boolean;
+}) {
+  return BASE_STEPS.filter((step) => {
+    if (step.id === "returningUser" && !options.showReturningUser) return false;
+    if (step.id === "sponsorType" && options.skipSponsor) return false;
+    if (step.id === "lighting" && !options.includeLighting) return false;
+    return true;
+  });
+}
+
+export function toSubmitPayload(values: BookingRequestFormValues) {
+  const sponsorType =
+    values.sponsorType === "Other" && values.sponsorTypeOther?.trim()
+      ? `Other: ${values.sponsorTypeOther.trim()}`
+      : values.sponsorType;
+  const eventCategory =
+    values.eventCategory === "Other" && values.eventCategoryOther?.trim()
+      ? `Other: ${values.eventCategoryOther.trim()}`
+      : values.eventCategory;
+
+  const eventDateText = formatLongDate(values.eventDate);
+  const eventStartTimeText = formatDisplayTime(values.eventStartTime);
+  const eventEndTimeText = formatDisplayTime(values.eventEndTime);
+  const earliestSetupText = values.flexibleSetupTime
+    ? "Flexible setup time"
+    : formatDisplayTime(values.setupTime ?? "");
+
+  const eventStartAtMs = combineDateAndTime(values.eventDate, values.eventStartTime) ?? undefined;
+  const eventEndAtMs = combineDateAndTime(values.eventDate, values.eventEndTime) ?? undefined;
+  const setupAtMs = values.setupTime
+    ? combineDateAndTime(values.eventDate, values.setupTime) ?? undefined
+    : undefined;
+
+  const servicesNeeded = [values.crewOrRental, ...values.servicesNeeded];
+
+  return {
+    website: values.website ?? "",
+    firstName: values.firstName,
+    lastName: values.lastName,
+    email: values.email,
+    phone: values.phone,
+    organization: values.organization || undefined,
+    sponsorType,
+    invoiceContactId: values.invoiceContactId || undefined,
+    invoiceGroupId: values.invoiceGroupId || undefined,
+    requestContext: values.requestContext,
+    venueName: values.venueName || undefined,
+    venueAddress: values.venueAddress || undefined,
+    eventDateText,
+    eventStartTimeText,
+    eventEndTimeText,
+    earliestSetupText,
+    eventStartAtMs,
+    eventEndAtMs,
+    setupAtMs,
+    flexibleSetupTime: values.flexibleSetupTime,
+    eventCategory,
+    crewOrRental: values.crewOrRental,
+    servicesNeeded,
+    productionTier: values.productionTier,
+    eventDescription: values.eventDescription || undefined,
+    expectedTurnout: values.expectedTurnout,
+    existingEquipment: values.existingEquipment || undefined,
+    lightingPreference: values.servicesNeeded.includes("Lighting")
+      ? values.lightingPreference
+      : undefined,
+    additionalNotes: values.additionalNotes || undefined,
+  };
+}
