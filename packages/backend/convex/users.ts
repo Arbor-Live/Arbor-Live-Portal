@@ -5,6 +5,7 @@ import { mutation, query } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import {
   getUserId,
+  isAdmin,
   requireAdmin,
   requireAuth,
   requireBandContext,
@@ -392,6 +393,23 @@ export const listMyOrganizations = query({
         };
       })
       .sort((a, b) => a.name.localeCompare(b.name));
+  },
+});
+
+export const getViewer = query({
+  args: {},
+  returns: v.object({
+    userId: v.string(),
+    role: v.optional(v.string()),
+    isAdmin: v.boolean(),
+  }),
+  handler: async (ctx) => {
+    const user = await requireAuth(ctx);
+    return {
+      userId: getUserId(user),
+      role: user.role ?? undefined,
+      isAdmin: isAdmin(user),
+    };
   },
 });
 

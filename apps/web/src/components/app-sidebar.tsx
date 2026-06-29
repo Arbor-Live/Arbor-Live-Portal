@@ -46,10 +46,23 @@ import {
   PaperPlaneTiltIcon,
 } from "@phosphor-icons/react"
 
-const navItems = [
+type NavSubItem = {
+  title: string
+  url: string
+  adminOnly?: boolean
+}
+
+type NavItem = {
+  title: string
+  url: string
+  icon: typeof CalendarDotsIcon
+  adminOnly?: boolean
+}
+
+const navItems: NavItem[] = [
   { title: "Events", url: "/dashboard/events", icon: CalendarDotsIcon },
-  { title: "Financial Hub", url: "/dashboard/financial-hub", icon: CurrencyDollarIcon },
-  { title: "Users", url: "/dashboard/users", icon: UsersIcon },
+  { title: "Financial Hub", url: "/dashboard/financial-hub", icon: CurrencyDollarIcon, adminOnly: true },
+  { title: "Users", url: "/dashboard/users", icon: UsersIcon, adminOnly: true },
   {
     title: "Bands and Performers",
     url: "/dashboard/bands-and-performers",
@@ -58,41 +71,46 @@ const navItems = [
   { title: "Inventory", url: "/dashboard/inventory", icon: PackageIcon },
 ]
 
-const inventorySubItems = [
+const inventorySubItems: NavSubItem[] = [
   { title: "Overview", url: "/dashboard/inventory" },
   { title: "Inventory Items", url: "/dashboard/inventory/items" },
-  { title: "Types", url: "/dashboard/inventory/types" },
+  { title: "Types", url: "/dashboard/inventory/types", adminOnly: true },
   { title: "Packages", url: "/dashboard/inventory/packages" },
   { title: "Storage Locations", url: "/dashboard/inventory/storage-locations" },
   { title: "Lost & Found", url: "/dashboard/inventory/lost-found" },
-  { title: "Import CSV", url: "/dashboard/inventory/import" },
+  { title: "Import CSV", url: "/dashboard/inventory/import", adminOnly: true },
 ]
 
-const financialHubSubItems = [
+const financialHubSubItems: NavSubItem[] = [
   { title: "Overview", url: "/dashboard/financial-hub" },
   { title: "Invoices", url: "/dashboard/financial-hub/invoices" },
   { title: "Create Invoice", url: "/dashboard/financial-hub/invoices/new" },
 ]
 
-const eventsSubItems = [
+const eventsSubItems: NavSubItem[] = [
   { title: "Overview", url: "/dashboard/events" },
-  { title: "Crew Scheduling", url: "/dashboard/events/crew-scheduling" },
+  { title: "Crew Scheduling", url: "/dashboard/events/crew-scheduling", adminOnly: true },
   { title: "My Availability", url: "/dashboard/events/my-availability" },
-  { title: "Create Event", url: "/dashboard/events/new" },
+  { title: "Create Event", url: "/dashboard/events/new", adminOnly: true },
 ]
 
-const usersSubItems = [
+const usersSubItems: NavSubItem[] = [
   { title: "Overview", url: "/dashboard/users" },
   { title: "Access & Invites", url: "/dashboard/users/access" },
   { title: "Organizations", url: "/dashboard/users/organizations" },
   { title: "Crew Rates", url: "/dashboard/users/crew-rates" },
 ]
 
-const sectionSubItems: Record<string, { title: string; url: string }[]> = {
+const sectionSubItems: Record<string, NavSubItem[]> = {
   "/dashboard/events": eventsSubItems,
   "/dashboard/financial-hub": financialHubSubItems,
   "/dashboard/inventory": inventorySubItems,
   "/dashboard/users": usersSubItems,
+}
+
+function visibleSubItems(subItems: NavSubItem[] | undefined, isAdmin: boolean) {
+  if (!subItems) return undefined
+  return subItems.filter((subItem) => isAdmin || !subItem.adminOnly)
 }
 
 const secondaryItems = [
@@ -105,16 +123,18 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
   const { data } = authClient.useSession()
   const [now] = useState(() => Date.now())
   const [adminSchedulingRange] = useState(() => getDefaultAdminSchedulingRange())
+  const viewer = useQuery(api.users.getViewer, {})
   const activeOrganization = useQuery(api.users.getActiveOrganization, {})
   const myOrganizations = useQuery(api.users.listMyOrganizations, {})
   const setActiveOrganization = useMutation(api.users.setActiveOrganization)
+  const isAdmin = viewer?.isAdmin ?? false
   const pendingAvailabilityCount = useQuery(
     api.eventCrewAvailability.getMyPendingAvailabilityCount,
     activeOrganization?.organizationType === "arbor_internal" ? { now } : "skip",
   )
   const unconfirmedCrewCount = useQuery(
     api.eventCrewAvailability.listForAdminOverview,
-    activeOrganization?.organizationType === "arbor_internal"
+    activeOrganization?.organizationType === "arbor_internal" && isAdmin
       ? {
           rangeStart: adminSchedulingRange.rangeStart,
           rangeEnd: adminSchedulingRange.rangeEnd,
@@ -128,14 +148,17 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
   const orgName = activeOrganization?.name ?? "No active org"
   const isBandContext = activeOrganization?.organizationType === "band"
   const unconfirmedEventCount = unconfirmedCrewCount?.length ?? 0
-  const scopedNavItems = navItems.filter((item) =>
-    isBandContext
-      ? item.url !== "/dashboard/events" &&
+  const scopedNavItems = navItems.filter((item) => {
+    if (isBandContext) {
+      return (
+        item.url !== "/dashboard/events" &&
         item.url !== "/dashboard/financial-hub" &&
         item.url !== "/dashboard/inventory" &&
         item.url !== "/dashboard/users"
-      : true,
-  )
+      )
+    }
+    return isAdmin || !item.adminOnly
+  })
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({})
 
   return (
@@ -182,7 +205,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
         <SidebarMenu>
           {scopedNavItems.map((item) => {
             const Icon = item.icon
-            const subItems = sectionSubItems[item.url]
+            const subItems = visibleSubItems(sectionSubItems[item.url], isAdmin)
             const hasCollapsibleSubItems = Boolean(subItems && subItems.length > 1)
             const isParentActive =
               pathname === item.url || pathname.startsWith(`${item.url}/`)

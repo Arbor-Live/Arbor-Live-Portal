@@ -52,11 +52,16 @@ export function shiftTemplatesToDrafts(
   }));
 }
 
-export function shiftDraftsToTemplates(drafts: SeriesShiftTemplateDraft[]): SeriesShiftTemplate[] {
-  return drafts
-    .filter((draft) => draft.role.trim())
-    .map((draft) => ({
-      role: draft.role.trim(),
+export function shiftDraftsToTemplates(
+  drafts: SeriesShiftTemplateDraft[],
+  blockTemplates?: SeriesBlockTemplate[],
+): SeriesShiftTemplate[] {
+  const blockOptions = blockTemplates ? sortedBlockTemplateOptions(blockTemplates) : [];
+  return drafts.map((draft) => {
+    const block = blockOptions.find((option) => option.index === draft.blockTemplateIndex);
+    const role = draft.role.trim() || block?.label || "Crew";
+    return {
+      role,
       blockTemplateIndex: draft.blockTemplateIndex,
       offsetMs: draft.offsetMs,
       durationMs: Math.max(draft.durationMs, 15 * 60 * 1000),
@@ -64,7 +69,8 @@ export function shiftDraftsToTemplates(drafts: SeriesShiftTemplateDraft[]): Seri
         ? Number(draft.estimatedHourlyRateUsd)
         : undefined,
       notes: draft.notes.trim() ? draft.notes.trim() : undefined,
-    }));
+    };
+  });
 }
 
 export function createShiftDraftForBlock(args: {
@@ -75,7 +81,7 @@ export function createShiftDraftForBlock(args: {
 }): SeriesShiftTemplateDraft {
   return {
     clientId: args.clientId,
-    role: "",
+    role: args.block.label || args.block.blockType,
     blockTemplateIndex: args.blockTemplateIndex,
     offsetMs: args.block.offsetMs,
     durationMs: args.block.durationMs,

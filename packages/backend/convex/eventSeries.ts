@@ -419,7 +419,10 @@ export const regenerateFutureShifts = mutation({
     await requireArborInternalContext(ctx);
     const series = await ctx.db.get(args.id);
     if (!series) throw new Error("Event series not found.");
-    const templates = args.shiftTemplates ?? series.shiftTemplates ?? undefined;
+    const templates =
+      args.shiftTemplates && args.shiftTemplates.length > 0
+        ? args.shiftTemplates
+        : (series.shiftTemplates ?? undefined);
     if (!templates || templates.length === 0) {
       throw new Error("No crew shift templates to apply.");
     }
@@ -432,9 +435,15 @@ export const regenerateFutureShifts = mutation({
       args.budgetCrewHourlyRateUsd !== undefined
         ? args.budgetCrewHourlyRateUsd
         : series.budgetCrewHourlyRateUsd;
-    if (args.shiftTemplates || args.budgetCrewHourlyRateUsd !== undefined) {
+    if (
+      (args.shiftTemplates && args.shiftTemplates.length > 0) ||
+      args.budgetCrewHourlyRateUsd !== undefined
+    ) {
       await ctx.db.patch(args.id, {
-        shiftTemplates: args.shiftTemplates ?? series.shiftTemplates,
+        shiftTemplates:
+          args.shiftTemplates && args.shiftTemplates.length > 0
+            ? args.shiftTemplates
+            : series.shiftTemplates,
         budgetCrewHourlyRateUsd: defaultRate,
         updatedAt: now,
       });

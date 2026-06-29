@@ -101,6 +101,11 @@ export function EventSeriesShiftEditor({
       onMessage("Save schedule block templates before applying crew shift templates.");
       return;
     }
+    const templates = shiftDraftsToTemplates(shifts, blockTemplates);
+    if (templates.length === 0) {
+      onMessage("Add at least one crew shift to the series template.");
+      return;
+    }
     const parsedFromIndex = Number(fromOccurrenceIndex);
     if (!Number.isFinite(parsedFromIndex) || parsedFromIndex < 0) {
       onMessage("Enter a valid occurrence index.");
@@ -108,7 +113,6 @@ export function EventSeriesShiftEditor({
     }
     setSaving(true);
     try {
-      const templates = shiftDraftsToTemplates(shifts);
       const result = await regenerateShifts({
         id: seriesId,
         scope: applyScope,
