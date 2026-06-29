@@ -59,6 +59,7 @@ import type * as lib_eventStatus from "../lib/eventStatus.js";
 import type * as lib_invoiceEvents from "../lib/invoiceEvents.js";
 import type * as lib_publicQuoteView from "../lib/publicQuoteView.js";
 import type * as lib_publicReferenceIds from "../lib/publicReferenceIds.js";
+import type * as lib_trustedOrigins from "../lib/trustedOrigins.js";
 import type * as lostFoundSettings from "../lostFoundSettings.js";
 import type * as migrations_referenceIds from "../migrations/referenceIds.js";
 import type * as publicInventory from "../publicInventory.js";
@@ -124,6 +125,7 @@ declare const fullApi: ApiFromModules<{
   "lib/invoiceEvents": typeof lib_invoiceEvents;
   "lib/publicQuoteView": typeof lib_publicQuoteView;
   "lib/publicReferenceIds": typeof lib_publicReferenceIds;
+  "lib/trustedOrigins": typeof lib_trustedOrigins;
   lostFoundSettings: typeof lostFoundSettings;
   "migrations/referenceIds": typeof migrations_referenceIds;
   publicInventory: typeof publicInventory;
