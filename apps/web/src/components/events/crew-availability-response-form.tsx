@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
+import { getConvexErrorMessage } from "@/lib/convex-error";
+import { FormSaveBar } from "@/components/forms";
 import {
   type CrewAvailabilityResponseStatus,
   formatCrewResponseLabel,
@@ -93,7 +95,8 @@ export function CrewAvailabilityResponseForm({
     buildInitialPartialWindows(existingResponse, scheduleBlocks),
   );
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const blockOptions = useMemo(
     () =>
@@ -106,7 +109,8 @@ export function CrewAvailabilityResponseForm({
 
   async function handleSubmit() {
     setSaving(true);
-    setError(null);
+    setSaveStatus("saving");
+    setSaveError(null);
     try {
       const partialPayload =
         responseStatus === "partial"
@@ -132,8 +136,10 @@ export function CrewAvailabilityResponseForm({
         notes: notes.trim() || undefined,
       });
       onSaved?.(`Saved ${formatCrewResponseLabel(responseStatus)} response.`);
+      setSaveStatus("saved");
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Failed to save response.");
+      setSaveStatus("error");
+      setSaveError(getConvexErrorMessage(submitError, "Failed to save response."));
     } finally {
       setSaving(false);
     }
@@ -265,11 +271,19 @@ export function CrewAvailabilityResponseForm({
         />
       </div>
 
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
-
       <Button type="button" disabled={saving} onClick={() => void handleSubmit()}>
         {saving ? "Saving..." : existingResponse ? "Update response" : "Submit response"}
       </Button>
+
+      <FormSaveBar
+        tier="C"
+        saveStatus={saveStatus}
+        saveError={saveError}
+        isDirty
+        saveLabel={existingResponse ? "Update response" : "Submit response"}
+        onSave={() => void handleSubmit()}
+        onRetry={() => void handleSubmit()}
+      />
     </div>
   );
 }

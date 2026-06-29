@@ -2,11 +2,14 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { FormEvent, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
 import { authClient } from "@/lib/auth-client";
+import { FormSaveBar } from "@/components/forms";
+import { Form } from "@/components/ui/form";
+import { TextFormField } from "@/components/forms/text-form-field";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,8 +19,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { useConvexForm } from "@/hooks/use-convex-form";
+import {
+  acceptInviteSchema,
+  type AcceptInviteFormValues,
+} from "@/lib/validations/auth";
 
 export default function AcceptInvitePage() {
   const searchParams = useSearchParams();
@@ -25,49 +31,36 @@ export default function AcceptInvitePage() {
   const invite = useQuery(api.userInvites.getInviteByToken, token ? { token } : "skip");
   const acceptInvite = useMutation(api.userInvites.acceptInviteWithPassword);
 
-  const [name, setName] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const form = useConvexForm<AcceptInviteFormValues>({
+    schema: acceptInviteSchema,
+    defaultValues: { name: "", password: "", confirmPassword: "" },
+    mode: "onTouched",
+  });
 
-  const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setError(null);
-
+  const onSubmit = form.submitMutation(async (values) => {
     if (!token) {
-      setError("Missing invitation token.");
-      return;
+      throw new Error("Missing invitation token.");
     }
-    if (password !== confirmPassword) {
-      setError("Passwords do not match.");
-      return;
+    const result = await acceptInvite({
+      token,
+      name: values.name?.trim() || undefined,
+      password: values.password,
+    });
+    const signInResult = await authClient.signIn.email({
+      email: result.email,
+      password: values.password,
+      callbackURL: "/dashboard",
+    });
+    if (signInResult.error) {
+      throw new Error(
+        signInResult.error.message ?? "Account created, but sign-in failed. Try signing in.",
+      );
     }
-
-    setIsLoading(true);
-    try {
-      const result = await acceptInvite({
-        token,
-        name: name.trim() || undefined,
-        password,
-      });
-      const signInResult = await authClient.signIn.email({
-        email: result.email,
-        password,
-        callbackURL: "/dashboard",
-      });
-      if (signInResult.error) {
-        setError(signInResult.error.message ?? "Account created, but sign-in failed. Try signing in.");
-      }
-    } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Unable to accept invitation.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    return result;
+  });
 
   return (
-    <div className="mx-auto flex min-h-[80vh] w-full max-w-md items-center px-6">
+    <div className="mx-auto flex min-h-[80vh] w-full max-w-md items-center px-6 pb-20">
       <Card className="w-full">
         <CardHeader>
           <div className="mb-2">
@@ -113,56 +106,30 @@ export default function AcceptInvitePage() {
               </Button>
             </div>
           ) : (
-            <form onSubmit={onSubmit} className="space-y-4">
-              <div className="rounded-none border bg-muted/30 p-3 text-sm">
-                <p className="font-medium">{invite.organizationName}</p>
-                <p className="text-muted-foreground">{invite.email}</p>
-              </div>
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                <div className="rounded-none border bg-muted/30 p-3 text-sm">
+                  <p className="font-medium">{invite.organizationName}</p>
+                  <p className="text-muted-foreground">{invite.email}</p>
+                </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="name">Your name</Label>
-                <Input
-                  id="name"
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                  placeholder="Optional"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
+                <TextFormField name="name" label="Your name" placeholder="Optional" />
+                <TextFormField name="password" label="Password" type="password" />
+                <TextFormField
+                  name="confirmPassword"
+                  label="Confirm password"
                   type="password"
-                  required
-                  minLength={8}
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
                 />
-              </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="confirmPassword">Confirm password</Label>
-                <Input
-                  id="confirmPassword"
-                  type="password"
-                  required
-                  minLength={8}
-                  value={confirmPassword}
-                  onChange={(event) => setConfirmPassword(event.target.value)}
-                />
-              </div>
-
-              {error ? (
-                <Alert variant="destructive">
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              ) : null}
-
-              <Button type="submit" disabled={isLoading} className="w-full">
-                {isLoading ? "Creating account..." : "Create account"}
-              </Button>
-            </form>
+                <Button
+                  type="submit"
+                  disabled={form.saveStatus === "saving"}
+                  className="w-full"
+                >
+                  {form.saveStatus === "saving" ? "Creating account..." : "Create account"}
+                </Button>
+              </form>
+            </Form>
           )}
 
           <Button asChild variant="link" className="px-0">
@@ -170,6 +137,19 @@ export default function AcceptInvitePage() {
           </Button>
         </CardContent>
       </Card>
+
+      {invite && !invite.hasAccount && !invite.expired ? (
+        <FormSaveBar
+          tier="C"
+          saveStatus={form.saveStatus}
+          saveError={form.saveError ?? undefined}
+          isDirty={form.formState.isDirty}
+          saveLabel="Create account"
+          onSave={() => void form.handleSubmit(onSubmit)()}
+          onDiscard={() => form.reset()}
+          onRetry={() => void form.handleSubmit(onSubmit)()}
+        />
+      ) : null}
     </div>
   );
 }

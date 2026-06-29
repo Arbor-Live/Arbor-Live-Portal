@@ -1,30 +1,32 @@
 "use client";
 
-import { useFormContext, type FieldPath } from "react-hook-form";
+import { useFormContext, type FieldPath, type FieldValues } from "react-hook-form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { BookingRequestFormValues } from "@/lib/validations/booking-request";
 
-type TextFieldProps = {
-  name: FieldPath<BookingRequestFormValues>;
+type TextFieldProps<T extends FieldValues> = {
+  name: FieldPath<T>;
   label: string;
   placeholder?: string;
   type?: "text" | "email" | "tel" | "number";
   autoFocus?: boolean;
 };
 
-export function TextField({ name, label, placeholder, type = "text", autoFocus }: TextFieldProps) {
-  const {
-    register,
-    getFieldState,
-  } = useFormContext<BookingRequestFormValues>();
+export function TextField<T extends FieldValues>({
+  name,
+  label,
+  placeholder,
+  type = "text",
+  autoFocus,
+}: TextFieldProps<T>) {
+  const { register, getFieldState } = useFormContext<T>();
   const error = getFieldState(name).error?.message;
 
   return (
     <div className="space-y-2">
-      <Label htmlFor={name}>{label}</Label>
+      <Label htmlFor={String(name)}>{label}</Label>
       <Input
-        id={name}
+        id={String(name)}
         type={type}
         placeholder={placeholder}
         autoFocus={autoFocus}

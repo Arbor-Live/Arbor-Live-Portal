@@ -2,10 +2,12 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { FormSaveBar } from "@/components/forms";
+import { Form } from "@/components/ui/form";
+import { TextFormField } from "@/components/forms/text-form-field";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -14,41 +16,41 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { useConvexForm } from "@/hooks/use-convex-form";
+import { signInSchema, type SignInFormValues } from "@/lib/validations/auth";
 
 export default function SignInPage() {
   const searchParams = useSearchParams();
   const emailFromQuery = useMemo(() => searchParams.get("email") ?? "", [searchParams]);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+
+  const form = useConvexForm<SignInFormValues>({
+    schema: signInSchema,
+    defaultValues: { email: "", password: "" },
+    mode: "onTouched",
+  });
 
   useEffect(() => {
-    if (emailFromQuery) setEmail(emailFromQuery);
-  }, [emailFromQuery]);
+    if (emailFromQuery) form.setValue("email", emailFromQuery);
+  }, [emailFromQuery, form]);
 
-  const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setError(null);
-    setIsLoading(true);
-
+  const onSubmit = form.submitMutation(async (values) => {
     const result = await authClient.signIn.email({
-      email,
-      password,
+      email: values.email,
+      password: values.password,
       callbackURL: "/dashboard",
     });
-
-    setIsLoading(false);
-
     if (result.error) {
-      setError(result.error.message ?? "Unable to sign in.");
+      throw new Error(
+        result.error.message === "Unable to sign in."
+          ? "We could not sign you in with those credentials."
+          : (result.error.message ?? "Unable to sign in."),
+      );
     }
-  };
+    return result;
+  });
 
   return (
-    <div className="mx-auto flex min-h-[80vh] w-full max-w-md items-center px-6">
+    <div className="mx-auto flex min-h-[80vh] w-full max-w-md items-center px-6 pb-20">
       <Card className="w-full">
         <CardHeader>
           <div className="mb-2">
@@ -74,49 +76,38 @@ export default function SignInPage() {
             </p>
           </div>
 
-          <form onSubmit={onSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                required
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-              />
-            </div>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <TextFormField name="email" label="Email" type="email" />
+              <TextFormField name="password" label="Password" type="password" />
 
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                required
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-              />
-            </div>
-
-            {error ? (
-              <Alert variant="destructive">
-                <AlertDescription>
-                  {error === "Unable to sign in."
-                    ? "We could not sign you in with those credentials."
-                    : error}
-                </AlertDescription>
-              </Alert>
-            ) : null}
-
-            <Button type="submit" disabled={isLoading} className="w-full">
-              {isLoading ? "Signing you in..." : "Sign in to dashboard"}
-            </Button>
-          </form>
+              <Button
+                type="submit"
+                disabled={form.saveStatus === "saving"}
+                className="w-full"
+              >
+                {form.saveStatus === "saving" ? "Signing you in..." : "Sign in to dashboard"}
+              </Button>
+            </form>
+          </Form>
 
           <Button asChild variant="link" className="px-0">
             <Link href="/forgot-password">Forgot your password?</Link>
           </Button>
         </CardContent>
       </Card>
+
+      <FormSaveBar
+        tier="C"
+        saveStatus={form.saveStatus}
+        saveError={form.saveError}
+        isDirty={form.formState.isDirty}
+        isSubmitting={form.saveStatus === "saving"}
+        saveLabel="Sign in"
+        onSave={() => void form.handleSubmit(onSubmit)()}
+        onDiscard={() => form.reset()}
+        onRetry={() => void form.handleSubmit(onSubmit)()}
+      />
     </div>
   );
 }

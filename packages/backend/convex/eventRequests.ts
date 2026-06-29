@@ -11,6 +11,7 @@ import {
 } from "./lib/publicQuoteView";
 import { scheduleBookingRequestReceivedEmail } from "./email/bookingRequestEmails";
 import { allocateRequestNumber } from "./lib/publicReferenceIds";
+import { resolveContactNameParts } from "./lib/contactName";
 
 const EVENT_TIMEZONE = "America/Los_Angeles";
 
@@ -121,7 +122,8 @@ async function generateUniquePublicToken(ctx: MutationCtx) {
   throw new Error("Unable to allocate tracking token.");
 }
 
-import { resolveContactNameParts } from "./lib/contactName";
+
+function mapGroupTypeToSponsor(type: string) {
   switch (type) {
     case "department":
       return "Stanford Department";

@@ -2,9 +2,12 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { FormEvent, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
+import { FormSaveBar } from "@/components/forms";
+import { Form } from "@/components/ui/form";
+import { TextFormField } from "@/components/forms/text-form-field";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,54 +17,42 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { useConvexForm } from "@/hooks/use-convex-form";
+import {
+  resetPasswordSchema,
+  type ResetPasswordFormValues,
+} from "@/lib/validations/auth";
 
 export default function ResetPasswordPage() {
   const searchParams = useSearchParams();
   const token = useMemo(() => searchParams.get("token"), [searchParams]);
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setError(null);
+  const form = useConvexForm<ResetPasswordFormValues>({
+    schema: resetPasswordSchema,
+    defaultValues: { password: "", confirmPassword: "" },
+    mode: "onTouched",
+  });
+
+  const onSubmit = form.submitMutation(async (values) => {
     setSuccess(null);
-
     if (!token) {
-      setError("Missing or invalid reset token.");
-      return;
+      throw new Error("Missing or invalid reset token.");
     }
-
-    if (password !== confirmPassword) {
-      setError("Passwords do not match.");
-      return;
-    }
-
-    setIsLoading(true);
-
     const result = await authClient.resetPassword({
       token,
-      newPassword: password,
+      newPassword: values.password,
     });
-
-    setIsLoading(false);
-
     if (result.error) {
-      setError(result.error.message ?? "Unable to reset password.");
-      return;
+      throw new Error(result.error.message ?? "Unable to reset password.");
     }
-
     setSuccess("Password reset complete. You can now sign in.");
-    setPassword("");
-    setConfirmPassword("");
-  };
+    form.reset();
+    return result;
+  });
 
   return (
-    <div className="mx-auto flex min-h-[80vh] w-full max-w-md items-center px-6">
+    <div className="mx-auto flex min-h-[80vh] w-full max-w-md items-center px-6 pb-20">
       <Card className="w-full">
         <CardHeader>
           <div className="mb-2">
@@ -78,52 +69,47 @@ export default function ResetPasswordPage() {
           <CardDescription>Choose a new password for your account.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <form onSubmit={onSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="password">New password</Label>
-              <Input
-                id="password"
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <TextFormField name="password" label="New password" type="password" />
+              <TextFormField
+                name="confirmPassword"
+                label="Confirm password"
                 type="password"
-                required
-                minLength={8}
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
               />
-            </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Confirm password</Label>
-              <Input
-                id="confirmPassword"
-                type="password"
-                required
-                minLength={8}
-                value={confirmPassword}
-                onChange={(event) => setConfirmPassword(event.target.value)}
-              />
-            </div>
+              {success ? (
+                <Alert>
+                  <AlertDescription>{success}</AlertDescription>
+                </Alert>
+              ) : null}
 
-            {error ? (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            ) : null}
-            {success ? (
-              <Alert>
-                <AlertDescription>{success}</AlertDescription>
-              </Alert>
-            ) : null}
-
-            <Button type="submit" disabled={isLoading || !token} className="w-full">
-              {isLoading ? "Updating..." : "Update password"}
-            </Button>
-          </form>
+              <Button
+                type="submit"
+                disabled={form.saveStatus === "saving" || !token}
+                className="w-full"
+              >
+                {form.saveStatus === "saving" ? "Updating..." : "Update password"}
+              </Button>
+            </form>
+          </Form>
 
           <Button asChild variant="link" className="px-0">
             <Link href="/sign-in">Back to sign in</Link>
           </Button>
         </CardContent>
       </Card>
+
+      <FormSaveBar
+        tier="C"
+        saveStatus={form.saveStatus}
+        saveError={form.saveError}
+        isDirty={form.formState.isDirty}
+        saveLabel="Update password"
+        onSave={() => void form.handleSubmit(onSubmit)()}
+        onDiscard={() => form.reset()}
+        onRetry={() => void form.handleSubmit(onSubmit)()}
+      />
     </div>
   );
 }

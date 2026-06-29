@@ -1,69 +1,55 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
+import { FormSaveBar } from "@/components/forms";
+import { Form } from "@/components/ui/form";
+import { TextFormField } from "@/components/forms/text-form-field";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { useConvexForm } from "@/hooks/use-convex-form";
+import {
+  globalCrewRatesSchema,
+  userRateSchema,
+  type GlobalCrewRatesFormValues,
+  type UserRateFormValues,
+} from "@/lib/validations/financial";
+import { CheckIcon, CircleNotchIcon, WarningCircleIcon } from "@phosphor-icons/react";
 
 export function UserRatesAdminClient() {
   const users = useQuery(api.users.listWithRates, {});
   const invoiceSettings = useQuery(api.invoiceSettings.get, {});
-  const setHourlyRate = useMutation(api.users.setHourlyRate);
   const updateInvoiceSettings = useMutation(api.invoiceSettings.update);
-  const [draftRates, setDraftRates] = useState<Record<string, string>>({});
-  const [normalCrewRateUsd, setNormalCrewRateUsd] = useState("");
-  const [leadCrewRateUsd, setLeadCrewRateUsd] = useState("");
-  const [savingUserId, setSavingUserId] = useState<string | null>(null);
-  const [savingGlobalRates, setSavingGlobalRates] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+
+  const globalForm = useConvexForm<GlobalCrewRatesFormValues>({
+    schema: globalCrewRatesSchema,
+    defaultValues: { defaultCrewRateUsd: 0, defaultLeadRateUsd: 0 },
+    mode: "onTouched",
+  });
+
+  useEffect(() => {
+    if (!invoiceSettings) return;
+    globalForm.reset({
+      defaultCrewRateUsd: invoiceSettings.crewNormalRateUsd ?? 0,
+      defaultLeadRateUsd:
+        invoiceSettings.crewLeadRateUsd ?? invoiceSettings.crewOtRateUsd ?? 0,
+    });
+    globalForm.suppressNextAutoSave();
+  }, [invoiceSettings, globalForm]);
+
+  const onSaveGlobalRates = globalForm.submitMutation(async (values) => {
+    await updateInvoiceSettings({
+      crewNormalRateUsd: values.defaultCrewRateUsd,
+      crewLeadRateUsd: values.defaultLeadRateUsd,
+      crewOtRateUsd: values.defaultLeadRateUsd,
+    });
+  });
 
   const rows = useMemo(() => users ?? [], [users]);
 
-  async function saveRate(userId: string, fallbackRate: number | null) {
-    const value = draftRates[userId];
-    const nextRate = Number(value ?? fallbackRate ?? 0);
-    if (Number.isNaN(nextRate) || nextRate < 0) {
-      setMessage("Hourly rate must be a positive number.");
-      return;
-    }
-    setSavingUserId(userId);
-    setMessage(null);
-    try {
-      await setHourlyRate({ userId, hourlyRateUsd: nextRate });
-      setMessage("User rate updated.");
-    } finally {
-      setSavingUserId(null);
-    }
-  }
-
-  async function saveGlobalCrewRates() {
-    const normal = Number((normalCrewRateUsd || invoiceSettings?.crewNormalRateUsd) ?? 0);
-    const lead = Number(
-      (leadCrewRateUsd || invoiceSettings?.crewLeadRateUsd || invoiceSettings?.crewOtRateUsd) ?? normal,
-    );
-    if (Number.isNaN(normal) || Number.isNaN(lead) || normal < 0 || lead < 0) {
-      setMessage("Global crew rates must be valid positive numbers.");
-      return;
-    }
-    setSavingGlobalRates(true);
-    setMessage(null);
-    try {
-      await updateInvoiceSettings({
-        crewNormalRateUsd: normal,
-        crewLeadRateUsd: lead,
-        // Keep legacy OT field aligned with lead until OT mode is fully retired.
-        crewOtRateUsd: lead,
-      });
-      setMessage("Global invoice crew rates updated.");
-    } finally {
-      setSavingGlobalRates(false);
-    }
-  }
-
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 pb-24">
       <Card>
         <CardHeader>
           <CardTitle>Invoice Crew Rate Modes</CardTitle>
@@ -72,32 +58,28 @@ export function UserRatesAdminClient() {
           <p className="text-sm text-muted-foreground">
             Invoices support three crew pricing modes: Normal, Lead, and Custom (per row).
           </p>
-          <div className="grid gap-3 md:grid-cols-3">
-            <div className="space-y-1">
-              <p className="text-sm font-medium">Normal Rate (USD)</p>
-              <Input
-                inputMode="decimal"
-                value={normalCrewRateUsd || (invoiceSettings?.crewNormalRateUsd ?? 0).toString()}
-                onChange={(e) => setNormalCrewRateUsd(e.target.value)}
+          <Form {...globalForm}>
+            <form
+              onSubmit={globalForm.handleSubmit(onSaveGlobalRates)}
+              className="grid gap-3 md:grid-cols-3"
+            >
+              <TextFormField
+                name="defaultCrewRateUsd"
+                label="Normal Rate (USD)"
+                type="number"
               />
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm font-medium">Lead Rate (USD)</p>
-              <Input
-                inputMode="decimal"
-                value={
-                  leadCrewRateUsd ||
-                  (invoiceSettings?.crewLeadRateUsd ?? invoiceSettings?.crewOtRateUsd ?? 0).toString()
-                }
-                onChange={(e) => setLeadCrewRateUsd(e.target.value)}
+              <TextFormField
+                name="defaultLeadRateUsd"
+                label="Lead Rate (USD)"
+                type="number"
               />
-            </div>
-            <div className="flex items-end">
-              <Button type="button" disabled={savingGlobalRates} onClick={() => void saveGlobalCrewRates()}>
-                Save Global Crew Rates
-              </Button>
-            </div>
-          </div>
+              <div className="flex items-end">
+                <Button type="submit" disabled={globalForm.saveStatus === "saving"}>
+                  Save Global Crew Rates
+                </Button>
+              </div>
+            </form>
+          </Form>
         </CardContent>
       </Card>
 
@@ -109,41 +91,109 @@ export function UserRatesAdminClient() {
           <p className="text-sm text-muted-foreground">
             Admin only: set each user hourly rate used for event crew cost calculations.
           </p>
-          {message ? <p className="text-sm text-primary">{message}</p> : null}
           <div className="space-y-2">
             {rows.map((user) => (
-              <div key={user.id} className="grid gap-2 rounded-md border p-3 md:grid-cols-[1fr_220px_120px]">
-                <div>
-                  <p className="text-sm font-medium">{user.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {[user.role, user.email].filter(Boolean).join(" • ")}
-                  </p>
-                </div>
-                <Input
-                  value={draftRates[user.id] ?? (user.hourlyRateUsd ?? 0).toString()}
-                  onChange={(e) =>
-                    setDraftRates((prev) => ({
-                      ...prev,
-                      [user.id]: e.target.value,
-                    }))
-                  }
-                  inputMode="decimal"
-                  placeholder="Hourly rate (USD)"
-                />
-                <Button
-                  type="button"
-                  disabled={savingUserId === user.id}
-                  onClick={() => void saveRate(user.id, user.hourlyRateUsd)}
-                >
-                  Save
-                </Button>
-              </div>
+              <UserRateRow
+                key={user.id}
+                userId={user.id}
+                name={user.name}
+                meta={[user.role, user.email].filter(Boolean).join(" • ")}
+                hourlyRateUsd={user.hourlyRateUsd}
+              />
             ))}
-            {users === undefined ? <p className="text-sm text-muted-foreground">Loading users...</p> : null}
-            {users?.length === 0 ? <p className="text-sm text-muted-foreground">No users found.</p> : null}
+            {users === undefined ? (
+              <p className="text-sm text-muted-foreground">Loading users...</p>
+            ) : null}
+            {users?.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No users found.</p>
+            ) : null}
           </div>
         </CardContent>
       </Card>
+
+      <FormSaveBar
+        tier="C"
+        saveStatus={globalForm.saveStatus}
+        saveError={globalForm.saveError}
+        isDirty={globalForm.formState.isDirty}
+        saveLabel="Save Global Crew Rates"
+        onSave={() => void globalForm.handleSubmit(onSaveGlobalRates)()}
+        onDiscard={() => {
+          if (!invoiceSettings) return;
+          globalForm.reset({
+            defaultCrewRateUsd: invoiceSettings.crewNormalRateUsd ?? 0,
+            defaultLeadRateUsd:
+              invoiceSettings.crewLeadRateUsd ?? invoiceSettings.crewOtRateUsd ?? 0,
+          });
+        }}
+        onRetry={() => void globalForm.handleSubmit(onSaveGlobalRates)()}
+      />
+    </div>
+  );
+}
+
+function UserRateRow({
+  userId,
+  name,
+  meta,
+  hourlyRateUsd,
+}: {
+  userId: string;
+  name: string;
+  meta: string;
+  hourlyRateUsd: number | null;
+}) {
+  const setHourlyRate = useMutation(api.users.setHourlyRate);
+
+  const form = useConvexForm<UserRateFormValues>({
+    schema: userRateSchema,
+    defaultValues: { hourlyRateUsd: hourlyRateUsd ?? 0 },
+    mode: "onChange",
+  });
+
+  useEffect(() => {
+    form.reset({ hourlyRateUsd: hourlyRateUsd ?? 0 });
+    form.suppressNextAutoSave();
+  }, [hourlyRateUsd, form]);
+
+  const persist = async (values: UserRateFormValues) => {
+    await setHourlyRate({ userId, hourlyRateUsd: values.hourlyRateUsd });
+  };
+
+  const watched = form.watch();
+  useEffect(() => {
+    form.debouncedAutoSave(persist, { delayMs: 800, enabled: form.formState.isDirty });
+  }, [watched, form]);
+
+  return (
+    <div className="grid gap-2 rounded-md border p-3 md:grid-cols-[1fr_220px_24px]">
+      <div>
+        <p className="text-sm font-medium">{name}</p>
+        <p className="text-xs text-muted-foreground">{meta}</p>
+      </div>
+      <Form {...form}>
+        <form>
+          <TextFormField
+            name="hourlyRateUsd"
+            label=""
+            type="number"
+            placeholder="Hourly rate (USD)"
+          />
+        </form>
+      </Form>
+      <span className="flex self-center justify-end">
+        {form.saveStatus === "saving" ? (
+          <CircleNotchIcon className="size-4 animate-spin text-muted-foreground" />
+        ) : form.saveStatus === "error" ? (
+          <WarningCircleIcon
+            className="size-4 text-destructive"
+            weight="fill"
+            aria-label={form.saveError ?? "Save failed"}
+          />
+        ) : form.saveStatus === "saved" ? (
+          <CheckIcon className="size-4 text-emerald-600" weight="bold" />
+        ) : null}
+      </span>
     </div>
   );
 }

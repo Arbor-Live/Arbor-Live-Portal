@@ -126,20 +126,8 @@ function normalizeEventType(value: StoredEventType | undefined): EventType {
   return value ?? "Crewed Event";
 }
 
-function getErrorMessage(error: unknown) {
-  if (error instanceof Error && error.message) {
-    return error.message;
-  }
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "data" in error &&
-    typeof (error as { data?: { message?: unknown } }).data?.message === "string"
-  ) {
-    return (error as { data: { message: string } }).data.message;
-  }
-  return "Something went wrong while saving. Please try again.";
-}
+import { getConvexErrorMessage } from "@/lib/convex-error";
+import { FormSaveBar } from "@/components/forms";
 
 export function EventEditor({
   eventId,
@@ -496,7 +484,7 @@ export function EventEditor({
       await persistOverview("this");
     } catch (error) {
       setMessageTone("error");
-      setMessage(`Overview error: ${getErrorMessage(error)}`);
+      setMessage(`Overview error: ${getConvexErrorMessage(error)}`);
     }
   }
 
@@ -506,7 +494,7 @@ export function EventEditor({
       await persistOverview(scope);
     } catch (error) {
       setMessageTone("error");
-      setMessage(`Overview error: ${getErrorMessage(error)}`);
+      setMessage(`Overview error: ${getConvexErrorMessage(error)}`);
     }
   }
 
@@ -567,7 +555,7 @@ export function EventEditor({
       setMessage("Schedule saved.");
     } catch (error) {
       setMessageTone("error");
-      setMessage(`Schedule error: ${getErrorMessage(error)}`);
+      setMessage(`Schedule error: ${getConvexErrorMessage(error)}`);
       throw error;
     }
   }
@@ -601,7 +589,7 @@ export function EventEditor({
       setMessage("Schedule personnel saved.");
     } catch (error) {
       setMessageTone("error");
-      setMessage(`Schedule personnel error: ${getErrorMessage(error)}`);
+      setMessage(`Schedule personnel error: ${getConvexErrorMessage(error)}`);
       throw error;
     }
   }
@@ -651,7 +639,7 @@ export function EventEditor({
       setMessage(`Deleted ${result.deletedCount} legacy unassigned shift${result.deletedCount === 1 ? "" : "s"}.`);
     } catch (error) {
       setMessageTone("error");
-      setMessage(getErrorMessage(error));
+      setMessage(getConvexErrorMessage(error));
     }
   }
 
@@ -715,8 +703,56 @@ export function EventEditor({
     [pullListInitialItems],
   );
 
+  const canAutoSaveOverview =
+    !isCreate &&
+    Boolean(eventId) &&
+    resolvedActiveTab === "overview" &&
+    (!seriesMeta || seriesMeta.seriesDetached);
+
+  useEffect(() => {
+    if (!canAutoSaveOverview) return;
+    if (!title.trim() || !startAt || !endAt) return;
+    const timer = setTimeout(() => {
+      void persistOverview("this").catch((error) => {
+        setMessageTone("error");
+        setMessage(getConvexErrorMessage(error));
+      });
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [
+    canAutoSaveOverview,
+    title,
+    status,
+    invoiceId,
+    startAt,
+    endAt,
+    venueName,
+    eventType,
+    rentalFulfillmentMode,
+    teamsInterested,
+    host,
+    managerUserId,
+    dayOfLeadUserId,
+    bandsCostUsd,
+    externalRentalsCostUsd,
+    otherCostUsd,
+    notes,
+  ]);
+
+  const saveTier = resolvedActiveTab === "overview" ? "B" : "C";
+  const saveStatus =
+    messageTone === "error" ? "error" : message ? "saved" : "idle";
+
+  const handleBarSave = () => {
+    if (resolvedActiveTab === "schedule") {
+      void saveScheduleAndPersonnel();
+      return;
+    }
+    void saveCore();
+  };
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 pb-20">
       <Card>
         <CardHeader>
           <CardTitle>{isCreate ? "Create Event" : "Edit Event"}</CardTitle>
@@ -746,12 +782,6 @@ export function EventEditor({
           </Button>
         </CardContent>
       </Card>
-
-      {message ? (
-        <p className={`rounded-md border px-3 py-2 text-sm ${messageTone === "error" ? "border-rose-500/40 bg-rose-500/10 text-rose-800" : "border-emerald-500/40 bg-emerald-500/10 text-emerald-800"}`}>
-          {message}
-        </p>
-      ) : null}
 
       {resolvedActiveTab === "overview" ? (
         <Card>
@@ -1556,6 +1586,24 @@ export function EventEditor({
           </Card>
         </div>
       ) : null}
+
+      <FormSaveBar
+        tier={saveTier}
+        saveStatus={saveStatus}
+        saveError={messageTone === "error" ? message : null}
+        isDirty={saveTier === "C" || canAutoSaveOverview}
+        saveLabel={
+          isCreate
+            ? isRecurring
+              ? "Create Series"
+              : "Create Event"
+            : resolvedActiveTab === "schedule"
+              ? "Save Schedule & Personnel"
+              : "Save Event"
+        }
+        onSave={handleBarSave}
+        onRetry={handleBarSave}
+      />
     </div>
   );
 }

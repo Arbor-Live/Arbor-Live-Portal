@@ -1,13 +1,17 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { PackageIcon } from "@phosphor-icons/react";
 import { api, type Id } from "@/lib/convex-api";
+import { FormSaveBar } from "@/components/forms";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SearchableSelect, type SearchableSelectOption } from "@/components/inventory/searchable-select";
+import { useConvexForm } from "@/hooks/use-convex-form";
+import { getConvexErrorMessage } from "@/lib/convex-error";
+import { pullListFormSchema, type PullListFormValues } from "@/lib/validations/event";
 
 type PackageContent = {
   typeName: string;
@@ -90,6 +94,29 @@ function groupCategory(item: PullListItemDraft) {
   return item.typeCategory?.trim() || "Other";
 }
 
+function clientKeyForItem(item: PullListItemDraft, index: number) {
+  return item.id ?? `${item.lineKind}-${item.typeId ?? item.packageId ?? item.label}-${index}`;
+}
+
+function toFormValues(items: PullListItemDraft[]): PullListFormValues {
+  return {
+    items: items.map((item, index) => ({
+      clientKey: clientKeyForItem(item, index),
+      quantityRequired: item.quantityRequired,
+      notes: item.notes,
+    })),
+  };
+}
+
+function mergeFormQuantities(items: PullListItemDraft[], values: PullListFormValues): PullListItemDraft[] {
+  const qtyByKey = new Map(values.items.map((row) => [row.clientKey, row.quantityRequired]));
+  return items.map((item, index) => {
+    const key = clientKeyForItem(item, index);
+    const quantityRequired = qtyByKey.get(key) ?? item.quantityRequired;
+    return { ...item, quantityRequired: Math.max(1, Math.floor(quantityRequired)) };
+  });
+}
+
 export function EventPullList({
   eventId,
   eventType,
@@ -104,13 +131,33 @@ export function EventPullList({
   const upsertItems = useMutation(api.eventPullLists.upsertItems);
   const scaffoldFromInvoice = useMutation(api.eventPullLists.scaffoldFromInvoice);
   const removeItem = useMutation(api.eventPullLists.removeItem);
+
   const [items, setItems] = useState<PullListItemDraft[]>(initialItems);
   const [addKind, setAddKind] = useState<"type" | "package">("type");
   const [newTypeId, setNewTypeId] = useState("");
   const [newPackageId, setNewPackageId] = useState("");
   const [newQty, setNewQty] = useState("1");
-  const [busy, setBusy] = useState(false);
   const [showManage, setShowManage] = useState(false);
+
+  const form = useConvexForm<PullListFormValues>({
+    schema: pullListFormSchema,
+    defaultValues: toFormValues(initialItems),
+    mode: "onChange",
+  });
+
+  const initialSyncKey = useMemo(
+    () =>
+      initialItems
+        .map((row) => `${row.id ?? "new"}:${row.lineKind}:${row.typeId ?? row.packageId}:${row.quantityRequired}`)
+        .join("|"),
+    [initialItems],
+  );
+
+  useEffect(() => {
+    setItems(initialItems);
+    form.reset(toFormValues(initialItems));
+    form.suppressNextAutoSave();
+  }, [initialSyncKey, initialItems, form]);
 
   const typeOptions: SearchableSelectOption[] = useMemo(
     () =>
@@ -172,10 +219,9 @@ export function EventPullList({
           ? "Set fulfillment on Overview: Delivery or Will-call."
           : null;
 
-  async function persistItems(nextItems: PullListItemDraft[], successMessage: string) {
-    if (!eventId) return;
-    setBusy(true);
-    try {
+  const persistItems = useCallback(
+    async (nextItems: PullListItemDraft[], successMessage: string) => {
+      if (!eventId) return;
       const result = await upsertItems({
         eventId,
         items: nextItems.map((item, index) => ({
@@ -194,29 +240,41 @@ export function EventPullList({
           notes: item.notes || undefined,
         })),
       });
+      setItems(nextItems);
+      form.reset(toFormValues(nextItems));
+      form.suppressNextAutoSave();
       onSaved?.(
         `${successMessage} (${result.totalLines} line${result.totalLines === 1 ? "" : "s"}, ${formatQty(result.totalPieces)} piece${result.totalPieces === 1 ? "" : "s"}).`,
       );
-    } catch (error) {
-      onError?.(error instanceof Error ? error.message : "Failed to save pull list.");
-    } finally {
-      setBusy(false);
-    }
-  }
+    },
+    [eventId, form, onSaved, upsertItems],
+  );
+
+  const debouncedPersist = useCallback(
+    async (values: PullListFormValues) => {
+      const nextItems = mergeFormQuantities(items, values);
+      await persistItems(nextItems, "Pull list updated");
+    },
+    [items, persistItems],
+  );
+
+  const watched = form.watch();
+  useEffect(() => {
+    if (!showManage) return;
+    form.debouncedAutoSave(debouncedPersist, {
+      delayMs: 1000,
+      enabled: form.formState.isDirty,
+    });
+  }, [watched, form, showManage, debouncedPersist]);
 
   async function handleScaffold() {
     if (!eventId) return;
-    setBusy(true);
-    try {
+    await form.runMutation(async () => {
       const result = await scaffoldFromInvoice({ eventId });
       onSaved?.(
         `Pull list loaded from invoice (${result.insertedCount} line${result.insertedCount === 1 ? "" : "s"}, ${formatQty(result.summary.totalPieces)} piece${result.summary.totalPieces === 1 ? "" : "s"}).`,
       );
-    } catch (error) {
-      onError?.(error instanceof Error ? error.message : "Failed to load from invoice.");
-    } finally {
-      setBusy(false);
-    }
+    });
   }
 
   async function addManualLine() {
@@ -243,10 +301,9 @@ export function EventPullList({
           notes: "",
         },
       ];
-      setItems(nextItems);
       setNewPackageId("");
       setNewQty("1");
-      await persistItems(nextItems, "Added package to pull list");
+      await form.runMutation(() => persistItems(nextItems, "Added package to pull list"));
       return;
     }
 
@@ -267,42 +324,40 @@ export function EventPullList({
         notes: "",
       },
     ];
-    setItems(nextItems);
     setNewTypeId("");
     setNewQty("1");
-    await persistItems(nextItems, "Added to pull list");
-  }
-
-  async function updateQuantity(index: number, quantityRequired: number) {
-    const nextItems = items.map((item, i) =>
-      i === index ? { ...item, quantityRequired: Math.max(1, Math.floor(quantityRequired)) } : item,
-    );
-    setItems(nextItems);
-    await persistItems(nextItems, "Pull list updated");
+    await form.runMutation(() => persistItems(nextItems, "Added to pull list"));
   }
 
   async function handleRemove(index: number) {
     const item = items[index];
     if (!item) return;
     if (item.id && eventId) {
-      setBusy(true);
-      try {
-        await removeItem({ id: item.id });
+      await form.runMutation(async () => {
+        await removeItem({ id: item.id! });
         const nextItems = items.filter((_, i) => i !== index);
         setItems(nextItems);
+        form.reset(toFormValues(nextItems));
+        form.suppressNextAutoSave();
         onSaved?.("Removed from pull list.");
-      } catch (error) {
-        onError?.(error instanceof Error ? error.message : "Failed to remove item.");
-      } finally {
-        setBusy(false);
-      }
+      });
       return;
     }
-    setItems((prev) => prev.filter((_, i) => i !== index));
+    const nextItems = items.filter((_, i) => i !== index);
+    setItems(nextItems);
+    form.reset(toFormValues(nextItems));
+  }
+
+  function updateQuantityAt(index: number, quantityRequired: number) {
+    const qty = Math.max(1, Math.floor(quantityRequired));
+    const nextItems = items.map((item, i) => (i === index ? { ...item, quantityRequired: qty } : item));
+    setItems(nextItems);
+    const nextForm = toFormValues(nextItems);
+    form.setValue("items", nextForm.items, { shouldDirty: true });
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 pb-20">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="text-lg font-semibold tracking-tight">What to pull</h3>
@@ -320,12 +375,17 @@ export function EventPullList({
           <Button
             type="button"
             variant="outline"
-            disabled={!eventId || !invoiceId || busy}
-            onClick={() => void handleScaffold()}
+            disabled={!eventId || !invoiceId || form.saveStatus === "saving"}
+            onClick={() => void handleScaffold().catch((error) => onError?.(getConvexErrorMessage(error)))}
           >
             Load from invoice
           </Button>
-          <Button type="button" variant="outline" disabled={busy} onClick={() => setShowManage((open) => !open)}>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={form.saveStatus === "saving"}
+            onClick={() => setShowManage((open) => !open)}
+          >
             {showManage ? "Hide editor" : "Edit list"}
           </Button>
         </div>
@@ -434,8 +494,10 @@ export function EventPullList({
               <Button
                 type="button"
                 variant="outline"
-                disabled={busy || (addKind === "package" ? !newPackageId : !newTypeId)}
-                onClick={() => void addManualLine()}
+                disabled={
+                  form.saveStatus === "saving" || (addKind === "package" ? !newPackageId : !newTypeId)
+                }
+                onClick={() => void addManualLine().catch((error) => onError?.(getConvexErrorMessage(error)))}
               >
                 Add
               </Button>
@@ -456,21 +518,15 @@ export function EventPullList({
                   <Input
                     className="h-8 w-20"
                     value={String(item.quantityRequired)}
-                    onChange={(e) => {
-                      const qty = Math.max(1, Number(e.target.value) || 1);
-                      setItems((prev) =>
-                        prev.map((row, i) => (i === index ? { ...row, quantityRequired: qty } : row)),
-                      );
-                    }}
-                    onBlur={() => void updateQuantity(index, items[index]?.quantityRequired ?? 1)}
+                    onChange={(e) => updateQuantityAt(index, Number(e.target.value) || 1)}
                     inputMode="numeric"
                   />
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
-                    disabled={busy}
-                    onClick={() => void handleRemove(index)}
+                    disabled={form.saveStatus === "saving"}
+                    onClick={() => void handleRemove(index).catch((error) => onError?.(getConvexErrorMessage(error)))}
                   >
                     Remove
                   </Button>
@@ -479,6 +535,18 @@ export function EventPullList({
             </div>
           ) : null}
         </div>
+      ) : null}
+
+      {showManage ? (
+        <FormSaveBar
+          tier="B"
+          saveStatus={form.saveStatus}
+          saveError={form.saveError}
+          isDirty={form.formState.isDirty}
+          saveLabel="Save now"
+          onSave={() => void form.handleSubmit(debouncedPersist)()}
+          onRetry={() => void form.handleSubmit(debouncedPersist)()}
+        />
       ) : null}
     </div>
   );

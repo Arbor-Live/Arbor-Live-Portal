@@ -1,10 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import type { Id } from "@/lib/convex-api";
 import { api } from "@/lib/convex-api";
-import { formatContactFullName } from "@/lib/contact-name";
 import {
   INVOICE_GROUP_TYPE_LABELS,
   INVOICE_GROUP_TYPE_OPTIONS,
@@ -12,127 +11,104 @@ import {
   EQUIPMENT_PRICING_MODE_OPTIONS,
   type EquipmentPricingMode,
 } from "@/lib/invoice-group-labels";
+import { FormSaveBar } from "@/components/forms";
+import { Form } from "@/components/ui/form";
+import { TextFormField } from "@/components/forms/text-form-field";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { useConvexForm } from "@/hooks/use-convex-form";
+import {
+  invoiceContactSchema,
+  invoiceGroupSchema,
+  type InvoiceContactFormValues,
+  type InvoiceGroupFormValues,
+} from "@/lib/validations/financial";
+import { CheckIcon, CircleNotchIcon, WarningCircleIcon } from "@phosphor-icons/react";
 
-type GroupType = "vso" | "house" | "department" | "individual";
+type GroupType = InvoiceGroupFormValues["type"];
+
+const emptyContactDefaults: InvoiceContactFormValues = {
+  firstName: "",
+  lastName: "",
+  email: "",
+  phone: "",
+};
 
 export function FinancialHubOrganizationsClient() {
   const [includeInactive, setIncludeInactive] = useState(false);
   const [selectedGroupId, setSelectedGroupId] = useState<Id<"invoiceGroups"> | "">("");
-  const [message, setMessage] = useState<string | null>(null);
 
   const groups = useQuery(api.invoiceGroups.listForAdmin, { includeInactive });
   const contacts = useQuery(
     api.invoiceContacts.listForAdmin,
-    selectedGroupId
-      ? { groupId: selectedGroupId, includeInactive }
-      : "skip",
+    selectedGroupId ? { groupId: selectedGroupId, includeInactive } : "skip",
   );
 
   const createGroup = useMutation(api.invoiceGroups.create);
-  const updateGroup = useMutation(api.invoiceGroups.update);
   const archiveGroup = useMutation(api.invoiceGroups.archive);
   const createContact = useMutation(api.invoiceContacts.create);
-  const updateContact = useMutation(api.invoiceContacts.update);
   const archiveContact = useMutation(api.invoiceContacts.archive);
-
-  const [newGroupName, setNewGroupName] = useState("");
-  const [newGroupType, setNewGroupType] = useState<GroupType>("vso");
-  const [newGroupEquipmentPricingMode, setNewGroupEquipmentPricingMode] =
-    useState<EquipmentPricingMode>("subsidized");
-  const [editGroupName, setEditGroupName] = useState("");
-  const [editGroupType, setEditGroupType] = useState<GroupType>("vso");
-  const [editGroupEquipmentPricingMode, setEditGroupEquipmentPricingMode] =
-    useState<EquipmentPricingMode>("subsidized");
-
-  const [newContactFirstName, setNewContactFirstName] = useState("");
-  const [newContactLastName, setNewContactLastName] = useState("");
-  const [newContactEmail, setNewContactEmail] = useState("");
-  const [newContactPhone, setNewContactPhone] = useState("");
 
   const groupRows = useMemo(() => groups ?? [], [groups]);
   const contactRows = useMemo(() => contacts ?? [], [contacts]);
   const selectedGroup = groupRows.find((group) => group._id === selectedGroupId);
 
-  function selectGroup(groupId: Id<"invoiceGroups">) {
-    setSelectedGroupId(groupId);
-    const group = groupRows.find((row) => row._id === groupId);
-    if (group) {
-      setEditGroupName(group.name);
-      setEditGroupType(group.type);
-      setEditGroupEquipmentPricingMode(group.equipmentPricingMode);
-    }
-  }
+  const newGroupForm = useConvexForm<InvoiceGroupFormValues>({
+    schema: invoiceGroupSchema,
+    defaultValues: {
+      name: "",
+      type: "vso",
+      equipmentPricingMode: "subsidized",
+    },
+    mode: "onTouched",
+  });
 
-  async function handleCreateGroup() {
-    if (!newGroupName.trim()) return;
-    setMessage(null);
+  const newContactForm = useConvexForm<InvoiceContactFormValues>({
+    schema: invoiceContactSchema,
+    defaultValues: emptyContactDefaults,
+    mode: "onTouched",
+  });
+
+  const onCreateGroup = newGroupForm.submitMutation(async (values) => {
     const id = await createGroup({
-      name: newGroupName.trim(),
-      type: newGroupType,
-      equipmentPricingMode: newGroupEquipmentPricingMode,
+      name: values.name.trim(),
+      type: values.type,
+      equipmentPricingMode: values.equipmentPricingMode,
       active: true,
     });
-    setNewGroupName("");
+    newGroupForm.reset({ name: "", type: "vso", equipmentPricingMode: "subsidized" });
     setSelectedGroupId(id);
-    setMessage("Host organization created.");
-  }
+  });
 
-  async function handleUpdateGroup() {
-    if (!selectedGroupId || !editGroupName.trim()) return;
-    setMessage(null);
-    await updateGroup({
-      id: selectedGroupId,
-      name: editGroupName.trim(),
-      type: editGroupType,
-      equipmentPricingMode: editGroupEquipmentPricingMode,
+  const onCreateContact = newContactForm.submitMutation(async (values) => {
+    if (!selectedGroupId) return;
+    await createContact({
+      groupId: selectedGroupId,
+      firstName: values.firstName.trim(),
+      lastName: values.lastName.trim(),
+      email: values.email.trim() || undefined,
+      phone: values.phone?.trim() || undefined,
+      active: true,
     });
-    setMessage("Host organization updated.");
-  }
+    newContactForm.reset(emptyContactDefaults);
+  });
 
   async function handleArchiveGroup() {
     if (!selectedGroupId) return;
     if (!window.confirm("Archive this host organization? It will no longer appear in invoice dropdowns.")) {
       return;
     }
-    setMessage(null);
     await archiveGroup({ id: selectedGroupId });
     setSelectedGroupId("");
-    setMessage("Host organization archived.");
-  }
-
-  async function handleCreateContact() {
-    if (!selectedGroupId || !newContactFirstName.trim() || !newContactLastName.trim()) return;
-    setMessage(null);
-    await createContact({
-      groupId: selectedGroupId,
-      firstName: newContactFirstName.trim(),
-      lastName: newContactLastName.trim(),
-      email: newContactEmail.trim() || undefined,
-      phone: newContactPhone.trim() || undefined,
-      active: true,
-    });
-    setNewContactFirstName("");
-    setNewContactLastName("");
-    setNewContactEmail("");
-    setNewContactPhone("");
-    setMessage("Client contact created.");
   }
 
   async function handleArchiveContact(contactId: Id<"invoiceContacts">) {
     if (!window.confirm("Archive this client contact?")) return;
-    setMessage(null);
     await archiveContact({ id: contactId });
-    setMessage("Client contact archived.");
   }
 
   return (
-    <div className="space-y-4">
-      {message ? <p className="text-sm text-primary">{message}</p> : null}
-
+    <div className="space-y-4 pb-24">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-2">
           <CardTitle>Host organizations</CardTitle>
@@ -147,43 +123,55 @@ export function FinancialHubOrganizationsClient() {
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Host orgs appear on invoices and booking requests. Link invoices to a host using the dropdown — not freeform text.
+            Host orgs appear on invoices and booking requests. Link invoices to a host using the dropdown — not
+            freeform text.
           </p>
 
-          <div className="grid gap-3 md:grid-cols-[1fr_160px_180px_120px]">
-            <Input
-              placeholder="New host name"
-              value={newGroupName}
-              onChange={(e) => setNewGroupName(e.target.value)}
-            />
-            <select
-              className="h-9 w-full rounded-md border bg-background px-3 text-sm"
-              value={newGroupType}
-              onChange={(e) => setNewGroupType(e.target.value as GroupType)}
+          <Form {...newGroupForm}>
+            <form
+              onSubmit={newGroupForm.handleSubmit(onCreateGroup)}
+              className="grid gap-3 md:grid-cols-[1fr_160px_180px_120px]"
             >
-              {INVOICE_GROUP_TYPE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <select
-              className="h-9 w-full rounded-md border bg-background px-3 text-sm"
-              value={newGroupEquipmentPricingMode}
-              onChange={(e) =>
-                setNewGroupEquipmentPricingMode(e.target.value as EquipmentPricingMode)
-              }
-            >
-              {EQUIPMENT_PRICING_MODE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <Button type="button" onClick={() => void handleCreateGroup()}>
-              Add host
-            </Button>
-          </div>
+              <TextFormField name="name" label="" placeholder="New host name" />
+              <div className="space-y-1">
+                <select
+                  className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                  value={newGroupForm.watch("type")}
+                  onChange={(e) =>
+                    newGroupForm.setValue("type", e.target.value as GroupType, { shouldDirty: true })
+                  }
+                >
+                  {INVOICE_GROUP_TYPE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <select
+                  className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                  value={newGroupForm.watch("equipmentPricingMode")}
+                  onChange={(e) =>
+                    newGroupForm.setValue(
+                      "equipmentPricingMode",
+                      e.target.value as EquipmentPricingMode,
+                      { shouldDirty: true },
+                    )
+                  }
+                >
+                  {EQUIPMENT_PRICING_MODE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <Button type="submit" disabled={newGroupForm.saveStatus === "saving"}>
+                Add host
+              </Button>
+            </form>
+          </Form>
 
           <div className="space-y-2">
             {groupRows.length === 0 ? (
@@ -193,7 +181,7 @@ export function FinancialHubOrganizationsClient() {
                 <button
                   key={group._id}
                   type="button"
-                  onClick={() => selectGroup(group._id)}
+                  onClick={() => setSelectedGroupId(group._id)}
                   className={`grid w-full gap-2 rounded-md border p-3 text-left transition hover:bg-muted/40 md:grid-cols-[1fr_120px_140px_100px_80px] ${
                     selectedGroupId === group._id ? "border-primary bg-primary/5" : ""
                   }`}
@@ -220,83 +208,34 @@ export function FinancialHubOrganizationsClient() {
             <CardTitle>Edit host: {selectedGroup.name}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid gap-3 md:grid-cols-4">
-              <div className="space-y-2">
-                <Label>Name</Label>
-                <Input value={editGroupName} onChange={(e) => setEditGroupName(e.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <Label>Type</Label>
-                <select
-                  className="h-9 w-full rounded-md border bg-background px-3 text-sm"
-                  value={editGroupType}
-                  onChange={(e) => setEditGroupType(e.target.value as GroupType)}
-                >
-                  {INVOICE_GROUP_TYPE_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-2">
-                <Label>Equipment pricing</Label>
-                <select
-                  className="h-9 w-full rounded-md border bg-background px-3 text-sm"
-                  value={editGroupEquipmentPricingMode}
-                  onChange={(e) =>
-                    setEditGroupEquipmentPricingMode(e.target.value as EquipmentPricingMode)
-                  }
-                >
-                  {EQUIPMENT_PRICING_MODE_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-xs text-muted-foreground">
-                  Applied when this host is selected on a new invoice.
-                </p>
-              </div>
-              <div className="flex items-end gap-2">
-                <Button type="button" onClick={() => void handleUpdateGroup()}>
-                  Save host
-                </Button>
-                {selectedGroup.active ? (
-                  <Button type="button" variant="outline" onClick={() => void handleArchiveGroup()}>
-                    Archive
-                  </Button>
-                ) : null}
-              </div>
-            </div>
+            <EditGroupForm
+              key={selectedGroup._id}
+              groupId={selectedGroup._id}
+              initial={{
+                name: selectedGroup.name,
+                type: selectedGroup.type,
+                equipmentPricingMode: selectedGroup.equipmentPricingMode,
+              }}
+              active={selectedGroup.active}
+              onArchive={() => void handleArchiveGroup()}
+            />
 
             <div className="border-t pt-4">
               <p className="mb-3 text-sm font-medium">Client contacts</p>
-              <div className="mb-3 grid gap-3 md:grid-cols-5">
-                <Input
-                  placeholder="First name"
-                  value={newContactFirstName}
-                  onChange={(e) => setNewContactFirstName(e.target.value)}
-                />
-                <Input
-                  placeholder="Last name"
-                  value={newContactLastName}
-                  onChange={(e) => setNewContactLastName(e.target.value)}
-                />
-                <Input
-                  placeholder="Email"
-                  value={newContactEmail}
-                  onChange={(e) => setNewContactEmail(e.target.value)}
-                />
-                <Input
-                  placeholder="Phone"
-                  value={newContactPhone}
-                  onChange={(e) => setNewContactPhone(e.target.value)}
-                />
-                <Button type="button" variant="outline" onClick={() => void handleCreateContact()}>
-                  Add client
-                </Button>
-              </div>
+              <Form {...newContactForm}>
+                <form
+                  onSubmit={newContactForm.handleSubmit(onCreateContact)}
+                  className="mb-3 grid gap-3 md:grid-cols-5"
+                >
+                  <TextFormField name="firstName" label="" placeholder="First name" />
+                  <TextFormField name="lastName" label="" placeholder="Last name" />
+                  <TextFormField name="email" label="" placeholder="Email" type="email" />
+                  <TextFormField name="phone" label="" placeholder="Phone" type="tel" />
+                  <Button type="submit" variant="outline" disabled={newContactForm.saveStatus === "saving"}>
+                    Add client
+                  </Button>
+                </form>
+              </Form>
 
               <div className="space-y-2">
                 {contactRows.length === 0 ? (
@@ -306,10 +245,6 @@ export function FinancialHubOrganizationsClient() {
                     <ContactRow
                       key={contact._id}
                       contact={contact}
-                      onSave={async (patch) => {
-                        await updateContact({ id: contact._id, ...patch });
-                        setMessage("Client contact updated.");
-                      }}
                       onArchive={() => void handleArchiveContact(contact._id)}
                     />
                   ))
@@ -319,13 +254,149 @@ export function FinancialHubOrganizationsClient() {
           </CardContent>
         </Card>
       ) : null}
+
+      <FormSaveBar
+        tier="C"
+        saveStatus={
+          newGroupForm.saveStatus !== "idle"
+            ? newGroupForm.saveStatus
+            : newContactForm.saveStatus
+        }
+        saveError={newGroupForm.saveError ?? newContactForm.saveError}
+        isDirty={newGroupForm.formState.isDirty || newContactForm.formState.isDirty}
+        saveLabel="Save"
+        onSave={() => {
+          if (newGroupForm.formState.isDirty) void newGroupForm.handleSubmit(onCreateGroup)();
+          if (newContactForm.formState.isDirty) void newContactForm.handleSubmit(onCreateContact)();
+        }}
+        onDiscard={() => {
+          newGroupForm.reset({ name: "", type: "vso", equipmentPricingMode: "subsidized" });
+          newContactForm.reset(emptyContactDefaults);
+        }}
+        onRetry={() => {
+          if (newGroupForm.formState.isDirty) void newGroupForm.handleSubmit(onCreateGroup)();
+          if (newContactForm.formState.isDirty) void newContactForm.handleSubmit(onCreateContact)();
+        }}
+      />
     </div>
+  );
+}
+
+function EditGroupForm({
+  groupId,
+  initial,
+  active,
+  onArchive,
+}: {
+  groupId: Id<"invoiceGroups">;
+  initial: InvoiceGroupFormValues;
+  active: boolean;
+  onArchive: () => void;
+}) {
+  const updateGroup = useMutation(api.invoiceGroups.update);
+
+  const form = useConvexForm<InvoiceGroupFormValues>({
+    schema: invoiceGroupSchema,
+    defaultValues: initial,
+    mode: "onChange",
+  });
+
+  useEffect(() => {
+    form.reset(initial);
+    form.suppressNextAutoSave();
+  }, [initial, form]);
+
+  const persist = async (values: InvoiceGroupFormValues) => {
+    await updateGroup({
+      id: groupId,
+      name: values.name.trim(),
+      type: values.type,
+      equipmentPricingMode: values.equipmentPricingMode,
+    });
+  };
+
+  const watched = form.watch();
+  useEffect(() => {
+    form.debouncedAutoSave(persist, { delayMs: 800, enabled: form.formState.isDirty });
+  }, [watched, form]);
+
+  return (
+    <>
+      <Form {...form}>
+        <form className="grid gap-3 md:grid-cols-4">
+          <TextFormField name="name" label="Name" />
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Type</label>
+            <select
+              className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+              value={form.watch("type")}
+              onChange={(e) => form.setValue("type", e.target.value as GroupType, { shouldDirty: true })}
+            >
+              {INVOICE_GROUP_TYPE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Equipment pricing</label>
+            <select
+              className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+              value={form.watch("equipmentPricingMode")}
+              onChange={(e) =>
+                form.setValue("equipmentPricingMode", e.target.value as EquipmentPricingMode, {
+                  shouldDirty: true,
+                })
+              }
+            >
+              {EQUIPMENT_PRICING_MODE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-muted-foreground">
+              Applied when this host is selected on a new invoice.
+            </p>
+          </div>
+          <div className="flex items-end gap-2">
+            {active ? (
+              <Button type="button" variant="outline" onClick={onArchive}>
+                Archive
+              </Button>
+            ) : null}
+            <span className="flex items-center">
+              {form.saveStatus === "saving" ? (
+                <CircleNotchIcon className="size-4 animate-spin text-muted-foreground" />
+              ) : form.saveStatus === "error" ? (
+                <WarningCircleIcon
+                  className="size-4 text-destructive"
+                  weight="fill"
+                  aria-label={form.saveError ?? "Save failed"}
+                />
+              ) : form.saveStatus === "saved" ? (
+                <CheckIcon className="size-4 text-emerald-600" weight="bold" />
+              ) : null}
+            </span>
+          </div>
+        </form>
+      </Form>
+
+      <FormSaveBar
+        tier="B"
+        saveStatus={form.saveStatus}
+        saveError={form.saveError}
+        isDirty={form.formState.isDirty}
+        onSave={() => void form.handleSubmit((values) => form.runMutation(() => persist(values)))()}
+        onRetry={() => void form.handleSubmit((values) => form.runMutation(() => persist(values)))()}
+      />
+    </>
   );
 }
 
 function ContactRow({
   contact,
-  onSave,
   onArchive,
 }: {
   contact: {
@@ -336,43 +407,70 @@ function ContactRow({
     phone?: string;
     active: boolean;
   };
-  onSave: (patch: {
-    firstName?: string;
-    lastName?: string;
-    email?: string;
-    phone?: string;
-  }) => Promise<void>;
   onArchive: () => void;
 }) {
-  const [firstName, setFirstName] = useState(contact.firstName);
-  const [lastName, setLastName] = useState(contact.lastName);
-  const [email, setEmail] = useState(contact.email ?? "");
-  const [phone, setPhone] = useState(contact.phone ?? "");
-  const [saving, setSaving] = useState(false);
+  const updateContact = useMutation(api.invoiceContacts.update);
+
+  const form = useConvexForm<InvoiceContactFormValues>({
+    schema: invoiceContactSchema,
+    defaultValues: {
+      firstName: contact.firstName,
+      lastName: contact.lastName,
+      email: contact.email ?? "",
+      phone: contact.phone ?? "",
+    },
+    mode: "onChange",
+  });
+
+  useEffect(() => {
+    form.reset({
+      firstName: contact.firstName,
+      lastName: contact.lastName,
+      email: contact.email ?? "",
+      phone: contact.phone ?? "",
+    });
+    form.suppressNextAutoSave();
+  }, [contact.firstName, contact.lastName, contact.email, contact.phone, form]);
+
+  const persist = async (values: InvoiceContactFormValues) => {
+    await updateContact({
+      id: contact._id,
+      firstName: values.firstName.trim(),
+      lastName: values.lastName.trim(),
+      email: values.email.trim() || undefined,
+      phone: values.phone?.trim() || undefined,
+    });
+  };
+
+  const watched = form.watch();
+  useEffect(() => {
+    form.debouncedAutoSave(persist, { delayMs: 800, enabled: form.formState.isDirty });
+  }, [watched, form]);
 
   return (
     <div className="grid gap-2 rounded-md border p-3 md:grid-cols-[1fr_1fr_1fr_1fr_160px]">
-      <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="First name" />
-      <Input value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="Last name" />
-      <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" />
-      <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone" />
-      <div className="flex gap-2">
-        <Button
-          type="button"
-          size="sm"
-          disabled={saving}
-          onClick={() => {
-            setSaving(true);
-            void onSave({
-              firstName: firstName.trim() || undefined,
-              lastName: lastName.trim() || undefined,
-              email: email.trim() || undefined,
-              phone: phone.trim() || undefined,
-            }).finally(() => setSaving(false));
-          }}
-        >
-          Save
-        </Button>
+      <Form {...form}>
+        <form className="contents md:col-span-4 md:grid md:grid-cols-4 md:gap-2">
+          <TextFormField name="firstName" label="" placeholder="First name" />
+          <TextFormField name="lastName" label="" placeholder="Last name" />
+          <TextFormField name="email" label="" placeholder="Email" type="email" />
+          <TextFormField name="phone" label="" placeholder="Phone" type="tel" />
+        </form>
+      </Form>
+      <div className="flex items-center gap-2">
+        <span className="flex shrink-0">
+          {form.saveStatus === "saving" ? (
+            <CircleNotchIcon className="size-4 animate-spin text-muted-foreground" />
+          ) : form.saveStatus === "error" ? (
+            <WarningCircleIcon
+              className="size-4 text-destructive"
+              weight="fill"
+              aria-label={form.saveError ?? "Save failed"}
+            />
+          ) : form.saveStatus === "saved" ? (
+            <CheckIcon className="size-4 text-emerald-600" weight="bold" />
+          ) : null}
+        </span>
         {contact.active ? (
           <Button type="button" size="sm" variant="outline" onClick={onArchive}>
             Archive

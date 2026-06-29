@@ -1,15 +1,26 @@
 "use client";
 
-import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
+import { FormSaveBar } from "@/components/forms";
+import { Form } from "@/components/ui/form";
+import { TextareaFormField } from "@/components/forms/textarea-form-field";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PublicEventHeader } from "@/components/public/public-event-header";
 import { PublicEventSchedule } from "@/components/public/public-event-schedule";
 import { PublicEventCrew } from "@/components/public/public-event-crew";
 import { PublicEventContacts } from "@/components/public/public-event-contacts";
 import { PublicQuoteFinancials } from "@/components/public/public-quote-financials";
-import { PublicQuoteTermsApproval } from "@/components/public/public-quote-terms-approval";
+import { useConvexForm } from "@/hooks/use-convex-form";
+import {
+  publicQuoteApprovalSchema,
+  publicQuoteChangeRequestSchema,
+  type PublicQuoteApprovalFormValues,
+  type PublicQuoteChangeRequestFormValues,
+} from "@/lib/validations/crew-availability";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { MarkdownContent } from "@/components/markdown-content";
 
 const STATUS_LABELS: Record<string, string> = {
   submitted: "Submitted",
@@ -65,10 +76,28 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
   const quoteData = useQuery(api.eventRequests.getPublicRequestQuoteByToken, { token });
   const approve = useMutation(api.eventRequests.approveQuoteByRequestToken);
   const requestChanges = useMutation(api.eventRequests.requestQuoteChangesByRequestToken);
-  const [acceptTerms, setAcceptTerms] = useState(false);
-  const [note, setNote] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+
+  const approvalForm = useConvexForm<PublicQuoteApprovalFormValues>({
+    schema: publicQuoteApprovalSchema,
+    defaultValues: { termsAccepted: false, note: "" },
+    mode: "onTouched",
+  });
+
+  const changeForm = useConvexForm<PublicQuoteChangeRequestFormValues>({
+    schema: publicQuoteChangeRequestSchema,
+    defaultValues: { note: "" },
+    mode: "onTouched",
+  });
+
+  const onApprove = approvalForm.submitMutation(async () => {
+    await approve({ token, acceptTerms: true });
+    changeForm.reset({ note: "" });
+  });
+
+  const onRequestChanges = changeForm.submitMutation(async (values) => {
+    await requestChanges({ token, note: values.note.trim() });
+    changeForm.reset({ note: "" });
+  });
 
   if (request === undefined) {
     return <p className="text-sm text-muted-foreground">Loading your request...</p>;
@@ -81,9 +110,14 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
   const isDeclined = request.status === "declined";
   const quoteLocked = quoteData ? quoteData.invoice.clientApprovalStatus !== "pending" : false;
   const linkedEvent = quoteData?.event ?? null;
+  const acceptTerms = approvalForm.watch("termsAccepted") === true;
+  const combinedStatus =
+    approvalForm.saveStatus !== "idle" ? approvalForm.saveStatus : changeForm.saveStatus;
+  const combinedError = approvalForm.saveError ?? changeForm.saveError;
+  const isDirty = approvalForm.formState.isDirty || changeForm.formState.isDirty;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 pb-24">
       <Card>
         <CardHeader>
           <CardTitle>Request {request.requestNumber}</CardTitle>
@@ -229,42 +263,82 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
             </Card>
           ) : null}
 
-          <PublicQuoteTermsApproval
-            termsAndConditionsMarkdown={quoteData.termsAndConditionsMarkdown}
-            termsVersion={quoteData.termsVersion}
-            acceptTerms={acceptTerms}
-            setAcceptTerms={setAcceptTerms}
-            locked={quoteLocked}
-            saving={saving}
-            onApprove={async () => {
-              setSaving(true);
-              setMessage(null);
-              try {
-                await approve({ token, acceptTerms: true });
-                setMessage("Quote approved. Thank you.");
-              } catch (error) {
-                setMessage(error instanceof Error ? error.message : "Could not submit approval.");
-              } finally {
-                setSaving(false);
-              }
-            }}
-            note={note}
-            setNote={setNote}
-            onRequestChanges={async () => {
-              setSaving(true);
-              setMessage(null);
-              try {
-                await requestChanges({ token, note: note.trim() });
-                setMessage("Change request submitted.");
-              } catch (error) {
-                setMessage(error instanceof Error ? error.message : "Could not submit change request.");
-              } finally {
-                setSaving(false);
-              }
+          <div className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Terms & Conditions</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                <MarkdownContent>
+                  {quoteData.termsAndConditionsMarkdown || "_No terms configured._"}
+                </MarkdownContent>
+                <Form {...approvalForm}>
+                  <form onSubmit={approvalForm.handleSubmit(onApprove)} className="space-y-3">
+                    <label className="flex items-center gap-2">
+                      <input
+                        id="accept-terms"
+                        type="checkbox"
+                        checked={acceptTerms}
+                        onChange={(e) =>
+                          approvalForm.setValue("termsAccepted", e.target.checked, {
+                            shouldDirty: true,
+                          })
+                        }
+                        disabled={quoteLocked}
+                      />
+                      <Label htmlFor="accept-terms">
+                        I accept the terms and conditions (version {quoteData.termsVersion}).
+                      </Label>
+                    </label>
+                    <Button
+                      type="submit"
+                      disabled={quoteLocked || !acceptTerms || approvalForm.saveStatus === "saving"}
+                    >
+                      Approve Quote
+                    </Button>
+                  </form>
+                </Form>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Request Changes</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <Form {...changeForm}>
+                  <form onSubmit={changeForm.handleSubmit(onRequestChanges)} className="space-y-3">
+                    <TextareaFormField
+                      name="note"
+                      label=""
+                      placeholder="Tell us what changes are needed"
+                      disabled={quoteLocked}
+                    />
+                    <Button
+                      type="submit"
+                      variant="outline"
+                      disabled={quoteLocked || changeForm.saveStatus === "saving"}
+                    >
+                      Request Changes
+                    </Button>
+                  </form>
+                </Form>
+              </CardContent>
+            </Card>
+          </div>
+
+          <FormSaveBar
+            tier="C"
+            saveStatus={combinedStatus}
+            saveError={combinedError}
+            isDirty={isDirty}
+            isSubmitting={approvalForm.saveStatus === "saving" || changeForm.saveStatus === "saving"}
+            saveLabel="Submit"
+            onDiscard={() => {
+              approvalForm.reset({ termsAccepted: false, note: "" });
+              changeForm.reset({ note: "" });
             }}
           />
-
-          {message ? <p className="text-sm text-primary">{message}</p> : null}
         </>
       ) : request.quote && !request.quote.readyForClientReview ? (
         <Card>

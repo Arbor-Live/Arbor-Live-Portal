@@ -2,11 +2,12 @@
 
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
-import { api } from "@/lib/convex-api";
+import { api, type Id } from "@/lib/convex-api";
+import { getConvexErrorMessage } from "@/lib/convex-error";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { StorageLocationEditor } from "./storage-location-editor";
 
 const defaultForm = { name: "", parentId: "" };
 
@@ -14,11 +15,9 @@ export function StorageLocationsManager() {
   const [search, setSearch] = useState("");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState(defaultForm);
+  const [editingId, setEditingId] = useState<Id<"storageLocations"> | null>(null);
+  const [editorInitial, setEditorInitial] = useState(defaultForm);
   const locations = useQuery(api.storageLocations.list, {});
-  const createLocation = useMutation(api.storageLocations.create);
-  const updateLocation = useMutation(api.storageLocations.update);
   const removeLocation = useMutation(api.storageLocations.remove);
   const filteredLocations = useMemo(() => {
     const rows = [...(locations ?? [])].filter(
@@ -32,24 +31,13 @@ export function StorageLocationsManager() {
     return rows;
   }, [locations, search, sortDir]);
 
-  async function submit() {
-    const payload = {
-      name: form.name,
-      parentId: form.parentId ? (form.parentId as never) : undefined,
-    };
-
-    if (editingId) {
-      await updateLocation({ id: editingId as never, ...payload });
-    } else {
-      await createLocation(payload);
-    }
-    setEditingId(null);
-    setForm(defaultForm);
-  }
-
   async function bulkDeleteSelected() {
-    await Promise.all(selectedIds.map((id) => removeLocation({ id: id as never })));
-    setSelectedIds([]);
+    try {
+      await Promise.all(selectedIds.map((id) => removeLocation({ id: id as Id<"storageLocations"> })));
+      setSelectedIds([]);
+    } catch (error) {
+      window.alert(getConvexErrorMessage(error, "Could not delete selected locations."));
+    }
   }
 
   return (
@@ -127,7 +115,10 @@ export function StorageLocationsManager() {
                           variant="outline"
                           onClick={() => {
                             setEditingId(location._id);
-                            setForm({ name: location.name, parentId: location.parentId ?? "" });
+                            setEditorInitial({
+                              name: location.name,
+                              parentId: location.parentId ?? "",
+                            });
                           }}
                         >
                           Edit
@@ -145,51 +136,18 @@ export function StorageLocationsManager() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{editingId ? "Edit Location" : "Create Location"}</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="space-y-2">
-            <Label>Name</Label>
-            <Input value={form.name} onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))} />
-          </div>
-          <div className="space-y-2">
-            <Label>Parent</Label>
-            <select
-              className="h-9 w-full rounded-md border bg-background px-3 text-sm"
-              value={form.parentId}
-              onChange={(event) => setForm((prev) => ({ ...prev, parentId: event.target.value }))}
-            >
-              <option value="">No Parent</option>
-              {(locations ?? [])
-                .filter((location) => location._id !== editingId)
-                .map((location) => (
-                  <option key={location._id} value={location._id}>
-                    {location.path}
-                  </option>
-                ))}
-            </select>
-          </div>
-          <div className="flex gap-2">
-            <Button type="button" onClick={() => void submit()}>
-              {editingId ? "Update" : "Create"}
-            </Button>
-            {editingId ? (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setEditingId(null);
-                  setForm(defaultForm);
-                }}
-              >
-                Cancel
-              </Button>
-            ) : null}
-          </div>
-        </CardContent>
-      </Card>
+      <StorageLocationEditor
+        editingId={editingId}
+        initial={editorInitial}
+        locations={locations ?? []}
+        onCancel={() => {
+          setEditingId(null);
+          setEditorInitial(defaultForm);
+        }}
+        onSaved={() => {
+          if (!editingId) setEditorInitial(defaultForm);
+        }}
+      />
     </div>
   );
 }

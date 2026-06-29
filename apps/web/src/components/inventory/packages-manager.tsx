@@ -1,12 +1,21 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
+import { FormSaveBar } from "@/components/forms";
+import { Form } from "@/components/ui/form";
+import { TextFormField } from "@/components/forms/text-form-field";
+import { TextareaFormField } from "@/components/forms/textarea-form-field";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useConvexForm } from "@/hooks/use-convex-form";
+import {
+  inventoryPackageSchema,
+  type InventoryPackageFormValues,
+} from "@/lib/validations/inventory";
 import { formatCurrency } from "./constants";
 import { SearchableSelect } from "./searchable-select";
 
@@ -14,17 +23,17 @@ type PackageItemRow = { typeId: string; quantity: string };
 
 type PublicPackageBucket = "lighting" | "sound" | "environmental" | "staging" | "misc";
 
-const defaultForm = {
+const defaultPackageValues: InventoryPackageFormValues = {
   name: "",
   description: "",
-  subsidizedPackagePriceUsd: "",
-  nonSubsidizedPackagePriceUsd: "",
+  subsidizedPackagePriceUsd: 0,
+  nonSubsidizedPackagePriceUsd: 0,
   active: true,
   publicListing: false,
-  /** Where this package appears on /public/packages (required when publicListing). */
-  publicBucket: "" as "" | PublicPackageBucket,
+  publicBucket: "",
   publicHeroImageUrl: "",
   publicSlug: "",
+  items: [{ typeId: "", quantity: 1 }],
 };
 
 const publicBucketLabels: Record<PublicPackageBucket, string> = {
@@ -42,8 +51,7 @@ export function PackagesManager() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState<"name" | "price" | "value">("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-  const [form, setForm] = useState(defaultForm);
-  const [items, setItems] = useState<PackageItemRow[]>([{ typeId: "", quantity: "1" }]);
+  const [itemRows, setItemRows] = useState<PackageItemRow[]>([{ typeId: "", quantity: "1" }]);
 
   const packages = useQuery(api.inventoryPackages.list, {});
   const types = useQuery(api.inventoryTypes.list, {});
@@ -51,6 +59,52 @@ export function PackagesManager() {
   const createPackage = useMutation(api.inventoryPackages.create);
   const updatePackage = useMutation(api.inventoryPackages.update);
   const removePackage = useMutation(api.inventoryPackages.remove);
+
+  const packageForm = useConvexForm<InventoryPackageFormValues>({
+    schema: inventoryPackageSchema,
+    defaultValues: defaultPackageValues,
+    mode: "onTouched",
+  });
+
+  useEffect(() => {
+    const parsedItems = itemRows
+      .filter((row) => row.typeId && Number(row.quantity) > 0)
+      .map((row) => ({ typeId: row.typeId, quantity: Number(row.quantity) }));
+    packageForm.setValue("items", parsedItems.length ? parsedItems : [{ typeId: "", quantity: 1 }], {
+      shouldDirty: true,
+    });
+  }, [itemRows, packageForm]);
+
+  function buildPackagePayload(values: InventoryPackageFormValues) {
+    return {
+      name: values.name,
+      description: values.description || undefined,
+      packagePriceCents: Math.round(values.nonSubsidizedPackagePriceUsd * 100),
+      subsidizedPackagePriceUsd: values.subsidizedPackagePriceUsd,
+      nonSubsidizedPackagePriceUsd: values.nonSubsidizedPackagePriceUsd,
+      active: values.active,
+      publicListing: values.publicListing,
+      publicBucket:
+        values.publicListing && values.publicBucket
+          ? (values.publicBucket as PublicPackageBucket)
+          : undefined,
+      publicHeroImageUrl: values.publicHeroImageUrl?.trim() || undefined,
+      publicSlug: values.publicSlug?.trim() || undefined,
+      items: values.items
+        .filter((row) => row.typeId && row.quantity > 0)
+        .map((row) => ({ typeId: row.typeId as Id<"inventoryTypes">, quantity: row.quantity })),
+    };
+  }
+
+  const onSubmitPackage = packageForm.submitMutation(async (values) => {
+    const payload = buildPackagePayload(values);
+    if (editingId) {
+      await updatePackage({ id: editingId as Id<"inventoryPackages">, ...payload });
+    } else {
+      await createPackage(payload);
+    }
+    closeEditor();
+  });
   const typeLookup = useMemo(() => {
     const map = new Map<string, InventoryTypeRow>();
     for (const type of types ?? []) {
@@ -73,70 +127,16 @@ export function PackagesManager() {
     return rows;
   }, [packages, search, sortBy, sortDir]);
 
-  function buildPackagePayload() {
-    const subsidizedPackagePriceUsd = Number(form.subsidizedPackagePriceUsd || "0");
-    const nonSubsidizedPackagePriceUsd = Number(form.nonSubsidizedPackagePriceUsd || "0");
-    return {
-      name: form.name,
-      description: form.description || undefined,
-      packagePriceCents: Math.round(nonSubsidizedPackagePriceUsd * 100),
-      subsidizedPackagePriceUsd,
-      nonSubsidizedPackagePriceUsd,
-      active: form.active,
-      publicListing: form.publicListing,
-      publicBucket:
-        form.publicListing && form.publicBucket ? (form.publicBucket as PublicPackageBucket) : undefined,
-      publicHeroImageUrl: form.publicHeroImageUrl.trim() || undefined,
-      publicSlug: form.publicSlug.trim() || undefined,
-      items: items
-        .filter((row) => row.typeId && Number(row.quantity) > 0)
-        .map((row) => ({ typeId: row.typeId as Id<"inventoryTypes">, quantity: Number(row.quantity) })),
-    };
-  }
-
-  async function persistPackage(payload: ReturnType<typeof buildPackagePayload>) {
-    if (editingId) {
-      await updatePackage({ id: editingId as Id<"inventoryPackages">, ...payload });
-    } else {
-      await createPackage(payload);
-    }
-    setEditingId(null);
-    setEditorOpen(false);
-    setForm(defaultForm);
-    setItems([{ typeId: "", quantity: "1" }]);
-  }
-
-  async function submit() {
-    const payload = buildPackagePayload();
-    if (!payload.items.length) return;
-
-    try {
-      if (form.publicListing && !form.publicBucket) {
-        window.alert("Choose which public browse section this package appears under (Lighting, Sound, etc.).");
-        return;
-      }
-
-      await persistPackage(payload);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Could not save package.";
-      window.alert(message);
-    }
-  }
-
-  async function bulkDeleteSelected() {
-    await Promise.all(selectedIds.map((id) => removePackage({ id: id as never })));
-    setSelectedIds([]);
-  }
-
   function closeEditor() {
     setEditorOpen(false);
     setEditingId(null);
-    setForm(defaultForm);
-    setItems([{ typeId: "", quantity: "1" }]);
+    packageForm.reset(defaultPackageValues);
+    packageForm.resetSaveState();
+    setItemRows([{ typeId: "", quantity: "1" }]);
   }
 
   const suggestedPricing = useMemo(() => {
-    return items.reduce(
+    return itemRows.reduce(
       (acc, row) => {
         const qty = Number(row.quantity || "0");
         if (!row.typeId || qty <= 0) return acc;
@@ -149,7 +149,12 @@ export function PackagesManager() {
       },
       { subsidized: 0, nonSubsidized: 0 },
     );
-  }, [items, typeLookup]);
+  }, [itemRows, typeLookup]);
+
+  async function bulkDeleteSelected() {
+    await Promise.all(selectedIds.map((id) => removePackage({ id: id as never })));
+    setSelectedIds([]);
+  }
 
   return (
     <div className="space-y-4">
@@ -187,8 +192,9 @@ export function PackagesManager() {
               type="button"
               onClick={() => {
                 setEditingId(null);
-                setForm(defaultForm);
-                setItems([{ typeId: "", quantity: "1" }]);
+                packageForm.reset(defaultPackageValues);
+                packageForm.resetSaveState();
+                setItemRows([{ typeId: "", quantity: "1" }]);
                 setEditorOpen(true);
               }}
             >
@@ -279,21 +285,24 @@ export function PackagesManager() {
                           variant="outline"
                           onClick={() => {
                             setEditingId(pkg._id);
-                            setForm({
+                            packageForm.reset({
                               name: pkg.name,
                               description: pkg.description ?? "",
-                              subsidizedPackagePriceUsd:
-                                (pkg.subsidizedPackagePriceUsd ?? 0).toString(),
-                              nonSubsidizedPackagePriceUsd: (
-                                pkg.nonSubsidizedPackagePriceUsd ?? pkg.packagePriceCents / 100
-                              ).toString(),
+                              subsidizedPackagePriceUsd: pkg.subsidizedPackagePriceUsd ?? 0,
+                              nonSubsidizedPackagePriceUsd:
+                                pkg.nonSubsidizedPackagePriceUsd ?? pkg.packagePriceCents / 100,
                               active: pkg.active,
                               publicListing: Boolean(pkg.publicListing),
-                              publicBucket: (pkg.publicBucket ?? "") as typeof defaultForm.publicBucket,
+                              publicBucket: (pkg.publicBucket ?? "") as InventoryPackageFormValues["publicBucket"],
                               publicHeroImageUrl: pkg.publicHeroImageUrl ?? "",
                               publicSlug: pkg.publicSlug ?? "",
+                              items: pkg.items.map((row) => ({
+                                typeId: row.typeId,
+                                quantity: row.quantity,
+                              })),
                             });
-                            setItems(
+                            packageForm.resetSaveState();
+                            setItemRows(
                               pkg.items.map((row) => ({
                                 typeId: row.typeId,
                                 quantity: row.quantity.toString(),
@@ -317,255 +326,234 @@ export function PackagesManager() {
         </CardContent>
       </Card>
       {editorOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 pb-20">
           <div className="relative w-full max-w-4xl rounded-lg border bg-background shadow-xl">
             <div className="border-b p-4">
               <h2 className="text-lg font-semibold">{editingId ? "Edit Package" : "Create Package"}</h2>
             </div>
             <div className="max-h-[80vh] overflow-auto p-4">
-              <div className="space-y-3">
-                <div className="space-y-2">
-                  <Label>Name</Label>
-                  <Input
-                    value={form.name}
-                    onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Description</Label>
-                  <textarea
-                    className="min-h-28 w-full rounded-md border bg-background px-3 py-2 text-sm"
-                    value={form.description}
-                    onChange={(event) =>
-                      setForm((prev) => ({ ...prev, description: event.target.value }))
-                    }
+              <Form {...packageForm}>
+                <form
+                  onSubmit={packageForm.handleSubmit(onSubmitPackage)}
+                  className="space-y-3"
+                >
+                  <TextFormField name="name" label="Name" />
+                  <TextareaFormField
+                    name="description"
+                    label="Description"
                     placeholder="Supports Markdown"
                   />
-                  <p className="text-xs text-muted-foreground">
+                  <p className="-mt-2 text-xs text-muted-foreground">
                     Multi-line; Markdown supported on the public package page.
                   </p>
-                </div>
-                <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>Subsidized Package Price (USD)</Label>
-                    <Input
-                      value={form.subsidizedPackagePriceUsd}
-                      onChange={(event) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          subsidizedPackagePriceUsd: event.target.value,
-                        }))
-                      }
+                  <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                    <TextFormField
+                      name="subsidizedPackagePriceUsd"
+                      label="Subsidized Package Price (USD)"
+                      type="number"
+                    />
+                    <TextFormField
+                      name="nonSubsidizedPackagePriceUsd"
+                      label="Non-Subsidized Package Price (USD)"
+                      type="number"
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label>Non-Subsidized Package Price (USD)</Label>
-                    <Input
-                      value={form.nonSubsidizedPackagePriceUsd}
-                      onChange={(event) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          nonSubsidizedPackagePriceUsd: event.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-                </div>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={form.active}
-                    onChange={(event) =>
-                      setForm((prev) => ({ ...prev, active: event.target.checked }))
-                    }
-                  />
-                  Active
-                </label>
-                <div className="rounded-md border p-3 space-y-3">
-                  <p className="text-sm font-medium">Public listing</p>
-                  <p className="text-xs text-muted-foreground">
-                    Public packages appear on the unauthenticated browse pages. Line items without a full public profile
-                    still show by name on the package page (for example road cases or accessories) but do not get their
-                    own standalone public product page.
-                  </p>
                   <label className="flex items-center gap-2 text-sm">
                     <input
                       type="checkbox"
-                      checked={form.publicListing}
+                      checked={packageForm.watch("active")}
                       onChange={(event) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          publicListing: event.target.checked,
-                          publicBucket: event.target.checked ? prev.publicBucket : "",
-                        }))
+                        packageForm.setValue("active", event.target.checked, { shouldDirty: true })
                       }
                     />
-                    List publicly
+                    Active
                   </label>
-                  {form.publicListing ? (
-                    <div className="space-y-2">
-                      <Label>Public browse section</Label>
-                      <select
-                        className="h-9 w-full rounded-md border bg-background px-3 text-sm"
-                        value={form.publicBucket}
-                        onChange={(event) =>
-                          setForm((prev) => ({
-                            ...prev,
-                            publicBucket: event.target.value as typeof prev.publicBucket,
-                          }))
-                        }
-                      >
-                        <option value="">Select section…</option>
-                        {(Object.keys(publicBucketLabels) as PublicPackageBucket[]).map((key) => (
-                          <option key={key} value={key}>
-                            {publicBucketLabels[key]}
-                          </option>
-                        ))}
-                      </select>
-                      <p className="text-xs text-muted-foreground">
-                        Controls which tab this package appears under on the public packages page.
-                      </p>
-                    </div>
-                  ) : null}
-                  <div className="space-y-2">
-                    <Label>Hero image URL</Label>
-                    <Input
-                      value={form.publicHeroImageUrl}
-                      onChange={(event) =>
-                        setForm((prev) => ({ ...prev, publicHeroImageUrl: event.target.value }))
-                      }
-                      placeholder="https://..."
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Optional public slug</Label>
-                    <Input
-                      value={form.publicSlug}
-                      onChange={(event) => setForm((prev) => ({ ...prev, publicSlug: event.target.value }))}
+                  <div className="space-y-3 rounded-md border p-3">
+                    <p className="text-sm font-medium">Public listing</p>
+                    <p className="text-xs text-muted-foreground">
+                      Public packages appear on the unauthenticated browse pages. Line items without a full public
+                      profile still show by name on the package page (for example road cases or accessories) but do
+                      not get their own standalone public product page.
+                    </p>
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={packageForm.watch("publicListing")}
+                        onChange={(event) => {
+                          packageForm.setValue("publicListing", event.target.checked, { shouldDirty: true });
+                          if (!event.target.checked) {
+                            packageForm.setValue("publicBucket", "", { shouldDirty: true });
+                          }
+                        }}
+                      />
+                      List publicly
+                    </label>
+                    {packageForm.watch("publicListing") ? (
+                      <div className="space-y-2">
+                        <Label>Public browse section</Label>
+                        <select
+                          className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                          value={packageForm.watch("publicBucket")}
+                          onChange={(event) =>
+                            packageForm.setValue(
+                              "publicBucket",
+                              event.target.value as InventoryPackageFormValues["publicBucket"],
+                              { shouldDirty: true },
+                            )
+                          }
+                        >
+                          <option value="">Select section…</option>
+                          {(Object.keys(publicBucketLabels) as PublicPackageBucket[]).map((key) => (
+                            <option key={key} value={key}>
+                              {publicBucketLabels[key]}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="text-xs text-muted-foreground">
+                          Controls which tab this package appears under on the public packages page.
+                        </p>
+                      </div>
+                    ) : null}
+                    <TextFormField name="publicHeroImageUrl" label="Hero image URL" placeholder="https://..." />
+                    <TextFormField
+                      name="publicSlug"
+                      label="Optional public slug"
                       placeholder="e.g. basic-foh-package"
                     />
-                    <p className="text-xs text-muted-foreground">Lowercase letters/numbers with dashes only.</p>
+                    <p className="-mt-2 text-xs text-muted-foreground">
+                      Lowercase letters/numbers with dashes only.
+                    </p>
                   </div>
-                </div>
-                <div className="space-y-2">
-                  <Label>Package Items</Label>
-                  {items.map((row, index) => (
-                    <div
-                      key={`${index}-${row.typeId}`}
-                      className="grid grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1fr)_120px_auto]"
+                  <div className="space-y-2">
+                    <Label>Package Items</Label>
+                    {itemRows.map((row, index) => (
+                      <div
+                        key={`${index}-${row.typeId}`}
+                        className="grid grid-cols-1 gap-2 lg:grid-cols-[minmax(0,1fr)_120px_auto]"
+                      >
+                        <SearchableSelect
+                          value={row.typeId}
+                          onChange={(nextValue) =>
+                            setItemRows((prev) =>
+                              prev.map((current, currentIndex) =>
+                                currentIndex === index ? { ...current, typeId: nextValue } : current,
+                              ),
+                            )
+                          }
+                          options={(types ?? []).map((type) => ({
+                            value: type._id,
+                            label: `${type.name} - ${type.model}`,
+                          }))}
+                          placeholder="Search package item type..."
+                          emptyLabel="Select type"
+                        />
+                        <Input
+                          value={row.quantity}
+                          onChange={(event) =>
+                            setItemRows((prev) =>
+                              prev.map((current, currentIndex) =>
+                                currentIndex === index
+                                  ? { ...current, quantity: event.target.value }
+                                  : current,
+                              ),
+                            )
+                          }
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="whitespace-nowrap"
+                          onClick={() =>
+                            setItemRows((prev) => prev.filter((_, currentIndex) => currentIndex !== index))
+                          }
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    ))}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setItemRows((prev) => [...prev, { typeId: "", quantity: "1" }])}
                     >
-                      <SearchableSelect
-                        value={row.typeId}
-                        onChange={(nextValue) =>
-                          setItems((prev) =>
-                            prev.map((current, currentIndex) =>
-                              currentIndex === index ? { ...current, typeId: nextValue } : current,
-                            ),
-                          )
-                        }
-                        options={(types ?? []).map((type) => ({
-                          value: type._id,
-                          label: `${type.name} - ${type.model}`,
-                        }))}
-                        placeholder="Search package item type..."
-                        emptyLabel="Select type"
-                      />
-                      <Input
-                        value={row.quantity}
-                        onChange={(event) =>
-                          setItems((prev) =>
-                            prev.map((current, currentIndex) =>
-                              currentIndex === index
-                                ? { ...current, quantity: event.target.value }
-                                : current,
-                            ),
-                          )
-                        }
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="whitespace-nowrap"
-                        onClick={() =>
-                          setItems((prev) =>
-                            prev.filter((_, currentIndex) => currentIndex !== index),
-                          )
-                        }
-                      >
-                        Remove
-                      </Button>
-                    </div>
-                  ))}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setItems((prev) => [...prev, { typeId: "", quantity: "1" }])}
-                  >
-                    Add Type Row
-                  </Button>
-                  <div className="rounded-md border p-2 text-sm">
-                    <p className="mb-1 font-medium">Selected Item Pricing</p>
-                    <div className="space-y-1 text-xs">
-                      {items
-                        .filter((row) => row.typeId && Number(row.quantity) > 0)
-                        .map((row, index) => {
-                          const type = typeLookup.get(row.typeId);
-                          if (!type) return null;
-                          const qty = Number(row.quantity || "0");
-                          const sub = (type.subsidizedRentalPriceUsd ?? 0) * qty;
-                          const nonSub =
-                            (type.nonSubsidizedRentalPriceUsd ?? type.rentalPriceUsd ?? 0) * qty;
-                          return (
-                            <p key={`${row.typeId}-${index}`}>
-                              {qty}x {type.name}: Sub {formatCurrency(sub)} / Non{" "}
-                              {formatCurrency(nonSub)}
-                            </p>
-                          );
-                        })}
-                    </div>
-                    <div className="my-2 border-t" />
-                    <p>
-                      Suggested Subsidized:{" "}
-                      <span className="font-medium">
-                        {formatCurrency(Number(suggestedPricing.subsidized.toFixed(2)))}
-                      </span>
-                    </p>
-                    <p>
-                      Suggested Non-Subsidized:{" "}
-                      <span className="font-medium">
-                        {formatCurrency(Number(suggestedPricing.nonSubsidized.toFixed(2)))}
-                      </span>
-                    </p>
-                    <div className="mt-2 flex gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() =>
-                          setForm((prev) => ({
-                            ...prev,
-                            subsidizedPackagePriceUsd:
-                              Number(suggestedPricing.subsidized.toFixed(2)).toString(),
-                            nonSubsidizedPackagePriceUsd:
-                              Number(suggestedPricing.nonSubsidized.toFixed(2)).toString(),
-                          }))
-                        }
-                      >
-                        Use Suggested Prices
-                      </Button>
+                      Add Type Row
+                    </Button>
+                    <div className="rounded-md border p-2 text-sm">
+                      <p className="mb-1 font-medium">Selected Item Pricing</p>
+                      <div className="space-y-1 text-xs">
+                        {itemRows
+                          .filter((row) => row.typeId && Number(row.quantity) > 0)
+                          .map((row, index) => {
+                            const type = typeLookup.get(row.typeId);
+                            if (!type) return null;
+                            const qty = Number(row.quantity || "0");
+                            const sub = (type.subsidizedRentalPriceUsd ?? 0) * qty;
+                            const nonSub =
+                              (type.nonSubsidizedRentalPriceUsd ?? type.rentalPriceUsd ?? 0) * qty;
+                            return (
+                              <p key={`${row.typeId}-${index}`}>
+                                {qty}x {type.name}: Sub {formatCurrency(sub)} / Non {formatCurrency(nonSub)}
+                              </p>
+                            );
+                          })}
+                      </div>
+                      <div className="my-2 border-t" />
+                      <p>
+                        Suggested Subsidized:{" "}
+                        <span className="font-medium">
+                          {formatCurrency(Number(suggestedPricing.subsidized.toFixed(2)))}
+                        </span>
+                      </p>
+                      <p>
+                        Suggested Non-Subsidized:{" "}
+                        <span className="font-medium">
+                          {formatCurrency(Number(suggestedPricing.nonSubsidized.toFixed(2)))}
+                        </span>
+                      </p>
+                      <div className="mt-2 flex gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => {
+                            packageForm.setValue(
+                              "subsidizedPackagePriceUsd",
+                              Number(suggestedPricing.subsidized.toFixed(2)),
+                              { shouldDirty: true },
+                            );
+                            packageForm.setValue(
+                              "nonSubsidizedPackagePriceUsd",
+                              Number(suggestedPricing.nonSubsidized.toFixed(2)),
+                              { shouldDirty: true },
+                            );
+                          }}
+                        >
+                          Use Suggested Prices
+                        </Button>
+                      </div>
                     </div>
                   </div>
-                </div>
-                <div className="flex gap-2">
-                  <Button type="button" onClick={() => void submit()}>
-                    {editingId ? "Update" : "Create"}
-                  </Button>
-                  <Button type="button" variant="outline" onClick={closeEditor}>
-                    Cancel
-                  </Button>
-                </div>
-              </div>
+                  <div className="flex gap-2">
+                    <Button type="submit" disabled={packageForm.saveStatus === "saving"}>
+                      {editingId ? "Update" : "Create"}
+                    </Button>
+                    <Button type="button" variant="outline" onClick={closeEditor}>
+                      Cancel
+                    </Button>
+                  </div>
+                </form>
+              </Form>
             </div>
           </div>
+          <FormSaveBar
+            tier="C"
+            saveStatus={packageForm.saveStatus}
+            saveError={packageForm.saveError}
+            isDirty={packageForm.formState.isDirty}
+            saveLabel={editingId ? "Update" : "Create"}
+            onSave={() => void packageForm.handleSubmit(onSubmitPackage)()}
+            onDiscard={closeEditor}
+            onRetry={() => void packageForm.handleSubmit(onSubmitPackage)()}
+          />
         </div>
       ) : null}
     </div>

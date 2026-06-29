@@ -59,6 +59,7 @@ export function InvoicePrintView({ invoiceId }: { invoiceId: Id<"invoices"> }) {
   if (!data || !documentData) return <p className="text-sm text-muted-foreground">Invoice not found.</p>;
 
   async function onPrint() {
+    if (!data) return;
     await createExport({
       invoiceId,
       fileName: `${data.invoice.invoiceNumber}.pdf`,

@@ -1,73 +1,94 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
-import { Button } from "@/components/ui/button";
+import { FormSaveBar } from "@/components/forms";
+import { Form } from "@/components/ui/form";
+import { TextFormField } from "@/components/forms/text-form-field";
+import { TextareaFormField } from "@/components/forms/textarea-form-field";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { useConvexForm } from "@/hooks/use-convex-form";
+import {
+  lostFoundSettingsSchema,
+  type LostFoundSettingsFormValues,
+} from "@/lib/validations/inventory";
 
-type FormState = {
-  instructions: string;
-  contactEmail: string;
-  infoUrl: string;
+type LostFoundFormProps = {
+  initial: LostFoundSettingsFormValues;
 };
 
-function LostFoundForm({ initial }: { initial: FormState }) {
+function LostFoundForm({ initial }: LostFoundFormProps) {
   const updateSettings = useMutation(api.lostFoundSettings.update);
-  const [form, setForm] = useState(initial);
+
+  const form = useConvexForm<LostFoundSettingsFormValues>({
+    schema: lostFoundSettingsSchema,
+    defaultValues: initial,
+    mode: "onChange",
+  });
+
+  useEffect(() => {
+    form.reset(initial);
+    form.suppressNextAutoSave();
+  }, [initial, form]);
+
+  const persist = async (values: LostFoundSettingsFormValues) => {
+    await updateSettings({
+      instructions: values.instructions?.trim() || undefined,
+      contactEmail: values.contactEmail?.trim() || undefined,
+      infoUrl: values.infoUrl?.trim() || undefined,
+    });
+  };
+
+  const watched = form.watch();
+  useEffect(() => {
+    form.debouncedAutoSave(persist, { delayMs: 1000, enabled: form.formState.isDirty });
+  }, [watched, form]);
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Public Lost &amp; Found copy</CardTitle>
-        <p className="text-sm text-muted-foreground">
-          This text appears on every public equipment page at{" "}
-          <span className="font-mono">/e/[asset ID]</span> for registered assets. Return instructions and contact info
-          are shared globally — not per item.
-        </p>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <Label>Return instructions</Label>
-          <textarea
-            className="min-h-32 w-full rounded-md border bg-background px-3 py-2 text-sm"
-            value={form.instructions}
-            onChange={(event) => setForm((prev) => ({ ...prev, instructions: event.target.value }))}
-            placeholder="Where to bring found equipment, hours, desk location, etc."
-          />
-        </div>
-        <div className="space-y-2">
-          <Label>Contact email (optional)</Label>
-          <Input
-            value={form.contactEmail}
-            onChange={(event) => setForm((prev) => ({ ...prev, contactEmail: event.target.value }))}
-            placeholder="equipment@example.com"
-          />
-        </div>
-        <div className="space-y-2">
-          <Label>More info URL (optional)</Label>
-          <Input
-            value={form.infoUrl}
-            onChange={(event) => setForm((prev) => ({ ...prev, infoUrl: event.target.value }))}
-            placeholder="https://..."
-          />
-        </div>
-        <Button
-          type="button"
-          onClick={() =>
-            void updateSettings({
-              instructions: form.instructions.trim() || undefined,
-              contactEmail: form.contactEmail.trim() || undefined,
-              infoUrl: form.infoUrl.trim() || undefined,
-            })
-          }
-        >
-          Save
-        </Button>
-      </CardContent>
-    </Card>
+    <>
+      <Card className="pb-20">
+        <CardHeader>
+          <CardTitle>Public Lost &amp; Found copy</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            This text appears on every public equipment page at{" "}
+            <span className="font-mono">/e/[asset ID]</span> for registered assets. Return instructions and contact
+            info are shared globally — not per item.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Form {...form}>
+            <form className="space-y-4">
+              <TextareaFormField
+                name="instructions"
+                label="Return instructions"
+                placeholder="Where to bring found equipment, hours, desk location, etc."
+              />
+              <TextFormField
+                name="contactEmail"
+                label="Contact email (optional)"
+                type="email"
+                placeholder="equipment@example.com"
+              />
+              <TextFormField
+                name="infoUrl"
+                label="More info URL (optional)"
+                placeholder="https://..."
+              />
+            </form>
+          </Form>
+        </CardContent>
+      </Card>
+
+      <FormSaveBar
+        tier="B"
+        saveStatus={form.saveStatus}
+        saveError={form.saveError}
+        isDirty={form.formState.isDirty}
+        onSave={() => void form.handleSubmit((values) => form.runMutation(() => persist(values)))()}
+        onRetry={() => void form.handleSubmit((values) => form.runMutation(() => persist(values)))()}
+      />
+    </>
   );
 }
 
@@ -78,7 +99,7 @@ export function LostFoundSettingsManager() {
     return <p className="text-sm text-muted-foreground">Loading…</p>;
   }
 
-  const initial: FormState = {
+  const initial: LostFoundSettingsFormValues = {
     instructions: settings?.instructions ?? "",
     contactEmail: settings?.contactEmail ?? "",
     infoUrl: settings?.infoUrl ?? "",

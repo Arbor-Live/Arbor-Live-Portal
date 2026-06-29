@@ -6,9 +6,9 @@ import { api } from "@/lib/convex-api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { getConvexErrorMessage } from "@/lib/convex-error";
+import { InventoryItemEditor } from "./inventory-item-editor";
 import { toCategoryOptions } from "./constants";
-import { SearchableSelect } from "./searchable-select";
 
 const defaultForm = {
   assetId: "",
@@ -36,7 +36,7 @@ export function ItemsManager() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState(defaultForm);
+  const [editorInitial, setEditorInitial] = useState(defaultForm);
   const rowRefs = useRef(new Map<string, HTMLTableRowElement>());
 
   const categories = useQuery(api.inventoryCategories.list, { activeOnly: true });
@@ -47,7 +47,6 @@ export function ItemsManager() {
   const types = useQuery(api.inventoryTypes.list, {});
   const locations = useQuery(api.storageLocations.list, {});
   const createItem = useMutation(api.inventoryItems.create);
-  const updateItem = useMutation(api.inventoryItems.update);
   const removeItem = useMutation(api.inventoryItems.remove);
   const sortedItems = useMemo(() => {
     const rows = [...(items ?? [])];
@@ -78,28 +77,13 @@ export function ItemsManager() {
     return map;
   }, [sortedItems]);
 
-  async function submit() {
-    const payload = {
-      assetId: form.assetId,
-      serialNumber: form.serialNumber || undefined,
-      typeId: form.typeId as never,
-      storageLocationId: form.storageLocationId ? (form.storageLocationId as never) : undefined,
-      containedInAssetId: form.containedInAssetId ? (form.containedInAssetId as never) : undefined,
-      status: form.status || undefined,
-      notes: form.notes || undefined,
-    };
-    if (editingId) {
-      await updateItem({ id: editingId as never, ...payload });
-    } else {
-      await createItem(payload);
-    }
-    setEditingId(null);
-    setForm(defaultForm);
-  }
-
   async function bulkDeleteSelected() {
-    await Promise.all(selectedIds.map((id) => removeItem({ id: id as never })));
-    setSelectedIds([]);
+    try {
+      await Promise.all(selectedIds.map((id) => removeItem({ id: id as never })));
+      setSelectedIds([]);
+    } catch (error) {
+      window.alert(getConvexErrorMessage(error, "Could not delete selected items."));
+    }
   }
 
   function scrollToItemRow(itemId: string) {
@@ -271,7 +255,7 @@ export function ItemsManager() {
                           variant="outline"
                           onClick={() => {
                             setEditingId(item._id);
-                            setForm({
+                            setEditorInitial({
                               assetId: item.assetId,
                               serialNumber: item.serialNumber ?? "",
                               typeId: item.typeId,
@@ -297,123 +281,21 @@ export function ItemsManager() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{editingId ? "Edit Item" : "Create Item"}</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="space-y-2">
-            <Label>Asset ID</Label>
-            <Input
-              value={form.assetId}
-              onChange={(event) => setForm((prev) => ({ ...prev, assetId: event.target.value }))}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Serial Number</Label>
-            <Input
-              value={form.serialNumber}
-              onChange={(event) =>
-                setForm((prev) => ({ ...prev, serialNumber: event.target.value }))
-              }
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Type</Label>
-            <SearchableSelect
-              value={form.typeId}
-              onChange={(nextValue) => setForm((prev) => ({ ...prev, typeId: nextValue }))}
-              options={(types ?? []).map((type) => ({
-                value: type._id,
-                label: `${type.name} - ${type.model}`,
-              }))}
-              placeholder="Search types..."
-              emptyLabel="Select type"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Storage Location</Label>
-            <SearchableSelect
-              value={form.storageLocationId}
-              onChange={(nextValue) =>
-                setForm((prev) => ({ ...prev, storageLocationId: nextValue }))
-              }
-              options={[
-                { value: "", label: "Unassigned" },
-                ...(locations ?? []).map((location) => ({
-                  value: location._id,
-                  label: location.path,
-                })),
-              ]}
-              placeholder="Search storage locations..."
-              emptyLabel="Unassigned"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Contained In Asset</Label>
-            <SearchableSelect
-              value={form.containedInAssetId}
-              onChange={(nextValue) =>
-                setForm((prev) => ({ ...prev, containedInAssetId: nextValue }))
-              }
-              options={[
-                { value: "", label: "Not contained" },
-                ...(items ?? [])
-                  .filter((item) => item._id !== editingId)
-                  .map((item) => ({
-                    value: item._id,
-                    label: `${item.assetId} - ${formatTypeDisplay(item.type)}`,
-                  })),
-              ]}
-              placeholder="Search container assets..."
-              emptyLabel="Not contained"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Status</Label>
-            <Input
-              value={form.status}
-              onChange={(event) => setForm((prev) => ({ ...prev, status: event.target.value }))}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Notes</Label>
-            <textarea
-              className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm"
-              value={form.notes}
-              onChange={(event) => setForm((prev) => ({ ...prev, notes: event.target.value }))}
-            />
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Public finder URL:{" "}
-            <span className="font-mono">
-              {siteBase || "(set NEXT_PUBLIC_SITE_URL)"}/e/{form.assetId || "ASSETID"}
-            </span>
-            . Global return instructions are configured under{" "}
-            <a className="underline" href="/dashboard/inventory/lost-found">
-              Inventory → Lost &amp; Found
-            </a>
-            .
-          </p>
-          <div className="flex gap-2">
-            <Button type="button" onClick={() => void submit()}>
-              {editingId ? "Update" : "Create"}
-            </Button>
-            {editingId ? (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setEditingId(null);
-                  setForm(defaultForm);
-                }}
-              >
-                Cancel
-              </Button>
-            ) : null}
-          </div>
-        </CardContent>
-      </Card>
+      <InventoryItemEditor
+        editingId={editingId as never}
+        initial={editorInitial}
+        types={types ?? []}
+        locations={locations ?? []}
+        items={sortedItems}
+        siteBase={siteBase}
+        onCancel={() => {
+          setEditingId(null);
+          setEditorInitial(defaultForm);
+        }}
+        onSaved={() => {
+          if (!editingId) setEditorInitial(defaultForm);
+        }}
+      />
     </div>
   );
 }

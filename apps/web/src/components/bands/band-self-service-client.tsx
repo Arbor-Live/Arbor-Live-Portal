@@ -1,12 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
+import { FormSaveBar } from "@/components/forms";
+import { Form, FormField } from "@/components/ui/form";
+import { TextFormField } from "@/components/forms/text-form-field";
+import { TextareaFormField } from "@/components/forms/textarea-form-field";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { useConvexForm } from "@/hooks/use-convex-form";
+import {
+  bandInviteSchema,
+  bandProfileSchema,
+  type BandInviteFormValues,
+  type BandProfileFormValues,
+} from "@/lib/validations/bands";
 
 export function BandSelfServiceClient() {
   const profile = useQuery(api.users.getActiveBandProfile, {});
@@ -14,90 +23,89 @@ export function BandSelfServiceClient() {
   const updateProfile = useMutation(api.users.updateActiveBandProfile);
   const inviteMember = useMutation(api.users.inviteMemberToActiveOrganization);
 
-  const [displayName, setDisplayName] = useState("");
-  const [bio, setBio] = useState("");
-  const [performerRateUsd, setPerformerRateUsd] = useState("");
-  const [website, setWebsite] = useState("");
-  const [instagram, setInstagram] = useState("");
-  const [youtube, setYoutube] = useState("");
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState<"org_admin" | "org_member">("org_member");
-  const [message, setMessage] = useState<string | null>(null);
+  const profileForm = useConvexForm<BandProfileFormValues>({
+    schema: bandProfileSchema,
+    defaultValues: {
+      displayName: "",
+      bio: "",
+      performerHourlyRateUsd: 0,
+      publicWebsiteUrl: "",
+      publicInstagramUrl: "",
+      publicYoutubeUrl: "",
+    },
+    mode: "onChange",
+  });
 
-  async function saveProfile() {
+  const inviteForm = useConvexForm<BandInviteFormValues>({
+    schema: bandInviteSchema,
+    defaultValues: { email: "", role: "org_member" },
+    mode: "onTouched",
+  });
+
+  useEffect(() => {
+    if (!profile) return;
+    profileForm.reset({
+      displayName: profile.displayName ?? "",
+      bio: profile.bio ?? "",
+      performerHourlyRateUsd: profile.performerHourlyRateUsd ?? 0,
+      publicWebsiteUrl: profile.publicWebsiteUrl ?? "",
+      publicInstagramUrl: profile.publicInstagramUrl ?? "",
+      publicYoutubeUrl: profile.publicYoutubeUrl ?? "",
+    });
+    profileForm.suppressNextAutoSave();
+  }, [profile, profileForm]);
+
+  const persistProfile = async (values: BandProfileFormValues) => {
     await updateProfile({
-      displayName: displayName || profile?.displayName,
-      bio: bio || profile?.bio,
-      performerHourlyRateUsd:
-        performerRateUsd.trim().length > 0
-          ? Number(performerRateUsd)
-          : profile?.performerHourlyRateUsd,
-      publicWebsiteUrl: website || profile?.publicWebsiteUrl,
-      publicInstagramUrl: instagram || profile?.publicInstagramUrl,
-      publicYoutubeUrl: youtube || profile?.publicYoutubeUrl,
+      displayName: values.displayName,
+      bio: values.bio || undefined,
+      performerHourlyRateUsd: values.performerHourlyRateUsd,
+      publicWebsiteUrl: values.publicWebsiteUrl || undefined,
+      publicInstagramUrl: values.publicInstagramUrl || undefined,
+      publicYoutubeUrl: values.publicYoutubeUrl || undefined,
     });
-    setMessage("Band profile updated.");
-  }
+  };
 
-  async function sendInvite() {
-    if (!inviteEmail.trim()) return;
-    await inviteMember({
-      email: inviteEmail.trim(),
-      role: inviteRole,
+  const watchedProfile = profileForm.watch();
+  useEffect(() => {
+    profileForm.debouncedAutoSave(persistProfile, {
+      delayMs: 1000,
+      enabled: profileForm.formState.isDirty && profile !== undefined,
     });
-    setInviteEmail("");
-    setMessage("Band member invite sent.");
+  }, [watchedProfile, profileForm, profile]);
+
+  const onInvite = inviteForm.submitMutation(async (values) => {
+    await inviteMember({ email: values.email.trim(), role: values.role });
+    inviteForm.reset({ email: "", role: values.role });
+  });
+
+  if (profile === undefined) {
+    return <p className="text-sm text-muted-foreground">Loading band profile…</p>;
   }
 
   return (
-    <div className="space-y-4">
-      {message ? <p className="text-sm text-primary">{message}</p> : null}
+    <div className="space-y-4 pb-20">
       <Card>
         <CardHeader>
           <CardTitle>Band Public Profile</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="space-y-1">
-            <Label>Display Name</Label>
-            <Input
-              value={displayName || profile?.displayName || ""}
-              onChange={(e) => setDisplayName(e.target.value)}
-            />
-          </div>
-          <div className="space-y-1">
-            <Label>Bio</Label>
-            <textarea
-              className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm"
-              value={bio || profile?.bio || ""}
-              onChange={(e) => setBio(e.target.value)}
-            />
-          </div>
-          <div className="grid gap-2 md:grid-cols-3">
-            <Input
-              placeholder="Performer hourly rate (USD)"
-              inputMode="decimal"
-              value={performerRateUsd || String(profile?.performerHourlyRateUsd ?? 0)}
-              onChange={(e) => setPerformerRateUsd(e.target.value)}
-            />
-            <Input
-              placeholder="Website"
-              value={website || profile?.publicWebsiteUrl || ""}
-              onChange={(e) => setWebsite(e.target.value)}
-            />
-            <Input
-              placeholder="Instagram URL"
-              value={instagram || profile?.publicInstagramUrl || ""}
-              onChange={(e) => setInstagram(e.target.value)}
-            />
-            <Input
-              placeholder="YouTube URL"
-              value={youtube || profile?.publicYoutubeUrl || ""}
-              onChange={(e) => setYoutube(e.target.value)}
-            />
-          </div>
-          <Button type="button" onClick={() => void saveProfile()}>
-            Save Band Profile
-          </Button>
+        <CardContent>
+          <Form {...profileForm}>
+            <form className="space-y-3">
+              <TextFormField name="displayName" label="Display Name" />
+              <TextareaFormField name="bio" label="Bio" />
+              <div className="grid gap-2 md:grid-cols-2">
+                <TextFormField
+                  name="performerHourlyRateUsd"
+                  label="Performer hourly rate (USD)"
+                  type="number"
+                />
+                <TextFormField name="publicWebsiteUrl" label="Website" placeholder="https://..." />
+                <TextFormField name="publicInstagramUrl" label="Instagram URL" />
+                <TextFormField name="publicYoutubeUrl" label="YouTube URL" />
+              </div>
+            </form>
+          </Form>
         </CardContent>
       </Card>
 
@@ -106,24 +114,31 @@ export function BandSelfServiceClient() {
           <CardTitle>Band Members</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="grid gap-2 md:grid-cols-[1fr_180px_auto]">
-            <Input
-              placeholder="Invite member email"
-              value={inviteEmail}
-              onChange={(e) => setInviteEmail(e.target.value)}
-            />
-            <select
-              className="h-9 rounded-md border bg-background px-3 text-sm"
-              value={inviteRole}
-              onChange={(e) => setInviteRole(e.target.value as "org_admin" | "org_member")}
+          <Form {...inviteForm}>
+            <form
+              onSubmit={inviteForm.handleSubmit(onInvite)}
+              className="grid gap-2 md:grid-cols-[1fr_180px_auto]"
             >
-              <option value="org_member">Org Member</option>
-              <option value="org_admin">Org Admin</option>
-            </select>
-            <Button type="button" onClick={() => void sendInvite()}>
-              Invite
-            </Button>
-          </div>
+              <TextFormField name="email" label="" placeholder="Invite member email" type="email" />
+              <FormField
+                control={inviteForm.control}
+                name="role"
+                render={({ field }) => (
+                  <select
+                    className="h-9 self-end rounded-md border bg-background px-3 text-sm"
+                    value={field.value}
+                    onChange={field.onChange}
+                  >
+                    <option value="org_member">Org Member</option>
+                    <option value="org_admin">Org Admin</option>
+                  </select>
+                )}
+              />
+              <Button type="submit" disabled={inviteForm.saveStatus === "saving"}>
+                Invite
+              </Button>
+            </form>
+          </Form>
           <div className="space-y-2">
             {(members ?? []).map((member) => (
               <div key={member.userId} className="rounded-md border p-2 text-sm">
@@ -139,6 +154,23 @@ export function BandSelfServiceClient() {
           </div>
         </CardContent>
       </Card>
+
+      <FormSaveBar
+        tier="B"
+        saveStatus={profileForm.saveStatus}
+        saveError={profileForm.saveError}
+        isDirty={profileForm.formState.isDirty}
+        onSave={() =>
+          void profileForm.handleSubmit((values) =>
+            profileForm.runMutation(() => persistProfile(values)),
+          )()
+        }
+        onRetry={() =>
+          void profileForm.handleSubmit((values) =>
+            profileForm.runMutation(() => persistProfile(values)),
+          )()
+        }
+      />
     </div>
   );
 }

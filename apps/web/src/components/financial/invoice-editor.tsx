@@ -24,6 +24,8 @@ import {
   type InvoiceCrewRow,
 } from "@/lib/invoice-crew-from-event";
 import { CaretDownIcon } from "@phosphor-icons/react";
+import { getConvexErrorMessage } from "@/lib/convex-error";
+import { FormSaveBar } from "@/components/forms";
 
 type EquipmentRow = { refId: string; quantity: string };
 type ExternalRentalRow = { provider: string; label: string; quantity: string; rateUsd: string };
@@ -603,7 +605,10 @@ export function InvoiceEditor({
   async function persistDraft(mode: "manual" | "auto") {
     const payload = buildPayload();
     if (!payload) {
-      if (mode === "manual") window.alert("Select a manager and add at least one line item.");
+      if (mode === "manual") {
+        setAutoSaveState("error");
+        setAutoSaveError("Select a manager and add at least one line item.");
+      }
       return false;
     }
 
@@ -655,8 +660,7 @@ export function InvoiceEditor({
       }
       return true;
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Could not save invoice.";
-      if (mode === "manual") window.alert(message);
+      const message = getConvexErrorMessage(error, "Could not save invoice.");
       if (requestId === saveRequestIdRef.current) {
         setAutoSaveState("error");
         setAutoSaveError(message);
@@ -775,7 +779,7 @@ export function InvoiceEditor({
         : "";
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 pb-20">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">{activeInvoiceId ? "Edit Invoice" : "Create Invoice"}</h1>
@@ -898,23 +902,6 @@ export function InvoiceEditor({
 
       {saveMessage ? <p className="text-sm text-primary">{saveMessage}</p> : null}
       {saveWarning ? <p className="text-sm text-amber-600">{saveWarning}</p> : null}
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <span>
-          {autoSaveState === "saving"
-            ? "Saving..."
-            : autoSaveState === "saved"
-              ? "Saved just now"
-              : autoSaveState === "error"
-                ? "Auto-save failed"
-                : "Auto-save idle"}
-        </span>
-        {autoSaveState === "error" ? (
-          <Button type="button" variant="outline" size="sm" onClick={() => void persistDraft("auto")}>
-            Retry
-          </Button>
-        ) : null}
-        {autoSaveError ? <span className="text-amber-600">{autoSaveError}</span> : null}
-      </div>
 
       <Card>
         <CardHeader><CardTitle>General</CardTitle></CardHeader>
@@ -1349,6 +1336,17 @@ export function InvoiceEditor({
           await deleteInvoiceAdmin({ id, cascade });
           router.push("/dashboard/financial-hub/invoices");
         }}
+      />
+
+      <FormSaveBar
+        tier="B"
+        saveStatus={autoSaveState}
+        saveError={autoSaveError}
+        isDirty={autoSaveState !== "idle" || saving}
+        isSubmitting={saving || autoSaveState === "saving"}
+        saveLabel="Save now"
+        onSave={() => void persistDraft("manual")}
+        onRetry={() => void persistDraft("auto")}
       />
     </div>
   );
