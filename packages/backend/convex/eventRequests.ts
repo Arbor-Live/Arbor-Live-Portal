@@ -3,7 +3,7 @@ import { mutation, query } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import { getUserId, requireArborInternalContext, requireAuth } from "./lib/auth";
 import { normalizeEventStatus } from "./lib/eventStatus";
-import { createDraftInvoiceFromBookingRequest } from "./lib/bookingRequestQuote";
+import { createDraftInvoiceFromBookingRequest, mapGroupTypeToSponsor } from "./lib/bookingRequestQuote";
 import {
   approveInvoiceQuote,
   loadPublicQuoteView,
@@ -121,7 +121,6 @@ async function generateUniquePublicToken(ctx: MutationCtx) {
   }
   throw new Error("Unable to allocate tracking token.");
 }
-
 
 function mapGroupTypeToSponsor(type: string) {
   switch (type) {

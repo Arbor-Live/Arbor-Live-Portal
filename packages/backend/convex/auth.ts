@@ -7,6 +7,7 @@ import { components, internal } from "./_generated/api";
 import type { DataModel } from "./_generated/dataModel";
 import authConfig from "./auth.config";
 import schema from "./betterAuth/schema";
+import { buildTrustedOrigins } from "./lib/trustedOrigins";
 
 export const authComponent = createClient<DataModel, typeof schema>(
   components.betterAuth,
@@ -22,7 +23,7 @@ export const createAuthOptions = (ctx: GenericCtx<DataModel>) => {
   return {
     appName: "Arbor Live Portal",
     baseURL: siteUrl,
-    trustedOrigins: [siteUrl, "http://localhost:3000", "http://127.0.0.1:3000"],
+    trustedOrigins: buildTrustedOrigins(siteUrl),
     secret: process.env.BETTER_AUTH_SECRET,
     database: authComponent.adapter(ctx),
     emailAndPassword: {

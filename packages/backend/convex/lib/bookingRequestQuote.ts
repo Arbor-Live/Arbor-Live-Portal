@@ -17,6 +17,19 @@ export function mapSponsorTypeToGroupType(sponsorType: string): GroupType {
   return "vso";
 }
 
+export function mapGroupTypeToSponsor(type: GroupType): string {
+  switch (type) {
+    case "department":
+      return "Stanford Department";
+    case "house":
+      return "Stanford House / Greek Life";
+    case "individual":
+      return "Individual Stanford Affiliate";
+    case "vso":
+      return "Large Voulunteer Student Organization";
+  }
+}
+
 export async function resolveClientGroupType(
   ctx: MutationCtx,
   request: Pick<Doc<"eventRequests">, "invoiceGroupId" | "sponsorType">,

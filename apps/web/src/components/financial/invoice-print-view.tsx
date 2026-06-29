@@ -58,11 +58,13 @@ export function InvoicePrintView({ invoiceId }: { invoiceId: Id<"invoices"> }) {
   if (data === undefined) return <p className="text-sm text-muted-foreground">Loading…</p>;
   if (!data || !documentData) return <p className="text-sm text-muted-foreground">Invoice not found.</p>;
 
+  const invoiceNumber = data.invoice.invoiceNumber;
+
   async function onPrint() {
     if (!data) return;
     await createExport({
       invoiceId,
-      fileName: `${data.invoice.invoiceNumber}.pdf`,
+      fileName: `${invoiceNumber}.pdf`,
       downloadUrl: undefined,
     });
     window.print();
@@ -96,7 +98,7 @@ export function InvoicePrintView({ invoiceId }: { invoiceId: Id<"invoices"> }) {
       `}</style>
 
       <div className="flex items-center justify-between print:hidden">
-        <h1 className="text-2xl font-semibold tracking-tight">Invoice {data.invoice.invoiceNumber}</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Invoice {invoiceNumber}</h1>
         <Button onClick={() => void onPrint()}>Print / Save PDF</Button>
       </div>
 
