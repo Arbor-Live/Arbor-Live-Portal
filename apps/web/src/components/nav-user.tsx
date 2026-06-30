@@ -1,6 +1,7 @@
 "use client"
 
-import BoringAvatar from "boring-avatars"
+import Link from "next/link"
+import { UserAvatar } from "@/components/account/user-avatar"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,6 +33,7 @@ export function NavUser({
     name: string
     email: string
     organization: string
+    avatarUrl?: string | null
   }
   onSignOut: () => Promise<void> | void
 }) {
@@ -47,12 +49,13 @@ export function NavUser({
               size="lg"
               className="h-14 data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
             >
-              <div className="size-10 shrink-0 overflow-hidden rounded-lg [&_svg]:!size-full">
-                <BoringAvatar
-                  size={32}
-                  name={`${user.email}-${user.name}`}
-                  variant="beam"
-                  colors={["#0D9488", "#334155", "#7C3AED", "#EA580C", "#16A34A"]}
+              <div className="size-10 shrink-0 overflow-hidden rounded-lg">
+                <UserAvatar
+                  name={user.name}
+                  email={user.email}
+                  imageUrl={user.avatarUrl}
+                  size="default"
+                  pixelSize={32}
                 />
               </div>
               <div className="grid flex-1 text-left text-base leading-tight">
@@ -71,11 +74,12 @@ export function NavUser({
             <DropdownMenuLabel className="p-0 font-normal">
               <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                 <div className="size-12 overflow-hidden rounded-lg">
-                  <BoringAvatar
-                    size={48}
-                    name={`${user.email}-${user.name}`}
-                    variant="beam"
-                    colors={["#0D9488", "#334155", "#7C3AED", "#EA580C", "#16A34A"]}
+                  <UserAvatar
+                    name={user.name}
+                    email={user.email}
+                    imageUrl={user.avatarUrl}
+                    size="lg"
+                    pixelSize={48}
                   />
                 </div>
                 <div className="grid flex-1 text-left text-base leading-tight">
@@ -89,10 +93,11 @@ export function NavUser({
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem>
-                <CheckCircleIcon
-                />
-                Account settings
+              <DropdownMenuItem asChild>
+                <Link href="/dashboard/account">
+                  <CheckCircleIcon />
+                  Account settings
+                </Link>
               </DropdownMenuItem>
               <DropdownMenuItem
                 onSelect={(event) => {

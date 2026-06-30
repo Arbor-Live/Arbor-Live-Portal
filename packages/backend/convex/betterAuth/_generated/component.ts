@@ -125,6 +125,21 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   status: string;
                 };
                 model: "invitation";
+              }
+            | {
+                data: {
+                  aaguid?: null | string;
+                  backedUp: boolean;
+                  counter: number;
+                  createdAt?: null | number;
+                  credentialID: string;
+                  deviceType: string;
+                  name?: null | string;
+                  publicKey: string;
+                  transports?: null | string;
+                  userId: string;
+                };
+                model: "passkey";
               };
           onCreateHandle?: string;
           select?: Array<string>;
@@ -388,6 +403,43 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                     | "expiresAt"
                     | "createdAt"
                     | "inviterId"
+                    | "_id";
+                  operator?:
+                    | "lt"
+                    | "lte"
+                    | "gt"
+                    | "gte"
+                    | "eq"
+                    | "in"
+                    | "not_in"
+                    | "ne"
+                    | "contains"
+                    | "starts_with"
+                    | "ends_with";
+                  value:
+                    | string
+                    | number
+                    | boolean
+                    | Array<string>
+                    | Array<number>
+                    | null;
+                }>;
+              }
+            | {
+                model: "passkey";
+                where?: Array<{
+                  connector?: "AND" | "OR";
+                  field:
+                    | "name"
+                    | "publicKey"
+                    | "userId"
+                    | "credentialID"
+                    | "counter"
+                    | "deviceType"
+                    | "backedUp"
+                    | "transports"
+                    | "createdAt"
+                    | "aaguid"
                     | "_id";
                   operator?:
                     | "lt"
@@ -700,6 +752,43 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                     | Array<number>
                     | null;
                 }>;
+              }
+            | {
+                model: "passkey";
+                where?: Array<{
+                  connector?: "AND" | "OR";
+                  field:
+                    | "name"
+                    | "publicKey"
+                    | "userId"
+                    | "credentialID"
+                    | "counter"
+                    | "deviceType"
+                    | "backedUp"
+                    | "transports"
+                    | "createdAt"
+                    | "aaguid"
+                    | "_id";
+                  operator?:
+                    | "lt"
+                    | "lte"
+                    | "gt"
+                    | "gte"
+                    | "eq"
+                    | "in"
+                    | "not_in"
+                    | "ne"
+                    | "contains"
+                    | "starts_with"
+                    | "ends_with";
+                  value:
+                    | string
+                    | number
+                    | boolean
+                    | Array<string>
+                    | Array<number>
+                    | null;
+                }>;
               };
           onDeleteHandle?: string;
         },
@@ -720,7 +809,8 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
             | "jwks"
             | "organization"
             | "member"
-            | "invitation";
+            | "invitation"
+            | "passkey";
           offset?: number;
           paginationOpts: {
             cursor: string | null;
@@ -772,7 +862,8 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
             | "jwks"
             | "organization"
             | "member"
-            | "invitation";
+            | "invitation"
+            | "passkey";
           select?: Array<string>;
           where?: Array<{
             connector?: "AND" | "OR";
@@ -1151,6 +1242,55 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                     | Array<number>
                     | null;
                 }>;
+              }
+            | {
+                model: "passkey";
+                update: {
+                  aaguid?: null | string;
+                  backedUp?: boolean;
+                  counter?: number;
+                  createdAt?: null | number;
+                  credentialID?: string;
+                  deviceType?: string;
+                  name?: null | string;
+                  publicKey?: string;
+                  transports?: null | string;
+                  userId?: string;
+                };
+                where?: Array<{
+                  connector?: "AND" | "OR";
+                  field:
+                    | "name"
+                    | "publicKey"
+                    | "userId"
+                    | "credentialID"
+                    | "counter"
+                    | "deviceType"
+                    | "backedUp"
+                    | "transports"
+                    | "createdAt"
+                    | "aaguid"
+                    | "_id";
+                  operator?:
+                    | "lt"
+                    | "lte"
+                    | "gt"
+                    | "gte"
+                    | "eq"
+                    | "in"
+                    | "not_in"
+                    | "ne"
+                    | "contains"
+                    | "starts_with"
+                    | "ends_with";
+                  value:
+                    | string
+                    | number
+                    | boolean
+                    | Array<string>
+                    | Array<number>
+                    | null;
+                }>;
               };
           onUpdateHandle?: string;
           paginationOpts: {
@@ -1494,6 +1634,55 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                     | "expiresAt"
                     | "createdAt"
                     | "inviterId"
+                    | "_id";
+                  operator?:
+                    | "lt"
+                    | "lte"
+                    | "gt"
+                    | "gte"
+                    | "eq"
+                    | "in"
+                    | "not_in"
+                    | "ne"
+                    | "contains"
+                    | "starts_with"
+                    | "ends_with";
+                  value:
+                    | string
+                    | number
+                    | boolean
+                    | Array<string>
+                    | Array<number>
+                    | null;
+                }>;
+              }
+            | {
+                model: "passkey";
+                update: {
+                  aaguid?: null | string;
+                  backedUp?: boolean;
+                  counter?: number;
+                  createdAt?: null | number;
+                  credentialID?: string;
+                  deviceType?: string;
+                  name?: null | string;
+                  publicKey?: string;
+                  transports?: null | string;
+                  userId?: string;
+                };
+                where?: Array<{
+                  connector?: "AND" | "OR";
+                  field:
+                    | "name"
+                    | "publicKey"
+                    | "userId"
+                    | "credentialID"
+                    | "counter"
+                    | "deviceType"
+                    | "backedUp"
+                    | "transports"
+                    | "createdAt"
+                    | "aaguid"
                     | "_id";
                   operator?:
                     | "lt"

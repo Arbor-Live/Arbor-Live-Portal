@@ -11,6 +11,8 @@ export type EmailTemplate =
   | "schedule_reminder"
   | "user_invite"
   | "password_reset"
+  | "email_verification"
+  | "change_email_confirmation"
   | "booking_request_received"
   | "booking_quote_ready"
   | "payment_proof_reminder"
@@ -95,6 +97,10 @@ export function subjectForTemplate(template: EmailTemplate, context: string) {
       return `You're invited to ${context}`;
     case "password_reset":
       return "Reset your Arbor Live password";
+    case "email_verification":
+      return "Verify your Arbor Live email";
+    case "change_email_confirmation":
+      return "Approve your Arbor Live email change";
     case "booking_request_received":
       return `Request received: ${context}`;
     case "booking_quote_ready":

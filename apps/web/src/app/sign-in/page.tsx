@@ -1,8 +1,8 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo } from "react";
+import Image from "next/image";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 import { Form } from "@/components/ui/form";
@@ -19,9 +19,15 @@ import {
 import { useConvexForm } from "@/hooks/use-convex-form";
 import { signInSchema, type SignInFormValues } from "@/lib/validations/auth";
 
+function authErrorMessage(error: { message?: unknown }, fallback: string) {
+  return typeof error.message === "string" ? error.message : fallback;
+}
+
 export default function SignInPage() {
   const searchParams = useSearchParams();
   const emailFromQuery = useMemo(() => searchParams.get("email") ?? "", [searchParams]);
+  const [passkeyBusy, setPasskeyBusy] = useState(false);
+  const [passkeyError, setPasskeyError] = useState<string | null>(null);
 
   const form = useConvexForm<SignInFormValues>({
     schema: signInSchema,
@@ -48,6 +54,22 @@ export default function SignInPage() {
     }
     return result;
   });
+
+  const onPasskeySignIn = async () => {
+    setPasskeyError(null);
+    setPasskeyBusy(true);
+    try {
+      const result = await authClient.signIn.passkey();
+      if (result.error) {
+        throw new Error(authErrorMessage(result.error, "Unable to sign in with passkey."));
+      }
+      window.location.href = "/dashboard";
+    } catch (error) {
+      setPasskeyError(error instanceof Error ? error.message : "Unable to sign in with passkey.");
+    } finally {
+      setPasskeyBusy(false);
+    }
+  };
 
   return (
     <div className="mx-auto flex min-h-[80vh] w-full max-w-md items-center px-6">
@@ -96,6 +118,31 @@ export default function SignInPage() {
               ) : null}
             </form>
           </Form>
+
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-card px-2 text-muted-foreground">Or</span>
+            </div>
+          </div>
+
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            disabled={passkeyBusy}
+            onClick={() => void onPasskeySignIn()}
+          >
+            {passkeyBusy ? "Checking passkey…" : "Sign in with passkey"}
+          </Button>
+
+          {passkeyError ? (
+            <Alert variant="destructive">
+              <AlertDescription>{passkeyError}</AlertDescription>
+            </Alert>
+          ) : null}
 
           <Button asChild variant="link" className="px-0">
             <Link href="/forgot-password">Forgot your password?</Link>

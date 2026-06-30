@@ -3,6 +3,8 @@ import {
   renderBookingRequestReceivedEmail,
   renderEventCancelledEmail,
   renderPasswordResetEmail,
+  renderEmailVerificationEmail,
+  renderChangeEmailConfirmationEmail,
   renderPaymentProofReminderEmail,
   renderPaymentProofSubmittedEmail,
   renderPayingPartyAddedEmail,
@@ -15,6 +17,8 @@ import type {
   BookingRequestReceivedEmailProps,
   EventEmailProps,
   PasswordResetEmailProps,
+  EmailVerificationEmailProps,
+  ChangeEmailConfirmationEmailProps,
   PaymentProofReminderEmailProps,
   PaymentProofSubmittedEmailProps,
   PayingPartyAddedEmailProps,
@@ -36,6 +40,10 @@ export async function renderEmailHtml(template: EmailTemplate, payload: unknown)
       return renderUserInviteEmail(payload as UserInviteEmailProps);
     case "password_reset":
       return renderPasswordResetEmail(payload as PasswordResetEmailProps);
+    case "email_verification":
+      return renderEmailVerificationEmail(payload as EmailVerificationEmailProps);
+    case "change_email_confirmation":
+      return renderChangeEmailConfirmationEmail(payload as ChangeEmailConfirmationEmailProps);
     case "booking_request_received":
       return renderBookingRequestReceivedEmail(payload as BookingRequestReceivedEmailProps);
     case "booking_quote_ready":

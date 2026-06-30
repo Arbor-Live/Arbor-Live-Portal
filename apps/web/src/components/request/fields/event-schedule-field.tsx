@@ -1,10 +1,12 @@
 "use client";
 
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import DatePicker from "react-datepicker";
 import { useFormContext } from "react-hook-form";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { createDefaultShowSlot, endsOnNextDay } from "@/lib/event-schedule";
 import type { BookingRequestFormValues } from "@/lib/validations/booking-request";
 
 function toDateInput(date: Date) {
@@ -68,66 +70,196 @@ function TimePicker({
   );
 }
 
-export function EventScheduleField() {
-  const { watch, setValue, getFieldState } = useFormContext<BookingRequestFormValues>();
-  const eventDate = watch("eventDate");
-  const flexibleSetupTime = watch("flexibleSetupTime");
-  const selectedDate = useMemo(() => parseDateInput(eventDate), [eventDate]);
-
-  const dateError = getFieldState("eventDate").error?.message;
-  const startError = getFieldState("eventStartTime").error?.message;
-  const endError = getFieldState("eventEndTime").error?.message;
-  const setupError = getFieldState("setupTime").error?.message;
+function ShowDatePicker({
+  value,
+  onChange,
+  minDate,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  minDate: Date;
+}) {
+  const selected = useMemo(() => parseDateInput(value), [value]);
 
   return (
-    <div className="space-y-4">
+    <DatePicker
+      selected={selected}
+      onChange={(date: Date | null) => {
+        if (!date) {
+          onChange("");
+          return;
+        }
+        onChange(toDateInput(date));
+      }}
+      minDate={minDate}
+      dateFormat="MMMM d, yyyy"
+      customInput={<Input />}
+      wrapperClassName="app-date-time-wrapper"
+      popperClassName="app-date-time-popper"
+      calendarClassName="app-date-time-calendar"
+      showPopperArrow={false}
+      autoComplete="off"
+    />
+  );
+}
+
+function ShowSlotRow({
+  index,
+  slot,
+  canRemove,
+  onChange,
+  onRemove,
+  errors,
+}: {
+  index: number;
+  slot: BookingRequestFormValues["showSlots"][number];
+  canRemove: boolean;
+  onChange: (next: BookingRequestFormValues["showSlots"][number]) => void;
+  onRemove: () => void;
+  errors: {
+    date?: string;
+    startTime?: string;
+    endTime?: string;
+  };
+}) {
+  const crossesMidnight = endsOnNextDay(slot.startTime, slot.endTime);
+  const label = index === 0 ? "Show" : `Show ${index + 1}`;
+
+  return (
+    <div className="space-y-3 rounded-md border p-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-medium">{label}</p>
+        {canRemove ? (
+          <Button type="button" variant="outline" size="sm" onClick={onRemove}>
+            Remove
+          </Button>
+        ) : null}
+      </div>
+
       <div className="space-y-2">
-        <Label>Event date</Label>
-        <DatePicker
-          selected={selectedDate}
-          onChange={(date: Date | null) => {
-            if (!date) {
-              setValue("eventDate", "", { shouldDirty: true, shouldValidate: true });
-              return;
-            }
-            setValue("eventDate", toDateInput(date), { shouldDirty: true, shouldValidate: true });
-          }}
+        <Label>Date</Label>
+        <ShowDatePicker
+          value={slot.date}
           minDate={new Date()}
-          dateFormat="MMMM d, yyyy"
-          customInput={<Input aria-invalid={Boolean(dateError)} />}
-          wrapperClassName="app-date-time-wrapper"
-          popperClassName="app-date-time-popper"
-          calendarClassName="app-date-time-calendar"
-          showPopperArrow={false}
-          autoComplete="off"
+          onChange={(date) => onChange({ ...slot, date })}
         />
-        {dateError ? <p className="text-sm text-destructive">{dateError}</p> : null}
+        {errors.date ? <p className="text-sm text-destructive">{errors.date}</p> : null}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <TimePicker
             label="Start time"
-            value={watch("eventStartTime")}
-            onChange={(value) => setValue("eventStartTime", value, { shouldDirty: true, shouldValidate: true })}
+            value={slot.startTime}
+            onChange={(startTime) => onChange({ ...slot, startTime })}
           />
-          {startError ? <p className="mt-1 text-sm text-destructive">{startError}</p> : null}
+          {errors.startTime ? (
+            <p className="mt-1 text-sm text-destructive">{errors.startTime}</p>
+          ) : null}
         </div>
         <div>
           <TimePicker
             label="End time"
-            value={watch("eventEndTime")}
-            onChange={(value) => setValue("eventEndTime", value, { shouldDirty: true, shouldValidate: true })}
+            value={slot.endTime}
+            onChange={(endTime) => onChange({ ...slot, endTime })}
           />
-          {endError ? <p className="mt-1 text-sm text-destructive">{endError}</p> : null}
+          {errors.endTime ? <p className="mt-1 text-sm text-destructive">{errors.endTime}</p> : null}
+          {crossesMidnight && !errors.endTime ? (
+            <p className="mt-1 text-xs text-muted-foreground">
+              End time is the next calendar day (after midnight).
+            </p>
+          ) : null}
         </div>
       </div>
+    </div>
+  );
+}
+
+export function EventScheduleField() {
+  const { watch, setValue, getFieldState, trigger, formState } =
+    useFormContext<BookingRequestFormValues>();
+  const showSlots = watch("showSlots");
+  const flexibleSetupTime = watch("flexibleSetupTime");
+
+  const revalidateSchedule = useCallback(async () => {
+    await trigger(["showSlots", "setupTime"]);
+  }, [trigger]);
+
+  const updateSlot = useCallback(
+    (index: number, next: BookingRequestFormValues["showSlots"][number]) => {
+      const updated = [...showSlots];
+      updated[index] = next;
+      setValue("showSlots", updated, { shouldDirty: true });
+      void revalidateSchedule();
+    },
+    [showSlots, setValue, revalidateSchedule],
+  );
+
+  const setupError = getFieldState("setupTime").error?.message;
+  const showSlotsError = getFieldState("showSlots").error?.message;
+
+  const slotErrors = showSlots.map((_, index) => ({
+    date: formState.errors.showSlots?.[index]?.date?.message,
+    startTime: formState.errors.showSlots?.[index]?.startTime?.message,
+    endTime: formState.errors.showSlots?.[index]?.endTime?.message,
+  }));
+
+  return (
+    <div className="space-y-4">
+      {showSlots.map((slot, index) => (
+        <ShowSlotRow
+          key={`show-slot-${index}`}
+          index={index}
+          slot={slot}
+          canRemove={showSlots.length > 1}
+          errors={slotErrors[index] ?? {}}
+          onChange={(next) => updateSlot(index, next)}
+          onRemove={() => {
+            const next = showSlots.filter((_, rowIndex) => rowIndex !== index);
+            setValue("showSlots", next, { shouldDirty: true });
+            void revalidateSchedule();
+          }}
+        />
+      ))}
+
+      {showSlotsError ? <p className="text-sm text-destructive">{showSlotsError}</p> : null}
+
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => {
+          const template = showSlots[0] ?? createDefaultShowSlot();
+          setValue(
+            "showSlots",
+            [
+              ...showSlots,
+              {
+                date: template.date,
+                startTime: template.startTime,
+                endTime: template.endTime,
+              },
+            ],
+            { shouldDirty: true },
+          );
+          void revalidateSchedule();
+        }}
+      >
+        Add another show
+      </Button>
+      <p className="text-xs text-muted-foreground">
+        Optional. Use this for multiple performances, matinee and evening shows, or different
+        dates and times.
+      </p>
 
       <div className="space-y-3 rounded-md border p-3">
         <TimePicker
           label="Earliest setup availability"
           value={watch("setupTime") ?? ""}
-          onChange={(value) => setValue("setupTime", value, { shouldDirty: true, shouldValidate: true })}
+          onChange={(value) => {
+            setValue("setupTime", value, { shouldDirty: true });
+            void revalidateSchedule();
+          }}
           disabled={flexibleSetupTime}
         />
         {setupError ? <p className="text-sm text-destructive">{setupError}</p> : null}
@@ -135,9 +267,10 @@ export function EventScheduleField() {
           <input
             type="checkbox"
             checked={flexibleSetupTime}
-            onChange={(event) =>
-              setValue("flexibleSetupTime", event.target.checked, { shouldDirty: true, shouldValidate: true })
-            }
+            onChange={(event) => {
+              setValue("flexibleSetupTime", event.target.checked, { shouldDirty: true });
+              void revalidateSchedule();
+            }}
           />
           Flexible setup time
         </label>

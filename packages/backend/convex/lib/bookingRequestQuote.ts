@@ -64,6 +64,204 @@ export async function resolveEquipmentPricingMode(
   return "subsidized";
 }
 
+async function findActiveContactByEmailAndGroup(
+  ctx: MutationCtx,
+  email: string,
+  groupId: Id<"invoiceGroups">,
+) {
+  const contacts = await ctx.db
+    .query("invoiceContacts")
+    .withIndex("by_email", (q) => q.eq("email", email))
+    .take(50);
+  return contacts.find((contact) => contact.active && contact.groupId === groupId) ?? null;
+}
+
+async function findActiveContactByEmail(ctx: MutationCtx, email: string) {
+  const contacts = await ctx.db
+    .query("invoiceContacts")
+    .withIndex("by_email", (q) => q.eq("email", email))
+    .take(50);
+  return contacts.find((contact) => contact.active) ?? null;
+}
+
+async function ensureContactLinkedToGroup(
+  ctx: MutationCtx,
+  args: {
+    groupId: Id<"invoiceGroups">;
+    email: string;
+    preferredContactId?: Id<"invoiceContacts">;
+    firstName: string;
+    lastName: string;
+    phone: string;
+    now: number;
+  },
+): Promise<Id<"invoiceContacts">> {
+  const email = args.email.trim().toLowerCase();
+  const firstName = args.firstName.trim();
+  const lastName = args.lastName.trim();
+  const phone = args.phone.trim();
+
+  const existingForGroup = await findActiveContactByEmailAndGroup(ctx, email, args.groupId);
+  if (existingForGroup) {
+    await ctx.db.patch(existingForGroup._id, {
+      firstName,
+      lastName,
+      phone,
+      updatedAt: args.now,
+      lastUsedAt: args.now,
+    });
+    return existingForGroup._id;
+  }
+
+  if (args.preferredContactId) {
+    const preferred = await ctx.db.get(args.preferredContactId);
+    if (preferred?.active && !preferred.groupId) {
+      await ctx.db.patch(preferred._id, {
+        groupId: args.groupId,
+        firstName,
+        lastName,
+        phone,
+        email,
+        updatedAt: args.now,
+        lastUsedAt: args.now,
+      });
+      return preferred._id;
+    }
+  }
+
+  return await ctx.db.insert("invoiceContacts", {
+    groupId: args.groupId,
+    firstName,
+    lastName,
+    email,
+    phone,
+    active: true,
+    createdAt: args.now,
+    updatedAt: args.now,
+    lastUsedAt: args.now,
+  });
+}
+
+async function ensureContactRecord(
+  ctx: MutationCtx,
+  args: {
+    email: string;
+    preferredContactId?: Id<"invoiceContacts">;
+    firstName: string;
+    lastName: string;
+    phone: string;
+    now: number;
+  },
+): Promise<Id<"invoiceContacts">> {
+  const email = args.email.trim().toLowerCase();
+  const firstName = args.firstName.trim();
+  const lastName = args.lastName.trim();
+  const phone = args.phone.trim();
+
+  if (args.preferredContactId) {
+    const preferred = await ctx.db.get(args.preferredContactId);
+    if (preferred?.active) {
+      await ctx.db.patch(preferred._id, {
+        firstName,
+        lastName,
+        phone,
+        email,
+        updatedAt: args.now,
+        lastUsedAt: args.now,
+      });
+      return preferred._id;
+    }
+  }
+
+  const existing = await findActiveContactByEmail(ctx, email);
+  if (existing) {
+    await ctx.db.patch(existing._id, {
+      firstName,
+      lastName,
+      phone,
+      updatedAt: args.now,
+      lastUsedAt: args.now,
+    });
+    return existing._id;
+  }
+
+  return await ctx.db.insert("invoiceContacts", {
+    firstName,
+    lastName,
+    email,
+    phone,
+    active: true,
+    createdAt: args.now,
+    updatedAt: args.now,
+    lastUsedAt: args.now,
+  });
+}
+
+export async function provisionBillingProfileFromRequest(
+  ctx: MutationCtx,
+  args: {
+    organization?: string;
+    sponsorType: string;
+    invoiceGroupId?: Id<"invoiceGroups">;
+    invoiceContactId?: Id<"invoiceContacts">;
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone: string;
+  },
+): Promise<{ invoiceGroupId?: Id<"invoiceGroups">; invoiceContactId?: Id<"invoiceContacts"> }> {
+  const now = Date.now();
+  const email = args.email.trim().toLowerCase();
+  let invoiceGroupId = args.invoiceGroupId;
+  let invoiceContactId = args.invoiceContactId;
+  const organization = trimOptional(args.organization);
+  const groupType = mapSponsorTypeToGroupType(args.sponsorType);
+
+  if (!invoiceGroupId && organization && groupType !== "individual") {
+    const existingGroup = await ctx.db
+      .query("invoiceGroups")
+      .withIndex("by_name", (q) => q.eq("name", organization))
+      .first();
+    if (existingGroup) {
+      invoiceGroupId = existingGroup._id;
+      await ctx.db.patch(existingGroup._id, { lastUsedAt: now, updatedAt: now });
+    } else {
+      invoiceGroupId = await ctx.db.insert("invoiceGroups", {
+        name: organization,
+        type: groupType,
+        equipmentPricingMode: "subsidized",
+        active: true,
+        createdAt: now,
+        updatedAt: now,
+        lastUsedAt: now,
+      });
+    }
+  }
+
+  if (invoiceGroupId) {
+    invoiceContactId = await ensureContactLinkedToGroup(ctx, {
+      groupId: invoiceGroupId,
+      email,
+      preferredContactId: invoiceContactId,
+      firstName: args.firstName,
+      lastName: args.lastName,
+      phone: args.phone,
+      now,
+    });
+  } else {
+    invoiceContactId = await ensureContactRecord(ctx, {
+      email,
+      preferredContactId: invoiceContactId,
+      firstName: args.firstName,
+      lastName: args.lastName,
+      phone: args.phone,
+      now,
+    });
+  }
+
+  return { invoiceGroupId, invoiceContactId };
+}
+
 function pacificIssueDate(now = Date.now()) {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Los_Angeles",

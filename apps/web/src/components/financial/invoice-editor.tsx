@@ -859,8 +859,14 @@ export function InvoiceEditor({
               · {sourceRequest.eventDateText}
             </p>
             <p>
-              <span className="font-medium">Times:</span> {sourceRequest.eventStartTimeText} –{" "}
-              {sourceRequest.eventEndTimeText}
+              <span className="font-medium">Times:</span>{" "}
+              {sourceRequest.eventScheduleText ? (
+                <span className="whitespace-pre-wrap">{sourceRequest.eventScheduleText}</span>
+              ) : (
+                <>
+                  {sourceRequest.eventStartTimeText} – {sourceRequest.eventEndTimeText}
+                </>
+              )}
             </p>
             <p>
               <span className="font-medium">Setup:</span> {sourceRequest.earliestSetupText}

@@ -157,9 +157,13 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
             {" · "}
             {request.eventDateText}
           </p>
-          <p>
-            {request.eventStartTimeText} – {request.eventEndTimeText}
-          </p>
+          {request.eventScheduleText ? (
+            <p className="whitespace-pre-wrap">{request.eventScheduleText}</p>
+          ) : (
+            <p>
+              {request.eventStartTimeText} – {request.eventEndTimeText}
+            </p>
+          )}
           {request.quote ? (
             <p>
               Quote {request.quote.invoiceNumber}
@@ -174,7 +178,7 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
           ) : null}
           {request.expectedTurnout >= 200 ? (
             <p className="rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-amber-800">
-              Major event ({request.expectedTurnout} guests) — our team will follow up with additional
+              Campus sensation ({request.expectedTurnout} guests). Our team will follow up with extra
               coordination steps.
             </p>
           ) : null}

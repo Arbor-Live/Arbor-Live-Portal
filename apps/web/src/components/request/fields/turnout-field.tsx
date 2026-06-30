@@ -1,11 +1,14 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useFormContext } from "react-hook-form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { getTurnoutTier, type BookingRequestFormValues } from "@/lib/validations/booking-request";
+
+const TURNOUT_VIZ_MAX = 2000;
 
 const ARC_START = Math.PI * 0.1;
 const ARC_END = Math.PI * 0.9;
@@ -91,23 +94,47 @@ function PersonDot({
   const bounce = 2 + energy * 0.5;
   const sway = 1 + energy * 0.4;
   const phase = index * 0.31;
-  const dance = count <= 150 && !reducedMotion;
+  const dance = count <= 150 && reducedMotion !== true;
   const sizeClass = dotSizeClass(count);
   const offset = dotOffset(count);
+  const dotRef = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    if (!dance || !dotRef.current) return;
+
+    const element = dotRef.current;
+    const durationMs = (0.8 + (index % 4) * 0.1) * 1000;
+    const delayMs = phase * 0.07 * 1000;
+    const animation = element.animate(
+      [
+        { transform: "translate(0px, 0px)" },
+        { transform: `translate(${sway}px, ${-bounce}px)` },
+        { transform: `translate(${-sway * 0.5}px, ${bounce * 0.2}px)` },
+        { transform: `translate(${sway * 0.35}px, ${-bounce * 0.55}px)` },
+        { transform: "translate(0px, 0px)" },
+      ],
+      {
+        duration: durationMs,
+        delay: delayMs,
+        iterations: Infinity,
+        easing: "ease-in-out",
+      },
+    );
+
+    return () => animation.cancel();
+  }, [dance, sway, bounce, phase, index, count]);
 
   return (
     <motion.span
       className="absolute"
-      style={{ left: "50%", top: 0, marginLeft: -offset, marginTop: -offset }}
-      initial={reducedMotion ? false : { opacity: 0, x, y: y + 14, scale: 0.5 }}
-      animate={{ opacity: 0.92, x, y, scale: 1 }}
+      style={{ left: "50%", top: 0, marginLeft: -offset, marginTop: -offset, x, y }}
+      initial={reducedMotion ? false : { opacity: 0, scale: 0.5 }}
+      animate={{ opacity: 0.92, scale: 1 }}
       exit={
         reducedMotion
           ? undefined
           : {
               opacity: 0,
-              x,
-              y: y + 14,
               scale: 0.5,
               transition: { duration: 0.22, ease: "easeIn" },
             }
@@ -119,23 +146,14 @@ function PersonDot({
         opacity: { duration: 0.18 },
       }}
     >
-      {dance ? (
-        <motion.span
-          className={cn("block rounded-full shadow-sm", sizeClass, dotColorClass(index, energy))}
-          animate={{
-            x: [0, sway, -sway * 0.5, sway * 0.35, 0],
-            y: [0, -bounce, bounce * 0.2, -bounce * 0.55, 0],
-          }}
-          transition={{
-            duration: 0.8 + (index % 4) * 0.1,
-            repeat: Infinity,
-            ease: "easeInOut",
-            delay: phase * 0.07,
-          }}
-        />
-      ) : (
-        <span className={cn("block rounded-full shadow-sm", sizeClass, dotColorClass(index, energy))} />
-      )}
+      <span
+        ref={dotRef}
+        className={cn(
+          "block rounded-full shadow-sm",
+          sizeClass,
+          dotColorClass(index, energy),
+        )}
+      />
     </motion.span>
   );
 }
@@ -256,10 +274,10 @@ function StageScene({
       <Stage energy={energy} reducedMotion={reducedMotion} />
 
       <div className="absolute inset-x-0 bottom-0 top-5 z-20">
-        <AnimatePresence initial={false}>
+        <AnimatePresence mode="popLayout">
           {Array.from({ length: count }).map((_, index) => (
             <PersonDot
-              key={index}
+              key={`turnout-dot-${index}`}
               index={index}
               count={count}
               energy={energy}
@@ -277,6 +295,7 @@ export function TurnoutField() {
   const { register, watch, getFieldState } = useFormContext<BookingRequestFormValues>();
   const raw = watch("expectedTurnout");
   const count = Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 0;
+  const vizCount = Math.min(count, TURNOUT_VIZ_MAX);
   const tier = getTurnoutTier(count || 1);
   const energy = getTurnoutEnergy(count || 1);
   const error = getFieldState("expectedTurnout").error?.message;
@@ -305,15 +324,22 @@ export function TurnoutField() {
 
         <div className="mt-3 py-1">
           {count > 0 ? (
-            <StageScene count={count} energy={energy} reducedMotion={reducedMotion} />
+            <StageScene count={vizCount} energy={energy} reducedMotion={reducedMotion} />
           ) : (
             <p className="text-center text-xs text-muted-foreground">Enter a turnout to preview the crowd.</p>
           )}
         </div>
 
+        {count > TURNOUT_VIZ_MAX ? (
+          <p className="mt-1 text-xs text-muted-foreground">
+            Crowd preview capped at {TURNOUT_VIZ_MAX.toLocaleString()} dots. Your entered turnout (
+            {count.toLocaleString()}) is still saved.
+          </p>
+        ) : null}
+
         {count >= 200 ? (
           <p className="mt-1 text-xs text-amber-700">
-            Major events require additional coordination after your request is submitted.
+            Campus sensation territory. We'll reach out with extra coordination after you submit.
           </p>
         ) : null}
       </motion.div>

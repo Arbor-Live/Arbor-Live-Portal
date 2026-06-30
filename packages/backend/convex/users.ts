@@ -1,6 +1,6 @@
 import { hashPassword } from "better-auth/crypto";
 import { v } from "convex/values";
-import { components } from "./_generated/api";
+import { components, internal } from "./_generated/api";
 import { mutation, query } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import {
@@ -1086,14 +1086,15 @@ export const removeUserOrganizationMembershipAdmin = mutation({
 
 export const sendPasswordResetAdmin = mutation({
   args: { userId: v.string() },
+  returns: v.object({ ok: v.boolean(), email: v.string() }),
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
     const users = await getAllAuthUsers(ctx);
     const target = users.find((user) => getUserId(user) === args.userId);
     if (!target?.email) throw new Error("User email not found.");
-    // Email transport for better-auth reset links is currently console-based in auth.ts.
-    // This mutation intentionally returns success and logs the target email.
-    console.log(`[admin-reset] Requested password reset for ${target.email}`);
+    await ctx.scheduler.runAfter(0, internal.account.requestPasswordResetInternal, {
+      email: target.email,
+    });
     return { ok: true, email: target.email };
   },
 });

@@ -138,6 +138,9 @@ export function useConvexForm<T extends FieldValues>({
     suppressAutoSaveRef.current = true;
   }, []);
 
+  // Subscribe to dirty state so consumers re-render when edits are made.
+  const { isDirty } = form.formState;
+
   useEffect(() => {
     return () => {
       if (savedFadeTimerRef.current) clearTimeout(savedFadeTimerRef.current);
@@ -160,6 +163,7 @@ export function useConvexForm<T extends FieldValues>({
     }),
     [
       form,
+      isDirty,
       saveStatus,
       saveError,
       submitMutation,
