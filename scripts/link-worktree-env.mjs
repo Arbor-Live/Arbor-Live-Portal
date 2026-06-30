@@ -17,6 +17,12 @@ const ENV_RELATIVE_PATHS = [
   "packages/backend/.env.local",
 ];
 
+/** When no worktree has a real env file yet, seed shared copies from examples. */
+const ENV_EXAMPLE_SOURCES = {
+  "apps/web/.env": "apps/web/.env.example",
+  "packages/backend/.env": "packages/backend/.env.example",
+};
+
 function git(command, cwd) {
   return execSync(command, { cwd, encoding: "utf8" }).trim();
 }
@@ -42,11 +48,26 @@ function ensureDir(dirPath) {
   fs.mkdirSync(dirPath, { recursive: true });
 }
 
+function seedSharedEnvFromExample(sharedRoot, repoRoot, relativePath) {
+  const exampleRelativePath = ENV_EXAMPLE_SOURCES[relativePath];
+  if (!exampleRelativePath) return false;
+
+  const examplePath = path.join(repoRoot, exampleRelativePath);
+  if (!fs.existsSync(examplePath)) return false;
+
+  const sharedPath = path.join(sharedRoot, relativePath);
+  ensureDir(path.dirname(sharedPath));
+  fs.copyFileSync(examplePath, sharedPath);
+  console.log(`Seeded ${relativePath} from ${exampleRelativePath}`);
+  return true;
+}
+
 function seedSharedEnv(sharedRoot, repoRoot) {
   for (const relativePath of ENV_RELATIVE_PATHS) {
     const sharedPath = path.join(sharedRoot, relativePath);
     if (fs.existsSync(sharedPath)) continue;
 
+    let seeded = false;
     for (const worktree of listWorktrees(repoRoot)) {
       const candidate = path.join(worktree, relativePath);
       if (!fs.existsSync(candidate) || fs.lstatSync(candidate).isSymbolicLink()) {
@@ -55,7 +76,12 @@ function seedSharedEnv(sharedRoot, repoRoot) {
       ensureDir(path.dirname(sharedPath));
       fs.copyFileSync(candidate, sharedPath);
       console.log(`Seeded ${relativePath} from ${worktree}`);
+      seeded = true;
       break;
+    }
+
+    if (!seeded) {
+      seedSharedEnvFromExample(sharedRoot, repoRoot, relativePath);
     }
   }
 }
@@ -112,7 +138,14 @@ function main() {
     console.warn(
       [
         "No env files linked.",
-        "Add secrets to the main checkout (or copy from .env.example), then rerun:",
+        "Create shared env files, then rerun:",
+        "  pnpm setup:worktree-env",
+        "",
+        "First-time setup (run once in any checkout):",
+        "  cp packages/backend/.env.example \"$(git rev-parse --git-common-dir)/arbor-env/packages/backend/.env\"",
+        "  cp apps/web/.env.example \"$(git rev-parse --git-common-dir)/arbor-env/apps/web/.env\"",
+        "  # Edit those files with real secrets, then:",
+        "  cd packages/backend && pnpm dev   # writes .env.local with CONVEX_DEPLOYMENT",
         "  pnpm setup:worktree-env",
       ].join("\n"),
     );
@@ -120,7 +153,23 @@ function main() {
     return;
   }
 
-  console.log(`Linked ${linked} env file(s) from ${sharedRoot}`);
+  const missing = ENV_RELATIVE_PATHS.filter(
+    (relativePath) => !fs.existsSync(path.join(sharedRoot, relativePath)),
+  );
+  if (missing.length > 0) {
+    console.warn(
+      [
+        `Linked ${linked} env file(s) from ${sharedRoot}.`,
+        "Still missing in the shared store:",
+        ...missing.map((relativePath) => `  - ${relativePath}`),
+        "",
+        "packages/backend/.env.local is created by `pnpm --filter backend dev` (Convex CLI).",
+        "apps/web/.env.local is optional; apps/web/.env + backend env are enough for local dev.",
+      ].join("\n"),
+    );
+  } else {
+    console.log(`Linked ${linked} env file(s) from ${sharedRoot}`);
+  }
 }
 
 main();

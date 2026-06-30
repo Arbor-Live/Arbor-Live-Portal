@@ -563,6 +563,7 @@ export default defineSchema({
     userId: v.string(),
     title: v.optional(v.string()),
     phone: v.optional(v.string()),
+    avatarStorageId: v.optional(v.id("_storage")),
     active: v.boolean(),
     teams: v.array(userTeamValue),
     /** When true, user appears on the public /crew page (opt-in). */
@@ -734,6 +735,8 @@ export default defineSchema({
       v.literal("schedule_reminder"),
       v.literal("user_invite"),
       v.literal("password_reset"),
+      v.literal("email_verification"),
+      v.literal("change_email_confirmation"),
       v.literal("booking_request_received"),
       v.literal("booking_quote_ready"),
       v.literal("payment_proof_reminder"),

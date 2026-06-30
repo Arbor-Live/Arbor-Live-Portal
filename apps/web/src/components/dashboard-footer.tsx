@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -21,8 +22,8 @@ export function DashboardFooter() {
 
       <div className="flex flex-wrap gap-2">
         <ThemeToggle />
-        <Button variant="outline" disabled>
-          Account settings
+        <Button asChild variant="outline">
+          <Link href="/dashboard/account">Account settings</Link>
         </Button>
         <Button
           variant="destructive"

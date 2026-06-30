@@ -128,6 +128,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
   const [now] = useState(() => Date.now())
   const [adminSchedulingRange] = useState(() => getDefaultAdminSchedulingRange())
   const viewer = useQuery(api.users.getViewer, {})
+  const account = useQuery(api.account.getMyAccount, {})
   const activeOrganization = useQuery(api.users.getActiveOrganization, {})
   const myOrganizations = useQuery(api.users.listMyOrganizations, {})
   const setActiveOrganization = useMutation(api.users.setActiveOrganization)
@@ -303,6 +304,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
             name: userName,
             email: userEmail,
             organization: orgName,
+            avatarUrl: account?.avatarUrl ?? account?.image ?? null,
           }}
           onSignOut={async () => {
             await authClient.signOut()
