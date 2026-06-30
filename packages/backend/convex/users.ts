@@ -17,6 +17,7 @@ import {
   scheduleUserInviteEmail,
   updatePendingInviteDetails,
 } from "./email/invitations";
+import { assertUniqueBandPublicSlug, normalizePublicSlug } from "./lib/publicSlug";
 
 const USER_TEAMS = ["Sound", "Lights", "Design", "Marketing", "Operations"] as const;
 const userTeamValue = v.union(
@@ -140,12 +141,14 @@ async function ensureUserProfileDefaults(
     phone,
     active = true,
     teams = [],
+    showOnPublicCrewPage,
     defaultOrganizationId,
   }: {
     title?: string;
     phone?: string;
     active?: boolean;
     teams?: UserTeam[];
+    showOnPublicCrewPage?: boolean;
     defaultOrganizationId?: string;
   },
 ) {
@@ -160,6 +163,8 @@ async function ensureUserProfileDefaults(
       phone: phone ?? existing.phone,
       active,
       teams,
+      showOnPublicCrewPage:
+        showOnPublicCrewPage !== undefined ? showOnPublicCrewPage : existing.showOnPublicCrewPage,
       defaultOrganizationId: defaultOrganizationId ?? existing.defaultOrganizationId,
       updatedAt: now,
     });
@@ -171,6 +176,7 @@ async function ensureUserProfileDefaults(
     phone,
     active,
     teams,
+    showOnPublicCrewPage,
     defaultOrganizationId,
     createdAt: now,
     updatedAt: now,
@@ -274,6 +280,9 @@ export const listBandOrganizationsAdmin = query({
           publicWebsiteUrl: profile?.publicWebsiteUrl ?? "",
           publicInstagramUrl: profile?.publicInstagramUrl ?? "",
           publicYoutubeUrl: profile?.publicYoutubeUrl ?? "",
+          publicListing: profile?.publicListing ?? false,
+          publicSlug: profile?.publicSlug ?? "",
+          publicHeroImageUrl: profile?.publicHeroImageUrl ?? "",
         };
       })
       .filter((organization) => organization.organizationType === "band")
@@ -290,6 +299,9 @@ export const updateBandOrganizationProfileAdmin = mutation({
     publicWebsiteUrl: v.optional(v.string()),
     publicInstagramUrl: v.optional(v.string()),
     publicYoutubeUrl: v.optional(v.string()),
+    publicListing: v.optional(v.boolean()),
+    publicSlug: v.optional(v.string()),
+    publicHeroImageUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
@@ -302,6 +314,16 @@ export const updateBandOrganizationProfileAdmin = mutation({
     }
     if (args.performerHourlyRateUsd !== undefined && args.performerHourlyRateUsd < 0) {
       throw new Error("Performer hourly rate must be 0 or greater.");
+    }
+
+    const publicSlug =
+      args.publicSlug === undefined ? undefined : normalizePublicSlug(args.publicSlug);
+    if (publicSlug) {
+      await assertUniqueBandPublicSlug(ctx, publicSlug, args.organizationId);
+    }
+    const publicListing = args.publicListing;
+    if (publicListing && !publicSlug) {
+      throw new Error("Public slug is required when enabling public artist listing.");
     }
 
     const existing = await ctx.db
@@ -317,6 +339,9 @@ export const updateBandOrganizationProfileAdmin = mutation({
         publicWebsiteUrl: args.publicWebsiteUrl?.trim() || undefined,
         publicInstagramUrl: args.publicInstagramUrl?.trim() || undefined,
         publicYoutubeUrl: args.publicYoutubeUrl?.trim() || undefined,
+        publicListing: publicListing ?? existing.publicListing,
+        publicSlug: publicSlug ?? (publicListing === false ? undefined : existing.publicSlug),
+        publicHeroImageUrl: args.publicHeroImageUrl?.trim() || undefined,
         updatedAt: now,
       });
       return existing._id;
@@ -330,6 +355,9 @@ export const updateBandOrganizationProfileAdmin = mutation({
       publicWebsiteUrl: args.publicWebsiteUrl?.trim() || undefined,
       publicInstagramUrl: args.publicInstagramUrl?.trim() || undefined,
       publicYoutubeUrl: args.publicYoutubeUrl?.trim() || undefined,
+      publicListing: publicListing ?? false,
+      publicSlug: publicListing ? publicSlug : undefined,
+      publicHeroImageUrl: args.publicHeroImageUrl?.trim() || undefined,
       updatedAt: now,
     });
   },
@@ -540,6 +568,7 @@ export const listUsersForAdmin = query({
           phone: profile?.phone ?? "",
           title: profile?.title ?? "",
           teams: profile?.teams ?? [],
+          showOnPublicCrewPage: profile?.showOnPublicCrewPage ?? false,
           defaultOrganizationId: profile?.defaultOrganizationId ?? "",
           organizationMemberships: memberships,
           hourlyRateUsd: rateByUserId.get(id) ?? null,
@@ -916,6 +945,7 @@ export const updateUserAdmin = mutation({
     phone: v.optional(v.string()),
     title: v.optional(v.string()),
     teams: v.optional(v.array(userTeamValue)),
+    showOnPublicCrewPage: v.optional(v.boolean()),
     defaultOrganizationId: v.optional(v.string()),
     hourlyRateUsd: v.optional(v.number()),
     organizationMemberships: v.optional(
@@ -956,6 +986,10 @@ export const updateUserAdmin = mutation({
       phone: args.phone ?? existingProfile?.phone,
       active: args.active ?? existingProfile?.active ?? true,
       teams: args.teams ?? (existingProfile?.teams as UserTeam[] | undefined) ?? [],
+      showOnPublicCrewPage:
+        args.showOnPublicCrewPage !== undefined
+          ? args.showOnPublicCrewPage
+          : existingProfile?.showOnPublicCrewPage,
       defaultOrganizationId: args.defaultOrganizationId ?? existingProfile?.defaultOrganizationId,
     });
 
@@ -1116,6 +1150,9 @@ export const getActiveBandProfile = query({
       publicWebsiteUrl: profile?.publicWebsiteUrl ?? "",
       publicInstagramUrl: profile?.publicInstagramUrl ?? "",
       publicYoutubeUrl: profile?.publicYoutubeUrl ?? "",
+      publicListing: profile?.publicListing ?? false,
+      publicSlug: profile?.publicSlug ?? "",
+      publicHeroImageUrl: profile?.publicHeroImageUrl ?? "",
     };
   },
 });
@@ -1128,12 +1165,25 @@ export const updateActiveBandProfile = mutation({
     publicWebsiteUrl: v.optional(v.string()),
     publicInstagramUrl: v.optional(v.string()),
     publicYoutubeUrl: v.optional(v.string()),
+    publicListing: v.optional(v.boolean()),
+    publicSlug: v.optional(v.string()),
+    publicHeroImageUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const context = await requireBandContext(ctx);
     if (args.performerHourlyRateUsd !== undefined && args.performerHourlyRateUsd < 0) {
       throw new Error("Performer hourly rate must be 0 or greater.");
     }
+    const publicSlug =
+      args.publicSlug === undefined ? undefined : normalizePublicSlug(args.publicSlug);
+    if (publicSlug) {
+      await assertUniqueBandPublicSlug(ctx, publicSlug, context.organizationId);
+    }
+    const publicListing = args.publicListing;
+    if (publicListing && !publicSlug) {
+      throw new Error("Public slug is required when enabling public artist listing.");
+    }
+
     const now = Date.now();
     const existing = await ctx.db
       .query("organizationProfiles")
@@ -1148,6 +1198,9 @@ export const updateActiveBandProfile = mutation({
         publicWebsiteUrl: args.publicWebsiteUrl?.trim() || undefined,
         publicInstagramUrl: args.publicInstagramUrl?.trim() || undefined,
         publicYoutubeUrl: args.publicYoutubeUrl?.trim() || undefined,
+        publicListing: publicListing ?? existing.publicListing,
+        publicSlug: publicSlug ?? (publicListing === false ? undefined : existing.publicSlug),
+        publicHeroImageUrl: args.publicHeroImageUrl?.trim() || undefined,
         updatedAt: now,
       });
       return existing._id;
@@ -1161,6 +1214,9 @@ export const updateActiveBandProfile = mutation({
       publicWebsiteUrl: args.publicWebsiteUrl?.trim() || undefined,
       publicInstagramUrl: args.publicInstagramUrl?.trim() || undefined,
       publicYoutubeUrl: args.publicYoutubeUrl?.trim() || undefined,
+      publicListing: publicListing ?? false,
+      publicSlug: publicListing ? publicSlug : undefined,
+      publicHeroImageUrl: args.publicHeroImageUrl?.trim() || undefined,
       updatedAt: now,
     });
   },

@@ -80,6 +80,7 @@ function userValuesFromRow(user: AdminUser, resolvedOrgId: string): UserAdminRow
   return {
     role: user.role || "member",
     active: user.active,
+    showOnPublicCrewPage: user.showOnPublicCrewPage ?? false,
     title: user.title || "",
     phone: user.phone || "",
     hourlyRateUsd: (user.hourlyRateUsd ?? 0).toString(),
@@ -96,6 +97,9 @@ function bandOrgValuesFromRow(org: BandOrgRow): BandOrgProfileFormValues {
     publicWebsiteUrl: org.publicWebsiteUrl ?? "",
     publicInstagramUrl: org.publicInstagramUrl ?? "",
     publicYoutubeUrl: org.publicYoutubeUrl ?? "",
+    publicListing: org.publicListing ?? false,
+    publicSlug: org.publicSlug ?? "",
+    publicHeroImageUrl: org.publicHeroImageUrl ?? "",
   };
 }
 
@@ -544,6 +548,7 @@ function UserAdminRow({
       userId: user.id,
       role: values.role,
       active: values.active,
+      showOnPublicCrewPage: values.showOnPublicCrewPage,
       title: values.title || undefined,
       phone: values.phone || undefined,
       teams: values.teams,
@@ -723,6 +728,19 @@ function UserAdminRow({
                 </div>
               </div>
               <div className="rounded-md border p-2">
+                <p className="mb-2 text-xs font-medium">Public profile</p>
+                <label className="flex items-center gap-2 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={form.watch("showOnPublicCrewPage")}
+                    onChange={(e) =>
+                      form.setValue("showOnPublicCrewPage", e.target.checked, { shouldDirty: true })
+                    }
+                  />
+                  Show on public crew page
+                </label>
+              </div>
+              <div className="rounded-md border p-2">
                 <p className="mb-2 text-xs font-medium">Organization Memberships</p>
                 <div className="space-y-1 text-xs text-muted-foreground">
                   {user.organizationMemberships.map((membership) => (
@@ -825,6 +843,9 @@ function BandOrgAdminRow({
       publicWebsiteUrl: values.publicWebsiteUrl || undefined,
       publicInstagramUrl: values.publicInstagramUrl || undefined,
       publicYoutubeUrl: values.publicYoutubeUrl || undefined,
+      publicListing: values.publicListing,
+      publicSlug: values.publicSlug || undefined,
+      publicHeroImageUrl: values.publicHeroImageUrl || undefined,
     });
   };
 
@@ -900,6 +921,31 @@ function BandOrgAdminRow({
               value={form.watch("bio")}
               onChange={(e) => form.setValue("bio", e.target.value, { shouldDirty: true })}
             />
+            <div className="mt-3 grid gap-2 md:grid-cols-2">
+              <label className="flex items-center gap-2 text-xs">
+                <input
+                  type="checkbox"
+                  checked={form.watch("publicListing")}
+                  onChange={(e) =>
+                    form.setValue("publicListing", e.target.checked, { shouldDirty: true })
+                  }
+                />
+                List on public artists page
+              </label>
+              <Input
+                placeholder="Public slug (e.g. my-band)"
+                value={form.watch("publicSlug")}
+                onChange={(e) => form.setValue("publicSlug", e.target.value, { shouldDirty: true })}
+              />
+              <Input
+                placeholder="Hero image URL"
+                value={form.watch("publicHeroImageUrl")}
+                onChange={(e) =>
+                  form.setValue("publicHeroImageUrl", e.target.value, { shouldDirty: true })
+                }
+                className="md:col-span-2"
+              />
+            </div>
           </td>
         </tr>
       ) : null}

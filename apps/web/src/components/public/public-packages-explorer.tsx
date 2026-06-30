@@ -7,8 +7,11 @@ import { useMemo } from "react";
 import { useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
 import { MarkdownContent } from "@/components/markdown-content";
+import { PublicPageHero } from "@/components/public/public-page-hero";
 import { PublicSiteChrome } from "@/components/public/public-site-chrome";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Reveal, Stagger, StaggerItem } from "@/components/landing/landing-motion";
+import { cn } from "@/lib/utils";
 
 type PublicBucket = "lighting" | "sound" | "environmental" | "staging" | "misc";
 
@@ -43,13 +46,15 @@ export function PublicPackagesExplorer({ bucket }: { bucket?: PublicBucket }) {
 
   return (
     <PublicSiteChrome>
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Packages</h1>
-          <p className="text-sm text-muted-foreground">
-            {bucket ? `${bucketLabels[bucket]} equipment packages.` : "Browse all publicly listed packages."}
-          </p>
-        </div>
+      <PublicPageHero
+        title={bucket ? `${bucketLabels[bucket]} packages` : "Equipment packages"}
+        subtitle={
+          bucket
+            ? `Browse ${bucketLabels[bucket].toLowerCase()} rental packages from Arbor Live.`
+            : "Browse publicly listed equipment packages for your next event."
+        }
+      />
+      <div className="mx-auto max-w-6xl space-y-10 px-4 py-12 sm:px-6 lg:px-8">
 
         {rows === undefined ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
 
@@ -64,31 +69,39 @@ export function PublicPackagesExplorer({ bucket }: { bucket?: PublicBucket }) {
           </Card>
         ) : null}
 
-        <div className="space-y-10">
+        <div className="space-y-12">
           {grouped.map((group) => {
             if (!group.items.length) return null;
 
             return (
               <section key={group.key} className="space-y-4">
-                <div>
-                  <h2 className="text-lg font-semibold tracking-tight">{bucketLabels[group.key]}</h2>
-                  <p className="text-xs text-muted-foreground">
-                    Packages are grouped by their dominant equipment category.
+                <Reveal>
+                  <h2 className="text-xl font-semibold tracking-tight">{bucketLabels[group.key]}</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Packages grouped by dominant equipment category.
                   </p>
-                </div>
+                </Reveal>
 
-                <div className="grid gap-4 md:grid-cols-2">
-                  {group.items.map((row) => (
-                    <Card key={row.package._id} className="overflow-hidden">
-                      {row.package.publicHeroImageUrl ? (
-                        <img
-                          src={row.package.publicHeroImageUrl}
-                          alt=""
-                          className="h-40 w-full object-cover"
-                        />
-                      ) : (
-                        <div className="h-40 w-full bg-muted/40" />
-                      )}
+                <Stagger className="grid gap-6 md:grid-cols-2">
+                  {group.items.map((row, index) => (
+                    <StaggerItem key={row.package._id}>
+                      <Card className="group overflow-hidden py-0 transition-shadow hover:ring-2 hover:ring-primary/20">
+                        {row.package.publicHeroImageUrl ? (
+                          <img
+                            src={row.package.publicHeroImageUrl}
+                            alt=""
+                            className="h-44 w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+                          />
+                        ) : (
+                          <div
+                            className={cn(
+                              "h-44 w-full bg-gradient-to-br",
+                              index % 2 === 0
+                                ? "from-emerald-900/60 via-primary/30 to-zinc-900"
+                                : "from-zinc-900 via-primary/25 to-emerald-950",
+                            )}
+                          />
+                        )}
                       <CardHeader>
                         <CardTitle className="text-base">{row.package.name}</CardTitle>
                       </CardHeader>
@@ -101,15 +114,16 @@ export function PublicPackagesExplorer({ bucket }: { bucket?: PublicBucket }) {
                           )}
                         </div>
                         <Link
-                          className="text-sm font-medium underline"
+                          className="text-sm font-medium text-primary hover:underline"
                           href={`/public/packages/view/${row.package._id}`}
                         >
-                          View package
+                          View package →
                         </Link>
                       </CardContent>
                     </Card>
+                    </StaggerItem>
                   ))}
-                </div>
+                </Stagger>
               </section>
             );
           })}

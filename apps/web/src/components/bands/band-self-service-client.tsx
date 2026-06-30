@@ -32,6 +32,9 @@ export function BandSelfServiceClient() {
       publicWebsiteUrl: "",
       publicInstagramUrl: "",
       publicYoutubeUrl: "",
+      publicListing: false,
+      publicSlug: "",
+      publicHeroImageUrl: "",
     },
     mode: "onChange",
   });
@@ -51,6 +54,9 @@ export function BandSelfServiceClient() {
       publicWebsiteUrl: profile.publicWebsiteUrl ?? "",
       publicInstagramUrl: profile.publicInstagramUrl ?? "",
       publicYoutubeUrl: profile.publicYoutubeUrl ?? "",
+      publicListing: profile.publicListing ?? false,
+      publicSlug: profile.publicSlug ?? "",
+      publicHeroImageUrl: profile.publicHeroImageUrl ?? "",
     });
     profileForm.suppressNextAutoSave();
   }, [profile, profileForm]);
@@ -63,6 +69,9 @@ export function BandSelfServiceClient() {
       publicWebsiteUrl: values.publicWebsiteUrl || undefined,
       publicInstagramUrl: values.publicInstagramUrl || undefined,
       publicYoutubeUrl: values.publicYoutubeUrl || undefined,
+      publicListing: values.publicListing,
+      publicSlug: values.publicSlug || undefined,
+      publicHeroImageUrl: values.publicHeroImageUrl || undefined,
     });
   };
 
@@ -103,6 +112,32 @@ export function BandSelfServiceClient() {
                 <TextFormField name="publicWebsiteUrl" label="Website" placeholder="https://..." />
                 <TextFormField name="publicInstagramUrl" label="Instagram URL" />
                 <TextFormField name="publicYoutubeUrl" label="YouTube URL" />
+              </div>
+              <div className="grid gap-2 md:grid-cols-2">
+                <FormField
+                  control={profileForm.control}
+                  name="publicListing"
+                  render={({ field }) => (
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(field.value)}
+                        onChange={(e) => field.onChange(e.target.checked)}
+                      />
+                      List on public artists page
+                    </label>
+                  )}
+                />
+                <TextFormField
+                  name="publicSlug"
+                  label="Public URL slug"
+                  placeholder="my-band-name"
+                />
+                <TextFormField
+                  name="publicHeroImageUrl"
+                  label="Hero image URL"
+                  placeholder="https://..."
+                />
               </div>
             </form>
           </Form>

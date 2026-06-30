@@ -91,6 +91,7 @@ export function PublicPackageDetailClient({ packageId }: { packageId: Id<"invent
 
   return (
     <PublicSiteChrome>
+      <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 lg:px-8">
       <div className="space-y-10">
         {packageHero ? (
           <div className="relative -mx-4 overflow-hidden rounded-b-2xl border-b border-border/80 shadow-md sm:-mx-4">
@@ -259,6 +260,7 @@ export function PublicPackageDetailClient({ packageId }: { packageId: Id<"invent
             })}
           </div>
         </div>
+      </div>
       </div>
     </PublicSiteChrome>
   );
