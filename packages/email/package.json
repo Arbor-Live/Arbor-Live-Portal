@@ -14,11 +14,11 @@
   "dependencies": {
     "@react-email/components": "^1.0.12",
     "@react-email/render": "^2.0.9",
-    "react": "^19.2.5",
-    "react-dom": "^19.2.5"
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
   },
   "devDependencies": {
-    "@types/react": "^19.2.14",
+    "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "react-email": "^6.6.5",
     "typescript": "^5.9.3"
