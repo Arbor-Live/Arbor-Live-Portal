@@ -16,7 +16,7 @@ import {
   Text,
 } from "@react-email/components";
 import type { CSSProperties, ReactNode } from "react";
-import { ARBOR_LOGO_URL, bodyText, brand, mutedText } from "./brand-theme";
+import { ARBOR_CONTACT_EMAIL, ARBOR_LOGO_URL, ARBOR_WEBSITE_URL, bodyText, brand, mutedText } from "./brand-theme";
 
 type EmailTone = "default" | "muted";
 
@@ -91,11 +91,11 @@ export function EmailLayout({
               Stanford&apos;s student-run live event production company
             </Text>
             <Text style={footerLineStyle}>
-              <Link href="https://arbor.st" style={footerLinkStyle}>
-                arbor.st
+              <Link href={ARBOR_WEBSITE_URL} style={footerLinkStyle}>
+                arborlive.stanford.edu
               </Link>
               {" · "}
-              <Link href="https://arbor.st/feedback" style={footerLinkStyle}>
+              <Link href={`mailto:${ARBOR_CONTACT_EMAIL}`} style={footerLinkStyle}>
                 Contact
               </Link>
               {" · "}© {year} Arbor Live

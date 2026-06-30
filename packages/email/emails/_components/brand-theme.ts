@@ -2,6 +2,9 @@
 export const ARBOR_LOGO_URL =
   "https://di867tnz6fwga.cloudfront.net/brand-kits/726962ea-cb8d-4c17-9b25-32bc8259d916/primary/4a5add54-637f-4565-a548-e0eca2109504.png";
 
+export const ARBOR_WEBSITE_URL = "https://arborlive.stanford.edu";
+export const ARBOR_CONTACT_EMAIL = "arborlive@stanford.edu";
+
 export const brand = {
   canvas: "#050505",
   surface: "#111111",

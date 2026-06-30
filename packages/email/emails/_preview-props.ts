@@ -10,12 +10,13 @@ import type {
   ScheduleReminderEmailProps,
   UserInviteEmailProps,
 } from "../src/types";
+import { ARBOR_WEBSITE_URL } from "./_components/brand-theme";
 
 const eventDefaults = {
   eventTitle: "Spring Concert 2026",
   venueName: "Memorial Auditorium",
   dateRangeLabel: "Saturday, Apr 12, 2026 • 6:00 PM – 11:00 PM",
-  eventUrl: "https://portal.arbor.st/events/demo-event",
+  eventUrl: `${ARBOR_WEBSITE_URL}/dashboard/events/demo-event`,
   recipientName: "Jordan Lee",
 };
 
@@ -40,7 +41,7 @@ export const scheduleReminderPreviewProps: ScheduleReminderEmailProps = {
 export const userInvitePreviewProps: UserInviteEmailProps = {
   organizationName: "Arbor Live",
   inviterName: "Alex Chen",
-  inviteUrl: "https://portal.arbor.st/invite/demo-token",
+  inviteUrl: `${ARBOR_WEBSITE_URL}/accept-invite?token=demo-token`,
   recipientEmail: "jordan.lee@stanford.edu",
   isExistingUser: false,
   expiresAtLabel: "Monday, Jul 7, 2026 at 5:00 PM PT",
@@ -48,7 +49,7 @@ export const userInvitePreviewProps: UserInviteEmailProps = {
 
 export const passwordResetPreviewProps: PasswordResetEmailProps = {
   recipientName: "Jordan Lee",
-  resetUrl: "https://portal.arbor.st/reset-password?token=demo",
+  resetUrl: `${ARBOR_WEBSITE_URL}/reset-password?token=demo`,
 };
 
 export const bookingRequestReceivedPreviewProps: BookingRequestReceivedEmailProps = {
@@ -56,7 +57,7 @@ export const bookingRequestReceivedPreviewProps: BookingRequestReceivedEmailProp
   requestNumber: "ALREQ-4K8Z2NP",
   eventName: "Spring Concert 2026",
   eventDateText: "Saturday, Apr 12, 2026",
-  trackingUrl: "https://portal.arbor.st/booking/demo-request",
+  trackingUrl: `${ARBOR_WEBSITE_URL}/public/request/track/demo-request`,
 };
 
 export const bookingQuoteReadyPreviewProps: BookingQuoteReadyEmailProps = {
@@ -65,7 +66,7 @@ export const bookingQuoteReadyPreviewProps: BookingQuoteReadyEmailProps = {
   eventName: "Spring Concert 2026",
   invoiceNumber: "ALINV-4K8Z2NP",
   quoteTotalUsd: 4250,
-  trackingUrl: "https://portal.arbor.st/booking/demo-request",
+  trackingUrl: `${ARBOR_WEBSITE_URL}/public/request/track/demo-request`,
   managerName: "Alex Chen",
   managerEmail: "alex.chen@stanford.edu",
 };
@@ -77,7 +78,7 @@ export const paymentProofReminderPreviewProps: PaymentProofReminderEmailProps = 
   dateRangeLabel: eventDefaults.dateRangeLabel,
   invoiceNumber: "ALINV-4K8Z2NP",
   quoteTotalUsd: 4250,
-  portalUrl: "https://portal.arbor.st/events/demo-event",
+  portalUrl: `${ARBOR_WEBSITE_URL}/public/event/demo-event`,
   reminderKind: "first",
   lateFeeUsd: 25,
   isOverdue: false,
@@ -94,7 +95,7 @@ export const paymentProofSubmittedPreviewProps: PaymentProofSubmittedEmailProps 
   paymentMethodLabel: "ASSU ePay",
   paymentReference: "EPAY-20260412-001",
   financeContactEmail: "finance@stanford.edu",
-  portalUrl: "https://portal.arbor.st/events/demo-event",
+  portalUrl: `${ARBOR_WEBSITE_URL}/public/event/demo-event`,
   managerName: "Alex Chen",
   managerEmail: "alex.chen@stanford.edu",
 };
