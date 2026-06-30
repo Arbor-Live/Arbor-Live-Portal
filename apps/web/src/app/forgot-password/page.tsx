@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useState } from "react";
 import { authClient } from "@/lib/auth-client";
-import { FormSaveBar } from "@/components/forms";
 import { Form } from "@/components/ui/form";
 import { TextFormField } from "@/components/forms/text-form-field";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -45,7 +44,7 @@ export default function ForgotPasswordPage() {
   });
 
   return (
-    <div className="mx-auto flex min-h-[80vh] w-full max-w-md items-center px-6 pb-20">
+    <div className="mx-auto flex min-h-[80vh] w-full max-w-md items-center px-6">
       <Card className="w-full">
         <CardHeader>
           <CardTitle>Reset your password</CardTitle>
@@ -71,6 +70,12 @@ export default function ForgotPasswordPage() {
               >
                 {form.saveStatus === "saving" ? "Sending..." : "Send reset link"}
               </Button>
+
+              {form.saveError ? (
+                <Alert variant="destructive">
+                  <AlertDescription>{form.saveError}</AlertDescription>
+                </Alert>
+              ) : null}
             </form>
           </Form>
 
@@ -79,17 +84,6 @@ export default function ForgotPasswordPage() {
           </Button>
         </CardContent>
       </Card>
-
-      <FormSaveBar
-        tier="C"
-        saveStatus={form.saveStatus}
-        saveError={form.saveError}
-        isDirty={form.formState.isDirty}
-        saveLabel="Send reset link"
-        onSave={() => void form.handleSubmit(onSubmit)()}
-        onDiscard={() => form.reset()}
-        onRetry={() => void form.handleSubmit(onSubmit)()}
-      />
     </div>
   );
 }

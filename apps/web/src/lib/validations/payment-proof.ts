@@ -6,7 +6,6 @@ export const paymentProofSubmissionSchema = z
   .object({
     paymentMethod: paymentMethodSchema,
     paymentReference: z.string().trim().min(1, "Payment reference is required"),
-    financeContactEmail: z.union([z.string().trim().email("Enter a valid email"), z.literal("")]),
   })
   .superRefine((values, ctx) => {
     const reference = values.paymentReference.trim();

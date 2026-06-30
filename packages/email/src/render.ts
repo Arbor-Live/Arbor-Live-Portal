@@ -3,6 +3,7 @@ import { BookingQuoteReadyEmail } from "../emails/booking-quote-ready";
 import { BookingRequestReceivedEmail } from "../emails/booking-request-received";
 import { EventCancelledEmail } from "../emails/event-cancelled";
 import { PasswordResetEmail } from "../emails/password-reset";
+import { PayingPartyAddedEmail } from "../emails/paying-party-added";
 import { PaymentProofReminderEmail } from "../emails/payment-proof-reminder";
 import { PaymentProofSubmittedEmail } from "../emails/payment-proof-submitted";
 import { SchedulePublishedEmail } from "../emails/schedule-published";
@@ -15,6 +16,7 @@ import type {
   PasswordResetEmailProps,
   PaymentProofReminderEmailProps,
   PaymentProofSubmittedEmailProps,
+  PayingPartyAddedEmailProps,
   SchedulePublishedEmailProps,
   ScheduleReminderEmailProps,
   UserInviteEmailProps,
@@ -54,4 +56,8 @@ export async function renderPaymentProofReminderEmail(props: PaymentProofReminde
 
 export async function renderPaymentProofSubmittedEmail(props: PaymentProofSubmittedEmailProps) {
   return render(PaymentProofSubmittedEmail(props));
+}
+
+export async function renderPayingPartyAddedEmail(props: PayingPartyAddedEmailProps) {
+  return render(PayingPartyAddedEmail(props));
 }

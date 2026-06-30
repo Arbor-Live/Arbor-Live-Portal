@@ -14,7 +14,8 @@ export type EmailTemplate =
   | "booking_request_received"
   | "booking_quote_ready"
   | "payment_proof_reminder"
-  | "payment_proof_submitted";
+  | "payment_proof_submitted"
+  | "paying_party_added";
 
 export function eventDashboardUrl(eventId: string) {
   return `${SITE_URL}/dashboard/events/${eventId}`;
@@ -102,6 +103,8 @@ export function subjectForTemplate(template: EmailTemplate, context: string) {
       return `Payment proof needed: ${context}`;
     case "payment_proof_submitted":
       return `Payment proof received: ${context}`;
+    case "paying_party_added":
+      return `You've been added as the paying party: ${context}`;
   }
 }
 

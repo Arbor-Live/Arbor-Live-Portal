@@ -29,13 +29,12 @@ export async function runPaymentProofReminders(
 
   const candidates = await ctx.db
     .query("events")
-    .withIndex("by_startAt", (q) => q.gte("startAt", windowStart).lte("startAt", now))
+    .withIndex("by_startAt", (q) => q.gte("startAt", windowStart))
     .take(500);
 
   let enqueuedCount = 0;
 
   for (const event of candidates) {
-    if (event.endAt > now) continue;
     if (!event.invoiceId) continue;
 
     const invoice = await ctx.db.get(event.invoiceId);
@@ -50,7 +49,8 @@ export async function runPaymentProofReminders(
     if (activeSubmission) continue;
 
     const timezone = event.timezone || EVENT_TIMEZONE;
-    const opensAt = getPaymentProofOpensAt(event.endAt, timezone);
+    const opensAt = getPaymentProofOpensAt(invoice);
+    if (opensAt == null) continue;
     const shouldSend =
       mode === "first"
         ? shouldSendFirstPaymentProofReminder(now, opensAt, timezone)

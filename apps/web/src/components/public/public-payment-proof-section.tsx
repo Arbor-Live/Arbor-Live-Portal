@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form } from "@/components/ui/form";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { TextFormField } from "@/components/forms/text-form-field";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import {
@@ -36,18 +37,14 @@ type SubmitArgs = {
   token: string;
   paymentMethod: PaymentProofSubmissionFormValues["paymentMethod"];
   paymentReference: string;
-  financeContactEmail?: string;
 };
 
-function formatOpensAt(opensAt: number) {
-  return new Date(opensAt).toLocaleString("en-US", {
+function formatDueDate(dueAt: number) {
+  return new Date(dueAt).toLocaleString("en-US", {
     timeZone: "America/Los_Angeles",
-    weekday: "short",
-    month: "short",
+    month: "long",
     day: "numeric",
     year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
   });
 }
 
@@ -69,7 +66,6 @@ export function PublicPaymentProofSection({
     defaultValues: {
       paymentMethod: "assu_epay",
       paymentReference: "",
-      financeContactEmail: "",
     },
     mode: "onTouched",
   });
@@ -84,12 +80,10 @@ export function PublicPaymentProofSection({
       token,
       paymentMethod: values.paymentMethod,
       paymentReference: values.paymentReference.trim(),
-      financeContactEmail: values.financeContactEmail?.trim() || undefined,
     });
     form.reset({
       paymentMethod: values.paymentMethod,
       paymentReference: "",
-      financeContactEmail: values.financeContactEmail ?? "",
     });
   });
 
@@ -130,26 +124,6 @@ export function PublicPaymentProofSection({
           <p>
             <span className="font-medium">Reference:</span> {paymentProof.submission.paymentReference}
           </p>
-          {paymentProof.submission.financeContactEmail ? (
-            <p>
-              <span className="font-medium">Finance contact:</span>{" "}
-              {paymentProof.submission.financeContactEmail}
-            </p>
-          ) : null}
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (!paymentProof.canSubmit) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Payment Proof</CardTitle>
-        </CardHeader>
-        <CardContent className="text-sm text-muted-foreground">
-          Payment proof submission opens the day after your event at 9:00 AM Pacific
-          {paymentProof.opensAt ? ` (${formatOpensAt(paymentProof.opensAt)})` : ""}.
         </CardContent>
       </Card>
     );
@@ -162,20 +136,21 @@ export function PublicPaymentProofSection({
       </CardHeader>
       <CardContent className="space-y-4">
         {paymentProof.lateFee?.isOverdue ? (
-          <p className="text-sm text-destructive">
-            This payment is overdue. Accrued late fees: ${paymentProof.lateFee.lateFeeUsd.toFixed(2)}{" "}
-            ($25/month starting the second month after due).
-          </p>
-        ) : paymentProof.lateFee && paymentProof.lateFee.weeksUntilLateFee > 0 ? (
-          <p className="text-sm text-muted-foreground">
-            Late fees of $25/month begin in {paymentProof.lateFee.weeksUntilLateFee}{" "}
-            {paymentProof.lateFee.weeksUntilLateFee === 1 ? "week" : "weeks"} if payment proof is not
-            submitted.
-          </p>
+          <Alert variant="destructive">
+            <AlertDescription className="space-y-1">
+              <p className="font-medium">This payment is past due.</p>
+              <p>
+                Payment was due {formatDueDate(paymentProof.lateFee.dueAt)} Pacific.
+                {paymentProof.lateFee.lateFeeUsd > 0
+                  ? ` Accrued late fees: $${paymentProof.lateFee.lateFeeUsd.toFixed(2)} ($25/month after the first month past due).`
+                  : " Late fees of $25/month apply after the first month past due."}
+              </p>
+            </AlertDescription>
+          </Alert>
         ) : null}
+
         <p className="text-sm text-muted-foreground">
-          Submit the payment reference for your invoice. You can also add a finance officer or card
-          coordinator email so they receive confirmation.
+          Submit the payment reference for your invoice once payment has been initiated.
         </p>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
@@ -212,18 +187,15 @@ export function PublicPaymentProofSection({
               placeholder={selectedOption.placeholder}
             />
 
-            <TextFormField
-              name="financeContactEmail"
-              label="Finance officer / card coordinator email (optional)"
-              type="email"
-              placeholder="fo@example.stanford.edu"
-              description="This person will also receive payment confirmation emails."
-            />
-
             <Button type="submit" disabled={form.saveStatus === "saving"}>
-              Submit payment proof
+              {form.saveStatus === "saving" ? "Submitting..." : "Submit payment proof"}
             </Button>
-            {form.saveError ? <p className="text-sm text-destructive">{form.saveError}</p> : null}
+
+            {form.saveError ? (
+              <Alert variant="destructive">
+                <AlertDescription>{form.saveError}</AlertDescription>
+              </Alert>
+            ) : null}
           </form>
         </Form>
       </CardContent>

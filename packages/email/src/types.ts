@@ -75,3 +75,16 @@ export type PaymentProofSubmittedEmailProps = {
   managerName: string;
   managerEmail?: string;
 };
+
+export type PayingPartyAddedEmailProps = {
+  recipientName?: string;
+  approvedByName: string;
+  clientGroupName?: string;
+  eventTitle: string;
+  venueName?: string;
+  dateRangeLabel: string;
+  invoiceNumber: string;
+  quoteTotalUsd: number;
+  managerName: string;
+  managerEmail?: string;
+};

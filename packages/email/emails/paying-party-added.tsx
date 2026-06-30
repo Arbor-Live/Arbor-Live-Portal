@@ -1,47 +1,52 @@
 import { Text } from "@react-email/components";
 import {
   BodyCopy,
-  CtaButton,
   EmailLayout,
   EmailSignOff,
   EventDetailsSection,
   HighlightBox,
+  MutedCopy,
 } from "./components/email-layout";
-import type { PaymentProofSubmittedEmailProps } from "../src/types";
+import type { PayingPartyAddedEmailProps } from "../src/types";
 
 function currency(value: number) {
   return `$${value.toFixed(2)}`;
 }
 
-export function PaymentProofSubmittedEmail({
+export function PayingPartyAddedEmail({
   recipientName,
+  approvedByName,
+  clientGroupName,
   eventTitle,
   venueName,
   dateRangeLabel,
   invoiceNumber,
   quoteTotalUsd,
-  paymentMethodLabel,
-  paymentReference,
-  financeContactEmail,
-  portalUrl,
   managerName,
   managerEmail,
-}: PaymentProofSubmittedEmailProps) {
+}: PayingPartyAddedEmailProps) {
   const greeting = recipientName ? `Hi ${recipientName},` : "Hi!";
+  const approverLabel = clientGroupName
+    ? `${approvedByName} (${clientGroupName})`
+    : approvedByName;
 
   return (
-    <EmailLayout preview={`Payment proof received for ${eventTitle}`} heading="Payment Proof Received">
+    <EmailLayout
+      preview={`You've been added as the paying party for ${eventTitle}`}
+      heading="Added as Paying Party"
+    >
       <BodyCopy>{greeting}</BodyCopy>
       <BodyCopy>
-        We received your payment proof submission for {eventTitle}. Our team will verify the payment
-        against the invoice total.
+        {approverLabel} added you as the Financial Officer or Paying party for an Arbor Live event.
+        The quote has been approved, and you will receive a finalized invoice after the event with
+        payment instructions.
       </BodyCopy>
       <EventDetailsSection
         eventTitle={eventTitle}
         venueName={venueName}
         dateRangeLabel={dateRangeLabel}
       />
-      <HighlightBox title="Submission Details">
+      <HighlightBox title="Approved quote">
         <Text style={highlightLineStyle}>
           <strong>Quote:</strong> {invoiceNumber}
         </Text>
@@ -49,28 +54,23 @@ export function PaymentProofSubmittedEmail({
           <strong>Total:</strong> {currency(quoteTotalUsd)}
         </Text>
         <Text style={highlightLineStyle}>
-          <strong>Payment method:</strong> {paymentMethodLabel}
+          <strong>Approved by:</strong> {approvedByName}
         </Text>
-        <Text style={highlightLineStyle}>
-          <strong>Reference:</strong> {paymentReference}
-        </Text>
-        {financeContactEmail ? (
-          <Text style={highlightLineStyle}>
-            <strong>Payment submitter:</strong> {financeContactEmail}
-          </Text>
-        ) : null}
       </HighlightBox>
       <BodyCopy>
-        Questions? Reply to this email or contact {managerName}
+        We will follow up after the event with the finalized invoice and details for submitting payment
+        proof. If you have questions in the meantime, contact {managerName}
         {managerEmail ? ` at ${managerEmail}` : ""}.
       </BodyCopy>
-      <CtaButton href={portalUrl} label="View event portal" />
+      <MutedCopy>
+        You are receiving this because you were listed as the paying party for this event.
+      </MutedCopy>
       <EmailSignOff />
     </EmailLayout>
   );
 }
 
-export default PaymentProofSubmittedEmail;
+export default PayingPartyAddedEmail;
 
 const highlightLineStyle = {
   color: "#ffffff",

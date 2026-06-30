@@ -1,29 +1,23 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
-import { EVENT_TIMEZONE, reminderDayKey } from "../email/constants";
+import { EVENT_TIMEZONE } from "../email/constants";
 import {
   computeLateFeeSummary,
   getPaymentDueAt,
   isSubmissionActive,
 } from "./invoicePaymentStatus";
 
-export const PAYMENT_PROOF_OPEN_HOUR = 9;
 export const PAYMENT_PROOF_REMINDER_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 export type PaymentProofMethod = "assu_epay" | "ijournal" | "granted_transfer";
+
+type PaymentProofInvoice = Pick<Doc<"invoices">, "approvedAt" | "clientApprovalStatus">;
 
 export const paymentProofMethodValue = {
   assu_epay: "assu_epay" as const,
   ijournal: "ijournal" as const,
   granted_transfer: "granted_transfer" as const,
 };
-
-function addCalendarDays(dayKey: string, days: number) {
-  const [year, month, day] = dayKey.split("-").map(Number);
-  const utcDate = new Date(Date.UTC(year, month - 1, day + days));
-  return utcDate.toISOString().slice(0, 10);
-}
 
 function formatZonedDateTime(ms: number, timezone: string) {
   const formatter = new Intl.DateTimeFormat("en-US", {
@@ -67,14 +61,16 @@ export function zonedLocalTimeToUtcMs(
   return lo;
 }
 
-export function getPaymentProofOpensAt(endAtMs: number, timezone: string = EVENT_TIMEZONE) {
-  const eventEndDayKey = reminderDayKey(endAtMs, timezone);
-  const opensDayKey = addCalendarDays(eventEndDayKey, 1);
-  return zonedLocalTimeToUtcMs(opensDayKey, PAYMENT_PROOF_OPEN_HOUR, 0, timezone);
+export function getPaymentProofOpensAt(invoice: PaymentProofInvoice): number | null {
+  if ((invoice.clientApprovalStatus ?? "pending") !== "approved") return null;
+  return invoice.approvedAt ?? null;
 }
 
-export function isPaymentProofOpen(nowMs: number, endAtMs: number, timezone: string = EVENT_TIMEZONE) {
-  return nowMs >= getPaymentProofOpensAt(endAtMs, timezone);
+export function isPaymentProofOpen(nowMs: number, invoice: PaymentProofInvoice) {
+  if ((invoice.clientApprovalStatus ?? "pending") !== "approved") return false;
+  const opensAt = invoice.approvedAt;
+  if (opensAt == null) return true;
+  return nowMs >= opensAt;
 }
 
 export function normalizePaymentReference(method: PaymentProofMethod, raw: string) {
@@ -118,10 +114,20 @@ function isValidEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
+export function resolvePaymentSubmitterEmail(invoice: Pick<
+  Doc<"invoices">,
+  "clientIsPaymentSubmitter" | "clientEmail" | "paymentSubmitterEmail"
+>) {
+  if (invoice.clientIsPaymentSubmitter) {
+    return normalizeFinanceContactEmail(invoice.clientEmail);
+  }
+  return normalizeFinanceContactEmail(invoice.paymentSubmitterEmail);
+}
+
 export function normalizeFinanceContactEmail(raw: string | undefined) {
   const trimmed = raw?.trim().toLowerCase();
   if (!trimmed) return undefined;
-  if (!isValidEmail(trimmed)) throw new Error("Finance contact email is invalid.");
+  if (!isValidEmail(trimmed)) throw new Error("Email address is invalid.");
   return trimmed;
 }
 
@@ -167,11 +173,10 @@ export async function loadPaymentProofState(
   }
 
   const approved = (invoice.clientApprovalStatus ?? "pending") === "approved";
-  const timezone = linkedEvent.timezone || EVENT_TIMEZONE;
-  const opensAt = getPaymentProofOpensAt(linkedEvent.endAt, timezone);
+  const opensAt = getPaymentProofOpensAt(invoice);
   const now = Date.now();
   const activeSubmission = await getActivePaymentProofSubmission(ctx, linkedEvent._id);
-  const open = approved && isPaymentProofOpen(now, linkedEvent.endAt, timezone);
+  const open = isPaymentProofOpen(now, invoice);
   const dueAt = getPaymentDueAt(invoice, linkedEvent);
   const lateFee = approved ? computeLateFeeSummary(dueAt, now) : null;
   const paymentReceived = Boolean(invoice.paymentReceivedAt);
@@ -207,7 +212,6 @@ export async function submitPaymentProof(
   args: {
     paymentMethod: PaymentProofMethod;
     paymentReference: string;
-    financeContactEmail?: string;
   },
 ) {
   if ((invoice.clientApprovalStatus ?? "pending") !== "approved") {
@@ -218,16 +222,11 @@ export async function submitPaymentProof(
     throw new Error("Payment has already been marked as received.");
   }
 
-  const timezone = linkedEvent.timezone || EVENT_TIMEZONE;
-  if (!isPaymentProofOpen(Date.now(), linkedEvent.endAt, timezone)) {
-    throw new Error("Payment proof submission opens the day after the event at 9:00 AM Pacific.");
-  }
-
   const existing = await getActivePaymentProofSubmission(ctx, linkedEvent._id);
   if (existing) throw new Error("Payment proof has already been submitted for this event.");
 
   const paymentReference = normalizePaymentReference(args.paymentMethod, args.paymentReference);
-  const financeContactEmail = normalizeFinanceContactEmail(args.financeContactEmail);
+  const financeContactEmail = resolvePaymentSubmitterEmail(invoice);
   const now = Date.now();
 
   const submissionId = await ctx.db.insert("eventPaymentProofSubmissions", {

@@ -25,12 +25,11 @@ export function PaymentProofReminderEmail({
   reminderKind,
   lateFeeUsd,
   isOverdue,
-  weeksUntilLateFee,
 }: PaymentProofReminderEmailProps) {
   const greeting = recipientName ? `Hi ${recipientName},` : "Hi!";
   const reminderLabel =
     reminderKind === "first"
-      ? "Your event has wrapped up and payment proof submission is now open."
+      ? "Your quote is approved and payment proof submission is now open."
       : "This is your weekly reminder to submit payment proof for your Arbor Live event.";
 
   return (
@@ -46,11 +45,6 @@ export function PaymentProofReminderEmail({
         <BodyCopy>
           This payment is overdue. Accrued late fees: <strong>{currency(lateFeeUsd)}</strong> ($25/month
           starting the second month after due).
-        </BodyCopy>
-      ) : weeksUntilLateFee > 0 ? (
-        <BodyCopy>
-          Late fees of $25/month begin in <strong>{weeksUntilLateFee}</strong>{" "}
-          {weeksUntilLateFee === 1 ? "week" : "weeks"} if payment proof is not submitted.
         </BodyCopy>
       ) : null}
       <EventDetailsSection

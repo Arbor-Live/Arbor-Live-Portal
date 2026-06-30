@@ -146,7 +146,7 @@ export function FinancialHubPaymentsClient() {
                     <p className="text-muted-foreground">
                       Submitted {formatDate(row.submission.submittedAt)}
                       {row.submission.financeContactEmail
-                        ? ` · Finance: ${row.submission.financeContactEmail}`
+                        ? ` · Submitter: ${row.submission.financeContactEmail}`
                         : ""}
                     </p>
                   </div>

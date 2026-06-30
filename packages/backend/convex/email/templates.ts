@@ -5,6 +5,7 @@ import {
   renderPasswordResetEmail,
   renderPaymentProofReminderEmail,
   renderPaymentProofSubmittedEmail,
+  renderPayingPartyAddedEmail,
   renderSchedulePublishedEmail,
   renderScheduleReminderEmail,
   renderUserInviteEmail,
@@ -16,6 +17,7 @@ import type {
   PasswordResetEmailProps,
   PaymentProofReminderEmailProps,
   PaymentProofSubmittedEmailProps,
+  PayingPartyAddedEmailProps,
   SchedulePublishedEmailProps,
   ScheduleReminderEmailProps,
   UserInviteEmailProps,
@@ -42,5 +44,7 @@ export async function renderEmailHtml(template: EmailTemplate, payload: unknown)
       return renderPaymentProofReminderEmail(payload as PaymentProofReminderEmailProps);
     case "payment_proof_submitted":
       return renderPaymentProofSubmittedEmail(payload as PaymentProofSubmittedEmailProps);
+    case "paying_party_added":
+      return renderPayingPartyAddedEmail(payload as PayingPartyAddedEmailProps);
   }
 }

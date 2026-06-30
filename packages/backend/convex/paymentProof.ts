@@ -148,7 +148,7 @@ export const listByQueue = query({
 
     const candidates = await ctx.db
       .query("events")
-      .withIndex("by_startAt", (q) => q.gte("startAt", windowStart).lte("startAt", now))
+      .withIndex("by_startAt", (q) => q.gte("startAt", windowStart))
       .take(500);
 
     const rows = [];
@@ -201,7 +201,6 @@ export const submitByQuoteToken = mutation({
     token: v.string(),
     paymentMethod: paymentProofMethodArg,
     paymentReference: v.string(),
-    financeContactEmail: v.optional(v.string()),
   },
   returns: v.object({ ok: v.literal(true) }),
   handler: async (ctx, args) => {
@@ -209,7 +208,6 @@ export const submitByQuoteToken = mutation({
     const result = await submitPaymentProof(ctx, invoice, linkedEvent, {
       paymentMethod: args.paymentMethod,
       paymentReference: args.paymentReference,
-      financeContactEmail: args.financeContactEmail,
     });
 
     await schedulePaymentProofSubmittedEmails(ctx, {
@@ -231,7 +229,6 @@ export const submitByRequestToken = mutation({
     token: v.string(),
     paymentMethod: paymentProofMethodArg,
     paymentReference: v.string(),
-    financeContactEmail: v.optional(v.string()),
   },
   returns: v.object({ ok: v.literal(true) }),
   handler: async (ctx, args) => {
@@ -239,7 +236,6 @@ export const submitByRequestToken = mutation({
     const result = await submitPaymentProof(ctx, invoice, linkedEvent, {
       paymentMethod: args.paymentMethod,
       paymentReference: args.paymentReference,
-      financeContactEmail: args.financeContactEmail,
     });
 
     await schedulePaymentProofSubmittedEmails(ctx, {

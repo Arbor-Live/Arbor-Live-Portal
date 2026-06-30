@@ -7,7 +7,6 @@ import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
 import { authClient } from "@/lib/auth-client";
-import { FormSaveBar } from "@/components/forms";
 import { Form } from "@/components/ui/form";
 import { TextFormField } from "@/components/forms/text-form-field";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -60,7 +59,7 @@ export default function AcceptInvitePage() {
   });
 
   return (
-    <div className="mx-auto flex min-h-[80vh] w-full max-w-md items-center px-6 pb-20">
+    <div className="mx-auto flex min-h-[80vh] w-full max-w-md items-center px-6">
       <Card className="w-full">
         <CardHeader>
           <div className="mb-2">
@@ -128,6 +127,12 @@ export default function AcceptInvitePage() {
                 >
                   {form.saveStatus === "saving" ? "Creating account..." : "Create account"}
                 </Button>
+
+                {form.saveError ? (
+                  <Alert variant="destructive">
+                    <AlertDescription>{form.saveError}</AlertDescription>
+                  </Alert>
+                ) : null}
               </form>
             </Form>
           )}
@@ -137,19 +142,6 @@ export default function AcceptInvitePage() {
           </Button>
         </CardContent>
       </Card>
-
-      {invite && !invite.hasAccount && !invite.expired ? (
-        <FormSaveBar
-          tier="C"
-          saveStatus={form.saveStatus}
-          saveError={form.saveError ?? undefined}
-          isDirty={form.formState.isDirty}
-          saveLabel="Create account"
-          onSave={() => void form.handleSubmit(onSubmit)()}
-          onDiscard={() => form.reset()}
-          onRetry={() => void form.handleSubmit(onSubmit)()}
-        />
-      ) : null}
     </div>
   );
 }

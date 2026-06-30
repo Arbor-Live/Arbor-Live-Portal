@@ -32,14 +32,16 @@ function parseDueDateString(dueDate: string, timezone: string) {
 }
 
 export function getPaymentDueAt(
-  invoice: Pick<Doc<"invoices">, "dueDate">,
-  event: Pick<Doc<"events">, "endAt" | "timezone">,
+  invoice: Pick<Doc<"invoices">, "dueDate" | "approvedAt" | "clientApprovalStatus">,
+  event: Pick<Doc<"events">, "timezone">,
 ) {
   const timezone = event.timezone || EVENT_TIMEZONE;
-  const opensAt = getPaymentProofOpensAt(event.endAt, timezone);
+  const opensAt = getPaymentProofOpensAt(invoice);
   const dueFromInvoice = invoice.dueDate ? parseDueDateString(invoice.dueDate, timezone) : null;
-  if (dueFromInvoice && dueFromInvoice > opensAt) return dueFromInvoice;
-  return opensAt;
+  if (dueFromInvoice && opensAt != null && dueFromInvoice > opensAt) return dueFromInvoice;
+  if (opensAt != null) return opensAt;
+  if (dueFromInvoice) return dueFromInvoice;
+  return Date.now();
 }
 
 export function computeLateFeeSummary(dueAt: number, nowMs: number = Date.now()): LateFeeSummary {
@@ -76,7 +78,6 @@ export function classifyPaymentQueue(args: {
   const nowMs = args.nowMs ?? Date.now();
   if (args.invoice.status === "void") return null;
   if ((args.invoice.clientApprovalStatus ?? "pending") !== "approved") return null;
-  if (args.event.endAt > nowMs) return null;
 
   if (args.invoice.paymentReceivedAt) return "payment_received";
 
@@ -86,10 +87,6 @@ export function classifyPaymentQueue(args: {
   if (isSubmissionActive(args.activeSubmission)) {
     return late.isOverdue ? "overdue" : "proof_no_receipt";
   }
-
-  const timezone = args.event.timezone || EVENT_TIMEZONE;
-  const opensAt = getPaymentProofOpensAt(args.event.endAt, timezone);
-  if (nowMs < opensAt) return null;
 
   return late.isOverdue ? "overdue" : "payment_pending";
 }
