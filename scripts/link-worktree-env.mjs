@@ -20,7 +20,6 @@ const ENV_RELATIVE_PATHS = [
 /** When no worktree has a real env file yet, seed shared copies from examples. */
 const ENV_EXAMPLE_SOURCES = {
   "apps/web/.env": "apps/web/.env.example",
-  "apps/web/.env.local": "apps/web/.env.example",
   "packages/backend/.env": "packages/backend/.env.example",
 };
 

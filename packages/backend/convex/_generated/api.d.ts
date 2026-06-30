@@ -8,8 +8,8 @@
  * @module
  */
 
-import type * as adminDeletes from "../adminDeletes.js";
 import type * as account from "../account.js";
+import type * as adminDeletes from "../adminDeletes.js";
 import type * as auth from "../auth.js";
 import type * as bootstrap from "../bootstrap.js";
 import type * as capabilityDefinitions from "../capabilityDefinitions.js";
