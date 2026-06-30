@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Reveal, Stagger, StaggerItem } from "@/components/landing/landing-motion";
+import { Stagger, StaggerItem } from "@/components/landing/landing-motion";
 import { cn } from "@/lib/utils";
 
 const gradients = [
