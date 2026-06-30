@@ -8,6 +8,7 @@ import {
   MutedCopy,
 } from "./components/email-layout";
 import type { UserInviteEmailProps } from "../src/types";
+import { userInvitePreviewProps } from "./_preview-props";
 
 export function UserInviteEmail({
   organizationName,
@@ -56,6 +57,8 @@ export function UserInviteEmail({
     </EmailLayout>
   );
 }
+
+UserInviteEmail.PreviewProps = userInvitePreviewProps;
 
 export default UserInviteEmail;
 

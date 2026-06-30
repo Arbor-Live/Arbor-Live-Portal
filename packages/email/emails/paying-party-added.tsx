@@ -8,6 +8,7 @@ import {
   MutedCopy,
 } from "./components/email-layout";
 import type { PayingPartyAddedEmailProps } from "../src/types";
+import { payingPartyAddedPreviewProps } from "./_preview-props";
 
 function currency(value: number) {
   return `$${value.toFixed(2)}`;
@@ -69,6 +70,8 @@ export function PayingPartyAddedEmail({
     </EmailLayout>
   );
 }
+
+PayingPartyAddedEmail.PreviewProps = payingPartyAddedPreviewProps;
 
 export default PayingPartyAddedEmail;
 

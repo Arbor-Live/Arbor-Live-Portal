@@ -6,6 +6,7 @@ import {
   MutedCopy,
 } from "./components/email-layout";
 import type { PasswordResetEmailProps } from "../src/types";
+import { passwordResetPreviewProps } from "./_preview-props";
 
 export function PasswordResetEmail({
   recipientName,
@@ -26,5 +27,7 @@ export function PasswordResetEmail({
     </EmailLayout>
   );
 }
+
+PasswordResetEmail.PreviewProps = passwordResetPreviewProps;
 
 export default PasswordResetEmail;

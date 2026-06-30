@@ -8,6 +8,7 @@ import {
   HighlightBox,
 } from "./components/email-layout";
 import type { PaymentProofSubmittedEmailProps } from "../src/types";
+import { paymentProofSubmittedPreviewProps } from "./_preview-props";
 
 function currency(value: number) {
   return `$${value.toFixed(2)}`;
@@ -69,6 +70,8 @@ export function PaymentProofSubmittedEmail({
     </EmailLayout>
   );
 }
+
+PaymentProofSubmittedEmail.PreviewProps = paymentProofSubmittedPreviewProps;
 
 export default PaymentProofSubmittedEmail;
 

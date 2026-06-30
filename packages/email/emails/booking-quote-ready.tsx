@@ -8,6 +8,7 @@ import {
   MutedCopy,
 } from "./components/email-layout";
 import type { BookingQuoteReadyEmailProps } from "../src/types";
+import { bookingQuoteReadyPreviewProps } from "./_preview-props";
 
 function currency(value: number) {
   return `$${value.toFixed(2)}`;
@@ -62,6 +63,8 @@ export function BookingQuoteReadyEmail({
     </EmailLayout>
   );
 }
+
+BookingQuoteReadyEmail.PreviewProps = bookingQuoteReadyPreviewProps;
 
 export default BookingQuoteReadyEmail;
 

@@ -6,6 +6,7 @@ import {
   EventDetailsSection,
 } from "./components/email-layout";
 import type { EventEmailProps } from "../src/types";
+import { eventCancelledPreviewProps } from "./_preview-props";
 
 export function EventCancelledEmail({
   eventTitle,
@@ -34,5 +35,7 @@ export function EventCancelledEmail({
     </EmailLayout>
   );
 }
+
+EventCancelledEmail.PreviewProps = eventCancelledPreviewProps;
 
 export default EventCancelledEmail;

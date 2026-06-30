@@ -9,6 +9,7 @@ import {
 } from "./components/email-layout";
 import { brand } from "./components/brand-theme";
 import type { SchedulePublishedEmailProps } from "../src/types";
+import { schedulePublishedPreviewProps } from "./_preview-props";
 
 export function SchedulePublishedEmail({
   eventTitle,
@@ -47,6 +48,8 @@ export function SchedulePublishedEmail({
     </EmailLayout>
   );
 }
+
+SchedulePublishedEmail.PreviewProps = schedulePublishedPreviewProps;
 
 export default SchedulePublishedEmail;
 

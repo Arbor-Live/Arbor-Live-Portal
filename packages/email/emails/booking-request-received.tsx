@@ -7,6 +7,7 @@ import {
   HighlightBox,
 } from "./components/email-layout";
 import type { BookingRequestReceivedEmailProps } from "../src/types";
+import { bookingRequestReceivedPreviewProps } from "./_preview-props";
 
 export function BookingRequestReceivedEmail({
   recipientName,
@@ -47,6 +48,8 @@ export function BookingRequestReceivedEmail({
     </EmailLayout>
   );
 }
+
+BookingRequestReceivedEmail.PreviewProps = bookingRequestReceivedPreviewProps;
 
 export default BookingRequestReceivedEmail;
 

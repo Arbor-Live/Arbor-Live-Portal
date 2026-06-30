@@ -9,6 +9,7 @@ import {
   MutedCopy,
 } from "./components/email-layout";
 import type { PaymentProofReminderEmailProps } from "../src/types";
+import { paymentProofReminderPreviewProps } from "./_preview-props";
 
 function currency(value: number) {
   return `$${value.toFixed(2)}`;
@@ -71,6 +72,8 @@ export function PaymentProofReminderEmail({
     </EmailLayout>
   );
 }
+
+PaymentProofReminderEmail.PreviewProps = paymentProofReminderPreviewProps;
 
 export default PaymentProofReminderEmail;
 
