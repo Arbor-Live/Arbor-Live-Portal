@@ -6,7 +6,7 @@ Monorepo bootstrap for:
 
 ## Setup
 
-1. Copy env templates:
+1. Copy env templates (main checkout only — worktrees share these automatically):
    - `cp apps/web/.env.example apps/web/.env.local`
    - `cp packages/backend/.env.example packages/backend/.env.local`
 2. Install dependencies:
@@ -17,4 +17,17 @@ Monorepo bootstrap for:
    - `pnpm --filter backend auth:generate`
 5. Start web app:
    - `pnpm dev:web`
+
+## Git worktrees
+
+Gitignored env files are stored once in `.git/arbor-env/` and symlinked into every
+worktree. `pnpm install` configures the shared git hook and links env files; to
+link manually:
+
+```bash
+pnpm setup:worktree-env
+```
+
+If you add a new worktree, run `pnpm setup:worktree-env` in it (or check out a
+branch — the `post-checkout` hook does this automatically).
 
