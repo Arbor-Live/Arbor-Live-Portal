@@ -15,6 +15,7 @@ type TextFormFieldProps<T extends FieldValues> = {
   label: string;
   placeholder?: string;
   type?: "text" | "email" | "tel" | "number" | "password";
+  autoComplete?: string;
   autoFocus?: boolean;
   disabled?: boolean;
   description?: string;
@@ -25,6 +26,7 @@ export function TextFormField<T extends FieldValues>({
   label,
   placeholder,
   type = "text",
+  autoComplete,
   autoFocus,
   disabled,
   description,
@@ -39,6 +41,7 @@ export function TextFormField<T extends FieldValues>({
             <Input
               type={type}
               placeholder={placeholder}
+              autoComplete={autoComplete}
               autoFocus={autoFocus}
               disabled={disabled}
               {...field}
