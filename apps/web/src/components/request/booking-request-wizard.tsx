@@ -15,6 +15,7 @@ import { BookingRequestNav } from "@/components/request/booking-request-nav";
 import { EventScheduleField } from "@/components/request/fields/event-schedule-field";
 import { ReturningUserField } from "@/components/request/fields/returning-user-field";
 import { ServicesField } from "@/components/request/fields/services-field";
+import { SponsorTypeField } from "@/components/request/fields/sponsor-type-field";
 import { SingleChoiceField } from "@/components/request/fields/single-choice-field";
 import { TextField } from "@/components/request/fields/text-field";
 import { TextareaField } from "@/components/request/fields/textarea-field";
@@ -23,7 +24,7 @@ import {
   EVENT_CATEGORY_OPTIONS,
   LIGHTING_TIER_OPTIONS,
   PRODUCTION_TIER_OPTIONS,
-  SPONSOR_TYPE_OPTIONS,
+  INDIVIDUAL_SPONSOR_TYPE,
   bookingRequestDefaultValues,
   bookingRequestSchema,
   getActiveSteps,
@@ -82,7 +83,7 @@ export function BookingRequestWizard() {
 
   const requestContext = form.watch("requestContext");
   const servicesNeeded = form.watch("servicesNeeded");
-  const skipSponsor = requestContext === "group";
+  const skipSponsor = requestContext === "group" || requestContext === "personal";
   const showReturningUser = contactLookup?.found === true;
   const includeLighting = servicesNeeded.includes("Lighting");
 
@@ -145,13 +146,14 @@ export function BookingRequestWizard() {
     form.setValue("requestContext", "personal", { shouldDirty: true, shouldValidate: true });
     form.setValue("invoiceGroupId", "", { shouldDirty: true });
     form.setValue("organization", "", { shouldDirty: true });
-    form.setValue("sponsorType", "Individual Stanford Affiliate", { shouldDirty: true });
+    form.setValue("sponsorType", INDIVIDUAL_SPONSOR_TYPE, { shouldDirty: true });
   }, [form]);
 
   const applyNewGroup = useCallback(() => {
     form.setValue("requestContext", "new_group", { shouldDirty: true, shouldValidate: true });
     form.setValue("invoiceGroupId", "", { shouldDirty: true });
     form.setValue("organization", "", { shouldDirty: true });
+    form.setValue("sponsorType", "Stanford Department", { shouldDirty: true });
   }, [form]);
 
   const advance = useCallback(() => {
@@ -382,15 +384,7 @@ function StepBody({
         </div>
       );
     case "sponsorType":
-      return (
-        <SingleChoiceField
-          name="sponsorType"
-          options={SPONSOR_TYPE_OPTIONS}
-          otherFieldName="sponsorTypeOther"
-          otherTriggerValue="Other"
-          otherPlaceholder="Who is sponsoring this event?"
-        />
-      );
+      return <SponsorTypeField />;
     case "venue":
       return (
         <div className="space-y-4">

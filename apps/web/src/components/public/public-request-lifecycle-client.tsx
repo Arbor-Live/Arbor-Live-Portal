@@ -146,9 +146,13 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
             {" · "}
             {request.eventDateText}
           </p>
-          <p>
-            {request.eventStartTimeText} – {request.eventEndTimeText}
-          </p>
+          {request.eventScheduleText ? (
+            <p className="whitespace-pre-wrap">{request.eventScheduleText}</p>
+          ) : (
+            <p>
+              {request.eventStartTimeText} – {request.eventEndTimeText}
+            </p>
+          )}
           {request.quote ? (
             <p>
               Quote {request.quote.invoiceNumber}

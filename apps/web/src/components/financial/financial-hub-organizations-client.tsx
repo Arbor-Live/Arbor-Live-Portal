@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import type { Id } from "@/lib/convex-api";
 import { api } from "@/lib/convex-api";
@@ -52,6 +52,17 @@ export function FinancialHubOrganizationsClient() {
   const groupRows = useMemo(() => groups ?? [], [groups]);
   const contactRows = useMemo(() => contacts ?? [], [contacts]);
   const selectedGroup = groupRows.find((group) => group._id === selectedGroupId);
+  const selectedGroupInitial = useMemo(
+    () =>
+      selectedGroup
+        ? {
+            name: selectedGroup.name,
+            type: selectedGroup.type,
+            equipmentPricingMode: selectedGroup.equipmentPricingMode,
+          }
+        : null,
+    [selectedGroup],
+  );
 
   const newGroupForm = useConvexForm<InvoiceGroupFormValues>({
     schema: invoiceGroupSchema,
@@ -211,11 +222,7 @@ export function FinancialHubOrganizationsClient() {
             <EditGroupForm
               key={selectedGroup._id}
               groupId={selectedGroup._id}
-              initial={{
-                name: selectedGroup.name,
-                type: selectedGroup.type,
-                equipmentPricingMode: selectedGroup.equipmentPricingMode,
-              }}
+              initial={selectedGroupInitial!}
               active={selectedGroup.active}
               onArchive={() => void handleArchiveGroup()}
             />
@@ -301,29 +308,45 @@ function EditGroupForm({
     mode: "onChange",
   });
 
-  useEffect(() => {
-    form.reset(initial);
-    form.suppressNextAutoSave();
-  }, [initial, form]);
+  const { debouncedAutoSave, watch, formState, reset, suppressNextAutoSave, runMutation } = form;
+  const isDirty = formState.isDirty;
 
-  const persist = async (values: InvoiceGroupFormValues) => {
-    await updateGroup({
-      id: groupId,
-      name: values.name.trim(),
-      type: values.type,
-      equipmentPricingMode: values.equipmentPricingMode,
-    });
-  };
-
-  const watched = form.watch();
   useEffect(() => {
-    form.debouncedAutoSave(persist, { delayMs: 800, enabled: form.formState.isDirty });
-  }, [watched, form]);
+    reset(initial);
+    suppressNextAutoSave();
+  }, [groupId, initial.name, initial.type, initial.equipmentPricingMode, reset, suppressNextAutoSave]);
+
+  const persist = useCallback(
+    async (values: InvoiceGroupFormValues) => {
+      await updateGroup({
+        id: groupId,
+        name: values.name.trim(),
+        type: values.type,
+        equipmentPricingMode: values.equipmentPricingMode,
+      });
+    },
+    [groupId, updateGroup],
+  );
+
+  const onSave = useCallback(() => {
+    void form.handleSubmit((values) =>
+      runMutation(async () => {
+        await persist(values);
+        reset(values, { keepValues: true });
+        suppressNextAutoSave();
+      }),
+    )();
+  }, [form, persist, reset, runMutation, suppressNextAutoSave]);
+
+  const watched = watch();
+  useEffect(() => {
+    debouncedAutoSave(persist, { delayMs: 800, enabled: isDirty });
+  }, [watched, debouncedAutoSave, isDirty, persist]);
 
   return (
     <>
       <Form {...form}>
-        <form className="grid gap-3 md:grid-cols-4">
+        <div className="grid gap-3 md:grid-cols-4">
           <TextFormField name="name" label="Name" />
           <div className="space-y-2">
             <label className="text-sm font-medium">Type</label>
@@ -360,9 +383,9 @@ function EditGroupForm({
               Applied when this host is selected on a new invoice.
             </p>
           </div>
-          <div className="flex items-end gap-2">
+          <div className="flex flex-wrap items-end gap-2">
             {active ? (
-              <Button type="button" variant="outline" onClick={onArchive}>
+              <Button type="button" variant="outline" size="sm" onClick={onArchive}>
                 Archive
               </Button>
             ) : null}
@@ -380,16 +403,16 @@ function EditGroupForm({
               ) : null}
             </span>
           </div>
-        </form>
+        </div>
       </Form>
 
       <FormSaveBar
         tier="B"
         saveStatus={form.saveStatus}
         saveError={form.saveError}
-        isDirty={form.formState.isDirty}
-        onSave={() => void form.handleSubmit((values) => form.runMutation(() => persist(values)))()}
-        onRetry={() => void form.handleSubmit((values) => form.runMutation(() => persist(values)))()}
+        isDirty={isDirty}
+        onSave={onSave}
+        onRetry={onSave}
       />
     </>
   );
@@ -422,40 +445,46 @@ function ContactRow({
     mode: "onChange",
   });
 
+  const { debouncedAutoSave, watch, formState, reset, suppressNextAutoSave } = form;
+  const isDirty = formState.isDirty;
+
   useEffect(() => {
-    form.reset({
+    reset({
       firstName: contact.firstName,
       lastName: contact.lastName,
       email: contact.email ?? "",
       phone: contact.phone ?? "",
     });
-    form.suppressNextAutoSave();
-  }, [contact.firstName, contact.lastName, contact.email, contact.phone, form]);
+    suppressNextAutoSave();
+  }, [contact._id, contact.firstName, contact.lastName, contact.email, contact.phone, reset, suppressNextAutoSave]);
 
-  const persist = async (values: InvoiceContactFormValues) => {
-    await updateContact({
-      id: contact._id,
-      firstName: values.firstName.trim(),
-      lastName: values.lastName.trim(),
-      email: values.email.trim() || undefined,
-      phone: values.phone?.trim() || undefined,
-    });
-  };
+  const persist = useCallback(
+    async (values: InvoiceContactFormValues) => {
+      await updateContact({
+        id: contact._id,
+        firstName: values.firstName.trim(),
+        lastName: values.lastName.trim(),
+        email: values.email.trim() || undefined,
+        phone: values.phone?.trim() || undefined,
+      });
+    },
+    [contact._id, updateContact],
+  );
 
-  const watched = form.watch();
+  const watched = watch();
   useEffect(() => {
-    form.debouncedAutoSave(persist, { delayMs: 800, enabled: form.formState.isDirty });
-  }, [watched, form]);
+    debouncedAutoSave(persist, { delayMs: 800, enabled: isDirty });
+  }, [watched, debouncedAutoSave, isDirty, persist]);
 
   return (
     <div className="grid gap-2 rounded-md border p-3 md:grid-cols-[1fr_1fr_1fr_1fr_160px]">
       <Form {...form}>
-        <form className="contents md:col-span-4 md:grid md:grid-cols-4 md:gap-2">
+        <div className="contents md:col-span-4 md:grid md:grid-cols-4 md:gap-2">
           <TextFormField name="firstName" label="" placeholder="First name" />
           <TextFormField name="lastName" label="" placeholder="Last name" />
           <TextFormField name="email" label="" placeholder="Email" type="email" />
           <TextFormField name="phone" label="" placeholder="Phone" type="tel" />
-        </form>
+        </div>
       </Form>
       <div className="flex items-center gap-2">
         <span className="flex shrink-0">
