@@ -28,6 +28,17 @@ export type PasswordResetEmailProps = {
   resetUrl: string;
 };
 
+export type EmailVerificationEmailProps = {
+  recipientName?: string;
+  verificationUrl: string;
+};
+
+export type ChangeEmailConfirmationEmailProps = {
+  recipientName?: string;
+  newEmail: string;
+  confirmUrl: string;
+};
+
 export type BookingRequestReceivedEmailProps = {
   recipientName?: string;
   requestNumber: string;
