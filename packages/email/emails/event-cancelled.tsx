@@ -4,7 +4,7 @@ import {
   EmailLayout,
   EmailSignOff,
   EventDetailsSection,
-} from "./components/email-layout";
+} from "./_components/email-layout";
 import type { EventEmailProps } from "../src/types";
 import { eventCancelledPreviewProps } from "./_preview-props";
 
@@ -18,7 +18,11 @@ export function EventCancelledEmail({
   const greeting = recipientName ? `Hi ${recipientName},` : "Hi!";
 
   return (
-    <EmailLayout preview={`${eventTitle} has been cancelled`} heading="Event Cancelled">
+    <EmailLayout
+      preview={`${eventTitle} has been cancelled`}
+      heading="Event Cancelled"
+      tone="muted"
+    >
       <BodyCopy>{greeting}</BodyCopy>
       <BodyCopy>
         This event has been marked as cancelled in Arbor Live. Please disregard any previous
@@ -29,8 +33,9 @@ export function EventCancelledEmail({
         eventTitle={eventTitle}
         venueName={venueName}
         dateRangeLabel={dateRangeLabel}
+        variant="muted"
       />
-      <CtaButton href={eventUrl} label="View event in portal" />
+      <CtaButton href={eventUrl} label="View event details" variant="secondary" />
       <EmailSignOff />
     </EmailLayout>
   );

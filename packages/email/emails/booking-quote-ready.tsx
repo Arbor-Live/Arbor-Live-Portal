@@ -1,18 +1,16 @@
-import { Text } from "@react-email/components";
 import {
   BodyCopy,
+  ContactNote,
   CtaButton,
+  DataCard,
+  DetailRow,
   EmailLayout,
   EmailSignOff,
-  HighlightBox,
   MutedCopy,
-} from "./components/email-layout";
+} from "./_components/email-layout";
+import { currency } from "./_components/format";
 import type { BookingQuoteReadyEmailProps } from "../src/types";
 import { bookingQuoteReadyPreviewProps } from "./_preview-props";
-
-function currency(value: number) {
-  return `$${value.toFixed(2)}`;
-}
 
 export function BookingQuoteReadyEmail({
   recipientName,
@@ -30,35 +28,24 @@ export function BookingQuoteReadyEmail({
     <EmailLayout preview={`Your quote for ${eventName ?? requestNumber} is ready`} heading="Quote Ready">
       <BodyCopy>{greeting}</BodyCopy>
       <BodyCopy>
-        Your Arbor Live quote is ready for review. We attached a PDF copy of the invoice for easy
-        reference, and you can review or approve the quote on your request tracker.
+        Your Arbor Live quote is ready for review. A PDF copy is attached, and you can approve the
+        quote on your request tracker.
       </BodyCopy>
-      <HighlightBox title="Quote Summary">
-        <Text style={highlightLineStyle}>
-          <strong>Request:</strong> {requestNumber}
-        </Text>
-        {eventName ? (
-          <Text style={highlightLineStyle}>
-            <strong>Event:</strong> {eventName}
-          </Text>
-        ) : null}
-        <Text style={highlightLineStyle}>
-          <strong>Quote:</strong> {invoiceNumber}
-        </Text>
-        <Text style={highlightLineStyle}>
-          <strong>Total:</strong> {currency(quoteTotalUsd)}
-        </Text>
-        <Text style={highlightLineStyle}>
-          <strong>Manager:</strong> {managerName}
-          {managerEmail ? ` (${managerEmail})` : ""}
-        </Text>
-      </HighlightBox>
-      <BodyCopy>
-        Questions or concerns? Reply to this email and your message will go to {managerName}
-        {managerEmail ? ` at ${managerEmail}` : ""}.
-      </BodyCopy>
+      <DataCard title="Quote Summary">
+        <DetailRow label="Request" value={requestNumber} />
+        {eventName ? <DetailRow label="Event" value={eventName} /> : null}
+        <DetailRow label="Quote" value={invoiceNumber} />
+        <DetailRow label="Total" value={currency(quoteTotalUsd)} emphasis />
+        <DetailRow
+          label="Manager"
+          value={
+            managerEmail ? `${managerName} (${managerEmail})` : managerName
+          }
+        />
+      </DataCard>
+      <CtaButton href={trackingUrl} label="Review and approve quote" />
+      <ContactNote managerName={managerName} managerEmail={managerEmail} />
       <MutedCopy>A PDF copy of the quote is attached to this email.</MutedCopy>
-      <CtaButton href={trackingUrl} label="Review quote on request tracker" />
       <EmailSignOff />
     </EmailLayout>
   );
@@ -67,10 +54,3 @@ export function BookingQuoteReadyEmail({
 BookingQuoteReadyEmail.PreviewProps = bookingQuoteReadyPreviewProps;
 
 export default BookingQuoteReadyEmail;
-
-const highlightLineStyle = {
-  color: "#ffffff",
-  fontSize: "14px",
-  lineHeight: "24px",
-  margin: "0 0 8px",
-};

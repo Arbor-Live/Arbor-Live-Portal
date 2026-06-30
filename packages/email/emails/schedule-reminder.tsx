@@ -4,7 +4,7 @@ import {
   EmailLayout,
   EmailSignOff,
   EventDetailsSection,
-} from "./components/email-layout";
+} from "./_components/email-layout";
 import type { ScheduleReminderEmailProps } from "../src/types";
 import { scheduleReminderPreviewProps } from "./_preview-props";
 
