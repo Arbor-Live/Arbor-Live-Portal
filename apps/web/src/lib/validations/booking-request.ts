@@ -354,7 +354,7 @@ const BASE_STEPS: BookingRequestStepConfig[] = [
     id: "eventSchedule",
     headline: "When is your event?",
     subheader:
-      "Pick your event date and times. Events requested with less than seven days' notice may have limited availability and overtime rates.",
+      "Add your show date and times. Use “Add another show” for multiple performances or different days. Events requested with less than seven days' notice may have limited availability and overtime rates.",
     fields: ["showSlots", "setupTime", "flexibleSetupTime"],
   },
   {
