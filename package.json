@@ -5,6 +5,7 @@
   "scripts": {
     "dev:web": "pnpm --filter web dev",
     "dev:backend": "pnpm --filter backend dev",
+    "dev:email": "pnpm --filter @arbor/email email:dev",
     "codegen:backend": "pnpm --filter backend codegen",
     "auth:generate": "pnpm --filter backend auth:generate",
     "dev": "pnpm -r --parallel --stream dev",

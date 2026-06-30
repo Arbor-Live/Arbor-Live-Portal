@@ -4,7 +4,7 @@ import {
   EmailLayout,
   EmailSignOff,
   MutedCopy,
-} from "./components/email-layout";
+} from "./_components/email-layout";
 import type { EmailVerificationEmailProps } from "../src/types";
 
 export function EmailVerificationEmail({

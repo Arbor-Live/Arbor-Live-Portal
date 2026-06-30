@@ -1,17 +1,16 @@
-import { Text } from "@react-email/components";
 import {
   BodyCopy,
+  ContactNote,
   CtaButton,
+  DataCard,
+  DetailRow,
   EmailLayout,
   EmailSignOff,
   EventDetailsSection,
-  HighlightBox,
-} from "./components/email-layout";
+} from "./_components/email-layout";
+import { currency } from "./_components/format";
 import type { PaymentProofSubmittedEmailProps } from "../src/types";
-
-function currency(value: number) {
-  return `$${value.toFixed(2)}`;
-}
+import { paymentProofSubmittedPreviewProps } from "./_preview-props";
 
 export function PaymentProofSubmittedEmail({
   recipientName,
@@ -33,48 +32,30 @@ export function PaymentProofSubmittedEmail({
     <EmailLayout preview={`Payment proof received for ${eventTitle}`} heading="Payment Proof Received">
       <BodyCopy>{greeting}</BodyCopy>
       <BodyCopy>
-        We received your payment proof submission for {eventTitle}. Our team will verify the payment
-        against the invoice total.
+        We received your payment proof for {eventTitle}. Our team will verify the payment against the
+        invoice total.
       </BodyCopy>
       <EventDetailsSection
         eventTitle={eventTitle}
         venueName={venueName}
         dateRangeLabel={dateRangeLabel}
       />
-      <HighlightBox title="Submission Details">
-        <Text style={highlightLineStyle}>
-          <strong>Quote:</strong> {invoiceNumber}
-        </Text>
-        <Text style={highlightLineStyle}>
-          <strong>Total:</strong> {currency(quoteTotalUsd)}
-        </Text>
-        <Text style={highlightLineStyle}>
-          <strong>Payment method:</strong> {paymentMethodLabel}
-        </Text>
-        <Text style={highlightLineStyle}>
-          <strong>Reference:</strong> {paymentReference}
-        </Text>
+      <DataCard title="Submission Details">
+        <DetailRow label="Quote" value={invoiceNumber} />
+        <DetailRow label="Total" value={currency(quoteTotalUsd)} emphasis />
+        <DetailRow label="Payment method" value={paymentMethodLabel} />
+        <DetailRow label="Reference" value={paymentReference} />
         {financeContactEmail ? (
-          <Text style={highlightLineStyle}>
-            <strong>Payment submitter:</strong> {financeContactEmail}
-          </Text>
+          <DetailRow label="Submitter" value={financeContactEmail} />
         ) : null}
-      </HighlightBox>
-      <BodyCopy>
-        Questions? Reply to this email or contact {managerName}
-        {managerEmail ? ` at ${managerEmail}` : ""}.
-      </BodyCopy>
+      </DataCard>
+      <ContactNote managerName={managerName} managerEmail={managerEmail} />
       <CtaButton href={portalUrl} label="View event portal" />
       <EmailSignOff />
     </EmailLayout>
   );
 }
 
-export default PaymentProofSubmittedEmail;
+PaymentProofSubmittedEmail.PreviewProps = paymentProofSubmittedPreviewProps;
 
-const highlightLineStyle = {
-  color: "#ffffff",
-  fontSize: "14px",
-  lineHeight: "24px",
-  margin: "0 0 8px",
-};
+export default PaymentProofSubmittedEmail;

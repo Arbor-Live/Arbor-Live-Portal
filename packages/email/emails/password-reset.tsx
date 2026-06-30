@@ -4,8 +4,9 @@ import {
   EmailLayout,
   EmailSignOff,
   MutedCopy,
-} from "./components/email-layout";
+} from "./_components/email-layout";
 import type { PasswordResetEmailProps } from "../src/types";
+import { passwordResetPreviewProps } from "./_preview-props";
 
 export function PasswordResetEmail({
   recipientName,
@@ -20,11 +21,13 @@ export function PasswordResetEmail({
         We received a request to reset the password for your Arbor Live account. Click below to
         choose a new password.
       </BodyCopy>
-      <MutedCopy>If you did not request this, you can safely ignore this email.</MutedCopy>
       <CtaButton href={resetUrl} label="Reset password" />
+      <MutedCopy>If you did not request this, you can safely ignore this email.</MutedCopy>
       <EmailSignOff />
     </EmailLayout>
   );
 }
+
+PasswordResetEmail.PreviewProps = passwordResetPreviewProps;
 
 export default PasswordResetEmail;
