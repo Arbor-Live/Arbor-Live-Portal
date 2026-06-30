@@ -3,7 +3,7 @@ import { mutation, query } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import { getUserId, requireArborInternalContext, requireAuth } from "./lib/auth";
 import { normalizeEventStatus } from "./lib/eventStatus";
-import { createDraftInvoiceFromBookingRequest, mapGroupTypeToSponsor } from "./lib/bookingRequestQuote";
+import { createDraftInvoiceFromBookingRequest, mapGroupTypeToSponsor, mapSponsorTypeToGroupType, provisionBillingProfileFromRequest } from "./lib/bookingRequestQuote";
 import {
   approveInvoiceQuote,
   loadPublicQuoteView,
@@ -21,6 +21,15 @@ const eventRequestStatusValue = v.union(
   v.literal("converted"),
   v.literal("declined"),
 );
+
+const showSlotValue = v.object({
+  date: v.string(),
+  startTime: v.string(),
+  endTime: v.string(),
+  startAtMs: v.number(),
+  endAtMs: v.number(),
+  endsNextDay: v.boolean(),
+});
 
 const submitPublicArgs = {
   website: v.optional(v.string()),
@@ -43,6 +52,10 @@ const submitPublicArgs = {
   eventEndAtMs: v.optional(v.number()),
   setupAtMs: v.optional(v.number()),
   flexibleSetupTime: v.optional(v.boolean()),
+  endsNextDay: v.optional(v.boolean()),
+  additionalShowDates: v.optional(v.array(v.string())),
+  eventScheduleText: v.optional(v.string()),
+  showSlots: v.optional(v.array(showSlotValue)),
   eventName: v.string(),
   eventCategory: v.string(),
   crewOrRental: v.string(),
@@ -68,6 +81,7 @@ const publicRequestShape = {
   eventDateText: v.string(),
   eventStartTimeText: v.string(),
   eventEndTimeText: v.string(),
+  eventScheduleText: v.optional(v.string()),
   earliestSetupText: v.string(),
   eventName: v.optional(v.string()),
   eventCategory: v.string(),
@@ -262,6 +276,7 @@ export const getPublicRequestByToken = query({
       eventDateText: request.eventDateText,
       eventStartTimeText: request.eventStartTimeText,
       eventEndTimeText: request.eventEndTimeText,
+      eventScheduleText: request.eventScheduleText,
       earliestSetupText: request.earliestSetupText,
       eventName: request.eventName,
       eventCategory: request.eventCategory,
@@ -356,6 +371,13 @@ export const submitPublic = mutation({
     if (!args.eventDateText.trim() || !args.eventStartTimeText.trim() || !args.eventEndTimeText.trim()) {
       throw new Error("Event timing is required.");
     }
+    if (
+      args.eventStartAtMs !== undefined &&
+      args.eventEndAtMs !== undefined &&
+      args.eventEndAtMs <= args.eventStartAtMs
+    ) {
+      throw new Error("Event end time must be after start time.");
+    }
     if (!args.earliestSetupText.trim() && !args.flexibleSetupTime) {
       throw new Error("Earliest setup availability is required.");
     }
@@ -380,6 +402,23 @@ export const submitPublic = mutation({
       // Major events are allowed but flagged in notes for staff follow-up.
     }
 
+    const organization = trimOptional(args.organization);
+    const groupType = mapSponsorTypeToGroupType(args.sponsorType);
+    if (groupType !== "individual" && !args.invoiceGroupId && !organization) {
+      throw new Error("Organization or group name is required for non-individual requests.");
+    }
+
+    const billingProfile = await provisionBillingProfileFromRequest(ctx, {
+      organization,
+      sponsorType: args.sponsorType.trim(),
+      invoiceGroupId: args.invoiceGroupId,
+      invoiceContactId: args.invoiceContactId,
+      firstName,
+      lastName,
+      email,
+      phone,
+    });
+
     const now = Date.now();
     const requestNumber = await allocateRequestNumber(ctx);
     const publicToken = await generateUniquePublicToken(ctx);
@@ -392,10 +431,10 @@ export const submitPublic = mutation({
       lastName,
       email,
       phone,
-      organization: trimOptional(args.organization),
+      organization,
       sponsorType: args.sponsorType.trim(),
-      invoiceContactId: args.invoiceContactId,
-      invoiceGroupId: args.invoiceGroupId,
+      invoiceContactId: billingProfile.invoiceContactId,
+      invoiceGroupId: billingProfile.invoiceGroupId,
       requestContext: trimOptional(args.requestContext),
       venueName: trimOptional(args.venueName),
       venueAddress: trimOptional(args.venueAddress),
@@ -407,6 +446,10 @@ export const submitPublic = mutation({
       eventEndAtMs: args.eventEndAtMs,
       setupAtMs: args.setupAtMs,
       flexibleSetupTime: args.flexibleSetupTime,
+      endsNextDay: args.endsNextDay,
+      additionalShowDates: args.additionalShowDates,
+      eventScheduleText: trimOptional(args.eventScheduleText),
+      showSlots: args.showSlots,
       eventName,
       eventCategory: args.eventCategory.trim(),
       crewOrRental: args.crewOrRental.trim(),
@@ -511,6 +554,7 @@ export const get = query({
       eventDateText: v.string(),
       eventStartTimeText: v.string(),
       eventEndTimeText: v.string(),
+      eventScheduleText: v.optional(v.string()),
       earliestSetupText: v.string(),
       eventStartAtMs: v.optional(v.number()),
       eventEndAtMs: v.optional(v.number()),
@@ -568,6 +612,7 @@ export const getByLinkedInvoiceId = query({
       eventDateText: v.string(),
       eventStartTimeText: v.string(),
       eventEndTimeText: v.string(),
+      eventScheduleText: v.optional(v.string()),
       earliestSetupText: v.string(),
       eventName: v.optional(v.string()),
       flexibleSetupTime: v.optional(v.boolean()),
@@ -608,6 +653,7 @@ export const getByLinkedInvoiceId = query({
       eventDateText: row.eventDateText,
       eventStartTimeText: row.eventStartTimeText,
       eventEndTimeText: row.eventEndTimeText,
+      eventScheduleText: row.eventScheduleText,
       earliestSetupText: row.earliestSetupText,
       eventName: row.eventName,
       flexibleSetupTime: row.flexibleSetupTime,
@@ -681,6 +727,15 @@ export const convertToEvent = mutation({
 
     const startAt = request.eventStartAtMs ?? defaultPlaceholderTimes().startAt;
     const endAt = request.eventEndAtMs ?? defaultPlaceholderTimes().endAt;
+    const uniqueShowDates = new Set(
+      (request.showSlots ?? []).map((slot) => slot.date).filter(Boolean),
+    );
+    const spansMultipleDays =
+      Boolean(request.showSlots && request.showSlots.length > 1) ||
+      uniqueShowDates.size > 1 ||
+      Boolean(request.additionalShowDates?.length) ||
+      Boolean(request.endsNextDay) ||
+      new Date(startAt).toDateString() !== new Date(endAt).toDateString();
     const teamsInterested = mapServicesToTeams(request.crewOrRental, request.servicesNeeded);
     const eventType = inferEventType(request.crewOrRental, request.servicesNeeded);
     const title =
@@ -715,7 +770,7 @@ export const convertToEvent = mutation({
       startAt,
       endAt,
       timezone: EVENT_TIMEZONE,
-      spansMultipleDays: false,
+      spansMultipleDays,
       setupOnly: false,
       strikeOnly: false,
       requiresShowWindow: true,

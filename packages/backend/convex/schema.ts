@@ -755,6 +755,21 @@ export default defineSchema({
     eventEndAtMs: v.optional(v.number()),
     setupAtMs: v.optional(v.number()),
     flexibleSetupTime: v.optional(v.boolean()),
+    endsNextDay: v.optional(v.boolean()),
+    additionalShowDates: v.optional(v.array(v.string())),
+    eventScheduleText: v.optional(v.string()),
+    showSlots: v.optional(
+      v.array(
+        v.object({
+          date: v.string(),
+          startTime: v.string(),
+          endTime: v.string(),
+          startAtMs: v.number(),
+          endAtMs: v.number(),
+          endsNextDay: v.boolean(),
+        }),
+      ),
+    ),
     eventName: v.optional(v.string()),
     eventCategory: v.string(),
     crewOrRental: v.optional(v.string()),
