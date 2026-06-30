@@ -2,6 +2,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { syncLinkedEventStatusFromInvoice } from "./eventStatus";
 import { listEventsByInvoiceId } from "./invoiceEvents";
+import { loadPaymentProofState } from "./paymentProof";
 
 function resolveInvoiceTermsIds(invoice: Doc<"invoices">): Id<"invoiceTerms">[] {
   if (invoice.termsIds && invoice.termsIds.length > 0) return invoice.termsIds;
@@ -56,6 +57,7 @@ export async function loadPublicQuoteView(ctx: QueryCtx, invoice: Doc<"invoices"
     : globalTermsMarkdown;
   const linkedEvents = await listEventsByInvoiceId(ctx, invoice._id);
   const linkedEvent = linkedEvents[0] ?? null;
+  const paymentProof = await loadPaymentProofState(ctx, invoice, linkedEvent);
   const eventIds = linkedEvents.map((event) => event._id);
   const eventAssignments = linkedEvent
     ? (
@@ -184,6 +186,7 @@ export async function loadPublicQuoteView(ctx: QueryCtx, invoice: Doc<"invoices"
           };
         })()
       : null,
+    paymentProof,
   };
 }
 

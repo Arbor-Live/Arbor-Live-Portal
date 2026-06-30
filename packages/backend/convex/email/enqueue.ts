@@ -12,6 +12,8 @@ const emailTemplateValue = v.union(
   v.literal("password_reset"),
   v.literal("booking_request_received"),
   v.literal("booking_quote_ready"),
+  v.literal("payment_proof_reminder"),
+  v.literal("payment_proof_submitted"),
 );
 
 const emailStatusValue = v.union(

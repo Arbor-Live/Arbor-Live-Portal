@@ -12,7 +12,9 @@ export type EmailTemplate =
   | "user_invite"
   | "password_reset"
   | "booking_request_received"
-  | "booking_quote_ready";
+  | "booking_quote_ready"
+  | "payment_proof_reminder"
+  | "payment_proof_submitted";
 
 export function eventDashboardUrl(eventId: string) {
   return `${SITE_URL}/dashboard/events/${eventId}`;
@@ -64,6 +66,10 @@ export function requestTrackingUrl(token: string) {
   return `${SITE_URL}/public/request/track/${encodeURIComponent(token)}`;
 }
 
+export function publicQuoteUrl(token: string) {
+  return `${SITE_URL}/public/event/${encodeURIComponent(token)}`;
+}
+
 export function formatInviteExpiry(expiresAt: number, timezone: string = EVENT_TIMEZONE) {
   return new Date(expiresAt).toLocaleString("en-US", {
     timeZone: timezone,
@@ -92,6 +98,10 @@ export function subjectForTemplate(template: EmailTemplate, context: string) {
       return `Request received: ${context}`;
     case "booking_quote_ready":
       return `Your quote is ready: ${context}`;
+    case "payment_proof_reminder":
+      return `Payment proof needed: ${context}`;
+    case "payment_proof_submitted":
+      return `Payment proof received: ${context}`;
   }
 }
 

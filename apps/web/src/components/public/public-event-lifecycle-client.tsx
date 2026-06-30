@@ -12,6 +12,8 @@ import { PublicEventSchedule } from "@/components/public/public-event-schedule";
 import { PublicEventCrew } from "@/components/public/public-event-crew";
 import { PublicEventContacts } from "@/components/public/public-event-contacts";
 import { PublicQuoteFinancials } from "@/components/public/public-quote-financials";
+import { PublicPaymentProofSection } from "@/components/public/public-payment-proof-section";
+import { PublicInvoicePdfDownload } from "@/components/public/public-invoice-pdf-download";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import {
   publicQuoteApprovalSchema,
@@ -27,6 +29,7 @@ export function PublicEventLifecycleClient({ token }: { token: string }) {
   const data = useQuery(api.invoices.getPublicQuoteByToken, { token });
   const approve = useMutation(api.invoices.approveByToken);
   const requestChanges = useMutation(api.invoices.requestChangesByToken);
+  const submitPaymentProof = useMutation(api.paymentProof.submitByQuoteToken);
 
   const approvalForm = useConvexForm<PublicQuoteApprovalFormValues>({
     schema: publicQuoteApprovalSchema,
@@ -87,6 +90,11 @@ export function PublicEventLifecycleClient({ token }: { token: string }) {
             <p className="text-base font-semibold">Total: ${data.invoice.totalUsd.toFixed(2)}</p>
             <p className="text-muted-foreground">Status: {data.invoice.clientApprovalStatus}</p>
             {data.invoice.clientApprovalNote ? <p>Change request note: {data.invoice.clientApprovalNote}</p> : null}
+            <PublicInvoicePdfDownload
+              token={token}
+              portal="quote"
+              invoiceNumber={data.invoice.invoiceNumber}
+            />
           </CardContent>
         </Card>
 
@@ -200,6 +208,14 @@ export function PublicEventLifecycleClient({ token }: { token: string }) {
             </CardContent>
           </Card>
         </div>
+
+        {data.paymentProof ? (
+          <PublicPaymentProofSection
+            token={token}
+            paymentProof={data.paymentProof}
+            submitMutation={submitPaymentProof}
+          />
+        ) : null}
 
         <FormSaveBar
           tier="C"

@@ -11,6 +11,8 @@ import { PublicEventSchedule } from "@/components/public/public-event-schedule";
 import { PublicEventCrew } from "@/components/public/public-event-crew";
 import { PublicEventContacts } from "@/components/public/public-event-contacts";
 import { PublicQuoteFinancials } from "@/components/public/public-quote-financials";
+import { PublicPaymentProofSection } from "@/components/public/public-payment-proof-section";
+import { PublicInvoicePdfDownload } from "@/components/public/public-invoice-pdf-download";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import {
   publicQuoteApprovalSchema,
@@ -76,6 +78,7 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
   const quoteData = useQuery(api.eventRequests.getPublicRequestQuoteByToken, { token });
   const approve = useMutation(api.eventRequests.approveQuoteByRequestToken);
   const requestChanges = useMutation(api.eventRequests.requestQuoteChangesByRequestToken);
+  const submitPaymentProof = useMutation(api.paymentProof.submitByRequestToken);
 
   const approvalForm = useConvexForm<PublicQuoteApprovalFormValues>({
     schema: publicQuoteApprovalSchema,
@@ -217,6 +220,11 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
               {quoteData.invoice.clientApprovalNote ? (
                 <p>Change request note: {quoteData.invoice.clientApprovalNote}</p>
               ) : null}
+              <PublicInvoicePdfDownload
+                token={token}
+                portal="request"
+                invoiceNumber={quoteData.invoice.invoiceNumber}
+              />
             </CardContent>
           </Card>
 
@@ -326,6 +334,14 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
               </CardContent>
             </Card>
           </div>
+
+          {quoteData.paymentProof ? (
+            <PublicPaymentProofSection
+              token={token}
+              paymentProof={quoteData.paymentProof}
+              submitMutation={submitPaymentProof}
+            />
+          ) : null}
 
           <FormSaveBar
             tier="C"
