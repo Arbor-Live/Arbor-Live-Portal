@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
-import { FormSaveBar } from "@/components/forms";
 import { Form } from "@/components/ui/form";
 import { TextFormField } from "@/components/forms/text-form-field";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -52,7 +51,7 @@ export default function ResetPasswordPage() {
   });
 
   return (
-    <div className="mx-auto flex min-h-[80vh] w-full max-w-md items-center px-6 pb-20">
+    <div className="mx-auto flex min-h-[80vh] w-full max-w-md items-center px-6">
       <Card className="w-full">
         <CardHeader>
           <div className="mb-2">
@@ -91,6 +90,12 @@ export default function ResetPasswordPage() {
               >
                 {form.saveStatus === "saving" ? "Updating..." : "Update password"}
               </Button>
+
+              {form.saveError ? (
+                <Alert variant="destructive">
+                  <AlertDescription>{form.saveError}</AlertDescription>
+                </Alert>
+              ) : null}
             </form>
           </Form>
 
@@ -99,17 +104,6 @@ export default function ResetPasswordPage() {
           </Button>
         </CardContent>
       </Card>
-
-      <FormSaveBar
-        tier="C"
-        saveStatus={form.saveStatus}
-        saveError={form.saveError}
-        isDirty={form.formState.isDirty}
-        saveLabel="Update password"
-        onSave={() => void form.handleSubmit(onSubmit)()}
-        onDiscard={() => form.reset()}
-        onRetry={() => void form.handleSubmit(onSubmit)()}
-      />
     </div>
   );
 }

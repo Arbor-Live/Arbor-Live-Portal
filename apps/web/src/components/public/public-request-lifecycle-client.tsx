@@ -2,25 +2,21 @@
 
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
-import { FormSaveBar } from "@/components/forms";
-import { Form } from "@/components/ui/form";
-import { TextareaFormField } from "@/components/forms/textarea-form-field";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PublicEventHeader } from "@/components/public/public-event-header";
 import { PublicEventSchedule } from "@/components/public/public-event-schedule";
 import { PublicEventCrew } from "@/components/public/public-event-crew";
 import { PublicEventContacts } from "@/components/public/public-event-contacts";
 import { PublicQuoteFinancials } from "@/components/public/public-quote-financials";
-import { useConvexForm } from "@/hooks/use-convex-form";
-import {
-  publicQuoteApprovalSchema,
-  publicQuoteChangeRequestSchema,
-  type PublicQuoteApprovalFormValues,
-  type PublicQuoteChangeRequestFormValues,
+import { PublicPaymentProofSection } from "@/components/public/public-payment-proof-section";
+import { PublicPaymentContactsSection } from "@/components/public/public-payment-contacts-section";
+import { PublicQuoteApprovalSection } from "@/components/public/public-quote-approval-section";
+import { PublicQuoteChangeRequestSection } from "@/components/public/public-quote-change-request-section";
+import { PublicInvoicePdfDownload } from "@/components/public/public-invoice-pdf-download";
+import type {
+  PublicPaymentContactsFormValues,
+  PublicQuoteApprovalFormValues,
 } from "@/lib/validations/crew-availability";
-import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
-import { MarkdownContent } from "@/components/markdown-content";
 
 const STATUS_LABELS: Record<string, string> = {
   submitted: "Submitted",
@@ -71,33 +67,24 @@ function buildLifecycleSteps(request: {
   ];
 }
 
+function quoteStatusLabel(status: "pending" | "approved" | "changes_requested") {
+  switch (status) {
+    case "approved":
+      return "Approved";
+    case "changes_requested":
+      return "Changes requested";
+    default:
+      return "Awaiting your approval";
+  }
+}
+
 export function PublicRequestLifecycleClient({ token }: { token: string }) {
   const request = useQuery(api.eventRequests.getPublicRequestByToken, { token });
   const quoteData = useQuery(api.eventRequests.getPublicRequestQuoteByToken, { token });
   const approve = useMutation(api.eventRequests.approveQuoteByRequestToken);
   const requestChanges = useMutation(api.eventRequests.requestQuoteChangesByRequestToken);
-
-  const approvalForm = useConvexForm<PublicQuoteApprovalFormValues>({
-    schema: publicQuoteApprovalSchema,
-    defaultValues: { termsAccepted: false, note: "" },
-    mode: "onTouched",
-  });
-
-  const changeForm = useConvexForm<PublicQuoteChangeRequestFormValues>({
-    schema: publicQuoteChangeRequestSchema,
-    defaultValues: { note: "" },
-    mode: "onTouched",
-  });
-
-  const onApprove = approvalForm.submitMutation(async () => {
-    await approve({ token, acceptTerms: true });
-    changeForm.reset({ note: "" });
-  });
-
-  const onRequestChanges = changeForm.submitMutation(async (values) => {
-    await requestChanges({ token, note: values.note.trim() });
-    changeForm.reset({ note: "" });
-  });
+  const updatePaymentContacts = useMutation(api.eventRequests.updatePaymentContactsByRequestToken);
+  const submitPaymentProof = useMutation(api.paymentProof.submitByRequestToken);
 
   if (request === undefined) {
     return <p className="text-sm text-muted-foreground">Loading your request...</p>;
@@ -110,14 +97,38 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
   const isDeclined = request.status === "declined";
   const quoteLocked = quoteData ? quoteData.invoice.clientApprovalStatus !== "pending" : false;
   const linkedEvent = quoteData?.event ?? null;
-  const acceptTerms = approvalForm.watch("termsAccepted") === true;
-  const combinedStatus =
-    approvalForm.saveStatus !== "idle" ? approvalForm.saveStatus : changeForm.saveStatus;
-  const combinedError = approvalForm.saveError ?? changeForm.saveError;
-  const isDirty = approvalForm.formState.isDirty || changeForm.formState.isDirty;
+  const showPaymentContacts =
+    quoteData?.invoice.clientApprovalStatus === "approved" && !quoteData.paymentProof?.paymentReceived;
+
+  const handleApprove = async (values: PublicQuoteApprovalFormValues) => {
+    await approve({
+      token,
+      signedName: values.signedName.trim(),
+      clientIsPaymentSubmitter: values.clientIsPaymentSubmitter,
+      paymentSubmitterName: values.clientIsPaymentSubmitter
+        ? undefined
+        : values.paymentSubmitterName?.trim(),
+      paymentSubmitterEmail: values.clientIsPaymentSubmitter
+        ? undefined
+        : values.paymentSubmitterEmail?.trim() || undefined,
+    });
+  };
+
+  const handleSavePaymentContacts = async (values: PublicPaymentContactsFormValues) => {
+    await updatePaymentContacts({
+      token,
+      clientIsPaymentSubmitter: values.clientIsPaymentSubmitter,
+      paymentSubmitterName: values.clientIsPaymentSubmitter
+        ? undefined
+        : values.paymentSubmitterName?.trim(),
+      paymentSubmitterEmail: values.clientIsPaymentSubmitter
+        ? undefined
+        : values.paymentSubmitterEmail?.trim() || undefined,
+    });
+  };
 
   return (
-    <div className="space-y-4 pb-24">
+    <div className="space-y-4">
       <Card>
         <CardHeader>
           <CardTitle>Request {request.requestNumber}</CardTitle>
@@ -217,10 +228,14 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
               {quoteData.invoice.clientGroupName ? <p>Group: {quoteData.invoice.clientGroupName}</p> : null}
               {quoteData.invoice.clientContactName ? <p>Contact: {quoteData.invoice.clientContactName}</p> : null}
               <p className="text-base font-semibold">Total: ${quoteData.invoice.totalUsd.toFixed(2)}</p>
-              <p className="text-muted-foreground">Status: {quoteData.invoice.clientApprovalStatus}</p>
-              {quoteData.invoice.clientApprovalNote ? (
-                <p>Change request note: {quoteData.invoice.clientApprovalNote}</p>
-              ) : null}
+              <p className="text-muted-foreground">
+                {quoteStatusLabel(quoteData.invoice.clientApprovalStatus)}
+              </p>
+              <PublicInvoicePdfDownload
+                token={token}
+                portal="request"
+                invoiceNumber={quoteData.invoice.invoiceNumber}
+              />
             </CardContent>
           </Card>
 
@@ -267,82 +282,35 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
             </Card>
           ) : null}
 
-          <div className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Terms & Conditions</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm">
-                <MarkdownContent>
-                  {quoteData.termsAndConditionsMarkdown || "_No terms configured._"}
-                </MarkdownContent>
-                <Form {...approvalForm}>
-                  <form onSubmit={approvalForm.handleSubmit(onApprove)} className="space-y-3">
-                    <label className="flex items-center gap-2">
-                      <input
-                        id="accept-terms"
-                        type="checkbox"
-                        checked={acceptTerms}
-                        onChange={(e) =>
-                          approvalForm.setValue("termsAccepted", e.target.checked, {
-                            shouldDirty: true,
-                          })
-                        }
-                        disabled={quoteLocked}
-                      />
-                      <Label htmlFor="accept-terms">
-                        I accept the terms and conditions (version {quoteData.termsVersion}).
-                      </Label>
-                    </label>
-                    <Button
-                      type="submit"
-                      disabled={quoteLocked || !acceptTerms || approvalForm.saveStatus === "saving"}
-                    >
-                      Approve Quote
-                    </Button>
-                  </form>
-                </Form>
-              </CardContent>
-            </Card>
+          <PublicQuoteApprovalSection
+            invoice={quoteData.invoice}
+            termsAndConditionsMarkdown={quoteData.termsAndConditionsMarkdown}
+            termsVersion={quoteData.termsVersion}
+            onApprove={handleApprove}
+          />
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Request Changes</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <Form {...changeForm}>
-                  <form onSubmit={changeForm.handleSubmit(onRequestChanges)} className="space-y-3">
-                    <TextareaFormField
-                      name="note"
-                      label=""
-                      placeholder="Tell us what changes are needed"
-                      disabled={quoteLocked}
-                    />
-                    <Button
-                      type="submit"
-                      variant="outline"
-                      disabled={quoteLocked || changeForm.saveStatus === "saving"}
-                    >
-                      Request Changes
-                    </Button>
-                  </form>
-                </Form>
-              </CardContent>
-            </Card>
-          </div>
-
-          <FormSaveBar
-            tier="C"
-            saveStatus={combinedStatus}
-            saveError={combinedError}
-            isDirty={isDirty}
-            isSubmitting={approvalForm.saveStatus === "saving" || changeForm.saveStatus === "saving"}
-            saveLabel="Submit"
-            onDiscard={() => {
-              approvalForm.reset({ termsAccepted: false, note: "" });
-              changeForm.reset({ note: "" });
+          <PublicQuoteChangeRequestSection
+            disabled={quoteLocked}
+            onRequestChanges={async (note) => {
+              await requestChanges({ token, note });
             }}
           />
+
+          {showPaymentContacts ? (
+            <PublicPaymentContactsSection
+              key={quoteData.invoice._id}
+              contacts={quoteData.invoice}
+              onSave={handleSavePaymentContacts}
+            />
+          ) : null}
+
+          {quoteData.paymentProof ? (
+            <PublicPaymentProofSection
+              token={token}
+              paymentProof={quoteData.paymentProof}
+              submitMutation={submitPaymentProof}
+            />
+          ) : null}
         </>
       ) : request.quote && !request.quote.readyForClientReview ? (
         <Card>

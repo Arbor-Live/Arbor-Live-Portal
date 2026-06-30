@@ -9,9 +9,14 @@ import {
   approveInvoiceQuote,
   loadPublicQuoteView,
   requestInvoiceQuoteChanges,
+  updateInvoicePaymentContacts,
 } from "./lib/publicQuoteView";
 import { allocateInvoiceNumber } from "./lib/publicReferenceIds";
 import { scheduleBookingQuoteReadyEmail } from "./email/bookingRequestEmails";
+import {
+  markPayingPartyNotified,
+  schedulePayingPartyAddedEmail,
+} from "./email/payingPartyEmails";
 
 const equipmentPricingModeValue = v.union(v.literal("subsidized"), v.literal("nonSubsidized"));
 const crewRateModeValue = v.union(
@@ -586,7 +591,13 @@ export const regeneratePublicApprovalToken = mutation({
 });
 
 export const approveByToken = mutation({
-  args: { token: v.string(), acceptTerms: v.boolean() },
+  args: {
+    token: v.string(),
+    signedName: v.string(),
+    clientIsPaymentSubmitter: v.boolean(),
+    paymentSubmitterName: v.optional(v.string()),
+    paymentSubmitterEmail: v.optional(v.string()),
+  },
   handler: async (ctx, args) => {
     const invoice = await ctx.db
       .query("invoices")
@@ -599,7 +610,7 @@ export const approveByToken = mutation({
     if (invoice.publicApprovalTokenExpiresAt && invoice.publicApprovalTokenExpiresAt < Date.now()) {
       throw new Error("Quote not found.");
     }
-    await approveInvoiceQuote(ctx, invoice, args.acceptTerms);
+    await approveInvoiceQuote(ctx, invoice, args);
     return { ok: true };
   },
 });
@@ -623,6 +634,83 @@ export const requestChangesByToken = mutation({
   },
 });
 
+export const updatePaymentContactsByToken = mutation({
+  args: {
+    token: v.string(),
+    clientIsPaymentSubmitter: v.optional(v.boolean()),
+    paymentSubmitterName: v.optional(v.string()),
+    paymentSubmitterEmail: v.optional(v.string()),
+  },
+  returns: v.object({ ok: v.literal(true) }),
+  handler: async (ctx, args) => {
+    const invoice = await ctx.db
+      .query("invoices")
+      .withIndex("by_publicApprovalToken", (q) => q.eq("publicApprovalToken", args.token))
+      .unique();
+    if (!invoice) throw new Error("Quote not found.");
+    if (invoice.sourceEventRequestId) {
+      throw new Error("Please review this quote from your booking request link.");
+    }
+    if (invoice.publicApprovalTokenExpiresAt && invoice.publicApprovalTokenExpiresAt < Date.now()) {
+      throw new Error("Quote not found.");
+    }
+    const { token: _token, ...contactArgs } = args;
+    await updateInvoicePaymentContacts(ctx, invoice, contactArgs);
+    return { ok: true as const };
+  },
+});
+
+export const updatePaymentSubmitter = mutation({
+  args: {
+    id: v.id("invoices"),
+    clientIsPaymentSubmitter: v.boolean(),
+    paymentSubmitterName: v.optional(v.string()),
+    paymentSubmitterEmail: v.optional(v.string()),
+  },
+  returns: v.object({ ok: v.literal(true) }),
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    const invoice = await ctx.db.get(args.id);
+    if (!invoice) throw new Error("Invoice not found.");
+    await updateInvoicePaymentContacts(ctx, invoice, {
+      clientIsPaymentSubmitter: args.clientIsPaymentSubmitter,
+      paymentSubmitterName: args.paymentSubmitterName,
+      paymentSubmitterEmail: args.paymentSubmitterEmail,
+    });
+    return { ok: true as const };
+  },
+});
+
+export const resendPayingPartyNotification = mutation({
+  args: { id: v.id("invoices") },
+  returns: v.object({ ok: v.literal(true) }),
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    const invoice = await ctx.db.get(args.id);
+    if (!invoice) throw new Error("Invoice not found.");
+    if ((invoice.clientApprovalStatus ?? "pending") !== "approved") {
+      throw new Error("Quote must be approved before notifying the paying party.");
+    }
+    if (invoice.clientIsPaymentSubmitter) {
+      throw new Error("The client is listed as the payment submitter.");
+    }
+    const email = invoice.paymentSubmitterEmail?.trim().toLowerCase();
+    if (!email) throw new Error("No paying party email is set.");
+
+    await schedulePayingPartyAddedEmail(ctx, {
+      invoice,
+      payingPartyEmail: email,
+      payingPartyName: invoice.paymentSubmitterName,
+      approvedByName: invoice.clientApprovalSignedName ?? invoice.clientContactName ?? "The client",
+      idempotencySuffix: `resend:${Date.now()}`,
+    });
+    await markPayingPartyNotified(ctx, invoice._id, email);
+    return { ok: true as const };
+  },
+});
+
 export const resetApprovalToPending = mutation({
   args: { id: v.id("invoices") },
   handler: async (ctx, args) => {
@@ -635,6 +723,13 @@ export const resetApprovalToPending = mutation({
       approvedAt: undefined,
       changesRequestedAt: undefined,
       clientApprovalNote: undefined,
+      clientApprovalSignedName: undefined,
+      paymentFinanceContactEmail: undefined,
+      clientIsPaymentSubmitter: undefined,
+      paymentSubmitterName: undefined,
+      paymentSubmitterEmail: undefined,
+      payingPartyNotifiedEmail: undefined,
+      payingPartyNotifiedAt: undefined,
       termsVersionAccepted: undefined,
       termsAcceptedAt: undefined,
       updatedAt: Date.now(),

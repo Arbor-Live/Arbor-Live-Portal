@@ -5,10 +5,10 @@ import { useMutation } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
 import { getConvexErrorMessage } from "@/lib/convex-error";
-import { FormSaveBar } from "@/components/forms";
 import {
   type CrewAvailabilityResponseStatus,
   formatCrewResponseLabel,
@@ -95,7 +95,6 @@ export function CrewAvailabilityResponseForm({
     buildInitialPartialWindows(existingResponse, scheduleBlocks),
   );
   const [saving, setSaving] = useState(false);
-  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const blockOptions = useMemo(
@@ -109,7 +108,6 @@ export function CrewAvailabilityResponseForm({
 
   async function handleSubmit() {
     setSaving(true);
-    setSaveStatus("saving");
     setSaveError(null);
     try {
       const partialPayload =
@@ -136,9 +134,7 @@ export function CrewAvailabilityResponseForm({
         notes: notes.trim() || undefined,
       });
       onSaved?.(`Saved ${formatCrewResponseLabel(responseStatus)} response.`);
-      setSaveStatus("saved");
     } catch (submitError) {
-      setSaveStatus("error");
       setSaveError(getConvexErrorMessage(submitError, "Failed to save response."));
     } finally {
       setSaving(false);
@@ -275,15 +271,11 @@ export function CrewAvailabilityResponseForm({
         {saving ? "Saving..." : existingResponse ? "Update response" : "Submit response"}
       </Button>
 
-      <FormSaveBar
-        tier="C"
-        saveStatus={saveStatus}
-        saveError={saveError}
-        isDirty
-        saveLabel={existingResponse ? "Update response" : "Submit response"}
-        onSave={() => void handleSubmit()}
-        onRetry={() => void handleSubmit()}
-      />
+      {saveError ? (
+        <Alert variant="destructive">
+          <AlertDescription>{saveError}</AlertDescription>
+        </Alert>
+      ) : null}
     </div>
   );
 }

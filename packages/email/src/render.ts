@@ -3,6 +3,9 @@ import { BookingQuoteReadyEmail } from "../emails/booking-quote-ready";
 import { BookingRequestReceivedEmail } from "../emails/booking-request-received";
 import { EventCancelledEmail } from "../emails/event-cancelled";
 import { PasswordResetEmail } from "../emails/password-reset";
+import { PayingPartyAddedEmail } from "../emails/paying-party-added";
+import { PaymentProofReminderEmail } from "../emails/payment-proof-reminder";
+import { PaymentProofSubmittedEmail } from "../emails/payment-proof-submitted";
 import { SchedulePublishedEmail } from "../emails/schedule-published";
 import { ScheduleReminderEmail } from "../emails/schedule-reminder";
 import { UserInviteEmail } from "../emails/user-invite";
@@ -11,6 +14,9 @@ import type {
   BookingRequestReceivedEmailProps,
   EventEmailProps,
   PasswordResetEmailProps,
+  PaymentProofReminderEmailProps,
+  PaymentProofSubmittedEmailProps,
+  PayingPartyAddedEmailProps,
   SchedulePublishedEmailProps,
   ScheduleReminderEmailProps,
   UserInviteEmailProps,
@@ -42,4 +48,16 @@ export async function renderBookingRequestReceivedEmail(props: BookingRequestRec
 
 export async function renderBookingQuoteReadyEmail(props: BookingQuoteReadyEmailProps) {
   return render(BookingQuoteReadyEmail(props));
+}
+
+export async function renderPaymentProofReminderEmail(props: PaymentProofReminderEmailProps) {
+  return render(PaymentProofReminderEmail(props));
+}
+
+export async function renderPaymentProofSubmittedEmail(props: PaymentProofSubmittedEmailProps) {
+  return render(PaymentProofSubmittedEmail(props));
+}
+
+export async function renderPayingPartyAddedEmail(props: PayingPartyAddedEmailProps) {
+  return render(PayingPartyAddedEmail(props));
 }

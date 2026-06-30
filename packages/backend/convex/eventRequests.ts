@@ -8,6 +8,7 @@ import {
   approveInvoiceQuote,
   loadPublicQuoteView,
   requestInvoiceQuoteChanges,
+  updateInvoicePaymentContacts,
 } from "./lib/publicQuoteView";
 import { scheduleBookingRequestReceivedEmail } from "./email/bookingRequestEmails";
 import { allocateRequestNumber } from "./lib/publicReferenceIds";
@@ -310,7 +311,13 @@ export const getPublicRequestQuoteByToken = query({
 });
 
 export const approveQuoteByRequestToken = mutation({
-  args: { token: v.string(), acceptTerms: v.boolean() },
+  args: {
+    token: v.string(),
+    signedName: v.string(),
+    clientIsPaymentSubmitter: v.boolean(),
+    paymentSubmitterName: v.optional(v.string()),
+    paymentSubmitterEmail: v.optional(v.string()),
+  },
   returns: v.object({ ok: v.literal(true) }),
   handler: async (ctx, args) => {
     const request = await ctx.db
@@ -323,7 +330,7 @@ export const approveQuoteByRequestToken = mutation({
     if (!invoice || invoice.status === "void" || !invoice.clientReviewReadyAt) {
       throw new Error("Quote is not ready for review yet.");
     }
-    await approveInvoiceQuote(ctx, invoice, args.acceptTerms);
+    await approveInvoiceQuote(ctx, invoice, args);
     return { ok: true as const };
   },
 });
@@ -343,6 +350,31 @@ export const requestQuoteChangesByRequestToken = mutation({
       throw new Error("Quote is not ready for review yet.");
     }
     await requestInvoiceQuoteChanges(ctx, invoice, args.note);
+    return { ok: true as const };
+  },
+});
+
+export const updatePaymentContactsByRequestToken = mutation({
+  args: {
+    token: v.string(),
+    clientIsPaymentSubmitter: v.optional(v.boolean()),
+    paymentSubmitterName: v.optional(v.string()),
+    paymentSubmitterEmail: v.optional(v.string()),
+  },
+  returns: v.object({ ok: v.literal(true) }),
+  handler: async (ctx, args) => {
+    const request = await ctx.db
+      .query("eventRequests")
+      .withIndex("by_publicToken", (q) => q.eq("publicToken", args.token))
+      .unique();
+    if (!request?.linkedInvoiceId) throw new Error("Quote not found.");
+
+    const invoice = await ctx.db.get(request.linkedInvoiceId);
+    if (!invoice || invoice.status === "void" || !invoice.clientReviewReadyAt) {
+      throw new Error("Quote is not ready for review yet.");
+    }
+    const { token: _token, ...contactArgs } = args;
+    await updateInvoicePaymentContacts(ctx, invoice, contactArgs);
     return { ok: true as const };
   },
 });

@@ -46,3 +46,45 @@ export type BookingQuoteReadyEmailProps = {
   managerName: string;
   managerEmail?: string;
 };
+
+export type PaymentProofReminderEmailProps = {
+  recipientName?: string;
+  eventTitle: string;
+  venueName?: string;
+  dateRangeLabel: string;
+  invoiceNumber: string;
+  quoteTotalUsd: number;
+  portalUrl: string;
+  reminderKind: "first" | "weekly";
+  lateFeeUsd: number;
+  isOverdue: boolean;
+  weeksUntilLateFee: number;
+};
+
+export type PaymentProofSubmittedEmailProps = {
+  recipientName?: string;
+  eventTitle: string;
+  venueName?: string;
+  dateRangeLabel: string;
+  invoiceNumber: string;
+  quoteTotalUsd: number;
+  paymentMethodLabel: string;
+  paymentReference: string;
+  financeContactEmail?: string;
+  portalUrl: string;
+  managerName: string;
+  managerEmail?: string;
+};
+
+export type PayingPartyAddedEmailProps = {
+  recipientName?: string;
+  approvedByName: string;
+  clientGroupName?: string;
+  eventTitle: string;
+  venueName?: string;
+  dateRangeLabel: string;
+  invoiceNumber: string;
+  quoteTotalUsd: number;
+  managerName: string;
+  managerEmail?: string;
+};

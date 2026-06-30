@@ -34,6 +34,9 @@ export default function FinancialHubPage() {
             <Button asChild variant="outline">
               <Link href="/dashboard/financial-hub/invoices/new">Create Invoice</Link>
             </Button>
+            <Button asChild variant="outline">
+              <Link href="/dashboard/financial-hub/payments">Payments</Link>
+            </Button>
           </CardContent>
         </Card>
         <div className="grid gap-4 md:grid-cols-3">

@@ -140,6 +140,17 @@ const eventPullListSourceValue = v.union(
 
 const eventPullListLineKindValue = v.union(v.literal("type"), v.literal("package"));
 
+const paymentProofMethodValue = v.union(
+  v.literal("assu_epay"),
+  v.literal("ijournal"),
+  v.literal("granted_transfer"),
+);
+
+const paymentProofSubmissionStatusValue = v.union(
+  v.literal("active"),
+  v.literal("invalidated"),
+);
+
 export default defineSchema({
   inventoryCategories: defineTable({
     key: v.string(),
@@ -379,8 +390,19 @@ export default defineSchema({
     approvedAt: v.optional(v.number()),
     changesRequestedAt: v.optional(v.number()),
     clientApprovalNote: v.optional(v.string()),
+    clientApprovalSignedName: v.optional(v.string()),
+    paymentFinanceContactEmail: v.optional(v.string()),
+    clientIsPaymentSubmitter: v.optional(v.boolean()),
+    paymentSubmitterName: v.optional(v.string()),
+    paymentSubmitterEmail: v.optional(v.string()),
+    payingPartyNotifiedEmail: v.optional(v.string()),
+    payingPartyNotifiedAt: v.optional(v.number()),
     termsVersionAccepted: v.optional(v.string()),
     termsAcceptedAt: v.optional(v.number()),
+
+    paymentReceivedAt: v.optional(v.number()),
+    paymentReceivedByUserId: v.optional(v.string()),
+    paymentReceiptStorageFileId: v.optional(v.id("_storage")),
 
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -708,6 +730,9 @@ export default defineSchema({
       v.literal("password_reset"),
       v.literal("booking_request_received"),
       v.literal("booking_quote_ready"),
+      v.literal("payment_proof_reminder"),
+      v.literal("payment_proof_submitted"),
+      v.literal("paying_party_added"),
     ),
     status: v.union(v.literal("queued"), v.literal("sent"), v.literal("failed")),
     to: v.string(),
@@ -793,6 +818,23 @@ export default defineSchema({
     .index("by_publicToken", ["publicToken"])
     .index("by_requestNumber", ["requestNumber"])
     .index("by_linkedInvoiceId", ["linkedInvoiceId"]),
+
+  eventPaymentProofSubmissions: defineTable({
+    eventId: v.id("events"),
+    invoiceId: v.id("invoices"),
+    paymentMethod: paymentProofMethodValue,
+    paymentReference: v.string(),
+    financeContactEmail: v.optional(v.string()),
+    status: v.optional(paymentProofSubmissionStatusValue),
+    invalidatedAt: v.optional(v.number()),
+    invalidatedByUserId: v.optional(v.string()),
+    invalidationNote: v.optional(v.string()),
+    submittedAt: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_eventId", ["eventId"])
+    .index("by_invoiceId", ["invoiceId"])
+    .index("by_eventId_and_status", ["eventId", "status"]),
 
   eventPullListItems: defineTable({
     eventId: v.id("events"),
