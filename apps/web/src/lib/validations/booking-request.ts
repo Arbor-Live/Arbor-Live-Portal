@@ -7,6 +7,16 @@ export function isStanfordEmail(email: string) {
   return STANFORD_EMAIL_PATTERN.test(email.trim());
 }
 
+export const INDIVIDUAL_SPONSOR_TYPE = "Individual Stanford Affiliate" as const;
+
+export function requiresOrganizationName(
+  sponsorType: string,
+  invoiceGroupId?: string,
+) {
+  if (invoiceGroupId?.trim()) return false;
+  return sponsorType !== INDIVIDUAL_SPONSOR_TYPE;
+}
+
 export const SPONSOR_TYPE_OPTIONS = [
   "Stanford Department",
   "Large Voulunteer Student Organization",
@@ -54,56 +64,59 @@ export const REQUEST_CONTEXT_OPTIONS = [
   "new_group",
 ] as const;
 
-export function combineDateAndTime(date: string, time: string): number | null {
-  if (!date || !time) return null;
-  const parsed = new Date(`${date}T${time}:00`);
-  return Number.isNaN(parsed.getTime()) ? null : parsed.getTime();
+export function sponsorTypeOptionsForContext(
+  requestContext?: (typeof REQUEST_CONTEXT_OPTIONS)[number],
+) {
+  if (requestContext === "personal") {
+    return SPONSOR_TYPE_OPTIONS.filter((option) => option !== INDIVIDUAL_SPONSOR_TYPE);
+  }
+  return SPONSOR_TYPE_OPTIONS;
 }
 
-export function formatLongDate(date: string) {
-  const parsed = new Date(`${date}T12:00:00`);
-  if (Number.isNaN(parsed.getTime())) return date;
-  return parsed.toLocaleDateString("en-US", {
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
-}
+import {
+  combineDateAndTime,
+  createDefaultShowSlot,
+  deriveLegacyTimeTexts,
+  formatDisplayTime,
+  formatShowDatesFromSlots,
+  formatShowScheduleText,
+  getEarliestShowSlot,
+  getEarliestShowStartMs,
+  getLatestShowEndMs,
+  resolveShowSlot,
+} from "@/lib/event-schedule";
 
-export function formatDisplayTime(time: string) {
-  const parsed = new Date(`1970-01-01T${time}:00`);
-  if (Number.isNaN(parsed.getTime())) return time;
-  return parsed.toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
+const showSlotSchema = z.object({
+  date: z.string().trim().min(1, "Date is required"),
+  startTime: z.string().trim().min(1, "Start time is required"),
+  endTime: z.string().trim().min(1, "End time is required"),
+});
 
 export function getTurnoutTier(count: number) {
   if (count < 50) {
     return {
-      label: "Small and cozy",
-      description: "Less than 50 guests",
+      label: "Cozy crew",
+      description: "Under 50, intimate and sweet",
       people: Math.min(Math.max(count, 8), 12),
     };
   }
   if (count < 100) {
     return {
-      label: "Medium",
-      description: "50 to 100 guests",
+      label: "Party's picking up",
+      description: "50 to 100 guests, the energy's building",
       people: 18,
     };
   }
   if (count < 200) {
     return {
-      label: "Large",
-      description: "100 to 200 guests",
+      label: "Packed house",
+      description: "100 to 200 guests, the room is alive",
       people: 28,
     };
   }
   return {
-    label: "Major event",
-    description: "200+ guests — additional coordination after your request",
+    label: "Campus sensation",
+    description: "200+ guests, we'll follow up with extra planning",
     people: 40,
   };
 }
@@ -129,9 +142,7 @@ export const bookingRequestSchema = z
     sponsorTypeOther: z.string().trim().optional(),
     venueName: z.string().trim().optional(),
     venueAddress: z.string().trim().optional(),
-    eventDate: z.string().trim().min(1, "Event date is required"),
-    eventStartTime: z.string().trim().min(1, "Start time is required"),
-    eventEndTime: z.string().trim().min(1, "End time is required"),
+    showSlots: z.array(showSlotSchema).min(1, "Add at least one show"),
     setupTime: z.string().trim().optional(),
     flexibleSetupTime: z.boolean(),
     eventName: z.string().trim().min(1, "Event name is required"),
@@ -154,6 +165,13 @@ export const bookingRequestSchema = z
     additionalNotes: z.string().trim().optional(),
   })
   .superRefine((data, ctx) => {
+    if (requiresOrganizationName(data.sponsorType, data.invoiceGroupId) && !data.organization?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Enter your organization or group name",
+        path: ["organization"],
+      });
+    }
     if (data.sponsorType === "Other" && !data.sponsorTypeOther?.trim()) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -176,37 +194,51 @@ export const bookingRequestSchema = z
       });
     }
 
-    const startMs = combineDateAndTime(data.eventDate, data.eventStartTime);
-    const endMs = combineDateAndTime(data.eventDate, data.eventEndTime);
-    const setupMs = data.setupTime
-      ? combineDateAndTime(data.eventDate, data.setupTime)
-      : null;
+    const showSlots = data.showSlots.map((slot) => ({
+      date: slot.date.trim(),
+      startTime: slot.startTime.trim(),
+      endTime: slot.endTime.trim(),
+    }));
 
-    if (!startMs) {
+    if (showSlots.length === 0) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Invalid start time",
-        path: ["eventStartTime"],
+        message: "Add at least one show",
+        path: ["showSlots"],
       });
     }
-    if (!endMs) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Invalid end time",
-        path: ["eventEndTime"],
-      });
+
+    for (let index = 0; index < showSlots.length; index += 1) {
+      const slot = showSlots[index];
+      const resolved = resolveShowSlot(slot);
+      if (!resolved) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Invalid show time",
+          path: ["showSlots", index, slot.date ? "startTime" : "date"],
+        });
+        continue;
+      }
+      if (slot.startTime === slot.endTime) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "End time must be after start time",
+          path: ["showSlots", index, "endTime"],
+        });
+      }
     }
-    if (startMs && endMs && endMs <= startMs) {
+
+    const earliestShow = getEarliestShowSlot(showSlots);
+    const earliestStartMs = getEarliestShowStartMs(showSlots);
+    const setupMs =
+      !data.flexibleSetupTime && data.setupTime?.trim() && earliestShow
+        ? combineDateAndTime(earliestShow.date, data.setupTime)
+        : null;
+
+    if (!data.flexibleSetupTime && setupMs && earliestStartMs && setupMs >= earliestStartMs) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "End time must be after start time",
-        path: ["eventEndTime"],
-      });
-    }
-    if (!data.flexibleSetupTime && setupMs && startMs && setupMs >= startMs) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Setup must be before event start",
+        message: "Setup must be before the first show start",
         path: ["setupTime"],
       });
     }
@@ -236,9 +268,7 @@ export const bookingRequestDefaultValues: BookingRequestFormValues = {
   sponsorTypeOther: "",
   venueName: "",
   venueAddress: "",
-  eventDate: "",
-  eventStartTime: "18:00",
-  eventEndTime: "22:00",
+  showSlots: [createDefaultShowSlot()],
   setupTime: "15:00",
   flexibleSetupTime: false,
   eventName: "",
@@ -311,7 +341,7 @@ const BASE_STEPS: BookingRequestStepConfig[] = [
   {
     id: "sponsorType",
     headline: "What best describes who is running/sponsoring this event?",
-    fields: ["sponsorType", "sponsorTypeOther"],
+    fields: ["sponsorType", "sponsorTypeOther", "organization"],
   },
   {
     id: "venue",
@@ -324,14 +354,8 @@ const BASE_STEPS: BookingRequestStepConfig[] = [
     id: "eventSchedule",
     headline: "When is your event?",
     subheader:
-      "Pick your event date and times. Events requested with less than seven days' notice may have limited availability and overtime rates.",
-    fields: [
-      "eventDate",
-      "eventStartTime",
-      "eventEndTime",
-      "setupTime",
-      "flexibleSetupTime",
-    ],
+      "Add your show date and times. Use “Add another show” for multiple performances or different days. Events requested with less than seven days' notice may have limited availability and overtime rates.",
+    fields: ["showSlots", "setupTime", "flexibleSetupTime"],
   },
   {
     id: "eventName",
@@ -426,20 +450,39 @@ export function toSubmitPayload(values: BookingRequestFormValues) {
       ? `Other: ${values.eventCategoryOther.trim()}`
       : values.eventCategory;
 
-  const eventDateText = formatLongDate(values.eventDate);
-  const eventStartTimeText = formatDisplayTime(values.eventStartTime);
-  const eventEndTimeText = formatDisplayTime(values.eventEndTime);
+  const showSlots = values.showSlots.map((slot) => ({
+    date: slot.date.trim(),
+    startTime: slot.startTime.trim(),
+    endTime: slot.endTime.trim(),
+  }));
+
+  const eventDateText = formatShowDatesFromSlots(showSlots);
+  const { eventStartTimeText, eventEndTimeText } = deriveLegacyTimeTexts(showSlots);
+  const eventScheduleText =
+    showSlots.length > 1 ? formatShowScheduleText(showSlots) : undefined;
+  const earliestShow = getEarliestShowSlot(showSlots);
   const earliestSetupText = values.flexibleSetupTime
     ? "Flexible setup time"
     : formatDisplayTime(values.setupTime ?? "");
 
-  const eventStartAtMs =
-    combineDateAndTime(values.eventDate, values.eventStartTime) ?? undefined;
-  const eventEndAtMs =
-    combineDateAndTime(values.eventDate, values.eventEndTime) ?? undefined;
-  const setupAtMs = values.setupTime
-    ? combineDateAndTime(values.eventDate, values.setupTime) ?? undefined
-    : undefined;
+  const eventStartAtMs = getEarliestShowStartMs(showSlots) ?? undefined;
+  const eventEndAtMs = getLatestShowEndMs(showSlots) ?? undefined;
+  const setupAtMs =
+    !values.flexibleSetupTime && values.setupTime?.trim() && earliestShow
+      ? combineDateAndTime(earliestShow.date, values.setupTime) ?? undefined
+      : undefined;
+
+  const resolvedShowSlots = showSlots
+    .map(resolveShowSlot)
+    .filter((slot): slot is NonNullable<ReturnType<typeof resolveShowSlot>> => slot !== null)
+    .map((slot) => ({
+      date: slot.date,
+      startTime: slot.startTime,
+      endTime: slot.endTime,
+      startAtMs: slot.startAtMs,
+      endAtMs: slot.endAtMs,
+      endsNextDay: slot.endsNextDay,
+    }));
 
   const servicesNeeded = [values.crewOrRental, ...values.servicesNeeded];
 
@@ -464,6 +507,9 @@ export function toSubmitPayload(values: BookingRequestFormValues) {
     eventEndAtMs,
     setupAtMs,
     flexibleSetupTime: values.flexibleSetupTime,
+    showSlots: resolvedShowSlots,
+    eventScheduleText,
+    endsNextDay: resolvedShowSlots.some((slot) => slot.endsNextDay),
     eventName: values.eventName.trim(),
     eventCategory,
     crewOrRental: values.crewOrRental,

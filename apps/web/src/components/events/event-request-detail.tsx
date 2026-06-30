@@ -143,8 +143,14 @@ export function EventRequestDetailClient({ requestId }: { requestId: Id<"eventRe
         <DetailRow label="Venue" value={request.venueName} />
         <DetailRow label="Venue address" value={request.venueAddress} />
         <DetailRow label="Event date" value={request.eventDateText} />
-        <DetailRow label="Start time" value={request.eventStartTimeText} />
-        <DetailRow label="End time" value={request.eventEndTimeText} />
+        {request.eventScheduleText ? (
+          <DetailRow label="Show schedule" value={request.eventScheduleText} />
+        ) : (
+          <>
+            <DetailRow label="Start time" value={request.eventStartTimeText} />
+            <DetailRow label="End time" value={request.eventEndTimeText} />
+          </>
+        )}
         <DetailRow label="Earliest setup" value={request.earliestSetupText} />
         <DetailRow
           label="Flexible setup"
