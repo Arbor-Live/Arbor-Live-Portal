@@ -21,8 +21,9 @@ const jetBrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Arbor Live Portal",
-  description: "Arbor Live operations dashboard",
+  title: "Arbor Live",
+  description:
+    "Arbor Live is Stanford's only student-run live event production company, bringing live events to every corner of campus.",
 };
 
 export default async function RootLayout({

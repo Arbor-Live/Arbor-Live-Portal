@@ -9,6 +9,7 @@ export type AdminTeamOption = z.infer<typeof adminTeamOptionSchema>;
 export const userAdminRowSchema = z.object({
   role: z.string(),
   active: z.boolean(),
+  showOnPublicCrewPage: z.boolean(),
   title: z.string(),
   phone: z.string(),
   hourlyRateUsd: z.string(),
@@ -25,6 +26,9 @@ export const bandOrgProfileSchema = z.object({
   publicWebsiteUrl: z.string(),
   publicInstagramUrl: z.string(),
   publicYoutubeUrl: z.string(),
+  publicListing: z.boolean(),
+  publicSlug: z.string(),
+  publicHeroImageUrl: z.string(),
 });
 
 export type BandOrgProfileFormValues = z.infer<typeof bandOrgProfileSchema>;

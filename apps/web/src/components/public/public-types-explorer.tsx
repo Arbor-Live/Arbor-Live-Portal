@@ -5,9 +5,11 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
+import { PublicPageHero } from "@/components/public/public-page-hero";
 import { PublicSiteChrome } from "@/components/public/public-site-chrome";
 import { MarkdownContent } from "@/components/markdown-content";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Reveal, Stagger, StaggerItem } from "@/components/landing/landing-motion";
 
 type PublicBucket = "lighting" | "sound" | "environmental" | "staging" | "misc";
 
@@ -88,13 +90,15 @@ export function PublicTypesExplorer({ bucket }: { bucket?: PublicBucket }) {
 
   return (
     <PublicSiteChrome>
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Model types</h1>
-          <p className="text-sm text-muted-foreground">
-            {bucket ? `${bucketLabels[bucket]} models.` : "Browse all publicly listed model types."}
-          </p>
-        </div>
+      <PublicPageHero
+        title={bucket ? `${bucketLabels[bucket]} model types` : "Model types"}
+        subtitle={
+          bucket
+            ? `Reference specs for ${bucketLabels[bucket].toLowerCase()} equipment.`
+            : "Browse publicly listed inventory model types and capabilities."
+        }
+      />
+      <div className="mx-auto max-w-6xl space-y-8 px-4 py-12 sm:px-6 lg:px-8">
 
         <div className="flex flex-wrap items-center gap-2">
           <label className="text-sm text-muted-foreground" htmlFor="cap-filter">
@@ -128,26 +132,24 @@ export function PublicTypesExplorer({ bucket }: { bucket?: PublicBucket }) {
           </Card>
         ) : null}
 
-        <div className="space-y-10">
+        <div className="space-y-12">
           {grouped.map((group) => {
             if (!group.items.length) return null;
 
             return (
               <section key={group.key} className="space-y-4">
-                <div>
-                  <h2 className="text-lg font-semibold tracking-tight">{bucketLabels[group.key]}</h2>
-                  <p className="text-xs text-muted-foreground">
-                    Types are grouped using each category&apos;s configured public bucket (with sensible defaults).
-                  </p>
-                </div>
+                <Reveal>
+                  <h2 className="text-xl font-semibold tracking-tight">{bucketLabels[group.key]}</h2>
+                </Reveal>
 
-                <div className="grid gap-4 md:grid-cols-2">
+                <Stagger className="grid gap-6 md:grid-cols-2">
                   {group.items.map((row) => {
                     const type = row.type as PublicTypeSummary | PublicTypeProfile;
                     const hasProfile = isPublicTypeProfile(type);
 
                     return (
-                      <Card key={type._id}>
+                      <StaggerItem key={type._id}>
+                      <Card>
                         <CardHeader>
                           <CardTitle className="text-base">{type.name}</CardTitle>
                           <p className="text-xs text-muted-foreground">
@@ -233,9 +235,10 @@ export function PublicTypesExplorer({ bucket }: { bucket?: PublicBucket }) {
                           ) : null}
                         </CardContent>
                       </Card>
+                      </StaggerItem>
                     );
                   })}
-                </div>
+                </Stagger>
               </section>
             );
           })}

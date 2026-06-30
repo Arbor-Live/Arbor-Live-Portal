@@ -565,6 +565,8 @@ export default defineSchema({
     phone: v.optional(v.string()),
     active: v.boolean(),
     teams: v.array(userTeamValue),
+    /** When true, user appears on the public /crew page (opt-in). */
+    showOnPublicCrewPage: v.optional(v.boolean()),
     defaultOrganizationId: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -594,10 +596,14 @@ export default defineSchema({
     publicWebsiteUrl: v.optional(v.string()),
     publicInstagramUrl: v.optional(v.string()),
     publicYoutubeUrl: v.optional(v.string()),
+    publicListing: v.optional(v.boolean()),
+    publicSlug: v.optional(v.string()),
+    publicHeroImageUrl: v.optional(v.string()),
     updatedAt: v.number(),
   })
     .index("by_organizationId", ["organizationId"])
-    .index("by_organizationType", ["organizationType"]),
+    .index("by_organizationType", ["organizationType"])
+    .index("by_publicSlug", ["publicSlug"]),
 
   userActiveOrganizations: defineTable({
     userId: v.string(),
