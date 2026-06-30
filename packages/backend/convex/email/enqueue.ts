@@ -10,6 +10,8 @@ const emailTemplateValue = v.union(
   v.literal("schedule_reminder"),
   v.literal("user_invite"),
   v.literal("password_reset"),
+  v.literal("email_verification"),
+  v.literal("change_email_confirmation"),
   v.literal("booking_request_received"),
   v.literal("booking_quote_ready"),
   v.literal("payment_proof_reminder"),
