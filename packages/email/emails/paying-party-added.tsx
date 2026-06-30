@@ -1,17 +1,16 @@
-import { Text } from "@react-email/components";
 import {
   BodyCopy,
+  ContactNote,
+  DataCard,
+  DetailRow,
   EmailLayout,
   EmailSignOff,
   EventDetailsSection,
-  HighlightBox,
   MutedCopy,
-} from "./components/email-layout";
+} from "./_components/email-layout";
+import { currency } from "./_components/format";
 import type { PayingPartyAddedEmailProps } from "../src/types";
-
-function currency(value: number) {
-  return `$${value.toFixed(2)}`;
-}
+import { payingPartyAddedPreviewProps } from "./_preview-props";
 
 export function PayingPartyAddedEmail({
   recipientName,
@@ -37,8 +36,8 @@ export function PayingPartyAddedEmail({
     >
       <BodyCopy>{greeting}</BodyCopy>
       <BodyCopy>
-        {approverLabel} added you as the Financial Officer or Paying party for an Arbor Live event.
-        The quote has been approved, and you will receive a finalized invoice after the event with
+        {approverLabel} added you as the Financial Officer or paying party for an Arbor Live event.
+        The quote has been approved — you&apos;ll receive a finalized invoice after the event with
         payment instructions.
       </BodyCopy>
       <EventDetailsSection
@@ -46,22 +45,12 @@ export function PayingPartyAddedEmail({
         venueName={venueName}
         dateRangeLabel={dateRangeLabel}
       />
-      <HighlightBox title="Approved quote">
-        <Text style={highlightLineStyle}>
-          <strong>Quote:</strong> {invoiceNumber}
-        </Text>
-        <Text style={highlightLineStyle}>
-          <strong>Total:</strong> {currency(quoteTotalUsd)}
-        </Text>
-        <Text style={highlightLineStyle}>
-          <strong>Approved by:</strong> {approvedByName}
-        </Text>
-      </HighlightBox>
-      <BodyCopy>
-        We will follow up after the event with the finalized invoice and details for submitting payment
-        proof. If you have questions in the meantime, contact {managerName}
-        {managerEmail ? ` at ${managerEmail}` : ""}.
-      </BodyCopy>
+      <DataCard title="Approved Quote">
+        <DetailRow label="Quote" value={invoiceNumber} />
+        <DetailRow label="Total" value={currency(quoteTotalUsd)} emphasis />
+        <DetailRow label="Approved by" value={approvedByName} />
+      </DataCard>
+      <ContactNote managerName={managerName} managerEmail={managerEmail} />
       <MutedCopy>
         You are receiving this because you were listed as the paying party for this event.
       </MutedCopy>
@@ -70,11 +59,6 @@ export function PayingPartyAddedEmail({
   );
 }
 
-export default PayingPartyAddedEmail;
+PayingPartyAddedEmail.PreviewProps = payingPartyAddedPreviewProps;
 
-const highlightLineStyle = {
-  color: "#ffffff",
-  fontSize: "14px",
-  lineHeight: "24px",
-  margin: "0 0 8px",
-};
+export default PayingPartyAddedEmail;

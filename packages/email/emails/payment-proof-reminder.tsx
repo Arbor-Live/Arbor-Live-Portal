@@ -1,18 +1,17 @@
-import { Text } from "@react-email/components";
 import {
+  AlertBanner,
   BodyCopy,
   CtaButton,
+  DataCard,
+  DetailRow,
   EmailLayout,
   EmailSignOff,
   EventDetailsSection,
-  HighlightBox,
   MutedCopy,
-} from "./components/email-layout";
+} from "./_components/email-layout";
+import { currency } from "./_components/format";
 import type { PaymentProofReminderEmailProps } from "../src/types";
-
-function currency(value: number) {
-  return `$${value.toFixed(2)}`;
-}
+import { paymentProofReminderPreviewProps } from "./_preview-props";
 
 export function PaymentProofReminderEmail({
   recipientName,
@@ -36,47 +35,35 @@ export function PaymentProofReminderEmail({
     <EmailLayout preview={`Submit payment proof for ${eventTitle}`} heading="Payment Proof Needed">
       <BodyCopy>{greeting}</BodyCopy>
       <BodyCopy>{reminderLabel}</BodyCopy>
-      <BodyCopy>
-        Please submit the payment reference for your invoice using ASSU ePay, iJournal transfer, or
-        GrantEd Group Transfer to VSO #5001. You can review your invoice and download a PDF from your
-        event portal.
-      </BodyCopy>
       {isOverdue ? (
-        <BodyCopy>
-          This payment is overdue. Accrued late fees: <strong>{currency(lateFeeUsd)}</strong> ($25/month
-          starting the second month after due).
-        </BodyCopy>
+        <AlertBanner>
+          Payment overdue — accrued late fees: {currency(lateFeeUsd)} ($25/month starting the second
+          month after due).
+        </AlertBanner>
       ) : null}
       <EventDetailsSection
         eventTitle={eventTitle}
         venueName={venueName}
         dateRangeLabel={dateRangeLabel}
       />
-      <HighlightBox title="Invoice">
-        <Text style={highlightLineStyle}>
-          <strong>Quote:</strong> {invoiceNumber}
-        </Text>
-        <Text style={highlightLineStyle}>
-          <strong>Total:</strong> {currency(quoteTotalUsd)}
-        </Text>
+      <DataCard title="Invoice">
+        <DetailRow label="Quote" value={invoiceNumber} />
+        <DetailRow label="Total" value={currency(quoteTotalUsd)} emphasis />
         {isOverdue ? (
-          <Text style={highlightLineStyle}>
-            <strong>Late fees accrued:</strong> {currency(lateFeeUsd)}
-          </Text>
+          <DetailRow label="Late fees" value={currency(lateFeeUsd)} emphasis />
         ) : null}
-      </HighlightBox>
-      <CtaButton href={portalUrl} label="Open event portal" />
-      <MutedCopy>Download your invoice PDF from the portal before submitting payment.</MutedCopy>
+      </DataCard>
+      <CtaButton href={portalUrl} label="Submit payment proof" />
+      <BodyCopy>
+        Submit your payment reference via ASSU ePay, iJournal transfer, or GrantEd Group Transfer to
+        VSO #5001. Download your invoice PDF from the portal before submitting.
+      </BodyCopy>
+      <MutedCopy>You are receiving this because your event quote has been approved.</MutedCopy>
       <EmailSignOff />
     </EmailLayout>
   );
 }
 
-export default PaymentProofReminderEmail;
+PaymentProofReminderEmail.PreviewProps = paymentProofReminderPreviewProps;
 
-const highlightLineStyle = {
-  color: "#ffffff",
-  fontSize: "14px",
-  lineHeight: "24px",
-  margin: "0 0 8px",
-};
+export default PaymentProofReminderEmail;

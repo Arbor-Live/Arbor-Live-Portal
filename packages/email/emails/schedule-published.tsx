@@ -1,14 +1,13 @@
-import { Text } from "@react-email/components";
 import {
   BodyCopy,
   CtaButton,
   EmailLayout,
   EmailSignOff,
   EventDetailsSection,
-  InfoCard,
-} from "./components/email-layout";
-import { brand } from "./components/brand-theme";
+  ScheduleTimeline,
+} from "./_components/email-layout";
 import type { SchedulePublishedEmailProps } from "../src/types";
+import { schedulePublishedPreviewProps } from "./_preview-props";
 
 export function SchedulePublishedEmail({
   eventTitle,
@@ -32,35 +31,13 @@ export function SchedulePublishedEmail({
         venueName={venueName}
         dateRangeLabel={dateRangeLabel}
       />
-      {blockSummaries.length > 0 ? (
-        <InfoCard>
-          <Text style={cardHeadingStyle}>Schedule Blocks</Text>
-          {blockSummaries.map((summary: string) => (
-            <Text key={summary} style={cardLineStyle}>
-              • {summary}
-            </Text>
-          ))}
-        </InfoCard>
-      ) : null}
+      {blockSummaries.length > 0 ? <ScheduleTimeline items={blockSummaries} /> : null}
       <CtaButton href={eventUrl} label="View schedule" />
       <EmailSignOff />
     </EmailLayout>
   );
 }
 
+SchedulePublishedEmail.PreviewProps = schedulePublishedPreviewProps;
+
 export default SchedulePublishedEmail;
-
-const cardHeadingStyle = {
-  color: brand.text,
-  fontSize: "18px",
-  fontWeight: "700",
-  lineHeight: "1.3",
-  margin: "0 0 12px",
-};
-
-const cardLineStyle = {
-  color: brand.text,
-  fontSize: "14px",
-  lineHeight: "22px",
-  margin: "0 0 6px",
-};

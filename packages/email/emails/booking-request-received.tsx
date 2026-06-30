@@ -1,12 +1,13 @@
-import { Text } from "@react-email/components";
 import {
   BodyCopy,
   CtaButton,
+  DataCard,
+  DetailRow,
   EmailLayout,
   EmailSignOff,
-  HighlightBox,
-} from "./components/email-layout";
+} from "./_components/email-layout";
 import type { BookingRequestReceivedEmailProps } from "../src/types";
+import { bookingRequestReceivedPreviewProps } from "./_preview-props";
 
 export function BookingRequestReceivedEmail({
   recipientName,
@@ -27,32 +28,21 @@ export function BookingRequestReceivedEmail({
         Thanks for submitting your event request to Arbor Live. Our team will review the details and
         follow up with a quote when it is ready.
       </BodyCopy>
-      <HighlightBox title="Request Summary">
-        <Text style={highlightLineStyle}>
-          <strong>Request:</strong> {requestNumber}
-        </Text>
-        <Text style={highlightLineStyle}>
-          <strong>Event:</strong> {eventName}
-        </Text>
-        <Text style={highlightLineStyle}>
-          <strong>Date:</strong> {eventDateText}
-        </Text>
-      </HighlightBox>
+      <DataCard title="Request Summary">
+        <DetailRow label="Request" value={requestNumber} />
+        <DetailRow label="Event" value={eventName} />
+        <DetailRow label="Date" value={eventDateText} />
+      </DataCard>
+      <CtaButton href={trackingUrl} label="Track your request" />
       <BodyCopy>
         Use your request tracker anytime to check status, review your quote, and approve when you are
         ready.
       </BodyCopy>
-      <CtaButton href={trackingUrl} label="Open request tracker" />
       <EmailSignOff />
     </EmailLayout>
   );
 }
 
-export default BookingRequestReceivedEmail;
+BookingRequestReceivedEmail.PreviewProps = bookingRequestReceivedPreviewProps;
 
-const highlightLineStyle = {
-  color: "#ffffff",
-  fontSize: "14px",
-  lineHeight: "24px",
-  margin: "0 0 8px",
-};
+export default BookingRequestReceivedEmail;
