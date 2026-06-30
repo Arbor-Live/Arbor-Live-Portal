@@ -49,8 +49,17 @@ export function EventSeriesShiftEditor({
   const regenerateShifts = useMutation(api.eventSeries.regenerateFutureShifts);
   const importShifts = useMutation(api.eventSeries.importShiftsFromOccurrence);
   const localShiftCounterRef = useRef(0);
-  const [shifts, setShifts] = useState<SeriesShiftTemplateDraft[]>([]);
+  const initialShifts = useMemo(
+    () => shiftTemplatesToDrafts(shiftTemplates ?? [], budgetCrewHourlyRateUsd),
+    [shiftTemplates, budgetCrewHourlyRateUsd],
+  );
+
+  const initialDefaultRate =
+    budgetCrewHourlyRateUsd !== undefined ? String(budgetCrewHourlyRateUsd) : "";
+
+  const [shifts, setShifts] = useState<SeriesShiftTemplateDraft[]>(initialShifts);
   const [shiftsDirty, setShiftsDirty] = useState(false);
+  const [syncedShifts, setSyncedShifts] = useState(initialShifts);
 
   const form = useConvexForm<SeriesShiftEditorFormValues>({
     schema: seriesShiftEditorSchema,
@@ -68,17 +77,13 @@ export function EventSeriesShiftEditor({
     [blockTemplates],
   );
 
-  const initialShifts = useMemo(
-    () => shiftTemplatesToDrafts(shiftTemplates ?? [], budgetCrewHourlyRateUsd),
-    [shiftTemplates, budgetCrewHourlyRateUsd],
-  );
-
-  const initialDefaultRate =
-    budgetCrewHourlyRateUsd !== undefined ? String(budgetCrewHourlyRateUsd) : "";
-
-  useEffect(() => {
+  if (initialShifts !== syncedShifts) {
+    setSyncedShifts(initialShifts);
     setShifts(initialShifts);
     setShiftsDirty(false);
+  }
+
+  useEffect(() => {
     form.reset({
       applyScope: "all",
       fromOccurrenceIndex: "0",
@@ -86,7 +91,7 @@ export function EventSeriesShiftEditor({
       defaultHourlyRate: initialDefaultRate,
     });
     form.suppressNextAutoSave();
-  }, [initialShifts, initialDefaultRate, form]);
+  }, [syncedShifts, initialDefaultRate, form]);
 
   const occurrenceOptions = useMemo(
     () =>

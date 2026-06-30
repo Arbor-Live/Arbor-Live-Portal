@@ -82,8 +82,14 @@ export function EventSeriesScheduleEditor({
   const regenerateBlocks = useMutation(api.eventSeries.regenerateFutureBlocks);
   const importSchedule = useMutation(api.eventSeries.importScheduleFromOccurrence);
   const localBlockCounterRef = useRef(0);
-  const [blocks, setBlocks] = useState<TimelineBlockDraft[]>([]);
+  const initialBlocks = useMemo(
+    () => blocksFromTemplates(blockTemplates, anchorStartAt),
+    [blockTemplates, anchorStartAt],
+  );
+
+  const [blocks, setBlocks] = useState<TimelineBlockDraft[]>(initialBlocks);
   const [blocksDirty, setBlocksDirty] = useState(false);
+  const [syncedBlocks, setSyncedBlocks] = useState(initialBlocks);
 
   const form = useConvexForm<SeriesScheduleEditorFormValues>({
     schema: seriesScheduleEditorSchema,
@@ -100,21 +106,20 @@ export function EventSeriesScheduleEditor({
   const dayCount = seriesDayCount(anchorStartAt, anchorEndAt);
   const hideSchedule = resolvedEventType === "Services Only";
 
-  const initialBlocks = useMemo(
-    () => blocksFromTemplates(blockTemplates, anchorStartAt),
-    [blockTemplates, anchorStartAt],
-  );
-
-  useEffect(() => {
+  if (initialBlocks !== syncedBlocks) {
+    setSyncedBlocks(initialBlocks);
     setBlocks(initialBlocks);
     setBlocksDirty(false);
+  }
+
+  useEffect(() => {
     form.reset({
       applyScope: "all",
       fromOccurrenceIndex: "0",
       importOccurrenceId: "",
     });
     form.suppressNextAutoSave();
-  }, [initialBlocks, form]);
+  }, [syncedBlocks, form]);
 
   const occurrenceOptions = useMemo(
     () =>

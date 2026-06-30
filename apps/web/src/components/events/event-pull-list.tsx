@@ -132,7 +132,16 @@ export function EventPullList({
   const scaffoldFromInvoice = useMutation(api.eventPullLists.scaffoldFromInvoice);
   const removeItem = useMutation(api.eventPullLists.removeItem);
 
+  const initialSyncKey = useMemo(
+    () =>
+      initialItems
+        .map((row) => `${row.id ?? "new"}:${row.lineKind}:${row.typeId ?? row.packageId}:${row.quantityRequired}`)
+        .join("|"),
+    [initialItems],
+  );
+
   const [items, setItems] = useState<PullListItemDraft[]>(initialItems);
+  const [syncedKey, setSyncedKey] = useState(initialSyncKey);
   const [addKind, setAddKind] = useState<"type" | "package">("type");
   const [newTypeId, setNewTypeId] = useState("");
   const [newPackageId, setNewPackageId] = useState("");
@@ -146,16 +155,12 @@ export function EventPullList({
   });
   const { reset, suppressNextAutoSave, debouncedAutoSave, watch, formState } = form;
 
-  const initialSyncKey = useMemo(
-    () =>
-      initialItems
-        .map((row) => `${row.id ?? "new"}:${row.lineKind}:${row.typeId ?? row.packageId}:${row.quantityRequired}`)
-        .join("|"),
-    [initialItems],
-  );
+  if (initialSyncKey !== syncedKey) {
+    setSyncedKey(initialSyncKey);
+    setItems(initialItems);
+  }
 
   useEffect(() => {
-    setItems(initialItems);
     reset(toFormValues(initialItems));
     suppressNextAutoSave();
   }, [initialSyncKey, initialItems, reset, suppressNextAutoSave]);

@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { CheckIcon, CircleNotchIcon, WarningCircleIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { useOptionalSidebar } from "@/components/ui/sidebar";
@@ -34,12 +33,17 @@ export function FormSaveBar({
   onRetry,
   className,
 }: FormSaveBarProps) {
-  const [visible, setVisible] = useState(false);
   const sidebar = useOptionalSidebar();
 
   const isSaving = saveStatus === "saving" || isSubmitting;
   const isError = saveStatus === "error";
   const isSaved = saveStatus === "saved";
+  const visible =
+    isDirty ||
+    isSaving ||
+    isError ||
+    isSaved ||
+    (tier === "B" && saveStatus !== "idle");
 
   // When inside the dashboard shell, offset past the fixed sidebar (not full viewport width).
   const isStaticBar = className?.includes("static");
@@ -48,16 +52,6 @@ export function FormSaveBar({
   const horizontalPosition = usesSidebarInset
     ? "left-[var(--sidebar-width)] right-0 transition-[left] duration-200 ease-linear"
     : "inset-x-0";
-
-  useEffect(() => {
-    const shouldShow =
-      isDirty ||
-      isSaving ||
-      isError ||
-      isSaved ||
-      (tier === "B" && saveStatus !== "idle");
-    setVisible(shouldShow);
-  }, [isDirty, isSaving, isError, isSaved, saveStatus, tier]);
 
   if (!visible && tier === "C" && !isDirty && !isSaving && !isError && !isSaved) {
     return null;

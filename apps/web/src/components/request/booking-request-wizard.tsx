@@ -6,7 +6,7 @@ import Link from "next/link";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useConvex } from "convex/react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { FormProvider, useForm } from "react-hook-form";
+import { FormProvider, useForm, type Resolver } from "react-hook-form";
 import { api } from "@/lib/convex-api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -76,7 +76,7 @@ export function BookingRequestWizard() {
   const directionRef = useRef(1);
 
   const form = useForm<BookingRequestFormValues>({
-    resolver: zodResolver(bookingRequestSchema),
+    resolver: zodResolver(bookingRequestSchema as never) as Resolver<BookingRequestFormValues>,
     defaultValues: bookingRequestDefaultValues,
     mode: "onTouched",
   });
