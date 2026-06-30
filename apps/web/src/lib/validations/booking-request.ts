@@ -95,28 +95,28 @@ const showSlotSchema = z.object({
 export function getTurnoutTier(count: number) {
   if (count < 50) {
     return {
-      label: "Small and cozy",
-      description: "Less than 50 guests",
+      label: "Cozy crew",
+      description: "Under 50, intimate and sweet",
       people: Math.min(Math.max(count, 8), 12),
     };
   }
   if (count < 100) {
     return {
-      label: "Medium",
-      description: "50 to 100 guests",
+      label: "Party's picking up",
+      description: "50 to 100 guests, the energy's building",
       people: 18,
     };
   }
   if (count < 200) {
     return {
-      label: "Large",
-      description: "100 to 200 guests",
+      label: "Packed house",
+      description: "100 to 200 guests, the room is alive",
       people: 28,
     };
   }
   return {
-    label: "Major event",
-    description: "200+ guests — additional coordination after your request",
+    label: "Campus sensation",
+    description: "200+ guests, we'll follow up with extra planning",
     people: 40,
   };
 }
