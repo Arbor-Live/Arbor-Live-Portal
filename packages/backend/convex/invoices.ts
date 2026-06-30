@@ -13,6 +13,10 @@ import {
 } from "./lib/publicQuoteView";
 import { allocateInvoiceNumber } from "./lib/publicReferenceIds";
 import { scheduleBookingQuoteReadyEmail } from "./email/bookingRequestEmails";
+import {
+  markPayingPartyNotified,
+  schedulePayingPartyAddedEmail,
+} from "./email/payingPartyEmails";
 
 const equipmentPricingModeValue = v.union(v.literal("subsidized"), v.literal("nonSubsidized"));
 const crewRateModeValue = v.union(
@@ -652,6 +656,57 @@ export const updatePaymentContactsByToken = mutation({
     }
     const { token: _token, ...contactArgs } = args;
     await updateInvoicePaymentContacts(ctx, invoice, contactArgs);
+    return { ok: true as const };
+  },
+});
+
+export const updatePaymentSubmitter = mutation({
+  args: {
+    id: v.id("invoices"),
+    clientIsPaymentSubmitter: v.boolean(),
+    paymentSubmitterName: v.optional(v.string()),
+    paymentSubmitterEmail: v.optional(v.string()),
+  },
+  returns: v.object({ ok: v.literal(true) }),
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    const invoice = await ctx.db.get(args.id);
+    if (!invoice) throw new Error("Invoice not found.");
+    await updateInvoicePaymentContacts(ctx, invoice, {
+      clientIsPaymentSubmitter: args.clientIsPaymentSubmitter,
+      paymentSubmitterName: args.paymentSubmitterName,
+      paymentSubmitterEmail: args.paymentSubmitterEmail,
+    });
+    return { ok: true as const };
+  },
+});
+
+export const resendPayingPartyNotification = mutation({
+  args: { id: v.id("invoices") },
+  returns: v.object({ ok: v.literal(true) }),
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    const invoice = await ctx.db.get(args.id);
+    if (!invoice) throw new Error("Invoice not found.");
+    if ((invoice.clientApprovalStatus ?? "pending") !== "approved") {
+      throw new Error("Quote must be approved before notifying the paying party.");
+    }
+    if (invoice.clientIsPaymentSubmitter) {
+      throw new Error("The client is listed as the payment submitter.");
+    }
+    const email = invoice.paymentSubmitterEmail?.trim().toLowerCase();
+    if (!email) throw new Error("No paying party email is set.");
+
+    await schedulePayingPartyAddedEmail(ctx, {
+      invoice,
+      payingPartyEmail: email,
+      payingPartyName: invoice.paymentSubmitterName,
+      approvedByName: invoice.clientApprovalSignedName ?? invoice.clientContactName ?? "The client",
+      idempotencySuffix: `resend:${Date.now()}`,
+    });
+    await markPayingPartyNotified(ctx, invoice._id, email);
     return { ok: true as const };
   },
 });

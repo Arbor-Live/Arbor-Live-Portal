@@ -18,6 +18,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
+import { InvoiceQuoteApprovalDetails } from "@/components/financial/invoice-quote-approval-details";
+import { InvoicePaymentStatusSection } from "@/components/financial/invoice-payment-status-section";
 import { InvoiceLinkedEventCrewSection } from "@/components/financial/invoice-linked-event-crew";
 import {
   mergeEventCrewWithManualRows,
@@ -995,17 +997,6 @@ export function InvoiceEditor({
             {invoiceData?.invoice ? (
               <div className="text-sm text-muted-foreground">
                 Portal status: {requestPortalReady ? "Visible to client" : "Not published yet"}
-                {" · "}
-                Approval: {invoiceData.invoice.clientApprovalStatus}
-                {invoiceData.invoice.approvedAt
-                  ? ` · Approved at ${new Date(invoiceData.invoice.approvedAt).toLocaleString()}`
-                  : ""}
-                {invoiceData.invoice.changesRequestedAt
-                  ? ` · Changes requested at ${new Date(invoiceData.invoice.changesRequestedAt).toLocaleString()}`
-                  : ""}
-                {invoiceData.invoice.clientApprovalNote
-                  ? ` · Note: ${invoiceData.invoice.clientApprovalNote}`
-                  : ""}
               </div>
             ) : null}
             {invoiceData?.invoice?.clientApprovalStatus === "changes_requested" ? (
@@ -1048,19 +1039,30 @@ export function InvoiceEditor({
                 </Button>
               ) : null}
             </div>
-            {invoiceData?.invoice ? (
-              <div className="text-sm text-muted-foreground">
-                Status: {invoiceData.invoice.clientApprovalStatus}
-                {invoiceData.invoice.approvedAt ? ` • Approved at ${new Date(invoiceData.invoice.approvedAt).toLocaleString()}` : ""}
-                {invoiceData.invoice.changesRequestedAt
-                  ? ` • Changes requested at ${new Date(invoiceData.invoice.changesRequestedAt).toLocaleString()}`
-                  : ""}
-                {invoiceData.invoice.clientApprovalNote ? ` • Note: ${invoiceData.invoice.clientApprovalNote}` : ""}
-              </div>
-            ) : null}
           </CardContent>
         </Card>
       )}
+
+      {activeInvoiceId && invoiceData?.invoice ? (
+        <InvoiceQuoteApprovalDetails
+          key={[
+            invoiceData.invoice.clientIsPaymentSubmitter,
+            invoiceData.invoice.paymentSubmitterEmail,
+            invoiceData.invoice.paymentSubmitterName,
+            invoiceData.invoice.payingPartyNotifiedAt,
+            invoiceData.invoice.clientApprovalStatus,
+            invoiceData.invoice.clientApprovalSignedName,
+          ].join(":")}
+          invoiceId={activeInvoiceId}
+          invoice={invoiceData.invoice}
+        />
+      ) : null}
+
+      {activeInvoiceId &&
+      invoiceData?.invoice &&
+      (invoiceData.invoice.clientApprovalStatus ?? "pending") === "approved" ? (
+        <InvoicePaymentStatusSection invoiceId={activeInvoiceId} />
+      ) : null}
 
       <Card>
         <CardHeader><CardTitle>Quote Terms & Conditions</CardTitle></CardHeader>
