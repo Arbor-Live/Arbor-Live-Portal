@@ -36,12 +36,26 @@ export const schedulePublishedPreviewProps: SchedulePublishedEmailProps = {
 
 export const crewScheduledPreviewProps: CrewScheduledEmailProps = {
   ...eventDefaults,
+  eventLeadName: "Alex Chen",
   assignmentSummaries: ["Setup • Lighting Tech • 2:00 PM – 5:00 PM"],
   fullScheduleSummaries: [
     "Setup • 2:00 PM – 5:00 PM",
     "Show • 6:00 PM – 10:00 PM",
     "Strike • 10:00 PM – 11:30 PM",
   ],
+  coversEntireEvent: false,
+};
+
+export const crewScheduledFullEventPreviewProps: CrewScheduledEmailProps = {
+  ...eventDefaults,
+  eventLeadName: "Alex Chen",
+  assignmentSummaries: [
+    "Setup • Lighting Tech • 2:00 PM – 5:00 PM",
+    "Show • Lighting Tech • 6:00 PM – 10:00 PM",
+    "Strike • Lighting Tech • 10:00 PM – 11:30 PM",
+  ],
+  fullScheduleSummaries: [],
+  coversEntireEvent: true,
 };
 
 export const scheduleReminderPreviewProps: ScheduleReminderEmailProps = {

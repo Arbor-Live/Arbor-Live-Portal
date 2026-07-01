@@ -70,3 +70,16 @@ export function crewAssignmentFingerprint(
     )
     .join("|");
 }
+
+export function userCoversEntireSchedule(
+  userShifts: Array<{ scheduleBlockId?: Id<"eventScheduleBlocks"> }>,
+  blocks: Array<{ _id: Id<"eventScheduleBlocks"> }>,
+) {
+  if (blocks.length === 0) return false;
+  const assignedBlockIds = new Set(
+    userShifts
+      .map((shift) => shift.scheduleBlockId)
+      .filter((value): value is Id<"eventScheduleBlocks"> => Boolean(value)),
+  );
+  return blocks.every((block) => assignedBlockIds.has(block._id));
+}

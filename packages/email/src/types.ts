@@ -11,8 +11,10 @@ export type SchedulePublishedEmailProps = EventEmailProps & {
 };
 
 export type CrewScheduledEmailProps = EventEmailProps & {
+  eventLeadName?: string;
   assignmentSummaries: string[];
   fullScheduleSummaries: string[];
+  coversEntireEvent: boolean;
 };
 
 export type CrewScheduledIcsEventPayload = {
@@ -27,7 +29,6 @@ export type CrewScheduledIcsEventPayload = {
 export type CrewScheduledEmailPayload = CrewScheduledEmailProps & {
   icsEvents: CrewScheduledIcsEventPayload[];
   timezone: string;
-  organizerEmail: string;
 };
 
 export type ScheduleReminderEmailProps = EventEmailProps & {

@@ -2,7 +2,6 @@ import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import {
   EVENT_TIMEZONE,
-  ORGANIZER_EMAIL,
   eventDashboardUrl,
   formatEventDateRange,
   subjectForTemplate,
@@ -17,6 +16,7 @@ import {
   crewAssignmentFingerprint,
   formatAssignmentSummary,
   formatScheduleBlockSummary,
+  userCoversEntireSchedule,
 } from "./scheduleEmailData";
 
 function buildBasePayload(
@@ -142,6 +142,9 @@ export async function scheduleCrewScheduledEmails(
     .take(500);
   const blockLabelById = new Map(blocks.map((block) => [block._id, block.label]));
   const fullScheduleSummaries = blocks.map((block) => formatScheduleBlockSummary(block, timezone));
+  const eventLeadName = event.dayOfLeadUserId
+    ? (await getUserEmailRecipient(ctx, event.dayOfLeadUserId))?.name
+    : undefined;
   const subject = subjectForTemplate("crew_scheduled", event.title);
 
   for (const userId of assignedUserIds) {
@@ -156,6 +159,7 @@ export async function scheduleCrewScheduledEmails(
     const assignmentSummaries = userShifts.map((shift) =>
       formatAssignmentSummary(shift, blockLabelById, timezone),
     );
+    const coversEntireEvent = userCoversEntireSchedule(userShifts, blocks);
     const icsEvents = userShifts.map((shift, index) => {
       const blockLabel = shift.scheduleBlockId
         ? blockLabelById.get(shift.scheduleBlockId) ?? "Assigned block"
@@ -179,11 +183,12 @@ export async function scheduleCrewScheduledEmails(
       idempotencyKey: `crew_scheduled:${eventId}:${userId}:${nextFingerprint}`,
       payload: {
         ...buildBasePayload(event, recipient.name),
+        eventLeadName,
         assignmentSummaries,
-        fullScheduleSummaries,
+        fullScheduleSummaries: coversEntireEvent ? [] : fullScheduleSummaries,
+        coversEntireEvent,
         icsEvents,
         timezone,
-        organizerEmail: ORGANIZER_EMAIL,
       },
     });
   }
