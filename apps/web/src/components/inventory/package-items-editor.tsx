@@ -408,21 +408,21 @@ export function PackageItemsEditor({
                   <div className="space-y-2">
                     {group.rows.map(({ type }) => {
                       const inPackage = quantityInPackage(itemRows, type._id);
-                    const imageUrl = type.iconImageUrl || type.promoImageUrl;
-                    return (
-                      <div
-                        key={type._id}
-                        className="flex flex-col gap-3 rounded-md border p-3 sm:flex-row sm:items-center"
-                      >
-                        <div className="flex min-w-0 flex-1 items-center gap-3">
-                          {imageUrl ? (
-                            <InventoryAssetImage
-                              storedValue={imageUrl}
-                              alt=""
-                              className="h-12 w-12 shrink-0 rounded object-cover"
-                              fallbackClassName="h-12 w-12 shrink-0 rounded"
-                            />
-                          ) : (
+                      const imageUrl = type.iconImageUrl || type.promoImageUrl;
+                      return (
+                        <div
+                          key={type._id}
+                          className="flex flex-col gap-3 rounded-md border p-3 sm:flex-row sm:items-center"
+                        >
+                          <div className="flex min-w-0 flex-1 items-center gap-3">
+                            {imageUrl ? (
+                              <InventoryAssetImage
+                                storedValue={imageUrl}
+                                alt=""
+                                className="h-12 w-12 shrink-0 rounded object-cover"
+                                fallbackClassName="h-12 w-12 shrink-0 rounded"
+                              />
+                            ) : (
                               <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded bg-muted text-[10px] text-muted-foreground">
                                 No img
                               </div>

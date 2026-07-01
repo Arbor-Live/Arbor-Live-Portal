@@ -9,6 +9,7 @@ type BookingRequestNavProps = {
   nextLabel: string;
   isSubmitting?: boolean;
   skippable?: boolean;
+  className?: string;
   onBack: () => void;
   onNext: () => void;
   onSkip?: () => void;
@@ -20,12 +21,13 @@ export function BookingRequestNav({
   nextLabel,
   isSubmitting,
   skippable,
+  className,
   onBack,
   onNext,
   onSkip,
 }: BookingRequestNavProps) {
   return (
-    <div className="space-y-3 pt-6">
+    <div className={className ?? "space-y-3 pt-6"}>
       <div className="flex min-h-7 items-center justify-center">
         {skippable ? (
           <button
