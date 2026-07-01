@@ -1,13 +1,12 @@
 "use client";
 
-/* eslint-disable @next/next/no-img-element -- public pages may reference arbitrary external image URLs */
-
 import Link from "next/link";
 import { useMemo } from "react";
 import { useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
 import { MarkdownContent } from "@/components/markdown-content";
 import { PublicPageHero } from "@/components/public/public-page-hero";
+import { StoredAssetImage } from "@/components/files/stored-asset-image";
 import { PublicSiteChrome } from "@/components/public/public-site-chrome";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Reveal, Stagger, StaggerItem } from "@/components/landing/landing-motion";
@@ -84,9 +83,8 @@ export function PublicPackagesExplorer({ bucket }: { bucket?: PublicBucket }) {
                       <Card className="group gap-0 overflow-hidden py-0 transition-shadow hover:ring-2 hover:ring-primary/20 has-[>div:first-child]:pt-0">
                         {row.package.publicHeroImageUrl ? (
                           <div className="relative h-44 w-full overflow-hidden border-b bg-zinc-950">
-                            <img
-                              src={row.package.publicHeroImageUrl}
-                              alt=""
+                            <StoredAssetImage
+                              storedValue={row.package.publicHeroImageUrl}
                               className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
                             />
                             <div

@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import BoringAvatar from "boring-avatars";
+import { useResolvedAssetUrl } from "@/components/files/stored-asset-image";
 import { cn } from "@/lib/utils";
 
 type PublicAvatarProps = {
@@ -12,10 +13,12 @@ type PublicAvatarProps = {
 };
 
 export function PublicAvatar({ name, imageUrl, className, size = 96 }: PublicAvatarProps) {
-  if (imageUrl) {
+  const resolvedImageUrl = useResolvedAssetUrl(imageUrl);
+
+  if (resolvedImageUrl) {
     return (
       <Image
-        src={imageUrl}
+        src={resolvedImageUrl}
         alt=""
         width={size}
         height={size}

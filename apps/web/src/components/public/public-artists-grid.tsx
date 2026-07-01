@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
+import { StoredAssetImage } from "@/components/files/stored-asset-image";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Stagger, StaggerItem } from "@/components/landing/landing-motion";
 import { cn } from "@/lib/utils";
@@ -48,10 +49,8 @@ export function PublicArtistsGrid() {
                       )}
                     >
                       {artist.heroImageUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={artist.heroImageUrl}
-                          alt=""
+                        <StoredAssetImage
+                          storedValue={artist.heroImageUrl}
                           className="absolute inset-0 size-full object-cover"
                         />
                       ) : null}

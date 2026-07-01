@@ -49,7 +49,34 @@ import {
 } from "@/lib/event-series";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { FormSaveBar } from "@/components/forms";
+import { StoredAssetImage, StoredAssetLink } from "@/components/files/stored-asset-image";
 import { isImageAssetReference } from "@/lib/r2-assets";
+
+function EventArtifactAttachment({
+  linkUrl,
+  fileUrl,
+}: {
+  linkUrl?: string;
+  fileUrl?: string;
+}) {
+  const storedValue = linkUrl ?? fileUrl;
+  if (!storedValue?.trim()) return null;
+
+  if (isImageAssetReference(storedValue)) {
+    return (
+      <StoredAssetImage
+        storedValue={storedValue}
+        className="max-h-40 rounded-md border object-contain"
+      />
+    );
+  }
+
+  return (
+    <StoredAssetLink storedValue={storedValue} className="text-xs text-primary hover:underline">
+      View attachment
+    </StoredAssetLink>
+  );
+}
 
 type EventType = "Crewed Event" | "Rental with Crew" | "Dry Hire" | "Services Only";
 type StoredEventType = EventType | "Dry Rental";
@@ -1458,10 +1485,7 @@ export function EventEditor({
               </>
             )}
             <div className="space-y-2">
-              {(eventData?.artifacts ?? []).map((row) => {
-                const attachmentUrl = row.fileUrl ?? (row.linkUrl?.startsWith("http") ? row.linkUrl : undefined);
-                const showImage = Boolean(attachmentUrl && isImageAssetReference(row.linkUrl ?? row.fileUrl));
-                return (
+              {(eventData?.artifacts ?? []).map((row) => (
                   <div key={row._id} className="rounded-md border px-3 py-2 text-sm space-y-2">
                     <div>
                       <p className="font-medium">{row.title}</p>
@@ -1470,27 +1494,9 @@ export function EventEditor({
                         <p className="mt-1 text-xs text-muted-foreground whitespace-pre-wrap">{row.markdown}</p>
                       ) : null}
                     </div>
-                    {attachmentUrl ? (
-                      showImage ? (
-                        <img
-                          src={attachmentUrl}
-                          alt=""
-                          className="max-h-40 rounded-md border object-contain"
-                        />
-                      ) : (
-                        <a
-                          href={attachmentUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs text-primary hover:underline"
-                        >
-                          View attachment
-                        </a>
-                      )
-                    ) : null}
+                    <EventArtifactAttachment linkUrl={row.linkUrl} fileUrl={row.fileUrl} />
                   </div>
-                );
-              })}
+                ))}
             </div>
           </CardContent>
         </Card>
