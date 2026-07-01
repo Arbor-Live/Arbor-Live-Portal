@@ -735,8 +735,8 @@ export function InvoiceEditor({
     artists,
     crewRows,
     fees,
-    hostGroup,
-    hostContact,
+    groups,
+    contacts,
   ]);
 
   const isDraftDirty =
