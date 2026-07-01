@@ -65,15 +65,21 @@ export const resourceLinkSchema = z.object({
   url: z.string(),
 });
 
+/** USD fields edited via number inputs may be stored as "" or a number. */
+const optionalUsdField = z.union([
+  z.literal(""),
+  z.coerce.number().min(0, "Must be non-negative"),
+]);
+
 export const inventoryTypeSchema = z.object({
   name: z.string().min(1, "Name is required"),
   description: z.string().optional(),
   model: z.string().min(1, "Model is required"),
   manufacturer: z.string().optional(),
   category: z.string().min(1, "Category is required"),
-  msrpUsd: z.string().optional(),
-  subsidizedRentalPriceUsd: z.string().optional(),
-  nonSubsidizedRentalPriceUsd: z.string().optional(),
+  msrpUsd: optionalUsdField,
+  subsidizedRentalPriceUsd: optionalUsdField,
+  nonSubsidizedRentalPriceUsd: optionalUsdField,
   manualResources: z.array(resourceLinkSchema),
   lightingGdtfResources: z.array(resourceLinkSchema),
   tips: z.string().optional(),
