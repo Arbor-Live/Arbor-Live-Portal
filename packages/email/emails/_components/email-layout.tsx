@@ -207,9 +207,9 @@ export function EventDetailsSection({
   );
 }
 
-export function ScheduleTimeline({ items }: { items: string[] }) {
+export function ScheduleTimeline({ items, title = "Schedule" }: { items: string[]; title?: string }) {
   return (
-    <InfoCard title="Schedule">
+    <InfoCard title={title}>
       {items.map((item, index) => {
         const separatorIndex = item.indexOf(" • ");
         const label = separatorIndex >= 0 ? item.slice(0, separatorIndex) : item;

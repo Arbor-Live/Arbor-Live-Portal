@@ -2,6 +2,7 @@ import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import {
   EVENT_TIMEZONE,
+  ORGANIZER_EMAIL,
   eventDashboardUrl,
   formatEventDateRange,
   subjectForTemplate,
@@ -10,7 +11,13 @@ import { enqueueEmail } from "./enqueue";
 import {
   getEventStakeholderEmails,
   getSchedulePublishedRecipients,
+  getUserEmailRecipient,
 } from "./recipients";
+import {
+  crewAssignmentFingerprint,
+  formatAssignmentSummary,
+  formatScheduleBlockSummary,
+} from "./scheduleEmailData";
 
 function buildBasePayload(
   event: {
@@ -97,6 +104,86 @@ export async function scheduleSchedulePublishedEmails(
       payload: {
         ...buildBasePayload(event, recipient.name),
         blockSummaries,
+      },
+    });
+  }
+}
+
+type CrewShiftInput = {
+  scheduleBlockId?: Id<"eventScheduleBlocks">;
+  role: string;
+  startsAt: number;
+  endsAt: number;
+  userId?: string;
+};
+
+export async function scheduleCrewScheduledEmails(
+  ctx: MutationCtx,
+  eventId: Id<"events">,
+  previousShifts: CrewShiftInput[],
+  nextShifts: CrewShiftInput[],
+) {
+  const event = await ctx.db.get(eventId);
+  if (!event) return;
+
+  const timezone = event.timezone || EVENT_TIMEZONE;
+  const assignedUserIds = [
+    ...new Set(
+      nextShifts
+        .map((shift) => shift.userId?.trim())
+        .filter((value): value is string => Boolean(value)),
+    ),
+  ];
+  if (assignedUserIds.length === 0) return;
+
+  const blocks = await ctx.db
+    .query("eventScheduleBlocks")
+    .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", eventId))
+    .take(500);
+  const blockLabelById = new Map(blocks.map((block) => [block._id, block.label]));
+  const fullScheduleSummaries = blocks.map((block) => formatScheduleBlockSummary(block, timezone));
+  const subject = subjectForTemplate("crew_scheduled", event.title);
+
+  for (const userId of assignedUserIds) {
+    const previousFingerprint = crewAssignmentFingerprint(previousShifts, userId);
+    const nextFingerprint = crewAssignmentFingerprint(nextShifts, userId);
+    if (!nextFingerprint || previousFingerprint === nextFingerprint) continue;
+
+    const recipient = await getUserEmailRecipient(ctx, userId);
+    if (!recipient) continue;
+
+    const userShifts = nextShifts.filter((shift) => shift.userId === userId);
+    const assignmentSummaries = userShifts.map((shift) =>
+      formatAssignmentSummary(shift, blockLabelById, timezone),
+    );
+    const icsEvents = userShifts.map((shift, index) => {
+      const blockLabel = shift.scheduleBlockId
+        ? blockLabelById.get(shift.scheduleBlockId) ?? "Assigned block"
+        : "Assigned block";
+      const role = shift.role.trim();
+      return {
+        uid: `crew-${eventId}-${userId}-${shift.scheduleBlockId ?? "block"}-${shift.startsAt}-${index}@arborlive.stanford.edu`,
+        title: role ? `${event.title} — ${blockLabel} (${role})` : `${event.title} — ${blockLabel}`,
+        description: role ? `Role: ${role}` : undefined,
+        location: event.venueName,
+        startAt: shift.startsAt,
+        endAt: shift.endsAt,
+      };
+    });
+
+    await enqueueEmail(ctx, {
+      template: "crew_scheduled",
+      to: recipient.email,
+      subject,
+      eventId,
+      idempotencyKey: `crew_scheduled:${eventId}:${userId}:${nextFingerprint}`,
+      payload: {
+        ...buildBasePayload(event, recipient.name),
+        assignmentSummaries,
+        fullScheduleSummaries,
+        icsEvents,
+        timezone,
+        organizerEmail: ORGANIZER_EMAIL,
       },
     });
   }

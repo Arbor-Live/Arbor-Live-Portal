@@ -732,6 +732,7 @@ export default defineSchema({
     template: v.union(
       v.literal("event_cancelled"),
       v.literal("schedule_published"),
+      v.literal("crew_scheduled"),
       v.literal("schedule_reminder"),
       v.literal("user_invite"),
       v.literal("password_reset"),

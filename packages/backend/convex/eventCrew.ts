@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireAuth } from "./lib/auth";
 import { calculateCrewCost, syncEventCrewCostUsd } from "./lib/crewCost";
+import { scheduleCrewScheduledEmails } from "./email/triggers";
 
 function hoursBetween(start: number, end: number) {
   return Number(((end - start) / 3_600_000).toFixed(2));
@@ -69,6 +70,13 @@ export const upsertShifts = mutation({
       .query("eventCrewShifts")
       .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
       .take(500);
+    const previousShifts = existing.map((row) => ({
+      scheduleBlockId: row.scheduleBlockId,
+      role: row.role,
+      startsAt: row.startsAt,
+      endsAt: row.endsAt,
+      userId: row.userId,
+    }));
     const keepIds = new Set(args.shifts.map((s) => s.id).filter(Boolean));
     for (const row of existing) {
       if (!keepIds.has(row._id)) await ctx.db.delete(row._id);
@@ -136,6 +144,18 @@ export const upsertShifts = mutation({
     }
 
     await syncEventCrewCostUsd(ctx, args.eventId, now);
+    await scheduleCrewScheduledEmails(
+      ctx,
+      args.eventId,
+      previousShifts,
+      args.shifts.map((shift) => ({
+        scheduleBlockId: shift.scheduleBlockId,
+        role: shift.role.trim(),
+        startsAt: shift.startsAt,
+        endsAt: shift.endsAt,
+        userId: shift.userId?.trim() || undefined,
+      })),
+    );
     return null;
   },
 });
