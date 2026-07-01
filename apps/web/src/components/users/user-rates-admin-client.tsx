@@ -30,12 +30,12 @@ export function UserRatesAdminClient() {
 
   useEffect(() => {
     if (!invoiceSettings) return;
+    if (globalForm.formState.isDirty) return;
     globalForm.reset({
       defaultCrewRateUsd: invoiceSettings.crewNormalRateUsd ?? 0,
       defaultLeadRateUsd:
         invoiceSettings.crewLeadRateUsd ?? invoiceSettings.crewOtRateUsd ?? 0,
     });
-    globalForm.suppressNextAutoSave();
   }, [invoiceSettings, globalForm]);
 
   const onSaveGlobalRates = globalForm.submitMutation(async (values) => {
@@ -152,33 +152,46 @@ function UserRateRow({
   });
 
   useEffect(() => {
+    if (form.formState.isDirty) return;
     form.reset({ hourlyRateUsd: hourlyRateUsd ?? 0 });
-    form.suppressNextAutoSave();
   }, [hourlyRateUsd, form]);
 
-  const persist = async (values: UserRateFormValues) => {
-    await setHourlyRate({ userId, hourlyRateUsd: values.hourlyRateUsd });
-  };
-
-  const watched = form.watch();
-  useEffect(() => {
-    form.debouncedAutoSave(persist, { delayMs: 800, enabled: form.formState.isDirty });
-  }, [watched, form]);
+  const onSave = form.submitMutation(
+    async (values) => {
+      await setHourlyRate({ userId, hourlyRateUsd: values.hourlyRateUsd });
+      return values;
+    },
+    {
+      onSuccess: (values) => {
+        form.reset(values);
+      },
+    },
+  );
 
   return (
-    <div className="grid gap-2 rounded-md border p-3 md:grid-cols-[1fr_220px_24px]">
+    <div className="grid gap-2 rounded-md border p-3 md:grid-cols-[1fr_1fr_24px]">
       <div>
         <p className="text-sm font-medium">{name}</p>
         <p className="text-xs text-muted-foreground">{meta}</p>
       </div>
       <Form {...form}>
-        <form>
-          <TextFormField
-            name="hourlyRateUsd"
-            label=""
-            type="number"
-            placeholder="Hourly rate (USD)"
-          />
+        <form
+          onSubmit={form.handleSubmit(onSave)}
+          className="flex items-end gap-2"
+        >
+          <div className="min-w-0 flex-1">
+            <TextFormField
+              name="hourlyRateUsd"
+              label=""
+              type="number"
+              placeholder="Hourly rate (USD)"
+            />
+          </div>
+          {form.formState.isDirty ? (
+            <Button type="submit" size="sm" disabled={form.saveStatus === "saving"}>
+              Save
+            </Button>
+          ) : null}
         </form>
       </Form>
       <span className="flex self-center justify-end">

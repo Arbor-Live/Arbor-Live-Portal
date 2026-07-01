@@ -96,8 +96,8 @@ export function EventSeriesOverview({ seriesId }: { seriesId: Id<"eventSeries"> 
 
   useEffect(() => {
     if (!data?.series) return;
+    if (costsForm.formState.isDirty) return;
     costsForm.reset(costsFromSeries(data.series));
-    costsForm.suppressNextAutoSave();
   }, [data?.series, costsForm]);
 
   const stats = useMemo(() => {

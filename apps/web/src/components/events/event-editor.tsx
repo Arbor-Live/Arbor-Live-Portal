@@ -183,6 +183,8 @@ export function EventEditor({
   const [seriesEndAt, setSeriesEndAt] = useState("");
   const [editScopeModalOpen, setEditScopeModalOpen] = useState(false);
   const hydratedEventIdRef = useRef<string | null>(null);
+  const lastSavedOverviewSignatureRef = useRef("");
+  const lastSavedScheduleSignatureRef = useRef("");
   const localBlockCounterRef = useRef(0);
 
   function makeLocalBlockRef() {
@@ -270,6 +272,57 @@ export function EventEditor({
         notes: row.notes ?? "",
       })),
     );
+    const hydratedTeams = (eventData.event.teamsInterested as EventTeam[] | undefined) ?? [];
+    const hydratedEventType = normalizeEventType(eventData.event.eventType as StoredEventType | undefined);
+    const hydratedFulfillment = normalizeFulfillmentMode(
+      eventData.event.rentalFulfillmentMode as RentalFulfillmentMode | "pickup" | undefined,
+    );
+    const rentalTypes = ["Dry Hire", "Rental with Crew"] as EventType[];
+    lastSavedOverviewSignatureRef.current = JSON.stringify({
+      title: eventData.event.title.trim(),
+      status: normalizeEventStatus(eventData.event.status),
+      invoiceId: eventData.event.invoiceId ?? undefined,
+      startAt: eventData.event.startAt,
+      endAt: eventData.event.endAt,
+      venueName: eventData.event.venueName || undefined,
+      eventType: hydratedEventType || undefined,
+      rentalFulfillmentMode: rentalTypes.includes(hydratedEventType) ? hydratedFulfillment : undefined,
+      teamsInterested: hydratedTeams.length > 0 ? hydratedTeams : undefined,
+      host: eventData.event.host || undefined,
+      eventManagerUserId: eventData.event.eventManagerUserId || undefined,
+      dayOfLeadUserId: eventData.event.dayOfLeadUserId || undefined,
+      bandsCostUsd: Number(eventData.event.bandsCostUsd ?? 0),
+      externalRentalsCostUsd: Number(eventData.event.externalRentalsCostUsd ?? 0),
+      otherCostUsd: Number(eventData.event.otherCostUsd ?? 0),
+      notes: eventData.event.notes || undefined,
+    });
+    const hydratedBlocks = eventData.blocks.map((row) => ({
+      id: row._id,
+      clientId: row._id,
+      blockType: row.blockType,
+      label: row.label,
+      dayIndex: row.dayIndex,
+      startsAt: toLocalDateTimeInput(row.startsAt),
+      endsAt: toLocalDateTimeInput(row.endsAt),
+      notes: row.notes ?? "",
+    }));
+    const hydratedShifts = eventData.shifts.map((row) => ({
+      id: row._id,
+      scheduleBlockId: row.scheduleBlockId,
+      scheduleBlockRef: row.scheduleBlockId,
+      expenseReportId: row.expenseReportId,
+      role: row.role,
+      userId: row.userId ?? undefined,
+      personName: row.personName ?? "",
+      startsAt: toLocalDateTimeInput(row.startsAt),
+      endsAt: toLocalDateTimeInput(row.endsAt),
+      postedToExpense: row.postedToExpense,
+      notes: row.notes ?? "",
+    }));
+    lastSavedScheduleSignatureRef.current = JSON.stringify({
+      blocks: hydratedBlocks,
+      shifts: hydratedShifts,
+    });
   }, [eventData]);
 
   const hideSchedule = eventType === "Services Only";
@@ -454,6 +507,7 @@ export function EventEditor({
       ...payload,
       editScope: seriesMeta && editScope ? editScope : undefined,
     });
+    lastSavedOverviewSignatureRef.current = JSON.stringify(payload);
     setMessageTone("success");
     setMessage("Overview saved.");
   }
@@ -539,8 +593,8 @@ export function EventEditor({
           notes: row.notes ?? "",
         })),
       );
-      setShifts((prev) =>
-        prev.map((shift) => {
+      setShifts((prev) => {
+        const next = prev.map((shift) => {
           const persistedId =
             shift.scheduleBlockId ??
             (shift.scheduleBlockRef ? persistedBlockIdByRef.get(shift.scheduleBlockRef) : undefined);
@@ -549,8 +603,22 @@ export function EventEditor({
             scheduleBlockId: persistedId,
             scheduleBlockRef: shift.scheduleBlockRef ?? persistedId,
           };
-        }),
-      );
+        });
+        lastSavedScheduleSignatureRef.current = JSON.stringify({
+          blocks: savedBlocks.map((row) => ({
+            id: row.id,
+            clientId: row.clientId ?? row.id,
+            blockType: row.blockType,
+            label: row.label,
+            dayIndex: row.dayIndex,
+            startsAt: toLocalDateTimeInput(row.startsAt),
+            endsAt: toLocalDateTimeInput(row.endsAt),
+            notes: row.notes ?? "",
+          })),
+          shifts: next,
+        });
+        return next;
+      });
       setMessageTone("success");
       setMessage("Schedule saved.");
     } catch (error) {
@@ -585,6 +653,7 @@ export function EventEditor({
           notes: row.notes || undefined,
         })),
       });
+      lastSavedScheduleSignatureRef.current = JSON.stringify({ blocks, shifts });
       setMessageTone("success");
       setMessage("Schedule personnel saved.");
     } catch (error) {
@@ -703,41 +772,41 @@ export function EventEditor({
     [pullListInitialItems],
   );
 
-  const canAutoSaveOverview =
-    !isCreate &&
-    Boolean(eventId) &&
-    resolvedActiveTab === "overview" &&
-    (!seriesMeta || seriesMeta.seriesDetached);
+  const overviewSignature = useMemo(
+    () => JSON.stringify(buildOverviewPayload()),
+    [
+      title,
+      status,
+      invoiceId,
+      startAt,
+      endAt,
+      venueName,
+      eventType,
+      rentalFulfillmentMode,
+      teamsInterested,
+      host,
+      managerUserId,
+      dayOfLeadUserId,
+      bandsCostUsd,
+      externalRentalsCostUsd,
+      otherCostUsd,
+      notes,
+      showFulfillmentPicker,
+    ],
+  );
 
-  useEffect(() => {
-    if (!canAutoSaveOverview) return;
-    if (!title.trim() || !startAt || !endAt) return;
-    const timer = setTimeout(() => {
-      void persistOverview("this").catch((error) => {
-        setMessageTone("error");
-        setMessage(getConvexErrorMessage(error));
-      });
-    }, 1000);
-    return () => clearTimeout(timer);
-  }, [
-    canAutoSaveOverview,
-    title,
-    status,
-    invoiceId,
-    startAt,
-    endAt,
-    venueName,
-    eventType,
-    rentalFulfillmentMode,
-    teamsInterested,
-    host,
-    managerUserId,
-    dayOfLeadUserId,
-    bandsCostUsd,
-    externalRentalsCostUsd,
-    otherCostUsd,
-    notes,
-  ]);
+  const scheduleSignature = useMemo(
+    () => JSON.stringify({ blocks, shifts }),
+    [blocks, shifts],
+  );
+
+  const hasUnsavedChanges = useMemo(() => {
+    if (isCreate) return true;
+    if (resolvedActiveTab === "schedule") {
+      return scheduleSignature !== lastSavedScheduleSignatureRef.current;
+    }
+    return overviewSignature !== lastSavedOverviewSignatureRef.current;
+  }, [isCreate, resolvedActiveTab, overviewSignature, scheduleSignature]);
 
   const saveTier = resolvedActiveTab === "overview" ? "B" : "C";
   const saveStatus =
@@ -1591,7 +1660,7 @@ export function EventEditor({
         tier={saveTier}
         saveStatus={saveStatus}
         saveError={messageTone === "error" ? message : null}
-        isDirty={saveTier === "C" || canAutoSaveOverview}
+        isDirty={hasUnsavedChanges}
         saveLabel={
           isCreate
             ? isRecurring

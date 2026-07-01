@@ -240,20 +240,10 @@ export function TypesManager() {
 
   const onSubmitType = typeForm.submitMutation(persistType);
 
-  const watchedType = typeForm.watch();
-  useEffect(() => {
-    if (!editingId) return;
-    typeForm.debouncedAutoSave(persistType, {
-      delayMs: 1000,
-      enabled: typeForm.formState.isDirty,
-    });
-  }, [watchedType, editingId, typeForm]);
-
   function beginEdit(row: (typeof rows)[number]) {
     setEditingId(row._id);
     const values = toTypeFormValues(row);
     typeForm.reset(values);
-    typeForm.suppressNextAutoSave();
     typeForm.resetSaveState();
   }
 
@@ -698,7 +688,7 @@ export function TypesManager() {
         </Card>
 
         <FormSaveBar
-          tier={editingId ? "B" : "C"}
+          tier="C"
           saveStatus={typeForm.saveStatus}
           saveError={typeForm.saveError}
           isDirty={typeForm.formState.isDirty}

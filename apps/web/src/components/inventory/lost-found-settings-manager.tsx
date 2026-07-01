@@ -28,8 +28,8 @@ function LostFoundForm({ initial }: LostFoundFormProps) {
   });
 
   useEffect(() => {
+    if (form.formState.isDirty) return;
     form.reset(initial);
-    form.suppressNextAutoSave();
   }, [initial, form]);
 
   const persist = async (values: LostFoundSettingsFormValues) => {
@@ -40,10 +40,17 @@ function LostFoundForm({ initial }: LostFoundFormProps) {
     });
   };
 
-  const watched = form.watch();
-  useEffect(() => {
-    form.debouncedAutoSave(persist, { delayMs: 1000, enabled: form.formState.isDirty });
-  }, [watched, form]);
+  const onSave = form.submitMutation(
+    async (values) => {
+      await persist(values);
+      return values;
+    },
+    {
+      onSuccess: (values) => {
+        form.reset(values);
+      },
+    },
+  );
 
   return (
     <>
@@ -81,12 +88,13 @@ function LostFoundForm({ initial }: LostFoundFormProps) {
       </Card>
 
       <FormSaveBar
-        tier="B"
+        tier="C"
         saveStatus={form.saveStatus}
         saveError={form.saveError}
         isDirty={form.formState.isDirty}
-        onSave={() => void form.handleSubmit((values) => form.runMutation(() => persist(values)))()}
-        onRetry={() => void form.handleSubmit((values) => form.runMutation(() => persist(values)))()}
+        onSave={() => void form.handleSubmit(onSave)()}
+        onDiscard={() => form.reset(initial)}
+        onRetry={() => void form.handleSubmit(onSave)()}
       />
     </>
   );

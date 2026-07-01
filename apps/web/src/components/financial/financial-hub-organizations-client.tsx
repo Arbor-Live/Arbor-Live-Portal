@@ -308,13 +308,13 @@ function EditGroupForm({
     mode: "onChange",
   });
 
-  const { debouncedAutoSave, watch, formState, reset, suppressNextAutoSave, runMutation } = form;
+  const { formState, reset, runMutation } = form;
   const isDirty = formState.isDirty;
 
   useEffect(() => {
+    if (formState.isDirty) return;
     reset(initial);
-    suppressNextAutoSave();
-  }, [groupId, initial.name, initial.type, initial.equipmentPricingMode, reset, suppressNextAutoSave]);
+  }, [groupId, initial.name, initial.type, initial.equipmentPricingMode, reset, formState.isDirty]);
 
   const persist = useCallback(
     async (values: InvoiceGroupFormValues) => {
@@ -333,15 +333,9 @@ function EditGroupForm({
       runMutation(async () => {
         await persist(values);
         reset(values, { keepValues: true });
-        suppressNextAutoSave();
       }),
     )();
-  }, [form, persist, reset, runMutation, suppressNextAutoSave]);
-
-  const watched = watch();
-  useEffect(() => {
-    debouncedAutoSave(persist, { delayMs: 800, enabled: isDirty });
-  }, [watched, debouncedAutoSave, isDirty, persist]);
+  }, [form, persist, reset, runMutation]);
 
   return (
     <>
@@ -407,11 +401,12 @@ function EditGroupForm({
       </Form>
 
       <FormSaveBar
-        tier="B"
+        tier="C"
         saveStatus={form.saveStatus}
         saveError={form.saveError}
         isDirty={isDirty}
         onSave={onSave}
+        onDiscard={() => reset(initial)}
         onRetry={onSave}
       />
     </>
@@ -445,18 +440,18 @@ function ContactRow({
     mode: "onChange",
   });
 
-  const { debouncedAutoSave, watch, formState, reset, suppressNextAutoSave } = form;
+  const { formState, reset } = form;
   const isDirty = formState.isDirty;
 
   useEffect(() => {
+    if (formState.isDirty) return;
     reset({
       firstName: contact.firstName,
       lastName: contact.lastName,
       email: contact.email ?? "",
       phone: contact.phone ?? "",
     });
-    suppressNextAutoSave();
-  }, [contact._id, contact.firstName, contact.lastName, contact.email, contact.phone, reset, suppressNextAutoSave]);
+  }, [contact._id, contact.firstName, contact.lastName, contact.email, contact.phone, reset, formState.isDirty]);
 
   const persist = useCallback(
     async (values: InvoiceContactFormValues) => {
@@ -471,10 +466,17 @@ function ContactRow({
     [contact._id, updateContact],
   );
 
-  const watched = watch();
-  useEffect(() => {
-    debouncedAutoSave(persist, { delayMs: 800, enabled: isDirty });
-  }, [watched, debouncedAutoSave, isDirty, persist]);
+  const onSave = form.submitMutation(
+    async (values) => {
+      await persist(values);
+      return values;
+    },
+    {
+      onSuccess: (values) => {
+        form.reset(values);
+      },
+    },
+  );
 
   return (
     <div className="grid gap-2 rounded-md border p-3 md:grid-cols-[1fr_1fr_1fr_1fr_160px]">
@@ -486,7 +488,12 @@ function ContactRow({
           <TextFormField name="phone" label="" placeholder="Phone" type="tel" />
         </div>
       </Form>
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        {isDirty ? (
+          <Button type="button" size="sm" disabled={form.saveStatus === "saving"} onClick={() => void form.handleSubmit(onSave)()}>
+            Save
+          </Button>
+        ) : null}
         <span className="flex shrink-0">
           {form.saveStatus === "saving" ? (
             <CircleNotchIcon className="size-4 animate-spin text-muted-foreground" />

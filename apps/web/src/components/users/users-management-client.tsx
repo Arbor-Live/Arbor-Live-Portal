@@ -539,8 +539,8 @@ function UserAdminRow({
   });
 
   useEffect(() => {
+    if (form.formState.isDirty) return;
     form.reset(userValuesFromRow(user, resolvedOrgId));
-    form.suppressNextAutoSave();
   }, [user, resolvedOrgId, form]);
 
   const persist = async (values: UserAdminRowFormValues) => {
@@ -566,10 +566,17 @@ function UserAdminRow({
     });
   };
 
-  const watched = form.watch();
-  useEffect(() => {
-    form.debouncedAutoSave(persist, { delayMs: 800, enabled: form.formState.isDirty });
-  }, [watched, form]);
+  const onSave = form.submitMutation(
+    async (values) => {
+      await persist(values);
+      return values;
+    },
+    {
+      onSuccess: (values) => {
+        form.reset(values);
+      },
+    },
+  );
 
   async function onAddMembership() {
     if (!membershipDraft.organizationId) {
@@ -683,7 +690,17 @@ function UserAdminRow({
           </label>
         </td>
         <td className="px-3 py-2">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {form.formState.isDirty ? (
+              <Button
+                type="button"
+                size="sm"
+                disabled={form.saveStatus === "saving"}
+                onClick={() => void form.handleSubmit(onSave)()}
+              >
+                Save
+              </Button>
+            ) : null}
             <Select
               value=""
               onValueChange={(action) => {
@@ -830,8 +847,8 @@ function BandOrgAdminRow({
   });
 
   useEffect(() => {
+    if (form.formState.isDirty) return;
     form.reset(bandOrgValuesFromRow(org));
-    form.suppressNextAutoSave();
   }, [org, form]);
 
   const persist = async (values: BandOrgProfileFormValues) => {
@@ -849,10 +866,17 @@ function BandOrgAdminRow({
     });
   };
 
-  const watched = form.watch();
-  useEffect(() => {
-    form.debouncedAutoSave(persist, { delayMs: 800, enabled: form.formState.isDirty });
-  }, [watched, form]);
+  const onSave = form.submitMutation(
+    async (values) => {
+      await persist(values);
+      return values;
+    },
+    {
+      onSuccess: (values) => {
+        form.reset(values);
+      },
+    },
+  );
 
   return (
     <>
@@ -877,7 +901,17 @@ function BandOrgAdminRow({
           />
         </td>
         <td className="px-3 py-2">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {form.formState.isDirty ? (
+              <Button
+                type="button"
+                size="sm"
+                disabled={form.saveStatus === "saving"}
+                onClick={() => void form.handleSubmit(onSave)()}
+              >
+                Save
+              </Button>
+            ) : null}
             <Select
               value=""
               onValueChange={(action) => {
@@ -1080,7 +1114,6 @@ function EditInviteModal({
 
   useEffect(() => {
     form.reset({ role: invite.role, teams: invite.teams });
-    form.suppressNextAutoSave();
   }, [invite, form]);
 
   const onSubmit = form.submitMutation(async (values) => {
