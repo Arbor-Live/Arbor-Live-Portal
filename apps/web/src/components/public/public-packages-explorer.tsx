@@ -55,7 +55,6 @@ export function PublicPackagesExplorer({ bucket }: { bucket?: PublicBucket }) {
         }
       />
       <div className="mx-auto max-w-6xl space-y-10 px-4 py-12 sm:px-6 lg:px-8">
-
         {rows === undefined ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
 
         {rows && !rows.length ? (
@@ -77,50 +76,70 @@ export function PublicPackagesExplorer({ bucket }: { bucket?: PublicBucket }) {
               <section key={group.key} className="space-y-4">
                 <Reveal>
                   <h2 className="text-xl font-semibold tracking-tight">{bucketLabels[group.key]}</h2>
-                  <p className="text-sm text-muted-foreground">
-                    Packages grouped by dominant equipment category.
-                  </p>
                 </Reveal>
 
                 <Stagger className="grid gap-6 md:grid-cols-2">
                   {group.items.map((row, index) => (
                     <StaggerItem key={row.package._id}>
-                      <Card className="group overflow-hidden py-0 transition-shadow hover:ring-2 hover:ring-primary/20">
+                      <Card className="group gap-0 overflow-hidden py-0 transition-shadow hover:ring-2 hover:ring-primary/20 has-[>div:first-child]:pt-0">
                         {row.package.publicHeroImageUrl ? (
-                          <img
-                            src={row.package.publicHeroImageUrl}
-                            alt=""
-                            className="h-44 w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
-                          />
+                          <div className="relative h-44 w-full overflow-hidden border-b bg-zinc-950">
+                            <img
+                              src={row.package.publicHeroImageUrl}
+                              alt=""
+                              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+                            />
+                            <div
+                              aria-hidden
+                              className="pointer-events-none absolute inset-0 bg-gradient-to-t from-background/80 via-transparent to-transparent"
+                            />
+                          </div>
                         ) : (
                           <div
                             className={cn(
-                              "h-44 w-full bg-gradient-to-br",
+                              "flex h-32 items-center justify-center border-b px-4 text-center text-sm font-medium text-zinc-200",
                               index % 2 === 0
-                                ? "from-emerald-900/60 via-primary/30 to-zinc-900"
-                                : "from-zinc-900 via-primary/25 to-emerald-950",
+                                ? "bg-gradient-to-br from-emerald-900/60 via-primary/30 to-zinc-900"
+                                : "bg-gradient-to-br from-zinc-900 via-primary/25 to-emerald-950",
                             )}
-                          />
+                          >
+                            {row.package.name}
+                          </div>
                         )}
-                      <CardHeader>
-                        <CardTitle className="text-base">{row.package.name}</CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-3 text-sm">
-                        <div className="max-h-32 overflow-hidden text-muted-foreground">
+                        <CardHeader className="gap-0.5 pb-2 pt-4">
+                          <CardTitle className="text-balance text-base leading-snug">
+                            {row.package.name}
+                          </CardTitle>
+                          <p className="text-xs text-muted-foreground">
+                            {bucketLabels[group.key]} package
+                          </p>
+                        </CardHeader>
+                        <CardContent className="space-y-3 pb-4 pt-0 text-sm">
                           {row.package.description ? (
-                            <MarkdownContent>{row.package.description}</MarkdownContent>
+                            <div className="relative min-w-0">
+                              <div className="max-h-32 overflow-hidden">
+                                <MarkdownContent className="text-muted-foreground">
+                                  {row.package.description}
+                                </MarkdownContent>
+                              </div>
+                              {row.package.description.length > 160 ? (
+                                <div
+                                  aria-hidden
+                                  className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-card to-transparent"
+                                />
+                              ) : null}
+                            </div>
                           ) : (
-                            <p>No description provided.</p>
+                            <p className="text-muted-foreground">No description provided.</p>
                           )}
-                        </div>
-                        <Link
-                          className="text-sm font-medium text-primary hover:underline"
-                          href={`/public/packages/view/${row.package._id}`}
-                        >
-                          View package →
-                        </Link>
-                      </CardContent>
-                    </Card>
+                          <Link
+                            className="inline-flex text-sm font-medium text-primary hover:underline"
+                            href={`/public/packages/view/${row.package._id}`}
+                          >
+                            View package →
+                          </Link>
+                        </CardContent>
+                      </Card>
                     </StaggerItem>
                   ))}
                 </Stagger>
