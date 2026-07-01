@@ -8,15 +8,18 @@ import {
 } from "./constants";
 import { enqueueEmail } from "./enqueue";
 import {
+  getEventLeadRecipients,
   getEventStakeholderEmails,
-  getSchedulePublishedRecipients,
-  getUserEmailRecipient,
+  getUserScheduledEmailRecipient,
 } from "./recipients";
 import {
-  crewAssignmentFingerprint,
+  buildMergedIcsEventForShiftGroup,
   formatAssignmentSummary,
   formatScheduleBlockSummary,
+  groupShiftsByConsecutiveBlocks,
+  shiftGroupFingerprint,
   userCoversEntireSchedule,
+  type CrewShiftLike,
 } from "./scheduleEmailData";
 
 function buildBasePayload(
@@ -91,7 +94,7 @@ export async function scheduleSchedulePublishedEmails(
     return `${block.label}: ${start} – ${end}`;
   });
 
-  const recipients = await getSchedulePublishedRecipients(ctx, eventId);
+  const recipients = await getEventLeadRecipients(ctx, eventId);
   const subject = subjectForTemplate("schedule_published", event.title);
 
   for (const recipient of recipients) {
@@ -109,19 +112,11 @@ export async function scheduleSchedulePublishedEmails(
   }
 }
 
-type CrewShiftInput = {
-  scheduleBlockId?: Id<"eventScheduleBlocks">;
-  role: string;
-  startsAt: number;
-  endsAt: number;
-  userId?: string;
-};
-
 export async function scheduleCrewScheduledEmails(
   ctx: MutationCtx,
   eventId: Id<"events">,
-  previousShifts: CrewShiftInput[],
-  nextShifts: CrewShiftInput[],
+  previousShifts: CrewShiftLike[],
+  nextShifts: CrewShiftLike[],
 ) {
   const event = await ctx.db.get(eventId);
   if (!event) return;
@@ -143,54 +138,63 @@ export async function scheduleCrewScheduledEmails(
   const blockLabelById = new Map(blocks.map((block) => [block._id, block.label]));
   const fullScheduleSummaries = blocks.map((block) => formatScheduleBlockSummary(block, timezone));
   const eventLeadName = event.dayOfLeadUserId
-    ? (await getUserEmailRecipient(ctx, event.dayOfLeadUserId))?.name
+    ? (await getUserScheduledEmailRecipient(ctx, event.dayOfLeadUserId))?.name
     : undefined;
   const subject = subjectForTemplate("crew_scheduled", event.title);
 
   for (const userId of assignedUserIds) {
-    const previousFingerprint = crewAssignmentFingerprint(previousShifts, userId);
-    const nextFingerprint = crewAssignmentFingerprint(nextShifts, userId);
-    if (!nextFingerprint || previousFingerprint === nextFingerprint) continue;
-
-    const recipient = await getUserEmailRecipient(ctx, userId);
+    const recipient = await getUserScheduledEmailRecipient(ctx, userId);
     if (!recipient) continue;
 
-    const userShifts = nextShifts.filter((shift) => shift.userId === userId);
-    const assignmentSummaries = userShifts.map((shift) =>
-      formatAssignmentSummary(shift, blockLabelById, timezone),
-    );
-    const coversEntireEvent = userCoversEntireSchedule(userShifts, blocks);
-    const icsEvents = userShifts.map((shift, index) => {
-      const blockLabel = shift.scheduleBlockId
-        ? blockLabelById.get(shift.scheduleBlockId) ?? "Assigned block"
-        : "Assigned block";
-      const role = shift.role.trim();
-      return {
-        uid: `crew-${eventId}-${userId}-${shift.scheduleBlockId ?? "block"}-${shift.startsAt}-${index}@arborlive.stanford.edu`,
-        title: role ? `${event.title} — ${blockLabel} (${role})` : `${event.title} — ${blockLabel}`,
-        description: role ? `Role: ${role}` : undefined,
-        location: event.venueName,
-        startAt: shift.startsAt,
-        endAt: shift.endsAt,
-      };
-    });
+    const previousUserShifts = previousShifts.filter((shift) => shift.userId === userId);
+    const nextUserShifts = nextShifts.filter((shift) => shift.userId === userId);
+    if (nextUserShifts.length === 0) continue;
 
-    await enqueueEmail(ctx, {
-      template: "crew_scheduled",
-      to: recipient.email,
-      subject,
-      eventId,
-      idempotencyKey: `crew_scheduled:${eventId}:${userId}:${nextFingerprint}`,
-      payload: {
-        ...buildBasePayload(event, recipient.name),
-        eventLeadName,
-        assignmentSummaries,
-        fullScheduleSummaries: coversEntireEvent ? [] : fullScheduleSummaries,
-        coversEntireEvent,
-        icsEvents,
-        timezone,
-      },
-    });
+    const previousGroups = groupShiftsByConsecutiveBlocks(previousUserShifts, blocks);
+    const nextGroups = groupShiftsByConsecutiveBlocks(nextUserShifts, blocks);
+    const previousFingerprints = new Set(previousGroups.map((group) => shiftGroupFingerprint(group)));
+    const coversEntireEventForUser = userCoversEntireSchedule(nextUserShifts, blocks);
+
+    for (let groupIndex = 0; groupIndex < nextGroups.length; groupIndex += 1) {
+      const group = nextGroups[groupIndex]!;
+      const groupFingerprint = shiftGroupFingerprint(group);
+      if (previousFingerprints.has(groupFingerprint)) continue;
+
+      const assignmentSummaries = group.map((shift) =>
+        formatAssignmentSummary(shift, blockLabelById, timezone),
+      );
+      const coversEntireEvent =
+        coversEntireEventForUser && nextGroups.length === 1 && group.length === nextUserShifts.length;
+      const icsEvents = [
+        buildMergedIcsEventForShiftGroup({
+          eventId,
+          userId,
+          groupIndex,
+          eventTitle: event.title,
+          venueName: event.venueName,
+          group,
+          blockLabelById,
+          timezone,
+        }),
+      ];
+
+      await enqueueEmail(ctx, {
+        template: "crew_scheduled",
+        to: recipient.email,
+        subject,
+        eventId,
+        idempotencyKey: `crew_scheduled:${eventId}:${userId}:${groupFingerprint}`,
+        payload: {
+          ...buildBasePayload(event, recipient.name),
+          eventLeadName,
+          assignmentSummaries,
+          fullScheduleSummaries: coversEntireEvent ? [] : fullScheduleSummaries,
+          coversEntireEvent,
+          icsEvents,
+          timezone,
+        },
+      });
+    }
   }
 }
 

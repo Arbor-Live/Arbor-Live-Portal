@@ -4,6 +4,14 @@ export const profileSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(120, "Name is too long"),
   phone: z.string().trim().max(40, "Phone is too long").optional(),
   title: z.string().trim().max(120, "Title is too long").optional(),
+  calendarInviteEmail: z
+    .string()
+    .trim()
+    .max(200, "Email is too long")
+    .refine((value) => value === "" || z.string().email().safeParse(value).success, {
+      message: "Enter a valid email address",
+    })
+    .optional(),
 });
 
 export type ProfileFormValues = z.infer<typeof profileSchema>;

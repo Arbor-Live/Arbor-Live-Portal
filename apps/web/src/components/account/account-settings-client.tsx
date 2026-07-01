@@ -74,7 +74,7 @@ export function AccountSettingsClient() {
 
   const profileForm = useConvexForm<ProfileFormValues>({
     schema: profileSchema,
-    defaultValues: { name: "", phone: "", title: "" },
+    defaultValues: { name: "", phone: "", title: "", calendarInviteEmail: "" },
     mode: "onTouched",
   });
 
@@ -108,6 +108,7 @@ export function AccountSettingsClient() {
       name: account.name,
       phone: account.phone ?? "",
       title: account.title ?? "",
+      calendarInviteEmail: account.calendarInviteEmail ?? "",
     });
   }, [account, profileForm]);
 
@@ -128,6 +129,7 @@ export function AccountSettingsClient() {
     await updateMyProfileDetails({
       phone: values.phone?.trim() || undefined,
       title: values.title?.trim() || undefined,
+      calendarInviteEmail: values.calendarInviteEmail?.trim() || undefined,
     });
     await refetchSession();
     return result;
@@ -323,6 +325,13 @@ export function AccountSettingsClient() {
               <TextFormField name="name" label="Display name" />
               <TextFormField name="title" label="Job title" />
               <TextFormField name="phone" label="Phone" type="tel" />
+              <TextFormField
+                name="calendarInviteEmail"
+                label="Calendar invite email"
+                type="email"
+                placeholder={displayEmail}
+                description="Crew schedule emails and calendar invites are sent here. Leave blank to use your account email."
+              />
               <Button type="submit" disabled={profileForm.saveStatus === "saving"}>
                 {profileForm.saveStatus === "saving" ? "Saving…" : "Save profile"}
               </Button>

@@ -568,6 +568,7 @@ export default defineSchema({
     teams: v.array(userTeamValue),
     /** When true, user appears on the public /crew page (opt-in). */
     showOnPublicCrewPage: v.optional(v.boolean()),
+    calendarInviteEmail: v.optional(v.string()),
     defaultOrganizationId: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
