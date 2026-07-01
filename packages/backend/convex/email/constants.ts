@@ -1,7 +1,14 @@
 export const EMAIL_FROM =
   process.env.EMAIL_FROM ?? "Arbor Notifications <noreply@arbor.st>";
 
-export const ORGANIZER_EMAIL = process.env.ORGANIZER_EMAIL ?? "arborlive@stanford.edu";
+function parseEmailAddress(from: string) {
+  const match = from.match(/<([^>]+)>/);
+  if (match) return match[1]!.trim().toLowerCase();
+  return from.trim().toLowerCase();
+}
+
+export const ORGANIZER_EMAIL =
+  process.env.ORGANIZER_EMAIL ?? parseEmailAddress(EMAIL_FROM);
 
 export const SITE_URL = process.env.SITE_URL ?? "http://localhost:3000";
 

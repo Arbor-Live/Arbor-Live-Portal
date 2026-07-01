@@ -2,7 +2,6 @@ import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import {
   EVENT_TIMEZONE,
-  ORGANIZER_EMAIL,
   eventDashboardUrl,
   formatEventDateRange,
   subjectForTemplate,
@@ -190,7 +189,6 @@ export async function scheduleCrewScheduledEmails(
         coversEntireEvent,
         icsEvents,
         timezone,
-        organizerEmail: ORGANIZER_EMAIL,
       },
     });
   }

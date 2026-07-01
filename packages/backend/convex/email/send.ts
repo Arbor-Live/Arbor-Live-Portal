@@ -9,7 +9,7 @@ import { internalAction } from "../_generated/server";
 import { renderInvoicePdfBuffer } from "@arbor/invoice-document/pdf";
 import { buildScheduleIcs } from "@arbor/email/ics";
 import type { CrewScheduledEmailPayload } from "@arbor/email/types";
-import { EMAIL_FROM } from "./constants";
+import { EMAIL_FROM, ORGANIZER_EMAIL } from "./constants";
 import { renderEmailHtml } from "./templates";
 
 export const resendClient = new Resend(components.resend, {
@@ -43,7 +43,11 @@ async function sendEmailWithAttachments(
     subject: string;
   },
   html: string,
-  attachments: Array<{ filename: string; content: string }>,
+  attachments: Array<{
+    filename: string;
+    content: string | Buffer;
+    contentType?: string;
+  }>,
 ) {
   const resendSdk = getResendSdk();
   return await resendClient.sendEmailManually(
@@ -132,7 +136,7 @@ export const sendQueuedEmail = internalAction({
         const payload = notification.payload as CrewScheduledEmailPayload;
         const icsContent = buildScheduleIcs({
           timezone: payload.timezone,
-          organizerEmail: payload.organizerEmail,
+          organizerEmail: ORGANIZER_EMAIL,
           attendeeEmail: notification.to,
           events: payload.icsEvents.map((event) => ({
             uid: event.uid,
@@ -150,8 +154,9 @@ export const sendQueuedEmail = internalAction({
           html,
           [
             {
-              filename: "event-schedule.ics",
-              content: Buffer.from(icsContent, "utf8").toString("base64"),
+              filename: "invite.ics",
+              content: Buffer.from(icsContent, "utf-8"),
+              contentType: "text/calendar; charset=utf-8; method=REQUEST",
             },
           ],
         );

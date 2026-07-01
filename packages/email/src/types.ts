@@ -29,7 +29,6 @@ export type CrewScheduledIcsEventPayload = {
 export type CrewScheduledEmailPayload = CrewScheduledEmailProps & {
   icsEvents: CrewScheduledIcsEventPayload[];
   timezone: string;
-  organizerEmail: string;
 };
 
 export type ScheduleReminderEmailProps = EventEmailProps & {
