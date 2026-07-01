@@ -1,10 +1,9 @@
 "use client";
 
-/* eslint-disable @next/next/no-img-element -- public pages may reference arbitrary external image URLs */
-
 import { useMemo, useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
+import { StoredAssetImage } from "@/components/files/stored-asset-image";
 import { PublicPageHero } from "@/components/public/public-page-hero";
 import { PublicSiteChrome } from "@/components/public/public-site-chrome";
 import { MarkdownContent } from "@/components/markdown-content";
@@ -177,16 +176,14 @@ export function PublicTypesExplorer({ bucket }: { bucket?: PublicBucket }) {
                           {hasProfile ? (
                             <div className="grid gap-3 sm:grid-cols-2">
                               {type.promoImageUrl ? (
-                                <img
-                                  src={type.promoImageUrl}
-                                  alt=""
+                                <StoredAssetImage
+                                  storedValue={type.promoImageUrl}
                                   className="h-32 w-full rounded-md border object-cover"
                                 />
                               ) : null}
                               {type.iconImageUrl ? (
-                                <img
-                                  src={type.iconImageUrl}
-                                  alt=""
+                                <StoredAssetImage
+                                  storedValue={type.iconImageUrl}
                                   className="h-32 w-full rounded-md border bg-muted/30 object-contain p-3"
                                 />
                               ) : null}

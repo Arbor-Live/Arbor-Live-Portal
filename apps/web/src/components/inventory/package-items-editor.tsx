@@ -14,7 +14,7 @@ import {
   type PublicPackageBucket,
 } from "./package-section-utils";
 import { cn } from "@/lib/utils";
-import { InventoryAssetImage } from "./inventory-asset-image";
+import { StoredAssetImage } from "@/components/files/stored-asset-image";
 
 export type PackageItemRow = { typeId: string; quantity: string };
 
@@ -261,7 +261,7 @@ export function PackageItemsEditor({
                           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                             <div className="flex min-w-0 flex-1 items-center gap-3">
                               {imageUrl ? (
-                                <InventoryAssetImage
+                                <StoredAssetImage
                                   storedValue={imageUrl}
                                   alt=""
                                   className="h-14 w-14 shrink-0 rounded object-cover"
@@ -416,7 +416,7 @@ export function PackageItemsEditor({
                         >
                           <div className="flex min-w-0 flex-1 items-center gap-3">
                             {imageUrl ? (
-                              <InventoryAssetImage
+                              <StoredAssetImage
                                 storedValue={imageUrl}
                                 alt=""
                                 className="h-12 w-12 shrink-0 rounded object-cover"

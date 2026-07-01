@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
+import { StoredAssetImage } from "@/components/files/stored-asset-image";
 import { Reveal } from "@/components/landing/landing-motion";
 import { cn } from "@/lib/utils";
 
@@ -38,10 +39,8 @@ export function PublicArtistDetail({ slug }: { slug: string }) {
           )}
         />
         {artist.heroImageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={artist.heroImageUrl}
-            alt=""
+          <StoredAssetImage
+            storedValue={artist.heroImageUrl}
             className="absolute inset-0 size-full object-cover opacity-50"
           />
         ) : null}

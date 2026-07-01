@@ -1,9 +1,8 @@
 "use client";
 
 import { useCallback, useRef } from "react";
-import { useQuery } from "convex/react";
 import Image from "next/image";
-import { api } from "@/lib/convex-api";
+import { useResolvedAssetUrl } from "@/components/files/stored-asset-image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -36,11 +35,6 @@ type R2UploadFieldProps = {
   pasteHint?: string;
 };
 
-function useResolvedAssetPreview(storedValue: string | undefined) {
-  const trimmed = storedValue?.trim() ?? "";
-  return useQuery(api.inventoryR2.resolveAssetUrl, trimmed ? { value: trimmed } : "skip");
-}
-
 function R2UploadField({
   label,
   uploadArgs,
@@ -60,7 +54,7 @@ function R2UploadField({
   const { uploadFile, busy, error } = useR2FileUpload(uploadArgs);
 
   const storedValue = (urlValue ?? currentUrl ?? "").trim();
-  const resolvedPreviewUrl = useResolvedAssetPreview(storedValue);
+  const resolvedPreviewUrl = useResolvedAssetUrl(storedValue);
   const showImagePreview = Boolean(
     storedValue && isImageAssetReference(storedValue) && resolvedPreviewUrl,
   );

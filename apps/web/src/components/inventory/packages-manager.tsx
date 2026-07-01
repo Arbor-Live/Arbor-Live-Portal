@@ -36,7 +36,7 @@ import {
   type PublicPackageBucket,
 } from "./package-section-utils";
 import { cn } from "@/lib/utils";
-import { InventoryAssetImage } from "./inventory-asset-image";
+import { StoredAssetImage } from "@/components/files/stored-asset-image";
 
 const defaultPackageValues: InventoryPackageFormValues = {
   name: "",
@@ -320,7 +320,7 @@ export function PackagesManager() {
       >
         {pkg.publicHeroImageUrl ? (
           <div className="relative h-36 w-full border-b">
-            <InventoryAssetImage
+            <StoredAssetImage
               storedValue={pkg.publicHeroImageUrl}
               alt=""
               className="h-full w-full object-cover"

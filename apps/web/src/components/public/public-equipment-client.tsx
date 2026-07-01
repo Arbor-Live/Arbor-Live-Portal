@@ -1,10 +1,9 @@
 "use client";
 
-/* eslint-disable @next/next/no-img-element -- public pages may reference arbitrary external image URLs */
-
 import { useMemo } from "react";
 import { useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
+import { StoredAssetImage } from "@/components/files/stored-asset-image";
 import { PublicPageHero } from "@/components/public/public-page-hero";
 import { PublicSiteChrome } from "@/components/public/public-site-chrome";
 import { MarkdownContent } from "@/components/markdown-content";
@@ -204,15 +203,15 @@ export function PublicEquipmentClient({ assetId }: { assetId: string }) {
             <CardContent className="space-y-4">
               <div className="grid gap-3 sm:grid-cols-2">
                 {type.promoImageUrl ? (
-                  <img
-                    src={type.promoImageUrl}
+                  <StoredAssetImage
+                    storedValue={type.promoImageUrl}
                     alt="Promo"
                     className="w-full rounded-md border object-cover"
                   />
                 ) : null}
                 {type.iconImageUrl ? (
-                  <img
-                    src={type.iconImageUrl}
+                  <StoredAssetImage
+                    storedValue={type.iconImageUrl}
                     alt="Icon"
                     className="w-full rounded-md border object-contain bg-muted/30 p-4"
                   />
