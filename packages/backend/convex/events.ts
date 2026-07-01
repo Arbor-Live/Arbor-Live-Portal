@@ -11,6 +11,7 @@ import { listEventsByInvoiceId } from "./lib/invoiceEvents";
 import { RENTAL_EVENT_TYPES, enrichPullListItems, summarizePullList } from "./eventPullLists";
 import { propagateOverviewToSeriesOccurrences, type SeriesEditScope } from "./lib/eventSeriesGeneration";
 import { scheduleEventCancelledEmails } from "./email/triggers";
+import { resolveStoredR2AssetUrl } from "./inventoryR2";
 
 const eventTypeValue = v.union(
   v.literal("Crewed Event"),
@@ -265,6 +266,12 @@ export const get = query({
       .query("eventArtifacts")
       .withIndex("by_eventId", (q) => q.eq("eventId", args.id))
       .take(500);
+    const enrichedArtifacts = await Promise.all(
+      artifacts.map(async (row) => ({
+        ...row,
+        fileUrl: row.linkUrl ? await resolveStoredR2AssetUrl(row.linkUrl) : undefined,
+      })),
+    );
     const expenseReports = await ctx.db
       .query("eventExpenseReports")
       .withIndex("by_eventId", (q) => q.eq("eventId", args.id))
@@ -307,7 +314,7 @@ export const get = query({
       blocks,
       shifts,
       assignments,
-      artifacts,
+      artifacts: enrichedArtifacts,
       expenseReports,
       pullListItems: enrichedPullList,
     };

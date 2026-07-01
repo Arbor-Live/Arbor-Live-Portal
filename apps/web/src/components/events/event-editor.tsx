@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
+import { EventArtifactUploadField } from "@/components/files/file-upload-field";
 import {
   FilmSlateIcon,
   GearIcon,
@@ -46,6 +47,9 @@ import {
   type RecurrenceEndMode,
   type SeriesEditScope,
 } from "@/lib/event-series";
+import { getConvexErrorMessage } from "@/lib/convex-error";
+import { FormSaveBar } from "@/components/forms";
+import { isImageAssetReference } from "@/lib/r2-assets";
 
 type EventType = "Crewed Event" | "Rental with Crew" | "Dry Hire" | "Services Only";
 type StoredEventType = EventType | "Dry Rental";
@@ -126,9 +130,6 @@ function normalizeEventType(value: StoredEventType | undefined): EventType {
   return value ?? "Crewed Event";
 }
 
-import { getConvexErrorMessage } from "@/lib/convex-error";
-import { FormSaveBar } from "@/components/forms";
-
 export function EventEditor({
   eventId,
   activeTab = "overview",
@@ -174,6 +175,7 @@ export function EventEditor({
   const [artifactType, setArtifactType] = useState<"note" | "instruction" | "document" | "pull_list">("note");
   const [artifactTitle, setArtifactTitle] = useState("");
   const [artifactMarkdown, setArtifactMarkdown] = useState("");
+  const [artifactLinkUrl, setArtifactLinkUrl] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [messageTone, setMessageTone] = useState<"success" | "error">("success");
   const [isRecurring, setIsRecurring] = useState(false);
@@ -1406,47 +1408,89 @@ export function EventEditor({
         <Card>
           <CardHeader><CardTitle>Artifacts</CardTitle></CardHeader>
           <CardContent className="space-y-3">
-            <div className="grid gap-2 md:grid-cols-4">
-              <SearchableSelect
-                value={artifactType}
-                onChange={(value) => setArtifactType(value as typeof artifactType)}
-                options={[
-                  { value: "note", label: "note" },
-                  { value: "instruction", label: "instruction" },
-                  { value: "document", label: "document" },
-                  { value: "pull_list", label: "pull_list" },
-                ]}
-                placeholder="Search artifact type..."
-                emptyLabel="Select artifact type"
-              />
-              <Input placeholder="Title" value={artifactTitle} onChange={(e) => setArtifactTitle(e.target.value)} />
-              <Input placeholder="Markdown/content" value={artifactMarkdown} onChange={(e) => setArtifactMarkdown(e.target.value)} />
-              <Button
-                type="button"
-                disabled={!currentEventId}
-                onClick={async () => {
-                  if (!currentEventId) return;
-                  await createArtifact({
-                    eventId: currentEventId,
-                    artifactType,
-                    title: artifactTitle,
-                    markdown: artifactMarkdown || undefined,
-                  });
-                  setArtifactTitle("");
-                  setArtifactMarkdown("");
-                  setMessage("Artifact added.");
-                }}
-              >
-                Add Artifact
-              </Button>
-            </div>
-            <div className="space-y-1">
-              {(eventData?.artifacts ?? []).map((row) => (
-                <div key={row._id} className="rounded-md border px-3 py-2 text-sm">
-                  <p className="font-medium">{row.title}</p>
-                  <p className="text-xs text-muted-foreground">{row.artifactType}</p>
+            {!currentEventId ? (
+              <p className="text-sm text-muted-foreground">Save the event first to manage artifacts.</p>
+            ) : (
+              <>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <SearchableSelect
+                    value={artifactType}
+                    onChange={(value) => setArtifactType(value as typeof artifactType)}
+                    options={[
+                      { value: "note", label: "note" },
+                      { value: "instruction", label: "instruction" },
+                      { value: "document", label: "document" },
+                      { value: "pull_list", label: "pull_list" },
+                    ]}
+                    placeholder="Search artifact type..."
+                    emptyLabel="Select artifact type"
+                  />
+                  <Input placeholder="Title" value={artifactTitle} onChange={(e) => setArtifactTitle(e.target.value)} />
                 </div>
-              ))}
+                <Input placeholder="Markdown/content" value={artifactMarkdown} onChange={(e) => setArtifactMarkdown(e.target.value)} />
+                <EventArtifactUploadField
+                  eventId={currentEventId}
+                  urlValue={artifactLinkUrl}
+                  onUploaded={(storedValue) => setArtifactLinkUrl(storedValue)}
+                  onUrlChange={setArtifactLinkUrl}
+                  onClear={() => setArtifactLinkUrl("")}
+                />
+                <Button
+                  type="button"
+                  disabled={!artifactTitle.trim()}
+                  onClick={async () => {
+                    if (!currentEventId) return;
+                    await createArtifact({
+                      eventId: currentEventId,
+                      artifactType,
+                      title: artifactTitle,
+                      markdown: artifactMarkdown || undefined,
+                      linkUrl: artifactLinkUrl.trim() || undefined,
+                    });
+                    setArtifactTitle("");
+                    setArtifactMarkdown("");
+                    setArtifactLinkUrl("");
+                    setMessage("Artifact added.");
+                  }}
+                >
+                  Add Artifact
+                </Button>
+              </>
+            )}
+            <div className="space-y-2">
+              {(eventData?.artifacts ?? []).map((row) => {
+                const attachmentUrl = row.fileUrl ?? (row.linkUrl?.startsWith("http") ? row.linkUrl : undefined);
+                const showImage = Boolean(attachmentUrl && isImageAssetReference(row.linkUrl ?? row.fileUrl));
+                return (
+                  <div key={row._id} className="rounded-md border px-3 py-2 text-sm space-y-2">
+                    <div>
+                      <p className="font-medium">{row.title}</p>
+                      <p className="text-xs text-muted-foreground">{row.artifactType}</p>
+                      {row.markdown ? (
+                        <p className="mt-1 text-xs text-muted-foreground whitespace-pre-wrap">{row.markdown}</p>
+                      ) : null}
+                    </div>
+                    {attachmentUrl ? (
+                      showImage ? (
+                        <img
+                          src={attachmentUrl}
+                          alt=""
+                          className="max-h-40 rounded-md border object-contain"
+                        />
+                      ) : (
+                        <a
+                          href={attachmentUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-primary hover:underline"
+                        >
+                          View attachment
+                        </a>
+                      )
+                    ) : null}
+                  </div>
+                );
+              })}
             </div>
           </CardContent>
         </Card>

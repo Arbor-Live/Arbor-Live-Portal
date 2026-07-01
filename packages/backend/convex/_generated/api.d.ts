@@ -45,6 +45,7 @@ import type * as http from "../http.js";
 import type * as inventoryCategories from "../inventoryCategories.js";
 import type * as inventoryItems from "../inventoryItems.js";
 import type * as inventoryPackages from "../inventoryPackages.js";
+import type * as inventoryR2 from "../inventoryR2.js";
 import type * as inventoryTypes from "../inventoryTypes.js";
 import type * as invoiceContacts from "../invoiceContacts.js";
 import type * as invoiceFeeDefinitions from "../invoiceFeeDefinitions.js";
@@ -62,6 +63,7 @@ import type * as lib_crewTeams from "../lib/crewTeams.js";
 import type * as lib_eventSeriesCosts from "../lib/eventSeriesCosts.js";
 import type * as lib_eventSeriesGeneration from "../lib/eventSeriesGeneration.js";
 import type * as lib_eventStatus from "../lib/eventStatus.js";
+import type * as lib_inventoryUpload from "../lib/inventoryUpload.js";
 import type * as lib_invoiceEvents from "../lib/invoiceEvents.js";
 import type * as lib_invoicePaymentStatus from "../lib/invoicePaymentStatus.js";
 import type * as lib_paymentProof from "../lib/paymentProof.js";
@@ -124,6 +126,7 @@ declare const fullApi: ApiFromModules<{
   inventoryCategories: typeof inventoryCategories;
   inventoryItems: typeof inventoryItems;
   inventoryPackages: typeof inventoryPackages;
+  inventoryR2: typeof inventoryR2;
   inventoryTypes: typeof inventoryTypes;
   invoiceContacts: typeof invoiceContacts;
   invoiceFeeDefinitions: typeof invoiceFeeDefinitions;
@@ -141,6 +144,7 @@ declare const fullApi: ApiFromModules<{
   "lib/eventSeriesCosts": typeof lib_eventSeriesCosts;
   "lib/eventSeriesGeneration": typeof lib_eventSeriesGeneration;
   "lib/eventStatus": typeof lib_eventStatus;
+  "lib/inventoryUpload": typeof lib_inventoryUpload;
   "lib/invoiceEvents": typeof lib_invoiceEvents;
   "lib/invoicePaymentStatus": typeof lib_invoicePaymentStatus;
   "lib/paymentProof": typeof lib_paymentProof;
@@ -189,4 +193,5 @@ export declare const internal: FilterApi<
 export declare const components: {
   betterAuth: import("../betterAuth/_generated/component.js").ComponentApi<"betterAuth">;
   resend: import("@convex-dev/resend/_generated/component.js").ComponentApi<"resend">;
+  r2: import("@convex-dev/r2/_generated/component.js").ComponentApi<"r2">;
 };

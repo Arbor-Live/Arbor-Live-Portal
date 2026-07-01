@@ -19,6 +19,10 @@ import {
 import { formatCurrency, toCategoryOptions } from "./constants";
 import { SearchableSelect } from "./searchable-select";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import {
+  FileUploadField,
+  InventoryResourceUploadButton,
+} from "@/components/files/file-upload-field";
 
 type PublicVisibilityFilter = "all" | "public" | "hidden";
 type PublicProfileFilter = "all" | "full" | "off";
@@ -746,6 +750,24 @@ export function TypesManager() {
                           )
                         }
                       />
+                      <InventoryResourceUploadButton
+                        entityKind="type"
+                        purpose="manual"
+                        entityId={editingId ?? undefined}
+                        onUploaded={({ url, title }) =>
+                          setTypeField(
+                            "manualResources",
+                            typeValues.manualResources.map((current, currentIndex) =>
+                              currentIndex === index
+                                ? {
+                                    title: current.title.trim() || title,
+                                    url,
+                                  }
+                                : current,
+                            ),
+                          )
+                        }
+                      />
                       <Button
                         type="button"
                         variant="outline"
@@ -814,6 +836,24 @@ export function TypesManager() {
                             )
                           }
                         />
+                        <InventoryResourceUploadButton
+                          entityKind="type"
+                          purpose="gdtf"
+                          entityId={editingId ?? undefined}
+                          onUploaded={({ url, title }) =>
+                            setTypeField(
+                              "lightingGdtfResources",
+                              typeValues.lightingGdtfResources.map((current, currentIndex) =>
+                                currentIndex === index
+                                  ? {
+                                      title: current.title.trim() || title,
+                                      url,
+                                    }
+                                  : current,
+                              ),
+                            )
+                          }
+                        />
                         <Button
                           type="button"
                           variant="outline"
@@ -849,8 +889,30 @@ export function TypesManager() {
                 <p className="-mt-2 text-xs text-muted-foreground">
                   Shown when full public profile is enabled. Multi-line; Markdown supported.
                 </p>
-                <TextFormField name="iconImageUrl" label="Icon Image URL" />
-                <TextFormField name="promoImageUrl" label="Promo Image URL" />
+                <FileUploadField
+                  label="Icon image"
+                  entityKind="type"
+                  purpose="icon"
+                  entityId={editingId ?? undefined}
+                  currentUrl={typeValues.iconImageUrl}
+                  urlValue={typeValues.iconImageUrl}
+                  onUploaded={(url) => setTypeField("iconImageUrl", url)}
+                  onUrlChange={(url) => setTypeField("iconImageUrl", url)}
+                  onClear={() => setTypeField("iconImageUrl", "")}
+                  helperText="Small icon shown on public equipment pages."
+                />
+                <FileUploadField
+                  label="Promo image"
+                  entityKind="type"
+                  purpose="promo"
+                  entityId={editingId ?? undefined}
+                  currentUrl={typeValues.promoImageUrl}
+                  urlValue={typeValues.promoImageUrl}
+                  onUploaded={(url) => setTypeField("promoImageUrl", url)}
+                  onUrlChange={(url) => setTypeField("promoImageUrl", url)}
+                  onClear={() => setTypeField("promoImageUrl", "")}
+                  helperText="Larger marketing image for public type profiles."
+                />
                 <div className="space-y-3 rounded-md border p-3">
                   <p className="text-sm font-medium">Public sharing</p>
                   <p className="text-xs text-muted-foreground">
