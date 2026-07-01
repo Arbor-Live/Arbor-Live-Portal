@@ -103,12 +103,12 @@ export function AccountSettingsClient() {
 
   useEffect(() => {
     if (!account) return;
+    if (profileForm.formState.isDirty) return;
     profileForm.reset({
       name: account.name,
       phone: account.phone ?? "",
       title: account.title ?? "",
     });
-    profileForm.suppressNextAutoSave();
   }, [account, profileForm]);
 
   if (account === undefined) {

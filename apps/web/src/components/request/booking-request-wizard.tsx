@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useConvex } from "convex/react";
@@ -10,6 +9,7 @@ import { FormProvider, useForm, type Resolver } from "react-hook-form";
 import { api } from "@/lib/convex-api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { PublicMarketingLayout } from "@/components/public/public-marketing-layout";
 import { submitBookingRequest } from "@/app/public/request/actions";
 import { BookingRequestNav } from "@/components/request/booking-request-nav";
 import { EventScheduleField } from "@/components/request/fields/event-schedule-field";
@@ -257,27 +257,26 @@ export function BookingRequestWizard() {
       : currentStep.headline;
 
   return (
-    <div className="flex min-h-dvh flex-col bg-background">
-      <header className="border-b px-4 py-4">
-        <div className="mx-auto flex max-w-2xl items-center justify-between gap-4">
-          <Link href="/" className="flex items-center gap-2">
-            <Image src="/logo.svg" alt="Arbor Live" width={140} height={32} className="h-8 w-auto" />
-          </Link>
-          <span className="text-xs text-muted-foreground">Booking request</span>
+    <PublicMarketingLayout>
+      <div className="border-b bg-background px-4 py-4">
+        <div className="mx-auto max-w-2xl">
+          <p className="text-center text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+            Booking request
+          </p>
+          <div className="mt-3 h-1 overflow-hidden rounded-full bg-muted">
+            <motion.div
+              className="h-full bg-primary"
+              initial={false}
+              animate={{ width: `${progressPercent}%` }}
+              transition={spring}
+            />
+          </div>
         </div>
-        <div className="mx-auto mt-4 h-1 max-w-2xl overflow-hidden rounded-full bg-muted">
-          <motion.div
-            className="h-full bg-primary"
-            initial={false}
-            animate={{ width: `${progressPercent}%` }}
-            transition={spring}
-          />
-        </div>
-      </header>
+      </div>
 
       <FormProvider {...form}>
         <form
-          className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-4 py-8"
+          className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-4 py-8 sm:px-6"
           onSubmit={(event) => {
             event.preventDefault();
             void goNext();
@@ -341,7 +340,7 @@ export function BookingRequestWizard() {
           ) : null}
         </form>
       </FormProvider>
-    </div>
+    </PublicMarketingLayout>
   );
 }
 

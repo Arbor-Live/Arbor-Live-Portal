@@ -85,7 +85,6 @@ export function EventSeriesShiftEditor({
       importOccurrenceId: "",
       defaultHourlyRate: initialDefaultRate,
     });
-    form.suppressNextAutoSave();
   }, [initialShifts, initialDefaultRate, form]);
 
   const occurrenceOptions = useMemo(

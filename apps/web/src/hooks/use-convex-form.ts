@@ -36,36 +36,7 @@ export type UseConvexFormReturn<T extends FieldValues> = UseFormReturn<T> & {
     options?: { successMessage?: string; onSuccess?: (result: R) => void },
   ) => Promise<R | undefined>;
   resetSaveState: () => void;
-  debouncedAutoSave: (
-    onSave: (values: T) => Promise<void>,
-    options?: { delayMs?: number; enabled?: boolean },
-  ) => void;
-  suppressNextAutoSave: () => void;
 };
-
-function captureTextInputFocus(): () => void {
-  const active = document.activeElement;
-  if (
-    !active ||
-    !(active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement)
-  ) {
-    return () => {};
-  }
-
-  const element = active;
-  const selectionStart = element.selectionStart;
-  const selectionEnd = element.selectionEnd;
-
-  return () => {
-    requestAnimationFrame(() => {
-      if (!document.contains(element)) return;
-      element.focus({ preventScroll: true });
-      if (selectionStart !== null && selectionEnd !== null) {
-        element.setSelectionRange(selectionStart, selectionEnd);
-      }
-    });
-  };
-}
 
 export function useConvexForm<T extends FieldValues>({
   schema,
@@ -78,14 +49,9 @@ export function useConvexForm<T extends FieldValues>({
     resolver: zodResolver(schema as never) as Resolver<T>,
   });
 
-  const schemaRef = useRef(schema);
-  schemaRef.current = schema;
-
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
   const savedFadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const suppressAutoSaveRef = useRef(false);
 
   const resetSaveState = useCallback(() => {
     setSaveStatus("idle");
@@ -134,53 +100,12 @@ export function useConvexForm<T extends FieldValues>({
     [runMutation],
   );
 
-  const debouncedAutoSave = useCallback(
-    (
-      onSave: (values: T) => Promise<void>,
-      options?: { delayMs?: number; enabled?: boolean },
-    ) => {
-      const { delayMs = 1000, enabled = true } = options ?? {};
-      if (!enabled) return;
-
-      if (suppressAutoSaveRef.current) {
-        suppressAutoSaveRef.current = false;
-        return;
-      }
-
-      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
-      autoSaveTimerRef.current = setTimeout(() => {
-        void (async () => {
-          if (!form.formState.isDirty) return;
-
-          const values = form.getValues();
-          const parsed = schemaRef.current.safeParse(values);
-          if (!parsed.success) return;
-
-          const result = await runMutation(() => onSave(parsed.data));
-          if (result === undefined) return;
-
-          if (form.formState.isDirty) {
-            const restoreFocus = captureTextInputFocus();
-            form.reset(parsed.data as DefaultValues<T>, { keepValues: true });
-            restoreFocus();
-          }
-        })();
-      }, delayMs);
-    },
-    [form, runMutation],
-  );
-
-  const suppressNextAutoSave = useCallback(() => {
-    suppressAutoSaveRef.current = true;
-  }, []);
-
   // Subscribe to dirty state so consumers re-render when edits are made.
   void form.formState.isDirty;
 
   useEffect(() => {
     return () => {
       if (savedFadeTimerRef.current) clearTimeout(savedFadeTimerRef.current);
-      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     };
   }, []);
 
@@ -195,8 +120,6 @@ export function useConvexForm<T extends FieldValues>({
       submitMutation,
       runMutation,
       resetSaveState,
-      debouncedAutoSave,
-      suppressNextAutoSave,
     };
   }
 
@@ -208,8 +131,6 @@ export function useConvexForm<T extends FieldValues>({
   formReturn.submitMutation = submitMutation;
   formReturn.runMutation = runMutation;
   formReturn.resetSaveState = resetSaveState;
-  formReturn.debouncedAutoSave = debouncedAutoSave;
-  formReturn.suppressNextAutoSave = suppressNextAutoSave;
 
   return formReturn;
 }

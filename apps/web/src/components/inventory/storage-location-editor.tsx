@@ -45,8 +45,8 @@ export function StorageLocationEditor({
   });
 
   useEffect(() => {
+    if (form.formState.isDirty) return;
     form.reset(initial);
-    form.suppressNextAutoSave();
   }, [initial, form]);
 
   const persist = async (values: StorageLocationFormValues) => {
@@ -63,13 +63,7 @@ export function StorageLocationEditor({
     if (!editingId) form.reset({ name: "", parentId: "" });
   };
 
-  const watched = form.watch();
-  useEffect(() => {
-    if (!editingId) return;
-    form.debouncedAutoSave(persist, { delayMs: 800, enabled: form.formState.isDirty });
-  }, [watched, form, editingId]);
-
-  const tier = editingId ? "B" : "C";
+  const tier = editingId ? "C" : "C";
 
   return (
     <>

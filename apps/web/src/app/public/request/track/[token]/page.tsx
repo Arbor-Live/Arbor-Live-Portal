@@ -2,6 +2,7 @@ import { PublicRequestLifecycleClient } from "@/components/public/public-request
 
 export const metadata = {
   title: "Track booking request | Arbor Live",
+  description: "Follow your Arbor Live booking request from submission through quote approval.",
 };
 
 export default async function PublicRequestTrackPage({
@@ -11,9 +12,5 @@ export default async function PublicRequestTrackPage({
 }) {
   const { token } = await params;
 
-  return (
-    <div className="mx-auto min-h-dvh max-w-2xl px-4 py-10">
-      <PublicRequestLifecycleClient token={token} />
-    </div>
-  );
+  return <PublicRequestLifecycleClient token={token} />;
 }

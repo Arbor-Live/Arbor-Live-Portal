@@ -100,9 +100,6 @@ export function InvoiceLinkedEventCrewSection({
   const localBlockCounterRef = useRef(0);
   const hydratedEventIdRef = useRef<Id<"events"> | null>(null);
   const scheduleHydratedRef = useRef(false);
-  const suppressAutoSaveOnceRef = useRef(false);
-  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const persistDraftRef = useRef<(mode: "manual" | "auto") => Promise<boolean>>(async () => false);
   const lastSavedSignatureRef = useRef("");
   const [blocks, setBlocks] = useState<TimelineBlockDraft[]>([]);
   const [shifts, setShifts] = useState<EventShiftDraft[]>([]);
@@ -183,7 +180,6 @@ export function InvoiceLinkedEventCrewSection({
     if (hydratedEventIdRef.current === eventData.event._id) return;
     hydratedEventIdRef.current = eventData.event._id;
     scheduleHydratedRef.current = false;
-    suppressAutoSaveOnceRef.current = true;
     const nextBlocks = eventData.blocks.map((row) => ({
       id: row._id,
       clientId: row._id,
@@ -195,10 +191,11 @@ export function InvoiceLinkedEventCrewSection({
       notes: row.notes ?? "",
     }));
     const nextShifts = shiftsFromEventRows(eventData.shifts);
+    const linkedShifts = attachShiftsToPersistedBlocks(nextShifts, nextBlocks);
     setBlocks(nextBlocks);
-    setShifts(attachShiftsToPersistedBlocks(nextShifts, nextBlocks));
+    setShifts(linkedShifts);
     scheduleHydratedRef.current = true;
-    lastSavedSignatureRef.current = JSON.stringify({ blocks: nextBlocks, shifts: nextShifts });
+    lastSavedSignatureRef.current = JSON.stringify({ blocks: nextBlocks, shifts: linkedShifts });
   }, [eventData]);
 
   useEffect(() => {
@@ -207,15 +204,10 @@ export function InvoiceLinkedEventCrewSection({
   }, [blocks, shifts, onEventCrewRowsChange]);
 
   const persistScheduleDraft = useCallback(
-    async (mode: "manual" | "auto", draftBlocks: TimelineBlockDraft[], draftShifts: EventShiftDraft[]) => {
-      const signature = JSON.stringify({ blocks: draftBlocks, shifts: draftShifts });
-      if (mode === "auto" && signature === lastSavedSignatureRef.current) return true;
-
-      if (mode === "manual") setSaving(true);
-      else {
-        setAutoSaveState("saving");
-        setAutoSaveError(null);
-      }
+    async (draftBlocks: TimelineBlockDraft[], draftShifts: EventShiftDraft[]) => {
+      setSaving(true);
+      setAutoSaveState("saving");
+      setAutoSaveError(null);
 
       try {
         const blocksWithRefs = withStableBlockRefs(draftBlocks, localBlockCounterRef);
@@ -257,49 +249,33 @@ export function InvoiceLinkedEventCrewSection({
         setBlocks(nextBlocks);
         setShifts(linkedShifts);
         lastSavedSignatureRef.current = JSON.stringify({ blocks: nextBlocks, shifts: linkedShifts });
-        suppressAutoSaveOnceRef.current = true;
         hydratedEventIdRef.current = null;
 
-        if (mode === "manual") {
-          onMessage?.("Event schedule and crew slots saved.");
-        } else {
-          setAutoSaveState("saved");
-          setAutoSaveError(null);
-        }
+        onMessage?.("Event schedule and crew slots saved.");
+        setAutoSaveState("saved");
+        setAutoSaveError(null);
         return true;
       } catch (error) {
         const message = getConvexErrorMessage(error);
-        if (mode === "manual") onMessage?.(message);
-        else {
-          setAutoSaveState("error");
-          setAutoSaveError(message);
-        }
+        onMessage?.(message);
+        setAutoSaveState("error");
+        setAutoSaveError(message);
         return false;
       } finally {
-        if (mode === "manual") setSaving(false);
+        setSaving(false);
       }
     },
     [defaultCrewHourlyRateUsd, eventId, onMessage, upsertBlocks, upsertShifts],
   );
 
-  useEffect(() => {
-    persistDraftRef.current = (mode) => persistScheduleDraft(mode, blocks, shifts);
-  }, [blocks, persistScheduleDraft, shifts]);
+  const scheduleSignature = useMemo(
+    () => JSON.stringify({ blocks, shifts }),
+    [blocks, shifts],
+  );
 
-  useEffect(() => {
-    if (!scheduleHydratedRef.current) return;
-    if (suppressAutoSaveOnceRef.current) {
-      suppressAutoSaveOnceRef.current = false;
-      return;
-    }
-    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
-    autoSaveTimerRef.current = setTimeout(() => {
-      void persistDraftRef.current("auto");
-    }, 1200);
-    return () => {
-      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
-    };
-  }, [blocks, shifts]);
+  const scheduleDirty =
+    lastSavedSignatureRef.current !== "" &&
+    scheduleSignature !== lastSavedSignatureRef.current;
 
   const quickAddDisabled = !startAt || !endAt;
   const quickAddDisabledReason = quickAddDisabled ? "Event start and end are required." : undefined;
@@ -333,7 +309,7 @@ export function InvoiceLinkedEventCrewSection({
   }
 
   async function saveScheduleAndPersonnel() {
-    await persistScheduleDraft("manual", blocks, shifts);
+    await persistScheduleDraft(blocks, shifts);
   }
 
   async function removeLegacyUnassignedShifts() {
@@ -344,7 +320,6 @@ export function InvoiceLinkedEventCrewSection({
     try {
       const result = await deleteUnassignedShifts({ eventId });
       setShifts((prev) => prev.filter((shift) => shift.scheduleBlockId || shift.scheduleBlockRef));
-      suppressAutoSaveOnceRef.current = true;
       onMessage?.(`Deleted ${result.deletedCount} unlinked shift${result.deletedCount === 1 ? "" : "s"}.`);
     } catch (error) {
       onMessage?.(getConvexErrorMessage(error));
@@ -472,8 +447,9 @@ export function InvoiceLinkedEventCrewSection({
         </div>
         <p className="text-sm text-muted-foreground">
           Edit schedule blocks and crew slots for{" "}
-          <span className="font-medium">{eventData.event.title}</span>. Changes auto-save to the linked event. Open
-          slots bill at the invoice&apos;s default crew rate (${defaultCrewHourlyRateUsd.toFixed(2)}/hr).
+          <span className="font-medium">{eventData.event.title}</span>. Click Save to persist schedule and crew
+          changes to the linked event. Open slots bill at the invoice&apos;s default crew rate ($
+          {defaultCrewHourlyRateUsd.toFixed(2)}/hr).
         </p>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -599,20 +575,20 @@ export function InvoiceLinkedEventCrewSection({
           </>
         ) : null}
         <Button type="button" disabled={saving} onClick={() => void saveScheduleAndPersonnel()}>
-          {saving ? "Saving..." : "Save Schedule & Crew Slots Now"}
+          {saving ? "Saving..." : "Save Schedule & Crew"}
         </Button>
       </CardContent>
     </Card>
 
     <FormSaveBar
-      tier="B"
+      tier="C"
       saveStatus={barSaveStatus}
       saveError={autoSaveError}
-      isDirty={barSaveStatus !== "idle"}
+      isDirty={scheduleDirty}
       isSubmitting={saving}
-      saveLabel="Save schedule now"
+      saveLabel="Save schedule"
       onSave={() => void saveScheduleAndPersonnel()}
-      onRetry={() => void persistDraftRef.current("auto")}
+      onRetry={() => void saveScheduleAndPersonnel()}
     />
     </>
   );

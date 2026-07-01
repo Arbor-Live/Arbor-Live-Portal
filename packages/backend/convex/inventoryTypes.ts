@@ -116,10 +116,28 @@ async function assertUniqueTypePublicSlug(
   }
 }
 
+function matchesInventoryTypeSearch(type: Doc<"inventoryTypes">, loweredSearch: string) {
+  if (
+    type.name.toLowerCase().includes(loweredSearch) ||
+    type.model.toLowerCase().includes(loweredSearch) ||
+    (type.manufacturer ?? "").toLowerCase().includes(loweredSearch) ||
+    (type.description ?? "").toLowerCase().includes(loweredSearch) ||
+    (type.tips ?? "").toLowerCase().includes(loweredSearch) ||
+    (type.publicSlug ?? "").toLowerCase().includes(loweredSearch)
+  ) {
+    return true;
+  }
+
+  return type.capabilities.some((capability) => capability.toLowerCase().includes(loweredSearch));
+}
+
 export const list = query({
   args: {
     category: v.optional(v.string()),
     capability: v.optional(v.string()),
+    manufacturer: v.optional(v.string()),
+    publicListing: v.optional(v.boolean()),
+    publicProfile: v.optional(v.boolean()),
     search: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -132,17 +150,25 @@ export const list = query({
       : await ctx.db.query("inventoryTypes").collect();
 
     const loweredSearch = args.search?.trim().toLowerCase();
+    const loweredManufacturer = args.manufacturer?.trim().toLowerCase();
 
     return types
       .filter((type) => {
         if (args.capability && !type.capabilities.includes(args.capability)) return false;
+        if (args.publicListing !== undefined && Boolean(type.publicListing) !== args.publicListing) {
+          return false;
+        }
+        if (args.publicProfile !== undefined && Boolean(type.publicProfile) !== args.publicProfile) {
+          return false;
+        }
+        if (
+          loweredManufacturer &&
+          (type.manufacturer ?? "").trim().toLowerCase() !== loweredManufacturer
+        ) {
+          return false;
+        }
         if (!loweredSearch) return true;
-        return (
-          type.name.toLowerCase().includes(loweredSearch) ||
-          type.model.toLowerCase().includes(loweredSearch) ||
-          (type.manufacturer ?? "").toLowerCase().includes(loweredSearch) ||
-          (type.description ?? "").toLowerCase().includes(loweredSearch)
-        );
+        return matchesInventoryTypeSearch(type, loweredSearch);
       })
       .sort((a, b) => a.name.localeCompare(b.name));
   },
@@ -315,6 +341,49 @@ export const update = mutation({
       publicSlug,
       updatedAt: Date.now(),
     });
+  },
+});
+
+export const bulkUpdateVisibility = mutation({
+  args: {
+    ids: v.array(v.id("inventoryTypes")),
+    publicListing: v.optional(v.boolean()),
+    publicProfile: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    if (!args.ids.length) {
+      return { updated: 0 };
+    }
+    if (args.publicListing === undefined && args.publicProfile === undefined) {
+      throw new Error("Specify at least one visibility field to update.");
+    }
+
+    const now = Date.now();
+    let updated = 0;
+
+    for (const id of args.ids) {
+      const existing = await ctx.db.get(id);
+      if (!existing) continue;
+
+      const patch: {
+        publicListing?: boolean;
+        publicProfile?: boolean;
+        updatedAt: number;
+      } = { updatedAt: now };
+
+      if (args.publicListing !== undefined) {
+        patch.publicListing = args.publicListing;
+      }
+      if (args.publicProfile !== undefined) {
+        patch.publicProfile = args.publicProfile;
+      }
+
+      await ctx.db.patch(id, patch);
+      updated += 1;
+    }
+
+    return { updated };
   },
 });
 
