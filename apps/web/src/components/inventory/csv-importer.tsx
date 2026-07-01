@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { getConvexErrorMessage } from "@/lib/convex-error";
 
 type CsvRow = Record<string, string>;
 type Category = "sound" | "lighting" | "staging_rigging" | "misc";
@@ -200,10 +201,11 @@ export function CsvImporter() {
     return map;
   }, [existingLocationsQuery]);
 
-  const existingAssetIds = useMemo(() => {
-    const existingItems = existingItemsQuery ?? [];
-    return new Set(existingItems.map((item) => item.assetId.toLowerCase()));
-  }, [existingItemsQuery]);
+  const isLoadingExistingData =
+    existingTypesQuery === undefined ||
+    existingLocationsQuery === undefined ||
+    existingItemsQuery === undefined ||
+    existingCategoriesQuery === undefined;
 
   function addLog(message: string) {
     setLogs((prev) => [...prev, message]);
@@ -246,8 +248,15 @@ export function CsvImporter() {
       return;
     }
 
+    if (isLoadingExistingData) {
+      addLog("Still loading existing inventory data. Wait a moment and try again.");
+      return;
+    }
+
     setIsImporting(true);
     setLogs([]);
+
+    let errorCount = 0;
 
     try {
       const typeCache = new Map(existingTypeMap);
@@ -255,7 +264,6 @@ export function CsvImporter() {
         (existingTypesQuery ?? []).map((type) => [type.name.toLowerCase(), type]),
       );
       const locationCache = new Map(existingLocationMap);
-      const assetIdCache = new Set(existingAssetIds);
       await ensureDefaultCategories({});
       const categoryCache = new Map<string, string>();
       const categoryLabels = new Map<string, string>();
@@ -275,9 +283,6 @@ export function CsvImporter() {
       const existingItems = existingItemsQuery ?? [];
       const assetRecordIdMap = new Map<string, string>();
       for (const item of existingItems) assetRecordIdMap.set(item.assetId.toLowerCase(), item._id);
-      const existingItemsByAssetId = new Map(
-        existingItems.map((item) => [item.assetId.toLowerCase(), item]),
-      );
 
       const [typesCsv, assetsCsv] = await Promise.all([typesFile.text(), assetsFile.text()]);
       const typeRows = parseCsvContent(typesCsv);
@@ -289,36 +294,42 @@ export function CsvImporter() {
       for (const row of typeRows) {
         const rawName = (row["Item Name"] ?? "").trim();
         if (!rawName) continue;
-        const { manufacturer, normalizedName } = stripLeadingBrand(rawName);
-        const name = normalizedName;
-        const key = name.toLowerCase();
-        const existingType = existingTypesByName.get(key);
-        const payload = {
-          name,
-          category: await ensureCategory(
-            mapCategory(row["Category"] ?? ""),
-            categoryCache,
-            categoryLabels,
-          ),
-          manufacturer,
-          model: inferModel(name, row["Model Number"] ?? ""),
-          msrpUsd: toUsd(row["MSRP"] ?? ""),
-          rentalPriceUsd: toUsd(row["Non-subsidized Rate (10%)"] ?? ""),
-          subsidizedRentalPriceUsd: toUsd(row["Crew Subsidized (5%)"] ?? ""),
-          nonSubsidizedRentalPriceUsd: toUsd(row["Non-subsidized Rate (10%)"] ?? ""),
-          manualUrls: [],
-          tips: row["Notes"] || undefined,
-          capabilities: [],
-          iconImageUrl: undefined,
-          promoImageUrl: undefined,
-        };
+        try {
+          const { manufacturer, normalizedName } = stripLeadingBrand(rawName);
+          const name = normalizedName;
+          const key = name.toLowerCase();
+          const existingType = existingTypesByName.get(key);
+          const payload = {
+            name,
+            category: await ensureCategory(
+              mapCategory(row["Category"] ?? ""),
+              categoryCache,
+              categoryLabels,
+            ),
+            manufacturer,
+            model: inferModel(name, row["Model Number"] ?? ""),
+            msrpUsd: toUsd(row["MSRP"] ?? ""),
+            rentalPriceUsd: toUsd(row["Non-subsidized Rate (10%)"] ?? ""),
+            subsidizedRentalPriceUsd: toUsd(row["Crew Subsidized (5%)"] ?? ""),
+            nonSubsidizedRentalPriceUsd: toUsd(row["Non-subsidized Rate (10%)"] ?? ""),
+            manualUrls: [],
+            tips: row["Notes"] || undefined,
+            capabilities: [],
+            iconImageUrl: undefined,
+            promoImageUrl: undefined,
+          };
 
-        if (existingType) {
-          await updateType({ id: existingType._id, ...payload });
-          typeCache.set(key, existingType._id);
-        } else {
-          const createdTypeId = await createType(payload);
-          typeCache.set(key, createdTypeId);
+          if (existingType) {
+            await updateType({ id: existingType._id, ...payload });
+            typeCache.set(key, existingType._id);
+          } else {
+            const createdTypeId = await createType(payload);
+            typeCache.set(key, createdTypeId);
+            existingTypesByName.set(key, { _id: createdTypeId, ...payload } as never);
+          }
+        } catch (error) {
+          errorCount += 1;
+          addLog(`Skipped type "${rawName}": ${getConvexErrorMessage(error)}`);
         }
       }
 
@@ -329,55 +340,64 @@ export function CsvImporter() {
       for (const row of assetRows) {
         const assetId = (row["Name"] ?? "").trim();
         const fungibleRaw = normalizeTypeName(row["Fungible Inventory"] ?? "");
-        const { manufacturer, normalizedName } = stripLeadingBrand(fungibleRaw);
-        const fungible = normalizedName;
-        if (!assetId || !fungible) continue;
-        const existingItem = existingItemsByAssetId.get(assetId.toLowerCase());
+        if (!assetId || !fungibleRaw) continue;
 
-        let typeId = typeCache.get(fungible.toLowerCase());
-        if (!typeId) {
-          const categoryKey = await ensureCategory(
-            mapCategory(row["Rollup"] ?? ""),
-            categoryCache,
-            categoryLabels,
-          );
-          typeId = await createType({
-            name: fungible,
-            category: categoryKey,
-            manufacturer,
-            model: fungible,
-            msrpUsd: toUsd(row["MSRP"] ?? ""),
-            rentalPriceUsd: toUsd(row["Large Rate PACK"] ?? ""),
-            subsidizedRentalPriceUsd: toUsd(row["Small Rate PACK"] ?? ""),
-            nonSubsidizedRentalPriceUsd: toUsd(row["Large Rate PACK"] ?? ""),
-            manualUrls: [],
-            tips: row["Description"] || undefined,
-            capabilities: [],
-            iconImageUrl: undefined,
-            promoImageUrl: undefined,
-          });
-          typeCache.set(fungible.toLowerCase(), typeId);
-          createdTypesFromAssets += 1;
-        }
+        try {
+          const { manufacturer, normalizedName } = stripLeadingBrand(fungibleRaw);
+          const fungible = normalizedName;
+          if (!fungible) continue;
 
-        const storageLocationId = await ensureLocation(row["Storage Loc"] ?? "", locationCache);
-        const itemPayload = {
-          assetId,
-          serialNumber: row["Serial"] || undefined,
-          typeId: typeId as never,
-          storageLocationId: storageLocationId as never,
-          status: row["Condition"] || undefined,
-          notes: row["Description"] || undefined,
-        };
-        const createdItemId = existingItem
-          ? (await updateItem({ id: existingItem._id, ...itemPayload }), existingItem._id)
-          : await createItem(itemPayload);
-        assetIdCache.add(assetId.toLowerCase());
-        assetRecordIdMap.set(assetId.toLowerCase(), createdItemId);
-        if (existingItem) {
-          skippedItems += 1;
-        } else {
+          const assetKey = assetId.toLowerCase();
+          const existingRecordId = assetRecordIdMap.get(assetKey);
+
+          let typeId = typeCache.get(fungible.toLowerCase());
+          if (!typeId) {
+            const categoryKey = await ensureCategory(
+              mapCategory(row["Rollup"] ?? ""),
+              categoryCache,
+              categoryLabels,
+            );
+            typeId = await createType({
+              name: fungible,
+              category: categoryKey,
+              manufacturer,
+              model: fungible,
+              msrpUsd: toUsd(row["MSRP"] ?? ""),
+              rentalPriceUsd: toUsd(row["Large Rate PACK"] ?? ""),
+              subsidizedRentalPriceUsd: toUsd(row["Small Rate PACK"] ?? ""),
+              nonSubsidizedRentalPriceUsd: toUsd(row["Large Rate PACK"] ?? ""),
+              manualUrls: [],
+              tips: row["Description"] || undefined,
+              capabilities: [],
+              iconImageUrl: undefined,
+              promoImageUrl: undefined,
+            });
+            typeCache.set(fungible.toLowerCase(), typeId);
+            createdTypesFromAssets += 1;
+          }
+
+          const storageLocationId = await ensureLocation(row["Storage Loc"] ?? "", locationCache);
+          const itemPayload = {
+            assetId,
+            serialNumber: row["Serial"] || undefined,
+            typeId: typeId as never,
+            storageLocationId: storageLocationId as never,
+            status: row["Condition"] || undefined,
+            notes: row["Description"] || undefined,
+          };
+
+          if (existingRecordId) {
+            await updateItem({ id: existingRecordId as never, ...itemPayload });
+            skippedItems += 1;
+            continue;
+          }
+
+          const createdItemId = await createItem(itemPayload);
+          assetRecordIdMap.set(assetKey, createdItemId);
           importedItems += 1;
+        } catch (error) {
+          errorCount += 1;
+          addLog(`Skipped asset "${assetId}": ${getConvexErrorMessage(error)}`);
         }
       }
 
@@ -391,19 +411,28 @@ export function CsvImporter() {
           const childRecordId = assetRecordIdMap.get(childAssetId.toLowerCase());
           if (!childRecordId) continue;
           if (childRecordId === containerRecordId) continue;
-          await setContainer({
-            id: childRecordId as never,
-            containedInAssetId: containerRecordId as never,
-          });
+          try {
+            await setContainer({
+              id: childRecordId as never,
+              containedInAssetId: containerRecordId as never,
+            });
+          } catch (error) {
+            errorCount += 1;
+            addLog(
+              `Skipped container link ${childAssetId} → ${containerAssetId}: ${getConvexErrorMessage(error)}`,
+            );
+          }
         }
       }
 
       addLog(`Import complete: ${importedItems} items imported.`);
       addLog(`${skippedItems} existing assets updated.`);
       addLog(`${createdTypesFromAssets} additional types created from asset-only rows.`);
+      if (errorCount > 0) {
+        addLog(`Finished with ${errorCount} row error${errorCount === 1 ? "" : "s"} (see messages above).`);
+      }
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown import error";
-      addLog(`Import failed: ${message}`);
+      addLog(`Import failed: ${getConvexErrorMessage(error)}`);
     } finally {
       setIsImporting(false);
     }
@@ -434,8 +463,16 @@ export function CsvImporter() {
             onChange={(event) => setAssetsFile(event.target.files?.[0] ?? null)}
           />
         </div>
-        <Button type="button" disabled={isImporting} onClick={() => void runImport()}>
-          {isImporting ? "Importing..." : "Run Import"}
+        <Button
+          type="button"
+          disabled={isImporting || isLoadingExistingData || !typesFile || !assetsFile}
+          onClick={() => void runImport()}
+        >
+          {isLoadingExistingData
+            ? "Loading existing data..."
+            : isImporting
+              ? "Importing..."
+              : "Run Import"}
         </Button>
         <div className="max-h-64 space-y-1 overflow-auto rounded-md border p-3 text-sm">
           {logs.length ? logs.map((log, index) => <p key={`${index}-${log}`}>{log}</p>) : <p>No logs yet.</p>}
