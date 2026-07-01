@@ -11,8 +11,10 @@ export type SchedulePublishedEmailProps = EventEmailProps & {
 };
 
 export type CrewScheduledEmailProps = EventEmailProps & {
+  eventLeadName?: string;
   assignmentSummaries: string[];
   fullScheduleSummaries: string[];
+  coversEntireEvent: boolean;
 };
 
 export type CrewScheduledIcsEventPayload = {

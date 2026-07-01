@@ -189,12 +189,14 @@ export function EventDetailsSection({
   eventTitle,
   venueName,
   dateRangeLabel,
+  eventLeadName,
   title = "Event Summary",
   variant = "default",
 }: {
   eventTitle: string;
   venueName?: string;
   dateRangeLabel: string;
+  eventLeadName?: string;
   title?: string;
   variant?: "default" | "muted";
 }) {
@@ -203,6 +205,7 @@ export function EventDetailsSection({
       <DetailRow label="Event" value={eventTitle} />
       <DetailRow label="Date & time" value={dateRangeLabel} />
       {venueName ? <DetailRow label="Venue" value={venueName} /> : null}
+      {eventLeadName ? <DetailRow label="Day-of lead" value={eventLeadName} /> : null}
     </DataCard>
   );
 }
