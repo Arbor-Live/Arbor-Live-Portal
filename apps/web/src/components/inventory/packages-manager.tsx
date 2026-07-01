@@ -18,6 +18,7 @@ import {
 } from "@/lib/validations/inventory";
 import { formatCurrency } from "./constants";
 import { SearchableSelect } from "./searchable-select";
+import { FileUploadField } from "@/components/files/file-upload-field";
 
 type PackageItemRow = { typeId: string; quantity: string };
 
@@ -414,7 +415,24 @@ export function PackagesManager() {
                         </p>
                       </div>
                     ) : null}
-                    <TextFormField name="publicHeroImageUrl" label="Hero image URL" placeholder="https://..." />
+                    <FileUploadField
+                      label="Hero image"
+                      entityKind="package"
+                      purpose="hero"
+                      entityId={editingId ?? undefined}
+                      currentUrl={packageForm.watch("publicHeroImageUrl")}
+                      urlValue={packageForm.watch("publicHeroImageUrl")}
+                      onUploaded={(url) =>
+                        packageForm.setValue("publicHeroImageUrl", url, { shouldDirty: true })
+                      }
+                      onUrlChange={(url) =>
+                        packageForm.setValue("publicHeroImageUrl", url, { shouldDirty: true })
+                      }
+                      onClear={() =>
+                        packageForm.setValue("publicHeroImageUrl", "", { shouldDirty: true })
+                      }
+                      helperText="Upload an image or paste an https URL. Stored R2 uploads use r2: references."
+                    />
                     <TextFormField
                       name="publicSlug"
                       label="Optional public slug"

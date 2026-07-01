@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { query, type QueryCtx } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
+import { resolveStoredInventoryAssetUrl } from "./inventoryR2";
 
 const publicBucketValue = v.union(
   v.literal("lighting"),
@@ -45,7 +46,20 @@ async function bucketForCategoryKey(
   return inferBucketFromCategoryKey(categoryKey) ?? "misc";
 }
 
-function sanitizeTypeForPublic(type: Doc<"inventoryTypes">, includeProfile: boolean) {
+async function resolvePublicAssetUrl(value: string | undefined) {
+  return await resolveStoredInventoryAssetUrl(value);
+}
+
+async function resolveResourceLinks(links: Array<{ title: string; url: string }>) {
+  return Promise.all(
+    links.map(async (link) => ({
+      title: link.title,
+      url: (await resolvePublicAssetUrl(link.url)) ?? link.url,
+    })),
+  );
+}
+
+async function sanitizeTypeForPublic(type: Doc<"inventoryTypes">, includeProfile: boolean) {
   const description = type.description?.trim() ? type.description : undefined;
   const shared = {
     _id: type._id,
@@ -64,13 +78,22 @@ function sanitizeTypeForPublic(type: Doc<"inventoryTypes">, includeProfile: bool
     };
   }
 
+  const categoryMetadata = type.categoryMetadata?.lighting?.gdtfUrls?.length
+    ? {
+        lighting: {
+          ...type.categoryMetadata.lighting,
+          gdtfUrls: await resolveResourceLinks(type.categoryMetadata.lighting.gdtfUrls),
+        },
+      }
+    : type.categoryMetadata;
+
   return {
     ...shared,
-    manualUrls: type.manualUrls,
+    manualUrls: await resolveResourceLinks(type.manualUrls),
     tips: type.tips,
-    iconImageUrl: type.iconImageUrl,
-    promoImageUrl: type.promoImageUrl,
-    categoryMetadata: type.categoryMetadata,
+    iconImageUrl: await resolvePublicAssetUrl(type.iconImageUrl),
+    promoImageUrl: await resolvePublicAssetUrl(type.promoImageUrl),
+    categoryMetadata,
     publicSlug: type.publicSlug,
     publicProfileEnabled: true as const,
   };
@@ -102,7 +125,7 @@ export const equipmentByAssetId = query({
         contactEmail: settings?.contactEmail,
         infoUrl: settings?.infoUrl,
       },
-      type: sanitizeTypeForPublic(type, showProfile),
+      type: await sanitizeTypeForPublic(type, showProfile),
     };
   },
 });
@@ -138,7 +161,7 @@ export const listPublicTypes = query({
       if (args.bucket && bucket !== args.bucket) continue;
       rows.push({
         bucket,
-        type: sanitizeTypeForPublic(type, Boolean(type.publicProfile)),
+        type: await sanitizeTypeForPublic(type, Boolean(type.publicProfile)),
       });
     }
 
@@ -181,7 +204,7 @@ export const listPublicPackages = query({
           _id: pkg._id,
           name: pkg.name,
           description: pkg.description,
-          publicHeroImageUrl: pkg.publicHeroImageUrl,
+          publicHeroImageUrl: await resolvePublicAssetUrl(pkg.publicHeroImageUrl),
           publicSlug: pkg.publicSlug,
         },
       });
@@ -214,7 +237,7 @@ export const getPublicPackage = query({
       items.push({
         quantity: row.quantity,
         bucket,
-        type: sanitizeTypeForPublic(type, Boolean(type.publicListing && type.publicProfile)),
+        type: await sanitizeTypeForPublic(type, Boolean(type.publicListing && type.publicProfile)),
       });
     }
 
@@ -227,7 +250,7 @@ export const getPublicPackage = query({
         _id: pkg._id,
         name: pkg.name,
         description: pkg.description,
-        publicHeroImageUrl: pkg.publicHeroImageUrl,
+        publicHeroImageUrl: await resolvePublicAssetUrl(pkg.publicHeroImageUrl),
         publicSlug: pkg.publicSlug,
       },
       items,
@@ -239,6 +262,5 @@ function pickDominantBucket(buckets: Set<PublicBucket>): PublicBucket {
   if (buckets.size === 1) {
     return [...buckets][0]!;
   }
-  // Mixed packages: group under misc as a catch-all when line items span buckets.
   return "misc";
 }

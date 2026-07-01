@@ -2,6 +2,10 @@ import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import { requireAuth } from "./lib/auth";
+import {
+  normalizeOptionalAssetReference,
+  normalizeResourceLinksForUpload,
+} from "./lib/inventoryUpload";
 
 type InventoryCategoryMetadata = Doc<"inventoryTypes">["categoryMetadata"];
 
@@ -29,12 +33,7 @@ function normalizeResourceLinksForStore(
   entries: Array<{ title?: string; url: string }> | undefined,
   defaultTitle: string,
 ): ResourceLinkStored[] {
-  return (entries ?? [])
-    .map((entry) => ({
-      title: (entry.title?.trim() || defaultTitle).trim(),
-      url: entry.url.trim(),
-    }))
-    .filter((entry) => entry.url.length > 0);
+  return normalizeResourceLinksForUpload(entries, defaultTitle);
 }
 
 function normalizeCategoryMetadataInput(
@@ -246,8 +245,8 @@ export const create = mutation({
       manualUrls: normalizeResourceLinksForStore(args.manualUrls, "Manual"),
       tips: args.tips?.trim(),
       capabilities,
-      iconImageUrl: args.iconImageUrl?.trim(),
-      promoImageUrl: args.promoImageUrl?.trim(),
+      iconImageUrl: normalizeOptionalAssetReference(args.iconImageUrl),
+      promoImageUrl: normalizeOptionalAssetReference(args.promoImageUrl),
       categoryMetadata: normalizeCategoryMetadataInput(args.categoryMetadata ?? {}),
       publicListing,
       publicProfile,
@@ -330,8 +329,8 @@ export const update = mutation({
       manualUrls: normalizeResourceLinksForStore(args.manualUrls, "Manual"),
       tips: args.tips?.trim(),
       capabilities,
-      iconImageUrl: args.iconImageUrl?.trim(),
-      promoImageUrl: args.promoImageUrl?.trim(),
+      iconImageUrl: normalizeOptionalAssetReference(args.iconImageUrl),
+      promoImageUrl: normalizeOptionalAssetReference(args.promoImageUrl),
       categoryMetadata:
         args.categoryMetadata !== undefined
           ? normalizeCategoryMetadataInput(args.categoryMetadata ?? {})

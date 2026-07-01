@@ -52,11 +52,41 @@ const convexSiteUrl =
     ? convexCloudUrl.replace(/\.convex\.cloud$/, ".convex.site")
     : undefined);
 
+const r2PublicBaseUrl = process.env.R2_PUBLIC_BASE_URL?.trim();
+let r2ImageHostname: string | undefined;
+if (r2PublicBaseUrl) {
+  try {
+    r2ImageHostname = new URL(r2PublicBaseUrl).hostname;
+  } catch {
+    r2ImageHostname = undefined;
+  }
+} else {
+  const r2Endpoint = process.env.R2_ENDPOINT?.trim();
+  if (r2Endpoint) {
+    try {
+      r2ImageHostname = new URL(r2Endpoint).hostname;
+    } catch {
+      r2ImageHostname = undefined;
+    }
+  }
+}
+
 const nextConfig: NextConfig = {
   transpilePackages: ["backend", "@arbor/invoice-document"],
   turbopack: {
     root: repoRoot,
   },
+  images: r2ImageHostname
+    ? {
+        remotePatterns: [
+          {
+            protocol: "https",
+            hostname: r2ImageHostname,
+            pathname: "/**",
+          },
+        ],
+      }
+    : undefined,
   env: {
     ...(convexCloudUrl ? { NEXT_PUBLIC_CONVEX_URL: convexCloudUrl } : {}),
     ...(convexSiteUrl ? { NEXT_PUBLIC_CONVEX_SITE_URL: convexSiteUrl } : {}),

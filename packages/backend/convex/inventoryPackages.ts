@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { requireAuth } from "./lib/auth";
+import { normalizeOptionalAssetReference } from "./lib/inventoryUpload";
 
 const packageItemInput = v.object({
   typeId: v.id("inventoryTypes"),
@@ -146,7 +147,7 @@ export const create = mutation({
       active: args.active ?? true,
       publicListing,
       publicBucket: publicListing ? args.publicBucket : undefined,
-      publicHeroImageUrl: args.publicHeroImageUrl?.trim(),
+      publicHeroImageUrl: normalizeOptionalAssetReference(args.publicHeroImageUrl),
       publicSlug,
       createdAt: now,
       updatedAt: now,
@@ -219,7 +220,7 @@ export const update = mutation({
       active: args.active,
       publicListing,
       publicBucket: publicListing ? (args.publicBucket ?? existing.publicBucket) : undefined,
-      publicHeroImageUrl: args.publicHeroImageUrl?.trim(),
+      publicHeroImageUrl: normalizeOptionalAssetReference(args.publicHeroImageUrl),
       publicSlug,
       updatedAt: now,
     });
