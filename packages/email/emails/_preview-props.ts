@@ -6,6 +6,7 @@ import type {
   PaymentProofReminderEmailProps,
   PaymentProofSubmittedEmailProps,
   PayingPartyAddedEmailProps,
+  CrewScheduledEmailProps,
   SchedulePublishedEmailProps,
   ScheduleReminderEmailProps,
   UserInviteEmailProps,
@@ -27,6 +28,16 @@ export const eventCancelledPreviewProps: EventEmailProps = {
 export const schedulePublishedPreviewProps: SchedulePublishedEmailProps = {
   ...eventDefaults,
   blockSummaries: [
+    "Setup • 2:00 PM – 5:00 PM",
+    "Show • 6:00 PM – 10:00 PM",
+    "Strike • 10:00 PM – 11:30 PM",
+  ],
+};
+
+export const crewScheduledPreviewProps: CrewScheduledEmailProps = {
+  ...eventDefaults,
+  assignmentSummaries: ["Setup • Lighting Tech • 2:00 PM – 5:00 PM"],
+  fullScheduleSummaries: [
     "Setup • 2:00 PM – 5:00 PM",
     "Show • 6:00 PM – 10:00 PM",
     "Strike • 10:00 PM – 11:30 PM",

@@ -1,6 +1,8 @@
 export const EMAIL_FROM =
   process.env.EMAIL_FROM ?? "Arbor Notifications <noreply@arbor.st>";
 
+export const ORGANIZER_EMAIL = process.env.ORGANIZER_EMAIL ?? "arborlive@stanford.edu";
+
 export const SITE_URL = process.env.SITE_URL ?? "http://localhost:3000";
 
 export const EVENT_TIMEZONE = "America/Los_Angeles";
@@ -8,6 +10,7 @@ export const EVENT_TIMEZONE = "America/Los_Angeles";
 export type EmailTemplate =
   | "event_cancelled"
   | "schedule_published"
+  | "crew_scheduled"
   | "schedule_reminder"
   | "user_invite"
   | "password_reset"
@@ -91,6 +94,8 @@ export function subjectForTemplate(template: EmailTemplate, context: string) {
       return `Cancelled: ${context}`;
     case "schedule_published":
       return `Schedule published: ${context}`;
+    case "crew_scheduled":
+      return `You're scheduled: ${context}`;
     case "schedule_reminder":
       return `Schedule needed: ${context}`;
     case "user_invite":

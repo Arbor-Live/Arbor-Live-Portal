@@ -7,6 +7,8 @@ import type { Id } from "../_generated/dataModel";
 import { components, internal } from "../_generated/api";
 import { internalAction } from "../_generated/server";
 import { renderInvoicePdfBuffer } from "@arbor/invoice-document/pdf";
+import { buildScheduleIcs } from "@arbor/email/ics";
+import type { CrewScheduledEmailPayload } from "@arbor/email/types";
 import { EMAIL_FROM } from "./constants";
 import { renderEmailHtml } from "./templates";
 
@@ -30,6 +32,53 @@ type BookingQuoteReadyPayload = {
 function formatSendError(error: unknown) {
   if (error instanceof Error) return error.message;
   return "Unknown email send error";
+}
+
+async function sendEmailWithAttachments(
+  ctx: Parameters<typeof resendClient.sendEmailManually>[0],
+  notification: {
+    to: string;
+    cc?: string[];
+    replyTo?: string[];
+    subject: string;
+  },
+  html: string,
+  attachments: Array<{ filename: string; content: string }>,
+) {
+  const resendSdk = getResendSdk();
+  return await resendClient.sendEmailManually(
+    ctx,
+    {
+      from: EMAIL_FROM,
+      to: notification.to,
+      cc: notification.cc,
+      replyTo: notification.replyTo,
+      subject: notification.subject,
+    },
+    async (emailId) => {
+      const result = await resendSdk.emails.send({
+        from: EMAIL_FROM,
+        to: notification.to,
+        cc: notification.cc,
+        replyTo: notification.replyTo,
+        subject: notification.subject,
+        html,
+        attachments,
+        headers: {
+          "Idempotency-Key": emailId,
+        },
+      });
+      if (result.error) {
+        throw new Error(
+          `[Resend] ${result.error.name ?? "send_failed"}: ${result.error.message}`,
+        );
+      }
+      if (!result.data?.id) {
+        throw new Error("Resend did not return an email id.");
+      }
+      return result.data.id;
+    },
+  );
 }
 
 export const sendQueuedEmail = internalAction({
@@ -59,45 +108,52 @@ export const sendQueuedEmail = internalAction({
 
         const pdfBuffer = await renderInvoicePdfBuffer(document);
         const fileName = `${payload.invoiceNumber}.pdf`;
-        const resendSdk = getResendSdk();
 
-        const resendId = await resendClient.sendEmailManually(
+        const resendId = await sendEmailWithAttachments(
           ctx,
-          {
-            from: EMAIL_FROM,
-            to: notification.to,
-            cc: notification.cc,
-            replyTo: notification.replyTo,
-            subject: notification.subject,
-          },
-          async (emailId) => {
-            const result = await resendSdk.emails.send({
-              from: EMAIL_FROM,
-              to: notification.to,
-              cc: notification.cc,
-              replyTo: notification.replyTo,
-              subject: notification.subject,
-              html,
-              attachments: [
-                {
-                  filename: fileName,
-                  content: pdfBuffer.toString("base64"),
-                },
-              ],
-              headers: {
-                "Idempotency-Key": emailId,
-              },
-            });
-            if (result.error) {
-              throw new Error(
-                `[Resend] ${result.error.name ?? "send_failed"}: ${result.error.message}`,
-              );
-            }
-            if (!result.data?.id) {
-              throw new Error("Resend did not return an email id.");
-            }
-            return result.data.id;
-          },
+          notification,
+          html,
+          [
+            {
+              filename: fileName,
+              content: pdfBuffer.toString("base64"),
+            },
+          ],
+        );
+
+        await ctx.runMutation(internal.email.enqueue.markSent, {
+          notificationId: args.notificationId,
+          resendId,
+        });
+        return null;
+      }
+
+      if (notification.template === "crew_scheduled") {
+        const payload = notification.payload as CrewScheduledEmailPayload;
+        const icsContent = buildScheduleIcs({
+          timezone: payload.timezone,
+          organizerEmail: payload.organizerEmail,
+          attendeeEmail: notification.to,
+          events: payload.icsEvents.map((event) => ({
+            uid: event.uid,
+            title: event.title,
+            description: event.description,
+            location: event.location,
+            startAt: new Date(event.startAt),
+            endAt: new Date(event.endAt),
+          })),
+        });
+
+        const resendId = await sendEmailWithAttachments(
+          ctx,
+          notification,
+          html,
+          [
+            {
+              filename: "event-schedule.ics",
+              content: Buffer.from(icsContent, "utf8").toString("base64"),
+            },
+          ],
         );
 
         await ctx.runMutation(internal.email.enqueue.markSent, {

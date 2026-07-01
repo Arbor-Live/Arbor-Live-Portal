@@ -8,6 +8,7 @@ import { ChangeEmailConfirmationEmail } from "../emails/change-email-confirmatio
 import { PayingPartyAddedEmail } from "../emails/paying-party-added";
 import { PaymentProofReminderEmail } from "../emails/payment-proof-reminder";
 import { PaymentProofSubmittedEmail } from "../emails/payment-proof-submitted";
+import { CrewScheduledEmail } from "../emails/crew-scheduled";
 import { SchedulePublishedEmail } from "../emails/schedule-published";
 import { ScheduleReminderEmail } from "../emails/schedule-reminder";
 import { UserInviteEmail } from "../emails/user-invite";
@@ -21,6 +22,7 @@ import type {
   PaymentProofReminderEmailProps,
   PaymentProofSubmittedEmailProps,
   PayingPartyAddedEmailProps,
+  CrewScheduledEmailProps,
   SchedulePublishedEmailProps,
   ScheduleReminderEmailProps,
   UserInviteEmailProps,
@@ -32,6 +34,10 @@ export async function renderEventCancelledEmail(props: EventEmailProps) {
 
 export async function renderSchedulePublishedEmail(props: SchedulePublishedEmailProps) {
   return render(SchedulePublishedEmail(props));
+}
+
+export async function renderCrewScheduledEmail(props: CrewScheduledEmailProps) {
+  return render(CrewScheduledEmail(props));
 }
 
 export async function renderScheduleReminderEmail(props: ScheduleReminderEmailProps) {
