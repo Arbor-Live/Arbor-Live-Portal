@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
+import { PublicPageHero } from "@/components/public/public-page-hero";
 import { PublicSiteChrome } from "@/components/public/public-site-chrome";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PublicEventHeader } from "@/components/public/public-event-header";
@@ -38,14 +39,20 @@ export function PublicEventLifecycleClient({ token }: { token: string }) {
   if (data === undefined) {
     return (
       <PublicSiteChrome>
-        <div className="mx-auto max-w-5xl p-6 text-sm text-muted-foreground">Loading quote...</div>
+        <PublicPageHero title="Your quote" subtitle="Loading event and quote details…" />
+        <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 lg:px-8">
+          <p className="text-sm text-muted-foreground">Loading quote…</p>
+        </div>
       </PublicSiteChrome>
     );
   }
   if (!data) {
     return (
       <PublicSiteChrome>
-        <div className="mx-auto max-w-5xl p-6 text-sm text-muted-foreground">This quote link is invalid or expired.</div>
+        <PublicPageHero title="Quote unavailable" subtitle="This link is invalid or has expired." />
+        <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 lg:px-8">
+          <p className="text-sm text-muted-foreground">This quote link is invalid or expired.</p>
+        </div>
       </PublicSiteChrome>
     );
   }
@@ -54,6 +61,9 @@ export function PublicEventLifecycleClient({ token }: { token: string }) {
   const quoteLocked = data.invoice.clientApprovalStatus !== "pending";
   const showPaymentContacts =
     data.invoice.clientApprovalStatus === "approved" && !data.paymentProof?.paymentReceived;
+  const heroSubtitle = linkedEvent
+    ? `${linkedEvent.title} · ${quoteStatusLabel(data.invoice.clientApprovalStatus)}`
+    : quoteStatusLabel(data.invoice.clientApprovalStatus);
 
   const handleApprove = async (values: PublicQuoteApprovalFormValues) => {
     await approve({
@@ -84,7 +94,8 @@ export function PublicEventLifecycleClient({ token }: { token: string }) {
 
   return (
     <PublicSiteChrome>
-      <div className="mx-auto max-w-5xl space-y-4 p-6">
+      <PublicPageHero title={`Quote ${data.invoice.invoiceNumber}`} subtitle={heroSubtitle} />
+      <div className="mx-auto max-w-6xl space-y-4 px-4 py-12 sm:px-6 lg:px-8">
         <Card>
           <CardHeader>
             <CardTitle>Quote {data.invoice.invoiceNumber}</CardTitle>

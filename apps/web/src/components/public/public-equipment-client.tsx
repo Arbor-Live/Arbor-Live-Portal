@@ -5,9 +5,13 @@
 import { useMemo } from "react";
 import { useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
+import { PublicPageHero } from "@/components/public/public-page-hero";
 import { PublicSiteChrome } from "@/components/public/public-site-chrome";
 import { MarkdownContent } from "@/components/markdown-content";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+
+const LOST_FOUND_SUBTITLE =
+  "This equipment belongs to Arbor Live. If you found it, please return it using the contact information below.";
 
 type PublicTypeSummary = {
   _id: string;
@@ -59,7 +63,10 @@ export function PublicEquipmentClient({ assetId }: { assetId: string }) {
   if (data === undefined) {
     return (
       <PublicSiteChrome>
-        <p className="text-sm text-muted-foreground">Loading…</p>
+        <PublicPageHero title="Lost & Found" subtitle={LOST_FOUND_SUBTITLE} />
+        <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 lg:px-8">
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        </div>
       </PublicSiteChrome>
     );
   }
@@ -67,14 +74,17 @@ export function PublicEquipmentClient({ assetId }: { assetId: string }) {
   if (!data) {
     return (
       <PublicSiteChrome>
-        <Card>
-          <CardHeader>
-            <CardTitle>Equipment not found</CardTitle>
-          </CardHeader>
-          <CardContent className="text-sm text-muted-foreground">
-            This asset ID is not registered, or it may have been retired.
-          </CardContent>
-        </Card>
+        <PublicPageHero title="Equipment not found" subtitle="This asset ID is not registered or may have been retired." />
+        <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 lg:px-8">
+          <Card>
+            <CardHeader>
+              <CardTitle>Unknown asset</CardTitle>
+            </CardHeader>
+            <CardContent className="text-sm text-muted-foreground">
+              Double-check the ID on the equipment label, or contact Arbor Live if you believe this is an error.
+            </CardContent>
+          </Card>
+        </div>
       </PublicSiteChrome>
     );
   }
@@ -87,7 +97,8 @@ export function PublicEquipmentClient({ assetId }: { assetId: string }) {
 
   return (
     <PublicSiteChrome>
-      <div className="space-y-8">
+      <PublicPageHero title={displayModelName} subtitle={LOST_FOUND_SUBTITLE} />
+      <div className="mx-auto max-w-6xl space-y-8 px-4 py-12 sm:px-6 lg:px-8">
         <Card className="overflow-hidden border-primary/20">
           <CardContent className="grid gap-6 p-6 sm:grid-cols-[1fr_auto] sm:items-end">
             <div className="space-y-2">

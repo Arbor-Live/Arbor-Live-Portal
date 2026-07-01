@@ -3,6 +3,8 @@
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PublicPageHero } from "@/components/public/public-page-hero";
+import { PublicSiteChrome } from "@/components/public/public-site-chrome";
 import { PublicEventHeader } from "@/components/public/public-event-header";
 import { PublicEventSchedule } from "@/components/public/public-event-schedule";
 import { PublicEventCrew } from "@/components/public/public-event-crew";
@@ -87,10 +89,24 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
   const submitPaymentProof = useMutation(api.paymentProof.submitByRequestToken);
 
   if (request === undefined) {
-    return <p className="text-sm text-muted-foreground">Loading your request...</p>;
+    return (
+      <PublicSiteChrome>
+        <PublicPageHero title="Track your request" subtitle="Loading your booking request…" />
+        <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 lg:px-8">
+          <p className="text-sm text-muted-foreground">Loading your request…</p>
+        </div>
+      </PublicSiteChrome>
+    );
   }
   if (!request) {
-    return <p className="text-sm text-muted-foreground">This request link is invalid or expired.</p>;
+    return (
+      <PublicSiteChrome>
+        <PublicPageHero title="Request unavailable" subtitle="This tracking link is invalid or has expired." />
+        <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 lg:px-8">
+          <p className="text-sm text-muted-foreground">This request link is invalid or expired.</p>
+        </div>
+      </PublicSiteChrome>
+    );
   }
 
   const lifecycleSteps = buildLifecycleSteps(request);
@@ -127,8 +143,16 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
     });
   };
 
+  const heroSubtitle =
+    request.eventName ??
+    (request.quote?.readyForClientReview
+      ? "Your quote is ready for review."
+      : "Follow your request from submission through quote approval.");
+
   return (
-    <div className="space-y-4">
+    <PublicSiteChrome>
+      <PublicPageHero title={`Request ${request.requestNumber}`} subtitle={heroSubtitle} />
+      <div className="mx-auto max-w-6xl space-y-4 px-4 py-12 sm:px-6 lg:px-8">
       <Card>
         <CardHeader>
           <CardTitle>Request {request.requestNumber}</CardTitle>
@@ -319,6 +343,7 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
           </CardContent>
         </Card>
       ) : null}
-    </div>
+      </div>
+    </PublicSiteChrome>
   );
 }
