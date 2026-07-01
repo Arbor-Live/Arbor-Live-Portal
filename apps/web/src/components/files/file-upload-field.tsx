@@ -1,23 +1,29 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useCallback, useRef } from "react";
+import { useQuery } from "convex/react";
 import Image from "next/image";
 import { api } from "@/lib/convex-api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { formatStoredInventoryAsset, isImageAssetReference } from "@/lib/inventory-assets";
+import {
+  fileFromClipboardEvent,
+  useR2FileUpload,
+  type InventoryUploadEntityKind,
+  type InventoryUploadPurpose,
+  type R2UploadArgs,
+} from "@/hooks/use-r2-file-upload";
+import {
+  defaultAcceptForPurpose,
+  defaultTitleFromFileName,
+  isImageAssetReference,
+} from "@/lib/r2-assets";
 
-export type InventoryUploadEntityKind = "package" | "type";
-export type InventoryUploadPurpose = "hero" | "icon" | "promo" | "manual" | "gdtf";
-
-type FileUploadFieldProps = {
+type R2UploadFieldProps = {
   label: string;
-  entityKind: InventoryUploadEntityKind;
-  purpose: InventoryUploadPurpose;
-  entityId?: string;
+  uploadArgs: R2UploadArgs;
   accept?: string;
   currentUrl?: string;
   onUploaded: (storedValue: string) => void;
@@ -27,41 +33,17 @@ type FileUploadFieldProps = {
   urlPlaceholder?: string;
   helperText?: string;
   className?: string;
+  pasteHint?: string;
 };
-
-function defaultAcceptForPurpose(purpose: InventoryUploadPurpose): string {
-  switch (purpose) {
-    case "hero":
-    case "icon":
-    case "promo":
-      return "image/jpeg,image/png,image/webp,image/gif,image/svg+xml";
-    case "manual":
-      return "application/pdf,.pdf,.zip,.md,.txt,text/plain,text/markdown";
-    case "gdtf":
-      return ".gdtf,.zip,application/zip,application/octet-stream";
-  }
-}
-
-function createUploadId() {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return crypto.randomUUID();
-  }
-  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
 
 function useResolvedAssetPreview(storedValue: string | undefined) {
   const trimmed = storedValue?.trim() ?? "";
-  return useQuery(
-    api.inventoryR2.resolveInventoryAssetUrl,
-    trimmed ? { value: trimmed } : "skip",
-  );
+  return useQuery(api.inventoryR2.resolveAssetUrl, trimmed ? { value: trimmed } : "skip");
 }
 
-export function FileUploadField({
+function R2UploadField({
   label,
-  entityKind,
-  purpose,
-  entityId,
+  uploadArgs,
   accept,
   currentUrl,
   onUploaded,
@@ -71,13 +53,11 @@ export function FileUploadField({
   urlPlaceholder = "https://… or r2:…",
   helperText,
   className,
-}: FileUploadFieldProps) {
+  pasteHint = "Focus this area and paste (Ctrl+V), or choose a file.",
+}: R2UploadFieldProps) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const draftUploadIdRef = useRef(createUploadId());
-  const generateUploadUrl = useMutation(api.inventoryR2.generateInventoryUploadUrl);
-  const syncMetadata = useMutation(api.inventoryR2.syncMetadata);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const zoneRef = useRef<HTMLDivElement>(null);
+  const { uploadFile, busy, error } = useR2FileUpload(uploadArgs);
 
   const storedValue = (urlValue ?? currentUrl ?? "").trim();
   const resolvedPreviewUrl = useResolvedAssetPreview(storedValue);
@@ -85,46 +65,30 @@ export function FileUploadField({
     storedValue && isImageAssetReference(storedValue) && resolvedPreviewUrl,
   );
 
-  async function onFileSelected(file: File) {
-    setBusy(true);
-    setError(null);
-    try {
-      const { url, key } = await generateUploadUrl({
-        entityKind,
-        purpose,
-        entityId,
-        fileName: file.name,
-        contentType: file.type || "application/octet-stream",
-        contentLength: file.size,
-        uploadId: draftUploadIdRef.current,
-      });
+  const purpose =
+    uploadArgs.scope === "event" ? "artifact" : uploadArgs.purpose;
+  const resolvedAccept = accept ?? defaultAcceptForPurpose(purpose);
 
-      const response = await fetch(url, {
-        method: "PUT",
-        headers: {
-          "Content-Type": file.type || "application/octet-stream",
-        },
-        body: file,
-      });
-
-      if (!response.ok) {
-        throw new Error("Upload failed. Check R2 bucket CORS and credentials.");
-      }
-
-      await syncMetadata({ key });
-      const storedReference = formatStoredInventoryAsset(key);
+  const handleFile = useCallback(
+    async (file: File) => {
+      const storedReference = await uploadFile(file);
+      if (!storedReference) return;
       onUploaded(storedReference);
-      if (onUrlChange) onUrlChange(storedReference);
-      draftUploadIdRef.current = createUploadId();
-    } catch (uploadError) {
-      setError(
-        uploadError instanceof Error ? uploadError.message : "Unable to upload file.",
-      );
-    } finally {
-      setBusy(false);
-      if (inputRef.current) inputRef.current.value = "";
-    }
-  }
+      onUrlChange?.(storedReference);
+    },
+    [onUploaded, onUrlChange, uploadFile],
+  );
+
+  const handlePaste = useCallback(
+    (event: React.ClipboardEvent) => {
+      if (busy) return;
+      const file = fileFromClipboardEvent(event.nativeEvent);
+      if (!file) return;
+      event.preventDefault();
+      void handleFile(file);
+    },
+    [busy, handleFile],
+  );
 
   const previewHref = resolvedPreviewUrl ?? (storedValue.startsWith("http") ? storedValue : undefined);
 
@@ -135,13 +99,7 @@ export function FileUploadField({
 
       {showImagePreview && previewHref ? (
         <div className="relative h-28 w-full max-w-xs overflow-hidden rounded-md border bg-muted">
-          <Image
-            src={previewHref}
-            alt=""
-            fill
-            className="object-cover"
-            unoptimized
-          />
+          <Image src={previewHref} alt="" fill className="object-cover" unoptimized />
         </div>
       ) : storedValue ? (
         <p className="text-xs text-muted-foreground break-all">
@@ -161,31 +119,43 @@ export function FileUploadField({
         </p>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-2">
-        <input
-          ref={inputRef}
-          type="file"
-          accept={accept ?? defaultAcceptForPurpose(purpose)}
-          className="hidden"
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            if (file) void onFileSelected(file);
-          }}
-        />
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={busy}
-          onClick={() => inputRef.current?.click()}
-        >
-          {busy ? "Uploading…" : storedValue ? "Replace file" : "Upload file"}
-        </Button>
-        {storedValue && onClear ? (
-          <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={onClear}>
-            Remove
+      <div
+        ref={zoneRef}
+        tabIndex={0}
+        onPaste={handlePaste}
+        className={cn(
+          "rounded-md border border-dashed p-3 outline-none transition-colors",
+          "focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30",
+        )}
+      >
+        <p className="mb-2 text-xs text-muted-foreground">{pasteHint}</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            ref={inputRef}
+            type="file"
+            accept={resolvedAccept}
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) void handleFile(file);
+              if (inputRef.current) inputRef.current.value = "";
+            }}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={busy}
+            onClick={() => inputRef.current?.click()}
+          >
+            {busy ? "Uploading…" : storedValue ? "Replace file" : "Choose file"}
           </Button>
-        ) : null}
+          {storedValue && onClear ? (
+            <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={onClear}>
+              Remove
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       {onUrlChange ? (
@@ -198,6 +168,60 @@ export function FileUploadField({
 
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
     </div>
+  );
+}
+
+type FileUploadFieldProps = {
+  label: string;
+  entityKind: InventoryUploadEntityKind;
+  purpose: InventoryUploadPurpose;
+  entityId?: string;
+  accept?: string;
+  currentUrl?: string;
+  onUploaded: (storedValue: string) => void;
+  onClear?: () => void;
+  urlValue?: string;
+  onUrlChange?: (url: string) => void;
+  urlPlaceholder?: string;
+  helperText?: string;
+  className?: string;
+};
+
+export function FileUploadField(props: FileUploadFieldProps) {
+  const { entityKind, purpose, entityId, ...rest } = props;
+  return (
+    <R2UploadField
+      uploadArgs={{ scope: "inventory", entityKind, purpose, entityId }}
+      {...rest}
+    />
+  );
+}
+
+type EventArtifactUploadFieldProps = {
+  eventId: string;
+  label?: string;
+  currentUrl?: string;
+  onUploaded: (storedValue: string) => void;
+  onClear?: () => void;
+  urlValue?: string;
+  onUrlChange?: (url: string) => void;
+  helperText?: string;
+  className?: string;
+};
+
+export function EventArtifactUploadField({
+  eventId,
+  label = "Attachment",
+  helperText = "Upload an image or document for this artifact.",
+  ...rest
+}: EventArtifactUploadFieldProps) {
+  return (
+    <R2UploadField
+      label={label}
+      uploadArgs={{ scope: "event", eventId, purpose: "artifact" }}
+      helperText={helperText}
+      {...rest}
+    />
   );
 }
 
@@ -217,58 +241,38 @@ export function InventoryResourceUploadButton({
   onUploaded,
 }: InventoryResourceUploadButtonProps) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const draftUploadIdRef = useRef(createUploadId());
-  const generateUploadUrl = useMutation(api.inventoryR2.generateInventoryUploadUrl);
-  const syncMetadata = useMutation(api.inventoryR2.syncMetadata);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { uploadFile, busy, error } = useR2FileUpload({
+    scope: "inventory",
+    entityKind,
+    purpose,
+    entityId,
+  });
 
-  async function onFileSelected(file: File) {
-    setBusy(true);
-    setError(null);
-    try {
-      const defaultTitle =
-        purpose === "gdtf"
-          ? file.name.replace(/\.[^.]+$/, "") || "GDTF"
-          : file.name.replace(/\.[^.]+$/, "") || "Manual";
-
-      const { url, key } = await generateUploadUrl({
-        entityKind,
-        purpose,
-        entityId,
-        fileName: file.name,
-        contentType: file.type || "application/octet-stream",
-        contentLength: file.size,
-        uploadId: draftUploadIdRef.current,
-      });
-
-      const response = await fetch(url, {
-        method: "PUT",
-        headers: {
-          "Content-Type": file.type || "application/octet-stream",
-        },
-        body: file,
-      });
-
-      if (!response.ok) {
-        throw new Error("Upload failed. Check R2 bucket CORS and credentials.");
-      }
-
-      await syncMetadata({ key });
-      onUploaded({ url: formatStoredInventoryAsset(key), title: defaultTitle });
-      draftUploadIdRef.current = createUploadId();
-    } catch (uploadError) {
-      setError(
-        uploadError instanceof Error ? uploadError.message : "Unable to upload file.",
-      );
-    } finally {
-      setBusy(false);
-      if (inputRef.current) inputRef.current.value = "";
-    }
+  async function handleFile(file: File) {
+    const storedReference = await uploadFile(file);
+    if (!storedReference) return;
+    const defaultTitle =
+      purpose === "gdtf"
+        ? defaultTitleFromFileName(file.name, "GDTF")
+        : defaultTitleFromFileName(file.name, "Manual");
+    onUploaded({ url: storedReference, title: defaultTitle });
   }
 
   return (
-    <div className="flex flex-col gap-1">
+    <div
+      tabIndex={0}
+      onPaste={(event) => {
+        if (disabled || busy) return;
+        const file = fileFromClipboardEvent(event.nativeEvent);
+        if (!file) return;
+        event.preventDefault();
+        void handleFile(file);
+      }}
+      className={cn(
+        "flex flex-col gap-1 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
+      )}
+      title="Paste file with Ctrl+V"
+    >
       <input
         ref={inputRef}
         type="file"
@@ -276,7 +280,8 @@ export function InventoryResourceUploadButton({
         className="hidden"
         onChange={(event) => {
           const file = event.target.files?.[0];
-          if (file) void onFileSelected(file);
+          if (file) void handleFile(file);
+          if (inputRef.current) inputRef.current.value = "";
         }}
       />
       <Button
@@ -292,3 +297,5 @@ export function InventoryResourceUploadButton({
     </div>
   );
 }
+
+export type { InventoryUploadEntityKind, InventoryUploadPurpose };

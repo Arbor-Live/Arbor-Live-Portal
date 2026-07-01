@@ -1,6 +1,8 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireAuth } from "./lib/auth";
+import { normalizeOptionalAssetReference } from "./lib/inventoryUpload";
+import { resolveStoredR2AssetUrl } from "./inventoryR2";
 
 const artifactTypeValue = v.union(
   v.literal("note"),
@@ -13,20 +15,25 @@ export const listByEvent = query({
   args: { eventId: v.id("events"), artifactType: v.optional(artifactTypeValue) },
   handler: async (ctx, args) => {
     await requireAuth(ctx);
-    if (args.artifactType) {
-      const rows = await ctx.db
-        .query("eventArtifacts")
-        .withIndex("by_eventId_and_artifactType", (q) =>
-          q.eq("eventId", args.eventId).eq("artifactType", args.artifactType!),
-        )
-        .take(500);
-      return rows.sort((a, b) => b.updatedAt - a.updatedAt);
-    }
-    const rows = await ctx.db
-      .query("eventArtifacts")
-      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
-      .take(500);
-    return rows.sort((a, b) => b.updatedAt - a.updatedAt);
+    const rows = args.artifactType
+      ? await ctx.db
+          .query("eventArtifacts")
+          .withIndex("by_eventId_and_artifactType", (q) =>
+            q.eq("eventId", args.eventId).eq("artifactType", args.artifactType!),
+          )
+          .take(500)
+      : await ctx.db
+          .query("eventArtifacts")
+          .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+          .take(500);
+
+    const sorted = rows.sort((a, b) => b.updatedAt - a.updatedAt);
+    return Promise.all(
+      sorted.map(async (row) => ({
+        ...row,
+        fileUrl: row.linkUrl ? await resolveStoredR2AssetUrl(row.linkUrl) : undefined,
+      })),
+    );
   },
 });
 
@@ -47,7 +54,7 @@ export const create = mutation({
       artifactType: args.artifactType,
       title: args.title.trim(),
       markdown: args.markdown?.trim() || undefined,
-      linkUrl: args.linkUrl?.trim() || undefined,
+      linkUrl: normalizeOptionalAssetReference(args.linkUrl),
       storageFileId: args.storageFileId,
       version: 1,
       active: true,
@@ -73,7 +80,10 @@ export const update = mutation({
     await ctx.db.patch(args.id, {
       title: args.title?.trim() ?? existing.title,
       markdown: args.markdown?.trim() ?? existing.markdown,
-      linkUrl: args.linkUrl?.trim() ?? existing.linkUrl,
+      linkUrl:
+        args.linkUrl === undefined
+          ? existing.linkUrl
+          : normalizeOptionalAssetReference(args.linkUrl),
       storageFileId: args.storageFileId ?? existing.storageFileId,
       active: args.active ?? existing.active,
       version: existing.version + 1,
