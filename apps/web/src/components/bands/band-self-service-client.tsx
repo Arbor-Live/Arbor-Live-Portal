@@ -47,6 +47,7 @@ export function BandSelfServiceClient() {
 
   useEffect(() => {
     if (!profile) return;
+    if (profileForm.formState.isDirty) return;
     profileForm.reset({
       displayName: profile.displayName ?? "",
       bio: profile.bio ?? "",
@@ -58,7 +59,6 @@ export function BandSelfServiceClient() {
       publicSlug: profile.publicSlug ?? "",
       publicHeroImageUrl: profile.publicHeroImageUrl ?? "",
     });
-    profileForm.suppressNextAutoSave();
   }, [profile, profileForm]);
 
   const persistProfile = async (values: BandProfileFormValues) => {
@@ -75,13 +75,17 @@ export function BandSelfServiceClient() {
     });
   };
 
-  const watchedProfile = profileForm.watch();
-  useEffect(() => {
-    profileForm.debouncedAutoSave(persistProfile, {
-      delayMs: 1000,
-      enabled: profileForm.formState.isDirty && profile !== undefined,
-    });
-  }, [watchedProfile, profileForm, profile]);
+  const onSaveProfile = profileForm.submitMutation(
+    async (values) => {
+      await persistProfile(values);
+      return values;
+    },
+    {
+      onSuccess: (values) => {
+        profileForm.reset(values);
+      },
+    },
+  );
 
   const onInvite = inviteForm.submitMutation(async (values) => {
     await inviteMember({ email: values.email.trim(), role: values.role });
@@ -191,20 +195,26 @@ export function BandSelfServiceClient() {
       </Card>
 
       <FormSaveBar
-        tier="B"
+        tier="C"
         saveStatus={profileForm.saveStatus}
         saveError={profileForm.saveError}
         isDirty={profileForm.formState.isDirty}
-        onSave={() =>
-          void profileForm.handleSubmit((values) =>
-            profileForm.runMutation(() => persistProfile(values)),
-          )()
-        }
-        onRetry={() =>
-          void profileForm.handleSubmit((values) =>
-            profileForm.runMutation(() => persistProfile(values)),
-          )()
-        }
+        onSave={() => void profileForm.handleSubmit(onSaveProfile)()}
+        onDiscard={() => {
+          if (!profile) return;
+          profileForm.reset({
+            displayName: profile.displayName ?? "",
+            bio: profile.bio ?? "",
+            performerHourlyRateUsd: profile.performerHourlyRateUsd ?? 0,
+            publicWebsiteUrl: profile.publicWebsiteUrl ?? "",
+            publicInstagramUrl: profile.publicInstagramUrl ?? "",
+            publicYoutubeUrl: profile.publicYoutubeUrl ?? "",
+            publicListing: profile.publicListing ?? false,
+            publicSlug: profile.publicSlug ?? "",
+            publicHeroImageUrl: profile.publicHeroImageUrl ?? "",
+          });
+        }}
+        onRetry={() => void profileForm.handleSubmit(onSaveProfile)()}
       />
     </div>
   );
