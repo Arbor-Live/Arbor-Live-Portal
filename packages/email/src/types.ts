@@ -10,6 +10,26 @@ export type SchedulePublishedEmailProps = EventEmailProps & {
   blockSummaries: string[];
 };
 
+export type CrewScheduledEmailProps = EventEmailProps & {
+  assignmentSummaries: string[];
+  fullScheduleSummaries: string[];
+};
+
+export type CrewScheduledIcsEventPayload = {
+  uid: string;
+  title: string;
+  description?: string;
+  location?: string;
+  startAt: number;
+  endAt: number;
+};
+
+export type CrewScheduledEmailPayload = CrewScheduledEmailProps & {
+  icsEvents: CrewScheduledIcsEventPayload[];
+  timezone: string;
+  organizerEmail: string;
+};
+
 export type ScheduleReminderEmailProps = EventEmailProps & {
   daysUntilEvent: number;
 };

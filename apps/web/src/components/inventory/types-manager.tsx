@@ -18,6 +18,10 @@ import {
 } from "@/lib/validations/inventory";
 import { formatCurrency, toCategoryOptions } from "./constants";
 import { SearchableSelect } from "./searchable-select";
+import { getConvexErrorMessage } from "@/lib/convex-error";
+
+type PublicVisibilityFilter = "all" | "public" | "hidden";
+type PublicProfileFilter = "all" | "full" | "off";
 
 type ResourceRow = { title: string; url: string };
 
@@ -139,6 +143,12 @@ function buildTypePayload(
   };
 }
 
+function formatVisibilityLabel(row: { publicListing?: boolean; publicProfile?: boolean }) {
+  if (!row.publicListing) return "Hidden";
+  if (row.publicProfile) return "Public + profile";
+  return "Public listing";
+}
+
 function formatTypeDisplay(type: {
   manufacturer?: string;
   name: string;
@@ -150,13 +160,24 @@ function formatTypeDisplay(type: {
   return maker ? `${maker} ${core}` : core;
 }
 
+function visibilityBadgeClass(row: { publicListing?: boolean; publicProfile?: boolean }) {
+  if (!row.publicListing) return "border-muted-foreground/30 text-muted-foreground";
+  if (row.publicProfile) return "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
+  return "border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-300";
+}
+
 export function TypesManager() {
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("");
+  const [publicVisibility, setPublicVisibility] = useState<PublicVisibilityFilter>("all");
+  const [publicProfileFilter, setPublicProfileFilter] = useState<PublicProfileFilter>("all");
+  const [selectedCapability, setSelectedCapability] = useState("");
+  const [selectedManufacturer, setSelectedManufacturer] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [sortBy, setSortBy] = useState<"name" | "category" | "msrp" | "normal">("name");
+  const [sortBy, setSortBy] = useState<"name" | "category" | "msrp" | "normal" | "visibility">("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [bulkActionPending, setBulkActionPending] = useState(false);
   const [capabilityForm, setCapabilityForm] = useState({ key: "", label: "", category: "" });
   const [categoryForm, setCategoryForm] = useState({ key: "", label: "", publicBucket: "" });
   const [capabilityPickerOpen, setCapabilityPickerOpen] = useState(false);
@@ -169,9 +190,16 @@ export function TypesManager() {
   });
 
   const categories = useQuery(api.inventoryCategories.list, { activeOnly: false });
+  const allTypes = useQuery(api.inventoryTypes.list, {});
   const types = useQuery(api.inventoryTypes.list, {
-    search: search || undefined,
+    search: search.trim() || undefined,
     category: selectedCategory || undefined,
+    capability: selectedCapability || undefined,
+    manufacturer: selectedManufacturer || undefined,
+    publicListing:
+      publicVisibility === "all" ? undefined : publicVisibility === "public",
+    publicProfile:
+      publicProfileFilter === "all" ? undefined : publicProfileFilter === "full",
   });
   const capabilities = useQuery(api.capabilityDefinitions.list, { activeOnly: false });
 
@@ -182,12 +210,38 @@ export function TypesManager() {
   const createType = useMutation(api.inventoryTypes.create);
   const updateType = useMutation(api.inventoryTypes.update);
   const deleteType = useMutation(api.inventoryTypes.remove);
+  const bulkUpdateVisibility = useMutation(api.inventoryTypes.bulkUpdateVisibility);
   const createCapability = useMutation(api.capabilityDefinitions.create);
   const deleteCapability = useMutation(api.capabilityDefinitions.remove);
 
   const rows = useMemo(() => types ?? [], [types]);
   const capabilityOptions = useMemo(() => capabilities ?? [], [capabilities]);
   const categoryOptions = useMemo(() => toCategoryOptions(categories), [categories]);
+  const manufacturerOptions = useMemo(() => {
+    const manufacturers = new Set<string>();
+    for (const type of allTypes ?? []) {
+      const manufacturer = type.manufacturer?.trim();
+      if (manufacturer) manufacturers.add(manufacturer);
+    }
+    return [...manufacturers].sort((a, b) => a.localeCompare(b));
+  }, [allTypes]);
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (search.trim()) count += 1;
+    if (selectedCategory) count += 1;
+    if (publicVisibility !== "all") count += 1;
+    if (publicProfileFilter !== "all") count += 1;
+    if (selectedCapability) count += 1;
+    if (selectedManufacturer) count += 1;
+    return count;
+  }, [
+    publicProfileFilter,
+    publicVisibility,
+    search,
+    selectedCapability,
+    selectedCategory,
+    selectedManufacturer,
+  ]);
   const filteredCapabilityOptions = useMemo(() => {
     const query = capabilityQuery.trim().toLowerCase();
     if (!query) return capabilityOptions;
@@ -202,6 +256,14 @@ export function TypesManager() {
       const direction = sortDir === "asc" ? 1 : -1;
       if (sortBy === "category") return a.category.localeCompare(b.category) * direction;
       if (sortBy === "msrp") return ((a.msrpUsd ?? 0) - (b.msrpUsd ?? 0)) * direction;
+      if (sortBy === "visibility") {
+        const rank = (row: (typeof rows)[number]) => {
+          if (!row.publicListing) return 0;
+          if (row.publicProfile) return 2;
+          return 1;
+        };
+        return (rank(a) - rank(b)) * direction;
+      }
       if (sortBy === "normal") {
         const aRate = a.nonSubsidizedRentalPriceUsd ?? a.rentalPriceUsd ?? 0;
         const bRate = b.nonSubsidizedRentalPriceUsd ?? b.rentalPriceUsd ?? 0;
@@ -240,20 +302,10 @@ export function TypesManager() {
 
   const onSubmitType = typeForm.submitMutation(persistType);
 
-  const watchedType = typeForm.watch();
-  useEffect(() => {
-    if (!editingId) return;
-    typeForm.debouncedAutoSave(persistType, {
-      delayMs: 1000,
-      enabled: typeForm.formState.isDirty,
-    });
-  }, [watchedType, editingId, typeForm]);
-
   function beginEdit(row: (typeof rows)[number]) {
     setEditingId(row._id);
     const values = toTypeFormValues(row);
     typeForm.reset(values);
-    typeForm.suppressNextAutoSave();
     typeForm.resetSaveState();
   }
 
@@ -264,8 +316,40 @@ export function TypesManager() {
   }
 
   async function bulkDeleteSelected() {
-    await Promise.all(selectedIds.map((id) => deleteType({ id: id as never })));
-    setSelectedIds([]);
+    try {
+      await Promise.all(selectedIds.map((id) => deleteType({ id: id as never })));
+      setSelectedIds([]);
+    } catch (error) {
+      window.alert(getConvexErrorMessage(error, "Could not delete selected types."));
+    }
+  }
+
+  async function bulkSetVisibility(options: {
+    publicListing?: boolean;
+    publicProfile?: boolean;
+  }) {
+    if (!selectedIds.length) return;
+    setBulkActionPending(true);
+    try {
+      await bulkUpdateVisibility({
+        ids: selectedIds as never,
+        ...options,
+      });
+      setSelectedIds([]);
+    } catch (error) {
+      window.alert(getConvexErrorMessage(error, "Could not update visibility for selected types."));
+    } finally {
+      setBulkActionPending(false);
+    }
+  }
+
+  function clearFilters() {
+    setSearch("");
+    setSelectedCategory("");
+    setPublicVisibility("all");
+    setPublicProfileFilter("all");
+    setSelectedCapability("");
+    setSelectedManufacturer("");
   }
 
   const typeValues = typeForm.watch();
@@ -281,50 +365,155 @@ export function TypesManager() {
       <Card className="lg:col-span-2">
         <CardHeader>
           <CardTitle>Model Types</CardTitle>
-          <div className="flex flex-wrap gap-2">
-            <Input
-              placeholder="Search by name/model/manufacturer"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-            />
-            <select
-              className="h-9 rounded-md border bg-background px-3 text-sm"
-              value={selectedCategory}
-              onChange={(event) => setSelectedCategory(event.target.value)}
-            >
-              <option value="">All Categories</option>
-              {categoryOptions.map((category) => (
-                <option key={category.value} value={category.value}>
-                  {category.label}
-                </option>
-              ))}
-            </select>
-            <select
-              className="h-9 rounded-md border bg-background px-3 text-sm"
-              value={sortBy}
-              onChange={(event) => setSortBy(event.target.value as typeof sortBy)}
-            >
-              <option value="name">Sort: Name</option>
-              <option value="category">Sort: Category</option>
-              <option value="msrp">Sort: MSRP</option>
-              <option value="normal">Sort: Normal Rate</option>
-            </select>
-            <select
-              className="h-9 rounded-md border bg-background px-3 text-sm"
-              value={sortDir}
-              onChange={(event) => setSortDir(event.target.value as typeof sortDir)}
-            >
-              <option value="asc">Asc</option>
-              <option value="desc">Desc</option>
-            </select>
-            <Button
-              type="button"
-              variant="destructive"
-              disabled={!selectedIds.length}
-              onClick={() => void bulkDeleteSelected()}
-            >
-              Delete Selected ({selectedIds.length})
-            </Button>
+          <div className="space-y-3">
+            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+              <Input
+                className="xl:col-span-2"
+                placeholder="Search name, model, manufacturer, description, capabilities, slug…"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+              />
+              <select
+                className="h-9 rounded-md border bg-background px-3 text-sm"
+                value={selectedCategory}
+                onChange={(event) => setSelectedCategory(event.target.value)}
+              >
+                <option value="">All categories</option>
+                {categoryOptions.map((category) => (
+                  <option key={category.value} value={category.value}>
+                    {category.label}
+                  </option>
+                ))}
+              </select>
+              <select
+                className="h-9 rounded-md border bg-background px-3 text-sm"
+                value={publicVisibility}
+                onChange={(event) =>
+                  setPublicVisibility(event.target.value as PublicVisibilityFilter)
+                }
+              >
+                <option value="all">All visibility</option>
+                <option value="public">Listed publicly</option>
+                <option value="hidden">Hidden from public</option>
+              </select>
+              <select
+                className="h-9 rounded-md border bg-background px-3 text-sm"
+                value={publicProfileFilter}
+                onChange={(event) =>
+                  setPublicProfileFilter(event.target.value as PublicProfileFilter)
+                }
+              >
+                <option value="all">All profile modes</option>
+                <option value="full">Full public profile</option>
+                <option value="off">Listing only / profile off</option>
+              </select>
+              <SearchableSelect
+                value={selectedCapability}
+                onChange={setSelectedCapability}
+                options={[
+                  { value: "", label: "All capabilities" },
+                  ...capabilityOptions.map((capability) => ({
+                    value: capability.key,
+                    label: capability.label,
+                  })),
+                ]}
+                placeholder="Filter by capability…"
+                emptyLabel="All capabilities"
+              />
+              <SearchableSelect
+                value={selectedManufacturer}
+                onChange={setSelectedManufacturer}
+                options={[
+                  { value: "", label: "All manufacturers" },
+                  ...manufacturerOptions.map((manufacturer) => ({
+                    value: manufacturer,
+                    label: manufacturer,
+                  })),
+                ]}
+                placeholder="Filter by manufacturer…"
+                emptyLabel="All manufacturers"
+              />
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                className="h-9 rounded-md border bg-background px-3 text-sm"
+                value={sortBy}
+                onChange={(event) => setSortBy(event.target.value as typeof sortBy)}
+              >
+                <option value="name">Sort: Name</option>
+                <option value="category">Sort: Category</option>
+                <option value="visibility">Sort: Visibility</option>
+                <option value="msrp">Sort: MSRP</option>
+                <option value="normal">Sort: Normal Rate</option>
+              </select>
+              <select
+                className="h-9 rounded-md border bg-background px-3 text-sm"
+                value={sortDir}
+                onChange={(event) => setSortDir(event.target.value as typeof sortDir)}
+              >
+                <option value="asc">Asc</option>
+                <option value="desc">Desc</option>
+              </select>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!activeFilterCount}
+                onClick={clearFilters}
+              >
+                Clear filters{activeFilterCount ? ` (${activeFilterCount})` : ""}
+              </Button>
+              <span className="text-sm text-muted-foreground">
+                {sortedRows.length} type{sortedRows.length === 1 ? "" : "s"}
+                {selectedIds.length ? ` · ${selectedIds.length} selected` : ""}
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-2 rounded-md border bg-muted/30 p-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!selectedIds.length || bulkActionPending}
+                onClick={() => void bulkSetVisibility({ publicListing: true })}
+              >
+                List publicly
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!selectedIds.length || bulkActionPending}
+                onClick={() => void bulkSetVisibility({ publicListing: false, publicProfile: false })}
+              >
+                Hide from public
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!selectedIds.length || bulkActionPending}
+                onClick={() => void bulkSetVisibility({ publicProfile: true })}
+              >
+                Enable full profile
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!selectedIds.length || bulkActionPending}
+                onClick={() => void bulkSetVisibility({ publicProfile: false })}
+              >
+                Disable full profile
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                disabled={!selectedIds.length || bulkActionPending}
+                onClick={() => void bulkDeleteSelected()}
+              >
+                Delete selected ({selectedIds.length})
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -343,6 +532,7 @@ export function TypesManager() {
                   </th>
                   <th className="p-2 text-left">Name</th>
                   <th className="p-2 text-left">Category</th>
+                  <th className="p-2 text-left">Visibility</th>
                   <th className="p-2 text-left">MSRP</th>
                   <th className="p-2 text-left">Subsidized</th>
                   <th className="p-2 text-left">Normal</th>
@@ -372,6 +562,13 @@ export function TypesManager() {
                       </div>
                     </td>
                     <td className="p-2">{row.category}</td>
+                    <td className="p-2">
+                      <span
+                        className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-medium ${visibilityBadgeClass(row)}`}
+                      >
+                        {formatVisibilityLabel(row)}
+                      </span>
+                    </td>
                     <td className="p-2">{formatCurrency(row.msrpUsd)}</td>
                     <td className="p-2">{formatCurrency(row.subsidizedRentalPriceUsd)}</td>
                     <td className="p-2">
@@ -397,7 +594,13 @@ export function TypesManager() {
               </tbody>
             </table>
           </div>
-          {!sortedRows.length ? <p className="text-sm text-muted-foreground">No types found.</p> : null}
+          {!sortedRows.length ? (
+            <p className="text-sm text-muted-foreground">
+              {activeFilterCount
+                ? "No types match the current filters."
+                : "No types found."}
+            </p>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -698,7 +901,7 @@ export function TypesManager() {
         </Card>
 
         <FormSaveBar
-          tier={editingId ? "B" : "C"}
+          tier="C"
           saveStatus={typeForm.saveStatus}
           saveError={typeForm.saveError}
           isDirty={typeForm.formState.isDirty}

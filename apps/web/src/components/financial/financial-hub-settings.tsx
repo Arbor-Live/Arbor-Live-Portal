@@ -163,27 +163,39 @@ function FeeRow({
   const [toggleSaving, setToggleSaving] = useState(false);
 
   useEffect(() => {
+    if (form.formState.isDirty) return;
     form.reset({ defaultAmountUsd: fee.defaultAmountUsd ?? 0 });
-    form.suppressNextAutoSave();
   }, [fee.defaultAmountUsd, form]);
 
   const persist = async (values: { defaultAmountUsd: number }) => {
     await updateFee({ id: fee._id, defaultAmountUsd: values.defaultAmountUsd });
   };
 
-  const watched = form.watch();
-  useEffect(() => {
-    form.debouncedAutoSave(persist, { delayMs: 800, enabled: form.formState.isDirty });
-  }, [watched, form]);
+  const onSave = form.submitMutation(
+    async (values) => {
+      await persist(values);
+      return values;
+    },
+    {
+      onSuccess: (values) => {
+        form.reset(values);
+      },
+    },
+  );
 
   return (
     <div className="rounded-md border p-3 text-sm">
       <p className="font-medium">{fee.label}</p>
       <p className="text-xs text-muted-foreground">{fee.key}</p>
-      <div className="mt-2 flex gap-2">
+      <div className="mt-2 flex flex-wrap gap-2">
         <Form {...form}>
-          <form className="flex-1">
+          <form className="flex flex-1 flex-wrap items-end gap-2" onSubmit={form.handleSubmit(onSave)}>
             <TextFormField name="defaultAmountUsd" label="" type="number" />
+            {form.formState.isDirty ? (
+              <Button type="submit" size="sm" disabled={form.saveStatus === "saving"}>
+                Save
+              </Button>
+            ) : null}
           </form>
         </Form>
         <Button
@@ -232,18 +244,25 @@ function TermsRow({
   });
 
   useEffect(() => {
+    if (form.formState.isDirty) return;
     form.reset({ markdown: term.markdown });
-    form.suppressNextAutoSave();
   }, [term.markdown, form]);
 
   const persist = async (values: { markdown: string }) => {
     await updateTerms({ id: term._id, markdown: values.markdown });
   };
 
-  const watched = form.watch();
-  useEffect(() => {
-    form.debouncedAutoSave(persist, { delayMs: 1000, enabled: form.formState.isDirty });
-  }, [watched, form]);
+  const onSave = form.submitMutation(
+    async (values) => {
+      await persist(values);
+      return values;
+    },
+    {
+      onSuccess: (values) => {
+        form.reset(values);
+      },
+    },
+  );
 
   return (
     <div className="rounded-md border p-3 text-sm">
@@ -251,8 +270,13 @@ function TermsRow({
         {term.label} ({term.version})
       </p>
       <Form {...form}>
-        <form>
+        <form onSubmit={form.handleSubmit(onSave)}>
           <TextareaFormField name="markdown" label="" className="min-h-20" />
+          {form.formState.isDirty ? (
+            <Button type="submit" size="sm" className="mt-2" disabled={form.saveStatus === "saving"}>
+              Save
+            </Button>
+          ) : null}
         </form>
       </Form>
       <div className="mt-2 flex gap-2">

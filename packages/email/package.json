@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./ics": "./lib/ics.ts",
     "./render": "./src/render.ts",
     "./types": "./src/types.ts"
   },

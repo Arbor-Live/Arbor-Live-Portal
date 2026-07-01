@@ -6,6 +6,7 @@ import { api } from "@/lib/convex-api";
 import { Form } from "@/components/ui/form";
 import { TextFormField } from "@/components/forms/text-form-field";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import {
   managerProfileSchema,
@@ -37,8 +38,8 @@ function ManagerRow({
   });
 
   useEffect(() => {
+    if (form.formState.isDirty) return;
     form.reset({ title, phone });
-    form.suppressNextAutoSave();
   }, [title, phone, form]);
 
   const persist = async (values: ManagerProfileFormValues) => {
@@ -49,25 +50,40 @@ function ManagerRow({
     });
   };
 
-  const watched = form.watch();
-  useEffect(() => {
-    form.debouncedAutoSave(persist, { delayMs: 800, enabled: form.formState.isDirty });
-  }, [watched, form]);
+  const onSave = form.submitMutation(
+    async (values) => {
+      await persist(values);
+      return values;
+    },
+    {
+      onSuccess: (values) => {
+        form.reset(values);
+      },
+    },
+  );
 
   return (
-    <div className="grid gap-2 rounded-md border p-3 md:grid-cols-[1fr_180px_160px_80px_24px]">
+    <div className="grid gap-2 rounded-md border p-3 md:grid-cols-[1fr_180px_160px_auto_24px]">
       <div>
         <p className="text-sm font-medium">{name}</p>
         <p className="text-xs text-muted-foreground">{meta}</p>
       </div>
       <Form {...form}>
-        <form className="contents md:col-span-2 md:grid md:grid-cols-2 md:gap-2">
+        <form
+          className="contents md:col-span-2 md:grid md:grid-cols-2 md:gap-2"
+          onSubmit={form.handleSubmit(onSave)}
+        >
           <TextFormField name="title" label="" placeholder="Title" />
           <TextFormField name="phone" label="" placeholder="Phone" type="tel" />
         </form>
       </Form>
       <span className="self-center text-xs text-muted-foreground">{active ? "Active" : "Inactive"}</span>
-      <span className="flex self-center justify-end">
+      <div className="flex items-center gap-2 self-center justify-end">
+        {form.formState.isDirty ? (
+          <Button type="button" size="sm" disabled={form.saveStatus === "saving"} onClick={() => void form.handleSubmit(onSave)()}>
+            Save
+          </Button>
+        ) : null}
         {form.saveStatus === "saving" ? (
           <CircleNotchIcon className="size-4 animate-spin text-muted-foreground" />
         ) : form.saveStatus === "error" ? (
@@ -79,7 +95,7 @@ function ManagerRow({
         ) : form.saveStatus === "saved" ? (
           <CheckIcon className="size-4 text-emerald-600" weight="bold" />
         ) : null}
-      </span>
+      </div>
     </div>
   );
 }
@@ -99,7 +115,7 @@ export function FinancialHubManagersClient() {
       <CardContent className="space-y-3">
         <p className="text-sm text-muted-foreground">
           Users who can be assigned as the invoice manager. Title and phone appear on quotes and client
-          communications. Changes save automatically.
+          communications. Click Save after editing a row.
         </p>
         <div className="space-y-2">
           {managers.map((manager) => (

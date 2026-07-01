@@ -140,14 +140,11 @@ export function InvoiceEditor({
   const [newContactPhone, setNewContactPhone] = useState("");
 
   const lastSavedSignatureRef = useRef("");
-  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveRequestIdRef = useRef(0);
-  const suppressAutoSaveOnceRef = useRef(false);
   const hasHydratedFromServerRef = useRef(false);
   const crewBootstrappedRef = useRef(false);
   const savedCrewSnapshotRef = useRef<CrewRow[]>([]);
   const [invoiceFieldsHydrated, setInvoiceFieldsHydrated] = useState(false);
-  const persistDraftRef = useRef<(mode: "manual" | "auto") => Promise<boolean>>(async () => false);
   const reapprovalDecisionRef = useRef<null | boolean>(null);
 
   const managerOptions = useMemo(
@@ -253,7 +250,6 @@ export function InvoiceEditor({
 
     const { invoice, lineItems } = invoiceData;
     hasHydratedFromServerRef.current = true;
-    suppressAutoSaveOnceRef.current = true;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setActiveInvoiceId(invoice._id);
     setApprovalToken(invoice.publicApprovalToken ?? "");
@@ -392,7 +388,6 @@ export function InvoiceEditor({
     }
 
     if (savedCrewSnapshotRef.current.length) {
-      suppressAutoSaveOnceRef.current = true;
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setCrewRows(savedCrewSnapshotRef.current);
     }
@@ -604,42 +599,30 @@ export function InvoiceEditor({
     };
   }
 
-  async function persistDraft(mode: "manual" | "auto") {
+  async function persistDraft() {
     const payload = buildPayload();
     if (!payload) {
-      if (mode === "manual") {
-        setAutoSaveState("error");
-        setAutoSaveError("Select a manager and add at least one line item.");
-      }
+      setAutoSaveState("error");
+      setAutoSaveError("Select a manager and add at least one line item.");
       return false;
     }
 
     const signature = JSON.stringify(payload);
-    if (mode === "auto" && signature === lastSavedSignatureRef.current) return true;
     const approvedQuoteEdited =
       invoiceData?.invoice?.clientApprovalStatus === "approved" &&
       signature !== lastSavedSignatureRef.current;
 
     if (approvedQuoteEdited && reapprovalDecisionRef.current === null) {
-      if (mode === "auto") {
-        // Avoid surprise popups during background save. Require an explicit save click.
-        setAutoSaveState("idle");
-        setAutoSaveError("Manual save required: decide whether client re-approval is needed.");
-        return false;
-      }
       reapprovalDecisionRef.current = window.confirm(
         "This quote was already approved and has changed. Require client approval again?",
       );
     }
 
     const requestId = ++saveRequestIdRef.current;
-    if (mode === "manual") {
-      setSaving(true);
-      setSaveMessage(null);
-    } else {
-      setAutoSaveState("saving");
-      setAutoSaveError(null);
-    }
+    setSaving(true);
+    setSaveMessage(null);
+    setAutoSaveState("saving");
+    setAutoSaveError(null);
     setSaveWarning(null);
 
     try {
@@ -657,7 +640,7 @@ export function InvoiceEditor({
       }
       lastSavedSignatureRef.current = signature;
       if (requestId === saveRequestIdRef.current) {
-        if (mode === "manual") setSaveMessage("Invoice saved.");
+        setSaveMessage("Invoice saved.");
         setAutoSaveState("saved");
       }
       return true;
@@ -669,18 +652,13 @@ export function InvoiceEditor({
       }
       return false;
     } finally {
-      if (mode === "manual") setSaving(false);
+      setSaving(false);
     }
   }
 
   async function save() {
-    await persistDraft("manual");
+    await persistDraft();
   }
-
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    persistDraftRef.current = persistDraft;
-  }, [persistDraft]);
 
   async function regenerateToken() {
     if (!activeInvoiceId) return;
@@ -726,18 +704,9 @@ export function InvoiceEditor({
     setSaveMessage("Quote withdrawn from the request portal for editing.");
   }
 
-  useEffect(() => {
-    if (suppressAutoSaveOnceRef.current) {
-      suppressAutoSaveOnceRef.current = false;
-      return;
-    }
-    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
-    autoSaveTimerRef.current = setTimeout(() => {
-      void persistDraftRef.current("auto");
-    }, 1000);
-    return () => {
-      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
-    };
+  const draftSignature = useMemo(() => {
+    const payload = buildPayload();
+    return payload ? JSON.stringify(payload) : "";
   }, [
     issueDate,
     dueDate,
@@ -766,7 +735,14 @@ export function InvoiceEditor({
     artists,
     crewRows,
     fees,
+    groups,
+    contacts,
   ]);
+
+  const isDraftDirty =
+    invoiceFieldsHydrated &&
+    draftSignature !== "" &&
+    draftSignature !== lastSavedSignatureRef.current;
 
   const linkedEvents = linkedEvent?.linkedEvents ?? [];
   const isRequestLinkedQuote = Boolean(invoiceData?.invoice?.sourceEventRequestId);
@@ -1347,14 +1323,14 @@ export function InvoiceEditor({
       />
 
       <FormSaveBar
-        tier="B"
+        tier="C"
         saveStatus={autoSaveState}
         saveError={autoSaveError}
-        isDirty={autoSaveState !== "idle" || saving}
+        isDirty={isDraftDirty}
         isSubmitting={saving || autoSaveState === "saving"}
-        saveLabel="Save now"
-        onSave={() => void persistDraft("manual")}
-        onRetry={() => void persistDraft("auto")}
+        saveLabel="Save"
+        onSave={() => void persistDraft()}
+        onRetry={() => void persistDraft()}
       />
     </div>
   );

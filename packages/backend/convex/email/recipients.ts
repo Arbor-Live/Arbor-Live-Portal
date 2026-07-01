@@ -121,6 +121,20 @@ export async function getSchedulePublishedRecipients(
   return [...recipients.values()];
 }
 
+export async function getUserEmailRecipient(
+  ctx: QueryCtx | MutationCtx,
+  userId: string,
+) {
+  const userByKey = await fetchUsersByIds(ctx, [userId]);
+  const user = userByKey.get(userId);
+  if (!user?.email) return null;
+  return {
+    email: user.email.trim().toLowerCase(),
+    name: user.name ?? undefined,
+    userId,
+  } satisfies EmailRecipient;
+}
+
 export async function getEventLeadRecipients(
   ctx: QueryCtx | MutationCtx,
   eventId: Id<"events">,

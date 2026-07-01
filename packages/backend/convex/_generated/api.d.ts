@@ -26,6 +26,7 @@ import type * as email_paymentProofReminderShared from "../email/paymentProofRem
 import type * as email_paymentProofReminders from "../email/paymentProofReminders.js";
 import type * as email_recipients from "../email/recipients.js";
 import type * as email_reminders from "../email/reminders.js";
+import type * as email_scheduleEmailData from "../email/scheduleEmailData.js";
 import type * as email_send from "../email/send.js";
 import type * as email_templates from "../email/templates.js";
 import type * as email_triggers from "../email/triggers.js";
@@ -104,6 +105,7 @@ declare const fullApi: ApiFromModules<{
   "email/paymentProofReminders": typeof email_paymentProofReminders;
   "email/recipients": typeof email_recipients;
   "email/reminders": typeof email_reminders;
+  "email/scheduleEmailData": typeof email_scheduleEmailData;
   "email/send": typeof email_send;
   "email/templates": typeof email_templates;
   "email/triggers": typeof email_triggers;

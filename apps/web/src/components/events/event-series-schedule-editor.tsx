@@ -113,7 +113,6 @@ export function EventSeriesScheduleEditor({
       fromOccurrenceIndex: "0",
       importOccurrenceId: "",
     });
-    form.suppressNextAutoSave();
   }, [initialBlocks, form]);
 
   const occurrenceOptions = useMemo(

@@ -57,8 +57,8 @@ export function InventoryItemEditor({
   });
 
   useEffect(() => {
+    if (form.formState.isDirty) return;
     form.reset(initial);
-    form.suppressNextAutoSave();
   }, [initial, form]);
 
   const persist = async (values: InventoryItemFormValues) => {
@@ -84,13 +84,7 @@ export function InventoryItemEditor({
     if (!editingId) form.reset(initial);
   };
 
-  const watched = form.watch();
-  useEffect(() => {
-    if (!editingId) return;
-    form.debouncedAutoSave(persist, { delayMs: 1000, enabled: form.formState.isDirty });
-  }, [watched, form, editingId]);
-
-  const tier = editingId ? "B" : "C";
+  const tier = "C";
 
   return (
     <>

@@ -144,7 +144,7 @@ export function EventPullList({
     defaultValues: toFormValues(initialItems),
     mode: "onChange",
   });
-  const { reset, suppressNextAutoSave, debouncedAutoSave, watch, formState } = form;
+  const { reset, formState } = form;
 
   const initialSyncKey = useMemo(
     () =>
@@ -155,10 +155,10 @@ export function EventPullList({
   );
 
   useEffect(() => {
+    if (formState.isDirty) return;
     setItems(initialItems);
     reset(toFormValues(initialItems));
-    suppressNextAutoSave();
-  }, [initialSyncKey, initialItems, reset, suppressNextAutoSave]);
+  }, [initialSyncKey, initialItems, reset, formState.isDirty]);
 
   const typeOptions: SearchableSelectOption[] = useMemo(
     () =>
@@ -243,30 +243,20 @@ export function EventPullList({
       });
       setItems(nextItems);
       reset(toFormValues(nextItems));
-      suppressNextAutoSave();
       onSaved?.(
         `${successMessage} (${result.totalLines} line${result.totalLines === 1 ? "" : "s"}, ${formatQty(result.totalPieces)} piece${result.totalPieces === 1 ? "" : "s"}).`,
       );
     },
-    [eventId, onSaved, reset, suppressNextAutoSave, upsertItems],
+    [eventId, onSaved, reset, upsertItems],
   );
 
-  const debouncedPersist = useCallback(
+  const savePullList = useCallback(
     async (values: PullListFormValues) => {
       const nextItems = mergeFormQuantities(items, values);
       await persistItems(nextItems, "Pull list updated");
     },
     [items, persistItems],
   );
-
-  const watched = watch();
-  useEffect(() => {
-    if (!showManage) return;
-    debouncedAutoSave(debouncedPersist, {
-      delayMs: 1000,
-      enabled: formState.isDirty,
-    });
-  }, [watched, debouncedAutoSave, showManage, debouncedPersist, formState.isDirty]);
 
   async function handleScaffold() {
     if (!eventId) return;
@@ -339,7 +329,6 @@ export function EventPullList({
         const nextItems = items.filter((_, i) => i !== index);
         setItems(nextItems);
         form.reset(toFormValues(nextItems));
-        form.suppressNextAutoSave();
         onSaved?.("Removed from pull list.");
       });
       return;
@@ -540,13 +529,17 @@ export function EventPullList({
 
       {showManage ? (
         <FormSaveBar
-          tier="B"
+          tier="C"
           saveStatus={form.saveStatus}
           saveError={form.saveError}
           isDirty={form.formState.isDirty}
-          saveLabel="Save now"
-          onSave={() => void form.handleSubmit(debouncedPersist)()}
-          onRetry={() => void form.handleSubmit(debouncedPersist)()}
+          saveLabel="Save pull list"
+          onSave={() => void form.handleSubmit(savePullList)()}
+          onDiscard={() => {
+            setItems(initialItems);
+            form.reset(toFormValues(initialItems));
+          }}
+          onRetry={() => void form.handleSubmit(savePullList)()}
         />
       ) : null}
     </div>

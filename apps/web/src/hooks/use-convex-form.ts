@@ -36,11 +36,6 @@ export type UseConvexFormReturn<T extends FieldValues> = UseFormReturn<T> & {
     options?: { successMessage?: string; onSuccess?: (result: R) => void },
   ) => Promise<R | undefined>;
   resetSaveState: () => void;
-  debouncedAutoSave: (
-    onSave: (values: T) => Promise<void>,
-    options?: { delayMs?: number; enabled?: boolean },
-  ) => void;
-  suppressNextAutoSave: () => void;
 };
 
 function captureTextInputFocus(): () => void {
@@ -84,8 +79,6 @@ export function useConvexForm<T extends FieldValues>({
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
   const savedFadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const suppressAutoSaveRef = useRef(false);
 
   const resetSaveState = useCallback(() => {
     setSaveStatus("idle");
@@ -180,7 +173,6 @@ export function useConvexForm<T extends FieldValues>({
   useEffect(() => {
     return () => {
       if (savedFadeTimerRef.current) clearTimeout(savedFadeTimerRef.current);
-      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     };
   }, []);
 
