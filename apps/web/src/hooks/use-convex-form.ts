@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   useForm,
@@ -101,7 +101,7 @@ export function useConvexForm<T extends FieldValues>({
   );
 
   // Subscribe to dirty state so consumers re-render when edits are made.
-  void form.formState.isDirty;
+  const { isDirty } = form.formState;
 
   useEffect(() => {
     return () => {
@@ -109,28 +109,29 @@ export function useConvexForm<T extends FieldValues>({
     };
   }, []);
 
-  const formReturnRef = useRef<UseConvexFormReturn<T> | null>(null);
-  if (!formReturnRef.current) {
-    formReturnRef.current = {
+  return useMemo(
+    () => ({
       ...form,
-      saveStatus: "idle",
-      saveError: null,
+      saveStatus,
+      saveError,
       setSaveStatus,
       setSaveError,
       submitMutation,
       runMutation,
       resetSaveState,
-    };
-  }
-
-  const formReturn = formReturnRef.current;
-  formReturn.saveStatus = saveStatus;
-  formReturn.saveError = saveError;
-  formReturn.setSaveStatus = setSaveStatus;
-  formReturn.setSaveError = setSaveError;
-  formReturn.submitMutation = submitMutation;
-  formReturn.runMutation = runMutation;
-  formReturn.resetSaveState = resetSaveState;
-
-  return formReturn;
+    }),
+    // isDirty busts memo so save bars and dirty-guarded effects see updates.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- isDirty intentionally included
+    [
+      form,
+      isDirty,
+      saveStatus,
+      saveError,
+      setSaveStatus,
+      setSaveError,
+      submitMutation,
+      runMutation,
+      resetSaveState,
+    ],
+  );
 }
