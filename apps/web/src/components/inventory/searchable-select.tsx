@@ -2,7 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { CaretDownIcon } from "@phosphor-icons/react";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
+import { filterControlClassName } from "./filter-controls";
 
 export type SearchableSelectOption = {
   value: string;
@@ -102,7 +105,7 @@ export function SearchableSelect({
       <button
         ref={triggerRef}
         type="button"
-        className="h-9 w-full min-w-0 rounded-none border border-input bg-transparent px-3 py-2 text-left text-sm transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-input/50 disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-1 aria-invalid:ring-destructive/20 dark:bg-input/30 dark:disabled:bg-input/80 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40"
+        className={cn(filterControlClassName, "flex items-center justify-between text-left")}
         onClick={() => setOpen((prev) => !prev)}
       >
         {renderSelected ? (
@@ -110,6 +113,7 @@ export function SearchableSelect({
         ) : (
           <span className="block truncate">{selected?.label ?? emptyLabel ?? "Select option"}</span>
         )}
+        <CaretDownIcon className="ml-2 size-4 shrink-0 opacity-50" aria-hidden />
       </button>
       {open && menuPosition
         ? createPortal(

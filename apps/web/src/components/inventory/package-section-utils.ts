@@ -16,6 +16,11 @@ export const sectionOrder: PublicPackageBucket[] = [
   "misc",
 ];
 
+export const sectionFilterOptions = sectionOrder.map((section) => ({
+  value: section,
+  label: publicBucketLabels[section],
+}));
+
 type CategoryRow = {
   key: string;
   publicBucket?: PublicPackageBucket | null;

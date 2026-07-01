@@ -5,7 +5,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
-import { FormSaveBar } from "@/components/forms";
 import { Form } from "@/components/ui/form";
 import { TextFormField } from "@/components/forms/text-form-field";
 import { TextareaFormField } from "@/components/forms/textarea-form-field";
@@ -21,6 +20,7 @@ import {
 import { formatCurrency } from "./constants";
 import { FileUploadField } from "@/components/files/file-upload-field";
 import { MultiSelectFilter } from "./multi-select-filter";
+import { FilterField, FilterNativeSelect } from "./filter-controls";
 import {
   PackageItemsEditor,
   useSuggestedPackagePricing,
@@ -32,6 +32,7 @@ import {
   groupRowsBySection,
   publicBucketLabels,
   sectionOrder,
+  sectionFilterOptions,
   type PublicPackageBucket,
 } from "./package-section-utils";
 import { cn } from "@/lib/utils";
@@ -75,7 +76,7 @@ function packageSection(pkg: {
 
 export function PackagesManager() {
   const [search, setSearch] = useState("");
-  const [sectionFilter, setSectionFilter] = useState<"" | PublicPackageBucket>("");
+  const [sectionFilterIds, setSectionFilterIds] = useState<PublicPackageBucket[]>([]);
   const [typeFilterIds, setTypeFilterIds] = useState<string[]>([]);
   const [itemFilterIds, setItemFilterIds] = useState<string[]>([]);
   const [editorOpen, setEditorOpen] = useState(false);
@@ -186,7 +187,7 @@ export function PackagesManager() {
     const rows = [...(packages ?? [])].filter((pkg) => {
       if (loweredSearch && !pkg.name.toLowerCase().includes(loweredSearch)) return false;
       const section = packageSection(pkg, categories);
-      if (sectionFilter && section !== sectionFilter) return false;
+      if (sectionFilterIds.length && !sectionFilterIds.includes(section)) return false;
       if (typeFilterIds.length) {
         const packageTypeIds = new Set(pkg.items.map((row) => row.typeId));
         if (!typeFilterIds.some((typeId) => packageTypeIds.has(typeId as Id<"inventoryTypes">))) {
@@ -218,7 +219,7 @@ export function PackagesManager() {
       return a.name.localeCompare(b.name) * direction;
     });
     return rows;
-  }, [categories, itemFilterTypeIds, packages, search, sectionFilter, sortBy, sortDir, typeFilterIds]);
+  }, [categories, itemFilterTypeIds, packages, search, sectionFilterIds, sortBy, sortDir, typeFilterIds]);
 
   const groupedPackages = useMemo(() => {
     if (sortBy !== "section") return null;
@@ -233,11 +234,11 @@ export function PackagesManager() {
   const activeFilterCount = useMemo(() => {
     let count = 0;
     if (search.trim()) count += 1;
-    if (sectionFilter) count += 1;
+    if (sectionFilterIds.length) count += 1;
     if (typeFilterIds.length) count += 1;
     if (itemFilterIds.length) count += 1;
     return count;
-  }, [itemFilterIds.length, search, sectionFilter, typeFilterIds.length]);
+  }, [itemFilterIds.length, search, sectionFilterIds.length, typeFilterIds.length]);
 
   const suggestedPricing = useSuggestedPackagePricing(itemRows, typeLookup);
   const packageValues = packageForm.watch();
@@ -248,6 +249,13 @@ export function PackagesManager() {
     packageForm.reset(defaultPackageValues);
     packageForm.resetSaveState();
     setItemRows([]);
+  }
+
+  function requestCloseEditor() {
+    if (packageForm.formState.isDirty) {
+      if (!window.confirm("Discard unsaved changes?")) return;
+    }
+    closeEditor();
   }
 
   function openCreateEditor() {
@@ -293,7 +301,7 @@ export function PackagesManager() {
 
   function clearFilters() {
     setSearch("");
-    setSectionFilter("");
+    setSectionFilterIds([]);
     setTypeFilterIds([]);
     setItemFilterIds([]);
   }
@@ -398,28 +406,22 @@ export function PackagesManager() {
         <CardHeader>
           <CardTitle>Packages</CardTitle>
           <div className="space-y-3">
-            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+            <FilterField label="Search" className="w-full">
               <Input
-                className="xl:col-span-2"
                 placeholder="Search packages"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
               />
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-muted-foreground">Section</p>
-                <select
-                  className="h-9 w-full rounded-md border bg-background px-3 text-sm"
-                  value={sectionFilter}
-                  onChange={(event) => setSectionFilter(event.target.value as "" | PublicPackageBucket)}
-                >
-                  <option value="">All sections</option>
-                  {(Object.keys(publicBucketLabels) as PublicPackageBucket[]).map((key) => (
-                    <option key={key} value={key}>
-                      {publicBucketLabels[key]}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            </FilterField>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <MultiSelectFilter
+                label="Sections"
+                placeholder="Search sections…"
+                values={sectionFilterIds}
+                onChange={(values) => setSectionFilterIds(values as PublicPackageBucket[])}
+                options={sectionFilterOptions}
+                emptyLabel="All sections"
+              />
               <MultiSelectFilter
                 label="Types"
                 placeholder="Search types…"
@@ -428,8 +430,6 @@ export function PackagesManager() {
                 options={typeOptions}
                 emptyLabel="All types"
               />
-            </div>
-            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
               <MultiSelectFilter
                 label="Inventory items"
                 placeholder="Search asset IDs…"
@@ -438,24 +438,28 @@ export function PackagesManager() {
                 options={inventoryItemOptions}
                 emptyLabel="All items"
               />
-              <select
-                className="h-9 rounded-md border bg-background px-3 text-sm"
+            </div>
+            <div className="flex flex-wrap items-end gap-3">
+              <FilterNativeSelect
+                label="Sort by"
+                className="w-full sm:w-44"
                 value={sortBy}
-                onChange={(event) => setSortBy(event.target.value as typeof sortBy)}
+                onChange={(value) => setSortBy(value as typeof sortBy)}
               >
-                <option value="section">Sort: Section</option>
-                <option value="name">Sort: Name</option>
-                <option value="price">Sort: Price</option>
-                <option value="value">Sort: Est. Value</option>
-              </select>
-              <select
-                className="h-9 rounded-md border bg-background px-3 text-sm"
+                <option value="section">Section</option>
+                <option value="name">Name</option>
+                <option value="price">Price</option>
+                <option value="value">Est. value</option>
+              </FilterNativeSelect>
+              <FilterNativeSelect
+                label="Order"
+                className="w-full sm:w-32"
                 value={sortDir}
-                onChange={(event) => setSortDir(event.target.value as typeof sortDir)}
+                onChange={(value) => setSortDir(value as typeof sortDir)}
               >
-                <option value="asc">Asc</option>
-                <option value="desc">Desc</option>
-              </select>
+                <option value="asc">Ascending</option>
+                <option value="desc">Descending</option>
+              </FilterNativeSelect>
               <Button
                 type="button"
                 variant="outline"
@@ -464,6 +468,9 @@ export function PackagesManager() {
               >
                 Clear filters{activeFilterCount ? ` (${activeFilterCount})` : ""}
               </Button>
+              <span className="pb-2 text-sm text-muted-foreground">
+                {filteredPackages.length} package{filteredPackages.length === 1 ? "" : "s"}
+              </span>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Button
@@ -477,9 +484,6 @@ export function PackagesManager() {
               <Button type="button" onClick={openCreateEditor}>
                 Create Package
               </Button>
-              <span className="text-sm text-muted-foreground">
-                {filteredPackages.length} package{filteredPackages.length === 1 ? "" : "s"}
-              </span>
             </div>
           </div>
         </CardHeader>
@@ -506,49 +510,41 @@ export function PackagesManager() {
       </Card>
 
       {editorOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 pb-20">
-          <div className="relative flex max-h-[92vh] w-full max-w-6xl flex-col rounded-lg border bg-background shadow-xl">
-            <div className="border-b p-4">
-              <h2 className="text-lg font-semibold">{editingId ? "Edit Package" : "Create Package"}</h2>
-              <p className="text-sm text-muted-foreground">
-                Build the package visually — the preview updates as you edit.
-              </p>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4"
+          onClick={() => requestCloseEditor()}
+        >
+          <div
+            className="relative flex max-h-[92vh] w-full max-w-6xl flex-col rounded-lg border bg-background shadow-xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3 border-b p-4">
+              <div>
+                <h2 className="text-lg font-semibold">{editingId ? "Edit Package" : "Create Package"}</h2>
+                <p className="text-sm text-muted-foreground">
+                  Fill in package details, then add equipment from the catalog.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="shrink-0"
+                aria-label="Close"
+                onClick={() => requestCloseEditor()}
+              >
+                Close
+              </Button>
             </div>
-            <div className="min-h-0 flex-1 overflow-auto p-4">
+            <div className="min-h-0 flex-1 overflow-y-auto p-4">
               <Form {...packageForm}>
-                <form onSubmit={packageForm.handleSubmit(onSubmitPackage)} className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
-                  <div className="space-y-4">
-                    <PackageItemsEditor
-                      itemRows={itemRows}
-                      onItemRowsChange={setItemRows}
-                      types={types ?? []}
-                      inventoryItems={inventoryItems ?? []}
-                      categories={categories}
-                      packageName={packageValues.name}
-                      packageDescription={packageValues.description ?? ""}
-                      heroImageUrl={packageValues.publicHeroImageUrl ?? ""}
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => {
-                        packageForm.setValue(
-                          "subsidizedPackagePriceUsd",
-                          Number(suggestedPricing.subsidized.toFixed(2)),
-                          { shouldDirty: true },
-                        );
-                        packageForm.setValue(
-                          "nonSubsidizedPackagePriceUsd",
-                          Number(suggestedPricing.nonSubsidized.toFixed(2)),
-                          { shouldDirty: true },
-                        );
-                      }}
-                    >
-                      Use suggested prices
-                    </Button>
-                  </div>
-
+                <form
+                  id="package-editor-form"
+                  onSubmit={packageForm.handleSubmit(onSubmitPackage)}
+                  className="grid gap-6 lg:grid-cols-2 lg:items-start"
+                >
                   <div className="space-y-3">
+                    <h3 className="text-sm font-semibold">Details</h3>
                     <TextFormField name="name" label="Name" />
                     <TextareaFormField
                       name="description"
@@ -558,7 +554,7 @@ export function PackagesManager() {
                     <p className="-mt-2 text-xs text-muted-foreground">
                       Multi-line; Markdown supported on the public package page.
                     </p>
-                    <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       <TextFormField
                         name="subsidizedPackagePriceUsd"
                         label="Subsidized Package Price (USD)"
@@ -569,6 +565,27 @@ export function PackagesManager() {
                         label="Non-Subsidized Package Price (USD)"
                         type="number"
                       />
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          packageForm.setValue(
+                            "subsidizedPackagePriceUsd",
+                            Number(suggestedPricing.subsidized.toFixed(2)),
+                            { shouldDirty: true },
+                          );
+                          packageForm.setValue(
+                            "nonSubsidizedPackagePriceUsd",
+                            Number(suggestedPricing.nonSubsidized.toFixed(2)),
+                            { shouldDirty: true },
+                          );
+                        }}
+                      >
+                        Use suggested prices
+                      </Button>
                     </div>
                     <label className="flex items-center gap-2 text-sm">
                       <input
@@ -582,9 +599,6 @@ export function PackagesManager() {
                     </label>
                     <div className="space-y-3 rounded-md border p-3">
                       <p className="text-sm font-medium">Public listing</p>
-                      <p className="text-xs text-muted-foreground">
-                        Public packages appear on the unauthenticated browse pages.
-                      </p>
                       <label className="flex items-center gap-2 text-sm">
                         <input
                           type="checkbox"
@@ -645,29 +659,49 @@ export function PackagesManager() {
                         placeholder="e.g. basic-foh-package"
                       />
                     </div>
-                    <div className="flex gap-2 xl:hidden">
-                      <Button type="submit" disabled={packageForm.saveStatus === "saving"}>
-                        {editingId ? "Update" : "Create"}
-                      </Button>
-                      <Button type="button" variant="outline" onClick={closeEditor}>
-                        Cancel
-                      </Button>
-                    </div>
+                  </div>
+
+                  <div className="space-y-3 lg:sticky lg:top-0">
+                    <h3 className="text-sm font-semibold">Package contents</h3>
+                    <PackageItemsEditor
+                      itemRows={itemRows}
+                      onItemRowsChange={setItemRows}
+                      types={types ?? []}
+                      inventoryItems={inventoryItems ?? []}
+                      categories={categories}
+                    />
                   </div>
                 </form>
               </Form>
             </div>
+            <div className="flex shrink-0 items-center justify-between gap-3 border-t p-4">
+              <div className="min-w-0 text-sm">
+                {packageForm.saveStatus === "saving" ? (
+                  <span className="text-muted-foreground">Saving…</span>
+                ) : packageForm.saveStatus === "error" ? (
+                  <span className="text-destructive">{packageForm.saveError ?? "Save failed"}</span>
+                ) : packageForm.formState.isDirty ? (
+                  <span className="text-muted-foreground">Unsaved changes</span>
+                ) : null}
+              </div>
+              <div className="flex shrink-0 gap-2">
+                <Button type="button" variant="outline" onClick={() => requestCloseEditor()}>
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  form="package-editor-form"
+                  disabled={packageForm.saveStatus === "saving"}
+                >
+                  {packageForm.saveStatus === "saving"
+                    ? "Saving…"
+                    : editingId
+                      ? "Update"
+                      : "Create"}
+                </Button>
+              </div>
+            </div>
           </div>
-          <FormSaveBar
-            tier="C"
-            saveStatus={packageForm.saveStatus}
-            saveError={packageForm.saveError}
-            isDirty={packageForm.formState.isDirty}
-            saveLabel={editingId ? "Update" : "Create"}
-            onSave={() => void packageForm.handleSubmit(onSubmitPackage)()}
-            onDiscard={closeEditor}
-            onRetry={() => void packageForm.handleSubmit(onSubmitPackage)()}
-          />
         </div>
       ) : null}
     </div>

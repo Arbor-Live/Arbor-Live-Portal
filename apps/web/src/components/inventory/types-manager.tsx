@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
 import { FormSaveBar } from "@/components/forms";
@@ -18,6 +18,8 @@ import {
 } from "@/lib/validations/inventory";
 import { formatCurrency, toCategoryOptions } from "./constants";
 import { SearchableSelect } from "./searchable-select";
+import { MultiSelectFilter } from "./multi-select-filter";
+import { FilterField, FilterNativeSelect } from "./filter-controls";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import {
   FileUploadField,
@@ -172,7 +174,7 @@ function visibilityBadgeClass(row: { publicListing?: boolean; publicProfile?: bo
 
 export function TypesManager() {
   const [search, setSearch] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState<string>("");
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
   const [publicVisibility, setPublicVisibility] = useState<PublicVisibilityFilter>("all");
   const [publicProfileFilter, setPublicProfileFilter] = useState<PublicProfileFilter>("all");
   const [selectedCapability, setSelectedCapability] = useState("");
@@ -197,7 +199,7 @@ export function TypesManager() {
   const allTypes = useQuery(api.inventoryTypes.list, {});
   const types = useQuery(api.inventoryTypes.list, {
     search: search.trim() || undefined,
-    category: selectedCategory || undefined,
+    category: selectedCategoryIds.length === 1 ? selectedCategoryIds[0] : undefined,
     capability: selectedCapability || undefined,
     manufacturer: selectedManufacturer || undefined,
     publicListing:
@@ -218,9 +220,21 @@ export function TypesManager() {
   const createCapability = useMutation(api.capabilityDefinitions.create);
   const deleteCapability = useMutation(api.capabilityDefinitions.remove);
 
-  const rows = useMemo(() => types ?? [], [types]);
+  const rows = useMemo(() => {
+    const base = types ?? [];
+    if (selectedCategoryIds.length <= 1) return base;
+    return base.filter((row) => selectedCategoryIds.includes(row.category));
+  }, [selectedCategoryIds, types]);
   const capabilityOptions = useMemo(() => capabilities ?? [], [capabilities]);
   const categoryOptions = useMemo(() => toCategoryOptions(categories), [categories]);
+  const categoryFilterOptions = useMemo(
+    () =>
+      categoryOptions.map((category) => ({
+        value: category.value,
+        label: category.label,
+      })),
+    [categoryOptions],
+  );
   const manufacturerOptions = useMemo(() => {
     const manufacturers = new Set<string>();
     for (const type of allTypes ?? []) {
@@ -232,7 +246,7 @@ export function TypesManager() {
   const activeFilterCount = useMemo(() => {
     let count = 0;
     if (search.trim()) count += 1;
-    if (selectedCategory) count += 1;
+    if (selectedCategoryIds.length) count += 1;
     if (publicVisibility !== "all") count += 1;
     if (publicProfileFilter !== "all") count += 1;
     if (selectedCapability) count += 1;
@@ -243,7 +257,7 @@ export function TypesManager() {
     publicVisibility,
     search,
     selectedCapability,
-    selectedCategory,
+    selectedCategoryIds,
     selectedManufacturer,
   ]);
   const filteredCapabilityOptions = useMemo(() => {
@@ -349,7 +363,7 @@ export function TypesManager() {
 
   function clearFilters() {
     setSearch("");
-    setSelectedCategory("");
+    setSelectedCategoryIds([]);
     setPublicVisibility("all");
     setPublicProfileFilter("all");
     setSelectedCapability("");
@@ -370,94 +384,93 @@ export function TypesManager() {
         <CardHeader>
           <CardTitle>Model Types</CardTitle>
           <div className="space-y-3">
-            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+            <FilterField label="Search" className="w-full">
               <Input
-                className="xl:col-span-2"
                 placeholder="Search name, model, manufacturer, description, capabilities, slug…"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
               />
-              <select
-                className="h-9 rounded-md border bg-background px-3 text-sm"
-                value={selectedCategory}
-                onChange={(event) => setSelectedCategory(event.target.value)}
-              >
-                <option value="">All categories</option>
-                {categoryOptions.map((category) => (
-                  <option key={category.value} value={category.value}>
-                    {category.label}
-                  </option>
-                ))}
-              </select>
-              <select
-                className="h-9 rounded-md border bg-background px-3 text-sm"
+            </FilterField>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <MultiSelectFilter
+                label="Categories"
+                placeholder="Search categories…"
+                values={selectedCategoryIds}
+                onChange={setSelectedCategoryIds}
+                options={categoryFilterOptions}
+                emptyLabel="All categories"
+              />
+              <FilterNativeSelect
+                label="Visibility"
                 value={publicVisibility}
-                onChange={(event) =>
-                  setPublicVisibility(event.target.value as PublicVisibilityFilter)
-                }
+                onChange={(value) => setPublicVisibility(value as PublicVisibilityFilter)}
               >
                 <option value="all">All visibility</option>
                 <option value="public">Listed publicly</option>
                 <option value="hidden">Hidden from public</option>
-              </select>
-              <select
-                className="h-9 rounded-md border bg-background px-3 text-sm"
+              </FilterNativeSelect>
+              <FilterNativeSelect
+                label="Profile mode"
                 value={publicProfileFilter}
-                onChange={(event) =>
-                  setPublicProfileFilter(event.target.value as PublicProfileFilter)
-                }
+                onChange={(value) => setPublicProfileFilter(value as PublicProfileFilter)}
               >
                 <option value="all">All profile modes</option>
                 <option value="full">Full public profile</option>
                 <option value="off">Listing only / profile off</option>
-              </select>
-              <SearchableSelect
-                value={selectedCapability}
-                onChange={setSelectedCapability}
-                options={[
-                  { value: "", label: "All capabilities" },
-                  ...capabilityOptions.map((capability) => ({
-                    value: capability.key,
-                    label: capability.label,
-                  })),
-                ]}
-                placeholder="Filter by capability…"
-                emptyLabel="All capabilities"
-              />
-              <SearchableSelect
-                value={selectedManufacturer}
-                onChange={setSelectedManufacturer}
-                options={[
-                  { value: "", label: "All manufacturers" },
-                  ...manufacturerOptions.map((manufacturer) => ({
-                    value: manufacturer,
-                    label: manufacturer,
-                  })),
-                ]}
-                placeholder="Filter by manufacturer…"
-                emptyLabel="All manufacturers"
-              />
+              </FilterNativeSelect>
+              <FilterField label="Capability">
+                <SearchableSelect
+                  value={selectedCapability}
+                  onChange={setSelectedCapability}
+                  options={[
+                    { value: "", label: "All capabilities" },
+                    ...capabilityOptions.map((capability) => ({
+                      value: capability.key,
+                      label: capability.label,
+                    })),
+                  ]}
+                  placeholder="Filter by capability…"
+                  emptyLabel="All capabilities"
+                />
+              </FilterField>
+              <FilterField label="Manufacturer">
+                <SearchableSelect
+                  value={selectedManufacturer}
+                  onChange={setSelectedManufacturer}
+                  options={[
+                    { value: "", label: "All manufacturers" },
+                    ...manufacturerOptions.map((manufacturer) => ({
+                      value: manufacturer,
+                      label: manufacturer,
+                    })),
+                  ]}
+                  placeholder="Filter by manufacturer…"
+                  emptyLabel="All manufacturers"
+                />
+              </FilterField>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <select
-                className="h-9 rounded-md border bg-background px-3 text-sm"
+            <div className="flex flex-wrap items-end gap-3">
+              <FilterNativeSelect
+                label="Sort by"
+                className="w-full sm:w-44"
                 value={sortBy}
-                onChange={(event) => setSortBy(event.target.value as typeof sortBy)}
+                onChange={(value) => setSortBy(value as typeof sortBy)}
               >
-                <option value="name">Sort: Name</option>
-                <option value="category">Sort: Category</option>
-                <option value="visibility">Sort: Visibility</option>
-                <option value="msrp">Sort: MSRP</option>
-                <option value="normal">Sort: Normal Rate</option>
-              </select>
-              <select
-                className="h-9 rounded-md border bg-background px-3 text-sm"
+                <option value="name">Name</option>
+                <option value="category">Category</option>
+                <option value="visibility">Visibility</option>
+                <option value="msrp">MSRP</option>
+                <option value="normal">Normal rate</option>
+              </FilterNativeSelect>
+              <FilterNativeSelect
+                label="Order"
+                className="w-full sm:w-32"
                 value={sortDir}
-                onChange={(event) => setSortDir(event.target.value as typeof sortDir)}
+                onChange={(value) => setSortDir(value as typeof sortDir)}
               >
-                <option value="asc">Asc</option>
-                <option value="desc">Desc</option>
-              </select>
+                <option value="asc">Ascending</option>
+                <option value="desc">Descending</option>
+              </FilterNativeSelect>
               <Button
                 type="button"
                 variant="outline"
@@ -466,7 +479,7 @@ export function TypesManager() {
               >
                 Clear filters{activeFilterCount ? ` (${activeFilterCount})` : ""}
               </Button>
-              <span className="text-sm text-muted-foreground">
+              <span className="pb-2 text-sm text-muted-foreground">
                 {sortedRows.length} type{sortedRows.length === 1 ? "" : "s"}
                 {selectedIds.length ? ` · ${selectedIds.length} selected` : ""}
               </span>
