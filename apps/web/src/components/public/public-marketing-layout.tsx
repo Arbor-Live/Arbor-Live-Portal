@@ -7,14 +7,16 @@ import { LandingFooter } from "@/components/landing/landing-footer";
 type PublicMarketingLayoutProps = {
   children: React.ReactNode;
   showDashboardLink?: boolean;
+  hideFooter?: boolean;
 };
 
 export function PublicMarketingLayout({
   children,
   showDashboardLink,
+  hideFooter,
 }: PublicMarketingLayoutProps) {
   return (
-    <div className="min-h-dvh bg-background text-foreground">
+    <div className="flex min-h-dvh flex-col bg-background text-foreground">
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:rounded-none focus:bg-primary focus:px-4 focus:py-2 focus:text-primary-foreground"
@@ -61,9 +63,11 @@ export function PublicMarketingLayout({
         </div>
       </header>
 
-      <main id="main-content">{children}</main>
+      <main id="main-content" className="flex flex-1 flex-col">
+        {children}
+      </main>
 
-      <LandingFooter showDashboardLink={showDashboardLink} />
+      {hideFooter ? null : <LandingFooter showDashboardLink={showDashboardLink} />}
     </div>
   );
 }
