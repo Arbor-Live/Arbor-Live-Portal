@@ -184,32 +184,16 @@ export function useConvexForm<T extends FieldValues>({
     };
   }, []);
 
-  const formReturnRef = useRef<UseConvexFormReturn<T> | null>(null);
-  if (!formReturnRef.current) {
-    formReturnRef.current = {
-      ...form,
-      saveStatus: "idle",
-      saveError: null,
-      setSaveStatus,
-      setSaveError,
-      submitMutation,
-      runMutation,
-      resetSaveState,
-      debouncedAutoSave,
-      suppressNextAutoSave,
-    };
-  }
+  const extendedForm = form as UseConvexFormReturn<T>;
+  extendedForm.saveStatus = saveStatus;
+  extendedForm.saveError = saveError;
+  extendedForm.setSaveStatus = setSaveStatus;
+  extendedForm.setSaveError = setSaveError;
+  extendedForm.submitMutation = submitMutation;
+  extendedForm.runMutation = runMutation;
+  extendedForm.resetSaveState = resetSaveState;
+  extendedForm.debouncedAutoSave = debouncedAutoSave;
+  extendedForm.suppressNextAutoSave = suppressNextAutoSave;
 
-  const formReturn = formReturnRef.current;
-  formReturn.saveStatus = saveStatus;
-  formReturn.saveError = saveError;
-  formReturn.setSaveStatus = setSaveStatus;
-  formReturn.setSaveError = setSaveError;
-  formReturn.submitMutation = submitMutation;
-  formReturn.runMutation = runMutation;
-  formReturn.resetSaveState = resetSaveState;
-  formReturn.debouncedAutoSave = debouncedAutoSave;
-  formReturn.suppressNextAutoSave = suppressNextAutoSave;
-
-  return formReturn;
+  return extendedForm;
 }
