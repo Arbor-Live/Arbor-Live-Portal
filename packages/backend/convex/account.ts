@@ -19,6 +19,7 @@ export const getMyAccount = query({
     avatarUrl: v.optional(v.string()),
     phone: v.optional(v.string()),
     title: v.optional(v.string()),
+    calendarInviteEmail: v.optional(v.string()),
   }),
   handler: async (ctx) => {
     const user = await requireAuth(ctx);
@@ -42,6 +43,7 @@ export const getMyAccount = query({
       avatarUrl,
       phone: profile?.phone,
       title: profile?.title,
+      calendarInviteEmail: profile?.calendarInviteEmail ?? "",
     };
   },
 });
@@ -127,6 +129,7 @@ export const updateMyProfileDetails = mutation({
   args: {
     phone: v.optional(v.string()),
     title: v.optional(v.string()),
+    calendarInviteEmail: v.optional(v.string()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -135,6 +138,10 @@ export const updateMyProfileDetails = mutation({
     const now = Date.now();
     const phone = args.phone?.trim() || undefined;
     const title = args.title?.trim() || undefined;
+    const calendarInviteEmail = args.calendarInviteEmail?.trim().toLowerCase() || undefined;
+    if (calendarInviteEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(calendarInviteEmail)) {
+      throw new Error("Enter a valid calendar invite email address.");
+    }
 
     const existing = await ctx.db
       .query("userAdminProfiles")
@@ -145,6 +152,7 @@ export const updateMyProfileDetails = mutation({
       await ctx.db.patch(existing._id, {
         phone,
         title,
+        calendarInviteEmail,
         updatedAt: now,
       });
       return null;
@@ -154,6 +162,7 @@ export const updateMyProfileDetails = mutation({
       userId,
       phone,
       title,
+      calendarInviteEmail,
       active: true,
       teams: [],
       createdAt: now,

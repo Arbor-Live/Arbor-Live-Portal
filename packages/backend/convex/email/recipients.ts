@@ -52,6 +52,20 @@ function addRecipient(
   recipients.set(normalized, { email: normalized, name, userId });
 }
 
+async function resolveCalendarInviteEmail(
+  ctx: QueryCtx | MutationCtx,
+  userId: string,
+  accountEmail: string,
+) {
+  const profile = await ctx.db
+    .query("userAdminProfiles")
+    .withIndex("by_userId", (q) => q.eq("userId", userId))
+    .unique();
+  const override = profile?.calendarInviteEmail?.trim().toLowerCase();
+  if (override && isValidEmail(override)) return override;
+  return accountEmail;
+}
+
 export async function getEventStakeholderEmails(
   ctx: QueryCtx | MutationCtx,
   eventId: Id<"events">,
@@ -91,36 +105,6 @@ export async function getEventStakeholderEmails(
   return [...recipients.values()];
 }
 
-export async function getSchedulePublishedRecipients(
-  ctx: QueryCtx | MutationCtx,
-  eventId: Id<"events">,
-) {
-  const event = await ctx.db.get(eventId);
-  if (!event) return [] as EmailRecipient[];
-
-  const userIds = [event.dayOfLeadUserId, event.eventManagerUserId].filter(
-    (value): value is string => Boolean(value?.trim()),
-  );
-
-  const shifts = await ctx.db
-    .query("eventCrewShifts")
-    .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
-    .take(500);
-  for (const shift of shifts) {
-    if (shift.userId) userIds.push(shift.userId);
-  }
-
-  const userByKey = await fetchUsersByIds(ctx, [...new Set(userIds)]);
-  const recipients = new Map<string, EmailRecipient>();
-
-  for (const userId of userIds) {
-    const user = userByKey.get(userId);
-    addRecipient(recipients, user?.email, user?.name ?? undefined, userId);
-  }
-
-  return [...recipients.values()];
-}
-
 export async function getUserEmailRecipient(
   ctx: QueryCtx | MutationCtx,
   userId: string,
@@ -130,6 +114,22 @@ export async function getUserEmailRecipient(
   if (!user?.email) return null;
   return {
     email: user.email.trim().toLowerCase(),
+    name: user.name ?? undefined,
+    userId,
+  } satisfies EmailRecipient;
+}
+
+export async function getUserScheduledEmailRecipient(
+  ctx: QueryCtx | MutationCtx,
+  userId: string,
+) {
+  const userByKey = await fetchUsersByIds(ctx, [userId]);
+  const user = userByKey.get(userId);
+  if (!user?.email) return null;
+  const accountEmail = user.email.trim().toLowerCase();
+  const email = await resolveCalendarInviteEmail(ctx, userId, accountEmail);
+  return {
+    email,
     name: user.name ?? undefined,
     userId,
   } satisfies EmailRecipient;
