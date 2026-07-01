@@ -1,7 +1,5 @@
 "use client";
 
-/* eslint-disable @next/next/no-img-element -- inventory admin may reference uploaded asset URLs */
-
 import { useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -16,6 +14,7 @@ import {
   type PublicPackageBucket,
 } from "./package-section-utils";
 import { cn } from "@/lib/utils";
+import { InventoryAssetImage } from "./inventory-asset-image";
 
 export type PackageItemRow = { typeId: string; quantity: string };
 
@@ -262,10 +261,11 @@ export function PackageItemsEditor({
                           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                             <div className="flex min-w-0 flex-1 items-center gap-3">
                               {imageUrl ? (
-                                <img
-                                  src={imageUrl}
+                                <InventoryAssetImage
+                                  storedValue={imageUrl}
                                   alt=""
                                   className="h-14 w-14 shrink-0 rounded object-cover"
+                                  fallbackClassName="h-14 w-14 shrink-0 rounded"
                                 />
                               ) : (
                                 <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded bg-muted text-[10px] text-muted-foreground">
@@ -408,20 +408,21 @@ export function PackageItemsEditor({
                   <div className="space-y-2">
                     {group.rows.map(({ type }) => {
                       const inPackage = quantityInPackage(itemRows, type._id);
-                      const imageUrl = type.iconImageUrl || type.promoImageUrl;
-                      return (
-                        <div
-                          key={type._id}
-                          className="flex flex-col gap-3 rounded-md border p-3 sm:flex-row sm:items-center"
-                        >
-                          <div className="flex min-w-0 flex-1 items-center gap-3">
-                            {imageUrl ? (
-                              <img
-                                src={imageUrl}
-                                alt=""
-                                className="h-12 w-12 shrink-0 rounded object-cover"
-                              />
-                            ) : (
+                    const imageUrl = type.iconImageUrl || type.promoImageUrl;
+                    return (
+                      <div
+                        key={type._id}
+                        className="flex flex-col gap-3 rounded-md border p-3 sm:flex-row sm:items-center"
+                      >
+                        <div className="flex min-w-0 flex-1 items-center gap-3">
+                          {imageUrl ? (
+                            <InventoryAssetImage
+                              storedValue={imageUrl}
+                              alt=""
+                              className="h-12 w-12 shrink-0 rounded object-cover"
+                              fallbackClassName="h-12 w-12 shrink-0 rounded"
+                            />
+                          ) : (
                               <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded bg-muted text-[10px] text-muted-foreground">
                                 No img
                               </div>

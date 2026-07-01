@@ -1,7 +1,5 @@
 "use client";
 
-/* eslint-disable @next/next/no-img-element -- inventory admin may reference uploaded asset URLs */
-
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
@@ -36,6 +34,7 @@ import {
   type PublicPackageBucket,
 } from "./package-section-utils";
 import { cn } from "@/lib/utils";
+import { InventoryAssetImage } from "./inventory-asset-image";
 
 const defaultPackageValues: InventoryPackageFormValues = {
   name: "",
@@ -319,7 +318,12 @@ export function PackagesManager() {
       >
         {pkg.publicHeroImageUrl ? (
           <div className="relative h-36 w-full border-b">
-            <img src={pkg.publicHeroImageUrl} alt="" className="h-full w-full object-cover" />
+            <InventoryAssetImage
+              storedValue={pkg.publicHeroImageUrl}
+              alt=""
+              className="h-full w-full object-cover"
+              fallbackClassName="h-full w-full"
+            />
           </div>
         ) : (
           <div className="flex h-24 items-center justify-center border-b bg-gradient-to-br from-muted/70 to-background px-4 text-center text-xs text-muted-foreground">
