@@ -79,10 +79,10 @@ function toTypeFormValues(row: {
     model: row.model,
     manufacturer: row.manufacturer ?? "",
     category: row.category,
-    msrpUsd: row.msrpUsd?.toString() ?? "",
-    subsidizedRentalPriceUsd: row.subsidizedRentalPriceUsd?.toString() ?? "",
+    msrpUsd: row.msrpUsd ?? "",
+    subsidizedRentalPriceUsd: row.subsidizedRentalPriceUsd ?? "",
     nonSubsidizedRentalPriceUsd:
-      (row.nonSubsidizedRentalPriceUsd ?? row.rentalPriceUsd)?.toString() ?? "",
+      row.nonSubsidizedRentalPriceUsd ?? row.rentalPriceUsd ?? "",
     manualResources: manualResourcesFromDb(row.manualUrls),
     lightingGdtfResources: gdtfResourcesFromDb(row.categoryMetadata?.lighting?.gdtfUrls),
     tips: row.tips ?? "",

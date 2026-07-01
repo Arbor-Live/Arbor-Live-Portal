@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   useForm,
@@ -43,6 +43,30 @@ export type UseConvexFormReturn<T extends FieldValues> = UseFormReturn<T> & {
   suppressNextAutoSave: () => void;
 };
 
+function captureTextInputFocus(): () => void {
+  const active = document.activeElement;
+  if (
+    !active ||
+    !(active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement)
+  ) {
+    return () => {};
+  }
+
+  const element = active;
+  const selectionStart = element.selectionStart;
+  const selectionEnd = element.selectionEnd;
+
+  return () => {
+    requestAnimationFrame(() => {
+      if (!document.contains(element)) return;
+      element.focus({ preventScroll: true });
+      if (selectionStart !== null && selectionEnd !== null) {
+        element.setSelectionRange(selectionStart, selectionEnd);
+      }
+    });
+  };
+}
+
 export function useConvexForm<T extends FieldValues>({
   schema,
   defaultValues,
@@ -53,6 +77,9 @@ export function useConvexForm<T extends FieldValues>({
     defaultValues: defaultValues as DefaultValues<T>,
     resolver: zodResolver(schema as never) as Resolver<T>,
   });
+
+  const schemaRef = useRef(schema);
+  schemaRef.current = schema;
 
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -122,11 +149,20 @@ export function useConvexForm<T extends FieldValues>({
 
       if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
       autoSaveTimerRef.current = setTimeout(() => {
-        void form.handleSubmit(async (values: T) => {
+        void (async () => {
           if (!form.formState.isDirty) return;
-          await runMutation(() => onSave(values));
+
+          const values = form.getValues();
+          const parsed = schemaRef.current.safeParse(values);
+          if (!parsed.success) return;
+
+          const result = await runMutation(() => onSave(parsed.data));
+          if (result === undefined) return;
+
           if (form.formState.isDirty) {
-            form.reset(values as DefaultValues<T>, { keepValues: true });
+            const restoreFocus = captureTextInputFocus();
+            form.reset(parsed.data as DefaultValues<T>, { keepValues: true });
+            restoreFocus();
           }
         })();
       }, delayMs);
@@ -139,7 +175,7 @@ export function useConvexForm<T extends FieldValues>({
   }, []);
 
   // Subscribe to dirty state so consumers re-render when edits are made.
-  const { isDirty } = form.formState;
+  void form.formState.isDirty;
 
   useEffect(() => {
     return () => {
@@ -148,11 +184,12 @@ export function useConvexForm<T extends FieldValues>({
     };
   }, []);
 
-  return useMemo(
-    () => ({
+  const formReturnRef = useRef<UseConvexFormReturn<T> | null>(null);
+  if (!formReturnRef.current) {
+    formReturnRef.current = {
       ...form,
-      saveStatus,
-      saveError,
+      saveStatus: "idle",
+      saveError: null,
       setSaveStatus,
       setSaveError,
       submitMutation,
@@ -160,17 +197,19 @@ export function useConvexForm<T extends FieldValues>({
       resetSaveState,
       debouncedAutoSave,
       suppressNextAutoSave,
-    }),
-    [
-      form,
-      isDirty,
-      saveStatus,
-      saveError,
-      submitMutation,
-      runMutation,
-      resetSaveState,
-      debouncedAutoSave,
-      suppressNextAutoSave,
-    ],
-  );
+    };
+  }
+
+  const formReturn = formReturnRef.current;
+  formReturn.saveStatus = saveStatus;
+  formReturn.saveError = saveError;
+  formReturn.setSaveStatus = setSaveStatus;
+  formReturn.setSaveError = setSaveError;
+  formReturn.submitMutation = submitMutation;
+  formReturn.runMutation = runMutation;
+  formReturn.resetSaveState = resetSaveState;
+  formReturn.debouncedAutoSave = debouncedAutoSave;
+  formReturn.suppressNextAutoSave = suppressNextAutoSave;
+
+  return formReturn;
 }
