@@ -5,9 +5,12 @@
 import { useMemo } from "react";
 import { useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
+import { PublicPageHero } from "@/components/public/public-page-hero";
 import { PublicSiteChrome } from "@/components/public/public-site-chrome";
 import { MarkdownContent } from "@/components/markdown-content";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+
+const contentClassName = "mx-auto max-w-6xl space-y-8 px-4 py-12 sm:px-6 lg:px-8";
 
 type PublicTypeSummary = {
   _id: string;
@@ -59,7 +62,13 @@ export function PublicEquipmentClient({ assetId }: { assetId: string }) {
   if (data === undefined) {
     return (
       <PublicSiteChrome>
-        <p className="text-sm text-muted-foreground">Loading…</p>
+        <PublicPageHero
+          title="Equipment record"
+          subtitle="Look up Arbor Live inventory by asset ID."
+        />
+        <div className={contentClassName}>
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        </div>
       </PublicSiteChrome>
     );
   }
@@ -67,14 +76,20 @@ export function PublicEquipmentClient({ assetId }: { assetId: string }) {
   if (!data) {
     return (
       <PublicSiteChrome>
-        <Card>
-          <CardHeader>
-            <CardTitle>Equipment not found</CardTitle>
-          </CardHeader>
-          <CardContent className="text-sm text-muted-foreground">
-            This asset ID is not registered, or it may have been retired.
-          </CardContent>
-        </Card>
+        <PublicPageHero
+          title="Equipment not found"
+          subtitle="This asset ID is not registered, or it may have been retired."
+        />
+        <div className={contentClassName}>
+          <Card>
+            <CardHeader>
+              <CardTitle>Asset unavailable</CardTitle>
+            </CardHeader>
+            <CardContent className="text-sm text-muted-foreground">
+              Double-check the ID on the equipment label, or contact Arbor Live if you found lost gear.
+            </CardContent>
+          </Card>
+        </div>
       </PublicSiteChrome>
     );
   }
@@ -87,26 +102,20 @@ export function PublicEquipmentClient({ assetId }: { assetId: string }) {
 
   return (
     <PublicSiteChrome>
+      <PublicPageHero
+        title={displayModelName}
+        subtitle={`${type.category} · Asset ${data.assetId}`}
+      />
+      <div className={contentClassName}>
       <div className="space-y-8">
-        <Card className="overflow-hidden border-primary/20">
-          <CardContent className="grid gap-6 p-6 sm:grid-cols-[1fr_auto] sm:items-end">
-            <div className="space-y-2">
-              <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Asset Record</p>
-              <p className="text-2xl font-semibold tracking-tight sm:text-3xl">{displayModelName}</p>
-              <p className="text-sm text-muted-foreground">Category: {type.category}</p>
-            </div>
-            <div className="rounded-lg border bg-muted/30 px-4 py-3 text-right">
-              <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Asset ID</p>
-              <p className="font-mono text-base font-semibold">{data.assetId}</p>
-              {data.serialNumber ? (
-                <>
-                  <p className="mt-2 text-xs uppercase tracking-[0.12em] text-muted-foreground">Serial</p>
-                  <p className="font-mono text-sm">{data.serialNumber}</p>
-                </>
-              ) : null}
-            </div>
-          </CardContent>
-        </Card>
+        {data.serialNumber ? (
+          <Card className="border-primary/20">
+            <CardContent className="flex flex-wrap items-center justify-between gap-4 p-6 text-sm">
+              <p className="text-muted-foreground">Serial number</p>
+              <p className="font-mono text-base font-semibold">{data.serialNumber}</p>
+            </CardContent>
+          </Card>
+        ) : null}
 
         <Card>
           <CardHeader>
@@ -247,6 +256,7 @@ export function PublicEquipmentClient({ assetId }: { assetId: string }) {
             </CardContent>
           </Card>
         ) : null}
+      </div>
       </div>
     </PublicSiteChrome>
   );

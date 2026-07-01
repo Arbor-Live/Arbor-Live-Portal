@@ -11,9 +11,5 @@ export default async function PublicRequestTrackPage({
 }) {
   const { token } = await params;
 
-  return (
-    <div className="mx-auto min-h-dvh max-w-2xl px-4 py-10">
-      <PublicRequestLifecycleClient token={token} />
-    </div>
-  );
+  return <PublicRequestLifecycleClient token={token} />;
 }

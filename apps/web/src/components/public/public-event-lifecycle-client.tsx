@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
+import { PublicPageHero } from "@/components/public/public-page-hero";
 import { PublicSiteChrome } from "@/components/public/public-site-chrome";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PublicEventHeader } from "@/components/public/public-event-header";
@@ -38,14 +39,20 @@ export function PublicEventLifecycleClient({ token }: { token: string }) {
   if (data === undefined) {
     return (
       <PublicSiteChrome>
-        <div className="mx-auto max-w-5xl p-6 text-sm text-muted-foreground">Loading quote...</div>
+        <PublicPageHero title="Event quote" subtitle="Review your quote and event details." />
+        <div className="mx-auto max-w-5xl px-4 py-12 sm:px-6 lg:px-8">
+          <p className="text-sm text-muted-foreground">Loading quote...</p>
+        </div>
       </PublicSiteChrome>
     );
   }
   if (!data) {
     return (
       <PublicSiteChrome>
-        <div className="mx-auto max-w-5xl p-6 text-sm text-muted-foreground">This quote link is invalid or expired.</div>
+        <PublicPageHero title="Quote unavailable" subtitle="This link is invalid or has expired." />
+        <div className="mx-auto max-w-5xl px-4 py-12 sm:px-6 lg:px-8">
+          <p className="text-sm text-muted-foreground">This quote link is invalid or expired.</p>
+        </div>
       </PublicSiteChrome>
     );
   }
@@ -84,7 +91,15 @@ export function PublicEventLifecycleClient({ token }: { token: string }) {
 
   return (
     <PublicSiteChrome>
-      <div className="mx-auto max-w-5xl space-y-4 p-6">
+      <PublicPageHero
+        title={linkedEvent?.title ?? `Quote ${data.invoice.invoiceNumber}`}
+        subtitle={
+          linkedEvent
+            ? `${quoteStatusLabel(data.invoice.clientApprovalStatus)} · ${data.invoice.invoiceNumber}`
+            : `Review quote ${data.invoice.invoiceNumber} · ${quoteStatusLabel(data.invoice.clientApprovalStatus)}`
+        }
+      />
+      <div className="mx-auto max-w-5xl space-y-4 px-4 py-12 sm:px-6 lg:px-8">
         <Card>
           <CardHeader>
             <CardTitle>Quote {data.invoice.invoiceNumber}</CardTitle>

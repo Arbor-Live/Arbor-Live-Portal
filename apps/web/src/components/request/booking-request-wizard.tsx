@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useConvex } from "convex/react";
@@ -257,23 +256,22 @@ export function BookingRequestWizard() {
       : currentStep.headline;
 
   return (
-    <div className="flex min-h-dvh flex-col bg-background">
-      <header className="border-b px-4 py-4">
-        <div className="mx-auto flex max-w-2xl items-center justify-between gap-4">
-          <Link href="/" className="flex items-center gap-2">
-            <Image src="/logo.svg" alt="Arbor Live" width={140} height={32} className="h-8 w-auto" />
-          </Link>
-          <span className="text-xs text-muted-foreground">Booking request</span>
+    <div className="flex flex-col">
+      <div className="border-b border-border/60 bg-muted/20 px-4 py-4">
+        <div className="mx-auto max-w-2xl">
+          <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+            Booking request
+          </p>
+          <div className="mt-3 h-1 overflow-hidden rounded-full bg-muted">
+            <motion.div
+              className="h-full bg-primary"
+              initial={false}
+              animate={{ width: `${progressPercent}%` }}
+              transition={spring}
+            />
+          </div>
         </div>
-        <div className="mx-auto mt-4 h-1 max-w-2xl overflow-hidden rounded-full bg-muted">
-          <motion.div
-            className="h-full bg-primary"
-            initial={false}
-            animate={{ width: `${progressPercent}%` }}
-            transition={spring}
-          />
-        </div>
-      </header>
+      </div>
 
       <FormProvider {...form}>
         <form

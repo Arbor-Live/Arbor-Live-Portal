@@ -5,6 +5,7 @@
 import { useMemo } from "react";
 import { useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
+import { PublicPageHero } from "@/components/public/public-page-hero";
 import { PublicSiteChrome } from "@/components/public/public-site-chrome";
 import { MarkdownContent } from "@/components/markdown-content";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -67,7 +68,10 @@ export function PublicPackageDetailClient({ packageId }: { packageId: Id<"invent
   if (data === undefined) {
     return (
       <PublicSiteChrome>
-        <p className="text-sm text-muted-foreground">Loading…</p>
+        <PublicPageHero title="Equipment package" subtitle="Loading package details…" />
+        <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 lg:px-8">
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        </div>
       </PublicSiteChrome>
     );
   }
@@ -75,14 +79,17 @@ export function PublicPackageDetailClient({ packageId }: { packageId: Id<"invent
   if (!data) {
     return (
       <PublicSiteChrome>
-        <Card>
-          <CardHeader>
-            <CardTitle>Package not available</CardTitle>
-          </CardHeader>
-          <CardContent className="text-sm text-muted-foreground">
-            This package is not public, inactive, or does not exist.
-          </CardContent>
-        </Card>
+        <PublicPageHero title="Package unavailable" subtitle="This package is not public or no longer exists." />
+        <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 lg:px-8">
+          <Card>
+            <CardHeader>
+              <CardTitle>Package not available</CardTitle>
+            </CardHeader>
+            <CardContent className="text-sm text-muted-foreground">
+              This package is not public, inactive, or does not exist.
+            </CardContent>
+          </Card>
+        </div>
       </PublicSiteChrome>
     );
   }
