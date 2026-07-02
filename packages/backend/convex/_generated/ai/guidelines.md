@@ -1,5 +1,7 @@
 # Convex guidelines
 
+These guidelines target Convex `^1.41.0`.
+
 ## Function guidelines
 
 ### Http endpoint syntax
@@ -63,20 +65,18 @@ export default defineSchema({
 ```
 
 - Here are the valid Convex types along with their respective validators:
-
-  | Convex Type | TS/JS type  | Example Usage          | Validator for argument validation and schemas | Notes                                                                                                                                                                                                 |
-  | ----------- | ----------- | ---------------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-  | Id          | string      | `doc._id`              | `v.id(tableName)`                             |                                                                                                                                                                                                       |
-  | Null        | null        | `null`                 | `v.null()`                                    | JavaScript's `undefined` is not a valid Convex value. Functions the return `undefined` or do not return will return `null` when called from a client. Use `null` instead.                             |
-  | Int64       | bigint      | `3n`                   | `v.int64()`                                   | Int64s only support BigInts between -2^63 and 2^63-1. Convex supports `bigint`s in most modern browsers.                                                                                              |
-  | Float64     | number      | `3.1`                  | `v.number()`                                  | Convex supports all IEEE-754 double-precision floating point numbers (such as NaNs). Inf and NaN are JSON serialized as strings.                                                                      |
-  | Boolean     | boolean     | `true`                 | `v.boolean()`                                 |                                                                                                                                                                                                       |
-  | String      | string      | `"abc"`                | `v.string()`                                  | Strings are stored as UTF-8 and must be valid Unicode sequences. Strings must be smaller than the 1MB total size limit when encoded as UTF-8.                                                         |
-  | Bytes       | ArrayBuffer | `new ArrayBuffer(8)`   | `v.bytes()`                                   | Convex supports first class bytestrings, passed in as `ArrayBuffer`s. Bytestrings must be smaller than the 1MB total size limit for Convex types.                                                     |
-  | Array       | Array       | `[1, 3.2, "abc"]`      | `v.array(values)`                             | Arrays can have at most 8192 values.                                                                                                                                                                  |
-  | Object      | Object      | `{a: "abc"}`           | `v.object({property: value})`                 | Convex only supports "plain old JavaScript objects" (objects that do not have a custom prototype). Objects can have at most 1024 entries. Field names must be nonempty and not start with "$" or "_". |
-  | Record      | Record      | `{"a": "1", "b": "2"}` | `v.record(keys, values)`                      | Records are objects at runtime, but can have dynamic keys. Keys must be only ASCII characters, nonempty, and not start with "$" or "".                                                                |
-
+  Convex Type | TS/JS type | Example Usage | Validator for argument validation and schemas | Notes |
+  | ----------- | ------------| -----------------------| -----------------------------------------------| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+  | Id | string | `doc._id` | `v.id(tableName)` | |
+  | Null | null | `null` | `v.null()` | JavaScript's `undefined` is not a valid Convex value. Functions the return `undefined` or do not return will return `null` when called from a client. Use `null` instead. |
+  | Int64 | bigint | `3n` | `v.int64()` | Int64s only support BigInts between -2^63 and 2^63-1. Convex supports `bigint`s in most modern browsers. |
+  | Float64 | number | `3.1` | `v.number()` | Convex supports all IEEE-754 double-precision floating point numbers (such as NaNs). Inf and NaN are JSON serialized as strings. |
+  | Boolean | boolean | `true` | `v.boolean()` |
+  | String | string | `"abc"` | `v.string()` | Strings are stored as UTF-8 and must be valid Unicode sequences. Strings must be smaller than the 1MB total size limit when encoded as UTF-8. |
+  | Bytes | ArrayBuffer | `new ArrayBuffer(8)` | `v.bytes()` | Convex supports first class bytestrings, passed in as `ArrayBuffer`s. Bytestrings must be smaller than the 1MB total size limit for Convex types. |
+  | Array | Array | `[1, 3.2, "abc"]` | `v.array(values)` | Arrays can have at most 8192 values. |
+  | Object | Object | `{a: "abc"}` | `v.object({property: value})` | Convex only supports "plain old JavaScript objects" (objects that do not have a custom prototype). Objects can have at most 1024 entries. Field names must be nonempty and not start with "$" or "_". |
+| Record      | Record      | `{"a": "1", "b": "2"}` | `v.record(keys, values)`                       | Records are objects at runtime, but can have dynamic keys. Keys must be only ASCII characters, nonempty, and not start with "$" or "\_". |
 
 ### Function registration
 
@@ -200,7 +200,7 @@ The `useAuth` prop must return `{ isLoading, isAuthenticated, fetchAccessToken }
 
 ## Typescript guidelines
 
-- You can use the helper typescript type `Id` imported from './generated/dataModel' to get the type of the id for a given table. For example if there is a table called 'users' you can use `Id<'users'>` to get the type of the id for that table.
+- You can use the helper typescript type `Id` imported from './\_generated/dataModel' to get the type of the id for a given table. For example if there is a table called 'users' you can use `Id<'users'>` to get the type of the id for that table.
 - Use `Doc<"tableName">` from `./_generated/dataModel` to get the full document type for a table.
 - Use `QueryCtx`, `MutationCtx`, `ActionCtx` from `./_generated/server` for typing function contexts. NEVER use `any` for ctx parameters — always use the proper context type.
 - If you need to define a `Record` make sure that you correctly provide the type of the key and value in the type. For example a validator `v.record(v.id('users'), v.string())` would have the type `Record<Id<'users'>, string>`. Below is an example of using `Record` with an `Id` type in a query:
@@ -226,6 +226,7 @@ export const exampleQuery = query({
 ```
 
 - Be strict with types, particularly around id's of documents. For example, if a function takes in an id for a document in the 'users' table, take in `Id<'users'>` rather than `string`.
+- For typed app environment variables, declare them in `convex/convex.config.ts` with `defineApp({ env: { MY_KEY: v.optional(v.string()) } })` and read them with `env` from `./_generated/server` instead of `process.env`.
 
 ## Full text search guidelines
 
@@ -243,7 +244,7 @@ q.search("body", "hello hi").eq("channel", "#general"),
 - Do NOT use `filter` in queries. Instead, define an index in the schema and use `withIndex` instead.
 - If the user does not explicitly tell you to return all results from a query you should ALWAYS return a bounded collection instead. So that is instead of using `.collect()` you should use `.take()` or paginate on database queries. This prevents future performance issues when tables grow in an unbounded way.
 - Never use `.collect().length` to count rows. Convex has no built-in count operator, so if you need a count that stays efficient at scale, maintain a denormalized counter in a separate document and update it in your mutations.
-- Convex queries do NOT support `.delete()`. If you need to delete all documents matching a query, use `.take(n)` to read them in batches, iterate over each batch calling `ctx.db.delete(row._id)`, and repeat until no more results are returned.
+- Convex queries do NOT support `.delete()`. If you need to delete all documents matching a query, use `.take(n)` to read them in batches, iterate over each batch calling `ctx.db.delete("tasks", row._id)`, and repeat until no more results are returned.
 - Convex mutations are transactions with limits on the number of documents read and written. If a mutation needs to process more documents than fit in a single transaction (e.g. bulk deletion on a large table), process a batch with `.take(n)` and then call `ctx.scheduler.runAfter(0, api.myModule.myMutation, args)` to schedule itself to continue. This way each invocation stays within transaction limits.
 - Use `.unique()` to get a single document from a query. This method will throw an error if there are multiple documents that match the query.
 - When using async iteration, don't use `.collect()` or `.take(n)` on the result of a query. Instead, use the `for await (const row of query)` syntax.
@@ -256,8 +257,8 @@ q.search("body", "hello hi").eq("channel", "#general"),
 
 ## Mutation guidelines
 
-- Use `ctx.db.replace` to fully replace an existing document. This method will throw an error if the document does not exist. Syntax: `await ctx.db.replace('tasks', taskId, { name: 'Buy milk', completed: false })`
-- Use `ctx.db.patch` to shallow merge updates into an existing document. This method will throw an error if the document does not exist. Syntax: `await ctx.db.patch('tasks', taskId, { completed: true })`
+- Use `ctx.db.replace` to fully replace an existing document. This method will throw an error if the document does not exist. Syntax: `await ctx.db.replace("tasks", taskId, { name: "Buy milk", completed: false })`
+- Use `ctx.db.patch` to shallow merge updates into an existing document. This method will throw an error if the document does not exist. Syntax: `await ctx.db.patch("tasks", taskId, { completed: true })`
 
 ## Action guidelines
 
@@ -308,7 +309,7 @@ export default crons;
 ```
 
 - You can register Convex functions within `crons.ts` just like any other file.
-- If a cron calls an internal function, always import the `internal` object from 'generated/api', even if the internal function is registered in the same file.
+- If a cron calls an internal function, always import the `internal` object from '\_generated/api', even if the internal function is registered in the same file.
 
 ## Testing guidelines
 
@@ -334,6 +335,9 @@ test("some behavior", async () => {
 ```
 
 The `modules` argument is required so convex-test can discover and load function files. The `/// <reference types="vite/client" />` directive is needed for TypeScript to recognize `import.meta.glob`.
+
+- Only add the `/// <reference types="vite/client" />` directive at the top of test files that call `import.meta.glob`; do NOT add it to non-test files.
+- Do NOT add a `compilerOptions.types` allowlist to `tsconfig.json` for type packages you have not installed (e.g. `"node"` without `@types/node`, or `"vite/client"` without vite). Any unresolved entry in `types` fails typechecking with TS2688. Leave `types` unset unless a package genuinely requires it and is installed.
 
 ## File storage guidelines
 
@@ -365,4 +369,3 @@ export const exampleQuery = query({
 ```
 
 - Convex storage stores items as `Blob` objects. You must convert all items to/from a `Blob` when using Convex storage.
-
