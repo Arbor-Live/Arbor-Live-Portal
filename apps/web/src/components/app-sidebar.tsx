@@ -44,6 +44,7 @@ import {
   PackageIcon,
   LifebuoyIcon,
   PaperPlaneTiltIcon,
+  MegaphoneIcon,
 } from "@phosphor-icons/react"
 
 type NavSubItem = {
@@ -69,6 +70,7 @@ const navItems: NavItem[] = [
     icon: GuitarIcon,
   },
   { title: "Inventory", url: "/dashboard/inventory", icon: PackageIcon },
+  { title: "Marketing", url: "/dashboard/marketing/work", icon: MegaphoneIcon, adminOnly: true },
 ]
 
 const inventorySubItems: NavSubItem[] = [

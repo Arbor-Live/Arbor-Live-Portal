@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { components } from "./_generated/api";
 import { query } from "./_generated/server";
 import type { QueryCtx } from "./_generated/server";
+import { resolveStoredR2AssetUrl } from "./inventoryR2";
 import { getUserId, type AuthUser } from "./lib/auth";
 
 type OrganizationRow = {
@@ -9,6 +10,17 @@ type OrganizationRow = {
   _id?: string;
   name?: string;
   slug?: string;
+};
+
+const CREW_SECTION_ORDER = ["Sound", "Lights", "Design", "Marketing", "Operations"] as const;
+const CREW_GENERAL_SECTION = "General" as const;
+
+const CREW_SECTION_LABELS: Record<(typeof CREW_SECTION_ORDER)[number], string> = {
+  Sound: "Sound",
+  Lights: "Lighting",
+  Design: "Design",
+  Marketing: "Marketing",
+  Operations: "Operations",
 };
 
 function getRecordId(row: { id?: string; _id?: string } | null | undefined) {
@@ -46,11 +58,46 @@ function bioExcerpt(bio: string | undefined, maxLen = 140) {
   return `${text.slice(0, maxLen).trimEnd()}…`;
 }
 
+async function resolveCrewMemberImageUrl(
+  ctx: QueryCtx,
+  profile: {
+    avatarStorageId?: import("./_generated/dataModel").Id<"_storage">;
+  },
+  user: AuthUser | undefined,
+) {
+  const authImage = (user as { image?: string | null } | undefined)?.image?.trim();
+  if (authImage) {
+    const resolved = await resolveStoredR2AssetUrl(authImage);
+    if (resolved) return resolved;
+    if (/^https?:\/\//i.test(authImage)) return authImage;
+  }
+  if (profile.avatarStorageId) {
+    return (await ctx.storage.getUrl(profile.avatarStorageId)) ?? undefined;
+  }
+  return undefined;
+}
+
 export const listPublicCrew = query({
   args: {},
+  returns: v.object({
+    sections: v.array(
+      v.object({
+        team: v.string(),
+        label: v.string(),
+        members: v.array(
+          v.object({
+            id: v.string(),
+            name: v.string(),
+            imageUrl: v.optional(v.string()),
+            description: v.optional(v.string()),
+          }),
+        ),
+      }),
+    ),
+  }),
   handler: async (ctx) => {
     const arborOrgId = await getArborLiveOrganizationId(ctx);
-    if (!arborOrgId) return [];
+    if (!arborOrgId) return { sections: [] };
 
     const memberships = await ctx.db
       .query("userOrganizationMemberships")
@@ -60,7 +107,7 @@ export const listPublicCrew = query({
     const activeMemberIds = new Set(
       memberships.filter((row) => row.active).map((row) => row.userId),
     );
-    if (!activeMemberIds.size) return [];
+    if (!activeMemberIds.size) return { sections: [] };
 
     const profiles = await ctx.db.query("userAdminProfiles").withIndex("by_active").take(2000);
     const publicProfiles = profiles.filter(
@@ -69,25 +116,74 @@ export const listPublicCrew = query({
         profile.active &&
         profile.showOnPublicCrewPage === true,
     );
-    if (!publicProfiles.length) return [];
+    if (!publicProfiles.length) return { sections: [] };
 
     const users = await getAllAuthUsers(ctx);
     const userById = new Map(users.map((user) => [getUserId(user), user]));
 
-    return publicProfiles
-      .map((profile) => {
-        const user = userById.get(profile.userId);
-        const name = user?.name?.trim() || "Arbor Live crew";
-        const image =
-          (user as { image?: string | null } | undefined)?.image?.trim() || undefined;
-        return {
-          id: profile.userId,
-          name,
-          teams: profile.teams,
-          imageUrl: image,
-        };
-      })
+    const membersByTeam = new Map<
+      (typeof CREW_SECTION_ORDER)[number] | typeof CREW_GENERAL_SECTION,
+      Array<{ id: string; name: string; imageUrl?: string; description?: string }>
+    >();
+    for (const team of CREW_SECTION_ORDER) {
+      membersByTeam.set(team, []);
+    }
+    membersByTeam.set(CREW_GENERAL_SECTION, []);
+
+    for (const profile of publicProfiles) {
+      const user = userById.get(profile.userId);
+      const name = user?.name?.trim() || "Arbor Live crew";
+      const imageUrl = await resolveCrewMemberImageUrl(ctx, profile, user);
+      const description = profile.publicCrewDescription?.trim() || undefined;
+      const member = {
+        id: profile.userId,
+        name,
+        imageUrl,
+        description,
+      };
+
+      if (profile.teams.length === 0) {
+        membersByTeam.get(CREW_GENERAL_SECTION)?.push(member);
+        continue;
+      }
+
+      for (const team of profile.teams) {
+        if (!(team in CREW_SECTION_LABELS)) continue;
+        const sectionTeam = team as (typeof CREW_SECTION_ORDER)[number];
+        membersByTeam.get(sectionTeam)?.push(member);
+      }
+    }
+
+    const sections: Array<{
+      team: string;
+      label: string;
+      members: Array<{ id: string; name: string; imageUrl?: string; description?: string }>;
+    }> = CREW_SECTION_ORDER.flatMap((team) => {
+      const members = (membersByTeam.get(team) ?? [])
+        .slice()
+        .sort((a, b) => a.name.localeCompare(b.name));
+      if (!members.length) return [];
+      return [
+        {
+          team,
+          label: CREW_SECTION_LABELS[team],
+          members,
+        },
+      ];
+    });
+
+    const generalMembers = (membersByTeam.get(CREW_GENERAL_SECTION) ?? [])
+      .slice()
       .sort((a, b) => a.name.localeCompare(b.name));
+    if (generalMembers.length > 0) {
+      sections.push({
+        team: CREW_GENERAL_SECTION,
+        label: "Crew",
+        members: generalMembers,
+      });
+    }
+
+    return { sections };
   },
 });
 

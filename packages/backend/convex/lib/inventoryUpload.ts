@@ -103,6 +103,38 @@ export function buildEventArtifactObjectKey(args: {
   return `events/${eventSegment}/artifacts/${args.uploadId}-${safeName}`;
 }
 
+export function buildMarketingPostHeroObjectKey(args: {
+  postId?: string;
+  fileName: string;
+  uploadId: string;
+}): string {
+  const postSegment = args.postId?.trim() || `draft/${args.uploadId}`;
+  const safeName = sanitizeInventoryFileName(args.fileName);
+  return `marketing/posts/${postSegment}/hero/${args.uploadId}-${safeName}`;
+}
+
+export function buildMarketingPostContentObjectKey(args: {
+  postId?: string;
+  fileName: string;
+  uploadId: string;
+}): string {
+  const postSegment = args.postId?.trim() || `draft/${args.uploadId}`;
+  const safeName = sanitizeInventoryFileName(args.fileName);
+  return `marketing/posts/${postSegment}/content/${args.uploadId}-${safeName}`;
+}
+
+export function validateMarketingHeroUploadRequest(args: {
+  fileName: string;
+  contentType: string;
+  contentLength: number;
+}): void {
+  const contentType = args.contentType.trim().toLowerCase() || "application/octet-stream";
+  const fileName = args.fileName.trim();
+  if (!fileName) throw new Error("File name is required.");
+  if (args.contentLength <= 0) throw new Error("File size must be greater than zero.");
+  validateImageUpload(contentType, args.contentLength);
+}
+
 function validateImageUpload(contentType: string, contentLength: number): void {
   if (contentLength > IMAGE_MAX_BYTES) {
     throw new Error("Images must be 5 MB or smaller.");
@@ -223,7 +255,12 @@ export function parseStoredR2Asset(
     const key = value.slice(R2_ASSET_PREFIX.length).trim();
     return key ? { kind: "r2", key } : null;
   }
-  if (value.startsWith("inventory/") || value.startsWith("events/")) {
+  if (
+    value.startsWith("inventory/") ||
+    value.startsWith("events/") ||
+    value.startsWith("users/") ||
+    value.startsWith("marketing/")
+  ) {
     return { kind: "r2", key: value };
   }
   return null;

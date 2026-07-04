@@ -142,6 +142,7 @@ async function ensureUserProfileDefaults(
     active = true,
     teams = [],
     showOnPublicCrewPage,
+    publicCrewDescription,
     defaultOrganizationId,
   }: {
     title?: string;
@@ -149,6 +150,7 @@ async function ensureUserProfileDefaults(
     active?: boolean;
     teams?: UserTeam[];
     showOnPublicCrewPage?: boolean;
+    publicCrewDescription?: string;
     defaultOrganizationId?: string;
   },
 ) {
@@ -157,6 +159,7 @@ async function ensureUserProfileDefaults(
     .query("userAdminProfiles")
     .withIndex("by_userId", (q) => q.eq("userId", userId))
     .unique();
+  const normalizedDescription = publicCrewDescription?.trim() || undefined;
   if (existing) {
     await ctx.db.patch(existing._id, {
       title: title ?? existing.title,
@@ -165,6 +168,8 @@ async function ensureUserProfileDefaults(
       teams,
       showOnPublicCrewPage:
         showOnPublicCrewPage !== undefined ? showOnPublicCrewPage : existing.showOnPublicCrewPage,
+      publicCrewDescription:
+        publicCrewDescription !== undefined ? normalizedDescription : existing.publicCrewDescription,
       defaultOrganizationId: defaultOrganizationId ?? existing.defaultOrganizationId,
       updatedAt: now,
     });
@@ -177,6 +182,7 @@ async function ensureUserProfileDefaults(
     active,
     teams,
     showOnPublicCrewPage,
+    publicCrewDescription: normalizedDescription,
     defaultOrganizationId,
     createdAt: now,
     updatedAt: now,
@@ -569,6 +575,7 @@ export const listUsersForAdmin = query({
           title: profile?.title ?? "",
           teams: profile?.teams ?? [],
           showOnPublicCrewPage: profile?.showOnPublicCrewPage ?? false,
+          publicCrewDescription: profile?.publicCrewDescription ?? "",
           defaultOrganizationId: profile?.defaultOrganizationId ?? "",
           organizationMemberships: memberships,
           hourlyRateUsd: rateByUserId.get(id) ?? null,
@@ -946,6 +953,7 @@ export const updateUserAdmin = mutation({
     title: v.optional(v.string()),
     teams: v.optional(v.array(userTeamValue)),
     showOnPublicCrewPage: v.optional(v.boolean()),
+    publicCrewDescription: v.optional(v.string()),
     defaultOrganizationId: v.optional(v.string()),
     hourlyRateUsd: v.optional(v.number()),
     organizationMemberships: v.optional(
@@ -990,6 +998,10 @@ export const updateUserAdmin = mutation({
         args.showOnPublicCrewPage !== undefined
           ? args.showOnPublicCrewPage
           : existingProfile?.showOnPublicCrewPage,
+      publicCrewDescription:
+        args.publicCrewDescription !== undefined
+          ? args.publicCrewDescription
+          : existingProfile?.publicCrewDescription,
       defaultOrganizationId: args.defaultOrganizationId ?? existingProfile?.defaultOrganizationId,
     });
 

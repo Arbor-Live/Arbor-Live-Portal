@@ -60,7 +60,11 @@ function R2UploadField({
   );
 
   const purpose =
-    uploadArgs.scope === "event" ? "artifact" : uploadArgs.purpose;
+    uploadArgs.scope === "event"
+      ? "artifact"
+      : uploadArgs.scope === "marketing"
+        ? "hero"
+        : uploadArgs.purpose;
   const resolvedAccept = accept ?? defaultAcceptForPurpose(purpose);
 
   const handleFile = useCallback(
@@ -186,6 +190,35 @@ export function FileUploadField(props: FileUploadFieldProps) {
   return (
     <R2UploadField
       uploadArgs={{ scope: "inventory", entityKind, purpose, entityId }}
+      {...rest}
+    />
+  );
+}
+
+type MarketingPostHeroUploadFieldProps = {
+  postId?: string;
+  label?: string;
+  currentUrl?: string;
+  onUploaded: (storedValue: string) => void;
+  onClear?: () => void;
+  urlValue?: string;
+  onUrlChange?: (url: string) => void;
+  helperText?: string;
+  className?: string;
+};
+
+export function MarketingPostHeroUploadField({
+  postId,
+  label = "Cover image",
+  helperText = "Optional hero image for cards and the detail page. JPEG, PNG, WebP, GIF, or SVG up to 5 MB.",
+  ...rest
+}: MarketingPostHeroUploadFieldProps) {
+  return (
+    <R2UploadField
+      label={label}
+      uploadArgs={{ scope: "marketing", postId, imageKind: "hero" }}
+      accept="image/jpeg,image/png,image/webp,image/gif,image/svg+xml"
+      helperText={helperText}
       {...rest}
     />
   );
