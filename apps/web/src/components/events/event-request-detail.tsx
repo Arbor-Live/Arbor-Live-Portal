@@ -93,7 +93,17 @@ export function EventRequestDetailClient({ requestId }: { requestId: Id<"eventRe
             <Link href={`/dashboard/financial-hub/invoices/${request.linkedInvoiceId}`}>Open quote</Link>
           </Button>
         ) : null}
-        {request.convertedEventId ? (
+        {request.convertedEvents.length > 0 ? (
+          request.convertedEvents.map((event) => (
+            <Button asChild key={event.id} size="sm" variant={request.convertedEvents.length > 1 ? "outline" : "default"}>
+              <Link href={`/dashboard/events/${event.id}`}>
+                {request.convertedEvents.length > 1
+                  ? `Open event · ${new Date(event.startAt).toLocaleDateString()}`
+                  : "Open tentative event"}
+              </Link>
+            </Button>
+          ))
+        ) : request.convertedEventId ? (
           <Button asChild size="sm">
             <Link href={`/dashboard/events/${request.convertedEventId}`}>Open tentative event</Link>
           </Button>

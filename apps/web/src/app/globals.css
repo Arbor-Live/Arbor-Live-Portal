@@ -293,6 +293,66 @@
     display: none !important;
   }
 
+  .booking-availability-calendar-panel {
+    width: 100%;
+  }
+
+  .booking-availability-calendar-panel .react-datepicker__month-container {
+    width: 100%;
+  }
+
+  .booking-availability-calendar-panel .react-datepicker__day-names,
+  .booking-availability-calendar-panel .react-datepicker__week {
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .booking-availability-calendar-panel .react-datepicker__day-name,
+  .booking-availability-calendar-panel .react-datepicker__day {
+    width: 2.75rem;
+    height: 2.75rem;
+    line-height: 2.75rem;
+    margin: 0.125rem;
+  }
+
+  .booking-availability-day-contents {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.15rem;
+    line-height: 1;
+    min-height: 2.25rem;
+  }
+
+  .booking-day-load-dot {
+    display: inline-block;
+    width: 0.4rem;
+    height: 0.4rem;
+    border-radius: 9999px;
+  }
+
+  .booking-day-load-dot-free {
+    background: color-mix(in oklch, var(--chart-2, var(--primary)) 70%, transparent);
+  }
+
+  .booking-day-load-dot-busy {
+    background: color-mix(in oklch, #d97706 85%, transparent);
+  }
+
+  .booking-day-load-dot-unavailable {
+    background: color-mix(in oklch, var(--destructive) 85%, transparent);
+  }
+
+  .booking-availability-calendar-panel .react-datepicker__day.booking-availability-day-selected,
+  .booking-availability-calendar-panel .react-datepicker__day--selected {
+    box-shadow: inset 0 0 0 2px var(--primary);
+  }
+
+  .booking-availability-calendar-panel .react-datepicker__day.booking-availability-day-highlighted {
+    box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--primary) 45%, transparent);
+  }
+
   .fc {
     --fc-border-color: var(--border);
     --fc-page-bg-color: var(--card);

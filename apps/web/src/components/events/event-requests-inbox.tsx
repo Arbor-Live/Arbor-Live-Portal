@@ -92,7 +92,19 @@ export function EventRequestsInbox() {
                 <Button asChild type="button" variant="outline" size="sm">
                   <Link href={`/dashboard/events/requests/${row._id}`}>Open</Link>
                 </Button>
-                {row.convertedEventId ? (
+                {row.convertedEventIds && row.convertedEventIds.length > 0 ? (
+                  row.convertedEventIds.length > 1 ? (
+                    <Button asChild type="button" variant="outline" size="sm">
+                      <Link href={`/dashboard/events/requests/${row._id}`}>
+                        View {row.convertedEventIds.length} events
+                      </Link>
+                    </Button>
+                  ) : (
+                    <Button asChild type="button" variant="outline" size="sm">
+                      <Link href={`/dashboard/events/${row.convertedEventIds[0]}`}>View event</Link>
+                    </Button>
+                  )
+                ) : row.convertedEventId ? (
                   <Button asChild type="button" variant="outline" size="sm">
                     <Link href={`/dashboard/events/${row.convertedEventId}`}>View event</Link>
                   </Button>

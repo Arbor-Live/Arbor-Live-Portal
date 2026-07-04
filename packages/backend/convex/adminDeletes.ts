@@ -10,6 +10,7 @@ import {
   unlinkRequestPeers,
 } from "./lib/bookingChainDelete";
 import { listEventsByInvoiceId } from "./lib/invoiceEvents";
+import { listEventsLinkedToRequest } from "./lib/bookingDayLoad";
 
 const linkedQuotePreview = v.object({
   id: v.id("invoices"),
@@ -56,13 +57,10 @@ export const previewRequestDeletion = query({
       }
     }
 
-    const linkedEvents = [];
-    if (request.convertedEventId) {
-      const event = await ctx.db.get(request.convertedEventId);
-      if (event) {
-        linkedEvents.push({ id: event._id, title: event.title });
-      }
-    }
+    const linkedEvents = (await listEventsLinkedToRequest(ctx, request)).map((event) => ({
+      id: event._id,
+      title: event.title,
+    }));
 
     return {
       label: request.requestNumber ?? `LEGACY-${request._id}`,
@@ -115,12 +113,10 @@ export const deleteRequestAdmin = mutation({
     let deletedEvents = 0;
 
     if (args.cascade) {
-      if (request.convertedEventId) {
-        const event = await ctx.db.get(request.convertedEventId);
-        if (event) {
-          await deleteEventRecord(ctx, event._id);
-          deletedEvents = 1;
-        }
+      const linkedEvents = await listEventsLinkedToRequest(ctx, request);
+      for (const event of linkedEvents) {
+        await deleteEventRecord(ctx, event._id);
+        deletedEvents += 1;
       }
       if (request.linkedInvoiceId) {
         const invoice = await ctx.db.get(request.linkedInvoiceId);
