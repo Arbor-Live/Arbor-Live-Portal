@@ -376,7 +376,7 @@ export const updateBandOrganizationProfileAdmin = mutation({
         publicHeroImageUrl: normalizeOptionalAssetReference(args.publicHeroImageUrl),
         updatedAt: now,
       });
-      await ctx.scheduler.runAfter(0, internal.bandPayments.refreshPendingPayeePaymentsForOrg, {
+      await ctx.runMutation(internal.bandPayments.refreshPendingPayeePaymentsForOrg, {
         organizationId: args.organizationId,
       });
       return existing._id;
@@ -399,7 +399,7 @@ export const updateBandOrganizationProfileAdmin = mutation({
       publicHeroImageUrl: normalizeOptionalAssetReference(args.publicHeroImageUrl),
       updatedAt: now,
     });
-    await ctx.scheduler.runAfter(0, internal.bandPayments.refreshPendingPayeePaymentsForOrg, {
+    await ctx.runMutation(internal.bandPayments.refreshPendingPayeePaymentsForOrg, {
       organizationId: args.organizationId,
     });
     return profileId;
@@ -1281,7 +1281,7 @@ export const updateActiveBandProfile = mutation({
         publicHeroImageUrl: normalizeOptionalAssetReference(args.publicHeroImageUrl),
         updatedAt: now,
       });
-      await ctx.scheduler.runAfter(0, internal.bandPayments.refreshPendingPayeePaymentsForOrg, {
+      await ctx.runMutation(internal.bandPayments.refreshPendingPayeePaymentsForOrg, {
         organizationId: context.organizationId,
       });
       return existing._id;
@@ -1304,7 +1304,7 @@ export const updateActiveBandProfile = mutation({
       publicHeroImageUrl: normalizeOptionalAssetReference(args.publicHeroImageUrl),
       updatedAt: now,
     });
-    await ctx.scheduler.runAfter(0, internal.bandPayments.refreshPendingPayeePaymentsForOrg, {
+    await ctx.runMutation(internal.bandPayments.refreshPendingPayeePaymentsForOrg, {
       organizationId: context.organizationId,
     });
     return profileId;

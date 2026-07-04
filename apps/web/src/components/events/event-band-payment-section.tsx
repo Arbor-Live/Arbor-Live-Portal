@@ -14,7 +14,9 @@ import { ArborOnlyGuard } from "@/components/org-context-guard";
 
 type PricingMode = "per_member_hourly" | "fixed_total";
 
-type BandPaymentRow = NonNullable<ReturnType<typeof useQuery<typeof api.bandPayments.getByEvent>>>;
+type BandPaymentRow = NonNullable<
+  ReturnType<typeof useQuery<typeof api.bandPayments.listByEvent>>
+>[number];
 
 const PRICING_OPTIONS = [
   { value: "per_member_hourly", label: "Per member per hour" },
@@ -37,31 +39,156 @@ function defaultRateForBand(
 }
 
 export function EventBandPaymentSection({ eventId }: { eventId: Id<"events"> }) {
-  const payment = useQuery(api.bandPayments.getByEvent, { eventId });
+  return (
+    <ArborOnlyGuard>
+      <EventBandPaymentsPanel eventId={eventId} />
+    </ArborOnlyGuard>
+  );
+}
 
-  if (payment === undefined) {
+function EventBandPaymentsPanel({ eventId }: { eventId: Id<"events"> }) {
+  const payments = useQuery(api.bandPayments.listByEvent, { eventId });
+  const cancelPayment = useMutation(api.bandPayments.cancelPayment);
+  const [editingId, setEditingId] = useState<Id<"eventBandPayments"> | "new" | null>(null);
+  const [busyPaymentId, setBusyPaymentId] = useState<Id<"eventBandPayments"> | null>(null);
+
+  const totalBandsCost = useMemo(
+    () => (payments ?? []).reduce((sum, row) => sum + row.totalUsd, 0),
+    [payments],
+  );
+
+  async function onRemove(paymentId: Id<"eventBandPayments">) {
+    setBusyPaymentId(paymentId);
+    try {
+      await cancelPayment({ paymentId });
+      if (editingId === paymentId) setEditingId(null);
+    } finally {
+      setBusyPaymentId(null);
+    }
+  }
+
+  if (payments === undefined) {
     return (
-      <ArborOnlyGuard>
-        <Card>
-          <CardContent className="py-6 text-sm text-muted-foreground">Loading band payment…</CardContent>
-        </Card>
-      </ArborOnlyGuard>
+      <Card>
+        <CardContent className="py-6 text-sm text-muted-foreground">Loading band payments…</CardContent>
+      </Card>
     );
   }
 
   return (
-    <ArborOnlyGuard>
-      <EventBandPaymentForm key={payment?._id ?? "new"} eventId={eventId} payment={payment} />
-    </ArborOnlyGuard>
+    <Card>
+      <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-2">
+        <div>
+          <CardTitle>Band &amp; Artist Payments</CardTitle>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Link each performing band and set payout details. After the event, each payment enters the payout queue
+            separately.
+          </p>
+        </div>
+        {payments.length > 0 ? (
+          <p className="text-sm">
+            <span className="font-medium">Event total:</span> {formatUsd(totalBandsCost)}
+          </p>
+        ) : null}
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {payments.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No performers linked yet.</p>
+        ) : (
+          <div className="space-y-2">
+            {payments.map((payment) => (
+              <div
+                key={payment._id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm"
+              >
+                <div>
+                  <p className="font-medium">{payment.bandName}</p>
+                  <p className="text-muted-foreground">
+                    {formatUsd(payment.totalUsd)} · {payment.statusLabel}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {payment.status !== "paid" ? (
+                    <>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={editingId === payment._id ? "default" : "outline"}
+                        onClick={() =>
+                          setEditingId(editingId === payment._id ? null : payment._id)
+                        }
+                      >
+                        {editingId === payment._id ? "Close" : "Edit"}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={busyPaymentId === payment._id}
+                        onClick={() => void onRemove(payment._id)}
+                      >
+                        Remove
+                      </Button>
+                    </>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">Paid</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {editingId === "new" || editingId === null ? (
+          <div className="flex gap-2">
+            {editingId !== "new" ? (
+              <Button type="button" size="sm" onClick={() => setEditingId("new")}>
+                Add performer
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+
+        {editingId === "new" ? (
+          <EventBandPaymentForm
+            key="new"
+            eventId={eventId}
+            payment={null}
+            excludedOrganizationIds={payments.map((row) => row.organizationId)}
+            onSaved={() => setEditingId(null)}
+            onCancel={() => setEditingId(null)}
+          />
+        ) : null}
+
+        {editingId && editingId !== "new" ? (
+          <EventBandPaymentForm
+            key={editingId}
+            eventId={eventId}
+            payment={payments.find((row) => row._id === editingId) ?? null}
+            excludedOrganizationIds={payments
+              .filter((row) => row._id !== editingId)
+              .map((row) => row.organizationId)}
+            onSaved={() => setEditingId(null)}
+            onCancel={() => setEditingId(null)}
+          />
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }
 
 function EventBandPaymentForm({
   eventId,
   payment,
+  excludedOrganizationIds,
+  onSaved,
+  onCancel,
 }: {
   eventId: Id<"events">;
   payment: BandPaymentRow | null;
+  excludedOrganizationIds: string[];
+  onSaved: () => void;
+  onCancel: () => void;
 }) {
   const bands = useQuery(api.users.listBandOrganizationsAdmin, {});
   const upsert = useMutation(api.bandPayments.upsertForEvent);
@@ -87,11 +214,13 @@ function EventBandPaymentForm({
 
   const bandOptions = useMemo(
     () =>
-      (bands ?? []).map((band) => ({
-        value: band.organizationId,
-        label: band.displayName || band.name,
-      })),
-    [bands],
+      (bands ?? [])
+        .filter((band) => !excludedOrganizationIds.includes(band.organizationId))
+        .map((band) => ({
+          value: band.organizationId,
+          label: band.displayName || band.name,
+        })),
+    [bands, excludedOrganizationIds],
   );
 
   const computedTotal = useMemo(() => {
@@ -107,7 +236,7 @@ function EventBandPaymentForm({
 
   async function onSave() {
     if (!organizationId) {
-      setMessage("Select a band.");
+      setMessage("Select a band or artist.");
       return;
     }
     setBusy(true);
@@ -115,6 +244,7 @@ function EventBandPaymentForm({
     try {
       await upsert({
         eventId,
+        paymentId: payment?._id,
         organizationId,
         pricingMode,
         ratePerMemberPerHourUsd:
@@ -124,7 +254,7 @@ function EventBandPaymentForm({
         totalUsd: pricingMode === "fixed_total" ? Number(fixedTotalUsd || "0") : computedTotal,
         photoAlbumUrl: photoAlbumUrl.trim() || undefined,
       });
-      setMessage("Band payment saved.");
+      onSaved();
     } catch (error) {
       setMessage(getConvexErrorMessage(error));
     } finally {
@@ -138,162 +268,165 @@ function EventBandPaymentForm({
     payment?.designatedPayeeMailingAddress ?? orgPayee?.designatedPayeeMailingAddress ?? "";
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Band Payment</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <p className="text-sm text-muted-foreground">
-          Link the performing band and set payout details before the event. After the event ends, the payment enters
-          the band payout queue for confirmation and GrantEd processing.
-        </p>
+    <div className="space-y-4 rounded-md border bg-muted/10 p-4">
+      <p className="text-sm font-medium">{payment ? "Edit performer payment" : "Add performer payment"}</p>
 
-        {payment ? (
-          <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
-            <p>
-              <span className="font-medium">Status:</span> {payment.statusLabel}
+      {payment ? (
+        <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
+          <p>
+            <span className="font-medium">Status:</span> {payment.statusLabel}
+          </p>
+          {payment.eventEnded && payment.status === "draft" ? (
+            <p className="text-muted-foreground">This event has ended and will enter the payout queue on save.</p>
+          ) : null}
+          {payment.status === "pending_payee" && !payeeComplete ? (
+            <p className="text-amber-700 dark:text-amber-300">
+              Waiting for the band to configure their designated payee before confirmation can be sent.
             </p>
-            {payment.eventEnded && payment.status === "draft" ? (
-              <p className="text-muted-foreground">This event has ended and will enter the payout queue on save.</p>
-            ) : null}
-            {payment.status === "pending_payee" ? (
-              <p className="text-amber-700 dark:text-amber-300">
-                Waiting for the band to configure their designated payee before confirmation can be sent.
-              </p>
-            ) : null}
-          </div>
-        ) : null}
+          ) : null}
+          {payment.status === "pending_payee" && payeeComplete ? (
+            <p className="text-muted-foreground">
+              Payee is on file for this band. The payout queue will update automatically, or save this
+              payment to refresh it now.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
-        <div className="grid gap-3 md:grid-cols-2">
-          <div className="space-y-1 md:col-span-2">
-            <Label>Band</Label>
-            <SearchableSelect
-              value={organizationId}
-              onChange={(value) => {
-                setOrganizationId(value);
-                if (!payment) {
-                  setRatePerMemberPerHourUsd(defaultRateForBand(bands, value));
-                }
-              }}
-              options={bandOptions}
-              placeholder="Search bands..."
-              emptyLabel="Select band"
-            />
-          </div>
+      <div className="grid gap-3 md:grid-cols-2">
+        <div className="space-y-1 md:col-span-2">
+          <Label>Band / artist</Label>
+          <SearchableSelect
+            value={organizationId}
+            onChange={(value) => {
+              setOrganizationId(value);
+              if (!payment) {
+                setRatePerMemberPerHourUsd(defaultRateForBand(bands, value));
+              }
+            }}
+            options={bandOptions}
+            placeholder="Search bands..."
+            emptyLabel="Select band"
+          />
+        </div>
 
-          <div className="space-y-1">
-            <Label>Pricing mode</Label>
-            <SearchableSelect
-              value={pricingMode}
-              onChange={(value) => setPricingMode(value as PricingMode)}
-              options={PRICING_OPTIONS}
-              placeholder="Pricing mode"
-              emptyLabel="Select pricing mode"
-            />
-          </div>
+        <div className="space-y-1">
+          <Label>Pricing mode</Label>
+          <SearchableSelect
+            value={pricingMode}
+            onChange={(value) => setPricingMode(value as PricingMode)}
+            options={PRICING_OPTIONS}
+            placeholder="Pricing mode"
+            emptyLabel="Select pricing mode"
+          />
+        </div>
 
-          <div className="space-y-1">
-            <Label>Performance length (hours)</Label>
-            <Input
-              type="number"
-              min="0"
-              step="0.25"
-              value={performanceHours}
-              onChange={(e) => setPerformanceHours(e.target.value)}
-              disabled={payment?.status === "paid"}
-            />
-          </div>
+        <div className="space-y-1">
+          <Label>Performance length (hours)</Label>
+          <Input
+            type="number"
+            min="0"
+            step="0.25"
+            value={performanceHours}
+            onChange={(e) => setPerformanceHours(e.target.value)}
+            disabled={payment?.status === "paid"}
+          />
+        </div>
 
-          {pricingMode === "per_member_hourly" ? (
-            <>
-              <div className="space-y-1">
-                <Label>Rate per member per hour (USD)</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={ratePerMemberPerHourUsd}
-                  onChange={(e) => setRatePerMemberPerHourUsd(e.target.value)}
-                  disabled={payment?.status === "paid"}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label>Member count</Label>
-                <Input
-                  type="number"
-                  min="1"
-                  step="1"
-                  value={memberCount}
-                  onChange={(e) => setMemberCount(e.target.value)}
-                  disabled={payment?.status === "paid"}
-                />
-              </div>
-            </>
-          ) : (
+        {pricingMode === "per_member_hourly" ? (
+          <>
             <div className="space-y-1">
-              <Label>Total payout (USD)</Label>
+              <Label>Rate per member per hour (USD)</Label>
               <Input
                 type="number"
                 min="0"
                 step="0.01"
-                value={fixedTotalUsd}
-                onChange={(e) => setFixedTotalUsd(e.target.value)}
+                value={ratePerMemberPerHourUsd}
+                onChange={(e) => setRatePerMemberPerHourUsd(e.target.value)}
                 disabled={payment?.status === "paid"}
               />
             </div>
-          )}
-
-          <div className="rounded-md border px-3 py-2 text-sm md:col-span-2">
-            <span className="font-medium">Computed total:</span> {formatUsd(computedTotal)}
-          </div>
-
-          <div className="space-y-2 md:col-span-2">
-            <Label>Designated payee (from band org profile)</Label>
-            {organizationId ? (
-              payeeComplete ? (
-                <div className="rounded-md border bg-muted/20 px-3 py-2 text-sm">
-                  <p>
-                    <span className="font-medium">Payee:</span> {displayPayeeName} ({displayPayeeEmail})
-                  </p>
-                  <p className="mt-1 whitespace-pre-wrap text-muted-foreground">{displayPayeeAddress}</p>
-                </div>
-              ) : (
-                <div className="rounded-md border border-dashed px-3 py-3 text-sm">
-                  <p className="text-muted-foreground">
-                    This band has not configured a designated payee with mailing address. Confirmation emails cannot
-                    be sent until payee info is on file.
-                  </p>
-                  <Button asChild size="sm" variant="outline" className="mt-2">
-                    <Link href="/dashboard/bands-and-performers#payment-payee">
-                      Open band payee settings
-                    </Link>
-                  </Button>
-                </div>
-              )
-            ) : (
-              <p className="text-sm text-muted-foreground">Select a band to view payee details.</p>
-            )}
-          </div>
-
-          <div className="space-y-1 md:col-span-2">
-            <Label>Photo album URL (optional override)</Label>
+            <div className="space-y-1">
+              <Label>Member count</Label>
+              <Input
+                type="number"
+                min="1"
+                step="1"
+                value={memberCount}
+                onChange={(e) => setMemberCount(e.target.value)}
+                disabled={payment?.status === "paid"}
+              />
+            </div>
+          </>
+        ) : (
+          <div className="space-y-1">
+            <Label>Total payout (USD)</Label>
             <Input
-              value={photoAlbumUrl}
-              onChange={(e) => setPhotoAlbumUrl(e.target.value)}
-              placeholder="https://photos.arbor.st/share/..."
+              type="number"
+              min="0"
+              step="0.01"
+              value={fixedTotalUsd}
+              onChange={(e) => setFixedTotalUsd(e.target.value)}
               disabled={payment?.status === "paid"}
             />
           </div>
+        )}
+
+        <div className="rounded-md border px-3 py-2 text-sm md:col-span-2">
+          <span className="font-medium">Computed total:</span> {formatUsd(computedTotal)}
         </div>
 
-        {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
+        <div className="space-y-2 md:col-span-2">
+          <Label>Designated payee (from band org profile)</Label>
+          {organizationId ? (
+            payeeComplete ? (
+              <div className="rounded-md border bg-muted/20 px-3 py-2 text-sm">
+                <p>
+                  <span className="font-medium">Payee:</span> {displayPayeeName} ({displayPayeeEmail})
+                </p>
+                <p className="mt-1 whitespace-pre-wrap text-muted-foreground">{displayPayeeAddress}</p>
+              </div>
+            ) : (
+              <div className="rounded-md border border-dashed px-3 py-3 text-sm">
+                <p className="text-muted-foreground">
+                  This band has not configured a designated payee with mailing address. Confirmation emails cannot
+                  be sent until payee info is on file.
+                </p>
+                <Button asChild size="sm" variant="outline" className="mt-2">
+                  <Link href="/dashboard/bands-and-performers#payment-payee">
+                    Open band payee settings
+                  </Link>
+                </Button>
+              </div>
+            )
+          ) : (
+            <p className="text-sm text-muted-foreground">Select a band to view payee details.</p>
+          )}
+        </div>
 
+        <div className="space-y-1 md:col-span-2">
+          <Label>Photo album URL (optional override)</Label>
+          <Input
+            value={photoAlbumUrl}
+            onChange={(e) => setPhotoAlbumUrl(e.target.value)}
+            placeholder="https://photos.arbor.st/share/..."
+            disabled={payment?.status === "paid"}
+          />
+        </div>
+      </div>
+
+      {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
+
+      <div className="flex flex-wrap gap-2">
         {payment?.status !== "paid" ? (
           <Button type="button" onClick={() => void onSave()} disabled={busy}>
-            Save band payment
+            {payment ? "Save changes" : "Add performer"}
           </Button>
         ) : null}
-      </CardContent>
-    </Card>
+        <Button type="button" variant="outline" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </div>
   );
 }

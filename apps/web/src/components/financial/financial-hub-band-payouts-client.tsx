@@ -47,6 +47,7 @@ export function FinancialHubBandPayoutsClient() {
   const settings = useQuery(api.bandPayments.getSettings, {});
   const sendConfirmation = useMutation(api.bandPayments.sendConfirmationEmail);
   const sendPayeeRequired = useMutation(api.bandPayments.sendPayeeRequiredEmail);
+  const syncStalePayeePayments = useMutation(api.bandPayments.syncStalePayeePayments);
   const markPaid = useMutation(api.bandPayments.markPaid);
   const cancelPayment = useMutation(api.bandPayments.cancelPayment);
   const updateSettings = useMutation(api.bandPayments.updateSettings);
@@ -71,6 +72,10 @@ export function FinancialHubBandPayoutsClient() {
       photoAlbumUrl: settings.photoAlbumUrl,
     });
   }, [settings]);
+
+  useEffect(() => {
+    void syncStalePayeePayments({});
+  }, [syncStalePayeePayments]);
 
   async function onSendConfirmation(paymentId: Id<"eventBandPayments">) {
     setBusyPaymentId(paymentId);
