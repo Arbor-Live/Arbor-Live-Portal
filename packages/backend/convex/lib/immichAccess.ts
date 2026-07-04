@@ -1,6 +1,10 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import {
+  getCanonicalAlbumLink,
+  listAlbumLinksForEntity,
+} from "./immichAlbumLinks";
+import {
   getActiveOrganizationContextOrNull,
   requireArborInternalContext,
   requireAuth,
@@ -17,7 +21,7 @@ export async function hasBandEventParticipation(
     .withIndex("by_eventId_and_organizationId", (q) =>
       q.eq("eventId", eventId).eq("organizationId", organizationId),
     )
-    .unique();
+    .first();
   return Boolean(row);
 }
 
@@ -62,21 +66,20 @@ export async function requireBandAlbumAccess(
 }
 
 export async function getAlbumLinkForBand(ctx: QueryCtx | MutationCtx, organizationId: string) {
-  return await ctx.db
-    .query("immichAlbumLinks")
-    .withIndex("by_entityType_and_entityId", (q) =>
-      q.eq("entityType", "band").eq("entityId", organizationId),
-    )
-    .unique();
+  return await getCanonicalAlbumLink(ctx, "band", organizationId);
 }
 
 export async function getAlbumLinkForEvent(ctx: QueryCtx | MutationCtx, eventId: Id<"events">) {
-  return await ctx.db
-    .query("immichAlbumLinks")
-    .withIndex("by_entityType_and_entityId", (q) =>
-      q.eq("entityType", "event").eq("entityId", eventId),
-    )
-    .unique();
+  return await getCanonicalAlbumLink(ctx, "event", eventId);
+}
+
+export async function getAlbumLinkIdsForEntity(
+  ctx: QueryCtx | MutationCtx,
+  entityType: "band" | "event",
+  entityId: string,
+) {
+  const rows = await listAlbumLinksForEntity(ctx, entityType, entityId);
+  return rows.map((row) => row._id);
 }
 
 export async function requireAssetAccess(
@@ -90,7 +93,7 @@ export async function requireAssetAccess(
   const assetRecord = await ctx.db
     .query("immichAssetRecords")
     .withIndex("by_immichAssetId", (q) => q.eq("immichAssetId", immichAssetId))
-    .unique();
+    .first();
   if (!assetRecord) throw new Error("Asset not found.");
 
   const albumLink = await ctx.db.get(assetRecord.albumLinkId);

@@ -1,6 +1,22 @@
-import { fetchAuthAction, fetchAuthMutation, fetchAuthQuery, isAuthenticated } from "@/lib/auth-server";
+import { fetchAuthAction, fetchAuthMutation, isAuthenticated } from "@/lib/auth-server";
 import { api } from "@/lib/convex-api";
 import { getImmichServerConfig, inferImmichAssetType } from "@/lib/immich-server";
+
+async function addAssetToAlbum(baseUrl: string, apiKey: string, immichAlbumId: string, assetId: string) {
+  const response = await fetch(`${baseUrl}/albums/${immichAlbumId}/assets`, {
+    method: "PUT",
+    headers: {
+      "x-api-key": apiKey,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({ ids: [assetId] }),
+  });
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    throw new Error(body || response.statusText);
+  }
+}
 
 export async function POST(request: Request) {
   if (!(await isAuthenticated())) {
@@ -23,20 +39,11 @@ export async function POST(request: Request) {
       return new Response("Target id is required.", { status: 400 });
     }
 
-    let album = await fetchAuthQuery(api.immich.getUploadTarget, {
+    const trimmedTargetId = targetId.trim();
+    let album = await fetchAuthAction(api.immichEnsure.ensureUploadAlbum, {
       targetType,
-      targetId: targetId.trim(),
+      targetId: trimmedTargetId,
     });
-
-    if (!album) {
-      if (targetType === "band") {
-        album = await fetchAuthAction(api.immichEnsure.ensureBandAlbum, {});
-      } else {
-        album = await fetchAuthAction(api.immichEnsure.ensureEventAlbum, {
-          eventId: targetId.trim() as never,
-        });
-      }
-    }
 
     if (!album) {
       return new Response("Could not resolve upload album.", { status: 400 });
@@ -60,24 +67,23 @@ export async function POST(request: Request) {
       return new Response(body || uploadResponse.statusText, { status: uploadResponse.status });
     }
 
-    const uploaded = (await uploadResponse.json()) as { id: string };
+    const uploaded = (await uploadResponse.json()) as { id?: string };
     const assetId = uploaded.id;
     if (!assetId) {
       return new Response("Immich did not return an asset id.", { status: 502 });
     }
 
-    const addResponse = await fetch(`${baseUrl}/albums/${album.immichAlbumId}/assets`, {
-      method: "PUT",
-      headers: {
-        "x-api-key": apiKey,
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify({ ids: [assetId] }),
-    });
-    if (!addResponse.ok) {
-      const body = await addResponse.text().catch(() => "");
-      return new Response(body || addResponse.statusText, { status: addResponse.status });
+    try {
+      await addAssetToAlbum(baseUrl, apiKey, album.immichAlbumId, assetId);
+    } catch {
+      album = await fetchAuthAction(api.immichEnsure.ensureUploadAlbum, {
+        targetType,
+        targetId: trimmedTargetId,
+      });
+      if (!album) {
+        return new Response("Could not recreate upload album.", { status: 502 });
+      }
+      await addAssetToAlbum(baseUrl, apiKey, album.immichAlbumId, assetId);
     }
 
     const assetType = inferImmichAssetType(file.name, file.type || "application/octet-stream");

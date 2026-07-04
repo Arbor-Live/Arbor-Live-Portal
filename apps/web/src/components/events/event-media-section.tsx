@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
 import { MediaGallery } from "@/components/media/media-gallery";
+import { MediaAlbumLink } from "@/components/media/media-album-link";
 import { MediaUploadDropzone } from "@/components/media/media-upload-dropzone";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 
@@ -163,6 +164,9 @@ export function EventMediaSection({ eventId }: { eventId: Id<"events"> }) {
             <p className="text-sm text-muted-foreground">Preparing media album…</p>
           ) : (
             <>
+              {media?.album ? (
+                <MediaAlbumLink albumName={media.album.albumName} albumUrl={media.album.albumUrl} />
+              ) : null}
               <MediaUploadDropzone
                 targetType="event"
                 targetId={eventId}

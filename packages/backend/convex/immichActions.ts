@@ -8,6 +8,7 @@ import {
   addAssetsToImmichAlbum,
   createImmichAlbum,
   getImmichAlbum,
+  immichAlbumExists,
   type ImmichAssetType,
 } from "./lib/immichClient";
 import { albumLinkResultValidator } from "./lib/immichValidators";
@@ -34,11 +35,17 @@ async function ensureAlbumCore(
     entityId: args.entityId,
   });
   if (existing) {
-    return {
+    const albumStillExists = await immichAlbumExists(existing.immichAlbumId);
+    if (albumStillExists) {
+      return {
+        albumLinkId: existing._id,
+        immichAlbumId: existing.immichAlbumId,
+        albumName: existing.albumName,
+      };
+    }
+    await ctx.runMutation(internal.immichDb.deleteAlbumLinkInternal, {
       albumLinkId: existing._id,
-      immichAlbumId: existing.immichAlbumId,
-      albumName: existing.albumName,
-    };
+    });
   }
 
   const created = await createImmichAlbum({

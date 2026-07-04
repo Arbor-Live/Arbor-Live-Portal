@@ -6,11 +6,12 @@ import {
   canUploadToAlbum,
   getAlbumLinkForBand,
   getAlbumLinkForEvent,
+  getAlbumLinkIdsForEntity,
   requireAssetAccess,
   requireBandAlbumAccess,
   requireEventMediaAccess,
 } from "./lib/immichAccess";
-import { buildImmichProxyUrl } from "./lib/immichClient";
+import { buildImmichProxyUrl, buildImmichAlbumUrl } from "./lib/immichClient";
 import { requireArborInternalContext, requireAuth, requireBandContext } from "./lib/auth";
 
 const entityTypeValue = v.union(v.literal("band"), v.literal("event"));
@@ -30,7 +31,21 @@ const albumLinkValidator = v.object({
   albumLinkId: v.id("immichAlbumLinks"),
   immichAlbumId: v.string(),
   albumName: v.string(),
+  albumUrl: v.optional(v.string()),
 });
+
+function toAlbumLink(row: {
+  _id: Id<"immichAlbumLinks">;
+  immichAlbumId: string;
+  albumName: string;
+}) {
+  return {
+    albumLinkId: row._id,
+    immichAlbumId: row.immichAlbumId,
+    albumName: row.albumName,
+    albumUrl: buildImmichAlbumUrl(row.immichAlbumId),
+  };
+}
 
 function toMediaAsset(row: Doc<"immichAssetRecords">) {
   return {
@@ -44,12 +59,24 @@ function toMediaAsset(row: Doc<"immichAssetRecords">) {
   };
 }
 
-async function listAssetsForAlbumLink(ctx: { db: QueryCtx["db"] }, albumLinkId: Id<"immichAlbumLinks">) {
-  const rows = await ctx.db
-    .query("immichAssetRecords")
-    .withIndex("by_albumLinkId", (q) => q.eq("albumLinkId", albumLinkId))
-    .take(500);
-  return rows.sort((a, b) => b.createdAt - a.createdAt).map(toMediaAsset);
+async function listAssetsForAlbumLinks(
+  ctx: QueryCtx,
+  albumLinkIds: Id<"immichAlbumLinks">[],
+) {
+  const seen = new Set<string>();
+  const assets = [];
+  for (const albumLinkId of albumLinkIds) {
+    const rows = await ctx.db
+      .query("immichAssetRecords")
+      .withIndex("by_albumLinkId", (q) => q.eq("albumLinkId", albumLinkId))
+      .take(500);
+    for (const row of rows) {
+      if (seen.has(row.immichAssetId)) continue;
+      seen.add(row.immichAssetId);
+      assets.push(toMediaAsset(row));
+    }
+  }
+  return assets.sort((a, b) => b.createdAt - a.createdAt);
 }
 
 export const listBandMedia = query({
@@ -69,12 +96,11 @@ export const listBandMedia = query({
         return { album: null, assets: [] };
       }
       return {
-        album: {
-          albumLinkId: albumLink._id,
-          immichAlbumId: albumLink.immichAlbumId,
-          albumName: albumLink.albumName,
-        },
-        assets: await listAssetsForAlbumLink(ctx, albumLink._id),
+        album: toAlbumLink(albumLink),
+        assets: await listAssetsForAlbumLinks(
+          ctx,
+          await getAlbumLinkIdsForEntity(ctx, "event", args.eventId),
+        ),
       };
     }
 
@@ -83,12 +109,11 @@ export const listBandMedia = query({
       return { album: null, assets: [] };
     }
     return {
-      album: {
-        albumLinkId: albumLink._id,
-        immichAlbumId: albumLink.immichAlbumId,
-        albumName: albumLink.albumName,
-      },
-      assets: await listAssetsForAlbumLink(ctx, albumLink._id),
+      album: toAlbumLink(albumLink),
+      assets: await listAssetsForAlbumLinks(
+        ctx,
+        await getAlbumLinkIdsForEntity(ctx, "band", context.organizationId),
+      ),
     };
   },
 });
@@ -106,12 +131,11 @@ export const listEventMedia = query({
       return { album: null, assets: [] };
     }
     return {
-      album: {
-        albumLinkId: albumLink._id,
-        immichAlbumId: albumLink.immichAlbumId,
-        albumName: albumLink.albumName,
-      },
-      assets: await listAssetsForAlbumLink(ctx, albumLink._id),
+      album: toAlbumLink(albumLink),
+      assets: await listAssetsForAlbumLinks(
+        ctx,
+        await getAlbumLinkIdsForEntity(ctx, "event", args.eventId),
+      ),
     };
   },
 });
@@ -147,6 +171,7 @@ export const getUploadTarget = query({
       albumLinkId: albumLink._id,
       immichAlbumId: albumLink.immichAlbumId,
       albumName: albumLink.albumName,
+      albumUrl: buildImmichAlbumUrl(albumLink.immichAlbumId),
     };
   },
 });
@@ -163,6 +188,11 @@ export const recordUploadedAsset = mutation({
     const albumLink = await ctx.db.get(args.albumLinkId);
     if (!albumLink) throw new Error("Album not found.");
     await canUploadToAlbum(ctx, albumLink);
+    const existing = await ctx.db
+      .query("immichAssetRecords")
+      .withIndex("by_immichAssetId", (q) => q.eq("immichAssetId", args.immichAssetId))
+      .first();
+    if (existing) return null;
     await ctx.db.insert("immichAssetRecords", {
       albumLinkId: args.albumLinkId,
       immichAssetId: args.immichAssetId,
@@ -180,6 +210,7 @@ export const runBackfillAlbums = mutation({
   handler: async (ctx) => {
     await requireArborInternalContext(ctx);
     await ctx.scheduler.runAfter(0, internal.immichActions.backfillAllAlbums, {});
+    await ctx.scheduler.runAfter(0, internal.immichDb.dedupeAllAlbumLinksInternal, {});
     return null;
   },
 });

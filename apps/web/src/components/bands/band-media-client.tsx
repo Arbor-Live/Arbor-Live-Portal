@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { MediaGallery } from "@/components/media/media-gallery";
+import { MediaAlbumLink } from "@/components/media/media-album-link";
 import { MediaUploadDropzone } from "@/components/media/media-upload-dropzone";
 import { BandOnlyGuard } from "@/components/org-context-guard";
 import { getConvexErrorMessage } from "@/lib/convex-error";
@@ -34,8 +35,16 @@ export function BandMediaClient() {
   const ensureEventAlbum = useAction(api.immichEnsure.ensureEventAlbum);
 
   const [selectedEventId, setSelectedEventId] = useState<string>("");
-  const [albumReady, setAlbumReady] = useState(false);
+  const [readyAlbumKey, setReadyAlbumKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const ensureAlbumKey =
+    activeOrg?.organizationType === "band"
+      ? selectedEventId
+        ? `event:${selectedEventId}`
+        : `band:${activeOrg.organizationId}`
+      : null;
+  const albumReady = ensureAlbumKey !== null && readyAlbumKey === ensureAlbumKey;
 
   const media = useQuery(
     api.immich.listBandMedia,
@@ -47,12 +56,19 @@ export function BandMediaClient() {
   );
 
   useEffect(() => {
-    if (activeOrg?.organizationType !== "band") return;
+    if (!ensureAlbumKey) return;
     let cancelled = false;
     async function ensure() {
       try {
-        await ensureBandAlbum({});
-        if (!cancelled) setAlbumReady(true);
+        if (selectedEventId) {
+          await ensureEventAlbum({ eventId: selectedEventId as Id<"events"> });
+        } else {
+          await ensureBandAlbum({});
+        }
+        if (!cancelled) {
+          setReadyAlbumKey(ensureAlbumKey);
+          setError(null);
+        }
       } catch (ensureError) {
         if (!cancelled) setError(getConvexErrorMessage(ensureError));
       }
@@ -61,24 +77,7 @@ export function BandMediaClient() {
     return () => {
       cancelled = true;
     };
-  }, [activeOrg?.organizationType, ensureBandAlbum]);
-
-  useEffect(() => {
-    if (!selectedEventId) return;
-    let cancelled = false;
-    async function ensure() {
-      try {
-        await ensureEventAlbum({ eventId: selectedEventId as Id<"events"> });
-        if (!cancelled) setAlbumReady(true);
-      } catch (ensureError) {
-        if (!cancelled) setError(getConvexErrorMessage(ensureError));
-      }
-    }
-    void ensure();
-    return () => {
-      cancelled = true;
-    };
-  }, [ensureEventAlbum, selectedEventId]);
+  }, [ensureAlbumKey, ensureBandAlbum, ensureEventAlbum, selectedEventId]);
 
   const eventOptions = useMemo(
     () =>
@@ -108,7 +107,10 @@ export function BandMediaClient() {
               <Label>Album</Label>
               <Select
                 value={selectedEventId || "band"}
-                onValueChange={(value) => setSelectedEventId(value === "band" ? "" : value)}
+                onValueChange={(value) => {
+                  setSelectedEventId(value === "band" ? "" : value);
+                  setError(null);
+                }}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Band album" />
@@ -127,6 +129,10 @@ export function BandMediaClient() {
             </div>
 
             {error ? <p className="text-sm text-destructive">{error}</p> : null}
+
+            {media?.album ? (
+              <MediaAlbumLink albumName={media.album.albumName} albumUrl={media.album.albumUrl} />
+            ) : null}
 
             <MediaUploadDropzone
               targetType={uploadTargetType}

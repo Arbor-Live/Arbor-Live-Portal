@@ -4,6 +4,7 @@ import { internalMutation, internalQuery, type MutationCtx, type QueryCtx } from
 import { components } from "./_generated/api";
 import { requireBandContext } from "./lib/auth";
 import { requireEventMediaAccess as requireEventMediaAccessFromImmich } from "./lib/immichAccess";
+import { dedupeAlbumLinksForEntity, getCanonicalAlbumLink } from "./lib/immichAlbumLinks";
 
 const entityTypeValue = v.union(v.literal("band"), v.literal("event"));
 const assetTypeValue = v.union(v.literal("IMAGE"), v.literal("VIDEO"));
@@ -47,12 +48,7 @@ export const getAlbumLinkInternal = internalQuery({
     v.null(),
   ),
   handler: async (ctx, args) => {
-    const row = await ctx.db
-      .query("immichAlbumLinks")
-      .withIndex("by_entityType_and_entityId", (q) =>
-        q.eq("entityType", args.entityType).eq("entityId", args.entityId),
-      )
-      .unique();
+    const row = await getCanonicalAlbumLink(ctx, args.entityType, args.entityId);
     if (!row) return null;
     return { _id: row._id, immichAlbumId: row.immichAlbumId, albumName: row.albumName };
   },
@@ -77,6 +73,22 @@ export const getAlbumLinkByIdInternal = internalQuery({
   },
 });
 
+export const deleteAlbumLinkInternal = internalMutation({
+  args: { albumLinkId: v.id("immichAlbumLinks") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const assets = await ctx.db
+      .query("immichAssetRecords")
+      .withIndex("by_albumLinkId", (q) => q.eq("albumLinkId", args.albumLinkId))
+      .take(500);
+    for (const asset of assets) {
+      await ctx.db.delete(asset._id);
+    }
+    await ctx.db.delete(args.albumLinkId);
+    return null;
+  },
+});
+
 export const insertAlbumLinkInternal = internalMutation({
   args: {
     entityType: entityTypeValue,
@@ -86,6 +98,12 @@ export const insertAlbumLinkInternal = internalMutation({
   },
   returns: v.id("immichAlbumLinks"),
   handler: async (ctx, args) => {
+    const existing = await getCanonicalAlbumLink(ctx, args.entityType, args.entityId);
+    if (existing) {
+      await dedupeAlbumLinksForEntity(ctx, args.entityType, args.entityId);
+      return existing._id;
+    }
+
     const now = Date.now();
     return await ctx.db.insert("immichAlbumLinks", {
       entityType: args.entityType,
@@ -110,7 +128,7 @@ export const recordAssetInternal = internalMutation({
     const existing = await ctx.db
       .query("immichAssetRecords")
       .withIndex("by_immichAssetId", (q) => q.eq("immichAssetId", args.immichAssetId))
-      .unique();
+      .first();
     if (existing) return null;
     await ctx.db.insert("immichAssetRecords", {
       albumLinkId: args.albumLinkId,
@@ -211,5 +229,29 @@ export const getEventMetaInternal = internalQuery({
       title: `${event.title} — ${formatPacificDate(event.startAt)}`,
       venueName: event.venueName,
     };
+  },
+});
+
+export const dedupeAllAlbumLinksInternal = internalMutation({
+  args: {},
+  returns: v.object({ dedupedEntities: v.number() }),
+  handler: async (ctx) => {
+    const links = await ctx.db.query("immichAlbumLinks").take(2000);
+    const byKey = new Map<string, Array<(typeof links)[number]>>();
+    for (const link of links) {
+      const key = `${link.entityType}:${link.entityId}`;
+      const group = byKey.get(key) ?? [];
+      group.push(link);
+      byKey.set(key, group);
+    }
+
+    let dedupedEntities = 0;
+    for (const [key, group] of byKey) {
+      if (group.length <= 1) continue;
+      const [entityType, entityId] = key.split(":") as ["band" | "event", string];
+      await dedupeAlbumLinksForEntity(ctx, entityType, entityId);
+      dedupedEntities += 1;
+    }
+    return { dedupedEntities };
   },
 });

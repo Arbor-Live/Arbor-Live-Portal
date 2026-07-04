@@ -39,6 +39,14 @@ async function parseImmichJson<T>(response: Response): Promise<T> {
   return (await response.json()) as T;
 }
 
+function normalizeImmichAlbumId(album: ImmichAlbum & { albumId?: string }) {
+  const id = album.id ?? album.albumId;
+  if (!id) {
+    throw new Error("Immich album response is missing an id.");
+  }
+  return id;
+}
+
 export async function createImmichAlbum(args: { albumName: string; description?: string }) {
   const { baseUrl, apiKey } = getImmichConfig();
   const response = await fetch(`${baseUrl}/albums`, {
@@ -49,7 +57,8 @@ export async function createImmichAlbum(args: { albumName: string; description?:
       description: args.description ?? "",
     }),
   });
-  return await parseImmichJson<ImmichAlbum>(response);
+  const created = await parseImmichJson<ImmichAlbum & { albumId?: string }>(response);
+  return { ...created, id: normalizeImmichAlbumId(created) };
 }
 
 export async function getImmichAlbum(albumId: string) {
@@ -58,6 +67,20 @@ export async function getImmichAlbum(albumId: string) {
     headers: immichHeaders(apiKey),
   });
   return await parseImmichJson<ImmichAlbum>(response);
+}
+
+export async function immichAlbumExists(albumId: string) {
+  const { baseUrl, apiKey } = getImmichConfig();
+  const response = await fetch(`${baseUrl}/albums/${albumId}`, {
+    headers: immichHeaders(apiKey),
+  });
+  return response.ok;
+}
+
+export function buildImmichAlbumUrl(immichAlbumId: string) {
+  const baseUrl = process.env.IMMICH_URL?.trim().replace(/\/$/, "");
+  if (!baseUrl || !immichAlbumId) return undefined;
+  return `${baseUrl}/albums/${immichAlbumId}`;
 }
 
 export async function addAssetsToImmichAlbum(albumId: string, assetIds: string[]) {
