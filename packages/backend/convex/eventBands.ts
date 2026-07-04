@@ -3,6 +3,7 @@ import type { Id } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { components } from "./_generated/api";
 import { requireArborInternalContext, requireAuth, requireBandContext } from "./lib/auth";
+import { listBandLinkedEvents } from "./lib/eventBandAccess";
 
 const participationRoleValue = v.union(
   v.literal("headliner"),
@@ -79,7 +80,12 @@ export const listByEvent = query({
     const result = [];
     for (const row of rows) {
       result.push({
-        ...row,
+        _id: row._id,
+        eventId: row.eventId,
+        organizationId: row.organizationId,
+        role: row.role,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
         bandName: await getOrganizationName(ctx, row.organizationId),
       });
     }
@@ -101,12 +107,9 @@ export const listLinkedEventsForActiveBand = query({
   ),
   handler: async (ctx) => {
     const context = await requireBandContext(ctx);
-    const participations = await ctx.db
-      .query("eventBandParticipations")
-      .withIndex("by_organizationId", (q) => q.eq("organizationId", context.organizationId))
-      .take(100);
+    const linkedEvents = await listBandLinkedEvents(ctx, context.organizationId);
     const result = [];
-    for (const row of participations) {
+    for (const row of linkedEvents.values()) {
       const event = await ctx.db.get(row.eventId);
       if (!event) continue;
       result.push({
@@ -119,6 +122,26 @@ export const listLinkedEventsForActiveBand = query({
       });
     }
     return result.sort((a, b) => b.startAt - a.startAt);
+  },
+});
+
+export const syncParticipationsFromPayments = mutation({
+  args: {},
+  returns: v.object({ synced: v.number() }),
+  handler: async (ctx) => {
+    await requireArborInternalContext(ctx);
+    const payments = await ctx.db.query("eventBandPayments").take(500);
+    let synced = 0;
+    for (const payment of payments) {
+      if (payment.status === "cancelled") continue;
+      await upsertEventBandParticipation(ctx, {
+        eventId: payment.eventId,
+        organizationId: payment.organizationId,
+        role: "headliner",
+      });
+      synced += 1;
+    }
+    return { synced };
   },
 });
 

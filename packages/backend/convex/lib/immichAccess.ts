@@ -1,5 +1,6 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
+import { hasBandEventParticipation as bandIsLinkedToEvent } from "./eventBandAccess";
 import {
   getCanonicalAlbumLink,
   listAlbumLinksForEntity,
@@ -16,13 +17,7 @@ export async function hasBandEventParticipation(
   eventId: Id<"events">,
   organizationId: string,
 ) {
-  const row = await ctx.db
-    .query("eventBandParticipations")
-    .withIndex("by_eventId_and_organizationId", (q) =>
-      q.eq("eventId", eventId).eq("organizationId", organizationId),
-    )
-    .first();
-  return Boolean(row);
+  return await bandIsLinkedToEvent(ctx, eventId, organizationId);
 }
 
 export async function requireBandEventAccess(

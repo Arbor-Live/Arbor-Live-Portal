@@ -11,7 +11,7 @@ import {
   requireBandAlbumAccess,
   requireEventMediaAccess,
 } from "./lib/immichAccess";
-import { buildImmichProxyUrl, buildImmichAlbumUrl } from "./lib/immichClient";
+import { buildImmichAlbumUrl, buildSharedAssetUrl, getImmichPublicBaseUrl } from "./lib/immichClient";
 import { requireArborInternalContext, requireAuth, requireBandContext } from "./lib/auth";
 
 const entityTypeValue = v.union(v.literal("band"), v.literal("event"));
@@ -38,31 +38,37 @@ function toAlbumLink(row: {
   _id: Id<"immichAlbumLinks">;
   immichAlbumId: string;
   albumName: string;
+  shareUrl?: string;
 }) {
   return {
     albumLinkId: row._id,
     immichAlbumId: row.immichAlbumId,
     albumName: row.albumName,
-    albumUrl: buildImmichAlbumUrl(row.immichAlbumId),
+    albumUrl: row.shareUrl ?? buildImmichAlbumUrl(row.immichAlbumId),
   };
 }
 
-function toMediaAsset(row: Doc<"immichAssetRecords">) {
+function toMediaAsset(row: Doc<"immichAssetRecords">, shareKey: string) {
   return {
     immichAssetId: row.immichAssetId,
     originalFileName: row.originalFileName,
     type: row.type,
     createdAt: row.createdAt,
-    thumbnailUrl: buildImmichProxyUrl(row.immichAssetId, "thumbnail"),
-    originalUrl: buildImmichProxyUrl(row.immichAssetId, "original"),
-    playbackUrl: row.type === "VIDEO" ? buildImmichProxyUrl(row.immichAssetId, "playback") : undefined,
+    thumbnailUrl: buildSharedAssetUrl(row.immichAssetId, "thumbnail", shareKey),
+    originalUrl: buildSharedAssetUrl(row.immichAssetId, "original", shareKey),
+    playbackUrl:
+      row.type === "VIDEO"
+        ? buildSharedAssetUrl(row.immichAssetId, "playback", shareKey)
+        : undefined,
   };
 }
 
 async function listAssetsForAlbumLinks(
   ctx: QueryCtx,
   albumLinkIds: Id<"immichAlbumLinks">[],
+  shareKey?: string,
 ) {
+  if (!shareKey) return [];
   const seen = new Set<string>();
   const assets = [];
   for (const albumLinkId of albumLinkIds) {
@@ -73,7 +79,7 @@ async function listAssetsForAlbumLinks(
     for (const row of rows) {
       if (seen.has(row.immichAssetId)) continue;
       seen.add(row.immichAssetId);
-      assets.push(toMediaAsset(row));
+      assets.push(toMediaAsset(row, shareKey));
     }
   }
   return assets.sort((a, b) => b.createdAt - a.createdAt);
@@ -100,6 +106,7 @@ export const listBandMedia = query({
         assets: await listAssetsForAlbumLinks(
           ctx,
           await getAlbumLinkIdsForEntity(ctx, "event", args.eventId),
+          albumLink.sharedLinkKey,
         ),
       };
     }
@@ -113,6 +120,7 @@ export const listBandMedia = query({
       assets: await listAssetsForAlbumLinks(
         ctx,
         await getAlbumLinkIdsForEntity(ctx, "band", context.organizationId),
+        albumLink.sharedLinkKey,
       ),
     };
   },
@@ -135,6 +143,7 @@ export const listEventMedia = query({
       assets: await listAssetsForAlbumLinks(
         ctx,
         await getAlbumLinkIdsForEntity(ctx, "event", args.eventId),
+        albumLink.sharedLinkKey,
       ),
     };
   },
@@ -176,6 +185,56 @@ export const getUploadTarget = query({
   },
 });
 
+export const getUploadConfig = query({
+  args: {
+    targetType: entityTypeValue,
+    targetId: v.string(),
+  },
+  returns: v.object({
+    albumLinkId: v.id("immichAlbumLinks"),
+    immichPublicUrl: v.string(),
+    uploadUrl: v.string(),
+    shareKey: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    const albumLink =
+      args.targetType === "band"
+        ? await getAlbumLinkForBand(ctx, args.targetId)
+        : await getAlbumLinkForEvent(ctx, args.targetId as Id<"events">);
+    if (!albumLink) {
+      throw new Error("Album not found. Refresh the page to prepare the album.");
+    }
+    await canUploadToAlbum(ctx, albumLink);
+    if (!albumLink.sharedLinkKey) {
+      throw new Error("Album upload is not ready yet. Refresh the page.");
+    }
+    const immichPublicUrl = getImmichPublicBaseUrl();
+    if (!immichPublicUrl) {
+      throw new Error("Immich public URL is not configured.");
+    }
+    return {
+      albumLinkId: albumLink._id,
+      immichPublicUrl,
+      uploadUrl: `${immichPublicUrl}/api/assets`,
+      shareKey: albumLink.sharedLinkKey,
+    };
+  },
+});
+
+export const refreshAlbumMedia = mutation({
+  args: { albumLinkId: v.id("immichAlbumLinks") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const albumLink = await ctx.db.get(args.albumLinkId);
+    if (!albumLink) throw new Error("Album not found.");
+    await canUploadToAlbum(ctx, albumLink);
+    await ctx.scheduler.runAfter(0, internal.immichActions.syncAlbumAssets, {
+      albumLinkId: args.albumLinkId,
+    });
+    return null;
+  },
+});
+
 export const recordUploadedAsset = mutation({
   args: {
     albumLinkId: v.id("immichAlbumLinks"),
@@ -199,6 +258,12 @@ export const recordUploadedAsset = mutation({
       originalFileName: args.originalFileName,
       type: args.type,
       createdAt: Date.now(),
+    });
+    await ctx.scheduler.runAfter(0, internal.immichActions.addUploadedAssetToAlbum, {
+      albumLinkId: args.albumLinkId,
+      immichAssetId: args.immichAssetId,
+      originalFileName: args.originalFileName,
+      type: args.type,
     });
     return null;
   },

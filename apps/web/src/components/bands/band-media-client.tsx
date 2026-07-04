@@ -31,8 +31,7 @@ function formatEventLabel(title: string, startAt: number) {
 export function BandMediaClient() {
   const activeOrg = useQuery(api.users.getActiveOrganization, {});
   const linkedEvents = useQuery(api.eventBands.listLinkedEventsForActiveBand, {});
-  const ensureBandAlbum = useAction(api.immichEnsure.ensureBandAlbum);
-  const ensureEventAlbum = useAction(api.immichEnsure.ensureEventAlbum);
+  const ensureUploadAlbum = useAction(api.immichEnsure.ensureUploadAlbum);
 
   const [selectedEventId, setSelectedEventId] = useState<string>("");
   const [readyAlbumKey, setReadyAlbumKey] = useState<string | null>(null);
@@ -60,10 +59,14 @@ export function BandMediaClient() {
     let cancelled = false;
     async function ensure() {
       try {
+        if (!activeOrg?.organizationId) return;
         if (selectedEventId) {
-          await ensureEventAlbum({ eventId: selectedEventId as Id<"events"> });
+          await ensureUploadAlbum({ targetType: "event", targetId: selectedEventId });
         } else {
-          await ensureBandAlbum({});
+          await ensureUploadAlbum({
+            targetType: "band",
+            targetId: activeOrg.organizationId,
+          });
         }
         if (!cancelled) {
           setReadyAlbumKey(ensureAlbumKey);
@@ -77,7 +80,7 @@ export function BandMediaClient() {
     return () => {
       cancelled = true;
     };
-  }, [ensureAlbumKey, ensureBandAlbum, ensureEventAlbum, selectedEventId]);
+  }, [activeOrg?.organizationId, ensureAlbumKey, ensureUploadAlbum, selectedEventId]);
 
   const eventOptions = useMemo(
     () =>

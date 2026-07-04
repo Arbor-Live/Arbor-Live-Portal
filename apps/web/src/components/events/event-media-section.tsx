@@ -28,7 +28,7 @@ export function EventMediaSection({ eventId }: { eventId: Id<"events"> }) {
   const bands = useQuery(api.users.listBandOrganizationsAdmin, {});
   const participations = useQuery(api.eventBands.listByEvent, { eventId });
   const media = useQuery(api.immich.listEventMedia, { eventId });
-  const ensureEventAlbum = useAction(api.immichEnsure.ensureEventAlbum);
+  const ensureUploadAlbum = useAction(api.immichEnsure.ensureUploadAlbum);
   const upsertParticipations = useMutation(api.eventBands.upsertParticipations);
 
   const [drafts, setDrafts] = useState<ParticipationDraft[]>([]);
@@ -52,7 +52,7 @@ export function EventMediaSection({ eventId }: { eventId: Id<"events"> }) {
     async function ensure() {
       setEnsuring(true);
       try {
-        await ensureEventAlbum({ eventId });
+        await ensureUploadAlbum({ targetType: "event", targetId: eventId });
         if (!cancelled) setAlbumReady(true);
       } catch (error) {
         if (!cancelled) setMessage(getConvexErrorMessage(error));
@@ -64,7 +64,7 @@ export function EventMediaSection({ eventId }: { eventId: Id<"events"> }) {
     return () => {
       cancelled = true;
     };
-  }, [ensureEventAlbum, eventId]);
+  }, [ensureUploadAlbum, eventId]);
 
   const bandOptions = useMemo(
     () =>

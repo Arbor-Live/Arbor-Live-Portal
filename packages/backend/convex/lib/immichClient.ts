@@ -14,6 +14,10 @@ export type ImmichAlbum = {
   assets?: ImmichAsset[];
 };
 
+export function getImmichPublicBaseUrl() {
+  return process.env.IMMICH_URL?.trim().replace(/\/$/, "") ?? "";
+}
+
 export function getImmichConfig() {
   const baseUrl = process.env.IMMICH_URL?.trim().replace(/\/$/, "");
   const apiKey = process.env.IMMICH_API_KEY?.trim();
@@ -78,9 +82,66 @@ export async function immichAlbumExists(albumId: string) {
 }
 
 export function buildImmichAlbumUrl(immichAlbumId: string) {
-  const baseUrl = process.env.IMMICH_URL?.trim().replace(/\/$/, "");
+  const baseUrl = getImmichPublicBaseUrl();
   if (!baseUrl || !immichAlbumId) return undefined;
   return `${baseUrl}/albums/${immichAlbumId}`;
+}
+
+export function buildImmichShareUrl(sharedLinkKey: string) {
+  const baseUrl = getImmichPublicBaseUrl();
+  if (!baseUrl || !sharedLinkKey) return undefined;
+  return `${baseUrl}/share/${sharedLinkKey}`;
+}
+
+export type ImmichSharedLink = {
+  id: string;
+  key: string;
+  token?: string;
+  allowUpload?: boolean;
+  allowDownload?: boolean;
+};
+
+export async function createImmichAlbumSharedLink(args: {
+  albumId: string;
+  description?: string;
+}) {
+  const { baseUrl, apiKey } = getImmichConfig();
+  const response = await fetch(`${baseUrl}/shared-links`, {
+    method: "POST",
+    headers: immichHeaders(apiKey, { "Content-Type": "application/json" }),
+    body: JSON.stringify({
+      type: "ALBUM",
+      albumId: args.albumId,
+      allowUpload: true,
+      allowDownload: true,
+      description: args.description ?? "Arbor Live Portal",
+    }),
+  });
+  const created = await parseImmichJson<ImmichSharedLink & { token?: string }>(response);
+  const key = created.key ?? created.token;
+  if (!key || !created.id) {
+    throw new Error("Immich shared link response is missing id or key.");
+  }
+  return { ...created, key };
+}
+
+export function buildSharedAssetUrl(
+  assetId: string,
+  kind: "thumbnail" | "original" | "playback",
+  shareKey: string,
+) {
+  const baseUrl = getImmichPublicBaseUrl();
+  if (!baseUrl) {
+    throw new Error("Immich public URL is not configured.");
+  }
+  const path =
+    kind === "thumbnail" ? "thumbnail" : kind === "playback" ? "video/playback" : "original";
+  const url = new URL(`${baseUrl}/api/assets/${assetId}/${path}`);
+  url.searchParams.set("key", shareKey);
+  if (kind === "thumbnail") {
+    url.searchParams.set("size", "preview");
+  }
+  return url.toString();
 }
 
 export async function addAssetsToImmichAlbum(albumId: string, assetIds: string[]) {
@@ -106,7 +167,12 @@ export async function uploadImmichAsset(file: Blob, fileName: string) {
     headers: { "x-api-key": apiKey, Accept: "application/json" },
     body: formData,
   });
-  return await parseImmichJson<ImmichAsset>(response);
+  const uploaded = await parseImmichJson<ImmichAsset & { assetId?: string }>(response);
+  const id = uploaded.id ?? uploaded.assetId;
+  if (!id) {
+    throw new Error("Immich upload response is missing an asset id.");
+  }
+  return { ...uploaded, id };
 }
 
 export function inferImmichAssetType(fileName: string, mimeType: string): ImmichAssetType {
@@ -115,14 +181,4 @@ export function inferImmichAssetType(fileName: string, mimeType: string): Immich
   const lower = fileName.toLowerCase();
   if (/\.(mp4|mov|webm|mkv|avi|m4v)$/.test(lower)) return "VIDEO";
   return "IMAGE";
-}
-
-export function buildImmichProxyUrl(assetId: string, kind: "thumbnail" | "original" | "playback") {
-  const suffix =
-    kind === "thumbnail"
-      ? "thumbnail?size=preview"
-      : kind === "playback"
-        ? "video/playback"
-        : "original";
-  return `/api/immich/assets/${assetId}/${suffix}`;
 }

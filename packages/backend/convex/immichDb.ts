@@ -63,13 +63,44 @@ export const getAlbumLinkByIdInternal = internalQuery({
       albumName: v.string(),
       entityType: entityTypeValue,
       entityId: v.string(),
+      sharedLinkId: v.optional(v.string()),
+      sharedLinkKey: v.optional(v.string()),
+      shareUrl: v.optional(v.string()),
     }),
     v.null(),
   ),
   handler: async (ctx, args) => {
     const row = await ctx.db.get(args.albumLinkId);
     if (!row) return null;
-    return row;
+    return {
+      _id: row._id,
+      immichAlbumId: row.immichAlbumId,
+      albumName: row.albumName,
+      entityType: row.entityType,
+      entityId: row.entityId,
+      sharedLinkId: row.sharedLinkId,
+      sharedLinkKey: row.sharedLinkKey,
+      shareUrl: row.shareUrl,
+    };
+  },
+});
+
+export const saveSharedLinkInternal = internalMutation({
+  args: {
+    albumLinkId: v.id("immichAlbumLinks"),
+    sharedLinkId: v.string(),
+    sharedLinkKey: v.string(),
+    shareUrl: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.albumLinkId, {
+      sharedLinkId: args.sharedLinkId,
+      sharedLinkKey: args.sharedLinkKey,
+      shareUrl: args.shareUrl,
+      updatedAt: Date.now(),
+    });
+    return null;
   },
 });
 

@@ -6,7 +6,9 @@ import type { Id } from "./_generated/dataModel";
 import { internalAction, type ActionCtx } from "./_generated/server";
 import {
   addAssetsToImmichAlbum,
+  buildImmichShareUrl,
   createImmichAlbum,
+  createImmichAlbumSharedLink,
   getImmichAlbum,
   immichAlbumExists,
   type ImmichAssetType,
@@ -20,6 +22,38 @@ type AlbumLinkResult = {
   immichAlbumId: string;
   albumName: string;
 };
+
+async function ensureSharedLinkForAlbum(
+  ctx: ActionCtx,
+  args: {
+    albumLinkId: Id<"immichAlbumLinks">;
+    immichAlbumId: string;
+    description?: string;
+  },
+) {
+  const link = await ctx.runQuery(internal.immichDb.getAlbumLinkByIdInternal, {
+    albumLinkId: args.albumLinkId,
+  });
+  if (link?.sharedLinkKey && link.shareUrl) {
+    return;
+  }
+
+  const shared = await createImmichAlbumSharedLink({
+    albumId: args.immichAlbumId,
+    description: args.description,
+  });
+  const shareUrl = buildImmichShareUrl(shared.key);
+  if (!shareUrl) {
+    throw new Error("Immich public URL is not configured.");
+  }
+
+  await ctx.runMutation(internal.immichDb.saveSharedLinkInternal, {
+    albumLinkId: args.albumLinkId,
+    sharedLinkId: shared.id,
+    sharedLinkKey: shared.key,
+    shareUrl,
+  });
+}
 
 async function ensureAlbumCore(
   ctx: ActionCtx,
@@ -37,6 +71,11 @@ async function ensureAlbumCore(
   if (existing) {
     const albumStillExists = await immichAlbumExists(existing.immichAlbumId);
     if (albumStillExists) {
+      await ensureSharedLinkForAlbum(ctx, {
+        albumLinkId: existing._id,
+        immichAlbumId: existing.immichAlbumId,
+        description: args.description ?? args.albumName,
+      });
       return {
         albumLinkId: existing._id,
         immichAlbumId: existing.immichAlbumId,
@@ -62,6 +101,12 @@ async function ensureAlbumCore(
       albumName: args.albumName,
     },
   );
+
+  await ensureSharedLinkForAlbum(ctx, {
+    albumLinkId,
+    immichAlbumId: created.id,
+    description: args.description ?? args.albumName,
+  });
 
   return {
     albumLinkId,
@@ -160,6 +205,9 @@ export const addUploadedAssetToAlbum = internalAction({
       immichAssetId: args.immichAssetId,
       originalFileName: args.originalFileName,
       type: args.type,
+    });
+    await ctx.runAction(internal.immichActions.syncAlbumAssets, {
+      albumLinkId: args.albumLinkId,
     });
     return null;
   },

@@ -70,6 +70,7 @@ import type * as lib_bookingRequestQuote from "../lib/bookingRequestQuote.js";
 import type * as lib_contactName from "../lib/contactName.js";
 import type * as lib_crewCost from "../lib/crewCost.js";
 import type * as lib_crewTeams from "../lib/crewTeams.js";
+import type * as lib_eventBandAccess from "../lib/eventBandAccess.js";
 import type * as lib_eventSeriesCosts from "../lib/eventSeriesCosts.js";
 import type * as lib_eventSeriesGeneration from "../lib/eventSeriesGeneration.js";
 import type * as lib_eventStatus from "../lib/eventStatus.js";
@@ -169,6 +170,7 @@ declare const fullApi: ApiFromModules<{
   "lib/contactName": typeof lib_contactName;
   "lib/crewCost": typeof lib_crewCost;
   "lib/crewTeams": typeof lib_crewTeams;
+  "lib/eventBandAccess": typeof lib_eventBandAccess;
   "lib/eventSeriesCosts": typeof lib_eventSeriesCosts;
   "lib/eventSeriesGeneration": typeof lib_eventSeriesGeneration;
   "lib/eventStatus": typeof lib_eventStatus;

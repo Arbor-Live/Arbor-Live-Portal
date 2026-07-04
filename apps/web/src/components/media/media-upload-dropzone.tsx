@@ -1,7 +1,11 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
+import { useConvex, useMutation } from "convex/react";
 import { Button } from "@/components/ui/button";
+import { api, type Id } from "@/lib/convex-api";
+import { getConvexErrorMessage } from "@/lib/convex-error";
+import { uploadFileToImmichShare } from "@/lib/immich-upload";
 import { cn } from "@/lib/utils";
 
 type MediaUploadDropzoneProps = {
@@ -19,6 +23,8 @@ export function MediaUploadDropzone({
   onUploaded,
   className,
 }: MediaUploadDropzoneProps) {
+  const convex = useConvex();
+  const recordUploadedAsset = useMutation(api.immich.recordUploadedAsset);
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,33 +39,34 @@ export function MediaUploadDropzone({
       setBusy(true);
       setError(null);
       try {
+        const config = await convex.query(api.immich.getUploadConfig, {
+          targetType,
+          targetId: targetId.trim(),
+        });
+
         for (let index = 0; index < list.length; index += 1) {
           const file = list[index];
           setProgress(`Uploading ${index + 1} of ${list.length}…`);
-          const formData = new FormData();
-          formData.append("file", file);
-          formData.append("targetType", targetType);
-          formData.append("targetId", targetId);
 
-          const response = await fetch("/api/immich/upload", {
-            method: "POST",
-            body: formData,
+          const uploaded = await uploadFileToImmichShare(file, config);
+          await recordUploadedAsset({
+            albumLinkId: config.albumLinkId as Id<"immichAlbumLinks">,
+            immichAssetId: uploaded.immichAssetId,
+            originalFileName: uploaded.originalFileName,
+            type: uploaded.type,
           });
-          if (!response.ok) {
-            const message = await response.text().catch(() => "Upload failed.");
-            throw new Error(message || "Upload failed.");
-          }
         }
+
         setProgress(null);
         onUploaded?.();
       } catch (uploadError) {
-        setError(uploadError instanceof Error ? uploadError.message : "Upload failed.");
+        setError(getConvexErrorMessage(uploadError));
       } finally {
         setBusy(false);
         setProgress(null);
       }
     },
-    [disabled, onUploaded, targetId, targetType],
+    [convex, disabled, onUploaded, recordUploadedAsset, targetId, targetType],
   );
 
   return (

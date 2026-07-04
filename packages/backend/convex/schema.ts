@@ -760,6 +760,9 @@ export default defineSchema({
     entityId: v.string(),
     immichAlbumId: v.string(),
     albumName: v.string(),
+    sharedLinkId: v.optional(v.string()),
+    sharedLinkKey: v.optional(v.string()),
+    shareUrl: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
