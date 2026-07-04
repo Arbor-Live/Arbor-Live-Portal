@@ -99,8 +99,8 @@ function ShowSlotPanel({
   return (
     <div
       className={cn(
-        "space-y-4 rounded-md border p-4 transition-colors",
-        isActive ? "border-primary bg-primary/5" : "border-border",
+        "space-y-4 rounded-xl border p-4 transition-colors",
+        isActive ? "border-primary bg-primary/5 ring-1 ring-primary/20" : "border-border bg-card",
       )}
     >
       <div className="flex items-start justify-between gap-2">
@@ -196,15 +196,17 @@ export function EventScheduleField() {
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
-        <BookingAvailabilityCalendar
-          selectedDate={activeSlot.date}
-          highlightedDates={highlightedDates}
-          minDate={new Date()}
-          onSelectDate={(date) => updateSlot(activeIndex, { ...activeSlot, date })}
-        />
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+        <div className="w-full shrink-0 lg:w-[340px]">
+          <BookingAvailabilityCalendar
+            selectedDate={activeSlot.date}
+            highlightedDates={highlightedDates}
+            minDate={new Date()}
+            onSelectDate={(date) => updateSlot(activeIndex, { ...activeSlot, date })}
+          />
+        </div>
 
-        <div className="space-y-3">
+        <div className="booking-show-slots-scroll min-h-0 w-full flex-1 space-y-3 lg:max-h-[25.5rem] lg:overflow-y-auto lg:overscroll-y-contain lg:pr-1">
           {showSlots.map((slot, index) => (
             <ShowSlotPanel
               key={`show-slot-${index}`}
