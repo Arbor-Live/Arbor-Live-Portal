@@ -1,6 +1,12 @@
 export const EMAIL_FROM =
   process.env.EMAIL_FROM ?? "Arbor Notifications <noreply@arbor.st>";
 
+export const PAYMENTS_EMAIL_FROM =
+  process.env.PAYMENTS_EMAIL_FROM ?? "Arbor Live — Financial Manager <payments@arbor.st>";
+
+export const BAND_PAYMENTS_CC_EMAIL =
+  process.env.BAND_PAYMENTS_CC_EMAIL ?? "arborlive@stanford.edu";
+
 function parseEmailAddress(from: string) {
   const match = from.match(/<([^>]+)>/);
   if (match) return match[1]!.trim().toLowerCase();
@@ -27,7 +33,10 @@ export type EmailTemplate =
   | "booking_quote_ready"
   | "payment_proof_reminder"
   | "payment_proof_submitted"
-  | "paying_party_added";
+  | "paying_party_added"
+  | "band_payment_confirmation"
+  | "band_payment_completed"
+  | "band_payment_payee_required";
 
 export function eventDashboardUrl(eventId: string) {
   return `${SITE_URL}/dashboard/events/${eventId}`;
@@ -95,6 +104,10 @@ export function formatInviteExpiry(expiresAt: number, timezone: string = EVENT_T
   });
 }
 
+export function bandPayeeSettingsUrl() {
+  return `${SITE_URL}/dashboard/bands-and-performers#payment-payee`;
+}
+
 export function subjectForTemplate(template: EmailTemplate, context: string) {
   switch (template) {
     case "event_cancelled":
@@ -123,6 +136,12 @@ export function subjectForTemplate(template: EmailTemplate, context: string) {
       return `Payment proof received: ${context}`;
     case "paying_party_added":
       return `You've been added as the paying party: ${context}`;
+    case "band_payment_confirmation":
+      return `Payment confirmation needed: ${context}`;
+    case "band_payment_completed":
+      return `Band payment processed: ${context}`;
+    case "band_payment_payee_required":
+      return `Payment payee info needed: ${context}`;
   }
 }
 

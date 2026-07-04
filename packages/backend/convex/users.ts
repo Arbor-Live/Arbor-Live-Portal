@@ -18,6 +18,8 @@ import {
   updatePendingInviteDetails,
 } from "./email/invitations";
 import { assertUniqueBandPublicSlug, normalizePublicSlug } from "./lib/publicSlug";
+import { isBandPayeeComplete } from "./lib/bandPayments";
+import { normalizeOptionalAssetReference } from "./lib/inventoryUpload";
 
 const USER_TEAMS = ["Sound", "Lights", "Design", "Marketing", "Operations"] as const;
 const userTeamValue = v.union(
@@ -283,6 +285,10 @@ export const listBandOrganizationsAdmin = query({
           displayName: profile?.displayName ?? organization.name ?? "",
           bio: profile?.bio ?? "",
           performerHourlyRateUsd: profile?.performerHourlyRateUsd ?? 0,
+          designatedPayeeUserId: profile?.designatedPayeeUserId ?? "",
+          designatedPayeeName: profile?.designatedPayeeName ?? "",
+          designatedPayeeEmail: profile?.designatedPayeeEmail ?? "",
+          designatedPayeeMailingAddress: profile?.designatedPayeeMailingAddress ?? "",
           publicWebsiteUrl: profile?.publicWebsiteUrl ?? "",
           publicInstagramUrl: profile?.publicInstagramUrl ?? "",
           publicYoutubeUrl: profile?.publicYoutubeUrl ?? "",
@@ -302,6 +308,10 @@ export const updateBandOrganizationProfileAdmin = mutation({
     displayName: v.optional(v.string()),
     bio: v.optional(v.string()),
     performerHourlyRateUsd: v.optional(v.number()),
+    designatedPayeeUserId: v.optional(v.string()),
+    designatedPayeeName: v.optional(v.string()),
+    designatedPayeeEmail: v.optional(v.string()),
+    designatedPayeeMailingAddress: v.optional(v.string()),
     publicWebsiteUrl: v.optional(v.string()),
     publicInstagramUrl: v.optional(v.string()),
     publicYoutubeUrl: v.optional(v.string()),
@@ -342,30 +352,57 @@ export const updateBandOrganizationProfileAdmin = mutation({
         displayName: args.displayName?.trim() || undefined,
         bio: args.bio?.trim() || undefined,
         performerHourlyRateUsd: args.performerHourlyRateUsd ?? existing.performerHourlyRateUsd,
+        designatedPayeeUserId:
+          args.designatedPayeeUserId !== undefined
+            ? args.designatedPayeeUserId.trim() || undefined
+            : existing.designatedPayeeUserId,
+        designatedPayeeName:
+          args.designatedPayeeName !== undefined
+            ? args.designatedPayeeName.trim() || undefined
+            : existing.designatedPayeeName,
+        designatedPayeeEmail:
+          args.designatedPayeeEmail !== undefined
+            ? args.designatedPayeeEmail.trim().toLowerCase() || undefined
+            : existing.designatedPayeeEmail,
+        designatedPayeeMailingAddress:
+          args.designatedPayeeMailingAddress !== undefined
+            ? args.designatedPayeeMailingAddress.trim() || undefined
+            : existing.designatedPayeeMailingAddress,
         publicWebsiteUrl: args.publicWebsiteUrl?.trim() || undefined,
         publicInstagramUrl: args.publicInstagramUrl?.trim() || undefined,
         publicYoutubeUrl: args.publicYoutubeUrl?.trim() || undefined,
         publicListing: publicListing ?? existing.publicListing,
         publicSlug: publicSlug ?? (publicListing === false ? undefined : existing.publicSlug),
-        publicHeroImageUrl: args.publicHeroImageUrl?.trim() || undefined,
+        publicHeroImageUrl: normalizeOptionalAssetReference(args.publicHeroImageUrl),
         updatedAt: now,
+      });
+      await ctx.scheduler.runAfter(0, internal.bandPayments.refreshPendingPayeePaymentsForOrg, {
+        organizationId: args.organizationId,
       });
       return existing._id;
     }
-    return await ctx.db.insert("organizationProfiles", {
+    const profileId = await ctx.db.insert("organizationProfiles", {
       organizationId: args.organizationId,
       organizationType: "band",
       displayName: args.displayName?.trim() || organization.name || "Band",
       bio: args.bio?.trim() || undefined,
       performerHourlyRateUsd: args.performerHourlyRateUsd,
+      designatedPayeeUserId: args.designatedPayeeUserId?.trim() || undefined,
+      designatedPayeeName: args.designatedPayeeName?.trim() || undefined,
+      designatedPayeeEmail: args.designatedPayeeEmail?.trim().toLowerCase() || undefined,
+      designatedPayeeMailingAddress: args.designatedPayeeMailingAddress?.trim() || undefined,
       publicWebsiteUrl: args.publicWebsiteUrl?.trim() || undefined,
       publicInstagramUrl: args.publicInstagramUrl?.trim() || undefined,
       publicYoutubeUrl: args.publicYoutubeUrl?.trim() || undefined,
       publicListing: publicListing ?? false,
       publicSlug: publicListing ? publicSlug : undefined,
-      publicHeroImageUrl: args.publicHeroImageUrl?.trim() || undefined,
+      publicHeroImageUrl: normalizeOptionalAssetReference(args.publicHeroImageUrl),
       updatedAt: now,
     });
+    await ctx.scheduler.runAfter(0, internal.bandPayments.refreshPendingPayeePaymentsForOrg, {
+      organizationId: args.organizationId,
+    });
+    return profileId;
   },
 });
 
@@ -1159,6 +1196,15 @@ export const getActiveBandProfile = query({
       displayName: profile?.displayName ?? context.organizationName,
       bio: profile?.bio ?? "",
       performerHourlyRateUsd: profile?.performerHourlyRateUsd ?? 0,
+      designatedPayeeUserId: profile?.designatedPayeeUserId ?? "",
+      designatedPayeeName: profile?.designatedPayeeName ?? "",
+      designatedPayeeEmail: profile?.designatedPayeeEmail ?? "",
+      designatedPayeeMailingAddress: profile?.designatedPayeeMailingAddress ?? "",
+      payeeComplete: isBandPayeeComplete({
+        designatedPayeeName: profile?.designatedPayeeName,
+        designatedPayeeEmail: profile?.designatedPayeeEmail,
+        designatedPayeeMailingAddress: profile?.designatedPayeeMailingAddress,
+      }),
       publicWebsiteUrl: profile?.publicWebsiteUrl ?? "",
       publicInstagramUrl: profile?.publicInstagramUrl ?? "",
       publicYoutubeUrl: profile?.publicYoutubeUrl ?? "",
@@ -1174,6 +1220,10 @@ export const updateActiveBandProfile = mutation({
     displayName: v.optional(v.string()),
     bio: v.optional(v.string()),
     performerHourlyRateUsd: v.optional(v.number()),
+    designatedPayeeUserId: v.optional(v.string()),
+    designatedPayeeName: v.optional(v.string()),
+    designatedPayeeEmail: v.optional(v.string()),
+    designatedPayeeMailingAddress: v.optional(v.string()),
     publicWebsiteUrl: v.optional(v.string()),
     publicInstagramUrl: v.optional(v.string()),
     publicYoutubeUrl: v.optional(v.string()),
@@ -1207,30 +1257,57 @@ export const updateActiveBandProfile = mutation({
         displayName: args.displayName?.trim() || undefined,
         bio: args.bio?.trim() || undefined,
         performerHourlyRateUsd: args.performerHourlyRateUsd ?? existing.performerHourlyRateUsd,
+        designatedPayeeUserId:
+          args.designatedPayeeUserId !== undefined
+            ? args.designatedPayeeUserId.trim() || undefined
+            : existing.designatedPayeeUserId,
+        designatedPayeeName:
+          args.designatedPayeeName !== undefined
+            ? args.designatedPayeeName.trim() || undefined
+            : existing.designatedPayeeName,
+        designatedPayeeEmail:
+          args.designatedPayeeEmail !== undefined
+            ? args.designatedPayeeEmail.trim().toLowerCase() || undefined
+            : existing.designatedPayeeEmail,
+        designatedPayeeMailingAddress:
+          args.designatedPayeeMailingAddress !== undefined
+            ? args.designatedPayeeMailingAddress.trim() || undefined
+            : existing.designatedPayeeMailingAddress,
         publicWebsiteUrl: args.publicWebsiteUrl?.trim() || undefined,
         publicInstagramUrl: args.publicInstagramUrl?.trim() || undefined,
         publicYoutubeUrl: args.publicYoutubeUrl?.trim() || undefined,
         publicListing: publicListing ?? existing.publicListing,
         publicSlug: publicSlug ?? (publicListing === false ? undefined : existing.publicSlug),
-        publicHeroImageUrl: args.publicHeroImageUrl?.trim() || undefined,
+        publicHeroImageUrl: normalizeOptionalAssetReference(args.publicHeroImageUrl),
         updatedAt: now,
+      });
+      await ctx.scheduler.runAfter(0, internal.bandPayments.refreshPendingPayeePaymentsForOrg, {
+        organizationId: context.organizationId,
       });
       return existing._id;
     }
-    return await ctx.db.insert("organizationProfiles", {
+    const profileId = await ctx.db.insert("organizationProfiles", {
       organizationId: context.organizationId,
       organizationType: "band",
       displayName: args.displayName?.trim() || context.organizationName,
       bio: args.bio?.trim() || undefined,
       performerHourlyRateUsd: args.performerHourlyRateUsd,
+      designatedPayeeUserId: args.designatedPayeeUserId?.trim() || undefined,
+      designatedPayeeName: args.designatedPayeeName?.trim() || undefined,
+      designatedPayeeEmail: args.designatedPayeeEmail?.trim().toLowerCase() || undefined,
+      designatedPayeeMailingAddress: args.designatedPayeeMailingAddress?.trim() || undefined,
       publicWebsiteUrl: args.publicWebsiteUrl?.trim() || undefined,
       publicInstagramUrl: args.publicInstagramUrl?.trim() || undefined,
       publicYoutubeUrl: args.publicYoutubeUrl?.trim() || undefined,
       publicListing: publicListing ?? false,
       publicSlug: publicListing ? publicSlug : undefined,
-      publicHeroImageUrl: args.publicHeroImageUrl?.trim() || undefined,
+      publicHeroImageUrl: normalizeOptionalAssetReference(args.publicHeroImageUrl),
       updatedAt: now,
     });
+    await ctx.scheduler.runAfter(0, internal.bandPayments.refreshPendingPayeePaymentsForOrg, {
+      organizationId: context.organizationId,
+    });
+    return profileId;
   },
 });
 

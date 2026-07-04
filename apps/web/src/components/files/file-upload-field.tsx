@@ -62,7 +62,7 @@ function R2UploadField({
   const purpose =
     uploadArgs.scope === "event"
       ? "artifact"
-      : uploadArgs.scope === "marketing"
+      : uploadArgs.scope === "marketing" || uploadArgs.scope === "organization"
         ? "hero"
         : uploadArgs.purpose;
   const resolvedAccept = accept ?? defaultAcceptForPurpose(purpose);
@@ -247,6 +247,36 @@ export function EventArtifactUploadField({
       label={label}
       uploadArgs={{ scope: "event", eventId, purpose: "artifact" }}
       helperText={helperText}
+      {...rest}
+    />
+  );
+}
+
+type BandHeroUploadFieldProps = {
+  organizationId: string;
+  label?: string;
+  currentUrl?: string;
+  onUploaded: (storedValue: string) => void;
+  onClear?: () => void;
+  urlValue?: string;
+  onUrlChange?: (url: string) => void;
+  helperText?: string;
+  className?: string;
+};
+
+export function BandHeroUploadField({
+  organizationId,
+  label = "Hero image",
+  helperText = "Shown on your public artist page. JPEG, PNG, WebP, GIF, or SVG up to 5 MB.",
+  ...rest
+}: BandHeroUploadFieldProps) {
+  return (
+    <R2UploadField
+      label={label}
+      uploadArgs={{ scope: "organization", organizationId }}
+      accept="image/jpeg,image/png,image/webp,image/gif,image/svg+xml"
+      helperText={helperText}
+      urlPlaceholder="https://… or upload a file"
       {...rest}
     />
   );

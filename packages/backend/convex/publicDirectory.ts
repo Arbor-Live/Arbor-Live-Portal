@@ -58,6 +58,12 @@ function bioExcerpt(bio: string | undefined, maxLen = 140) {
   return `${text.slice(0, maxLen).trimEnd()}…`;
 }
 
+async function resolvePublicHeroImageUrl(value: string | undefined) {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  return (await resolveStoredR2AssetUrl(trimmed)) ?? trimmed;
+}
+
 async function resolveCrewMemberImageUrl(
   ctx: QueryCtx,
   profile: {
@@ -202,19 +208,22 @@ export const listPublicArtists = query({
     const organizations = (result?.page ?? []) as OrganizationRow[];
     const orgNameById = new Map(organizations.map((org) => [getRecordId(org), org.name ?? ""]));
 
-    return profiles
-      .filter((profile) => profile.publicListing === true && profile.publicSlug?.trim())
-      .map((profile) => ({
+    const listed = profiles.filter(
+      (profile) => profile.publicListing === true && profile.publicSlug?.trim(),
+    );
+    const rows = await Promise.all(
+      listed.map(async (profile) => ({
         slug: profile.publicSlug!,
         displayName:
           profile.displayName?.trim() ||
           orgNameById.get(profile.organizationId) ||
           "Artist",
         bioExcerpt: bioExcerpt(profile.bio),
-        heroImageUrl: profile.publicHeroImageUrl?.trim() || undefined,
+        heroImageUrl: await resolvePublicHeroImageUrl(profile.publicHeroImageUrl),
         instagramUrl: profile.publicInstagramUrl?.trim() || undefined,
-      }))
-      .sort((a, b) => a.displayName.localeCompare(b.displayName));
+      })),
+    );
+    return rows.sort((a, b) => a.displayName.localeCompare(b.displayName));
   },
 });
 
@@ -251,7 +260,7 @@ export const getPublicArtistBySlug = query({
         orgResult?.name?.trim() ||
         "Artist",
       bio: profile.bio?.trim() || undefined,
-      heroImageUrl: profile.publicHeroImageUrl?.trim() || undefined,
+      heroImageUrl: await resolvePublicHeroImageUrl(profile.publicHeroImageUrl),
       websiteUrl: profile.publicWebsiteUrl?.trim() || undefined,
       instagramUrl: profile.publicInstagramUrl?.trim() || undefined,
       youtubeUrl: profile.publicYoutubeUrl?.trim() || undefined,
