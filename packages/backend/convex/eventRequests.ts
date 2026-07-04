@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { getUserId, requireArborInternalContext, requireAuth } from "./lib/auth";
 import { normalizeEventStatus } from "./lib/eventStatus";
@@ -13,6 +14,15 @@ import {
 import { scheduleBookingRequestReceivedEmail } from "./email/bookingRequestEmails";
 import { allocateRequestNumber } from "./lib/publicReferenceIds";
 import { resolveContactNameParts } from "./lib/contactName";
+import {
+  buildPublicBookingDayLoad,
+  formatPacificShortDate,
+  groupShowSlotsByDay,
+  listEventsLinkedToRequest,
+  primaryConvertedEventId,
+  toPacificDateKey,
+  type DayEventPlan,
+} from "./lib/bookingDayLoad";
 
 const EVENT_TIMEZONE = "America/Los_Angeles";
 
@@ -30,6 +40,17 @@ const showSlotValue = v.object({
   startAtMs: v.number(),
   endAtMs: v.number(),
   endsNextDay: v.boolean(),
+});
+
+const dayLoadEntryValue = v.object({
+  count: v.number(),
+  level: v.union(v.literal("free"), v.literal("busy"), v.literal("unavailable")),
+});
+
+const convertedEventSummaryValue = v.object({
+  id: v.id("events"),
+  title: v.string(),
+  startAt: v.number(),
 });
 
 const submitPublicArgs = {
@@ -170,6 +191,27 @@ function defaultPlaceholderTimes() {
   return { startAt: start.getTime(), endAt: end.getTime() };
 }
 
+function buildDayEventPlans(
+  request: {
+    showSlots?: Array<{ date: string; startAtMs: number; endAtMs: number }>;
+    eventStartAtMs?: number;
+    eventEndAtMs?: number;
+  },
+): DayEventPlan[] {
+  if (request.showSlots?.length) {
+    return groupShowSlotsByDay(request.showSlots);
+  }
+  const placeholder = defaultPlaceholderTimes();
+  const startAt = request.eventStartAtMs ?? placeholder.startAt;
+  const endAt = request.eventEndAtMs ?? placeholder.endAt;
+  return [{ date: toPacificDateKey(startAt), startAt, endAt }];
+}
+
+function titleForDayEvent(baseTitle: string, dateKey: string, multiDay: boolean) {
+  if (!multiDay) return baseTitle;
+  return `${baseTitle} — ${formatPacificShortDate(dateKey)}`;
+}
+
 export const lookupContactByEmail = query({
   args: { email: v.string() },
   returns: v.union(
@@ -233,6 +275,17 @@ export const lookupContactByEmail = query({
       contactId: primary._id,
       groups: uniqueGroups,
     };
+  },
+});
+
+export const getPublicBookingDayLoad = query({
+  args: {
+    rangeStart: v.string(),
+    rangeEnd: v.string(),
+  },
+  returns: v.record(v.string(), dayLoadEntryValue),
+  handler: async (ctx, args) => {
+    return await buildPublicBookingDayLoad(ctx, args.rangeStart.trim(), args.rangeEnd.trim());
   },
 });
 
@@ -529,6 +582,7 @@ export const list = query({
       eventCategory: v.string(),
       submittedAt: v.number(),
       convertedEventId: v.optional(v.id("events")),
+      convertedEventIds: v.optional(v.array(v.id("events"))),
     }),
   ),
   handler: async (ctx, args) => {
@@ -559,6 +613,7 @@ export const list = query({
       eventCategory: row.eventCategory,
       submittedAt: row.submittedAt,
       convertedEventId: row.convertedEventId,
+      convertedEventIds: row.convertedEventIds,
     }));
   },
 });
@@ -603,6 +658,8 @@ export const get = query({
       lightingPreference: v.optional(v.string()),
       additionalNotes: v.optional(v.string()),
       convertedEventId: v.optional(v.id("events")),
+      convertedEventIds: v.optional(v.array(v.id("events"))),
+      convertedEvents: v.array(convertedEventSummaryValue),
       linkedInvoiceId: v.optional(v.id("invoices")),
       reviewedByUserId: v.optional(v.string()),
       staffNotes: v.optional(v.string()),
@@ -617,10 +674,16 @@ export const get = query({
     await requireArborInternalContext(ctx);
     const row = await ctx.db.get(args.id);
     if (!row) return null;
+    const convertedEvents = (await listEventsLinkedToRequest(ctx, row)).map((event) => ({
+      id: event._id,
+      title: event.title,
+      startAt: event.startAt,
+    }));
     return {
       ...row,
       requestNumber: row.requestNumber ?? `LEGACY-${row._id}`,
       publicToken: row.publicToken ?? "",
+      convertedEvents,
     };
   },
 });
@@ -733,6 +796,7 @@ export const convertToEvent = mutation({
   args: { id: v.id("eventRequests") },
   returns: v.object({
     eventId: v.id("events"),
+    eventIds: v.array(v.id("events")),
     invoiceId: v.id("invoices"),
   }),
   handler: async (ctx, args) => {
@@ -741,9 +805,13 @@ export const convertToEvent = mutation({
     const request = await ctx.db.get(args.id);
     if (!request) throw new Error("Request not found.");
 
-    if (request.convertedEventId && request.linkedInvoiceId) {
+    const existingPrimaryEventId = primaryConvertedEventId(request);
+    if (existingPrimaryEventId && request.linkedInvoiceId) {
+      const existingEvents = await listEventsLinkedToRequest(ctx, request);
+      const eventIds = existingEvents.map((event) => event._id);
       return {
-        eventId: request.convertedEventId,
+        eventId: existingPrimaryEventId,
+        eventIds: eventIds.length > 0 ? eventIds : [existingPrimaryEventId],
         invoiceId: request.linkedInvoiceId,
       };
     }
@@ -757,80 +825,94 @@ export const convertToEvent = mutation({
       managerEmail: user.email,
     });
 
-    const startAt = request.eventStartAtMs ?? defaultPlaceholderTimes().startAt;
-    const endAt = request.eventEndAtMs ?? defaultPlaceholderTimes().endAt;
-    const uniqueShowDates = new Set(
-      (request.showSlots ?? []).map((slot) => slot.date).filter(Boolean),
-    );
-    const spansMultipleDays =
-      Boolean(request.showSlots && request.showSlots.length > 1) ||
-      uniqueShowDates.size > 1 ||
-      Boolean(request.additionalShowDates?.length) ||
-      Boolean(request.endsNextDay) ||
-      new Date(startAt).toDateString() !== new Date(endAt).toDateString();
+    const dayPlans = buildDayEventPlans(request);
+    if (dayPlans.length === 0) {
+      const placeholder = defaultPlaceholderTimes();
+      const startAt = request.eventStartAtMs ?? placeholder.startAt;
+      const endAt = request.eventEndAtMs ?? placeholder.endAt;
+      dayPlans.push({ date: toPacificDateKey(startAt), startAt, endAt });
+    }
     const teamsInterested = mapServicesToTeams(request.crewOrRental, request.servicesNeeded);
     const eventType = inferEventType(request.crewOrRental, request.servicesNeeded);
-    const title =
+    const baseTitle =
       request.eventName?.trim() ||
       request.venueName?.trim() ||
       `${request.eventCategory} — ${request.firstName} ${request.lastName}`;
     const host = request.organization?.trim() || request.sponsorType;
+    const multiDay = dayPlans.length > 1;
     const now = Date.now();
 
-    if (request.convertedEventId) {
-      await ctx.db.patch(request.convertedEventId, {
-        invoiceId,
-        updatedAt: now,
-      });
+    if (existingPrimaryEventId) {
+      const existingEvents = await listEventsLinkedToRequest(ctx, request);
+      for (const event of existingEvents) {
+        await ctx.db.patch(event._id, {
+          invoiceId,
+          updatedAt: now,
+        });
+      }
       await ctx.db.patch(args.id, {
         status: "converted",
         linkedInvoiceId: invoiceId,
+        convertedEventIds: existingEvents.map((event) => event._id),
+        convertedEventId: existingEvents[0]?._id ?? existingPrimaryEventId,
         reviewedByUserId: managerUserId,
         updatedAt: now,
       });
+      const eventIds = existingEvents.map((event) => event._id);
       return {
-        eventId: request.convertedEventId,
+        eventId: eventIds[0] ?? existingPrimaryEventId,
+        eventIds: eventIds.length > 0 ? eventIds : [existingPrimaryEventId],
         invoiceId,
       };
     }
 
-    const eventId = await ctx.db.insert("events", {
-      title,
-      status: normalizeEventStatus("tentative"),
-      visibility: "internal",
-      publicToken: makeEventPublicToken(),
-      startAt,
-      endAt,
-      timezone: EVENT_TIMEZONE,
-      spansMultipleDays,
-      setupOnly: false,
-      strikeOnly: false,
-      requiresShowWindow: true,
-      venueName: request.venueName,
-      eventType: eventType as
-        | "Crewed Event"
-        | "Rental with Crew"
-        | "Dry Hire"
-        | "Dry Rental"
-        | "Services Only"
-        | undefined,
-      teamsInterested: teamsInterested.length > 0 ? teamsInterested : undefined,
-      category: request.eventCategory,
-      host,
-      expectedTurnout: request.expectedTurnout,
-      invoiceId,
-      createdAt: now,
-      updatedAt: now,
-    });
+    const eventIds: Id<"events">[] = [];
+    for (const dayPlan of dayPlans) {
+      const eventId = await ctx.db.insert("events", {
+        title: titleForDayEvent(baseTitle, dayPlan.date, multiDay),
+        status: normalizeEventStatus("tentative"),
+        visibility: "internal",
+        publicToken: makeEventPublicToken(),
+        startAt: dayPlan.startAt,
+        endAt: dayPlan.endAt,
+        timezone: EVENT_TIMEZONE,
+        spansMultipleDays: false,
+        setupOnly: false,
+        strikeOnly: false,
+        requiresShowWindow: true,
+        venueName: request.venueName,
+        eventType: eventType as
+          | "Crewed Event"
+          | "Rental with Crew"
+          | "Dry Hire"
+          | "Dry Rental"
+          | "Services Only"
+          | undefined,
+        teamsInterested: teamsInterested.length > 0 ? teamsInterested : undefined,
+        category: request.eventCategory,
+        host,
+        expectedTurnout: request.expectedTurnout,
+        invoiceId,
+        sourceEventRequestId: request._id,
+        createdAt: now,
+        updatedAt: now,
+      });
+      eventIds.push(eventId);
+    }
 
     await ctx.db.patch(args.id, {
       status: "converted",
-      convertedEventId: eventId,
+      convertedEventId: eventIds[0],
+      convertedEventIds: eventIds,
       linkedInvoiceId: invoiceId,
       reviewedByUserId: managerUserId,
       updatedAt: now,
     });
 
-    return { eventId, invoiceId };
+    return {
+      eventId: eventIds[0]!,
+      eventIds,
+      invoiceId,
+    };
   },
 });

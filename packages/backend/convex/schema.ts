@@ -538,6 +538,7 @@ export default defineSchema({
     otherCostUsd: v.optional(v.number()),
     rentalFulfillmentMode: v.optional(rentalFulfillmentModeValue),
     notes: v.optional(v.string()),
+    sourceEventRequestId: v.optional(v.id("eventRequests")),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -547,7 +548,8 @@ export default defineSchema({
     .index("by_publicToken", ["publicToken"])
     .index("by_startAt", ["startAt"])
     .index("by_createdAt", ["createdAt"])
-    .index("by_seriesId_and_occurrenceIndex", ["seriesId", "occurrenceIndex"]),
+    .index("by_seriesId_and_occurrenceIndex", ["seriesId", "occurrenceIndex"])
+    .index("by_sourceEventRequestId", ["sourceEventRequestId"]),
 
   userCompensationRates: defineTable({
     userId: v.string(),
@@ -817,6 +819,7 @@ export default defineSchema({
     lightingPreference: v.optional(v.string()),
     additionalNotes: v.optional(v.string()),
     convertedEventId: v.optional(v.id("events")),
+    convertedEventIds: v.optional(v.array(v.id("events"))),
     linkedInvoiceId: v.optional(v.id("invoices")),
     reviewedByUserId: v.optional(v.string()),
     staffNotes: v.optional(v.string()),
