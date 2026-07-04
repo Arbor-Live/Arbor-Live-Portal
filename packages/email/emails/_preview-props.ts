@@ -6,6 +6,9 @@ import type {
   PaymentProofReminderEmailProps,
   PaymentProofSubmittedEmailProps,
   PayingPartyAddedEmailProps,
+  BandPaymentConfirmationEmailProps,
+  BandPaymentCompletedEmailProps,
+  BandPaymentPayeeRequiredEmailProps,
   CrewScheduledEmailProps,
   SchedulePublishedEmailProps,
   ScheduleReminderEmailProps,
@@ -136,4 +139,38 @@ export const payingPartyAddedPreviewProps: PayingPartyAddedEmailProps = {
   quoteTotalUsd: 4250,
   managerName: "Alex Chen",
   managerEmail: "alex.chen@stanford.edu",
+};
+
+export const bandPaymentConfirmationPreviewProps: BandPaymentConfirmationEmailProps = {
+  recipientName: "Jules",
+  eventTitle: "Senior Night",
+  venueName: "Arbor Stage",
+  eventDateLabel: "5/29/26",
+  performanceHoursLabel: "0.75 hrs",
+  pricingMode: "per_member_hourly",
+  ratePerMemberPerHourUsd: 150,
+  totalUsd: 562.5,
+  designatedPayeeName: "Jules Jackson",
+  photoAlbumUrl: "https://photos.arbor.st/share/demo-album",
+  confirmationToken: "ALBPAY-demo123",
+};
+
+export const bandPaymentCompletedPreviewProps: BandPaymentCompletedEmailProps = {
+  recipientName: "Jordan Lee",
+  bandName: "The Stanford Band",
+  eventTitle: "Senior Night",
+  venueName: "Arbor Stage",
+  dateRangeLabel: eventDefaults.dateRangeLabel,
+  totalUsd: 562.5,
+  servicePaymentNumber: "SP-2026-0042",
+  designatedPayeeName: "Jules Jackson",
+};
+
+export const bandPaymentPayeeRequiredPreviewProps: BandPaymentPayeeRequiredEmailProps = {
+  recipientName: "Jordan Lee",
+  bandName: "The Stanford Band",
+  eventTitle: "Senior Night",
+  venueName: "Arbor Stage",
+  eventDateLabel: "5/29/26",
+  payeeSettingsUrl: "https://portal.arbor.st/dashboard/bands-and-performers#payment-payee",
 };

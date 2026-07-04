@@ -8,6 +8,7 @@ import {
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { FinancialHubSettings } from "@/components/financial/financial-hub-settings";
+import { BandPayoutsSummary } from "@/components/financial/band-payouts-summary";
 import { ArborOnlyGuard } from "@/components/org-context-guard";
 
 export default function FinancialHubPage() {
@@ -35,7 +36,10 @@ export default function FinancialHubPage() {
               <Link href="/dashboard/financial-hub/invoices/new">Create Invoice</Link>
             </Button>
             <Button asChild variant="outline">
-              <Link href="/dashboard/financial-hub/payments">Payments</Link>
+              <Link href="/dashboard/financial-hub/payments">Client Payments</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/dashboard/financial-hub/band-payouts">Band Payouts</Link>
             </Button>
           </CardContent>
         </Card>
@@ -56,7 +60,9 @@ export default function FinancialHubPage() {
             <CardHeader>
               <CardTitle>Payouts</CardTitle>
             </CardHeader>
-            <CardContent className="text-muted-foreground">Coming soon.</CardContent>
+            <CardContent>
+              <BandPayoutsSummary />
+            </CardContent>
           </Card>
         </div>
         <FinancialHubSettings />

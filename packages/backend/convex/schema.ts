@@ -158,6 +158,21 @@ const paymentProofSubmissionStatusValue = v.union(
   v.literal("invalidated"),
 );
 
+const bandPaymentPricingModeValue = v.union(
+  v.literal("per_member_hourly"),
+  v.literal("fixed_total"),
+);
+
+const bandPaymentStatusValue = v.union(
+  v.literal("draft"),
+  v.literal("pending_payee"),
+  v.literal("pending_email"),
+  v.literal("awaiting_confirmation"),
+  v.literal("confirmed"),
+  v.literal("paid"),
+  v.literal("cancelled"),
+);
+
 export default defineSchema({
   inventoryCategories: defineTable({
     key: v.string(),
@@ -606,6 +621,10 @@ export default defineSchema({
     displayName: v.optional(v.string()),
     bio: v.optional(v.string()),
     performerHourlyRateUsd: v.optional(v.number()),
+    designatedPayeeUserId: v.optional(v.string()),
+    designatedPayeeName: v.optional(v.string()),
+    designatedPayeeEmail: v.optional(v.string()),
+    designatedPayeeMailingAddress: v.optional(v.string()),
     publicWebsiteUrl: v.optional(v.string()),
     publicInstagramUrl: v.optional(v.string()),
     publicYoutubeUrl: v.optional(v.string()),
@@ -755,6 +774,9 @@ export default defineSchema({
       v.literal("payment_proof_reminder"),
       v.literal("payment_proof_submitted"),
       v.literal("paying_party_added"),
+      v.literal("band_payment_confirmation"),
+      v.literal("band_payment_completed"),
+      v.literal("band_payment_payee_required"),
     ),
     status: v.union(v.literal("queued"), v.literal("sent"), v.literal("failed")),
     to: v.string(),
@@ -841,6 +863,49 @@ export default defineSchema({
     .index("by_publicToken", ["publicToken"])
     .index("by_requestNumber", ["requestNumber"])
     .index("by_linkedInvoiceId", ["linkedInvoiceId"]),
+
+  eventBandPayments: defineTable({
+    eventId: v.id("events"),
+    organizationId: v.string(),
+    pricingMode: bandPaymentPricingModeValue,
+    ratePerMemberPerHourUsd: v.optional(v.number()),
+    performanceHours: v.optional(v.number()),
+    memberCount: v.optional(v.number()),
+    totalUsd: v.number(),
+    designatedPayeeName: v.optional(v.string()),
+    designatedPayeeEmail: v.optional(v.string()),
+    designatedPayeeUserId: v.optional(v.string()),
+    designatedPayeeMailingAddress: v.optional(v.string()),
+    status: bandPaymentStatusValue,
+    confirmationToken: v.string(),
+    confirmationEmailSentAt: v.optional(v.number()),
+    confirmationEmailNotificationId: v.optional(v.id("emailNotifications")),
+    confirmationResendEmailId: v.optional(v.string()),
+    confirmedAt: v.optional(v.number()),
+    confirmationReplyFrom: v.optional(v.string()),
+    confirmationReplyBody: v.optional(v.string()),
+    confirmationReplyEmailId: v.optional(v.string()),
+    servicePaymentNumber: v.optional(v.string()),
+    paidAt: v.optional(v.number()),
+    paidByUserId: v.optional(v.string()),
+    bandNotifiedAt: v.optional(v.number()),
+    photoAlbumUrl: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_eventId", ["eventId"])
+    .index("by_organizationId", ["organizationId"])
+    .index("by_status", ["status"])
+    .index("by_eventId_and_organizationId", ["eventId", "organizationId"])
+    .index("by_confirmationToken", ["confirmationToken"]),
+
+  bandPaymentSettings: defineTable({
+    key: v.string(),
+    photoAlbumUrl: v.optional(v.string()),
+    financialManagerName: v.optional(v.string()),
+    financialManagerPronouns: v.optional(v.string()),
+    updatedAt: v.number(),
+  }).index("by_key", ["key"]),
 
   eventPaymentProofSubmissions: defineTable({
     eventId: v.id("events"),

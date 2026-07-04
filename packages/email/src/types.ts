@@ -120,3 +120,37 @@ export type PayingPartyAddedEmailProps = {
   managerName: string;
   managerEmail?: string;
 };
+
+export type BandPaymentConfirmationEmailProps = {
+  recipientName?: string;
+  eventTitle: string;
+  venueName?: string;
+  eventDateLabel: string;
+  performanceHoursLabel: string;
+  pricingMode: "per_member_hourly" | "fixed_total";
+  ratePerMemberPerHourUsd?: number;
+  totalUsd: number;
+  designatedPayeeName: string;
+  photoAlbumUrl?: string;
+  confirmationToken: string;
+};
+
+export type BandPaymentCompletedEmailProps = {
+  recipientName?: string;
+  bandName: string;
+  eventTitle: string;
+  venueName?: string;
+  dateRangeLabel: string;
+  totalUsd: number;
+  servicePaymentNumber: string;
+  designatedPayeeName: string;
+};
+
+export type BandPaymentPayeeRequiredEmailProps = {
+  recipientName?: string;
+  bandName: string;
+  eventTitle: string;
+  venueName?: string;
+  eventDateLabel: string;
+  payeeSettingsUrl: string;
+};

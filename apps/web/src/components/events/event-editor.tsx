@@ -23,6 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect, type SearchableSelectOption } from "@/components/inventory/searchable-select";
+import { EventBandPaymentSection } from "@/components/events/event-band-payment-section";
 import { EventPullList, mapPullListRow, type PullListItemDraft } from "@/components/events/event-pull-list";
 import { EventTimelineScheduler, type TimelineBlockDraft } from "@/components/events/event-timeline-scheduler";
 import { EventScheduleCrewAssignPanel } from "@/components/events/event-availability-summary";
@@ -1121,6 +1122,8 @@ export function EventEditor({
           </CardContent>
         </Card>
       ) : null}
+
+      {resolvedActiveTab === "overview" && eventId ? <EventBandPaymentSection eventId={eventId} /> : null}
 
       {resolvedActiveTab === "schedule" ? (
         <Card>

@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { UserRatesAdminClient } from "@/components/users/user-rates-admin-client";
+import { BandHeroUploadField } from "@/components/files/file-upload-field";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import {
@@ -95,6 +96,10 @@ function bandOrgValuesFromRow(org: BandOrgRow): BandOrgProfileFormValues {
     displayName: org.displayName ?? "",
     bio: org.bio ?? "",
     performerHourlyRateUsd: String(org.performerHourlyRateUsd ?? 0),
+    designatedPayeeUserId: org.designatedPayeeUserId ?? "",
+    designatedPayeeName: org.designatedPayeeName ?? "",
+    designatedPayeeEmail: org.designatedPayeeEmail ?? "",
+    designatedPayeeMailingAddress: org.designatedPayeeMailingAddress ?? "",
     publicWebsiteUrl: org.publicWebsiteUrl ?? "",
     publicInstagramUrl: org.publicInstagramUrl ?? "",
     publicYoutubeUrl: org.publicYoutubeUrl ?? "",
@@ -876,6 +881,10 @@ function BandOrgAdminRow({
       displayName: values.displayName || undefined,
       bio: values.bio || undefined,
       performerHourlyRateUsd: Number(values.performerHourlyRateUsd || "0"),
+      designatedPayeeUserId: values.designatedPayeeUserId || undefined,
+      designatedPayeeName: values.designatedPayeeName || undefined,
+      designatedPayeeEmail: values.designatedPayeeEmail || undefined,
+      designatedPayeeMailingAddress: values.designatedPayeeMailingAddress || undefined,
       publicWebsiteUrl: values.publicWebsiteUrl || undefined,
       publicInstagramUrl: values.publicInstagramUrl || undefined,
       publicYoutubeUrl: values.publicYoutubeUrl || undefined,
@@ -974,6 +983,33 @@ function BandOrgAdminRow({
               value={form.watch("bio")}
               onChange={(e) => form.setValue("bio", e.target.value, { shouldDirty: true })}
             />
+            <div className="mt-3 space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">Payment payee</p>
+              <div className="grid gap-2 md:grid-cols-2">
+                <Input
+                  placeholder="Payee name"
+                  value={form.watch("designatedPayeeName")}
+                  onChange={(e) =>
+                    form.setValue("designatedPayeeName", e.target.value, { shouldDirty: true })
+                  }
+                />
+                <Input
+                  placeholder="Payee email"
+                  value={form.watch("designatedPayeeEmail")}
+                  onChange={(e) =>
+                    form.setValue("designatedPayeeEmail", e.target.value, { shouldDirty: true })
+                  }
+                />
+              </div>
+              <textarea
+                className="min-h-20 w-full rounded-md border bg-background px-3 py-2 text-sm"
+                placeholder="Mailing address"
+                value={form.watch("designatedPayeeMailingAddress")}
+                onChange={(e) =>
+                  form.setValue("designatedPayeeMailingAddress", e.target.value, { shouldDirty: true })
+                }
+              />
+            </div>
             <div className="mt-3 grid gap-2 md:grid-cols-2">
               <label className="flex items-center gap-2 text-xs">
                 <input
@@ -990,14 +1026,16 @@ function BandOrgAdminRow({
                 value={form.watch("publicSlug")}
                 onChange={(e) => form.setValue("publicSlug", e.target.value, { shouldDirty: true })}
               />
-              <Input
-                placeholder="Hero image URL"
-                value={form.watch("publicHeroImageUrl")}
-                onChange={(e) =>
-                  form.setValue("publicHeroImageUrl", e.target.value, { shouldDirty: true })
-                }
-                className="md:col-span-2"
-              />
+              <div className="md:col-span-2">
+                <BandHeroUploadField
+                  organizationId={org.organizationId}
+                  currentUrl={form.watch("publicHeroImageUrl")}
+                  urlValue={form.watch("publicHeroImageUrl")}
+                  onUploaded={(url) => form.setValue("publicHeroImageUrl", url, { shouldDirty: true })}
+                  onUrlChange={(url) => form.setValue("publicHeroImageUrl", url, { shouldDirty: true })}
+                  onClear={() => form.setValue("publicHeroImageUrl", "", { shouldDirty: true })}
+                />
+              </div>
             </div>
           </td>
         </tr>

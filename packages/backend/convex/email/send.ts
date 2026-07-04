@@ -9,7 +9,7 @@ import { internalAction } from "../_generated/server";
 import { renderInvoicePdfBuffer } from "@arbor/invoice-document/pdf";
 import { buildScheduleIcs } from "@arbor/email/ics";
 import type { CrewScheduledEmailPayload } from "@arbor/email/types";
-import { EMAIL_FROM, ORGANIZER_EMAIL } from "./constants";
+import { EMAIL_FROM, ORGANIZER_EMAIL, PAYMENTS_EMAIL_FROM } from "./constants";
 import { renderEmailHtml } from "./templates";
 
 export const resendClient = new Resend(components.resend, {
@@ -168,8 +168,14 @@ export const sendQueuedEmail = internalAction({
         return null;
       }
 
+      const fromAddress =
+        notification.template === "band_payment_confirmation" ||
+        notification.template === "band_payment_completed"
+          ? PAYMENTS_EMAIL_FROM
+          : EMAIL_FROM;
+
       const resendId = await resendClient.sendEmail(ctx, {
-        from: EMAIL_FROM,
+        from: fromAddress,
         to: notification.to,
         cc: notification.cc,
         replyTo: notification.replyTo,

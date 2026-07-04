@@ -8,6 +8,9 @@ import {
   renderPaymentProofReminderEmail,
   renderPaymentProofSubmittedEmail,
   renderPayingPartyAddedEmail,
+  renderBandPaymentConfirmationEmail,
+  renderBandPaymentCompletedEmail,
+  renderBandPaymentPayeeRequiredEmail,
   renderCrewScheduledEmail,
   renderSchedulePublishedEmail,
   renderScheduleReminderEmail,
@@ -23,6 +26,9 @@ import type {
   PaymentProofReminderEmailProps,
   PaymentProofSubmittedEmailProps,
   PayingPartyAddedEmailProps,
+  BandPaymentConfirmationEmailProps,
+  BandPaymentCompletedEmailProps,
+  BandPaymentPayeeRequiredEmailProps,
   CrewScheduledEmailProps,
   SchedulePublishedEmailProps,
   ScheduleReminderEmailProps,
@@ -58,5 +64,11 @@ export async function renderEmailHtml(template: EmailTemplate, payload: unknown)
       return renderPaymentProofSubmittedEmail(payload as PaymentProofSubmittedEmailProps);
     case "paying_party_added":
       return renderPayingPartyAddedEmail(payload as PayingPartyAddedEmailProps);
+    case "band_payment_confirmation":
+      return renderBandPaymentConfirmationEmail(payload as BandPaymentConfirmationEmailProps);
+    case "band_payment_completed":
+      return renderBandPaymentCompletedEmail(payload as BandPaymentCompletedEmailProps);
+    case "band_payment_payee_required":
+      return renderBandPaymentPayeeRequiredEmail(payload as BandPaymentPayeeRequiredEmailProps);
   }
 }

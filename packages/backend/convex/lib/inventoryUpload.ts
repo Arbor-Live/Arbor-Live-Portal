@@ -123,6 +123,16 @@ export function buildMarketingPostContentObjectKey(args: {
   return `marketing/posts/${postSegment}/content/${args.uploadId}-${safeName}`;
 }
 
+export function buildBandHeroObjectKey(args: {
+  organizationId: string;
+  fileName: string;
+  uploadId: string;
+}): string {
+  const orgSegment = args.organizationId.trim() || `draft/${args.uploadId}`;
+  const safeName = sanitizeInventoryFileName(args.fileName);
+  return `organizations/bands/${orgSegment}/hero/${args.uploadId}-${safeName}`;
+}
+
 export function validateMarketingHeroUploadRequest(args: {
   fileName: string;
   contentType: string;
@@ -259,7 +269,8 @@ export function parseStoredR2Asset(
     value.startsWith("inventory/") ||
     value.startsWith("events/") ||
     value.startsWith("users/") ||
-    value.startsWith("marketing/")
+    value.startsWith("marketing/") ||
+    value.startsWith("organizations/")
   ) {
     return { kind: "r2", key: value };
   }

@@ -3,8 +3,9 @@ import { v } from "convex/values";
 import { components } from "./_generated/api";
 import type { DataModel } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
-import { requireAdmin, requireAuth } from "./lib/auth";
+import { requireAdmin, requireAuth, requireBandContext, isAdmin } from "./lib/auth";
 import {
+  buildBandHeroObjectKey,
   buildEventArtifactObjectKey,
   buildInventoryObjectKey,
   buildMarketingPostContentObjectKey,
@@ -49,7 +50,12 @@ export const { syncMetadata, getMetadata } = inventoryR2.clientApi<DataModel>({
   },
 });
 
-const uploadScopeValue = v.union(v.literal("inventory"), v.literal("event"), v.literal("marketing"));
+const uploadScopeValue = v.union(
+  v.literal("inventory"),
+  v.literal("event"),
+  v.literal("marketing"),
+  v.literal("organization"),
+);
 
 const inventoryPurposeValue = v.union(
   v.literal("hero"),
@@ -69,6 +75,7 @@ export const generateR2UploadUrl = mutation({
     entityId: v.optional(v.string()),
     eventId: v.optional(v.id("events")),
     postId: v.optional(v.string()),
+    organizationId: v.optional(v.string()),
     marketingImageKind: v.optional(marketingImageKindValue),
     fileName: v.string(),
     contentType: v.string(),
@@ -86,7 +93,28 @@ export const generateR2UploadUrl = mutation({
     if (!uploadId) throw new Error("Upload id is required.");
 
     let key: string;
-    if (args.scope === "marketing") {
+    if (args.scope === "organization") {
+      if (!args.organizationId?.trim()) {
+        throw new Error("Organization id is required for band hero uploads.");
+      }
+      const user = await requireAuth(ctx);
+      if (!isAdmin(user)) {
+        const bandContext = await requireBandContext(ctx);
+        if (bandContext.organizationId !== args.organizationId.trim()) {
+          throw new Error("You can only upload hero images for your active band.");
+        }
+      }
+      validateMarketingHeroUploadRequest({
+        fileName: args.fileName,
+        contentType: args.contentType,
+        contentLength: args.contentLength,
+      });
+      key = buildBandHeroObjectKey({
+        organizationId: args.organizationId,
+        fileName: args.fileName,
+        uploadId,
+      });
+    } else if (args.scope === "marketing") {
       await requireAdmin(ctx);
       validateMarketingHeroUploadRequest({
         fileName: args.fileName,
