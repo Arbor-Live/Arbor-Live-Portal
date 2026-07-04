@@ -116,6 +116,46 @@ async function refreshPayeeSnapshot(
   };
 }
 
+async function getEffectivePayeeForPayment(
+  ctx: QueryCtx | MutationCtx,
+  payment: Doc<"eventBandPayments">,
+) {
+  const orgPayee = await getOrganizationProfilePayee(ctx, payment.organizationId);
+  return resolvePayeeSnapshot(orgPayee, payeeFieldsFromProfile(payment));
+}
+
+async function syncPayeeFromOrganizationForPayment(
+  ctx: MutationCtx,
+  payment: Doc<"eventBandPayments">,
+  nowMs: number,
+): Promise<Doc<"eventBandPayments">> {
+  if (payment.status !== "pending_payee" && payment.status !== "draft") {
+    return payment;
+  }
+  const payeeSnapshot = await refreshPayeeSnapshot(ctx, payment.organizationId);
+  const patch = {
+    designatedPayeeName: payeeSnapshot.designatedPayeeName,
+    designatedPayeeEmail: payeeSnapshot.designatedPayeeEmail,
+    designatedPayeeUserId: payeeSnapshot.designatedPayeeUserId,
+    designatedPayeeMailingAddress: payeeSnapshot.designatedPayeeMailingAddress,
+    updatedAt: nowMs,
+  };
+  if (payment.status === "pending_payee" && payeeSnapshot.payeeComplete) {
+    await ctx.db.patch(payment._id, { ...patch, status: "pending_email" as const });
+    return (await ctx.db.get(payment._id))!;
+  }
+  const needsPatch =
+    payment.designatedPayeeName !== patch.designatedPayeeName ||
+    payment.designatedPayeeEmail !== patch.designatedPayeeEmail ||
+    payment.designatedPayeeUserId !== patch.designatedPayeeUserId ||
+    payment.designatedPayeeMailingAddress !== patch.designatedPayeeMailingAddress;
+  if (needsPatch) {
+    await ctx.db.patch(payment._id, patch);
+    return (await ctx.db.get(payment._id))!;
+  }
+  return payment;
+}
+
 function computeNextStatus(args: {
   existing: Doc<"eventBandPayments"> | null;
   event: Doc<"events">;
@@ -141,7 +181,7 @@ async function buildBandPaymentRow(
   event: Doc<"events">,
   nowMs: number,
 ) {
-  const payeeSnapshot = payeeFieldsFromProfile(payment);
+  const effectivePayee = await getEffectivePayeeForPayment(ctx, payment);
   return {
     _id: payment._id,
     eventId: payment.eventId,
@@ -155,11 +195,11 @@ async function buildBandPaymentRow(
     performanceHours: payment.performanceHours,
     memberCount: payment.memberCount,
     totalUsd: payment.totalUsd,
-    designatedPayeeName: payment.designatedPayeeName,
-    designatedPayeeEmail: payment.designatedPayeeEmail,
-    designatedPayeeUserId: payment.designatedPayeeUserId,
-    designatedPayeeMailingAddress: payment.designatedPayeeMailingAddress,
-    payeeComplete: isBandPayeeComplete(payeeSnapshot),
+    designatedPayeeName: effectivePayee.designatedPayeeName,
+    designatedPayeeEmail: effectivePayee.designatedPayeeEmail,
+    designatedPayeeUserId: effectivePayee.designatedPayeeUserId,
+    designatedPayeeMailingAddress: effectivePayee.designatedPayeeMailingAddress,
+    payeeComplete: isBandPayeeComplete(effectivePayee),
     status: payment.status,
     statusLabel: bandPaymentStatusLabel(payment.status),
     confirmationToken: payment.confirmationToken,
@@ -289,19 +329,24 @@ export const updateSettings = mutation({
   },
 });
 
-export const getByEvent = query({
+export const listByEvent = query({
   args: { eventId: v.id("events") },
-  returns: v.union(bandPaymentRowValidator, v.null()),
+  returns: v.array(bandPaymentRowValidator),
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     const event = await ctx.db.get(args.eventId);
-    if (!event) return null;
-    const payment = await ctx.db
+    if (!event) return [];
+    const payments = await ctx.db
       .query("eventBandPayments")
       .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
-      .first();
-    if (!payment) return null;
-    return await buildBandPaymentRow(ctx, payment, event, Date.now());
+      .take(50);
+    const nowMs = Date.now();
+    const rows = [];
+    for (const payment of payments) {
+      if (payment.status === "cancelled") continue;
+      rows.push(await buildBandPaymentRow(ctx, payment, event, nowMs));
+    }
+    return rows.sort((a, b) => a.bandName.localeCompare(b.bandName));
   },
 });
 
@@ -369,6 +414,7 @@ export const getQueueCounts = query({
 export const upsertForEvent = mutation({
   args: {
     eventId: v.id("events"),
+    paymentId: v.optional(v.id("eventBandPayments")),
     organizationId: v.string(),
     pricingMode: pricingModeValue,
     ratePerMemberPerHourUsd: v.optional(v.number()),
@@ -396,10 +442,38 @@ export const upsertForEvent = mutation({
 
     const now = Date.now();
     const settings = await getBandPaymentSettings(ctx);
-    const existing = await ctx.db
-      .query("eventBandPayments")
-      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
-      .first();
+
+    let existing: Doc<"eventBandPayments"> | null = null;
+    if (args.paymentId) {
+      const payment = await ctx.db.get(args.paymentId);
+      if (!payment || payment.eventId !== args.eventId) {
+        throw new Error("Band payment not found.");
+      }
+      existing = payment;
+    } else {
+      existing = await ctx.db
+        .query("eventBandPayments")
+        .withIndex("by_eventId_and_organizationId", (q) =>
+          q.eq("eventId", args.eventId).eq("organizationId", args.organizationId),
+        )
+        .unique();
+    }
+
+    if (
+      existing &&
+      args.paymentId &&
+      existing.organizationId !== args.organizationId
+    ) {
+      const duplicate = await ctx.db
+        .query("eventBandPayments")
+        .withIndex("by_eventId_and_organizationId", (q) =>
+          q.eq("eventId", args.eventId).eq("organizationId", args.organizationId),
+        )
+        .unique();
+      if (duplicate && duplicate._id !== existing._id && duplicate.status !== "cancelled") {
+        throw new Error("This band is already linked to the event.");
+      }
+    }
 
     const payeeSnapshot = await refreshPayeeSnapshot(ctx, args.organizationId, {
       designatedPayeeName: args.designatedPayeeName,
@@ -408,7 +482,7 @@ export const upsertForEvent = mutation({
     });
 
     const nextStatus = computeNextStatus({
-      existing: existing ?? null,
+      existing: existing?.status === "cancelled" ? null : existing,
       event,
       nowMs: now,
       payeeComplete: payeeSnapshot.payeeComplete,
@@ -488,20 +562,48 @@ export const listByQueue = query({
   },
 });
 
+export const syncStalePayeePayments = mutation({
+  args: {},
+  returns: v.number(),
+  handler: async (ctx) => {
+    await requireArborInternalContext(ctx);
+    const now = Date.now();
+    const pending = await ctx.db
+      .query("eventBandPayments")
+      .withIndex("by_status", (q) => q.eq("status", "pending_payee"))
+      .take(500);
+    let updated = 0;
+    for (const payment of pending) {
+      const synced = await syncPayeeFromOrganizationForPayment(ctx, payment, now);
+      if (
+        synced.status !== payment.status ||
+        synced.designatedPayeeName !== payment.designatedPayeeName ||
+        synced.designatedPayeeEmail !== payment.designatedPayeeEmail ||
+        synced.designatedPayeeMailingAddress !== payment.designatedPayeeMailingAddress
+      ) {
+        updated += 1;
+      }
+    }
+    return updated;
+  },
+});
+
 export const sendConfirmationEmail = mutation({
   args: { paymentId: v.id("eventBandPayments") },
   returns: v.null(),
   handler: async (ctx, args) => {
     await requireArborInternalContext(ctx);
-    const payment = await ctx.db.get(args.paymentId);
-    if (!payment) throw new Error("Band payment not found.");
+    const existing = await ctx.db.get(args.paymentId);
+    if (!existing) throw new Error("Band payment not found.");
+    const payment = await syncPayeeFromOrganizationForPayment(ctx, existing, Date.now());
     if (payment.status === "paid" || payment.status === "cancelled") {
       throw new Error("This payment is no longer active.");
     }
     if (payment.status !== "pending_email" && payment.status !== "awaiting_confirmation") {
       throw new Error("Confirmation email can only be sent from the payment queue.");
     }
-    if (!isBandPayeeComplete(payeeFieldsFromProfile(payment))) {
+    const effectivePayee = await getEffectivePayeeForPayment(ctx, payment);
+    if (!isBandPayeeComplete(effectivePayee)) {
       throw new Error("Designated payee name, email, and mailing address are required before sending.");
     }
 
@@ -651,24 +753,18 @@ export const refreshPendingPayeePaymentsForOrg = internalMutation({
       .query("eventBandPayments")
       .withIndex("by_organizationId", (q) => q.eq("organizationId", args.organizationId))
       .take(200);
-    const payeeSnapshot = await refreshPayeeSnapshot(ctx, args.organizationId);
     let updated = 0;
     for (const payment of payments) {
       if (payment.status !== "pending_payee" && payment.status !== "draft") continue;
-      const patch = {
-        designatedPayeeName: payeeSnapshot.designatedPayeeName,
-        designatedPayeeEmail: payeeSnapshot.designatedPayeeEmail,
-        designatedPayeeUserId: payeeSnapshot.designatedPayeeUserId,
-        designatedPayeeMailingAddress: payeeSnapshot.designatedPayeeMailingAddress,
-        updatedAt: now,
-      };
-      if (payment.status === "pending_payee" && payeeSnapshot.payeeComplete) {
-        await ctx.db.patch(payment._id, { ...patch, status: "pending_email" as const });
+      const synced = await syncPayeeFromOrganizationForPayment(ctx, payment, now);
+      if (
+        synced.status !== payment.status ||
+        synced.designatedPayeeName !== payment.designatedPayeeName ||
+        synced.designatedPayeeEmail !== payment.designatedPayeeEmail ||
+        synced.designatedPayeeMailingAddress !== payment.designatedPayeeMailingAddress
+      ) {
         updated += 1;
-        continue;
       }
-      await ctx.db.patch(payment._id, patch);
-      updated += 1;
     }
     return updated;
   },
