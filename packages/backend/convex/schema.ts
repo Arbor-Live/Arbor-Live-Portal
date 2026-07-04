@@ -147,6 +147,16 @@ const eventPullListSourceValue = v.union(
 
 const eventPullListLineKindValue = v.union(v.literal("type"), v.literal("package"));
 
+const immichAlbumEntityTypeValue = v.union(v.literal("band"), v.literal("event"));
+
+const immichAssetTypeValue = v.union(v.literal("IMAGE"), v.literal("VIDEO"));
+
+const eventBandParticipationRoleValue = v.union(
+  v.literal("headliner"),
+  v.literal("support"),
+  v.literal("other"),
+);
+
 const paymentProofMethodValue = v.union(
   v.literal("assu_epay"),
   v.literal("ijournal"),
@@ -744,6 +754,38 @@ export default defineSchema({
     .index("by_eventId", ["eventId"])
     .index("by_artifactType", ["artifactType"])
     .index("by_eventId_and_artifactType", ["eventId", "artifactType"]),
+
+  immichAlbumLinks: defineTable({
+    entityType: immichAlbumEntityTypeValue,
+    entityId: v.string(),
+    immichAlbumId: v.string(),
+    albumName: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_entityType_and_entityId", ["entityType", "entityId"])
+    .index("by_immichAlbumId", ["immichAlbumId"]),
+
+  immichAssetRecords: defineTable({
+    albumLinkId: v.id("immichAlbumLinks"),
+    immichAssetId: v.string(),
+    originalFileName: v.string(),
+    type: immichAssetTypeValue,
+    createdAt: v.number(),
+  })
+    .index("by_albumLinkId", ["albumLinkId"])
+    .index("by_immichAssetId", ["immichAssetId"]),
+
+  eventBandParticipations: defineTable({
+    eventId: v.id("events"),
+    organizationId: v.string(),
+    role: eventBandParticipationRoleValue,
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_eventId", ["eventId"])
+    .index("by_organizationId", ["organizationId"])
+    .index("by_eventId_and_organizationId", ["eventId", "organizationId"]),
 
   // Phase 2: eventPullListAssetAssignments (pullListItemId, inventoryItemId, checkedOutAt)
   pendingUserInvites: defineTable({
