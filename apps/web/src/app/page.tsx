@@ -5,6 +5,7 @@ import { LandingHero } from "@/components/landing/landing-hero";
 import { LandingLayout } from "@/components/landing/landing-layout";
 import { LandingPrograms } from "@/components/landing/landing-programs";
 import { LandingStats } from "@/components/landing/landing-stats";
+import { LandingWorkCarousel } from "@/components/marketing/public-work-carousel";
 import { isAuthenticated } from "@/lib/auth-server";
 
 export default async function Home() {
@@ -13,6 +14,7 @@ export default async function Home() {
   return (
     <LandingLayout showDashboardLink={authed}>
       <LandingHero />
+      <LandingWorkCarousel />
       <LandingPrograms />
       <LandingStats />
       <LandingEventTypes />

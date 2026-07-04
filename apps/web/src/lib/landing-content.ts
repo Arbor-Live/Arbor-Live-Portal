@@ -156,6 +156,7 @@ export const landingFaqs: LandingFaq[] = [
 
 export const landingNavLinks: LandingLink[] = [
   { label: "Programs", href: "/#programs" },
+  { label: "Work", href: "/work" },
   { label: "Crew", href: "/crew" },
   { label: "Artists", href: "/artists" },
   { label: "Equipment", href: "/public/packages" },
@@ -163,6 +164,7 @@ export const landingNavLinks: LandingLink[] = [
 ];
 
 export const landingFooterLinks: LandingLink[] = [
+  { label: "Our Work", href: "/work" },
   { label: "The Team", href: "/crew" },
   { label: "Artists", href: "/artists" },
   { label: "Book Us", href: "/public/request" },

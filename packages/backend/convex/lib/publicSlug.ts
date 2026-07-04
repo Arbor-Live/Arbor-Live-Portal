@@ -23,3 +23,18 @@ export async function assertUniqueBandPublicSlug(
     throw new Error("Public slug is already in use by another artist profile.");
   }
 }
+
+export async function assertUniqueMarketingPostSlug(
+  ctx: MutationCtx | QueryCtx,
+  slug: string | undefined,
+  excludePostId?: import("../_generated/dataModel").Id<"marketingPosts">,
+) {
+  if (!slug) return;
+  const match = await ctx.db
+    .query("marketingPosts")
+    .withIndex("by_slug", (q) => q.eq("slug", slug))
+    .unique();
+  if (match && (!excludePostId || match._id !== excludePostId)) {
+    throw new Error("Public slug is already in use by another post.");
+  }
+}

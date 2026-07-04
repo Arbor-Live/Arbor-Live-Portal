@@ -102,6 +102,13 @@ const userTeamValue = v.union(
 );
 const organizationTypeValue = v.union(v.literal("arbor_internal"), v.literal("band"));
 
+const marketingPostKindValue = v.union(v.literal("case_study"), v.literal("blog"));
+
+const marketingFeaturedStatValue = v.object({
+  label: v.string(),
+  value: v.string(),
+});
+
 const eventArtifactTypeValue = v.union(
   v.literal("note"),
   v.literal("instruction"),
@@ -872,4 +879,23 @@ export default defineSchema({
     .index("by_eventId", ["eventId"])
     .index("by_eventId_and_sortOrder", ["eventId", "sortOrder"])
     .index("by_packageId", ["packageId"]),
+
+  marketingPosts: defineTable({
+    title: v.string(),
+    slug: v.optional(v.string()),
+    excerpt: v.optional(v.string()),
+    kind: marketingPostKindValue,
+    heroImageUrl: v.optional(v.string()),
+    featuredStats: v.optional(v.array(marketingFeaturedStatValue)),
+    contentJson: v.string(),
+    published: v.boolean(),
+    featured: v.boolean(),
+    publishedAt: v.optional(v.number()),
+    updatedByUserId: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_slug", ["slug"])
+    .index("by_published_and_publishedAt", ["published", "publishedAt"])
+    .index("by_published_and_featured", ["published", "featured"]),
 });
