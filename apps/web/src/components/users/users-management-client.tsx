@@ -81,6 +81,7 @@ function userValuesFromRow(user: AdminUser, resolvedOrgId: string): UserAdminRow
     role: user.role || "member",
     active: user.active,
     showOnPublicCrewPage: user.showOnPublicCrewPage ?? false,
+    publicCrewDescription: user.publicCrewDescription ?? "",
     title: user.title || "",
     phone: user.phone || "",
     hourlyRateUsd: (user.hourlyRateUsd ?? 0).toString(),
@@ -549,6 +550,7 @@ function UserAdminRow({
       role: values.role,
       active: values.active,
       showOnPublicCrewPage: values.showOnPublicCrewPage,
+      publicCrewDescription: values.publicCrewDescription || undefined,
       title: values.title || undefined,
       phone: values.phone || undefined,
       teams: values.teams,
@@ -744,9 +746,9 @@ function UserAdminRow({
                   ))}
                 </div>
               </div>
-              <div className="rounded-md border p-2">
-                <p className="mb-2 text-xs font-medium">Public profile</p>
-                <label className="flex items-center gap-2 text-xs">
+              <div className="rounded-md border p-2 md:col-span-2">
+                <p className="mb-2 text-xs font-medium">Public crew page</p>
+                <label className="mb-3 flex items-center gap-2 text-xs">
                   <input
                     type="checkbox"
                     checked={form.watch("showOnPublicCrewPage")}
@@ -756,6 +758,23 @@ function UserAdminRow({
                   />
                   Show on public crew page
                 </label>
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <Label htmlFor={`public-crew-description-${user.id}`} className="text-xs">
+                      Description
+                    </Label>
+                    <textarea
+                      id={`public-crew-description-${user.id}`}
+                      rows={3}
+                      value={form.watch("publicCrewDescription")}
+                      onChange={(e) =>
+                        form.setValue("publicCrewDescription", e.target.value, { shouldDirty: true })
+                      }
+                      placeholder="Short bio shown on the public crew page."
+                      className="flex min-h-[72px] w-full rounded-md border border-input bg-background px-3 py-2 text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    />
+                  </div>
+                </div>
               </div>
               <div className="rounded-md border p-2">
                 <p className="mb-2 text-xs font-medium">Organization Memberships</p>

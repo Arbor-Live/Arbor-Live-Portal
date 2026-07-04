@@ -223,7 +223,7 @@ export function parseStoredR2Asset(
     const key = value.slice(R2_ASSET_PREFIX.length).trim();
     return key ? { kind: "r2", key } : null;
   }
-  if (value.startsWith("inventory/") || value.startsWith("events/")) {
+  if (value.startsWith("inventory/") || value.startsWith("events/") || value.startsWith("users/")) {
     return { kind: "r2", key: value };
   }
   return null;

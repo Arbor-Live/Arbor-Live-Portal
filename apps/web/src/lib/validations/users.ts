@@ -10,6 +10,7 @@ export const userAdminRowSchema = z.object({
   role: z.string(),
   active: z.boolean(),
   showOnPublicCrewPage: z.boolean(),
+  publicCrewDescription: z.string(),
   title: z.string(),
   phone: z.string(),
   hourlyRateUsd: z.string(),

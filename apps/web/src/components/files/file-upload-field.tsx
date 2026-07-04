@@ -59,8 +59,7 @@ function R2UploadField({
     storedValue && isImageAssetReference(storedValue) && resolvedPreviewUrl,
   );
 
-  const purpose =
-    uploadArgs.scope === "event" ? "artifact" : uploadArgs.purpose;
+  const purpose = uploadArgs.scope === "event" ? "artifact" : uploadArgs.purpose;
   const resolvedAccept = accept ?? defaultAcceptForPurpose(purpose);
 
   const handleFile = useCallback(
