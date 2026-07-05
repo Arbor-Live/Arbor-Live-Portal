@@ -24,6 +24,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect, type SearchableSelectOption } from "@/components/inventory/searchable-select";
 import { EventBandPaymentSection } from "@/components/events/event-band-payment-section";
+import { EventMediaSection } from "@/components/events/event-media-section";
 import { EventPullList, mapPullListRow, type PullListItemDraft } from "@/components/events/event-pull-list";
 import { EventTimelineScheduler, type TimelineBlockDraft } from "@/components/events/event-timeline-scheduler";
 import { EventScheduleCrewAssignPanel } from "@/components/events/event-availability-summary";
@@ -1503,6 +1504,21 @@ export function EventEditor({
             </div>
           </CardContent>
         </Card>
+      ) : null}
+
+      {resolvedActiveTab === "media" ? (
+        !currentEventId ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Media</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">Save the event first to manage media.</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <EventMediaSection eventId={currentEventId} />
+        )
       ) : null}
 
       {resolvedActiveTab === "expenses" ? (

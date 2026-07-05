@@ -71,20 +71,45 @@ if (r2PublicBaseUrl) {
   }
 }
 
+const immichPublicBaseUrl = process.env.NEXT_PUBLIC_IMMICH_URL?.trim();
+let immichImageHostname: string | undefined;
+if (immichPublicBaseUrl) {
+  try {
+    immichImageHostname = new URL(immichPublicBaseUrl).hostname;
+  } catch {
+    immichImageHostname = undefined;
+  }
+}
+
+const imageRemotePatterns = [
+  ...(r2ImageHostname
+    ? [
+        {
+          protocol: "https" as const,
+          hostname: r2ImageHostname,
+          pathname: "/**",
+        },
+      ]
+    : []),
+  ...(immichImageHostname
+    ? [
+        {
+          protocol: "https" as const,
+          hostname: immichImageHostname,
+          pathname: "/**",
+        },
+      ]
+    : []),
+];
+
 const nextConfig: NextConfig = {
   transpilePackages: ["backend", "@arbor/invoice-document"],
   turbopack: {
     root: repoRoot,
   },
-  images: r2ImageHostname
+  images: imageRemotePatterns.length
     ? {
-        remotePatterns: [
-          {
-            protocol: "https",
-            hostname: r2ImageHostname,
-            pathname: "/**",
-          },
-        ],
+        remotePatterns: imageRemotePatterns,
       }
     : undefined,
   env: {

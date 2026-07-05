@@ -31,6 +31,7 @@ import {
   scheduleBandPaymentConfirmationEmail,
   scheduleBandPaymentPayeeRequiredEmail,
 } from "./email/bandPaymentEmails";
+import { upsertEventBandParticipation } from "./eventBands";
 
 const pricingModeValue = v.union(v.literal("per_member_hourly"), v.literal("fixed_total"));
 const statusValue = v.union(
@@ -510,6 +511,11 @@ export const upsertForEvent = mutation({
       }
       await ctx.db.patch(existing._id, payload);
       await syncEventBandsCost(ctx, args.eventId);
+      await upsertEventBandParticipation(ctx, {
+        eventId: args.eventId,
+        organizationId: args.organizationId,
+        role: "headliner",
+      });
       return existing._id;
     }
 
@@ -519,6 +525,11 @@ export const upsertForEvent = mutation({
       createdAt: now,
     });
     await syncEventBandsCost(ctx, args.eventId);
+    await upsertEventBandParticipation(ctx, {
+      eventId: args.eventId,
+      organizationId: args.organizationId,
+      role: "headliner",
+    });
     return paymentId;
   },
 });
