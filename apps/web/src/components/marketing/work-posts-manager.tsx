@@ -25,18 +25,22 @@ import { useConvexForm } from "@/hooks/use-convex-form";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import {
   featuredStatPresets,
+  formatPublishedAtInput,
   marketingPostFormSchema,
   marketingPostKindLabels,
+  parsePublishedAtInput,
   slugifyTitle,
   type MarketingPostFormValues,
 } from "@/lib/validations/marketing";
 import { cn } from "@/lib/utils";
+import { DatePickerField } from "@/components/ui/date-picker";
 
 const defaultValues: MarketingPostFormValues = {
   title: "",
   slug: "",
   excerpt: "",
   kind: "case_study",
+  publishedAt: "",
   heroImageUrl: "",
   featuredStats: [],
   contentJson: EMPTY_LEXICAL_STATE,
@@ -89,6 +93,7 @@ export function WorkPostsManager() {
       slug: post.slug,
       excerpt: post.excerpt,
       kind: post.kind,
+      publishedAt: formatPublishedAtInput(post.publishedAt),
       heroImageUrl: post.heroImageUrl,
       featuredStats: post.featuredStats ?? [],
       contentJson: post.contentJson,
@@ -113,6 +118,7 @@ export function WorkPostsManager() {
 
   const onSave = form.submitMutation(
     async (values) => {
+      const publishedAt = parsePublishedAtInput(values.publishedAt);
       if (selectedId) {
         await updatePost({
           id: selectedId as Id<"marketingPosts">,
@@ -120,6 +126,7 @@ export function WorkPostsManager() {
           slug: values.slug || undefined,
           excerpt: values.excerpt || undefined,
           kind: values.kind,
+          publishedAt,
           heroImageUrl: values.heroImageUrl || undefined,
           featuredStats: values.featuredStats,
           contentJson: values.contentJson,
@@ -134,6 +141,7 @@ export function WorkPostsManager() {
         slug: values.slug || undefined,
         excerpt: values.excerpt || undefined,
         kind: values.kind,
+        publishedAt,
         heroImageUrl: values.heroImageUrl || undefined,
         featuredStats: values.featuredStats,
         contentJson: values.contentJson,
@@ -239,6 +247,22 @@ export function WorkPostsManager() {
                 )}
               />
               <TextareaFormField name="excerpt" label="Excerpt" />
+
+              {form.watch("kind") === "case_study" ? (
+                <div className="space-y-2">
+                  <Label>Case study date</Label>
+                  <DatePickerField
+                    value={form.watch("publishedAt")}
+                    onChange={(value) =>
+                      form.setValue("publishedAt", value, { shouldDirty: true })
+                    }
+                    placeholder="Select date"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Shown on the public case study page. Defaults to today when you first publish.
+                  </p>
+                </div>
+              ) : null}
 
               <div className="space-y-2">
                 <Label>Type</Label>

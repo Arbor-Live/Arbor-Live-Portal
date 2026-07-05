@@ -26,6 +26,7 @@ import {
 import { useEffect, useRef, useState, type ReactElement } from "react";
 import { Input } from "@/components/ui/input";
 import { useR2FileUpload } from "@/hooks/use-r2-file-upload";
+import { ImmichImportButton } from "@/components/marketing/immich-library-picker";
 import { useMarketingEditorChange } from "@/components/editor/lexical-editor-context";
 import { api } from "@/lib/convex-api";
 import { R2_ASSET_PREFIX } from "@/lib/r2-assets";
@@ -318,6 +319,20 @@ export function InsertImageButton({
         >
           {busy ? "Uploading…" : "Image"}
         </button>
+        <ImmichImportButton
+          postId={postId}
+          imageKind="content"
+          disabled={disabled || busy}
+          className="h-8 rounded-none px-2 text-xs"
+          onImported={(storedReference, originalFileName) => {
+            editor.update(() => {
+              insertImageNode(
+                storedReference,
+                originalFileName.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").trim(),
+              );
+            });
+          }}
+        />
       </div>
       {error ? <p className="max-w-xs text-[11px] text-destructive">{error}</p> : null}
     </div>

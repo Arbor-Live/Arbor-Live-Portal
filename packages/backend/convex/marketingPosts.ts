@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalQuery, mutation, query } from "./_generated/server";
 import { getUserId, requireAdmin } from "./lib/auth";
 import { normalizeOptionalAssetReference } from "./lib/inventoryUpload";
 import { normalizeFeaturedStats, resolveLexicalContentJson } from "./lib/marketingContent";
@@ -53,6 +53,15 @@ function sortPostsByRecency<T extends { publishedAt?: number; updatedAt: number 
     return bTime - aTime;
   });
 }
+
+export const assertAdminInternal = internalQuery({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    await requireAdmin(ctx);
+    return null;
+  },
+});
 
 export const listAdmin = query({
   args: {},
@@ -128,8 +137,7 @@ export const create = mutation({
       await assertUniqueMarketingPostSlug(ctx, slug);
     }
 
-    const publishedAt =
-      published ? (args.publishedAt ?? now) : args.publishedAt ?? undefined;
+    const publishedAt = args.publishedAt ?? (published ? now : undefined);
 
     return await ctx.db.insert("marketingPosts", {
       title,
@@ -188,10 +196,8 @@ export const update = mutation({
     let publishedAt = existing.publishedAt;
     if (args.publishedAt !== undefined) {
       publishedAt = args.publishedAt;
-    } else if (published && !existing.published) {
+    } else if (published && !existing.published && publishedAt === undefined) {
       publishedAt = now;
-    } else if (!published) {
-      publishedAt = undefined;
     }
 
     await ctx.db.patch(args.id, {

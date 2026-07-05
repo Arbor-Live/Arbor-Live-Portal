@@ -37,6 +37,10 @@ export const landingHero = {
     "The only student-run live event production company at Stanford. We bring live music and production to every corner of campus.",
   primaryCta: { label: "Book your event", href: "/public/request" },
   secondaryCta: { label: "Explore equipment", href: "/public/packages" },
+  /** H.264 plays in Chrome/Firefox; HEVC is smaller and used on Safari when supported. */
+  backgroundVideoSrc: "/dnm-opti-h264.mp4",
+  backgroundVideoSrcHevc: "/dnm-opti-265.mp4",
+  backgroundVideoCredit: { label: "VEP", href: "https://wearevep.com" },
 } as const;
 
 export const landingMission = {

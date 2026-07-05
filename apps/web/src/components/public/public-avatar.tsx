@@ -22,6 +22,7 @@ export function PublicAvatar({ name, imageUrl, className, size = 96 }: PublicAva
         alt=""
         width={size}
         height={size}
+        sizes={`${size}px`}
         className={cn("rounded-none object-cover ring-1 ring-foreground/10", className)}
         style={{ width: size, height: size }}
       />
