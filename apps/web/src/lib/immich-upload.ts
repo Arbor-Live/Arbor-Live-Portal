@@ -6,9 +6,14 @@ export function inferImmichAssetType(fileName: string, mimeType: string): "IMAGE
   return "IMAGE";
 }
 
-type UploadConfig = {
+export type ImmichUploadConfig = {
   uploadUrl: string;
   shareKey: string;
+};
+
+export type ImmichUploadProgress = {
+  loaded: number;
+  total: number;
 };
 
 const PORTAL_DEVICE_ID = "arbor-live-portal";
@@ -39,7 +44,7 @@ function formatImmichUploadError(message: string) {
   return message || "Upload failed.";
 }
 
-export async function uploadFileToImmichShare(file: File, config: UploadConfig) {
+function buildUploadFormData(file: File) {
   const modifiedAt = new Date(file.lastModified || Date.now());
   const formData = new FormData();
   formData.append("assetData", file, file.name);
@@ -47,29 +52,58 @@ export async function uploadFileToImmichShare(file: File, config: UploadConfig) 
   formData.append("deviceAssetId", createDeviceAssetId(file));
   formData.append("fileCreatedAt", modifiedAt.toISOString());
   formData.append("fileModifiedAt", modifiedAt.toISOString());
+  return formData;
+}
 
-  const response = await fetch(
-    `${config.uploadUrl}?key=${encodeURIComponent(config.shareKey)}`,
-    {
-      method: "POST",
-      body: formData,
-    },
-  );
+export async function uploadFileToImmichShare(
+  file: File,
+  config: ImmichUploadConfig,
+  onProgress?: (progress: ImmichUploadProgress) => void,
+) {
+  const url = `${config.uploadUrl}?key=${encodeURIComponent(config.shareKey)}`;
+  const formData = buildUploadFormData(file);
 
-  if (!response.ok) {
-    const message = await response.text().catch(() => "Upload failed.");
-    throw new Error(formatImmichUploadError(message));
-  }
+  return await new Promise<{
+    immichAssetId: string;
+    originalFileName: string;
+    type: "IMAGE" | "VIDEO";
+  }>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", url);
+    xhr.responseType = "text";
 
-  const uploaded = (await response.json()) as { id?: string; assetId?: string };
-  const assetId = uploaded.id ?? uploaded.assetId;
-  if (!assetId) {
-    throw new Error("Immich did not return an asset id.");
-  }
+    xhr.upload.addEventListener("progress", (event) => {
+      onProgress?.({
+        loaded: event.loaded,
+        total: event.lengthComputable ? event.total : file.size,
+      });
+    });
 
-  return {
-    immichAssetId: assetId,
-    originalFileName: file.name,
-    type: inferImmichAssetType(file.name, file.type || "application/octet-stream"),
-  };
+    xhr.addEventListener("load", () => {
+      if (xhr.status < 200 || xhr.status >= 300) {
+        reject(new Error(formatImmichUploadError(xhr.responseText || "Upload failed.")));
+        return;
+      }
+
+      try {
+        const uploaded = JSON.parse(xhr.responseText) as { id?: string; assetId?: string };
+        const assetId = uploaded.id ?? uploaded.assetId;
+        if (!assetId) {
+          reject(new Error("Immich did not return an asset id."));
+          return;
+        }
+        resolve({
+          immichAssetId: assetId,
+          originalFileName: file.name,
+          type: inferImmichAssetType(file.name, file.type || "application/octet-stream"),
+        });
+      } catch {
+        reject(new Error("Immich returned an invalid upload response."));
+      }
+    });
+
+    xhr.addEventListener("error", () => reject(new Error("Upload failed due to a network error.")));
+    xhr.addEventListener("abort", () => reject(new Error("Upload was cancelled.")));
+    xhr.send(formData);
+  });
 }
