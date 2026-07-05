@@ -21,10 +21,10 @@ export function LandingWorkCarousel() {
         <Reveal className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <h2 className="display-tight text-3xl font-semibold tracking-tight sm:text-4xl">
-              Work we&apos;ve done
+              You&apos;re in good company
             </h2>
             <p className="mt-3 max-w-2xl text-base leading-relaxed text-muted-foreground">
-              Case studies and stories from live events across campus.
+              Whether it's a small house event or a full production, we are ready to help you every step of the way.
             </p>
           </div>
           <Link href="/work" className="text-sm font-medium text-primary hover:underline">
