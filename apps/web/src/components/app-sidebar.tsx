@@ -45,6 +45,7 @@ import {
   LifebuoyIcon,
   PaperPlaneTiltIcon,
   MegaphoneIcon,
+  ImagesIcon,
 } from "@phosphor-icons/react"
 
 type NavSubItem = {
@@ -58,6 +59,7 @@ type NavItem = {
   url: string
   icon: typeof CalendarDotsIcon
   adminOnly?: boolean
+  bandOnly?: boolean
 }
 
 const navItems: NavItem[] = [
@@ -69,6 +71,7 @@ const navItems: NavItem[] = [
     url: "/dashboard/bands-and-performers",
     icon: GuitarIcon,
   },
+  { title: "Media", url: "/dashboard/media", icon: ImagesIcon, bandOnly: true },
   { title: "Inventory", url: "/dashboard/inventory", icon: PackageIcon },
   { title: "Marketing", url: "/dashboard/marketing/work", icon: MegaphoneIcon, adminOnly: true },
 ]
@@ -158,13 +161,16 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
   const unconfirmedEventCount = unconfirmedCrewCount?.length ?? 0
   const scopedNavItems = navItems.filter((item) => {
     if (isBandContext) {
+      if (item.bandOnly) return true
       return (
         item.url !== "/dashboard/events" &&
         item.url !== "/dashboard/financial-hub" &&
         item.url !== "/dashboard/inventory" &&
-        item.url !== "/dashboard/users"
+        item.url !== "/dashboard/users" &&
+        item.url !== "/dashboard/marketing/work"
       )
     }
+    if (item.bandOnly) return false
     return isAdmin || !item.adminOnly
   })
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({})
