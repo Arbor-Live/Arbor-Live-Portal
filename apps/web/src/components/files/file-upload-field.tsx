@@ -19,6 +19,7 @@ import {
   defaultTitleFromFileName,
   isImageAssetReference,
 } from "@/lib/r2-assets";
+import { ImmichImportButton } from "@/components/marketing/immich-library-picker";
 
 type R2UploadFieldProps = {
   label: string;
@@ -148,6 +149,17 @@ function R2UploadField({
           >
             {busy ? "Uploading…" : storedValue ? "Replace file" : "Choose file"}
           </Button>
+          {uploadArgs.scope === "marketing" ? (
+            <ImmichImportButton
+              postId={uploadArgs.postId}
+              imageKind={uploadArgs.imageKind}
+              disabled={busy}
+              onImported={(storedReference) => {
+                onUploaded(storedReference);
+                onUrlChange?.(storedReference);
+              }}
+            />
+          ) : null}
           {storedValue && onClear ? (
             <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={onClear}>
               Remove

@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useEffect, useRef } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { landingHero } from "@/lib/landing-content";
@@ -21,35 +22,68 @@ const heroItem = {
 
 export function LandingHero() {
   const reduceMotion = useReducedMotion();
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    if (reduceMotion) return;
+    const video = videoRef.current;
+    if (!video) return;
+    void video.play().catch(() => {
+      // Autoplay can be blocked by the browser; muted playback usually still works.
+    });
+  }, [reduceMotion]);
 
   return (
     <section className="relative overflow-hidden bg-zinc-950 text-zinc-50">
+      {!reduceMotion ? (
+        <div aria-hidden className="pointer-events-none absolute inset-0 z-0">
+          <video
+            ref={videoRef}
+            autoPlay
+            muted
+            loop
+            playsInline
+            preload="auto"
+            className="size-full object-cover opacity-60"
+          >
+            <source
+              src={landingHero.backgroundVideoSrcHevc}
+              type='video/mp4; codecs="hvc1"'
+            />
+            <source src={landingHero.backgroundVideoSrc} type="video/mp4" />
+          </video>
+        </div>
+      ) : null}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_-10%,color-mix(in_oklch,var(--color-primary)_35%,transparent),transparent)]"
+        className="pointer-events-none absolute inset-0 z-[1] bg-zinc-950/35"
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-30 [background-image:linear-gradient(to_right,color-mix(in_oklch,white_6%,transparent)_1px,transparent_1px),linear-gradient(to_bottom,color-mix(in_oklch,white_6%,transparent)_1px,transparent_1px)] [background-size:4rem_4rem]"
+        className="pointer-events-none absolute inset-0 z-[1] bg-[radial-gradient(ellipse_80%_60%_at_50%_-10%,color-mix(in_oklch,var(--color-primary)_35%,transparent),transparent)]"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 z-[1] opacity-30 [background-image:linear-gradient(to_right,color-mix(in_oklch,white_6%,transparent)_1px,transparent_1px),linear-gradient(to_bottom,color-mix(in_oklch,white_6%,transparent)_1px,transparent_1px)] [background-size:4rem_4rem]"
       />
 
       <FloatOrb
-        className="left-[8%] top-[18%] size-48 bg-primary/25"
+        className="z-[1] left-[8%] top-[18%] size-48 bg-primary/25"
         duration={9}
       />
       <FloatOrb
-        className="right-[12%] top-[28%] size-36 bg-emerald-400/15"
+        className="z-[1] right-[12%] top-[28%] size-36 bg-emerald-400/15"
         duration={11}
         delay={1.2}
       />
       <FloatOrb
-        className="bottom-[12%] left-[42%] size-56 bg-primary/15"
+        className="z-[1] bottom-[12%] left-[42%] size-56 bg-primary/15"
         duration={13}
         delay={0.6}
       />
 
       <motion.div
-        className="relative mx-auto flex min-h-[min(88vh,52rem)] max-w-6xl flex-col justify-center px-4 py-24 sm:px-6 lg:px-8"
+        className="relative z-[2] mx-auto flex min-h-[min(88vh,52rem)] max-w-6xl flex-col justify-center px-4 py-24 sm:px-6 lg:px-8"
         initial={reduceMotion ? false : "hidden"}
         animate="visible"
         variants={heroStagger}
@@ -130,6 +164,18 @@ export function LandingHero() {
           </motion.div>
         </motion.div>
       </motion.div>
+
+      <p className="absolute right-4 bottom-4 z-[2] text-[10px] tracking-wide text-zinc-400/80 sm:right-6 sm:bottom-6 sm:text-xs">
+        Video by{" "}
+        <a
+          href={landingHero.backgroundVideoCredit.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-zinc-300/90 underline-offset-2 hover:text-white hover:underline"
+        >
+          {landingHero.backgroundVideoCredit.label}
+        </a>
+      </p>
     </section>
   );
 }

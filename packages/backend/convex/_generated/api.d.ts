@@ -88,6 +88,8 @@ import type * as lib_publicReferenceIds from "../lib/publicReferenceIds.js";
 import type * as lib_publicSlug from "../lib/publicSlug.js";
 import type * as lib_trustedOrigins from "../lib/trustedOrigins.js";
 import type * as lostFoundSettings from "../lostFoundSettings.js";
+import type * as marketingImmich from "../marketingImmich.js";
+import type * as marketingImmichActions from "../marketingImmichActions.js";
 import type * as marketingPosts from "../marketingPosts.js";
 import type * as migrations_convertedEventLinks from "../migrations/convertedEventLinks.js";
 import type * as migrations_referenceIds from "../migrations/referenceIds.js";
@@ -188,6 +190,8 @@ declare const fullApi: ApiFromModules<{
   "lib/publicSlug": typeof lib_publicSlug;
   "lib/trustedOrigins": typeof lib_trustedOrigins;
   lostFoundSettings: typeof lostFoundSettings;
+  marketingImmich: typeof marketingImmich;
+  marketingImmichActions: typeof marketingImmichActions;
   marketingPosts: typeof marketingPosts;
   "migrations/convertedEventLinks": typeof migrations_convertedEventLinks;
   "migrations/referenceIds": typeof migrations_referenceIds;

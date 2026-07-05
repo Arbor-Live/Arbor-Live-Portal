@@ -14,6 +14,7 @@ export const marketingPostFormSchema = z.object({
   slug: z.string(),
   excerpt: z.string(),
   kind: marketingPostKindSchema,
+  publishedAt: z.string(),
   heroImageUrl: z.string(),
   featuredStats: z.array(marketingPostFeaturedStatSchema),
   contentJson: z.string(),
@@ -42,3 +43,21 @@ export const featuredStatPresets = [
   { label: "Turnout", value: "" },
   { label: "Production team", value: "" },
 ] as const;
+
+export function formatPublishedAtInput(timestamp: number | null | undefined) {
+  if (!timestamp) return "";
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return "";
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+export function parsePublishedAtInput(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  const date = new Date(`${trimmed}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return undefined;
+  return date.getTime();
+}

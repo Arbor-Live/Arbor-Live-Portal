@@ -81,6 +81,15 @@ if (immichPublicBaseUrl) {
   }
 }
 
+let convexImageHostname: string | undefined;
+if (convexCloudUrl) {
+  try {
+    convexImageHostname = new URL(convexCloudUrl).hostname;
+  } catch {
+    convexImageHostname = undefined;
+  }
+}
+
 const imageRemotePatterns = [
   ...(r2ImageHostname
     ? [
@@ -100,6 +109,25 @@ const imageRemotePatterns = [
         },
       ]
     : []),
+  ...(convexImageHostname
+    ? [
+        {
+          protocol: "https" as const,
+          hostname: convexImageHostname,
+          pathname: "/api/storage/**",
+        },
+      ]
+    : []),
+  {
+    protocol: "https" as const,
+    hostname: "*.convex.cloud",
+    pathname: "/api/storage/**",
+  },
+  {
+    protocol: "https" as const,
+    hostname: "**.convex.cloud",
+    pathname: "/api/storage/**",
+  },
 ];
 
 const nextConfig: NextConfig = {
@@ -107,11 +135,9 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: repoRoot,
   },
-  images: imageRemotePatterns.length
-    ? {
-        remotePatterns: imageRemotePatterns,
-      }
-    : undefined,
+  images: {
+    remotePatterns: imageRemotePatterns,
+  },
   env: {
     ...(convexCloudUrl ? { NEXT_PUBLIC_CONVEX_URL: convexCloudUrl } : {}),
     ...(convexSiteUrl ? { NEXT_PUBLIC_CONVEX_SITE_URL: convexSiteUrl } : {}),
