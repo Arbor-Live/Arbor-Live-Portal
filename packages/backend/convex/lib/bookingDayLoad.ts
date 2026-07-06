@@ -1,18 +1,12 @@
+import { pacificDateKey, PORTAL_TIMEZONE } from "@arbor/format";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 import { normalizeEventStatus } from "./eventStatus";
 
-export const EVENT_TIMEZONE = "America/Los_Angeles";
+export const EVENT_TIMEZONE = PORTAL_TIMEZONE;
 export const MAX_BOOKING_DAY_LOAD_RANGE_DAYS = 93;
 
 export type DayLoadLevel = "free" | "busy" | "unavailable";
-
-const pacificDateFormatter = new Intl.DateTimeFormat("en-CA", {
-  timeZone: EVENT_TIMEZONE,
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-});
 
 const pacificShortDateFormatter = new Intl.DateTimeFormat("en-US", {
   timeZone: EVENT_TIMEZONE,
@@ -21,7 +15,7 @@ const pacificShortDateFormatter = new Intl.DateTimeFormat("en-US", {
 });
 
 export function toPacificDateKey(ms: number): string {
-  return pacificDateFormatter.format(new Date(ms));
+  return pacificDateKey(ms, EVENT_TIMEZONE);
 }
 
 export function formatPacificShortDate(dateKey: string): string {

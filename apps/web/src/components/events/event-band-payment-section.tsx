@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { ArborOnlyGuard } from "@/components/org-context-guard";
+import { formatUsd } from "@/lib/format";
 
 type PricingMode = "per_member_hourly" | "fixed_total";
 
@@ -22,10 +23,6 @@ const PRICING_OPTIONS = [
   { value: "per_member_hourly", label: "Per member per hour" },
   { value: "fixed_total", label: "Fixed total" },
 ];
-
-function formatUsd(value: number) {
-  return `$${value.toFixed(2)}`;
-}
 
 function defaultRateForBand(
   bands: Array<{ organizationId: string; performerHourlyRateUsd: number }> | undefined,

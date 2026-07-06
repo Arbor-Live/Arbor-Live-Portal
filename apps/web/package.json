@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@arbor/format": "workspace:*",
     "@arbor/invoice-document": "workspace:*",
     "@better-auth/passkey": "^1.6.23",
     "@convex-dev/better-auth": "^0.12.3",

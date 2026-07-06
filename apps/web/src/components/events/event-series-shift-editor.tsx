@@ -11,8 +11,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
 import { useConvexForm } from "@/hooks/use-convex-form";
+import {
+  EventTimelineScheduler,
+  type TimelineBlockDraft,
+} from "@/components/events/event-timeline-scheduler";
 import { SERIES_EDIT_SCOPE_LABELS, type SeriesEditScope } from "@/lib/event-series";
-import type { SeriesBlockTemplate } from "@/lib/event-series-schedule";
+import {
+  seriesDayCount,
+  templatesToTimelineDrafts,
+  type SeriesBlockTemplate,
+} from "@/lib/event-series-schedule";
 import {
   createShiftDraftForBlock,
   formatDurationHours,
@@ -28,23 +36,63 @@ import {
   seriesShiftEditorSchema,
   type SeriesShiftEditorFormValues,
 } from "@/lib/validations/event";
+import { formatOccurrencePreview } from "@/lib/event-series";
+import { formatUsd } from "@/lib/format";
 
 type EventSeriesShiftEditorProps = {
   seriesId: Id<"eventSeries">;
+  anchorStartAt: number;
+  anchorEndAt: number;
+  eventType?: string;
+  rentalFulfillmentMode?: "delivery" | "will_call" | "pickup";
   blockTemplates?: SeriesBlockTemplate[];
   shiftTemplates?: SeriesShiftTemplate[];
   budgetCrewHourlyRateUsd?: number;
   occurrences: Array<{ _id: Id<"events">; occurrenceIndex?: number; startAt: number }>;
   onMessage: (message: string) => void;
+  onShiftDraftsChange?: (drafts: SeriesShiftTemplateDraft[]) => void;
+  title?: string;
+  description?: string;
+  billableOccurrenceCount?: number;
 };
+
+function normalizeEventType(value: string | undefined) {
+  if (value === "Dry Rental") return "Dry Hire" as const;
+  if (
+    value === "Crewed Event" ||
+    value === "Rental with Crew" ||
+    value === "Dry Hire" ||
+    value === "Services Only"
+  ) {
+    return value;
+  }
+  return "Crewed Event" as const;
+}
+
+function blocksFromTemplates(
+  blockTemplates: SeriesBlockTemplate[] | undefined,
+  anchorStartAt: number,
+): TimelineBlockDraft[] {
+  return templatesToTimelineDrafts(blockTemplates ?? [], anchorStartAt).map((block, index) => ({
+    ...block,
+    clientId: block.clientId ?? `template-${index}`,
+  }));
+}
 
 export function EventSeriesShiftEditor({
   seriesId,
+  anchorStartAt,
+  anchorEndAt,
+  eventType,
   blockTemplates,
   shiftTemplates,
   budgetCrewHourlyRateUsd,
   occurrences,
   onMessage,
+  onShiftDraftsChange,
+  title = "Series crew shift template",
+  description = "Define empty shifts once for cost estimation. Applying syncs schedule blocks and replaces unassigned shifts on selected occurrences; staffed shifts are kept.",
+  billableOccurrenceCount = 1,
 }: EventSeriesShiftEditorProps) {
   const regenerateShifts = useMutation(api.eventSeries.regenerateFutureShifts);
   const importShifts = useMutation(api.eventSeries.importShiftsFromOccurrence);
@@ -63,9 +111,18 @@ export function EventSeriesShiftEditor({
     mode: "onChange",
   });
 
+  const resolvedEventType = normalizeEventType(eventType);
+  const dayCount = seriesDayCount(anchorStartAt, anchorEndAt);
+  const hideSchedule = resolvedEventType === "Services Only";
+
   const blockOptions = useMemo(
     () => sortedBlockTemplateOptions(blockTemplates ?? []),
     [blockTemplates],
+  );
+
+  const timelineBlocks = useMemo(
+    () => blocksFromTemplates(blockTemplates, anchorStartAt),
+    [blockTemplates, anchorStartAt],
   );
 
   const initialShifts = useMemo(
@@ -87,22 +144,32 @@ export function EventSeriesShiftEditor({
     });
   }, [initialShifts, initialDefaultRate, form]);
 
+  useEffect(() => {
+    onShiftDraftsChange?.(shifts);
+  }, [shifts, onShiftDraftsChange]);
+
   const occurrenceOptions = useMemo(
     () =>
       occurrences.map((row) => ({
         value: row._id,
-        label: `#${(row.occurrenceIndex ?? 0) + 1} · ${new Intl.DateTimeFormat("en-US", {
-          month: "short",
-          day: "numeric",
-          hour: "numeric",
-          minute: "2-digit",
-        }).format(new Date(row.startAt))}`,
+        label: `#${(row.occurrenceIndex ?? 0) + 1} · ${formatOccurrencePreview(row.startAt)}`,
       })),
     [occurrences],
   );
 
-  const estimatedTotal = useMemo(() => totalEstimatedShiftCostUsd(shifts), [shifts]);
+  const estimatedPerOccurrence = useMemo(() => totalEstimatedShiftCostUsd(shifts), [shifts]);
+  const estimatedSeriesTotal = estimatedPerOccurrence * Math.max(1, billableOccurrenceCount);
   const isDirty = form.formState.isDirty || shiftsDirty;
+
+  function updateShift(clientId: string, patch: Partial<SeriesShiftTemplateDraft>) {
+    setShiftsDirty(true);
+    setShifts((prev) => prev.map((row) => (row.clientId === clientId ? { ...row, ...patch } : row)));
+  }
+
+  function removeShift(clientId: string) {
+    setShiftsDirty(true);
+    setShifts((prev) => prev.filter((row) => row.clientId !== clientId));
+  }
 
   function addShiftForBlock(blockTemplateIndex: number) {
     const block = blockOptions.find((option) => option.index === blockTemplateIndex);
@@ -183,15 +250,27 @@ export function EventSeriesShiftEditor({
     });
   }
 
+  if (hideSchedule) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>{title}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            Services Only events do not use crew shift templates.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <>
       <Card>
         <CardHeader>
-          <CardTitle>Series crew shift template</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Define empty shifts once for cost estimation. Applying replaces unassigned shifts on selected
-            occurrences; staffed shifts are kept.
-          </p>
+          <CardTitle>{title}</CardTitle>
+          <p className="text-sm text-muted-foreground">{description}</p>
         </CardHeader>
         <CardContent className="space-y-4">
           <Form {...form}>
@@ -210,9 +289,19 @@ export function EventSeriesShiftEditor({
                 </p>
               </div>
               <div className="space-y-1 md:col-span-2">
-                <Label>Estimated template crew cost (per occurrence)</Label>
+                <Label>
+                  Estimated template crew cost
+                  {billableOccurrenceCount > 1
+                    ? ` (${billableOccurrenceCount} occurrences)`
+                    : " (per occurrence)"}
+                </Label>
                 <p className="rounded-md border bg-muted/30 px-3 py-2 text-lg font-semibold">
-                  ${estimatedTotal.toFixed(2)}
+                  {formatUsd(estimatedSeriesTotal)}
+                  {billableOccurrenceCount > 1 ? (
+                    <span className="ml-2 text-sm font-normal text-muted-foreground">
+                      ({formatUsd(estimatedPerOccurrence)} × {billableOccurrenceCount})
+                    </span>
+                  ) : null}
                 </p>
               </div>
             </div>
@@ -248,143 +337,88 @@ export function EventSeriesShiftEditor({
               Add schedule block templates first — crew shifts link to those blocks.
             </p>
           ) : (
-            <div className="flex flex-wrap gap-2">
-              {blockOptions.map((block) => (
-                <Button
-                  key={block.index}
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => addShiftForBlock(block.index)}
-                >
-                  Add shift · {block.label}
-                </Button>
-              ))}
-            </div>
-          )}
+            <>
+              <div className="space-y-1">
+                <p className="text-sm font-medium">Schedule blocks (from series template)</p>
+                <p className="text-xs text-muted-foreground">
+                  Edit blocks in the series schedule template. Crew shifts below attach to each block.
+                </p>
+              </div>
+              <EventTimelineScheduler
+                dayCount={dayCount}
+                blocks={timelineBlocks}
+                onChange={() => {}}
+                onQuickAdd={() => {}}
+                quickAddLabel=""
+                readOnly
+              />
 
-          {shifts.length > 0 ? (
-            <div className="overflow-x-auto rounded-md border">
-              <table className="w-full min-w-[760px] text-sm">
-                <thead>
-                  <tr className="border-b bg-muted/40 text-left">
-                    <th className="px-2 py-2">Role</th>
-                    <th className="px-2 py-2">Block</th>
-                    <th className="px-2 py-2">Timing</th>
-                    <th className="px-2 py-2">Rate (USD/hr)</th>
-                    <th className="px-2 py-2">Notes</th>
-                    <th className="px-2 py-2"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {shifts.map((shift) => {
-                    const block = blockOptions.find((option) => option.index === shift.blockTemplateIndex);
-                    return (
-                      <tr key={shift.clientId} className="border-b last:border-b-0">
-                        <td className="px-2 py-2">
-                          <Input
-                            value={shift.role}
-                            onChange={(event) => {
-                              setShiftsDirty(true);
-                              setShifts((prev) =>
-                                prev.map((row) =>
-                                  row.clientId === shift.clientId
-                                    ? { ...row, role: event.target.value }
-                                    : row,
-                                ),
-                              );
-                            }}
-                            placeholder="e.g. LD"
-                          />
-                        </td>
-                        <td className="px-2 py-2">
-                          <SearchableSelect
-                            value={String(shift.blockTemplateIndex)}
-                            onChange={(value) => {
-                              const blockTemplateIndex = Number(value);
-                              const nextBlock = blockOptions.find(
-                                (option) => option.index === blockTemplateIndex,
-                              );
-                              if (!nextBlock) return;
-                              setShiftsDirty(true);
-                              setShifts((prev) =>
-                                prev.map((row) =>
-                                  row.clientId === shift.clientId
-                                    ? {
-                                        ...row,
-                                        blockTemplateIndex,
-                                        offsetMs: nextBlock.offsetMs,
-                                        durationMs: nextBlock.durationMs,
-                                      }
-                                    : row,
-                                ),
-                              );
-                            }}
-                            options={blockOptions.map((option) => ({
-                              value: String(option.index),
-                              label: `${option.label} (${option.blockType})`,
-                            }))}
-                            placeholder="Select block..."
-                            emptyLabel="Select block"
-                          />
-                        </td>
-                        <td className="px-2 py-2 text-xs text-muted-foreground">
-                          {block
-                            ? `${formatOffsetHours(shift.offsetMs)} · ${formatDurationHours(shift.durationMs)}`
-                            : "—"}
-                        </td>
-                        <td className="px-2 py-2">
-                          <Input
-                            value={shift.estimatedHourlyRateUsd}
-                            onChange={(event) => {
-                              setShiftsDirty(true);
-                              setShifts((prev) =>
-                                prev.map((row) =>
-                                  row.clientId === shift.clientId
-                                    ? { ...row, estimatedHourlyRateUsd: event.target.value }
-                                    : row,
-                                ),
-                              );
-                            }}
-                            placeholder={form.watch("defaultHourlyRate") || "Rate"}
-                          />
-                        </td>
-                        <td className="px-2 py-2">
-                          <Input
-                            value={shift.notes}
-                            onChange={(event) => {
-                              setShiftsDirty(true);
-                              setShifts((prev) =>
-                                prev.map((row) =>
-                                  row.clientId === shift.clientId
-                                    ? { ...row, notes: event.target.value }
-                                    : row,
-                                ),
-                              );
-                            }}
-                          />
-                        </td>
-                        <td className="px-2 py-2">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setShiftsDirty(true);
-                              setShifts((prev) => prev.filter((row) => row.clientId !== shift.clientId));
-                            }}
-                          >
-                            Remove
-                          </Button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">No shift templates yet.</p>
+              <div className="space-y-2 rounded-md border p-3">
+                <p className="text-sm font-medium">Empty shifts by block</p>
+                {blockOptions.map((block) => {
+                  const blockShifts = shifts.filter((shift) => shift.blockTemplateIndex === block.index);
+                  return (
+                    <div key={block.index} className="space-y-2 rounded-md border p-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-sm font-medium">
+                          {block.label} ({block.blockType})
+                        </p>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => addShiftForBlock(block.index)}
+                        >
+                          Add empty shift
+                        </Button>
+                      </div>
+                      {blockShifts.length ? (
+                        blockShifts.map((shift) => (
+                          <div key={shift.clientId} className="grid gap-2 md:grid-cols-6">
+                            <Input
+                              placeholder="Role"
+                              value={shift.role}
+                              onChange={(event) => updateShift(shift.clientId, { role: event.target.value })}
+                            />
+                            <Input
+                              readOnly
+                              value={formatDurationHours(shift.durationMs)}
+                              aria-label="Shift duration"
+                            />
+                            <Input
+                              readOnly
+                              value={formatOffsetHours(shift.offsetMs)}
+                              aria-label="Shift offset"
+                            />
+                            <Input
+                              value={shift.estimatedHourlyRateUsd}
+                              onChange={(event) =>
+                                updateShift(shift.clientId, { estimatedHourlyRateUsd: event.target.value })
+                              }
+                              placeholder={form.watch("defaultHourlyRate") || "Rate"}
+                            />
+                            <Input
+                              value={shift.notes}
+                              onChange={(event) => updateShift(shift.clientId, { notes: event.target.value })}
+                              placeholder="Notes"
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => removeShift(shift.clientId)}
+                            >
+                              Remove
+                            </Button>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-xs text-muted-foreground">No shift templates for this block yet.</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </>
           )}
 
           <Form {...form}>
@@ -430,6 +464,10 @@ export function EventSeriesShiftEditor({
               </div>
             </div>
           </Form>
+          <p className="text-xs text-muted-foreground">
+            Applying syncs schedule blocks on each selected occurrence, then replaces unassigned crew
+            shifts from this template.
+          </p>
           {form.saveError ? (
             <p className="text-sm text-destructive">{form.saveError}</p>
           ) : null}

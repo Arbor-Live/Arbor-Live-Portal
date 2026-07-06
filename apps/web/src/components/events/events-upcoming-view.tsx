@@ -5,6 +5,7 @@ import { EventStateBadges, getDerivedLifecycleState } from "@/components/events/
 import { Button } from "@/components/ui/button";
 
 import { normalizeEventStatus } from "@/lib/event-status";
+import { formatDateTime } from "@/lib/format";
 
 type DashboardEvent = {
   _id: string;
@@ -25,15 +26,6 @@ type DashboardEvent = {
     strikeAt?: number;
   };
 };
-
-function formatDateTime(value: number) {
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(value));
-}
 
 export function EventsUpcomingView({ events }: { events: DashboardEvent[] }) {
   const upcoming = events

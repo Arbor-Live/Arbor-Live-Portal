@@ -13,6 +13,7 @@ export type InvoiceLineItem = {
   provider?: string;
   label: string;
   quantity: number;
+  quantityDetail?: string;
   rateUsd: number;
   amountUsd: number;
 };

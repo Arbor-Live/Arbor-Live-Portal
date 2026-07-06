@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@arbor/format": "workspace:*",
     "@react-pdf/renderer": "^4.3.0",
     "react": "^19.2.5"
   },

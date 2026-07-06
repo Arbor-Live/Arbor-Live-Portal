@@ -1,13 +1,14 @@
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatUsd } from "@/lib/format";
 
 function QuoteSection({
   title,
   rows,
 }: {
   title: string;
-  rows: Array<{ _id: string; label: string; quantity: number; rateUsd: number; amountUsd: number; notes?: string }>;
+  rows: Array<{ _id: string; label: string; quantity: number; quantityDetail?: string; rateUsd: number; amountUsd: number; notes?: string }>;
 }) {
   if (!rows.length) return null;
   return (
@@ -21,7 +22,8 @@ function QuoteSection({
             <div className="flex items-center justify-between">
               <span>{line.label}</span>
               <span>
-                {line.quantity} x ${line.rateUsd.toFixed(2)} = ${line.amountUsd.toFixed(2)}
+                {line.quantity}
+                {line.quantityDetail ? ` (${line.quantityDetail})` : ""} x {formatUsd(line.rateUsd)} = {formatUsd(line.amountUsd)}
               </span>
             </div>
             {line.notes ? <p className="mt-1 text-xs text-muted-foreground">{line.notes}</p> : null}
@@ -36,7 +38,7 @@ export function PublicQuoteFinancials({
   lineItems,
   totals,
 }: {
-  lineItems: Array<{ _id: string; section: string; label: string; quantity: number; rateUsd: number; amountUsd: number; notes?: string }>;
+  lineItems: Array<{ _id: string; section: string; label: string; quantity: number; quantityDetail?: string; rateUsd: number; amountUsd: number; notes?: string }>;
   totals: {
     equipmentSubtotalUsd: number;
     externalRentalsSubtotalUsd: number;
@@ -67,14 +69,14 @@ export function PublicQuoteFinancials({
           <CardTitle>Totals</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-2 text-sm md:grid-cols-2">
-          <p>Equipment: ${totals.equipmentSubtotalUsd.toFixed(2)}</p>
-          <p>External rentals: ${totals.externalRentalsSubtotalUsd.toFixed(2)}</p>
-          <p>Artists: ${totals.artistsSubtotalUsd.toFixed(2)}</p>
-          <p>Crew: ${totals.crewSubtotalUsd.toFixed(2)}</p>
-          <p>Fees: ${totals.feesSubtotalUsd.toFixed(2)}</p>
-          <p>Subtotal: ${totals.subtotalUsd.toFixed(2)}</p>
-          <p>Discount: -${totals.discountAmountUsd.toFixed(2)}</p>
-          <p className="text-base font-semibold">Total: ${totals.totalUsd.toFixed(2)}</p>
+          <p>Equipment: {formatUsd(totals.equipmentSubtotalUsd)}</p>
+          <p>External rentals: {formatUsd(totals.externalRentalsSubtotalUsd)}</p>
+          <p>Artists: {formatUsd(totals.artistsSubtotalUsd)}</p>
+          <p>Crew: {formatUsd(totals.crewSubtotalUsd)}</p>
+          <p>Fees: {formatUsd(totals.feesSubtotalUsd)}</p>
+          <p>Subtotal: {formatUsd(totals.subtotalUsd)}</p>
+          <p>Discount: -{formatUsd(totals.discountAmountUsd)}</p>
+          <p className="text-base font-semibold">Total: {formatUsd(totals.totalUsd)}</p>
         </CardContent>
       </Card>
     </div>

@@ -2,6 +2,10 @@ import { v } from "convex/values";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireArborInternalContext, requireAuth } from "./lib/auth";
+import {
+  perOccurrencePullQuantity,
+  resolveBillableOccurrenceCount,
+} from "./lib/invoiceSeries";
 
 const pullListLineKindValue = v.union(v.literal("type"), v.literal("package"));
 
@@ -116,6 +120,7 @@ type ScaffoldRow =
 async function buildScaffoldRowsFromInvoice(
   ctx: MutationCtx,
   invoiceId: Id<"invoices">,
+  billableOccurrenceCount: number,
 ): Promise<ScaffoldRow[]> {
   const lineItems = await ctx.db
     .query("invoiceLineItems")
@@ -130,11 +135,16 @@ async function buildScaffoldRowsFromInvoice(
   const merged = new Map<string, ScaffoldRow>();
 
   for (const line of equipmentLines) {
+    const { qty: quantityRequired } = perOccurrencePullQuantity(
+      Math.max(0, line.quantity),
+      line.equipmentQuantityBasis,
+      billableOccurrenceCount,
+    );
+    if (quantityRequired <= 0) continue;
+
     if (line.section === "equipment_package" && line.packageId) {
       const pkg = await ctx.db.get(line.packageId);
       if (!pkg) continue;
-      const quantityRequired = Math.max(0, line.quantity);
-      if (quantityRequired <= 0) continue;
       const key = `package:${line.packageId}`;
       const existing = merged.get(key);
       if (existing && existing.lineKind === "package") {
@@ -153,8 +163,6 @@ async function buildScaffoldRowsFromInvoice(
     } else if (line.section === "equipment_type" && line.typeId) {
       const type = await ctx.db.get(line.typeId);
       if (!type) continue;
-      const quantityRequired = Math.max(0, line.quantity);
-      if (quantityRequired <= 0) continue;
       const key = `type:${line.typeId}`;
       const existing = merged.get(key);
       if (existing && existing.lineKind === "type") {
@@ -428,7 +436,17 @@ export const scaffoldFromInvoice = mutation({
     if (!event) throw new Error("Event not found.");
     if (!event.invoiceId) throw new Error("Link an invoice to this event before scaffolding.");
 
-    const scaffoldRows = await buildScaffoldRowsFromInvoice(ctx, event.invoiceId);
+    const series = event.seriesId ? await ctx.db.get(event.seriesId) : null;
+    const useSeriesQty =
+      Boolean(series?.invoiceId && series.invoiceId === event.invoiceId);
+    const billableOccurrenceCount = useSeriesQty
+      ? await resolveBillableOccurrenceCount(ctx, event.invoiceId)
+      : 1;
+    const scaffoldRows = await buildScaffoldRowsFromInvoice(
+      ctx,
+      event.invoiceId,
+      billableOccurrenceCount,
+    );
     if (scaffoldRows.length === 0) {
       throw new Error("Linked invoice has no equipment line items to scaffold.");
     }

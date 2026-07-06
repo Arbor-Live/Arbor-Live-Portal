@@ -1,3 +1,4 @@
+import { formatDateTimeRange } from "@arbor/format";
 import type { Id } from "../_generated/dataModel";
 import { EVENT_TIMEZONE } from "./constants";
 
@@ -17,19 +18,7 @@ export type CrewShiftLike = {
 };
 
 export function formatBlockTimeRange(startsAt: number, endsAt: number, timezone: string) {
-  const start = new Date(startsAt).toLocaleString("en-US", {
-    timeZone: timezone,
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-  const end = new Date(endsAt).toLocaleString("en-US", {
-    timeZone: timezone,
-    hour: "numeric",
-    minute: "2-digit",
-  });
-  return `${start} – ${end}`;
+  return formatDateTimeRange(startsAt, endsAt, timezone);
 }
 
 export function formatScheduleBlockSummary(

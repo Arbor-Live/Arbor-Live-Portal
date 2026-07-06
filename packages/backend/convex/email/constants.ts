@@ -1,3 +1,10 @@
+import {
+  formatDateTime,
+  formatDateTimeRange,
+  pacificDateKey,
+  PORTAL_TIMEZONE,
+} from "@arbor/format";
+
 export const EMAIL_FROM =
   process.env.EMAIL_FROM ?? "Arbor Notifications <noreply@arbor.st>";
 
@@ -18,7 +25,7 @@ export const ORGANIZER_EMAIL =
 
 export const SITE_URL = process.env.SITE_URL ?? "http://localhost:3000";
 
-export const EVENT_TIMEZONE = "America/Los_Angeles";
+export const EVENT_TIMEZONE = PORTAL_TIMEZONE;
 
 export type EmailTemplate =
   | "event_cancelled"
@@ -47,32 +54,7 @@ export function formatEventDateRange(
   endAt: number,
   timezone: string = EVENT_TIMEZONE,
 ) {
-  const dateOpts: Intl.DateTimeFormatOptions = {
-    timeZone: timezone,
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  };
-  const timeOpts: Intl.DateTimeFormatOptions = {
-    timeZone: timezone,
-    hour: "numeric",
-    minute: "2-digit",
-  };
-
-  const sameDay = new Date(startAt).toDateString() === new Date(endAt).toDateString();
-  const startLabel = new Date(startAt).toLocaleString("en-US", {
-    ...dateOpts,
-    ...timeOpts,
-  });
-
-  if (sameDay) {
-    const endTime = new Date(endAt).toLocaleString("en-US", timeOpts);
-    return `${startLabel} – ${endTime}`;
-  }
-
-  const endLabel = new Date(endAt).toLocaleString("en-US", { ...dateOpts, ...timeOpts });
-  return `${startLabel} – ${endLabel}`;
+  return formatDateTimeRange(startAt, endAt, timezone);
 }
 
 export function inviteAcceptUrl(token: string) {
@@ -93,15 +75,7 @@ export function publicQuoteUrl(token: string) {
 }
 
 export function formatInviteExpiry(expiresAt: number, timezone: string = EVENT_TIMEZONE) {
-  return new Date(expiresAt).toLocaleString("en-US", {
-    timeZone: timezone,
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  return formatDateTime(expiresAt, "long", timezone);
 }
 
 export function bandPayeeSettingsUrl() {
@@ -146,5 +120,5 @@ export function subjectForTemplate(template: EmailTemplate, context: string) {
 }
 
 export function reminderDayKey(nowMs: number, timezone: string = EVENT_TIMEZONE) {
-  return new Date(nowMs).toLocaleDateString("en-CA", { timeZone: timezone });
+  return pacificDateKey(nowMs, timezone);
 }

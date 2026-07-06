@@ -17,15 +17,10 @@ import { MediaAlbumLink } from "@/components/media/media-album-link";
 import { MediaUploadDropzone } from "@/components/media/media-upload-dropzone";
 import { BandOnlyGuard } from "@/components/org-context-guard";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { formatDate } from "@/lib/format";
 
 function formatEventLabel(title: string, startAt: number) {
-  const date = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/Los_Angeles",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(new Date(startAt));
-  return `${title} — ${date}`;
+  return `${title} — ${formatDate(startAt)}`;
 }
 
 export function BandMediaClient() {

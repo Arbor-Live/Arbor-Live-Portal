@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { internalQuery } from "../_generated/server";
+import { buildInvoiceDocumentData } from "../lib/invoiceDocumentBuild";
 
 const invoiceDocumentValidator = v.object({
   invoice: v.object({
@@ -31,6 +32,7 @@ const invoiceDocumentValidator = v.object({
       provider: v.optional(v.string()),
       label: v.string(),
       quantity: v.number(),
+      quantityDetail: v.optional(v.string()),
       rateUsd: v.number(),
       amountUsd: v.number(),
     }),
@@ -47,38 +49,6 @@ export const getInvoiceDocument = internalQuery({
       .query("invoiceLineItems")
       .withIndex("by_invoiceId_and_order", (q) => q.eq("invoiceId", args.invoiceId))
       .take(500);
-    return {
-      invoice: {
-        invoiceNumber: invoice.invoiceNumber,
-        issueDate: invoice.issueDate,
-        dueDate: invoice.dueDate,
-        managerName: invoice.managerName,
-        managerEmail: invoice.managerEmail,
-        clientGroupName: invoice.clientGroupName,
-        clientContactName: invoice.clientContactName,
-        clientEmail: invoice.clientEmail,
-        clientPhone: invoice.clientPhone,
-        clientApprovalStatus: invoice.clientApprovalStatus,
-        digitalQuoteUrl: undefined,
-        equipmentSubtotalUsd: invoice.equipmentSubtotalUsd,
-        externalRentalsSubtotalUsd: invoice.externalRentalsSubtotalUsd,
-        artistsSubtotalUsd: invoice.artistsSubtotalUsd,
-        crewSubtotalUsd: invoice.crewSubtotalUsd,
-        feesSubtotalUsd: invoice.feesSubtotalUsd,
-        subtotalUsd: invoice.subtotalUsd,
-        discountAmountUsd: invoice.discountAmountUsd,
-        totalUsd: invoice.totalUsd,
-        notes: invoice.notes,
-      },
-      lineItems: lineItems.map((row) => ({
-        id: row._id,
-        section: row.section,
-        provider: row.provider,
-        label: row.label,
-        quantity: row.quantity,
-        rateUsd: row.rateUsd,
-        amountUsd: row.amountUsd,
-      })),
-    };
+    return await buildInvoiceDocumentData(ctx, invoice, lineItems);
   },
 });

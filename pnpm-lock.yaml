@@ -14,6 +14,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@arbor/format':
+        specifier: workspace:*
+        version: link:../../packages/format
       '@arbor/invoice-document':
         specifier: workspace:*
         version: link:../../packages/invoice-document
@@ -162,6 +165,9 @@ importers:
       '@arbor/email':
         specifier: workspace:*
         version: link:../email
+      '@arbor/format':
+        specifier: workspace:*
+        version: link:../format
       '@arbor/invoice-document':
         specifier: workspace:*
         version: link:../invoice-document
@@ -211,6 +217,9 @@ importers:
 
   packages/email:
     dependencies:
+      '@arbor/format':
+        specifier: workspace:*
+        version: link:../format
       '@react-email/components':
         specifier: ^1.0.12
         version: 1.0.12(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
@@ -240,8 +249,17 @@ importers:
         specifier: ^5.9.3
         version: 5.9.3
 
+  packages/format:
+    devDependencies:
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+
   packages/invoice-document:
     dependencies:
+      '@arbor/format':
+        specifier: workspace:*
+        version: link:../format
       '@react-pdf/renderer':
         specifier: ^4.3.0
         version: 4.5.1(react@19.2.5)

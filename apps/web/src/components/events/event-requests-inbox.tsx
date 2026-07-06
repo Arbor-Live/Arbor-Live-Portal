@@ -6,6 +6,7 @@ import { useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
+import { formatDateTime } from "@/lib/format";
 
 const STATUS_OPTIONS = [
   { value: "", label: "All statuses" },
@@ -112,7 +113,7 @@ export function EventRequestsInbox() {
               </div>
             </div>
             <p className="mt-2 text-xs text-muted-foreground">
-              Submitted {new Date(row.submittedAt).toLocaleString()}
+              Submitted {formatDateTime(row.submittedAt)}
             </p>
           </div>
         ))}

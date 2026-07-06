@@ -8,6 +8,7 @@ import { api, type Id } from "@/lib/convex-api";
 import { AdminCascadeDeleteDialog } from "@/components/admin/admin-cascade-delete-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { formatDate, formatDateTime } from "@/lib/format";
 
 function DetailRow({ label, value }: { label: string; value?: string | number | null }) {
   if (value === undefined || value === null || value === "") return null;
@@ -98,7 +99,7 @@ export function EventRequestDetailClient({ requestId }: { requestId: Id<"eventRe
             <Button asChild key={event.id} size="sm" variant={request.convertedEvents.length > 1 ? "outline" : "default"}>
               <Link href={`/dashboard/events/${event.id}`}>
                 {request.convertedEvents.length > 1
-                  ? `Open event · ${new Date(event.startAt).toLocaleDateString()}`
+                  ? `Open event · ${formatDate(event.startAt)}`
                   : "Open tentative event"}
               </Link>
             </Button>
@@ -135,7 +136,7 @@ export function EventRequestDetailClient({ requestId }: { requestId: Id<"eventRe
           <span className="rounded bg-muted px-2 py-0.5">{request.requestNumber ?? request._id}</span>
           <span className="rounded bg-muted px-2 py-0.5">{request.status}</span>
           <span className="rounded bg-muted px-2 py-0.5">
-            Submitted {new Date(request.submittedAt).toLocaleString()}
+            Submitted {formatDateTime(request.submittedAt)}
           </span>
           {linkedInvoice ? (
             <span className="rounded bg-muted px-2 py-0.5">

@@ -23,6 +23,7 @@ import {
   type ChangePasswordFormValues,
   type ProfileFormValues,
 } from "@/lib/validations/account";
+import { formatDate } from "@/lib/format";
 import { UserAvatarUploadPreview } from "@/components/account/user-avatar";
 import {
   FingerprintIcon,
@@ -43,11 +44,7 @@ function formatPasskeyDate(value: string | Date | null | undefined) {
   if (!value) return "Unknown";
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return "Unknown";
-  return date.toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  return formatDate(date.getTime());
 }
 
 function authErrorMessage(error: { message?: unknown }, fallback: string) {

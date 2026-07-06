@@ -1,3 +1,4 @@
+import { pacificDateKey } from "@arbor/format";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { components } from "./_generated/api";
@@ -7,9 +8,12 @@ import {
   normalizeEventStatus,
   syncEventStatusForLinkedInvoice,
 } from "./lib/eventStatus";
+import { computeSeriesCostSummary } from "./lib/eventSeriesCosts";
 import { listEventsByInvoiceId } from "./lib/invoiceEvents";
 import { RENTAL_EVENT_TYPES, enrichPullListItems, summarizePullList } from "./eventPullLists";
-import { propagateOverviewToSeriesOccurrences, type SeriesEditScope } from "./lib/eventSeriesGeneration";
+import { propagateOverviewToSeriesOccurrences, propagateInvoiceIdToSeriesOccurrences, type SeriesEditScope } from "./lib/eventSeriesGeneration";
+import { resolveSeriesMetadataForInvoice } from "./lib/invoiceSeries";
+import { EVENT_TIMEZONE } from "./email/constants";
 import { scheduleEventCancelledEmails } from "./email/triggers";
 import { resolveStoredR2AssetUrl } from "./inventoryR2";
 
@@ -28,8 +32,6 @@ const eventTeamValue = v.union(
   v.literal("Sound"),
   v.literal("Operations"),
 );
-const EVENT_TIMEZONE = "America/Los_Angeles";
-
 const rentalFulfillmentModeValue = v.union(v.literal("delivery"), v.literal("will_call"));
 
 const seriesEditScopeValue = v.union(v.literal("this"), v.literal("future"), v.literal("all"));
@@ -293,6 +295,7 @@ export const get = query({
                 .query("events")
                 .withIndex("by_seriesId_and_occurrenceIndex", (q) => q.eq("seriesId", event.seriesId!))
                 .take(200);
+              const costSummary = computeSeriesCostSummary(series, siblings);
               return {
                 _id: series._id,
                 title: series.title,
@@ -301,6 +304,7 @@ export const get = query({
                 totalOccurrences: series.occurrenceCount ?? siblings.length,
                 occurrenceIndex: event.occurrenceIndex,
                 seriesDetached: event.seriesDetached ?? false,
+                invoiceId: series.invoiceId,
                 budgetUsd: series.budgetUsd,
                 occurrenceBandsCostUsd: series.occurrenceBandsCostUsd,
                 occurrenceExternalRentalsCostUsd: series.occurrenceExternalRentalsCostUsd,
@@ -308,6 +312,7 @@ export const get = query({
                 seriesBandsCostUsd: series.seriesBandsCostUsd,
                 seriesExternalRentalsCostUsd: series.seriesExternalRentalsCostUsd,
                 seriesOtherCostUsd: series.seriesOtherCostUsd,
+                costSummary,
               };
             })()
           : null,
@@ -378,6 +383,7 @@ export const getByInvoiceId = query({
         startAt: row.startAt,
         endAt: row.endAt,
       })),
+      series: await resolveSeriesMetadataForInvoice(ctx, args.invoiceId),
     };
   },
 });
@@ -412,7 +418,7 @@ export const create = mutation({
     await requireArborInternalContext(ctx);
     if (args.endAt <= args.startAt) throw new Error("Event end time must be after start time.");
     const now = Date.now();
-    const spansMultipleDays = new Date(args.startAt).toDateString() !== new Date(args.endAt).toDateString();
+    const spansMultipleDays = pacificDateKey(args.startAt) !== pacificDateKey(args.endAt);
     const initialStatus = normalizeEventStatus(args.status);
     const eventId = await ctx.db.insert("events", {
       title: args.title.trim(),
@@ -487,7 +493,7 @@ export const update = mutation({
     const startAt = args.startAt ?? existing.startAt;
     const endAt = args.endAt ?? existing.endAt;
     if (endAt <= startAt) throw new Error("Event end time must be after start time.");
-    const spansMultipleDays = new Date(startAt).toDateString() !== new Date(endAt).toDateString();
+    const spansMultipleDays = pacificDateKey(startAt) !== pacificDateKey(endAt);
     const nextEventType = args.eventType ?? existing.eventType;
     const nextRentalFulfillmentMode =
       args.rentalFulfillmentMode !== undefined
@@ -567,6 +573,7 @@ export const update = mutation({
         eventManagerUserId: patch.eventManagerUserId,
         rentalFulfillmentMode: patch.rentalFulfillmentMode,
         notes: patch.notes,
+        ...(args.invoiceId !== undefined ? { invoiceId: nextInvoiceId } : {}),
         updatedAt: now,
       });
       const updatedSeries = await ctx.db.get(existing.seriesId);
@@ -578,6 +585,16 @@ export const update = mutation({
         scope,
         now,
       );
+      if (args.invoiceId !== undefined) {
+        await propagateInvoiceIdToSeriesOccurrences(
+          ctx,
+          existing.seriesId,
+          nextInvoiceId,
+          referenceIndex,
+          scope,
+          now,
+        );
+      }
     } else {
       await ctx.db.patch(args.id, {
         ...patch,

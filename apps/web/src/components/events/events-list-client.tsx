@@ -13,6 +13,7 @@ import {
   normalizeEventStatus,
   type EventStatus,
 } from "@/lib/event-status";
+import { formatDateTimeRange } from "@/lib/format";
 
 export function EventsListClient() {
   const [status, setStatus] = useState<"" | EventStatus>("");
@@ -58,7 +59,7 @@ export function EventsListClient() {
                 <div className="min-w-0 flex-1">
                   <p className="font-medium">{row.title}</p>
                   <p className="text-xs text-muted-foreground">
-                    {new Date(row.startAt).toLocaleString()} {"->"} {new Date(row.endAt).toLocaleString()}
+                    {formatDateTimeRange(row.startAt, row.endAt)}
                   </p>
                   <div className="mt-1 flex gap-2 text-xs">
                     <span className="rounded bg-muted px-2 py-0.5">{formatEventStatusLabel(normalizedStatus)}</span>

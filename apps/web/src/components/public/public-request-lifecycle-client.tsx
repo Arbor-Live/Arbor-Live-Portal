@@ -15,6 +15,7 @@ import { PublicPaymentContactsSection } from "@/components/public/public-payment
 import { PublicQuoteApprovalSection } from "@/components/public/public-quote-approval-section";
 import { PublicQuoteChangeRequestSection } from "@/components/public/public-quote-change-request-section";
 import { PublicInvoicePdfDownload } from "@/components/public/public-invoice-pdf-download";
+import { formatDateTime, formatUsd } from "@/lib/format";
 import type {
   PublicPaymentContactsFormValues,
   PublicQuoteApprovalFormValues,
@@ -163,7 +164,7 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
             <span className="font-medium">{STATUS_LABELS[request.status] ?? request.status}</span>
           </p>
           <p className="text-muted-foreground">
-            Submitted {new Date(request.submittedAt).toLocaleString()}
+            Submitted {formatDateTime(request.submittedAt)}
           </p>
           <p>
             {request.firstName} {request.lastName} · {request.email}
@@ -251,7 +252,7 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
               <p>Issued: {quoteData.invoice.issueDate}</p>
               {quoteData.invoice.clientGroupName ? <p>Group: {quoteData.invoice.clientGroupName}</p> : null}
               {quoteData.invoice.clientContactName ? <p>Contact: {quoteData.invoice.clientContactName}</p> : null}
-              <p className="text-base font-semibold">Total: ${quoteData.invoice.totalUsd.toFixed(2)}</p>
+              <p className="text-base font-semibold">Total: {formatUsd(quoteData.invoice.totalUsd)}</p>
               <p className="text-muted-foreground">
                 {quoteStatusLabel(quoteData.invoice.clientApprovalStatus)}
               </p>
