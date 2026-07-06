@@ -32,6 +32,13 @@ export async function getCurrentUserOrNull(
 ): Promise<AuthUser | null> {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity?.email) return null;
+  // Defense in depth: we resolve the Better Auth user purely by the identity's
+  // email claim, so an identity whose email is provably unverified must not be
+  // trusted to map onto an account. Current providers (email/password, passkey)
+  // never assert `emailVerified === false` here; this guard exists so that
+  // adding a social provider with unverified emails can't become an
+  // account-takeover vector.
+  if (identity.emailVerified === false) return null;
   const user = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
     model: "user",
     where: [{ field: "email", value: identity.email }],

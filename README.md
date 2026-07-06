@@ -12,6 +12,8 @@ Monorepo bootstrap for:
 - [docs/environment-variables.md](docs/environment-variables.md) — every env var and where it lives
 - [docs/deployment.md](docs/deployment.md) — Vercel + Convex deploy pipeline and triage
 - [docs/r2-storage.md](docs/r2-storage.md) — Cloudflare R2 file storage setup
+- [docs/immich.md](docs/immich.md) — Immich media albums & share links for event/band galleries
+- [docs/resend-email.md](docs/resend-email.md) — Resend transactional sends & inbound confirmation webhook
 
 ## Setup
 

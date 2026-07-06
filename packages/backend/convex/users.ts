@@ -80,20 +80,39 @@ function toSlug(input: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
+/**
+ * Drain every page of a Better Auth model rather than reading a single fixed
+ * page. The previous single-page reads silently truncated once an org grew past
+ * the page size (e.g. users beyond 1000 vanished from admin lists); looping the
+ * cursor keeps these admin-only reads complete. Bounded by `maxPages` as a
+ * runaway guard.
+ */
+async function fetchAllBetterAuthRows<T>(
+  ctx: QueryCtx | MutationCtx,
+  model: "user" | "organization",
+  pageSize: number,
+  maxPages = 50,
+): Promise<T[]> {
+  const rows: T[] = [];
+  let cursor: string | null = null;
+  for (let page = 0; page < maxPages; page += 1) {
+    const result = await ctx.runQuery(components.betterAuth.adapter.findMany, {
+      model,
+      paginationOpts: { cursor, numItems: pageSize },
+    });
+    rows.push(...((result?.page ?? []) as T[]));
+    if (result?.isDone || !result?.continueCursor) break;
+    cursor = result.continueCursor as string;
+  }
+  return rows;
+}
+
 async function getAllAuthUsers(ctx: QueryCtx | MutationCtx) {
-  const result = await ctx.runQuery(components.betterAuth.adapter.findMany, {
-    model: "user",
-    paginationOpts: { cursor: null, numItems: 1000 },
-  });
-  return (result?.page ?? []) as AuthUser[];
+  return await fetchAllBetterAuthRows<AuthUser>(ctx, "user", 500);
 }
 
 async function getAllOrganizations(ctx: QueryCtx | MutationCtx) {
-  const result = await ctx.runQuery(components.betterAuth.adapter.findMany, {
-    model: "organization",
-    paginationOpts: { cursor: null, numItems: 500 },
-  });
-  return (result?.page ?? []) as OrganizationRow[];
+  return await fetchAllBetterAuthRows<OrganizationRow>(ctx, "organization", 500);
 }
 
 async function resolveOrCreateOrganization(ctx: MutationCtx, name: string) {

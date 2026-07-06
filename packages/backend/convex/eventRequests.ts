@@ -12,6 +12,7 @@ import {
   updateInvoicePaymentContacts,
 } from "./lib/publicQuoteView";
 import { scheduleBookingRequestReceivedEmail } from "./email/bookingRequestEmails";
+import { enforceRateLimit, HOUR_MS } from "./rateLimit";
 import { allocateRequestNumber } from "./lib/publicReferenceIds";
 import { resolveContactNameParts } from "./lib/contactName";
 import {
@@ -370,6 +371,7 @@ export const approveQuoteByRequestToken = mutation({
   },
   returns: v.object({ ok: v.literal(true) }),
   handler: async (ctx, args) => {
+    await enforceRateLimit(ctx, `requestToken:${args.token}`, { limit: 30, windowMs: HOUR_MS });
     const request = await ctx.db
       .query("eventRequests")
       .withIndex("by_publicToken", (q) => q.eq("publicToken", args.token))
@@ -389,6 +391,7 @@ export const requestQuoteChangesByRequestToken = mutation({
   args: { token: v.string(), note: v.string() },
   returns: v.object({ ok: v.literal(true) }),
   handler: async (ctx, args) => {
+    await enforceRateLimit(ctx, `requestToken:${args.token}`, { limit: 30, windowMs: HOUR_MS });
     const request = await ctx.db
       .query("eventRequests")
       .withIndex("by_publicToken", (q) => q.eq("publicToken", args.token))
@@ -413,6 +416,7 @@ export const updatePaymentContactsByRequestToken = mutation({
   },
   returns: v.object({ ok: v.literal(true) }),
   handler: async (ctx, args) => {
+    await enforceRateLimit(ctx, `requestToken:${args.token}`, { limit: 30, windowMs: HOUR_MS });
     const request = await ctx.db
       .query("eventRequests")
       .withIndex("by_publicToken", (q) => q.eq("publicToken", args.token))
@@ -489,6 +493,11 @@ export const submitPublic = mutation({
     if (groupType !== "individual" && !args.invoiceGroupId && !organization) {
       throw new Error("Organization or group name is required for non-individual requests.");
     }
+
+    // Throttle before the first billing-table write. Per-email caps a single
+    // submitter; the global key is a backstop against a spray of addresses.
+    await enforceRateLimit(ctx, `submitPublic:${email}`, { limit: 5, windowMs: HOUR_MS });
+    await enforceRateLimit(ctx, "submitPublic:global", { limit: 60, windowMs: HOUR_MS });
 
     const billingProfile = await provisionBillingProfileFromRequest(ctx, {
       organization,

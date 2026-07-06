@@ -402,11 +402,18 @@ export const getQueueCounts = query({
       ["paid", "paid"],
     ];
     for (const [status, key] of statusKeys) {
-      const rows = await ctx.db
+      // Count via async iteration so the queue badges stay accurate past 500
+      // rows per status. Band-payout cardinality is bounded (events × bands for
+      // one production org), so scanning each status index is cheap here; if
+      // this table ever grows unbounded, switch to a denormalized counter
+      // maintained on each status transition.
+      let count = 0;
+      for await (const _row of ctx.db
         .query("eventBandPayments")
-        .withIndex("by_status", (q) => q.eq("status", status))
-        .take(500);
-      counts[key] = rows.length;
+        .withIndex("by_status", (q) => q.eq("status", status))) {
+        count += 1;
+      }
+      counts[key] = count;
     }
     return counts;
   },

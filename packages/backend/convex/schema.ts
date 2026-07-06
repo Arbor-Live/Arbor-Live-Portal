@@ -1033,4 +1033,14 @@ export default defineSchema({
     .index("by_slug", ["slug"])
     .index("by_published_and_publishedAt", ["published", "publishedAt"])
     .index("by_published_and_featured", ["published", "featured"]),
+
+  // Fixed-window counters backing the public-endpoint rate limiter. One row per
+  // limiter key (e.g. `submitPublic:email@stanford.edu`). Pruned daily by cron.
+  rateLimitHits: defineTable({
+    key: v.string(),
+    windowStartMs: v.number(),
+    count: v.number(),
+  })
+    .index("by_key", ["key"])
+    .index("by_windowStartMs", ["windowStartMs"]),
 });

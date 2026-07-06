@@ -20,8 +20,8 @@ Where variables live:
 | `SITE_URL` | yes | Canonical app origin; trusted-origin checks (`lib/trustedOrigins.ts`) and links in emails |
 | `ARBOR_ENV` | prod only | Set to `production` **only** on the prod Convex deployment; gates production behavior (`lib/trustedOrigins.ts`) |
 | `BOOTSTRAP_ADMIN_SECRET` | yes (setup) | Gates `bootstrap.bootstrapAdmin`; must be high-entropy |
-| `RESEND_API_KEY` | yes | Outbound email via Resend (`email/send.ts`, `http/resendInbound.ts`) |
-| `RESEND_INBOUND_WEBHOOK_SECRET` | yes (band payments) | Svix secret for the inbound-email webhook (`http/resendInbound.ts`) |
+| `RESEND_API_KEY` | yes | Outbound email via Resend (`email/send.ts`, `http/resendInbound.ts`) — see [resend-email.md](resend-email.md) |
+| `RESEND_INBOUND_WEBHOOK_SECRET` | yes (band payments) | Svix secret for the inbound-email webhook (`http/resendInbound.ts`) — see [resend-email.md](resend-email.md) |
 | `EMAIL_FROM` | yes | Default From address (`email/constants.ts`) |
 | `EMAIL_TEST_MODE` | no | `"true"` routes email sending into test mode (`email/send.ts`) |
 | `ORGANIZER_EMAIL` | no | Organizer contact in emails; defaults to `EMAIL_FROM`'s address (`email/constants.ts`) |
@@ -29,7 +29,7 @@ Where variables live:
 | `BAND_PAYMENTS_CC_EMAIL` | no | CC address on band-payment emails; has a default (`email/constants.ts`) |
 | `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_ENDPOINT`, `R2_BUCKET` | yes (uploads) | Cloudflare R2 via `@convex-dev/r2` (`inventoryR2.ts`) — see [r2-storage.md](r2-storage.md) |
 | `R2_PUBLIC_BASE_URL` | yes (uploads) | Public read domain for stored assets, no trailing slash (`inventoryR2.ts`) |
-| `IMMICH_URL`, `IMMICH_API_KEY` | yes (media) | Self-hosted Immich API (`lib/immichClient.ts`) |
+| `IMMICH_URL`, `IMMICH_API_KEY` | yes (media) | Self-hosted Immich API (`lib/immichClient.ts`) — see [immich.md](immich.md) |
 | `CONVEX_CLOUD_URL`, `CONVEX_SITE_URL` | auto | Provided by Convex; also read as fallbacks by the web build script |
 
 ## Web (read by Next.js)
