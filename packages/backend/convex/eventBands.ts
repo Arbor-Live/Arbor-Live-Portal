@@ -73,6 +73,7 @@ export const listByEvent = query({
   returns: v.array(participationRowValidator),
   handler: async (ctx, args) => {
     await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
     const rows = await ctx.db
       .query("eventBandParticipations")
       .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))

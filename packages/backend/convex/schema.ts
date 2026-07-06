@@ -236,7 +236,8 @@ export default defineSchema({
     .index("by_name", ["name"])
     .index("by_category", ["category"])
     .index("by_category_and_name", ["category", "name"])
-    .index("by_publicSlug", ["publicSlug"]),
+    .index("by_publicSlug", ["publicSlug"])
+    .index("by_publicListing", ["publicListing"]),
 
   storageLocations: defineTable({
     name: v.string(),
@@ -290,7 +291,8 @@ export default defineSchema({
   })
     .index("by_name", ["name"])
     .index("by_active", ["active"])
-    .index("by_publicSlug", ["publicSlug"]),
+    .index("by_publicSlug", ["publicSlug"])
+    .index("by_publicListing", ["publicListing"]),
 
   inventoryPackageItems: defineTable({
     packageId: v.id("inventoryPackages"),

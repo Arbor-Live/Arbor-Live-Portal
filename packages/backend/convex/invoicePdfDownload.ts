@@ -12,6 +12,10 @@ export const downloadByInvoiceId = action({
   },
   returns: v.bytes(),
   handler: async (ctx, args) => {
+    // Local auth guard: getDocumentData enforces the full role check, but this
+    // action must not depend solely on a downstream guard.
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("You must be signed in.");
     const document = await ctx.runQuery(api.invoices.getDocumentData, {
       id: args.invoiceId,
       siteOrigin: args.siteOrigin,

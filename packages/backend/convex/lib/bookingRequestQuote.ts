@@ -89,7 +89,6 @@ async function ensureContactLinkedToGroup(
   args: {
     groupId: Id<"invoiceGroups">;
     email: string;
-    preferredContactId?: Id<"invoiceContacts">;
     firstName: string;
     lastName: string;
     phone: string;
@@ -113,20 +112,17 @@ async function ensureContactLinkedToGroup(
     return existingForGroup._id;
   }
 
-  if (args.preferredContactId) {
-    const preferred = await ctx.db.get(args.preferredContactId);
-    if (preferred?.active && !preferred.groupId) {
-      await ctx.db.patch(preferred._id, {
-        groupId: args.groupId,
-        firstName,
-        lastName,
-        phone,
-        email,
-        updatedAt: args.now,
-        lastUsedAt: args.now,
-      });
-      return preferred._id;
-    }
+  const ungroupedByEmail = await findActiveContactByEmail(ctx, email);
+  if (ungroupedByEmail && !ungroupedByEmail.groupId) {
+    await ctx.db.patch(ungroupedByEmail._id, {
+      groupId: args.groupId,
+      firstName,
+      lastName,
+      phone,
+      updatedAt: args.now,
+      lastUsedAt: args.now,
+    });
+    return ungroupedByEmail._id;
   }
 
   return await ctx.db.insert("invoiceContacts", {
@@ -146,7 +142,6 @@ async function ensureContactRecord(
   ctx: MutationCtx,
   args: {
     email: string;
-    preferredContactId?: Id<"invoiceContacts">;
     firstName: string;
     lastName: string;
     phone: string;
@@ -157,21 +152,6 @@ async function ensureContactRecord(
   const firstName = args.firstName.trim();
   const lastName = args.lastName.trim();
   const phone = args.phone.trim();
-
-  if (args.preferredContactId) {
-    const preferred = await ctx.db.get(args.preferredContactId);
-    if (preferred?.active) {
-      await ctx.db.patch(preferred._id, {
-        firstName,
-        lastName,
-        phone,
-        email,
-        updatedAt: args.now,
-        lastUsedAt: args.now,
-      });
-      return preferred._id;
-    }
-  }
 
   const existing = await findActiveContactByEmail(ctx, email);
   if (existing) {
@@ -203,7 +183,6 @@ export async function provisionBillingProfileFromRequest(
     organization?: string;
     sponsorType: string;
     invoiceGroupId?: Id<"invoiceGroups">;
-    invoiceContactId?: Id<"invoiceContacts">;
     firstName: string;
     lastName: string;
     email: string;
@@ -213,7 +192,7 @@ export async function provisionBillingProfileFromRequest(
   const now = Date.now();
   const email = args.email.trim().toLowerCase();
   let invoiceGroupId = args.invoiceGroupId;
-  let invoiceContactId = args.invoiceContactId;
+  let invoiceContactId: Id<"invoiceContacts"> | undefined;
   const organization = trimOptional(args.organization);
   const groupType = mapSponsorTypeToGroupType(args.sponsorType);
 
@@ -242,7 +221,6 @@ export async function provisionBillingProfileFromRequest(
     invoiceContactId = await ensureContactLinkedToGroup(ctx, {
       groupId: invoiceGroupId,
       email,
-      preferredContactId: invoiceContactId,
       firstName: args.firstName,
       lastName: args.lastName,
       phone: args.phone,
@@ -251,7 +229,6 @@ export async function provisionBillingProfileFromRequest(
   } else {
     invoiceContactId = await ensureContactRecord(ctx, {
       email,
-      preferredContactId: invoiceContactId,
       firstName: args.firstName,
       lastName: args.lastName,
       phone: args.phone,

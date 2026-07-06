@@ -334,7 +334,7 @@ export const listByEvent = query({
   args: { eventId: v.id("events") },
   returns: v.array(bandPaymentRowValidator),
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
     const event = await ctx.db.get(args.eventId);
     if (!event) return [];
     const payments = await ctx.db

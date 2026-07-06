@@ -84,8 +84,13 @@ export const handleInboundEmail = internalAction({
       return { handled: false, reason: "payment_not_found" };
     }
 
+    // A missing/unparseable From header must fail closed: only a reply that
+    // provably comes from the designated payee may confirm a payment.
     const replyFrom = normalizeEmail(received.data.from ?? event.data?.from);
-    if (replyFrom && payment.designatedPayeeEmail && replyFrom !== payment.designatedPayeeEmail.toLowerCase()) {
+    if (!replyFrom) {
+      return { handled: false, reason: "missing_sender" };
+    }
+    if (payment.designatedPayeeEmail && replyFrom !== payment.designatedPayeeEmail.toLowerCase()) {
       return { handled: false, reason: "unexpected_sender" };
     }
 

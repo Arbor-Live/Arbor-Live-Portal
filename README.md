@@ -4,6 +4,15 @@ Monorepo bootstrap for:
 - `apps/web`: Next.js + shadcn/ui frontend
 - `packages/backend`: Convex backend + Better Auth (local install)
 
+## Documentation
+
+- [docs/getting-started.md](docs/getting-started.md) — clone to running app, first admin account
+- [docs/architecture.md](docs/architecture.md) — workspace map, backend module tour, auth model
+- [docs/domain-guide.md](docs/domain-guide.md) — events, booking requests, quotes/invoices, band payments, inventory
+- [docs/environment-variables.md](docs/environment-variables.md) — every env var and where it lives
+- [docs/deployment.md](docs/deployment.md) — Vercel + Convex deploy pipeline and triage
+- [docs/r2-storage.md](docs/r2-storage.md) — Cloudflare R2 file storage setup
+
 ## Setup
 
 Env files are **not** committed. They live once in `.git/arbor-env/` and are

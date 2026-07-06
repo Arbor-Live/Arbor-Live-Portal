@@ -60,7 +60,8 @@ const submitPublicArgs = {
   phone: v.string(),
   organization: v.optional(v.string()),
   sponsorType: v.string(),
-  invoiceContactId: v.optional(v.id("invoiceContacts")),
+  // NOTE: no invoiceContactId here — anonymous callers must never pick the
+  // contact record; it is resolved server-side by email.
   invoiceGroupId: v.optional(v.id("invoiceGroups")),
   requestContext: v.optional(v.string()),
   venueName: v.optional(v.string()),
@@ -211,15 +212,15 @@ function titleForDayEvent(baseTitle: string, dateKey: string, multiDay: boolean)
   return `${baseTitle} — ${formatPacificShortDate(dateKey)}`;
 }
 
+// Public (unauthenticated) lookup used by the booking wizard. Deliberately
+// returns no PII beyond first name + group names: last name, phone, and
+// contact IDs must never be exposed here.
 export const lookupContactByEmail = query({
   args: { email: v.string() },
   returns: v.union(
     v.object({
       found: v.literal(true),
       firstName: v.string(),
-      lastName: v.string(),
-      phone: v.optional(v.string()),
-      contactId: v.id("invoiceContacts"),
       groups: v.array(
         v.object({
           groupId: v.id("invoiceGroups"),
@@ -247,7 +248,7 @@ export const lookupContactByEmail = query({
     }
 
     const primary = activeContacts[0]!;
-    const { firstName, lastName } = resolveContactNameParts(primary);
+    const { firstName } = resolveContactNameParts(primary);
     const groups = (
       await Promise.all(
         activeContacts.map(async (contact) => {
@@ -269,9 +270,6 @@ export const lookupContactByEmail = query({
     return {
       found: true as const,
       firstName,
-      lastName,
-      phone: primary.phone,
-      contactId: primary._id,
       groups: uniqueGroups,
     };
   },
@@ -496,7 +494,6 @@ export const submitPublic = mutation({
       organization,
       sponsorType: args.sponsorType.trim(),
       invoiceGroupId: args.invoiceGroupId,
-      invoiceContactId: args.invoiceContactId,
       firstName,
       lastName,
       email,

@@ -108,7 +108,7 @@ export const listPublicCrew = query({
     const memberships = await ctx.db
       .query("userOrganizationMemberships")
       .withIndex("by_organizationId", (q) => q.eq("organizationId", arborOrgId))
-      .collect();
+      .take(1000);
 
     const activeMemberIds = new Set(
       memberships.filter((row) => row.active).map((row) => row.userId),

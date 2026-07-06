@@ -136,7 +136,7 @@ export const listPublicCapabilityFilters = query({
     const caps = await ctx.db
       .query("capabilityDefinitions")
       .withIndex("by_active", (q) => q.eq("active", true))
-      .collect();
+      .take(200);
     return caps
       .map((c) => ({ key: c.key, label: c.label }))
       .sort((a, b) => a.label.localeCompare(b.label));
@@ -149,13 +149,15 @@ export const listPublicTypes = query({
     capability: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const types = await ctx.db.query("inventoryTypes").collect();
+    const types = await ctx.db
+      .query("inventoryTypes")
+      .withIndex("by_publicListing", (q) => q.eq("publicListing", true))
+      .take(500);
     const categoryCache = new Map<string, Doc<"inventoryCategories"> | null>();
     const capFilter = args.capability?.trim().toLowerCase();
 
     const rows = [];
     for (const type of types) {
-      if (!type.publicListing) continue;
       if (capFilter && !type.capabilities.includes(capFilter)) continue;
       const bucket = await bucketForCategoryKey(ctx, type.category, categoryCache);
       if (args.bucket && bucket !== args.bucket) continue;
@@ -175,17 +177,20 @@ export const listPublicPackages = query({
     bucket: v.optional(publicBucketValue),
   },
   handler: async (ctx, args) => {
-    const packages = await ctx.db.query("inventoryPackages").collect();
+    const packages = await ctx.db
+      .query("inventoryPackages")
+      .withIndex("by_publicListing", (q) => q.eq("publicListing", true))
+      .take(500);
     const categoryCache = new Map<string, Doc<"inventoryCategories"> | null>();
 
     const rows = [];
     for (const pkg of packages) {
-      if (!pkg.active || !pkg.publicListing) continue;
+      if (!pkg.active) continue;
 
       const lineRows = await ctx.db
         .query("inventoryPackageItems")
         .withIndex("by_packageId", (q) => q.eq("packageId", pkg._id))
-        .collect();
+        .take(200);
 
       const buckets = new Set<PublicBucket>();
       for (const row of lineRows) {
@@ -225,7 +230,7 @@ export const getPublicPackage = query({
     const lineRows = await ctx.db
       .query("inventoryPackageItems")
       .withIndex("by_packageId", (q) => q.eq("packageId", pkg._id))
-      .collect();
+      .take(200);
 
     const buckets = new Set<PublicBucket>();
     const items = [];

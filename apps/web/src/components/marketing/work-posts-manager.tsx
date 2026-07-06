@@ -1,9 +1,9 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
-import { LexicalEditor } from "@/components/editor/lexical-editor";
 import { EMPTY_LEXICAL_STATE } from "@/components/editor/lexical-theme";
 import { MarketingPostHeroUploadField } from "@/components/files/file-upload-field";
 import { TextFormField } from "@/components/forms/text-form-field";
@@ -34,6 +34,15 @@ import {
 } from "@/lib/validations/marketing";
 import { cn } from "@/lib/utils";
 import { DatePickerField } from "@/components/ui/date-picker";
+
+// Lexical (and its plugins) is heavy; load the editor only when this manager renders.
+const LexicalEditor = dynamic(
+  () => import("@/components/editor/lexical-editor").then((m) => m.LexicalEditor),
+  {
+    ssr: false,
+    loading: () => <p className="text-sm text-muted-foreground">Loading editor...</p>,
+  },
+);
 
 const defaultValues: MarketingPostFormValues = {
   title: "",

@@ -134,7 +134,6 @@ export const bookingRequestSchema = z
     phone: z.string().trim().min(1, "Phone is required"),
     organization: z.string().trim().optional(),
     requestContext: z.enum(REQUEST_CONTEXT_OPTIONS).optional(),
-    invoiceContactId: z.string().trim().optional(),
     invoiceGroupId: z.string().trim().optional(),
     sponsorType: z.enum(SPONSOR_TYPE_OPTIONS, {
       message: "Select a sponsor type",
@@ -262,7 +261,6 @@ export const bookingRequestDefaultValues: BookingRequestFormValues = {
   phone: "",
   organization: "",
   requestContext: undefined,
-  invoiceContactId: "",
   invoiceGroupId: "",
   sponsorType: "Stanford Department",
   sponsorTypeOther: "",
@@ -494,7 +492,6 @@ export function toSubmitPayload(values: BookingRequestFormValues) {
     phone: values.phone,
     organization: values.organization || undefined,
     sponsorType,
-    invoiceContactId: values.invoiceContactId || undefined,
     invoiceGroupId: values.invoiceGroupId || undefined,
     requestContext: values.requestContext,
     venueName: values.venueName || undefined,
