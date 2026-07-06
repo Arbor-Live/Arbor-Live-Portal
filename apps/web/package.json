@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "node ./scripts/materialize-convex-public-env.mjs && next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@arbor/format": "workspace:*",

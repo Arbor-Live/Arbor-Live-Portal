@@ -236,7 +236,8 @@ export default defineSchema({
     .index("by_name", ["name"])
     .index("by_category", ["category"])
     .index("by_category_and_name", ["category", "name"])
-    .index("by_publicSlug", ["publicSlug"]),
+    .index("by_publicSlug", ["publicSlug"])
+    .index("by_publicListing", ["publicListing"]),
 
   storageLocations: defineTable({
     name: v.string(),
@@ -290,7 +291,8 @@ export default defineSchema({
   })
     .index("by_name", ["name"])
     .index("by_active", ["active"])
-    .index("by_publicSlug", ["publicSlug"]),
+    .index("by_publicSlug", ["publicSlug"])
+    .index("by_publicListing", ["publicListing"]),
 
   inventoryPackageItems: defineTable({
     packageId: v.id("inventoryPackages"),
@@ -1031,4 +1033,14 @@ export default defineSchema({
     .index("by_slug", ["slug"])
     .index("by_published_and_publishedAt", ["published", "publishedAt"])
     .index("by_published_and_featured", ["published", "featured"]),
+
+  // Fixed-window counters backing the public-endpoint rate limiter. One row per
+  // limiter key (e.g. `submitPublic:email@stanford.edu`). Pruned daily by cron.
+  rateLimitHits: defineTable({
+    key: v.string(),
+    windowStartMs: v.number(),
+    count: v.number(),
+  })
+    .index("by_key", ["key"])
+    .index("by_windowStartMs", ["windowStartMs"]),
 });

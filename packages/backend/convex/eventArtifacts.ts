@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { requireAuth } from "./lib/auth";
+import { requireArborInternalContext, requireAuth } from "./lib/auth";
 import { normalizeOptionalAssetReference } from "./lib/inventoryUpload";
 import { resolveStoredR2AssetUrl } from "./inventoryR2";
 
@@ -15,6 +15,7 @@ export const listByEvent = query({
   args: { eventId: v.id("events"), artifactType: v.optional(artifactTypeValue) },
   handler: async (ctx, args) => {
     await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
     const rows = args.artifactType
       ? await ctx.db
           .query("eventArtifacts")
@@ -48,6 +49,7 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
     const now = Date.now();
     return await ctx.db.insert("eventArtifacts", {
       eventId: args.eventId,
@@ -75,6 +77,7 @@ export const update = mutation({
   },
   handler: async (ctx, args) => {
     await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Artifact not found.");
     await ctx.db.patch(args.id, {
@@ -96,6 +99,7 @@ export const remove = mutation({
   args: { id: v.id("eventArtifacts") },
   handler: async (ctx, args) => {
     await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Artifact not found.");
     await ctx.db.delete(args.id);

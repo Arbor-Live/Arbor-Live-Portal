@@ -32,6 +32,13 @@ export async function getCurrentUserOrNull(
 ): Promise<AuthUser | null> {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity?.email) return null;
+  // Defense in depth: we resolve the Better Auth user purely by the identity's
+  // email claim, so an identity whose email is provably unverified must not be
+  // trusted to map onto an account. Current providers (email/password, passkey)
+  // never assert `emailVerified === false` here; this guard exists so that
+  // adding a social provider with unverified emails can't become an
+  // account-takeover vector.
+  if (identity.emailVerified === false) return null;
   const user = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
     model: "user",
     where: [{ field: "email", value: identity.email }],
@@ -77,11 +84,7 @@ export type ActiveOrganizationContext = {
   organizationType: "arbor_internal" | "band";
 };
 
-function getRecordId(row: { id?: string; _id?: string } | null | undefined) {
-  return row?.id ?? row?._id ?? "";
-}
-
-function deriveOrganizationType(org: AuthOrganization | undefined) {
+function deriveOrganizationType(org: AuthOrganization | null | undefined) {
   const name = (org?.name ?? "").trim().toLowerCase();
   const slug = (org?.slug ?? "").trim().toLowerCase();
   return name === "arbor live" || slug === "arbor-live" ? "arbor_internal" : "band";
@@ -111,11 +114,19 @@ export async function getActiveOrganizationContextOrNull(
   );
   if (!selectedMembership) return null;
 
-  const orgRows = (await ctx.runQuery(components.betterAuth.adapter.findMany, {
+  // Look up by _id first: the better-auth adapter resolves _id with ctx.db.get
+  // (fast path), while `field: "id"` falls back to a scan. This runs on nearly
+  // every request, so avoid paging the whole organization table.
+  let org = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
     model: "organization",
-    paginationOpts: { cursor: null, numItems: 500 },
-  })) as { page?: AuthOrganization[] } | null;
-  const org = (orgRows?.page ?? []).find((row) => getRecordId(row) === selectedOrganizationId);
+    where: [{ field: "_id", value: selectedOrganizationId }],
+  })) as AuthOrganization | null;
+  if (!org) {
+    org = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
+      model: "organization",
+      where: [{ field: "id", value: selectedOrganizationId }],
+    })) as AuthOrganization | null;
+  }
   const orgProfile = await ctx.db
     .query("organizationProfiles")
     .withIndex("by_organizationId", (q) => q.eq("organizationId", selectedOrganizationId))

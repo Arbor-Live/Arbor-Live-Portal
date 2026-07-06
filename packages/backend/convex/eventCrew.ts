@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { requireAuth } from "./lib/auth";
+import { requireArborInternalContext, requireAuth } from "./lib/auth";
 import { calculateCrewCost, syncEventCrewCostUsd } from "./lib/crewCost";
 import { scheduleCrewScheduledEmails } from "./email/triggers";
 
@@ -13,6 +13,7 @@ export const listByEvent = query({
   returns: v.array(v.any()),
   handler: async (ctx, args) => {
     await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
     return await ctx.db
       .query("eventCrewShifts")
       .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", args.eventId))
@@ -25,6 +26,7 @@ export const getComputedCrewCost = query({
   returns: v.any(),
   handler: async (ctx, args) => {
     await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
     return await calculateCrewCost(ctx, args.eventId);
   },
 });
@@ -52,6 +54,7 @@ export const upsertShifts = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
     for (const shift of args.shifts) {
       if (shift.endsAt <= shift.startsAt) throw new Error("Shift end must be after shift start.");
       if (shift.expenseReportId) {
@@ -70,6 +73,12 @@ export const upsertShifts = mutation({
       .query("eventCrewShifts")
       .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
       .take(500);
+    const existingIds = new Set(existing.map((row) => row._id));
+    for (const shift of args.shifts) {
+      if (shift.id && !existingIds.has(shift.id)) {
+        throw new Error("Crew shift does not belong to this event.");
+      }
+    }
     const previousShifts = existing.map((row) => ({
       scheduleBlockId: row.scheduleBlockId,
       role: row.role,
@@ -165,6 +174,7 @@ export const deleteUnassignedShifts = mutation({
   returns: v.object({ deletedCount: v.number() }),
   handler: async (ctx, args) => {
     await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
 
     const existing = await ctx.db
       .query("eventCrewShifts")

@@ -27,4 +27,11 @@ crons.daily(
   internal.bandPayments.promoteEndedPayments,
 );
 
+crons.cron(
+  "prune expired rate limit rows",
+  "0 4 * * *",
+  internal.rateLimit.pruneExpired,
+  {},
+);
+
 export default crons;

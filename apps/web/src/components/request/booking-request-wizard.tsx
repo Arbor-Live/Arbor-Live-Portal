@@ -44,9 +44,6 @@ type ContactLookup =
   | {
       found: true;
       firstName: string;
-      lastName: string;
-      phone?: string;
-      contactId: string;
       groups: ReturningGroup[];
     }
   | { found: false };
@@ -135,11 +132,8 @@ export function BookingRequestWizard() {
         group.sponsorType as BookingRequestFormValues["sponsorType"],
         { shouldDirty: true },
       );
-      if (contactLookup?.found) {
-        form.setValue("invoiceContactId", contactLookup.contactId, { shouldDirty: true });
-      }
     },
-    [contactLookup, form],
+    [form],
   );
 
   const applyPersonal = useCallback(() => {
@@ -179,9 +173,6 @@ export function BookingRequestWizard() {
       setContactLookup(lookup);
       if (lookup.found) {
         form.setValue("firstName", lookup.firstName, { shouldDirty: true });
-        form.setValue("lastName", lookup.lastName, { shouldDirty: true });
-        if (lookup.phone) form.setValue("phone", lookup.phone, { shouldDirty: true });
-        form.setValue("invoiceContactId", lookup.contactId, { shouldDirty: true });
       }
       advance();
       return;

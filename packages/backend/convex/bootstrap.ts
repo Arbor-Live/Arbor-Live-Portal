@@ -37,6 +37,20 @@ export const bootstrapAdmin = mutation({
       throw new Error("Invalid bootstrap secret.");
     }
 
+    // Once an admin exists, this escape hatch only works for that same
+    // account (idempotent re-runs); it can never mint a second admin.
+    const existingAdmin = await ctx.runQuery(components.betterAuth.adapter.findOne, {
+      model: "user",
+      where: [{ field: "role", value: "admin" }],
+    });
+    const existingAdminEmail =
+      existingAdmin && typeof existingAdmin === "object" && "email" in existingAdmin
+        ? (existingAdmin as { email?: string }).email
+        : undefined;
+    if (existingAdmin && existingAdminEmail !== args.email) {
+      throw new Error("An admin account already exists. Bootstrap is disabled.");
+    }
+
     const organizationName = args.organizationName ?? defaultOrganizationName;
     const now = Date.now();
 

@@ -103,6 +103,7 @@ import type * as paymentProofPublic from "../paymentProofPublic.js";
 import type * as publicDirectory from "../publicDirectory.js";
 import type * as publicInventory from "../publicInventory.js";
 import type * as publicMarketing from "../publicMarketing.js";
+import type * as rateLimit from "../rateLimit.js";
 import type * as storageLocations from "../storageLocations.js";
 import type * as userInvites from "../userInvites.js";
 import type * as users from "../users.js";
@@ -209,6 +210,7 @@ declare const fullApi: ApiFromModules<{
   publicDirectory: typeof publicDirectory;
   publicInventory: typeof publicInventory;
   publicMarketing: typeof publicMarketing;
+  rateLimit: typeof rateLimit;
   storageLocations: typeof storageLocations;
   userInvites: typeof userInvites;
   users: typeof users;

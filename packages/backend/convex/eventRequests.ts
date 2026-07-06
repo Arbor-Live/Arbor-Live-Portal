@@ -12,6 +12,7 @@ import {
   updateInvoicePaymentContacts,
 } from "./lib/publicQuoteView";
 import { scheduleBookingRequestReceivedEmail } from "./email/bookingRequestEmails";
+import { enforceRateLimit, HOUR_MS } from "./rateLimit";
 import { allocateRequestNumber } from "./lib/publicReferenceIds";
 import { resolveContactNameParts } from "./lib/contactName";
 import {
@@ -60,7 +61,8 @@ const submitPublicArgs = {
   phone: v.string(),
   organization: v.optional(v.string()),
   sponsorType: v.string(),
-  invoiceContactId: v.optional(v.id("invoiceContacts")),
+  // NOTE: no invoiceContactId here — anonymous callers must never pick the
+  // contact record; it is resolved server-side by email.
   invoiceGroupId: v.optional(v.id("invoiceGroups")),
   requestContext: v.optional(v.string()),
   venueName: v.optional(v.string()),
@@ -211,15 +213,15 @@ function titleForDayEvent(baseTitle: string, dateKey: string, multiDay: boolean)
   return `${baseTitle} — ${formatPacificShortDate(dateKey)}`;
 }
 
+// Public (unauthenticated) lookup used by the booking wizard. Deliberately
+// returns no PII beyond first name + group names: last name, phone, and
+// contact IDs must never be exposed here.
 export const lookupContactByEmail = query({
   args: { email: v.string() },
   returns: v.union(
     v.object({
       found: v.literal(true),
       firstName: v.string(),
-      lastName: v.string(),
-      phone: v.optional(v.string()),
-      contactId: v.id("invoiceContacts"),
       groups: v.array(
         v.object({
           groupId: v.id("invoiceGroups"),
@@ -247,7 +249,7 @@ export const lookupContactByEmail = query({
     }
 
     const primary = activeContacts[0]!;
-    const { firstName, lastName } = resolveContactNameParts(primary);
+    const { firstName } = resolveContactNameParts(primary);
     const groups = (
       await Promise.all(
         activeContacts.map(async (contact) => {
@@ -269,9 +271,6 @@ export const lookupContactByEmail = query({
     return {
       found: true as const,
       firstName,
-      lastName,
-      phone: primary.phone,
-      contactId: primary._id,
       groups: uniqueGroups,
     };
   },
@@ -372,6 +371,7 @@ export const approveQuoteByRequestToken = mutation({
   },
   returns: v.object({ ok: v.literal(true) }),
   handler: async (ctx, args) => {
+    await enforceRateLimit(ctx, `requestToken:${args.token}`, { limit: 30, windowMs: HOUR_MS });
     const request = await ctx.db
       .query("eventRequests")
       .withIndex("by_publicToken", (q) => q.eq("publicToken", args.token))
@@ -391,6 +391,7 @@ export const requestQuoteChangesByRequestToken = mutation({
   args: { token: v.string(), note: v.string() },
   returns: v.object({ ok: v.literal(true) }),
   handler: async (ctx, args) => {
+    await enforceRateLimit(ctx, `requestToken:${args.token}`, { limit: 30, windowMs: HOUR_MS });
     const request = await ctx.db
       .query("eventRequests")
       .withIndex("by_publicToken", (q) => q.eq("publicToken", args.token))
@@ -415,6 +416,7 @@ export const updatePaymentContactsByRequestToken = mutation({
   },
   returns: v.object({ ok: v.literal(true) }),
   handler: async (ctx, args) => {
+    await enforceRateLimit(ctx, `requestToken:${args.token}`, { limit: 30, windowMs: HOUR_MS });
     const request = await ctx.db
       .query("eventRequests")
       .withIndex("by_publicToken", (q) => q.eq("publicToken", args.token))
@@ -492,11 +494,15 @@ export const submitPublic = mutation({
       throw new Error("Organization or group name is required for non-individual requests.");
     }
 
+    // Throttle before the first billing-table write. Per-email caps a single
+    // submitter; the global key is a backstop against a spray of addresses.
+    await enforceRateLimit(ctx, `submitPublic:${email}`, { limit: 5, windowMs: HOUR_MS });
+    await enforceRateLimit(ctx, "submitPublic:global", { limit: 60, windowMs: HOUR_MS });
+
     const billingProfile = await provisionBillingProfileFromRequest(ctx, {
       organization,
       sponsorType: args.sponsorType.trim(),
       invoiceGroupId: args.invoiceGroupId,
-      invoiceContactId: args.invoiceContactId,
       firstName,
       lastName,
       email,

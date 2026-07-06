@@ -21,6 +21,7 @@ import {
   updateInvoicePaymentContacts,
 } from "./lib/publicQuoteView";
 import { allocateInvoiceNumber } from "./lib/publicReferenceIds";
+import { enforceRateLimit, HOUR_MS } from "./rateLimit";
 import { scheduleBookingQuoteReadyEmail } from "./email/bookingRequestEmails";
 import {
   markPayingPartyNotified,
@@ -119,6 +120,15 @@ async function generateUniquePublicApprovalToken(ctx: MutationCtx) {
     if (!existing) return token;
   }
   throw new Error("Unable to generate public quote token.");
+}
+
+// Public quote links grant approve / request-changes power, so they expire.
+// Staff can mint a fresh 6-month window at any time via
+// `regeneratePublicApprovalToken`.
+function publicApprovalTokenExpiry(now: number): number {
+  const expiresAt = new Date(now);
+  expiresAt.setMonth(expiresAt.getMonth() + 6);
+  return expiresAt.getTime();
 }
 
 async function computeLineAmount(
@@ -544,7 +554,7 @@ export const createDraft = mutation({
       additionalTermsMarkdown: trimOptional(args.additionalTermsMarkdown),
       clientApprovalStatus: "pending",
       publicApprovalToken,
-      publicApprovalTokenExpiresAt: undefined,
+      publicApprovalTokenExpiresAt: publicApprovalTokenExpiry(now),
       approvedAt: undefined,
       changesRequestedAt: undefined,
       clientApprovalNote: undefined,
@@ -597,6 +607,9 @@ export const updateDraft = mutation({
     const publicApprovalToken = existing.sourceEventRequestId
       ? undefined
       : existing.publicApprovalToken || (await generateUniquePublicApprovalToken(ctx));
+    // Only start a fresh expiry window when we mint a brand-new token; editing an
+    // invoice that already has a live link must not silently extend it.
+    const mintedNewToken = Boolean(publicApprovalToken) && !existing.publicApprovalToken;
     const normalizedTermsIds = normalizeTermsIds(args.termsIds);
     const totals = await computeTotals(
       ctx,
@@ -644,6 +657,7 @@ export const updateDraft = mutation({
       termsId: undefined,
       additionalTermsMarkdown: trimOptional(args.additionalTermsMarkdown),
       publicApprovalToken,
+      ...(mintedNewToken ? { publicApprovalTokenExpiresAt: publicApprovalTokenExpiry(now) } : {}),
       billableOccurrenceCountAtSave: await resolveBillableCountAtSave(ctx, args.id),
       updatedAt: now,
     });
@@ -664,11 +678,12 @@ export const regeneratePublicApprovalToken = mutation({
     if (existing.sourceEventRequestId) {
       throw new Error("Booking-request quotes are reviewed on the request portal, not via a standalone link.");
     }
+    const now = Date.now();
     const token = await generateUniquePublicApprovalToken(ctx);
     await ctx.db.patch(args.id, {
       publicApprovalToken: token,
-      publicApprovalTokenExpiresAt: undefined,
-      updatedAt: Date.now(),
+      publicApprovalTokenExpiresAt: publicApprovalTokenExpiry(now),
+      updatedAt: now,
     });
     return { token };
   },
@@ -683,6 +698,7 @@ export const approveByToken = mutation({
     paymentSubmitterEmail: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    await enforceRateLimit(ctx, `quoteToken:${args.token}`, { limit: 30, windowMs: HOUR_MS });
     const invoice = await ctx.db
       .query("invoices")
       .withIndex("by_publicApprovalToken", (q) => q.eq("publicApprovalToken", args.token))
@@ -702,6 +718,7 @@ export const approveByToken = mutation({
 export const requestChangesByToken = mutation({
   args: { token: v.string(), note: v.string() },
   handler: async (ctx, args) => {
+    await enforceRateLimit(ctx, `quoteToken:${args.token}`, { limit: 30, windowMs: HOUR_MS });
     const invoice = await ctx.db
       .query("invoices")
       .withIndex("by_publicApprovalToken", (q) => q.eq("publicApprovalToken", args.token))
@@ -727,6 +744,7 @@ export const updatePaymentContactsByToken = mutation({
   },
   returns: v.object({ ok: v.literal(true) }),
   handler: async (ctx, args) => {
+    await enforceRateLimit(ctx, `quoteToken:${args.token}`, { limit: 30, windowMs: HOUR_MS });
     const invoice = await ctx.db
       .query("invoices")
       .withIndex("by_publicApprovalToken", (q) => q.eq("publicApprovalToken", args.token))
@@ -987,7 +1005,7 @@ export const duplicate = mutation({
       additionalTermsMarkdown: existing.additionalTermsMarkdown,
       clientApprovalStatus: "pending",
       publicApprovalToken,
-      publicApprovalTokenExpiresAt: undefined,
+      publicApprovalTokenExpiresAt: publicApprovalToken ? publicApprovalTokenExpiry(now) : undefined,
       approvedAt: undefined,
       changesRequestedAt: undefined,
       clientApprovalNote: undefined,
@@ -1069,6 +1087,7 @@ export const createDraftForSeries = mutation({
       totalUsd: 0,
       clientApprovalStatus: "pending",
       publicApprovalToken,
+      publicApprovalTokenExpiresAt: publicApprovalTokenExpiry(now),
       createdAt: now,
       updatedAt: now,
     });
