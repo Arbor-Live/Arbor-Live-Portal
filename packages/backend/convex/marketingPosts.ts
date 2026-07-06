@@ -3,6 +3,7 @@ import { internalQuery, mutation, query } from "./_generated/server";
 import { getUserId, requireAdmin } from "./lib/auth";
 import { normalizeOptionalAssetReference } from "./lib/inventoryUpload";
 import { normalizeFeaturedStats, resolveLexicalContentJson } from "./lib/marketingContent";
+import { scheduleMarketingSiteRevalidation } from "./lib/scheduleSiteRevalidation";
 import {
   assertUniqueMarketingPostSlug,
   normalizePublicSlug,
@@ -139,7 +140,7 @@ export const create = mutation({
 
     const publishedAt = args.publishedAt ?? (published ? now : undefined);
 
-    return await ctx.db.insert("marketingPosts", {
+    const postId = await ctx.db.insert("marketingPosts", {
       title,
       slug: published ? slug : slug ?? undefined,
       excerpt: args.excerpt?.trim() || undefined,
@@ -154,6 +155,12 @@ export const create = mutation({
       createdAt: now,
       updatedAt: now,
     });
+
+    if (published) {
+      await scheduleMarketingSiteRevalidation(ctx, slug);
+    }
+
+    return postId;
   },
 });
 
@@ -224,6 +231,10 @@ export const update = mutation({
       updatedAt: now,
     });
 
+    if (published || existing.published) {
+      await scheduleMarketingSiteRevalidation(ctx, published ? slug : existing.slug);
+    }
+
     return args.id;
   },
 });
@@ -235,6 +246,9 @@ export const remove = mutation({
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Post not found.");
     await ctx.db.delete(args.id);
+    if (existing.published) {
+      await scheduleMarketingSiteRevalidation(ctx, existing.slug);
+    }
     return null;
   },
 });

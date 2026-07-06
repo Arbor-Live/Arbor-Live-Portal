@@ -62,6 +62,21 @@ export const listFeaturedPosts = query({
   },
 });
 
+export const listPublishedSlugs = query({
+  args: {},
+  returns: v.array(v.object({ slug: v.string() })),
+  handler: async (ctx) => {
+    const posts = await ctx.db
+      .query("marketingPosts")
+      .withIndex("by_published_and_publishedAt", (q) => q.eq("published", true))
+      .take(200);
+
+    return posts
+      .filter((post) => post.slug?.trim())
+      .map((post) => ({ slug: post.slug!.trim().toLowerCase() }));
+  },
+});
+
 export const listPublishedPosts = query({
   args: {
     kind: v.optional(marketingPostKindValue),

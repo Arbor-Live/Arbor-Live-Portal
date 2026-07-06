@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { PublicArtistDetail } from "@/components/public/public-artist-detail";
 import { PublicMarketingLayout } from "@/components/public/public-marketing-layout";
-import { isAuthenticated } from "@/lib/auth-server";
 
 type PageProps = {
   params: Promise<{ slug: string }>;
@@ -21,10 +20,9 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
 export default async function ArtistDetailPage({ params }: PageProps) {
   const { slug } = await params;
-  const authed = await isAuthenticated();
 
   return (
-    <PublicMarketingLayout showDashboardLink={authed}>
+    <PublicMarketingLayout>
       <PublicArtistDetail slug={slug} />
     </PublicMarketingLayout>
   );

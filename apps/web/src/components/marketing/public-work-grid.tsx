@@ -2,8 +2,6 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { useQuery } from "convex/react";
-import { api } from "@/lib/convex-api";
 import { StoredAssetImage } from "@/components/files/stored-asset-image";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Stagger, StaggerItem } from "@/components/landing/landing-motion";
@@ -13,16 +11,18 @@ import {
   workPostGradient,
 } from "@/components/marketing/work-post-ui";
 import { cn } from "@/lib/utils";
+import type { PublicWorkPostCard } from "@/lib/public-marketing-types";
 import type { MarketingPostKind } from "@/lib/validations/marketing";
 
 const ALL_FILTER = "all" as const;
 
-export function PublicWorkGrid() {
+export function PublicWorkGrid({ posts }: { posts: PublicWorkPostCard[] }) {
   const [kindFilter, setKindFilter] = useState<typeof ALL_FILTER | MarketingPostKind>(ALL_FILTER);
-  const posts = useQuery(
-    api.publicMarketing.listPublishedPosts,
-    kindFilter === ALL_FILTER ? {} : { kind: kindFilter },
-  );
+
+  const filteredPosts = useMemo(() => {
+    if (kindFilter === ALL_FILTER) return posts;
+    return posts.filter((post) => post.kind === kindFilter);
+  }, [kindFilter, posts]);
 
   const filters = useMemo(
     () =>
@@ -55,11 +55,7 @@ export function PublicWorkGrid() {
           ))}
         </div>
 
-        {posts === undefined ? (
-          <p className="text-sm text-muted-foreground">Loading work…</p>
-        ) : null}
-
-        {posts && posts.length === 0 ? (
+        {filteredPosts.length === 0 ? (
           <Card>
             <CardHeader>
               <CardTitle>Coming soon</CardTitle>
@@ -68,11 +64,9 @@ export function PublicWorkGrid() {
               Case studies and blog posts will appear here once published from the dashboard.
             </CardContent>
           </Card>
-        ) : null}
-
-        {posts && posts.length > 0 ? (
+        ) : (
           <Stagger className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {posts.map((post, index) => (
+            {filteredPosts.map((post, index) => (
               <StaggerItem key={post.slug}>
                 <Link href={`/work/${post.slug}`} className="group block h-full">
                   <Card className="h-full overflow-hidden py-0 transition-shadow group-hover:ring-2 group-hover:ring-primary/30">
@@ -85,6 +79,8 @@ export function PublicWorkGrid() {
                       {post.heroImageUrl ? (
                         <StoredAssetImage
                           storedValue={post.heroImageUrl}
+                          fill
+                          sizes="(max-width: 768px) 100vw, 33vw"
                           className="absolute inset-0 size-full object-cover"
                         />
                       ) : null}
@@ -113,7 +109,7 @@ export function PublicWorkGrid() {
               </StaggerItem>
             ))}
           </Stagger>
-        ) : null}
+        )}
       </div>
     </section>
   );

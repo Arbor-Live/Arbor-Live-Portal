@@ -25,6 +25,7 @@ import {
 } from "lexical";
 import { useEffect, useRef, useState, type ReactElement } from "react";
 import { Input } from "@/components/ui/input";
+import { OptimizedRemoteImage } from "@/components/media/optimized-remote-image";
 import { useR2FileUpload } from "@/hooks/use-r2-file-upload";
 import { ImmichImportButton } from "@/components/marketing/immich-library-picker";
 import { useMarketingEditorChange } from "@/components/editor/lexical-editor-context";
@@ -110,12 +111,23 @@ function ImageComponent({
 
   return (
     <figure className="overflow-hidden border bg-muted">
-      {/* eslint-disable-next-line @next/next/no-img-element -- dynamic R2/signed URLs */}
-      <img
-        src={resolvedSrc}
-        alt={captionLabel || "Image"}
-        className="h-auto max-h-[520px] w-full object-cover"
-      />
+      {editable ? (
+        // eslint-disable-next-line @next/next/no-img-element -- editor preview for signed URLs
+        <img
+          src={resolvedSrc}
+          alt={captionLabel || "Image"}
+          className="h-auto max-h-[520px] w-full object-cover"
+        />
+      ) : (
+        <OptimizedRemoteImage
+          src={resolvedSrc}
+          alt={captionLabel || "Image"}
+          className="h-auto max-h-[520px] w-full object-cover"
+          width={1200}
+          height={800}
+          sizes="(max-width: 768px) 100vw, 768px"
+        />
+      )}
       {editable ? (
         <div className="border-t bg-background px-2 py-1.5">
           <Input

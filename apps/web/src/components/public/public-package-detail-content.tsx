@@ -1,18 +1,13 @@
-"use client";
-
-import { useMemo } from "react";
-import { useQuery } from "convex/react";
-import { api, type Id } from "@/lib/convex-api";
-import { StoredAssetImage } from "@/components/files/stored-asset-image";
+import { OptimizedRemoteImage } from "@/components/media/optimized-remote-image";
 import { PublicPageHero } from "@/components/public/public-page-hero";
 import { PublicSiteChrome } from "@/components/public/public-site-chrome";
 import { MarkdownContent } from "@/components/markdown-content";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Reveal, Stagger, StaggerItem } from "@/components/landing/landing-motion";
+import type { PublicCapabilityFilter } from "@/components/public/public-types-explorer";
+import type { PublicPackageBucket } from "@/lib/site-revalidation";
 
-type PublicBucket = "lighting" | "sound" | "environmental" | "staging" | "misc";
-
-const bucketLabels: Record<PublicBucket, string> = {
+const bucketLabels: Record<PublicPackageBucket, string> = {
   lighting: "Lighting",
   sound: "Sound",
   environmental: "Environmental",
@@ -53,48 +48,31 @@ function isPublicTypeProfile(type: PublicTypeSummary | PublicTypeProfile): type 
   return type.publicProfileEnabled === true;
 }
 
-export function PublicPackageDetailClient({ packageId }: { packageId: Id<"inventoryPackages"> }) {
-  const data = useQuery(api.publicInventory.getPublicPackage, { packageId });
-  const capabilityFilters = useQuery(api.publicInventory.listPublicCapabilityFilters, {});
+export type PublicPackageDetailData = {
+  bucket: PublicPackageBucket;
+  package: {
+    _id: string;
+    name: string;
+    description?: string;
+    publicHeroImageUrl?: string;
+    publicSlug?: string;
+  };
+  items: Array<{
+    quantity: number;
+    bucket: PublicPackageBucket;
+    type: PublicTypeSummary | PublicTypeProfile;
+  }>;
+};
 
-  const labelByKey = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const entry of capabilityFilters ?? []) {
-      map.set(entry.key, entry.label);
-    }
-    return map;
-  }, [capabilityFilters]);
-
-  if (data === undefined) {
-    return (
-      <PublicSiteChrome>
-        <PublicPageHero title="Equipment package" subtitle="Loading package details…" />
-        <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 lg:px-8">
-          <p className="text-sm text-muted-foreground">Loading…</p>
-        </div>
-      </PublicSiteChrome>
-    );
-  }
-
-  if (!data) {
-    return (
-      <PublicSiteChrome>
-        <PublicPageHero title="Package not available" subtitle="This package is not public, inactive, or does not exist." />
-        <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 lg:px-8">
-          <Card>
-            <CardHeader>
-              <CardTitle>Unavailable</CardTitle>
-            </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">
-              Ask an admin to enable public listing on this package, or return to the packages catalog.
-            </CardContent>
-          </Card>
-        </div>
-      </PublicSiteChrome>
-    );
-  }
-
-  const bucketLabel = bucketLabels[data.bucket as PublicBucket] ?? data.bucket;
+export function PublicPackageDetailContent({
+  data,
+  capabilityFilters,
+}: {
+  data: PublicPackageDetailData;
+  capabilityFilters: PublicCapabilityFilter[];
+}) {
+  const labelByKey = new Map(capabilityFilters.map((entry) => [entry.key, entry.label]));
+  const bucketLabel = bucketLabels[data.bucket] ?? data.bucket;
 
   return (
     <PublicSiteChrome>
@@ -126,9 +104,9 @@ export function PublicPackageDetailClient({ packageId }: { packageId: Id<"invent
 
           <Stagger className="grid gap-6 md:grid-cols-2">
             {data.items.map((row) => {
-              const type = row.type as PublicTypeSummary | PublicTypeProfile;
+              const type = row.type;
               const hasProfile = isPublicTypeProfile(type);
-              const lineBucket = bucketLabels[row.bucket as PublicBucket] ?? row.bucket;
+              const lineBucket = bucketLabels[row.bucket] ?? row.bucket;
 
               return (
                 <StaggerItem key={`${row.quantity}-${type._id}`}>
@@ -136,14 +114,22 @@ export function PublicPackageDetailClient({ packageId }: { packageId: Id<"invent
                     {hasProfile && (type.promoImageUrl || type.iconImageUrl) ? (
                       <div className="grid gap-3 border-b p-4 sm:grid-cols-2">
                         {type.promoImageUrl ? (
-                          <StoredAssetImage
-                            storedValue={type.promoImageUrl}
+                          <OptimizedRemoteImage
+                            src={type.promoImageUrl}
+                            alt=""
+                            width={400}
+                            height={256}
+                            sizes="(max-width: 768px) 100vw, 25vw"
                             className="h-32 w-full rounded-md border object-cover"
                           />
                         ) : null}
                         {type.iconImageUrl ? (
-                          <StoredAssetImage
-                            storedValue={type.iconImageUrl}
+                          <OptimizedRemoteImage
+                            src={type.iconImageUrl}
+                            alt=""
+                            width={400}
+                            height={256}
+                            sizes="(max-width: 768px) 100vw, 25vw"
                             className="h-32 w-full rounded-md border bg-muted/30 object-contain p-3"
                           />
                         ) : null}
@@ -227,6 +213,27 @@ export function PublicPackageDetailClient({ packageId }: { packageId: Id<"invent
             })}
           </Stagger>
         </section>
+      </div>
+    </PublicSiteChrome>
+  );
+}
+
+export function PublicPackageUnavailable() {
+  return (
+    <PublicSiteChrome>
+      <PublicPageHero
+        title="Package not available"
+        subtitle="This package is not public, inactive, or does not exist."
+      />
+      <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 lg:px-8">
+        <Card>
+          <CardHeader>
+            <CardTitle>Unavailable</CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm text-muted-foreground">
+            Ask an admin to enable public listing on this package, or return to the packages catalog.
+          </CardContent>
+        </Card>
       </div>
     </PublicSiteChrome>
   );

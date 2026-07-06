@@ -1,15 +1,12 @@
 import Link from "next/link";
+import { DashboardFooterLink } from "@/components/public/dashboard-nav-link";
 import {
   ARBOR_CONTACT_EMAIL,
   landingFooterLinks,
   landingPortalLinks,
 } from "@/lib/landing-content";
 
-type LandingFooterProps = {
-  showDashboardLink?: boolean;
-};
-
-export function LandingFooter({ showDashboardLink = false }: LandingFooterProps) {
+export function LandingFooter() {
   return (
     <footer className="bg-zinc-950 text-zinc-300">
       <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6 lg:px-8">
@@ -55,13 +52,7 @@ export function LandingFooter({ showDashboardLink = false }: LandingFooterProps)
                   </Link>
                 </li>
               ))}
-              {showDashboardLink ? (
-                <li>
-                  <Link href="/dashboard" className="hover:text-white hover:underline">
-                    Open dashboard
-                  </Link>
-                </li>
-              ) : null}
+              <DashboardFooterLink />
             </ul>
           </div>
         </div>

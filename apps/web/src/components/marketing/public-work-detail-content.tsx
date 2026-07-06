@@ -1,10 +1,6 @@
-"use client";
-
 import Link from "next/link";
-import { useQuery } from "convex/react";
-import { api } from "@/lib/convex-api";
 import { LexicalViewer } from "@/components/editor/lexical-viewer";
-import { StoredAssetImage } from "@/components/files/stored-asset-image";
+import { OptimizedRemoteImage } from "@/components/media/optimized-remote-image";
 import { Reveal } from "@/components/landing/landing-motion";
 import {
   formatWorkPostDate,
@@ -12,28 +8,9 @@ import {
 } from "@/components/marketing/work-post-ui";
 import { WorkFeaturedStats } from "@/components/marketing/work-featured-stats";
 import { cn } from "@/lib/utils";
+import type { PublicWorkPostDetail } from "@/lib/public-marketing-types";
 
-export function PublicWorkDetail({ slug }: { slug: string }) {
-  const post = useQuery(api.publicMarketing.getPublishedPostBySlug, { slug });
-
-  if (post === undefined) {
-    return <p className="text-sm text-muted-foreground">Loading…</p>;
-  }
-
-  if (post === null) {
-    return (
-      <div className="py-16 text-center">
-        <h1 className="text-2xl font-semibold">Post not found</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          This story may be unpublished or no longer available.
-        </p>
-        <Link href="/work" className="mt-6 inline-block text-sm font-medium text-primary hover:underline">
-          Back to all work
-        </Link>
-      </div>
-    );
-  }
-
+export function PublicWorkDetailContent({ post }: { post: PublicWorkPostDetail }) {
   return (
     <article>
       <section className="relative overflow-hidden border-b bg-zinc-950 text-zinc-50">
@@ -45,8 +22,12 @@ export function PublicWorkDetail({ slug }: { slug: string }) {
           )}
         />
         {post.heroImageUrl ? (
-          <StoredAssetImage
-            storedValue={post.heroImageUrl}
+          <OptimizedRemoteImage
+            src={post.heroImageUrl}
+            alt=""
+            fill
+            priority
+            sizes="100vw"
             className="absolute inset-0 size-full object-cover opacity-50"
           />
         ) : null}

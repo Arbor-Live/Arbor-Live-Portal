@@ -137,6 +137,7 @@ const nextConfig: NextConfig = {
   },
   images: {
     remotePatterns: imageRemotePatterns,
+    formats: ["image/avif", "image/webp"],
   },
   env: {
     ...(convexCloudUrl ? { NEXT_PUBLIC_CONVEX_URL: convexCloudUrl } : {}),
