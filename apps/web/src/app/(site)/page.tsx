@@ -6,15 +6,17 @@ import { LandingLayout } from "@/components/landing/landing-layout";
 import { LandingPrograms } from "@/components/landing/landing-programs";
 import { LandingStats } from "@/components/landing/landing-stats";
 import { LandingWorkCarousel } from "@/components/marketing/public-work-carousel";
-import { isAuthenticated } from "@/lib/auth-server";
+import { api } from "@/lib/convex-api";
+import { fetchPublicQuerySafe } from "@/lib/convex-server";
+export const revalidate = 3600;
 
 export default async function Home() {
-  const authed = await isAuthenticated();
+  const featuredPosts = await fetchPublicQuerySafe(api.publicMarketing.listFeaturedPosts, {}, []);
 
   return (
-    <LandingLayout showDashboardLink={authed}>
+    <LandingLayout>
       <LandingHero />
-      <LandingWorkCarousel />
+      <LandingWorkCarousel posts={featuredPosts} />
       <LandingPrograms />
       <LandingStats />
       <LandingEventTypes />

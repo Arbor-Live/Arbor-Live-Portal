@@ -6,6 +6,7 @@ import {
   normalizeOptionalAssetReference,
   normalizeResourceLinksForUpload,
 } from "./lib/inventoryUpload";
+import { scheduleInventoryTypeSiteRevalidation } from "./lib/scheduleSiteRevalidation";
 
 type InventoryCategoryMetadata = Doc<"inventoryTypes">["categoryMetadata"];
 
@@ -232,7 +233,7 @@ export const create = mutation({
       }
     }
 
-    return await ctx.db.insert("inventoryTypes", {
+    const typeId = await ctx.db.insert("inventoryTypes", {
       name: args.name.trim(),
       description: args.description?.trim() || undefined,
       category: args.category.trim().toLowerCase(),
@@ -254,6 +255,12 @@ export const create = mutation({
       createdAt: now,
       updatedAt: now,
     });
+
+    if (publicListing) {
+      await scheduleInventoryTypeSiteRevalidation(ctx);
+    }
+
+    return typeId;
   },
 });
 
@@ -340,6 +347,10 @@ export const update = mutation({
       publicSlug,
       updatedAt: Date.now(),
     });
+
+    if (publicListing || existing.publicListing) {
+      await scheduleInventoryTypeSiteRevalidation(ctx);
+    }
   },
 });
 
@@ -382,6 +393,10 @@ export const bulkUpdateVisibility = mutation({
       updated += 1;
     }
 
+    if (args.publicListing !== undefined) {
+      await scheduleInventoryTypeSiteRevalidation(ctx);
+    }
+
     return { updated };
   },
 });
@@ -410,5 +425,9 @@ export const remove = mutation({
     }
 
     await ctx.db.delete(args.id);
+
+    if (existing.publicListing) {
+      await scheduleInventoryTypeSiteRevalidation(ctx);
+    }
   },
 });

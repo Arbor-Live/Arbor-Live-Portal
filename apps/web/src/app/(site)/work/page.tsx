@@ -1,7 +1,9 @@
 import { PublicWorkGrid } from "@/components/marketing/public-work-grid";
 import { PublicMarketingLayout } from "@/components/public/public-marketing-layout";
 import { PublicPageHero } from "@/components/public/public-page-hero";
-import { isAuthenticated } from "@/lib/auth-server";
+import { api } from "@/lib/convex-api";
+import { fetchPublicQuerySafe } from "@/lib/convex-server";
+export const revalidate = 3600;
 
 export const metadata = {
   title: "Our Work | Arbor Live",
@@ -9,15 +11,15 @@ export const metadata = {
 };
 
 export default async function WorkPage() {
-  const authed = await isAuthenticated();
+  const posts = await fetchPublicQuerySafe(api.publicMarketing.listPublishedPosts, {}, []);
 
   return (
-    <PublicMarketingLayout showDashboardLink={authed}>
+    <PublicMarketingLayout>
       <PublicPageHero
         title="Our Work"
         subtitle="Case studies and blog posts from events we've produced across campus."
       />
-      <PublicWorkGrid />
+      <PublicWorkGrid posts={posts} />
     </PublicMarketingLayout>
   );
 }

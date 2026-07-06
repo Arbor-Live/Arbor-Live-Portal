@@ -1,17 +1,12 @@
-"use client";
-
 import Link from "next/link";
-import { useQuery } from "convex/react";
-import { api } from "@/lib/convex-api";
-import { StoredAssetImage } from "@/components/files/stored-asset-image";
+import { OptimizedRemoteImage } from "@/components/media/optimized-remote-image";
 import { Reveal } from "@/components/landing/landing-motion";
 import { formatWorkPostDate, WorkPostKindBadge, workPostGradient } from "@/components/marketing/work-post-ui";
 import { cn } from "@/lib/utils";
+import type { PublicWorkPostCard } from "@/lib/public-marketing-types";
 
-export function LandingWorkCarousel() {
-  const posts = useQuery(api.publicMarketing.listFeaturedPosts, {});
-
-  if (posts === undefined || posts.length === 0) {
+export function LandingWorkCarousel({ posts }: { posts: PublicWorkPostCard[] }) {
+  if (!posts.length) {
     return null;
   }
 
@@ -24,7 +19,7 @@ export function LandingWorkCarousel() {
               You&apos;re in good company
             </h2>
             <p className="mt-3 max-w-2xl text-base leading-relaxed text-muted-foreground">
-              Whether it's a small house event or a full production, we are ready to help you every step of the way.
+              Whether it&apos;s a small house event or a full production, we are ready to help you every step of the way.
             </p>
           </div>
           <Link href="/work" className="text-sm font-medium text-primary hover:underline">
@@ -48,8 +43,11 @@ export function LandingWorkCarousel() {
                     )}
                   >
                     {post.heroImageUrl ? (
-                      <StoredAssetImage
-                        storedValue={post.heroImageUrl}
+                      <OptimizedRemoteImage
+                        src={post.heroImageUrl}
+                        alt=""
+                        fill
+                        sizes="340px"
                         className="absolute inset-0 size-full object-cover"
                       />
                     ) : null}

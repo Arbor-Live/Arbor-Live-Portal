@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useQuery } from "convex/react";
+import { OptimizedRemoteImage } from "@/components/media/optimized-remote-image";
 import { api } from "@/lib/convex-api";
 import { R2_ASSET_PREFIX } from "@/lib/r2-assets";
 import { cn } from "@/lib/utils";
@@ -29,18 +30,38 @@ export function StoredAssetImage({
   alt = "",
   className,
   fallbackClassName,
+  sizes,
+  priority,
+  fill,
+  width,
+  height,
 }: {
   storedValue?: string;
   alt?: string;
   className?: string;
   fallbackClassName?: string;
+  sizes?: string;
+  priority?: boolean;
+  fill?: boolean;
+  width?: number;
+  height?: number;
 }) {
   const trimmed = storedValue?.trim() ?? "";
   const src = useResolvedAssetUrl(storedValue);
 
   if (src) {
-    // eslint-disable-next-line @next/next/no-img-element -- resolved R2/signed URLs are dynamic
-    return <img src={src} alt={alt} className={className} />;
+    return (
+      <OptimizedRemoteImage
+        src={src}
+        alt={alt}
+        className={className}
+        sizes={sizes}
+        priority={priority}
+        fill={fill}
+        width={width}
+        height={height}
+      />
+    );
   }
 
   if (!trimmed) return null;

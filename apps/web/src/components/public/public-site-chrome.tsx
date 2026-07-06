@@ -2,12 +2,8 @@ import { PublicMarketingLayout } from "@/components/public/public-marketing-layo
 
 export function PublicSiteChrome({
   children,
-  showDashboardLink,
 }: {
   children: React.ReactNode;
-  showDashboardLink?: boolean;
 }) {
-  return (
-    <PublicMarketingLayout showDashboardLink={showDashboardLink}>{children}</PublicMarketingLayout>
-  );
+  return <PublicMarketingLayout>{children}</PublicMarketingLayout>;
 }

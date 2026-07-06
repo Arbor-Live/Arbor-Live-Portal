@@ -3,6 +3,7 @@ import { mutation, query, type MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { requireAuth } from "./lib/auth";
 import { normalizeOptionalAssetReference } from "./lib/inventoryUpload";
+import { scheduleInventoryPackageSiteRevalidation } from "./lib/scheduleSiteRevalidation";
 
 const packageItemInput = v.object({
   typeId: v.id("inventoryTypes"),
@@ -163,6 +164,10 @@ export const create = mutation({
       });
     }
 
+    if (publicListing) {
+      await scheduleInventoryPackageSiteRevalidation(ctx, packageId);
+    }
+
     return packageId;
   },
 });
@@ -242,6 +247,10 @@ export const update = mutation({
         updatedAt: now,
       });
     }
+
+    if (publicListing || existing.publicListing) {
+      await scheduleInventoryPackageSiteRevalidation(ctx, args.id);
+    }
   },
 });
 
@@ -261,5 +270,9 @@ export const remove = mutation({
     }
 
     await ctx.db.delete(args.id);
+
+    if (existing.publicListing) {
+      await scheduleInventoryPackageSiteRevalidation(ctx, args.id);
+    }
   },
 });

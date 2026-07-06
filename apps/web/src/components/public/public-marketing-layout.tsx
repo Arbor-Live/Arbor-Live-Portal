@@ -1,18 +1,17 @@
 import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { DashboardNavLink } from "@/components/public/dashboard-nav-link";
 import { landingNavLinks } from "@/lib/landing-content";
 import { LandingFooter } from "@/components/landing/landing-footer";
 
 type PublicMarketingLayoutProps = {
   children: React.ReactNode;
-  showDashboardLink?: boolean;
   hideFooter?: boolean;
 };
 
 export function PublicMarketingLayout({
   children,
-  showDashboardLink,
   hideFooter,
 }: PublicMarketingLayoutProps) {
   return (
@@ -51,11 +50,7 @@ export function PublicMarketingLayout({
           </nav>
 
           <div className="flex items-center gap-2">
-            {showDashboardLink ? (
-              <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex">
-                <Link href="/dashboard">Dashboard</Link>
-              </Button>
-            ) : null}
+            <DashboardNavLink className="hidden sm:inline-flex" />
             <Button asChild size="sm">
               <Link href="/public/request">Book us</Link>
             </Button>
@@ -67,7 +62,7 @@ export function PublicMarketingLayout({
         {children}
       </main>
 
-      {hideFooter ? null : <LandingFooter showDashboardLink={showDashboardLink} />}
+      {hideFooter ? null : <LandingFooter />}
     </div>
   );
 }
