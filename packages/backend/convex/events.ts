@@ -1,3 +1,4 @@
+import { pacificDateKey } from "@arbor/format";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { components } from "./_generated/api";
@@ -12,6 +13,7 @@ import { listEventsByInvoiceId } from "./lib/invoiceEvents";
 import { RENTAL_EVENT_TYPES, enrichPullListItems, summarizePullList } from "./eventPullLists";
 import { propagateOverviewToSeriesOccurrences, propagateInvoiceIdToSeriesOccurrences, type SeriesEditScope } from "./lib/eventSeriesGeneration";
 import { resolveSeriesMetadataForInvoice } from "./lib/invoiceSeries";
+import { EVENT_TIMEZONE } from "./email/constants";
 import { scheduleEventCancelledEmails } from "./email/triggers";
 import { resolveStoredR2AssetUrl } from "./inventoryR2";
 
@@ -30,8 +32,6 @@ const eventTeamValue = v.union(
   v.literal("Sound"),
   v.literal("Operations"),
 );
-const EVENT_TIMEZONE = "America/Los_Angeles";
-
 const rentalFulfillmentModeValue = v.union(v.literal("delivery"), v.literal("will_call"));
 
 const seriesEditScopeValue = v.union(v.literal("this"), v.literal("future"), v.literal("all"));
@@ -418,7 +418,7 @@ export const create = mutation({
     await requireArborInternalContext(ctx);
     if (args.endAt <= args.startAt) throw new Error("Event end time must be after start time.");
     const now = Date.now();
-    const spansMultipleDays = new Date(args.startAt).toDateString() !== new Date(args.endAt).toDateString();
+    const spansMultipleDays = pacificDateKey(args.startAt) !== pacificDateKey(args.endAt);
     const initialStatus = normalizeEventStatus(args.status);
     const eventId = await ctx.db.insert("events", {
       title: args.title.trim(),
@@ -493,7 +493,7 @@ export const update = mutation({
     const startAt = args.startAt ?? existing.startAt;
     const endAt = args.endAt ?? existing.endAt;
     if (endAt <= startAt) throw new Error("Event end time must be after start time.");
-    const spansMultipleDays = new Date(startAt).toDateString() !== new Date(endAt).toDateString();
+    const spansMultipleDays = pacificDateKey(startAt) !== pacificDateKey(endAt);
     const nextEventType = args.eventType ?? existing.eventType;
     const nextRentalFulfillmentMode =
       args.rentalFulfillmentMode !== undefined

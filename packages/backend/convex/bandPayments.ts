@@ -1,3 +1,4 @@
+import { formatUsd } from "@arbor/format";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
@@ -906,10 +907,10 @@ export const buildConfirmationPreview = query({
       `Length of Performance: ${formatPerformanceHours(payment.performanceHours)}`,
     ];
     if (payment.pricingMode === "per_member_hourly") {
-      lines.push(`Rate per person per hour: $${payment.ratePerMemberPerHourUsd ?? 0}`);
+      lines.push(`Rate per person per hour: ${formatUsd(payment.ratePerMemberPerHourUsd ?? 0)}`);
     }
     lines.push(
-      `Total (paid to you to distribute among your band): $${payment.totalUsd}`,
+      `Total (paid to you to distribute among your band): ${formatUsd(payment.totalUsd)}`,
       "",
       `Band designated payee: ${payment.designatedPayeeName}`,
       "",

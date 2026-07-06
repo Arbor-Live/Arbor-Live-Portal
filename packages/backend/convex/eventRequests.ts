@@ -16,6 +16,7 @@ import { allocateRequestNumber } from "./lib/publicReferenceIds";
 import { resolveContactNameParts } from "./lib/contactName";
 import {
   buildPublicBookingDayLoad,
+  EVENT_TIMEZONE,
   formatPacificShortDate,
   groupShowSlotsByDay,
   listEventsLinkedToRequest,
@@ -23,8 +24,6 @@ import {
   toPacificDateKey,
   type DayEventPlan,
 } from "./lib/bookingDayLoad";
-
-const EVENT_TIMEZONE = "America/Los_Angeles";
 
 const eventRequestStatusValue = v.union(
   v.literal("submitted"),

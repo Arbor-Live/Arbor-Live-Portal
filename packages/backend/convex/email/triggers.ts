@@ -15,6 +15,7 @@ import {
 import {
   buildMergedIcsEventForShiftGroup,
   formatAssignmentSummary,
+  formatBlockTimeRange,
   formatScheduleBlockSummary,
   groupShiftsByConsecutiveBlocks,
   shiftGroupFingerprint,
@@ -78,20 +79,9 @@ export async function scheduleSchedulePublishedEmails(
     .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", eventId))
     .take(500);
 
+  const timezone = event.timezone || EVENT_TIMEZONE;
   const blockSummaries = blocks.map((block) => {
-    const start = new Date(block.startsAt).toLocaleString("en-US", {
-      timeZone: event.timezone || EVENT_TIMEZONE,
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
-    const end = new Date(block.endsAt).toLocaleString("en-US", {
-      timeZone: event.timezone || EVENT_TIMEZONE,
-      hour: "numeric",
-      minute: "2-digit",
-    });
-    return `${block.label}: ${start} – ${end}`;
+    return `${block.label}: ${formatBlockTimeRange(block.startsAt, block.endsAt, timezone)}`;
   });
 
   const recipients = await getEventLeadRecipients(ctx, eventId);

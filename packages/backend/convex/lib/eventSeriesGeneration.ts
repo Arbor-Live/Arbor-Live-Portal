@@ -1,9 +1,10 @@
+import { pacificDateKey, PORTAL_TIMEZONE } from "@arbor/format";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { syncEventCrewCostUsd } from "./crewCost";
 import { syncEventStatusForLinkedInvoice } from "./eventStatus";
 
-export const EVENT_TIMEZONE = "America/Los_Angeles";
+export const EVENT_TIMEZONE = PORTAL_TIMEZONE;
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 export type EventSeriesBlockTemplate = {
@@ -260,7 +261,7 @@ export function occurrenceEndAt(startAt: number, anchorStartAt: number, anchorEn
 }
 
 export function spansMultipleDays(startAt: number, endAt: number) {
-  return new Date(startAt).toDateString() !== new Date(endAt).toDateString();
+  return pacificDateKey(startAt) !== pacificDateKey(endAt);
 }
 
 export async function insertScheduleBlocksFromTemplates(
