@@ -47,15 +47,12 @@ export function monthDateRange(date: Date) {
   };
 }
 
+import { formatDate } from "@/lib/format";
+
 export function formatSelectedDateLabel(dateKey: string) {
   const parsed = parseDateInput(dateKey);
   if (!parsed) return dateKey;
-  return parsed.toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
+  return formatDate(parsed.getTime());
 }
 
 export const UNAVAILABLE_DAY_WARNING =

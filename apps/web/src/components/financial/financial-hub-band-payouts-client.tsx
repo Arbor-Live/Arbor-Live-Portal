@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { formatDate, formatUsd } from "@/lib/format";
 
 type BandPaymentQueue =
   | "all_pending"
@@ -26,19 +27,6 @@ const QUEUE_LABELS: Record<BandPaymentQueue, string> = {
   ready_to_pay: "Ready to pay",
   paid: "Paid",
 };
-
-function formatUsd(value: number) {
-  return `$${value.toFixed(2)}`;
-}
-
-function formatDate(ms: number) {
-  return new Date(ms).toLocaleString("en-US", {
-    timeZone: "America/Los_Angeles",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
 
 export function FinancialHubBandPayoutsClient() {
   const [queue, setQueue] = useState<BandPaymentQueue>("all_pending");

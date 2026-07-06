@@ -110,6 +110,9 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 8,
   },
+  tableLastRow: {
+    borderBottomWidth: 0,
+  },
   th: {
     fontWeight: 700,
     fontSize: 9,
@@ -288,13 +291,25 @@ function SectionTable({
         <Text style={[styles.th, { flex: rateFlex, textAlign: "right" }]}>Rate</Text>
         <Text style={[styles.th, { flex: amountFlex, textAlign: "right" }]}>Amount</Text>
       </View>
-      {rows.map((row) => (
-        <View key={row.id} style={styles.tableRow}>
+      {rows.map((row, index) => (
+        <View
+          key={row.id}
+          style={
+            index === rows.length - 1
+              ? [styles.tableRow, styles.tableLastRow]
+              : styles.tableRow
+          }
+        >
           {showProvider ? (
             <Text style={[styles.td, { flex: providerFlex }]}>{row.provider || "—"}</Text>
           ) : null}
           <Text style={[styles.td, { flex: itemFlex }]}>{row.label}</Text>
-          <Text style={[styles.td, { flex: qtyFlex, textAlign: "right" }]}>{row.quantity}</Text>
+          <View style={[styles.td, { flex: qtyFlex, alignItems: "flex-end" }]}>
+            <Text style={{ textAlign: "right" }}>{row.quantity}</Text>
+            {row.quantityDetail ? (
+              <Text style={{ fontSize: 7, color: "#64748b", textAlign: "right" }}>{row.quantityDetail}</Text>
+            ) : null}
+          </View>
           <Text style={[styles.td, { flex: rateFlex, textAlign: "right" }]}>{currency(row.rateUsd)}</Text>
           <Text style={[styles.td, { flex: amountFlex, textAlign: "right", fontWeight: 700 }]}>
             {currency(row.amountUsd)}

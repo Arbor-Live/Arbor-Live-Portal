@@ -53,6 +53,7 @@ import { getConvexErrorMessage } from "@/lib/convex-error";
 import { FormSaveBar } from "@/components/forms";
 import { StoredAssetImage, StoredAssetLink } from "@/components/files/stored-asset-image";
 import { isImageAssetReference } from "@/lib/r2-assets";
+import { formatDateTime, formatUsd } from "@/lib/format";
 
 function EventArtifactAttachment({
   linkUrl,
@@ -124,21 +125,8 @@ function toLocalDateTimeInput(value: number | Date) {
   return `${y}-${m}-${d}T${hh}:${mm}`;
 }
 
-function formatCurrency(value: number) {
-  return `$${value.toFixed(2)}`;
-}
-
 function formatHours(value: number) {
   return `${value.toFixed(2)}h`;
-}
-
-function formatDateTime(value: number) {
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(value));
 }
 
 const RENTAL_EVENT_TYPES: EventType[] = ["Dry Hire", "Rental with Crew"];
@@ -525,6 +513,7 @@ export function EventEditor({
           eventManagerUserId: payload.eventManagerUserId,
           dayOfLeadUserId: payload.dayOfLeadUserId,
           notes: payload.notes,
+          invoiceId: payload.invoiceId,
         });
         router.replace(getEventEditorTabPath(String(result.firstEventId), resolvedActiveTab));
         return;
@@ -772,13 +761,18 @@ export function EventEditor({
   const bandsCostTotal = Number(bandsCostUsd || "0");
   const externalRentalsCostTotal = Number(externalRentalsCostUsd || "0");
   const otherCostTotal = Number(otherCostUsd || "0");
-  const totalEventCostUsd = crewCostTotal + bandsCostTotal + externalRentalsCostTotal + otherCostTotal;
   const seriesRecurringTotalUsd =
     (seriesMeta?.seriesBandsCostUsd ?? 0) +
     (seriesMeta?.seriesExternalRentalsCostUsd ?? 0) +
     (seriesMeta?.seriesOtherCostUsd ?? 0);
+  const totalEventCostUsd = crewCostTotal + bandsCostTotal + externalRentalsCostTotal + otherCostTotal;
+  const seriesProjectedCostUsd = seriesMeta?.costSummary?.projectedGrandTotalUsd;
+  const marginCostUsd =
+    seriesMeta && seriesProjectedCostUsd !== undefined
+      ? seriesProjectedCostUsd
+      : totalEventCostUsd + seriesRecurringTotalUsd;
   const billedTotalUsd = linkedInvoice?.totalUsd ?? null;
-  const profitLossUsd = billedTotalUsd !== null ? billedTotalUsd - totalEventCostUsd : null;
+  const profitLossUsd = billedTotalUsd !== null ? billedTotalUsd - marginCostUsd : null;
   const quickAddDisabled = !startAt || !endAt;
   const quickAddDisabledReason = quickAddDisabled ? "Set event start and end first." : undefined;
   const quickAddLabel =
@@ -1420,6 +1414,7 @@ export function EventEditor({
                 eventType={eventType}
                 rentalFulfillmentMode={rentalFulfillmentMode}
                 invoiceId={invoiceId ? (invoiceId as Id<"invoices">) : undefined}
+                seriesLinked={Boolean(seriesMeta && !seriesMeta.seriesDetached)}
                 initialItems={pullListInitialItems}
                 onSaved={(text) => {
                   setMessageTone("success");
@@ -1536,12 +1531,12 @@ export function EventEditor({
                   . Crew cost remains unique to each occurrence.
                 </p>
                 <div className="grid gap-2 md:grid-cols-4 text-sm">
-                  <p>Template bands / event: ${(seriesMeta.occurrenceBandsCostUsd ?? 0).toFixed(2)}</p>
+                  <p>Template bands / event: {formatUsd(seriesMeta.occurrenceBandsCostUsd ?? 0)}</p>
                   <p>
-                    Template external / event: ${(seriesMeta.occurrenceExternalRentalsCostUsd ?? 0).toFixed(2)}
+                    Template external / event: {formatUsd(seriesMeta.occurrenceExternalRentalsCostUsd ?? 0)}
                   </p>
-                  <p>Template other / event: ${(seriesMeta.occurrenceOtherCostUsd ?? 0).toFixed(2)}</p>
-                  <p>Series-wide recurring: ${seriesRecurringTotalUsd.toFixed(2)}</p>
+                  <p>Template other / event: {formatUsd(seriesMeta.occurrenceOtherCostUsd ?? 0)}</p>
+                  <p>Series-wide recurring: {formatUsd(seriesRecurringTotalUsd)}</p>
                 </div>
               </div>
             ) : null}
@@ -1587,11 +1582,13 @@ export function EventEditor({
                 <div className="mt-2 grid gap-2 md:grid-cols-3">
                   <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
                     <p className="text-xs text-muted-foreground">Total Billed</p>
-                    <p className="font-semibold">${billedTotalUsd!.toFixed(2)}</p>
+                    <p className="font-semibold">{formatUsd(billedTotalUsd!)}</p>
                   </div>
                   <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
-                    <p className="text-xs text-muted-foreground">Total Event Cost</p>
-                    <p className="font-semibold">${totalEventCostUsd.toFixed(2)}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {seriesMeta ? "Total Series Cost (projected)" : "Total Event Cost"}
+                    </p>
+                    <p className="font-semibold">{formatUsd(marginCostUsd)}</p>
                   </div>
                   <div
                     className={`rounded-md border px-3 py-2 text-sm ${
@@ -1601,7 +1598,7 @@ export function EventEditor({
                     }`}
                   >
                     <p className="text-xs">Profit / Loss</p>
-                    <p className="font-semibold">${(profitLossUsd ?? 0).toFixed(2)}</p>
+                    <p className="font-semibold">{formatUsd(profitLossUsd ?? 0)}</p>
                   </div>
                 </div>
               </div>
@@ -1646,7 +1643,7 @@ export function EventEditor({
                               Regular {formatHours(block.regularHours)} • OT {formatHours(block.overtimeHours)}
                             </p>
                           </div>
-                          <p className="text-sm font-semibold">{formatCurrency(block.subtotalUsd)}</p>
+                          <p className="text-sm font-semibold">{formatUsd(block.subtotalUsd)}</p>
                         </div>
                         <div className="overflow-x-auto">
                           <table className="min-w-full text-xs">
@@ -1677,9 +1674,9 @@ export function EventEditor({
                                     {formatHours(row.regularHours)} / {formatHours(row.overtimeHours)}
                                   </td>
                                   <td className="px-3 py-2">
-                                    {formatCurrency(row.baseRateUsd)} / {formatCurrency(row.overtimeRateUsd)}
+                                    {formatUsd(row.baseRateUsd)} / {formatUsd(row.overtimeRateUsd)}
                                   </td>
-                                  <td className="px-3 py-2 text-right">{formatCurrency(row.subtotalUsd)}</td>
+                                  <td className="px-3 py-2 text-right">{formatUsd(row.subtotalUsd)}</td>
                                 </tr>
                               ))}
                             </tbody>

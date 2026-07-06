@@ -1,6 +1,11 @@
 import type { Id } from "@/lib/convex-api";
 import { shiftHours, type EventShiftDraft } from "@/lib/event-schedule-draft";
 import type { TimelineBlockDraft } from "@/components/events/event-timeline-scheduler";
+import type { SeriesBlockTemplate } from "@/lib/event-series-schedule";
+import {
+  sortedBlockTemplateOptions,
+  type SeriesShiftTemplateDraft,
+} from "@/lib/event-series-shifts";
 
 export type InvoiceCrewRow = {
   label: string;
@@ -114,4 +119,32 @@ export function mergeEventCrewWithManualRows(
 ): InvoiceCrewRow[] {
   const manualRows = currentRows.filter((row) => row.source === "manual");
   return [...eventRows, ...manualRows];
+}
+
+export function buildInvoiceCrewRowsFromShiftTemplateDrafts(args: {
+  drafts: SeriesShiftTemplateDraft[];
+  blockTemplates: SeriesBlockTemplate[];
+  billableOccurrenceCount: number;
+}): InvoiceCrewRow[] {
+  const blockOptions = sortedBlockTemplateOptions(args.blockTemplates);
+  const occurrenceCount = Math.max(1, args.billableOccurrenceCount);
+
+  return args.drafts
+    .map((draft) => {
+      const block = blockOptions.find((option) => option.index === draft.blockTemplateIndex);
+      const hoursPerOccurrence = draft.durationMs / 3_600_000;
+      const totalHours = hoursPerOccurrence * occurrenceCount;
+      const role = draft.role.trim() || block?.label || "Crew";
+      return {
+        label: crewRowLabel({
+          blockLabel: block?.label,
+          role,
+          personName: undefined,
+          userId: undefined,
+        }),
+        quantity: String(Math.max(0, totalHours)),
+        source: "event" as const,
+      };
+    })
+    .filter((row) => row.label.trim().length > 0 && Number(row.quantity) > 0);
 }

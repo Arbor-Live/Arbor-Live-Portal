@@ -30,6 +30,7 @@ import { getEventEditorTabPath } from "@/lib/event-editor-tabs";
 import { buildCrewRowsFromShifts, type InvoiceCrewRow } from "@/lib/invoice-crew-from-event";
 import { FormSaveBar } from "@/components/forms";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { formatUsd } from "@/lib/format";
 import type { SaveStatus } from "@/hooks/use-convex-form";
 
 type EventType = "Crewed Event" | "Rental with Crew" | "Dry Hire" | "Services Only";
@@ -391,7 +392,7 @@ export function InvoiceLinkedEventCrewSection({
         </div>
         {!row.userId?.trim() ? (
           <p className="text-xs text-muted-foreground">
-            Open slot · bills at ${defaultCrewHourlyRateUsd.toFixed(2)}/hr on this invoice
+            Open slot · bills at {formatUsd(defaultCrewHourlyRateUsd)}/hr on this invoice
           </p>
         ) : null}
         {availabilityNotes.length > 0 ? (
@@ -449,7 +450,7 @@ export function InvoiceLinkedEventCrewSection({
           Edit schedule blocks and crew slots for{" "}
           <span className="font-medium">{eventData.event.title}</span>. Click Save to persist schedule and crew
           changes to the linked event. Open slots bill at the invoice&apos;s default crew rate ($
-          {defaultCrewHourlyRateUsd.toFixed(2)}/hr).
+          {formatUsd(defaultCrewHourlyRateUsd)}/hr).
         </p>
       </CardHeader>
       <CardContent className="space-y-3">

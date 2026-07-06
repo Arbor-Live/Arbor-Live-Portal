@@ -12,6 +12,7 @@ import { Avatar, AvatarFallback, AvatarGroup, AvatarGroupCount, AvatarImage } fr
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 import { normalizeEventStatus } from "@/lib/event-status";
+import { formatDateTime, formatDateTimeRange } from "@/lib/format";
 
 type DashboardEvent = {
   _id: string;
@@ -43,18 +44,11 @@ type DashboardEvent = {
 
 function formatClock(value: number | undefined) {
   if (!value) return null;
-  return new Intl.DateTimeFormat("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(value));
+  return formatDateTime(value, "timeOnly");
 }
 
 function formatRange(start: Date, end: Date) {
-  const formatter = new Intl.DateTimeFormat("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-  return `${formatter.format(start)} - ${formatter.format(end)}`;
+  return formatDateTimeRange(start.getTime(), end.getTime());
 }
 
 function initials(value: string) {

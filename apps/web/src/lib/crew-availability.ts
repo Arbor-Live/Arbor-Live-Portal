@@ -1,3 +1,5 @@
+import { formatDateTime } from "@/lib/format";
+
 export type CrewAvailabilityResponseStatus = "yes" | "partial" | "only_if_necessary" | "no";
 
 export const DEFAULT_AVAILABILITY_WEEKS = 3;
@@ -86,13 +88,7 @@ export function crewResponseBadgeClass(status: CrewAvailabilityResponseStatus): 
 }
 
 export function formatEventDateTime(value: number) {
-  return new Intl.DateTimeFormat("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(value));
+  return formatDateTime(value, "short");
 }
 
 type ResponderNotesSource = {

@@ -13,6 +13,7 @@ import {
   paymentProofSubmissionSchema,
   type PaymentProofSubmissionFormValues,
 } from "@/lib/validations/payment-proof";
+import { formatDate, formatDateTime, formatUsd } from "@/lib/format";
 
 type PaymentProofState = {
   eligible: boolean;
@@ -40,12 +41,7 @@ type SubmitArgs = {
 };
 
 function formatDueDate(dueAt: number) {
-  return new Date(dueAt).toLocaleString("en-US", {
-    timeZone: "America/Los_Angeles",
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
+  return formatDate(dueAt);
 }
 
 function paymentMethodDisplay(method: PaymentProofSubmissionFormValues["paymentMethod"]) {
@@ -112,10 +108,7 @@ export function PublicPaymentProofSection({
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
           <p className="text-muted-foreground">
-            Submitted {new Date(paymentProof.submission.submittedAt).toLocaleString("en-US", {
-              timeZone: "America/Los_Angeles",
-            })}{" "}
-            Pacific.
+            Submitted {formatDateTime(paymentProof.submission.submittedAt)}
           </p>
           <p>
             <span className="font-medium">Method:</span>{" "}
@@ -140,9 +133,9 @@ export function PublicPaymentProofSection({
             <AlertDescription className="space-y-1">
               <p className="font-medium">This payment is past due.</p>
               <p>
-                Payment was due {formatDueDate(paymentProof.lateFee.dueAt)} Pacific.
+                Payment was due {formatDueDate(paymentProof.lateFee.dueAt)}.
                 {paymentProof.lateFee.lateFeeUsd > 0
-                  ? ` Accrued late fees: $${paymentProof.lateFee.lateFeeUsd.toFixed(2)} ($25/month after the first month past due).`
+                  ? ` Accrued late fees: ${formatUsd(paymentProof.lateFee.lateFeeUsd)} ($25/month after the first month past due).`
                   : " Late fees of $25/month apply after the first month past due."}
               </p>
             </AlertDescription>

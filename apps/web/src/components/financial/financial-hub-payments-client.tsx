@@ -6,6 +6,7 @@ import { useRef, useState } from "react";
 import { api, type Id } from "@/lib/convex-api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatDate, formatUsd } from "@/lib/format";
 
 type PaymentQueue = "payment_pending" | "proof_no_receipt" | "payment_received" | "overdue";
 
@@ -15,19 +16,6 @@ const QUEUE_LABELS: Record<PaymentQueue, string> = {
   payment_received: "Payment received",
   overdue: "Overdue",
 };
-
-function formatUsd(value: number) {
-  return `$${value.toFixed(2)}`;
-}
-
-function formatDate(ms: number) {
-  return new Date(ms).toLocaleString("en-US", {
-    timeZone: "America/Los_Angeles",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
 
 export function FinancialHubPaymentsClient() {
   const [queue, setQueue] = useState<PaymentQueue>("payment_pending");

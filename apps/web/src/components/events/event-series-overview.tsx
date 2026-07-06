@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
@@ -11,24 +12,23 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SearchableSelect } from "@/components/inventory/searchable-select";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { formatEventStatusLabel, normalizeEventStatus } from "@/lib/event-status";
 import { formatOccurrencePreview } from "@/lib/event-series";
+import { formatUsd } from "@/lib/format";
 import {
   eventSeriesCostsSchema,
   type EventSeriesCostsFormValues,
 } from "@/lib/validations/event";
 import { EventSeriesScheduleEditor } from "@/components/events/event-series-schedule-editor";
 import { EventSeriesShiftEditor } from "@/components/events/event-series-shift-editor";
+import { authClient } from "@/lib/auth-client";
 
 function intervalLabel(weeks: number) {
   if (weeks === 1) return "Weekly";
   return `Every ${weeks} weeks`;
-}
-
-function formatUsd(value: number) {
-  return `$${value.toFixed(2)}`;
 }
 
 function emptyCostsForm(): EventSeriesCostsFormValues {
@@ -78,11 +78,21 @@ function costsFromSeries(series: SeriesDoc): EventSeriesCostsFormValues {
 }
 
 export function EventSeriesOverview({ seriesId }: { seriesId: Id<"eventSeries"> }) {
+  const router = useRouter();
+  const viewer = useQuery(api.users.getViewer, {});
+  const session = authClient.useSession();
   const data = useQuery(api.eventSeries.get, { id: seriesId });
+  const invoices = useQuery(api.invoices.list, { status: "draft" });
   const addOccurrences = useMutation(api.eventSeries.addOccurrences);
   const cancelFuture = useMutation(api.eventSeries.cancelFuture);
   const endSeries = useMutation(api.eventSeries.endSeries);
   const updateSeriesCosts = useMutation(api.eventSeries.updateSeriesCosts);
+  const linkInvoice = useMutation(api.eventSeries.linkInvoice);
+  const unlinkInvoice = useMutation(api.eventSeries.unlinkInvoice);
+  const createDraftForSeries = useMutation(api.invoices.createDraftForSeries);
+  const scaffoldPullList = useMutation(api.eventSeriesPullLists.scaffoldFromInvoice);
+
+  const [invoiceLinkId, setInvoiceLinkId] = useState("");
 
   const costsForm = useConvexForm<EventSeriesCostsFormValues>({
     schema: eventSeriesCostsSchema,
@@ -98,7 +108,30 @@ export function EventSeriesOverview({ seriesId }: { seriesId: Id<"eventSeries"> 
     if (!data?.series) return;
     if (costsForm.formState.isDirty) return;
     costsForm.reset(costsFromSeries(data.series));
+    setInvoiceLinkId(data.series.invoiceId ?? "");
   }, [data?.series, costsForm]);
+
+  const billableOccurrenceCount = useMemo(() => {
+    const rows = data?.occurrences ?? [];
+    return rows.filter(
+      (row) => !row.seriesDetached && normalizeEventStatus(row.status) !== "cancelled",
+    ).length;
+  }, [data?.occurrences]);
+
+  const invoiceOptions = useMemo(
+    () =>
+      (invoices ?? []).map((row) => ({
+        value: row._id,
+        label: `${row.invoiceNumber} · ${formatUsd(row.totalUsd)}`,
+      })),
+    [invoices],
+  );
+
+  const linkedInvoice = useMemo(() => {
+    const id = data?.series?.invoiceId;
+    if (!id) return null;
+    return (invoices ?? []).find((row) => row._id === id) ?? { _id: id, invoiceNumber: "Linked invoice" };
+  }, [data?.series?.invoiceId, invoices]);
 
   const stats = useMemo(() => {
     const rows = data?.occurrences ?? [];
@@ -212,6 +245,110 @@ export function EventSeriesOverview({ seriesId }: { seriesId: Id<"eventSeries"> 
       {message ? (
         <p className="rounded-md border px-3 py-2 text-sm">{message}</p>
       ) : null}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Billing</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            One invoice can bill the whole series. {billableOccurrenceCount} billable occurrence
+            {billableOccurrenceCount === 1 ? "" : "s"}.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {linkedInvoice ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-sm">
+                Linked invoice:{" "}
+                <span className="font-medium">
+                  {"invoiceNumber" in linkedInvoice ? linkedInvoice.invoiceNumber : "Invoice"}
+                </span>
+              </p>
+              <Button type="button" variant="outline" size="sm" asChild>
+                <Link href={`/dashboard/financial-hub/invoices/${linkedInvoice._id}`}>Open invoice</Link>
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!series.invoiceId}
+                onClick={() =>
+                  void scaffoldPullList({ seriesId })
+                    .then((result) =>
+                      setMessage(`Built pull list template from invoice (${result.templateCount} lines).`),
+                    )
+                    .catch((error) =>
+                      setMessage(getConvexErrorMessage(error, "Failed to scaffold pull list.")),
+                    )
+                }
+              >
+                Build pull list from invoice
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() =>
+                  void unlinkInvoice({ id: seriesId })
+                    .then(() => setMessage("Invoice unlinked from series."))
+                    .catch((error) =>
+                      setMessage(getConvexErrorMessage(error, "Failed to unlink invoice.")),
+                    )
+                }
+              >
+                Unlink
+              </Button>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-end gap-2">
+              <Button
+                type="button"
+                disabled={!session.data?.user?.id}
+                onClick={() => {
+                  const user = session.data?.user;
+                  if (!user?.id) return;
+                  void createDraftForSeries({
+                    seriesId,
+                    managerUserId: user.id,
+                    managerName: user.name ?? "Manager",
+                    managerEmail: user.email ?? undefined,
+                  })
+                    .then((result) => {
+                      router.push(`/dashboard/financial-hub/invoices/${result.id}`);
+                    })
+                    .catch((error) =>
+                      setMessage(getConvexErrorMessage(error, "Failed to create invoice.")),
+                    );
+                }}
+              >
+                Create invoice for series
+              </Button>
+              <div className="min-w-[16rem] flex-1 space-y-2">
+                <Label>Link draft invoice</Label>
+                <SearchableSelect
+                  value={invoiceLinkId}
+                  onChange={setInvoiceLinkId}
+                  options={invoiceOptions}
+                  placeholder="Search invoices..."
+                  emptyLabel="Select invoice"
+                />
+              </div>
+              <Button
+                type="button"
+                disabled={!invoiceLinkId}
+                onClick={() =>
+                  void linkInvoice({ id: seriesId, invoiceId: invoiceLinkId as Id<"invoices"> })
+                    .then(() => setMessage("Invoice linked to series and all active occurrences."))
+                    .catch((error) =>
+                      setMessage(getConvexErrorMessage(error, "Failed to link invoice.")),
+                    )
+                }
+              >
+                Link invoice
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -351,6 +488,10 @@ export function EventSeriesOverview({ seriesId }: { seriesId: Id<"eventSeries"> 
 
       <EventSeriesShiftEditor
         seriesId={seriesId}
+        anchorStartAt={series.anchorStartAt}
+        anchorEndAt={series.anchorEndAt}
+        eventType={series.eventType}
+        rentalFulfillmentMode={series.rentalFulfillmentMode}
         blockTemplates={series.blockTemplates}
         shiftTemplates={series.shiftTemplates}
         budgetCrewHourlyRateUsd={series.budgetCrewHourlyRateUsd}

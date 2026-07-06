@@ -1,3 +1,5 @@
+import { formatUsd, formatUsdOptional } from "@/lib/format";
+
 export const DEFAULT_INVENTORY_CATEGORIES = [
   { value: "sound", label: "Sound" },
   { value: "lighting", label: "Lighting" },
@@ -34,11 +36,7 @@ export function toCategoryOptions(
 }
 
 export function formatCurrency(amount?: number) {
-  if (amount === undefined || amount === null) return "-";
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  }).format(amount);
+  return formatUsdOptional(amount);
 }
 
 export function formatCurrencyFromCents(cents?: number) {

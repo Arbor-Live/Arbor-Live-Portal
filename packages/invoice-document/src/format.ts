@@ -1,7 +1,8 @@
+import { formatUsd } from "@arbor/format";
 import type { GroupedInvoiceSections, InvoiceDocumentData, InvoiceLineItem } from "./types";
 
 export function currency(value: number) {
-  return `$${value.toFixed(2)}`;
+  return formatUsd(value);
 }
 
 export function groupInvoiceSections(lineItems: InvoiceLineItem[]): GroupedInvoiceSections {
@@ -28,6 +29,7 @@ export function buildInvoiceDocumentData(args: {
       provider: line.provider,
       label: line.label,
       quantity: line.quantity,
+      quantityDetail: line.quantityDetail,
       rateUsd: line.rateUsd,
       amountUsd: line.amountUsd,
     })),

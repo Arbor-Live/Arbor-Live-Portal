@@ -1,6 +1,7 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { syncEventCrewCostUsd } from "./crewCost";
+import { syncEventStatusForLinkedInvoice } from "./eventStatus";
 
 export const EVENT_TIMEZONE = "America/Los_Angeles";
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
@@ -316,6 +317,7 @@ export async function materializeOccurrence(
     title: series.title,
     status: "tentative",
     visibility: "internal",
+    invoiceId: series.invoiceId,
     seriesId: series._id,
     occurrenceIndex,
     seriesDetached: false,
@@ -363,6 +365,9 @@ export async function materializeOccurrence(
   );
   if (series.shiftTemplates && series.shiftTemplates.length > 0) {
     await syncEventCrewCostUsd(ctx, eventId, now);
+  }
+  if (series.invoiceId) {
+    await syncEventStatusForLinkedInvoice(ctx, eventId, series.invoiceId, "tentative");
   }
   return eventId;
 }
@@ -414,6 +419,35 @@ export function shouldApplySeriesUpdate(
   return true;
 }
 
+export async function propagateInvoiceIdToSeriesOccurrences(
+  ctx: MutationCtx,
+  seriesId: Id<"eventSeries">,
+  invoiceId: Id<"invoices"> | undefined,
+  referenceOccurrenceIndex: number,
+  scope: SeriesEditScope,
+  now: number,
+) {
+  const occurrences = await ctx.db
+    .query("events")
+    .withIndex("by_seriesId_and_occurrenceIndex", (q) => q.eq("seriesId", seriesId))
+    .take(200);
+
+  for (const occurrence of occurrences.sort(
+    (a, b) => (a.occurrenceIndex ?? 0) - (b.occurrenceIndex ?? 0),
+  )) {
+    if (scope === "this") {
+      if (occurrence.occurrenceIndex !== referenceOccurrenceIndex) continue;
+    } else if (!shouldApplySeriesUpdate(occurrence, scope, referenceOccurrenceIndex, now)) {
+      continue;
+    }
+    if (occurrence.seriesDetached || occurrence.status === "cancelled") continue;
+
+    await ctx.db.patch(occurrence._id, { invoiceId, updatedAt: now });
+    if (invoiceId) {
+      await syncEventStatusForLinkedInvoice(ctx, occurrence._id, invoiceId, occurrence.status);
+    }
+  }
+}
 export async function propagateOverviewToSeriesOccurrences(
   ctx: MutationCtx,
   series: Doc<"eventSeries">,

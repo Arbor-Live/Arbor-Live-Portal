@@ -7,9 +7,11 @@ import {
   normalizeEventStatus,
   syncEventStatusForLinkedInvoice,
 } from "./lib/eventStatus";
+import { computeSeriesCostSummary } from "./lib/eventSeriesCosts";
 import { listEventsByInvoiceId } from "./lib/invoiceEvents";
 import { RENTAL_EVENT_TYPES, enrichPullListItems, summarizePullList } from "./eventPullLists";
-import { propagateOverviewToSeriesOccurrences, type SeriesEditScope } from "./lib/eventSeriesGeneration";
+import { propagateOverviewToSeriesOccurrences, propagateInvoiceIdToSeriesOccurrences, type SeriesEditScope } from "./lib/eventSeriesGeneration";
+import { resolveSeriesMetadataForInvoice } from "./lib/invoiceSeries";
 import { scheduleEventCancelledEmails } from "./email/triggers";
 import { resolveStoredR2AssetUrl } from "./inventoryR2";
 
@@ -293,6 +295,7 @@ export const get = query({
                 .query("events")
                 .withIndex("by_seriesId_and_occurrenceIndex", (q) => q.eq("seriesId", event.seriesId!))
                 .take(200);
+              const costSummary = computeSeriesCostSummary(series, siblings);
               return {
                 _id: series._id,
                 title: series.title,
@@ -301,6 +304,7 @@ export const get = query({
                 totalOccurrences: series.occurrenceCount ?? siblings.length,
                 occurrenceIndex: event.occurrenceIndex,
                 seriesDetached: event.seriesDetached ?? false,
+                invoiceId: series.invoiceId,
                 budgetUsd: series.budgetUsd,
                 occurrenceBandsCostUsd: series.occurrenceBandsCostUsd,
                 occurrenceExternalRentalsCostUsd: series.occurrenceExternalRentalsCostUsd,
@@ -308,6 +312,7 @@ export const get = query({
                 seriesBandsCostUsd: series.seriesBandsCostUsd,
                 seriesExternalRentalsCostUsd: series.seriesExternalRentalsCostUsd,
                 seriesOtherCostUsd: series.seriesOtherCostUsd,
+                costSummary,
               };
             })()
           : null,
@@ -378,6 +383,7 @@ export const getByInvoiceId = query({
         startAt: row.startAt,
         endAt: row.endAt,
       })),
+      series: await resolveSeriesMetadataForInvoice(ctx, args.invoiceId),
     };
   },
 });
@@ -567,6 +573,7 @@ export const update = mutation({
         eventManagerUserId: patch.eventManagerUserId,
         rentalFulfillmentMode: patch.rentalFulfillmentMode,
         notes: patch.notes,
+        ...(args.invoiceId !== undefined ? { invoiceId: nextInvoiceId } : {}),
         updatedAt: now,
       });
       const updatedSeries = await ctx.db.get(existing.seriesId);
@@ -578,6 +585,16 @@ export const update = mutation({
         scope,
         now,
       );
+      if (args.invoiceId !== undefined) {
+        await propagateInvoiceIdToSeriesOccurrences(
+          ctx,
+          existing.seriesId,
+          nextInvoiceId,
+          referenceIndex,
+          scope,
+          now,
+        );
+      }
     } else {
       await ctx.db.patch(args.id, {
         ...patch,

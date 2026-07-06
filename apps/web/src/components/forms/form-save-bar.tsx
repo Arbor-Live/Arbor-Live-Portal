@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { CheckIcon, CircleNotchIcon, WarningCircleIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { useOptionalSidebar } from "@/components/ui/sidebar";
@@ -19,6 +20,7 @@ export type FormSaveBarProps = {
   onDiscard?: () => void;
   onRetry?: () => void;
   className?: string;
+  summary?: ReactNode;
 };
 
 export function FormSaveBar({
@@ -32,6 +34,7 @@ export function FormSaveBar({
   onDiscard,
   onRetry,
   className,
+  summary,
 }: FormSaveBarProps) {
   const sidebar = useOptionalSidebar();
 
@@ -67,8 +70,9 @@ export function FormSaveBar({
         className,
       )}
     >
-      <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-        <div className="flex min-w-0 flex-1 items-center gap-2 text-sm">
+      <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
+        <div className="flex min-w-0 flex-1 items-center gap-4 text-sm">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
           {isSaving ? (
             <>
               <CircleNotchIcon className="size-4 shrink-0 animate-spin text-muted-foreground" />
@@ -97,6 +101,8 @@ export function FormSaveBar({
           {!isSaving && !isError && !isSaved && isDirty && tier === "C" ? (
             <span className="text-muted-foreground">Unsaved changes</span>
           ) : null}
+          </div>
+          {summary ? <div className="hidden shrink-0 text-right sm:block">{summary}</div> : null}
         </div>
 
         <div className="flex shrink-0 items-center gap-2">

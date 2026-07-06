@@ -68,6 +68,7 @@ type EventPullListProps = {
   eventType: string;
   rentalFulfillmentMode?: "delivery" | "will_call";
   invoiceId?: Id<"invoices">;
+  seriesLinked?: boolean;
   initialItems: PullListItemDraft[];
   onSaved?: (message: string) => void;
   onError?: (message: string) => void;
@@ -122,6 +123,7 @@ export function EventPullList({
   eventType,
   rentalFulfillmentMode,
   invoiceId,
+  seriesLinked,
   initialItems,
   onSaved,
   onError,
@@ -360,6 +362,12 @@ export function EventPullList({
             <p className="text-sm text-muted-foreground">Build the pull list from a linked invoice or add items.</p>
           )}
           {fulfillmentHelp ? <p className="mt-1 text-xs text-muted-foreground">{fulfillmentHelp}</p> : null}
+          {seriesLinked ? (
+            <p className="mt-1 text-xs text-muted-foreground">
+              This event is part of a billed series. Invoice lines define billing totals; use the series pull
+              list template for per-show quantities. Load from invoice uses per-occurrence qty when series-linked.
+            </p>
+          ) : null}
         </div>
         <div className="flex flex-wrap gap-2">
           <Button

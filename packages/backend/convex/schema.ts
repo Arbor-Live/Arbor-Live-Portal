@@ -436,6 +436,8 @@ export default defineSchema({
     paymentReceivedByUserId: v.optional(v.string()),
     paymentReceiptStorageFileId: v.optional(v.id("_storage")),
 
+    billableOccurrenceCountAtSave: v.optional(v.number()),
+
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -461,6 +463,7 @@ export default defineSchema({
     packageId: v.optional(v.id("inventoryPackages")),
     typeId: v.optional(v.id("inventoryTypes")),
     feeDefinitionId: v.optional(v.id("invoiceFeeDefinitions")),
+    equipmentQuantityBasis: v.optional(v.union(v.literal("total"), v.literal("per_occurrence"))),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -533,11 +536,13 @@ export default defineSchema({
         }),
       ),
     ),
+    invoiceId: v.optional(v.id("invoices")),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_status", ["status"])
-    .index("by_createdAt", ["createdAt"]),
+    .index("by_createdAt", ["createdAt"])
+    .index("by_invoiceId", ["invoiceId"]),
 
   events: defineTable({
     title: v.string(),
@@ -989,6 +994,24 @@ export default defineSchema({
     .index("by_eventId", ["eventId"])
     .index("by_eventId_and_sortOrder", ["eventId", "sortOrder"])
     .index("by_packageId", ["packageId"]),
+
+  eventSeriesPullListItems: defineTable({
+    seriesId: v.id("eventSeries"),
+    lineKind: eventPullListLineKindValue,
+    typeId: v.optional(v.id("inventoryTypes")),
+    packageId: v.optional(v.id("inventoryPackages")),
+    label: v.string(),
+    quantityRequired: v.number(),
+    source: eventPullListSourceValue,
+    sourcePackageId: v.optional(v.id("inventoryPackages")),
+    sourceInvoiceLineKey: v.optional(v.string()),
+    sortOrder: v.number(),
+    notes: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_seriesId", ["seriesId"])
+    .index("by_seriesId_and_sortOrder", ["seriesId", "sortOrder"]),
 
   marketingPosts: defineTable({
     title: v.string(),

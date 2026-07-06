@@ -2,6 +2,8 @@ import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { syncLinkedEventStatusFromInvoice } from "./eventStatus";
 import { listEventsByInvoiceId } from "./invoiceEvents";
+import { toDocumentLineItem } from "./invoiceDocumentBuild";
+import { resolveBillableOccurrenceCount } from "./invoiceSeries";
 import { loadPaymentProofState, normalizeFinanceContactEmail } from "./paymentProof";
 import {
   markPayingPartyNotified,
@@ -63,6 +65,15 @@ export async function loadPublicQuoteView(ctx: QueryCtx, invoice: Doc<"invoices"
   const linkedEvents = await listEventsByInvoiceId(ctx, invoice._id);
   const linkedEvent = linkedEvents[0] ?? null;
   const paymentProof = await loadPaymentProofState(ctx, invoice, linkedEvent);
+  const billableOccurrenceCount = await resolveBillableOccurrenceCount(ctx, invoice._id);
+  const displayLineItems = lineItems.map((row) => {
+    const doc = toDocumentLineItem(row, billableOccurrenceCount);
+    return {
+      ...row,
+      quantity: doc.quantity,
+      quantityDetail: doc.quantityDetail,
+    };
+  });
   const eventIds = linkedEvents.map((event) => event._id);
   const eventAssignments = linkedEvent
     ? (
@@ -151,7 +162,7 @@ export async function loadPublicQuoteView(ctx: QueryCtx, invoice: Doc<"invoices"
       termsIds: resolveInvoiceTermsIds(invoice),
       additionalTermsMarkdown: invoice.additionalTermsMarkdown,
     },
-    lineItems,
+    lineItems: displayLineItems,
     termsAndConditionsMarkdown: combinedTermsMarkdown,
     termsVersion: globalTermsVersion,
     event: linkedEvent

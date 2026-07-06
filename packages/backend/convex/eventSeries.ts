@@ -11,6 +11,7 @@ import {
   computeOccurrenceStarts,
   EVENT_TIMEZONE,
   materializeOccurrence,
+  propagateInvoiceIdToSeriesOccurrences,
   replaceEmptyShiftsFromTemplates,
   replaceScheduleBlocksFromTemplates,
   shiftsToTemplates,
@@ -18,6 +19,7 @@ import {
   type SeriesEditScope,
 } from "./lib/eventSeriesGeneration";
 import { syncEventCrewCostUsd } from "./lib/crewCost";
+import { syncEventStatusForLinkedInvoice } from "./lib/eventStatus";
 import { computeSeriesCostSummary, effectiveCrewUsd } from "./lib/eventSeriesCosts";
 
 const eventTypeValue = v.union(
@@ -184,6 +186,7 @@ export const create = mutation({
     notes: v.optional(v.string()),
     blockTemplates: v.optional(v.array(blockTemplateValue)),
     shiftTemplates: v.optional(v.array(shiftTemplateValue)),
+    invoiceId: v.optional(v.id("invoices")),
   },
   handler: async (ctx, args) => {
     await requireAuth(ctx);
@@ -227,6 +230,7 @@ export const create = mutation({
       blockTemplates: args.blockTemplates,
       shiftTemplates: args.shiftTemplates,
       budgetCrewHourlyRateUsd: args.budgetCrewHourlyRateUsd,
+      invoiceId: args.invoiceId,
       createdAt: now,
       updatedAt: now,
     });
@@ -238,6 +242,50 @@ export const create = mutation({
       eventIds.push(eventId);
     }
     return { seriesId, firstEventId: eventIds[0]!, eventIds };
+  },
+});
+
+export const linkInvoice = mutation({
+  args: {
+    id: v.id("eventSeries"),
+    invoiceId: v.id("invoices"),
+  },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    const series = await ctx.db.get(args.id);
+    if (!series) throw new Error("Event series not found.");
+    const invoice = await ctx.db.get(args.invoiceId);
+    if (!invoice) throw new Error("Invoice not found.");
+    const now = Date.now();
+    await ctx.db.patch(args.id, { invoiceId: args.invoiceId, updatedAt: now });
+
+    const occurrences = await listOccurrencesForSeries(ctx, args.id);
+    for (const occurrence of occurrences) {
+      if (occurrence.seriesDetached || occurrence.status === "cancelled") continue;
+      await ctx.db.patch(occurrence._id, { invoiceId: args.invoiceId, updatedAt: now });
+      await syncEventStatusForLinkedInvoice(ctx, occurrence._id, args.invoiceId, occurrence.status);
+    }
+    return args.id;
+  },
+});
+
+export const unlinkInvoice = mutation({
+  args: { id: v.id("eventSeries") },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    const series = await ctx.db.get(args.id);
+    if (!series) throw new Error("Event series not found.");
+    const now = Date.now();
+    await ctx.db.patch(args.id, { invoiceId: undefined, updatedAt: now });
+
+    const occurrences = await listOccurrencesForSeries(ctx, args.id);
+    for (const occurrence of occurrences) {
+      if (occurrence.seriesDetached || occurrence.status === "cancelled") continue;
+      await ctx.db.patch(occurrence._id, { invoiceId: undefined, updatedAt: now });
+    }
+    return args.id;
   },
 });
 
@@ -459,6 +507,13 @@ export const regenerateFutureShifts = mutation({
         continue;
       }
       if (occurrence.seriesDetached || occurrence.status === "cancelled") continue;
+      await replaceScheduleBlocksFromTemplates(
+        ctx,
+        occurrence._id,
+        occurrence.startAt,
+        blockTemplates,
+        now,
+      );
       await replaceEmptyShiftsFromTemplates(
         ctx,
         occurrence._id,

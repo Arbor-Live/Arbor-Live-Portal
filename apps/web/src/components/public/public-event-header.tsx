@@ -1,15 +1,7 @@
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-
-function formatDateTime(value: number) {
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(value));
-}
+import { formatDateTimeRange } from "@/lib/format";
 
 export function PublicEventHeader({
   title,
@@ -35,7 +27,7 @@ export function PublicEventHeader({
       </CardHeader>
       <CardContent className="space-y-2 text-sm">
         <p>
-          {formatDateTime(startAt)} {"->"} {formatDateTime(endAt)}
+          {formatDateTimeRange(startAt, endAt)}
         </p>
         <div className="flex flex-wrap gap-2 text-xs">
           {eventType ? <span className="rounded bg-muted px-2 py-0.5">{eventType}</span> : null}
