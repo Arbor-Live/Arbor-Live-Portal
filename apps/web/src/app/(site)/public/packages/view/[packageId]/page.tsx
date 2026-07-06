@@ -4,12 +4,12 @@ import {
   PublicPackageUnavailable,
 } from "@/components/public/public-package-detail-content";
 import { api, type Id } from "@/lib/convex-api";
-import { fetchPublicQuery, fetchPublicQueryForStaticParams } from "@/lib/convex-server";
+import { fetchPublicQuerySafe } from "@/lib/convex-server";
 export const revalidate = 3600;
 export const dynamicParams = true;
 
 export async function generateStaticParams() {
-  const packages = await fetchPublicQueryForStaticParams(
+  const packages = await fetchPublicQuerySafe(
     api.publicInventory.listPublicPackages,
     {},
     [],
@@ -23,9 +23,11 @@ export async function generateMetadata({
   params: Promise<{ packageId: string }>;
 }): Promise<Metadata> {
   const { packageId } = await params;
-  const data = await fetchPublicQuery(api.publicInventory.getPublicPackage, {
-    packageId: packageId as Id<"inventoryPackages">,
-  });
+  const data = await fetchPublicQuerySafe(
+    api.publicInventory.getPublicPackage,
+    { packageId: packageId as Id<"inventoryPackages"> },
+    null,
+  );
 
   if (!data) {
     return {
@@ -46,10 +48,12 @@ export default async function PublicPackageDetailPage({
 }) {
   const { packageId } = await params;
   const [data, capabilityFilters] = await Promise.all([
-    fetchPublicQuery(api.publicInventory.getPublicPackage, {
-      packageId: packageId as Id<"inventoryPackages">,
-    }),
-    fetchPublicQuery(api.publicInventory.listPublicCapabilityFilters, {}),
+    fetchPublicQuerySafe(
+      api.publicInventory.getPublicPackage,
+      { packageId: packageId as Id<"inventoryPackages"> },
+      null,
+    ),
+    fetchPublicQuerySafe(api.publicInventory.listPublicCapabilityFilters, {}, []),
   ]);
 
   if (!data) {

@@ -10,8 +10,8 @@ export async function fetchPublicQuery<Query extends FunctionReference<"query">>
   return client.query(query, args);
 }
 
-/** Best-effort fetch for `generateStaticParams` — never fails the build. */
-export async function fetchPublicQueryForStaticParams<
+/** Best-effort public query for static generation — returns fallback instead of throwing. */
+export async function fetchPublicQuerySafe<
   Query extends FunctionReference<"query">,
   Fallback extends FunctionReturnType<Query>,
 >(query: Query, args: FunctionArgs<Query>, fallback: Fallback): Promise<FunctionReturnType<Query>> {
@@ -19,7 +19,10 @@ export async function fetchPublicQueryForStaticParams<
     return await fetchPublicQuery(query, args);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    console.warn(`[static-params] Convex query failed: ${message}`);
+    console.warn(`[convex] Public query failed: ${message}`);
     return fallback;
   }
 }
+
+/** @deprecated Use fetchPublicQuerySafe */
+export const fetchPublicQueryForStaticParams = fetchPublicQuerySafe;

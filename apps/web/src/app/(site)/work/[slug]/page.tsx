@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { PublicWorkDetailContent } from "@/components/marketing/public-work-detail-content";
 import { PublicMarketingLayout } from "@/components/public/public-marketing-layout";
 import { api } from "@/lib/convex-api";
-import { fetchPublicQuery, fetchPublicQueryForStaticParams } from "@/lib/convex-server";
+import { fetchPublicQuerySafe } from "@/lib/convex-server";
 export const revalidate = 3600;
 export const dynamicParams = true;
 
@@ -12,7 +12,7 @@ type WorkDetailPageProps = {
 };
 
 export async function generateStaticParams() {
-  const posts = await fetchPublicQueryForStaticParams(
+  const posts = await fetchPublicQuerySafe(
     api.publicMarketing.listPublishedPosts,
     {},
     [],
@@ -22,7 +22,7 @@ export async function generateStaticParams() {
 
 export async function generateMetadata({ params }: WorkDetailPageProps): Promise<Metadata> {
   const { slug } = await params;
-  const post = await fetchPublicQuery(api.publicMarketing.getPublishedPostBySlug, { slug });
+  const post = await fetchPublicQuerySafe(api.publicMarketing.getPublishedPostBySlug, { slug }, null);
 
   if (!post) {
     return {
@@ -39,7 +39,7 @@ export async function generateMetadata({ params }: WorkDetailPageProps): Promise
 
 export default async function WorkDetailPage({ params }: WorkDetailPageProps) {
   const { slug } = await params;
-  const post = await fetchPublicQuery(api.publicMarketing.getPublishedPostBySlug, { slug });
+  const post = await fetchPublicQuerySafe(api.publicMarketing.getPublishedPostBySlug, { slug }, null);
 
   if (!post) {
     notFound();

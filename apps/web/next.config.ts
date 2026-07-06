@@ -39,11 +39,11 @@ loadEnvDir(webDir, [".env", ".env.local", ".env.development", ".env.development.
 loadEnvDir(backendDir, [".env", ".env.local"]);
 loadEnvFile(path.join(webDir, ".env.production.local"));
 
-/** Convex CLI sets CONVEX_URL during `convex deploy --cmd`; expose it to the Next.js bundle. */
+/** Convex CLI sets CONVEX_URL during `convex deploy --cmd`; prefer it at build time. */
 const convexCloudUrl =
-  process.env.NEXT_PUBLIC_CONVEX_URL?.trim() ||
   process.env.CONVEX_URL?.trim() ||
   process.env.CONVEX_CLOUD_URL?.trim() ||
+  process.env.NEXT_PUBLIC_CONVEX_URL?.trim() ||
   undefined;
 const convexSiteUrl =
   process.env.NEXT_PUBLIC_CONVEX_SITE_URL?.trim() ||

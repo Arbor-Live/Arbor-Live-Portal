@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { PublicPackagesExplorer } from "@/components/public/public-packages-explorer";
 import { api } from "@/lib/convex-api";
-import { fetchPublicQuery } from "@/lib/convex-server";
+import { fetchPublicQuerySafe } from "@/lib/convex-server";
 import {
   PUBLIC_PACKAGE_BUCKETS,
   type PublicPackageBucket,
@@ -25,9 +25,9 @@ export default async function PublicPackagesBucketPage({
     redirect("/public/packages");
   }
 
-  const rows = await fetchPublicQuery(api.publicInventory.listPublicPackages, {
+  const rows = await fetchPublicQuerySafe(api.publicInventory.listPublicPackages, {
     bucket: bucket as PublicPackageBucket,
-  });
+  }, []);
 
   return <PublicPackagesExplorer rows={rows} bucket={bucket as PublicPackageBucket} />;
 }

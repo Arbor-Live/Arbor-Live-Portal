@@ -2,7 +2,7 @@ import { PublicWorkGrid } from "@/components/marketing/public-work-grid";
 import { PublicMarketingLayout } from "@/components/public/public-marketing-layout";
 import { PublicPageHero } from "@/components/public/public-page-hero";
 import { api } from "@/lib/convex-api";
-import { fetchPublicQuery } from "@/lib/convex-server";
+import { fetchPublicQuerySafe } from "@/lib/convex-server";
 export const revalidate = 3600;
 
 export const metadata = {
@@ -11,7 +11,7 @@ export const metadata = {
 };
 
 export default async function WorkPage() {
-  const posts = await fetchPublicQuery(api.publicMarketing.listPublishedPosts, {});
+  const posts = await fetchPublicQuerySafe(api.publicMarketing.listPublishedPosts, {}, []);
 
   return (
     <PublicMarketingLayout>

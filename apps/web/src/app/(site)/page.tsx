@@ -7,11 +7,11 @@ import { LandingPrograms } from "@/components/landing/landing-programs";
 import { LandingStats } from "@/components/landing/landing-stats";
 import { LandingWorkCarousel } from "@/components/marketing/public-work-carousel";
 import { api } from "@/lib/convex-api";
-import { fetchPublicQuery } from "@/lib/convex-server";
+import { fetchPublicQuerySafe } from "@/lib/convex-server";
 export const revalidate = 3600;
 
 export default async function Home() {
-  const featuredPosts = await fetchPublicQuery(api.publicMarketing.listFeaturedPosts, {});
+  const featuredPosts = await fetchPublicQuerySafe(api.publicMarketing.listFeaturedPosts, {}, []);
 
   return (
     <LandingLayout>

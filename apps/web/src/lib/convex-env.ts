@@ -8,11 +8,12 @@ function trimEnv(value: string | undefined): string | undefined {
  * Do not read these through dynamic keys (`process.env[key]`).
  */
 function readConvexCloudUrl(): string | undefined {
-  return (
-    trimEnv(process.env.NEXT_PUBLIC_CONVEX_URL) ??
-    trimEnv(process.env.CONVEX_URL) ??
-    trimEnv(process.env.CONVEX_CLOUD_URL)
-  );
+  // Server/build: prefer CONVEX_URL from `convex deploy --cmd` when present.
+  const fromDeploy =
+    trimEnv(process.env.CONVEX_URL) ?? trimEnv(process.env.CONVEX_CLOUD_URL);
+  if (fromDeploy) return fromDeploy;
+
+  return trimEnv(process.env.NEXT_PUBLIC_CONVEX_URL);
 }
 
 function readConvexSiteUrl(cloudUrl: string | undefined): string | undefined {

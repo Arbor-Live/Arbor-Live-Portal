@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { PublicTypesExplorer } from "@/components/public/public-types-explorer";
 import { api } from "@/lib/convex-api";
-import { fetchPublicQuery } from "@/lib/convex-server";
+import { fetchPublicQuerySafe } from "@/lib/convex-server";
 import {
   PUBLIC_PACKAGE_BUCKETS,
   type PublicPackageBucket,
@@ -26,10 +26,10 @@ export default async function PublicTypesBucketPage({
   }
 
   const [rows, capabilityFilters] = await Promise.all([
-    fetchPublicQuery(api.publicInventory.listPublicTypes, {
+    fetchPublicQuerySafe(api.publicInventory.listPublicTypes, {
       bucket: bucket as PublicPackageBucket,
-    }),
-    fetchPublicQuery(api.publicInventory.listPublicCapabilityFilters, {}),
+    }, []),
+    fetchPublicQuerySafe(api.publicInventory.listPublicCapabilityFilters, {}, []),
   ]);
 
   return (
