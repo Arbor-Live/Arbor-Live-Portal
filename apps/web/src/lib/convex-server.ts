@@ -9,3 +9,17 @@ export async function fetchPublicQuery<Query extends FunctionReference<"query">>
   const client = new ConvexHttpClient(getConvexCloudUrl());
   return client.query(query, args);
 }
+
+/** Best-effort fetch for `generateStaticParams` — never fails the build. */
+export async function fetchPublicQueryForStaticParams<
+  Query extends FunctionReference<"query">,
+  Fallback extends FunctionReturnType<Query>,
+>(query: Query, args: FunctionArgs<Query>, fallback: Fallback): Promise<FunctionReturnType<Query>> {
+  try {
+    return await fetchPublicQuery(query, args);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[static-params] Convex query failed: ${message}`);
+    return fallback;
+  }
+}

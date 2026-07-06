@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { PublicWorkDetailContent } from "@/components/marketing/public-work-detail-content";
 import { PublicMarketingLayout } from "@/components/public/public-marketing-layout";
 import { api } from "@/lib/convex-api";
-import { fetchPublicQuery } from "@/lib/convex-server";
+import { fetchPublicQuery, fetchPublicQueryForStaticParams } from "@/lib/convex-server";
 export const revalidate = 3600;
 export const dynamicParams = true;
 
@@ -12,8 +12,12 @@ type WorkDetailPageProps = {
 };
 
 export async function generateStaticParams() {
-  const slugs = await fetchPublicQuery(api.publicMarketing.listPublishedSlugs, {});
-  return slugs.map(({ slug }) => ({ slug }));
+  const posts = await fetchPublicQueryForStaticParams(
+    api.publicMarketing.listPublishedPosts,
+    {},
+    [],
+  );
+  return posts.map((post) => ({ slug: post.slug }));
 }
 
 export async function generateMetadata({ params }: WorkDetailPageProps): Promise<Metadata> {

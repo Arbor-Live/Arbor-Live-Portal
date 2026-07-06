@@ -4,13 +4,17 @@ import {
   PublicPackageUnavailable,
 } from "@/components/public/public-package-detail-content";
 import { api, type Id } from "@/lib/convex-api";
-import { fetchPublicQuery } from "@/lib/convex-server";
+import { fetchPublicQuery, fetchPublicQueryForStaticParams } from "@/lib/convex-server";
 export const revalidate = 3600;
 export const dynamicParams = true;
 
 export async function generateStaticParams() {
-  const packages = await fetchPublicQuery(api.publicInventory.listPublicPackageIds, {});
-  return packages.map(({ packageId }) => ({ packageId }));
+  const packages = await fetchPublicQueryForStaticParams(
+    api.publicInventory.listPublicPackages,
+    {},
+    [],
+  );
+  return packages.map((row) => ({ packageId: row.package._id }));
 }
 
 export async function generateMetadata({

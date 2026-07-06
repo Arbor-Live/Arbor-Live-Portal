@@ -220,29 +220,6 @@ export const listPublicPackages = query({
   },
 });
 
-export const listPublicPackageIds = query({
-  args: {},
-  returns: v.array(
-    v.object({
-      packageId: v.id("inventoryPackages"),
-      publicSlug: v.optional(v.string()),
-    }),
-  ),
-  handler: async (ctx) => {
-    const packages = await ctx.db
-      .query("inventoryPackages")
-      .withIndex("by_publicListing", (q) => q.eq("publicListing", true))
-      .take(500);
-
-    return packages
-      .filter((pkg) => pkg.active)
-      .map((pkg) => ({
-        packageId: pkg._id,
-        publicSlug: pkg.publicSlug?.trim() || undefined,
-      }));
-  },
-});
-
 export const getPublicPackage = query({
   args: { packageId: v.id("inventoryPackages") },
   handler: async (ctx, args) => {
