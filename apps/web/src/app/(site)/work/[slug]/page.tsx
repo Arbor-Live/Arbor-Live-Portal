@@ -4,6 +4,11 @@ import { PublicWorkDetailContent } from "@/components/marketing/public-work-deta
 import { PublicMarketingLayout } from "@/components/public/public-marketing-layout";
 import { api } from "@/lib/convex-api";
 import { fetchPublicQuerySafe } from "@/lib/convex-server";
+import {
+  formatPublicWorkPageTitle,
+  getPublicWorkPostBySlug,
+} from "@/lib/public-work-post";
+
 export const revalidate = 3600;
 export const dynamicParams = true;
 
@@ -22,7 +27,7 @@ export async function generateStaticParams() {
 
 export async function generateMetadata({ params }: WorkDetailPageProps): Promise<Metadata> {
   const { slug } = await params;
-  const post = await fetchPublicQuerySafe(api.publicMarketing.getPublishedPostBySlug, { slug }, null);
+  const post = await getPublicWorkPostBySlug(slug);
 
   if (!post) {
     return {
@@ -31,15 +36,27 @@ export async function generateMetadata({ params }: WorkDetailPageProps): Promise
     };
   }
 
+  const description = post.excerpt ?? "Case study or blog post from Arbor Live.";
+
   return {
-    title: `${post.title} | Arbor Live`,
-    description: post.excerpt ?? "Case study or blog post from Arbor Live.",
+    title: formatPublicWorkPageTitle(post.title),
+    description,
+    openGraph: {
+      title: post.title,
+      description,
+      type: "article",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: post.title,
+      description,
+    },
   };
 }
 
 export default async function WorkDetailPage({ params }: WorkDetailPageProps) {
   const { slug } = await params;
-  const post = await fetchPublicQuerySafe(api.publicMarketing.getPublishedPostBySlug, { slug }, null);
+  const post = await getPublicWorkPostBySlug(slug);
 
   if (!post) {
     notFound();
