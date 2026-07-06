@@ -1,3 +1,5 @@
+import { isAllowedRemoteImageHostname } from "@/lib/asset-image-hosts";
+
 const SIGNED_URL_MARKERS = ["X-Amz-Signature", "X-Amz-Algorithm", "sig="];
 
 /** True when Next.js image optimization can safely cache and transform this URL. */
@@ -16,7 +18,7 @@ export function isOptimizableRemoteImageUrl(src: string): boolean {
       return false;
     }
 
-    return true;
+    return isAllowedRemoteImageHostname(url.hostname);
   } catch {
     return false;
   }

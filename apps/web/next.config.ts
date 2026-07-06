@@ -1,6 +1,7 @@
 import fs from "fs";
 import type { NextConfig } from "next";
 import path from "path";
+import { collectR2ImageHostnames } from "./src/lib/asset-image-hosts";
 
 const webDir = __dirname;
 const repoRoot = path.join(webDir, "../..");
@@ -52,24 +53,7 @@ const convexSiteUrl =
     ? convexCloudUrl.replace(/\.convex\.cloud$/, ".convex.site")
     : undefined);
 
-const r2PublicBaseUrl = process.env.R2_PUBLIC_BASE_URL?.trim();
-let r2ImageHostname: string | undefined;
-if (r2PublicBaseUrl) {
-  try {
-    r2ImageHostname = new URL(r2PublicBaseUrl).hostname;
-  } catch {
-    r2ImageHostname = undefined;
-  }
-} else {
-  const r2Endpoint = process.env.R2_ENDPOINT?.trim();
-  if (r2Endpoint) {
-    try {
-      r2ImageHostname = new URL(r2Endpoint).hostname;
-    } catch {
-      r2ImageHostname = undefined;
-    }
-  }
-}
+const r2ImageHostnames = collectR2ImageHostnames();
 
 const immichPublicBaseUrl = process.env.NEXT_PUBLIC_IMMICH_URL?.trim();
 let immichImageHostname: string | undefined;
@@ -91,15 +75,11 @@ if (convexCloudUrl) {
 }
 
 const imageRemotePatterns = [
-  ...(r2ImageHostname
-    ? [
-        {
-          protocol: "https" as const,
-          hostname: r2ImageHostname,
-          pathname: "/**",
-        },
-      ]
-    : []),
+  ...r2ImageHostnames.map((hostname) => ({
+    protocol: "https" as const,
+    hostname,
+    pathname: "/**",
+  })),
   ...(immichImageHostname
     ? [
         {
