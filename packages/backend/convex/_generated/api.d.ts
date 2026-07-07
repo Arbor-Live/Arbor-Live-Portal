@@ -98,6 +98,7 @@ import type * as lib_siteRevalidation from "../lib/siteRevalidation.js";
 import type * as lib_siteRevalidationPaths from "../lib/siteRevalidationPaths.js";
 import type * as lib_stanfordHours from "../lib/stanfordHours.js";
 import type * as lib_trustedOrigins from "../lib/trustedOrigins.js";
+import type * as lib_userTimecards from "../lib/userTimecards.js";
 import type * as lostFoundSettings from "../lostFoundSettings.js";
 import type * as marketingImmich from "../marketingImmich.js";
 import type * as marketingImmichActions from "../marketingImmichActions.js";
@@ -213,6 +214,7 @@ declare const fullApi: ApiFromModules<{
   "lib/siteRevalidationPaths": typeof lib_siteRevalidationPaths;
   "lib/stanfordHours": typeof lib_stanfordHours;
   "lib/trustedOrigins": typeof lib_trustedOrigins;
+  "lib/userTimecards": typeof lib_userTimecards;
   lostFoundSettings: typeof lostFoundSettings;
   marketingImmich: typeof marketingImmich;
   marketingImmichActions: typeof marketingImmichActions;

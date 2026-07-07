@@ -113,6 +113,7 @@ const usersSubItems: NavSubItem[] = [
   { title: "Access & Invites", url: "/dashboard/users/access" },
   { title: "Organizations", url: "/dashboard/users/organizations" },
   { title: "Crew Rates", url: "/dashboard/users/crew-rates" },
+  { title: "Crew Timecards", url: "/dashboard/users/timecards", adminOnly: true },
 ]
 
 const sectionSubItems: Record<string, NavSubItem[]> = {

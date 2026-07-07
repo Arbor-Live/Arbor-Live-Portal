@@ -21,7 +21,7 @@ export default function UsersPage() {
         </CardHeader>
       </Card>
       <ArborOnlyGuard>
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <Card>
             <CardHeader>
               <CardTitle>Access & Invites</CardTitle>
@@ -52,6 +52,17 @@ export default function UsersPage() {
             <CardContent>
               <Button asChild>
                 <Link href="/dashboard/users/crew-rates">Open Crew Rates</Link>
+              </Button>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Crew Timecards</CardTitle>
+              <CardDescription>Review crew hours by pay period and drill into day-by-day details.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button asChild>
+                <Link href="/dashboard/users/timecards">Open Crew Timecards</Link>
               </Button>
             </CardContent>
           </Card>
