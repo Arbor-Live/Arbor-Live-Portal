@@ -38,7 +38,9 @@ import {
 import {
   CalendarDotsIcon,
   CaretRightIcon,
+  ClockIcon,
   CurrencyDollarIcon,
+  HouseIcon,
   UsersIcon,
   GuitarIcon,
   PackageIcon,
@@ -63,6 +65,8 @@ type NavItem = {
 }
 
 const navItems: NavItem[] = [
+  { title: "Home", url: "/dashboard", icon: HouseIcon },
+  { title: "Timecards", url: "/dashboard/timecards", icon: ClockIcon },
   { title: "Events", url: "/dashboard/events", icon: CalendarDotsIcon },
   { title: "Financial Hub", url: "/dashboard/financial-hub", icon: CurrencyDollarIcon, adminOnly: true },
   { title: "Users", url: "/dashboard/users", icon: UsersIcon, adminOnly: true },
@@ -158,28 +162,32 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
   const userEmail = data?.user?.email ?? "No email"
   const orgName = activeOrganization?.name ?? "No active org"
   const isBandContext = activeOrganization?.organizationType === "band"
+  const isCrewContext = activeOrganization?.organizationType === "arbor_internal" && !isAdmin
   const unconfirmedEventCount = unconfirmedCrewCount?.length ?? 0
   const scopedNavItems = navItems.filter((item) => {
     if (isBandContext) {
-      if (item.bandOnly) return true
+      if (item.bandOnly) return true;
       return (
         item.url !== "/dashboard/events" &&
         item.url !== "/dashboard/financial-hub" &&
         item.url !== "/dashboard/inventory" &&
         item.url !== "/dashboard/users" &&
-        item.url !== "/dashboard/marketing/work"
-      )
+        item.url !== "/dashboard/marketing/work" &&
+        item.url !== "/dashboard" &&
+        item.url !== "/dashboard/timecards"
+      );
     }
-    if (item.bandOnly) return false
-    return isAdmin || !item.adminOnly
-  })
+    if (item.bandOnly) return false;
+    if (item.url === "/dashboard" && !isCrewContext) return false;
+    return isAdmin || !item.adminOnly;
+  });
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({})
 
   return (
     <Sidebar variant="inset" {...props}>
       <SidebarHeader className="relative z-20 shrink-0">
         <div className="px-2 py-2">
-          <Link href="/dashboard/events" className="flex items-center">
+          <Link href="/dashboard" className="flex items-center">
             <Image
               src="/logo.svg"
               alt="Arbor Live logo"

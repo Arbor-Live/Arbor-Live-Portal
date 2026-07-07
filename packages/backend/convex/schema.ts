@@ -343,6 +343,7 @@ export default defineSchema({
     crewNormalRateUsd: v.optional(v.number()),
     crewLeadRateUsd: v.optional(v.number()),
     crewOtRateUsd: v.optional(v.number()),
+    crewCostBufferPercent: v.optional(v.number()),
     termsAndConditionsMarkdown: v.optional(v.string()),
     termsVersion: v.optional(v.string()),
     updatedAt: v.number(),
@@ -571,6 +572,8 @@ export default defineSchema({
     budgetUsd: v.optional(v.number()),
     dayOfLeadUserId: v.optional(v.string()),
     eventManagerUserId: v.optional(v.string()),
+    otPremium: v.optional(v.boolean()),
+    crewCostBufferPercent: v.optional(v.number()),
     crewCostUsd: v.optional(v.number()),
     bandsCostUsd: v.optional(v.number()),
     externalRentalsCostUsd: v.optional(v.number()),
@@ -714,7 +717,17 @@ export default defineSchema({
     .index("by_eventId", ["eventId"])
     .index("by_eventId_and_startsAt", ["eventId", "startsAt"])
     .index("by_scheduleBlockId", ["scheduleBlockId"])
-    .index("by_expenseReportId", ["expenseReportId"]),
+    .index("by_expenseReportId", ["expenseReportId"])
+    .index("by_userId_and_startsAt", ["userId", "startsAt"]),
+
+  eventCrewMediaStatus: defineTable({
+    eventId: v.id("events"),
+    userId: v.string(),
+    status: v.union(v.literal("uploaded"), v.literal("no_media")),
+    resolvedAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_eventId_and_userId", ["eventId", "userId"]),
 
   eventCrewAvailabilityResponses: defineTable({
     eventId: v.id("events"),

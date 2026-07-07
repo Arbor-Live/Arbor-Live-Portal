@@ -4,6 +4,7 @@ import { components, internal } from "./_generated/api";
 import { mutation, query } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import {
+  getActiveOrganizationContextOrNull,
   getUserId,
   isAdmin,
   requireAdmin,
@@ -492,13 +493,23 @@ export const getViewer = query({
     userId: v.string(),
     role: v.optional(v.string()),
     isAdmin: v.boolean(),
+    isCrewOnly: v.boolean(),
+    teams: v.array(userTeamValue),
   }),
   handler: async (ctx) => {
     const user = await requireAuth(ctx);
+    const userId = getUserId(user);
+    const orgContext = await getActiveOrganizationContextOrNull(ctx);
+    const profile = await ctx.db
+      .query("userAdminProfiles")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .unique();
     return {
-      userId: getUserId(user),
+      userId,
       role: user.role ?? undefined,
       isAdmin: isAdmin(user),
+      isCrewOnly: !isAdmin(user) && orgContext?.organizationType === "arbor_internal",
+      teams: profile?.teams ?? [],
     };
   },
 });

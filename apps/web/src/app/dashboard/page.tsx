@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import { DashboardHomeClient } from "@/app/dashboard/dashboard-home-client";
 
 export default function DashboardPage() {
-  redirect("/dashboard/events");
+  return <DashboardHomeClient />;
 }

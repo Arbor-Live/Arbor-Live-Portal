@@ -1,7 +1,9 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireArborInternalContext, requireAuth } from "./lib/auth";
+import { requireEventEditAccess } from "./lib/eventAccess";
 import { calculateCrewCost, syncEventCrewCostUsd } from "./lib/crewCost";
+import { getUserOtForecast } from "./lib/otForecast";
 import { scheduleCrewScheduledEmails } from "./email/triggers";
 
 function hoursBetween(start: number, end: number) {
@@ -55,6 +57,7 @@ export const upsertShifts = mutation({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
+    await requireEventEditAccess(ctx, args.eventId);
     for (const shift of args.shifts) {
       if (shift.endsAt <= shift.startsAt) throw new Error("Shift end must be after shift start.");
       if (shift.expenseReportId) {
@@ -175,6 +178,7 @@ export const deleteUnassignedShifts = mutation({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
+    await requireEventEditAccess(ctx, args.eventId);
 
     const existing = await ctx.db
       .query("eventCrewShifts")
@@ -205,5 +209,25 @@ export const deleteUnassignedShifts = mutation({
     await syncEventCrewCostUsd(ctx, args.eventId, now);
 
     return { deletedCount: legacy.length };
+  },
+});
+
+export const getOtForecastForUser = query({
+  args: {
+    userId: v.string(),
+    rangeStart: v.number(),
+    rangeEnd: v.number(),
+  },
+  returns: v.object({
+    hasOt: v.boolean(),
+    hasDt: v.boolean(),
+    otDays: v.array(v.object({ dayKey: v.string(), hours: v.number() })),
+    dtDays: v.array(v.object({ dayKey: v.string(), hours: v.number() })),
+    otWeeks: v.array(v.object({ weekKey: v.string(), hours: v.number() })),
+  }),
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    return await getUserOtForecast(ctx, args.userId, args.rangeStart, args.rangeEnd);
   },
 });

@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireArborInternalContext, requireAuth } from "./lib/auth";
+import { requireEventEditAccess } from "./lib/eventAccess";
 import { scheduleSchedulePublishedEmails } from "./email/triggers";
 
 const blockTypeValue = v.union(
@@ -41,6 +42,7 @@ export const upsertBlocks = mutation({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
+    await requireEventEditAccess(ctx, args.eventId);
     const event = await ctx.db.get(args.eventId);
     if (!event) throw new Error("Event not found.");
     for (const block of args.blocks) {

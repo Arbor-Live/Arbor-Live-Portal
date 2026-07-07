@@ -53,7 +53,9 @@ import { getConvexErrorMessage } from "@/lib/convex-error";
 import { FormSaveBar } from "@/components/forms";
 import { StoredAssetImage, StoredAssetLink } from "@/components/files/stored-asset-image";
 import { isImageAssetReference } from "@/lib/r2-assets";
-import { formatDateTime, formatUsd } from "@/lib/format";
+import { formatDateTime, formatUsd, payPeriodForDate } from "@/lib/format";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { WarningCircleIcon } from "@phosphor-icons/react";
 
 function EventArtifactAttachment({
   linkUrl,
@@ -158,6 +160,7 @@ export function EventEditor({
   const session = authClient.useSession();
   const isCreate = !eventId;
   const eventData = useQuery(api.events.get, eventId ? { id: eventId } : "skip");
+  const viewer = useQuery(api.users.getViewer, {});
   const invoices = useQuery(api.invoices.list, {});
   const managerList = useQuery(api.invoices.listManagers, {});
   const createEvent = useMutation(api.events.create);
@@ -185,6 +188,8 @@ export function EventEditor({
   const [bandsCostUsd, setBandsCostUsd] = useState("0");
   const [externalRentalsCostUsd, setExternalRentalsCostUsd] = useState("0");
   const [otherCostUsd, setOtherCostUsd] = useState("0");
+  const [otPremium, setOtPremium] = useState(false);
+  const [crewCostBufferPercent, setCrewCostBufferPercent] = useState("");
   const [notes, setNotes] = useState("");
   const [blocks, setBlocks] = useState<TimelineBlockDraft[]>([]);
   const [shifts, setShifts] = useState<ShiftDraft[]>([]);
@@ -263,6 +268,12 @@ export function EventEditor({
     setBandsCostUsd((eventData.event.bandsCostUsd ?? 0).toString());
     setExternalRentalsCostUsd((eventData.event.externalRentalsCostUsd ?? 0).toString());
     setOtherCostUsd((eventData.event.otherCostUsd ?? 0).toString());
+    setOtPremium(eventData.event.otPremium === true);
+    setCrewCostBufferPercent(
+      eventData.event.crewCostBufferPercent !== undefined
+        ? String(eventData.event.crewCostBufferPercent)
+        : "",
+    );
     setNotes(eventData.event.notes ?? "");
     setBlocks(
       eventData.blocks.map((row) => ({
@@ -465,8 +476,12 @@ export function EventEditor({
 
   const seriesMeta = eventData?.series ?? null;
 
+  const isAdmin = viewer?.isAdmin ?? false;
+  const canEdit = isCreate || (eventData?.canEdit ?? false);
+  const readOnly = !canEdit && !isCreate;
+
   function buildOverviewPayload() {
-    return {
+    const base = {
       title: title.trim(),
       status,
       invoiceId: invoiceId ? (invoiceId as Id<"invoices">) : undefined,
@@ -483,6 +498,15 @@ export function EventEditor({
       externalRentalsCostUsd: Number(externalRentalsCostUsd || "0"),
       otherCostUsd: Number(otherCostUsd || "0"),
       notes: notes || undefined,
+    };
+    if (!isAdmin) return base;
+    return {
+      ...base,
+      otPremium: otPremium || undefined,
+      crewCostBufferPercent:
+        crewCostBufferPercent.trim() === ""
+          ? undefined
+          : Number(crewCostBufferPercent || "0"),
     };
   }
 
@@ -733,6 +757,17 @@ export function EventEditor({
   }
 
   const currentEventId = eventId ?? eventData?.event?._id;
+  const payPeriod = useMemo(() => payPeriodForDate(Date.now()), []);
+  const otForecast = useQuery(
+    api.eventCrew.getOtForecastForUser,
+    selectedCrewUserId && canEdit
+      ? {
+          userId: selectedCrewUserId,
+          rangeStart: payPeriod.startMs,
+          rangeEnd: payPeriod.endMs,
+        }
+      : "skip",
+  );
   const computedCrewCost = useQuery(
     api.eventCrew.getComputedCrewCost,
     currentEventId ? { eventId: currentEventId } : "skip",
@@ -847,6 +882,15 @@ export function EventEditor({
 
   return (
     <div className="space-y-4 pb-20">
+      {readOnly ? (
+        <Alert>
+          <WarningCircleIcon className="size-4" />
+          <AlertTitle>Read-only view</AlertTitle>
+          <AlertDescription>
+            You can view this event but only crew leads and admins can make changes.
+          </AlertDescription>
+        </Alert>
+      ) : null}
       <Card>
         <CardHeader>
           <CardTitle>{isCreate ? "Create Event" : "Edit Event"}</CardTitle>
@@ -871,13 +915,14 @@ export function EventEditor({
               <Link href={getEventEditorTabPath(eventId, tab)}>{EVENT_EDITOR_TAB_LABELS[tab]}</Link>
             </Button>
           ))}
-          <Button type="button" onClick={() => void saveCore()} className="ml-auto">
+          <Button type="button" onClick={() => void saveCore()} className="ml-auto" disabled={readOnly}>
             {isCreate ? (isRecurring ? "Create Series" : "Create Event") : "Save Event"}
           </Button>
         </CardContent>
       </Card>
 
       {resolvedActiveTab === "overview" ? (
+        <fieldset disabled={readOnly} className="contents">
         <Card>
           <CardHeader><CardTitle>Overview</CardTitle></CardHeader>
           <CardContent className="grid gap-3 md:grid-cols-3">
@@ -1116,11 +1161,13 @@ export function EventEditor({
             ) : null}
           </CardContent>
         </Card>
+        </fieldset>
       ) : null}
 
       {resolvedActiveTab === "overview" && eventId ? <EventBandPaymentSection eventId={eventId} /> : null}
 
       {resolvedActiveTab === "schedule" ? (
+        <fieldset disabled={readOnly} className="contents">
         <Card>
           <CardHeader><CardTitle>Schedule</CardTitle></CardHeader>
           <CardContent className="space-y-3">
@@ -1142,6 +1189,7 @@ export function EventEditor({
               dayCount={dayCount}
               blocks={blocks}
               onChange={(next) => setBlocks(withStableBlockRefs(next))}
+              readOnly={readOnly}
               quickAddLabel={quickAddLabel}
               quickAddDisabled={quickAddDisabled}
               quickAddDisabledReason={quickAddDisabledReason}
@@ -1263,6 +1311,13 @@ export function EventEditor({
                   ? `Selected: ${selectedCrewUserOption.label}. Use this to quickly add the same crew member across multiple schedule blocks.`
                   : "Select a crew user, then use Add Shift for Selected User on each block."}
               </p>
+              {otForecast?.hasOt || otForecast?.hasDt ? (
+                <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-xs text-amber-800">
+                  OT warning: this crew member may exceed pay-period limits
+                  {otForecast.hasDt ? " (including double-time days >12h)" : ""}
+                  {otForecast.otWeeks.length > 0 ? " or weekly hours >40" : ""}.
+                </p>
+              ) : null}
             </div>
             <div className="space-y-2 rounded-md border p-3">
               <p className="text-sm font-medium">Assigned Personnel by Block</p>
@@ -1397,6 +1452,7 @@ export function EventEditor({
             </Button>
           </CardContent>
         </Card>
+        </fieldset>
       ) : null}
 
       {resolvedActiveTab === "equipment" ? (
@@ -1542,8 +1598,38 @@ export function EventEditor({
             ) : null}
             <p className="text-xs text-muted-foreground">
               Crew costs are auto-calculated from assigned users in schedule shifts:
-              each user uses their hourly rate, and hours beyond 8/day are billed at 1.5x.
+              each user uses their hourly rate, and hours beyond 8/day are billed at 1.5x
+              {computedCrewCost?.otPremium ? " (this event uses whole-event OT premium)." : "."}
             </p>
+            {computedCrewCost?.bufferPercent !== undefined && computedCrewCost.bufferPercent > 0 ? (
+              <p className="text-xs text-muted-foreground">
+                Buffered crew cost ({computedCrewCost.bufferPercent}%):{" "}
+                {formatUsd(computedCrewCost.bufferedTotalCostUsd ?? computedCrewCost.totalCostUsd)}
+              </p>
+            ) : null}
+            {isAdmin ? (
+              <div className="grid gap-2 rounded-md border border-dashed p-3 md:grid-cols-2">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={otPremium}
+                    onChange={(e) => setOtPremium(e.target.checked)}
+                  />
+                  OT premium (whole event 1.5×)
+                </label>
+                <div className="space-y-1">
+                  <Label>Per-event crew buffer %</Label>
+                  <Input
+                    value={crewCostBufferPercent}
+                    onChange={(e) => setCrewCostBufferPercent(e.target.value)}
+                    placeholder="Use global default"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground md:col-span-2">
+                  OT premium inflates Stanford input hours (1.5× for hours 1–8) and bills all crew hours at 1.5× rate.
+                </p>
+              </div>
+            ) : null}
             <div className="grid gap-2 md:grid-cols-4">
               <div className="space-y-1">
                 <Label>Crew Cost (USD)</Label>
@@ -1559,7 +1645,11 @@ export function EventEditor({
               </div>
               <div className="space-y-1">
                 <Label>Bands Cost (USD)</Label>
-                <Input value={bandsCostUsd} onChange={(e) => setBandsCostUsd(e.target.value)} />
+                <Input
+                  value={bandsCostUsd}
+                  onChange={(e) => setBandsCostUsd(e.target.value)}
+                  readOnly={readOnly}
+                />
                 {seriesMeta ? (
                   <p className="text-xs text-muted-foreground">This occurrence only unless you choose a series scope on save.</p>
                 ) : null}
@@ -1569,11 +1659,16 @@ export function EventEditor({
                 <Input
                   value={externalRentalsCostUsd}
                   onChange={(e) => setExternalRentalsCostUsd(e.target.value)}
+                  readOnly={readOnly}
                 />
               </div>
               <div className="space-y-1">
                 <Label>Other Costs (USD)</Label>
-                <Input value={otherCostUsd} onChange={(e) => setOtherCostUsd(e.target.value)} />
+                <Input
+                  value={otherCostUsd}
+                  onChange={(e) => setOtherCostUsd(e.target.value)}
+                  readOnly={readOnly}
+                />
               </div>
             </div>
             {linkedInvoice ? (
@@ -1690,9 +1785,11 @@ export function EventEditor({
                 )}
               </div>
             ) : null}
+            {canEdit ? (
             <Button type="button" onClick={() => void saveCore()}>
               Save Event Costs
             </Button>
+            ) : null}
           </CardContent>
         </Card>
       ) : null}
@@ -1722,6 +1819,7 @@ export function EventEditor({
         </div>
       ) : null}
 
+      {canEdit || isCreate ? (
       <FormSaveBar
         tier={saveTier}
         saveStatus={saveStatus}
@@ -1739,6 +1837,7 @@ export function EventEditor({
         onSave={handleBarSave}
         onRetry={handleBarSave}
       />
+      ) : null}
     </div>
   );
 }

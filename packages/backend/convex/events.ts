@@ -2,7 +2,8 @@ import { pacificDateKey } from "@arbor/format";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { components } from "./_generated/api";
-import { requireArborInternalContext, requireAuth } from "./lib/auth";
+import { requireAdmin, requireArborInternalContext, requireAuth } from "./lib/auth";
+import { canEditEventForUser, requireEventEditAccess } from "./lib/eventAccess";
 import {
   eventStatusValue,
   normalizeEventStatus,
@@ -248,7 +249,7 @@ export const listForDashboard = query({
 export const get = query({
   args: { id: v.id("events") },
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    const user = await requireAuth(ctx);
     await requireArborInternalContext(ctx);
     const event = await ctx.db.get(args.id);
     if (!event) return null;
@@ -284,7 +285,9 @@ export const get = query({
       .take(500);
     const sortedPullList = pullListItems.sort((a, b) => a.sortOrder - b.sortOrder || a.createdAt - b.createdAt);
     const enrichedPullList = await enrichPullListItems(ctx, sortedPullList);
+    const canEdit = canEditEventForUser(user, event, assignments);
     return {
+      canEdit,
       event: { ...event, status: normalizeEventStatus(event.status) },
       series:
         event.seriesId !== undefined
@@ -414,7 +417,7 @@ export const create = mutation({
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    await requireAdmin(ctx);
     await requireArborInternalContext(ctx);
     if (args.endAt <= args.startAt) throw new Error("Event end time must be after start time.");
     const now = Date.now();
@@ -483,11 +486,14 @@ export const update = mutation({
     externalRentalsCostUsd: v.optional(v.number()),
     otherCostUsd: v.optional(v.number()),
     rentalFulfillmentMode: v.optional(rentalFulfillmentModeValue),
+    otPremium: v.optional(v.boolean()),
+    crewCostBufferPercent: v.optional(v.number()),
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
+    await requireEventEditAccess(ctx, args.id);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Event not found.");
     const startAt = args.startAt ?? existing.startAt;
@@ -529,6 +535,8 @@ export const update = mutation({
       externalRentalsCostUsd: args.externalRentalsCostUsd ?? existing.externalRentalsCostUsd,
       otherCostUsd: args.otherCostUsd ?? existing.otherCostUsd,
       rentalFulfillmentMode: nextRentalFulfillmentMode,
+      otPremium: args.otPremium ?? existing.otPremium,
+      crewCostBufferPercent: args.crewCostBufferPercent ?? existing.crewCostBufferPercent,
       notes: args.notes?.trim() ?? existing.notes,
       updatedAt: now,
     };
@@ -620,6 +628,7 @@ export const setStatus = mutation({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
+    await requireEventEditAccess(ctx, args.id);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Event not found.");
     const wasCancelled = normalizeEventStatus(existing.status) === "cancelled";
@@ -640,6 +649,7 @@ export const duplicate = mutation({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
+    await requireEventEditAccess(ctx, args.id);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Event not found.");
     const now = Date.now();

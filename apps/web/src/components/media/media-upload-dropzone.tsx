@@ -90,6 +90,7 @@ export function MediaUploadDropzone({
 }: MediaUploadDropzoneProps) {
   const convex = useConvex();
   const recordUploadedAsset = useMutation(api.immich.recordUploadedAsset);
+  const resolveMyEventMedia = useMutation(api.crewPortal.resolveMyEventMedia);
   const inputRef = useRef<HTMLInputElement>(null);
   const [items, setItems] = useState<UploadItem[]>([]);
   const [busy, setBusy] = useState(false);
@@ -158,6 +159,13 @@ export function MediaUploadDropzone({
               type: uploaded.type,
             });
 
+            if (targetType === "event") {
+              await resolveMyEventMedia({
+                eventId: targetId.trim() as Id<"events">,
+                status: "uploaded",
+              });
+            }
+
             updateItem(item.id, { phase: "done", loadedBytes: file.size });
             successCount += 1;
           } catch (uploadError) {
@@ -194,7 +202,7 @@ export function MediaUploadDropzone({
         setBusy(false);
       }
     },
-    [convex, disabled, onUploaded, recordUploadedAsset, targetId, targetType, updateItem, uploading],
+    [convex, disabled, onUploaded, recordUploadedAsset, resolveMyEventMedia, targetId, targetType, updateItem, uploading],
   );
 
   const showProgressPanel = items.length > 0;

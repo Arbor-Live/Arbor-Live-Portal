@@ -7,6 +7,10 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     environment: "node",
-    include: ["packages/format/**/*.test.ts", "packages/invoice-document/**/*.test.ts"],
+    include: [
+      "packages/format/**/*.test.ts",
+      "packages/invoice-document/**/*.test.ts",
+      "packages/backend/convex/lib/**/*.test.ts",
+    ],
   },
 });
