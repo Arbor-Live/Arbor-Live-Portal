@@ -11,7 +11,6 @@ export type ImmichAlbum = {
   id: string;
   albumName: string;
   assetCount?: number;
-  assets?: ImmichAsset[];
 };
 
 export function getImmichPublicBaseUrl() {
@@ -69,14 +68,6 @@ export async function createImmichAlbum(args: { albumName: string; description?:
   return { ...created, id: normalizeImmichAlbumId(created) };
 }
 
-export async function getImmichAlbum(albumId: string) {
-  const { baseUrl, apiKey } = getImmichConfig();
-  const response = await fetch(`${baseUrl}/albums/${albumId}`, {
-    headers: immichHeaders(apiKey),
-  });
-  return await parseImmichJson<ImmichAlbum>(response);
-}
-
 export async function immichAlbumExists(albumId: string) {
   const { baseUrl, apiKey } = getImmichConfig();
   const response = await fetch(`${baseUrl}/albums/${albumId}`, {
@@ -100,7 +91,6 @@ export function buildImmichShareUrl(sharedLinkKey: string) {
 export type ImmichSharedLink = {
   id: string;
   key: string;
-  token?: string;
   allowUpload?: boolean;
   allowDownload?: boolean;
 };
@@ -121,12 +111,11 @@ export async function createImmichAlbumSharedLink(args: {
       description: args.description ?? "Arbor Live Portal",
     }),
   });
-  const created = await parseImmichJson<ImmichSharedLink & { token?: string }>(response);
-  const key = created.key ?? created.token;
-  if (!key || !created.id) {
+  const created = await parseImmichJson<ImmichSharedLink>(response);
+  if (!created.key || !created.id) {
     throw new Error("Immich shared link response is missing id or key.");
   }
-  return { ...created, key };
+  return created;
 }
 
 export function buildSharedAssetUrl(
@@ -252,7 +241,7 @@ export async function listImmichAlbumSummaries() {
     summaries.push({
       id,
       albumName: album.albumName?.trim() || "Untitled album",
-      assetCount: album.assetCount ?? album.assets?.length ?? 0,
+      assetCount: album.assetCount ?? 0,
       thumbnailAssetId: album.albumThumbnailAssetId ?? undefined,
       updatedAt: Number.isNaN(updatedAt) ? 0 : updatedAt,
     });
@@ -277,6 +266,9 @@ export async function searchImmichLibraryImages(args: {
     size,
     type: "IMAGE",
     order: "desc",
+    // v3 changed the default visibility from "timeline" to "any"; pin it so the
+    // library picker keeps showing only timeline assets (not archived/hidden).
+    visibility: "timeline",
   };
 
   const albumId = args.albumId?.trim();
@@ -311,6 +303,51 @@ export async function searchImmichLibraryImages(args: {
       : String(nextPageRaw);
 
   return { items, nextPage };
+}
+
+export type ImmichAlbumAsset = {
+  id: string;
+  type: ImmichAssetType;
+  originalFileName: string;
+};
+
+/**
+ * Lists every asset in an album via POST /search/metadata. v3 removed the
+ * `assets` array from the GET /albums/:id response, so album membership must be
+ * resolved through search. Pages through all results and keeps images + videos.
+ */
+export async function listImmichAlbumAssets(albumId: string) {
+  const { baseUrl, apiKey } = getImmichConfig();
+  const assets: ImmichAlbumAsset[] = [];
+  let page = 1;
+
+  // Bounded loop so a misbehaving `nextPage` can never spin forever.
+  for (let guard = 0; guard < 1000; guard += 1) {
+    const response = await fetch(`${baseUrl}/search/metadata`, {
+      method: "POST",
+      headers: immichHeaders(apiKey, { "Content-Type": "application/json" }),
+      body: JSON.stringify({ albumIds: [albumId], page, size: 100, order: "desc" }),
+    });
+    const result = await parseImmichJson<ImmichSearchAssetResponse>(response);
+
+    for (const item of result.assets?.items ?? []) {
+      if (!item.id) continue;
+      assets.push({
+        id: item.id,
+        type: item.type === "VIDEO" ? "VIDEO" : "IMAGE",
+        originalFileName: item.originalFileName?.trim() || "asset",
+      });
+    }
+
+    const nextPageRaw = result.assets?.nextPage;
+    if (nextPageRaw === null || nextPageRaw === undefined || nextPageRaw === "") {
+      break;
+    }
+    const nextPage = Number(nextPageRaw);
+    page = Number.isNaN(nextPage) ? page + 1 : nextPage;
+  }
+
+  return assets;
 }
 
 export async function fetchImmichAssetBytes(

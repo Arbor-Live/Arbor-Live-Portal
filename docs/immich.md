@@ -27,14 +27,22 @@ event / band  ──►  immichAlbumLinks (Convex)  ──►  Immich album + sh
 2. **Upload.** Uploads either go directly to Immich via the share link, or flow
    through Convex (`immich.recordUploadedAsset` → `immichActions.addUploadedAssetToAlbum`,
    which calls `uploadImmichAsset` / `addAssetsToImmichAlbum`).
-3. **Sync the index.** `immichActions.syncAlbumAssets` reads the album from
-   Immich and reconciles `immichAssetRecords`. `immich.runBackfillAlbums` /
+3. **Sync the index.** `immichActions.syncAlbumAssets` lists the album's assets
+   via `listImmichAlbumAssets` (a paged `POST /search/metadata` with
+   `albumIds: [id]`) and reconciles `immichAssetRecords`. `immich.runBackfillAlbums` /
    `immichActions.backfillAllAlbums` rebuild the index across all linked albums.
 4. **Serve.** Public galleries call `buildSharedAssetUrl(assetId, kind, shareKey)`
    which produces `"{IMMICH_URL}/api/assets/{id}/{thumbnail|original|video/playback}?key={shareKey}"`.
    Staff can deep-link to the Immich UI with `buildImmichAlbumUrl` / `buildImmichShareUrl`.
 
 All API access lives in [`packages/backend/convex/lib/immichClient.ts`](../packages/backend/convex/lib/immichClient.ts) and authenticates with the `x-api-key` header. `IMMICH_URL` is normalized (trailing slash stripped) and the REST base is `"{IMMICH_URL}/api"`.
+
+> **Immich version:** the client targets the **Immich v3** API. Notable v3
+> assumptions baked in: album membership is read via `POST /search/metadata`
+> (the `assets` array was removed from `GET /albums/:id`), asset uploads no
+> longer send `deviceId`/`deviceAssetId`, and library searches pin
+> `visibility: "timeline"` (v3 changed the default to "any"). Run against an
+> Immich v3+ server.
 
 ## 1. Provision an Immich API key
 

@@ -9,9 +9,8 @@ import {
   buildImmichShareUrl,
   createImmichAlbum,
   createImmichAlbumSharedLink,
-  getImmichAlbum,
   immichAlbumExists,
-  type ImmichAssetType,
+  listImmichAlbumAssets,
 } from "./lib/immichClient";
 import { albumLinkResultValidator } from "./lib/immichValidators";
 
@@ -135,14 +134,13 @@ export const syncAlbumAssets = internalAction({
     });
     if (!link) return null;
 
-    const album = await getImmichAlbum(link.immichAlbumId);
-    const assets = album.assets ?? [];
+    const assets = await listImmichAlbumAssets(link.immichAlbumId);
     for (const asset of assets) {
       await ctx.runMutation(internal.immichDb.recordAssetInternal, {
         albumLinkId: args.albumLinkId,
         immichAssetId: asset.id,
         originalFileName: asset.originalFileName,
-        type: asset.type as ImmichAssetType,
+        type: asset.type,
       });
     }
     return null;
