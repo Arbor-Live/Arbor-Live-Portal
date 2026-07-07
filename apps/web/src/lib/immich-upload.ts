@@ -16,15 +16,6 @@ export type ImmichUploadProgress = {
   total: number;
 };
 
-const PORTAL_DEVICE_ID = "arbor-live-portal";
-
-function createDeviceAssetId(file: File) {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return crypto.randomUUID();
-  }
-  return `${file.name}-${file.size}-${file.lastModified}-${Date.now()}`;
-}
-
 function formatImmichUploadError(message: string) {
   try {
     const parsed = JSON.parse(message) as unknown;
@@ -48,8 +39,6 @@ function buildUploadFormData(file: File) {
   const modifiedAt = new Date(file.lastModified || Date.now());
   const formData = new FormData();
   formData.append("assetData", file, file.name);
-  formData.append("deviceId", PORTAL_DEVICE_ID);
-  formData.append("deviceAssetId", createDeviceAssetId(file));
   formData.append("fileCreatedAt", modifiedAt.toISOString());
   formData.append("fileModifiedAt", modifiedAt.toISOString());
   return formData;
