@@ -75,7 +75,7 @@ const navItems: NavItem[] = [
   },
   { title: "Media", url: "/dashboard/media", icon: ImagesIcon, bandOnly: true },
   { title: "Inventory", url: "/dashboard/inventory", icon: PackageIcon },
-  { title: "Marketing", url: "/dashboard/marketing/work", icon: MegaphoneIcon, adminOnly: true },
+  { title: "Marketing", url: "/dashboard/marketing", icon: MegaphoneIcon, adminOnly: true },
 ]
 
 const inventorySubItems: NavSubItem[] = [
@@ -103,6 +103,7 @@ const financialHubSubItems: NavSubItem[] = [
 const eventsSubItems: NavSubItem[] = [
   { title: "Overview", url: "/dashboard/events" },
   { title: "Booking Requests", url: "/dashboard/events/requests" },
+  { title: "Open Mic", url: "/dashboard/events/open-mic", adminOnly: true },
   { title: "Crew Scheduling", url: "/dashboard/events/crew-scheduling", adminOnly: true },
   { title: "My Availability", url: "/dashboard/events/my-availability" },
   { title: "My Timecards", url: "/dashboard/timecards/mine" },
@@ -116,11 +117,17 @@ const usersSubItems: NavSubItem[] = [
   { title: "Crew Rates", url: "/dashboard/users/crew-rates" },
 ]
 
+const marketingSubItems: NavSubItem[] = [
+  { title: "Work & stories", url: "/dashboard/marketing/work" },
+  { title: "Settings", url: "/dashboard/marketing/settings" },
+]
+
 const sectionSubItems: Record<string, NavSubItem[]> = {
   "/dashboard/events": eventsSubItems,
   "/dashboard/financial-hub": financialHubSubItems,
   "/dashboard/inventory": inventorySubItems,
   "/dashboard/users": usersSubItems,
+  "/dashboard/marketing": marketingSubItems,
 }
 
 function visibleSubItems(subItems: NavSubItem[] | undefined, isAdmin: boolean) {
@@ -174,7 +181,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
         item.url !== "/dashboard/financial-hub" &&
         item.url !== "/dashboard/inventory" &&
         item.url !== "/dashboard/users" &&
-        item.url !== "/dashboard/marketing/work" &&
+        item.url !== "/dashboard/marketing" &&
         item.url !== "/dashboard"
       );
     }

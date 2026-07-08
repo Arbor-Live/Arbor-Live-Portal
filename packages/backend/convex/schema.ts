@@ -1069,4 +1069,70 @@ export default defineSchema({
   })
     .index("by_key", ["key"])
     .index("by_windowStartMs", ["windowStartMs"]),
+
+  /** Singleton row: global marketing feature flags. Extend with new fields as
+   *  more sections gain admin-toggled marketing boosts. */
+  marketingSettings: defineTable({
+    /** When true, the public Open Mic sign-up form shows the Arbor Live intro
+     *  slide (promo video background + socials link) before the form steps. */
+    openMicMarketingBoost: v.boolean(),
+    updatedAt: v.number(),
+  }),
+
+  openMicNights: defineTable({
+    title: v.string(),
+    /** Epoch ms when the night begins. Used to find the "next" upcoming night
+     *  for the public sign-up form and to order the admin inbox. */
+    startAt: v.number(),
+    endAt: v.optional(v.number()),
+    /** "scheduled" = upcoming/open for sign-ups, "live" = crew running the
+     *  queue now, "completed" = wrapped, "cancelled" = called off. */
+    status: v.union(
+      v.literal("scheduled"),
+      v.literal("live"),
+      v.literal("completed"),
+      v.literal("cancelled"),
+    ),
+    notes: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_status", ["status"])
+    .index("by_startAt", ["startAt"])
+    .index("by_status_and_startAt", ["status", "startAt"]),
+
+  openMicSignups: defineTable({
+    nightId: v.id("openMicNights"),
+    name: v.string(),
+    email: v.string(),
+    whatTheyreDoing: v.string(),
+    equipment: v.array(v.string()),
+    /** Required when equipment includes "Background Music". */
+    bgMusicLink: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    /** "queued" = waiting in FCFS order, "current" = on stage now,
+     *  "performed" = already went up, "removed" = crew dropped them. */
+    status: v.union(
+      v.literal("queued"),
+      v.literal("current"),
+      v.literal("performed"),
+      v.literal("removed"),
+    ),
+    /** Strike counter for "Not here" presses. 0 → front of queue, 1 → back of
+     *  queue, 2 → removed. Reset to 0 when a signup becomes current again. */
+    skipsCount: v.number(),
+    /** Monotonic order key (lower = earlier). New signups use Date.now();
+     *  bumped-up signups get a value just below the current front to stay
+     *  ahead of the rest of the queue. */
+    position: v.number(),
+    /** Epoch ms when status transitioned to "performed". For the leaderboard. */
+    performedAt: v.optional(v.number()),
+    submittedAt: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_nightId_and_position", ["nightId", "position"])
+    .index("by_nightId_and_status", ["nightId", "status"])
+    .index("by_status_and_performedAt", ["status", "performedAt"])
+    .index("by_email", ["email"]),
 });

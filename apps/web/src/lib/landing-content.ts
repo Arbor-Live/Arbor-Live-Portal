@@ -89,8 +89,7 @@ export const landingPrograms: LandingProgram[] = [
     schedule: { when: "Wed · 8pm", where: "CoHo" },
     cta: {
       label: "Sign up to perform",
-      href: `${ARBOR_EXTERNAL_SITE}/open-mic`,
-      external: true,
+      href: "/public/open-mic",
     },
     imageGradient: "from-violet-950/80 via-primary/25 to-zinc-900",
   },
