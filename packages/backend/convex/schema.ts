@@ -583,6 +583,24 @@ export default defineSchema({
     rentalFulfillmentMode: v.optional(rentalFulfillmentModeValue),
     notes: v.optional(v.string()),
     sourceEventRequestId: v.optional(v.id("eventRequests")),
+
+    /** Event add-ons (per-event feature toggles). Open Mic is the first add-on. */
+    openMicEnabled: v.optional(v.boolean()),
+    /** Runner operational state for the Open Mic add-on. Drives the public
+     *  sign-up window (scheduled/live) and runner UI gating. Independent from
+     *  the event's own lifecycle status so running the queue never fights the
+     *  broader event workflow. */
+    openMicStatus: v.optional(
+      v.union(
+        v.literal("scheduled"),
+        v.literal("live"),
+        v.literal("completed"),
+        v.literal("cancelled"),
+      ),
+    ),
+    /** Free-form crew notes shown on the Open Mic runner and public sign-up. */
+    openMicNotes: v.optional(v.string()),
+
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -593,7 +611,8 @@ export default defineSchema({
     .index("by_startAt", ["startAt"])
     .index("by_createdAt", ["createdAt"])
     .index("by_seriesId_and_occurrenceIndex", ["seriesId", "occurrenceIndex"])
-    .index("by_sourceEventRequestId", ["sourceEventRequestId"]),
+    .index("by_sourceEventRequestId", ["sourceEventRequestId"])
+    .index("by_openMicEnabled_and_startAt", ["openMicEnabled", "startAt"]),
 
   userCompensationRates: defineTable({
     userId: v.string(),
@@ -1069,4 +1088,50 @@ export default defineSchema({
   })
     .index("by_key", ["key"])
     .index("by_windowStartMs", ["windowStartMs"]),
+
+  /** Singleton row: global marketing feature flags. Extend with new fields as
+   *  more sections gain admin-toggled marketing boosts. */
+  marketingSettings: defineTable({
+    /** When true, the public Open Mic sign-up form shows the Arbor Live intro
+     *  slide (promo video background + socials link) before the form steps. */
+    openMicMarketingBoost: v.boolean(),
+    updatedAt: v.number(),
+  }),
+
+  openMicSignups: defineTable({
+    /** Event this sign-up belongs to. Open Mic is an add-on on events, so
+     *  sign-ups are keyed to the event instead of a standalone night entity. */
+    eventId: v.id("events"),
+    name: v.string(),
+    email: v.string(),
+    whatTheyreDoing: v.string(),
+    equipment: v.array(v.string()),
+    /** Required when equipment includes "Background Music". */
+    bgMusicLink: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    /** "queued" = waiting in FCFS order, "current" = on stage now,
+     *  "performed" = already went up, "removed" = crew dropped them. */
+    status: v.union(
+      v.literal("queued"),
+      v.literal("current"),
+      v.literal("performed"),
+      v.literal("removed"),
+    ),
+    /** Strike counter for "Not here" presses. 0 → front of queue, 1 → back of
+     *  queue, 2 → removed. Reset to 0 when a signup becomes current again. */
+    skipsCount: v.number(),
+    /** Monotonic order key (lower = earlier). New signups use Date.now();
+     *  bumped-up signups get a value just below the current front to stay
+     *  ahead of the rest of the queue. */
+    position: v.number(),
+    /** Epoch ms when status transitioned to "performed". For the leaderboard. */
+    performedAt: v.optional(v.number()),
+    submittedAt: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_eventId_and_position", ["eventId", "position"])
+    .index("by_eventId_and_status", ["eventId", "status"])
+    .index("by_status_and_performedAt", ["status", "performedAt"])
+    .index("by_email", ["email"]),
 });
