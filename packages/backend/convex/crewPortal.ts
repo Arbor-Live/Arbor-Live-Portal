@@ -1,9 +1,11 @@
 import { pacificDateKey, recentPayPeriods } from "@arbor/format";
 import { v } from "convex/values";
+import { components } from "./_generated/api";
 import { mutation, query, type QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
   getUserId,
+  requireAdmin,
   requireArborInternalContext,
   requireAuth,
 } from "./lib/auth";
@@ -311,5 +313,107 @@ export const resolveMyEventMedia = mutation({
       });
     }
     return null;
+  },
+});
+
+const crewMediaStatusRowValue = v.object({
+  userId: v.string(),
+  name: v.string(),
+  email: v.string(),
+  image: v.optional(v.string()),
+  role: v.string(),
+  status: v.union(
+    v.literal("pending"),
+    v.literal("uploaded"),
+    v.literal("no_media"),
+  ),
+  resolvedAt: v.optional(v.number()),
+});
+
+type AuthUserRecord = {
+  id?: string;
+  _id?: string;
+  name?: string;
+  email?: string;
+  image?: string | null;
+};
+
+function authUserKey(user: AuthUserRecord) {
+  return user.id ?? user._id ?? "";
+}
+
+async function fetchAuthUsersByIds(ctx: QueryCtx, userIds: string[]) {
+  const byKey = new Map<string, AuthUserRecord>();
+  if (userIds.length === 0) return byKey;
+  const result = await ctx.runQuery(components.betterAuth.adapter.findMany, {
+    model: "user",
+    where: [{ field: "_id", operator: "in", value: userIds }],
+    paginationOpts: { cursor: null, numItems: userIds.length },
+  });
+  for (const user of (result?.page ?? []) as AuthUserRecord[]) {
+    const key = authUserKey(user);
+    if (key) byKey.set(key, user);
+  }
+  return byKey;
+}
+
+const crewMediaStatusSortOrder: Record<"pending" | "uploaded" | "no_media", number> = {
+  pending: 0,
+  no_media: 1,
+  uploaded: 2,
+};
+
+export const listCrewMediaStatusForEvent = query({
+  args: { eventId: v.id("events") },
+  returns: v.array(crewMediaStatusRowValue),
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    await requireArborInternalContext(ctx);
+
+    const shifts = await ctx.db
+      .query("eventCrewShifts")
+      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+      .take(500);
+
+    // First-assigned role per user; shifts without a userId are not eligible
+    // to self-report media status (they have no upload flow).
+    const userRole = new Map<string, string>();
+    for (const shift of shifts) {
+      const uid = shift.userId?.trim();
+      if (!uid) continue;
+      if (!userRole.has(uid)) userRole.set(uid, shift.role);
+    }
+    const userIds = Array.from(userRole.keys());
+    if (userIds.length === 0) return [];
+
+    const [statusRows, userByKey] = await Promise.all([
+      ctx.db
+        .query("eventCrewMediaStatus")
+        .withIndex("by_eventId_and_userId", (q) => q.eq("eventId", args.eventId))
+        .take(500),
+      fetchAuthUsersByIds(ctx, userIds),
+    ]);
+    const statusByUserId = new Map(statusRows.map((row) => [row.userId, row]));
+
+    const rows = userIds.map((userId) => {
+      const statusRow = statusByUserId.get(userId);
+      const user = userByKey.get(userId);
+      return {
+        userId,
+        name: user?.name ?? user?.email ?? userId,
+        email: user?.email ?? "",
+        image: user?.image ?? undefined,
+        role: userRole.get(userId) ?? "",
+        status: (statusRow?.status ?? "pending") as "pending" | "uploaded" | "no_media",
+        resolvedAt: statusRow?.resolvedAt,
+      };
+    });
+
+    rows.sort((a, b) => {
+      const orderDiff = crewMediaStatusSortOrder[a.status] - crewMediaStatusSortOrder[b.status];
+      if (orderDiff !== 0) return orderDiff;
+      return a.name.localeCompare(b.name);
+    });
+    return rows;
   },
 });
