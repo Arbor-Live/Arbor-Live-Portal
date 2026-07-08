@@ -1,6 +1,7 @@
 import { pacificDateKey } from "@arbor/format";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { components } from "./_generated/api";
 import { requireAdmin, requireArborInternalContext, requireAuth } from "./lib/auth";
 import { canEditEventForUser, requireEventEditAccess } from "./lib/eventAccess";
@@ -12,7 +13,7 @@ import {
 import { computeSeriesCostSummary } from "./lib/eventSeriesCosts";
 import { listEventsByInvoiceId } from "./lib/invoiceEvents";
 import { RENTAL_EVENT_TYPES, enrichPullListItems, summarizePullList } from "./eventPullLists";
-import { propagateOverviewToSeriesOccurrences, propagateInvoiceIdToSeriesOccurrences, type SeriesEditScope } from "./lib/eventSeriesGeneration";
+import { propagateOverviewToSeriesOccurrences, propagateInvoiceIdToSeriesOccurrences, type SeriesEditScope, type SeriesOverviewAffectedOccurrence, type SeriesOverviewOverride } from "./lib/eventSeriesGeneration";
 import { resolveSeriesMetadataForInvoice } from "./lib/invoiceSeries";
 import { EVENT_TIMEZONE } from "./email/constants";
 import { scheduleEventCancelledEmails } from "./email/triggers";
@@ -507,7 +508,6 @@ export const update = mutation({
         : resolveRentalFulfillmentMode(nextEventType, existing.rentalFulfillmentMode);
     const nextInvoiceId = args.invoiceId !== undefined ? args.invoiceId : existing.invoiceId;
     const nextStatus = normalizeEventStatus(args.status ?? existing.status);
-    const wasCancelled = normalizeEventStatus(existing.status) === "cancelled";
     const now = Date.now();
     const patch = {
       title: args.title?.trim() ?? existing.title,
@@ -543,6 +543,8 @@ export const update = mutation({
 
     const scope = (args.editScope ?? "this") as SeriesEditScope;
     const hasSeries = Boolean(existing.seriesId);
+
+    let affectedOccurrences: SeriesOverviewAffectedOccurrence[] = [{ id: args.id, prevStatus: existing.status, invoiceId: nextInvoiceId }];
 
     if (hasSeries && existing.seriesId && scope !== "this") {
       const series = await ctx.db.get(existing.seriesId);
@@ -586,13 +588,27 @@ export const update = mutation({
       });
       const updatedSeries = await ctx.db.get(existing.seriesId);
       if (!updatedSeries) throw new Error("Linked event series not found.");
-      await propagateOverviewToSeriesOccurrences(
+      const overrides: SeriesOverviewOverride = {
+        status: nextStatus,
+        visibility: patch.visibility,
+      };
+      if (patch.otPremium !== undefined) overrides.otPremium = patch.otPremium;
+      if (patch.crewCostBufferPercent !== undefined) {
+        overrides.crewCostBufferPercent = patch.crewCostBufferPercent;
+      }
+      const propagated = await propagateOverviewToSeriesOccurrences(
         ctx,
         updatedSeries,
         referenceIndex,
         scope,
         now,
+        overrides,
       );
+      const propagatedIds = new Set(propagated.map((o) => o.id));
+      if (!propagatedIds.has(args.id)) {
+        await ctx.db.patch(args.id, { ...overrides, updatedAt: now });
+      }
+      affectedOccurrences = [...affectedOccurrences, ...propagated];
       if (args.invoiceId !== undefined) {
         await propagateInvoiceIdToSeriesOccurrences(
           ctx,
@@ -610,12 +626,17 @@ export const update = mutation({
       });
     }
 
-    if (nextInvoiceId) {
-      await syncEventStatusForLinkedInvoice(ctx, args.id, nextInvoiceId, nextStatus);
-    }
+    const seen = new Set<Id<"events">>();
+    for (const occ of affectedOccurrences) {
+      if (seen.has(occ.id)) continue;
+      seen.add(occ.id);
+      if (occ.invoiceId) {
+        await syncEventStatusForLinkedInvoice(ctx, occ.id, occ.invoiceId, nextStatus);
+      }
 
-    if (nextStatus === "cancelled" && !wasCancelled) {
-      await scheduleEventCancelledEmails(ctx, args.id, now);
+      if (nextStatus === "cancelled" && normalizeEventStatus(occ.prevStatus) !== "cancelled") {
+        await scheduleEventCancelledEmails(ctx, occ.id, now);
+      }
     }
   },
 });
