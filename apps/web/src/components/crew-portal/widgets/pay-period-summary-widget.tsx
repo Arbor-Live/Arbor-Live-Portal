@@ -22,7 +22,7 @@ export function PayPeriodSummaryWidget() {
           Pay periods
         </CardTitle>
         <Button variant="outline" size="sm" asChild>
-          <Link href="/dashboard/timecards">Timecards</Link>
+          <Link href="/dashboard/timecards/mine">Timecards</Link>
         </Button>
       </CardHeader>
       <CardContent className="space-y-2">

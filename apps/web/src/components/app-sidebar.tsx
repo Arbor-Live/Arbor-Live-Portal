@@ -38,7 +38,6 @@ import {
 import {
   CalendarDotsIcon,
   CaretRightIcon,
-  ClockIcon,
   CurrencyDollarIcon,
   HouseIcon,
   UsersIcon,
@@ -66,9 +65,8 @@ type NavItem = {
 
 const navItems: NavItem[] = [
   { title: "Home", url: "/dashboard", icon: HouseIcon },
-  { title: "Timecards", url: "/dashboard/timecards", icon: ClockIcon },
   { title: "Events", url: "/dashboard/events", icon: CalendarDotsIcon },
-  { title: "Financial Hub", url: "/dashboard/financial-hub", icon: CurrencyDollarIcon, adminOnly: true },
+  { title: "Finances", url: "/dashboard/financial-hub", icon: CurrencyDollarIcon, adminOnly: true },
   { title: "Users", url: "/dashboard/users", icon: UsersIcon, adminOnly: true },
   {
     title: "Bands and Performers",
@@ -95,6 +93,8 @@ const financialHubSubItems: NavSubItem[] = [
   { title: "Invoices", url: "/dashboard/financial-hub/invoices" },
   { title: "Payments", url: "/dashboard/financial-hub/payments" },
   { title: "Band Payouts", url: "/dashboard/financial-hub/band-payouts" },
+  { title: "Crew Timecards", url: "/dashboard/timecards" },
+  { title: "My Timecards", url: "/dashboard/timecards/mine" },
   { title: "Host Organizations", url: "/dashboard/financial-hub/organizations" },
   { title: "Managers", url: "/dashboard/financial-hub/managers" },
   { title: "Create Invoice", url: "/dashboard/financial-hub/invoices/new" },
@@ -105,6 +105,7 @@ const eventsSubItems: NavSubItem[] = [
   { title: "Booking Requests", url: "/dashboard/events/requests" },
   { title: "Crew Scheduling", url: "/dashboard/events/crew-scheduling", adminOnly: true },
   { title: "My Availability", url: "/dashboard/events/my-availability" },
+  { title: "My Timecards", url: "/dashboard/timecards/mine" },
   { title: "Create Event", url: "/dashboard/events/new", adminOnly: true },
 ]
 
@@ -113,7 +114,6 @@ const usersSubItems: NavSubItem[] = [
   { title: "Access & Invites", url: "/dashboard/users/access" },
   { title: "Organizations", url: "/dashboard/users/organizations" },
   { title: "Crew Rates", url: "/dashboard/users/crew-rates" },
-  { title: "Crew Timecards", url: "/dashboard/users/timecards", adminOnly: true },
 ]
 
 const sectionSubItems: Record<string, NavSubItem[]> = {
@@ -174,8 +174,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
         item.url !== "/dashboard/inventory" &&
         item.url !== "/dashboard/users" &&
         item.url !== "/dashboard/marketing/work" &&
-        item.url !== "/dashboard" &&
-        item.url !== "/dashboard/timecards"
+        item.url !== "/dashboard"
       );
     }
     if (item.bandOnly) return false;
@@ -228,10 +227,20 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
         <SidebarMenu>
           {scopedNavItems.map((item) => {
             const Icon = item.icon
-            const subItems = visibleSubItems(sectionSubItems[item.url], isAdmin)
+            const subItems = visibleSubItems(sectionSubItems[item.url], isAdmin)?.filter(
+              (subItem) =>
+                !(
+                  isAdmin &&
+                  item.url === "/dashboard/events" &&
+                  subItem.url === "/dashboard/timecards/mine"
+                ),
+            )
             const hasCollapsibleSubItems = Boolean(subItems && subItems.length > 1)
             const isParentActive =
-              pathname === item.url || pathname.startsWith(`${item.url}/`)
+              pathname === item.url ||
+              pathname.startsWith(`${item.url}/`) ||
+              (item.url === "/dashboard/financial-hub" &&
+                pathname.startsWith("/dashboard/timecards"))
             return (
               <Collapsible
                 key={item.url}

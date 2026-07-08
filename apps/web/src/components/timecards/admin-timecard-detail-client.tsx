@@ -24,7 +24,7 @@ export function AdminTimecardDetailClient({ userId }: { userId: string }) {
           <p className="text-sm text-muted-foreground">{detail.email}</p>
         </div>
         <Button variant="outline" size="sm" asChild>
-          <Link href="/dashboard/users/timecards">Back to overview</Link>
+          <Link href="/dashboard/timecards">Back to overview</Link>
         </Button>
       </div>
 

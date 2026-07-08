@@ -62,7 +62,7 @@ export default function UsersPage() {
             </CardHeader>
             <CardContent>
               <Button asChild>
-                <Link href="/dashboard/users/timecards">Open Crew Timecards</Link>
+                <Link href="/dashboard/timecards">Open Crew Timecards</Link>
               </Button>
             </CardContent>
           </Card>
