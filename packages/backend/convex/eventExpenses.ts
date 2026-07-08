@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { requireArborInternalContext, requireAuth } from "./lib/auth";
+import { requireAdmin, requireArborInternalContext, requireAuth } from "./lib/auth";
 
 const statusValue = v.union(
   v.literal("draft"),
@@ -29,7 +29,7 @@ export const create = mutation({
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    await requireAdmin(ctx);
     await requireArborInternalContext(ctx);
     const now = Date.now();
     return await ctx.db.insert("eventExpenseReports", {
@@ -54,7 +54,7 @@ export const update = mutation({
     totalAmountUsd: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    await requireAdmin(ctx);
     await requireArborInternalContext(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Expense report not found.");

@@ -39,6 +39,7 @@ import {
   CalendarDotsIcon,
   CaretRightIcon,
   CurrencyDollarIcon,
+  HouseIcon,
   UsersIcon,
   GuitarIcon,
   PackageIcon,
@@ -63,8 +64,9 @@ type NavItem = {
 }
 
 const navItems: NavItem[] = [
+  { title: "Home", url: "/dashboard", icon: HouseIcon },
   { title: "Events", url: "/dashboard/events", icon: CalendarDotsIcon },
-  { title: "Financial Hub", url: "/dashboard/financial-hub", icon: CurrencyDollarIcon, adminOnly: true },
+  { title: "Finances", url: "/dashboard/financial-hub", icon: CurrencyDollarIcon, adminOnly: true },
   { title: "Users", url: "/dashboard/users", icon: UsersIcon, adminOnly: true },
   {
     title: "Bands and Performers",
@@ -91,6 +93,8 @@ const financialHubSubItems: NavSubItem[] = [
   { title: "Invoices", url: "/dashboard/financial-hub/invoices" },
   { title: "Payments", url: "/dashboard/financial-hub/payments" },
   { title: "Band Payouts", url: "/dashboard/financial-hub/band-payouts" },
+  { title: "Crew Timecards", url: "/dashboard/timecards" },
+  { title: "My Timecards", url: "/dashboard/timecards/mine" },
   { title: "Host Organizations", url: "/dashboard/financial-hub/organizations" },
   { title: "Managers", url: "/dashboard/financial-hub/managers" },
   { title: "Create Invoice", url: "/dashboard/financial-hub/invoices/new" },
@@ -101,6 +105,7 @@ const eventsSubItems: NavSubItem[] = [
   { title: "Booking Requests", url: "/dashboard/events/requests" },
   { title: "Crew Scheduling", url: "/dashboard/events/crew-scheduling", adminOnly: true },
   { title: "My Availability", url: "/dashboard/events/my-availability" },
+  { title: "My Timecards", url: "/dashboard/timecards/mine" },
   { title: "Create Event", url: "/dashboard/events/new", adminOnly: true },
 ]
 
@@ -158,28 +163,32 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
   const userEmail = data?.user?.email ?? "No email"
   const orgName = activeOrganization?.name ?? "No active org"
   const isBandContext = activeOrganization?.organizationType === "band"
+  const isCrewContext = activeOrganization?.organizationType === "arbor_internal" && !isAdmin
+  const isAdminHomeContext = activeOrganization?.organizationType === "arbor_internal" && isAdmin
   const unconfirmedEventCount = unconfirmedCrewCount?.length ?? 0
   const scopedNavItems = navItems.filter((item) => {
     if (isBandContext) {
-      if (item.bandOnly) return true
+      if (item.bandOnly) return true;
       return (
         item.url !== "/dashboard/events" &&
         item.url !== "/dashboard/financial-hub" &&
         item.url !== "/dashboard/inventory" &&
         item.url !== "/dashboard/users" &&
-        item.url !== "/dashboard/marketing/work"
-      )
+        item.url !== "/dashboard/marketing/work" &&
+        item.url !== "/dashboard"
+      );
     }
-    if (item.bandOnly) return false
-    return isAdmin || !item.adminOnly
-  })
+    if (item.bandOnly) return false;
+    if (item.url === "/dashboard" && !isCrewContext && !isAdminHomeContext) return false;
+    return isAdmin || !item.adminOnly;
+  });
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({})
 
   return (
     <Sidebar variant="inset" {...props}>
       <SidebarHeader className="relative z-20 shrink-0">
         <div className="px-2 py-2">
-          <Link href="/dashboard/events" className="flex items-center">
+          <Link href="/dashboard" className="flex items-center">
             <Image
               src="/logo.svg"
               alt="Arbor Live logo"
@@ -219,10 +228,20 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
         <SidebarMenu>
           {scopedNavItems.map((item) => {
             const Icon = item.icon
-            const subItems = visibleSubItems(sectionSubItems[item.url], isAdmin)
+            const subItems = visibleSubItems(sectionSubItems[item.url], isAdmin)?.filter(
+              (subItem) =>
+                !(
+                  isAdmin &&
+                  item.url === "/dashboard/events" &&
+                  subItem.url === "/dashboard/timecards/mine"
+                ),
+            )
             const hasCollapsibleSubItems = Boolean(subItems && subItems.length > 1)
             const isParentActive =
-              pathname === item.url || pathname.startsWith(`${item.url}/`)
+              pathname === item.url ||
+              pathname.startsWith(`${item.url}/`) ||
+              (item.url === "/dashboard/financial-hub" &&
+                pathname.startsWith("/dashboard/timecards"))
             return (
               <Collapsible
                 key={item.url}

@@ -16,6 +16,14 @@ function getShiftDayKey(startsAt: number) {
 }
 
 export async function calculateCrewCost(ctx: QueryCtx | MutationCtx, eventId: Id<"events">) {
+  const event = await ctx.db.get(eventId);
+  const otPremium = event?.otPremium === true;
+  const settings = await ctx.db
+    .query("invoiceSettings")
+    .withIndex("by_key", (q) => q.eq("key", "default"))
+    .unique();
+  const bufferPercent = event?.crewCostBufferPercent ?? settings?.crewCostBufferPercent ?? 0;
+
   const shifts = await ctx.db
     .query("eventCrewShifts")
     .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", eventId))
@@ -107,14 +115,20 @@ export async function calculateCrewCost(ctx: QueryCtx | MutationCtx, eventId: Id
       : shift.personName?.trim() || "Unassigned";
     const allocationKey = shift.userId ? `${shift.userId}:${dayKey}` : undefined;
     const alreadyAllocated = allocationKey ? (userDayAllocatedHours.get(allocationKey) ?? 0) : 0;
-    const regularHours = roundCurrency(Math.max(0, Math.min(shift.hours, 8 - alreadyAllocated)));
-    const overtimeHours = roundCurrency(Math.max(0, shift.hours - regularHours));
+    let regularHours = roundCurrency(Math.max(0, Math.min(shift.hours, 8 - alreadyAllocated)));
+    let overtimeHours = roundCurrency(Math.max(0, shift.hours - regularHours));
+    if (otPremium) {
+      regularHours = 0;
+      overtimeHours = roundCurrency(shift.hours);
+    }
     if (allocationKey) {
       userDayAllocatedHours.set(allocationKey, roundCurrency(alreadyAllocated + shift.hours));
     }
     const overtimeRateUsd = roundCurrency(rate * overtimeMultiplier);
     const subtotalUsd = shift.userId
-      ? roundCurrency(regularHours * rate + overtimeHours * overtimeRateUsd)
+      ? otPremium
+        ? roundCurrency(shift.hours * overtimeRateUsd)
+        : roundCurrency(regularHours * rate + overtimeHours * overtimeRateUsd)
       : roundCurrency(shift.hours * rate);
 
     blockEntry.regularHours = roundCurrency(blockEntry.regularHours + regularHours);
@@ -166,6 +180,7 @@ export async function calculateCrewCost(ctx: QueryCtx | MutationCtx, eventId: Id
     }))
     .sort((a, b) => a.startsAt - b.startsAt || a.blockLabel.localeCompare(b.blockLabel));
   const totalCostUsd = roundCurrency(byScheduleBlock.reduce((sum, row) => sum + row.subtotalUsd, 0));
+  const bufferedTotalCostUsd = roundCurrency(totalCostUsd * (1 + bufferPercent / 100));
   const missingRateUsers = Array.from(
     new Set(
       byScheduleBlock
@@ -176,9 +191,12 @@ export async function calculateCrewCost(ctx: QueryCtx | MutationCtx, eventId: Id
   const totalOvertimeHours = roundCurrency(byScheduleBlock.reduce((sum, row) => sum + row.overtimeHours, 0));
   return {
     totalCostUsd,
+    bufferedTotalCostUsd,
+    bufferPercent,
     totalRegularHours,
     totalOvertimeHours,
     overtimeMultiplier,
+    otPremium,
     byUser,
     byScheduleBlock,
     missingRateUsers,

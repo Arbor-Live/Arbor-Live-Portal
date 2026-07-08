@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 
 const links = [
   { href: "/dashboard/events", label: "Events" },
-  { href: "/dashboard/financial-hub", label: "Financial Hub" },
+  { href: "/dashboard/financial-hub", label: "Finances" },
   { href: "/dashboard/users", label: "Users" },
   { href: "/dashboard/bands-and-performers", label: "Bands and Performers" },
   { href: "/dashboard/inventory", label: "Inventory" },

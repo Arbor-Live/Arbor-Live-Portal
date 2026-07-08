@@ -17,7 +17,7 @@ export default function FinancialHubPage() {
       <ArborOnlyGuard>
         <Card>
           <CardHeader>
-            <CardTitle>Financial Hub</CardTitle>
+            <CardTitle>Finances</CardTitle>
             <CardDescription>
               Centralize invoices, settlements, and payments across operations.
             </CardDescription>
@@ -40,6 +40,12 @@ export default function FinancialHubPage() {
             </Button>
             <Button asChild variant="outline">
               <Link href="/dashboard/financial-hub/band-payouts">Band Payouts</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/dashboard/timecards">Crew Timecards</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/dashboard/timecards/mine">My Timecards</Link>
             </Button>
           </CardContent>
         </Card>

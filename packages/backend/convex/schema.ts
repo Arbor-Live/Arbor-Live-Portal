@@ -183,6 +183,8 @@ const bandPaymentStatusValue = v.union(
   v.literal("cancelled"),
 );
 
+const dashboardKeyValue = v.union(v.literal("crewHome"), v.literal("adminHome"));
+
 export default defineSchema({
   inventoryCategories: defineTable({
     key: v.string(),
@@ -343,6 +345,7 @@ export default defineSchema({
     crewNormalRateUsd: v.optional(v.number()),
     crewLeadRateUsd: v.optional(v.number()),
     crewOtRateUsd: v.optional(v.number()),
+    crewCostBufferPercent: v.optional(v.number()),
     termsAndConditionsMarkdown: v.optional(v.string()),
     termsVersion: v.optional(v.string()),
     updatedAt: v.number(),
@@ -571,6 +574,8 @@ export default defineSchema({
     budgetUsd: v.optional(v.number()),
     dayOfLeadUserId: v.optional(v.string()),
     eventManagerUserId: v.optional(v.string()),
+    otPremium: v.optional(v.boolean()),
+    crewCostBufferPercent: v.optional(v.number()),
     crewCostUsd: v.optional(v.number()),
     bandsCostUsd: v.optional(v.number()),
     externalRentalsCostUsd: v.optional(v.number()),
@@ -662,6 +667,17 @@ export default defineSchema({
     .index("by_userId", ["userId"])
     .index("by_organizationId", ["organizationId"]),
 
+  dashboardPreferences: defineTable({
+    userId: v.string(),
+    dashboardKey: dashboardKeyValue,
+    widgetOrder: v.array(v.string()),
+    hiddenWidgetIds: v.array(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_and_dashboardKey", ["userId", "dashboardKey"]),
+
   eventScheduleBlocks: defineTable({
     eventId: v.id("events"),
     blockType: eventTimelineBlockTypeValue,
@@ -714,7 +730,17 @@ export default defineSchema({
     .index("by_eventId", ["eventId"])
     .index("by_eventId_and_startsAt", ["eventId", "startsAt"])
     .index("by_scheduleBlockId", ["scheduleBlockId"])
-    .index("by_expenseReportId", ["expenseReportId"]),
+    .index("by_expenseReportId", ["expenseReportId"])
+    .index("by_userId_and_startsAt", ["userId", "startsAt"]),
+
+  eventCrewMediaStatus: defineTable({
+    eventId: v.id("events"),
+    userId: v.string(),
+    status: v.union(v.literal("uploaded"), v.literal("no_media")),
+    resolvedAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_eventId_and_userId", ["eventId", "userId"]),
 
   eventCrewAvailabilityResponses: defineTable({
     eventId: v.id("events"),

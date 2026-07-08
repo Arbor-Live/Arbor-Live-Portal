@@ -22,6 +22,16 @@ import type { Id } from "@/lib/convex-api";
 export function FinancialHubSettings() {
   const fees = useQuery(api.invoiceFeeDefinitions.list, {});
   const terms = useQuery(api.invoiceTerms.list, {});
+  const invoiceSettings = useQuery(api.invoiceSettings.get, {});
+  const updateInvoiceSettings = useMutation(api.invoiceSettings.update);
+  const [crewBufferPercent, setCrewBufferPercent] = useState("");
+  const [bufferMessage, setBufferMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (invoiceSettings?.crewCostBufferPercent !== undefined) {
+      setCrewBufferPercent(String(invoiceSettings.crewCostBufferPercent));
+    }
+  }, [invoiceSettings?.crewCostBufferPercent]);
 
   const addFeeForm = useConvexForm<FeeDefinitionFormValues>({
     schema: feeDefinitionSchema,
@@ -110,6 +120,44 @@ export function FinancialHubSettings() {
               </form>
             </Form>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Crew Cost Defaults</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Global default buffer applied to crew cost estimates unless overridden per event.
+          </p>
+          <div className="space-y-1">
+            <label className="text-sm font-medium" htmlFor="crew-buffer-percent">
+              Crew cost buffer %
+            </label>
+            <input
+              id="crew-buffer-percent"
+              type="number"
+              min={0}
+              step={0.5}
+              className="flex h-9 w-full rounded-md border bg-background px-3 py-1 text-sm"
+              value={crewBufferPercent}
+              onChange={(e) => setCrewBufferPercent(e.target.value)}
+            />
+          </div>
+          {bufferMessage ? <p className="text-xs text-emerald-700">{bufferMessage}</p> : null}
+          <Button
+            type="button"
+            size="sm"
+            onClick={async () => {
+              await updateInvoiceSettings({
+                crewCostBufferPercent: Number(crewBufferPercent || "0"),
+              });
+              setBufferMessage("Crew cost buffer saved.");
+            }}
+          >
+            Save crew buffer
+          </Button>
         </CardContent>
       </Card>
 
