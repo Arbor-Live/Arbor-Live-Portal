@@ -10,7 +10,7 @@ export type CrewWidget = DashboardWidgetDefinition & {
   teams?: UserTeam[];
 };
 
-const DEFAULT_CREW_WIDGETS: CrewWidget[] = [
+export const DEFAULT_CREW_WIDGETS: CrewWidget[] = [
   {
     id: "pending-availability",
     title: "Availability",

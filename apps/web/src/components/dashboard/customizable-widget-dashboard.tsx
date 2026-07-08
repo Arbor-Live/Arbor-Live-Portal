@@ -181,7 +181,11 @@ export function CustomizableWidgetDashboard({
           No widgets are visible. Use the Widgets menu to restore them.
         </div>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div
+          className={cn(
+            isCustomizing ? "grid gap-4 md:grid-cols-2" : "columns-1 gap-4 md:columns-2",
+          )}
+        >
           {visibleWidgets.map((widget) => {
             const Widget = widget.component;
             return (
@@ -201,6 +205,7 @@ export function CustomizableWidgetDashboard({
                 }}
                 className={cn(
                   "transition-opacity",
+                  isCustomizing ? "" : "mb-4 break-inside-avoid",
                   isCustomizing ? "cursor-grab" : "",
                   draggedWidgetId === widget.id ? "opacity-50" : "",
                 )}

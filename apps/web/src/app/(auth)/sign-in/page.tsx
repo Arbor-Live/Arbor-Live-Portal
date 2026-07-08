@@ -26,6 +26,10 @@ function authErrorMessage(error: { message?: unknown }, fallback: string) {
 export default function SignInPage() {
   const searchParams = useSearchParams();
   const emailFromQuery = useMemo(() => searchParams.get("email") ?? "", [searchParams]);
+  const redirectTarget = useMemo(() => {
+    const target = searchParams.get("redirect") ?? "/dashboard";
+    return target.startsWith("/") && !target.startsWith("//") ? target : "/dashboard";
+  }, [searchParams]);
   const [passkeyBusy, setPasskeyBusy] = useState(false);
   const [passkeyError, setPasskeyError] = useState<string | null>(null);
 
@@ -43,7 +47,7 @@ export default function SignInPage() {
     const result = await authClient.signIn.email({
       email: values.email,
       password: values.password,
-      callbackURL: "/dashboard",
+      callbackURL: redirectTarget,
     });
     if (result.error) {
       throw new Error(
@@ -63,7 +67,7 @@ export default function SignInPage() {
       if (result.error) {
         throw new Error(authErrorMessage(result.error, "Unable to sign in with passkey."));
       }
-      window.location.href = "/dashboard";
+      window.location.href = redirectTarget;
     } catch (error) {
       setPasskeyError(error instanceof Error ? error.message : "Unable to sign in with passkey.");
     } finally {
