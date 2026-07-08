@@ -13,7 +13,7 @@ export type SubmitOpenMicSignupResult =
   | { ok: false; message: string; fieldErrors?: Partial<Record<keyof OpenMicSignupFormValues, string>> };
 
 export async function submitOpenMicSignup(
-  nightId: string,
+  eventId: string,
   raw: OpenMicSignupFormValues,
 ): Promise<SubmitOpenMicSignupResult> {
   const parsed = openMicSignupSchema.safeParse(raw);
@@ -37,7 +37,7 @@ export async function submitOpenMicSignup(
   try {
     const result = await fetchMutation(api.openMic.submitPublic, {
       ...payload,
-      nightId: nightId as Id<"openMicNights">,
+      eventId: eventId as Id<"events">,
     });
     return { ok: true, nightTitle: result.nightTitle, nightStartAt: result.nightStartAt };
   } catch (error) {

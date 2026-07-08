@@ -3,6 +3,7 @@ import { mutation, query, type MutationCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireAdmin } from "./lib/auth";
 import { enforceRateLimit, HOUR_MS } from "./rateLimit";
+import { runnerWindowFor, runnerWindowOpenAt } from "./lib/openMicAddon";
 
 export const OPEN_MIC_EQUIPMENT_OPTIONS = [
   "Piano",
@@ -14,7 +15,7 @@ export const OPEN_MIC_EQUIPMENT_OPTIONS = [
 
 export type OpenMicEquipment = (typeof OPEN_MIC_EQUIPMENT_OPTIONS)[number];
 
-const nightStatusValue = v.union(
+export const openMicStatusValue = v.union(
   v.literal("scheduled"),
   v.literal("live"),
   v.literal("completed"),
@@ -28,8 +29,9 @@ const signupStatusValue = v.union(
   v.literal("removed"),
 );
 
-const publicNightValue = v.object({
-  _id: v.id("openMicNights"),
+/** Public projection of the next event accepting Open Mic sign-ups. */
+const publicEventValue = v.object({
+  _id: v.id("events"),
   title: v.string(),
   startAt: v.number(),
   endAt: v.optional(v.number()),
@@ -48,25 +50,29 @@ function isUrl(value: string) {
   }
 }
 
-/** Sign-ups stay open for a night up to 4 hours after its listed start. */
-const ACTIVE_NIGHT_WINDOW_MS = 4 * HOUR_MS;
+/** Sign-ups stay open for an event up to 4 hours after its listed start. */
+const ACTIVE_EVENT_WINDOW_MS = 4 * HOUR_MS;
 
 /* ------------------------------------------------------------------ */
 /* Public queries                                                     */
 /* ------------------------------------------------------------------ */
 
+/** Find the next upcoming Arbor Live event that has the Open Mic add-on
+ *  enabled and accepting sign-ups. Returned to the public sign-up wizard. */
 export const getActiveNight = query({
   args: {},
-  returns: v.union(v.null(), publicNightValue),
+  returns: v.union(v.null(), publicEventValue),
   handler: async (ctx) => {
     const now = Date.now();
-    const since = now - ACTIVE_NIGHT_WINDOW_MS;
-    const nights = await ctx.db
-      .query("openMicNights")
-      .withIndex("by_startAt", (q) => q.gte("startAt", since))
+    const since = now - ACTIVE_EVENT_WINDOW_MS;
+    const events = await ctx.db
+      .query("events")
+      .withIndex("by_openMicEnabled_and_startAt", (q) =>
+        q.eq("openMicEnabled", true).gte("startAt", since),
+      )
       .take(100);
-    const candidate = nights
-      .filter((night) => night.status === "scheduled" || night.status === "live")
+    const candidate = events
+      .filter((event) => event.openMicStatus === "scheduled" || event.openMicStatus === "live")
       .sort((a, b) => a.startAt - b.startAt)[0];
     if (!candidate) return null;
     return {
@@ -85,7 +91,7 @@ export const getActiveNight = query({
 export const submitPublic = mutation({
   args: {
     website: v.optional(v.string()),
-    nightId: v.id("openMicNights"),
+    eventId: v.id("events"),
     name: v.string(),
     email: v.string(),
     whatTheyreDoing: v.string(),
@@ -129,21 +135,24 @@ export const submitPublic = mutation({
       }
     }
 
-    const night = await ctx.db.get(args.nightId);
-    if (!night) throw new Error("This open mic night no longer exists.");
-    if (night.status !== "scheduled" && night.status !== "live") {
-      throw new Error("Sign-ups are closed for this open mic night.");
+    const event = await ctx.db.get(args.eventId);
+    if (!event) throw new Error("This event no longer exists.");
+    if (!event.openMicEnabled) {
+      throw new Error("Open Mic sign-ups aren't open for this event.");
+    }
+    if (event.openMicStatus !== "scheduled" && event.openMicStatus !== "live") {
+      throw new Error("Sign-ups are closed for this Open Mic.");
     }
     const now = Date.now();
-    if (night.startAt < now - ACTIVE_NIGHT_WINDOW_MS) {
-      throw new Error("Sign-ups are closed for this open mic night.");
+    if (event.startAt < now - ACTIVE_EVENT_WINDOW_MS) {
+      throw new Error("Sign-ups are closed for this Open Mic.");
     }
 
     await enforceRateLimit(ctx, `openMicSubmit:${email}`, { limit: 5, windowMs: HOUR_MS });
     await enforceRateLimit(ctx, "openMicSubmit:global", { limit: 60, windowMs: HOUR_MS });
 
     const id = await ctx.db.insert("openMicSignups", {
-      nightId: night._id,
+      eventId: event._id,
       name,
       email,
       whatTheyreDoing,
@@ -158,7 +167,7 @@ export const submitPublic = mutation({
       updatedAt: now,
     });
 
-    return { _id: id, nightTitle: night.title, nightStartAt: night.startAt };
+    return { _id: id, nightTitle: event.title, nightStartAt: event.startAt };
   },
 });
 
@@ -166,60 +175,79 @@ export const submitPublic = mutation({
 /* Admin queries                                                      */
 /* ------------------------------------------------------------------ */
 
-const adminNightSummaryValue = v.object({
-  _id: v.id("openMicNights"),
+const adminEventSummaryValue = v.object({
+  _id: v.id("events"),
   title: v.string(),
   startAt: v.number(),
   endAt: v.optional(v.number()),
-  status: nightStatusValue,
+  status: openMicStatusValue,
   notes: v.optional(v.string()),
+  /** Underlying event lifecycle status, surfaced for the inbox UI. */
+  eventStatus: v.string(),
+  /** Whether the runner is currently inside the [start-1h, end+1h] bookable window. */
+  runnerWindowOpen: v.boolean(),
+  runnerOpensAt: v.number(),
+  runnerClosesAt: v.number(),
   queuedCount: v.number(),
   performedCount: v.number(),
   hasCurrent: v.boolean(),
 });
 
-export const listNights = query({
+/** Admin inbox: Arbor Live events with the Open Mic add-on enabled. */
+export const listEvents = query({
   args: {},
-  returns: v.array(adminNightSummaryValue),
+  returns: v.array(adminEventSummaryValue),
   handler: async (ctx) => {
     await requireAdmin(ctx);
-    const nights = await ctx.db
-      .query("openMicNights")
-      .withIndex("by_startAt", (q) => q.gte("startAt", 0))
+    const events = await ctx.db
+      .query("events")
+      .withIndex("by_openMicEnabled_and_startAt", (q) => q.eq("openMicEnabled", true))
       .order("desc")
       .take(100);
 
     const summaries: Array<{
-      _id: Id<"openMicNights">;
+      _id: Id<"events">;
       title: string;
       startAt: number;
       endAt?: number;
       status: "scheduled" | "live" | "completed" | "cancelled";
       notes?: string;
+      eventStatus: string;
+      runnerWindowOpen: boolean;
+      runnerOpensAt: number;
+      runnerClosesAt: number;
       queuedCount: number;
       performedCount: number;
       hasCurrent: boolean;
     }> = [];
-    for (const night of nights) {
+    const now = Date.now();
+    for (const event of events) {
+      const window = runnerWindowFor(event.startAt, event.endAt);
       const queued = await ctx.db
         .query("openMicSignups")
-        .withIndex("by_nightId_and_status", (q) => q.eq("nightId", night._id).eq("status", "queued"))
+        .withIndex("by_eventId_and_status", (q) => q.eq("eventId", event._id).eq("status", "queued"))
         .take(500);
       const current = await ctx.db
         .query("openMicSignups")
-        .withIndex("by_nightId_and_status", (q) => q.eq("nightId", night._id).eq("status", "current"))
+        .withIndex("by_eventId_and_status", (q) => q.eq("eventId", event._id).eq("status", "current"))
         .take(1);
       const performed = await ctx.db
         .query("openMicSignups")
-        .withIndex("by_nightId_and_status", (q) => q.eq("nightId", night._id).eq("status", "performed"))
+        .withIndex("by_eventId_and_status", (q) =>
+          q.eq("eventId", event._id).eq("status", "performed"),
+        )
         .take(500);
       summaries.push({
-        _id: night._id,
-        title: night.title,
-        startAt: night.startAt,
-        endAt: night.endAt,
-        status: night.status,
-        notes: night.notes,
+        _id: event._id,
+        title: event.title,
+        startAt: event.startAt,
+        endAt: event.endAt,
+        status: event.openMicStatus ?? "scheduled",
+        notes: event.openMicNotes,
+        eventStatus: event.status,
+        runnerWindowOpen: runnerWindowOpenAt(event.startAt, event.endAt, now),
+        runnerOpensAt: window.opensAt,
+        runnerClosesAt: window.closesAt,
         queuedCount: queued.length,
         performedCount: performed.length,
         hasCurrent: current.length > 0,
@@ -244,41 +272,52 @@ const runnerSignupValue = v.object({
   submittedAt: v.number(),
 });
 
-const runnerNightValue = v.object({
-  _id: v.id("openMicNights"),
+const runnerEventValue = v.object({
+  _id: v.id("events"),
   title: v.string(),
   startAt: v.number(),
   endAt: v.optional(v.number()),
-  status: nightStatusValue,
+  status: openMicStatusValue,
   notes: v.optional(v.string()),
+  /** Whether the runner (call-up + queue actions) is currently open, based on
+   *  event start/end ± 1h. Derived server-side so the UI doesn't need to
+   *  compute it and the gating also lives on the mutations. */
+  runnerWindowOpen: v.boolean(),
+  runnerOpensAt: v.number(),
+  runnerClosesAt: v.number(),
 });
 
 export const getRunnerState = query({
-  args: { nightId: v.id("openMicNights") },
+  args: { eventId: v.id("events") },
   returns: v.union(
     v.null(),
     v.object({
-      night: runnerNightValue,
+      event: runnerEventValue,
       signups: v.array(runnerSignupValue),
     }),
   ),
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
-    const night = await ctx.db.get(args.nightId);
-    if (!night) return null;
+    const event = await ctx.db.get(args.eventId);
+    if (!event || !event.openMicEnabled) return null;
+    const now = Date.now();
+    const window = runnerWindowFor(event.startAt, event.endAt);
     const signups = await ctx.db
       .query("openMicSignups")
-      .withIndex("by_nightId_and_position", (q) => q.eq("nightId", night._id))
+      .withIndex("by_eventId_and_position", (q) => q.eq("eventId", event._id))
       .order("asc")
       .take(500);
     return {
-      night: {
-        _id: night._id,
-        title: night.title,
-        startAt: night.startAt,
-        endAt: night.endAt,
-        status: night.status,
-        notes: night.notes,
+      event: {
+        _id: event._id,
+        title: event.title,
+        startAt: event.startAt,
+        endAt: event.endAt,
+        status: event.openMicStatus ?? "scheduled",
+        notes: event.openMicNotes,
+        runnerWindowOpen: runnerWindowOpenAt(event.startAt, event.endAt, now),
+        runnerOpensAt: window.opensAt,
+        runnerClosesAt: window.closesAt,
       },
       signups: signups.map((signup) => ({
         _id: signup._id,
@@ -341,84 +380,40 @@ export const getLeaderboard = query({
 });
 
 /* ------------------------------------------------------------------ */
-/* Admin night CRUD                                                   */
+/* Admin event Open Mic add-on control                                */
 /* ------------------------------------------------------------------ */
 
-export const createNight = mutation({
+/** Toggle the runner operational state for an event's Open Mic add-on.
+ *  The Open Mic enabled flag itself is managed via `events.update`. */
+export const setOpenMicStatus = mutation({
   args: {
-    title: v.string(),
-    startAt: v.number(),
-    endAt: v.optional(v.number()),
-    notes: v.optional(v.string()),
+    eventId: v.id("events"),
+    status: openMicStatusValue,
   },
-  returns: v.id("openMicNights"),
+  returns: v.null(),
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
-    const title = args.title.trim();
-    if (!title) throw new Error("Title is required.");
-    if (!args.endAt || args.endAt <= args.startAt) {
-      throw new Error("End time must be after start time.");
+    const event = await ctx.db.get(args.eventId);
+    if (!event) throw new Error("Event not found.");
+    if (!event.openMicEnabled) {
+      throw new Error("Enable the Open Mic add-on on this event first.");
     }
     const now = Date.now();
-    return await ctx.db.insert("openMicNights", {
-      title,
-      startAt: args.startAt,
-      endAt: args.endAt,
-      status: "scheduled",
-      notes: args.notes?.trim() || undefined,
-      createdAt: now,
-      updatedAt: now,
-    });
-  },
-});
-
-export const updateNight = mutation({
-  args: {
-    nightId: v.id("openMicNights"),
-    title: v.optional(v.string()),
-    startAt: v.optional(v.number()),
-    endAt: v.optional(v.number()),
-    status: v.optional(nightStatusValue),
-    notes: v.optional(v.string()),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    await requireAdmin(ctx);
-    const night = await ctx.db.get(args.nightId);
-    if (!night) throw new Error("Open mic night not found.");
-    const patch: Record<string, unknown> = { updatedAt: Date.now() };
-    if (args.title !== undefined) {
-      const title = args.title.trim();
-      if (!title) throw new Error("Title cannot be empty.");
-      patch.title = title;
+    // Going live starts the runner. Forbid it outside the bookable window so a
+    // stray click can't open the queue an hour ahead or bring a closed night
+    // back to life. Completing/cancelling is allowed any time.
+    if (args.status === "live" && !runnerWindowOpenAt(event.startAt, event.endAt, now)) {
+      const window = runnerWindowFor(event.startAt, event.endAt);
+      if (now < window.opensAt) {
+        throw new Error(
+          `Runner doesn't open until ${new Date(window.opensAt).toLocaleString()} (1h before event start).`,
+        );
+      }
+      throw new Error(
+        `Runner closed at ${new Date(window.closesAt).toLocaleString()} (1h after event end).`,
+      );
     }
-    if (args.startAt !== undefined) patch.startAt = args.startAt;
-    if (args.endAt !== undefined) patch.endAt = args.endAt;
-    if (args.status !== undefined) patch.status = args.status;
-    if (args.notes !== undefined) patch.notes = args.notes.trim() || undefined;
-    const startAt = (patch.startAt as number | undefined) ?? night.startAt;
-    const endAt = (patch.endAt as number | undefined) ?? night.endAt;
-    if (endAt !== undefined && endAt <= startAt) {
-      throw new Error("End time must be after start time.");
-    }
-    await ctx.db.patch(night._id, patch);
-    return null;
-  },
-});
-
-export const deleteNight = mutation({
-  args: { nightId: v.id("openMicNights") },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    await requireAdmin(ctx);
-    const signups = await ctx.db
-      .query("openMicSignups")
-      .withIndex("by_nightId_and_position", (q) => q.eq("nightId", args.nightId))
-      .take(500);
-    for (const signup of signups) {
-      await ctx.db.delete(signup._id);
-    }
-    await ctx.db.delete(args.nightId);
+    await ctx.db.patch(args.eventId, { openMicStatus: args.status, updatedAt: now });
     return null;
   },
 });
@@ -427,24 +422,33 @@ export const deleteNight = mutation({
 /* Admin runner actions                                               */
 /* ------------------------------------------------------------------ */
 
-async function firstQueued(ctx: MutationCtx, nightId: Id<"openMicNights">) {
+async function firstQueued(ctx: MutationCtx, eventId: Id<"events">) {
   const rows = await ctx.db
     .query("openMicSignups")
-    .withIndex("by_nightId_and_status", (q) => q.eq("nightId", nightId).eq("status", "queued"))
+    .withIndex("by_eventId_and_status", (q) => q.eq("eventId", eventId).eq("status", "queued"))
     .order("asc")
     .take(1);
   return rows[0] ?? null;
 }
 
 export const advanceCurrent = mutation({
-  args: { nightId: v.id("openMicNights") },
+  args: { eventId: v.id("events") },
   returns: v.null(),
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
+    const event = await ctx.db.get(args.eventId);
+    if (!event || !event.openMicEnabled) {
+      throw new Error("Open Mic isn't enabled on this event.");
+    }
     const now = Date.now();
+    if (!runnerWindowOpenAt(event.startAt, event.endAt, now)) {
+      throw new Error("Runner window is closed (open 1h before start to 1h after end).");
+    }
     const currentRows = await ctx.db
       .query("openMicSignups")
-      .withIndex("by_nightId_and_status", (q) => q.eq("nightId", args.nightId).eq("status", "current"))
+      .withIndex("by_eventId_and_status", (q) =>
+        q.eq("eventId", args.eventId).eq("status", "current"),
+      )
       .take(1);
     const current = currentRows[0];
     if (current) {
@@ -454,7 +458,7 @@ export const advanceCurrent = mutation({
         updatedAt: now,
       });
     }
-    const next = await firstQueued(ctx, args.nightId);
+    const next = await firstQueued(ctx, args.eventId);
     if (next) {
       await ctx.db.patch(next._id, {
         status: "current",
@@ -476,8 +480,15 @@ export const markNotHere = mutation({
     if (signup.status !== "current") {
       throw new Error("Only the current performer can be marked as not here.");
     }
+    const event = await ctx.db.get(signup.eventId);
+    if (!event || !event.openMicEnabled) {
+      throw new Error("Open Mic isn't enabled on this event.");
+    }
     const now = Date.now();
-    const nightId = signup.nightId;
+    if (!runnerWindowOpenAt(event.startAt, event.endAt, now)) {
+      throw new Error("Runner window is closed (open 1h before start to 1h after end).");
+    }
+    const eventId = signup.eventId;
     let bumpedToFront = false;
 
     if (signup.skipsCount >= 2) {
@@ -488,7 +499,7 @@ export const markNotHere = mutation({
       if (nextSkips === 1) {
         // 1st strike: keep them reachable by placing them at the front of the
         // remaining queue, but the runner should call up someone else next.
-        const front = await firstQueued(ctx, nightId);
+        const front = await firstQueued(ctx, eventId);
         const frontPosition = front ? front.position : now;
         await ctx.db.patch(signup._id, {
           status: "queued",
@@ -501,7 +512,7 @@ export const markNotHere = mutation({
         // 2nd strike: send to the back of the queue.
         const lastRows = await ctx.db
           .query("openMicSignups")
-          .withIndex("by_nightId_and_position", (q) => q.eq("nightId", nightId))
+          .withIndex("by_eventId_and_position", (q) => q.eq("eventId", eventId))
           .order("desc")
           .take(1);
         const lastPosition = lastRows[0]?.position ?? now;
@@ -518,11 +529,13 @@ export const markNotHere = mutation({
     // skipper to the front of the queue, skip past them so the runner calls up
     // a different performer ("shift to the next"); the skipper stays queued
     // and will be re-tried on a later rotation.
-    let next: Doc<"openMicSignups"> | null = await firstQueued(ctx, nightId);
+    let next: Doc<"openMicSignups"> | null = await firstQueued(ctx, eventId);
     if (next && bumpedToFront && next._id === signup._id) {
       const rows = await ctx.db
         .query("openMicSignups")
-        .withIndex("by_nightId_and_status", (q) => q.eq("nightId", nightId).eq("status", "queued"))
+        .withIndex("by_eventId_and_status", (q) =>
+          q.eq("eventId", eventId).eq("status", "queued"),
+        )
         .order("asc")
         .take(2);
       next = rows.find((row) => row._id !== signup._id) ?? null;
@@ -549,7 +562,7 @@ export const removeSignup = mutation({
     const now = Date.now();
     await ctx.db.delete(signup._id);
     if (wasCurrent) {
-      const next = await firstQueued(ctx, signup.nightId);
+      const next = await firstQueued(ctx, signup.eventId);
       if (next) {
         await ctx.db.patch(next._id, {
           status: "current",

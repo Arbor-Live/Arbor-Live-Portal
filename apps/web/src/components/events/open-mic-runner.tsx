@@ -39,8 +39,8 @@ function EquipmentChips({ equipment }: { equipment: string[] }) {
   );
 }
 
-export function OpenMicRunner({ nightId }: { nightId: Id<"openMicNights"> }) {
-  const state = useQuery(api.openMic.getRunnerState, { nightId });
+export function OpenMicRunner({ eventId }: { eventId: Id<"events"> }) {
+  const state = useQuery(api.openMic.getRunnerState, { eventId });
   const leaderboard = useQuery(api.openMic.getLeaderboard, {});
   const advance = useMutation(api.openMic.advanceCurrent);
   const markNotHere = useMutation(api.openMic.markNotHere);
@@ -60,25 +60,35 @@ export function OpenMicRunner({ nightId }: { nightId: Id<"openMicNights"> }) {
     return <p className="text-sm text-muted-foreground">Loading…</p>;
   }
   if (state === null) {
-    return <p className="text-sm text-muted-foreground">This open mic night no longer exists.</p>;
+    return <p className="text-sm text-muted-foreground">Open Mic isn&rsquo;t enabled on this event.</p>;
   }
 
-  const night = state.night;
-  const nightIsLive = night.status === "live";
+  const event = state.event;
+  const eventIsLive = event.status === "live";
+  const windowClosed = !event.runnerWindowOpen;
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <div>
-          <p className="font-medium">{night.title}</p>
+          <p className="font-medium">{event.title}</p>
           <p className="text-xs text-muted-foreground">
-            {formatDateTime(night.startAt)} · {night.status}
+            {formatDateTime(event.startAt)} · {event.status}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Runner opens {formatDateTime(event.runnerOpensAt)} · closes {formatDateTime(event.runnerClosesAt)}
           </p>
         </div>
         <Button asChild variant="outline" size="sm" className="ml-auto">
-          <Link href="/dashboard/events/open-mic">Back to open mic</Link>
+          <Link href="/dashboard/events/open-mic">Back to Open Mic</Link>
         </Button>
       </div>
+
+      {windowClosed ? (
+        <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-800">
+          Runner is currently closed. It opens 1h before the event start and closes 1h after the event end.
+        </p>
+      ) : null}
 
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Now performing */}
@@ -114,8 +124,12 @@ export function OpenMicRunner({ nightId }: { nightId: Id<"openMicNights"> }) {
                 <div className="flex flex-wrap gap-2 pt-2">
                   <Button
                     type="button"
-                    disabled={!nightIsLive && night.status !== "scheduled"}
-                    onClick={() => void advance({ nightId })}
+                    disabled={windowClosed || (!eventIsLive && event.status !== "scheduled")}
+                    onClick={() =>
+                      void advance({ eventId }).catch((err) => {
+                        window.alert(getConvexErrorMessage(err));
+                      })
+                    }
                   >
                     Next performer
                   </Button>
@@ -151,8 +165,16 @@ export function OpenMicRunner({ nightId }: { nightId: Id<"openMicNights"> }) {
                 </p>
                 <Button
                   type="button"
-                  disabled={night.status === "completed" || night.status === "cancelled"}
-                  onClick={() => void advance({ nightId })}
+                  disabled={
+                    windowClosed ||
+                    event.status === "completed" ||
+                    event.status === "cancelled"
+                  }
+                  onClick={() =>
+                    void advance({ eventId }).catch((err) => {
+                      window.alert(getConvexErrorMessage(err));
+                    })
+                  }
                 >
                   Call up next performer
                 </Button>

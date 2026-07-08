@@ -20,13 +20,14 @@ export default async function OpenMicRunnerPage({
         <CardHeader>
           <CardTitle>Open Mic runner</CardTitle>
           <CardDescription>
-            Call performers up first-come, first-served. “Next” finishes the current performer and
-            brings up the next; “Not here” sends them through the strike ladder.
+            Call performers up first-come, first-served. &ldquo;Next&rdquo; finishes the current
+            performer and brings up the next; &ldquo;Not here&rdquo; sends them through the strike
+            ladder.
           </CardDescription>
         </CardHeader>
       </Card>
       <ArborOnlyGuard>
-        <OpenMicRunner nightId={id as Id<"openMicNights">} />
+        <OpenMicRunner eventId={id as Id<"events">} />
       </ArborOnlyGuard>
     </div>
   );

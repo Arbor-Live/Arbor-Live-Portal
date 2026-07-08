@@ -191,6 +191,8 @@ export function EventEditor({
   const [otPremium, setOtPremium] = useState(false);
   const [crewCostBufferPercent, setCrewCostBufferPercent] = useState("");
   const [notes, setNotes] = useState("");
+  const [openMicEnabled, setOpenMicEnabled] = useState(false);
+  const [openMicNotes, setOpenMicNotes] = useState("");
   const [blocks, setBlocks] = useState<TimelineBlockDraft[]>([]);
   const [shifts, setShifts] = useState<ShiftDraft[]>([]);
   const [selectedCrewUserId, setSelectedCrewUserId] = useState("");
@@ -275,6 +277,8 @@ export function EventEditor({
         : "",
     );
     setNotes(eventData.event.notes ?? "");
+    setOpenMicEnabled(eventData.event.openMicEnabled === true);
+    setOpenMicNotes(eventData.event.openMicNotes ?? "");
     setBlocks(
       eventData.blocks.map((row) => ({
         id: row._id,
@@ -325,6 +329,8 @@ export function EventEditor({
       externalRentalsCostUsd: Number(eventData.event.externalRentalsCostUsd ?? 0),
       otherCostUsd: Number(eventData.event.otherCostUsd ?? 0),
       notes: eventData.event.notes || undefined,
+      openMicEnabled: eventData.event.openMicEnabled === true,
+      openMicNotes: eventData.event.openMicNotes || undefined,
     });
     const hydratedBlocks = eventData.blocks.map((row) => ({
       id: row._id,
@@ -507,6 +513,8 @@ export function EventEditor({
         crewCostBufferPercent.trim() === ""
           ? undefined
           : Number(crewCostBufferPercent || "0"),
+      openMicEnabled,
+      openMicNotes: openMicNotes || undefined,
     };
   }
 
@@ -852,6 +860,8 @@ export function EventEditor({
       otherCostUsd,
       notes,
       showFulfillmentPicker,
+      openMicEnabled,
+      openMicNotes,
     ],
   );
 
@@ -1165,6 +1175,55 @@ export function EventEditor({
       ) : null}
 
       {resolvedActiveTab === "overview" && eventId ? <EventBandPaymentSection eventId={eventId} /> : null}
+
+      {resolvedActiveTab === "overview" && isAdmin && eventId ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Add-ons</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <label className="flex items-start gap-3 rounded-md border p-3">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={openMicEnabled}
+                onChange={(event) => setOpenMicEnabled(event.target.checked)}
+              />
+              <div className="space-y-1">
+                <p className="text-sm font-medium">Open Mic</p>
+                <p className="text-xs text-muted-foreground">
+                  Adds a first-come, first-served sign-up queue to this event. Strangers sign up
+                  from the public Open Mic form and the crew calls them up via the runner.
+                </p>
+                {openMicEnabled ? (
+                  <p className="text-xs text-muted-foreground">
+                    Public sign-ups open until 4 hours after the event start. Runner lives at{" "}
+                    <Link
+                      href={`/dashboard/events/open-mic/${eventId}`}
+                      className="underline"
+                      target="_blank"
+                    >
+                      Open Mic runner
+                    </Link>
+                    .
+                  </p>
+                ) : null}
+              </div>
+            </label>
+            {openMicEnabled ? (
+              <div className="space-y-1">
+                <Label>Open Mic notes</Label>
+                <textarea
+                  className="min-h-20 w-full rounded-md border bg-background px-3 py-2 text-sm"
+                  value={openMicNotes}
+                  onChange={(event) => setOpenMicNotes(event.target.value)}
+                  placeholder="Theme, special instructions, etc."
+                />
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
 
       {resolvedActiveTab === "schedule" ? (
         <fieldset disabled={readOnly} className="contents">

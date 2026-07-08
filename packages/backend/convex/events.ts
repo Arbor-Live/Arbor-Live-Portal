@@ -14,6 +14,7 @@ import { listEventsByInvoiceId } from "./lib/invoiceEvents";
 import { RENTAL_EVENT_TYPES, enrichPullListItems, summarizePullList } from "./eventPullLists";
 import { propagateOverviewToSeriesOccurrences, propagateInvoiceIdToSeriesOccurrences, type SeriesEditScope } from "./lib/eventSeriesGeneration";
 import { resolveSeriesMetadataForInvoice } from "./lib/invoiceSeries";
+import { assertNoOpenMicOverlap } from "./lib/openMicAddon";
 import { EVENT_TIMEZONE } from "./email/constants";
 import { scheduleEventCancelledEmails } from "./email/triggers";
 import { resolveStoredR2AssetUrl } from "./inventoryR2";
@@ -415,6 +416,8 @@ export const create = mutation({
     otherCostUsd: v.optional(v.number()),
     rentalFulfillmentMode: v.optional(rentalFulfillmentModeValue),
     notes: v.optional(v.string()),
+    openMicEnabled: v.optional(v.boolean()),
+    openMicNotes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
@@ -423,6 +426,10 @@ export const create = mutation({
     const now = Date.now();
     const spansMultipleDays = pacificDateKey(args.startAt) !== pacificDateKey(args.endAt);
     const initialStatus = normalizeEventStatus(args.status);
+    const openMicEnabled = args.openMicEnabled === true;
+    if (openMicEnabled) {
+      await assertNoOpenMicOverlap(ctx, null, args.startAt, args.endAt);
+    }
     const eventId = await ctx.db.insert("events", {
       title: args.title.trim(),
       status: initialStatus,
@@ -451,6 +458,9 @@ export const create = mutation({
       otherCostUsd: args.otherCostUsd,
       rentalFulfillmentMode: resolveRentalFulfillmentMode(args.eventType, args.rentalFulfillmentMode),
       notes: trimOptional(args.notes),
+      openMicEnabled,
+      openMicStatus: openMicEnabled ? "scheduled" : undefined,
+      openMicNotes: trimOptional(args.openMicNotes),
       createdAt: now,
       updatedAt: now,
     });
@@ -489,6 +499,8 @@ export const update = mutation({
     otPremium: v.optional(v.boolean()),
     crewCostBufferPercent: v.optional(v.number()),
     notes: v.optional(v.string()),
+    openMicEnabled: v.optional(v.boolean()),
+    openMicNotes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     await requireAuth(ctx);
@@ -509,6 +521,25 @@ export const update = mutation({
     const nextStatus = normalizeEventStatus(args.status ?? existing.status);
     const wasCancelled = normalizeEventStatus(existing.status) === "cancelled";
     const now = Date.now();
+    const nextOpenMicEnabled =
+      args.openMicEnabled !== undefined ? args.openMicEnabled === true : existing.openMicEnabled === true;
+    // Enforce the runner overlap rule whenever Open Mic ends up enabled and
+    // either the add-on is being toggled on or the event is being moved while
+    // enabled. Use the post-patch start/end so a move can't dodge the check.
+    if (
+      nextOpenMicEnabled &&
+      (args.openMicEnabled === true || args.startAt !== undefined || args.endAt !== undefined)
+    ) {
+      await assertNoOpenMicOverlap(ctx, args.id, startAt, endAt);
+    }
+    // When Open Mic is first toggled on and the runner status has never been
+    // set, seed it to "scheduled" so the public sign-up window opens
+    // immediately. Toggling off leaves the runner status untouched (queries
+    // gate on openMicEnabled), so re-enabling restores the previous state.
+    const nextOpenMicStatus =
+      nextOpenMicEnabled && !existing.openMicStatus
+        ? ("scheduled" as const)
+        : existing.openMicStatus;
     const patch = {
       title: args.title?.trim() ?? existing.title,
       status: nextStatus,
@@ -538,6 +569,14 @@ export const update = mutation({
       otPremium: args.otPremium ?? existing.otPremium,
       crewCostBufferPercent: args.crewCostBufferPercent ?? existing.crewCostBufferPercent,
       notes: args.notes?.trim() ?? existing.notes,
+      openMicEnabled: nextOpenMicEnabled,
+      // When Open Mic is enabled and there's no runner status yet, seed
+      // "scheduled". When disabled, preserve the previous status so a
+      // later re-enable restores the runner's operational state.
+      openMicStatus: nextOpenMicEnabled
+        ? (nextOpenMicStatus ?? existing.openMicStatus)
+        : existing.openMicStatus,
+      openMicNotes: args.openMicNotes !== undefined ? trimOptional(args.openMicNotes) : existing.openMicNotes,
       updatedAt: now,
     };
 
@@ -602,6 +641,17 @@ export const update = mutation({
           scope,
           now,
         );
+      }
+      // Open Mic is a per-occurrence add-on, not part of the series template.
+      // Apply it directly to the reference occurrence so the admin's toggle
+      // isn't silently dropped when saving with a non-"this" series scope.
+      if (args.openMicEnabled !== undefined || args.openMicNotes !== undefined) {
+        await ctx.db.patch(args.id, {
+          openMicEnabled: patch.openMicEnabled,
+          openMicStatus: patch.openMicStatus,
+          openMicNotes: patch.openMicNotes,
+          updatedAt: now,
+        });
       }
     } else {
       await ctx.db.patch(args.id, {
@@ -681,6 +731,9 @@ export const duplicate = mutation({
       otherCostUsd: existing.otherCostUsd,
       rentalFulfillmentMode: existing.rentalFulfillmentMode,
       notes: existing.notes,
+      openMicEnabled: existing.openMicEnabled,
+      openMicStatus: existing.openMicEnabled ? "scheduled" : undefined,
+      openMicNotes: existing.openMicNotes,
       createdAt: now,
       updatedAt: now,
     });

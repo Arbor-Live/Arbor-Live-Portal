@@ -90,6 +90,7 @@ import type * as lib_invoiceEvents from "../lib/invoiceEvents.js";
 import type * as lib_invoicePaymentStatus from "../lib/invoicePaymentStatus.js";
 import type * as lib_invoiceSeries from "../lib/invoiceSeries.js";
 import type * as lib_marketingContent from "../lib/marketingContent.js";
+import type * as lib_openMicAddon from "../lib/openMicAddon.js";
 import type * as lib_otForecast from "../lib/otForecast.js";
 import type * as lib_paymentProof from "../lib/paymentProof.js";
 import type * as lib_publicQuoteView from "../lib/publicQuoteView.js";
@@ -210,6 +211,7 @@ declare const fullApi: ApiFromModules<{
   "lib/invoicePaymentStatus": typeof lib_invoicePaymentStatus;
   "lib/invoiceSeries": typeof lib_invoiceSeries;
   "lib/marketingContent": typeof lib_marketingContent;
+  "lib/openMicAddon": typeof lib_openMicAddon;
   "lib/otForecast": typeof lib_otForecast;
   "lib/paymentProof": typeof lib_paymentProof;
   "lib/publicQuoteView": typeof lib_publicQuoteView;

@@ -583,6 +583,24 @@ export default defineSchema({
     rentalFulfillmentMode: v.optional(rentalFulfillmentModeValue),
     notes: v.optional(v.string()),
     sourceEventRequestId: v.optional(v.id("eventRequests")),
+
+    /** Event add-ons (per-event feature toggles). Open Mic is the first add-on. */
+    openMicEnabled: v.optional(v.boolean()),
+    /** Runner operational state for the Open Mic add-on. Drives the public
+     *  sign-up window (scheduled/live) and runner UI gating. Independent from
+     *  the event's own lifecycle status so running the queue never fights the
+     *  broader event workflow. */
+    openMicStatus: v.optional(
+      v.union(
+        v.literal("scheduled"),
+        v.literal("live"),
+        v.literal("completed"),
+        v.literal("cancelled"),
+      ),
+    ),
+    /** Free-form crew notes shown on the Open Mic runner and public sign-up. */
+    openMicNotes: v.optional(v.string()),
+
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -593,7 +611,8 @@ export default defineSchema({
     .index("by_startAt", ["startAt"])
     .index("by_createdAt", ["createdAt"])
     .index("by_seriesId_and_occurrenceIndex", ["seriesId", "occurrenceIndex"])
-    .index("by_sourceEventRequestId", ["sourceEventRequestId"]),
+    .index("by_sourceEventRequestId", ["sourceEventRequestId"])
+    .index("by_openMicEnabled_and_startAt", ["openMicEnabled", "startAt"]),
 
   userCompensationRates: defineTable({
     userId: v.string(),
@@ -1079,30 +1098,10 @@ export default defineSchema({
     updatedAt: v.number(),
   }),
 
-  openMicNights: defineTable({
-    title: v.string(),
-    /** Epoch ms when the night begins. Used to find the "next" upcoming night
-     *  for the public sign-up form and to order the admin inbox. */
-    startAt: v.number(),
-    endAt: v.optional(v.number()),
-    /** "scheduled" = upcoming/open for sign-ups, "live" = crew running the
-     *  queue now, "completed" = wrapped, "cancelled" = called off. */
-    status: v.union(
-      v.literal("scheduled"),
-      v.literal("live"),
-      v.literal("completed"),
-      v.literal("cancelled"),
-    ),
-    notes: v.optional(v.string()),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index("by_status", ["status"])
-    .index("by_startAt", ["startAt"])
-    .index("by_status_and_startAt", ["status", "startAt"]),
-
   openMicSignups: defineTable({
-    nightId: v.id("openMicNights"),
+    /** Event this sign-up belongs to. Open Mic is an add-on on events, so
+     *  sign-ups are keyed to the event instead of a standalone night entity. */
+    eventId: v.id("events"),
     name: v.string(),
     email: v.string(),
     whatTheyreDoing: v.string(),
@@ -1131,8 +1130,8 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   })
-    .index("by_nightId_and_position", ["nightId", "position"])
-    .index("by_nightId_and_status", ["nightId", "status"])
+    .index("by_eventId_and_position", ["eventId", "position"])
+    .index("by_eventId_and_status", ["eventId", "status"])
     .index("by_status_and_performedAt", ["status", "performedAt"])
     .index("by_email", ["email"]),
 });
