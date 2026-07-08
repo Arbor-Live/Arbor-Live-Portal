@@ -183,6 +183,8 @@ const bandPaymentStatusValue = v.union(
   v.literal("cancelled"),
 );
 
+const dashboardKeyValue = v.union(v.literal("crewHome"), v.literal("adminHome"));
+
 export default defineSchema({
   inventoryCategories: defineTable({
     key: v.string(),
@@ -664,6 +666,17 @@ export default defineSchema({
   })
     .index("by_userId", ["userId"])
     .index("by_organizationId", ["organizationId"]),
+
+  dashboardPreferences: defineTable({
+    userId: v.string(),
+    dashboardKey: dashboardKeyValue,
+    widgetOrder: v.array(v.string()),
+    hiddenWidgetIds: v.array(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_and_dashboardKey", ["userId", "dashboardKey"]),
 
   eventScheduleBlocks: defineTable({
     eventId: v.id("events"),

@@ -164,6 +164,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
   const orgName = activeOrganization?.name ?? "No active org"
   const isBandContext = activeOrganization?.organizationType === "band"
   const isCrewContext = activeOrganization?.organizationType === "arbor_internal" && !isAdmin
+  const isAdminHomeContext = activeOrganization?.organizationType === "arbor_internal" && isAdmin
   const unconfirmedEventCount = unconfirmedCrewCount?.length ?? 0
   const scopedNavItems = navItems.filter((item) => {
     if (isBandContext) {
@@ -178,7 +179,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
       );
     }
     if (item.bandOnly) return false;
-    if (item.url === "/dashboard" && !isCrewContext) return false;
+    if (item.url === "/dashboard" && !isCrewContext && !isAdminHomeContext) return false;
     return isAdmin || !item.adminOnly;
   });
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({})

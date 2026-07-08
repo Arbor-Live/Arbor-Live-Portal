@@ -16,6 +16,8 @@ import type * as bootstrap from "../bootstrap.js";
 import type * as capabilityDefinitions from "../capabilityDefinitions.js";
 import type * as crewPortal from "../crewPortal.js";
 import type * as crons from "../crons.js";
+import type * as dashboardHome from "../dashboardHome.js";
+import type * as dashboardPreferences from "../dashboardPreferences.js";
 import type * as email_authEmails from "../email/authEmails.js";
 import type * as email_bandPaymentEmails from "../email/bandPaymentEmails.js";
 import type * as email_bookingRequestEmails from "../email/bookingRequestEmails.js";
@@ -132,6 +134,8 @@ declare const fullApi: ApiFromModules<{
   capabilityDefinitions: typeof capabilityDefinitions;
   crewPortal: typeof crewPortal;
   crons: typeof crons;
+  dashboardHome: typeof dashboardHome;
+  dashboardPreferences: typeof dashboardPreferences;
   "email/authEmails": typeof email_authEmails;
   "email/bandPaymentEmails": typeof email_bandPaymentEmails;
   "email/bookingRequestEmails": typeof email_bookingRequestEmails;

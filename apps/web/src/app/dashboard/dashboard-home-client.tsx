@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
+import { AdminDashboard } from "@/components/admin-dashboard/admin-dashboard";
 import { CrewDashboard } from "@/components/crew-portal/crew-dashboard";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -13,19 +14,23 @@ export function DashboardHomeClient() {
   const activeOrganization = useQuery(api.users.getActiveOrganization, {});
 
   useEffect(() => {
-    if (!viewer) return;
-    if (viewer.isAdmin) {
-      router.replace("/dashboard/events");
-      return;
-    }
+    if (!viewer || activeOrganization === undefined) return;
     if (!viewer.isCrewOnly) {
       router.replace(
         activeOrganization?.organizationType === "band" ? "/dashboard/media" : "/dashboard/events",
       );
     }
-  }, [viewer, activeOrganization?.organizationType, router]);
+  }, [viewer, activeOrganization, router]);
 
-  if (viewer === undefined) {
+  if (viewer === undefined || activeOrganization === undefined) {
+    return <Skeleton className="h-48 w-full" />;
+  }
+
+  if (viewer.isAdmin && activeOrganization?.organizationType === "arbor_internal") {
+    return <AdminDashboard />;
+  }
+
+  if (viewer.isAdmin) {
     return <Skeleton className="h-48 w-full" />;
   }
 
