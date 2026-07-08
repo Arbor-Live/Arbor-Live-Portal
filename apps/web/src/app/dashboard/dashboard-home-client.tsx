@@ -15,6 +15,9 @@ export function DashboardHomeClient() {
 
   useEffect(() => {
     if (!viewer || activeOrganization === undefined) return;
+    if (viewer.isAdmin && activeOrganization?.organizationType === "arbor_internal") {
+      return;
+    }
     if (!viewer.isCrewOnly) {
       router.replace(
         activeOrganization?.organizationType === "band" ? "/dashboard/media" : "/dashboard/events",
