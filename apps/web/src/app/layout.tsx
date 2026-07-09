@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import { ConvexClientProvider } from "@/components/convex-client-provider";
 import { ThemeProvider } from "@/components/theme-provider";
+import { getToken } from "@/lib/auth-server";
 import "./globals.css";
 
 const inter = Inter({
@@ -25,11 +26,13 @@ export const metadata: Metadata = {
     "Arbor Live is Stanford's only student-run live event production company, bringing live events to every corner of campus.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const initialToken = await getToken();
+
   return (
     <html
       lang="en"
@@ -38,7 +41,9 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <ThemeProvider>
-          <ConvexClientProvider>{children}</ConvexClientProvider>
+          <ConvexClientProvider initialToken={initialToken}>
+            {children}
+          </ConvexClientProvider>
         </ThemeProvider>
       </body>
     </html>
