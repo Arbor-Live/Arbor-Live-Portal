@@ -30,6 +30,9 @@ Where variables live:
 | `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_ENDPOINT`, `R2_BUCKET` | yes (uploads) | Cloudflare R2 via `@convex-dev/r2` (`inventoryR2.ts`) — see [r2-storage.md](r2-storage.md) |
 | `R2_PUBLIC_BASE_URL` | yes (uploads) | Public read domain for stored assets, no trailing slash (`inventoryR2.ts`) |
 | `IMMICH_URL`, `IMMICH_API_KEY` | yes (media) | Self-hosted Immich API (`lib/immichClient.ts`) — see [immich.md](immich.md) |
+| `POSTPEER_ACCESS_KEY` or `POSTPEER_SECRET` | yes (IG publish) | PostPeer API key (`marketingInstagramActions.ts`) — header `x-access-key` |
+| `POSTPEER_INSTAGRAM_ACCOUNT_ID` | yes (IG publish) | PostPeer Instagram account id for `platforms[].accountId` |
+| `REVALIDATE_SECRET` | yes (public site) | Bearer token for Next.js `/api/revalidate` (`lib/siteRevalidation.ts`) |
 | `CONVEX_CLOUD_URL`, `CONVEX_SITE_URL` | auto | Provided by Convex; also read as fallbacks by the web build script |
 
 ## Web (read by Next.js)

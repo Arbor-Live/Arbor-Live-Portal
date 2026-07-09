@@ -5,6 +5,7 @@ import {
   inventoryPackageRevalidatePaths,
   inventoryTypeRevalidatePaths,
   marketingRevalidatePaths,
+  publicEventsRevalidatePaths,
 } from "./siteRevalidationPaths";
 
 type MutationCtx = GenericMutationCtx<DataModel>;
@@ -30,5 +31,14 @@ export async function scheduleInventoryPackageSiteRevalidation(
 export async function scheduleInventoryTypeSiteRevalidation(ctx: MutationCtx) {
   await ctx.scheduler.runAfter(0, internal.lib.siteRevalidation.trigger, {
     paths: inventoryTypeRevalidatePaths(),
+  });
+}
+
+export async function schedulePublicEventsSiteRevalidation(
+  ctx: MutationCtx,
+  eventId?: string,
+) {
+  await ctx.scheduler.runAfter(0, internal.lib.siteRevalidation.trigger, {
+    paths: publicEventsRevalidatePaths(eventId),
   });
 }

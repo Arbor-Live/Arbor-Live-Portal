@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { components } from "./_generated/api";
 import { query } from "./_generated/server";
 import { getUserId, requireAdmin, requireArborInternalContext, requireAuth } from "./lib/auth";
+import { isStaffMember, resolveProfileMembership } from "./lib/userVerticals";
 import { buildTimecardPeriodSummaryForUser, buildUserTimecards } from "./lib/userTimecards";
 
 const timecardEventValue = v.object({
@@ -106,7 +107,9 @@ export const listCrewTimecardOverview = query({
       .query("userAdminProfiles")
       .withIndex("by_active", (q) => q.eq("active", true))
       .take(500);
-    const crewProfiles = profiles.filter((profile) => profile.teams.length > 0);
+    const crewProfiles = profiles.filter((profile) =>
+      isStaffMember(resolveProfileMembership(profile)),
+    );
 
     const summaries = await Promise.all(
       crewProfiles.map(async (profile) => {

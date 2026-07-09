@@ -4,6 +4,14 @@ import { query } from "./_generated/server";
 import type { QueryCtx } from "./_generated/server";
 import { resolveStoredR2AssetUrl } from "./inventoryR2";
 import { getUserId, type AuthUser } from "./lib/auth";
+import {
+  getPrimaryVertical,
+  getSecondaryTags,
+  PUBLIC_CREW_SECTION_LABELS,
+  PUBLIC_CREW_SECTION_ORDER,
+  resolveProfileMembership,
+  type UserVertical,
+} from "./lib/userVerticals";
 
 type OrganizationRow = {
   id?: string;
@@ -12,16 +20,7 @@ type OrganizationRow = {
   slug?: string;
 };
 
-const CREW_SECTION_ORDER = ["Sound", "Lights", "Design", "Marketing", "Operations"] as const;
 const CREW_GENERAL_SECTION = "General" as const;
-
-const CREW_SECTION_LABELS: Record<(typeof CREW_SECTION_ORDER)[number], string> = {
-  Sound: "Sound",
-  Lights: "Lighting",
-  Design: "Design",
-  Marketing: "Marketing",
-  Operations: "Operations",
-};
 
 function getRecordId(row: { id?: string; _id?: string } | null | undefined) {
   return row?.id ?? row?._id ?? "";
@@ -96,6 +95,7 @@ export const listPublicCrew = query({
             name: v.string(),
             imageUrl: v.optional(v.string()),
             description: v.optional(v.string()),
+            secondaryTags: v.array(v.string()),
           }),
         ),
       }),
@@ -128,10 +128,16 @@ export const listPublicCrew = query({
     const userById = new Map(users.map((user) => [getUserId(user), user]));
 
     const membersByTeam = new Map<
-      (typeof CREW_SECTION_ORDER)[number] | typeof CREW_GENERAL_SECTION,
-      Array<{ id: string; name: string; imageUrl?: string; description?: string }>
+      UserVertical | typeof CREW_GENERAL_SECTION,
+      Array<{
+        id: string;
+        name: string;
+        imageUrl?: string;
+        description?: string;
+        secondaryTags: string[];
+      }>
     >();
-    for (const team of CREW_SECTION_ORDER) {
+    for (const team of PUBLIC_CREW_SECTION_ORDER) {
       membersByTeam.set(team, []);
     }
     membersByTeam.set(CREW_GENERAL_SECTION, []);
@@ -141,30 +147,40 @@ export const listPublicCrew = query({
       const name = user?.name?.trim() || "Arbor Live crew";
       const imageUrl = await resolveCrewMemberImageUrl(ctx, profile, user);
       const description = profile.publicCrewDescription?.trim() || undefined;
+      const membership = resolveProfileMembership(profile);
+      const primaryVertical = getPrimaryVertical(membership.verticals);
+      const secondaryTags = getSecondaryTags(
+        membership.verticals,
+        membership.disciplines,
+        primaryVertical,
+      );
       const member = {
         id: profile.userId,
         name,
         imageUrl,
         description,
+        secondaryTags,
       };
 
-      if (profile.teams.length === 0) {
+      if (!primaryVertical) {
         membersByTeam.get(CREW_GENERAL_SECTION)?.push(member);
         continue;
       }
 
-      for (const team of profile.teams) {
-        if (!(team in CREW_SECTION_LABELS)) continue;
-        const sectionTeam = team as (typeof CREW_SECTION_ORDER)[number];
-        membersByTeam.get(sectionTeam)?.push(member);
-      }
+      membersByTeam.get(primaryVertical)?.push(member);
     }
 
     const sections: Array<{
       team: string;
       label: string;
-      members: Array<{ id: string; name: string; imageUrl?: string; description?: string }>;
-    }> = CREW_SECTION_ORDER.flatMap((team) => {
+      members: Array<{
+        id: string;
+        name: string;
+        imageUrl?: string;
+        description?: string;
+        secondaryTags: string[];
+      }>;
+    }> = PUBLIC_CREW_SECTION_ORDER.flatMap((team) => {
       const members = (membersByTeam.get(team) ?? [])
         .slice()
         .sort((a, b) => a.name.localeCompare(b.name));
@@ -172,7 +188,7 @@ export const listPublicCrew = query({
       return [
         {
           team,
-          label: CREW_SECTION_LABELS[team],
+          label: PUBLIC_CREW_SECTION_LABELS[team],
           members,
         },
       ];

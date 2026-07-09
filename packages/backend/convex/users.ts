@@ -21,17 +21,14 @@ import {
 import { assertUniqueBandPublicSlug, normalizePublicSlug } from "./lib/publicSlug";
 import { isBandPayeeComplete } from "./lib/bandPayments";
 import { normalizeOptionalAssetReference } from "./lib/inventoryUpload";
+import {
+  resolveProfileMembership,
+  userDisciplineValue,
+  userVerticalValue,
+  type UserDiscipline,
+  type UserVertical,
+} from "./lib/userVerticals";
 
-const USER_TEAMS = ["Sound", "Lights", "Design", "Marketing", "Operations"] as const;
-const userTeamValue = v.union(
-  v.literal("Sound"),
-  v.literal("Lights"),
-  v.literal("Design"),
-  v.literal("Marketing"),
-  v.literal("Operations"),
-);
-
-type UserTeam = (typeof USER_TEAMS)[number];
 const invitationStatusValue = v.union(
   v.literal("pending"),
   v.literal("accepted"),
@@ -162,7 +159,8 @@ async function ensureUserProfileDefaults(
     title,
     phone,
     active = true,
-    teams = [],
+    verticals = [],
+    disciplines = [],
     showOnPublicCrewPage,
     publicCrewDescription,
     defaultOrganizationId,
@@ -170,7 +168,8 @@ async function ensureUserProfileDefaults(
     title?: string;
     phone?: string;
     active?: boolean;
-    teams?: UserTeam[];
+    verticals?: UserVertical[];
+    disciplines?: UserDiscipline[];
     showOnPublicCrewPage?: boolean;
     publicCrewDescription?: string;
     defaultOrganizationId?: string;
@@ -187,7 +186,8 @@ async function ensureUserProfileDefaults(
       title: title ?? existing.title,
       phone: phone ?? existing.phone,
       active,
-      teams,
+      verticals,
+      disciplines,
       showOnPublicCrewPage:
         showOnPublicCrewPage !== undefined ? showOnPublicCrewPage : existing.showOnPublicCrewPage,
       publicCrewDescription:
@@ -202,7 +202,8 @@ async function ensureUserProfileDefaults(
     title,
     phone,
     active,
-    teams,
+    verticals,
+    disciplines,
     showOnPublicCrewPage,
     publicCrewDescription: normalizedDescription,
     defaultOrganizationId,
@@ -494,7 +495,8 @@ export const getViewer = query({
     role: v.optional(v.string()),
     isAdmin: v.boolean(),
     isCrewOnly: v.boolean(),
-    teams: v.array(userTeamValue),
+    verticals: v.array(userVerticalValue),
+    disciplines: v.array(userDisciplineValue),
   }),
   handler: async (ctx) => {
     const user = await requireAuth(ctx);
@@ -504,12 +506,14 @@ export const getViewer = query({
       .query("userAdminProfiles")
       .withIndex("by_userId", (q) => q.eq("userId", userId))
       .unique();
+    const membership = resolveProfileMembership(profile ?? {});
     return {
       userId,
       role: user.role ?? undefined,
       isAdmin: isAdmin(user),
       isCrewOnly: !isAdmin(user) && orgContext?.organizationType === "arbor_internal",
-      teams: profile?.teams ?? [],
+      verticals: membership.verticals,
+      disciplines: membership.disciplines,
     };
   },
 });
@@ -631,6 +635,7 @@ export const listUsersForAdmin = query({
             active: membership.active,
           }))
           .sort((a, b) => a.organizationName.localeCompare(b.organizationName));
+        const membership = resolveProfileMembership(profile ?? {});
         return {
           id,
           name: user.name ?? user.email ?? "Unknown user",
@@ -640,7 +645,8 @@ export const listUsersForAdmin = query({
           active: profile?.active ?? true,
           phone: profile?.phone ?? "",
           title: profile?.title ?? "",
-          teams: profile?.teams ?? [],
+          verticals: membership.verticals,
+          disciplines: membership.disciplines,
           showOnPublicCrewPage: profile?.showOnPublicCrewPage ?? false,
           publicCrewDescription: profile?.publicCrewDescription ?? "",
           defaultOrganizationId: profile?.defaultOrganizationId ?? "",
@@ -663,7 +669,8 @@ export const listUsersForAdmin = query({
           user.email,
           user.role,
           user.phone,
-          user.teams.join(" "),
+          user.verticals.join(" "),
+          user.disciplines.join(" "),
           user.organizationMemberships.map((row) => row.organizationName).join(" "),
         ]
           .join(" ")
@@ -709,7 +716,9 @@ export const listInvitationsAdmin = query({
             "Unknown",
           createdAt: invite.createdAt ?? 0,
           expiresAt: invite.expiresAt ?? 0,
-          teams: (pending?.teams ?? []) as UserTeam[],
+          teams: (pending?.teams ?? []) as string[],
+          verticals: (pending?.verticals ?? []) as UserVertical[],
+          disciplines: (pending?.disciplines ?? []) as UserDiscipline[],
         };
       })
       .filter((invite) => Boolean(invite.id))
@@ -724,7 +733,8 @@ export const inviteUserAdmin = mutation({
     organizationId: v.string(),
     email: v.string(),
     role: v.optional(v.string()),
-    teams: v.optional(v.array(userTeamValue)),
+    verticals: v.optional(v.array(userVerticalValue)),
+    disciplines: v.optional(v.array(userDisciplineValue)),
   },
   handler: async (ctx, args) => {
     const admin = await requireAdmin(ctx);
@@ -759,7 +769,8 @@ export const inviteUserAdmin = mutation({
     if (existingUserId) {
       await ensureUserProfileDefaults(ctx, existingUserId, {
         active: true,
-        teams: args.teams ?? [],
+        verticals: args.verticals ?? [],
+        disciplines: args.disciplines ?? [],
         defaultOrganizationId: args.organizationId,
       });
       await upsertOrgMembership(ctx, {
@@ -781,7 +792,8 @@ export const inviteUserAdmin = mutation({
       role: membershipRole,
       inviterId: adminId,
       expiresAt,
-      teams: args.teams,
+      verticals: args.verticals,
+      disciplines: args.disciplines,
       isExistingUser: Boolean(existingUserId),
     });
 
@@ -853,7 +865,8 @@ export const updateInviteAdmin = mutation({
   args: {
     invitationId: v.string(),
     role: v.optional(v.string()),
-    teams: v.optional(v.array(userTeamValue)),
+    verticals: v.optional(v.array(userVerticalValue)),
+    disciplines: v.optional(v.array(userDisciplineValue)),
   },
   returns: v.object({ ok: v.boolean() }),
   handler: async (ctx, args) => {
@@ -871,7 +884,6 @@ export const updateInviteAdmin = mutation({
       invite.organizationId,
       args.role ?? invite.role ?? "member",
     );
-    const nextTeams = args.teams;
 
     await ctx.runMutation(components.betterAuth.adapter.updateOne, {
       input: {
@@ -884,7 +896,8 @@ export const updateInviteAdmin = mutation({
     });
     await updatePendingInviteDetails(ctx, args.invitationId, {
       role: nextRole,
-      teams: nextTeams,
+      verticals: args.verticals,
+      disciplines: args.disciplines,
     });
 
     return { ok: true };
@@ -914,7 +927,8 @@ export const createUserAdmin = mutation({
     role: v.string(),
     phone: v.optional(v.string()),
     title: v.optional(v.string()),
-    teams: v.optional(v.array(userTeamValue)),
+    verticals: v.optional(v.array(userVerticalValue)),
+    disciplines: v.optional(v.array(userDisciplineValue)),
     hourlyRateUsd: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -976,7 +990,8 @@ export const createUserAdmin = mutation({
       title: args.title?.trim() || undefined,
       phone: args.phone?.trim() || undefined,
       active: true,
-      teams: args.teams ?? [],
+      verticals: args.verticals ?? [],
+      disciplines: args.disciplines ?? [],
       defaultOrganizationId: args.organizationId,
     });
     await upsertOrgMembership(ctx, {
@@ -1018,7 +1033,8 @@ export const updateUserAdmin = mutation({
     active: v.optional(v.boolean()),
     phone: v.optional(v.string()),
     title: v.optional(v.string()),
-    teams: v.optional(v.array(userTeamValue)),
+    verticals: v.optional(v.array(userVerticalValue)),
+    disciplines: v.optional(v.array(userDisciplineValue)),
     showOnPublicCrewPage: v.optional(v.boolean()),
     publicCrewDescription: v.optional(v.string()),
     defaultOrganizationId: v.optional(v.string()),
@@ -1056,11 +1072,15 @@ export const updateUserAdmin = mutation({
       .query("userAdminProfiles")
       .withIndex("by_userId", (q) => q.eq("userId", args.userId))
       .unique();
+    const existingMembership = existingProfile
+      ? resolveProfileMembership(existingProfile)
+      : { verticals: [], disciplines: [] };
     await ensureUserProfileDefaults(ctx, args.userId, {
       title: args.title?.trim() ?? existingProfile?.title,
       phone: args.phone ?? existingProfile?.phone,
       active: args.active ?? existingProfile?.active ?? true,
-      teams: args.teams ?? (existingProfile?.teams as UserTeam[] | undefined) ?? [],
+      verticals: args.verticals ?? existingMembership.verticals,
+      disciplines: args.disciplines ?? existingMembership.disciplines,
       showOnPublicCrewPage:
         args.showOnPublicCrewPage !== undefined
           ? args.showOnPublicCrewPage
@@ -1478,7 +1498,8 @@ export const backfillUserAdminDefaults = mutation({
       await ensureUserProfileDefaults(ctx, userId, {
         title: undefined,
         active: true,
-        teams: [],
+        verticals: [],
+        disciplines: [],
         defaultOrganizationId: defaultOrg.id,
       });
       touchedProfiles += 1;

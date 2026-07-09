@@ -14,6 +14,7 @@ import {
   eventMatchesUserTeams,
   isCrewedEventType,
 } from "./lib/crewTeams";
+import { getDisciplinesForEventMatching, resolveProfileMembership } from "./lib/userVerticals";
 import { normalizeEventStatus } from "./lib/eventStatus";
 
 const scheduleBlockSummaryValue = v.object({
@@ -88,7 +89,9 @@ export const listMyPendingAvailability = query({
     await requireArborInternalContext(ctx);
     const userId = getUserId(user);
     const profile = await getCurrentUserProfile(ctx, userId);
-    const userTeams = profile?.teams ?? [];
+    const userDisciplines = getDisciplinesForEventMatching(
+      resolveProfileMembership(profile ?? {}).disciplines,
+    );
     const weeksAhead = args.weeksAhead ?? DEFAULT_AVAILABILITY_WEEKS;
     const windowEnd = args.now + weeksToMs(weeksAhead);
 
@@ -97,7 +100,7 @@ export const listMyPendingAvailability = query({
       .filter(
         (event) =>
           isUpcomingCrewedEvent(event, args.now, windowEnd) &&
-          eventMatchesUserTeams(event.teamsInterested, userTeams),
+          eventMatchesUserTeams(event.teamsInterested, userDisciplines),
       )
       .sort((a, b) => a.startAt - b.startAt);
 

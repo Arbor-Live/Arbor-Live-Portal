@@ -1,13 +1,20 @@
 import { hashPassword } from "better-auth/crypto";
 import { v } from "convex/values";
 import { components } from "./_generated/api";
-import type { MutationCtx, QueryCtx } from "./_generated/server";
+import type { MutationCtx } from "./_generated/server";
 import { mutation, query } from "./_generated/server";
 import {
   getOrganizationName,
   markInvitationAccepted,
   resolveInviteByToken,
 } from "./email/invitations";
+import {
+  legacyTeamsToMembership,
+  userDisciplineValue,
+  userVerticalValue,
+  type UserDiscipline,
+  type UserVertical,
+} from "./lib/userVerticals";
 
 type AuthUser = {
   id?: string;
@@ -17,9 +24,6 @@ type AuthUser = {
   role?: string | null;
 };
 
-const USER_TEAMS = ["Sound", "Lights", "Design", "Marketing", "Operations"] as const;
-type UserTeam = (typeof USER_TEAMS)[number];
-
 function getUserId(user: AuthUser) {
   return user.id ?? user._id ?? "";
 }
@@ -27,7 +31,11 @@ function getUserId(user: AuthUser) {
 async function ensureUserProfileDefaults(
   ctx: MutationCtx,
   userId: string,
-  args: { teams?: UserTeam[]; defaultOrganizationId?: string },
+  args: {
+    verticals?: UserVertical[];
+    disciplines?: UserDiscipline[];
+    defaultOrganizationId?: string;
+  },
 ) {
   const now = Date.now();
   const existing = await ctx.db
@@ -37,7 +45,8 @@ async function ensureUserProfileDefaults(
   if (existing) {
     await ctx.db.patch(existing._id, {
       active: true,
-      teams: args.teams ?? existing.teams,
+      verticals: args.verticals ?? existing.verticals ?? [],
+      disciplines: args.disciplines ?? existing.disciplines ?? [],
       defaultOrganizationId: args.defaultOrganizationId ?? existing.defaultOrganizationId,
       updatedAt: now,
     });
@@ -46,7 +55,8 @@ async function ensureUserProfileDefaults(
   await ctx.db.insert("userAdminProfiles", {
     userId,
     active: true,
-    teams: args.teams ?? [],
+    verticals: args.verticals ?? [],
+    disciplines: args.disciplines ?? [],
     defaultOrganizationId: args.defaultOrganizationId,
     createdAt: now,
     updatedAt: now,
@@ -80,6 +90,20 @@ async function upsertOrgMembership(
     createdAt: now,
     updatedAt: now,
   });
+}
+
+function pendingMembership(pending: {
+  verticals?: string[];
+  disciplines?: string[];
+  teams?: string[];
+}): { verticals: UserVertical[]; disciplines: UserDiscipline[] } {
+  if (pending.verticals?.length) {
+    return {
+      verticals: pending.verticals as UserVertical[],
+      disciplines: (pending.disciplines ?? []) as UserDiscipline[],
+    };
+  }
+  return legacyTeamsToMembership(pending.teams ?? []);
 }
 
 export const getInviteByToken = query({
@@ -144,6 +168,7 @@ export const acceptInviteWithPassword = mutation({
     const email = pending.email.trim().toLowerCase();
     const now = Date.now();
     const displayName = args.name?.trim() || email;
+    const membership = pendingMembership(pending);
 
     const created = (await ctx.runMutation(components.betterAuth.adapter.create, {
       input: {
@@ -175,7 +200,8 @@ export const acceptInviteWithPassword = mutation({
     });
 
     await ensureUserProfileDefaults(ctx, userId, {
-      teams: (pending.teams ?? []) as UserTeam[],
+      verticals: membership.verticals,
+      disciplines: membership.disciplines,
       defaultOrganizationId: pending.organizationId,
     });
     await upsertOrgMembership(ctx, {

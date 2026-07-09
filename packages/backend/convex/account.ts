@@ -113,7 +113,8 @@ export const setMyAvatar = mutation({
       await ctx.db.insert("userAdminProfiles", {
         userId,
         active: true,
-        teams: [],
+        verticals: [],
+        disciplines: [],
         avatarStorageId: args.storageId,
         createdAt: now,
         updatedAt: now,
@@ -164,7 +165,8 @@ export const updateMyProfileDetails = mutation({
       title,
       calendarInviteEmail,
       active: true,
-      teams: [],
+      verticals: [],
+      disciplines: [],
       createdAt: now,
       updatedAt: now,
     });

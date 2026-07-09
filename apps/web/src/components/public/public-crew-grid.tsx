@@ -41,6 +41,18 @@ export function PublicCrewGrid() {
                           <CardContent className="flex flex-col items-center px-4 py-6 text-center">
                             <PublicAvatar name={member.name} imageUrl={member.imageUrl} size={88} />
                             <p className="mt-4 font-semibold">{member.name}</p>
+                            {member.secondaryTags.length > 0 ? (
+                              <div className="mt-2 flex flex-wrap justify-center gap-1">
+                                {member.secondaryTags.map((tag) => (
+                                  <span
+                                    key={`${member.id}-${tag}`}
+                                    className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground"
+                                  >
+                                    {tag}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : null}
                             {member.description ? (
                               <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
                                 {member.description}

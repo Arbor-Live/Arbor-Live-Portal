@@ -228,7 +228,8 @@ export const bootstrapAdmin = mutation({
       await ctx.db.insert("userAdminProfiles", {
         userId,
         active: true,
-        teams: [],
+        verticals: [],
+        disciplines: [],
         defaultOrganizationId: organizationId,
         createdAt: now,
         updatedAt: now,

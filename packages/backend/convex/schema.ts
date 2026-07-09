@@ -100,6 +100,34 @@ const userTeamValue = v.union(
   v.literal("Marketing"),
   v.literal("Operations"),
 );
+
+const userVerticalValue = v.union(
+  v.literal("Operations"),
+  v.literal("Crew"),
+  v.literal("Trivia"),
+  v.literal("Marketing"),
+);
+
+const userDisciplineValue = v.union(v.literal("Sound"), v.literal("Lights"), v.literal("Design"));
+
+const marketingDesignLinkValue = v.object({
+  label: v.string(),
+  url: v.string(),
+});
+
+const marketingDesignStatusValue = v.union(
+  v.literal("draft"),
+  v.literal("ready"),
+  v.literal("published"),
+);
+
+const marketingPublishJobStatusValue = v.union(
+  v.literal("queued"),
+  v.literal("processing"),
+  v.literal("completed"),
+  v.literal("failed"),
+);
+
 const organizationTypeValue = v.union(v.literal("arbor_internal"), v.literal("band"));
 
 const marketingPostKindValue = v.union(v.literal("case_study"), v.literal("blog"));
@@ -630,7 +658,10 @@ export default defineSchema({
     phone: v.optional(v.string()),
     avatarStorageId: v.optional(v.id("_storage")),
     active: v.boolean(),
-    teams: v.array(userTeamValue),
+    /** @deprecated Use verticals + disciplines. Kept for migration reads. */
+    teams: v.optional(v.array(userTeamValue)),
+    verticals: v.optional(v.array(userVerticalValue)),
+    disciplines: v.optional(v.array(userDisciplineValue)),
     /** When true, user appears on the public /crew page (opt-in). */
     showOnPublicCrewPage: v.optional(v.boolean()),
     /** Admin-written blurb shown on the public /crew page. */
@@ -849,7 +880,10 @@ export default defineSchema({
     email: v.string(),
     organizationId: v.string(),
     role: v.string(),
+    /** @deprecated Use verticals + disciplines on invite acceptance. */
     teams: v.optional(v.array(v.string())),
+    verticals: v.optional(v.array(v.string())),
+    disciplines: v.optional(v.array(v.string())),
     expiresAt: v.number(),
     createdAt: v.number(),
   })
@@ -1059,6 +1093,35 @@ export default defineSchema({
   })
     .index("by_seriesId", ["seriesId"])
     .index("by_seriesId_and_sortOrder", ["seriesId", "sortOrder"]),
+
+  eventMarketingDesigns: defineTable({
+    eventId: v.id("events"),
+    assigneeUserId: v.optional(v.string()),
+    imageUrl: v.string(),
+    caption: v.optional(v.string()),
+    additionalLinks: v.optional(v.array(marketingDesignLinkValue)),
+    status: marketingDesignStatusValue,
+    instagramPostId: v.optional(v.string()),
+    publishedAt: v.optional(v.number()),
+    lastError: v.optional(v.string()),
+    createdByUserId: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_eventId", ["eventId"])
+    .index("by_assigneeUserId_and_status", ["assigneeUserId", "status"])
+    .index("by_status", ["status"]),
+
+  marketingPublishJobs: defineTable({
+    designId: v.id("eventMarketingDesigns"),
+    status: marketingPublishJobStatusValue,
+    target: v.union(v.literal("instagram"), v.literal("website")),
+    lastError: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_designId", ["designId"])
+    .index("by_status", ["status"]),
 
   marketingPosts: defineTable({
     title: v.string(),
