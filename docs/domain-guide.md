@@ -108,6 +108,12 @@ Event types (drive which editor tabs and quick-add blocks appear):
 
 ## Marketing site
 
+- `marketingDesigns.ts` — event poster assignments and publishing. Upcoming
+  poster work covers events in the next four weeks. Operations or Marketing can
+  assign a poster designer from the event editor or design board; assignments
+  appear immediately on the board (including internal events). The design board
+  filters: assigned to me, unassigned, and all upcoming. Posters publish to
+  Instagram and the public event page once the event is public.
 - `marketingPosts.ts` — case studies and blog posts, Lexical rich text,
   published/featured flags, rendered publicly via `publicMarketing.ts`
   (`/work`). Public crew and artist directories come from

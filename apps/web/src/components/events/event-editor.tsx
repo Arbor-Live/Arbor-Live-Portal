@@ -163,6 +163,10 @@ export function EventEditor({
   const viewer = useQuery(api.users.getViewer, {});
   const invoices = useQuery(api.invoices.list, {});
   const managerList = useQuery(api.invoices.listManagers, {});
+  const posterAssignment = useQuery(
+    api.marketingDesigns.getPosterAssignmentForEvent,
+    eventId ? { eventId } : "skip",
+  );
   const createEvent = useMutation(api.events.create);
   const createEventSeries = useMutation(api.eventSeries.create);
   const updateEvent = useMutation(api.events.update);
@@ -170,6 +174,7 @@ export function EventEditor({
   const upsertShifts = useMutation(api.eventCrew.upsertShifts);
   const deleteUnassignedShifts = useMutation(api.eventCrew.deleteUnassignedShifts);
   const createArtifact = useMutation(api.eventArtifacts.create);
+  const assignPosterDesigner = useMutation(api.marketingDesigns.assignPosterDesigner);
 
   const [title, setTitle] = useState("");
   const [status, setStatus] = useState<EventStatus>("tentative");
@@ -451,6 +456,11 @@ export function EventEditor({
   const selectedCrewUserOption = useMemo(
     () => userOptions.find((option) => option.value === selectedCrewUserId),
     [selectedCrewUserId, userOptions],
+  );
+  const canAssignPosterDesigner = Boolean(
+    viewer?.isAdmin ||
+      viewer?.verticals.includes("Marketing") ||
+      viewer?.verticals.includes("Operations"),
   );
 
   const recurrencePreview = useMemo(() => {
@@ -1083,6 +1093,32 @@ export function EventEditor({
                 emptyLabel="Select day-of lead"
               />
             </div>
+            {!isCreate && canAssignPosterDesigner ? (
+              <div className="space-y-1">
+                <Label>Marketing poster designer</Label>
+                <UserSelect
+                  value={posterAssignment?.assigneeUserId ?? ""}
+                  onChange={(value) => {
+                    if (!eventId) return;
+                    void assignPosterDesigner({
+                      eventId,
+                      assigneeUserId: value || undefined,
+                    })
+                      .then(() => {
+                        setMessage("Marketing poster designer updated.");
+                        setMessageTone("success");
+                      })
+                      .catch((error) => {
+                        setMessage(error instanceof Error ? error.message : "Could not update poster designer.");
+                        setMessageTone("error");
+                      });
+                  }}
+                  options={userSelectOptions}
+                  emptyLabel="Unassigned"
+                  placeholder="Assign marketing designer..."
+                />
+              </div>
+            ) : null}
             <div className="space-y-1 md:col-span-3">
               <Label>Notes</Label>
               <textarea className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm" value={notes} onChange={(e) => setNotes(e.target.value)} />

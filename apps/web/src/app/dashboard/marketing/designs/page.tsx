@@ -6,7 +6,8 @@ export default function MarketingDesignsPage() {
       <div>
         <h1 className="text-xl font-semibold">Design board</h1>
         <p className="text-sm text-muted-foreground">
-          Upload event posters, add captions and links, then publish to Instagram and the public site.
+          Assign poster designers, upload event posters, add captions and links, then publish to Instagram and the
+          public site.
         </p>
       </div>
       <MarketingDesignBoard />

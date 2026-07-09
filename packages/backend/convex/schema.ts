@@ -1097,7 +1097,7 @@ export default defineSchema({
   eventMarketingDesigns: defineTable({
     eventId: v.id("events"),
     assigneeUserId: v.optional(v.string()),
-    imageUrl: v.string(),
+    imageUrl: v.optional(v.string()),
     caption: v.optional(v.string()),
     additionalLinks: v.optional(v.array(marketingDesignLinkValue)),
     status: marketingDesignStatusValue,

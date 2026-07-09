@@ -1,29 +1,47 @@
 import { v } from "convex/values";
-import { internal } from "./_generated/api";
+import { components, internal } from "./_generated/api";
 import { internalMutation, mutation, query } from "./_generated/server";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { getUserId, requireAnyVerticalOrAdmin, requireVerticalOrAdmin } from "./lib/auth";
 import { SITE_URL } from "./email/constants";
+import { normalizeEventStatus } from "./lib/eventStatus";
 import { normalizeOptionalAssetReference } from "./lib/inventoryUpload";
 import {
   buildPublicEventUrl,
   formatLinksForCaption,
   isPublicListableEventStatus,
+  isWithinDays,
 } from "./lib/publicEvents";
 import { schedulePublicEventsSiteRevalidation } from "./lib/scheduleSiteRevalidation";
 import { resolveStoredR2AssetUrl } from "./inventoryR2";
+
+const MARKETING_POSTER_WINDOW_DAYS = 28;
 
 const designLinkInputValue = v.object({
   label: v.string(),
   url: v.string(),
 });
 
-const designStatusValue = v.union(
-  v.literal("draft"),
-  v.literal("ready"),
-  v.literal("published"),
+const posterWorkViewValue = v.union(
+  v.literal("unassigned"),
+  v.literal("mine"),
+  v.literal("all"),
 );
+
+type DesignDoc = Doc<"eventMarketingDesigns">;
+
+type AuthUserRecord = {
+  _id?: string;
+  id?: string;
+  name?: string;
+  email?: string;
+  image?: string | null;
+};
+
+function getUserKey(user: AuthUserRecord): string {
+  return user.id ?? user._id ?? "";
+}
 
 function normalizeLinks(links: Array<{ label: string; url: string }> | undefined) {
   return (links ?? [])
@@ -34,21 +52,40 @@ function normalizeLinks(links: Array<{ label: string; url: string }> | undefined
     .filter((link) => link.label && link.url);
 }
 
-async function serializeDesign(ctx: QueryCtx, design: {
-  _id: Id<"eventMarketingDesigns">;
-  eventId: Id<"events">;
-  assigneeUserId?: string;
-  imageUrl: string;
-  caption?: string;
-  additionalLinks?: Array<{ label: string; url: string }>;
-  status: "draft" | "ready" | "published";
-  instagramPostId?: string;
-  publishedAt?: number;
-  lastError?: string;
-  createdByUserId: string;
-  createdAt: number;
-  updatedAt: number;
-}) {
+function isMarketingPosterEligible(event: Doc<"events">, now: number): boolean {
+  if (normalizeEventStatus(event.status) === "cancelled") return false;
+  return isWithinDays(event.startAt, now, MARKETING_POSTER_WINDOW_DAYS);
+}
+
+async function fetchUsersByIds(ctx: QueryCtx, userIds: string[]) {
+  const userByKey = new Map<string, AuthUserRecord>();
+  const uniqueIds = [...new Set(userIds.filter(Boolean))];
+  if (uniqueIds.length === 0) return userByKey;
+
+  const usersResult = await ctx.runQuery(components.betterAuth.adapter.findMany, {
+    model: "user",
+    where: [{ field: "_id", operator: "in", value: uniqueIds }],
+    paginationOpts: { cursor: null, numItems: uniqueIds.length },
+  });
+  for (const user of (usersResult?.page ?? []) as AuthUserRecord[]) {
+    const key = getUserKey(user);
+    if (key) userByKey.set(key, user);
+  }
+  return userByKey;
+}
+
+function userDisplayName(userByKey: Map<string, AuthUserRecord>, userId: string | undefined) {
+  if (!userId) return null;
+  const user = userByKey.get(userId);
+  return user?.name ?? user?.email ?? userId;
+}
+
+async function resolveDesignImageUrl(imageUrl: string | undefined) {
+  if (!imageUrl?.trim()) return null;
+  return (await resolveStoredR2AssetUrl(imageUrl)) ?? imageUrl;
+}
+
+async function serializeDesign(ctx: QueryCtx, design: DesignDoc) {
   const event = await ctx.db.get(design.eventId);
   return {
     _id: design._id,
@@ -57,7 +94,7 @@ async function serializeDesign(ctx: QueryCtx, design: {
     eventStartAt: event?.startAt ?? 0,
     venueName: event?.venueName,
     assigneeUserId: design.assigneeUserId ?? null,
-    imageUrl: (await resolveStoredR2AssetUrl(design.imageUrl)) ?? design.imageUrl,
+    imageUrl: await resolveDesignImageUrl(design.imageUrl),
     caption: design.caption ?? "",
     additionalLinks: design.additionalLinks ?? [],
     status: design.status,
@@ -69,6 +106,41 @@ async function serializeDesign(ctx: QueryCtx, design: {
     createdAt: design.createdAt,
     updatedAt: design.updatedAt,
   };
+}
+
+async function loadDesignByEventId(ctx: QueryCtx) {
+  const designs = await ctx.db.query("eventMarketingDesigns").take(500);
+  return new Map(designs.map((design) => [design.eventId, design]));
+}
+
+async function upsertPosterAssignment(
+  ctx: MutationCtx,
+  eventId: Id<"events">,
+  assigneeUserId: string | undefined,
+  actorUserId: string,
+) {
+  const now = Date.now();
+  const existing = await ctx.db
+    .query("eventMarketingDesigns")
+    .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
+    .take(1);
+
+  if (existing[0]) {
+    await ctx.db.patch(existing[0]._id, {
+      assigneeUserId,
+      updatedAt: now,
+    });
+    return existing[0]._id;
+  }
+
+  return await ctx.db.insert("eventMarketingDesigns", {
+    eventId,
+    assigneeUserId,
+    status: "draft",
+    createdByUserId: actorUserId,
+    createdAt: now,
+    updatedAt: now,
+  });
 }
 
 async function enqueuePublishJobs(ctx: MutationCtx, designId: Id<"eventMarketingDesigns">) {
@@ -114,26 +186,114 @@ export const listMine = query({
   },
 });
 
-export const listEventsNeedingDesigns = query({
-  args: { now: v.number() },
+export const listUpcomingPosterWork = query({
+  args: {
+    now: v.number(),
+    view: posterWorkViewValue,
+  },
+  handler: async (ctx, args) => {
+    const user = await requireAnyVerticalOrAdmin(ctx, ["Marketing", "Operations"]);
+    const currentUserId = getUserId(user);
+    const windowEnd = args.now + MARKETING_POSTER_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+    const events = await ctx.db
+      .query("events")
+      .withIndex("by_startAt", (q) => q.gte("startAt", args.now))
+      .order("asc")
+      .take(300);
+    const designByEventId = await loadDesignByEventId(ctx);
+
+    const eligible = events.filter(
+      (event) => event.startAt <= windowEnd && isMarketingPosterEligible(event, args.now),
+    );
+
+    const filtered = eligible.filter((event) => {
+      const assigneeUserId = designByEventId.get(event._id)?.assigneeUserId;
+      if (args.view === "mine") return assigneeUserId === currentUserId;
+      if (args.view === "unassigned") return !assigneeUserId;
+      return true;
+    });
+
+    const assigneeIds = filtered
+      .map((event) => designByEventId.get(event._id)?.assigneeUserId)
+      .filter((id): id is string => Boolean(id));
+    const userByKey = await fetchUsersByIds(ctx, assigneeIds);
+
+    return Promise.all(
+      filtered.map(async (event) => {
+        const design = designByEventId.get(event._id);
+        const assigneeUserId = design?.assigneeUserId ?? null;
+        return {
+          eventId: event._id,
+          title: event.title,
+          startAt: event.startAt,
+          venueName: event.venueName,
+          visibility: event.visibility,
+          status: normalizeEventStatus(event.status),
+          assigneeUserId,
+          assigneeName: userDisplayName(userByKey, assigneeUserId ?? undefined),
+          design: design
+            ? {
+                _id: design._id,
+                status: design.status,
+                imageUrl: await resolveDesignImageUrl(design.imageUrl),
+                caption: design.caption ?? "",
+                additionalLinks: design.additionalLinks ?? [],
+                publishedAt: design.publishedAt ?? null,
+                lastError: design.lastError ?? null,
+                instagramPostId: design.instagramPostId ?? null,
+              }
+            : null,
+        };
+      }),
+    );
+  },
+});
+
+export const getPosterAssignmentForEvent = query({
+  args: { eventId: v.id("events") },
   handler: async (ctx, args) => {
     await requireAnyVerticalOrAdmin(ctx, ["Marketing", "Operations"]);
-    const events = await ctx.db.query("events").withIndex("by_startAt").order("asc").take(300);
-    const upcomingPublic = events.filter(
-      (event) =>
-        event.visibility === "public" &&
-        isPublicListableEventStatus(event.status) &&
-        event.startAt >= args.now,
+    const design = (
+      await ctx.db
+        .query("eventMarketingDesigns")
+        .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+        .take(1)
+    )[0];
+    if (!design) {
+      return {
+        designId: null,
+        assigneeUserId: null,
+        assigneeName: null,
+        status: null,
+        hasPosterImage: false,
+      };
+    }
+    const userByKey = await fetchUsersByIds(
+      ctx,
+      design.assigneeUserId ? [design.assigneeUserId] : [],
     );
-    const designs = await ctx.db.query("eventMarketingDesigns").take(500);
-    const designByEventId = new Map(designs.map((design) => [design.eventId, design]));
-    return upcomingPublic.map((event) => ({
-      eventId: event._id,
-      title: event.title,
-      startAt: event.startAt,
-      venueName: event.venueName,
-      design: designByEventId.get(event._id) ?? null,
-    }));
+    return {
+      designId: design._id,
+      assigneeUserId: design.assigneeUserId ?? null,
+      assigneeName: userDisplayName(userByKey, design.assigneeUserId),
+      status: design.status,
+      hasPosterImage: Boolean(design.imageUrl?.trim()),
+    };
+  },
+});
+
+export const assignPosterDesigner = mutation({
+  args: {
+    eventId: v.id("events"),
+    assigneeUserId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireAnyVerticalOrAdmin(ctx, ["Marketing", "Operations"]);
+    const event = await ctx.db.get(args.eventId);
+    if (!event) throw new Error("Event not found.");
+    const assigneeUserId = args.assigneeUserId?.trim() || undefined;
+    const designId = await upsertPosterAssignment(ctx, args.eventId, assigneeUserId, getUserId(user));
+    return { designId };
   },
 });
 
@@ -159,7 +319,7 @@ export const create = mutation({
       .take(1);
     if (existing[0]) {
       await ctx.db.patch(existing[0]._id, {
-        assigneeUserId: args.assigneeUserId,
+        assigneeUserId: args.assigneeUserId ?? existing[0].assigneeUserId,
         imageUrl,
         caption: args.caption?.trim() || undefined,
         additionalLinks: normalizeLinks(args.additionalLinks),

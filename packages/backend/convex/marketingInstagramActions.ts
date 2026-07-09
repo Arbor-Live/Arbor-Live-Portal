@@ -75,6 +75,7 @@ export const processJob = internalAction({
         designId: job.designId,
       });
       if (!design) throw new Error("Design not found.");
+      if (!design.imageUrl?.trim()) throw new Error("Design has no poster image.");
 
       const instagramPostId = await publishToInstagramViaPostPeer(design.imageUrl, caption);
       await ctx.runMutation(internal.marketingInstagram.markJobCompleted, {
