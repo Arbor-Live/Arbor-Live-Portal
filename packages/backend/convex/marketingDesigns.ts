@@ -6,6 +6,7 @@ import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { getUserId, requireAnyVerticalOrAdmin, requireVerticalOrAdmin } from "./lib/auth";
 import { SITE_URL } from "./email/constants";
 import { normalizeEventStatus } from "./lib/eventStatus";
+import { normalizeEventVisibility } from "./lib/eventVisibility";
 import { normalizeOptionalAssetReference } from "./lib/inventoryUpload";
 import {
   buildPublicEventUrl,
@@ -13,6 +14,10 @@ import {
   isPublicListableEventStatus,
   isWithinDays,
 } from "./lib/publicEvents";
+import {
+  canPublishMarketingDesignVisibility,
+  isMarketingPosterWorkVisibility,
+} from "./lib/eventVisibility";
 import { schedulePublicEventsSiteRevalidation } from "./lib/scheduleSiteRevalidation";
 import { resolveStoredR2AssetUrl } from "./inventoryR2";
 
@@ -53,6 +58,7 @@ function normalizeLinks(links: Array<{ label: string; url: string }> | undefined
 }
 
 function isMarketingPosterEligible(event: Doc<"events">, now: number): boolean {
+  if (!isMarketingPosterWorkVisibility(event.visibility)) return false;
   if (normalizeEventStatus(event.status) === "cancelled") return false;
   return isWithinDays(event.startAt, now, MARKETING_POSTER_WINDOW_DAYS);
 }
@@ -227,7 +233,7 @@ export const listUpcomingPosterWork = query({
           title: event.title,
           startAt: event.startAt,
           venueName: event.venueName,
-          visibility: event.visibility,
+          visibility: normalizeEventVisibility(event.visibility),
           status: normalizeEventStatus(event.status),
           assigneeUserId,
           assigneeName: userDisplayName(userByKey, assigneeUserId ?? undefined),
@@ -383,7 +389,7 @@ export const markReady = mutation({
     if (!design.imageUrl?.trim()) throw new Error("Upload a poster image before publishing.");
     const event = await ctx.db.get(design.eventId);
     if (!event) throw new Error("Event not found.");
-    if (event.visibility !== "public") {
+    if (!canPublishMarketingDesignVisibility(event.visibility)) {
       throw new Error("Event must be public before publishing marketing designs.");
     }
     if (!isPublicListableEventStatus(event.status)) {

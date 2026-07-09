@@ -317,7 +317,7 @@ export async function materializeOccurrence(
   const eventId = await ctx.db.insert("events", {
     title: series.title,
     status: "tentative",
-    visibility: "internal",
+    visibility: "public",
     invoiceId: series.invoiceId,
     seriesId: series._id,
     occurrenceIndex,
@@ -451,7 +451,7 @@ export async function propagateInvoiceIdToSeriesOccurrences(
 }
 export type SeriesOverviewOverride = {
   status?: EventStatus;
-  visibility?: "internal" | "public";
+  visibility?: "public" | "internal" | "informational";
   otPremium?: boolean;
   crewCostBufferPercent?: number;
 };

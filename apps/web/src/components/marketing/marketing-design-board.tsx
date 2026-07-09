@@ -11,6 +11,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import {
+  formatEventVisibilityLabel,
+  type EventVisibility,
+} from "@/lib/event-visibility";
 import { cn } from "@/lib/utils";
 
 type AdditionalLink = { label: string; url: string };
@@ -187,7 +191,9 @@ export function MarketingDesignBoard() {
                 <p className="text-xs text-muted-foreground">{formatEventMeta(event.startAt, event.venueName)}</p>
                 <p className="text-xs text-muted-foreground">
                   {event.assigneeName ? `Assigned to ${event.assigneeName}` : "Unassigned"}
-                  {event.visibility !== "public" ? " · Internal" : ""}
+                  {event.visibility !== "public"
+                    ? ` · ${formatEventVisibilityLabel(event.visibility as EventVisibility)}`
+                    : ""}
                 </p>
               </button>
             ))

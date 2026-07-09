@@ -80,6 +80,7 @@ import type * as lib_eventBandAccess from "../lib/eventBandAccess.js";
 import type * as lib_eventSeriesCosts from "../lib/eventSeriesCosts.js";
 import type * as lib_eventSeriesGeneration from "../lib/eventSeriesGeneration.js";
 import type * as lib_eventStatus from "../lib/eventStatus.js";
+import type * as lib_eventVisibility from "../lib/eventVisibility.js";
 import type * as lib_immichAccess from "../lib/immichAccess.js";
 import type * as lib_immichAlbumLinks from "../lib/immichAlbumLinks.js";
 import type * as lib_immichClient from "../lib/immichClient.js";
@@ -113,6 +114,7 @@ import type * as marketingInstagramActions from "../marketingInstagramActions.js
 import type * as marketingPosts from "../marketingPosts.js";
 import type * as marketingSettings from "../marketingSettings.js";
 import type * as migrations_convertedEventLinks from "../migrations/convertedEventLinks.js";
+import type * as migrations_eventVisibility from "../migrations/eventVisibility.js";
 import type * as migrations_referenceIds from "../migrations/referenceIds.js";
 import type * as migrations_userVerticals from "../migrations/userVerticals.js";
 import type * as openMic from "../openMic.js";
@@ -208,6 +210,7 @@ declare const fullApi: ApiFromModules<{
   "lib/eventSeriesCosts": typeof lib_eventSeriesCosts;
   "lib/eventSeriesGeneration": typeof lib_eventSeriesGeneration;
   "lib/eventStatus": typeof lib_eventStatus;
+  "lib/eventVisibility": typeof lib_eventVisibility;
   "lib/immichAccess": typeof lib_immichAccess;
   "lib/immichAlbumLinks": typeof lib_immichAlbumLinks;
   "lib/immichClient": typeof lib_immichClient;
@@ -241,6 +244,7 @@ declare const fullApi: ApiFromModules<{
   marketingPosts: typeof marketingPosts;
   marketingSettings: typeof marketingSettings;
   "migrations/convertedEventLinks": typeof migrations_convertedEventLinks;
+  "migrations/eventVisibility": typeof migrations_eventVisibility;
   "migrations/referenceIds": typeof migrations_referenceIds;
   "migrations/userVerticals": typeof migrations_userVerticals;
   openMic: typeof openMic;

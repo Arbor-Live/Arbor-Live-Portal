@@ -75,7 +75,11 @@ const eventStatusValue = v.union(
   v.literal("completed"),
 );
 
-const eventVisibilityValue = v.union(v.literal("internal"), v.literal("public"));
+const eventVisibilityValue = v.union(
+  v.literal("public"),
+  v.literal("internal"),
+  v.literal("informational"),
+);
 
 const eventTimelineBlockTypeValue = v.union(
   v.literal("setup"),

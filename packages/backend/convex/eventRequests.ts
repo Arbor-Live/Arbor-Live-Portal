@@ -876,7 +876,7 @@ export const convertToEvent = mutation({
       const eventId = await ctx.db.insert("events", {
         title: titleForDayEvent(baseTitle, dayPlan.date, multiDay),
         status: normalizeEventStatus("tentative"),
-        visibility: "internal",
+        visibility: "public",
         publicToken: makeEventPublicToken(),
         startAt: dayPlan.startAt,
         endAt: dayPlan.endAt,

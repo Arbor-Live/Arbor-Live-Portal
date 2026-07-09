@@ -35,6 +35,12 @@ import {
   normalizeEventStatus,
   type EventStatus,
 } from "@/lib/event-status";
+import {
+  DEFAULT_EVENT_VISIBILITY,
+  EVENT_VISIBILITY_OPTIONS,
+  normalizeEventVisibility,
+  type EventVisibility,
+} from "@/lib/event-visibility";
 import { getAvailabilityNotesForDisplay } from "@/lib/crew-availability";
 import {
   EVENT_EDITOR_TAB_LABELS,
@@ -178,6 +184,7 @@ export function EventEditor({
 
   const [title, setTitle] = useState("");
   const [status, setStatus] = useState<EventStatus>("tentative");
+  const [visibility, setVisibility] = useState<EventVisibility>(DEFAULT_EVENT_VISIBILITY);
   const [invoiceId, setInvoiceId] = useState("");
   const [startAt, setStartAt] = useState("");
   const [endAt, setEndAt] = useState("");
@@ -256,6 +263,7 @@ export function EventEditor({
     hydratedEventIdRef.current = eventData.event._id;
     setTitle(eventData.event.title);
     setStatus(normalizeEventStatus(eventData.event.status));
+    setVisibility(normalizeEventVisibility(eventData.event.visibility));
     setInvoiceId(eventData.event.invoiceId ?? "");
     setStartAt(toLocalDateTimeInput(eventData.event.startAt));
     setEndAt(toLocalDateTimeInput(eventData.event.endAt));
@@ -320,6 +328,7 @@ export function EventEditor({
     lastSavedOverviewSignatureRef.current = JSON.stringify({
       title: eventData.event.title.trim(),
       status: normalizeEventStatus(eventData.event.status),
+      visibility: normalizeEventVisibility(eventData.event.visibility),
       invoiceId: eventData.event.invoiceId ?? undefined,
       startAt: eventData.event.startAt,
       endAt: eventData.event.endAt,
@@ -397,6 +406,14 @@ export function EventEditor({
   const statusOptions: SearchableSelectOption[] = useMemo(
     () =>
       EVENT_STATUS_EDITOR_OPTIONS.map((option) => ({
+        value: option.value,
+        label: option.label,
+      })),
+    [],
+  );
+  const visibilityOptions: SearchableSelectOption[] = useMemo(
+    () =>
+      EVENT_VISIBILITY_OPTIONS.map((option) => ({
         value: option.value,
         label: option.label,
       })),
@@ -500,6 +517,7 @@ export function EventEditor({
     const base = {
       title: title.trim(),
       status,
+      visibility,
       invoiceId: invoiceId ? (invoiceId as Id<"invoices">) : undefined,
       startAt: new Date(startAt).getTime(),
       endAt: new Date(endAt).getTime(),
@@ -560,7 +578,7 @@ export function EventEditor({
         router.replace(getEventEditorTabPath(String(result.firstEventId), resolvedActiveTab));
         return;
       }
-      const id = await createEvent({ ...payload, visibility: "internal" });
+      const id = await createEvent({ ...payload, visibility });
       router.replace(getEventEditorTabPath(String(id), resolvedActiveTab));
       return;
     }
@@ -855,6 +873,7 @@ export function EventEditor({
     [
       title,
       status,
+      visibility,
       invoiceId,
       startAt,
       endAt,
@@ -964,6 +983,20 @@ export function EventEditor({
                   Quote is approved — status will move to Logistics when you save.
                 </p>
               ) : null}
+            </div>
+            <div className="space-y-1">
+              <Label>Visibility</Label>
+              <SearchableSelect
+                value={visibility}
+                onChange={(value) => setVisibility(value as EventVisibility)}
+                options={visibilityOptions}
+                placeholder="Search visibility..."
+                emptyLabel="Select visibility"
+              />
+              <p className="text-xs text-muted-foreground">
+                Public events appear on the marketing site. Internal and informational entries stay
+                staff-only.
+              </p>
             </div>
             <div className="space-y-1">
               <Label>Linked Invoice (optional)</Label>

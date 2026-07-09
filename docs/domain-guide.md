@@ -20,6 +20,13 @@ canonical description of the domain itself.
 
 ## Events
 
+## Events
+
+- `visibility` on each event: `public` (default, listed on the marketing site),
+  `internal` (staff-only), or `informational` (staff-only reference entries that
+  are not real producible events). Poster publishing requires `public`
+  visibility plus a listable status.
+
 Event types (drive which editor tabs and quick-add blocks appear):
 
 | Type | Meaning | Quick-add schedule intent |

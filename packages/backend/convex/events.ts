@@ -16,6 +16,10 @@ import { RENTAL_EVENT_TYPES, enrichPullListItems, summarizePullList } from "./ev
 import { propagateOverviewToSeriesOccurrences, propagateInvoiceIdToSeriesOccurrences, type SeriesEditScope, type SeriesOverviewAffectedOccurrence, type SeriesOverviewOverride } from "./lib/eventSeriesGeneration";
 import { resolveSeriesMetadataForInvoice } from "./lib/invoiceSeries";
 import { assertNoOpenMicOverlap } from "./lib/openMicAddon";
+import {
+  DEFAULT_EVENT_VISIBILITY,
+  eventVisibilityValue,
+} from "./lib/eventVisibility";
 import { EVENT_TIMEZONE } from "./email/constants";
 import { scheduleEventCancelledEmails } from "./email/triggers";
 import { resolveStoredR2AssetUrl } from "./inventoryR2";
@@ -397,7 +401,7 @@ export const create = mutation({
   args: {
     title: v.string(),
     status: v.optional(eventStatusValue),
-    visibility: v.optional(v.union(v.literal("internal"), v.literal("public"))),
+    visibility: v.optional(eventVisibilityValue),
     invoiceId: v.optional(v.id("invoices")),
     startAt: v.number(),
     endAt: v.number(),
@@ -434,7 +438,7 @@ export const create = mutation({
     const eventId = await ctx.db.insert("events", {
       title: args.title.trim(),
       status: initialStatus,
-      visibility: args.visibility ?? "internal",
+      visibility: args.visibility ?? DEFAULT_EVENT_VISIBILITY,
       invoiceId: args.invoiceId,
       publicToken: makePublicToken(),
       startAt: args.startAt,
@@ -478,7 +482,7 @@ export const update = mutation({
     editScope: v.optional(seriesEditScopeValue),
     title: v.optional(v.string()),
     status: v.optional(eventStatusValue),
-    visibility: v.optional(v.union(v.literal("internal"), v.literal("public"))),
+    visibility: v.optional(eventVisibilityValue),
     invoiceId: v.optional(v.id("invoices")),
     startAt: v.optional(v.number()),
     endAt: v.optional(v.number()),

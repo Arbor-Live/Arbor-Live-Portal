@@ -9,6 +9,7 @@ import {
   isUpcomingEvent,
   isWithinDays,
 } from "./lib/publicEvents";
+import { isPublicSiteListableVisibility } from "./lib/eventVisibility";
 import { SITE_URL } from "./email/constants";
 
 const publicEventLinkValue = v.object({
@@ -73,7 +74,7 @@ async function listPublicUpcomingEvents(ctx: QueryCtx, now: number) {
   const events = await ctx.db.query("events").withIndex("by_startAt").order("asc").take(300);
   return events.filter(
     (event) =>
-      event.visibility === "public" &&
+      isPublicSiteListableVisibility(event.visibility) &&
       isPublicListableEventStatus(event.status) &&
       isUpcomingEvent(event.startAt, now),
   );
@@ -115,7 +116,7 @@ export const getByEventId = query({
   handler: async (ctx, args) => {
     const event = await ctx.db.get(args.eventId);
     if (!event) return null;
-    if (event.visibility !== "public" || !isPublicListableEventStatus(event.status)) {
+    if (!isPublicSiteListableVisibility(event.visibility) || !isPublicListableEventStatus(event.status)) {
       return null;
     }
     const design = await ctx.db
