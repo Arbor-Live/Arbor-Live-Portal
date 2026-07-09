@@ -72,6 +72,8 @@ export async function upsertPendingInviteToken(
     organizationId: string;
     role: string;
     teams?: string[];
+    verticals?: string[];
+    disciplines?: string[];
     expiresAt: number;
   },
 ) {
@@ -89,6 +91,8 @@ export async function upsertPendingInviteToken(
     organizationId: args.organizationId,
     role: args.role,
     teams: args.teams,
+    verticals: args.verticals,
+    disciplines: args.disciplines,
     expiresAt: args.expiresAt,
     createdAt: now,
   };
@@ -112,6 +116,8 @@ export async function scheduleUserInviteEmail(
     inviterId: string;
     expiresAt: number;
     teams?: string[];
+    verticals?: string[];
+    disciplines?: string[];
     isExistingUser: boolean;
     resendKey?: string;
   },
@@ -128,6 +134,8 @@ export async function scheduleUserInviteEmail(
       organizationId: args.organizationId,
       role: args.role,
       teams: args.teams,
+      verticals: args.verticals,
+      disciplines: args.disciplines,
       expiresAt: args.expiresAt,
     });
     inviteUrl = inviteAcceptUrl(token);
@@ -156,17 +164,27 @@ export async function scheduleUserInviteEmail(
 export async function updatePendingInviteDetails(
   ctx: MutationCtx,
   invitationId: string,
-  args: { role: string; teams?: string[] },
+  args: {
+    role: string;
+    teams?: string[];
+    verticals?: string[];
+    disciplines?: string[];
+  },
 ) {
   const pending = await ctx.db
     .query("pendingUserInvites")
     .withIndex("by_invitationId", (q) => q.eq("invitationId", invitationId))
     .unique();
   if (!pending) return;
-  const patch: { role: string; teams?: string[] } = { role: args.role };
-  if (args.teams !== undefined) {
-    patch.teams = args.teams;
-  }
+  const patch: {
+    role: string;
+    teams?: string[];
+    verticals?: string[];
+    disciplines?: string[];
+  } = { role: args.role };
+  if (args.teams !== undefined) patch.teams = args.teams;
+  if (args.verticals !== undefined) patch.verticals = args.verticals;
+  if (args.disciplines !== undefined) patch.disciplines = args.disciplines;
   await ctx.db.patch(pending._id, patch);
 }
 

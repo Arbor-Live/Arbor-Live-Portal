@@ -13,6 +13,11 @@ import {
   isCrewedEventType,
 } from "./lib/crewTeams";
 import { normalizeEventStatus } from "./lib/eventStatus";
+import {
+  getDisciplinesForEventMatching,
+  isStaffMember,
+  resolveProfileMembership,
+} from "./lib/userVerticals";
 
 const crewAvailabilityResponseStatusValue = v.union(
   v.literal("yes"),
@@ -102,14 +107,19 @@ async function getActiveCrewProfiles(ctx: QueryCtx) {
     .query("userAdminProfiles")
     .withIndex("by_active", (q) => q.eq("active", true))
     .take(500);
-  return profiles.filter((profile) => profile.teams.length > 0);
+  return profiles.filter((profile) => isStaffMember(resolveProfileMembership(profile)));
 }
 
 function countEligibleCrewForEvent(
   eventTeams: string[] | undefined,
   profiles: Doc<"userAdminProfiles">[],
 ) {
-  return profiles.filter((profile) => eventMatchesUserTeams(eventTeams, profile.teams)).length;
+  return profiles.filter((profile) =>
+    eventMatchesUserTeams(
+      eventTeams,
+      getDisciplinesForEventMatching(resolveProfileMembership(profile).disciplines),
+    ),
+  ).length;
 }
 
 function computeShiftStats(shifts: Doc<"eventCrewShifts">[]) {
@@ -378,7 +388,9 @@ export const listForCrewMember = query({
     const userId = getUserId(user);
 
     const profile = await getCurrentUserProfile(ctx, userId);
-    const userTeams = profile?.teams ?? [];
+    const userDisciplines = getDisciplinesForEventMatching(
+      resolveProfileMembership(profile ?? {}).disciplines,
+    );
     const weeksAhead = args.weeksAhead ?? DEFAULT_AVAILABILITY_WEEKS;
     const windowEnd = args.now + weeksToMs(weeksAhead);
 
@@ -391,7 +403,7 @@ export const listForCrewMember = query({
       .filter(
         (event) =>
           isUpcomingCrewedEvent(event, args.now, windowEnd) &&
-          eventMatchesUserTeams(event.teamsInterested, userTeams),
+          eventMatchesUserTeams(event.teamsInterested, userDisciplines),
       )
       .sort((a, b) => a.startAt - b.startAt);
 
@@ -492,7 +504,9 @@ export const getMyPendingAvailabilityCount = query({
     const userId = getUserId(user);
 
     const profile = await getCurrentUserProfile(ctx, userId);
-    const userTeams = profile?.teams ?? [];
+    const userDisciplines = getDisciplinesForEventMatching(
+      resolveProfileMembership(profile ?? {}).disciplines,
+    );
     const weeksAhead = args.weeksAhead ?? DEFAULT_AVAILABILITY_WEEKS;
     const windowEnd = args.now + weeksToMs(weeksAhead);
 
@@ -504,7 +518,7 @@ export const getMyPendingAvailabilityCount = query({
     const matchedEvents = events.filter(
       (event) =>
         isUpcomingCrewedEvent(event, args.now, windowEnd) &&
-        eventMatchesUserTeams(event.teamsInterested, userTeams),
+        eventMatchesUserTeams(event.teamsInterested, userDisciplines),
     );
 
     let pending = 0;
@@ -565,8 +579,10 @@ export const getEventForCrewResponse = query({
     if (!bundle) return null;
 
     const profile = await getCurrentUserProfile(ctx, userId);
-    const userTeams = profile?.teams ?? [];
-    if (!eventMatchesUserTeams(bundle.event.teamsInterested, userTeams)) {
+    const userDisciplines = getDisciplinesForEventMatching(
+      resolveProfileMembership(profile ?? {}).disciplines,
+    );
+    if (!eventMatchesUserTeams(bundle.event.teamsInterested, userDisciplines)) {
       throw new Error("This event is not in your crew team scope.");
     }
 
@@ -751,8 +767,10 @@ export const submitResponse = mutation({
     }
 
     const profile = await getCurrentUserProfile(ctx, userId);
-    const userTeams = profile?.teams ?? [];
-    if (!eventMatchesUserTeams(event.teamsInterested, userTeams)) {
+    const userDisciplines = getDisciplinesForEventMatching(
+      resolveProfileMembership(profile ?? {}).disciplines,
+    );
+    if (!eventMatchesUserTeams(event.teamsInterested, userDisciplines)) {
       throw new Error("This event is not in your crew team scope.");
     }
 

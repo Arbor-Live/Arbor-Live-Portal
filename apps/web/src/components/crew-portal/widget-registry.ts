@@ -4,10 +4,10 @@ import { EventsNeedingPhotosWidget } from "@/components/crew-portal/widgets/even
 import { PayPeriodSummaryWidget } from "@/components/crew-portal/widgets/pay-period-summary-widget";
 import type { DashboardWidgetDefinition } from "@/components/dashboard/customizable-widget-dashboard";
 
-export type UserTeam = "Sound" | "Lights" | "Design" | "Marketing" | "Operations";
+export type UserDiscipline = "Sound" | "Lights" | "Design";
 
 export type CrewWidget = DashboardWidgetDefinition & {
-  teams?: UserTeam[];
+  disciplines?: UserDiscipline[];
 };
 
 export const DEFAULT_CREW_WIDGETS: CrewWidget[] = [
@@ -33,9 +33,17 @@ export const DEFAULT_CREW_WIDGETS: CrewWidget[] = [
   },
 ];
 
-export function getWidgetsForTeams(teams: UserTeam[]): CrewWidget[] {
+export function getWidgetsForDisciplines(disciplines: UserDiscipline[]): CrewWidget[] {
   return DEFAULT_CREW_WIDGETS.filter((widget) => {
-    if (!widget.teams?.length) return true;
-    return widget.teams.some((team) => teams.includes(team));
+    if (!widget.disciplines?.length) return true;
+    return widget.disciplines.some((discipline) => disciplines.includes(discipline));
   });
+}
+
+/** @deprecated Use getWidgetsForDisciplines */
+export function getWidgetsForTeams(teams: string[]): CrewWidget[] {
+  const disciplines = teams.filter((team): team is UserDiscipline =>
+    team === "Sound" || team === "Lights" || team === "Design",
+  );
+  return getWidgetsForDisciplines(disciplines);
 }

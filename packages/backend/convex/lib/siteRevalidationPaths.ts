@@ -11,6 +11,12 @@ export function marketingRevalidatePaths(slug?: string) {
   return paths;
 }
 
+export function publicEventsRevalidatePaths(eventId?: string) {
+  const paths = ["/", "/events"];
+  if (eventId) paths.push(`/events/${eventId}`);
+  return paths;
+}
+
 export function inventoryPackageRevalidatePaths(packageId?: string) {
   const paths = [
     "/public/packages",

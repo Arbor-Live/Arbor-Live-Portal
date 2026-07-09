@@ -13,6 +13,12 @@
  */
 import { components } from "../_generated/api";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
+import {
+  hasAnyVertical,
+  hasVertical,
+  resolveProfileMembership,
+  type UserVertical,
+} from "./userVerticals";
 
 export type AuthUser = {
   _id?: string;
@@ -168,4 +174,48 @@ export async function requireBandContext(
     throw new Error("This area is only available in band organization context.");
   }
   return context;
+}
+
+async function getUserAdminProfile(ctx: QueryCtx | MutationCtx, userId: string) {
+  return await ctx.db
+    .query("userAdminProfiles")
+    .withIndex("by_userId", (q) => q.eq("userId", userId))
+    .unique();
+}
+
+export async function getViewerMembership(ctx: QueryCtx | MutationCtx) {
+  const user = await requireAuth(ctx);
+  const profile = await getUserAdminProfile(ctx, getUserId(user));
+  return {
+    user,
+    ...resolveProfileMembership(profile ?? {}),
+  };
+}
+
+export async function requireVerticalOrAdmin(
+  ctx: QueryCtx | MutationCtx,
+  vertical: UserVertical,
+): Promise<AuthUser> {
+  const user = await requireAuth(ctx);
+  if (isAdmin(user)) return user;
+  const profile = await getUserAdminProfile(ctx, getUserId(user));
+  const { verticals } = resolveProfileMembership(profile ?? {});
+  if (!hasVertical(verticals, vertical)) {
+    throw new Error(`${vertical} team access required.`);
+  }
+  return user;
+}
+
+export async function requireAnyVerticalOrAdmin(
+  ctx: QueryCtx | MutationCtx,
+  candidates: readonly UserVertical[],
+): Promise<AuthUser> {
+  const user = await requireAuth(ctx);
+  if (isAdmin(user)) return user;
+  const profile = await getUserAdminProfile(ctx, getUserId(user));
+  const { verticals } = resolveProfileMembership(profile ?? {});
+  if (!hasAnyVertical(verticals, candidates)) {
+    throw new Error("You do not have access to this area.");
+  }
+  return user;
 }

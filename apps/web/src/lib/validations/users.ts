@@ -1,9 +1,20 @@
 import { z } from "zod";
 
+export const USER_VERTICAL_OPTIONS = ["Operations", "Crew", "Trivia", "Marketing"] as const;
+export const USER_DISCIPLINE_OPTIONS = ["Sound", "Lights", "Design"] as const;
+
+/** @deprecated Use USER_VERTICAL_OPTIONS / USER_DISCIPLINE_OPTIONS */
 export const ADMIN_TEAM_OPTIONS = ["Sound", "Lights", "Design", "Marketing", "Operations"] as const;
 
-export const adminTeamOptionSchema = z.enum(ADMIN_TEAM_OPTIONS);
+export const userVerticalOptionSchema = z.enum(USER_VERTICAL_OPTIONS);
+export const userDisciplineOptionSchema = z.enum(USER_DISCIPLINE_OPTIONS);
 
+export type UserVerticalOption = z.infer<typeof userVerticalOptionSchema>;
+export type UserDisciplineOption = z.infer<typeof userDisciplineOptionSchema>;
+
+/** @deprecated */
+export const adminTeamOptionSchema = z.enum(ADMIN_TEAM_OPTIONS);
+/** @deprecated */
 export type AdminTeamOption = z.infer<typeof adminTeamOptionSchema>;
 
 export const userAdminRowSchema = z.object({
@@ -14,7 +25,8 @@ export const userAdminRowSchema = z.object({
   title: z.string(),
   phone: z.string(),
   hourlyRateUsd: z.string(),
-  teams: z.array(adminTeamOptionSchema),
+  verticals: z.array(userVerticalOptionSchema),
+  disciplines: z.array(userDisciplineOptionSchema),
   defaultOrganizationId: z.string(),
 });
 
@@ -41,7 +53,8 @@ export type BandOrgProfileFormValues = z.infer<typeof bandOrgProfileSchema>;
 export const inviteUserSchema = z.object({
   email: z.string().email("Enter a valid email"),
   role: z.string(),
-  teams: z.array(adminTeamOptionSchema),
+  verticals: z.array(userVerticalOptionSchema),
+  disciplines: z.array(userDisciplineOptionSchema),
 });
 
 export type InviteUserFormValues = z.infer<typeof inviteUserSchema>;
@@ -52,7 +65,8 @@ export const createUserAdminSchema = z.object({
   email: z.string().email("Enter a valid email"),
   password: z.string().min(1, "Temporary password is required"),
   role: z.string(),
-  teams: z.array(adminTeamOptionSchema),
+  verticals: z.array(userVerticalOptionSchema),
+  disciplines: z.array(userDisciplineOptionSchema),
   hourlyRateUsd: z.string(),
 });
 
@@ -60,7 +74,8 @@ export type CreateUserAdminFormValues = z.infer<typeof createUserAdminSchema>;
 
 export const editInviteSchema = z.object({
   role: z.string(),
-  teams: z.array(adminTeamOptionSchema),
+  verticals: z.array(userVerticalOptionSchema),
+  disciplines: z.array(userDisciplineOptionSchema),
 });
 
 export type EditInviteFormValues = z.infer<typeof editInviteSchema>;

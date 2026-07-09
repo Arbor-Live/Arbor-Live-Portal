@@ -3,7 +3,7 @@
 import { useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
 import { CustomizableWidgetDashboard } from "@/components/dashboard/customizable-widget-dashboard";
-import { getWidgetsForTeams, type UserTeam } from "@/components/crew-portal/widget-registry";
+import { getWidgetsForDisciplines } from "@/components/crew-portal/widget-registry";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export function CrewDashboard() {
@@ -20,7 +20,7 @@ export function CrewDashboard() {
     );
   }
 
-  const widgets = getWidgetsForTeams(viewer.teams as UserTeam[]);
+  const widgets = getWidgetsForDisciplines(viewer.disciplines);
 
   return (
     <CustomizableWidgetDashboard

@@ -61,6 +61,7 @@ type NavItem = {
   icon: typeof CalendarDotsIcon
   adminOnly?: boolean
   bandOnly?: boolean
+  marketingOnly?: boolean
 }
 
 const navItems: NavItem[] = [
@@ -75,7 +76,7 @@ const navItems: NavItem[] = [
   },
   { title: "Media", url: "/dashboard/media", icon: ImagesIcon, bandOnly: true },
   { title: "Inventory", url: "/dashboard/inventory", icon: PackageIcon },
-  { title: "Marketing", url: "/dashboard/marketing", icon: MegaphoneIcon, adminOnly: true },
+  { title: "Marketing", url: "/dashboard/marketing", icon: MegaphoneIcon, marketingOnly: true },
 ]
 
 const inventorySubItems: NavSubItem[] = [
@@ -118,6 +119,7 @@ const usersSubItems: NavSubItem[] = [
 ]
 
 const marketingSubItems: NavSubItem[] = [
+  { title: "Design board", url: "/dashboard/marketing/designs" },
   { title: "Work & stories", url: "/dashboard/marketing/work" },
   { title: "Settings", url: "/dashboard/marketing/settings" },
 ]
@@ -130,9 +132,44 @@ const sectionSubItems: Record<string, NavSubItem[]> = {
   "/dashboard/marketing": marketingSubItems,
 }
 
-function visibleSubItems(subItems: NavSubItem[] | undefined, isAdmin: boolean) {
+function visibleSubItems(
+  subItems: NavSubItem[] | undefined,
+  access: { isAdmin: boolean; hasOperationsAccess: boolean },
+) {
   if (!subItems) return undefined
-  return subItems.filter((subItem) => isAdmin || !subItem.adminOnly)
+  return subItems.filter(
+    (subItem) => access.isAdmin || access.hasOperationsAccess || !subItem.adminOnly,
+  )
+}
+
+function canAccessNavItem(
+  item: NavItem,
+  access: {
+    isAdmin: boolean
+    hasOperationsAccess: boolean
+    hasMarketingAccess: boolean
+    isBandContext: boolean
+    isCrewContext: boolean
+    isAdminHomeContext: boolean
+  },
+) {
+  if (access.isBandContext) {
+    if (item.bandOnly) return true
+    return (
+      item.url !== "/dashboard/events" &&
+      item.url !== "/dashboard/financial-hub" &&
+      item.url !== "/dashboard/inventory" &&
+      item.url !== "/dashboard/users" &&
+      item.url !== "/dashboard/marketing" &&
+      item.url !== "/dashboard"
+    )
+  }
+  if (item.bandOnly) return false
+  if (item.url === "/dashboard" && !access.isCrewContext && !access.isAdminHomeContext) return false
+  if (access.isAdmin) return true
+  if (item.adminOnly && !access.hasOperationsAccess) return false
+  if (item.marketingOnly && !access.hasMarketingAccess) return false
+  return true
 }
 
 const secondaryItems = [
@@ -151,6 +188,14 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
   const myOrganizations = useQuery(api.users.listMyOrganizations, {})
   const setActiveOrganization = useMutation(api.users.setActiveOrganization)
   const isAdmin = viewer?.isAdmin ?? false
+  const viewerVerticals = viewer?.verticals ?? []
+  const hasOperationsAccess = isAdmin || viewerVerticals.includes("Operations")
+  const hasMarketingAccess = isAdmin || viewerVerticals.includes("Marketing")
+  const hasCrewAccess =
+    isAdmin ||
+    viewerVerticals.includes("Crew") ||
+    viewerVerticals.includes("Trivia") ||
+    viewerVerticals.length === 0
   const pendingAvailabilityCount = useQuery(
     api.eventCrewAvailability.getMyPendingAvailabilityCount,
     activeOrganization?.organizationType === "arbor_internal" ? { now } : "skip",
@@ -170,25 +215,24 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
   const userEmail = data?.user?.email ?? "No email"
   const orgName = activeOrganization?.name ?? "No active org"
   const isBandContext = activeOrganization?.organizationType === "band"
-  const isCrewContext = activeOrganization?.organizationType === "arbor_internal" && !isAdmin
-  const isAdminHomeContext = activeOrganization?.organizationType === "arbor_internal" && isAdmin
+  const isCrewContext =
+    activeOrganization?.organizationType === "arbor_internal" &&
+    hasCrewAccess &&
+    !hasOperationsAccess &&
+    !isAdmin
+  const isAdminHomeContext =
+    activeOrganization?.organizationType === "arbor_internal" &&
+    (isAdmin || hasOperationsAccess)
+  const navAccess = {
+    isAdmin,
+    hasOperationsAccess,
+    hasMarketingAccess,
+    isBandContext,
+    isCrewContext,
+    isAdminHomeContext,
+  }
   const unconfirmedEventCount = unconfirmedCrewCount?.length ?? 0
-  const scopedNavItems = navItems.filter((item) => {
-    if (isBandContext) {
-      if (item.bandOnly) return true;
-      return (
-        item.url !== "/dashboard/events" &&
-        item.url !== "/dashboard/financial-hub" &&
-        item.url !== "/dashboard/inventory" &&
-        item.url !== "/dashboard/users" &&
-        item.url !== "/dashboard/marketing" &&
-        item.url !== "/dashboard"
-      );
-    }
-    if (item.bandOnly) return false;
-    if (item.url === "/dashboard" && !isCrewContext && !isAdminHomeContext) return false;
-    return isAdmin || !item.adminOnly;
-  });
+  const scopedNavItems = navItems.filter((item) => canAccessNavItem(item, navAccess))
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({})
 
   return (
@@ -235,7 +279,10 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
         <SidebarMenu>
           {scopedNavItems.map((item) => {
             const Icon = item.icon
-            const subItems = visibleSubItems(sectionSubItems[item.url], isAdmin)?.filter(
+            const subItems = visibleSubItems(sectionSubItems[item.url], {
+              isAdmin,
+              hasOperationsAccess,
+            })?.filter(
               (subItem) =>
                 !(
                   isAdmin &&
