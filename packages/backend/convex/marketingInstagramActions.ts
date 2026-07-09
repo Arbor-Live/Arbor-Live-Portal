@@ -4,52 +4,55 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalAction } from "./_generated/server";
 
-async function publishToInstagram(imageUrl: string, caption: string) {
-  const accessToken = process.env.META_ACCESS_TOKEN;
-  const accountId = process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID;
-  if (!accessToken || !accountId) {
-    throw new Error("Instagram credentials are not configured.");
+type PostPeerResponse = {
+  id?: string;
+  postId?: string;
+  data?: { id?: string };
+  error?: string;
+  message?: string;
+};
+
+function getPostPeerAccessKey() {
+  return process.env.POSTPEER_ACCESS_KEY ?? process.env.POSTPEER_SECRET;
+}
+
+async function publishToInstagramViaPostPeer(imageUrl: string, caption: string) {
+  const accessKey = getPostPeerAccessKey();
+  const accountId = process.env.POSTPEER_INSTAGRAM_ACCOUNT_ID;
+  if (!accessKey || !accountId) {
+    throw new Error("PostPeer credentials are not configured.");
   }
 
-  const containerResponse = await fetch(
-    `https://graph.facebook.com/v21.0/${accountId}/media`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        image_url: imageUrl,
-        caption,
-        access_token: accessToken,
-      }),
+  const response = await fetch("https://api.postpeer.dev/v1/posts", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-access-key": accessKey,
     },
-  );
-  const containerJson = (await containerResponse.json()) as {
-    id?: string;
-    error?: { message?: string };
-  };
-  if (!containerResponse.ok || !containerJson.id) {
-    throw new Error(containerJson.error?.message ?? "Failed to create Instagram media container.");
+    body: JSON.stringify({
+      content: caption,
+      platforms: [
+        {
+          platform: "instagram",
+          accountId,
+          mediaItems: [
+            {
+              url: imageUrl,
+              type: "image",
+            },
+          ],
+        },
+      ],
+    }),
+  });
+
+  const body = (await response.json().catch(() => ({}))) as PostPeerResponse;
+  if (!response.ok) {
+    throw new Error(body.message ?? body.error ?? `PostPeer publish failed (${response.status}).`);
   }
 
-  const publishResponse = await fetch(
-    `https://graph.facebook.com/v21.0/${accountId}/media_publish`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        creation_id: containerJson.id,
-        access_token: accessToken,
-      }),
-    },
-  );
-  const publishJson = (await publishResponse.json()) as {
-    id?: string;
-    error?: { message?: string };
-  };
-  if (!publishResponse.ok || !publishJson.id) {
-    throw new Error(publishJson.error?.message ?? "Failed to publish Instagram media.");
-  }
-  return publishJson.id;
+  const postId = body.id ?? body.postId ?? body.data?.id;
+  return postId ?? "postpeer-published";
 }
 
 export const processJob = internalAction({
@@ -73,7 +76,7 @@ export const processJob = internalAction({
       });
       if (!design) throw new Error("Design not found.");
 
-      const instagramPostId = await publishToInstagram(design.imageUrl, caption);
+      const instagramPostId = await publishToInstagramViaPostPeer(design.imageUrl, caption);
       await ctx.runMutation(internal.marketingInstagram.markJobCompleted, {
         jobId: args.jobId,
         designId: job.designId,
