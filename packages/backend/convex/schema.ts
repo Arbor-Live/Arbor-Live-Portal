@@ -100,7 +100,7 @@ const userTeamValue = v.union(
   v.literal("Marketing"),
   v.literal("Operations"),
 );
-const organizationTypeValue = v.union(v.literal("arbor_internal"), v.literal("band"));
+const organizationTypeValue = v.union(v.literal("arbor_internal"), v.literal("band"), v.literal("dj"));
 
 const eventArtifactTypeValue = v.union(
   v.literal("note"),
@@ -602,10 +602,25 @@ export default defineSchema({
     publicSlug: v.optional(v.string()),
     publicHeroImageUrl: v.optional(v.string()),
     updatedAt: v.number(),
+
+    //expanding orgs to include the additional fields for bands and djs
+    orgCreationTime: v.optional(v.number()),
+    techRiderURL: v.optional(v.string()),
+    numShowsRan: v.optional(v.number()),
+    demoUrl: v.optional(v.string()),
+    genres: v.optional(v.array(v.string())),
+    mainContactName: v.optional(v.string()),
+    mainContactEmail: v.optional(v.string()),
+    mainContactPhone: v.optional(v.string()),
+    status: v.optional(v.string()), //e.g. active, disbanded, inactive, unknown
+
+
   })
     .index("by_organizationId", ["organizationId"])
     .index("by_organizationType", ["organizationType"])
-    .index("by_publicSlug", ["publicSlug"]),
+    .index("by_publicSlug", ["publicSlug"])
+    //to allow searching for orgs by display name (mainly for band/dj search)
+    .index("by_displayName", ["displayName"]),
 
   userActiveOrganizations: defineTable({
     userId: v.string(),
@@ -867,4 +882,6 @@ export default defineSchema({
     .index("by_eventId", ["eventId"])
     .index("by_eventId_and_sortOrder", ["eventId", "sortOrder"])
     .index("by_packageId", ["packageId"]),
+
+
 });

@@ -73,6 +73,7 @@ import type * as lib_publicSlug from "../lib/publicSlug.js";
 import type * as lib_trustedOrigins from "../lib/trustedOrigins.js";
 import type * as lostFoundSettings from "../lostFoundSettings.js";
 import type * as migrations_referenceIds from "../migrations/referenceIds.js";
+import type * as organizationImporter from "../organizationImporter.js";
 import type * as paymentProof from "../paymentProof.js";
 import type * as paymentProofInternals from "../paymentProofInternals.js";
 import type * as paymentProofPublic from "../paymentProofPublic.js";
@@ -154,6 +155,7 @@ declare const fullApi: ApiFromModules<{
   "lib/trustedOrigins": typeof lib_trustedOrigins;
   lostFoundSettings: typeof lostFoundSettings;
   "migrations/referenceIds": typeof migrations_referenceIds;
+  organizationImporter: typeof organizationImporter;
   paymentProof: typeof paymentProof;
   paymentProofInternals: typeof paymentProofInternals;
   paymentProofPublic: typeof paymentProofPublic;

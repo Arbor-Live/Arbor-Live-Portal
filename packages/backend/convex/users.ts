@@ -117,8 +117,8 @@ async function resolveOrCreateOrganization(ctx: MutationCtx, name: string) {
 
 function resolveOrganizationType(
   organization: OrganizationRow | undefined,
-  profile?: { organizationType: "arbor_internal" | "band" } | null,
-): "arbor_internal" | "band" {
+  profile?: { organizationType: "arbor_internal" | "band" | "dj" } | null,
+): "arbor_internal" | "band" | "dj" {
   if (isArborOrganization(organization)) return "arbor_internal";
   return profile?.organizationType ?? "band";
 }
@@ -285,7 +285,7 @@ export const listBandOrganizationsAdmin = query({
           publicHeroImageUrl: profile?.publicHeroImageUrl ?? "",
         };
       })
-      .filter((organization) => organization.organizationType === "band")
+      .filter((organization) => organization.organizationType === "band" || organization.organizationType === "dj")
       .sort((a, b) => a.name.localeCompare(b.name));
   },
 });
@@ -332,7 +332,7 @@ export const updateBandOrganizationProfileAdmin = mutation({
       .unique();
     if (existing) {
       await ctx.db.patch(existing._id, {
-        organizationType: "band",
+        organizationType: existing.organizationType ?? "band",
         displayName: args.displayName?.trim() || undefined,
         bio: args.bio?.trim() || undefined,
         performerHourlyRateUsd: args.performerHourlyRateUsd ?? existing.performerHourlyRateUsd,
@@ -364,7 +364,7 @@ export const updateBandOrganizationProfileAdmin = mutation({
 });
 
 export const createOrganizationAdmin = mutation({
-  args: { name: v.string(), organizationType: v.optional(v.union(v.literal("arbor_internal"), v.literal("band"))) },
+  args: { name: v.string(), organizationType: v.optional(v.union(v.literal("arbor_internal"), v.literal("band"), v.literal("dj"))) },
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
     const orgName = args.name.trim();
@@ -1191,7 +1191,7 @@ export const updateActiveBandProfile = mutation({
       .unique();
     if (existing) {
       await ctx.db.patch(existing._id, {
-        organizationType: "band",
+        organizationType: existing.organizationType ?? "band",
         displayName: args.displayName?.trim() || undefined,
         bio: args.bio?.trim() || undefined,
         performerHourlyRateUsd: args.performerHourlyRateUsd ?? existing.performerHourlyRateUsd,
@@ -1338,7 +1338,7 @@ export const backfillUserAdminDefaults = mutation({
         .withIndex("by_organizationId", (q) => q.eq("organizationId", orgId))
         .unique();
       if (existing) {
-        if (existing.organizationType !== "band") {
+        if (existing.organizationType !== "band" && existing.organizationType !== "dj") {
           await ctx.db.patch(existing._id, { organizationType: "band", updatedAt: now });
         }
       } else {
