@@ -6,6 +6,7 @@ import {
 } from "@/components/ui/card";
 import { ArborOnlyGuard } from "@/components/org-context-guard";
 import { UsersManagementClient } from "@/components/users/users-management-client";
+import { OrganizationCSVImporter } from "@/components/org-csv-importer";
 
 export default function UsersOrganizationsPage() {
   return (
@@ -20,6 +21,7 @@ export default function UsersOrganizationsPage() {
       </Card>
       <ArborOnlyGuard>
         <UsersManagementClient view="organizations" />
+        <OrganizationCSVImporter />
       </ArborOnlyGuard>
     </div>
   );

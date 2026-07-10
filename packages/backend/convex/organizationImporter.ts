@@ -40,7 +40,8 @@ export const batchImport = mutation({
         performerHourlyRateUsd: v.optional(v.number()),
         techRiderURL: v.optional(v.string()),
         status: v.optional(v.string()), //e.g. active, disbanded, inactive, unknown
-
+        bandMembers: v.optional(v.array(v.string())), //list of names of band members but not necessarily auth users of the website
+        oneLiner: v.optional(v.string()),
         //might need to do a .toLowerCase() on this field to make sure it is consistent with the other orgs in the database
         organizationType: v.optional(
           v.union(v.literal("arbor_internal"), v.literal("band"), v.literal("dj"))),

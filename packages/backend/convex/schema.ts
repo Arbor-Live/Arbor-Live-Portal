@@ -607,13 +607,14 @@ export default defineSchema({
     orgCreationTime: v.optional(v.number()),
     techRiderURL: v.optional(v.string()),
     numShowsRan: v.optional(v.number()),
-    demoUrl: v.optional(v.string()),
+    demoURL: v.optional(v.string()),
     genres: v.optional(v.array(v.string())),
     mainContactName: v.optional(v.string()),
     mainContactEmail: v.optional(v.string()),
     mainContactPhone: v.optional(v.string()),
     status: v.optional(v.string()), //e.g. active, disbanded, inactive, unknown
-
+    bandMembers: v.optional(v.array(v.string())), //members of the band but arent necessarily users on the website.  
+    oneLiner: v.optional(v.string()), //short description of the band/dj for public listing page
 
   })
     .index("by_organizationId", ["organizationId"])
