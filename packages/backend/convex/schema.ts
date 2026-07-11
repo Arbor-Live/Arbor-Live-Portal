@@ -75,7 +75,11 @@ const eventStatusValue = v.union(
   v.literal("completed"),
 );
 
-const eventVisibilityValue = v.union(v.literal("internal"), v.literal("public"));
+const eventVisibilityValue = v.union(
+  v.literal("public"),
+  v.literal("internal"),
+  v.literal("informational"),
+);
 
 const eventTimelineBlockTypeValue = v.union(
   v.literal("setup"),
@@ -100,7 +104,41 @@ const userTeamValue = v.union(
   v.literal("Marketing"),
   v.literal("Operations"),
 );
+const userVerticalValue = v.union(
+  v.literal("Operations"),
+  v.literal("Crew"),
+  v.literal("Trivia"),
+  v.literal("Marketing"),
+);
+
+const userDisciplineValue = v.union(v.literal("Sound"), v.literal("Lights"), v.literal("Design"));
+
+const marketingDesignLinkValue = v.object({
+  label: v.string(),
+  url: v.string(),
+});
+
+const marketingDesignStatusValue = v.union(
+  v.literal("draft"),
+  v.literal("ready"),
+  v.literal("published"),
+);
+
+const marketingPublishJobStatusValue = v.union(
+  v.literal("queued"),
+  v.literal("processing"),
+  v.literal("completed"),
+  v.literal("failed"),
+);
+
 const organizationTypeValue = v.union(v.literal("arbor_internal"), v.literal("band"), v.literal("dj"));
+
+const marketingPostKindValue = v.union(v.literal("case_study"), v.literal("blog"));
+
+const marketingFeaturedStatValue = v.object({
+  label: v.string(),
+  value: v.string(),
+});
 
 const eventArtifactTypeValue = v.union(
   v.literal("note"),
@@ -140,6 +178,16 @@ const eventPullListSourceValue = v.union(
 
 const eventPullListLineKindValue = v.union(v.literal("type"), v.literal("package"));
 
+const immichAlbumEntityTypeValue = v.union(v.literal("band"), v.literal("event"));
+
+const immichAssetTypeValue = v.union(v.literal("IMAGE"), v.literal("VIDEO"));
+
+const eventBandParticipationRoleValue = v.union(
+  v.literal("headliner"),
+  v.literal("support"),
+  v.literal("other"),
+);
+
 const paymentProofMethodValue = v.union(
   v.literal("assu_epay"),
   v.literal("ijournal"),
@@ -150,6 +198,23 @@ const paymentProofSubmissionStatusValue = v.union(
   v.literal("active"),
   v.literal("invalidated"),
 );
+
+const bandPaymentPricingModeValue = v.union(
+  v.literal("per_member_hourly"),
+  v.literal("fixed_total"),
+);
+
+const bandPaymentStatusValue = v.union(
+  v.literal("draft"),
+  v.literal("pending_payee"),
+  v.literal("pending_email"),
+  v.literal("awaiting_confirmation"),
+  v.literal("confirmed"),
+  v.literal("paid"),
+  v.literal("cancelled"),
+);
+
+const dashboardKeyValue = v.union(v.literal("crewHome"), v.literal("adminHome"));
 
 export default defineSchema({
   inventoryCategories: defineTable({
@@ -204,7 +269,8 @@ export default defineSchema({
     .index("by_name", ["name"])
     .index("by_category", ["category"])
     .index("by_category_and_name", ["category", "name"])
-    .index("by_publicSlug", ["publicSlug"]),
+    .index("by_publicSlug", ["publicSlug"])
+    .index("by_publicListing", ["publicListing"]),
 
   storageLocations: defineTable({
     name: v.string(),
@@ -258,7 +324,8 @@ export default defineSchema({
   })
     .index("by_name", ["name"])
     .index("by_active", ["active"])
-    .index("by_publicSlug", ["publicSlug"]),
+    .index("by_publicSlug", ["publicSlug"])
+    .index("by_publicListing", ["publicListing"]),
 
   inventoryPackageItems: defineTable({
     packageId: v.id("inventoryPackages"),
@@ -309,6 +376,7 @@ export default defineSchema({
     crewNormalRateUsd: v.optional(v.number()),
     crewLeadRateUsd: v.optional(v.number()),
     crewOtRateUsd: v.optional(v.number()),
+    crewCostBufferPercent: v.optional(v.number()),
     termsAndConditionsMarkdown: v.optional(v.string()),
     termsVersion: v.optional(v.string()),
     updatedAt: v.number(),
@@ -404,6 +472,8 @@ export default defineSchema({
     paymentReceivedByUserId: v.optional(v.string()),
     paymentReceiptStorageFileId: v.optional(v.id("_storage")),
 
+    billableOccurrenceCountAtSave: v.optional(v.number()),
+
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -429,6 +499,7 @@ export default defineSchema({
     packageId: v.optional(v.id("inventoryPackages")),
     typeId: v.optional(v.id("inventoryTypes")),
     feeDefinitionId: v.optional(v.id("invoiceFeeDefinitions")),
+    equipmentQuantityBasis: v.optional(v.union(v.literal("total"), v.literal("per_occurrence"))),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -501,11 +572,13 @@ export default defineSchema({
         }),
       ),
     ),
+    invoiceId: v.optional(v.id("invoices")),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_status", ["status"])
-    .index("by_createdAt", ["createdAt"]),
+    .index("by_createdAt", ["createdAt"])
+    .index("by_invoiceId", ["invoiceId"]),
 
   events: defineTable({
     title: v.string(),
@@ -532,12 +605,33 @@ export default defineSchema({
     budgetUsd: v.optional(v.number()),
     dayOfLeadUserId: v.optional(v.string()),
     eventManagerUserId: v.optional(v.string()),
+    otPremium: v.optional(v.boolean()),
+    crewCostBufferPercent: v.optional(v.number()),
     crewCostUsd: v.optional(v.number()),
     bandsCostUsd: v.optional(v.number()),
     externalRentalsCostUsd: v.optional(v.number()),
     otherCostUsd: v.optional(v.number()),
     rentalFulfillmentMode: v.optional(rentalFulfillmentModeValue),
     notes: v.optional(v.string()),
+    sourceEventRequestId: v.optional(v.id("eventRequests")),
+
+    /** Event add-ons (per-event feature toggles). Open Mic is the first add-on. */
+    openMicEnabled: v.optional(v.boolean()),
+    /** Runner operational state for the Open Mic add-on. Drives the public
+     *  sign-up window (scheduled/live) and runner UI gating. Independent from
+     *  the event's own lifecycle status so running the queue never fights the
+     *  broader event workflow. */
+    openMicStatus: v.optional(
+      v.union(
+        v.literal("scheduled"),
+        v.literal("live"),
+        v.literal("completed"),
+        v.literal("cancelled"),
+      ),
+    ),
+    /** Free-form crew notes shown on the Open Mic runner and public sign-up. */
+    openMicNotes: v.optional(v.string()),
+
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -547,7 +641,9 @@ export default defineSchema({
     .index("by_publicToken", ["publicToken"])
     .index("by_startAt", ["startAt"])
     .index("by_createdAt", ["createdAt"])
-    .index("by_seriesId_and_occurrenceIndex", ["seriesId", "occurrenceIndex"]),
+    .index("by_seriesId_and_occurrenceIndex", ["seriesId", "occurrenceIndex"])
+    .index("by_sourceEventRequestId", ["sourceEventRequestId"])
+    .index("by_openMicEnabled_and_startAt", ["openMicEnabled", "startAt"]),
 
   userCompensationRates: defineTable({
     userId: v.string(),
@@ -565,9 +661,14 @@ export default defineSchema({
     phone: v.optional(v.string()),
     avatarStorageId: v.optional(v.id("_storage")),
     active: v.boolean(),
-    teams: v.array(userTeamValue),
+    /** @deprecated Use verticals + disciplines. Kept for migration reads. */
+    teams: v.optional(v.array(userTeamValue)),
+    verticals: v.optional(v.array(userVerticalValue)),
+    disciplines: v.optional(v.array(userDisciplineValue)),
     /** When true, user appears on the public /crew page (opt-in). */
     showOnPublicCrewPage: v.optional(v.boolean()),
+    /** Admin-written blurb shown on the public /crew page. */
+    publicCrewDescription: v.optional(v.string()),
     calendarInviteEmail: v.optional(v.string()),
     defaultOrganizationId: v.optional(v.string()),
     createdAt: v.number(),
@@ -595,6 +696,10 @@ export default defineSchema({
     displayName: v.optional(v.string()),
     bio: v.optional(v.string()),
     performerHourlyRateUsd: v.optional(v.number()),
+    designatedPayeeUserId: v.optional(v.string()),
+    designatedPayeeName: v.optional(v.string()),
+    designatedPayeeEmail: v.optional(v.string()),
+    designatedPayeeMailingAddress: v.optional(v.string()),
     publicWebsiteUrl: v.optional(v.string()),
     publicInstagramUrl: v.optional(v.string()),
     publicYoutubeUrl: v.optional(v.string()),
@@ -630,6 +735,17 @@ export default defineSchema({
   })
     .index("by_userId", ["userId"])
     .index("by_organizationId", ["organizationId"]),
+
+  dashboardPreferences: defineTable({
+    userId: v.string(),
+    dashboardKey: dashboardKeyValue,
+    widgetOrder: v.array(v.string()),
+    hiddenWidgetIds: v.array(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_userId_and_dashboardKey", ["userId", "dashboardKey"]),
 
   eventScheduleBlocks: defineTable({
     eventId: v.id("events"),
@@ -683,7 +799,17 @@ export default defineSchema({
     .index("by_eventId", ["eventId"])
     .index("by_eventId_and_startsAt", ["eventId", "startsAt"])
     .index("by_scheduleBlockId", ["scheduleBlockId"])
-    .index("by_expenseReportId", ["expenseReportId"]),
+    .index("by_expenseReportId", ["expenseReportId"])
+    .index("by_userId_and_startsAt", ["userId", "startsAt"]),
+
+  eventCrewMediaStatus: defineTable({
+    eventId: v.id("events"),
+    userId: v.string(),
+    status: v.union(v.literal("uploaded"), v.literal("no_media")),
+    resolvedAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_eventId_and_userId", ["eventId", "userId"]),
 
   eventCrewAvailabilityResponses: defineTable({
     eventId: v.id("events"),
@@ -731,6 +857,41 @@ export default defineSchema({
     .index("by_artifactType", ["artifactType"])
     .index("by_eventId_and_artifactType", ["eventId", "artifactType"]),
 
+  immichAlbumLinks: defineTable({
+    entityType: immichAlbumEntityTypeValue,
+    entityId: v.string(),
+    immichAlbumId: v.string(),
+    albumName: v.string(),
+    sharedLinkId: v.optional(v.string()),
+    sharedLinkKey: v.optional(v.string()),
+    shareUrl: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_entityType_and_entityId", ["entityType", "entityId"])
+    .index("by_immichAlbumId", ["immichAlbumId"]),
+
+  immichAssetRecords: defineTable({
+    albumLinkId: v.id("immichAlbumLinks"),
+    immichAssetId: v.string(),
+    originalFileName: v.string(),
+    type: immichAssetTypeValue,
+    createdAt: v.number(),
+  })
+    .index("by_albumLinkId", ["albumLinkId"])
+    .index("by_immichAssetId", ["immichAssetId"]),
+
+  eventBandParticipations: defineTable({
+    eventId: v.id("events"),
+    organizationId: v.string(),
+    role: eventBandParticipationRoleValue,
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_eventId", ["eventId"])
+    .index("by_organizationId", ["organizationId"])
+    .index("by_eventId_and_organizationId", ["eventId", "organizationId"]),
+
   // Phase 2: eventPullListAssetAssignments (pullListItemId, inventoryItemId, checkedOutAt)
   pendingUserInvites: defineTable({
     invitationId: v.string(),
@@ -738,7 +899,10 @@ export default defineSchema({
     email: v.string(),
     organizationId: v.string(),
     role: v.string(),
+    /** @deprecated Use verticals + disciplines on invite acceptance. */
     teams: v.optional(v.array(v.string())),
+    verticals: v.optional(v.array(v.string())),
+    disciplines: v.optional(v.array(v.string())),
     expiresAt: v.number(),
     createdAt: v.number(),
   })
@@ -760,6 +924,9 @@ export default defineSchema({
       v.literal("payment_proof_reminder"),
       v.literal("payment_proof_submitted"),
       v.literal("paying_party_added"),
+      v.literal("band_payment_confirmation"),
+      v.literal("band_payment_completed"),
+      v.literal("band_payment_payee_required"),
     ),
     status: v.union(v.literal("queued"), v.literal("sent"), v.literal("failed")),
     to: v.string(),
@@ -833,6 +1000,7 @@ export default defineSchema({
     lightingPreference: v.optional(v.string()),
     additionalNotes: v.optional(v.string()),
     convertedEventId: v.optional(v.id("events")),
+    convertedEventIds: v.optional(v.array(v.id("events"))),
     linkedInvoiceId: v.optional(v.id("invoices")),
     reviewedByUserId: v.optional(v.string()),
     staffNotes: v.optional(v.string()),
@@ -845,6 +1013,49 @@ export default defineSchema({
     .index("by_publicToken", ["publicToken"])
     .index("by_requestNumber", ["requestNumber"])
     .index("by_linkedInvoiceId", ["linkedInvoiceId"]),
+
+  eventBandPayments: defineTable({
+    eventId: v.id("events"),
+    organizationId: v.string(),
+    pricingMode: bandPaymentPricingModeValue,
+    ratePerMemberPerHourUsd: v.optional(v.number()),
+    performanceHours: v.optional(v.number()),
+    memberCount: v.optional(v.number()),
+    totalUsd: v.number(),
+    designatedPayeeName: v.optional(v.string()),
+    designatedPayeeEmail: v.optional(v.string()),
+    designatedPayeeUserId: v.optional(v.string()),
+    designatedPayeeMailingAddress: v.optional(v.string()),
+    status: bandPaymentStatusValue,
+    confirmationToken: v.string(),
+    confirmationEmailSentAt: v.optional(v.number()),
+    confirmationEmailNotificationId: v.optional(v.id("emailNotifications")),
+    confirmationResendEmailId: v.optional(v.string()),
+    confirmedAt: v.optional(v.number()),
+    confirmationReplyFrom: v.optional(v.string()),
+    confirmationReplyBody: v.optional(v.string()),
+    confirmationReplyEmailId: v.optional(v.string()),
+    servicePaymentNumber: v.optional(v.string()),
+    paidAt: v.optional(v.number()),
+    paidByUserId: v.optional(v.string()),
+    bandNotifiedAt: v.optional(v.number()),
+    photoAlbumUrl: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_eventId", ["eventId"])
+    .index("by_organizationId", ["organizationId"])
+    .index("by_status", ["status"])
+    .index("by_eventId_and_organizationId", ["eventId", "organizationId"])
+    .index("by_confirmationToken", ["confirmationToken"]),
+
+  bandPaymentSettings: defineTable({
+    key: v.string(),
+    photoAlbumUrl: v.optional(v.string()),
+    financialManagerName: v.optional(v.string()),
+    financialManagerPronouns: v.optional(v.string()),
+    updatedAt: v.number(),
+  }).index("by_key", ["key"]),
 
   eventPaymentProofSubmissions: defineTable({
     eventId: v.id("events"),
@@ -884,5 +1095,125 @@ export default defineSchema({
     .index("by_eventId_and_sortOrder", ["eventId", "sortOrder"])
     .index("by_packageId", ["packageId"]),
 
+  eventSeriesPullListItems: defineTable({
+    seriesId: v.id("eventSeries"),
+    lineKind: eventPullListLineKindValue,
+    typeId: v.optional(v.id("inventoryTypes")),
+    packageId: v.optional(v.id("inventoryPackages")),
+    label: v.string(),
+    quantityRequired: v.number(),
+    source: eventPullListSourceValue,
+    sourcePackageId: v.optional(v.id("inventoryPackages")),
+    sourceInvoiceLineKey: v.optional(v.string()),
+    sortOrder: v.number(),
+    notes: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_seriesId", ["seriesId"])
+    .index("by_seriesId_and_sortOrder", ["seriesId", "sortOrder"]),
 
+  eventMarketingDesigns: defineTable({
+    eventId: v.id("events"),
+    assigneeUserId: v.optional(v.string()),
+    imageUrl: v.optional(v.string()),
+    caption: v.optional(v.string()),
+    additionalLinks: v.optional(v.array(marketingDesignLinkValue)),
+    status: marketingDesignStatusValue,
+    instagramPostId: v.optional(v.string()),
+    publishedAt: v.optional(v.number()),
+    lastError: v.optional(v.string()),
+    createdByUserId: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_eventId", ["eventId"])
+    .index("by_assigneeUserId_and_status", ["assigneeUserId", "status"])
+    .index("by_status", ["status"]),
+
+  marketingPublishJobs: defineTable({
+    designId: v.id("eventMarketingDesigns"),
+    status: marketingPublishJobStatusValue,
+    target: v.union(v.literal("instagram"), v.literal("website")),
+    lastError: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_designId", ["designId"])
+    .index("by_status", ["status"]),
+
+  marketingPosts: defineTable({
+    title: v.string(),
+    slug: v.optional(v.string()),
+    excerpt: v.optional(v.string()),
+    kind: marketingPostKindValue,
+    heroImageUrl: v.optional(v.string()),
+    featuredStats: v.optional(v.array(marketingFeaturedStatValue)),
+    contentJson: v.string(),
+    published: v.boolean(),
+    featured: v.boolean(),
+    publishedAt: v.optional(v.number()),
+    updatedByUserId: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_slug", ["slug"])
+    .index("by_published_and_publishedAt", ["published", "publishedAt"])
+    .index("by_published_and_featured", ["published", "featured"]),
+
+  // Fixed-window counters backing the public-endpoint rate limiter. One row per
+  // limiter key (e.g. `submitPublic:email@stanford.edu`). Pruned daily by cron.
+  rateLimitHits: defineTable({
+    key: v.string(),
+    windowStartMs: v.number(),
+    count: v.number(),
+  })
+    .index("by_key", ["key"])
+    .index("by_windowStartMs", ["windowStartMs"]),
+
+  /** Singleton row: global marketing feature flags. Extend with new fields as
+   *  more sections gain admin-toggled marketing boosts. */
+  marketingSettings: defineTable({
+    /** When true, the public Open Mic sign-up form shows the Arbor Live intro
+     *  slide (promo video background + socials link) before the form steps. */
+    openMicMarketingBoost: v.boolean(),
+    updatedAt: v.number(),
+  }),
+
+  openMicSignups: defineTable({
+    /** Event this sign-up belongs to. Open Mic is an add-on on events, so
+     *  sign-ups are keyed to the event instead of a standalone night entity. */
+    eventId: v.id("events"),
+    name: v.string(),
+    email: v.string(),
+    whatTheyreDoing: v.string(),
+    equipment: v.array(v.string()),
+    /** Required when equipment includes "Background Music". */
+    bgMusicLink: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    /** "queued" = waiting in FCFS order, "current" = on stage now,
+     *  "performed" = already went up, "removed" = crew dropped them. */
+    status: v.union(
+      v.literal("queued"),
+      v.literal("current"),
+      v.literal("performed"),
+      v.literal("removed"),
+    ),
+    /** Strike counter for "Not here" presses. 0 → front of queue, 1 → back of
+     *  queue, 2 → removed. Reset to 0 when a signup becomes current again. */
+    skipsCount: v.number(),
+    /** Monotonic order key (lower = earlier). New signups use Date.now();
+     *  bumped-up signups get a value just below the current front to stay
+     *  ahead of the rest of the queue. */
+    position: v.number(),
+    /** Epoch ms when status transitioned to "performed". For the leaderboard. */
+    performedAt: v.optional(v.number()),
+    submittedAt: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_eventId_and_position", ["eventId", "position"])
+    .index("by_eventId_and_status", ["eventId", "status"])
+    .index("by_status_and_performedAt", ["status", "performedAt"])
+    .index("by_email", ["email"]),
 });

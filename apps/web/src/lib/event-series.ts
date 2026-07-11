@@ -1,3 +1,5 @@
+import { formatDateTime } from "@/lib/format";
+
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 export type RecurrenceEndMode = "count" | "date";
@@ -45,13 +47,7 @@ export function computeOccurrenceStarts(args: {
 }
 
 export function formatOccurrencePreview(value: number) {
-  return new Intl.DateTimeFormat("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(value));
+  return formatDateTime(value, "short");
 }
 
 export type SeriesEditScope = "this" | "future" | "all";

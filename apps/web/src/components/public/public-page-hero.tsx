@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Reveal } from "@/components/landing/landing-motion";
-import { PublicPageHeroBackground } from "@/components/public/public-page-hero-background";
+import { OptimizedRemoteImage } from "@/components/media/optimized-remote-image";
 import { cn } from "@/lib/utils";
 
 type PublicPageHeroProps = {
@@ -39,8 +39,12 @@ export function PublicPageHero({
             aria-hidden
             className="pointer-events-none absolute inset-0 bg-gradient-to-br from-emerald-900/80 via-primary/35 to-zinc-950"
           />
-          <PublicPageHeroBackground
-            storedValue={imageUrl!}
+          <OptimizedRemoteImage
+            src={imageUrl!}
+            alt=""
+            fill
+            priority
+            sizes="100vw"
             className="absolute inset-0 size-full object-cover opacity-45"
           />
           <div

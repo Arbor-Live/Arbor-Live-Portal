@@ -31,7 +31,7 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const token = await getToken();
+  const initialToken = await getToken();
 
   return (
     <html
@@ -41,7 +41,7 @@ export default async function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <ThemeProvider>
-          <ConvexClientProvider initialToken={token}>
+          <ConvexClientProvider initialToken={initialToken}>
             {children}
           </ConvexClientProvider>
         </ThemeProvider>

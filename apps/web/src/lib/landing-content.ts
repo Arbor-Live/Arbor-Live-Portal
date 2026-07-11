@@ -37,11 +37,19 @@ export const landingHero = {
     "The only student-run live event production company at Stanford. We bring live music and production to every corner of campus.",
   primaryCta: { label: "Book your event", href: "/public/request" },
   secondaryCta: { label: "Explore equipment", href: "/public/packages" },
+  /** H.264 plays in Chrome/Firefox; HEVC is smaller and used on Safari when supported. */
+  backgroundVideoSrc: "/dnm-opti-h264.mp4",
+  backgroundVideoSrcHevc: "/dnm-opti-265.mp4",
+  backgroundVideoCredit: {
+    label: "Verducci Event Productions",
+    href: "https://wearevep.com?utm_source=arborlive&utm_medium=referral",
+  },
 } as const;
 
 export const landingMission = {
   title: "Spread joy and spark connections",
-  body: "Our mission is to bring live music to every corner of campus — from trivia nights to open mics, jams, and full production for your group.",
+  body:
+    "Our mission is to bring live music to every corner of campus — from trivia nights to open mics, jams, and full production for your group.",
   seriesTitle: "Weekly on campus",
   seriesSubtitle: "Show up, bring friends, and make some noise.",
 } as const;
@@ -53,7 +61,11 @@ export const landingPrograms: LandingProgram[] = [
     description:
       "Ahhhh the good ol' classic! Join us every Thursday right outside Arbor Bar next to the huge screen for fun trivia with friends. Come with your crew, pick a team name, and get answering!",
     schedule: { when: "Thu · 7pm", where: "Arbor Bar" },
-    cta: { label: "Open Instagram", href: "https://instagram.com/arbortrivia", external: true },
+    cta: {
+      label: "Open Instagram",
+      href: "https://instagram.com/arbortrivia",
+      external: true,
+    },
     imageGradient: "from-amber-900/70 via-primary/35 to-zinc-900",
   },
   {
@@ -75,7 +87,10 @@ export const landingPrograms: LandingProgram[] = [
     description:
       "Join us at CoHo every other Wednesday to show off your skills! Whether you're a singer, a comedian, or want to show off something cool — we're eager to see what you've got.",
     schedule: { when: "Wed · 8pm", where: "CoHo" },
-    cta: { label: "Sign up to perform", href: `${ARBOR_EXTERNAL_SITE}/open-mic`, external: true },
+    cta: {
+      label: "Sign up to perform",
+      href: "/public/open-mic",
+    },
     imageGradient: "from-violet-950/80 via-primary/25 to-zinc-900",
   },
   {
@@ -96,7 +111,11 @@ export const landingPrograms: LandingProgram[] = [
     title: "The Arbor Live Stage",
     description:
       "Join us every week during Fall and Spring quarters and listen to the best bands on campus perform in a relaxed setting. Grab dinner, hang out, and party like it's 1999.",
-    cta: { label: "See what's on", href: `${ARBOR_EXTERNAL_SITE}/socials`, external: true },
+    cta: {
+      label: "See what's on",
+      href: `${ARBOR_EXTERNAL_SITE}/socials`,
+      external: true,
+    },
     imageGradient: "from-emerald-900/80 via-primary/40 to-zinc-900",
   },
   {
@@ -156,6 +175,7 @@ export const landingFaqs: LandingFaq[] = [
 
 export const landingNavLinks: LandingLink[] = [
   { label: "Programs", href: "/#programs" },
+  { label: "Work", href: "/work" },
   { label: "Crew", href: "/crew" },
   { label: "Artists", href: "/artists" },
   { label: "Equipment", href: "/public/packages" },
@@ -163,11 +183,20 @@ export const landingNavLinks: LandingLink[] = [
 ];
 
 export const landingFooterLinks: LandingLink[] = [
+  { label: "Our Work", href: "/work" },
   { label: "The Team", href: "/crew" },
   { label: "Artists", href: "/artists" },
   { label: "Book Us", href: "/public/request" },
-  { label: "Instagram", href: "https://instagram.com/thearborstanford", external: true },
-  { label: "Feedback", href: `${ARBOR_EXTERNAL_SITE}/feedback`, external: true },
+  {
+    label: "Instagram",
+    href: "https://instagram.com/thearborstanford",
+    external: true,
+  },
+  {
+    label: "Feedback",
+    href: `${ARBOR_EXTERNAL_SITE}/feedback`,
+    external: true,
+  },
 ];
 
 export const landingPortalLinks: LandingLink[] = [

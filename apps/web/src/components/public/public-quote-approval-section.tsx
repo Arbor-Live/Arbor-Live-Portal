@@ -11,6 +11,7 @@ import {
   publicQuoteApprovalSchema,
   type PublicQuoteApprovalFormValues,
 } from "@/lib/validations/crew-availability";
+import { formatDateTime } from "@/lib/format";
 
 type InvoiceApprovalState = {
   clientApprovalStatus: "pending" | "approved" | "changes_requested";
@@ -20,14 +21,7 @@ type InvoiceApprovalState = {
 };
 
 function formatApprovalDate(ms: number) {
-  return new Date(ms).toLocaleString("en-US", {
-    timeZone: "America/Los_Angeles",
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  return formatDateTime(ms, "long");
 }
 
 function PaymentSubmitterFields({

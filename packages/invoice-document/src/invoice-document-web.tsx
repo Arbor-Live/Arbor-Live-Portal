@@ -157,11 +157,19 @@ function SectionTable({
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => (
-            <tr key={row.id} style={tableRowStyle}>
+          {rows.map((row, index) => (
+            <tr
+              key={row.id}
+              style={index < rows.length - 1 ? tableRowStyle : tableLastRowStyle}
+            >
               {showProvider ? <td style={tdStyle}>{row.provider || "—"}</td> : null}
               <td style={tdStyle}>{row.label}</td>
-              <td style={tdRightStyle}>{row.quantity}</td>
+              <td style={tdRightStyle}>
+                {row.quantity}
+                {row.quantityDetail ? (
+                  <div style={{ fontSize: "0.75rem", color: "#64748b" }}>{row.quantityDetail}</div>
+                ) : null}
+              </td>
               <td style={tdRightStyle}>{currency(row.rateUsd)}</td>
               <td style={tdAmountStyle}>{currency(row.amountUsd)}</td>
             </tr>
@@ -344,6 +352,8 @@ const thRightStyle: CSSProperties = {
 const tableRowStyle: CSSProperties = {
   borderBottom: `1px solid ${invoiceTheme.border}`,
 };
+
+const tableLastRowStyle: CSSProperties = {};
 
 const tdStyle: CSSProperties = {
   padding: "8px",

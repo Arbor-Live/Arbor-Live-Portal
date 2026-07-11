@@ -2,18 +2,9 @@
 
 import { useAction } from "convex/react";
 import { useState } from "react";
+import { downloadBytes } from "@/lib/download-bytes";
 import { api } from "@/lib/convex-api";
 import { Button } from "@/components/ui/button";
-
-function downloadBytes(bytes: ArrayBuffer, fileName: string) {
-  const blob = new Blob([bytes], { type: "application/pdf" });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = fileName;
-  anchor.click();
-  URL.revokeObjectURL(url);
-}
 
 export function PublicInvoicePdfDownload({
   token,

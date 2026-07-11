@@ -5,13 +5,28 @@ import { renderInvoicePdfBuffer } from "@arbor/invoice-document/pdf";
 import type { InvoiceDocumentData } from "@arbor/invoice-document/types";
 import type { Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
-import { action } from "./_generated/server";
+import { action, type ActionCtx } from "./_generated/server";
+import { HOUR_MS } from "./rateLimit";
 
 async function loadPublicInvoicePdf(
-  ctx: { runQuery: (...args: any[]) => Promise<unknown> },
+  ctx: ActionCtx,
   token: string,
   portal: "quote" | "request",
 ) {
+  // Rendering a PDF is CPU-heavy, so throttle these unauthenticated endpoints
+  // before doing any work. Per-token caps a single link; the global key bounds
+  // total render load.
+  await ctx.runMutation(internal.rateLimit.enforce, {
+    key: `pdf:${portal}:${token}`,
+    limit: 20,
+    windowMs: HOUR_MS,
+  });
+  await ctx.runMutation(internal.rateLimit.enforce, {
+    key: "pdf:global",
+    limit: 120,
+    windowMs: HOUR_MS,
+  });
+
   const invoiceId = (await ctx.runQuery(internal.paymentProofInternals.resolvePublicInvoiceId, {
     token,
     portal,

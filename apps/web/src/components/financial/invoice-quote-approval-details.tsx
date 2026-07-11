@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { formatDateTime } from "@/lib/format";
 
 type InvoiceApprovalRecord = {
   clientApprovalStatus?: "pending" | "approved" | "changes_requested";
@@ -27,14 +28,7 @@ type InvoiceApprovalRecord = {
 };
 
 function formatTimestamp(ms: number) {
-  return new Date(ms).toLocaleString("en-US", {
-    timeZone: "America/Los_Angeles",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  return formatDateTime(ms, "long");
 }
 
 function statusLabel(status: InvoiceApprovalRecord["clientApprovalStatus"]) {

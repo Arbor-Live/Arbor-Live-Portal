@@ -1,5 +1,4 @@
-import { InvoicePrintView } from "@/components/financial/invoice-print-view";
-import type { Id } from "@/lib/convex-api";
+import { redirect } from "next/navigation";
 
 export default async function InvoicePrintPage({
   params,
@@ -7,5 +6,5 @@ export default async function InvoicePrintPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  return <InvoicePrintView invoiceId={id as Id<"invoices">} />;
+  redirect(`/dashboard/financial-hub/invoices/${id}`);
 }

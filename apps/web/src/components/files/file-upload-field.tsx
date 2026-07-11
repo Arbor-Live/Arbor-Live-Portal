@@ -19,6 +19,7 @@ import {
   defaultTitleFromFileName,
   isImageAssetReference,
 } from "@/lib/r2-assets";
+import { ImmichImportButton } from "@/components/marketing/immich-library-picker";
 
 type R2UploadFieldProps = {
   label: string;
@@ -60,7 +61,11 @@ function R2UploadField({
   );
 
   const purpose =
-    uploadArgs.scope === "event" ? "artifact" : uploadArgs.purpose;
+    uploadArgs.scope === "event"
+      ? "artifact"
+      : uploadArgs.scope === "marketing" || uploadArgs.scope === "organization"
+        ? "hero"
+        : uploadArgs.purpose;
   const resolvedAccept = accept ?? defaultAcceptForPurpose(purpose);
 
   const handleFile = useCallback(
@@ -144,6 +149,17 @@ function R2UploadField({
           >
             {busy ? "Uploading…" : storedValue ? "Replace file" : "Choose file"}
           </Button>
+          {uploadArgs.scope === "marketing" ? (
+            <ImmichImportButton
+              postId={uploadArgs.postId}
+              imageKind={uploadArgs.imageKind}
+              disabled={busy}
+              onImported={(storedReference) => {
+                onUploaded(storedReference);
+                onUrlChange?.(storedReference);
+              }}
+            />
+          ) : null}
           {storedValue && onClear ? (
             <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={onClear}>
               Remove
@@ -191,6 +207,35 @@ export function FileUploadField(props: FileUploadFieldProps) {
   );
 }
 
+type MarketingPostHeroUploadFieldProps = {
+  postId?: string;
+  label?: string;
+  currentUrl?: string;
+  onUploaded: (storedValue: string) => void;
+  onClear?: () => void;
+  urlValue?: string;
+  onUrlChange?: (url: string) => void;
+  helperText?: string;
+  className?: string;
+};
+
+export function MarketingPostHeroUploadField({
+  postId,
+  label = "Cover image",
+  helperText = "Optional hero image for cards and the detail page. JPEG, PNG, WebP, GIF, or SVG up to 5 MB.",
+  ...rest
+}: MarketingPostHeroUploadFieldProps) {
+  return (
+    <R2UploadField
+      label={label}
+      uploadArgs={{ scope: "marketing", postId, imageKind: "hero" }}
+      accept="image/jpeg,image/png,image/webp,image/gif,image/svg+xml"
+      helperText={helperText}
+      {...rest}
+    />
+  );
+}
+
 type EventArtifactUploadFieldProps = {
   eventId: string;
   label?: string;
@@ -214,6 +259,36 @@ export function EventArtifactUploadField({
       label={label}
       uploadArgs={{ scope: "event", eventId, purpose: "artifact" }}
       helperText={helperText}
+      {...rest}
+    />
+  );
+}
+
+type BandHeroUploadFieldProps = {
+  organizationId: string;
+  label?: string;
+  currentUrl?: string;
+  onUploaded: (storedValue: string) => void;
+  onClear?: () => void;
+  urlValue?: string;
+  onUrlChange?: (url: string) => void;
+  helperText?: string;
+  className?: string;
+};
+
+export function BandHeroUploadField({
+  organizationId,
+  label = "Hero image",
+  helperText = "Shown on your public artist page. JPEG, PNG, WebP, GIF, or SVG up to 5 MB.",
+  ...rest
+}: BandHeroUploadFieldProps) {
+  return (
+    <R2UploadField
+      label={label}
+      uploadArgs={{ scope: "organization", organizationId }}
+      accept="image/jpeg,image/png,image/webp,image/gif,image/svg+xml"
+      helperText={helperText}
+      urlPlaceholder="https://… or upload a file"
       {...rest}
     />
   );

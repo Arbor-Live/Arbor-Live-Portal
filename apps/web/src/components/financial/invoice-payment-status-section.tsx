@@ -14,6 +14,7 @@ import {
   paymentProofReferenceLabel,
   type PaymentProofSubmissionFormValues,
 } from "@/lib/validations/payment-proof";
+import { formatDate, formatDateTime, formatUsd } from "@/lib/format";
 
 type PaymentStatus = "not_applicable" | "payment_received" | "proof_submitted" | "payment_pending" | "overdue";
 
@@ -23,30 +24,6 @@ const STATUS_LABELS: Record<Exclude<PaymentStatus, "not_applicable">, string> = 
   payment_pending: "Payment pending",
   overdue: "Overdue",
 };
-
-function formatUsd(value: number) {
-  return `$${value.toFixed(2)}`;
-}
-
-function formatDate(ms: number) {
-  return new Date(ms).toLocaleString("en-US", {
-    timeZone: "America/Los_Angeles",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-function formatDateTime(ms: number) {
-  return new Date(ms).toLocaleString("en-US", {
-    timeZone: "America/Los_Angeles",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
 
 export function InvoicePaymentStatusSection({ invoiceId }: { invoiceId: Id<"invoices"> }) {
   const details = useQuery(api.paymentProof.getByInvoiceId, { invoiceId });

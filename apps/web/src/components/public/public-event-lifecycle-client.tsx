@@ -15,6 +15,7 @@ import { PublicPaymentContactsSection } from "@/components/public/public-payment
 import { PublicQuoteApprovalSection } from "@/components/public/public-quote-approval-section";
 import { PublicQuoteChangeRequestSection } from "@/components/public/public-quote-change-request-section";
 import { PublicInvoicePdfDownload } from "@/components/public/public-invoice-pdf-download";
+import { formatUsd } from "@/lib/format";
 import type { PublicQuoteApprovalFormValues } from "@/lib/validations/crew-availability";
 import type { PublicPaymentContactsFormValues } from "@/lib/validations/crew-availability";
 
@@ -104,7 +105,7 @@ export function PublicEventLifecycleClient({ token }: { token: string }) {
             <p>Issued: {data.invoice.issueDate}</p>
             {data.invoice.clientGroupName ? <p>Group: {data.invoice.clientGroupName}</p> : null}
             {data.invoice.clientContactName ? <p>Contact: {data.invoice.clientContactName}</p> : null}
-            <p className="text-base font-semibold">Total: ${data.invoice.totalUsd.toFixed(2)}</p>
+            <p className="text-base font-semibold">Total: {formatUsd(data.invoice.totalUsd)}</p>
             <p className="text-muted-foreground">
               {quoteStatusLabel(data.invoice.clientApprovalStatus)}
             </p>

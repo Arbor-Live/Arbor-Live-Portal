@@ -10,6 +10,9 @@ import { TextareaFormField } from "@/components/forms/textarea-form-field";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { UserSelect } from "@/components/users/user-select";
+import { BandHeroUploadField } from "@/components/files/file-upload-field";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import {
   bandInviteSchema,
@@ -32,6 +35,10 @@ export function BandSelfServiceClient() {
       displayName: "",
       bio: "",
       performerHourlyRateUsd: 0,
+      designatedPayeeUserId: "",
+      designatedPayeeName: "",
+      designatedPayeeEmail: "",
+      designatedPayeeMailingAddress: "",
       publicWebsiteUrl: "",
       publicInstagramUrl: "",
       publicYoutubeUrl: "",
@@ -55,6 +62,10 @@ export function BandSelfServiceClient() {
       displayName: profile.displayName ?? "",
       bio: profile.bio ?? "",
       performerHourlyRateUsd: profile.performerHourlyRateUsd ?? 0,
+      designatedPayeeUserId: profile.designatedPayeeUserId ?? "",
+      designatedPayeeName: profile.designatedPayeeName ?? "",
+      designatedPayeeEmail: profile.designatedPayeeEmail ?? "",
+      designatedPayeeMailingAddress: profile.designatedPayeeMailingAddress ?? "",
       publicWebsiteUrl: profile.publicWebsiteUrl ?? "",
       publicInstagramUrl: profile.publicInstagramUrl ?? "",
       publicYoutubeUrl: profile.publicYoutubeUrl ?? "",
@@ -69,6 +80,10 @@ export function BandSelfServiceClient() {
       displayName: values.displayName,
       bio: values.bio || undefined,
       performerHourlyRateUsd: values.performerHourlyRateUsd,
+      designatedPayeeUserId: values.designatedPayeeUserId || undefined,
+      designatedPayeeName: values.designatedPayeeName || undefined,
+      designatedPayeeEmail: values.designatedPayeeEmail || undefined,
+      designatedPayeeMailingAddress: values.designatedPayeeMailingAddress || undefined,
       publicWebsiteUrl: values.publicWebsiteUrl || undefined,
       publicInstagramUrl: values.publicInstagramUrl || undefined,
       publicYoutubeUrl: values.publicYoutubeUrl || undefined,
@@ -103,19 +118,22 @@ export function BandSelfServiceClient() {
     },
   );
 
+  const payeeUserId = profileForm.watch("designatedPayeeUserId");
+
   if (profile === undefined) {
     return <p className="text-sm text-muted-foreground">Loading band profile…</p>;
   }
 
   return (
     <div className="space-y-4 pb-20">
+      <Form {...profileForm}>
+        <form className="space-y-4">
       <Card>
         <CardHeader>
           <CardTitle>Band Public Profile</CardTitle>
         </CardHeader>
         <CardContent>
-          <Form {...profileForm}>
-            <form className="space-y-3">
+            <div className="space-y-3">
               <TextFormField name="displayName" label="Display Name" />
               <TextareaFormField name="bio" label="Bio" />
               <div className="grid gap-2 md:grid-cols-2">
@@ -148,16 +166,73 @@ export function BandSelfServiceClient() {
                   label="Public URL slug"
                   placeholder="my-band-name"
                 />
-                <TextFormField
-                  name="publicHeroImageUrl"
-                  label="Hero image URL"
-                  placeholder="https://..."
-                />
               </div>
-            </form>
-          </Form>
+              <BandHeroUploadField
+                organizationId={profile.organizationId}
+                currentUrl={profileForm.watch("publicHeroImageUrl")}
+                urlValue={profileForm.watch("publicHeroImageUrl")}
+                onUploaded={(url) =>
+                  profileForm.setValue("publicHeroImageUrl", url, { shouldDirty: true })
+                }
+                onUrlChange={(url) =>
+                  profileForm.setValue("publicHeroImageUrl", url, { shouldDirty: true })
+                }
+                onClear={() => profileForm.setValue("publicHeroImageUrl", "", { shouldDirty: true })}
+              />
+            </div>
         </CardContent>
       </Card>
+
+      <Card id="payment-payee">
+        <CardHeader>
+          <CardTitle>Payment Payee</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {!profile.payeeComplete ? (
+            <p className="rounded-md border border-dashed px-3 py-2 text-sm text-amber-800 dark:text-amber-200">
+              Required before band payments can be processed. Provide one designated payee who receives and
+              distributes payment, plus a mailing address for GrantEd.
+            </p>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Payee on file. Update here if your band&apos;s payment contact or address changes.
+            </p>
+          )}
+          <div className="space-y-1">
+            <Label>Designated payee</Label>
+            <UserSelect
+              value={payeeUserId ?? ""}
+              onChange={(userId) => {
+                profileForm.setValue("designatedPayeeUserId", userId, { shouldDirty: true });
+                const user = (members ?? []).find((row) => row.userId === userId);
+                if (user) {
+                  profileForm.setValue("designatedPayeeName", user.name, { shouldDirty: true });
+                  profileForm.setValue("designatedPayeeEmail", user.email ?? "", { shouldDirty: true });
+                }
+              }}
+              options={(members ?? []).map((user) => ({
+                value: user.userId,
+                label: user.name,
+                email: user.email,
+                description: user.email,
+              }))}
+              placeholder="Select band member payee..."
+              emptyLabel="Select payee"
+            />
+          </div>
+          <div className="grid gap-2 md:grid-cols-2">
+            <TextFormField name="designatedPayeeName" label="Payee name" />
+            <TextFormField name="designatedPayeeEmail" label="Payee email" type="email" />
+          </div>
+          <TextareaFormField
+            name="designatedPayeeMailingAddress"
+            label="Mailing address"
+            placeholder={"123 Example St\nStanford, CA 94305"}
+          />
+        </CardContent>
+      </Card>
+        </form>
+      </Form>
 
       <Card>
         <CardHeader>
@@ -252,6 +327,10 @@ export function BandSelfServiceClient() {
             displayName: profile.displayName ?? "",
             bio: profile.bio ?? "",
             performerHourlyRateUsd: profile.performerHourlyRateUsd ?? 0,
+            designatedPayeeUserId: profile.designatedPayeeUserId ?? "",
+            designatedPayeeName: profile.designatedPayeeName ?? "",
+            designatedPayeeEmail: profile.designatedPayeeEmail ?? "",
+            designatedPayeeMailingAddress: profile.designatedPayeeMailingAddress ?? "",
             publicWebsiteUrl: profile.publicWebsiteUrl ?? "",
             publicInstagramUrl: profile.publicInstagramUrl ?? "",
             publicYoutubeUrl: profile.publicYoutubeUrl ?? "",

@@ -10,6 +10,11 @@ import { SearchableSelect } from "@/components/inventory/searchable-select";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -21,15 +26,21 @@ import { authClient } from "@/lib/auth-client";
 import { InvoiceQuoteApprovalDetails } from "@/components/financial/invoice-quote-approval-details";
 import { InvoicePaymentStatusSection } from "@/components/financial/invoice-payment-status-section";
 import { InvoiceLinkedEventCrewSection } from "@/components/financial/invoice-linked-event-crew";
+import { EventSeriesShiftEditor } from "@/components/events/event-series-shift-editor";
 import {
+  buildInvoiceCrewRowsFromShiftTemplateDrafts,
   mergeEventCrewWithManualRows,
   type InvoiceCrewRow,
 } from "@/lib/invoice-crew-from-event";
+import type { SeriesShiftTemplateDraft } from "@/lib/event-series-shifts";
 import { CaretDownIcon } from "@phosphor-icons/react";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { FormSaveBar } from "@/components/forms";
+import { computeInvoiceDraftTotals } from "@/lib/compute-invoice-draft-totals";
+import { equipmentDivisionWarnings } from "@/lib/equipment-division-warnings";
+import { InvoicePdfDownloadButton } from "@/components/financial/invoice-pdf-download-button";
 
-type EquipmentRow = { refId: string; quantity: string };
+type EquipmentRow = { refId: string; quantity: string; basis?: "total" | "per_occurrence" };
 type ExternalRentalRow = { provider: string; label: string; quantity: string; rateUsd: string };
 type ArtistRow = { label: string; quantity: string; rateUsd: string };
 type CrewRow = InvoiceCrewRow;
@@ -42,6 +53,7 @@ import {
   type EquipmentPricingMode,
 } from "@/lib/invoice-group-labels";
 import { formatContactFullName, splitContactName } from "@/lib/contact-name";
+import { formatDateTime, formatDateTimeRange, formatUsd } from "@/lib/format";
 
 export function InvoiceEditor({
   invoiceId,
@@ -69,12 +81,13 @@ export function InvoiceEditor({
   });
 
   const createDraft = useMutation(api.invoices.createDraft);
+  const duplicateInvoice = useMutation(api.invoices.duplicate);
   const updateDraft = useMutation(api.invoices.updateDraft);
+  const recalculateSeriesEquipmentLines = useMutation(api.invoices.recalculateSeriesEquipmentLines);
   const markReadyForClientReview = useMutation(api.invoices.markReadyForClientReview);
   const withdrawFromClientReview = useMutation(api.invoices.withdrawFromClientReview);
   const regeneratePublicApprovalToken = useMutation(api.invoices.regeneratePublicApprovalToken);
   const resetApprovalToPending = useMutation(api.invoices.resetApprovalToPending);
-  const createTermsDefinition = useMutation(api.invoiceTerms.create);
   const createGroup = useMutation(api.invoiceGroups.create);
   const createContact = useMutation(api.invoiceContacts.create);
   const deleteInvoiceAdmin = useMutation(api.adminDeletes.deleteInvoiceAdmin);
@@ -108,10 +121,20 @@ export function InvoiceEditor({
   const [autoSaveState, setAutoSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [autoSaveError, setAutoSaveError] = useState<string | null>(null);
   const [activeInvoiceId, setActiveInvoiceId] = useState<Id<"invoices"> | undefined>(invoiceId);
+  const pdfExports = useQuery(
+    api.invoicePdf.listExports,
+    activeInvoiceId ? { invoiceId: activeInvoiceId } : "skip",
+  );
   const [deleteOpen, setDeleteOpen] = useState(false);
   const linkedEvent = useQuery(
     api.events.getByInvoiceId,
     activeInvoiceId ? { invoiceId: activeInvoiceId } : "skip",
+  );
+  const linkedSeries = invoiceData?.series ?? linkedEvent?.series ?? null;
+  const billableOccurrenceCount = linkedSeries?.activeOccurrenceCount ?? 0;
+  const seriesCostData = useQuery(
+    api.eventSeries.get,
+    linkedSeries?.seriesId ? { id: linkedSeries.seriesId } : "skip",
   );
   const sourceRequest = useQuery(
     api.eventRequests.getByLinkedInvoiceId,
@@ -125,9 +148,6 @@ export function InvoiceEditor({
   const [approvalToken, setApprovalToken] = useState("");
   const [termsIds, setTermsIds] = useState<Id<"invoiceTerms">[]>([]);
   const [additionalTermsMarkdown, setAdditionalTermsMarkdown] = useState("");
-  const [newTermsLabel, setNewTermsLabel] = useState("");
-  const [newTermsVersion, setNewTermsVersion] = useState("v1");
-  const [newTermsMarkdown, setNewTermsMarkdown] = useState("");
   const [groupModalOpen, setGroupModalOpen] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
   const [newGroupType, setNewGroupType] = useState<"vso" | "house" | "department" | "individual">("department");
@@ -143,8 +163,11 @@ export function InvoiceEditor({
   const saveRequestIdRef = useRef(0);
   const hasHydratedFromServerRef = useRef(false);
   const crewBootstrappedRef = useRef(false);
+  const linkedEventCrewInitializedRef = useRef(false);
+  const baselineSignaturePendingRef = useRef(false);
   const savedCrewSnapshotRef = useRef<CrewRow[]>([]);
   const [invoiceFieldsHydrated, setInvoiceFieldsHydrated] = useState(false);
+  const [editorBaselineReady, setEditorBaselineReady] = useState(() => !invoiceId);
   const reapprovalDecisionRef = useRef<null | boolean>(null);
 
   const managerOptions = useMemo(
@@ -204,6 +227,7 @@ export function InvoiceEditor({
 
   const handleEventCrewRowsChange = useCallback((eventRows: InvoiceCrewRow[]) => {
     if (!crewBootstrappedRef.current) return;
+    linkedEventCrewInitializedRef.current = true;
     setCrewRows((current) => mergeEventCrewWithManualRows(eventRows, current));
   }, []);
 
@@ -238,9 +262,12 @@ export function InvoiceEditor({
   useEffect(() => {
     hasHydratedFromServerRef.current = false;
     crewBootstrappedRef.current = false;
+    linkedEventCrewInitializedRef.current = false;
+    baselineSignaturePendingRef.current = false;
     savedCrewSnapshotRef.current = [];
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setInvoiceFieldsHydrated(false);
+    setEditorBaselineReady(!invoiceId);
   }, [invoiceId]);
 
   useEffect(() => {
@@ -284,12 +311,20 @@ export function InvoiceEditor({
     setEquipmentPackages(
       lineItems
         .filter((row) => row.section === "equipment_package")
-        .map((row) => ({ refId: row.packageId ?? "", quantity: row.quantity.toString() })) || [{ refId: "", quantity: "1" }],
+        .map((row) => ({
+          refId: row.packageId ?? "",
+          quantity: row.quantity.toString(),
+          basis: row.equipmentQuantityBasis ?? "total",
+        })) || [{ refId: "", quantity: "1", basis: "total" }],
     );
     setEquipmentTypes(
       lineItems
         .filter((row) => row.section === "equipment_type")
-        .map((row) => ({ refId: row.typeId ?? "", quantity: row.quantity.toString() })) || [{ refId: "", quantity: "1" }],
+        .map((row) => ({
+          refId: row.typeId ?? "",
+          quantity: row.quantity.toString(),
+          basis: row.equipmentQuantityBasis ?? "total",
+        })) || [{ refId: "", quantity: "1", basis: "total" }],
     );
     setExternalRentals(
       lineItems
@@ -322,50 +357,8 @@ export function InvoiceEditor({
           rateUsd: row.rateUsd.toString(),
         })),
     );
-    lastSavedSignatureRef.current = JSON.stringify({
-      issueDate: invoice.issueDate,
-      dueDate: invoice.dueDate ?? "",
-      managerUserId: invoice.managerUserId,
-      managerName: invoice.managerName,
-      managerEmail: invoice.managerEmail ?? "",
-      groupId: invoice.groupId ?? "",
-      contactId: invoice.contactId ?? "",
-      clientGroupName: invoice.clientGroupName ?? "",
-      clientGroupType: invoice.clientGroupType ?? "",
-      clientContactName: invoice.clientContactName ?? "",
-      clientEmail: invoice.clientEmail ?? "",
-      clientPhone: invoice.clientPhone ?? "",
-      clientAddressLine1: invoice.clientAddressLine1 ?? "",
-      clientAddressLine2: invoice.clientAddressLine2 ?? "",
-      clientCity: invoice.clientCity ?? "",
-      clientState: invoice.clientState ?? "",
-      clientPostalCode: invoice.clientPostalCode ?? "",
-      equipmentPricingMode: invoice.equipmentPricingMode,
-      crewRateMode: invoice.crewRateMode,
-      discountType: invoice.discountType,
-      discountValue: invoice.discountValue,
-      notes: invoice.notes ?? "",
-      termsIds:
-        invoice.termsIds?.length
-          ? invoice.termsIds
-          : invoice.termsId
-            ? [invoice.termsId]
-            : [],
-      additionalTermsMarkdown: invoice.additionalTermsMarkdown ?? "",
-      lineItems: lineItems.map((row) => ({
-        section: row.section,
-        order: row.order,
-        provider: row.provider ?? "",
-        label: row.label,
-        notes: row.notes ?? "",
-        quantity: row.quantity,
-        rateUsd: row.rateUsd,
-        packageId: row.packageId ?? "",
-        typeId: row.typeId ?? "",
-        feeDefinitionId: row.feeDefinitionId ?? "",
-      })),
-    });
     reapprovalDecisionRef.current = null;
+    baselineSignaturePendingRef.current = true;
     setInvoiceFieldsHydrated(true);
   }, [invoiceData, invoiceId]);
 
@@ -378,12 +371,13 @@ export function InvoiceEditor({
   useEffect(() => {
     if (invoiceId && !invoiceFieldsHydrated) return;
     if (crewBootstrappedRef.current) return;
-    if (activeInvoiceId && linkedEvent === undefined) return;
+    if (activeInvoiceId && linkedEvent === undefined && !linkedSeries) return;
+    if (linkedSeries && seriesCostData === undefined) return;
 
     crewBootstrappedRef.current = true;
 
-    if (linkedEvent) {
-      // Crew lines for linked events come from the event schedule editor, not saved invoice rows.
+    if (linkedEvent && !linkedSeries) {
+      // Crew lines for a single linked event come from the event schedule editor.
       return;
     }
 
@@ -391,7 +385,7 @@ export function InvoiceEditor({
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setCrewRows(savedCrewSnapshotRef.current);
     }
-  }, [invoiceId, invoiceFieldsHydrated, linkedEvent, activeInvoiceId]);
+  }, [invoiceId, invoiceFieldsHydrated, linkedEvent, linkedSeries, seriesCostData, activeInvoiceId]);
 
   function onManagerChange(userId: string) {
     setManagerUserId(userId);
@@ -486,6 +480,7 @@ export function InvoiceEditor({
       packageId?: Id<"inventoryPackages">;
       typeId?: Id<"inventoryTypes">;
       feeDefinitionId?: Id<"invoiceFeeDefinitions">;
+      equipmentQuantityBasis?: "total" | "per_occurrence";
     }> = [];
     for (const row of equipmentPackages) {
       if (!row.refId || Number(row.quantity) <= 0) continue;
@@ -497,6 +492,7 @@ export function InvoiceEditor({
         quantity: Number(row.quantity),
         rateUsd: 0,
         packageId: row.refId as Id<"inventoryPackages">,
+        equipmentQuantityBasis: row.basis ?? "total",
       });
     }
     for (const row of equipmentTypes) {
@@ -509,6 +505,7 @@ export function InvoiceEditor({
         quantity: Number(row.quantity),
         rateUsd: 0,
         typeId: row.refId as Id<"inventoryTypes">,
+        equipmentQuantityBasis: row.basis ?? "total",
       });
     }
     for (const row of externalRentals) {
@@ -674,24 +671,6 @@ export function InvoiceEditor({
     setSaveMessage("Quote status reset to pending.");
   }
 
-  async function createGlobalTerms() {
-    if (!newTermsLabel.trim() || !newTermsMarkdown.trim()) {
-      window.alert("Provide terms label and markdown.");
-      return;
-    }
-    const createdId = await createTermsDefinition({
-      label: newTermsLabel.trim(),
-      version: newTermsVersion.trim() || "v1",
-      markdown: newTermsMarkdown.trim(),
-      active: true,
-    });
-    setTermsIds((current) => [...current, createdId]);
-    setNewTermsLabel("");
-    setNewTermsVersion("v1");
-    setNewTermsMarkdown("");
-    setSaveMessage("Global terms template created.");
-  }
-
   async function markReadyOnRequestPortal() {
     if (!activeInvoiceId) return;
     await markReadyForClientReview({ id: activeInvoiceId });
@@ -740,11 +719,160 @@ export function InvoiceEditor({
   ]);
 
   const isDraftDirty =
+    editorBaselineReady &&
     invoiceFieldsHydrated &&
     draftSignature !== "" &&
     draftSignature !== lastSavedSignatureRef.current;
 
+  useEffect(() => {
+    if (!baselineSignaturePendingRef.current || !invoiceFieldsHydrated) return;
+    if (invoiceId && linkedEvent === undefined && !linkedSeries) return;
+    if (invoiceData?.invoice?.groupId && groups === undefined) return;
+    if (contactId && contacts === undefined) return;
+    if (!crewBootstrappedRef.current) return;
+    if (linkedEvent && !linkedSeries && !linkedEventCrewInitializedRef.current) return;
+    if (linkedSeries && !linkedEventCrewInitializedRef.current) return;
+    if (!linkedEvent && !linkedSeries && savedCrewSnapshotRef.current.length > 0 && crewRows.length === 0) return;
+
+    const payload = buildPayload();
+    if (!payload) return;
+
+    lastSavedSignatureRef.current = JSON.stringify(payload);
+    baselineSignaturePendingRef.current = false;
+    setEditorBaselineReady(true);
+  }, [
+    invoiceFieldsHydrated,
+    invoiceId,
+    linkedEvent,
+    linkedSeries,
+    groups,
+    contacts,
+    contactId,
+    crewRows,
+    issueDate,
+    dueDate,
+    managerUserId,
+    managerName,
+    managerEmail,
+    groupId,
+    clientEmail,
+    clientPhone,
+    clientAddressLine1,
+    clientAddressLine2,
+    clientCity,
+    clientState,
+    clientPostalCode,
+    equipmentPricingMode,
+    crewRateMode,
+    discountType,
+    discountValue,
+    notes,
+    termsIds,
+    additionalTermsMarkdown,
+    equipmentPackages,
+    equipmentTypes,
+    externalRentals,
+    artists,
+    fees,
+    invoiceData,
+  ]);
+
   const linkedEvents = linkedEvent?.linkedEvents ?? [];
+
+  const handleSeriesShiftDraftsChange = useCallback(
+    (drafts: SeriesShiftTemplateDraft[]) => {
+      if (!crewBootstrappedRef.current) return;
+      if (!seriesCostData?.series?.blockTemplates) return;
+      linkedEventCrewInitializedRef.current = true;
+      const eventRows = buildInvoiceCrewRowsFromShiftTemplateDrafts({
+        drafts,
+        blockTemplates: seriesCostData.series.blockTemplates,
+        billableOccurrenceCount,
+      });
+      setCrewRows((current) => mergeEventCrewWithManualRows(eventRows, current));
+    },
+    [seriesCostData, billableOccurrenceCount],
+  );
+
+  const draftTotals = useMemo(() => {
+    const lineItems = buildLineItems();
+    return computeInvoiceDraftTotals({
+      equipmentPricingMode,
+      discountType,
+      discountValue: Number(discountValue || "0"),
+      billableOccurrenceCount,
+      packages: packages ?? [],
+      types: types ?? [],
+      lineItems: lineItems.map((row) => ({
+        section: row.section,
+        quantity: row.quantity,
+        rateUsd: row.rateUsd,
+        equipmentQuantityBasis: row.equipmentQuantityBasis,
+        packageId: row.packageId,
+        typeId: row.typeId,
+      })),
+    });
+  }, [
+    equipmentPricingMode,
+    discountType,
+    discountValue,
+    billableOccurrenceCount,
+    packages,
+    types,
+    equipmentPackages,
+    equipmentTypes,
+    externalRentals,
+    artists,
+    crewRows,
+    fees,
+    crewRateMode,
+    settings,
+  ]);
+
+  const savedTotalUsd = invoiceData?.invoice?.totalUsd;
+  const pricingUnsaved =
+    savedTotalUsd !== undefined && Math.abs(draftTotals.totalUsd - savedTotalUsd) > 0.009;
+
+  const divisionWarnings = useMemo(() => {
+    return equipmentDivisionWarnings({
+      billableOccurrenceCount,
+      packages: equipmentPackages
+        .filter((row) => row.refId && Number(row.quantity) > 0)
+        .map((row) => ({
+          label: (packages ?? []).find((p) => p._id === row.refId)?.name ?? "Package",
+          quantity: Number(row.quantity),
+          basis: row.basis,
+        })),
+      types: equipmentTypes
+        .filter((row) => row.refId && Number(row.quantity) > 0)
+        .map((row) => {
+          const type = (types ?? []).find((t) => t._id === row.refId);
+          return {
+            label: type ? `${type.name} · ${type.model}` : "Type",
+            quantity: Number(row.quantity),
+            basis: row.basis,
+          };
+        }),
+    });
+  }, [billableOccurrenceCount, equipmentPackages, equipmentTypes, packages, types]);
+
+  const seriesOccurrenceStale =
+    editorBaselineReady &&
+    linkedSeries &&
+    invoiceData?.invoice?.billableOccurrenceCountAtSave != null &&
+    billableOccurrenceCount !== invoiceData.invoice.billableOccurrenceCountAtSave;
+
+  const defaultEquipmentBasis: EquipmentRow["basis"] = linkedSeries ? "per_occurrence" : "total";
+
+  useEffect(() => {
+    if (!activeInvoiceId || !invoiceFieldsHydrated || !editorBaselineReady || !isDraftDirty) return;
+    if (saving || autoSaveState === "saving") return;
+    const timer = window.setTimeout(() => {
+      void persistDraft();
+    }, 2500);
+    return () => window.clearTimeout(timer);
+  }, [draftSignature, activeInvoiceId, invoiceFieldsHydrated, editorBaselineReady, isDraftDirty, saving, autoSaveState]);
+
   const isRequestLinkedQuote = Boolean(invoiceData?.invoice?.sourceEventRequestId);
   const requestPortalReady = Boolean(invoiceData?.invoice?.clientReviewReadyAt);
 
@@ -757,11 +885,11 @@ export function InvoiceEditor({
         : "";
 
   return (
-    <div className="space-y-4 pb-20">
+    <div className="mx-auto max-w-7xl space-y-4 pb-20">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">{activeInvoiceId ? "Edit Invoice" : "Create Invoice"}</h1>
-          <p className="text-sm text-muted-foreground">Build invoice sections and export a print-ready PDF.</p>
+          <p className="text-sm text-muted-foreground">Build invoice sections and download a PDF when ready.</p>
         </div>
         <div className="flex gap-2">
           {linkedEvents.length === 1 ? (
@@ -782,7 +910,7 @@ export function InvoiceEditor({
                     <Link href={`/dashboard/events/${event._id}`} className="flex flex-col items-start gap-0.5">
                       <span className="font-medium">{event.title}</span>
                       <span className="text-xs text-muted-foreground">
-                        {new Date(event.startAt).toLocaleString()} – {new Date(event.endAt).toLocaleString()}
+                        {formatDateTimeRange(event.startAt, event.endAt)}
                       </span>
                     </Link>
                   </DropdownMenuItem>
@@ -791,8 +919,23 @@ export function InvoiceEditor({
             </DropdownMenu>
           ) : null}
           {activeInvoiceId ? (
-            <Button type="button" variant="outline" asChild>
-              <Link href={`/dashboard/financial-hub/invoices/${activeInvoiceId}/print`}>Print / PDF</Link>
+            <InvoicePdfDownloadButton
+              invoiceId={activeInvoiceId}
+              invoiceNumber={invoiceData?.invoice?.invoiceNumber}
+              variant="outline"
+            />
+          ) : null}
+          {activeInvoiceId ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() =>
+                void duplicateInvoice({ id: activeInvoiceId }).then((result) => {
+                  router.push(`/dashboard/financial-hub/invoices/${result.id}`);
+                })
+              }
+            >
+              Duplicate
             </Button>
           ) : null}
           {activeInvoiceId && isAdmin ? (
@@ -800,9 +943,6 @@ export function InvoiceEditor({
               Delete quote
             </Button>
           ) : null}
-          <Button type="button" onClick={() => void save()} disabled={saving}>
-            {saving ? "Saving..." : "Save Draft"}
-          </Button>
         </div>
       </div>
 
@@ -887,143 +1027,457 @@ export function InvoiceEditor({
       {saveMessage ? <p className="text-sm text-primary">{saveMessage}</p> : null}
       {saveWarning ? <p className="text-sm text-amber-600">{saveWarning}</p> : null}
 
-      <Card>
-        <CardHeader><CardTitle>General</CardTitle></CardHeader>
-        <CardContent className="grid gap-3 md:grid-cols-3">
-          <div className="space-y-2">
-            <Label>Issue date</Label>
-            <Input type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} />
-          </div>
-          <div className="space-y-2">
-            <Label>Due date</Label>
-            <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
-          </div>
-          <div className="space-y-2">
-            <Label>Manager</Label>
-            <SearchableSelect
-              value={managerUserId}
-              onChange={onManagerChange}
-              options={managerOptions}
-              placeholder="Search managers..."
-              emptyLabel="Select manager"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Equipment pricing</Label>
-            <select className="h-9 w-full rounded-md border bg-background px-3 text-sm" value={equipmentPricingMode} onChange={(e) => setEquipmentPricingMode(e.target.value as "subsidized" | "nonSubsidized")}>
-              {EQUIPMENT_PRICING_MODE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            {selectedGroup ? (
-              <p className="text-xs text-muted-foreground">
-                Default from host:{" "}
-                {EQUIPMENT_PRICING_MODE_LABELS[selectedGroup.equipmentPricingMode ?? "subsidized"]}. You can
-                override per invoice.
-              </p>
-            ) : null}
-          </div>
-          <div className="space-y-2">
-            <Label>Crew rate mode</Label>
-            <select
-              className="h-9 w-full rounded-md border bg-background px-3 text-sm"
-              value={crewRateMode}
-              onChange={(e) => setCrewRateMode(e.target.value as "normal" | "lead" | "custom")}
-            >
-              <option value="normal">Normal</option>
-              <option value="lead">Lead</option>
-              <option value="custom">Custom</option>
-            </select>
-          </div>
-        </CardContent>
-      </Card>
+      {invoiceData?.invoice?.clientApprovalStatus === "approved" && isDraftDirty ? (
+        <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          This quote is approved. Saving changes may require client re-approval.
+        </div>
+      ) : null}
 
-      {isRequestLinkedQuote ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Request portal review</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              This quote is linked to a booking request. Clients review and approve it on the request portal —
-              no standalone approval link is generated.
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <Input
-                readOnly
-                value={requestPortalUrl || "Save the quote once to load the request portal link."}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                disabled={!requestPortalUrl}
-                onClick={() => {
-                  if (!requestPortalUrl) return;
-                  void navigator.clipboard.writeText(requestPortalUrl);
-                }}
+      {seriesOccurrenceStale ? (
+        <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          Billable occurrence count changed (
+          {invoiceData?.invoice?.billableOccurrenceCountAtSave} → {billableOccurrenceCount}). Recalculate
+          equipment totals to refresh billed amounts.
+          {activeInvoiceId ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="ml-2"
+              onClick={() =>
+                void recalculateSeriesEquipmentLines({ id: activeInvoiceId }).then(() =>
+                  setSaveMessage("Recalculated billed equipment totals."),
+                )
+              }
+            >
+              Recalculate now
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+
+      {isDraftDirty && divisionWarnings.length ? (
+        <ul className="space-y-1 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          {divisionWarnings.map((warning) => (
+            <li key={warning}>{warning}</li>
+          ))}
+        </ul>
+      ) : null}
+
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
+        <div className="space-y-4">
+          <nav className="sticky top-4 z-10 flex flex-wrap gap-2 rounded-md border bg-background/95 p-2 text-sm shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80">
+            {[
+              { id: "section-equipment-packages", label: "Packages" },
+              { id: "section-equipment-types", label: "Types" },
+              { id: "section-external-rentals", label: "External" },
+              { id: "section-artists", label: "Artists" },
+              { id: "section-crew", label: "Crew" },
+              { id: "section-fees", label: "Fees" },
+            ].map((section) => (
+              <a
+                key={section.id}
+                href={`#${section.id}`}
+                className="rounded-md px-2 py-1 hover:bg-background"
               >
-                Copy portal link
-              </Button>
-              {requestPortalReady ? (
-                <Button type="button" variant="outline" onClick={() => void withdrawFromRequestPortal()}>
-                  Withdraw from portal
-                </Button>
-              ) : (
-                <Button type="button" onClick={() => void markReadyOnRequestPortal()}>
-                  Ready for client review
-                </Button>
-              )}
-            </div>
-            {invoiceData?.invoice ? (
-              <div className="text-sm text-muted-foreground">
-                Portal status: {requestPortalReady ? "Visible to client" : "Not published yet"}
+                {section.label}
+              </a>
+            ))}
+          </nav>
+
+          <div id="section-equipment-packages">
+          <SectionEquipmentPackages
+            rows={equipmentPackages}
+            setRows={setEquipmentPackages}
+            options={packageOptions}
+            billableOccurrenceCount={billableOccurrenceCount}
+            packages={packages ?? []}
+            equipmentPricingMode={equipmentPricingMode}
+            defaultBasis={defaultEquipmentBasis}
+          />
+          </div>
+          <div id="section-equipment-types">
+          <SectionEquipmentTypes
+            rows={equipmentTypes}
+            setRows={setEquipmentTypes}
+            options={typeOptions}
+            billableOccurrenceCount={billableOccurrenceCount}
+            types={types ?? []}
+            equipmentPricingMode={equipmentPricingMode}
+            defaultBasis={defaultEquipmentBasis}
+          />
+          </div>
+          <div id="section-external-rentals">
+          <SectionExternalRentals rows={externalRentals} setRows={setExternalRentals} />
+          </div>
+          <div id="section-artists">
+          <SectionArtists rows={artists} setRows={setArtists} />
+          </div>
+          <div id="section-crew">
+          {linkedSeries ? (
+            seriesCostData === undefined ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Crew Schedule</CardTitle>
+                </CardHeader>
+                <CardContent className="text-sm text-muted-foreground">
+                  Loading series crew template...
+                </CardContent>
+              </Card>
+            ) : seriesCostData?.series ? (
+            <>
+              <EventSeriesShiftEditor
+                seriesId={linkedSeries.seriesId}
+                anchorStartAt={seriesCostData.series.anchorStartAt}
+                anchorEndAt={seriesCostData.series.anchorEndAt}
+                eventType={seriesCostData.series.eventType}
+                rentalFulfillmentMode={seriesCostData.series.rentalFulfillmentMode}
+                blockTemplates={seriesCostData.series.blockTemplates}
+                shiftTemplates={seriesCostData.series.shiftTemplates}
+                budgetCrewHourlyRateUsd={seriesCostData.series.budgetCrewHourlyRateUsd}
+                occurrences={seriesCostData.occurrences}
+                billableOccurrenceCount={billableOccurrenceCount}
+                title="Crew Schedule"
+                description={`Define crew shift templates for the series. Invoice crew hours bill as template duration × ${billableOccurrenceCount} billable occurrence${billableOccurrenceCount === 1 ? "" : "s"}. Saving applies empty shifts to each selected occurrence.`}
+                onMessage={setSaveMessage}
+                onShiftDraftsChange={handleSeriesShiftDraftsChange}
+              />
+              <SectionAdditionalCrewHours
+                rows={crewRows.filter((row) => row.source === "manual")}
+                setRows={setManualCrewRows}
+                rateMode={crewRateMode}
+              />
+            </>
+            ) : (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Crew Schedule</CardTitle>
+                </CardHeader>
+                <CardContent className="text-sm text-muted-foreground">
+                  Linked series not found.
+                </CardContent>
+              </Card>
+            )
+          ) : linkedEvent ? (
+            <>
+              <InvoiceLinkedEventCrewSection
+                eventId={linkedEvent._id}
+                defaultCrewHourlyRateUsd={defaultCrewHourlyRateUsd}
+                onEventCrewRowsChange={handleEventCrewRowsChange}
+                onMessage={setSaveMessage}
+              />
+              <SectionAdditionalCrewHours
+                rows={crewRows.filter((row) => row.source === "manual")}
+                setRows={setManualCrewRows}
+                rateMode={crewRateMode}
+              />
+            </>
+          ) : (
+            <SectionCrew rows={crewRows} setRows={setCrewRows} rateMode={crewRateMode} />
+          )}
+          </div>
+          <div id="section-fees">
+          <SectionFees rows={fees} setRows={setFees} options={feeDefinitions ?? []} />
+          </div>
+        </div>
+
+        <aside className="space-y-4 lg:sticky lg:top-4">
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-base">General</CardTitle></CardHeader>
+            <CardContent className="grid gap-3">
+              <div className="space-y-2">
+                <Label>Issue date</Label>
+                <Input type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} />
               </div>
-            ) : null}
-            {invoiceData?.invoice?.clientApprovalStatus === "changes_requested" ? (
-              <Button type="button" variant="outline" onClick={() => void resetQuoteToPending()}>
-                Reset to pending
-              </Button>
-            ) : null}
-          </CardContent>
-        </Card>
-      ) : (
-        <Card>
-          <CardHeader><CardTitle>Client Quote Approval</CardTitle></CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex flex-wrap gap-2">
-              <Input
-                readOnly
-                value={
-                  approvalToken && origin
-                    ? `${origin}/public/quote/${approvalToken}`
-                    : "Save draft once to generate the public quote link."
-                }
-              />
-              <Button
-                type="button"
-                variant="outline"
-                disabled={!approvalToken || !origin}
-                onClick={() => {
-                  if (!approvalToken || !origin) return;
-                  void navigator.clipboard.writeText(`${origin}/public/quote/${approvalToken}`);
-                }}
-              >
-                Copy Link
-              </Button>
-              <Button type="button" variant="outline" disabled={!activeInvoiceId} onClick={() => void regenerateToken()}>
-                Regenerate Token
-              </Button>
-              {invoiceData?.invoice?.clientApprovalStatus === "changes_requested" ? (
-                <Button type="button" variant="outline" onClick={() => void resetQuoteToPending()}>
-                  Reset To Pending
+              <div className="space-y-2">
+                <Label>Due date</Label>
+                <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Manager</Label>
+                <SearchableSelect
+                  value={managerUserId}
+                  onChange={onManagerChange}
+                  options={managerOptions}
+                  placeholder="Search managers..."
+                  emptyLabel="Select manager"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Equipment pricing</Label>
+                <select className="h-9 w-full rounded-md border bg-background px-3 text-sm" value={equipmentPricingMode} onChange={(e) => setEquipmentPricingMode(e.target.value as "subsidized" | "nonSubsidized")}>
+                  {EQUIPMENT_PRICING_MODE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label>Crew rate mode</Label>
+                <select
+                  className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                  value={crewRateMode}
+                  onChange={(e) => setCrewRateMode(e.target.value as "normal" | "lead" | "custom")}
+                >
+                  <option value="normal">Normal</option>
+                  <option value="lead">Lead</option>
+                  <option value="custom">Custom</option>
+                </select>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-base">Client</CardTitle></CardHeader>
+            <CardContent className="grid gap-3">
+              <div className="space-y-2">
+                <Label>Host</Label>
+                <SearchableSelect
+                  value={groupId}
+                  onChange={onGroupChange}
+                  options={groupOptions}
+                  placeholder="Search hosts..."
+                  emptyLabel="Select host"
+                  onCreate={openCreateGroup}
+                  createLabel="New Host"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Contact</Label>
+                <SearchableSelect
+                  value={contactId}
+                  onChange={onContactChange}
+                  options={contactOptions}
+                  placeholder={groupId ? "Search contacts..." : "Select host first"}
+                  emptyLabel={groupId ? "Select contact" : "Select host first"}
+                  onCreate={openCreateContact}
+                  createLabel="New Client"
+                />
+              </div>
+              <Input placeholder="Email" value={clientEmail} onChange={(e) => setClientEmail(e.target.value)} />
+              <Input placeholder="Phone" value={clientPhone} onChange={(e) => setClientPhone(e.target.value)} />
+              <Input placeholder="Address line 1" value={clientAddressLine1} onChange={(e) => setClientAddressLine1(e.target.value)} />
+              <Input placeholder="City" value={clientCity} onChange={(e) => setClientCity(e.target.value)} />
+              <Input placeholder="State" value={clientState} onChange={(e) => setClientState(e.target.value)} />
+              <Input placeholder="Postal code" value={clientPostalCode} onChange={(e) => setClientPostalCode(e.target.value)} />
+            </CardContent>
+          </Card>
+
+          {linkedSeries ? (
+            <Card className="border-primary/30 bg-primary/5">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Linked series</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                <p className="font-medium">{linkedSeries.title}</p>
+                <p className="text-muted-foreground">
+                  {linkedSeries.activeOccurrenceCount} billable occurrence
+                  {linkedSeries.activeOccurrenceCount === 1 ? "" : "s"}
+                </p>
+                <Button type="button" variant="outline" size="sm" asChild>
+                  <Link href={`/dashboard/events/series/${linkedSeries.seriesId}`}>Open series</Link>
                 </Button>
+                {activeInvoiceId ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    onClick={() =>
+                      void recalculateSeriesEquipmentLines({ id: activeInvoiceId }).then(() =>
+                        setSaveMessage("Recalculated billed equipment totals."),
+                      )
+                    }
+                  >
+                    Recalculate equipment totals
+                  </Button>
+                ) : null}
+              </CardContent>
+            </Card>
+          ) : null}
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">{isDraftDirty ? "Draft total" : "Total"}</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-1 text-sm">
+              <p>Equipment: {formatUsd(draftTotals.equipmentSubtotalUsd)}</p>
+              <p>External: {formatUsd(draftTotals.externalRentalsSubtotalUsd)}</p>
+              <p>Artists: {formatUsd(draftTotals.artistsSubtotalUsd)}</p>
+              <p>Crew: {formatUsd(draftTotals.crewSubtotalUsd)}</p>
+              <p>Fees: {formatUsd(draftTotals.feesSubtotalUsd)}</p>
+              <p>Subtotal: {formatUsd(draftTotals.subtotalUsd)}</p>
+              <p>Discount: -{formatUsd(draftTotals.discountAmountUsd)}</p>
+              <p className="border-t pt-2 font-semibold">{formatUsd(draftTotals.totalUsd)}</p>
+              {pricingUnsaved && isDraftDirty ? (
+                <p className="text-xs text-amber-700">Pricing differs from last saved total.</p>
               ) : null}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+              {(draftTotals.discountAmountUsd > draftTotals.equipmentSubtotalUsd ||
+                invoiceData?.invoice?.discountWarning) ? (
+                <p className="text-xs text-amber-700">
+                  {invoiceData?.invoice?.discountWarning ?? "Discount exceeds equipment rental subtotal."}
+                </p>
+              ) : null}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-base">Discount & Notes</CardTitle></CardHeader>
+            <CardContent className="grid gap-3">
+              <div className="space-y-2">
+                <Label>Discount type</Label>
+                <select className="h-9 w-full rounded-md border bg-background px-3 text-sm" value={discountType} onChange={(e) => setDiscountType(e.target.value as "amount" | "percent")}>
+                  <option value="amount">Amount</option>
+                  <option value="percent">Percent</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label>Discount value</Label>
+                <Input value={discountValue} onChange={(e) => setDiscountValue(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Notes</Label>
+                <textarea className="min-h-20 w-full rounded-md border bg-background px-3 py-2 text-sm" value={notes} onChange={(e) => setNotes(e.target.value)} />
+              </div>
+            </CardContent>
+          </Card>
+
+          {linkedSeries && seriesCostData?.costSummary ? (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Series margin (projected)</CardTitle>
+              </CardHeader>
+              <CardContent className="text-sm">
+                <p>
+                  Billed: <span className="font-medium">{formatUsd(draftTotals.totalUsd)}</span>
+                </p>
+                <p>
+                  Series cost:{" "}
+                  <span className="font-medium">
+                    {formatUsd(seriesCostData.costSummary.projectedGrandTotalUsd)}
+                  </span>
+                </p>
+                <p
+                  className={
+                    draftTotals.totalUsd - seriesCostData.costSummary.projectedGrandTotalUsd >= 0
+                      ? "font-medium text-emerald-700"
+                      : "font-medium text-rose-700"
+                  }
+                >
+                  Margin:{" "}
+                  {formatUsd(draftTotals.totalUsd - seriesCostData.costSummary.projectedGrandTotalUsd)}
+                </p>
+              </CardContent>
+            </Card>
+          ) : null}
+
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-base">Terms</CardTitle></CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              <div className="max-h-32 space-y-1 overflow-y-auto rounded-md border p-2">
+                {(termsDefinitions ?? []).map((row) => {
+                  const checked = termsIds.includes(row._id);
+                  return (
+                    <label key={row._id} className="flex cursor-pointer items-start gap-2">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5"
+                        checked={checked}
+                        onChange={() => {
+                          setTermsIds((current) =>
+                            checked ? current.filter((id) => id !== row._id) : [...current, row._id],
+                          );
+                        }}
+                      />
+                      <span>
+                        {row.label} ({row.version})
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+              <textarea
+                className="min-h-16 w-full rounded-md border bg-background px-3 py-2 text-sm"
+                placeholder="Additional terms"
+                value={additionalTermsMarkdown}
+                onChange={(e) => setAdditionalTermsMarkdown(e.target.value)}
+              />
+            </CardContent>
+          </Card>
+
+          {isRequestLinkedQuote ? (
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-base">Request portal</CardTitle></CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                <Input readOnly value={requestPortalUrl || "Save to load portal link."} />
+                {requestPortalReady ? (
+                  <Button type="button" variant="outline" size="sm" onClick={() => void withdrawFromRequestPortal()}>
+                    Withdraw
+                  </Button>
+                ) : (
+                  <Button type="button" size="sm" onClick={() => void markReadyOnRequestPortal()}>
+                    Ready for review
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-base">Quote approval</CardTitle></CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                <Input
+                  readOnly
+                  value={
+                    approvalToken && origin
+                      ? `${origin}/public/quote/${approvalToken}`
+                      : "Save draft to generate link."
+                  }
+                />
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" variant="outline" size="sm" disabled={!approvalToken} onClick={() => {
+                    if (!approvalToken || !origin) return;
+                    void navigator.clipboard.writeText(`${origin}/public/quote/${approvalToken}`);
+                  }}>
+                    Copy link
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" disabled={!activeInvoiceId} onClick={() => void regenerateToken()}>
+                    Regenerate
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {activeInvoiceId && (pdfExports?.length ?? 0) > 0 ? (
+            <Collapsible defaultOpen={false}>
+              <Card>
+                <CollapsibleTrigger asChild>
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-between px-6 py-4 text-left"
+                  >
+                    <span className="text-base font-semibold">
+                      PDF exports ({pdfExports?.length ?? 0})
+                    </span>
+                    <CaretDownIcon className="size-4 shrink-0 text-muted-foreground" />
+                  </button>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <CardContent className="space-y-1 border-t pt-4 text-xs text-muted-foreground">
+                    {(pdfExports ?? []).slice(0, 5).map((row) => (
+                      <p key={row._id}>
+                        {row.fileName} · {formatDateTime(row.createdAt)}
+                        {row.generatedByName ? ` · ${row.generatedByName}` : ""}
+                      </p>
+                    ))}
+                  </CardContent>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
+          ) : null}
+        </aside>
+      </div>
 
       {activeInvoiceId && invoiceData?.invoice ? (
         <InvoiceQuoteApprovalDetails
@@ -1044,189 +1498,6 @@ export function InvoiceEditor({
       invoiceData?.invoice &&
       (invoiceData.invoice.clientApprovalStatus ?? "pending") === "approved" ? (
         <InvoicePaymentStatusSection invoiceId={activeInvoiceId} />
-      ) : null}
-
-      <Card>
-        <CardHeader><CardTitle>Quote Terms & Conditions</CardTitle></CardHeader>
-        <CardContent className="space-y-3">
-          <div className="space-y-2">
-            <Label>Global terms templates</Label>
-            <p className="text-xs text-muted-foreground">
-              Select one or more templates. Leave all unchecked to use default terms from global settings.
-            </p>
-            <div className="space-y-2 rounded-md border p-3">
-              {(termsDefinitions ?? []).length ? (
-                (termsDefinitions ?? []).map((row) => {
-                  const checked = termsIds.includes(row._id);
-                  return (
-                    <label key={row._id} className="flex cursor-pointer items-start gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        className="mt-0.5"
-                        checked={checked}
-                        onChange={() => {
-                          setTermsIds((current) =>
-                            checked ? current.filter((id) => id !== row._id) : [...current, row._id],
-                          );
-                        }}
-                      />
-                      <span>
-                        {row.label} ({row.version})
-                      </span>
-                    </label>
-                  );
-                })
-              ) : (
-                <p className="text-sm text-muted-foreground">No global terms templates yet.</p>
-              )}
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label>Additional terms (invoice-specific)</Label>
-            <textarea
-              className="min-h-28 w-full rounded-md border bg-background px-3 py-2 text-sm"
-              value={additionalTermsMarkdown}
-              onChange={(e) => setAdditionalTermsMarkdown(e.target.value)}
-            />
-          </div>
-          <div className="rounded-md border p-3">
-            <p className="mb-2 text-sm font-medium">Create global terms template</p>
-            <div className="grid gap-2 md:grid-cols-2">
-              <Input placeholder="Label" value={newTermsLabel} onChange={(e) => setNewTermsLabel(e.target.value)} />
-              <Input placeholder="Version" value={newTermsVersion} onChange={(e) => setNewTermsVersion(e.target.value)} />
-              <div className="md:col-span-2">
-                <textarea
-                  className="min-h-20 w-full rounded-md border bg-background px-3 py-2 text-sm"
-                  placeholder="Global terms markdown"
-                  value={newTermsMarkdown}
-                  onChange={(e) => setNewTermsMarkdown(e.target.value)}
-                />
-              </div>
-            </div>
-            <Button type="button" variant="outline" className="mt-2" onClick={() => void createGlobalTerms()}>
-              Add Global Terms
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader><CardTitle>Client</CardTitle></CardHeader>
-        <CardContent className="grid gap-3 md:grid-cols-3">
-          <div className="space-y-2">
-            <Label>Host</Label>
-            <SearchableSelect
-              value={groupId}
-              onChange={onGroupChange}
-              options={groupOptions}
-              placeholder="Search hosts..."
-              emptyLabel="Select host"
-              onCreate={openCreateGroup}
-              createLabel="New Host"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Contact</Label>
-            <SearchableSelect
-              value={contactId}
-              onChange={onContactChange}
-              options={contactOptions}
-              placeholder={groupId ? "Search contacts..." : "Select host first"}
-              emptyLabel={groupId ? "Select contact" : "Select host first"}
-              onCreate={openCreateContact}
-              createLabel="New Client"
-            />
-            {!groupId ? (
-              <p className="text-xs text-muted-foreground">Clients are linked to a host. Select a host first.</p>
-            ) : null}
-          </div>
-          {selectedGroup ? (
-            <div className="space-y-1 rounded-md border bg-muted/30 p-3 text-sm">
-              <p className="font-medium">{selectedGroup.name}</p>
-              <p className="text-muted-foreground">
-                {INVOICE_GROUP_TYPE_LABELS[selectedGroup.type] ?? selectedGroup.type}
-                {" · "}
-                {EQUIPMENT_PRICING_MODE_LABELS[selectedGroup.equipmentPricingMode ?? "subsidized"]}
-              </p>
-              {selectedContact ? (
-                <p className="text-muted-foreground">
-                  Contact: {formatContactFullName(selectedContact.firstName, selectedContact.lastName)}
-                </p>
-              ) : null}
-            </div>
-          ) : (
-            <div className="flex items-center rounded-md border border-dashed p-3 text-sm text-muted-foreground">
-              Select a host to link this invoice.
-            </div>
-          )}
-          <Input placeholder="Email" value={clientEmail} onChange={(e) => setClientEmail(e.target.value)} />
-          <Input placeholder="Phone" value={clientPhone} onChange={(e) => setClientPhone(e.target.value)} />
-          <Input placeholder="Address line 1" value={clientAddressLine1} onChange={(e) => setClientAddressLine1(e.target.value)} />
-          <Input placeholder="Address line 2" value={clientAddressLine2} onChange={(e) => setClientAddressLine2(e.target.value)} />
-          <Input placeholder="City" value={clientCity} onChange={(e) => setClientCity(e.target.value)} />
-          <Input placeholder="State" value={clientState} onChange={(e) => setClientState(e.target.value)} />
-          <Input placeholder="Postal code" value={clientPostalCode} onChange={(e) => setClientPostalCode(e.target.value)} />
-        </CardContent>
-      </Card>
-
-      <SectionEquipmentPackages rows={equipmentPackages} setRows={setEquipmentPackages} options={packageOptions} />
-      <SectionEquipmentTypes rows={equipmentTypes} setRows={setEquipmentTypes} options={typeOptions} />
-      <SectionExternalRentals rows={externalRentals} setRows={setExternalRentals} />
-      <SectionArtists rows={artists} setRows={setArtists} />
-      {linkedEvent ? (
-        <>
-          <InvoiceLinkedEventCrewSection
-            eventId={linkedEvent._id}
-            defaultCrewHourlyRateUsd={defaultCrewHourlyRateUsd}
-            onEventCrewRowsChange={handleEventCrewRowsChange}
-            onMessage={setSaveMessage}
-          />
-          <SectionAdditionalCrewHours
-            rows={crewRows.filter((row) => row.source === "manual")}
-            setRows={setManualCrewRows}
-            rateMode={crewRateMode}
-          />
-        </>
-      ) : (
-        <SectionCrew rows={crewRows} setRows={setCrewRows} rateMode={crewRateMode} />
-      )}
-      <SectionFees rows={fees} setRows={setFees} options={feeDefinitions ?? []} />
-
-      <Card>
-        <CardHeader><CardTitle>Discount & Notes</CardTitle></CardHeader>
-        <CardContent className="grid gap-3 md:grid-cols-3">
-          <div className="space-y-2">
-            <Label>Discount type</Label>
-            <select className="h-9 w-full rounded-md border bg-background px-3 text-sm" value={discountType} onChange={(e) => setDiscountType(e.target.value as "amount" | "percent")}>
-              <option value="amount">Amount</option>
-              <option value="percent">Percent</option>
-            </select>
-          </div>
-          <div className="space-y-2">
-            <Label>Discount value</Label>
-            <Input value={discountValue} onChange={(e) => setDiscountValue(e.target.value)} />
-          </div>
-          <div className="space-y-2 md:col-span-3">
-            <Label>Notes</Label>
-            <textarea className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm" value={notes} onChange={(e) => setNotes(e.target.value)} />
-          </div>
-        </CardContent>
-      </Card>
-
-      {invoiceData?.invoice ? (
-        <Card>
-          <CardHeader><CardTitle>Totals</CardTitle></CardHeader>
-          <CardContent className="grid gap-2 text-sm md:grid-cols-2">
-            <p>Equipment: ${invoiceData.invoice.equipmentSubtotalUsd.toFixed(2)}</p>
-            <p>External rentals: ${invoiceData.invoice.externalRentalsSubtotalUsd.toFixed(2)}</p>
-            <p>Artists: ${invoiceData.invoice.artistsSubtotalUsd.toFixed(2)}</p>
-            <p>Crew: ${invoiceData.invoice.crewSubtotalUsd.toFixed(2)}</p>
-            <p>Fees: ${invoiceData.invoice.feesSubtotalUsd.toFixed(2)}</p>
-            <p>Subtotal: ${invoiceData.invoice.subtotalUsd.toFixed(2)}</p>
-            <p>Discount: -${invoiceData.invoice.discountAmountUsd.toFixed(2)}</p>
-            <p className="font-semibold">Total: ${invoiceData.invoice.totalUsd.toFixed(2)}</p>
-          </CardContent>
-        </Card>
       ) : null}
 
       {groupModalOpen ? (
@@ -1331,6 +1602,12 @@ export function InvoiceEditor({
         saveLabel="Save"
         onSave={() => void persistDraft()}
         onRetry={() => void persistDraft()}
+        summary={
+          <div>
+            <p className="text-xs text-muted-foreground">{isDraftDirty ? "Draft total" : "Total"}</p>
+            <p className="font-semibold tabular-nums">{formatUsd(draftTotals.totalUsd)}</p>
+          </div>
+        }
       />
     </div>
   );
@@ -1340,23 +1617,100 @@ function SectionEquipmentPackages({
   rows,
   setRows,
   options,
+  billableOccurrenceCount,
+  packages,
+  equipmentPricingMode,
+  defaultBasis = "total",
 }: {
   rows: EquipmentRow[];
   setRows: Dispatch<SetStateAction<EquipmentRow[]>>;
   options: Array<{ value: string; label: string }>;
+  billableOccurrenceCount: number;
+  packages: Array<{
+    _id: string;
+    name?: string;
+    subsidizedPackagePriceUsd?: number;
+    nonSubsidizedPackagePriceUsd?: number;
+    packagePriceCents: number;
+    items?: Array<{ quantity: number; type?: { name?: string; model?: string } | null }>;
+  }>;
+  equipmentPricingMode: "subsidized" | "nonSubsidized";
+  defaultBasis?: EquipmentRow["basis"];
 }) {
   return (
     <Card>
       <CardHeader><CardTitle>Equipment — Packages</CardTitle></CardHeader>
       <CardContent className="space-y-2">
-        {rows.map((row, idx) => (
-          <div key={`pkg-${idx}`} className="grid gap-2 md:grid-cols-[1fr_120px_auto]">
-            <SearchableSelect value={row.refId} onChange={(v) => setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, refId: v } : r)))} options={options} placeholder="Search packages..." emptyLabel="Select package" />
-            <Input value={row.quantity} onChange={(e) => setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, quantity: e.target.value } : r)))} />
-            <Button type="button" variant="outline" onClick={() => setRows((prev) => prev.filter((_, i) => i !== idx))}>Remove</Button>
-          </div>
-        ))}
-        <Button type="button" variant="outline" onClick={() => setRows((prev) => [...prev, { refId: "", quantity: "1" }])}>Add package</Button>
+        {rows.map((row, idx) => {
+          const pkg = packages.find((p) => p._id === row.refId);
+          const rate =
+            equipmentPricingMode === "subsidized"
+              ? (pkg?.subsidizedPackagePriceUsd ??
+                pkg?.nonSubsidizedPackagePriceUsd ??
+                (pkg?.packagePriceCents ?? 0) / 100)
+              : (pkg?.nonSubsidizedPackagePriceUsd ?? (pkg?.packagePriceCents ?? 0) / 100);
+          const qty = Number(row.quantity || "0");
+          const basis = row.basis ?? "total";
+          const billedQty =
+            basis === "per_occurrence" && billableOccurrenceCount > 0
+              ? qty * billableOccurrenceCount
+              : qty;
+          const lineTotal = billedQty * rate;
+          return (
+            <div key={`pkg-${idx}`} className="space-y-1">
+            <div className="grid gap-2 md:grid-cols-[1fr_120px_120px_100px_auto]">
+              <SearchableSelect value={row.refId} onChange={(v) => setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, refId: v } : r)))} options={options} placeholder="Search packages..." emptyLabel="Select package" />
+              <select
+                className="h-9 rounded-md border bg-background px-2 text-sm"
+                value={basis}
+                onChange={(e) =>
+                  setRows((prev) =>
+                    prev.map((r, i) =>
+                      i === idx ? { ...r, basis: e.target.value as "total" | "per_occurrence" } : r,
+                    ),
+                  )
+                }
+              >
+                <option value="total">Total qty</option>
+                <option value="per_occurrence">Per occurrence</option>
+              </select>
+              <Input value={row.quantity} onChange={(e) => setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, quantity: e.target.value } : r)))} />
+              <p className="self-center text-xs text-muted-foreground tabular-nums">
+                {formatUsd(lineTotal)}
+                {basis === "per_occurrence" && billableOccurrenceCount > 0
+                  ? ` (${qty}×${billableOccurrenceCount})`
+                  : basis === "total" && billableOccurrenceCount > 1
+                    ? ` (~${Math.floor(qty / billableOccurrenceCount)}/show)`
+                    : ""}
+              </p>
+              <Button type="button" variant="outline" onClick={() => setRows((prev) => prev.filter((_, i) => i !== idx))}>Remove</Button>
+            </div>
+            {pkg?.items?.length ? (
+              <Collapsible defaultOpen={false}>
+                <CollapsibleTrigger asChild>
+                  <button
+                    type="button"
+                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    Package contents ({pkg.items.length})
+                    <CaretDownIcon className="size-3" />
+                  </button>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <p className="pt-1 text-xs text-muted-foreground">
+                    {pkg.items
+                      .map((item) =>
+                        `${item.quantity}× ${item.type?.name ?? "item"}${item.type?.model ? ` · ${item.type.model}` : ""}`,
+                      )
+                      .join(", ")}
+                  </p>
+                </CollapsibleContent>
+              </Collapsible>
+            ) : null}
+            </div>
+          );
+        })}
+        <Button type="button" variant="outline" onClick={() => setRows((prev) => [...prev, { refId: "", quantity: "1", basis: defaultBasis }])}>Add package</Button>
       </CardContent>
     </Card>
   );
@@ -1366,23 +1720,75 @@ function SectionEquipmentTypes({
   rows,
   setRows,
   options,
+  billableOccurrenceCount,
+  types,
+  equipmentPricingMode,
+  defaultBasis = "total",
 }: {
   rows: EquipmentRow[];
   setRows: Dispatch<SetStateAction<EquipmentRow[]>>;
   options: Array<{ value: string; label: string }>;
+  billableOccurrenceCount: number;
+  types: Array<{
+    _id: string;
+    subsidizedRentalPriceUsd?: number;
+    nonSubsidizedRentalPriceUsd?: number;
+    rentalPriceUsd?: number;
+  }>;
+  equipmentPricingMode: "subsidized" | "nonSubsidized";
+  defaultBasis?: EquipmentRow["basis"];
 }) {
   return (
     <Card>
       <CardHeader><CardTitle>Equipment — Individual Asset Types</CardTitle></CardHeader>
       <CardContent className="space-y-2">
-        {rows.map((row, idx) => (
-          <div key={`type-${idx}`} className="grid gap-2 md:grid-cols-[1fr_120px_auto]">
-            <SearchableSelect value={row.refId} onChange={(v) => setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, refId: v } : r)))} options={options} placeholder="Search types..." emptyLabel="Select type" />
-            <Input value={row.quantity} onChange={(e) => setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, quantity: e.target.value } : r)))} />
-            <Button type="button" variant="outline" onClick={() => setRows((prev) => prev.filter((_, i) => i !== idx))}>Remove</Button>
-          </div>
-        ))}
-        <Button type="button" variant="outline" onClick={() => setRows((prev) => [...prev, { refId: "", quantity: "1" }])}>Add type</Button>
+        {rows.map((row, idx) => {
+          const type = types.find((t) => t._id === row.refId);
+          const rate =
+            equipmentPricingMode === "subsidized"
+              ? (type?.subsidizedRentalPriceUsd ??
+                type?.nonSubsidizedRentalPriceUsd ??
+                type?.rentalPriceUsd ??
+                0)
+              : (type?.nonSubsidizedRentalPriceUsd ?? type?.rentalPriceUsd ?? 0);
+          const qty = Number(row.quantity || "0");
+          const basis = row.basis ?? "total";
+          const billedQty =
+            basis === "per_occurrence" && billableOccurrenceCount > 0
+              ? qty * billableOccurrenceCount
+              : qty;
+          const lineTotal = billedQty * rate;
+          return (
+            <div key={`type-${idx}`} className="grid gap-2 md:grid-cols-[1fr_120px_120px_100px_auto]">
+              <SearchableSelect value={row.refId} onChange={(v) => setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, refId: v } : r)))} options={options} placeholder="Search types..." emptyLabel="Select type" />
+              <select
+                className="h-9 rounded-md border bg-background px-2 text-sm"
+                value={basis}
+                onChange={(e) =>
+                  setRows((prev) =>
+                    prev.map((r, i) =>
+                      i === idx ? { ...r, basis: e.target.value as "total" | "per_occurrence" } : r,
+                    ),
+                  )
+                }
+              >
+                <option value="total">Total qty</option>
+                <option value="per_occurrence">Per occurrence</option>
+              </select>
+              <Input value={row.quantity} onChange={(e) => setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, quantity: e.target.value } : r)))} />
+              <p className="self-center text-xs text-muted-foreground tabular-nums">
+                {formatUsd(lineTotal)}
+                {basis === "per_occurrence" && billableOccurrenceCount > 0
+                  ? ` (${qty}×${billableOccurrenceCount})`
+                  : basis === "total" && billableOccurrenceCount > 1
+                    ? ` (~${Math.floor(qty / billableOccurrenceCount)}/show)`
+                    : ""}
+              </p>
+              <Button type="button" variant="outline" onClick={() => setRows((prev) => prev.filter((_, i) => i !== idx))}>Remove</Button>
+            </div>
+          );
+        })}
+        <Button type="button" variant="outline" onClick={() => setRows((prev) => [...prev, { refId: "", quantity: "1", basis: defaultBasis }])}>Add type</Button>
       </CardContent>
     </Card>
   );

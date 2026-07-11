@@ -4,6 +4,7 @@ import { components, internal } from "./_generated/api";
 import { mutation, query } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import {
+  getActiveOrganizationContextOrNull,
   getUserId,
   isAdmin,
   requireAdmin,
@@ -18,17 +19,16 @@ import {
   updatePendingInviteDetails,
 } from "./email/invitations";
 import { assertUniqueBandPublicSlug, normalizePublicSlug } from "./lib/publicSlug";
+import { isBandPayeeComplete } from "./lib/bandPayments";
+import { normalizeOptionalAssetReference } from "./lib/inventoryUpload";
+import {
+  resolveProfileMembership,
+  userDisciplineValue,
+  userVerticalValue,
+  type UserDiscipline,
+  type UserVertical,
+} from "./lib/userVerticals";
 
-const USER_TEAMS = ["Sound", "Lights", "Design", "Marketing", "Operations"] as const;
-const userTeamValue = v.union(
-  v.literal("Sound"),
-  v.literal("Lights"),
-  v.literal("Design"),
-  v.literal("Marketing"),
-  v.literal("Operations"),
-);
-
-type UserTeam = (typeof USER_TEAMS)[number];
 const invitationStatusValue = v.union(
   v.literal("pending"),
   v.literal("accepted"),
@@ -78,20 +78,39 @@ function toSlug(input: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
+/**
+ * Drain every page of a Better Auth model rather than reading a single fixed
+ * page. The previous single-page reads silently truncated once an org grew past
+ * the page size (e.g. users beyond 1000 vanished from admin lists); looping the
+ * cursor keeps these admin-only reads complete. Bounded by `maxPages` as a
+ * runaway guard.
+ */
+async function fetchAllBetterAuthRows<T>(
+  ctx: QueryCtx | MutationCtx,
+  model: "user" | "organization",
+  pageSize: number,
+  maxPages = 50,
+): Promise<T[]> {
+  const rows: T[] = [];
+  let cursor: string | null = null;
+  for (let page = 0; page < maxPages; page += 1) {
+    const result = await ctx.runQuery(components.betterAuth.adapter.findMany, {
+      model,
+      paginationOpts: { cursor, numItems: pageSize },
+    });
+    rows.push(...((result?.page ?? []) as T[]));
+    if (result?.isDone || !result?.continueCursor) break;
+    cursor = result.continueCursor as string;
+  }
+  return rows;
+}
+
 async function getAllAuthUsers(ctx: QueryCtx | MutationCtx) {
-  const result = await ctx.runQuery(components.betterAuth.adapter.findMany, {
-    model: "user",
-    paginationOpts: { cursor: null, numItems: 1000 },
-  });
-  return (result?.page ?? []) as AuthUser[];
+  return await fetchAllBetterAuthRows<AuthUser>(ctx, "user", 500);
 }
 
 async function getAllOrganizations(ctx: QueryCtx | MutationCtx) {
-  const result = await ctx.runQuery(components.betterAuth.adapter.findMany, {
-    model: "organization",
-    paginationOpts: { cursor: null, numItems: 500 },
-  });
-  return (result?.page ?? []) as OrganizationRow[];
+  return await fetchAllBetterAuthRows<OrganizationRow>(ctx, "organization", 500);
 }
 
 async function resolveOrCreateOrganization(ctx: MutationCtx, name: string) {
@@ -140,15 +159,19 @@ async function ensureUserProfileDefaults(
     title,
     phone,
     active = true,
-    teams = [],
+    verticals = [],
+    disciplines = [],
     showOnPublicCrewPage,
+    publicCrewDescription,
     defaultOrganizationId,
   }: {
     title?: string;
     phone?: string;
     active?: boolean;
-    teams?: UserTeam[];
+    verticals?: UserVertical[];
+    disciplines?: UserDiscipline[];
     showOnPublicCrewPage?: boolean;
+    publicCrewDescription?: string;
     defaultOrganizationId?: string;
   },
 ) {
@@ -157,14 +180,18 @@ async function ensureUserProfileDefaults(
     .query("userAdminProfiles")
     .withIndex("by_userId", (q) => q.eq("userId", userId))
     .unique();
+  const normalizedDescription = publicCrewDescription?.trim() || undefined;
   if (existing) {
     await ctx.db.patch(existing._id, {
       title: title ?? existing.title,
       phone: phone ?? existing.phone,
       active,
-      teams,
+      verticals,
+      disciplines,
       showOnPublicCrewPage:
         showOnPublicCrewPage !== undefined ? showOnPublicCrewPage : existing.showOnPublicCrewPage,
+      publicCrewDescription:
+        publicCrewDescription !== undefined ? normalizedDescription : existing.publicCrewDescription,
       defaultOrganizationId: defaultOrganizationId ?? existing.defaultOrganizationId,
       updatedAt: now,
     });
@@ -175,8 +202,10 @@ async function ensureUserProfileDefaults(
     title,
     phone,
     active,
-    teams,
+    verticals,
+    disciplines,
     showOnPublicCrewPage,
+    publicCrewDescription: normalizedDescription,
     defaultOrganizationId,
     createdAt: now,
     updatedAt: now,
@@ -277,6 +306,10 @@ export const listBandOrganizationsAdmin = query({
           displayName: profile?.displayName ?? organization.name ?? "",
           bio: profile?.bio ?? "",
           performerHourlyRateUsd: profile?.performerHourlyRateUsd ?? 0,
+          designatedPayeeUserId: profile?.designatedPayeeUserId ?? "",
+          designatedPayeeName: profile?.designatedPayeeName ?? "",
+          designatedPayeeEmail: profile?.designatedPayeeEmail ?? "",
+          designatedPayeeMailingAddress: profile?.designatedPayeeMailingAddress ?? "",
           publicWebsiteUrl: profile?.publicWebsiteUrl ?? "",
           publicInstagramUrl: profile?.publicInstagramUrl ?? "",
           publicYoutubeUrl: profile?.publicYoutubeUrl ?? "",
@@ -296,6 +329,10 @@ export const updateBandOrganizationProfileAdmin = mutation({
     displayName: v.optional(v.string()),
     bio: v.optional(v.string()),
     performerHourlyRateUsd: v.optional(v.number()),
+    designatedPayeeUserId: v.optional(v.string()),
+    designatedPayeeName: v.optional(v.string()),
+    designatedPayeeEmail: v.optional(v.string()),
+    designatedPayeeMailingAddress: v.optional(v.string()),
     publicWebsiteUrl: v.optional(v.string()),
     publicInstagramUrl: v.optional(v.string()),
     publicYoutubeUrl: v.optional(v.string()),
@@ -336,30 +373,57 @@ export const updateBandOrganizationProfileAdmin = mutation({
         displayName: args.displayName?.trim() || undefined,
         bio: args.bio?.trim() || undefined,
         performerHourlyRateUsd: args.performerHourlyRateUsd ?? existing.performerHourlyRateUsd,
+        designatedPayeeUserId:
+          args.designatedPayeeUserId !== undefined
+            ? args.designatedPayeeUserId.trim() || undefined
+            : existing.designatedPayeeUserId,
+        designatedPayeeName:
+          args.designatedPayeeName !== undefined
+            ? args.designatedPayeeName.trim() || undefined
+            : existing.designatedPayeeName,
+        designatedPayeeEmail:
+          args.designatedPayeeEmail !== undefined
+            ? args.designatedPayeeEmail.trim().toLowerCase() || undefined
+            : existing.designatedPayeeEmail,
+        designatedPayeeMailingAddress:
+          args.designatedPayeeMailingAddress !== undefined
+            ? args.designatedPayeeMailingAddress.trim() || undefined
+            : existing.designatedPayeeMailingAddress,
         publicWebsiteUrl: args.publicWebsiteUrl?.trim() || undefined,
         publicInstagramUrl: args.publicInstagramUrl?.trim() || undefined,
         publicYoutubeUrl: args.publicYoutubeUrl?.trim() || undefined,
         publicListing: publicListing ?? existing.publicListing,
         publicSlug: publicSlug ?? (publicListing === false ? undefined : existing.publicSlug),
-        publicHeroImageUrl: args.publicHeroImageUrl?.trim() || undefined,
+        publicHeroImageUrl: normalizeOptionalAssetReference(args.publicHeroImageUrl),
         updatedAt: now,
+      });
+      await ctx.runMutation(internal.bandPayments.refreshPendingPayeePaymentsForOrg, {
+        organizationId: args.organizationId,
       });
       return existing._id;
     }
-    return await ctx.db.insert("organizationProfiles", {
+    const profileId = await ctx.db.insert("organizationProfiles", {
       organizationId: args.organizationId,
       organizationType: "band",
       displayName: args.displayName?.trim() || organization.name || "Band",
       bio: args.bio?.trim() || undefined,
       performerHourlyRateUsd: args.performerHourlyRateUsd,
+      designatedPayeeUserId: args.designatedPayeeUserId?.trim() || undefined,
+      designatedPayeeName: args.designatedPayeeName?.trim() || undefined,
+      designatedPayeeEmail: args.designatedPayeeEmail?.trim().toLowerCase() || undefined,
+      designatedPayeeMailingAddress: args.designatedPayeeMailingAddress?.trim() || undefined,
       publicWebsiteUrl: args.publicWebsiteUrl?.trim() || undefined,
       publicInstagramUrl: args.publicInstagramUrl?.trim() || undefined,
       publicYoutubeUrl: args.publicYoutubeUrl?.trim() || undefined,
       publicListing: publicListing ?? false,
       publicSlug: publicListing ? publicSlug : undefined,
-      publicHeroImageUrl: args.publicHeroImageUrl?.trim() || undefined,
+      publicHeroImageUrl: normalizeOptionalAssetReference(args.publicHeroImageUrl),
       updatedAt: now,
     });
+    await ctx.runMutation(internal.bandPayments.refreshPendingPayeePaymentsForOrg, {
+      organizationId: args.organizationId,
+    });
+    return profileId;
   },
 });
 
@@ -430,13 +494,26 @@ export const getViewer = query({
     userId: v.string(),
     role: v.optional(v.string()),
     isAdmin: v.boolean(),
+    isCrewOnly: v.boolean(),
+    verticals: v.array(userVerticalValue),
+    disciplines: v.array(userDisciplineValue),
   }),
   handler: async (ctx) => {
     const user = await requireAuth(ctx);
+    const userId = getUserId(user);
+    const orgContext = await getActiveOrganizationContextOrNull(ctx);
+    const profile = await ctx.db
+      .query("userAdminProfiles")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .unique();
+    const membership = resolveProfileMembership(profile ?? {});
     return {
-      userId: getUserId(user),
+      userId,
       role: user.role ?? undefined,
       isAdmin: isAdmin(user),
+      isCrewOnly: !isAdmin(user) && orgContext?.organizationType === "arbor_internal",
+      verticals: membership.verticals,
+      disciplines: membership.disciplines,
     };
   },
 });
@@ -558,6 +635,7 @@ export const listUsersForAdmin = query({
             active: membership.active,
           }))
           .sort((a, b) => a.organizationName.localeCompare(b.organizationName));
+        const membership = resolveProfileMembership(profile ?? {});
         return {
           id,
           name: user.name ?? user.email ?? "Unknown user",
@@ -567,8 +645,10 @@ export const listUsersForAdmin = query({
           active: profile?.active ?? true,
           phone: profile?.phone ?? "",
           title: profile?.title ?? "",
-          teams: profile?.teams ?? [],
+          verticals: membership.verticals,
+          disciplines: membership.disciplines,
           showOnPublicCrewPage: profile?.showOnPublicCrewPage ?? false,
+          publicCrewDescription: profile?.publicCrewDescription ?? "",
           defaultOrganizationId: profile?.defaultOrganizationId ?? "",
           organizationMemberships: memberships,
           hourlyRateUsd: rateByUserId.get(id) ?? null,
@@ -589,7 +669,8 @@ export const listUsersForAdmin = query({
           user.email,
           user.role,
           user.phone,
-          user.teams.join(" "),
+          user.verticals.join(" "),
+          user.disciplines.join(" "),
           user.organizationMemberships.map((row) => row.organizationName).join(" "),
         ]
           .join(" ")
@@ -635,7 +716,9 @@ export const listInvitationsAdmin = query({
             "Unknown",
           createdAt: invite.createdAt ?? 0,
           expiresAt: invite.expiresAt ?? 0,
-          teams: (pending?.teams ?? []) as UserTeam[],
+          teams: (pending?.teams ?? []) as string[],
+          verticals: (pending?.verticals ?? []) as UserVertical[],
+          disciplines: (pending?.disciplines ?? []) as UserDiscipline[],
         };
       })
       .filter((invite) => Boolean(invite.id))
@@ -650,7 +733,8 @@ export const inviteUserAdmin = mutation({
     organizationId: v.string(),
     email: v.string(),
     role: v.optional(v.string()),
-    teams: v.optional(v.array(userTeamValue)),
+    verticals: v.optional(v.array(userVerticalValue)),
+    disciplines: v.optional(v.array(userDisciplineValue)),
   },
   handler: async (ctx, args) => {
     const admin = await requireAdmin(ctx);
@@ -685,7 +769,8 @@ export const inviteUserAdmin = mutation({
     if (existingUserId) {
       await ensureUserProfileDefaults(ctx, existingUserId, {
         active: true,
-        teams: args.teams ?? [],
+        verticals: args.verticals ?? [],
+        disciplines: args.disciplines ?? [],
         defaultOrganizationId: args.organizationId,
       });
       await upsertOrgMembership(ctx, {
@@ -707,7 +792,8 @@ export const inviteUserAdmin = mutation({
       role: membershipRole,
       inviterId: adminId,
       expiresAt,
-      teams: args.teams,
+      verticals: args.verticals,
+      disciplines: args.disciplines,
       isExistingUser: Boolean(existingUserId),
     });
 
@@ -779,7 +865,8 @@ export const updateInviteAdmin = mutation({
   args: {
     invitationId: v.string(),
     role: v.optional(v.string()),
-    teams: v.optional(v.array(userTeamValue)),
+    verticals: v.optional(v.array(userVerticalValue)),
+    disciplines: v.optional(v.array(userDisciplineValue)),
   },
   returns: v.object({ ok: v.boolean() }),
   handler: async (ctx, args) => {
@@ -797,7 +884,6 @@ export const updateInviteAdmin = mutation({
       invite.organizationId,
       args.role ?? invite.role ?? "member",
     );
-    const nextTeams = args.teams;
 
     await ctx.runMutation(components.betterAuth.adapter.updateOne, {
       input: {
@@ -810,7 +896,8 @@ export const updateInviteAdmin = mutation({
     });
     await updatePendingInviteDetails(ctx, args.invitationId, {
       role: nextRole,
-      teams: nextTeams,
+      verticals: args.verticals,
+      disciplines: args.disciplines,
     });
 
     return { ok: true };
@@ -840,7 +927,8 @@ export const createUserAdmin = mutation({
     role: v.string(),
     phone: v.optional(v.string()),
     title: v.optional(v.string()),
-    teams: v.optional(v.array(userTeamValue)),
+    verticals: v.optional(v.array(userVerticalValue)),
+    disciplines: v.optional(v.array(userDisciplineValue)),
     hourlyRateUsd: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -902,7 +990,8 @@ export const createUserAdmin = mutation({
       title: args.title?.trim() || undefined,
       phone: args.phone?.trim() || undefined,
       active: true,
-      teams: args.teams ?? [],
+      verticals: args.verticals ?? [],
+      disciplines: args.disciplines ?? [],
       defaultOrganizationId: args.organizationId,
     });
     await upsertOrgMembership(ctx, {
@@ -944,8 +1033,10 @@ export const updateUserAdmin = mutation({
     active: v.optional(v.boolean()),
     phone: v.optional(v.string()),
     title: v.optional(v.string()),
-    teams: v.optional(v.array(userTeamValue)),
+    verticals: v.optional(v.array(userVerticalValue)),
+    disciplines: v.optional(v.array(userDisciplineValue)),
     showOnPublicCrewPage: v.optional(v.boolean()),
+    publicCrewDescription: v.optional(v.string()),
     defaultOrganizationId: v.optional(v.string()),
     hourlyRateUsd: v.optional(v.number()),
     organizationMemberships: v.optional(
@@ -981,15 +1072,23 @@ export const updateUserAdmin = mutation({
       .query("userAdminProfiles")
       .withIndex("by_userId", (q) => q.eq("userId", args.userId))
       .unique();
+    const existingMembership = existingProfile
+      ? resolveProfileMembership(existingProfile)
+      : { verticals: [], disciplines: [] };
     await ensureUserProfileDefaults(ctx, args.userId, {
       title: args.title?.trim() ?? existingProfile?.title,
       phone: args.phone ?? existingProfile?.phone,
       active: args.active ?? existingProfile?.active ?? true,
-      teams: args.teams ?? (existingProfile?.teams as UserTeam[] | undefined) ?? [],
+      verticals: args.verticals ?? existingMembership.verticals,
+      disciplines: args.disciplines ?? existingMembership.disciplines,
       showOnPublicCrewPage:
         args.showOnPublicCrewPage !== undefined
           ? args.showOnPublicCrewPage
           : existingProfile?.showOnPublicCrewPage,
+      publicCrewDescription:
+        args.publicCrewDescription !== undefined
+          ? args.publicCrewDescription
+          : existingProfile?.publicCrewDescription,
       defaultOrganizationId: args.defaultOrganizationId ?? existingProfile?.defaultOrganizationId,
     });
 
@@ -1147,6 +1246,15 @@ export const getActiveBandProfile = query({
       displayName: profile?.displayName ?? context.organizationName,
       bio: profile?.bio ?? "",
       performerHourlyRateUsd: profile?.performerHourlyRateUsd ?? 0,
+      designatedPayeeUserId: profile?.designatedPayeeUserId ?? "",
+      designatedPayeeName: profile?.designatedPayeeName ?? "",
+      designatedPayeeEmail: profile?.designatedPayeeEmail ?? "",
+      designatedPayeeMailingAddress: profile?.designatedPayeeMailingAddress ?? "",
+      payeeComplete: isBandPayeeComplete({
+        designatedPayeeName: profile?.designatedPayeeName,
+        designatedPayeeEmail: profile?.designatedPayeeEmail,
+        designatedPayeeMailingAddress: profile?.designatedPayeeMailingAddress,
+      }),
       publicWebsiteUrl: profile?.publicWebsiteUrl ?? "",
       publicInstagramUrl: profile?.publicInstagramUrl ?? "",
       publicYoutubeUrl: profile?.publicYoutubeUrl ?? "",
@@ -1162,6 +1270,10 @@ export const updateActiveBandProfile = mutation({
     displayName: v.optional(v.string()),
     bio: v.optional(v.string()),
     performerHourlyRateUsd: v.optional(v.number()),
+    designatedPayeeUserId: v.optional(v.string()),
+    designatedPayeeName: v.optional(v.string()),
+    designatedPayeeEmail: v.optional(v.string()),
+    designatedPayeeMailingAddress: v.optional(v.string()),
     publicWebsiteUrl: v.optional(v.string()),
     publicInstagramUrl: v.optional(v.string()),
     publicYoutubeUrl: v.optional(v.string()),
@@ -1195,30 +1307,57 @@ export const updateActiveBandProfile = mutation({
         displayName: args.displayName?.trim() || undefined,
         bio: args.bio?.trim() || undefined,
         performerHourlyRateUsd: args.performerHourlyRateUsd ?? existing.performerHourlyRateUsd,
+        designatedPayeeUserId:
+          args.designatedPayeeUserId !== undefined
+            ? args.designatedPayeeUserId.trim() || undefined
+            : existing.designatedPayeeUserId,
+        designatedPayeeName:
+          args.designatedPayeeName !== undefined
+            ? args.designatedPayeeName.trim() || undefined
+            : existing.designatedPayeeName,
+        designatedPayeeEmail:
+          args.designatedPayeeEmail !== undefined
+            ? args.designatedPayeeEmail.trim().toLowerCase() || undefined
+            : existing.designatedPayeeEmail,
+        designatedPayeeMailingAddress:
+          args.designatedPayeeMailingAddress !== undefined
+            ? args.designatedPayeeMailingAddress.trim() || undefined
+            : existing.designatedPayeeMailingAddress,
         publicWebsiteUrl: args.publicWebsiteUrl?.trim() || undefined,
         publicInstagramUrl: args.publicInstagramUrl?.trim() || undefined,
         publicYoutubeUrl: args.publicYoutubeUrl?.trim() || undefined,
         publicListing: publicListing ?? existing.publicListing,
         publicSlug: publicSlug ?? (publicListing === false ? undefined : existing.publicSlug),
-        publicHeroImageUrl: args.publicHeroImageUrl?.trim() || undefined,
+        publicHeroImageUrl: normalizeOptionalAssetReference(args.publicHeroImageUrl),
         updatedAt: now,
+      });
+      await ctx.runMutation(internal.bandPayments.refreshPendingPayeePaymentsForOrg, {
+        organizationId: context.organizationId,
       });
       return existing._id;
     }
-    return await ctx.db.insert("organizationProfiles", {
+    const profileId = await ctx.db.insert("organizationProfiles", {
       organizationId: context.organizationId,
       organizationType: "band",
       displayName: args.displayName?.trim() || context.organizationName,
       bio: args.bio?.trim() || undefined,
       performerHourlyRateUsd: args.performerHourlyRateUsd,
+      designatedPayeeUserId: args.designatedPayeeUserId?.trim() || undefined,
+      designatedPayeeName: args.designatedPayeeName?.trim() || undefined,
+      designatedPayeeEmail: args.designatedPayeeEmail?.trim().toLowerCase() || undefined,
+      designatedPayeeMailingAddress: args.designatedPayeeMailingAddress?.trim() || undefined,
       publicWebsiteUrl: args.publicWebsiteUrl?.trim() || undefined,
       publicInstagramUrl: args.publicInstagramUrl?.trim() || undefined,
       publicYoutubeUrl: args.publicYoutubeUrl?.trim() || undefined,
       publicListing: publicListing ?? false,
       publicSlug: publicListing ? publicSlug : undefined,
-      publicHeroImageUrl: args.publicHeroImageUrl?.trim() || undefined,
+      publicHeroImageUrl: normalizeOptionalAssetReference(args.publicHeroImageUrl),
       updatedAt: now,
     });
+    await ctx.runMutation(internal.bandPayments.refreshPendingPayeePaymentsForOrg, {
+      organizationId: context.organizationId,
+    });
+    return profileId;
   },
 });
 
@@ -1380,7 +1519,8 @@ export const backfillUserAdminDefaults = mutation({
       await ensureUserProfileDefaults(ctx, userId, {
         title: undefined,
         active: true,
-        teams: [],
+        verticals: [],
+        disciplines: [],
         defaultOrganizationId: defaultOrg.id,
       });
       touchedProfiles += 1;

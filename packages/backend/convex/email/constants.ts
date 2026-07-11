@@ -1,5 +1,18 @@
+import {
+  formatDateTime,
+  formatDateTimeRange,
+  pacificDateKey,
+  PORTAL_TIMEZONE,
+} from "@arbor/format";
+
 export const EMAIL_FROM =
   process.env.EMAIL_FROM ?? "Arbor Notifications <noreply@arbor.st>";
+
+export const PAYMENTS_EMAIL_FROM =
+  process.env.PAYMENTS_EMAIL_FROM ?? "Arbor Live — Financial Manager <payments@arbor.st>";
+
+export const BAND_PAYMENTS_CC_EMAIL =
+  process.env.BAND_PAYMENTS_CC_EMAIL ?? "arborlive@stanford.edu";
 
 function parseEmailAddress(from: string) {
   const match = from.match(/<([^>]+)>/);
@@ -12,7 +25,7 @@ export const ORGANIZER_EMAIL =
 
 export const SITE_URL = process.env.SITE_URL ?? "http://localhost:3000";
 
-export const EVENT_TIMEZONE = "America/Los_Angeles";
+export const EVENT_TIMEZONE = PORTAL_TIMEZONE;
 
 export type EmailTemplate =
   | "event_cancelled"
@@ -27,7 +40,10 @@ export type EmailTemplate =
   | "booking_quote_ready"
   | "payment_proof_reminder"
   | "payment_proof_submitted"
-  | "paying_party_added";
+  | "paying_party_added"
+  | "band_payment_confirmation"
+  | "band_payment_completed"
+  | "band_payment_payee_required";
 
 export function eventDashboardUrl(eventId: string) {
   return `${SITE_URL}/dashboard/events/${eventId}`;
@@ -38,32 +54,7 @@ export function formatEventDateRange(
   endAt: number,
   timezone: string = EVENT_TIMEZONE,
 ) {
-  const dateOpts: Intl.DateTimeFormatOptions = {
-    timeZone: timezone,
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  };
-  const timeOpts: Intl.DateTimeFormatOptions = {
-    timeZone: timezone,
-    hour: "numeric",
-    minute: "2-digit",
-  };
-
-  const sameDay = new Date(startAt).toDateString() === new Date(endAt).toDateString();
-  const startLabel = new Date(startAt).toLocaleString("en-US", {
-    ...dateOpts,
-    ...timeOpts,
-  });
-
-  if (sameDay) {
-    const endTime = new Date(endAt).toLocaleString("en-US", timeOpts);
-    return `${startLabel} – ${endTime}`;
-  }
-
-  const endLabel = new Date(endAt).toLocaleString("en-US", { ...dateOpts, ...timeOpts });
-  return `${startLabel} – ${endLabel}`;
+  return formatDateTimeRange(startAt, endAt, timezone);
 }
 
 export function inviteAcceptUrl(token: string) {
@@ -84,15 +75,11 @@ export function publicQuoteUrl(token: string) {
 }
 
 export function formatInviteExpiry(expiresAt: number, timezone: string = EVENT_TIMEZONE) {
-  return new Date(expiresAt).toLocaleString("en-US", {
-    timeZone: timezone,
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  return formatDateTime(expiresAt, "long", timezone);
+}
+
+export function bandPayeeSettingsUrl() {
+  return `${SITE_URL}/dashboard/bands-and-performers#payment-payee`;
 }
 
 export function subjectForTemplate(template: EmailTemplate, context: string) {
@@ -123,9 +110,15 @@ export function subjectForTemplate(template: EmailTemplate, context: string) {
       return `Payment proof received: ${context}`;
     case "paying_party_added":
       return `You've been added as the paying party: ${context}`;
+    case "band_payment_confirmation":
+      return `Payment confirmation needed: ${context}`;
+    case "band_payment_completed":
+      return `Band payment processed: ${context}`;
+    case "band_payment_payee_required":
+      return `Payment payee info needed: ${context}`;
   }
 }
 
 export function reminderDayKey(nowMs: number, timezone: string = EVENT_TIMEZONE) {
-  return new Date(nowMs).toLocaleDateString("en-CA", { timeZone: timezone });
+  return pacificDateKey(nowMs, timezone);
 }

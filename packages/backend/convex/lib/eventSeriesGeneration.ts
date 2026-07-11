@@ -1,8 +1,10 @@
+import { pacificDateKey, PORTAL_TIMEZONE } from "@arbor/format";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { syncEventCrewCostUsd } from "./crewCost";
+import { syncEventStatusForLinkedInvoice, type EventStatus } from "./eventStatus";
 
-export const EVENT_TIMEZONE = "America/Los_Angeles";
+export const EVENT_TIMEZONE = PORTAL_TIMEZONE;
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 export type EventSeriesBlockTemplate = {
@@ -259,7 +261,7 @@ export function occurrenceEndAt(startAt: number, anchorStartAt: number, anchorEn
 }
 
 export function spansMultipleDays(startAt: number, endAt: number) {
-  return new Date(startAt).toDateString() !== new Date(endAt).toDateString();
+  return pacificDateKey(startAt) !== pacificDateKey(endAt);
 }
 
 export async function insertScheduleBlocksFromTemplates(
@@ -315,7 +317,8 @@ export async function materializeOccurrence(
   const eventId = await ctx.db.insert("events", {
     title: series.title,
     status: "tentative",
-    visibility: "internal",
+    visibility: "public",
+    invoiceId: series.invoiceId,
     seriesId: series._id,
     occurrenceIndex,
     seriesDetached: false,
@@ -363,6 +366,9 @@ export async function materializeOccurrence(
   );
   if (series.shiftTemplates && series.shiftTemplates.length > 0) {
     await syncEventCrewCostUsd(ctx, eventId, now);
+  }
+  if (series.invoiceId) {
+    await syncEventStatusForLinkedInvoice(ctx, eventId, series.invoiceId, "tentative");
   }
   return eventId;
 }
@@ -414,18 +420,63 @@ export function shouldApplySeriesUpdate(
   return true;
 }
 
-export async function propagateOverviewToSeriesOccurrences(
+export async function propagateInvoiceIdToSeriesOccurrences(
   ctx: MutationCtx,
-  series: Doc<"eventSeries">,
+  seriesId: Id<"eventSeries">,
+  invoiceId: Id<"invoices"> | undefined,
   referenceOccurrenceIndex: number,
   scope: SeriesEditScope,
   now: number,
 ) {
   const occurrences = await ctx.db
     .query("events")
+    .withIndex("by_seriesId_and_occurrenceIndex", (q) => q.eq("seriesId", seriesId))
+    .take(200);
+
+  for (const occurrence of occurrences.sort(
+    (a, b) => (a.occurrenceIndex ?? 0) - (b.occurrenceIndex ?? 0),
+  )) {
+    if (scope === "this") {
+      if (occurrence.occurrenceIndex !== referenceOccurrenceIndex) continue;
+    } else if (!shouldApplySeriesUpdate(occurrence, scope, referenceOccurrenceIndex, now)) {
+      continue;
+    }
+    if (occurrence.seriesDetached || occurrence.status === "cancelled") continue;
+
+    await ctx.db.patch(occurrence._id, { invoiceId, updatedAt: now });
+    if (invoiceId) {
+      await syncEventStatusForLinkedInvoice(ctx, occurrence._id, invoiceId, occurrence.status);
+    }
+  }
+}
+export type SeriesOverviewOverride = {
+  status?: EventStatus;
+  visibility?: "public" | "internal" | "informational";
+  otPremium?: boolean;
+  crewCostBufferPercent?: number;
+};
+
+export type SeriesOverviewAffectedOccurrence = {
+  id: Id<"events">;
+  prevStatus: string;
+  invoiceId: Id<"invoices"> | undefined;
+};
+
+export async function propagateOverviewToSeriesOccurrences(
+  ctx: MutationCtx,
+  series: Doc<"eventSeries">,
+  referenceOccurrenceIndex: number,
+  scope: SeriesEditScope,
+  now: number,
+  overrides?: SeriesOverviewOverride,
+): Promise<SeriesOverviewAffectedOccurrence[]> {
+  const occurrences = await ctx.db
+    .query("events")
     .withIndex("by_seriesId_and_occurrenceIndex", (q) => q.eq("seriesId", series._id))
     .take(200);
   const intervalMs = series.intervalWeeks * 7 * 24 * 60 * 60 * 1000;
+
+  const affected: SeriesOverviewAffectedOccurrence[] = [];
 
   for (const occurrence of occurrences.sort(
     (a, b) => (a.occurrenceIndex ?? 0) - (b.occurrenceIndex ?? 0),
@@ -439,6 +490,13 @@ export async function propagateOverviewToSeriesOccurrences(
     const occurrenceIndex = occurrence.occurrenceIndex ?? 0;
     const startAt = series.anchorStartAt + occurrenceIndex * intervalMs;
     const patch = buildEventPatchFromSeriesTemplate(series, startAt);
-    await ctx.db.patch(occurrence._id, { ...patch, updatedAt: now });
+    await ctx.db.patch(occurrence._id, { ...patch, ...overrides, updatedAt: now });
+    affected.push({
+      id: occurrence._id,
+      prevStatus: occurrence.status,
+      invoiceId: occurrence.invoiceId,
+    });
   }
+
+  return affected;
 }

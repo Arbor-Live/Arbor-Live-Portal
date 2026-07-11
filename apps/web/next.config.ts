@@ -1,6 +1,7 @@
 import fs from "fs";
 import type { NextConfig } from "next";
 import path from "path";
+import { collectR2ImageHostnames } from "./src/lib/asset-image-hosts";
 
 const webDir = __dirname;
 const repoRoot = path.join(webDir, "../..");
@@ -39,11 +40,11 @@ loadEnvDir(webDir, [".env", ".env.local", ".env.development", ".env.development.
 loadEnvDir(backendDir, [".env", ".env.local"]);
 loadEnvFile(path.join(webDir, ".env.production.local"));
 
-/** Convex CLI sets CONVEX_URL during `convex deploy --cmd`; expose it to the Next.js bundle. */
+/** Convex CLI sets CONVEX_URL during `convex deploy --cmd`; prefer it at build time. */
 const convexCloudUrl =
-  process.env.NEXT_PUBLIC_CONVEX_URL?.trim() ||
   process.env.CONVEX_URL?.trim() ||
   process.env.CONVEX_CLOUD_URL?.trim() ||
+  process.env.NEXT_PUBLIC_CONVEX_URL?.trim() ||
   undefined;
 const convexSiteUrl =
   process.env.NEXT_PUBLIC_CONVEX_SITE_URL?.trim() ||
@@ -52,41 +53,72 @@ const convexSiteUrl =
     ? convexCloudUrl.replace(/\.convex\.cloud$/, ".convex.site")
     : undefined);
 
-const r2PublicBaseUrl = process.env.R2_PUBLIC_BASE_URL?.trim();
-let r2ImageHostname: string | undefined;
-if (r2PublicBaseUrl) {
+const r2ImageHostnames = collectR2ImageHostnames();
+
+const immichPublicBaseUrl = process.env.NEXT_PUBLIC_IMMICH_URL?.trim();
+let immichImageHostname: string | undefined;
+if (immichPublicBaseUrl) {
   try {
-    r2ImageHostname = new URL(r2PublicBaseUrl).hostname;
+    immichImageHostname = new URL(immichPublicBaseUrl).hostname;
   } catch {
-    r2ImageHostname = undefined;
-  }
-} else {
-  const r2Endpoint = process.env.R2_ENDPOINT?.trim();
-  if (r2Endpoint) {
-    try {
-      r2ImageHostname = new URL(r2Endpoint).hostname;
-    } catch {
-      r2ImageHostname = undefined;
-    }
+    immichImageHostname = undefined;
   }
 }
+
+let convexImageHostname: string | undefined;
+if (convexCloudUrl) {
+  try {
+    convexImageHostname = new URL(convexCloudUrl).hostname;
+  } catch {
+    convexImageHostname = undefined;
+  }
+}
+
+const imageRemotePatterns = [
+  ...r2ImageHostnames.map((hostname) => ({
+    protocol: "https" as const,
+    hostname,
+    pathname: "/**",
+  })),
+  ...(immichImageHostname
+    ? [
+        {
+          protocol: "https" as const,
+          hostname: immichImageHostname,
+          pathname: "/**",
+        },
+      ]
+    : []),
+  ...(convexImageHostname
+    ? [
+        {
+          protocol: "https" as const,
+          hostname: convexImageHostname,
+          pathname: "/api/storage/**",
+        },
+      ]
+    : []),
+  {
+    protocol: "https" as const,
+    hostname: "*.convex.cloud",
+    pathname: "/api/storage/**",
+  },
+  {
+    protocol: "https" as const,
+    hostname: "**.convex.cloud",
+    pathname: "/api/storage/**",
+  },
+];
 
 const nextConfig: NextConfig = {
   transpilePackages: ["backend", "@arbor/invoice-document"],
   turbopack: {
     root: repoRoot,
   },
-  images: r2ImageHostname
-    ? {
-        remotePatterns: [
-          {
-            protocol: "https",
-            hostname: r2ImageHostname,
-            pathname: "/**",
-          },
-        ],
-      }
-    : undefined,
+  images: {
+    remotePatterns: imageRemotePatterns,
+    formats: ["image/avif", "image/webp"],
+  },
   env: {
     ...(convexCloudUrl ? { NEXT_PUBLIC_CONVEX_URL: convexCloudUrl } : {}),
     ...(convexSiteUrl ? { NEXT_PUBLIC_CONVEX_SITE_URL: convexSiteUrl } : {}),

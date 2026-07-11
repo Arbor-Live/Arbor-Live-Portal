@@ -1,25 +1,27 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useFormContext, type FieldPath } from "react-hook-form";
+import { useFormContext, type FieldPath, type FieldValues } from "react-hook-form";
 import { CheckIcon } from "@phosphor-icons/react";
-import type { BookingRequestFormValues } from "@/lib/validations/booking-request";
 
-type MultiChoiceFieldProps<T extends string> = {
-  name: FieldPath<BookingRequestFormValues>;
-  options: readonly T[];
+type MultiChoiceFieldProps<T extends FieldValues, O extends string> = {
+  name: FieldPath<T>;
+  options: readonly O[];
 };
 
-export function MultiChoiceField<T extends string>({ name, options }: MultiChoiceFieldProps<T>) {
+export function MultiChoiceField<T extends FieldValues, O extends string>({
+  name,
+  options,
+}: MultiChoiceFieldProps<T, O>) {
   const {
     watch,
     setValue,
     getFieldState,
-  } = useFormContext<BookingRequestFormValues>();
-  const selected = (watch(name) as T[] | undefined) ?? [];
+  } = useFormContext<T>();
+  const selected = (watch(name) as O[] | undefined) ?? [];
   const error = getFieldState(name).error?.message;
 
-  function toggle(option: T) {
+  function toggle(option: O) {
     const next = selected.includes(option)
       ? selected.filter((item) => item !== option)
       : [...selected, option];

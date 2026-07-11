@@ -21,4 +21,17 @@ crons.cron(
   internal.email.paymentProofReminders.runMonday,
 );
 
+crons.daily(
+  "promote ended band payments",
+  { hourUTC: 18, minuteUTC: 0 },
+  internal.bandPayments.promoteEndedPayments,
+);
+
+crons.cron(
+  "prune expired rate limit rows",
+  "0 4 * * *",
+  internal.rateLimit.pruneExpired,
+  {},
+);
+
 export default crons;

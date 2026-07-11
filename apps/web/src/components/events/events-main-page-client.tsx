@@ -1,15 +1,24 @@
 "use client";
 
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
-import { EventsCalendarView } from "@/components/events/events-calendar-view";
 import { EventsUpcomingView } from "@/components/events/events-upcoming-view";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { EVENT_STATUS_FILTER_OPTIONS, type EventStatus } from "@/lib/event-status";
+
+// FullCalendar is heavy; load it only when the calendar view actually renders.
+const EventsCalendarView = dynamic(
+  () => import("@/components/events/events-calendar-view").then((m) => m.EventsCalendarView),
+  {
+    ssr: false,
+    loading: () => <p className="text-sm text-muted-foreground">Loading calendar...</p>,
+  },
+);
 
 type EventsView = "calendar" | "upcoming";
 

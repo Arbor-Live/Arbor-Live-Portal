@@ -3,15 +3,19 @@ import { v } from "convex/values";
 import { components } from "./_generated/api";
 import type { DataModel } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
-import { requireAuth } from "./lib/auth";
+import { requireAdmin, requireAuth, requireBandContext, isAdmin } from "./lib/auth";
 import {
+  buildBandHeroObjectKey,
   buildEventArtifactObjectKey,
   buildInventoryObjectKey,
+  buildMarketingPostContentObjectKey,
+  buildMarketingPostHeroObjectKey,
   buildPublicAssetUrlFromKey,
   formatStoredR2Asset,
   parseStoredR2Asset,
   validateEventArtifactUploadRequest,
   validateInventoryUploadRequest,
+  validateMarketingHeroUploadRequest,
 } from "./lib/inventoryUpload";
 
 export const inventoryR2 = new R2(components.r2);
@@ -46,7 +50,12 @@ export const { syncMetadata, getMetadata } = inventoryR2.clientApi<DataModel>({
   },
 });
 
-const uploadScopeValue = v.union(v.literal("inventory"), v.literal("event"));
+const uploadScopeValue = v.union(
+  v.literal("inventory"),
+  v.literal("event"),
+  v.literal("marketing"),
+  v.literal("organization"),
+);
 
 const inventoryPurposeValue = v.union(
   v.literal("hero"),
@@ -56,6 +65,8 @@ const inventoryPurposeValue = v.union(
   v.literal("gdtf"),
 );
 
+const marketingImageKindValue = v.union(v.literal("hero"), v.literal("content"));
+
 export const generateR2UploadUrl = mutation({
   args: {
     scope: uploadScopeValue,
@@ -63,6 +74,9 @@ export const generateR2UploadUrl = mutation({
     purpose: v.union(inventoryPurposeValue, v.literal("artifact")),
     entityId: v.optional(v.string()),
     eventId: v.optional(v.id("events")),
+    postId: v.optional(v.string()),
+    organizationId: v.optional(v.string()),
+    marketingImageKind: v.optional(marketingImageKindValue),
     fileName: v.string(),
     contentType: v.string(),
     contentLength: v.number(),
@@ -79,7 +93,47 @@ export const generateR2UploadUrl = mutation({
     if (!uploadId) throw new Error("Upload id is required.");
 
     let key: string;
-    if (args.scope === "event") {
+    if (args.scope === "organization") {
+      if (!args.organizationId?.trim()) {
+        throw new Error("Organization id is required for band hero uploads.");
+      }
+      const user = await requireAuth(ctx);
+      if (!isAdmin(user)) {
+        const bandContext = await requireBandContext(ctx);
+        if (bandContext.organizationId !== args.organizationId.trim()) {
+          throw new Error("You can only upload hero images for your active band.");
+        }
+      }
+      validateMarketingHeroUploadRequest({
+        fileName: args.fileName,
+        contentType: args.contentType,
+        contentLength: args.contentLength,
+      });
+      key = buildBandHeroObjectKey({
+        organizationId: args.organizationId,
+        fileName: args.fileName,
+        uploadId,
+      });
+    } else if (args.scope === "marketing") {
+      await requireAdmin(ctx);
+      validateMarketingHeroUploadRequest({
+        fileName: args.fileName,
+        contentType: args.contentType,
+        contentLength: args.contentLength,
+      });
+      key =
+        (args.marketingImageKind ?? "hero") === "content"
+          ? buildMarketingPostContentObjectKey({
+              postId: args.postId,
+              fileName: args.fileName,
+              uploadId,
+            })
+          : buildMarketingPostHeroObjectKey({
+              postId: args.postId,
+              fileName: args.fileName,
+              uploadId,
+            });
+    } else if (args.scope === "event") {
       if (!args.eventId) throw new Error("Event id is required for event uploads.");
       validateEventArtifactUploadRequest({
         fileName: args.fileName,

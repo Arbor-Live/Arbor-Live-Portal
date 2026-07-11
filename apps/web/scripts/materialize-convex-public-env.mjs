@@ -46,7 +46,15 @@ function readStatic(...keys) {
   return undefined;
 }
 
-const cloudUrl = readStatic("NEXT_PUBLIC_CONVEX_URL", "CONVEX_URL", "CONVEX_CLOUD_URL");
+function readConvexCloudUrlForBuild() {
+  // `convex deploy --cmd` sets CONVEX_URL to the deployment that was just pushed.
+  // Prefer it over NEXT_PUBLIC_CONVEX_URL, which may point at a different deployment.
+  const fromDeploy = readStatic("CONVEX_URL", "CONVEX_CLOUD_URL");
+  if (fromDeploy) return fromDeploy;
+  return readStatic("NEXT_PUBLIC_CONVEX_URL");
+}
+
+const cloudUrl = readConvexCloudUrlForBuild();
 if (!cloudUrl) {
   console.error(
     [

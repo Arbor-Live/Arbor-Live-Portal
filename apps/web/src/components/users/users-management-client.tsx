@@ -13,16 +13,19 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { UserRatesAdminClient } from "@/components/users/user-rates-admin-client";
+import { BandHeroUploadField } from "@/components/files/file-upload-field";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import {
-  ADMIN_TEAM_OPTIONS,
+  USER_DISCIPLINE_OPTIONS,
+  USER_VERTICAL_OPTIONS,
   bandOrgProfileSchema,
   createUserAdminSchema,
   editInviteSchema,
   inviteUserSchema,
   userAdminRowSchema,
-  type AdminTeamOption,
+  type UserDisciplineOption,
+  type UserVerticalOption,
   type BandOrgProfileFormValues,
   type CreateUserAdminFormValues,
   type EditInviteFormValues,
@@ -46,13 +49,46 @@ type EditingInvite = {
   email: string;
   organizationId: string;
   role: string;
-  teams: AdminTeamOption[];
+  verticals: UserVerticalOption[];
+  disciplines: UserDisciplineOption[];
 };
 
 const NO_DEFAULT_ORG = "__none__";
 
-function toggleTeam(teams: AdminTeamOption[], team: AdminTeamOption) {
-  return teams.includes(team) ? teams.filter((entry) => entry !== team) : [...teams, team];
+function toggleOption<T extends string>(values: T[], value: T) {
+  return values.includes(value) ? values.filter((entry) => entry !== value) : [...values, value];
+}
+
+function MembershipCheckboxes<T extends string>({
+  label,
+  options,
+  values,
+  onChange,
+  idPrefix,
+}: {
+  label: string;
+  options: readonly T[];
+  values: T[];
+  onChange: (next: T[]) => void;
+  idPrefix: string;
+}) {
+  return (
+    <div className="rounded-md border p-2">
+      <p className="mb-2 text-xs font-medium">{label}</p>
+      <div className="grid gap-1 md:grid-cols-2">
+        {options.map((option) => (
+          <label key={`${idPrefix}-${option}`} className="flex items-center gap-2 text-xs">
+            <input
+              type="checkbox"
+              checked={values.includes(option)}
+              onChange={() => onChange(toggleOption(values, option))}
+            />
+            {option}
+          </label>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function isArborOrg(orgOptions: OrgOption[], orgId: string) {
@@ -81,10 +117,12 @@ function userValuesFromRow(user: AdminUser, resolvedOrgId: string): UserAdminRow
     role: user.role || "member",
     active: user.active,
     showOnPublicCrewPage: user.showOnPublicCrewPage ?? false,
+    publicCrewDescription: user.publicCrewDescription ?? "",
     title: user.title || "",
     phone: user.phone || "",
     hourlyRateUsd: (user.hourlyRateUsd ?? 0).toString(),
-    teams: (user.teams ?? []) as AdminTeamOption[],
+    verticals: (user.verticals ?? []) as UserVerticalOption[],
+    disciplines: (user.disciplines ?? []) as UserDisciplineOption[],
     defaultOrganizationId: user.defaultOrganizationId || resolvedOrgId,
   };
 }
@@ -94,6 +132,10 @@ function bandOrgValuesFromRow(org: BandOrgRow): BandOrgProfileFormValues {
     displayName: org.displayName ?? "",
     bio: org.bio ?? "",
     performerHourlyRateUsd: String(org.performerHourlyRateUsd ?? 0),
+    designatedPayeeUserId: org.designatedPayeeUserId ?? "",
+    designatedPayeeName: org.designatedPayeeName ?? "",
+    designatedPayeeEmail: org.designatedPayeeEmail ?? "",
+    designatedPayeeMailingAddress: org.designatedPayeeMailingAddress ?? "",
     publicWebsiteUrl: org.publicWebsiteUrl ?? "",
     publicInstagramUrl: org.publicInstagramUrl ?? "",
     publicYoutubeUrl: org.publicYoutubeUrl ?? "",
@@ -160,7 +202,8 @@ export function UsersManagementClient({
       email: invite.email,
       organizationId: invite.organizationId,
       role: invite.role,
-      teams: (invite.teams ?? []) as AdminTeamOption[],
+      verticals: (invite.verticals ?? []) as UserVerticalOption[],
+      disciplines: (invite.disciplines ?? []) as UserDisciplineOption[],
     });
   }
 
@@ -549,9 +592,11 @@ function UserAdminRow({
       role: values.role,
       active: values.active,
       showOnPublicCrewPage: values.showOnPublicCrewPage,
+      publicCrewDescription: values.publicCrewDescription || undefined,
       title: values.title || undefined,
       phone: values.phone || undefined,
-      teams: values.teams,
+      verticals: values.verticals,
+      disciplines: values.disciplines,
       defaultOrganizationId: values.defaultOrganizationId || undefined,
       hourlyRateUsd: Number(values.hourlyRateUsd || "0"),
       organizationMemberships: values.defaultOrganizationId
@@ -725,28 +770,23 @@ function UserAdminRow({
           <td className="px-3 py-2 text-xs text-muted-foreground">Advanced fields</td>
           <td className="px-3 py-2" colSpan={8}>
             <div className="grid gap-2 md:grid-cols-2">
-              <div className="rounded-md border p-2">
-                <p className="mb-2 text-xs font-medium">Teams</p>
-                <div className="grid gap-1 md:grid-cols-2">
-                  {ADMIN_TEAM_OPTIONS.map((team) => (
-                    <label key={`user-${user.id}-${team}`} className="flex items-center gap-2 text-xs">
-                      <input
-                        type="checkbox"
-                        checked={form.watch("teams").includes(team)}
-                        onChange={() =>
-                          form.setValue("teams", toggleTeam(form.getValues("teams"), team), {
-                            shouldDirty: true,
-                          })
-                        }
-                      />
-                      {team}
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <div className="rounded-md border p-2">
-                <p className="mb-2 text-xs font-medium">Public profile</p>
-                <label className="flex items-center gap-2 text-xs">
+              <MembershipCheckboxes
+                label="Verticals"
+                options={USER_VERTICAL_OPTIONS}
+                values={form.watch("verticals")}
+                onChange={(next) => form.setValue("verticals", next, { shouldDirty: true })}
+                idPrefix={`user-${user.id}-vertical`}
+              />
+              <MembershipCheckboxes
+                label="Disciplines"
+                options={USER_DISCIPLINE_OPTIONS}
+                values={form.watch("disciplines")}
+                onChange={(next) => form.setValue("disciplines", next, { shouldDirty: true })}
+                idPrefix={`user-${user.id}-discipline`}
+              />
+              <div className="rounded-md border p-2 md:col-span-2">
+                <p className="mb-2 text-xs font-medium">Public crew page</p>
+                <label className="mb-3 flex items-center gap-2 text-xs">
                   <input
                     type="checkbox"
                     checked={form.watch("showOnPublicCrewPage")}
@@ -756,6 +796,23 @@ function UserAdminRow({
                   />
                   Show on public crew page
                 </label>
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <Label htmlFor={`public-crew-description-${user.id}`} className="text-xs">
+                      Description
+                    </Label>
+                    <textarea
+                      id={`public-crew-description-${user.id}`}
+                      rows={3}
+                      value={form.watch("publicCrewDescription")}
+                      onChange={(e) =>
+                        form.setValue("publicCrewDescription", e.target.value, { shouldDirty: true })
+                      }
+                      placeholder="Short bio shown on the public crew page."
+                      className="flex min-h-[72px] w-full rounded-md border border-input bg-background px-3 py-2 text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    />
+                  </div>
+                </div>
               </div>
               <div className="rounded-md border p-2">
                 <p className="mb-2 text-xs font-medium">Organization Memberships</p>
@@ -857,6 +914,10 @@ function BandOrgAdminRow({
       displayName: values.displayName || undefined,
       bio: values.bio || undefined,
       performerHourlyRateUsd: Number(values.performerHourlyRateUsd || "0"),
+      designatedPayeeUserId: values.designatedPayeeUserId || undefined,
+      designatedPayeeName: values.designatedPayeeName || undefined,
+      designatedPayeeEmail: values.designatedPayeeEmail || undefined,
+      designatedPayeeMailingAddress: values.designatedPayeeMailingAddress || undefined,
       publicWebsiteUrl: values.publicWebsiteUrl || undefined,
       publicInstagramUrl: values.publicInstagramUrl || undefined,
       publicYoutubeUrl: values.publicYoutubeUrl || undefined,
@@ -955,6 +1016,33 @@ function BandOrgAdminRow({
               value={form.watch("bio")}
               onChange={(e) => form.setValue("bio", e.target.value, { shouldDirty: true })}
             />
+            <div className="mt-3 space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">Payment payee</p>
+              <div className="grid gap-2 md:grid-cols-2">
+                <Input
+                  placeholder="Payee name"
+                  value={form.watch("designatedPayeeName")}
+                  onChange={(e) =>
+                    form.setValue("designatedPayeeName", e.target.value, { shouldDirty: true })
+                  }
+                />
+                <Input
+                  placeholder="Payee email"
+                  value={form.watch("designatedPayeeEmail")}
+                  onChange={(e) =>
+                    form.setValue("designatedPayeeEmail", e.target.value, { shouldDirty: true })
+                  }
+                />
+              </div>
+              <textarea
+                className="min-h-20 w-full rounded-md border bg-background px-3 py-2 text-sm"
+                placeholder="Mailing address"
+                value={form.watch("designatedPayeeMailingAddress")}
+                onChange={(e) =>
+                  form.setValue("designatedPayeeMailingAddress", e.target.value, { shouldDirty: true })
+                }
+              />
+            </div>
             <div className="mt-3 grid gap-2 md:grid-cols-2">
               <label className="flex items-center gap-2 text-xs">
                 <input
@@ -971,14 +1059,16 @@ function BandOrgAdminRow({
                 value={form.watch("publicSlug")}
                 onChange={(e) => form.setValue("publicSlug", e.target.value, { shouldDirty: true })}
               />
-              <Input
-                placeholder="Hero image URL"
-                value={form.watch("publicHeroImageUrl")}
-                onChange={(e) =>
-                  form.setValue("publicHeroImageUrl", e.target.value, { shouldDirty: true })
-                }
-                className="md:col-span-2"
-              />
+              <div className="md:col-span-2">
+                <BandHeroUploadField
+                  organizationId={org.organizationId}
+                  currentUrl={form.watch("publicHeroImageUrl")}
+                  urlValue={form.watch("publicHeroImageUrl")}
+                  onUploaded={(url) => form.setValue("publicHeroImageUrl", url, { shouldDirty: true })}
+                  onUrlChange={(url) => form.setValue("publicHeroImageUrl", url, { shouldDirty: true })}
+                  onClear={() => form.setValue("publicHeroImageUrl", "", { shouldDirty: true })}
+                />
+              </div>
             </div>
           </td>
         </tr>
@@ -1002,7 +1092,7 @@ function InviteUserModal({
 }) {
   const form = useConvexForm<InviteUserFormValues>({
     schema: inviteUserSchema,
-    defaultValues: { email: "", role: "member", teams: [] },
+    defaultValues: { email: "", role: "member", verticals: [], disciplines: [] },
     mode: "onTouched",
   });
 
@@ -1012,9 +1102,10 @@ function InviteUserModal({
       organizationId: orgId,
       email: values.email.trim(),
       role: values.role,
-      teams: values.teams,
+      verticals: values.verticals,
+      disciplines: values.disciplines,
     });
-    form.reset({ email: "", role: "member", teams: [] });
+    form.reset({ email: "", role: "member", verticals: [], disciplines: [] });
     onInvited();
   });
 
@@ -1048,21 +1139,21 @@ function InviteUserModal({
                   </Select>
                 </div>
               </div>
-              <div className="flex flex-wrap gap-3">
-                {ADMIN_TEAM_OPTIONS.map((team) => (
-                  <label key={`invite-${team}`} className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={form.watch("teams").includes(team)}
-                      onChange={() =>
-                        form.setValue("teams", toggleTeam(form.getValues("teams"), team), {
-                          shouldDirty: true,
-                        })
-                      }
-                    />
-                    {team}
-                  </label>
-                ))}
+              <div className="grid gap-2 md:grid-cols-2">
+                <MembershipCheckboxes
+                  label="Verticals"
+                  options={USER_VERTICAL_OPTIONS}
+                  values={form.watch("verticals")}
+                  onChange={(next) => form.setValue("verticals", next, { shouldDirty: true })}
+                  idPrefix="invite-vertical"
+                />
+                <MembershipCheckboxes
+                  label="Disciplines"
+                  options={USER_DISCIPLINE_OPTIONS}
+                  values={form.watch("disciplines")}
+                  onChange={(next) => form.setValue("disciplines", next, { shouldDirty: true })}
+                  idPrefix="invite-discipline"
+                />
               </div>
               <div className="flex gap-2">
                 <Button type="submit" disabled={form.saveStatus === "saving"}>
@@ -1084,7 +1175,7 @@ function InviteUserModal({
         saveLabel="Send Invite"
         onSave={() => void form.handleSubmit(onSubmit)()}
         onDiscard={() => {
-          form.reset({ email: "", role: "member", teams: [] });
+          form.reset({ email: "", role: "member", verticals: [], disciplines: [] });
           onClose();
         }}
         onRetry={() => void form.handleSubmit(onSubmit)()}
@@ -1108,19 +1199,20 @@ function EditInviteModal({
 }) {
   const form = useConvexForm<EditInviteFormValues>({
     schema: editInviteSchema,
-    defaultValues: { role: invite.role, teams: invite.teams },
+    defaultValues: { role: invite.role, verticals: invite.verticals, disciplines: invite.disciplines },
     mode: "onTouched",
   });
 
   useEffect(() => {
-    form.reset({ role: invite.role, teams: invite.teams });
+    form.reset({ role: invite.role, verticals: invite.verticals, disciplines: invite.disciplines });
   }, [invite, form]);
 
   const onSubmit = form.submitMutation(async (values) => {
     await updateInvite({
       invitationId: invite.id,
       role: values.role,
-      teams: isArborOrg(orgOptions, invite.organizationId) ? values.teams : undefined,
+      verticals: isArborOrg(orgOptions, invite.organizationId) ? values.verticals : undefined,
+      disciplines: isArborOrg(orgOptions, invite.organizationId) ? values.disciplines : undefined,
     });
     onSaved();
   });
@@ -1157,21 +1249,21 @@ function EditInviteModal({
                 </Select>
               </div>
               {isArborOrg(orgOptions, invite.organizationId) ? (
-                <div className="flex flex-wrap gap-3">
-                  {ADMIN_TEAM_OPTIONS.map((team) => (
-                    <label key={`edit-invite-${team}`} className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={form.watch("teams").includes(team)}
-                        onChange={() =>
-                          form.setValue("teams", toggleTeam(form.getValues("teams"), team), {
-                            shouldDirty: true,
-                          })
-                        }
-                      />
-                      {team}
-                    </label>
-                  ))}
+                <div className="grid gap-2 md:grid-cols-2">
+                  <MembershipCheckboxes
+                    label="Verticals"
+                    options={USER_VERTICAL_OPTIONS}
+                    values={form.watch("verticals")}
+                    onChange={(next) => form.setValue("verticals", next, { shouldDirty: true })}
+                    idPrefix="edit-invite-vertical"
+                  />
+                  <MembershipCheckboxes
+                    label="Disciplines"
+                    options={USER_DISCIPLINE_OPTIONS}
+                    values={form.watch("disciplines")}
+                    onChange={(next) => form.setValue("disciplines", next, { shouldDirty: true })}
+                    idPrefix="edit-invite-discipline"
+                  />
                 </div>
               ) : null}
               <div className="flex gap-2">
@@ -1194,7 +1286,7 @@ function EditInviteModal({
         saveLabel="Save changes"
         onSave={() => void form.handleSubmit(onSubmit)()}
         onDiscard={() => {
-          form.reset({ role: invite.role, teams: invite.teams });
+          form.reset({ role: invite.role, verticals: invite.verticals, disciplines: invite.disciplines });
           onClose();
         }}
         onRetry={() => void form.handleSubmit(onSubmit)()}
@@ -1224,7 +1316,8 @@ function CreateUserModal({
       email: "",
       password: "",
       role: "member",
-      teams: [],
+      verticals: [],
+      disciplines: [],
       hourlyRateUsd: "0",
     },
     mode: "onTouched",
@@ -1239,7 +1332,8 @@ function CreateUserModal({
       email: values.email.trim(),
       tempPassword: values.password,
       role: values.role,
-      teams: values.teams,
+      verticals: values.verticals,
+      disciplines: values.disciplines,
       hourlyRateUsd: Number(values.hourlyRateUsd || "0"),
     });
     form.reset({
@@ -1248,7 +1342,8 @@ function CreateUserModal({
       email: "",
       password: "",
       role: "member",
-      teams: [],
+      verticals: [],
+      disciplines: [],
       hourlyRateUsd: "0",
     });
     onCreated();
@@ -1288,21 +1383,21 @@ function CreateUserModal({
                 </div>
                 <TextFormField name="hourlyRateUsd" label="Hourly rate (USD)" />
               </div>
-              <div className="flex flex-wrap gap-3">
-                {ADMIN_TEAM_OPTIONS.map((team) => (
-                  <label key={`create-${team}`} className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={form.watch("teams").includes(team)}
-                      onChange={() =>
-                        form.setValue("teams", toggleTeam(form.getValues("teams"), team), {
-                          shouldDirty: true,
-                        })
-                      }
-                    />
-                    {team}
-                  </label>
-                ))}
+              <div className="grid gap-2 md:grid-cols-2">
+                <MembershipCheckboxes
+                  label="Verticals"
+                  options={USER_VERTICAL_OPTIONS}
+                  values={form.watch("verticals")}
+                  onChange={(next) => form.setValue("verticals", next, { shouldDirty: true })}
+                  idPrefix="create-vertical"
+                />
+                <MembershipCheckboxes
+                  label="Disciplines"
+                  options={USER_DISCIPLINE_OPTIONS}
+                  values={form.watch("disciplines")}
+                  onChange={(next) => form.setValue("disciplines", next, { shouldDirty: true })}
+                  idPrefix="create-discipline"
+                />
               </div>
               <div className="flex gap-2">
                 <Button type="submit" disabled={form.saveStatus === "saving"}>
@@ -1330,7 +1425,8 @@ function CreateUserModal({
             email: "",
             password: "",
             role: "member",
-            teams: [],
+            verticals: [],
+            disciplines: [],
             hourlyRateUsd: "0",
           });
           onClose();

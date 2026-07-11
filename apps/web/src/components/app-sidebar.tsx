@@ -39,11 +39,14 @@ import {
   CalendarDotsIcon,
   CaretRightIcon,
   CurrencyDollarIcon,
+  HouseIcon,
   UsersIcon,
   GuitarIcon,
   PackageIcon,
   LifebuoyIcon,
   PaperPlaneTiltIcon,
+  MegaphoneIcon,
+  ImagesIcon,
 } from "@phosphor-icons/react"
 
 type NavSubItem = {
@@ -57,18 +60,23 @@ type NavItem = {
   url: string
   icon: typeof CalendarDotsIcon
   adminOnly?: boolean
+  bandOnly?: boolean
+  marketingOnly?: boolean
 }
 
 const navItems: NavItem[] = [
+  { title: "Home", url: "/dashboard", icon: HouseIcon },
   { title: "Events", url: "/dashboard/events", icon: CalendarDotsIcon },
-  { title: "Financial Hub", url: "/dashboard/financial-hub", icon: CurrencyDollarIcon, adminOnly: true },
+  { title: "Finances", url: "/dashboard/financial-hub", icon: CurrencyDollarIcon, adminOnly: true },
   { title: "Users", url: "/dashboard/users", icon: UsersIcon, adminOnly: true },
   {
     title: "Bands and Performers",
     url: "/dashboard/bands-and-performers",
     icon: GuitarIcon,
   },
+  { title: "Media", url: "/dashboard/media", icon: ImagesIcon, bandOnly: true },
   { title: "Inventory", url: "/dashboard/inventory", icon: PackageIcon },
+  { title: "Marketing", url: "/dashboard/marketing", icon: MegaphoneIcon, marketingOnly: true },
 ]
 
 const inventorySubItems: NavSubItem[] = [
@@ -85,6 +93,9 @@ const financialHubSubItems: NavSubItem[] = [
   { title: "Overview", url: "/dashboard/financial-hub" },
   { title: "Invoices", url: "/dashboard/financial-hub/invoices" },
   { title: "Payments", url: "/dashboard/financial-hub/payments" },
+  { title: "Band Payouts", url: "/dashboard/financial-hub/band-payouts" },
+  { title: "Crew Timecards", url: "/dashboard/timecards" },
+  { title: "My Timecards", url: "/dashboard/timecards/mine" },
   { title: "Host Organizations", url: "/dashboard/financial-hub/organizations" },
   { title: "Managers", url: "/dashboard/financial-hub/managers" },
   { title: "Create Invoice", url: "/dashboard/financial-hub/invoices/new" },
@@ -93,8 +104,10 @@ const financialHubSubItems: NavSubItem[] = [
 const eventsSubItems: NavSubItem[] = [
   { title: "Overview", url: "/dashboard/events" },
   { title: "Booking Requests", url: "/dashboard/events/requests" },
+  { title: "Open Mic", url: "/dashboard/events/open-mic", adminOnly: true },
   { title: "Crew Scheduling", url: "/dashboard/events/crew-scheduling", adminOnly: true },
   { title: "My Availability", url: "/dashboard/events/my-availability" },
+  { title: "My Timecards", url: "/dashboard/timecards/mine" },
   { title: "Create Event", url: "/dashboard/events/new", adminOnly: true },
 ]
 
@@ -105,16 +118,58 @@ const usersSubItems: NavSubItem[] = [
   { title: "Crew Rates", url: "/dashboard/users/crew-rates" },
 ]
 
+const marketingSubItems: NavSubItem[] = [
+  { title: "Design board", url: "/dashboard/marketing/designs" },
+  { title: "Work & stories", url: "/dashboard/marketing/work" },
+  { title: "Settings", url: "/dashboard/marketing/settings" },
+]
+
 const sectionSubItems: Record<string, NavSubItem[]> = {
   "/dashboard/events": eventsSubItems,
   "/dashboard/financial-hub": financialHubSubItems,
   "/dashboard/inventory": inventorySubItems,
   "/dashboard/users": usersSubItems,
+  "/dashboard/marketing": marketingSubItems,
 }
 
-function visibleSubItems(subItems: NavSubItem[] | undefined, isAdmin: boolean) {
+function visibleSubItems(
+  subItems: NavSubItem[] | undefined,
+  access: { isAdmin: boolean; hasOperationsAccess: boolean },
+) {
   if (!subItems) return undefined
-  return subItems.filter((subItem) => isAdmin || !subItem.adminOnly)
+  return subItems.filter(
+    (subItem) => access.isAdmin || access.hasOperationsAccess || !subItem.adminOnly,
+  )
+}
+
+function canAccessNavItem(
+  item: NavItem,
+  access: {
+    isAdmin: boolean
+    hasOperationsAccess: boolean
+    hasMarketingAccess: boolean
+    isBandContext: boolean
+    isCrewContext: boolean
+    isAdminHomeContext: boolean
+  },
+) {
+  if (access.isBandContext) {
+    if (item.bandOnly) return true
+    return (
+      item.url !== "/dashboard/events" &&
+      item.url !== "/dashboard/financial-hub" &&
+      item.url !== "/dashboard/inventory" &&
+      item.url !== "/dashboard/users" &&
+      item.url !== "/dashboard/marketing" &&
+      item.url !== "/dashboard"
+    )
+  }
+  if (item.bandOnly) return false
+  if (item.url === "/dashboard" && !access.isCrewContext && !access.isAdminHomeContext) return false
+  if (access.isAdmin) return true
+  if (item.adminOnly && !access.hasOperationsAccess) return false
+  if (item.marketingOnly && !access.hasMarketingAccess) return false
+  return true
 }
 
 const secondaryItems = [
@@ -133,6 +188,14 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
   const myOrganizations = useQuery(api.users.listMyOrganizations, {})
   const setActiveOrganization = useMutation(api.users.setActiveOrganization)
   const isAdmin = viewer?.isAdmin ?? false
+  const viewerVerticals = viewer?.verticals ?? []
+  const hasOperationsAccess = isAdmin || viewerVerticals.includes("Operations")
+  const hasMarketingAccess = isAdmin || viewerVerticals.includes("Marketing")
+  const hasCrewAccess =
+    isAdmin ||
+    viewerVerticals.includes("Crew") ||
+    viewerVerticals.includes("Trivia") ||
+    viewerVerticals.length === 0
   const pendingAvailabilityCount = useQuery(
     api.eventCrewAvailability.getMyPendingAvailabilityCount,
     activeOrganization?.organizationType === "arbor_internal" ? { now } : "skip",
@@ -152,25 +215,31 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
   const userEmail = data?.user?.email ?? "No email"
   const orgName = activeOrganization?.name ?? "No active org"
   const isBandContext = activeOrganization?.organizationType === "band"
+  const isCrewContext =
+    activeOrganization?.organizationType === "arbor_internal" &&
+    hasCrewAccess &&
+    !hasOperationsAccess &&
+    !isAdmin
+  const isAdminHomeContext =
+    activeOrganization?.organizationType === "arbor_internal" &&
+    (isAdmin || hasOperationsAccess)
+  const navAccess = {
+    isAdmin,
+    hasOperationsAccess,
+    hasMarketingAccess,
+    isBandContext,
+    isCrewContext,
+    isAdminHomeContext,
+  }
   const unconfirmedEventCount = unconfirmedCrewCount?.length ?? 0
-  const scopedNavItems = navItems.filter((item) => {
-    if (isBandContext) {
-      return (
-        item.url !== "/dashboard/events" &&
-        item.url !== "/dashboard/financial-hub" &&
-        item.url !== "/dashboard/inventory" &&
-        item.url !== "/dashboard/users"
-      )
-    }
-    return isAdmin || !item.adminOnly
-  })
+  const scopedNavItems = navItems.filter((item) => canAccessNavItem(item, navAccess))
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({})
 
   return (
     <Sidebar variant="inset" {...props}>
       <SidebarHeader className="relative z-20 shrink-0">
         <div className="px-2 py-2">
-          <Link href="/dashboard/events" className="flex items-center">
+          <Link href="/dashboard" className="flex items-center">
             <Image
               src="/logo.svg"
               alt="Arbor Live logo"
@@ -210,10 +279,23 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
         <SidebarMenu>
           {scopedNavItems.map((item) => {
             const Icon = item.icon
-            const subItems = visibleSubItems(sectionSubItems[item.url], isAdmin)
+            const subItems = visibleSubItems(sectionSubItems[item.url], {
+              isAdmin,
+              hasOperationsAccess,
+            })?.filter(
+              (subItem) =>
+                !(
+                  isAdmin &&
+                  item.url === "/dashboard/events" &&
+                  subItem.url === "/dashboard/timecards/mine"
+                ),
+            )
             const hasCollapsibleSubItems = Boolean(subItems && subItems.length > 1)
             const isParentActive =
-              pathname === item.url || pathname.startsWith(`${item.url}/`)
+              pathname === item.url ||
+              pathname.startsWith(`${item.url}/`) ||
+              (item.url === "/dashboard/financial-hub" &&
+                pathname.startsWith("/dashboard/timecards"))
             return (
               <Collapsible
                 key={item.url}

@@ -1,3 +1,4 @@
+import { formatUsd as formatUsdValue } from "@arbor/format";
 import type { Doc } from "../_generated/dataModel";
 
 export type SeriesCostSummary = {
@@ -123,5 +124,5 @@ export function computeSeriesCostSummary(
 }
 
 export function formatUsd(value: number) {
-  return `$${value.toFixed(2)}`;
+  return formatUsdValue(value);
 }

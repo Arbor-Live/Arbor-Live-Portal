@@ -15,6 +15,7 @@ export type EventOverviewFormValues = z.infer<typeof eventOverviewSchema>;
 export const invoiceDraftRowSchema = z.object({
   refId: z.string(),
   quantity: z.string(),
+  basis: z.enum(["total", "per_occurrence"]).optional(),
 });
 
 export const invoiceDraftSchema = z.object({

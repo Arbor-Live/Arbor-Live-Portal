@@ -6,6 +6,9 @@ import { PasswordResetEmail } from "../emails/password-reset";
 import { EmailVerificationEmail } from "../emails/email-verification";
 import { ChangeEmailConfirmationEmail } from "../emails/change-email-confirmation";
 import { PayingPartyAddedEmail } from "../emails/paying-party-added";
+import { BandPaymentConfirmationEmail } from "../emails/band-payment-confirmation";
+import { BandPaymentCompletedEmail } from "../emails/band-payment-completed";
+import { BandPaymentPayeeRequiredEmail } from "../emails/band-payment-payee-required";
 import { PaymentProofReminderEmail } from "../emails/payment-proof-reminder";
 import { PaymentProofSubmittedEmail } from "../emails/payment-proof-submitted";
 import { CrewScheduledEmail } from "../emails/crew-scheduled";
@@ -22,6 +25,9 @@ import type {
   PaymentProofReminderEmailProps,
   PaymentProofSubmittedEmailProps,
   PayingPartyAddedEmailProps,
+  BandPaymentConfirmationEmailProps,
+  BandPaymentCompletedEmailProps,
+  BandPaymentPayeeRequiredEmailProps,
   CrewScheduledEmailProps,
   SchedulePublishedEmailProps,
   ScheduleReminderEmailProps,
@@ -78,4 +84,16 @@ export async function renderPaymentProofSubmittedEmail(props: PaymentProofSubmit
 
 export async function renderPayingPartyAddedEmail(props: PayingPartyAddedEmailProps) {
   return render(PayingPartyAddedEmail(props));
+}
+
+export async function renderBandPaymentConfirmationEmail(props: BandPaymentConfirmationEmailProps) {
+  return render(BandPaymentConfirmationEmail(props));
+}
+
+export async function renderBandPaymentCompletedEmail(props: BandPaymentCompletedEmailProps) {
+  return render(BandPaymentCompletedEmail(props));
+}
+
+export async function renderBandPaymentPayeeRequiredEmail(props: BandPaymentPayeeRequiredEmailProps) {
+  return render(BandPaymentPayeeRequiredEmail(props));
 }

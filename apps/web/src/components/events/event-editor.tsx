@@ -23,6 +23,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect, type SearchableSelectOption } from "@/components/inventory/searchable-select";
+import { EventBandPaymentSection } from "@/components/events/event-band-payment-section";
+import { EventMediaSection } from "@/components/events/event-media-section";
 import { EventPullList, mapPullListRow, type PullListItemDraft } from "@/components/events/event-pull-list";
 import { EventTimelineScheduler, type TimelineBlockDraft } from "@/components/events/event-timeline-scheduler";
 import { EventScheduleCrewAssignPanel } from "@/components/events/event-availability-summary";
@@ -33,6 +35,12 @@ import {
   normalizeEventStatus,
   type EventStatus,
 } from "@/lib/event-status";
+import {
+  DEFAULT_EVENT_VISIBILITY,
+  EVENT_VISIBILITY_OPTIONS,
+  normalizeEventVisibility,
+  type EventVisibility,
+} from "@/lib/event-visibility";
 import { getAvailabilityNotesForDisplay } from "@/lib/crew-availability";
 import {
   EVENT_EDITOR_TAB_LABELS,
@@ -51,6 +59,9 @@ import { getConvexErrorMessage } from "@/lib/convex-error";
 import { FormSaveBar } from "@/components/forms";
 import { StoredAssetImage, StoredAssetLink } from "@/components/files/stored-asset-image";
 import { isImageAssetReference } from "@/lib/r2-assets";
+import { formatDateTime, formatUsd, payPeriodForDate } from "@/lib/format";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { WarningCircleIcon } from "@phosphor-icons/react";
 
 function EventArtifactAttachment({
   linkUrl,
@@ -122,21 +133,8 @@ function toLocalDateTimeInput(value: number | Date) {
   return `${y}-${m}-${d}T${hh}:${mm}`;
 }
 
-function formatCurrency(value: number) {
-  return `$${value.toFixed(2)}`;
-}
-
 function formatHours(value: number) {
   return `${value.toFixed(2)}h`;
-}
-
-function formatDateTime(value: number) {
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(value));
 }
 
 const RENTAL_EVENT_TYPES: EventType[] = ["Dry Hire", "Rental with Crew"];
@@ -168,8 +166,13 @@ export function EventEditor({
   const session = authClient.useSession();
   const isCreate = !eventId;
   const eventData = useQuery(api.events.get, eventId ? { id: eventId } : "skip");
+  const viewer = useQuery(api.users.getViewer, {});
   const invoices = useQuery(api.invoices.list, {});
   const managerList = useQuery(api.invoices.listManagers, {});
+  const posterAssignment = useQuery(
+    api.marketingDesigns.getPosterAssignmentForEvent,
+    eventId ? { eventId } : "skip",
+  );
   const createEvent = useMutation(api.events.create);
   const createEventSeries = useMutation(api.eventSeries.create);
   const updateEvent = useMutation(api.events.update);
@@ -177,9 +180,11 @@ export function EventEditor({
   const upsertShifts = useMutation(api.eventCrew.upsertShifts);
   const deleteUnassignedShifts = useMutation(api.eventCrew.deleteUnassignedShifts);
   const createArtifact = useMutation(api.eventArtifacts.create);
+  const assignPosterDesigner = useMutation(api.marketingDesigns.assignPosterDesigner);
 
   const [title, setTitle] = useState("");
   const [status, setStatus] = useState<EventStatus>("tentative");
+  const [visibility, setVisibility] = useState<EventVisibility>(DEFAULT_EVENT_VISIBILITY);
   const [invoiceId, setInvoiceId] = useState("");
   const [startAt, setStartAt] = useState("");
   const [endAt, setEndAt] = useState("");
@@ -195,7 +200,11 @@ export function EventEditor({
   const [bandsCostUsd, setBandsCostUsd] = useState("0");
   const [externalRentalsCostUsd, setExternalRentalsCostUsd] = useState("0");
   const [otherCostUsd, setOtherCostUsd] = useState("0");
+  const [otPremium, setOtPremium] = useState(false);
+  const [crewCostBufferPercent, setCrewCostBufferPercent] = useState("");
   const [notes, setNotes] = useState("");
+  const [openMicEnabled, setOpenMicEnabled] = useState(false);
+  const [openMicNotes, setOpenMicNotes] = useState("");
   const [blocks, setBlocks] = useState<TimelineBlockDraft[]>([]);
   const [shifts, setShifts] = useState<ShiftDraft[]>([]);
   const [selectedCrewUserId, setSelectedCrewUserId] = useState("");
@@ -254,6 +263,7 @@ export function EventEditor({
     hydratedEventIdRef.current = eventData.event._id;
     setTitle(eventData.event.title);
     setStatus(normalizeEventStatus(eventData.event.status));
+    setVisibility(normalizeEventVisibility(eventData.event.visibility));
     setInvoiceId(eventData.event.invoiceId ?? "");
     setStartAt(toLocalDateTimeInput(eventData.event.startAt));
     setEndAt(toLocalDateTimeInput(eventData.event.endAt));
@@ -273,7 +283,15 @@ export function EventEditor({
     setBandsCostUsd((eventData.event.bandsCostUsd ?? 0).toString());
     setExternalRentalsCostUsd((eventData.event.externalRentalsCostUsd ?? 0).toString());
     setOtherCostUsd((eventData.event.otherCostUsd ?? 0).toString());
+    setOtPremium(eventData.event.otPremium === true);
+    setCrewCostBufferPercent(
+      eventData.event.crewCostBufferPercent !== undefined
+        ? String(eventData.event.crewCostBufferPercent)
+        : "",
+    );
     setNotes(eventData.event.notes ?? "");
+    setOpenMicEnabled(eventData.event.openMicEnabled === true);
+    setOpenMicNotes(eventData.event.openMicNotes ?? "");
     setBlocks(
       eventData.blocks.map((row) => ({
         id: row._id,
@@ -310,6 +328,7 @@ export function EventEditor({
     lastSavedOverviewSignatureRef.current = JSON.stringify({
       title: eventData.event.title.trim(),
       status: normalizeEventStatus(eventData.event.status),
+      visibility: normalizeEventVisibility(eventData.event.visibility),
       invoiceId: eventData.event.invoiceId ?? undefined,
       startAt: eventData.event.startAt,
       endAt: eventData.event.endAt,
@@ -324,6 +343,8 @@ export function EventEditor({
       externalRentalsCostUsd: Number(eventData.event.externalRentalsCostUsd ?? 0),
       otherCostUsd: Number(eventData.event.otherCostUsd ?? 0),
       notes: eventData.event.notes || undefined,
+      openMicEnabled: eventData.event.openMicEnabled === true,
+      openMicNotes: eventData.event.openMicNotes || undefined,
     });
     const hydratedBlocks = eventData.blocks.map((row) => ({
       id: row._id,
@@ -390,6 +411,14 @@ export function EventEditor({
       })),
     [],
   );
+  const visibilityOptions: SearchableSelectOption[] = useMemo(
+    () =>
+      EVENT_VISIBILITY_OPTIONS.map((option) => ({
+        value: option.value,
+        label: option.label,
+      })),
+    [],
+  );
 
   const invoiceOptions: SearchableSelectOption[] = useMemo(
     () => [
@@ -445,6 +474,11 @@ export function EventEditor({
     () => userOptions.find((option) => option.value === selectedCrewUserId),
     [selectedCrewUserId, userOptions],
   );
+  const canAssignPosterDesigner = Boolean(
+    viewer?.isAdmin ||
+      viewer?.verticals.includes("Marketing") ||
+      viewer?.verticals.includes("Operations"),
+  );
 
   const recurrencePreview = useMemo(() => {
     if (!isCreate || !isRecurring || !startAt) return { starts: [] as number[], error: null as string | null };
@@ -475,10 +509,15 @@ export function EventEditor({
 
   const seriesMeta = eventData?.series ?? null;
 
+  const isAdmin = viewer?.isAdmin ?? false;
+  const canEdit = isCreate || (eventData?.canEdit ?? false);
+  const readOnly = !canEdit && !isCreate;
+
   function buildOverviewPayload() {
-    return {
+    const base = {
       title: title.trim(),
       status,
+      visibility,
       invoiceId: invoiceId ? (invoiceId as Id<"invoices">) : undefined,
       startAt: new Date(startAt).getTime(),
       endAt: new Date(endAt).getTime(),
@@ -493,6 +532,17 @@ export function EventEditor({
       externalRentalsCostUsd: Number(externalRentalsCostUsd || "0"),
       otherCostUsd: Number(otherCostUsd || "0"),
       notes: notes || undefined,
+    };
+    if (!isAdmin) return base;
+    return {
+      ...base,
+      otPremium: otPremium || undefined,
+      crewCostBufferPercent:
+        crewCostBufferPercent.trim() === ""
+          ? undefined
+          : Number(crewCostBufferPercent || "0"),
+      openMicEnabled,
+      openMicNotes: openMicNotes || undefined,
     };
   }
 
@@ -523,11 +573,12 @@ export function EventEditor({
           eventManagerUserId: payload.eventManagerUserId,
           dayOfLeadUserId: payload.dayOfLeadUserId,
           notes: payload.notes,
+          invoiceId: payload.invoiceId,
         });
         router.replace(getEventEditorTabPath(String(result.firstEventId), resolvedActiveTab));
         return;
       }
-      const id = await createEvent({ ...payload, visibility: "internal" });
+      const id = await createEvent({ ...payload, visibility });
       router.replace(getEventEditorTabPath(String(id), resolvedActiveTab));
       return;
     }
@@ -742,6 +793,17 @@ export function EventEditor({
   }
 
   const currentEventId = eventId ?? eventData?.event?._id;
+  const payPeriod = useMemo(() => payPeriodForDate(Date.now()), []);
+  const otForecast = useQuery(
+    api.eventCrew.getOtForecastForUser,
+    selectedCrewUserId && canEdit
+      ? {
+          userId: selectedCrewUserId,
+          rangeStart: payPeriod.startMs,
+          rangeEnd: payPeriod.endMs,
+        }
+      : "skip",
+  );
   const computedCrewCost = useQuery(
     api.eventCrew.getComputedCrewCost,
     currentEventId ? { eventId: currentEventId } : "skip",
@@ -770,13 +832,18 @@ export function EventEditor({
   const bandsCostTotal = Number(bandsCostUsd || "0");
   const externalRentalsCostTotal = Number(externalRentalsCostUsd || "0");
   const otherCostTotal = Number(otherCostUsd || "0");
-  const totalEventCostUsd = crewCostTotal + bandsCostTotal + externalRentalsCostTotal + otherCostTotal;
   const seriesRecurringTotalUsd =
     (seriesMeta?.seriesBandsCostUsd ?? 0) +
     (seriesMeta?.seriesExternalRentalsCostUsd ?? 0) +
     (seriesMeta?.seriesOtherCostUsd ?? 0);
+  const totalEventCostUsd = crewCostTotal + bandsCostTotal + externalRentalsCostTotal + otherCostTotal;
+  const seriesProjectedCostUsd = seriesMeta?.costSummary?.projectedGrandTotalUsd;
+  const marginCostUsd =
+    seriesMeta && seriesProjectedCostUsd !== undefined
+      ? seriesProjectedCostUsd
+      : totalEventCostUsd + seriesRecurringTotalUsd;
   const billedTotalUsd = linkedInvoice?.totalUsd ?? null;
-  const profitLossUsd = billedTotalUsd !== null ? billedTotalUsd - totalEventCostUsd : null;
+  const profitLossUsd = billedTotalUsd !== null ? billedTotalUsd - marginCostUsd : null;
   const quickAddDisabled = !startAt || !endAt;
   const quickAddDisabledReason = quickAddDisabled ? "Set event start and end first." : undefined;
   const quickAddLabel =
@@ -806,6 +873,7 @@ export function EventEditor({
     [
       title,
       status,
+      visibility,
       invoiceId,
       startAt,
       endAt,
@@ -821,6 +889,8 @@ export function EventEditor({
       otherCostUsd,
       notes,
       showFulfillmentPicker,
+      openMicEnabled,
+      openMicNotes,
     ],
   );
 
@@ -851,6 +921,15 @@ export function EventEditor({
 
   return (
     <div className="space-y-4 pb-20">
+      {readOnly ? (
+        <Alert>
+          <WarningCircleIcon className="size-4" />
+          <AlertTitle>Read-only view</AlertTitle>
+          <AlertDescription>
+            You can view this event but only crew leads and admins can make changes.
+          </AlertDescription>
+        </Alert>
+      ) : null}
       <Card>
         <CardHeader>
           <CardTitle>{isCreate ? "Create Event" : "Edit Event"}</CardTitle>
@@ -875,13 +954,14 @@ export function EventEditor({
               <Link href={getEventEditorTabPath(eventId, tab)}>{EVENT_EDITOR_TAB_LABELS[tab]}</Link>
             </Button>
           ))}
-          <Button type="button" onClick={() => void saveCore()} className="ml-auto">
+          <Button type="button" onClick={() => void saveCore()} className="ml-auto" disabled={readOnly}>
             {isCreate ? (isRecurring ? "Create Series" : "Create Event") : "Save Event"}
           </Button>
         </CardContent>
       </Card>
 
       {resolvedActiveTab === "overview" ? (
+        <fieldset disabled={readOnly} className="contents">
         <Card>
           <CardHeader><CardTitle>Overview</CardTitle></CardHeader>
           <CardContent className="grid gap-3 md:grid-cols-3">
@@ -903,6 +983,20 @@ export function EventEditor({
                   Quote is approved — status will move to Logistics when you save.
                 </p>
               ) : null}
+            </div>
+            <div className="space-y-1">
+              <Label>Visibility</Label>
+              <SearchableSelect
+                value={visibility}
+                onChange={(value) => setVisibility(value as EventVisibility)}
+                options={visibilityOptions}
+                placeholder="Search visibility..."
+                emptyLabel="Select visibility"
+              />
+              <p className="text-xs text-muted-foreground">
+                Public events appear on the marketing site. Internal and informational entries stay
+                staff-only.
+              </p>
             </div>
             <div className="space-y-1">
               <Label>Linked Invoice (optional)</Label>
@@ -1032,6 +1126,32 @@ export function EventEditor({
                 emptyLabel="Select day-of lead"
               />
             </div>
+            {!isCreate && canAssignPosterDesigner ? (
+              <div className="space-y-1">
+                <Label>Marketing poster designer</Label>
+                <UserSelect
+                  value={posterAssignment?.assigneeUserId ?? ""}
+                  onChange={(value) => {
+                    if (!eventId) return;
+                    void assignPosterDesigner({
+                      eventId,
+                      assigneeUserId: value || undefined,
+                    })
+                      .then(() => {
+                        setMessage("Marketing poster designer updated.");
+                        setMessageTone("success");
+                      })
+                      .catch((error) => {
+                        setMessage(error instanceof Error ? error.message : "Could not update poster designer.");
+                        setMessageTone("error");
+                      });
+                  }}
+                  options={userSelectOptions}
+                  emptyLabel="Unassigned"
+                  placeholder="Assign marketing designer..."
+                />
+              </div>
+            ) : null}
             <div className="space-y-1 md:col-span-3">
               <Label>Notes</Label>
               <textarea className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm" value={notes} onChange={(e) => setNotes(e.target.value)} />
@@ -1120,9 +1240,62 @@ export function EventEditor({
             ) : null}
           </CardContent>
         </Card>
+        </fieldset>
+      ) : null}
+
+      {resolvedActiveTab === "overview" && eventId ? <EventBandPaymentSection eventId={eventId} /> : null}
+
+      {resolvedActiveTab === "overview" && isAdmin && eventId ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Add-ons</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <label className="flex items-start gap-3 rounded-md border p-3">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={openMicEnabled}
+                onChange={(event) => setOpenMicEnabled(event.target.checked)}
+              />
+              <div className="space-y-1">
+                <p className="text-sm font-medium">Open Mic</p>
+                <p className="text-xs text-muted-foreground">
+                  Adds a first-come, first-served sign-up queue to this event. Strangers sign up
+                  from the public Open Mic form and the crew calls them up via the runner.
+                </p>
+                {openMicEnabled ? (
+                  <p className="text-xs text-muted-foreground">
+                    Public sign-ups open until 4 hours after the event start. Runner lives at{" "}
+                    <Link
+                      href={`/dashboard/events/open-mic/${eventId}`}
+                      className="underline"
+                      target="_blank"
+                    >
+                      Open Mic runner
+                    </Link>
+                    .
+                  </p>
+                ) : null}
+              </div>
+            </label>
+            {openMicEnabled ? (
+              <div className="space-y-1">
+                <Label>Open Mic notes</Label>
+                <textarea
+                  className="min-h-20 w-full rounded-md border bg-background px-3 py-2 text-sm"
+                  value={openMicNotes}
+                  onChange={(event) => setOpenMicNotes(event.target.value)}
+                  placeholder="Theme, special instructions, etc."
+                />
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
       ) : null}
 
       {resolvedActiveTab === "schedule" ? (
+        <fieldset disabled={readOnly} className="contents">
         <Card>
           <CardHeader><CardTitle>Schedule</CardTitle></CardHeader>
           <CardContent className="space-y-3">
@@ -1144,6 +1317,7 @@ export function EventEditor({
               dayCount={dayCount}
               blocks={blocks}
               onChange={(next) => setBlocks(withStableBlockRefs(next))}
+              readOnly={readOnly}
               quickAddLabel={quickAddLabel}
               quickAddDisabled={quickAddDisabled}
               quickAddDisabledReason={quickAddDisabledReason}
@@ -1265,6 +1439,13 @@ export function EventEditor({
                   ? `Selected: ${selectedCrewUserOption.label}. Use this to quickly add the same crew member across multiple schedule blocks.`
                   : "Select a crew user, then use Add Shift for Selected User on each block."}
               </p>
+              {otForecast?.hasOt || otForecast?.hasDt ? (
+                <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-xs text-amber-800">
+                  OT warning: this crew member may exceed pay-period limits
+                  {otForecast.hasDt ? " (including double-time days >12h)" : ""}
+                  {otForecast.otWeeks.length > 0 ? " or weekly hours >40" : ""}.
+                </p>
+              ) : null}
             </div>
             <div className="space-y-2 rounded-md border p-3">
               <p className="text-sm font-medium">Assigned Personnel by Block</p>
@@ -1399,6 +1580,7 @@ export function EventEditor({
             </Button>
           </CardContent>
         </Card>
+        </fieldset>
       ) : null}
 
       {resolvedActiveTab === "equipment" ? (
@@ -1416,6 +1598,7 @@ export function EventEditor({
                 eventType={eventType}
                 rentalFulfillmentMode={rentalFulfillmentMode}
                 invoiceId={invoiceId ? (invoiceId as Id<"invoices">) : undefined}
+                seriesLinked={Boolean(seriesMeta && !seriesMeta.seriesDetached)}
                 initialItems={pullListInitialItems}
                 onSaved={(text) => {
                   setMessageTone("success");
@@ -1502,6 +1685,21 @@ export function EventEditor({
         </Card>
       ) : null}
 
+      {resolvedActiveTab === "media" ? (
+        !currentEventId ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Media</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">Save the event first to manage media.</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <EventMediaSection eventId={currentEventId} />
+        )
+      ) : null}
+
       {resolvedActiveTab === "expenses" ? (
         <Card>
           <CardHeader><CardTitle>Event Costs</CardTitle></CardHeader>
@@ -1517,19 +1715,49 @@ export function EventEditor({
                   . Crew cost remains unique to each occurrence.
                 </p>
                 <div className="grid gap-2 md:grid-cols-4 text-sm">
-                  <p>Template bands / event: ${(seriesMeta.occurrenceBandsCostUsd ?? 0).toFixed(2)}</p>
+                  <p>Template bands / event: {formatUsd(seriesMeta.occurrenceBandsCostUsd ?? 0)}</p>
                   <p>
-                    Template external / event: ${(seriesMeta.occurrenceExternalRentalsCostUsd ?? 0).toFixed(2)}
+                    Template external / event: {formatUsd(seriesMeta.occurrenceExternalRentalsCostUsd ?? 0)}
                   </p>
-                  <p>Template other / event: ${(seriesMeta.occurrenceOtherCostUsd ?? 0).toFixed(2)}</p>
-                  <p>Series-wide recurring: ${seriesRecurringTotalUsd.toFixed(2)}</p>
+                  <p>Template other / event: {formatUsd(seriesMeta.occurrenceOtherCostUsd ?? 0)}</p>
+                  <p>Series-wide recurring: {formatUsd(seriesRecurringTotalUsd)}</p>
                 </div>
               </div>
             ) : null}
             <p className="text-xs text-muted-foreground">
               Crew costs are auto-calculated from assigned users in schedule shifts:
-              each user uses their hourly rate, and hours beyond 8/day are billed at 1.5x.
+              each user uses their hourly rate, and hours beyond 8/day are billed at 1.5x
+              {computedCrewCost?.otPremium ? " (this event uses whole-event OT premium)." : "."}
             </p>
+            {computedCrewCost?.bufferPercent !== undefined && computedCrewCost.bufferPercent > 0 ? (
+              <p className="text-xs text-muted-foreground">
+                Buffered crew cost ({computedCrewCost.bufferPercent}%):{" "}
+                {formatUsd(computedCrewCost.bufferedTotalCostUsd ?? computedCrewCost.totalCostUsd)}
+              </p>
+            ) : null}
+            {isAdmin ? (
+              <div className="grid gap-2 rounded-md border border-dashed p-3 md:grid-cols-2">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={otPremium}
+                    onChange={(e) => setOtPremium(e.target.checked)}
+                  />
+                  OT premium (whole event 1.5×)
+                </label>
+                <div className="space-y-1">
+                  <Label>Per-event crew buffer %</Label>
+                  <Input
+                    value={crewCostBufferPercent}
+                    onChange={(e) => setCrewCostBufferPercent(e.target.value)}
+                    placeholder="Use global default"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground md:col-span-2">
+                  OT premium inflates Stanford input hours (1.5× for hours 1–8) and bills all crew hours at 1.5× rate.
+                </p>
+              </div>
+            ) : null}
             <div className="grid gap-2 md:grid-cols-4">
               <div className="space-y-1">
                 <Label>Crew Cost (USD)</Label>
@@ -1545,7 +1773,11 @@ export function EventEditor({
               </div>
               <div className="space-y-1">
                 <Label>Bands Cost (USD)</Label>
-                <Input value={bandsCostUsd} onChange={(e) => setBandsCostUsd(e.target.value)} />
+                <Input
+                  value={bandsCostUsd}
+                  onChange={(e) => setBandsCostUsd(e.target.value)}
+                  readOnly={readOnly}
+                />
                 {seriesMeta ? (
                   <p className="text-xs text-muted-foreground">This occurrence only unless you choose a series scope on save.</p>
                 ) : null}
@@ -1555,11 +1787,16 @@ export function EventEditor({
                 <Input
                   value={externalRentalsCostUsd}
                   onChange={(e) => setExternalRentalsCostUsd(e.target.value)}
+                  readOnly={readOnly}
                 />
               </div>
               <div className="space-y-1">
                 <Label>Other Costs (USD)</Label>
-                <Input value={otherCostUsd} onChange={(e) => setOtherCostUsd(e.target.value)} />
+                <Input
+                  value={otherCostUsd}
+                  onChange={(e) => setOtherCostUsd(e.target.value)}
+                  readOnly={readOnly}
+                />
               </div>
             </div>
             {linkedInvoice ? (
@@ -1568,11 +1805,13 @@ export function EventEditor({
                 <div className="mt-2 grid gap-2 md:grid-cols-3">
                   <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
                     <p className="text-xs text-muted-foreground">Total Billed</p>
-                    <p className="font-semibold">${billedTotalUsd!.toFixed(2)}</p>
+                    <p className="font-semibold">{formatUsd(billedTotalUsd!)}</p>
                   </div>
                   <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
-                    <p className="text-xs text-muted-foreground">Total Event Cost</p>
-                    <p className="font-semibold">${totalEventCostUsd.toFixed(2)}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {seriesMeta ? "Total Series Cost (projected)" : "Total Event Cost"}
+                    </p>
+                    <p className="font-semibold">{formatUsd(marginCostUsd)}</p>
                   </div>
                   <div
                     className={`rounded-md border px-3 py-2 text-sm ${
@@ -1582,7 +1821,7 @@ export function EventEditor({
                     }`}
                   >
                     <p className="text-xs">Profit / Loss</p>
-                    <p className="font-semibold">${(profitLossUsd ?? 0).toFixed(2)}</p>
+                    <p className="font-semibold">{formatUsd(profitLossUsd ?? 0)}</p>
                   </div>
                 </div>
               </div>
@@ -1627,7 +1866,7 @@ export function EventEditor({
                               Regular {formatHours(block.regularHours)} • OT {formatHours(block.overtimeHours)}
                             </p>
                           </div>
-                          <p className="text-sm font-semibold">{formatCurrency(block.subtotalUsd)}</p>
+                          <p className="text-sm font-semibold">{formatUsd(block.subtotalUsd)}</p>
                         </div>
                         <div className="overflow-x-auto">
                           <table className="min-w-full text-xs">
@@ -1658,9 +1897,9 @@ export function EventEditor({
                                     {formatHours(row.regularHours)} / {formatHours(row.overtimeHours)}
                                   </td>
                                   <td className="px-3 py-2">
-                                    {formatCurrency(row.baseRateUsd)} / {formatCurrency(row.overtimeRateUsd)}
+                                    {formatUsd(row.baseRateUsd)} / {formatUsd(row.overtimeRateUsd)}
                                   </td>
-                                  <td className="px-3 py-2 text-right">{formatCurrency(row.subtotalUsd)}</td>
+                                  <td className="px-3 py-2 text-right">{formatUsd(row.subtotalUsd)}</td>
                                 </tr>
                               ))}
                             </tbody>
@@ -1674,9 +1913,11 @@ export function EventEditor({
                 )}
               </div>
             ) : null}
+            {canEdit ? (
             <Button type="button" onClick={() => void saveCore()}>
               Save Event Costs
             </Button>
+            ) : null}
           </CardContent>
         </Card>
       ) : null}
@@ -1706,6 +1947,7 @@ export function EventEditor({
         </div>
       ) : null}
 
+      {canEdit || isCreate ? (
       <FormSaveBar
         tier={saveTier}
         saveStatus={saveStatus}
@@ -1723,6 +1965,7 @@ export function EventEditor({
         onSave={handleBarSave}
         onRetry={handleBarSave}
       />
+      ) : null}
     </div>
   );
 }

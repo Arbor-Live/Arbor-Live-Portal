@@ -18,6 +18,8 @@
     "build": "pnpm -r build",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "setup:worktree-env": "node scripts/link-worktree-env.mjs",
     "prepare": "git config core.hooksPath .githooks 2>/dev/null || true && node scripts/link-worktree-env.mjs 2>/dev/null || true"
   },
@@ -26,6 +28,7 @@
     "papaparse": "^5.5.4"
   },
   "devDependencies": {
-    "@types/papaparse": "^5.5.2"
+    "@types/papaparse": "^5.5.2",
+    "vitest": "^4.1.10"
   }
 }

@@ -3,8 +3,17 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { components } from "./_generated/api";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { isAdmin, requireAdmin, requireArborInternalContext, requireAuth } from "./lib/auth";
-import { syncLinkedEventStatusFromInvoice } from "./lib/eventStatus";
+import { syncEventStatusForLinkedInvoice, syncLinkedEventStatusFromInvoice } from "./lib/eventStatus";
 import { listEventsByInvoiceId } from "./lib/invoiceEvents";
+import {
+  billingQuantityForEquipmentLine,
+  findSeriesByInvoiceId,
+  isEquipmentSection,
+  resolveBillableOccurrenceCount,
+  resolveSeriesMetadataForInvoice,
+  type EquipmentQuantityBasis,
+} from "./lib/invoiceSeries";
+import { buildInvoiceDocumentData } from "./lib/invoiceDocumentBuild";
 import {
   approveInvoiceQuote,
   loadPublicQuoteView,
@@ -12,6 +21,7 @@ import {
   updateInvoicePaymentContacts,
 } from "./lib/publicQuoteView";
 import { allocateInvoiceNumber } from "./lib/publicReferenceIds";
+import { enforceRateLimit, HOUR_MS } from "./rateLimit";
 import { scheduleBookingQuoteReadyEmail } from "./email/bookingRequestEmails";
 import {
   markPayingPartyNotified,
@@ -54,6 +64,7 @@ const lineItemInput = v.object({
   packageId: v.optional(v.id("inventoryPackages")),
   typeId: v.optional(v.id("inventoryTypes")),
   feeDefinitionId: v.optional(v.id("invoiceFeeDefinitions")),
+  equipmentQuantityBasis: v.optional(v.union(v.literal("total"), v.literal("per_occurrence"))),
 });
 
 type LineInput = {
@@ -67,6 +78,7 @@ type LineInput = {
   packageId?: Id<"inventoryPackages">;
   typeId?: Id<"inventoryTypes">;
   feeDefinitionId?: Id<"invoiceFeeDefinitions">;
+  equipmentQuantityBasis?: EquipmentQuantityBasis;
 };
 
 function trimOptional(raw: string | undefined) {
@@ -110,12 +122,22 @@ async function generateUniquePublicApprovalToken(ctx: MutationCtx) {
   throw new Error("Unable to generate public quote token.");
 }
 
+// Public quote links grant approve / request-changes power, so they expire.
+// Staff can mint a fresh 6-month window at any time via
+// `regeneratePublicApprovalToken`.
+function publicApprovalTokenExpiry(now: number): number {
+  const expiresAt = new Date(now);
+  expiresAt.setMonth(expiresAt.getMonth() + 6);
+  return expiresAt.getTime();
+}
+
 async function computeLineAmount(
   ctx: MutationCtx,
   line: LineInput,
   equipmentPricingMode: "subsidized" | "nonSubsidized",
   crewRateMode: "normal" | "lead" | "custom" | "ot",
   crewRates: { normal: number; lead: number; ot: number },
+  billableOccurrenceCount: number,
 ) {
   if (line.quantity < 0) throw new Error("Line quantity cannot be negative.");
   let rate = line.rateUsd;
@@ -148,7 +170,15 @@ async function computeLineAmount(
     }
   }
 
-  const amount = Number((Math.max(0, line.quantity) * Math.max(0, rate)).toFixed(2));
+  const billingQuantity = isEquipmentSection(line.section)
+    ? billingQuantityForEquipmentLine(
+        line.quantity,
+        line.equipmentQuantityBasis,
+        billableOccurrenceCount,
+      )
+    : Math.max(0, line.quantity);
+
+  const amount = Number((billingQuantity * Math.max(0, rate)).toFixed(2));
   return { rate, amount };
 }
 
@@ -159,6 +189,7 @@ async function computeTotals(
   crewRateMode: "normal" | "lead" | "custom" | "ot",
   discountType: "amount" | "percent",
   discountValue: number,
+  invoiceId?: Id<"invoices">,
 ) {
   const settings = await ctx.db.query("invoiceSettings").withIndex("by_key", (q) => q.eq("key", "default")).unique();
   const crewRates = {
@@ -166,6 +197,10 @@ async function computeTotals(
     lead: settings?.crewLeadRateUsd ?? settings?.crewOtRateUsd ?? settings?.crewNormalRateUsd ?? 0,
     ot: settings?.crewOtRateUsd ?? settings?.crewNormalRateUsd ?? 0,
   };
+
+  const billableOccurrenceCount = invoiceId
+    ? await resolveBillableOccurrenceCount(ctx, invoiceId)
+    : 0;
 
   let equipmentSubtotalUsd = 0;
   let externalRentalsSubtotalUsd = 0;
@@ -181,6 +216,7 @@ async function computeTotals(
       equipmentPricingMode,
       crewRateMode,
       crewRates,
+      billableOccurrenceCount,
     );
     normalized.push({ ...line, rateUsd: rate, amountUsd: amount });
     if (line.section === "equipment_package" || line.section === "equipment_type") equipmentSubtotalUsd += amount;
@@ -218,6 +254,13 @@ async function computeTotals(
   };
 }
 
+async function resolveBillableCountAtSave(ctx: MutationCtx, invoiceId: Id<"invoices">) {
+  const series = await findSeriesByInvoiceId(ctx, invoiceId);
+  if (!series) return undefined;
+  const count = await resolveBillableOccurrenceCount(ctx, invoiceId);
+  return count > 0 ? count : undefined;
+}
+
 async function replaceLineItems(
   ctx: MutationCtx,
   invoiceId: Id<"invoices">,
@@ -245,6 +288,7 @@ async function replaceLineItems(
       packageId: row.packageId,
       typeId: row.typeId,
       feeDefinitionId: row.feeDefinitionId,
+      equipmentQuantityBasis: row.equipmentQuantityBasis,
       createdAt: now,
       updatedAt: now,
     });
@@ -350,6 +394,31 @@ export const list = query({
   },
 });
 
+export const listEnriched = query({
+  args: { status: v.optional(v.union(v.literal("draft"), v.literal("finalized"), v.literal("void"))) },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    const rows = args.status
+      ? await ctx.db.query("invoices").withIndex("by_status", (q) => q.eq("status", args.status!)).take(200)
+      : await ctx.db.query("invoices").take(200);
+    const sorted = rows.sort((a, b) => b.createdAt - a.createdAt);
+    return await Promise.all(
+      sorted.map(async (invoice) => {
+        const series = await resolveSeriesMetadataForInvoice(ctx, invoice._id);
+        const linkedEvents = await listEventsByInvoiceId(ctx, invoice._id);
+        return {
+          ...invoice,
+          seriesTitle: series?.title,
+          seriesId: series?.seriesId,
+          linkedEventCount: linkedEvents.length,
+          linkedEventTitle: linkedEvents[0]?.title,
+        };
+      }),
+    );
+  },
+});
+
 export const get = query({
   args: { id: v.id("invoices") },
   handler: async (ctx, args) => {
@@ -361,7 +430,30 @@ export const get = query({
       .query("invoiceLineItems")
       .withIndex("by_invoiceId_and_order", (q) => q.eq("invoiceId", args.id))
       .take(500);
-    return { invoice, lineItems };
+    const series = await resolveSeriesMetadataForInvoice(ctx, args.id);
+    return { invoice, lineItems, series };
+  },
+});
+
+export const getDocumentData = query({
+  args: {
+    id: v.id("invoices"),
+    siteOrigin: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    const invoice = await ctx.db.get(args.id);
+    if (!invoice) return null;
+    const lineItems = await ctx.db
+      .query("invoiceLineItems")
+      .withIndex("by_invoiceId_and_order", (q) => q.eq("invoiceId", args.id))
+      .take(500);
+    const digitalQuoteUrl =
+      invoice.publicApprovalToken && args.siteOrigin
+        ? `${args.siteOrigin}/public/quote/${invoice.publicApprovalToken}`
+        : undefined;
+    return await buildInvoiceDocumentData(ctx, invoice, lineItems, digitalQuoteUrl);
   },
 });
 
@@ -462,7 +554,7 @@ export const createDraft = mutation({
       additionalTermsMarkdown: trimOptional(args.additionalTermsMarkdown),
       clientApprovalStatus: "pending",
       publicApprovalToken,
-      publicApprovalTokenExpiresAt: undefined,
+      publicApprovalTokenExpiresAt: publicApprovalTokenExpiry(now),
       approvedAt: undefined,
       changesRequestedAt: undefined,
       clientApprovalNote: undefined,
@@ -515,6 +607,9 @@ export const updateDraft = mutation({
     const publicApprovalToken = existing.sourceEventRequestId
       ? undefined
       : existing.publicApprovalToken || (await generateUniquePublicApprovalToken(ctx));
+    // Only start a fresh expiry window when we mint a brand-new token; editing an
+    // invoice that already has a live link must not silently extend it.
+    const mintedNewToken = Boolean(publicApprovalToken) && !existing.publicApprovalToken;
     const normalizedTermsIds = normalizeTermsIds(args.termsIds);
     const totals = await computeTotals(
       ctx,
@@ -523,6 +618,7 @@ export const updateDraft = mutation({
       args.crewRateMode,
       args.discountType,
       args.discountValue,
+      args.id,
     );
     const now = Date.now();
     await ctx.db.patch(args.id, {
@@ -561,6 +657,8 @@ export const updateDraft = mutation({
       termsId: undefined,
       additionalTermsMarkdown: trimOptional(args.additionalTermsMarkdown),
       publicApprovalToken,
+      ...(mintedNewToken ? { publicApprovalTokenExpiresAt: publicApprovalTokenExpiry(now) } : {}),
+      billableOccurrenceCountAtSave: await resolveBillableCountAtSave(ctx, args.id),
       updatedAt: now,
     });
     await replaceLineItems(ctx, args.id, totals.normalized);
@@ -580,11 +678,12 @@ export const regeneratePublicApprovalToken = mutation({
     if (existing.sourceEventRequestId) {
       throw new Error("Booking-request quotes are reviewed on the request portal, not via a standalone link.");
     }
+    const now = Date.now();
     const token = await generateUniquePublicApprovalToken(ctx);
     await ctx.db.patch(args.id, {
       publicApprovalToken: token,
-      publicApprovalTokenExpiresAt: undefined,
-      updatedAt: Date.now(),
+      publicApprovalTokenExpiresAt: publicApprovalTokenExpiry(now),
+      updatedAt: now,
     });
     return { token };
   },
@@ -599,6 +698,7 @@ export const approveByToken = mutation({
     paymentSubmitterEmail: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    await enforceRateLimit(ctx, `quoteToken:${args.token}`, { limit: 30, windowMs: HOUR_MS });
     const invoice = await ctx.db
       .query("invoices")
       .withIndex("by_publicApprovalToken", (q) => q.eq("publicApprovalToken", args.token))
@@ -618,6 +718,7 @@ export const approveByToken = mutation({
 export const requestChangesByToken = mutation({
   args: { token: v.string(), note: v.string() },
   handler: async (ctx, args) => {
+    await enforceRateLimit(ctx, `quoteToken:${args.token}`, { limit: 30, windowMs: HOUR_MS });
     const invoice = await ctx.db
       .query("invoices")
       .withIndex("by_publicApprovalToken", (q) => q.eq("publicApprovalToken", args.token))
@@ -643,6 +744,7 @@ export const updatePaymentContactsByToken = mutation({
   },
   returns: v.object({ ok: v.literal(true) }),
   handler: async (ctx, args) => {
+    await enforceRateLimit(ctx, `quoteToken:${args.token}`, { limit: 30, windowMs: HOUR_MS });
     const invoice = await ctx.db
       .query("invoices")
       .withIndex("by_publicApprovalToken", (q) => q.eq("publicApprovalToken", args.token))
@@ -760,11 +862,13 @@ export const recalculateTotals = mutation({
         packageId: line.packageId,
         typeId: line.typeId,
         feeDefinitionId: line.feeDefinitionId,
+        equipmentQuantityBasis: line.equipmentQuantityBasis,
       })),
       invoice.equipmentPricingMode,
       invoice.crewRateMode,
       invoice.discountType,
       invoice.discountValue,
+      args.id,
     );
     await ctx.db.patch(args.id, {
       discountAmountUsd: totals.discountAmountUsd,
@@ -790,6 +894,221 @@ export const finalize = mutation({
     const invoice = await ctx.db.get(args.id);
     if (!invoice) throw new Error("Invoice not found.");
     await ctx.db.patch(args.id, { status: "finalized", updatedAt: Date.now() });
+  },
+});
+
+export const recalculateSeriesEquipmentLines = mutation({
+  args: { id: v.id("invoices") },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    const series = await findSeriesByInvoiceId(ctx, args.id);
+    if (!series) {
+      throw new Error("No event series is linked to this invoice.");
+    }
+    const invoice = await ctx.db.get(args.id);
+    if (!invoice) throw new Error("Invoice not found.");
+    const lineItems = await ctx.db
+      .query("invoiceLineItems")
+      .withIndex("by_invoiceId", (q) => q.eq("invoiceId", args.id))
+      .take(500);
+    const totals = await computeTotals(
+      ctx,
+      lineItems.map((line) => ({
+        section: line.section,
+        order: line.order,
+        provider: line.provider,
+        label: line.label,
+        notes: line.notes,
+        quantity: line.quantity,
+        rateUsd: line.rateUsd,
+        packageId: line.packageId,
+        typeId: line.typeId,
+        feeDefinitionId: line.feeDefinitionId,
+        equipmentQuantityBasis: line.equipmentQuantityBasis,
+      })),
+      invoice.equipmentPricingMode,
+      invoice.crewRateMode,
+      invoice.discountType,
+      invoice.discountValue,
+      args.id,
+    );
+    await ctx.db.patch(args.id, {
+      discountAmountUsd: totals.discountAmountUsd,
+      discountWarning: totals.discountWarning,
+      equipmentSubtotalUsd: totals.equipmentSubtotalUsd,
+      externalRentalsSubtotalUsd: totals.externalRentalsSubtotalUsd,
+      artistsSubtotalUsd: totals.artistsSubtotalUsd,
+      crewSubtotalUsd: totals.crewSubtotalUsd,
+      feesSubtotalUsd: totals.feesSubtotalUsd,
+      subtotalUsd: totals.subtotalUsd,
+      totalUsd: totals.totalUsd,
+      updatedAt: Date.now(),
+      billableOccurrenceCountAtSave: await resolveBillableCountAtSave(ctx, args.id),
+    });
+    await replaceLineItems(ctx, args.id, totals.normalized);
+    return { warning: totals.discountWarning };
+  },
+});
+
+export const duplicate = mutation({
+  args: { id: v.id("invoices") },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    const existing = await ctx.db.get(args.id);
+    if (!existing) throw new Error("Invoice not found.");
+    const lineItems = await ctx.db
+      .query("invoiceLineItems")
+      .withIndex("by_invoiceId_and_order", (q) => q.eq("invoiceId", args.id))
+      .take(500);
+    const publicApprovalToken = existing.sourceEventRequestId
+      ? undefined
+      : await generateUniquePublicApprovalToken(ctx);
+    const now = Date.now();
+    const newId = await ctx.db.insert("invoices", {
+      invoiceNumber: await allocateInvoiceNumber(ctx),
+      status: "draft",
+      issueDate: existing.issueDate,
+      dueDate: existing.dueDate,
+      managerUserId: existing.managerUserId,
+      managerName: existing.managerName,
+      managerEmail: existing.managerEmail,
+      groupId: existing.groupId,
+      contactId: existing.contactId,
+      clientGroupName: existing.clientGroupName,
+      clientGroupType: existing.clientGroupType,
+      clientContactName: existing.clientContactName,
+      clientEmail: existing.clientEmail,
+      clientPhone: existing.clientPhone,
+      clientAddressLine1: existing.clientAddressLine1,
+      clientAddressLine2: existing.clientAddressLine2,
+      clientCity: existing.clientCity,
+      clientState: existing.clientState,
+      clientPostalCode: existing.clientPostalCode,
+      equipmentPricingMode: existing.equipmentPricingMode,
+      crewRateMode: existing.crewRateMode,
+      discountType: existing.discountType,
+      discountValue: existing.discountValue,
+      discountAmountUsd: existing.discountAmountUsd,
+      discountWarning: existing.discountWarning,
+      equipmentSubtotalUsd: existing.equipmentSubtotalUsd,
+      externalRentalsSubtotalUsd: existing.externalRentalsSubtotalUsd,
+      artistsSubtotalUsd: existing.artistsSubtotalUsd,
+      crewSubtotalUsd: existing.crewSubtotalUsd,
+      feesSubtotalUsd: existing.feesSubtotalUsd,
+      subtotalUsd: existing.subtotalUsd,
+      totalUsd: existing.totalUsd,
+      notes: existing.notes,
+      termsIds: existing.termsIds,
+      termsId: undefined,
+      additionalTermsMarkdown: existing.additionalTermsMarkdown,
+      clientApprovalStatus: "pending",
+      publicApprovalToken,
+      publicApprovalTokenExpiresAt: publicApprovalToken ? publicApprovalTokenExpiry(now) : undefined,
+      approvedAt: undefined,
+      changesRequestedAt: undefined,
+      clientApprovalNote: undefined,
+      clientApprovalSignedName: undefined,
+      clientReviewReadyAt: undefined,
+      paymentFinanceContactEmail: undefined,
+      clientIsPaymentSubmitter: undefined,
+      paymentSubmitterName: undefined,
+      paymentSubmitterEmail: undefined,
+      payingPartyNotifiedEmail: undefined,
+      payingPartyNotifiedAt: undefined,
+      termsVersionAccepted: undefined,
+      termsAcceptedAt: undefined,
+      paymentReceivedAt: undefined,
+      paymentReceivedByUserId: undefined,
+      paymentReceiptStorageFileId: undefined,
+      billableOccurrenceCountAtSave: undefined,
+      createdAt: now,
+      updatedAt: now,
+    });
+    for (const line of lineItems) {
+      await ctx.db.insert("invoiceLineItems", {
+        invoiceId: newId,
+        section: line.section,
+        order: line.order,
+        provider: line.provider,
+        label: line.label,
+        notes: line.notes,
+        quantity: line.quantity,
+        rateUsd: line.rateUsd,
+        amountUsd: line.amountUsd,
+        packageId: line.packageId,
+        typeId: line.typeId,
+        feeDefinitionId: line.feeDefinitionId,
+        equipmentQuantityBasis: line.equipmentQuantityBasis,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+    return { id: newId, publicApprovalToken };
+  },
+});
+
+export const createDraftForSeries = mutation({
+  args: {
+    seriesId: v.id("eventSeries"),
+    managerUserId: v.string(),
+    managerName: v.string(),
+    managerEmail: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    const series = await ctx.db.get(args.seriesId);
+    if (!series) throw new Error("Event series not found.");
+    if (series.invoiceId) throw new Error("This series already has a linked invoice.");
+
+    const publicApprovalToken = await generateUniquePublicApprovalToken(ctx);
+    const now = Date.now();
+    const issueDate = new Date().toISOString().slice(0, 10);
+    const id = await ctx.db.insert("invoices", {
+      invoiceNumber: await allocateInvoiceNumber(ctx),
+      status: "draft",
+      issueDate,
+      managerUserId: args.managerUserId,
+      managerName: args.managerName.trim(),
+      managerEmail: trimOptional(args.managerEmail),
+      equipmentPricingMode: "nonSubsidized",
+      crewRateMode: "normal",
+      discountType: "amount",
+      discountValue: 0,
+      discountAmountUsd: 0,
+      equipmentSubtotalUsd: 0,
+      externalRentalsSubtotalUsd: 0,
+      artistsSubtotalUsd: 0,
+      crewSubtotalUsd: 0,
+      feesSubtotalUsd: 0,
+      subtotalUsd: 0,
+      totalUsd: 0,
+      clientApprovalStatus: "pending",
+      publicApprovalToken,
+      publicApprovalTokenExpiresAt: publicApprovalTokenExpiry(now),
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    await ctx.db.patch(args.seriesId, { invoiceId: id, updatedAt: now });
+    const occurrences = await ctx.db
+      .query("events")
+      .withIndex("by_seriesId_and_occurrenceIndex", (q) => q.eq("seriesId", args.seriesId))
+      .take(200);
+    for (const occurrence of occurrences) {
+      if (occurrence.seriesDetached || occurrence.status === "cancelled") continue;
+      await ctx.db.patch(occurrence._id, { invoiceId: id, updatedAt: now });
+      await syncEventStatusForLinkedInvoice(ctx, occurrence._id, id, occurrence.status);
+    }
+
+    const billableCount = await resolveBillableOccurrenceCount(ctx, id);
+    await ctx.db.patch(id, {
+      billableOccurrenceCountAtSave: billableCount > 0 ? billableCount : undefined,
+    });
+
+    return { id, publicApprovalToken };
   },
 });
 

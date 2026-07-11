@@ -8,6 +8,8 @@ description: Core implementation context for Arbor Live Portal (Next.js + Convex
 ## Purpose
 Use this skill to quickly align with how this app is built and avoid regressions in the event/invoice domains.
 
+Human-readable docs live in `docs/` (`getting-started.md`, `architecture.md`, `domain-guide.md`, `environment-variables.md`, `deployment.md`, `r2-storage.md`). Keep `docs/domain-guide.md` in sync when domain behavior described here changes.
+
 ## Stack and Structure
 - Monorepo with `pnpm` workspaces.
 - Frontend: Next.js app in `apps/web`.

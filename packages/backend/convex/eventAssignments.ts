@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { requireAuth } from "./lib/auth";
+import { requireArborInternalContext, requireAuth } from "./lib/auth";
+import { requireEventEditAccess } from "./lib/eventAccess";
 
 const assignmentTypeValue = v.union(
   v.literal("event_manager"),
@@ -15,6 +16,7 @@ export const listByEvent = query({
   args: { eventId: v.id("events") },
   handler: async (ctx, args) => {
     await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
     return await ctx.db
       .query("eventPeopleAssignments")
       .withIndex("by_eventId_and_assignmentType", (q) => q.eq("eventId", args.eventId))
@@ -40,6 +42,8 @@ export const upsertAssignments = mutation({
   },
   handler: async (ctx, args) => {
     await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    await requireEventEditAccess(ctx, args.eventId);
     const existing = await ctx.db
       .query("eventPeopleAssignments")
       .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))

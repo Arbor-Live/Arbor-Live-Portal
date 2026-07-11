@@ -1,36 +1,40 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# web — Arbor Live Portal frontend
 
-## Getting Started
+Next.js (App Router) frontend for the Arbor Live Portal monorepo. It does not
+run standalone: it needs env files linked and the Convex backend running.
 
-First, run the development server:
+## Running locally
+
+From the **repo root** (not this folder):
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+pnpm install
+pnpm setup:worktree-env        # link env files (first-time setup: see root README)
+pnpm --filter backend dev      # terminal 1: Convex backend
+pnpm dev:web                   # terminal 2: this app on http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Full walkthrough (including creating the first admin):
+[docs/getting-started.md](../../docs/getting-started.md).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Useful scripts (run with `pnpm --filter web <script>`)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Script | What it does |
+|---|---|
+| `dev` | Next.js dev server |
+| `build` | Materializes `NEXT_PUBLIC_CONVEX_*` env then `next build` |
+| `lint` | ESLint |
+| `typecheck` | `tsc --noEmit` |
 
-## Learn More
+## Layout
 
-To learn more about Next.js, take a look at the following resources:
+- `src/app/` — routes: `dashboard/` (staff app), `public/` (booking wizard,
+  quote pages), marketing pages, auth pages.
+- `src/components/` — feature components by domain; `ui/` holds shadcn
+  primitives.
+- `src/lib/convex-api.ts` — re-exports the generated Convex API used
+  everywhere as `@/lib/convex-api`.
+- `src/lib/validations/` — zod schemas shared by forms and server actions.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+More context: [docs/architecture.md](../../docs/architecture.md) and
+[docs/deployment.md](../../docs/deployment.md).

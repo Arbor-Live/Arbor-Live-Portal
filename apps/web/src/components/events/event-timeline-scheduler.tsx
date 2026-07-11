@@ -85,6 +85,7 @@ export function EventTimelineScheduler({
   quickAddLabel,
   quickAddDisabled,
   quickAddDisabledReason,
+  readOnly = false,
 }: {
   dayCount: number;
   blocks: TimelineBlockDraft[];
@@ -93,6 +94,7 @@ export function EventTimelineScheduler({
   quickAddLabel: string;
   quickAddDisabled?: boolean;
   quickAddDisabledReason?: string;
+  readOnly?: boolean;
 }) {
   const dragRef = useRef<{
     index: number;
@@ -180,37 +182,39 @@ export function EventTimelineScheduler({
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          disabled={quickAddDisabled}
-          title={quickAddDisabled ? quickAddDisabledReason : undefined}
-          className={quickAddDisabled ? "opacity-40 blur-[0.5px]" : undefined}
-          onClick={onQuickAdd}
-        >
-          {quickAddLabel}
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() =>
-            onChange([
-              ...blocks,
-              {
-                blockType: "setup",
-                label: "New block",
-                dayIndex: 0,
-                startsAt: "",
-                endsAt: "",
-                notes: "",
-              },
-            ])
-          }
-        >
-          Add Block
-        </Button>
-      </div>
+      {!readOnly ? (
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={quickAddDisabled}
+            title={quickAddDisabled ? quickAddDisabledReason : undefined}
+            className={quickAddDisabled ? "opacity-40 blur-[0.5px]" : undefined}
+            onClick={onQuickAdd}
+          >
+            {quickAddLabel}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() =>
+              onChange([
+                ...blocks,
+                {
+                  blockType: "setup",
+                  label: "New block",
+                  dayIndex: 0,
+                  startsAt: "",
+                  endsAt: "",
+                  notes: "",
+                },
+              ])
+            }
+          >
+            Add Block
+          </Button>
+        </div>
+      ) : null}
 
       <div className="space-y-2">
         <div className="relative h-5 rounded border bg-muted/30">
@@ -280,26 +284,34 @@ export function EventTimelineScheduler({
                         left: `${left}%`,
                         width: `${Math.max(4, width)}%`,
                       }}
-                      onMouseDown={(event) => {
-                        if (!(event.target instanceof HTMLElement)) return;
-                        const rowRect = event.currentTarget.parentElement?.getBoundingClientRect();
-                        if (!rowRect) return;
-                        const target = event.target.getAttribute("data-drag-handle");
-                        const mode: DragMode =
-                          target === "start" ? "resizeStart" : target === "end" ? "resizeEnd" : "move";
-                        beginDrag(idx, mode, dayIndex, event.clientX, rowRect.width, rowRect.left);
-                        event.preventDefault();
-                      }}
+                      onMouseDown={
+                        readOnly
+                          ? undefined
+                          : (event) => {
+                              if (!(event.target instanceof HTMLElement)) return;
+                              const rowRect = event.currentTarget.parentElement?.getBoundingClientRect();
+                              if (!rowRect) return;
+                              const target = event.target.getAttribute("data-drag-handle");
+                              const mode: DragMode =
+                                target === "start" ? "resizeStart" : target === "end" ? "resizeEnd" : "move";
+                              beginDrag(idx, mode, dayIndex, event.clientX, rowRect.width, rowRect.left);
+                              event.preventDefault();
+                            }
+                      }
                     >
-                      <div
-                        data-drag-handle="start"
-                        className="absolute left-0 top-0 z-10 h-full w-1.5 cursor-ew-resize bg-foreground/20"
-                      />
+                      {!readOnly ? (
+                        <div
+                          data-drag-handle="start"
+                          className="absolute left-0 top-0 z-10 h-full w-1.5 cursor-ew-resize bg-foreground/20"
+                        />
+                      ) : null}
                       <span className="truncate leading-[30px]">{block.label}</span>
-                      <div
-                        data-drag-handle="end"
-                        className="absolute right-0 top-0 z-10 h-full w-1.5 cursor-ew-resize bg-foreground/20"
-                      />
+                      {!readOnly ? (
+                        <div
+                          data-drag-handle="end"
+                          className="absolute right-0 top-0 z-10 h-full w-1.5 cursor-ew-resize bg-foreground/20"
+                        />
+                      ) : null}
                     </div>
                   );
                 })}
@@ -309,6 +321,7 @@ export function EventTimelineScheduler({
         })}
       </div>
 
+      {!readOnly ? (
       <div className="space-y-2">
         {blocks.map((block, index) => (
           <div key={block.id ?? `block-${index}`} className="grid gap-2 md:grid-cols-7">
@@ -375,6 +388,7 @@ export function EventTimelineScheduler({
           </div>
         ))}
       </div>
+      ) : null}
     </div>
   );
 }

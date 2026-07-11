@@ -1,26 +1,25 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import DatePicker from "react-datepicker";
 import { useFormContext } from "react-hook-form";
+import { useQuery } from "convex/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { api } from "@/lib/convex-api";
+import {
+  formatSelectedDateLabel,
+  monthDateRange,
+  UNAVAILABLE_DAY_WARNING,
+} from "@/lib/booking-day-load";
 import { createDefaultShowSlot, endsOnNextDay } from "@/lib/event-schedule";
 import type { BookingRequestFormValues } from "@/lib/validations/booking-request";
-
-function toDateInput(date: Date) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
-function parseDateInput(value: string) {
-  if (!value) return null;
-  const date = new Date(`${value}T12:00:00`);
-  return Number.isNaN(date.getTime()) ? null : date;
-}
+import {
+  BookingAvailabilityCalendar,
+  getDayLoadLevel,
+} from "@/components/request/booking-availability-calendar";
+import { cn } from "@/lib/utils";
 
 function TimePicker({
   value,
@@ -70,50 +69,21 @@ function TimePicker({
   );
 }
 
-function ShowDatePicker({
-  value,
-  onChange,
-  minDate,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  minDate: Date;
-}) {
-  const selected = useMemo(() => parseDateInput(value), [value]);
-
-  return (
-    <DatePicker
-      selected={selected}
-      onChange={(date: Date | null) => {
-        if (!date) {
-          onChange("");
-          return;
-        }
-        onChange(toDateInput(date));
-      }}
-      minDate={minDate}
-      dateFormat="MMMM d, yyyy"
-      customInput={<Input />}
-      wrapperClassName="app-date-time-wrapper"
-      popperClassName="app-date-time-popper"
-      calendarClassName="app-date-time-calendar"
-      showPopperArrow={false}
-      autoComplete="off"
-    />
-  );
-}
-
-function ShowSlotRow({
+function ShowSlotPanel({
   index,
   slot,
+  isActive,
   canRemove,
+  onActivate,
   onChange,
   onRemove,
   errors,
 }: {
   index: number;
   slot: BookingRequestFormValues["showSlots"][number];
+  isActive: boolean;
   canRemove: boolean;
+  onActivate: () => void;
   onChange: (next: BookingRequestFormValues["showSlots"][number]) => void;
   onRemove: () => void;
   errors: {
@@ -124,11 +94,24 @@ function ShowSlotRow({
 }) {
   const crossesMidnight = endsOnNextDay(slot.startTime, slot.endTime);
   const label = index === 0 ? "Show" : `Show ${index + 1}`;
+  const selectedDateLabel = slot.date ? formatSelectedDateLabel(slot.date) : "Select a date on the calendar";
 
   return (
-    <div className="space-y-3 rounded-md border p-3">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-sm font-medium">{label}</p>
+    <div
+      className={cn(
+        "space-y-4 rounded-xl border p-4 transition-colors",
+        isActive ? "border-primary bg-primary/5 ring-1 ring-primary/20" : "border-border bg-card",
+      )}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <button
+          type="button"
+          className="text-left"
+          onClick={onActivate}
+        >
+          <p className="text-sm font-medium">{label}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{selectedDateLabel}</p>
+        </button>
         {canRemove ? (
           <Button type="button" variant="outline" size="sm" onClick={onRemove}>
             Remove
@@ -136,15 +119,7 @@ function ShowSlotRow({
         ) : null}
       </div>
 
-      <div className="space-y-2">
-        <Label>Date</Label>
-        <ShowDatePicker
-          value={slot.date}
-          minDate={new Date()}
-          onChange={(date) => onChange({ ...slot, date })}
-        />
-        {errors.date ? <p className="text-sm text-destructive">{errors.date}</p> : null}
-      </div>
+      {errors.date ? <p className="text-sm text-destructive">{errors.date}</p> : null}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
@@ -180,6 +155,17 @@ export function EventScheduleField() {
     useFormContext<BookingRequestFormValues>();
   const showSlots = watch("showSlots");
   const flexibleSetupTime = watch("flexibleSetupTime");
+  const [activeSlotIndex, setActiveSlotIndex] = useState(0);
+
+  const activeIndex = Math.min(activeSlotIndex, Math.max(showSlots.length - 1, 0));
+  const activeSlot = showSlots[activeIndex] ?? showSlots[0] ?? createDefaultShowSlot();
+  const visibleMonth = useMemo(() => {
+    const parsed = activeSlot.date ? new Date(`${activeSlot.date}T12:00:00`) : new Date();
+    return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+  }, [activeSlot.date]);
+  const { rangeStart, rangeEnd } = useMemo(() => monthDateRange(visibleMonth), [visibleMonth]);
+  const dayLoad = useQuery(api.eventRequests.getPublicBookingDayLoad, { rangeStart, rangeEnd });
+  const activeDayLevel = getDayLoadLevel(dayLoad, activeSlot.date);
 
   const revalidateSchedule = useCallback(async () => {
     await trigger(["showSlots", "setupTime"]);
@@ -204,23 +190,49 @@ export function EventScheduleField() {
     endTime: formState.errors.showSlots?.[index]?.endTime?.message,
   }));
 
+  const highlightedDates = showSlots
+    .map((slot, index) => (index === activeIndex ? null : slot.date.trim()))
+    .filter((date): date is string => Boolean(date));
+
   return (
     <div className="space-y-4">
-      {showSlots.map((slot, index) => (
-        <ShowSlotRow
-          key={`show-slot-${index}`}
-          index={index}
-          slot={slot}
-          canRemove={showSlots.length > 1}
-          errors={slotErrors[index] ?? {}}
-          onChange={(next) => updateSlot(index, next)}
-          onRemove={() => {
-            const next = showSlots.filter((_, rowIndex) => rowIndex !== index);
-            setValue("showSlots", next, { shouldDirty: true });
-            void revalidateSchedule();
-          }}
-        />
-      ))}
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+        <div className="w-full shrink-0 lg:w-[340px]">
+          <BookingAvailabilityCalendar
+            selectedDate={activeSlot.date}
+            highlightedDates={highlightedDates}
+            minDate={new Date()}
+            onSelectDate={(date) => updateSlot(activeIndex, { ...activeSlot, date })}
+          />
+        </div>
+
+        <div className="booking-show-slots-scroll min-h-0 w-full flex-1 space-y-3 lg:max-h-[25.5rem] lg:overflow-y-auto lg:overscroll-y-contain lg:pr-1">
+          {showSlots.map((slot, index) => (
+            <ShowSlotPanel
+              key={`show-slot-${index}`}
+              index={index}
+              slot={slot}
+              isActive={index === activeIndex}
+              canRemove={showSlots.length > 1}
+              errors={slotErrors[index] ?? {}}
+              onActivate={() => setActiveSlotIndex(index)}
+              onChange={(next) => updateSlot(index, next)}
+              onRemove={() => {
+                const next = showSlots.filter((_, rowIndex) => rowIndex !== index);
+                setValue("showSlots", next, { shouldDirty: true });
+                setActiveSlotIndex((current) => Math.min(current, Math.max(next.length - 1, 0)));
+                void revalidateSchedule();
+              }}
+            />
+          ))}
+        </div>
+      </div>
+
+      {activeDayLevel === "unavailable" && activeSlot.date ? (
+        <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-950 dark:text-amber-100">
+          {UNAVAILABLE_DAY_WARNING}
+        </p>
+      ) : null}
 
       {showSlotsError ? <p className="text-sm text-destructive">{showSlotsError}</p> : null}
 
@@ -242,6 +254,7 @@ export function EventScheduleField() {
             ],
             { shouldDirty: true },
           );
+          setActiveSlotIndex(showSlots.length);
           void revalidateSchedule();
         }}
       >

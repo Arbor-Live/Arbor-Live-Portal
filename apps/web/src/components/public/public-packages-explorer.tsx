@@ -1,20 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
-import { useQuery } from "convex/react";
-import { api } from "@/lib/convex-api";
+import { useMemo, useState } from "react";
 import { MarkdownContent } from "@/components/markdown-content";
 import { PublicPageHero } from "@/components/public/public-page-hero";
-import { StoredAssetImage } from "@/components/files/stored-asset-image";
+import { OptimizedRemoteImage } from "@/components/media/optimized-remote-image";
 import { PublicSiteChrome } from "@/components/public/public-site-chrome";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Reveal, Stagger, StaggerItem } from "@/components/landing/landing-motion";
 import { cn } from "@/lib/utils";
+import type { PublicPackageBucket } from "@/lib/site-revalidation";
 
-type PublicBucket = "lighting" | "sound" | "environmental" | "staging" | "misc";
-
-const bucketLabels: Record<PublicBucket, string> = {
+const bucketLabels: Record<PublicPackageBucket, string> = {
   lighting: "Lighting",
   sound: "Sound",
   environmental: "Environmental",
@@ -22,13 +19,33 @@ const bucketLabels: Record<PublicBucket, string> = {
   misc: "Misc",
 };
 
-export function PublicPackagesExplorer({ bucket }: { bucket?: PublicBucket }) {
-  const rows = useQuery(api.publicInventory.listPublicPackages, bucket ? { bucket } : {});
+export type PublicPackageRow = {
+  bucket: PublicPackageBucket;
+  package: {
+    _id: string;
+    name: string;
+    description?: string;
+    publicHeroImageUrl?: string;
+    publicSlug?: string;
+  };
+};
 
+export function PublicPackagesExplorer({
+  rows,
+  bucket,
+}: {
+  rows: PublicPackageRow[];
+  bucket?: PublicPackageBucket;
+}) {
   const grouped = useMemo(() => {
-    type Row = NonNullable<typeof rows>[number];
-    const ordered: PublicBucket[] = ["lighting", "sound", "environmental", "staging", "misc"];
-    const map: Record<PublicBucket, Row[]> = {
+    const ordered: PublicPackageBucket[] = [
+      "lighting",
+      "sound",
+      "environmental",
+      "staging",
+      "misc",
+    ];
+    const map: Record<PublicPackageBucket, PublicPackageRow[]> = {
       lighting: [],
       sound: [],
       environmental: [],
@@ -36,8 +53,8 @@ export function PublicPackagesExplorer({ bucket }: { bucket?: PublicBucket }) {
       misc: [],
     };
 
-    for (const row of rows ?? []) {
-      map[row.bucket as PublicBucket].push(row);
+    for (const row of rows) {
+      map[row.bucket].push(row);
     }
 
     return ordered.map((key) => ({ key, items: map[key] }));
@@ -54,9 +71,7 @@ export function PublicPackagesExplorer({ bucket }: { bucket?: PublicBucket }) {
         }
       />
       <div className="mx-auto max-w-6xl space-y-10 px-4 py-12 sm:px-6 lg:px-8">
-        {rows === undefined ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
-
-        {rows && !rows.length ? (
+        {!rows.length ? (
           <Card>
             <CardHeader>
               <CardTitle>No public packages</CardTitle>
@@ -83,8 +98,11 @@ export function PublicPackagesExplorer({ bucket }: { bucket?: PublicBucket }) {
                       <Card className="group gap-0 overflow-hidden py-0 transition-shadow hover:ring-2 hover:ring-primary/20 has-[>div:first-child]:pt-0">
                         {row.package.publicHeroImageUrl ? (
                           <div className="relative h-44 w-full overflow-hidden border-b bg-zinc-950">
-                            <StoredAssetImage
-                              storedValue={row.package.publicHeroImageUrl}
+                            <OptimizedRemoteImage
+                              src={row.package.publicHeroImageUrl}
+                              alt=""
+                              fill
+                              sizes="(max-width: 768px) 100vw, 50vw"
                               className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
                             />
                             <div

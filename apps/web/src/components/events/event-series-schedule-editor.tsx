@@ -25,6 +25,7 @@ import {
   timelineDraftsToTemplates,
   type SeriesBlockTemplate,
 } from "@/lib/event-series-schedule";
+import { formatOccurrencePreview } from "@/lib/event-series";
 import {
   seriesScheduleEditorSchema,
   type SeriesScheduleEditorFormValues,
@@ -119,12 +120,7 @@ export function EventSeriesScheduleEditor({
     () =>
       occurrences.map((row) => ({
         value: row._id,
-        label: `#${(row.occurrenceIndex ?? 0) + 1} · ${new Intl.DateTimeFormat("en-US", {
-          month: "short",
-          day: "numeric",
-          hour: "numeric",
-          minute: "2-digit",
-        }).format(new Date(row.startAt))}`,
+        label: `#${(row.occurrenceIndex ?? 0) + 1} · ${formatOccurrencePreview(row.startAt)}`,
       })),
     [occurrences],
   );

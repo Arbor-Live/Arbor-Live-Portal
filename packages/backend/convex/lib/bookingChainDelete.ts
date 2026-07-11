@@ -121,6 +121,14 @@ export async function unlinkInvoicePeers(ctx: MutationCtx, invoiceId: Id<"invoic
   for (const event of events) {
     await ctx.db.patch(event._id, { invoiceId: undefined, updatedAt: now });
   }
+
+  const seriesRows = await ctx.db
+    .query("eventSeries")
+    .withIndex("by_invoiceId", (q) => q.eq("invoiceId", invoiceId))
+    .take(10);
+  for (const series of seriesRows) {
+    await ctx.db.patch(series._id, { invoiceId: undefined, updatedAt: now });
+  }
 }
 
 export async function unlinkRequestPeers(ctx: MutationCtx, request: Doc<"eventRequests">) {

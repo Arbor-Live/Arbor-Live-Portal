@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { requireAuth } from "./lib/auth";
+import { requireArborInternalContext, requireAuth } from "./lib/auth";
+import { requireEventEditAccess } from "./lib/eventAccess";
 import { scheduleSchedulePublishedEmails } from "./email/triggers";
 
 const blockTypeValue = v.union(
@@ -14,6 +15,7 @@ export const listByEvent = query({
   args: { eventId: v.id("events") },
   handler: async (ctx, args) => {
     await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
     return await ctx.db
       .query("eventScheduleBlocks")
       .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", args.eventId))
@@ -39,6 +41,8 @@ export const upsertBlocks = mutation({
   },
   handler: async (ctx, args) => {
     await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    await requireEventEditAccess(ctx, args.eventId);
     const event = await ctx.db.get(args.eventId);
     if (!event) throw new Error("Event not found.");
     for (const block of args.blocks) {
@@ -48,17 +52,19 @@ export const upsertBlocks = mutation({
         throw new Error("Single-day events only allow day index 0.");
       }
     }
-    const sorted = [...args.blocks].sort((a, b) => a.startsAt - b.startsAt);
-    for (let i = 1; i < sorted.length; i += 1) {
-      if (sorted[i].startsAt < sorted[i - 1].endsAt) {
-        throw new Error("Schedule blocks cannot overlap.");
-      }
-    }
+    // Overlapping blocks are allowed: the timeline renders overlaps on
+    // separate lanes, so no overlap validation happens here.
 
     const existing = await ctx.db
       .query("eventScheduleBlocks")
       .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
       .take(500);
+    const existingIds = new Set(existing.map((row) => row._id));
+    for (const block of args.blocks) {
+      if (block.id && !existingIds.has(block.id)) {
+        throw new Error("Schedule block does not belong to this event.");
+      }
+    }
     const keepIds = new Set(args.blocks.map((b) => b.id).filter(Boolean));
     for (const row of existing) {
       if (!keepIds.has(row._id)) await ctx.db.delete(row._id);

@@ -1,15 +1,26 @@
+import { pacificDateKey } from "@arbor/format";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { components } from "./_generated/api";
-import { requireArborInternalContext, requireAuth } from "./lib/auth";
+import { requireAdmin, requireArborInternalContext, requireAuth } from "./lib/auth";
+import { canEditEventForUser, requireEventEditAccess } from "./lib/eventAccess";
 import {
   eventStatusValue,
   normalizeEventStatus,
   syncEventStatusForLinkedInvoice,
 } from "./lib/eventStatus";
+import { computeSeriesCostSummary } from "./lib/eventSeriesCosts";
 import { listEventsByInvoiceId } from "./lib/invoiceEvents";
 import { RENTAL_EVENT_TYPES, enrichPullListItems, summarizePullList } from "./eventPullLists";
-import { propagateOverviewToSeriesOccurrences, type SeriesEditScope } from "./lib/eventSeriesGeneration";
+import { propagateOverviewToSeriesOccurrences, propagateInvoiceIdToSeriesOccurrences, type SeriesEditScope, type SeriesOverviewAffectedOccurrence, type SeriesOverviewOverride } from "./lib/eventSeriesGeneration";
+import { resolveSeriesMetadataForInvoice } from "./lib/invoiceSeries";
+import { assertNoOpenMicOverlap } from "./lib/openMicAddon";
+import {
+  DEFAULT_EVENT_VISIBILITY,
+  eventVisibilityValue,
+} from "./lib/eventVisibility";
+import { EVENT_TIMEZONE } from "./email/constants";
 import { scheduleEventCancelledEmails } from "./email/triggers";
 import { resolveStoredR2AssetUrl } from "./inventoryR2";
 
@@ -28,8 +39,6 @@ const eventTeamValue = v.union(
   v.literal("Sound"),
   v.literal("Operations"),
 );
-const EVENT_TIMEZONE = "America/Los_Angeles";
-
 const rentalFulfillmentModeValue = v.union(v.literal("delivery"), v.literal("will_call"));
 
 const seriesEditScopeValue = v.union(v.literal("this"), v.literal("future"), v.literal("all"));
@@ -246,7 +255,7 @@ export const listForDashboard = query({
 export const get = query({
   args: { id: v.id("events") },
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    const user = await requireAuth(ctx);
     await requireArborInternalContext(ctx);
     const event = await ctx.db.get(args.id);
     if (!event) return null;
@@ -282,7 +291,9 @@ export const get = query({
       .take(500);
     const sortedPullList = pullListItems.sort((a, b) => a.sortOrder - b.sortOrder || a.createdAt - b.createdAt);
     const enrichedPullList = await enrichPullListItems(ctx, sortedPullList);
+    const canEdit = canEditEventForUser(user, event, assignments);
     return {
+      canEdit,
       event: { ...event, status: normalizeEventStatus(event.status) },
       series:
         event.seriesId !== undefined
@@ -293,6 +304,7 @@ export const get = query({
                 .query("events")
                 .withIndex("by_seriesId_and_occurrenceIndex", (q) => q.eq("seriesId", event.seriesId!))
                 .take(200);
+              const costSummary = computeSeriesCostSummary(series, siblings);
               return {
                 _id: series._id,
                 title: series.title,
@@ -301,6 +313,7 @@ export const get = query({
                 totalOccurrences: series.occurrenceCount ?? siblings.length,
                 occurrenceIndex: event.occurrenceIndex,
                 seriesDetached: event.seriesDetached ?? false,
+                invoiceId: series.invoiceId,
                 budgetUsd: series.budgetUsd,
                 occurrenceBandsCostUsd: series.occurrenceBandsCostUsd,
                 occurrenceExternalRentalsCostUsd: series.occurrenceExternalRentalsCostUsd,
@@ -308,6 +321,7 @@ export const get = query({
                 seriesBandsCostUsd: series.seriesBandsCostUsd,
                 seriesExternalRentalsCostUsd: series.seriesExternalRentalsCostUsd,
                 seriesOtherCostUsd: series.seriesOtherCostUsd,
+                costSummary,
               };
             })()
           : null,
@@ -378,6 +392,7 @@ export const getByInvoiceId = query({
         startAt: row.startAt,
         endAt: row.endAt,
       })),
+      series: await resolveSeriesMetadataForInvoice(ctx, args.invoiceId),
     };
   },
 });
@@ -386,7 +401,7 @@ export const create = mutation({
   args: {
     title: v.string(),
     status: v.optional(eventStatusValue),
-    visibility: v.optional(v.union(v.literal("internal"), v.literal("public"))),
+    visibility: v.optional(eventVisibilityValue),
     invoiceId: v.optional(v.id("invoices")),
     startAt: v.number(),
     endAt: v.number(),
@@ -406,18 +421,24 @@ export const create = mutation({
     otherCostUsd: v.optional(v.number()),
     rentalFulfillmentMode: v.optional(rentalFulfillmentModeValue),
     notes: v.optional(v.string()),
+    openMicEnabled: v.optional(v.boolean()),
+    openMicNotes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    await requireAdmin(ctx);
     await requireArborInternalContext(ctx);
     if (args.endAt <= args.startAt) throw new Error("Event end time must be after start time.");
     const now = Date.now();
-    const spansMultipleDays = new Date(args.startAt).toDateString() !== new Date(args.endAt).toDateString();
+    const spansMultipleDays = pacificDateKey(args.startAt) !== pacificDateKey(args.endAt);
     const initialStatus = normalizeEventStatus(args.status);
+    const openMicEnabled = args.openMicEnabled === true;
+    if (openMicEnabled) {
+      await assertNoOpenMicOverlap(ctx, null, args.startAt, args.endAt);
+    }
     const eventId = await ctx.db.insert("events", {
       title: args.title.trim(),
       status: initialStatus,
-      visibility: args.visibility ?? "internal",
+      visibility: args.visibility ?? DEFAULT_EVENT_VISIBILITY,
       invoiceId: args.invoiceId,
       publicToken: makePublicToken(),
       startAt: args.startAt,
@@ -442,6 +463,9 @@ export const create = mutation({
       otherCostUsd: args.otherCostUsd,
       rentalFulfillmentMode: resolveRentalFulfillmentMode(args.eventType, args.rentalFulfillmentMode),
       notes: trimOptional(args.notes),
+      openMicEnabled,
+      openMicStatus: openMicEnabled ? "scheduled" : undefined,
+      openMicNotes: trimOptional(args.openMicNotes),
       createdAt: now,
       updatedAt: now,
     });
@@ -458,7 +482,7 @@ export const update = mutation({
     editScope: v.optional(seriesEditScopeValue),
     title: v.optional(v.string()),
     status: v.optional(eventStatusValue),
-    visibility: v.optional(v.union(v.literal("internal"), v.literal("public"))),
+    visibility: v.optional(eventVisibilityValue),
     invoiceId: v.optional(v.id("invoices")),
     startAt: v.optional(v.number()),
     endAt: v.optional(v.number()),
@@ -477,17 +501,22 @@ export const update = mutation({
     externalRentalsCostUsd: v.optional(v.number()),
     otherCostUsd: v.optional(v.number()),
     rentalFulfillmentMode: v.optional(rentalFulfillmentModeValue),
+    otPremium: v.optional(v.boolean()),
+    crewCostBufferPercent: v.optional(v.number()),
     notes: v.optional(v.string()),
+    openMicEnabled: v.optional(v.boolean()),
+    openMicNotes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
+    await requireEventEditAccess(ctx, args.id);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Event not found.");
     const startAt = args.startAt ?? existing.startAt;
     const endAt = args.endAt ?? existing.endAt;
     if (endAt <= startAt) throw new Error("Event end time must be after start time.");
-    const spansMultipleDays = new Date(startAt).toDateString() !== new Date(endAt).toDateString();
+    const spansMultipleDays = pacificDateKey(startAt) !== pacificDateKey(endAt);
     const nextEventType = args.eventType ?? existing.eventType;
     const nextRentalFulfillmentMode =
       args.rentalFulfillmentMode !== undefined
@@ -495,8 +524,26 @@ export const update = mutation({
         : resolveRentalFulfillmentMode(nextEventType, existing.rentalFulfillmentMode);
     const nextInvoiceId = args.invoiceId !== undefined ? args.invoiceId : existing.invoiceId;
     const nextStatus = normalizeEventStatus(args.status ?? existing.status);
-    const wasCancelled = normalizeEventStatus(existing.status) === "cancelled";
     const now = Date.now();
+    const nextOpenMicEnabled =
+      args.openMicEnabled !== undefined ? args.openMicEnabled === true : existing.openMicEnabled === true;
+    // Enforce the runner overlap rule whenever Open Mic ends up enabled and
+    // either the add-on is being toggled on or the event is being moved while
+    // enabled. Use the post-patch start/end so a move can't dodge the check.
+    if (
+      nextOpenMicEnabled &&
+      (args.openMicEnabled === true || args.startAt !== undefined || args.endAt !== undefined)
+    ) {
+      await assertNoOpenMicOverlap(ctx, args.id, startAt, endAt);
+    }
+    // When Open Mic is first toggled on and the runner status has never been
+    // set, seed it to "scheduled" so the public sign-up window opens
+    // immediately. Toggling off leaves the runner status untouched (queries
+    // gate on openMicEnabled), so re-enabling restores the previous state.
+    const nextOpenMicStatus =
+      nextOpenMicEnabled && !existing.openMicStatus
+        ? ("scheduled" as const)
+        : existing.openMicStatus;
     const patch = {
       title: args.title?.trim() ?? existing.title,
       status: nextStatus,
@@ -523,12 +570,24 @@ export const update = mutation({
       externalRentalsCostUsd: args.externalRentalsCostUsd ?? existing.externalRentalsCostUsd,
       otherCostUsd: args.otherCostUsd ?? existing.otherCostUsd,
       rentalFulfillmentMode: nextRentalFulfillmentMode,
+      otPremium: args.otPremium ?? existing.otPremium,
+      crewCostBufferPercent: args.crewCostBufferPercent ?? existing.crewCostBufferPercent,
       notes: args.notes?.trim() ?? existing.notes,
+      openMicEnabled: nextOpenMicEnabled,
+      // When Open Mic is enabled and there's no runner status yet, seed
+      // "scheduled". When disabled, preserve the previous status so a
+      // later re-enable restores the runner's operational state.
+      openMicStatus: nextOpenMicEnabled
+        ? (nextOpenMicStatus ?? existing.openMicStatus)
+        : existing.openMicStatus,
+      openMicNotes: args.openMicNotes !== undefined ? trimOptional(args.openMicNotes) : existing.openMicNotes,
       updatedAt: now,
     };
 
     const scope = (args.editScope ?? "this") as SeriesEditScope;
     const hasSeries = Boolean(existing.seriesId);
+
+    let affectedOccurrences: SeriesOverviewAffectedOccurrence[] = [{ id: args.id, prevStatus: existing.status, invoiceId: nextInvoiceId }];
 
     if (hasSeries && existing.seriesId && scope !== "this") {
       const series = await ctx.db.get(existing.seriesId);
@@ -567,17 +626,53 @@ export const update = mutation({
         eventManagerUserId: patch.eventManagerUserId,
         rentalFulfillmentMode: patch.rentalFulfillmentMode,
         notes: patch.notes,
+        ...(args.invoiceId !== undefined ? { invoiceId: nextInvoiceId } : {}),
         updatedAt: now,
       });
       const updatedSeries = await ctx.db.get(existing.seriesId);
       if (!updatedSeries) throw new Error("Linked event series not found.");
-      await propagateOverviewToSeriesOccurrences(
+      const overrides: SeriesOverviewOverride = {
+        status: nextStatus,
+        visibility: patch.visibility,
+      };
+      if (patch.otPremium !== undefined) overrides.otPremium = patch.otPremium;
+      if (patch.crewCostBufferPercent !== undefined) {
+        overrides.crewCostBufferPercent = patch.crewCostBufferPercent;
+      }
+      const propagated = await propagateOverviewToSeriesOccurrences(
         ctx,
         updatedSeries,
         referenceIndex,
         scope,
         now,
+        overrides,
       );
+      const propagatedIds = new Set(propagated.map((o) => o.id));
+      if (!propagatedIds.has(args.id)) {
+        await ctx.db.patch(args.id, { ...overrides, updatedAt: now });
+      }
+      affectedOccurrences = [...affectedOccurrences, ...propagated];
+      if (args.invoiceId !== undefined) {
+        await propagateInvoiceIdToSeriesOccurrences(
+          ctx,
+          existing.seriesId,
+          nextInvoiceId,
+          referenceIndex,
+          scope,
+          now,
+        );
+      }
+      // Open Mic is a per-occurrence add-on, not part of the series template.
+      // Apply it directly to the reference occurrence so the admin's toggle
+      // isn't silently dropped when saving with a non-"this" series scope.
+      if (args.openMicEnabled !== undefined || args.openMicNotes !== undefined) {
+        await ctx.db.patch(args.id, {
+          openMicEnabled: patch.openMicEnabled,
+          openMicStatus: patch.openMicStatus,
+          openMicNotes: patch.openMicNotes,
+          updatedAt: now,
+        });
+      }
     } else {
       await ctx.db.patch(args.id, {
         ...patch,
@@ -585,12 +680,17 @@ export const update = mutation({
       });
     }
 
-    if (nextInvoiceId) {
-      await syncEventStatusForLinkedInvoice(ctx, args.id, nextInvoiceId, nextStatus);
-    }
+    const seen = new Set<Id<"events">>();
+    for (const occ of affectedOccurrences) {
+      if (seen.has(occ.id)) continue;
+      seen.add(occ.id);
+      if (occ.invoiceId) {
+        await syncEventStatusForLinkedInvoice(ctx, occ.id, occ.invoiceId, nextStatus);
+      }
 
-    if (nextStatus === "cancelled" && !wasCancelled) {
-      await scheduleEventCancelledEmails(ctx, args.id, now);
+      if (nextStatus === "cancelled" && normalizeEventStatus(occ.prevStatus) !== "cancelled") {
+        await scheduleEventCancelledEmails(ctx, occ.id, now);
+      }
     }
   },
 });
@@ -603,6 +703,7 @@ export const setStatus = mutation({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
+    await requireEventEditAccess(ctx, args.id);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Event not found.");
     const wasCancelled = normalizeEventStatus(existing.status) === "cancelled";
@@ -623,6 +724,7 @@ export const duplicate = mutation({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
+    await requireEventEditAccess(ctx, args.id);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Event not found.");
     const now = Date.now();
@@ -654,6 +756,9 @@ export const duplicate = mutation({
       otherCostUsd: existing.otherCostUsd,
       rentalFulfillmentMode: existing.rentalFulfillmentMode,
       notes: existing.notes,
+      openMicEnabled: existing.openMicEnabled,
+      openMicStatus: existing.openMicEnabled ? "scheduled" : undefined,
+      openMicNotes: existing.openMicNotes,
       createdAt: now,
       updatedAt: now,
     });
