@@ -1,92 +1,224 @@
 "use client";
-import { useState } from "react";
-import Papa from "papaparse";
-import { useConvex, useMutation } from "convex/react";
-import { api } from "../../../../packages/backend/convex/_generated/api";
 
-/**
- * OrganizatoinCSVImporter is a React component that allows users to import 
- * organization data from a CSV file. It uses the PapaParse library to parse 
- * the CSV file and the Convex API to batch import the cleaned organization 
- * data into the backend database.
- */
+import { useId, useMemo, useState } from "react";
+import { useMutation } from "convex/react";
+import { FileCsvIcon, UploadSimpleIcon, WarningCircleIcon } from "@phosphor-icons/react";
+import { api } from "@/lib/convex-api";
+import { getConvexErrorMessage } from "@/lib/convex-error";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+
+type OrganizationType = "arbor_internal" | "band" | "dj";
+
+type ImportOrganization = {
+  displayName: string;
+  orgCreationTime?: number;
+  numShowsRan?: number;
+  performerHourlyRateUsd?: number;
+  genres?: string[];
+  bandMembers?: string[];
+  oneLiner?: string;
+  demoURL?: string;
+  mainContactName?: string;
+  mainContactEmail?: string;
+  mainContactPhone?: string;
+  techRiderURL?: string;
+  status?: string;
+  organizationType: OrganizationType;
+};
+
+type ImportPreview = {
+  organizations: ImportOrganization[];
+  skippedRows: number;
+  fileName: string;
+};
+
+function cleanText(value: string | undefined) {
+  const cleaned = value?.replace(/\s*\(https:\/\/app\.notion\.com\/.*?\)/g, "").trim();
+  return cleaned || undefined;
+}
+
+function optionalNumber(value: string | undefined) {
+  if (!value?.trim()) return undefined;
+  const parsed = Number.parseFloat(value.replace(/[$,]/g, ""));
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function optionalDate(value: string | undefined) {
+  if (!value?.trim()) return undefined;
+  const parsed = new Date(value).getTime();
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function splitList(value: string | undefined) {
+  return value
+    ?.split(",")
+    .map((item) => cleanText(item))
+    .filter((item): item is string => Boolean(item));
+}
+
+function organizationType(value: string | undefined): OrganizationType {
+  switch (value?.trim().toLowerCase()) {
+    case "dj":
+      return "dj";
+    case "arbor_internal":
+      return "arbor_internal";
+    default:
+      return "band";
+  }
+}
+
+function parseCsv(content: string): Record<string, string>[] {
+  const rows: string[][] = [];
+  let value = "";
+  let row: string[] = [];
+  let inQuotes = false;
+  for (let index = 0; index < content.length; index += 1) {
+    const char = content[index];
+    const next = content[index + 1];
+    if (char === '"') {
+      if (inQuotes && next === '"') { value += '"'; index += 1; } else inQuotes = !inQuotes;
+    } else if (char === "," && !inQuotes) {
+      row.push(value); value = "";
+    } else if ((char === "\n" || char === "\r") && !inQuotes) {
+      if (char === "\r" && next === "\n") index += 1;
+      row.push(value); value = "";
+      if (row.some((entry) => entry.trim())) rows.push(row);
+      row = [];
+    } else value += char;
+  }
+  if (value || row.length) {
+    row.push(value);
+    if (row.some((entry) => entry.trim())) rows.push(row);
+  }
+  const headers = (rows.shift() ?? []).map((header) => header.trim());
+  return rows.map((entries) => Object.fromEntries(headers.map((header, index) => [header, entries[index]?.trim() ?? ""])));
+}
+
+async function readOrganizationCsv(file: File): Promise<ImportPreview> {
+  const parsed = parseCsv(await file.text());
+  let skippedRows = 0;
+  const organizations = parsed.flatMap((row) => {
+    const displayName = cleanText(row["Artist Name"] ?? row["Band Name"]);
+    if (!displayName) {
+      skippedRows += 1;
+      return [];
+    }
+    return [{
+      displayName,
+      orgCreationTime: optionalDate(row["Created time"]),
+      numShowsRan: optionalNumber(row["Shows Ran"]),
+      performerHourlyRateUsd: optionalNumber(row["Hourly Rate"]),
+      genres: splitList(row["Genre"]),
+      bandMembers: splitList(row["Members"]),
+      oneLiner: cleanText(row["One Liner Headline"]),
+      demoURL: cleanText(row["Demo"]),
+      mainContactName: cleanText(row["Main Contact Name"]),
+      mainContactEmail: cleanText(row["Main Contact Email"]),
+      mainContactPhone: cleanText(row["Main Contact Phone"]),
+      techRiderURL: cleanText(row["Tech Rider"]),
+      status: cleanText(row["Status"]) ?? "unknown",
+      organizationType: organizationType(row["Type"]),
+    }];
+  });
+  return { organizations, skippedRows, fileName: file.name };
+}
+
 export function OrganizationCSVImporter() {
-  const [isImporting, setIsImporting] = useState(false);
+  const inputId = useId();
   const batchImport = useMutation(api.organizationImporter.batchImport);
+  const [preview, setPreview] = useState<ImportPreview | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [inputKey, setInputKey] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<string | null>(null);
 
-  //removes notion links from the string and trims whitespace, returns undefined if val is undefined
-  const cleanNotionString = (val: string | undefined) => {
-    if (!val) return undefined;
-    return val.replace(/\s*\(https:\/\/app\.notion\.com\/.*?\)/g, "").trim();
-  };
+  const previewRows = useMemo(() => preview?.organizations.slice(0, 5) ?? [], [preview]);
 
-  //handleFileUpload is an async function that processes the uploaded CSV file, cleans the data, and calls the batchImport mutation to save the organizations to the database.
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  async function onSelectFile(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
-    if (!file) return;
+    setError(null);
+    setResult(null);
+    if (!file) {
+      setPreview(null);
+      return;
+    }
+    try {
+      const nextPreview = await readOrganizationCsv(file);
+      if (!nextPreview.organizations.length) {
+        setPreview(null);
+        setError("No organizations were found. Include an Artist Name or Band Name column.");
+        return;
+      }
+      setPreview(nextPreview);
+    } catch (parseError) {
+      setPreview(null);
+      setError(getConvexErrorMessage(parseError, "The CSV could not be read."));
+    }
+  }
 
+  async function runImport() {
+    if (!preview) return;
     setIsImporting(true);
-
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: async (results) => {
-        try {
-          const cleanedOrganizations = results.data.map((row: any) => {
-
-            const rawType = (row["Type"] || "band").toLowerCase().trim();
-            const safeType = rawType === "dj" ? "dj"
-              : rawType === "arbor_internal" ? "arbor_internal"
-                : "band";
-
-            return {
-              displayName: row["Artist Name"] || row["Band Name"] || "Unknown",
-              orgCreationTime: new Date(row["Created time"]).getTime() || Date.now(),
-              numShowsRan: parseInt(row["Shows Ran"]) || 0,
-              performerHourlyRateUsd: parseFloat(row["Hourly Rate"]) || 0,
-
-              genres: row["Genre"] ? row["Genre"].split(",").map((g: string) => g.trim()) : [],
-              bandMembers: row["Members"] ? row["Members"].split(",").map((m: string) => cleanNotionString(m.trim())) : [],
-
-              oneLiner: row["One Liner Headline"] || undefined,
-              demoURL: row["Demo"] || undefined,
-              mainContactName: row["Main Contact Name"] || undefined,
-              mainContactEmail: row["Main Contact Email"] || undefined,
-              mainContactPhone: row["Main Contact Phone"] || undefined,
-              techRiderURL: row["Tech Rider"] || undefined,
-              status: row["Status"] || "unknown",
-              organizationType: safeType,
-            };
-          });
-
-          const response = await batchImport({ organizations: cleanedOrganizations });
-
-          // FIX 5: Use backticks for variable injection
-          alert(`Success! Imported ${response.count} organizations.`);
-          window.location.reload(); // Refresh the page to reflect the new data
-        } catch (error) {
-          console.error("Import failed:", error);
-          alert("Something went wrong during the import. Check the console.");
-        } finally {
-          setIsImporting(false);
-          event.target.value = '';
-        }
-      },
-    });
-  };
+    setError(null);
+    setResult(null);
+    try {
+      const response = await batchImport({ organizations: preview.organizations });
+      setResult(`${response.count} organization${response.count === 1 ? "" : "s"} imported or updated.`);
+      setPreview(null);
+      setInputKey((key) => key + 1);
+    } catch (importError) {
+      setError(getConvexErrorMessage(importError, "The organization import failed."));
+    } finally {
+      setIsImporting(false);
+    }
+  }
 
   return (
-    <div className="p-4 border-gray-700 rounded-md bg-gray-900 mt-4">
-      <h3 className="text-lg font-semibold mb-2">Import Organizations from CSV</h3>
-      <input
-        type="file"
-        accept=".csv"
-        // FIX 6: Wired the physical button to your function!
-        onChange={handleFileUpload}
-        disabled={isImporting}
-        className="text-gray-300 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-gray-700 file:text-white hover:file:bg-gray-600"
-      />
-      {isImporting && <p className="text-green-400 mt-2">Importing...</p>}
-    </div>
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2"><FileCsvIcon /> Import organizations</CardTitle>
+        <CardDescription>
+          Import bands, DJs, and their profile details from a Notion CSV. Existing organizations are updated by name.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid gap-2">
+          <Label htmlFor={inputId}>Organization CSV</Label>
+          <Input key={inputKey} id={inputId} type="file" accept=".csv,text/csv" disabled={isImporting} onChange={(event) => void onSelectFile(event)} />
+          <p className="text-xs text-muted-foreground">Recognized columns include Artist Name, Band Name, Type, Genre, Members, and contact details.</p>
+        </div>
+
+        {preview ? (
+          <div className="space-y-3 border p-3">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <div>
+                <p className="font-medium">Ready to import {preview.organizations.length} organizations</p>
+                <p className="text-xs text-muted-foreground">{preview.fileName}{preview.skippedRows ? ` · ${preview.skippedRows} blank row${preview.skippedRows === 1 ? "" : "s"} skipped` : ""}</p>
+              </div>
+              <Button type="button" onClick={() => void runImport()} disabled={isImporting}>
+                <UploadSimpleIcon data-icon="inline-start" />
+                {isImporting ? "Importing…" : "Confirm import"}
+              </Button>
+            </div>
+            <div className="divide-y border text-sm">
+              {previewRows.map((organization) => (
+                <div key={organization.displayName} className="flex items-center justify-between gap-3 px-3 py-2">
+                  <span className="font-medium">{organization.displayName}</span>
+                  <span className="text-xs capitalize text-muted-foreground">{organization.organizationType.replace("_", " ")}</span>
+                </div>
+              ))}
+            </div>
+            {preview.organizations.length > previewRows.length ? <p className="text-xs text-muted-foreground">Plus {preview.organizations.length - previewRows.length} more organizations.</p> : null}
+          </div>
+        ) : null}
+
+        {error ? <Alert variant="destructive"><WarningCircleIcon /><AlertTitle>Import not completed</AlertTitle><AlertDescription>{error}</AlertDescription></Alert> : null}
+        {result ? <Alert><AlertTitle>Import complete</AlertTitle><AlertDescription>{result}</AlertDescription></Alert> : null}
+      </CardContent>
+    </Card>
   );
 }

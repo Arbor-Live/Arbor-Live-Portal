@@ -1251,6 +1251,27 @@ export const listMembersForActiveOrganization = query({
   },
 });
 
+export const listPendingInvitesForActiveOrganization = query({
+  args: {},
+  handler: async (ctx) => {
+    const context = await requireBandContext(ctx);
+    const result = await ctx.runQuery(components.betterAuth.adapter.findMany, {
+      model: "invitation",
+      paginationOpts: { cursor: null, numItems: 500 },
+    });
+    return ((result?.page ?? []) as InvitationRow[])
+      .filter((invite) => invite.organizationId === context.organizationId && invite.status === "pending")
+      .map((invite) => ({
+        invitationId: getRecordId(invite),
+        email: invite.email ?? "",
+        role: invite.role ?? "org_member",
+        expiresAt: invite.expiresAt ?? 0,
+      }))
+      .filter((invite) => Boolean(invite.invitationId))
+      .sort((a, b) => a.expiresAt - b.expiresAt);
+  },
+});
+
 export const inviteMemberToActiveOrganization = mutation({
   args: {
     email: v.string(),
