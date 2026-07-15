@@ -33,3 +33,6 @@ yarn-error.log*
 # build artifacts
 dist/
 coverage/
+
+# dev package instances
+package.json

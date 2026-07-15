@@ -87,10 +87,13 @@ export type ActiveOrganizationContext = {
   organizationId: string;
   organizationName: string;
   organizationSlug: string;
-  organizationType: "arbor_internal" | "band";
+  organizationType: "arbor_internal" | "band" | "dj";//going to have band and dj 
+  //basically act as the same
 };
 
-function deriveOrganizationType(org: AuthOrganization | null | undefined) {
+function deriveOrganizationType(
+  org: AuthOrganization | null | undefined,
+): "arbor_internal" | "band" | "dj" {
   const name = (org?.name ?? "").trim().toLowerCase();
   const slug = (org?.slug ?? "").trim().toLowerCase();
   return name === "arbor live" || slug === "arbor-live" ? "arbor_internal" : "band";
@@ -170,8 +173,8 @@ export async function requireBandContext(
   ctx: QueryCtx | MutationCtx,
 ): Promise<ActiveOrganizationContext> {
   const context = await requireActiveOrganizationContext(ctx);
-  if (context.organizationType !== "band") {
-    throw new Error("This area is only available in band organization context.");
+  if (context.organizationType !== "band" && context.organizationType !== "dj") {
+    throw new Error("This area is only available to bands and DJs.");
   }
   return context;
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
 import { FormSaveBar } from "@/components/forms";
@@ -8,7 +8,8 @@ import { Form, FormField } from "@/components/ui/form";
 import { TextFormField } from "@/components/forms/text-form-field";
 import { TextareaFormField } from "@/components/forms/textarea-form-field";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { UserSelect } from "@/components/users/user-select";
 import { BandHeroUploadField } from "@/components/files/file-upload-field";
@@ -23,8 +24,10 @@ import {
 export function BandSelfServiceClient() {
   const profile = useQuery(api.users.getActiveBandProfile, {});
   const members = useQuery(api.users.listMembersForActiveOrganization, {});
+  const pendingInvites = useQuery(api.users.listPendingInvitesForActiveOrganization, {});
   const updateProfile = useMutation(api.users.updateActiveBandProfile);
   const inviteMember = useMutation(api.users.inviteMemberToActiveOrganization);
+  const [inviteConfirmation, setInviteConfirmation] = useState<string | null>(null);
 
   const profileForm = useConvexForm<BandProfileFormValues>({
     schema: bandProfileSchema,
@@ -102,10 +105,18 @@ export function BandSelfServiceClient() {
     },
   );
 
-  const onInvite = inviteForm.submitMutation(async (values) => {
-    await inviteMember({ email: values.email.trim(), role: values.role });
-    inviteForm.reset({ email: "", role: values.role });
-  });
+  const onInvite = inviteForm.submitMutation(
+    async (values) => {
+      await inviteMember({ email: values.email.trim(), role: values.role });
+      return values;
+    },
+    {
+      onSuccess: (values) => {
+        setInviteConfirmation(`Invitation sent to ${values.email.trim()}.`);
+        inviteForm.reset({ email: "", role: values.role });
+      },
+    },
+  );
 
   const payeeUserId = profileForm.watch("designatedPayeeUserId");
 
@@ -225,46 +236,81 @@ export function BandSelfServiceClient() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Band Members</CardTitle>
+          <CardTitle>Invite your band</CardTitle>
+          <CardDescription>
+            Invite collaborators to join this organization. Invitations expire after 14 days.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <Form {...inviteForm}>
             <form
               onSubmit={inviteForm.handleSubmit(onInvite)}
-              className="grid gap-2 md:grid-cols-[1fr_180px_auto]"
+              className="grid gap-3 border p-3 md:grid-cols-[1fr_180px_auto] md:items-end"
             >
-              <TextFormField name="email" label="" placeholder="Invite member email" type="email" />
+              <TextFormField name="email" label="Email address" placeholder="name@example.com" type="email" />
               <FormField
                 control={inviteForm.control}
                 name="role"
                 render={({ field }) => (
-                  <select
-                    className="h-9 self-end rounded-md border bg-background px-3 text-sm"
-                    value={field.value}
-                    onChange={field.onChange}
-                  >
-                    <option value="org_member">Org Member</option>
-                    <option value="org_admin">Org Admin</option>
-                  </select>
+                  <label className="grid gap-2 text-sm font-medium">
+                    Access level
+                    <select
+                      className="h-9 rounded-none border bg-background px-3 text-sm font-normal"
+                      value={field.value}
+                      onChange={field.onChange}
+                    >
+                      <option value="org_member">Member — collaborate on the band profile</option>
+                      <option value="org_admin">Admin — manage members and access</option>
+                    </select>
+                  </label>
                 )}
               />
               <Button type="submit" disabled={inviteForm.saveStatus === "saving"}>
-                Invite
+                {inviteForm.saveStatus === "saving" ? "Sending…" : "Send invitation"}
               </Button>
             </form>
           </Form>
+          {inviteConfirmation ? <Alert><AlertTitle>Invitation sent</AlertTitle><AlertDescription>{inviteConfirmation}</AlertDescription></Alert> : null}
+          {inviteForm.saveError ? <Alert variant="destructive"><AlertTitle>Invitation not sent</AlertTitle><AlertDescription>{inviteForm.saveError}</AlertDescription></Alert> : null}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Band access</CardTitle>
+          <CardDescription>Current collaborators and outstanding invitations.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
           <div className="space-y-2">
+            <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Members</p>
             {(members ?? []).map((member) => (
-              <div key={member.userId} className="rounded-md border p-2 text-sm">
-                <p className="font-medium">{member.name}</p>
-                <p className="text-xs text-muted-foreground">
+              <div key={member.userId} className="flex items-center justify-between gap-3 border p-3 text-sm">
+                <div>
+                  <p className="font-medium">{member.name}</p>
+                  <p className="text-xs text-muted-foreground">
                   {[member.email, member.title, member.role].filter(Boolean).join(" • ")}
-                </p>
+                  </p>
+                </div>
+                <span className={member.active ? "text-xs text-emerald-700 dark:text-emerald-400" : "text-xs text-muted-foreground"}>{member.active ? "Active" : "Inactive"}</span>
               </div>
             ))}
             {members?.length === 0 ? (
               <p className="text-sm text-muted-foreground">No members yet.</p>
             ) : null}
+          </div>
+          <div className="space-y-2">
+            <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Pending invitations</p>
+            {pendingInvites === undefined ? <p className="text-sm text-muted-foreground">Loading invitations…</p> : null}
+            {pendingInvites?.map((invite) => (
+              <div key={invite.invitationId} className="flex items-center justify-between gap-3 border border-dashed p-3 text-sm">
+                <div>
+                  <p className="font-medium">{invite.email}</p>
+                  <p className="text-xs text-muted-foreground">{invite.role === "org_admin" ? "Admin" : "Member"} access · expires {invite.expiresAt ? new Date(invite.expiresAt).toLocaleDateString() : "soon"}</p>
+                </div>
+                <span className="text-xs text-muted-foreground">Pending</span>
+              </div>
+            ))}
+            {pendingInvites?.length === 0 ? <p className="text-sm text-muted-foreground">No invitations waiting for a response.</p> : null}
           </div>
         </CardContent>
       </Card>

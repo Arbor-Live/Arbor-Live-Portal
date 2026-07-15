@@ -118,6 +118,7 @@ import type * as migrations_eventVisibility from "../migrations/eventVisibility.
 import type * as migrations_referenceIds from "../migrations/referenceIds.js";
 import type * as migrations_userVerticals from "../migrations/userVerticals.js";
 import type * as openMic from "../openMic.js";
+import type * as organizationImporter from "../organizationImporter.js";
 import type * as paymentProof from "../paymentProof.js";
 import type * as paymentProofInternals from "../paymentProofInternals.js";
 import type * as paymentProofPublic from "../paymentProofPublic.js";
@@ -248,6 +249,7 @@ declare const fullApi: ApiFromModules<{
   "migrations/referenceIds": typeof migrations_referenceIds;
   "migrations/userVerticals": typeof migrations_userVerticals;
   openMic: typeof openMic;
+  organizationImporter: typeof organizationImporter;
   paymentProof: typeof paymentProof;
   paymentProofInternals: typeof paymentProofInternals;
   paymentProofPublic: typeof paymentProofPublic;

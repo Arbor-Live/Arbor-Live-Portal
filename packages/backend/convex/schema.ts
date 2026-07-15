@@ -104,7 +104,6 @@ const userTeamValue = v.union(
   v.literal("Marketing"),
   v.literal("Operations"),
 );
-
 const userVerticalValue = v.union(
   v.literal("Operations"),
   v.literal("Crew"),
@@ -132,7 +131,7 @@ const marketingPublishJobStatusValue = v.union(
   v.literal("failed"),
 );
 
-const organizationTypeValue = v.union(v.literal("arbor_internal"), v.literal("band"));
+const organizationTypeValue = v.union(v.literal("arbor_internal"), v.literal("band"), v.literal("dj"));
 
 const marketingPostKindValue = v.union(v.literal("case_study"), v.literal("blog"));
 
@@ -708,10 +707,26 @@ export default defineSchema({
     publicSlug: v.optional(v.string()),
     publicHeroImageUrl: v.optional(v.string()),
     updatedAt: v.number(),
+
+    //expanding orgs to include the additional fields for bands and djs
+    orgCreationTime: v.optional(v.number()),
+    techRiderURL: v.optional(v.string()),
+    numShowsRan: v.optional(v.number()),
+    demoURL: v.optional(v.string()),
+    genres: v.optional(v.array(v.string())),
+    mainContactName: v.optional(v.string()),
+    mainContactEmail: v.optional(v.string()),
+    mainContactPhone: v.optional(v.string()),
+    status: v.optional(v.string()), //e.g. active, disbanded, inactive, unknown
+    bandMembers: v.optional(v.array(v.string())), //members of the band but arent necessarily users on the website.  
+    oneLiner: v.optional(v.string()), //short description of the band/dj for public listing page
+
   })
     .index("by_organizationId", ["organizationId"])
     .index("by_organizationType", ["organizationType"])
-    .index("by_publicSlug", ["publicSlug"]),
+    .index("by_publicSlug", ["publicSlug"])
+    //to allow searching for orgs by display name (mainly for band/dj search)
+    .index("by_displayName", ["displayName"]),
 
   userActiveOrganizations: defineTable({
     userId: v.string(),
