@@ -10,6 +10,7 @@ import type {
   BandPaymentCompletedEmailProps,
   BandPaymentPayeeRequiredEmailProps,
   CrewScheduledEmailProps,
+  CrewUnscheduledEmailProps,
   SchedulePublishedEmailProps,
   ScheduleReminderEmailProps,
   UserInviteEmailProps,
@@ -59,6 +60,12 @@ export const crewScheduledFullEventPreviewProps: CrewScheduledEmailProps = {
   ],
   fullScheduleSummaries: [],
   coversEntireEvent: true,
+};
+
+export const crewUnscheduledPreviewProps: CrewUnscheduledEmailProps = {
+  ...eventDefaults,
+  eventLeadName: "Alex Chen",
+  previousAssignmentSummaries: ["Setup • Lighting Tech • 2:00 PM – 5:00 PM"],
 };
 
 export const scheduleReminderPreviewProps: ScheduleReminderEmailProps = {

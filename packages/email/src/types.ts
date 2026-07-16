@@ -31,6 +31,16 @@ export type CrewScheduledEmailPayload = CrewScheduledEmailProps & {
   timezone: string;
 };
 
+export type CrewUnscheduledEmailProps = EventEmailProps & {
+  eventLeadName?: string;
+  previousAssignmentSummaries: string[];
+};
+
+export type CrewUnscheduledEmailPayload = CrewUnscheduledEmailProps & {
+  icsEvents: CrewScheduledIcsEventPayload[];
+  timezone: string;
+};
+
 export type ScheduleReminderEmailProps = EventEmailProps & {
   daysUntilEvent: number;
 };

@@ -12,6 +12,7 @@ import {
   renderBandPaymentCompletedEmail,
   renderBandPaymentPayeeRequiredEmail,
   renderCrewScheduledEmail,
+  renderCrewUnscheduledEmail,
   renderSchedulePublishedEmail,
   renderScheduleReminderEmail,
   renderUserInviteEmail,
@@ -30,6 +31,7 @@ import type {
   BandPaymentCompletedEmailProps,
   BandPaymentPayeeRequiredEmailProps,
   CrewScheduledEmailProps,
+  CrewUnscheduledEmailProps,
   SchedulePublishedEmailProps,
   ScheduleReminderEmailProps,
   UserInviteEmailProps,
@@ -44,6 +46,8 @@ export async function renderEmailHtml(template: EmailTemplate, payload: unknown)
       return renderSchedulePublishedEmail(payload as SchedulePublishedEmailProps);
     case "crew_scheduled":
       return renderCrewScheduledEmail(payload as CrewScheduledEmailProps);
+    case "crew_unscheduled":
+      return renderCrewUnscheduledEmail(payload as CrewUnscheduledEmailProps);
     case "schedule_reminder":
       return renderScheduleReminderEmail(payload as ScheduleReminderEmailProps);
     case "user_invite":

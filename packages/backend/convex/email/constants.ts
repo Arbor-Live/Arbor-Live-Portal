@@ -31,6 +31,7 @@ export type EmailTemplate =
   | "event_cancelled"
   | "schedule_published"
   | "crew_scheduled"
+  | "crew_unscheduled"
   | "schedule_reminder"
   | "user_invite"
   | "password_reset"
@@ -90,6 +91,8 @@ export function subjectForTemplate(template: EmailTemplate, context: string) {
       return `Schedule published: ${context}`;
     case "crew_scheduled":
       return `You're scheduled: ${context}`;
+    case "crew_unscheduled":
+      return `Schedule removed: ${context}`;
     case "schedule_reminder":
       return `Schedule needed: ${context}`;
     case "user_invite":

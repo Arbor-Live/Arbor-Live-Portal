@@ -7,11 +7,15 @@ export type IcsEventInput = {
   endAt: Date;
 };
 
+export type IcsMethod = "REQUEST" | "CANCEL";
+
 export type ScheduleIcsInput = {
   timezone: string;
   organizerEmail: string;
   attendeeEmail: string;
   events: IcsEventInput[];
+  /** Defaults to REQUEST. Use CANCEL with the same event UIDs to revoke invites. */
+  method?: IcsMethod;
 };
 
 /** @deprecated Use ScheduleIcsInput with a single event instead. */
@@ -76,6 +80,10 @@ function formatIcsLocalDateTime(date: Date, timezone: string) {
 }
 
 function buildVeventLines(event: IcsEventInput, input: ScheduleIcsInput, now: Date) {
+  const method = input.method ?? "REQUEST";
+  const attendeePartStat = method === "CANCEL" ? "DECLINED" : "NEEDS-ACTION";
+  const attendeeRsvp = method === "CANCEL" ? "FALSE" : "TRUE";
+
   const lines = [
     "BEGIN:VEVENT",
     foldIcsLine(`UID:${escapeIcsText(event.uid)}`),
@@ -91,9 +99,13 @@ function buildVeventLines(event: IcsEventInput, input: ScheduleIcsInput, now: Da
       `ORGANIZER;CN=Arbor Live:mailto:${escapeIcsText(input.organizerEmail)}`,
     ),
     foldIcsLine(
-      `ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:${escapeIcsText(input.attendeeEmail)}`,
+      `ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=${attendeePartStat};RSVP=${attendeeRsvp}:mailto:${escapeIcsText(input.attendeeEmail)}`,
     ),
   ];
+
+  if (method === "CANCEL") {
+    lines.push("STATUS:CANCELLED");
+  }
 
   if (event.description?.trim()) {
     lines.push(foldIcsLine(`DESCRIPTION:${escapeIcsText(event.description.trim())}`));
@@ -111,13 +123,14 @@ export function buildScheduleIcs(input: ScheduleIcsInput): string {
     throw new Error("At least one calendar event is required.");
   }
 
+  const method = input.method ?? "REQUEST";
   const now = new Date();
   const lines = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
     "PRODID:-//Arbor Live//Schedule//EN",
     "CALSCALE:GREGORIAN",
-    "METHOD:REQUEST",
+    `METHOD:${method}`,
     ...input.events.flatMap((event) => buildVeventLines(event, input, now)),
     "END:VCALENDAR",
   ];

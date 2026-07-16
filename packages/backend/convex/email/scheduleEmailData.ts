@@ -141,11 +141,35 @@ export function buildMergedIcsEventForShiftGroup(args: {
     .join("\n");
 
   return {
-    uid: `crew-${args.eventId}-${args.userId}-g${args.groupIndex}-${startsAt}@arbor.st`,
+    // One VEVENT per person/event so calendar clients that only read the first
+    // invite still get a span covering all assigned windows (e.g. 9–10 + 11–12 → 9–12).
+    uid: `crew-${args.eventId}-${args.userId}@arbor.st`,
     title,
     description,
     location: args.venueName,
     startAt: startsAt,
     endAt: endsAt,
   };
+}
+
+/** Single calendar invite spanning every assigned shift for a user on an event. */
+export function buildSingleIcsEventForUserShifts(args: {
+  eventId: Id<"events">;
+  userId: string;
+  eventTitle: string;
+  venueName?: string;
+  shifts: CrewShiftLike[];
+  blockLabelById: Map<string, string>;
+  timezone: string;
+}) {
+  return buildMergedIcsEventForShiftGroup({
+    eventId: args.eventId,
+    userId: args.userId,
+    groupIndex: 0,
+    eventTitle: args.eventTitle,
+    venueName: args.venueName,
+    group: args.shifts,
+    blockLabelById: args.blockLabelById,
+    timezone: args.timezone,
+  });
 }

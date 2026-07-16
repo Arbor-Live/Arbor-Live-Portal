@@ -970,6 +970,7 @@ export default defineSchema({
       v.literal("event_cancelled"),
       v.literal("schedule_published"),
       v.literal("crew_scheduled"),
+      v.literal("crew_unscheduled"),
       v.literal("schedule_reminder"),
       v.literal("user_invite"),
       v.literal("password_reset"),
@@ -991,6 +992,10 @@ export default defineSchema({
     subject: v.string(),
     eventId: v.optional(v.id("events")),
     idempotencyKey: v.string(),
+    /** Stable key for coalescing rapid schedule/crew updates into one send. */
+    debounceKey: v.optional(v.string()),
+    sendGeneration: v.optional(v.number()),
+    readyAt: v.optional(v.number()),
     payload: v.any(),
     resendId: v.optional(v.string()),
     error: v.optional(v.string()),
@@ -999,7 +1004,8 @@ export default defineSchema({
   })
     .index("by_status", ["status"])
     .index("by_idempotencyKey", ["idempotencyKey"])
-    .index("by_eventId", ["eventId"]),
+    .index("by_eventId", ["eventId"])
+    .index("by_debounceKey_and_status", ["debounceKey", "status"]),
 
 
   eventRequests: defineTable({

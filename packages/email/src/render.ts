@@ -12,6 +12,7 @@ import { BandPaymentPayeeRequiredEmail } from "../emails/band-payment-payee-requ
 import { PaymentProofReminderEmail } from "../emails/payment-proof-reminder";
 import { PaymentProofSubmittedEmail } from "../emails/payment-proof-submitted";
 import { CrewScheduledEmail } from "../emails/crew-scheduled";
+import { CrewUnscheduledEmail } from "../emails/crew-unscheduled";
 import { SchedulePublishedEmail } from "../emails/schedule-published";
 import { ScheduleReminderEmail } from "../emails/schedule-reminder";
 import { UserInviteEmail } from "../emails/user-invite";
@@ -29,6 +30,7 @@ import type {
   BandPaymentCompletedEmailProps,
   BandPaymentPayeeRequiredEmailProps,
   CrewScheduledEmailProps,
+  CrewUnscheduledEmailProps,
   SchedulePublishedEmailProps,
   ScheduleReminderEmailProps,
   UserInviteEmailProps,
@@ -44,6 +46,10 @@ export async function renderSchedulePublishedEmail(props: SchedulePublishedEmail
 
 export async function renderCrewScheduledEmail(props: CrewScheduledEmailProps) {
   return render(CrewScheduledEmail(props));
+}
+
+export async function renderCrewUnscheduledEmail(props: CrewUnscheduledEmailProps) {
+  return render(CrewUnscheduledEmail(props));
 }
 
 export async function renderScheduleReminderEmail(props: ScheduleReminderEmailProps) {

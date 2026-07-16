@@ -2,7 +2,10 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireArborInternalContext, requireAuth } from "./lib/auth";
 import { requireEventEditAccess } from "./lib/eventAccess";
-import { scheduleSchedulePublishedEmails } from "./email/triggers";
+import {
+  scheduleBlocksContentFingerprint,
+  scheduleSchedulePublishedEmails,
+} from "./email/triggers";
 
 const blockTypeValue = v.union(
   v.literal("setup"),
@@ -127,7 +130,8 @@ export const upsertBlocks = mutation({
       }
     }
     if (savedBlocks.length > 0) {
-      await scheduleSchedulePublishedEmails(ctx, args.eventId, `${savedBlocks.length}:${now}`);
+      const fingerprint = scheduleBlocksContentFingerprint(savedBlocks);
+      await scheduleSchedulePublishedEmails(ctx, args.eventId, fingerprint);
     }
     return savedBlocks;
   },

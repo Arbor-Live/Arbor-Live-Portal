@@ -8,7 +8,10 @@ import { components, internal } from "../_generated/api";
 import { internalAction } from "../_generated/server";
 import { renderInvoicePdfBuffer } from "@arbor/invoice-document/pdf";
 import { buildScheduleIcs } from "@arbor/email/ics";
-import type { CrewScheduledEmailPayload } from "@arbor/email/types";
+import type {
+  CrewScheduledEmailPayload,
+  CrewUnscheduledEmailPayload,
+} from "@arbor/email/types";
 import { EMAIL_FROM, ORGANIZER_EMAIL, PAYMENTS_EMAIL_FROM } from "./constants";
 import { renderEmailHtml } from "./templates";
 
@@ -132,12 +135,19 @@ export const sendQueuedEmail = internalAction({
         return null;
       }
 
-      if (notification.template === "crew_scheduled") {
-        const payload = notification.payload as CrewScheduledEmailPayload;
+      if (
+        notification.template === "crew_scheduled" ||
+        notification.template === "crew_unscheduled"
+      ) {
+        const payload = notification.payload as
+          | CrewScheduledEmailPayload
+          | CrewUnscheduledEmailPayload;
+        const icsMethod = notification.template === "crew_unscheduled" ? "CANCEL" : "REQUEST";
         const icsContent = buildScheduleIcs({
           timezone: payload.timezone,
           organizerEmail: ORGANIZER_EMAIL,
           attendeeEmail: notification.to,
+          method: icsMethod,
           events: payload.icsEvents.map((event) => ({
             uid: event.uid,
             title: event.title,
@@ -154,9 +164,9 @@ export const sendQueuedEmail = internalAction({
           html,
           [
             {
-              filename: "invite.ics",
+              filename: icsMethod === "CANCEL" ? "cancel.ics" : "invite.ics",
               content: Buffer.from(icsContent, "utf-8"),
-              contentType: "text/calendar; charset=utf-8; method=REQUEST",
+              contentType: `text/calendar; charset=utf-8; method=${icsMethod}`,
             },
           ],
         );
