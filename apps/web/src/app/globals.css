@@ -170,6 +170,16 @@
       0 0 0.4rem color-mix(in oklch, var(--color-foreground) 18%, transparent);
   }
 
+  .marketing-nav-glow {
+    background-image: radial-gradient(
+      200px circle at var(--glow-x, 50%) var(--glow-y, 0%),
+      color-mix(in oklch, white 55%, transparent),
+      color-mix(in oklch, white 18%, transparent) 30%,
+      color-mix(in oklch, var(--border) 65%, transparent) 65%,
+      color-mix(in oklch, var(--border) 45%, transparent) 100%
+    );
+  }
+
   .app-date-time-popper {
     z-index: 60;
   }

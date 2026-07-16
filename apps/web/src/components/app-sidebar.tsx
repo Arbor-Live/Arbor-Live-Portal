@@ -244,8 +244,8 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
             <Image
               src="/logo.svg"
               alt="Arbor Live logo"
-              width={100}
-              height={20}
+              width={1014}
+              height={463}
               className="h-10 w-auto brightness-0 dark:invert"
               priority
             />

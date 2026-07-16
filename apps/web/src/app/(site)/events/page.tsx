@@ -14,7 +14,7 @@ export default function EventsPage() {
         title="Upcoming events"
         subtitle="Confirmed public events from Arbor Live — posters, details, and links."
       />
-      <section className="pb-16">
+      <section className="bg-muted/35 pb-16 pt-10">
         <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
           <PublicUpcomingEventsClient />
         </div>

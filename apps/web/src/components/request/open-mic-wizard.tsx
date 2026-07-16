@@ -10,7 +10,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { PublicMarketingLayout } from "@/components/public/public-marketing-layout";
 import { submitOpenMicSignup } from "@/app/public/open-mic/actions";
-import { BookingRequestNav } from "@/components/request/booking-request-nav";
+import { RequestWizardNav } from "@/components/request/request-wizard-nav";
+import { RequestWizardShell } from "@/components/request/request-wizard-shell";
 import { MultiChoiceField } from "@/components/request/fields/multi-choice-field";
 import { TextField } from "@/components/request/fields/text-field";
 import { TextareaField } from "@/components/request/fields/textarea-field";
@@ -32,7 +33,7 @@ const spring = { type: "spring" as const, stiffness: 380, damping: 36 };
 function StepSubheader({ text }: { text: string }) {
   const paragraphs = text.split("\n\n");
   return (
-    <div className="space-y-3 text-sm text-muted-foreground">
+    <div className="space-y-3 text-sm text-foreground/70">
       {paragraphs.map((paragraph, index) => (
         <p key={index}>{paragraph}</p>
       ))}
@@ -165,9 +166,11 @@ export function OpenMicWizard() {
   if (activeNight === undefined) {
     return (
       <PublicMarketingLayout hideFooter>
-        <div className="mx-auto max-w-2xl flex-1 px-4 py-12 sm:px-6">
-          <p className="text-sm text-muted-foreground">Loading…</p>
-        </div>
+        <RequestWizardShell eyebrow="Open Mic sign-up" progressPercent={0}>
+          <div className="px-4 py-8 sm:px-6">
+            <p className="text-sm text-foreground/70">Loading…</p>
+          </div>
+        </RequestWizardShell>
       </PublicMarketingLayout>
     );
   }
@@ -175,55 +178,60 @@ export function OpenMicWizard() {
   if (activeNight === null) {
     return (
       <PublicMarketingLayout hideFooter>
-        <div className="mx-auto max-w-2xl flex-1 px-4 py-12 sm:px-6">
-          <div className="space-y-3">
-            <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
-              No open mic right now
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              There isn&apos;t an upcoming Arbor Live open mic accepting sign-ups at the moment.
-              Check back closer to the next night, or follow us on Instagram for the schedule.
-            </p>
-            <Button asChild variant="outline">
-              <a
-                href="https://instagram.com/thearborstanford"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                @thearborstanford
-              </a>
-            </Button>
+        <RequestWizardShell eyebrow="Open Mic sign-up" progressPercent={0}>
+          <div className="px-4 py-8 sm:px-6">
+            <div className="space-y-3 border border-border/50 bg-background/70 p-5 shadow-[0_8px_24px_rgba(0,0,0,0.06)] backdrop-blur-xl sm:p-6">
+              <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
+                No open mic right now
+              </h1>
+              <p className="text-sm text-foreground/70">
+                There isn&apos;t an upcoming Arbor Live open mic accepting sign-ups at the moment.
+                Check back closer to the next night, or follow us on Instagram for the schedule.
+              </p>
+              <Button asChild variant="outline">
+                <a
+                  href="https://instagram.com/thearborstanford"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  @thearborstanford
+                </a>
+              </Button>
+            </div>
           </div>
-        </div>
+        </RequestWizardShell>
       </PublicMarketingLayout>
     );
   }
 
   return (
     <PublicMarketingLayout hideFooter>
-      <div className="flex flex-1 flex-col">
-        <div className="border-b bg-background px-4 py-4">
-          <div className="mx-auto max-w-2xl">
-            <p className="text-center text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-              Open Mic sign-up · {activeNight.title}
-            </p>
-            <p className="mt-1 text-center text-xs text-muted-foreground">
-              {formatDateTime(activeNight.startAt)}
-            </p>
-            <div className="mt-3 h-1 overflow-hidden rounded-full bg-muted">
-              <motion.div
-                className="h-full bg-primary"
-                initial={false}
-                animate={{ width: `${progressPercent}%` }}
-                transition={spring}
-              />
-            </div>
-          </div>
-        </div>
-
+      <RequestWizardShell
+        eyebrow={`Open Mic sign-up · ${activeNight.title}`}
+        meta={formatDateTime(activeNight.startAt)}
+        progressPercent={progressPercent}
+        footer={
+          currentStep.id !== "thankYou" && currentStep.id !== "intro" ? (
+            <RequestWizardNav
+              showBack={stepIndex > 0}
+              showNext
+              nextLabel={currentStep.id === "notes" ? "Sign me up" : "Next"}
+              isSubmitting={isSubmitting}
+              skippable={currentStep.skippable}
+              onBack={goBack}
+              onNext={() => void goNext()}
+              onSkip={() => {
+                directionRef.current = 1;
+                setDirection(1);
+                setStepIndex((index) => Math.min(index + 1, activeSteps.length - 1));
+              }}
+            />
+          ) : null
+        }
+      >
         <FormProvider {...form}>
           <form
-            className="mx-auto flex w-full max-w-2xl flex-1 flex-col"
+            className="flex min-h-0 w-full flex-1 flex-col"
             onSubmit={(event) => {
               event.preventDefault();
               void goNext();
@@ -247,7 +255,7 @@ export function OpenMicWizard() {
                   animate="center"
                   exit="exit"
                   transition={spring}
-                  className="space-y-6"
+                  className="space-y-6 border border-border/50 bg-background/70 p-5 shadow-[0_8px_24px_rgba(0,0,0,0.06)] backdrop-blur-xl sm:p-6"
                 >
                   {currentStep.id === "intro" ? (
                     <OpenMicIntroSlide onContinue={() => void goNext()} />
@@ -274,27 +282,9 @@ export function OpenMicWizard() {
                 </motion.div>
               </AnimatePresence>
             </div>
-
-            {currentStep.id !== "thankYou" && currentStep.id !== "intro" ? (
-              <BookingRequestNav
-                className="sticky bottom-0 space-y-3 border-t bg-background/95 px-4 py-4 backdrop-blur-sm sm:px-6"
-                showBack={stepIndex > 0}
-                showNext
-                nextLabel={currentStep.id === "notes" ? "Sign me up" : "Next"}
-                isSubmitting={isSubmitting}
-                skippable={currentStep.skippable}
-                onBack={goBack}
-                onNext={() => void goNext()}
-                onSkip={() => {
-                  directionRef.current = 1;
-                  setDirection(1);
-                  setStepIndex((index) => Math.min(index + 1, activeSteps.length - 1));
-                }}
-              />
-            ) : null}
           </form>
         </FormProvider>
-      </div>
+      </RequestWizardShell>
     </PublicMarketingLayout>
   );
 }
@@ -343,12 +333,12 @@ function StepBody({
       );
     case "thankYou":
       return (
-        <div className="space-y-4 text-sm text-muted-foreground">
+        <div className="space-y-4 text-sm text-foreground/70">
           <p>You&apos;re on the list — we&apos;ll call you up when it&apos;s your turn.</p>
           {confirmation ? (
-            <div className="rounded-md border bg-muted/20 p-4 text-foreground">
+            <div className="border border-border/50 bg-background/50 p-4 text-foreground">
               <p className="font-medium">{confirmation.nightTitle}</p>
-              <p className="mt-1">{formatDateTime(confirmation.nightStartAt)}</p>
+              <p className="mt-1 text-foreground/70">{formatDateTime(confirmation.nightStartAt)}</p>
             </div>
           ) : null}
           <p>

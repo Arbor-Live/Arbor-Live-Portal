@@ -179,7 +179,6 @@ export const landingNavLinks: LandingLink[] = [
   { label: "Crew", href: "/crew" },
   { label: "Artists", href: "/artists" },
   { label: "Equipment", href: "/public/packages" },
-  { label: "Book us", href: "/public/request" },
 ];
 
 export const landingFooterLinks: LandingLink[] = [

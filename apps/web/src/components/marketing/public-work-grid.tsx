@@ -35,7 +35,7 @@ export function PublicWorkGrid({ posts }: { posts: PublicWorkPostCard[] }) {
   );
 
   return (
-    <section className="py-12 sm:py-16">
+    <section className="bg-muted/35 py-12 sm:py-16">
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
         <div className="mb-8 flex flex-wrap gap-2">
           {filters.map((filter) => (
@@ -47,7 +47,7 @@ export function PublicWorkGrid({ posts }: { posts: PublicWorkPostCard[] }) {
                 "rounded-none border px-3 py-1.5 text-sm font-medium transition-colors",
                 kindFilter === filter.id
                   ? "border-primary bg-primary text-primary-foreground"
-                  : "bg-card text-foreground hover:bg-muted",
+                  : "border-foreground/15 bg-card text-foreground hover:bg-muted",
               )}
             >
               {filter.label}
@@ -56,11 +56,11 @@ export function PublicWorkGrid({ posts }: { posts: PublicWorkPostCard[] }) {
         </div>
 
         {filteredPosts.length === 0 ? (
-          <Card>
+          <Card className="ring-foreground/15">
             <CardHeader>
               <CardTitle>Coming soon</CardTitle>
             </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">
+            <CardContent className="text-sm text-foreground/70">
               Case studies and blog posts will appear here once published from the dashboard.
             </CardContent>
           </Card>
@@ -69,7 +69,7 @@ export function PublicWorkGrid({ posts }: { posts: PublicWorkPostCard[] }) {
             {filteredPosts.map((post, index) => (
               <StaggerItem key={post.slug}>
                 <Link href={`/work/${post.slug}`} className="group block h-full">
-                  <Card className="h-full overflow-hidden py-0 transition-shadow group-hover:ring-2 group-hover:ring-primary/30">
+                  <Card className="h-full overflow-hidden py-0 ring-foreground/15 transition-shadow group-hover:ring-2 group-hover:ring-primary/30">
                     <div
                       className={cn(
                         "relative h-36 bg-gradient-to-br",
@@ -90,18 +90,18 @@ export function PublicWorkGrid({ posts }: { posts: PublicWorkPostCard[] }) {
                       </div>
                     </div>
                     <CardHeader>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-xs font-medium text-foreground/60">
                         {formatWorkPostDate(post.publishedAt)}
                       </p>
-                      <CardTitle className="text-lg">{post.title}</CardTitle>
+                      <CardTitle className="text-lg text-foreground">{post.title}</CardTitle>
                     </CardHeader>
                     <CardContent className="pb-6">
                       {post.excerpt ? (
-                        <p className="text-sm leading-relaxed text-muted-foreground">
+                        <p className="text-sm leading-relaxed text-foreground/70">
                           {post.excerpt}
                         </p>
                       ) : (
-                        <p className="text-sm text-muted-foreground">Read more</p>
+                        <p className="text-sm text-foreground/70">Read more</p>
                       )}
                     </CardContent>
                   </Card>

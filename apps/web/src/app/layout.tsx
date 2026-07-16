@@ -24,6 +24,9 @@ export const metadata: Metadata = {
   title: "Arbor Live",
   description:
     "Arbor Live is Stanford's only student-run live event production company, bringing live events to every corner of campus.",
+  icons: {
+    icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
+  },
 };
 
 export default async function RootLayout({

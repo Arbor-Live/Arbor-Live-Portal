@@ -18,11 +18,11 @@ export function LandingWorkCarousel({ posts }: { posts: PublicWorkPostCard[] }) 
             <h2 className="display-tight text-3xl font-semibold tracking-tight sm:text-4xl">
               You&apos;re in good company
             </h2>
-            <p className="mt-3 max-w-2xl text-base leading-relaxed text-muted-foreground">
+            <p className="mt-3 max-w-2xl text-base leading-relaxed text-foreground/70">
               Whether it&apos;s a small house event or a full production, we are ready to help you every step of the way.
             </p>
           </div>
-          <Link href="/work" className="text-sm font-medium text-primary hover:underline">
+          <Link href="/work" className="text-sm font-medium text-emerald-800 underline-offset-4 hover:underline dark:text-primary">
             View all work →
           </Link>
         </Reveal>
@@ -35,7 +35,7 @@ export function LandingWorkCarousel({ posts }: { posts: PublicWorkPostCard[] }) 
                 href={`/work/${post.slug}`}
                 className="group w-[min(100%,320px)] shrink-0 snap-start sm:w-[340px]"
               >
-                <article className="h-full overflow-hidden border bg-card transition-shadow group-hover:ring-2 group-hover:ring-primary/30">
+                <article className="h-full overflow-hidden border border-foreground/12 bg-card shadow-sm transition-shadow group-hover:ring-2 group-hover:ring-primary/30">
                   <div
                     className={cn(
                       "relative h-40 bg-gradient-to-br",
@@ -57,12 +57,12 @@ export function LandingWorkCarousel({ posts }: { posts: PublicWorkPostCard[] }) 
                     </div>
                   </div>
                   <div className="space-y-2 p-4">
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs font-medium text-foreground/60">
                       {formatWorkPostDate(post.publishedAt)}
                     </p>
-                    <h3 className="text-lg font-semibold leading-snug">{post.title}</h3>
+                    <h3 className="text-lg font-semibold leading-snug text-foreground">{post.title}</h3>
                     {post.excerpt ? (
-                      <p className="line-clamp-3 text-sm leading-relaxed text-muted-foreground">
+                      <p className="line-clamp-3 text-sm leading-relaxed text-foreground/70">
                         {post.excerpt}
                       </p>
                     ) : null}

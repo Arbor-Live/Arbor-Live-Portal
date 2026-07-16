@@ -27,9 +27,9 @@ export function PublicPageHero({
   return (
     <section
       className={cn(
-        "relative overflow-hidden border-b py-14 sm:py-20",
+        "relative overflow-hidden border-b pt-24 pb-14 sm:pt-28 sm:pb-20",
         dark ? "bg-zinc-950 text-zinc-50" : "bg-muted/30",
-        hasImage && "py-16 sm:py-24",
+        hasImage && "pt-28 pb-16 sm:pt-32 sm:pb-24",
         className,
       )}
     >

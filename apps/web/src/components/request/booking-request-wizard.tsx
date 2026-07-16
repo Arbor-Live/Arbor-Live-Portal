@@ -12,7 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { PublicMarketingLayout } from "@/components/public/public-marketing-layout";
 import { submitBookingRequest } from "@/app/public/request/actions";
-import { BookingRequestNav } from "@/components/request/booking-request-nav";
+import { RequestWizardNav } from "@/components/request/request-wizard-nav";
+import { RequestWizardShell } from "@/components/request/request-wizard-shell";
 import { EventScheduleField } from "@/components/request/fields/event-schedule-field";
 import { ReturningUserField } from "@/components/request/fields/returning-user-field";
 import { ServicesField } from "@/components/request/fields/services-field";
@@ -53,7 +54,7 @@ type ContactLookup =
 function StepSubheader({ text }: { text: string }) {
   const paragraphs = text.split("\n\n");
   return (
-    <div className="space-y-3 text-sm text-muted-foreground">
+    <div className="space-y-3 text-sm text-foreground/70">
       {paragraphs.map((paragraph, index) => (
         <p key={index}>{paragraph}</p>
       ))}
@@ -251,26 +252,27 @@ export function BookingRequestWizard() {
 
   return (
     <PublicMarketingLayout hideFooter>
-      <div className="flex flex-1 flex-col">
-        <div className="border-b bg-background px-4 py-4">
-          <div className="mx-auto max-w-2xl">
-            <p className="text-center text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-              Booking request
-            </p>
-            <div className="mt-3 h-1 overflow-hidden rounded-full bg-muted">
-              <motion.div
-                className="h-full bg-primary"
-                initial={false}
-                animate={{ width: `${progressPercent}%` }}
-                transition={spring}
-              />
-            </div>
-          </div>
-        </div>
-
+      <RequestWizardShell
+        eyebrow="Booking request"
+        progressPercent={progressPercent}
+        footer={
+          currentStep.id !== "thankYou" ? (
+            <RequestWizardNav
+              showBack={stepIndex > 0}
+              showNext
+              nextLabel={currentStep.id === "additionalNotes" ? "Submit" : "Next"}
+              isSubmitting={isSubmitting}
+              skippable={currentStep.skippable}
+              onBack={goBack}
+              onNext={() => void goNext()}
+              onSkip={skipStep}
+            />
+          ) : null
+        }
+      >
         <FormProvider {...form}>
           <form
-            className="mx-auto flex w-full max-w-2xl flex-1 flex-col"
+            className="flex min-h-0 w-full flex-1 flex-col"
             onSubmit={(event) => {
               event.preventDefault();
               void goNext();
@@ -294,7 +296,7 @@ export function BookingRequestWizard() {
                   animate="center"
                   exit="exit"
                   transition={spring}
-                  className="space-y-6"
+                  className="space-y-6 border border-border/50 bg-background/70 p-5 shadow-[0_8px_24px_rgba(0,0,0,0.06)] backdrop-blur-xl sm:p-6"
                 >
                   <div className="space-y-3">
                     <motion.h1
@@ -319,23 +321,9 @@ export function BookingRequestWizard() {
                 </motion.div>
               </AnimatePresence>
             </div>
-
-            {currentStep.id !== "thankYou" ? (
-              <BookingRequestNav
-                className="sticky bottom-0 space-y-3 border-t bg-background/95 px-4 py-4 backdrop-blur-sm sm:px-6"
-                showBack={stepIndex > 0}
-                showNext
-                nextLabel={currentStep.id === "additionalNotes" ? "Submit" : "Next"}
-                isSubmitting={isSubmitting}
-                skippable={currentStep.skippable}
-                onBack={goBack}
-                onNext={() => void goNext()}
-                onSkip={skipStep}
-              />
-            ) : null}
           </form>
         </FormProvider>
-      </div>
+      </RequestWizardShell>
     </PublicMarketingLayout>
   );
 }
@@ -440,10 +428,10 @@ function StepBody({
       );
     case "thankYou":
       return (
-        <div className="space-y-4 text-sm text-muted-foreground">
+        <div className="space-y-4 text-sm text-foreground/70">
           <p>We will get back to you soon!</p>
           {trackingInfo ? (
-            <div className="rounded-md border bg-muted/20 p-4 text-foreground">
+            <div className="border border-border/50 bg-background/50 p-4 text-foreground">
               <p className="font-medium">Request {trackingInfo.requestNumber}</p>
               <p className="mt-1">Save this link to track your request status:</p>
               <Button asChild className="mt-3" variant="outline">

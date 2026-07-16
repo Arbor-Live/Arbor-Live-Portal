@@ -11,7 +11,7 @@ export function formatWorkPostDate(timestamp: number) {
 
 export function WorkPostKindBadge({ kind }: { kind: MarketingPostKind }) {
   return (
-    <span className="rounded-none border bg-muted/50 px-2 py-0.5 text-xs font-medium text-muted-foreground">
+    <span className="border border-white/35 bg-zinc-950/80 px-2 py-0.5 text-xs font-medium text-zinc-50">
       {marketingPostKindLabels[kind]}
     </span>
   );

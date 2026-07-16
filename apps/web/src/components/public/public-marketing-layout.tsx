@@ -1,8 +1,4 @@
-import Image from "next/image";
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { DashboardNavLink } from "@/components/public/dashboard-nav-link";
-import { landingNavLinks } from "@/lib/landing-content";
+import { FloatingMarketingNav } from "@/components/public/floating-marketing-nav";
 import { LandingFooter } from "@/components/landing/landing-footer";
 
 type PublicMarketingLayoutProps = {
@@ -23,40 +19,7 @@ export function PublicMarketingLayout({
         Skip to content
       </a>
 
-      <header className="sticky top-0 z-40 border-b border-border/60 bg-background/90 backdrop-blur-md">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
-          <Link href="/" className="flex items-center gap-2">
-            <Image
-              src="/logo.svg"
-              alt="Arbor Live"
-              width={140}
-              height={36}
-              className="h-8 w-auto brightness-0 dark:invert"
-            />
-          </Link>
-
-          <nav className="hidden items-center gap-1 lg:flex">
-            {landingNavLinks.map((link) => (
-              <Button key={link.label} asChild variant="ghost" size="sm">
-                <Link
-                  href={link.href}
-                  target={link.external ? "_blank" : undefined}
-                  rel={link.external ? "noopener noreferrer" : undefined}
-                >
-                  {link.label}
-                </Link>
-              </Button>
-            ))}
-          </nav>
-
-          <div className="flex items-center gap-2">
-            <DashboardNavLink className="hidden sm:inline-flex" />
-            <Button asChild size="sm">
-              <Link href="/public/request">Book us</Link>
-            </Button>
-          </div>
-        </div>
-      </header>
+      <FloatingMarketingNav />
 
       <main id="main-content" className="flex flex-1 flex-col">
         {children}
