@@ -36,6 +36,7 @@ export async function submitBookingRequest(
   try {
     const result = await fetchMutation(api.eventRequests.submitPublic, {
       ...payload,
+      venueId: payload.venueId ? (payload.venueId as Id<"venues">) : undefined,
       invoiceGroupId: payload.invoiceGroupId
         ? (payload.invoiceGroupId as Id<"invoiceGroups">)
         : undefined,

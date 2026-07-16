@@ -103,6 +103,16 @@ export function buildEventArtifactObjectKey(args: {
   return `events/${eventSegment}/artifacts/${args.uploadId}-${safeName}`;
 }
 
+export function buildVenueDocumentObjectKey(args: {
+  venueId?: string;
+  fileName: string;
+  uploadId: string;
+}): string {
+  const venueSegment = args.venueId?.trim() || `draft/${args.uploadId}`;
+  const safeName = sanitizeInventoryFileName(args.fileName);
+  return `venues/${venueSegment}/documents/${args.uploadId}-${safeName}`;
+}
+
 export function buildMarketingPostHeroObjectKey(args: {
   postId?: string;
   fileName: string;
@@ -198,6 +208,40 @@ export function validateEventArtifactUploadRequest(args: {
     return;
   }
   validateDocumentUpload(contentType, args.contentLength, fileName, "Event file");
+}
+
+export function validateVenueDocumentUploadRequest(args: {
+  fileName: string;
+  contentType: string;
+  contentLength: number;
+}): void {
+  const contentType = args.contentType.trim().toLowerCase() || "application/octet-stream";
+  const fileName = args.fileName.trim();
+  if (!fileName) throw new Error("File name is required.");
+  if (args.contentLength <= 0) throw new Error("File size must be greater than zero.");
+  if (args.contentLength > DOCUMENT_MAX_BYTES) {
+    throw new Error("Venue files must be 25 MB or smaller.");
+  }
+
+  const lowerName = fileName.toLowerCase();
+  const allowed =
+    MANUAL_CONTENT_TYPES.has(contentType) ||
+    GDTF_CONTENT_TYPES.has(contentType) ||
+    contentType === "application/octet-stream" ||
+    lowerName.endsWith(".pdf") ||
+    lowerName.endsWith(".zip") ||
+    lowerName.endsWith(".vwx") ||
+    lowerName.endsWith(".dwg") ||
+    lowerName.endsWith(".dxf") ||
+    lowerName.endsWith(".md") ||
+    lowerName.endsWith(".txt") ||
+    lowerName.endsWith(".doc") ||
+    lowerName.endsWith(".docx") ||
+    lowerName.endsWith(".xls") ||
+    lowerName.endsWith(".xlsx");
+  if (!allowed) {
+    throw new Error("Upload a supported venue file (PDF, ZIP, VWX, CAD, text, or Office doc).");
+  }
 }
 
 export function validateInventoryUploadRequest(args: {

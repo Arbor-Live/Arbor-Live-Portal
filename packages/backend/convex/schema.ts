@@ -282,6 +282,54 @@ export default defineSchema({
     .index("by_parentId", ["parentId"])
     .index("by_path", ["path"]),
 
+  venues: defineTable({
+    name: v.string(),
+    nicknames: v.optional(v.array(v.string())),
+    parentId: v.optional(v.id("venues")),
+    path: v.string(),
+    kind: v.union(v.literal("building"), v.literal("indoor"), v.literal("outdoor")),
+    venueType: v.string(),
+    capacity: v.optional(v.number()),
+    address: v.optional(v.string()),
+    googleMapsUrl: v.optional(v.string()),
+    notesJson: v.optional(v.string()),
+    circuits: v.optional(
+      v.array(
+        v.object({
+          label: v.string(),
+          voltage: v.number(),
+          amperage: v.number(),
+        }),
+      ),
+    ),
+    documentationLinks: v.optional(
+      v.array(
+        v.object({
+          title: v.string(),
+          url: v.string(),
+        }),
+      ),
+    ),
+    files: v.optional(
+      v.array(
+        v.object({
+          title: v.string(),
+          r2Key: v.string(),
+          fileName: v.string(),
+          contentType: v.string(),
+        }),
+      ),
+    ),
+    contactName: v.optional(v.string()),
+    contactEmail: v.optional(v.string()),
+    contactPhone: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_parentId", ["parentId"])
+    .index("by_path", ["path"])
+    .index("by_kind", ["kind"]),
+
   /** Singleton row: global copy for public /e/[assetId] Lost & Found (staff-edited). */
   lostFoundSettings: defineTable({
     instructions: v.optional(v.string()),
@@ -529,6 +577,7 @@ export default defineSchema({
     seriesEndAt: v.optional(v.number()),
     timezone: v.string(),
     requiresShowWindow: v.boolean(),
+    venueId: v.optional(v.id("venues")),
     venueName: v.optional(v.string()),
     eventType: v.optional(v.string()),
     teamsInterested: v.optional(v.array(v.string())),
@@ -578,7 +627,8 @@ export default defineSchema({
   })
     .index("by_status", ["status"])
     .index("by_createdAt", ["createdAt"])
-    .index("by_invoiceId", ["invoiceId"]),
+    .index("by_invoiceId", ["invoiceId"])
+    .index("by_venueId", ["venueId"]),
 
   events: defineTable({
     title: v.string(),
@@ -596,6 +646,7 @@ export default defineSchema({
     setupOnly: v.boolean(),
     strikeOnly: v.boolean(),
     requiresShowWindow: v.boolean(),
+    venueId: v.optional(v.id("venues")),
     venueName: v.optional(v.string()),
     eventType: v.optional(v.string()),
     teamsInterested: v.optional(v.array(v.string())),
@@ -643,7 +694,8 @@ export default defineSchema({
     .index("by_createdAt", ["createdAt"])
     .index("by_seriesId_and_occurrenceIndex", ["seriesId", "occurrenceIndex"])
     .index("by_sourceEventRequestId", ["sourceEventRequestId"])
-    .index("by_openMicEnabled_and_startAt", ["openMicEnabled", "startAt"]),
+    .index("by_openMicEnabled_and_startAt", ["openMicEnabled", "startAt"])
+    .index("by_venueId", ["venueId"]),
 
   userCompensationRates: defineTable({
     userId: v.string(),
@@ -964,6 +1016,7 @@ export default defineSchema({
     invoiceContactId: v.optional(v.id("invoiceContacts")),
     invoiceGroupId: v.optional(v.id("invoiceGroups")),
     requestContext: v.optional(v.string()),
+    venueId: v.optional(v.id("venues")),
     venueName: v.optional(v.string()),
     venueAddress: v.optional(v.string()),
     eventDateText: v.string(),
@@ -1012,7 +1065,8 @@ export default defineSchema({
     .index("by_email", ["email"])
     .index("by_publicToken", ["publicToken"])
     .index("by_requestNumber", ["requestNumber"])
-    .index("by_linkedInvoiceId", ["linkedInvoiceId"]),
+    .index("by_linkedInvoiceId", ["linkedInvoiceId"])
+    .index("by_venueId", ["venueId"]),
 
   eventBandPayments: defineTable({
     eventId: v.id("events"),

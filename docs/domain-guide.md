@@ -18,7 +18,19 @@ canonical description of the domain itself.
 - Staff capabilities/teams: `Design`, `Marketing`, `Lighting`, `Sound`,
   `Operations` (see `capabilityDefinitions.ts` and `userAdminProfiles`).
 
-## Events
+## Venues
+
+- Venues are a hierarchical catalog (`venues` table) with optional `parentId`
+  and a computed `path` (e.g. `Tresidder > Arbor Stage`). Both buildings and
+  nested spaces are selectable as event locations.
+- Kind/type allowlists: Building (`Dorm`, `Academic`, `Leisure Space`); Indoor
+  (`Classroom`, `Theater`, `Conference Room`, `Common Space`, `Other`); Outdoor
+  (`Backyard`, `Park`, `Fountain`, `Common Space`, `Other`). Nicknames support
+  aliases (e.g. Llaga/Yaga).
+- Admin-only management under Events → Venues. Events, series, and booking
+  requests store `venueId` plus a denormalized `venueName` (the venue path) for
+  display/emails. Venue records also hold capacity, address, Google Maps URL,
+  circuits, contacts, Lexical notes, documentation links, and R2 file uploads.
 
 ## Events
 

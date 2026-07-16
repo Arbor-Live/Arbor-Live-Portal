@@ -169,6 +169,7 @@ export type SeriesTemplateFields = Pick<
   Doc<"eventSeries">,
   | "title"
   | "requiresShowWindow"
+  | "venueId"
   | "venueName"
   | "eventType"
   | "teamsInterested"
@@ -329,6 +330,7 @@ export async function materializeOccurrence(
     setupOnly: false,
     strikeOnly: false,
     requiresShowWindow: series.requiresShowWindow,
+    venueId: series.venueId,
     venueName: series.venueName,
     eventType: series.eventType,
     teamsInterested: series.teamsInterested,
@@ -380,6 +382,7 @@ export function buildEventPatchFromSeriesTemplate(
   const endAt = occurrenceEndAt(startAt, series.anchorStartAt, series.anchorEndAt);
   return {
     title: series.title,
+    venueId: series.venueId,
     venueName: series.venueName,
     eventType: series.eventType,
     teamsInterested: series.teamsInterested,

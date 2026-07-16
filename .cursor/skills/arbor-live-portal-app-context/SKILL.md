@@ -30,6 +30,10 @@ Human-readable docs live in `docs/` (`getting-started.md`, `architecture.md`, `d
 
 ## Event Domain (Current Behavior)
 
+### Venues
+- Hierarchical `venues` table (optional parent, computed path). Admin-only CRUD at `/dashboard/events/venues`.
+- Events/series/requests use `venueId` + denormalized `venueName` (path). Pick via `VenuePicker` (fuzzy search + nicknames; admins can create inline).
+
 ### Event Basics
 - Event types:
   - `Crewed Event`

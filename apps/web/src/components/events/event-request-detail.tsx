@@ -152,6 +152,9 @@ export function EventRequestDetailClient({ requestId }: { requestId: Id<"eventRe
         <DetailRow label="Organization" value={request.organization} />
         <DetailRow label="Sponsor type" value={request.sponsorType} />
         <DetailRow label="Venue" value={request.venueName} />
+        {request.venueAddress ? (
+          <DetailRow label="Venue address" value={request.venueAddress} />
+        ) : null}
         <DetailRow label="Venue address" value={request.venueAddress} />
         <DetailRow label="Event date" value={request.eventDateText} />
         {request.eventScheduleText ? (

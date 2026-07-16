@@ -23,6 +23,7 @@ import {
 import { EVENT_TIMEZONE } from "./email/constants";
 import { scheduleEventCancelledEmails } from "./email/triggers";
 import { resolveStoredR2AssetUrl } from "./inventoryR2";
+import { resolveVenueLink } from "./lib/venues";
 
 const eventTypeValue = v.union(
   v.literal("Crewed Event"),
@@ -406,6 +407,7 @@ export const create = mutation({
     startAt: v.number(),
     endAt: v.number(),
     requiresShowWindow: v.optional(v.boolean()),
+    venueId: v.optional(v.id("venues")),
     venueName: v.optional(v.string()),
     eventType: v.optional(eventTypeValue),
     teamsInterested: v.optional(v.array(eventTeamValue)),
@@ -435,6 +437,7 @@ export const create = mutation({
     if (openMicEnabled) {
       await assertNoOpenMicOverlap(ctx, null, args.startAt, args.endAt);
     }
+    const venueLink = await resolveVenueLink(ctx, args.venueId);
     const eventId = await ctx.db.insert("events", {
       title: args.title.trim(),
       status: initialStatus,
@@ -448,7 +451,8 @@ export const create = mutation({
       setupOnly: false,
       strikeOnly: false,
       requiresShowWindow: args.requiresShowWindow ?? true,
-      venueName: trimOptional(args.venueName),
+      venueId: venueLink.venueId,
+      venueName: venueLink.venueName,
       eventType: args.eventType,
       teamsInterested: args.teamsInterested && args.teamsInterested.length > 0 ? args.teamsInterested : undefined,
       category: trimOptional(args.category),
@@ -487,6 +491,7 @@ export const update = mutation({
     startAt: v.optional(v.number()),
     endAt: v.optional(v.number()),
     requiresShowWindow: v.optional(v.boolean()),
+    venueId: v.optional(v.union(v.id("venues"), v.null())),
     venueName: v.optional(v.string()),
     eventType: v.optional(eventTypeValue),
     teamsInterested: v.optional(v.array(eventTeamValue)),
@@ -544,6 +549,10 @@ export const update = mutation({
       nextOpenMicEnabled && !existing.openMicStatus
         ? ("scheduled" as const)
         : existing.openMicStatus;
+    const venueLink =
+      args.venueId !== undefined
+        ? await resolveVenueLink(ctx, args.venueId)
+        : { venueId: existing.venueId, venueName: existing.venueName, venueAddress: undefined };
     const patch = {
       title: args.title?.trim() ?? existing.title,
       status: nextStatus,
@@ -556,7 +565,8 @@ export const update = mutation({
       setupOnly: false,
       strikeOnly: false,
       requiresShowWindow: args.requiresShowWindow ?? existing.requiresShowWindow,
-      venueName: args.venueName?.trim() ?? existing.venueName,
+      venueId: venueLink.venueId,
+      venueName: venueLink.venueName,
       eventType: args.eventType ?? existing.eventType,
       teamsInterested: args.teamsInterested ?? existing.teamsInterested,
       category: args.category?.trim() ?? existing.category,
@@ -607,6 +617,7 @@ export const update = mutation({
         anchorStartAt: nextAnchorStartAt,
         anchorEndAt: nextAnchorEndAt,
         requiresShowWindow: patch.requiresShowWindow,
+        venueId: patch.venueId,
         venueName: patch.venueName,
         eventType: patch.eventType,
         teamsInterested: patch.teamsInterested,
@@ -741,6 +752,7 @@ export const duplicate = mutation({
       setupOnly: false,
       strikeOnly: false,
       requiresShowWindow: existing.requiresShowWindow,
+      venueId: existing.venueId,
       venueName: existing.venueName,
       eventType: existing.eventType,
       teamsInterested: existing.teamsInterested,

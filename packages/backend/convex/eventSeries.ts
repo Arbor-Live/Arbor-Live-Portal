@@ -21,6 +21,7 @@ import {
 import { syncEventCrewCostUsd } from "./lib/crewCost";
 import { syncEventStatusForLinkedInvoice } from "./lib/eventStatus";
 import { computeSeriesCostSummary, effectiveCrewUsd } from "./lib/eventSeriesCosts";
+import { resolveVenueLink } from "./lib/venues";
 
 const eventTypeValue = v.union(
   v.literal("Crewed Event"),
@@ -165,6 +166,7 @@ export const create = mutation({
     occurrenceCount: v.optional(v.number()),
     seriesEndAt: v.optional(v.number()),
     requiresShowWindow: v.optional(v.boolean()),
+    venueId: v.optional(v.id("venues")),
     venueName: v.optional(v.string()),
     eventType: v.optional(eventTypeValue),
     teamsInterested: v.optional(v.array(eventTeamValue)),
@@ -199,6 +201,7 @@ export const create = mutation({
       seriesEndAt: args.seriesEndAt,
     });
     const now = Date.now();
+    const venueLink = await resolveVenueLink(ctx, args.venueId);
     const seriesId = await ctx.db.insert("eventSeries", {
       title: args.title.trim(),
       status: "active",
@@ -209,7 +212,8 @@ export const create = mutation({
       seriesEndAt: args.seriesEndAt,
       timezone: EVENT_TIMEZONE,
       requiresShowWindow: args.requiresShowWindow ?? true,
-      venueName: trimOptional(args.venueName),
+      venueId: venueLink.venueId,
+      venueName: venueLink.venueName,
       eventType: args.eventType,
       teamsInterested: args.teamsInterested && args.teamsInterested.length > 0 ? args.teamsInterested : undefined,
       category: trimOptional(args.category),
@@ -298,6 +302,7 @@ export const updateTemplate = mutation({
     anchorStartAt: v.optional(v.number()),
     anchorEndAt: v.optional(v.number()),
     requiresShowWindow: v.optional(v.boolean()),
+    venueId: v.optional(v.union(v.id("venues"), v.null())),
     venueName: v.optional(v.string()),
     eventType: v.optional(eventTypeValue),
     teamsInterested: v.optional(v.array(eventTeamValue)),
@@ -327,13 +332,18 @@ export const updateTemplate = mutation({
       args.rentalFulfillmentMode !== undefined
         ? resolveRentalFulfillmentMode(nextEventType, args.rentalFulfillmentMode)
         : resolveRentalFulfillmentMode(nextEventType, series.rentalFulfillmentMode);
+    const venueLink =
+      args.venueId !== undefined
+        ? await resolveVenueLink(ctx, args.venueId)
+        : { venueId: series.venueId, venueName: series.venueName, venueAddress: undefined };
 
     await ctx.db.patch(args.id, {
       title: args.title?.trim() ?? series.title,
       anchorStartAt: nextAnchorStartAt,
       anchorEndAt: nextAnchorEndAt,
       requiresShowWindow: args.requiresShowWindow ?? series.requiresShowWindow,
-      venueName: args.venueName?.trim() ?? series.venueName,
+      venueId: venueLink.venueId,
+      venueName: venueLink.venueName,
       eventType: nextEventType,
       teamsInterested: args.teamsInterested ?? series.teamsInterested,
       category: args.category?.trim() ?? series.category,

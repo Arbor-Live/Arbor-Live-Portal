@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { CaretDownIcon } from "@phosphor-icons/react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { fuzzyScoreHaystack } from "@/lib/fuzzy-match";
 import { filterControlClassName } from "./filter-controls";
 
 export type SearchableSelectOption = {
@@ -88,11 +89,16 @@ export function SearchableSelect({
     [options, value],
   );
   const filtered = useMemo(() => {
-    const lowered = query.trim().toLowerCase();
+    const lowered = query.trim();
     if (!lowered) return options;
-    return options.filter((option) =>
-      `${option.label} ${option.description ?? ""} ${option.keywords ?? ""}`.toLowerCase().includes(lowered),
-    );
+    return options
+      .map((option) => ({
+        option,
+        score: fuzzyScoreHaystack(lowered, [option.label, option.description, option.keywords]),
+      }))
+      .filter((row) => row.score > 0)
+      .sort((a, b) => b.score - a.score || a.option.label.localeCompare(b.option.label))
+      .map((row) => row.option);
   }, [options, query]);
   const normalizedQuery = query.trim().toLowerCase();
   const canCreate =

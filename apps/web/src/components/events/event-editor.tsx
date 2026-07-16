@@ -23,6 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect, type SearchableSelectOption } from "@/components/inventory/searchable-select";
+import { VenuePicker } from "@/components/venues/venue-picker";
 import { EventBandPaymentSection } from "@/components/events/event-band-payment-section";
 import { EventMediaSection } from "@/components/events/event-media-section";
 import { EventPullList, mapPullListRow, type PullListItemDraft } from "@/components/events/event-pull-list";
@@ -189,7 +190,7 @@ export function EventEditor({
   const [startAt, setStartAt] = useState("");
   const [endAt, setEndAt] = useState("");
   const [endAtTouched, setEndAtTouched] = useState(false);
-  const [venueName, setVenueName] = useState("");
+  const [venueId, setVenueId] = useState("");
   const [eventType, setEventType] = useState<EventType>("Crewed Event");
   const [rentalFulfillmentMode, setRentalFulfillmentMode] = useState<RentalFulfillmentMode>("delivery");
   const [teamsInterested, setTeamsInterested] = useState<EventTeam[]>([]);
@@ -268,7 +269,7 @@ export function EventEditor({
     setStartAt(toLocalDateTimeInput(eventData.event.startAt));
     setEndAt(toLocalDateTimeInput(eventData.event.endAt));
     setEndAtTouched(true);
-    setVenueName(eventData.event.venueName ?? "");
+    setVenueId(eventData.event.venueId ?? "");
     setEventType(normalizeEventType(eventData.event.eventType as StoredEventType | undefined));
     setRentalFulfillmentMode(
       normalizeFulfillmentMode(
@@ -332,7 +333,7 @@ export function EventEditor({
       invoiceId: eventData.event.invoiceId ?? undefined,
       startAt: eventData.event.startAt,
       endAt: eventData.event.endAt,
-      venueName: eventData.event.venueName || undefined,
+      venueId: eventData.event.venueId || undefined,
       eventType: hydratedEventType || undefined,
       rentalFulfillmentMode: rentalTypes.includes(hydratedEventType) ? hydratedFulfillment : undefined,
       teamsInterested: hydratedTeams.length > 0 ? hydratedTeams : undefined,
@@ -521,7 +522,7 @@ export function EventEditor({
       invoiceId: invoiceId ? (invoiceId as Id<"invoices">) : undefined,
       startAt: new Date(startAt).getTime(),
       endAt: new Date(endAt).getTime(),
-      venueName: venueName || undefined,
+      venueId: venueId ? (venueId as Id<"venues">) : null,
       eventType: eventType || undefined,
       rentalFulfillmentMode: showFulfillmentPicker ? rentalFulfillmentMode : undefined,
       teamsInterested: teamsInterested.length > 0 ? teamsInterested : undefined,
@@ -565,7 +566,7 @@ export function EventEditor({
             recurrenceEndMode === "date" && seriesEndAt
               ? new Date(`${seriesEndAt}T23:59:59`).getTime()
               : undefined,
-          venueName: payload.venueName,
+          venueId: payload.venueId ?? undefined,
           eventType: payload.eventType,
           rentalFulfillmentMode: payload.rentalFulfillmentMode,
           teamsInterested: payload.teamsInterested,
@@ -578,7 +579,11 @@ export function EventEditor({
         router.replace(getEventEditorTabPath(String(result.firstEventId), resolvedActiveTab));
         return;
       }
-      const id = await createEvent({ ...payload, visibility });
+      const id = await createEvent({
+        ...payload,
+        venueId: payload.venueId ?? undefined,
+        visibility,
+      });
       router.replace(getEventEditorTabPath(String(id), resolvedActiveTab));
       return;
     }
@@ -877,7 +882,7 @@ export function EventEditor({
       invoiceId,
       startAt,
       endAt,
-      venueName,
+      venueId,
       eventType,
       rentalFulfillmentMode,
       teamsInterested,
@@ -1037,7 +1042,11 @@ export function EventEditor({
             </div>
             <div className="space-y-1">
               <Label>Venue</Label>
-              <Input value={venueName} onChange={(e) => setVenueName(e.target.value)} />
+              <VenuePicker
+                value={venueId}
+                onChange={setVenueId}
+                allowCreate={isAdmin}
+              />
             </div>
             <div className="space-y-1">
               <Label>Event Type</Label>

@@ -63,9 +63,11 @@ function R2UploadField({
   const purpose =
     uploadArgs.scope === "event"
       ? "artifact"
-      : uploadArgs.scope === "marketing" || uploadArgs.scope === "organization"
-        ? "hero"
-        : uploadArgs.purpose;
+      : uploadArgs.scope === "venue"
+        ? "manual"
+        : uploadArgs.scope === "marketing" || uploadArgs.scope === "organization"
+          ? "hero"
+          : uploadArgs.purpose;
   const resolvedAccept = accept ?? defaultAcceptForPurpose(purpose);
 
   const handleFile = useCallback(
@@ -361,6 +363,67 @@ export function InventoryResourceUploadButton({
         onClick={() => inputRef.current?.click()}
       >
         {busy ? "Uploading…" : "Upload"}
+      </Button>
+      {error ? <p className="text-xs text-destructive">{error}</p> : null}
+    </div>
+  );
+}
+
+type VenueDocumentUploadButtonProps = {
+  venueId?: string;
+  disabled?: boolean;
+  onUploaded: (result: {
+    r2Key: string;
+    title: string;
+    fileName: string;
+    contentType: string;
+  }) => void;
+};
+
+export function VenueDocumentUploadButton({
+  venueId,
+  disabled,
+  onUploaded,
+}: VenueDocumentUploadButtonProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const { uploadFile, busy, error } = useR2FileUpload({
+    scope: "venue",
+    venueId,
+    purpose: "document",
+  });
+
+  async function handleFile(file: File) {
+    const storedReference = await uploadFile(file);
+    if (!storedReference) return;
+    onUploaded({
+      r2Key: storedReference,
+      title: defaultTitleFromFileName(file.name, "Document"),
+      fileName: file.name,
+      contentType: file.type || "application/octet-stream",
+    });
+  }
+
+  return (
+    <div className="flex flex-col gap-1">
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".pdf,.zip,.vwx,.dwg,.dxf,.md,.txt,.doc,.docx,.xls,.xlsx,application/pdf,application/zip,application/octet-stream"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) void handleFile(file);
+          if (inputRef.current) inputRef.current.value = "";
+        }}
+      />
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={disabled || busy}
+        onClick={() => inputRef.current?.click()}
+      >
+        {busy ? "Uploading…" : "Upload file"}
       </Button>
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
     </div>

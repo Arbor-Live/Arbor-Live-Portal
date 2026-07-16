@@ -5,6 +5,7 @@ export const eventOverviewSchema = z.object({
   status: z.string().min(1),
   startAt: z.string().min(1, "Start is required"),
   endAt: z.string().min(1, "End is required"),
+  venueId: z.string().optional(),
   venueName: z.string().optional(),
   eventType: z.string().optional(),
   notes: z.string().optional(),
