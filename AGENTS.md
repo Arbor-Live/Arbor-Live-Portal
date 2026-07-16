@@ -83,11 +83,5 @@ refuses a different one.
 
 ### Non-obvious runtime notes
 
-- On the very first sign-in the dashboard can flash a transient
-  "You must be signed in" / `requireAuth` error before the auth token propagates;
-  clicking "Try again" (or reloading) lands on the dashboard. Not a real failure.
-- `pnpm lint` currently reports pre-existing errors in `apps/web` source
-  (e.g. `react/no-unescaped-entities`, `react-hooks/refs`); these are unrelated to
-  environment setup. `pnpm typecheck` and `pnpm test` are clean.
 - After schema/backend API edits, run `pnpm --filter backend codegen` (or just
   keep `convex dev` running, which pushes automatically).
