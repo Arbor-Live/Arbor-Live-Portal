@@ -11,11 +11,13 @@ import {
   buildMarketingPostContentObjectKey,
   buildMarketingPostHeroObjectKey,
   buildPublicAssetUrlFromKey,
+  buildVenueDocumentObjectKey,
   formatStoredR2Asset,
   parseStoredR2Asset,
   validateEventArtifactUploadRequest,
   validateInventoryUploadRequest,
   validateMarketingHeroUploadRequest,
+  validateVenueDocumentUploadRequest,
 } from "./lib/inventoryUpload";
 
 export const inventoryR2 = new R2(components.r2);
@@ -55,6 +57,7 @@ const uploadScopeValue = v.union(
   v.literal("event"),
   v.literal("marketing"),
   v.literal("organization"),
+  v.literal("venue"),
 );
 
 const inventoryPurposeValue = v.union(
@@ -71,9 +74,10 @@ export const generateR2UploadUrl = mutation({
   args: {
     scope: uploadScopeValue,
     entityKind: v.optional(v.union(v.literal("package"), v.literal("type"))),
-    purpose: v.union(inventoryPurposeValue, v.literal("artifact")),
+    purpose: v.union(inventoryPurposeValue, v.literal("artifact"), v.literal("document")),
     entityId: v.optional(v.string()),
     eventId: v.optional(v.id("events")),
+    venueId: v.optional(v.id("venues")),
     postId: v.optional(v.string()),
     organizationId: v.optional(v.string()),
     marketingImageKind: v.optional(marketingImageKindValue),
@@ -145,10 +149,22 @@ export const generateR2UploadUrl = mutation({
         fileName: args.fileName,
         uploadId,
       });
+    } else if (args.scope === "venue") {
+      await requireAdmin(ctx);
+      validateVenueDocumentUploadRequest({
+        fileName: args.fileName,
+        contentType: args.contentType,
+        contentLength: args.contentLength,
+      });
+      key = buildVenueDocumentObjectKey({
+        venueId: args.venueId,
+        fileName: args.fileName,
+        uploadId,
+      });
     } else {
       if (!args.entityKind) throw new Error("Inventory entity kind is required.");
-      if (args.purpose === "artifact") {
-        throw new Error("Artifact purpose is only valid for event uploads.");
+      if (args.purpose === "artifact" || args.purpose === "document") {
+        throw new Error("Artifact/document purpose is only valid for event or venue uploads.");
       }
       validateInventoryUploadRequest({
         entityKind: args.entityKind,

@@ -5,7 +5,7 @@ import { useMutation } from "convex/react";
 import { api } from "@/lib/convex-api";
 import { formatStoredR2Asset } from "@/lib/r2-assets";
 
-export type R2UploadScope = "inventory" | "event" | "marketing" | "organization";
+export type R2UploadScope = "inventory" | "event" | "marketing" | "organization" | "venue";
 
 export type InventoryUploadEntityKind = "package" | "type";
 export type InventoryUploadPurpose = "hero" | "icon" | "promo" | "manual" | "gdtf";
@@ -30,6 +30,11 @@ export type R2UploadArgs =
   | {
       scope: "organization";
       organizationId: string;
+    }
+  | {
+      scope: "venue";
+      venueId?: string;
+      purpose: "document";
     };
 
 function createUploadId() {
@@ -100,13 +105,20 @@ export function useR2FileUpload(uploadArgs: R2UploadArgs) {
                     organizationId: uploadArgs.organizationId,
                     ...common,
                   })
-                : await generateUploadUrl({
-                    scope: "inventory",
-                    entityKind: uploadArgs.entityKind,
-                    purpose: uploadArgs.purpose,
-                    entityId: uploadArgs.entityId,
-                    ...common,
-                  });
+                : uploadArgs.scope === "venue"
+                  ? await generateUploadUrl({
+                      scope: "venue",
+                      purpose: "document",
+                      venueId: uploadArgs.venueId as never,
+                      ...common,
+                    })
+                  : await generateUploadUrl({
+                      scope: "inventory",
+                      entityKind: uploadArgs.entityKind,
+                      purpose: uploadArgs.purpose,
+                      entityId: uploadArgs.entityId,
+                      ...common,
+                    });
 
         const response = await fetch(url, {
           method: "PUT",

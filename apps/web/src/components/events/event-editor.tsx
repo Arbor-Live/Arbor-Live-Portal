@@ -17,12 +17,20 @@ import {
   type Icon,
 } from "@phosphor-icons/react";
 import { api, type Id } from "@/lib/convex-api";
+import {
+  EQUIPMENT_PRICING_MODE_OPTIONS,
+  INVOICE_GROUP_TYPE_LABELS,
+  INVOICE_GROUP_TYPE_OPTIONS,
+  type EquipmentPricingMode,
+} from "@/lib/invoice-group-labels";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect, type SearchableSelectOption } from "@/components/inventory/searchable-select";
+import { VenuePicker } from "@/components/venues/venue-picker";
+import { VenueDetailsButton } from "@/components/venues/venue-details-sheet";
 import { EventBandPaymentSection } from "@/components/events/event-band-payment-section";
 import { EventMediaSection } from "@/components/events/event-media-section";
 import { EventPullList, mapPullListRow, type PullListItemDraft } from "@/components/events/event-pull-list";
@@ -168,6 +176,7 @@ export function EventEditor({
   const eventData = useQuery(api.events.get, eventId ? { id: eventId } : "skip");
   const viewer = useQuery(api.users.getViewer, {});
   const invoices = useQuery(api.invoices.list, {});
+  const hostGroups = useQuery(api.invoiceGroups.list, { activeOnly: true });
   const managerList = useQuery(api.invoices.listManagers, {});
   const posterAssignment = useQuery(
     api.marketingDesigns.getPosterAssignmentForEvent,
@@ -175,6 +184,7 @@ export function EventEditor({
   );
   const createEvent = useMutation(api.events.create);
   const createEventSeries = useMutation(api.eventSeries.create);
+  const createHostGroup = useMutation(api.invoiceGroups.create);
   const updateEvent = useMutation(api.events.update);
   const upsertBlocks = useMutation(api.eventSchedule.upsertBlocks);
   const upsertShifts = useMutation(api.eventCrew.upsertShifts);
@@ -189,11 +199,19 @@ export function EventEditor({
   const [startAt, setStartAt] = useState("");
   const [endAt, setEndAt] = useState("");
   const [endAtTouched, setEndAtTouched] = useState(false);
-  const [venueName, setVenueName] = useState("");
+  const [venueId, setVenueId] = useState("");
   const [eventType, setEventType] = useState<EventType>("Crewed Event");
   const [rentalFulfillmentMode, setRentalFulfillmentMode] = useState<RentalFulfillmentMode>("delivery");
   const [teamsInterested, setTeamsInterested] = useState<EventTeam[]>([]);
-  const [host, setHost] = useState("");
+  const [hostGroupId, setHostGroupId] = useState("");
+  const [hostGroupModalOpen, setHostGroupModalOpen] = useState(false);
+  const [newHostName, setNewHostName] = useState("");
+  const [newHostType, setNewHostType] = useState<"vso" | "house" | "department" | "individual">(
+    "department",
+  );
+  const [newHostEquipmentPricingMode, setNewHostEquipmentPricingMode] =
+    useState<EquipmentPricingMode>("subsidized");
+  const [creatingHost, setCreatingHost] = useState(false);
   const [managerUserId, setManagerUserId] = useState("");
   const [dayOfLeadUserId, setDayOfLeadUserId] = useState("");
   const [crewCostUsd, setCrewCostUsd] = useState("0");
@@ -260,6 +278,8 @@ export function EventEditor({
   useEffect(() => {
     if (!eventData?.event) return;
     if (hydratedEventIdRef.current === eventData.event._id) return;
+    // Wait for host groups so we can match legacy free-text hosts by name.
+    if (hostGroups === undefined) return;
     hydratedEventIdRef.current = eventData.event._id;
     setTitle(eventData.event.title);
     setStatus(normalizeEventStatus(eventData.event.status));
@@ -268,7 +288,7 @@ export function EventEditor({
     setStartAt(toLocalDateTimeInput(eventData.event.startAt));
     setEndAt(toLocalDateTimeInput(eventData.event.endAt));
     setEndAtTouched(true);
-    setVenueName(eventData.event.venueName ?? "");
+    setVenueId(eventData.event.venueId ?? "");
     setEventType(normalizeEventType(eventData.event.eventType as StoredEventType | undefined));
     setRentalFulfillmentMode(
       normalizeFulfillmentMode(
@@ -276,7 +296,15 @@ export function EventEditor({
       ),
     );
     setTeamsInterested((eventData.event.teamsInterested as EventTeam[] | undefined) ?? []);
-    setHost(eventData.event.host ?? "");
+    const linkedHostGroupId =
+      eventData.event.hostGroupId ??
+      hostGroups.find(
+        (group) =>
+          eventData.event.host &&
+          group.name.trim().toLowerCase() === eventData.event.host.trim().toLowerCase(),
+      )?._id ??
+      "";
+    setHostGroupId(linkedHostGroupId);
     setManagerUserId(eventData.event.eventManagerUserId ?? "");
     setDayOfLeadUserId(eventData.event.dayOfLeadUserId ?? "");
     setCrewCostUsd((eventData.event.crewCostUsd ?? 0).toString());
@@ -332,11 +360,11 @@ export function EventEditor({
       invoiceId: eventData.event.invoiceId ?? undefined,
       startAt: eventData.event.startAt,
       endAt: eventData.event.endAt,
-      venueName: eventData.event.venueName || undefined,
+      venueId: eventData.event.venueId || undefined,
       eventType: hydratedEventType || undefined,
       rentalFulfillmentMode: rentalTypes.includes(hydratedEventType) ? hydratedFulfillment : undefined,
       teamsInterested: hydratedTeams.length > 0 ? hydratedTeams : undefined,
-      host: eventData.event.host || undefined,
+      hostGroupId: eventData.event.hostGroupId || undefined,
       eventManagerUserId: eventData.event.eventManagerUserId || undefined,
       dayOfLeadUserId: eventData.event.dayOfLeadUserId || undefined,
       bandsCostUsd: Number(eventData.event.bandsCostUsd ?? 0),
@@ -373,7 +401,7 @@ export function EventEditor({
       blocks: hydratedBlocks,
       shifts: hydratedShifts,
     });
-  }, [eventData]);
+  }, [eventData, hostGroups]);
 
   const hideSchedule = eventType === "Services Only";
   const hideEquipment = eventType === "Services Only";
@@ -430,6 +458,19 @@ export function EventEditor({
       })) satisfies SearchableSelectOption[]),
     ],
     [invoices],
+  );
+
+  const hostGroupOptions: SearchableSelectOption[] = useMemo(
+    () => [
+      { value: "", label: "No host" },
+      ...((hostGroups ?? []).map((group) => ({
+        value: group._id,
+        label: group.name,
+        description: INVOICE_GROUP_TYPE_LABELS[group.type] ?? group.type,
+        keywords: group.type,
+      })) satisfies SearchableSelectOption[]),
+    ],
+    [hostGroups],
   );
 
   const eventTypeOptions: SearchableSelectOption[] = useMemo(
@@ -513,6 +554,33 @@ export function EventEditor({
   const canEdit = isCreate || (eventData?.canEdit ?? false);
   const readOnly = !canEdit && !isCreate;
 
+  function openCreateHost(prefill: string) {
+    setNewHostName(prefill);
+    setNewHostType("department");
+    setNewHostEquipmentPricingMode("subsidized");
+    setHostGroupModalOpen(true);
+  }
+
+  async function submitCreateHost() {
+    if (!newHostName.trim() || creatingHost) return;
+    setCreatingHost(true);
+    try {
+      const id = await createHostGroup({
+        name: newHostName.trim(),
+        type: newHostType,
+        equipmentPricingMode: newHostEquipmentPricingMode,
+        active: true,
+      });
+      setHostGroupId(id);
+      setHostGroupModalOpen(false);
+      setNewHostName("");
+    } catch (error) {
+      window.alert(getConvexErrorMessage(error, "Failed to create host."));
+    } finally {
+      setCreatingHost(false);
+    }
+  }
+
   function buildOverviewPayload() {
     const base = {
       title: title.trim(),
@@ -521,11 +589,11 @@ export function EventEditor({
       invoiceId: invoiceId ? (invoiceId as Id<"invoices">) : undefined,
       startAt: new Date(startAt).getTime(),
       endAt: new Date(endAt).getTime(),
-      venueName: venueName || undefined,
+      venueId: venueId ? (venueId as Id<"venues">) : null,
       eventType: eventType || undefined,
       rentalFulfillmentMode: showFulfillmentPicker ? rentalFulfillmentMode : undefined,
       teamsInterested: teamsInterested.length > 0 ? teamsInterested : undefined,
-      host: host || undefined,
+      hostGroupId: hostGroupId ? (hostGroupId as Id<"invoiceGroups">) : null,
       eventManagerUserId: managerUserId || undefined,
       dayOfLeadUserId: dayOfLeadUserId || undefined,
       bandsCostUsd: Number(bandsCostUsd || "0"),
@@ -565,11 +633,11 @@ export function EventEditor({
             recurrenceEndMode === "date" && seriesEndAt
               ? new Date(`${seriesEndAt}T23:59:59`).getTime()
               : undefined,
-          venueName: payload.venueName,
+          venueId: payload.venueId ?? undefined,
           eventType: payload.eventType,
           rentalFulfillmentMode: payload.rentalFulfillmentMode,
           teamsInterested: payload.teamsInterested,
-          host: payload.host,
+          hostGroupId: payload.hostGroupId ?? undefined,
           eventManagerUserId: payload.eventManagerUserId,
           dayOfLeadUserId: payload.dayOfLeadUserId,
           notes: payload.notes,
@@ -578,7 +646,12 @@ export function EventEditor({
         router.replace(getEventEditorTabPath(String(result.firstEventId), resolvedActiveTab));
         return;
       }
-      const id = await createEvent({ ...payload, visibility });
+      const id = await createEvent({
+        ...payload,
+        venueId: payload.venueId ?? undefined,
+        hostGroupId: payload.hostGroupId ?? undefined,
+        visibility,
+      });
       router.replace(getEventEditorTabPath(String(id), resolvedActiveTab));
       return;
     }
@@ -877,11 +950,11 @@ export function EventEditor({
       invoiceId,
       startAt,
       endAt,
-      venueName,
+      venueId,
       eventType,
       rentalFulfillmentMode,
       teamsInterested,
-      host,
+      hostGroupId,
       managerUserId,
       dayOfLeadUserId,
       bandsCostUsd,
@@ -1037,7 +1110,16 @@ export function EventEditor({
             </div>
             <div className="space-y-1">
               <Label>Venue</Label>
-              <Input value={venueName} onChange={(e) => setVenueName(e.target.value)} />
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="min-w-0 flex-1">
+                  <VenuePicker
+                    value={venueId}
+                    onChange={setVenueId}
+                    allowCreate={isAdmin}
+                  />
+                </div>
+                {venueId ? <VenueDetailsButton venueId={venueId} /> : null}
+              </div>
             </div>
             <div className="space-y-1">
               <Label>Event Type</Label>
@@ -1082,7 +1164,15 @@ export function EventEditor({
             ) : null}
             <div className="space-y-1">
               <Label>Host</Label>
-              <Input value={host} onChange={(e) => setHost(e.target.value)} />
+              <SearchableSelect
+                value={hostGroupId}
+                onChange={setHostGroupId}
+                options={hostGroupOptions}
+                placeholder="Search host organizations…"
+                emptyLabel="No host"
+                onCreate={canEdit || isCreate ? openCreateHost : undefined}
+                createLabel="New Host"
+              />
             </div>
             <div className="space-y-1 md:col-span-3">
               <Label>Teams Interested</Label>
@@ -1939,6 +2029,71 @@ export function EventEditor({
                   </Button>
                 ))}
                 <Button type="button" variant="ghost" onClick={() => setEditScopeModalOpen(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      ) : null}
+
+      {hostGroupModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+          <Card className="w-full max-w-md">
+            <CardHeader>
+              <CardTitle>New Host</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="space-y-2">
+                <Label>Name</Label>
+                <Input value={newHostName} onChange={(e) => setNewHostName(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>Type</Label>
+                <select
+                  className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                  value={newHostType}
+                  onChange={(e) =>
+                    setNewHostType(e.target.value as "vso" | "house" | "department" | "individual")
+                  }
+                >
+                  {INVOICE_GROUP_TYPE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label>Equipment pricing</Label>
+                <select
+                  className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                  value={newHostEquipmentPricingMode}
+                  onChange={(e) =>
+                    setNewHostEquipmentPricingMode(e.target.value as EquipmentPricingMode)
+                  }
+                >
+                  {EQUIPMENT_PRICING_MODE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  disabled={!newHostName.trim() || creatingHost}
+                  onClick={() => void submitCreateHost()}
+                >
+                  {creatingHost ? "Creating…" : "Create Host"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={creatingHost}
+                  onClick={() => setHostGroupModalOpen(false)}
+                >
                   Cancel
                 </Button>
               </div>

@@ -5,10 +5,11 @@ import Link from "next/link";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useConvex } from "convex/react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { FormProvider, useForm, type Resolver } from "react-hook-form";
+import { FormProvider, useForm, useFormContext, type Resolver } from "react-hook-form";
 import { api } from "@/lib/convex-api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { PublicMarketingLayout } from "@/components/public/public-marketing-layout";
 import { submitBookingRequest } from "@/app/public/request/actions";
 import { BookingRequestNav } from "@/components/request/booking-request-nav";
@@ -20,6 +21,7 @@ import { SingleChoiceField } from "@/components/request/fields/single-choice-fie
 import { TextField } from "@/components/request/fields/text-field";
 import { TextareaField } from "@/components/request/fields/textarea-field";
 import { TurnoutField } from "@/components/request/fields/turnout-field";
+import { VenuePicker } from "@/components/venues/venue-picker";
 import {
   EVENT_CATEGORY_OPTIONS,
   LIGHTING_TIER_OPTIONS,
@@ -379,12 +381,7 @@ function StepBody({
     case "sponsorType":
       return <SponsorTypeField />;
     case "venue":
-      return (
-        <div className="space-y-4">
-          <TextField name="venueName" label="Venue Name" placeholder="Venue Name" autoFocus />
-          <TextField name="venueAddress" label="Venue Address" placeholder="Venue Address" />
-        </div>
-      );
+      return <VenueStepField />;
     case "eventSchedule":
       return <EventScheduleField />;
     case "eventName":
@@ -459,4 +456,24 @@ function StepBody({
     default:
       return null;
   }
+}
+
+function VenueStepField() {
+  const { watch, setValue } = useFormContext<BookingRequestFormValues>();
+  const venueId = watch("venueId") ?? "";
+  return (
+    <div className="space-y-2">
+      <Label>Venue</Label>
+      <VenuePicker
+        value={venueId}
+        onChange={(next) => setValue("venueId", next, { shouldDirty: true, shouldValidate: true })}
+        allowCreate={false}
+        emptyLabel="Not sure yet"
+        placeholder="Search campus venues…"
+      />
+      <p className="text-xs text-muted-foreground">
+        Leave empty if you do not know yet. Off-campus events may have additional fees.
+      </p>
+    </div>
+  );
 }

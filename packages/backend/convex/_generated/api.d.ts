@@ -81,6 +81,7 @@ import type * as lib_eventSeriesCosts from "../lib/eventSeriesCosts.js";
 import type * as lib_eventSeriesGeneration from "../lib/eventSeriesGeneration.js";
 import type * as lib_eventStatus from "../lib/eventStatus.js";
 import type * as lib_eventVisibility from "../lib/eventVisibility.js";
+import type * as lib_hostOrgs from "../lib/hostOrgs.js";
 import type * as lib_immichAccess from "../lib/immichAccess.js";
 import type * as lib_immichAlbumLinks from "../lib/immichAlbumLinks.js";
 import type * as lib_immichClient from "../lib/immichClient.js";
@@ -105,6 +106,8 @@ import type * as lib_stanfordHours from "../lib/stanfordHours.js";
 import type * as lib_trustedOrigins from "../lib/trustedOrigins.js";
 import type * as lib_userTimecards from "../lib/userTimecards.js";
 import type * as lib_userVerticals from "../lib/userVerticals.js";
+import type * as lib_venueTypes from "../lib/venueTypes.js";
+import type * as lib_venues from "../lib/venues.js";
 import type * as lostFoundSettings from "../lostFoundSettings.js";
 import type * as marketingDesigns from "../marketingDesigns.js";
 import type * as marketingImmich from "../marketingImmich.js";
@@ -131,6 +134,7 @@ import type * as storageLocations from "../storageLocations.js";
 import type * as timecards from "../timecards.js";
 import type * as userInvites from "../userInvites.js";
 import type * as users from "../users.js";
+import type * as venues from "../venues.js";
 
 import type {
   ApiFromModules,
@@ -212,6 +216,7 @@ declare const fullApi: ApiFromModules<{
   "lib/eventSeriesGeneration": typeof lib_eventSeriesGeneration;
   "lib/eventStatus": typeof lib_eventStatus;
   "lib/eventVisibility": typeof lib_eventVisibility;
+  "lib/hostOrgs": typeof lib_hostOrgs;
   "lib/immichAccess": typeof lib_immichAccess;
   "lib/immichAlbumLinks": typeof lib_immichAlbumLinks;
   "lib/immichClient": typeof lib_immichClient;
@@ -236,6 +241,8 @@ declare const fullApi: ApiFromModules<{
   "lib/trustedOrigins": typeof lib_trustedOrigins;
   "lib/userTimecards": typeof lib_userTimecards;
   "lib/userVerticals": typeof lib_userVerticals;
+  "lib/venueTypes": typeof lib_venueTypes;
+  "lib/venues": typeof lib_venues;
   lostFoundSettings: typeof lostFoundSettings;
   marketingDesigns: typeof marketingDesigns;
   marketingImmich: typeof marketingImmich;
@@ -262,6 +269,7 @@ declare const fullApi: ApiFromModules<{
   timecards: typeof timecards;
   userInvites: typeof userInvites;
   users: typeof users;
+  venues: typeof venues;
 }>;
 
 /**

@@ -25,6 +25,7 @@ import {
   toPacificDateKey,
   type DayEventPlan,
 } from "./lib/bookingDayLoad";
+import { resolveVenueLink } from "./lib/venues";
 
 const eventRequestStatusValue = v.union(
   v.literal("submitted"),
@@ -65,6 +66,7 @@ const submitPublicArgs = {
   // contact record; it is resolved server-side by email.
   invoiceGroupId: v.optional(v.id("invoiceGroups")),
   requestContext: v.optional(v.string()),
+  venueId: v.optional(v.id("venues")),
   venueName: v.optional(v.string()),
   venueAddress: v.optional(v.string()),
   eventDateText: v.string(),
@@ -513,6 +515,7 @@ export const submitPublic = mutation({
     const requestNumber = await allocateRequestNumber(ctx);
     const publicToken = await generateUniquePublicToken(ctx);
 
+    const venueLink = await resolveVenueLink(ctx, args.venueId);
     const id = await ctx.db.insert("eventRequests", {
       status: "submitted",
       requestNumber,
@@ -526,8 +529,9 @@ export const submitPublic = mutation({
       invoiceContactId: billingProfile.invoiceContactId,
       invoiceGroupId: billingProfile.invoiceGroupId,
       requestContext: trimOptional(args.requestContext),
-      venueName: trimOptional(args.venueName),
-      venueAddress: trimOptional(args.venueAddress),
+      venueId: venueLink.venueId,
+      venueName: venueLink.venueName,
+      venueAddress: venueLink.venueAddress,
       eventDateText: args.eventDateText.trim(),
       eventStartTimeText: args.eventStartTimeText.trim(),
       eventEndTimeText: args.eventEndTimeText.trim(),
@@ -885,6 +889,7 @@ export const convertToEvent = mutation({
         setupOnly: false,
         strikeOnly: false,
         requiresShowWindow: true,
+        venueId: request.venueId,
         venueName: request.venueName,
         eventType: eventType as
           | "Crewed Event"

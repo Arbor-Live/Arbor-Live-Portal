@@ -104,6 +104,7 @@ const financialHubSubItems: NavSubItem[] = [
 const eventsSubItems: NavSubItem[] = [
   { title: "Overview", url: "/dashboard/events" },
   { title: "Booking Requests", url: "/dashboard/events/requests" },
+  { title: "Venues", url: "/dashboard/events/venues", adminOnly: true },
   { title: "Open Mic", url: "/dashboard/events/open-mic", adminOnly: true },
   { title: "Crew Scheduling", url: "/dashboard/events/crew-scheduling", adminOnly: true },
   { title: "My Availability", url: "/dashboard/events/my-availability" },
