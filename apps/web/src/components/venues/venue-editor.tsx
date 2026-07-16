@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect } from "react";
+import { useCallback, useEffect } from "react";
 import { useMutation } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
 import { EMPTY_LEXICAL_STATE } from "@/components/editor/lexical-theme";
@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import {
   emptyVenueForm,
+  isEmptyLexicalJson,
   venueSchema,
   venueTypesForKind,
   VENUE_KINDS,
@@ -52,20 +53,26 @@ export function VenueEditor({
   initial: VenueFormValues;
   venues: VenueRow[];
   onCancel: () => void;
-  onSaved: () => void;
+  onSaved: (savedId?: Id<"venues">) => void;
 }) {
   const createVenue = useMutation(api.venues.create);
   const updateVenue = useMutation(api.venues.update);
 
   const form = useConvexForm<VenueFormValues>({
     schema: venueSchema,
-    defaultValues: initial,
+    defaultValues: {
+      ...initial,
+      notesJson: initial.notesJson || EMPTY_LEXICAL_STATE,
+    },
     mode: "onChange",
   });
 
   useEffect(() => {
     if (form.formState.isDirty) return;
-    form.reset(initial);
+    form.reset({
+      ...initial,
+      notesJson: initial.notesJson || EMPTY_LEXICAL_STATE,
+    });
   }, [initial, form]);
 
   const kind = form.watch("kind") as VenueKind;
@@ -74,48 +81,63 @@ export function VenueEditor({
   const documentationLinks = form.watch("documentationLinks");
   const files = form.watch("files");
 
-  const persist = async (values: VenueFormValues) => {
-    const payload = {
-      name: values.name,
-      nicknames: values.nicknames.map((n) => n.trim()).filter(Boolean),
-      parentId: values.parentId ? (values.parentId as Id<"venues">) : undefined,
-      kind: values.kind,
-      venueType: values.venueType,
-      capacity: normalizeCapacity(values.capacity),
-      address: values.address?.trim() || undefined,
-      googleMapsUrl: values.googleMapsUrl?.trim() || undefined,
-      notesJson: values.notesJson?.trim() || undefined,
-      circuits: values.circuits
-        .filter((c) => c.label.trim())
-        .map((c) => ({
-          label: c.label.trim(),
-          voltage: c.voltage || 120,
-          amperage: c.amperage || 20,
-        })),
-      documentationLinks: values.documentationLinks
-        .filter((l) => l.url.trim())
-        .map((l) => ({
-          title: l.title.trim() || "Link",
-          url: l.url.trim(),
-        })),
-      files: values.files.filter((f) => f.r2Key.trim()),
-      contactName: values.contactName?.trim() || undefined,
-      contactEmail: values.contactEmail?.trim() || undefined,
-      contactPhone: values.contactPhone?.trim() || undefined,
-    };
+  const persist = useCallback(
+    async (values: VenueFormValues) => {
+      const notesFromForm = form.getValues("notesJson") || values.notesJson;
+      const notesJson = isEmptyLexicalJson(notesFromForm) ? undefined : notesFromForm?.trim();
 
-    if (editingId) {
-      await updateVenue({
-        id: editingId,
-        ...payload,
-        parentId: values.parentId ? (values.parentId as Id<"venues">) : null,
-      });
-    } else {
-      await createVenue(payload);
-    }
-    onSaved();
-    if (!editingId) form.reset(emptyVenueForm());
-  };
+      const payload = {
+        name: values.name,
+        nicknames: values.nicknames.map((n) => n.trim()).filter(Boolean),
+        parentId: values.parentId ? (values.parentId as Id<"venues">) : undefined,
+        kind: values.kind,
+        venueType: values.venueType,
+        capacity: normalizeCapacity(values.capacity),
+        address: values.address?.trim() || undefined,
+        googleMapsUrl: values.googleMapsUrl?.trim() || undefined,
+        notesJson,
+        circuits: values.circuits
+          .filter((c) => c.label.trim())
+          .map((c) => ({
+            label: c.label.trim(),
+            voltage: c.voltage || 120,
+            amperage: c.amperage || 20,
+          })),
+        documentationLinks: values.documentationLinks
+          .filter((l) => l.url.trim())
+          .map((l) => ({
+            title: l.title.trim() || "Link",
+            url: l.url.trim(),
+          })),
+        files: values.files.filter((f) => f.r2Key.trim()),
+        contactName: values.contactName?.trim() || undefined,
+        contactEmail: values.contactEmail?.trim() || undefined,
+        contactPhone: values.contactPhone?.trim() || undefined,
+      };
+
+      if (editingId) {
+        await updateVenue({
+          id: editingId,
+          ...payload,
+          parentId: values.parentId ? (values.parentId as Id<"venues">) : null,
+        });
+        form.reset({
+          ...values,
+          notesJson: notesJson || EMPTY_LEXICAL_STATE,
+        });
+        onSaved(editingId);
+      } else {
+        const createdId = await createVenue(payload);
+        form.reset(emptyVenueForm());
+        onSaved(createdId);
+      }
+    },
+    [createVenue, editingId, form, onSaved, updateVenue],
+  );
+
+  const runSave = useCallback(() => {
+    void form.handleSubmit((values) => form.runMutation(() => persist(values)))();
+  }, [form, persist]);
 
   const tier = editingId ? "C" : "C";
 
@@ -128,7 +150,10 @@ export function VenueEditor({
         <CardContent className="max-h-[80vh] space-y-4 overflow-auto">
           <Form {...form}>
             <form
-              onSubmit={form.handleSubmit((values) => form.runMutation(() => persist(values)))}
+              onSubmit={(event) => {
+                event.preventDefault();
+                runSave();
+              }}
               className="space-y-4"
             >
               <TextFormField name="name" label="Name" />
@@ -324,9 +349,12 @@ export function VenueEditor({
                 <LexicalEditor
                   editorKey={editingId ?? "new-venue"}
                   contentJson={form.watch("notesJson") || EMPTY_LEXICAL_STATE}
-                  onChange={(notesJson) =>
-                    form.setValue("notesJson", notesJson, { shouldDirty: true })
-                  }
+                  onChange={(notesJson) => {
+                    form.setValue("notesJson", notesJson, {
+                      shouldDirty: true,
+                      shouldTouch: true,
+                    });
+                  }}
                 />
               </div>
 
@@ -391,9 +419,7 @@ export function VenueEditor({
                     key={`file-${index}`}
                     className="flex items-center justify-between gap-2 rounded-md border px-2 py-1 text-sm"
                   >
-                    <span className="truncate">
-                      {file.title || file.fileName}
-                    </span>
+                    <span className="truncate">{file.title || file.fileName}</span>
                     <Button
                       type="button"
                       variant="outline"
@@ -450,12 +476,15 @@ export function VenueEditor({
         saveError={form.saveError}
         isDirty={form.formState.isDirty}
         saveLabel={editingId ? "Save" : "Create"}
-        onSave={() => void form.handleSubmit((values) => form.runMutation(() => persist(values)))()}
+        onSave={runSave}
         onDiscard={() => {
-          form.reset(initial);
+          form.reset({
+            ...initial,
+            notesJson: initial.notesJson || EMPTY_LEXICAL_STATE,
+          });
           onCancel();
         }}
-        onRetry={() => void form.handleSubmit((values) => form.runMutation(() => persist(values)))()}
+        onRetry={runSave}
       />
     </>
   );

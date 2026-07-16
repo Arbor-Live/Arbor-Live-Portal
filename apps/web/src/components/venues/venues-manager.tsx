@@ -54,9 +54,14 @@ export function VenuesManager() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [editingId, setEditingId] = useState<Id<"venues"> | null>(null);
-  const [editorInitial, setEditorInitial] = useState<VenueFormValues>(emptyVenueForm());
   const venues = useQuery(api.venues.list, {});
   const removeVenue = useMutation(api.venues.remove);
+
+  const editorInitial = useMemo(() => {
+    if (!editingId) return emptyVenueForm();
+    const venue = venues?.find((row) => row._id === editingId);
+    return venue ? toFormValues(venue) : emptyVenueForm();
+  }, [editingId, venues]);
 
   const filteredVenues = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -82,7 +87,6 @@ export function VenuesManager() {
       setSelectedIds([]);
       if (editingId && selectedIds.includes(editingId)) {
         setEditingId(null);
-        setEditorInitial(emptyVenueForm());
       }
     } catch (error) {
       window.alert(getConvexErrorMessage(error, "Could not delete selected venues."));
@@ -116,14 +120,7 @@ export function VenuesManager() {
             >
               Delete Selected ({selectedIds.length})
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setEditingId(null);
-                setEditorInitial(emptyVenueForm());
-              }}
-            >
+            <Button type="button" variant="outline" onClick={() => setEditingId(null)}>
               New Venue
             </Button>
           </div>
@@ -185,10 +182,7 @@ export function VenuesManager() {
                         type="button"
                         variant="outline"
                         size="sm"
-                        onClick={() => {
-                          setEditingId(venue._id);
-                          setEditorInitial(toFormValues(venue));
-                        }}
+                        onClick={() => setEditingId(venue._id)}
                       >
                         Edit
                       </Button>
@@ -209,6 +203,7 @@ export function VenuesManager() {
       </Card>
 
       <VenueEditor
+        key={editingId ?? "new-venue"}
         editingId={editingId}
         initial={editorInitial}
         venues={(venues ?? []).map((venue) => ({
@@ -217,14 +212,13 @@ export function VenuesManager() {
           path: venue.path,
           parentId: venue.parentId,
         }))}
-        onCancel={() => {
-          setEditingId(null);
-          setEditorInitial(emptyVenueForm());
-        }}
-        onSaved={() => {
-          if (!editingId) {
-            setEditorInitial(emptyVenueForm());
+        onCancel={() => setEditingId(null)}
+        onSaved={(savedId) => {
+          if (!savedId) {
+            setEditingId(null);
+            return;
           }
+          setEditingId(savedId);
         }}
       />
     </div>

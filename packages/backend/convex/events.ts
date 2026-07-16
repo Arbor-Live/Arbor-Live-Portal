@@ -24,6 +24,7 @@ import { EVENT_TIMEZONE } from "./email/constants";
 import { scheduleEventCancelledEmails } from "./email/triggers";
 import { resolveStoredR2AssetUrl } from "./inventoryR2";
 import { resolveVenueLink } from "./lib/venues";
+import { resolveHostLink } from "./lib/hostOrgs";
 
 const eventTypeValue = v.union(
   v.literal("Crewed Event"),
@@ -412,6 +413,7 @@ export const create = mutation({
     eventType: v.optional(eventTypeValue),
     teamsInterested: v.optional(v.array(eventTeamValue)),
     category: v.optional(v.string()),
+    hostGroupId: v.optional(v.id("invoiceGroups")),
     host: v.optional(v.string()),
     expectedTurnout: v.optional(v.number()),
     budgetUsd: v.optional(v.number()),
@@ -438,6 +440,7 @@ export const create = mutation({
       await assertNoOpenMicOverlap(ctx, null, args.startAt, args.endAt);
     }
     const venueLink = await resolveVenueLink(ctx, args.venueId);
+    const hostLink = await resolveHostLink(ctx, args.hostGroupId);
     const eventId = await ctx.db.insert("events", {
       title: args.title.trim(),
       status: initialStatus,
@@ -456,7 +459,8 @@ export const create = mutation({
       eventType: args.eventType,
       teamsInterested: args.teamsInterested && args.teamsInterested.length > 0 ? args.teamsInterested : undefined,
       category: trimOptional(args.category),
-      host: trimOptional(args.host),
+      hostGroupId: hostLink.hostGroupId,
+      host: hostLink.host,
       expectedTurnout: args.expectedTurnout,
       budgetUsd: args.budgetUsd,
       dayOfLeadUserId: trimOptional(args.dayOfLeadUserId),
@@ -496,6 +500,7 @@ export const update = mutation({
     eventType: v.optional(eventTypeValue),
     teamsInterested: v.optional(v.array(eventTeamValue)),
     category: v.optional(v.string()),
+    hostGroupId: v.optional(v.union(v.id("invoiceGroups"), v.null())),
     host: v.optional(v.string()),
     expectedTurnout: v.optional(v.number()),
     budgetUsd: v.optional(v.number()),
@@ -553,6 +558,10 @@ export const update = mutation({
       args.venueId !== undefined
         ? await resolveVenueLink(ctx, args.venueId)
         : { venueId: existing.venueId, venueName: existing.venueName, venueAddress: undefined };
+    const hostLink =
+      args.hostGroupId !== undefined
+        ? await resolveHostLink(ctx, args.hostGroupId)
+        : { hostGroupId: existing.hostGroupId, host: existing.host };
     const patch = {
       title: args.title?.trim() ?? existing.title,
       status: nextStatus,
@@ -570,7 +579,8 @@ export const update = mutation({
       eventType: args.eventType ?? existing.eventType,
       teamsInterested: args.teamsInterested ?? existing.teamsInterested,
       category: args.category?.trim() ?? existing.category,
-      host: args.host?.trim() ?? existing.host,
+      hostGroupId: hostLink.hostGroupId,
+      host: hostLink.host,
       expectedTurnout: args.expectedTurnout ?? existing.expectedTurnout,
       budgetUsd: args.budgetUsd ?? existing.budgetUsd,
       dayOfLeadUserId: args.dayOfLeadUserId?.trim() ?? existing.dayOfLeadUserId,
@@ -622,6 +632,7 @@ export const update = mutation({
         eventType: patch.eventType,
         teamsInterested: patch.teamsInterested,
         category: patch.category,
+        hostGroupId: patch.hostGroupId,
         host: patch.host,
         expectedTurnout: patch.expectedTurnout,
         budgetUsd: patch.budgetUsd,
@@ -757,6 +768,7 @@ export const duplicate = mutation({
       eventType: existing.eventType,
       teamsInterested: existing.teamsInterested,
       category: existing.category,
+      hostGroupId: existing.hostGroupId,
       host: existing.host,
       expectedTurnout: existing.expectedTurnout,
       budgetUsd: existing.budgetUsd,

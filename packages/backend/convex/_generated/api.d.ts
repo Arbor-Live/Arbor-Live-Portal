@@ -81,6 +81,7 @@ import type * as lib_eventSeriesCosts from "../lib/eventSeriesCosts.js";
 import type * as lib_eventSeriesGeneration from "../lib/eventSeriesGeneration.js";
 import type * as lib_eventStatus from "../lib/eventStatus.js";
 import type * as lib_eventVisibility from "../lib/eventVisibility.js";
+import type * as lib_hostOrgs from "../lib/hostOrgs.js";
 import type * as lib_immichAccess from "../lib/immichAccess.js";
 import type * as lib_immichAlbumLinks from "../lib/immichAlbumLinks.js";
 import type * as lib_immichClient from "../lib/immichClient.js";
@@ -215,6 +216,7 @@ declare const fullApi: ApiFromModules<{
   "lib/eventSeriesGeneration": typeof lib_eventSeriesGeneration;
   "lib/eventStatus": typeof lib_eventStatus;
   "lib/eventVisibility": typeof lib_eventVisibility;
+  "lib/hostOrgs": typeof lib_hostOrgs;
   "lib/immichAccess": typeof lib_immichAccess;
   "lib/immichAlbumLinks": typeof lib_immichAlbumLinks;
   "lib/immichClient": typeof lib_immichClient;

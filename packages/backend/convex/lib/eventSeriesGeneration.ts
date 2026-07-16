@@ -174,6 +174,7 @@ export type SeriesTemplateFields = Pick<
   | "eventType"
   | "teamsInterested"
   | "category"
+  | "hostGroupId"
   | "host"
   | "expectedTurnout"
   | "budgetUsd"
@@ -335,6 +336,7 @@ export async function materializeOccurrence(
     eventType: series.eventType,
     teamsInterested: series.teamsInterested,
     category: series.category,
+    hostGroupId: series.hostGroupId,
     host: series.host,
     expectedTurnout: series.expectedTurnout,
     budgetUsd: series.budgetUsd,
@@ -387,6 +389,7 @@ export function buildEventPatchFromSeriesTemplate(
     eventType: series.eventType,
     teamsInterested: series.teamsInterested,
     category: series.category,
+    hostGroupId: series.hostGroupId,
     host: series.host,
     expectedTurnout: series.expectedTurnout,
     budgetUsd: series.budgetUsd,

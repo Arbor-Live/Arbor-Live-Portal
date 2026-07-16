@@ -112,7 +112,7 @@ export const emptyVenueForm = (): VenueFormValues => ({
   capacity: "",
   address: "",
   googleMapsUrl: "",
-  notesJson: "",
+  notesJson: undefined,
   circuits: [],
   documentationLinks: [{ title: "", url: "" }],
   files: [],
@@ -120,3 +120,10 @@ export const emptyVenueForm = (): VenueFormValues => ({
   contactEmail: "",
   contactPhone: "",
 });
+
+/** True when Lexical JSON has no meaningful text content. */
+export function isEmptyLexicalJson(value: string | undefined): boolean {
+  if (!value?.trim()) return true;
+  // Any Lexical text node with non-whitespace content.
+  return !/"text"\s*:\s*"(?:[^"\\]|\\.)*\S(?:[^"\\]|\\.)*"/.test(value);
+}

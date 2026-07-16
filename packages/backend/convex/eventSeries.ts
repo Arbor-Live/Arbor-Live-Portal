@@ -22,6 +22,7 @@ import { syncEventCrewCostUsd } from "./lib/crewCost";
 import { syncEventStatusForLinkedInvoice } from "./lib/eventStatus";
 import { computeSeriesCostSummary, effectiveCrewUsd } from "./lib/eventSeriesCosts";
 import { resolveVenueLink } from "./lib/venues";
+import { resolveHostLink } from "./lib/hostOrgs";
 
 const eventTypeValue = v.union(
   v.literal("Crewed Event"),
@@ -171,6 +172,7 @@ export const create = mutation({
     eventType: v.optional(eventTypeValue),
     teamsInterested: v.optional(v.array(eventTeamValue)),
     category: v.optional(v.string()),
+    hostGroupId: v.optional(v.id("invoiceGroups")),
     host: v.optional(v.string()),
     expectedTurnout: v.optional(v.number()),
     budgetUsd: v.optional(v.number()),
@@ -202,6 +204,7 @@ export const create = mutation({
     });
     const now = Date.now();
     const venueLink = await resolveVenueLink(ctx, args.venueId);
+    const hostLink = await resolveHostLink(ctx, args.hostGroupId);
     const seriesId = await ctx.db.insert("eventSeries", {
       title: args.title.trim(),
       status: "active",
@@ -217,7 +220,8 @@ export const create = mutation({
       eventType: args.eventType,
       teamsInterested: args.teamsInterested && args.teamsInterested.length > 0 ? args.teamsInterested : undefined,
       category: trimOptional(args.category),
-      host: trimOptional(args.host),
+      hostGroupId: hostLink.hostGroupId,
+      host: hostLink.host,
       expectedTurnout: args.expectedTurnout,
       budgetUsd: args.budgetUsd,
       occurrenceBandsCostUsd: args.occurrenceBandsCostUsd,
@@ -307,6 +311,7 @@ export const updateTemplate = mutation({
     eventType: v.optional(eventTypeValue),
     teamsInterested: v.optional(v.array(eventTeamValue)),
     category: v.optional(v.string()),
+    hostGroupId: v.optional(v.union(v.id("invoiceGroups"), v.null())),
     host: v.optional(v.string()),
     expectedTurnout: v.optional(v.number()),
     budgetUsd: v.optional(v.number()),
@@ -336,6 +341,10 @@ export const updateTemplate = mutation({
       args.venueId !== undefined
         ? await resolveVenueLink(ctx, args.venueId)
         : { venueId: series.venueId, venueName: series.venueName, venueAddress: undefined };
+    const hostLink =
+      args.hostGroupId !== undefined
+        ? await resolveHostLink(ctx, args.hostGroupId)
+        : { hostGroupId: series.hostGroupId, host: series.host };
 
     await ctx.db.patch(args.id, {
       title: args.title?.trim() ?? series.title,
@@ -347,7 +356,8 @@ export const updateTemplate = mutation({
       eventType: nextEventType,
       teamsInterested: args.teamsInterested ?? series.teamsInterested,
       category: args.category?.trim() ?? series.category,
-      host: args.host?.trim() ?? series.host,
+      hostGroupId: hostLink.hostGroupId,
+      host: hostLink.host,
       expectedTurnout: args.expectedTurnout ?? series.expectedTurnout,
       budgetUsd: args.budgetUsd ?? series.budgetUsd,
       dayOfLeadUserId: args.dayOfLeadUserId?.trim() ?? series.dayOfLeadUserId,

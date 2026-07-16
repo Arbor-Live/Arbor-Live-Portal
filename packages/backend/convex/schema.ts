@@ -582,6 +582,7 @@ export default defineSchema({
     eventType: v.optional(v.string()),
     teamsInterested: v.optional(v.array(v.string())),
     category: v.optional(v.string()),
+    hostGroupId: v.optional(v.id("invoiceGroups")),
     host: v.optional(v.string()),
     expectedTurnout: v.optional(v.number()),
     budgetUsd: v.optional(v.number()),
@@ -628,7 +629,8 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_createdAt", ["createdAt"])
     .index("by_invoiceId", ["invoiceId"])
-    .index("by_venueId", ["venueId"]),
+    .index("by_venueId", ["venueId"])
+    .index("by_hostGroupId", ["hostGroupId"]),
 
   events: defineTable({
     title: v.string(),
@@ -651,6 +653,7 @@ export default defineSchema({
     eventType: v.optional(v.string()),
     teamsInterested: v.optional(v.array(v.string())),
     category: v.optional(v.string()),
+    hostGroupId: v.optional(v.id("invoiceGroups")),
     host: v.optional(v.string()),
     expectedTurnout: v.optional(v.number()),
     budgetUsd: v.optional(v.number()),
@@ -695,7 +698,8 @@ export default defineSchema({
     .index("by_seriesId_and_occurrenceIndex", ["seriesId", "occurrenceIndex"])
     .index("by_sourceEventRequestId", ["sourceEventRequestId"])
     .index("by_openMicEnabled_and_startAt", ["openMicEnabled", "startAt"])
-    .index("by_venueId", ["venueId"]),
+    .index("by_venueId", ["venueId"])
+    .index("by_hostGroupId", ["hostGroupId"]),
 
   userCompensationRates: defineTable({
     userId: v.string(),

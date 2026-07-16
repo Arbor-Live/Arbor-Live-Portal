@@ -126,6 +126,36 @@ export const get = query({
   },
 });
 
+/** Full venue details for event page sheet (arbor staff, including crew). */
+export const getDetails = query({
+  args: { id: v.id("venues") },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    const venue = await ctx.db.get(args.id);
+    if (!venue) return null;
+    return {
+      _id: venue._id,
+      name: venue.name,
+      path: venue.path,
+      kind: venue.kind,
+      venueType: venue.venueType,
+      nicknames: venue.nicknames ?? [],
+      capacity: venue.capacity,
+      address: venue.address,
+      googleMapsUrl: venue.googleMapsUrl,
+      notesJson: venue.notesJson,
+      circuits: venue.circuits ?? [],
+      documentationLinks: venue.documentationLinks ?? [],
+      files: venue.files ?? [],
+      contactName: venue.contactName,
+      contactEmail: venue.contactEmail,
+      contactPhone: venue.contactPhone,
+      parentId: venue.parentId,
+    };
+  },
+});
+
 /** Limited fields for pickers (staff + public booking). */
 export const listForPicker = query({
   args: {},
