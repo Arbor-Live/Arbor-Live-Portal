@@ -14,7 +14,9 @@ export default function CrewRatesPage() {
         <CardHeader>
           <CardTitle>Crew Rates</CardTitle>
           <CardDescription>
-            Admin-only hourly rates used to calculate event crew costs and overtime.
+            Set Normal and Lead hourly rates used for invoices and empty-shift cost estimates
+            (default estimate uses the average of both). Per-user rates below are used when crew
+            are assigned.
           </CardDescription>
         </CardHeader>
       </Card>

@@ -38,7 +38,6 @@ function emptyCostsForm(): EventSeriesCostsFormValues {
     occurrenceExternalRentalsCostUsd: "",
     occurrenceOtherCostUsd: "",
     occurrenceBudgetCrewCostUsd: "",
-    budgetCrewHourlyRateUsd: "",
     seriesBandsCostUsd: "",
     seriesExternalRentalsCostUsd: "",
     seriesOtherCostUsd: "",
@@ -64,8 +63,6 @@ function costsFromSeries(series: SeriesDoc): EventSeriesCostsFormValues {
       series.occurrenceBudgetCrewCostUsd !== undefined
         ? String(series.occurrenceBudgetCrewCostUsd)
         : "",
-    budgetCrewHourlyRateUsd:
-      series.budgetCrewHourlyRateUsd !== undefined ? String(series.budgetCrewHourlyRateUsd) : "",
     seriesBandsCostUsd: series.seriesBandsCostUsd !== undefined ? String(series.seriesBandsCostUsd) : "",
     seriesExternalRentalsCostUsd:
       series.seriesExternalRentalsCostUsd !== undefined
@@ -155,9 +152,6 @@ export function EventSeriesOverview({ seriesId }: { seriesId: Id<"eventSeries"> 
         : undefined,
       occurrenceBudgetCrewCostUsd: values.occurrenceBudgetCrewCostUsd.trim()
         ? Number(values.occurrenceBudgetCrewCostUsd)
-        : undefined,
-      budgetCrewHourlyRateUsd: values.budgetCrewHourlyRateUsd.trim()
-        ? Number(values.budgetCrewHourlyRateUsd)
         : undefined,
       seriesBandsCostUsd: values.seriesBandsCostUsd.trim() ? Number(values.seriesBandsCostUsd) : undefined,
       seriesExternalRentalsCostUsd: values.seriesExternalRentalsCostUsd.trim()
@@ -368,8 +362,15 @@ export function EventSeriesOverview({ seriesId }: { seriesId: Id<"eventSeries"> 
               <p className="text-lg font-semibold">{formatUsd(costSummary.projectedGrandTotalUsd)}</p>
             </div>
             <div className="rounded-md border bg-muted/30 px-3 py-2">
-              <p className="text-xs text-muted-foreground">Per-occurrence (actual)</p>
-              <p className="text-lg font-semibold">{formatUsd(costSummary.perOccurrence.totalUsd)}</p>
+              <p className="text-xs text-muted-foreground">
+                Avg per occurrence
+                {costSummary.activeOccurrenceCount > 0
+                  ? ` (${costSummary.activeOccurrenceCount} active)`
+                  : ""}
+              </p>
+              <p className="text-lg font-semibold">
+                {formatUsd(costSummary.averageCostPerOccurrenceUsd)}
+              </p>
             </div>
             <div className="rounded-md border bg-muted/30 px-3 py-2">
               <p className="text-xs text-muted-foreground">Series recurring</p>
@@ -422,12 +423,6 @@ export function EventSeriesOverview({ seriesId }: { seriesId: Id<"eventSeries"> 
                 <TextFormField name="occurrenceBudgetCrewCostUsd" label="Per-occurrence budget crew (USD)" />
                 <p className="text-xs text-muted-foreground">
                   Standard crew cost assumed for budgeting until shifts are staffed.
-                </p>
-              </div>
-              <div className="space-y-1">
-                <TextFormField name="budgetCrewHourlyRateUsd" label="Default crew hourly rate (USD)" />
-                <p className="text-xs text-muted-foreground">
-                  Used when estimating empty shift costs from the shift template.
                 </p>
               </div>
               <div className="space-y-1">
@@ -494,7 +489,6 @@ export function EventSeriesOverview({ seriesId }: { seriesId: Id<"eventSeries"> 
         rentalFulfillmentMode={series.rentalFulfillmentMode}
         blockTemplates={series.blockTemplates}
         shiftTemplates={series.shiftTemplates}
-        budgetCrewHourlyRateUsd={series.budgetCrewHourlyRateUsd}
         occurrences={occurrences}
         onMessage={setMessage}
       />

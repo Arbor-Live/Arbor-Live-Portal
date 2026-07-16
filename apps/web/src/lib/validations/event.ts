@@ -8,7 +8,6 @@ export const eventSeriesCostsSchema = z.object({
   occurrenceExternalRentalsCostUsd: z.string(),
   occurrenceOtherCostUsd: z.string(),
   occurrenceBudgetCrewCostUsd: z.string(),
-  budgetCrewHourlyRateUsd: z.string(),
   seriesBandsCostUsd: z.string(),
   seriesExternalRentalsCostUsd: z.string(),
   seriesOtherCostUsd: z.string(),
@@ -29,7 +28,6 @@ export const seriesShiftEditorSchema = z.object({
   applyScope: seriesEditScopeSchema,
   fromOccurrenceIndex: z.string(),
   importOccurrenceId: z.string(),
-  defaultHourlyRate: z.string(),
 });
 
 export type SeriesShiftEditorFormValues = z.infer<typeof seriesShiftEditorSchema>;

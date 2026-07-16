@@ -1134,7 +1134,6 @@ export function InvoiceEditor({
                 rentalFulfillmentMode={seriesCostData.series.rentalFulfillmentMode}
                 blockTemplates={seriesCostData.series.blockTemplates}
                 shiftTemplates={seriesCostData.series.shiftTemplates}
-                budgetCrewHourlyRateUsd={seriesCostData.series.budgetCrewHourlyRateUsd}
                 occurrences={seriesCostData.occurrences}
                 billableOccurrenceCount={billableOccurrenceCount}
                 title="Crew Schedule"

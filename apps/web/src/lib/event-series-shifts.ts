@@ -103,13 +103,27 @@ export function formatDurationHours(durationMs: number) {
   return `${hours.toFixed(1)}h`;
 }
 
-export function estimatedShiftCostUsd(draft: SeriesShiftTemplateDraft) {
-  const rate = draft.estimatedHourlyRateUsd.trim() ? Number(draft.estimatedHourlyRateUsd) : 0;
-  if (!Number.isFinite(rate) || rate <= 0) return 0;
+export function estimatedShiftCostUsd(
+  draft: SeriesShiftTemplateDraft,
+  defaultHourlyRateUsd?: number,
+) {
+  const explicit = draft.estimatedHourlyRateUsd.trim()
+    ? Number(draft.estimatedHourlyRateUsd)
+    : undefined;
+  const rate =
+    explicit !== undefined && Number.isFinite(explicit) && explicit > 0
+      ? explicit
+      : defaultHourlyRateUsd !== undefined && defaultHourlyRateUsd > 0
+        ? defaultHourlyRateUsd
+        : 0;
+  if (rate <= 0) return 0;
   const hours = draft.durationMs / 3_600_000;
   return Math.round(rate * hours * 100) / 100;
 }
 
-export function totalEstimatedShiftCostUsd(drafts: SeriesShiftTemplateDraft[]) {
-  return drafts.reduce((sum, draft) => sum + estimatedShiftCostUsd(draft), 0);
+export function totalEstimatedShiftCostUsd(
+  drafts: SeriesShiftTemplateDraft[],
+  defaultHourlyRateUsd?: number,
+) {
+  return drafts.reduce((sum, draft) => sum + estimatedShiftCostUsd(draft, defaultHourlyRateUsd), 0);
 }

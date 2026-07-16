@@ -29,6 +29,20 @@ function hoursBetween(start: number, end: number) {
   return Number(((end - start) / 3_600_000).toFixed(2));
 }
 
+export async function resolveDefaultCrewHourlyRateUsd(ctx: MutationCtx) {
+  const settings = await ctx.db
+    .query("invoiceSettings")
+    .withIndex("by_key", (q) => q.eq("key", "default"))
+    .unique();
+  const normal = settings?.crewNormalRateUsd;
+  const lead = settings?.crewLeadRateUsd ?? settings?.crewOtRateUsd;
+  const rates = [normal, lead].filter(
+    (rate): rate is number => rate !== undefined && Number.isFinite(rate) && rate > 0,
+  );
+  if (rates.length === 0) return undefined;
+  return Math.round((rates.reduce((sum, rate) => sum + rate, 0) / rates.length) * 100) / 100;
+}
+
 export function sortedBlockTemplates(templates: EventSeriesBlockTemplate[]) {
   return templates.slice().sort((a, b) => a.offsetMs - b.offsetMs);
 }
@@ -365,7 +379,7 @@ export async function materializeOccurrence(
     startAt,
     series.shiftTemplates ?? undefined,
     series.blockTemplates ?? undefined,
-    series.budgetCrewHourlyRateUsd,
+    await resolveDefaultCrewHourlyRateUsd(ctx),
     now,
   );
   if (series.shiftTemplates && series.shiftTemplates.length > 0) {

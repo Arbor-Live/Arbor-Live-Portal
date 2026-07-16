@@ -52,11 +52,12 @@ export function UserRatesAdminClient() {
     <div className="space-y-4 pb-24">
       <Card>
         <CardHeader>
-          <CardTitle>Invoice Crew Rate Modes</CardTitle>
+          <CardTitle>Global Crew Rates</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            Invoices support three crew pricing modes: Normal, Lead, and Custom (per row).
+            Normal and Lead rates for invoice crew pricing. Empty shift cost estimates default to
+            the average of both.
           </p>
           <Form {...globalForm}>
             <form

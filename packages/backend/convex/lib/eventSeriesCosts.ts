@@ -117,9 +117,10 @@ export function computeSeriesCostSummary(
     budgetUsd,
     budgetRemainingUsd,
     projectedBudgetRemainingUsd,
-    averageCostPerOccurrenceUsd: activeCount > 0 ? grandTotalUsd / activeCount : grandTotalUsd,
+    averageCostPerOccurrenceUsd:
+      activeCount > 0 ? perOccurrenceTotal / activeCount : perOccurrenceTotal,
     projectedAverageCostPerOccurrenceUsd:
-      activeCount > 0 ? projectedGrandTotalUsd / activeCount : projectedGrandTotalUsd,
+      activeCount > 0 ? projectedPerOccurrenceTotal / activeCount : projectedPerOccurrenceTotal,
   };
 }
 

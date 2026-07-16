@@ -14,6 +14,7 @@ import {
   propagateInvoiceIdToSeriesOccurrences,
   replaceEmptyShiftsFromTemplates,
   replaceScheduleBlocksFromTemplates,
+  resolveDefaultCrewHourlyRateUsd,
   shiftsToTemplates,
   shouldApplySeriesUpdate,
   type SeriesEditScope,
@@ -479,7 +480,6 @@ export const regenerateFutureShifts = mutation({
     scope: seriesEditScopeValue,
     fromOccurrenceIndex: v.number(),
     shiftTemplates: v.optional(v.array(shiftTemplateValue)),
-    budgetCrewHourlyRateUsd: v.optional(v.number()),
   },
   returns: v.object({ updatedCount: v.number() }),
   handler: async (ctx, args) => {
@@ -499,20 +499,10 @@ export const regenerateFutureShifts = mutation({
       throw new Error("Apply schedule block templates before crew shift templates.");
     }
     const now = Date.now();
-    const defaultRate =
-      args.budgetCrewHourlyRateUsd !== undefined
-        ? args.budgetCrewHourlyRateUsd
-        : series.budgetCrewHourlyRateUsd;
-    if (
-      (args.shiftTemplates && args.shiftTemplates.length > 0) ||
-      args.budgetCrewHourlyRateUsd !== undefined
-    ) {
+    const defaultRate = await resolveDefaultCrewHourlyRateUsd(ctx);
+    if (args.shiftTemplates && args.shiftTemplates.length > 0) {
       await ctx.db.patch(args.id, {
-        shiftTemplates:
-          args.shiftTemplates && args.shiftTemplates.length > 0
-            ? args.shiftTemplates
-            : series.shiftTemplates,
-        budgetCrewHourlyRateUsd: defaultRate,
+        shiftTemplates: args.shiftTemplates,
         updatedAt: now,
       });
     }
