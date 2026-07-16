@@ -1,25 +1,17 @@
 "use client";
 
-import { motion, useReducedMotion } from "framer-motion";
+import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
 const spring = { type: "spring" as const, stiffness: 380, damping: 36 };
 
-const GRID_STYLE = {
+const GRID_STYLE: React.CSSProperties = {
   backgroundImage: [
-    "linear-gradient(to right, color-mix(in oklch, var(--foreground) 12%, transparent) 1px, transparent 1px)",
-    "linear-gradient(to bottom, color-mix(in oklch, var(--foreground) 12%, transparent) 1px, transparent 1px)",
+    "linear-gradient(to right, color-mix(in oklch, var(--foreground) 11%, transparent) 1px, transparent 1px)",
+    "linear-gradient(to bottom, color-mix(in oklch, var(--foreground) 11%, transparent) 1px, transparent 1px)",
   ].join(", "),
   backgroundSize: "3.5rem 3.5rem",
-} as const;
-
-const GLOW_GRID_STYLE = {
-  backgroundImage: [
-    "linear-gradient(to right, color-mix(in oklch, var(--color-primary) 55%, transparent) 1px, transparent 1px)",
-    "linear-gradient(to bottom, color-mix(in oklch, var(--color-primary) 55%, transparent) 1px, transparent 1px)",
-  ].join(", "),
-  backgroundSize: "3.5rem 3.5rem",
-} as const;
+};
 
 type RequestWizardShellProps = {
   eyebrow: string;
@@ -38,8 +30,6 @@ export function RequestWizardShell({
   footer,
   className,
 }: RequestWizardShellProps) {
-  const reduceMotion = useReducedMotion();
-
   return (
     <div
       className={cn(
@@ -49,41 +39,12 @@ export function RequestWizardShell({
     >
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(ellipse_70%_50%_at_50%_-10%,color-mix(in_oklch,var(--color-primary)_18%,transparent),transparent)]"
+        className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(ellipse_70%_50%_at_50%_-10%,color-mix(in_oklch,var(--color-primary)_16%,transparent),transparent)]"
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 z-0 opacity-45"
+        className="pointer-events-none absolute inset-0 z-0 opacity-40"
         style={GRID_STYLE}
-      />
-      <motion.div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 z-0 opacity-60"
-        style={{
-          ...GLOW_GRID_STYLE,
-          maskImage:
-            "radial-gradient(ellipse 50% 38% at 50% 50%, #000 0%, rgb(0 0 0 / 0.45) 35%, transparent 72%)",
-          WebkitMaskImage:
-            "radial-gradient(ellipse 50% 38% at 50% 50%, #000 0%, rgb(0 0 0 / 0.45) 35%, transparent 72%)",
-          maskSize: "180% 180%",
-          WebkitMaskSize: "180% 180%",
-          maskRepeat: "no-repeat",
-          WebkitMaskRepeat: "no-repeat",
-        }}
-        initial={false}
-        animate={
-          reduceMotion
-            ? { maskPosition: "50% 40%", WebkitMaskPosition: "50% 40%" }
-            : {
-                maskPosition: ["0% 15%", "100% 85%"],
-                WebkitMaskPosition: ["0% 15%", "100% 85%"],
-              }
-        }
-        transition={
-          reduceMotion
-            ? undefined
-            : { duration: 26, ease: "easeInOut", repeat: Infinity, repeatType: "reverse" }
-        }
       />
 
       <div className="relative z-10 flex min-h-0 flex-1 flex-col pt-[5.5rem] sm:pt-24">
