@@ -44,7 +44,9 @@ export type EmailTemplate =
   | "paying_party_added"
   | "band_payment_confirmation"
   | "band_payment_completed"
-  | "band_payment_payee_required";
+  | "band_payment_payee_required"
+  | "onboarding_completed"
+  | "onboarding_reminder";
 
 export function eventDashboardUrl(eventId: string) {
   return `${SITE_URL}/dashboard/events/${eventId}`;
@@ -62,9 +64,16 @@ export function inviteAcceptUrl(token: string) {
   return `${SITE_URL}/accept-invite?token=${encodeURIComponent(token)}`;
 }
 
-export function signInUrl(email?: string) {
-  if (!email) return `${SITE_URL}/sign-in`;
-  return `${SITE_URL}/sign-in?email=${encodeURIComponent(email)}`;
+export function signInUrl(email?: string, callbackPath?: string) {
+  const params = new URLSearchParams();
+  if (email) params.set("email", email);
+  if (callbackPath) params.set("redirect", callbackPath);
+  const qs = params.toString();
+  return qs ? `${SITE_URL}/sign-in?${qs}` : `${SITE_URL}/sign-in`;
+}
+
+export function onboardingUrl(path: "/onboarding" | "/onboarding/band" = "/onboarding") {
+  return `${SITE_URL}${path}`;
 }
 
 export function requestTrackingUrl(token: string) {
@@ -119,6 +128,10 @@ export function subjectForTemplate(template: EmailTemplate, context: string) {
       return `Band payment processed: ${context}`;
     case "band_payment_payee_required":
       return `Payment payee info needed: ${context}`;
+    case "onboarding_completed":
+      return `Crew onboarding complete: ${context}`;
+    case "onboarding_reminder":
+      return "Finish your Arbor Live onboarding";
   }
 }
 

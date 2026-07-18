@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { hashPassword } from "better-auth/crypto";
-import { mutation } from "./_generated/server";
 import { components } from "./_generated/api";
+import { mutation, query } from "./_generated/server";
 
 const defaultOrganizationName = "Arbor Live";
 
@@ -21,24 +21,47 @@ function getId(record: unknown): string | null {
   return null;
 }
 
-export const bootstrapAdmin = mutation({
+export const isSetupAvailable = query({
+  args: {},
+  returns: v.object({ available: v.boolean() }),
+  handler: async (ctx) => {
+    const existingAdmin = await ctx.runQuery(components.betterAuth.adapter.findOne, {
+      model: "user",
+      where: [{ field: "role", value: "admin" }],
+    });
+    return { available: !existingAdmin };
+  },
+});
+
+/**
+ * Creates the first admin when none exist. Public (no auth) — gated by
+ * "zero admins" only. Idempotent for the same email; never mints a second admin.
+ */
+export const setupFirstAdmin = mutation({
   args: {
-    secret: v.string(),
     email: v.string(),
     password: v.string(),
     name: v.string(),
     organizationName: v.optional(v.string()),
   },
+  returns: v.object({
+    ok: v.boolean(),
+    email: v.string(),
+    role: v.string(),
+    organizationId: v.string(),
+    organizationName: v.string(),
+    organizationSlug: v.string(),
+    organizationType: v.string(),
+  }),
   handler: async (ctx, args) => {
-    if (!process.env.BOOTSTRAP_ADMIN_SECRET) {
-      throw new Error("BOOTSTRAP_ADMIN_SECRET is not configured.");
-    }
-    if (args.secret !== process.env.BOOTSTRAP_ADMIN_SECRET) {
-      throw new Error("Invalid bootstrap secret.");
+    const email = args.email.trim().toLowerCase();
+    const name = args.name.trim();
+    if (!email) throw new Error("Email is required.");
+    if (!name) throw new Error("Name is required.");
+    if (args.password.length < 8) {
+      throw new Error("Password must be at least 8 characters.");
     }
 
-    // Once an admin exists, this escape hatch only works for that same
-    // account (idempotent re-runs); it can never mint a second admin.
     const existingAdmin = await ctx.runQuery(components.betterAuth.adapter.findOne, {
       model: "user",
       where: [{ field: "role", value: "admin" }],
@@ -47,8 +70,8 @@ export const bootstrapAdmin = mutation({
       existingAdmin && typeof existingAdmin === "object" && "email" in existingAdmin
         ? (existingAdmin as { email?: string }).email
         : undefined;
-    if (existingAdmin && existingAdminEmail !== args.email) {
-      throw new Error("An admin account already exists. Bootstrap is disabled.");
+    if (existingAdmin && existingAdminEmail?.toLowerCase() !== email) {
+      throw new Error("An admin account already exists. Setup is disabled.");
     }
 
     const organizationName = args.organizationName ?? defaultOrganizationName;
@@ -56,7 +79,7 @@ export const bootstrapAdmin = mutation({
 
     const existingUser = await ctx.runQuery(components.betterAuth.adapter.findOne, {
       model: "user",
-      where: [{ field: "email", value: args.email }],
+      where: [{ field: "email", value: email }],
     });
 
     let userId = getId(existingUser);
@@ -66,8 +89,8 @@ export const bootstrapAdmin = mutation({
         input: {
           model: "user",
           data: {
-            name: args.name,
-            email: args.email,
+            name,
+            email,
             emailVerified: true,
             createdAt: now,
             updatedAt: now,
@@ -80,14 +103,14 @@ export const bootstrapAdmin = mutation({
       await ctx.runMutation(components.betterAuth.adapter.updateOne, {
         input: {
           model: "user",
-          where: [{ field: "email", value: args.email }],
-          update: { role: "admin", updatedAt: now, emailVerified: true },
+          where: [{ field: "email", value: email }],
+          update: { role: "admin", name, updatedAt: now, emailVerified: true },
         },
       });
     }
 
     if (!userId) {
-      throw new Error("Unable to resolve user ID for bootstrap account.");
+      throw new Error("Unable to resolve user ID for setup account.");
     }
 
     const existingCredentialAccount = await ctx.runQuery(
@@ -96,7 +119,7 @@ export const bootstrapAdmin = mutation({
         model: "account",
         where: [
           { field: "providerId", value: "credential" },
-          { connector: "AND", field: "accountId", value: args.email },
+          { connector: "AND", field: "accountId", value: email },
         ],
       },
     );
@@ -106,7 +129,7 @@ export const bootstrapAdmin = mutation({
         input: {
           model: "account",
           data: {
-            accountId: args.email,
+            accountId: email,
             providerId: "credential",
             userId,
             password: await hashPassword(args.password),
@@ -135,7 +158,7 @@ export const bootstrapAdmin = mutation({
     }
 
     if (!organizationId) {
-      throw new Error("Unable to resolve organization ID for bootstrap account.");
+      throw new Error("Unable to resolve organization ID for setup account.");
     }
 
     const existingMember = await ctx.runQuery(components.betterAuth.adapter.findOne, {
@@ -253,9 +276,33 @@ export const bootstrapAdmin = mutation({
       });
     }
 
+    // First admin skips crew onboarding.
+    const existingOnboarding = await ctx.db
+      .query("userOnboarding")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .unique();
+    if (existingOnboarding) {
+      await ctx.db.patch(existingOnboarding._id, {
+        status: "waived",
+        waivedAt: now,
+        waivedByUserId: userId,
+        updatedAt: now,
+      });
+    } else {
+      await ctx.db.insert("userOnboarding", {
+        userId,
+        flow: "crew",
+        status: "waived",
+        waivedAt: now,
+        waivedByUserId: userId,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
     return {
       ok: true,
-      email: args.email,
+      email,
       role: "admin",
       organizationId,
       organizationName,

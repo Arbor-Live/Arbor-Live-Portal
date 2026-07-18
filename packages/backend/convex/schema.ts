@@ -792,6 +792,66 @@ export default defineSchema({
     .index("by_userId", ["userId"])
     .index("by_organizationId", ["organizationId"]),
 
+  /** Crew (arbor_internal) onboarding checklist — one row per user. */
+  userOnboarding: defineTable({
+    userId: v.string(),
+    flow: v.literal("crew"),
+    status: v.union(
+      v.literal("not_started"),
+      v.literal("in_progress"),
+      v.literal("completed"),
+      v.literal("waived"),
+    ),
+    profileCompletedAt: v.optional(v.number()),
+    whatsappAcknowledgedAt: v.optional(v.number()),
+    instagramAcknowledgedAt: v.optional(v.number()),
+    hasFederalWorkStudy: v.optional(v.union(v.boolean(), v.null())),
+    fwsAcknowledgedAt: v.optional(v.number()),
+    narcanCompletedAt: v.optional(v.number()),
+    soberMonitorCompletedAt: v.optional(v.number()),
+    emergencySopsAcknowledgedAt: v.optional(v.number()),
+    crewExpectationsAcknowledgedAt: v.optional(v.number()),
+    liftingCompletedAt: v.optional(v.number()),
+    hasValidDriversLicense: v.optional(v.boolean()),
+    cartTrainingCompletedAt: v.optional(v.number()),
+    oseHiringFormCompletedAt: v.optional(v.number()),
+    timecardAcknowledgedAt: v.optional(v.number()),
+    agreedToOnboardingDocAt: v.optional(v.number()),
+    signatureLegalName: v.optional(v.string()),
+    signatureUserAgent: v.optional(v.string()),
+    completedAt: v.optional(v.number()),
+    waivedAt: v.optional(v.number()),
+    waivedByUserId: v.optional(v.string()),
+    lastReminderSentAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_status", ["status"]),
+
+  /** Band/DJ org onboarding checklist — one row per organization. */
+  organizationOnboarding: defineTable({
+    organizationId: v.string(),
+    status: v.union(
+      v.literal("not_started"),
+      v.literal("in_progress"),
+      v.literal("completed"),
+      v.literal("waived"),
+    ),
+    identityCompletedAt: v.optional(v.number()),
+    heroCompletedAt: v.optional(v.number()),
+    socialsCompletedAt: v.optional(v.number()),
+    ratesPayeeCompletedAt: v.optional(v.number()),
+    membersCompletedAt: v.optional(v.number()),
+    paymentExplainedAt: v.optional(v.number()),
+    soloAcknowledgedAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+    waivedAt: v.optional(v.number()),
+    waivedByUserId: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_organizationId", ["organizationId"]).index("by_status", ["status"]),
+
   dashboardPreferences: defineTable({
     userId: v.string(),
     dashboardKey: dashboardKeyValue,
@@ -984,6 +1044,8 @@ export default defineSchema({
       v.literal("band_payment_confirmation"),
       v.literal("band_payment_completed"),
       v.literal("band_payment_payee_required"),
+      v.literal("onboarding_completed"),
+      v.literal("onboarding_reminder"),
     ),
     status: v.union(v.literal("queued"), v.literal("sent"), v.literal("failed")),
     to: v.string(),

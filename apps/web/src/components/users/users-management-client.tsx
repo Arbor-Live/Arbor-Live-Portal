@@ -157,6 +157,8 @@ export function UsersManagementClient({
   const users = useQuery(api.users.listUsersForAdmin, {
     organizationId: selectedOrganizationId || undefined,
   });
+  const crewOnboarding = useQuery(api.onboarding.listCrewOnboardingForAdmin, {});
+  const waiveOnboarding = useMutation(api.onboarding.waiveCrewOnboarding);
   const invitations = useQuery(api.users.listInvitationsAdmin, {
     organizationId: selectedOrganizationId || undefined,
     status: inviteStatus === "all" ? undefined : inviteStatus,
@@ -177,12 +179,30 @@ export function UsersManagementClient({
   const [message, setMessage] = useState<string | null>(null);
   const [expandedUserIds, setExpandedUserIds] = useState<Record<string, boolean>>({});
   const [expandedBandOrgIds, setExpandedBandOrgIds] = useState<Record<string, boolean>>({});
+  const [onboardingFilter, setOnboardingFilter] = useState<"all" | "incomplete">("all");
   const showOrganizations = view === "all" || view === "organizations";
   const showAccess = view === "all" || view === "access";
   const showRates = view === "all";
 
   const orgOptions = useMemo(() => organizations ?? [], [organizations]);
   const resolvedOrgId = selectedOrganizationId || orgOptions[0]?.id || "";
+  const onboardingByUserId = useMemo(() => {
+    const map = new Map<string, NonNullable<typeof crewOnboarding>[number]>();
+    for (const row of crewOnboarding ?? []) {
+      map.set(row.userId, row);
+    }
+    return map;
+  }, [crewOnboarding]);
+
+  const filteredUsers = useMemo(() => {
+    const list = users ?? [];
+    if (onboardingFilter !== "incomplete") return list;
+    return list.filter((user) => {
+      const row = onboardingByUserId.get(user.id);
+      if (!row) return true;
+      return row.status === "not_started" || row.status === "in_progress";
+    });
+  }, [users, onboardingFilter, onboardingByUserId]);
 
   async function onCreateOrganization() {
     if (!organizationName.trim()) return;
@@ -341,6 +361,21 @@ export function UsersManagementClient({
             <CardTitle>Users</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
+            <div className="max-w-[240px] space-y-1">
+              <Label>Onboarding</Label>
+              <Select
+                value={onboardingFilter}
+                onValueChange={(value) => setOnboardingFilter(value as "all" | "incomplete")}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="incomplete">Incomplete only</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="overflow-x-auto rounded-md border">
               <table className="min-w-full text-sm">
                 <thead>
@@ -348,6 +383,7 @@ export function UsersManagementClient({
                     <th className="px-3 py-2 font-medium">Name</th>
                     <th className="px-3 py-2 font-medium">Email</th>
                     <th className="px-3 py-2 font-medium">Role</th>
+                    <th className="px-3 py-2 font-medium">Onboarding</th>
                     <th className="px-3 py-2 font-medium">Title</th>
                     <th className="px-3 py-2 font-medium">Phone</th>
                     <th className="px-3 py-2 font-medium">Hourly Rate</th>
@@ -357,10 +393,11 @@ export function UsersManagementClient({
                   </tr>
                 </thead>
                 <tbody>
-                  {(users ?? []).map((user) => (
+                  {filteredUsers.map((user) => (
                     <UserAdminRow
                       key={user.id}
                       user={user}
+                      onboarding={onboardingByUserId.get(user.id) ?? null}
                       orgOptions={orgOptions}
                       resolvedOrgId={resolvedOrgId}
                       expanded={Boolean(expandedUserIds[user.id])}
@@ -368,6 +405,14 @@ export function UsersManagementClient({
                         setExpandedUserIds((prev) => ({ ...prev, [user.id]: !prev[user.id] }))
                       }
                       onPasswordReset={() => void onUserPasswordReset(user)}
+                      onWaiveOnboarding={async () => {
+                        try {
+                          await waiveOnboarding({ userId: user.id });
+                          setMessage(`Waived onboarding for ${user.name}.`);
+                        } catch (error) {
+                          setMessage(getConvexErrorMessage(error));
+                        }
+                      }}
                       onMessage={setMessage}
                     />
                   ))}
@@ -552,19 +597,23 @@ function SaveStatusIcon({ saveStatus, saveError }: { saveStatus: string; saveErr
 
 function UserAdminRow({
   user,
+  onboarding,
   orgOptions,
   resolvedOrgId,
   expanded,
   onToggleExpanded,
   onPasswordReset,
+  onWaiveOnboarding,
   onMessage,
 }: {
   user: AdminUser;
+  onboarding: NonNullable<ReturnType<typeof useQuery<typeof api.onboarding.listCrewOnboardingForAdmin>>>[number] | null;
   orgOptions: OrgOption[];
   resolvedOrgId: string;
   expanded: boolean;
   onToggleExpanded: () => void;
   onPasswordReset: () => void;
+  onWaiveOnboarding: () => Promise<void>;
   onMessage: (message: string) => void;
 }) {
   const updateUser = useMutation(api.users.updateUserAdmin);
@@ -683,6 +732,18 @@ function UserAdminRow({
           </Select>
         </td>
         <td className="px-3 py-2">
+          {onboarding ? (
+            <div className="space-y-1 text-xs">
+              <p className="font-medium capitalize">{onboarding.status.replace("_", " ")}</p>
+              {onboarding.status === "not_started" || onboarding.status === "in_progress" ? (
+                <p className="text-muted-foreground">{onboarding.incompleteStepCount} left</p>
+              ) : null}
+            </div>
+          ) : (
+            <span className="text-xs text-muted-foreground">—</span>
+          )}
+        </td>
+        <td className="px-3 py-2">
           <Input
             value={form.watch("title")}
             onChange={(e) => form.setValue("title", e.target.value, { shouldDirty: true })}
@@ -751,6 +812,7 @@ function UserAdminRow({
               onValueChange={(action) => {
                 if (action === "reset") onPasswordReset();
                 if (action === "toggle_details") onToggleExpanded();
+                if (action === "waive") void onWaiveOnboarding();
               }}
             >
               <SelectTrigger className="min-w-[140px]">
@@ -759,6 +821,10 @@ function UserAdminRow({
               <SelectContent>
                 <SelectItem value="reset">Reset Password</SelectItem>
                 <SelectItem value="toggle_details">{expanded ? "Hide details" : "Show details"}</SelectItem>
+                {onboarding &&
+                (onboarding.status === "not_started" || onboarding.status === "in_progress") ? (
+                  <SelectItem value="waive">Waive onboarding</SelectItem>
+                ) : null}
               </SelectContent>
             </Select>
             <SaveStatusIcon saveStatus={form.saveStatus} saveError={form.saveError} />
@@ -768,8 +834,35 @@ function UserAdminRow({
       {expanded ? (
         <tr className="border-b bg-muted/20">
           <td className="px-3 py-2 text-xs text-muted-foreground">Advanced fields</td>
-          <td className="px-3 py-2" colSpan={8}>
+          <td className="px-3 py-2" colSpan={9}>
             <div className="grid gap-2 md:grid-cols-2">
+              {onboarding ? (
+                <div className="rounded-md border p-2 md:col-span-2">
+                  <p className="mb-2 text-xs font-medium">Onboarding checklist</p>
+                  <ul className="grid gap-1 text-xs text-muted-foreground sm:grid-cols-2">
+                    <li>Profile: {onboarding.profileCompletedAt ? "done" : "pending"}</li>
+                    <li>WhatsApp: {onboarding.whatsappAcknowledgedAt ? "done" : "pending"}</li>
+                    <li>Instagram: {onboarding.instagramAcknowledgedAt ? "done" : "pending"}</li>
+                    <li>
+                      FWS:{" "}
+                      {onboarding.fwsAcknowledgedAt
+                        ? onboarding.hasFederalWorkStudy
+                          ? "yes"
+                          : "no"
+                        : "pending"}
+                    </li>
+                    <li>Narcan: {onboarding.narcanCompletedAt ? "done" : "pending"}</li>
+                    <li>Sober monitor: {onboarding.soberMonitorCompletedAt ? "done" : "pending"}</li>
+                    <li>Emergency SOPs: {onboarding.emergencySopsAcknowledgedAt ? "done" : "pending"}</li>
+                    <li>Expectations: {onboarding.crewExpectationsAcknowledgedAt ? "done" : "pending"}</li>
+                    <li>Lifting: {onboarding.liftingCompletedAt ? "done" : "pending"}</li>
+                    <li>Cart: {onboarding.cartTrainingCompletedAt ? "done" : "n/a or pending"}</li>
+                    <li>OSE hiring: {onboarding.oseHiringFormCompletedAt ? "done" : "pending"}</li>
+                    <li>Timecard: {onboarding.timecardAcknowledgedAt ? "done" : "pending"}</li>
+                    <li>Signed: {onboarding.agreedToOnboardingDocAt ? onboarding.signatureLegalName ?? "yes" : "pending"}</li>
+                  </ul>
+                </div>
+              ) : null}
               <MembershipCheckboxes
                 label="Verticals"
                 options={USER_VERTICAL_OPTIONS}

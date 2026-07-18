@@ -15,6 +15,7 @@ import {
   type UserDiscipline,
   type UserVertical,
 } from "./lib/userVerticals";
+import { ensureOnboardingForOrgMembership } from "./onboarding";
 
 type AuthUser = {
   id?: string;
@@ -112,9 +113,16 @@ export const getInviteByToken = query({
     v.object({
       email: v.string(),
       organizationName: v.string(),
+      organizationId: v.string(),
+      organizationType: v.union(
+        v.literal("arbor_internal"),
+        v.literal("band"),
+        v.literal("dj"),
+      ),
       role: v.string(),
       hasAccount: v.boolean(),
       expired: v.boolean(),
+      onboardingPath: v.string(),
     }),
     v.null(),
   ),
@@ -122,22 +130,38 @@ export const getInviteByToken = query({
     const resolved = await resolveInviteByToken(ctx, args.token.trim());
     if (!resolved) return null;
 
+    const orgProfile = await ctx.db
+      .query("organizationProfiles")
+      .withIndex("by_organizationId", (q) => q.eq("organizationId", resolved.pending.organizationId))
+      .unique();
+    const organizationType = orgProfile?.organizationType ?? "arbor_internal";
+    const onboardingPath =
+      organizationType === "band" || organizationType === "dj"
+        ? "/onboarding/band"
+        : "/onboarding";
+
     if (resolved.expired) {
       return {
         email: resolved.pending.email,
         organizationName: await getOrganizationName(ctx, resolved.pending.organizationId),
+        organizationId: resolved.pending.organizationId,
+        organizationType,
         role: resolved.pending.role,
         hasAccount: false,
         expired: true,
+        onboardingPath,
       };
     }
 
     return {
       email: resolved.pending.email,
       organizationName: resolved.organizationName,
+      organizationId: resolved.pending.organizationId,
+      organizationType,
       role: resolved.pending.role,
       hasAccount: resolved.hasAccount,
       expired: false,
+      onboardingPath,
     };
   },
 });
@@ -150,6 +174,7 @@ export const acceptInviteWithPassword = mutation({
   },
   returns: v.object({
     email: v.string(),
+    onboardingPath: v.string(),
   }),
   handler: async (ctx, args) => {
     const token = args.token.trim();
@@ -209,8 +234,33 @@ export const acceptInviteWithPassword = mutation({
       organizationId: pending.organizationId,
       role: pending.role,
     });
+
+    const existingActiveOrg = await ctx.db
+      .query("userActiveOrganizations")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .unique();
+    if (existingActiveOrg) {
+      await ctx.db.patch(existingActiveOrg._id, {
+        organizationId: pending.organizationId,
+        updatedAt: now,
+      });
+    } else {
+      await ctx.db.insert("userActiveOrganizations", {
+        userId,
+        organizationId: pending.organizationId,
+        updatedAt: now,
+      });
+    }
+
+    const orgType = await ensureOnboardingForOrgMembership(ctx, {
+      userId,
+      organizationId: pending.organizationId,
+    });
     await markInvitationAccepted(ctx, pending.invitationId);
 
-    return { email };
+    const onboardingPath =
+      orgType === "band" || orgType === "dj" ? "/onboarding/band" : "/onboarding";
+
+    return { email, onboardingPath };
   },
 });

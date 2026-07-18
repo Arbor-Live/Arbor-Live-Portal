@@ -16,6 +16,8 @@ import { CrewUnscheduledEmail } from "../emails/crew-unscheduled";
 import { SchedulePublishedEmail } from "../emails/schedule-published";
 import { ScheduleReminderEmail } from "../emails/schedule-reminder";
 import { UserInviteEmail } from "../emails/user-invite";
+import { OnboardingCompletedEmail } from "../emails/onboarding-completed";
+import { OnboardingReminderEmail } from "../emails/onboarding-reminder";
 import type {
   BookingQuoteReadyEmailProps,
   BookingRequestReceivedEmailProps,
@@ -34,6 +36,8 @@ import type {
   SchedulePublishedEmailProps,
   ScheduleReminderEmailProps,
   UserInviteEmailProps,
+  OnboardingCompletedEmailProps,
+  OnboardingReminderEmailProps,
 } from "./types";
 
 export async function renderEventCancelledEmail(props: EventEmailProps) {
@@ -102,4 +106,12 @@ export async function renderBandPaymentCompletedEmail(props: BandPaymentComplete
 
 export async function renderBandPaymentPayeeRequiredEmail(props: BandPaymentPayeeRequiredEmailProps) {
   return render(BandPaymentPayeeRequiredEmail(props));
+}
+
+export async function renderOnboardingCompletedEmail(props: OnboardingCompletedEmailProps) {
+  return render(OnboardingCompletedEmail(props));
+}
+
+export async function renderOnboardingReminderEmail(props: OnboardingReminderEmailProps) {
+  return render(OnboardingReminderEmail(props));
 }

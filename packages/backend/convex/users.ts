@@ -28,6 +28,7 @@ import {
   type UserDiscipline,
   type UserVertical,
 } from "./lib/userVerticals";
+import { ensureOnboardingForOrgMembership, ensureOrganizationOnboarding } from "./onboarding";
 
 const invitationStatusValue = v.union(
   v.literal("pending"),
@@ -453,6 +454,9 @@ export const createOrganizationAdmin = mutation({
         updatedAt: now,
       });
     }
+    if (orgType === "band" || orgType === "dj") {
+      await ensureOrganizationOnboarding(ctx, resolved.id);
+    }
     return { ...resolved, organizationType: orgType };
   },
 });
@@ -779,6 +783,10 @@ export const inviteUserAdmin = mutation({
         role: membershipRole,
         active: true,
       });
+      await ensureOnboardingForOrgMembership(ctx, {
+        userId: existingUserId,
+        organizationId: args.organizationId,
+      });
     }
 
     const invitationId = getRecordId(created);
@@ -1022,6 +1030,10 @@ export const createUserAdmin = mutation({
         });
       }
     }
+    await ensureOnboardingForOrgMembership(ctx, {
+      userId,
+      organizationId: args.organizationId,
+    });
     return { userId, email };
   },
 });
@@ -1450,6 +1462,10 @@ export const inviteMemberToActiveOrganization = mutation({
         organizationId: context.organizationId,
         role: args.role,
         active: true,
+      });
+      await ensureOnboardingForOrgMembership(ctx, {
+        userId: existingUserId,
+        organizationId: context.organizationId,
       });
       await markInvitationAccepted(ctx, invitationId);
     }

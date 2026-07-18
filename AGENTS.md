@@ -53,9 +53,9 @@ loads `.env` before `.env.local` and only keeps the first value it sees, so thos
 placeholders shadow the real local URLs and break sign-in (auth points at a
 non-existent `.convex.site` domain). Comment out / remove those two lines in
 `packages/backend/.env` so the local URLs from `.env.local` win. Local dev only
-needs `BETTER_AUTH_SECRET`, `SITE_URL=http://localhost:3000`,
-`BOOTSTRAP_ADMIN_SECRET`, and `EMAIL_TEST_MODE=true` (dry-run email; avoids
-needing Resend). R2 / Immich are optional and their features degrade gracefully.
+needs `BETTER_AUTH_SECRET`, `SITE_URL=http://localhost:3000`, and
+`EMAIL_TEST_MODE=true` (dry-run email; avoids needing Resend). R2 / Immich are
+optional and their features degrade gracefully.
 
 ### Deployment env vars are separate from `.env`
 
@@ -67,20 +67,15 @@ cd packages/backend
 export CONVEX_AGENT_MODE=anonymous
 npx convex env set BETTER_AUTH_SECRET "<secret>"
 npx convex env set SITE_URL "http://localhost:3000"
-npx convex env set BOOTSTRAP_ADMIN_SECRET "<secret>"
 npx convex env set EMAIL_TEST_MODE "true"
 ```
 
 ### First admin (no self-serve signup)
 
-```bash
-cd packages/backend
-CONVEX_AGENT_MODE=anonymous npx convex run bootstrap:bootstrapAdmin \
-  '{"secret":"<BOOTSTRAP_ADMIN_SECRET>","email":"admin@arbor.test","password":"ArborAdmin123!","name":"Arbor Admin"}'
-```
-
-`bootstrapAdmin` is idempotent for the same email; once an admin exists it
-refuses a different one.
+With the web app running and zero admins on the deployment, open
+`http://localhost:3000/setup` and create the first admin account. `/setup`
+locks permanently once any admin exists. Invite additional users from the
+Users dashboard; they land on `/onboarding` after accept-invite.
 
 ### Non-obvious runtime notes
 

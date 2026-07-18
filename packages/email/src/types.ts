@@ -164,3 +164,18 @@ export type BandPaymentPayeeRequiredEmailProps = {
   eventDateLabel: string;
   payeeSettingsUrl: string;
 };
+
+export type OnboardingCompletedEmailProps = {
+  crewName: string;
+  crewEmail: string;
+  hasFederalWorkStudy: boolean;
+  hasValidDriversLicense: boolean;
+  signatureLegalName: string;
+  dashboardUsersUrl: string;
+};
+
+export type OnboardingReminderEmailProps = {
+  recipientName?: string;
+  onboardingUrl: string;
+  incompleteStepCount: number;
+};

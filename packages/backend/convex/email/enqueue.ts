@@ -25,6 +25,8 @@ const emailTemplateValue = v.union(
   v.literal("band_payment_confirmation"),
   v.literal("band_payment_completed"),
   v.literal("band_payment_payee_required"),
+  v.literal("onboarding_completed"),
+  v.literal("onboarding_reminder"),
 );
 
 const emailStatusValue = v.union(

@@ -12,9 +12,12 @@ canonical description of the domain itself.
 - Staff-only functionality is guarded by `requireArborInternalContext`; band
   portal surfaces (linked events, media albums, payout status) use
   `requireBandContext` plus `lib/eventBandAccess.ts`.
-- The first admin comes from `bootstrapAdmin`
+- The first admin is created at `/setup` while zero admins exist
   (see [getting-started.md](getting-started.md)); everyone else is invited
-  (`userInvites.ts`, accept-invite flow).
+  (`userInvites.ts`, accept-invite → `/onboarding` or `/onboarding/band`).
+- Crew onboarding progress lives in `userOnboarding`; band org setup in
+  `organizationOnboarding`. Incomplete crew get a dashboard banner and weekly
+  reminder email; admins see status under Users and can waive.
 - Staff capabilities/teams: `Design`, `Marketing`, `Lighting`, `Sound`,
   `Operations` (see `capabilityDefinitions.ts` and `userAdminProfiles`).
 
