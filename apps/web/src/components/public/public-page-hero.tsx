@@ -9,6 +9,8 @@ type PublicPageHeroProps = {
   eyebrow?: string;
   imageUrl?: string;
   backLink?: { href: string; label: string };
+  /** Primary actions under the subtitle (e.g. apply / request CTAs). */
+  actions?: React.ReactNode;
   className?: string;
   /** Force the dark zinc hero even in light mode. */
   dark?: boolean;
@@ -20,6 +22,7 @@ export function PublicPageHero({
   eyebrow,
   imageUrl,
   backLink,
+  actions,
   className,
   dark = false,
 }: PublicPageHeroProps) {
@@ -110,7 +113,7 @@ export function PublicPageHero({
           {subtitle ? (
             <p
               className={cn(
-                "mt-4 max-w-3xl text-base leading-relaxed sm:text-lg",
+                "mt-4 max-w-2xl text-base leading-relaxed sm:text-lg",
                 dark
                   ? "text-zinc-300"
                   : "text-muted-foreground dark:text-zinc-300",
@@ -118,6 +121,9 @@ export function PublicPageHero({
             >
               {subtitle}
             </p>
+          ) : null}
+          {actions ? (
+            <div className="mt-8 flex flex-wrap items-center gap-3">{actions}</div>
           ) : null}
         </Reveal>
       </div>

@@ -46,6 +46,19 @@ export default function UsersPage() {
           </Card>
           <Card>
             <CardHeader>
+              <CardTitle>Band applications</CardTitle>
+              <CardDescription>
+                Review public artist applications from the Artists page.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button asChild>
+                <Link href="/dashboard/users/band-applications">Open Band Applications</Link>
+              </Button>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
               <CardTitle>Crew Rates</CardTitle>
               <CardDescription>Manage invoice global crew rates and per-user compensation rates.</CardDescription>
             </CardHeader>

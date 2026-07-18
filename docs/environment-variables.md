@@ -19,7 +19,6 @@ Where variables live:
 | `BETTER_AUTH_SECRET` | yes | Better Auth signing secret (`convex/betterAuth/`) |
 | `SITE_URL` | yes | Canonical app origin; trusted-origin checks (`lib/trustedOrigins.ts`) and links in emails |
 | `ARBOR_ENV` | prod only | Set to `production` **only** on the prod Convex deployment; gates production behavior (`lib/trustedOrigins.ts`) |
-| `BOOTSTRAP_ADMIN_SECRET` | yes (setup) | Gates `bootstrap.bootstrapAdmin`; must be high-entropy |
 | `RESEND_API_KEY` | yes | Outbound email via Resend (`email/send.ts`, `http/resendInbound.ts`) — see [resend-email.md](resend-email.md) |
 | `RESEND_INBOUND_WEBHOOK_SECRET` | yes (band payments) | Svix secret for the inbound-email webhook (`http/resendInbound.ts`) — see [resend-email.md](resend-email.md) |
 | `EMAIL_FROM` | yes | Default From address (`email/constants.ts`) |

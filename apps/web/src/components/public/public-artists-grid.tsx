@@ -3,17 +3,24 @@
 import Link from "next/link";
 import { useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
-import { StoredAssetImage } from "@/components/files/stored-asset-image";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Stagger, StaggerItem } from "@/components/landing/landing-motion";
-import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Reveal, Stagger, StaggerItem } from "@/components/landing/landing-motion";
+import { PublicArtistPoster } from "@/components/public/public-artist-poster";
 
-const gradients = [
-  "from-emerald-900/80 via-primary/40 to-zinc-900",
-  "from-violet-950/80 via-primary/25 to-zinc-900",
-  "from-amber-900/70 via-primary/35 to-zinc-900",
-  "from-zinc-900 via-primary/30 to-emerald-950",
-];
+function ArtistCardSkeleton() {
+  return (
+    <Card className="h-full gap-0 overflow-hidden border border-border/50 bg-background/70 py-0 shadow-[0_8px_24px_rgba(0,0,0,0.06)] backdrop-blur-xl ring-0">
+      <Skeleton className="aspect-[4/5] w-full rounded-none" />
+      <CardContent className="space-y-2 p-4">
+        <Skeleton className="h-5 w-3/4" />
+        <Skeleton className="h-4 w-full" />
+        <Skeleton className="h-4 w-2/3" />
+      </CardContent>
+    </Card>
+  );
+}
 
 export function PublicArtistsGrid() {
   const artists = useQuery(api.publicDirectory.listPublicArtists, {});
@@ -22,54 +29,56 @@ export function PublicArtistsGrid() {
     <section className="py-12 sm:py-16">
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
         {artists === undefined ? (
-          <p className="text-sm text-muted-foreground">Loading artists…</p>
+          <div
+            className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3"
+            role="status"
+            aria-label="Loading artists"
+          >
+            {Array.from({ length: 6 }, (_, index) => (
+              <ArtistCardSkeleton key={index} />
+            ))}
+            <span className="sr-only">Loading artists…</span>
+          </div>
         ) : null}
 
         {artists && artists.length === 0 ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>No public artists yet</CardTitle>
-            </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">
-              Bands can enable a public profile from the portal to appear here.
-            </CardContent>
-          </Card>
+          <div className="mx-auto max-w-xl border border-border/50 bg-background/70 px-6 py-10 text-center shadow-[0_8px_24px_rgba(0,0,0,0.06)] backdrop-blur-xl sm:px-8">
+            <p className="font-heading text-xl font-semibold tracking-tight">No public profiles yet</p>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+              Be the first — join the live music community at Stanford!
+            </p>
+            <Button asChild className="mt-6" size="lg">
+              <Link href="/artists/apply">Join the community</Link>
+            </Button>
+          </div>
         ) : null}
 
         {artists && artists.length > 0 ? (
           <Stagger className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {artists.map((artist, index) => (
+            {artists.map((artist) => (
               <StaggerItem key={artist.slug}>
-                <Link href={`/artists/${artist.slug}`} className="group block h-full">
-                  <Card className="h-full gap-0 overflow-hidden border border-border py-0 shadow-sm ring-0 transition-[border-color,box-shadow] group-hover:border-primary/40 group-hover:shadow-md">
-                    <div
-                      className={cn(
-                        "relative h-36 bg-gradient-to-br",
-                        gradients[index % gradients.length],
-                      )}
-                    >
-                      {artist.heroImageUrl ? (
-                        <StoredAssetImage
-                          storedValue={artist.heroImageUrl}
-                          className="absolute inset-0 size-full object-cover"
-                        />
-                      ) : null}
-                      <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/70 to-transparent" />
-                    </div>
-                    <CardHeader>
-                      <CardTitle className="text-lg">{artist.displayName}</CardTitle>
-                    </CardHeader>
-                    <CardContent className="pb-6">
-                      {artist.bioExcerpt ? (
-                        <p className="text-sm leading-relaxed text-muted-foreground">
-                          {artist.bioExcerpt}
-                        </p>
-                      ) : (
-                        <p className="text-sm text-muted-foreground">View profile</p>
-                      )}
-                    </CardContent>
-                  </Card>
-                </Link>
+                <Reveal>
+                  <Link href={`/artists/${artist.slug}`} className="group block h-full">
+                    <Card className="h-full gap-0 overflow-hidden border border-border/50 bg-background/70 py-0 shadow-[0_8px_24px_rgba(0,0,0,0.06)] backdrop-blur-xl ring-0 transition-[border-color,box-shadow] group-hover:border-primary/40 group-hover:shadow-[0_12px_28px_rgba(0,0,0,0.08)]">
+                      <PublicArtistPoster
+                        imageUrl={artist.heroImageUrl}
+                        seed={artist.slug}
+                        title={artist.displayName}
+                        className="w-full"
+                      />
+                      <CardContent className="space-y-2 p-4">
+                        <h3 className="font-semibold text-foreground">{artist.displayName}</h3>
+                        {artist.bioExcerpt ? (
+                          <p className="line-clamp-3 text-sm leading-relaxed text-muted-foreground">
+                            {artist.bioExcerpt}
+                          </p>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">View profile</p>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </Link>
+                </Reveal>
               </StaggerItem>
             ))}
           </Stagger>

@@ -28,6 +28,12 @@ crons.daily(
 );
 
 crons.cron(
+  "onboarding incomplete reminders",
+  "0 17 * * 1",
+  internal.onboarding.remindIncomplete,
+);
+
+crons.cron(
   "prune expired rate limit rows",
   "0 4 * * *",
   internal.rateLimit.pruneExpired,

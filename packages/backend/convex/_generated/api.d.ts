@@ -11,6 +11,7 @@
 import type * as account from "../account.js";
 import type * as adminDeletes from "../adminDeletes.js";
 import type * as auth from "../auth.js";
+import type * as bandApplications from "../bandApplications.js";
 import type * as bandPayments from "../bandPayments.js";
 import type * as bootstrap from "../bootstrap.js";
 import type * as capabilityDefinitions from "../capabilityDefinitions.js";
@@ -92,6 +93,7 @@ import type * as lib_invoiceEvents from "../lib/invoiceEvents.js";
 import type * as lib_invoicePaymentStatus from "../lib/invoicePaymentStatus.js";
 import type * as lib_invoiceSeries from "../lib/invoiceSeries.js";
 import type * as lib_marketingContent from "../lib/marketingContent.js";
+import type * as lib_onboardingLinks from "../lib/onboardingLinks.js";
 import type * as lib_openMicAddon from "../lib/openMicAddon.js";
 import type * as lib_otForecast from "../lib/otForecast.js";
 import type * as lib_paymentProof from "../lib/paymentProof.js";
@@ -120,6 +122,7 @@ import type * as migrations_convertedEventLinks from "../migrations/convertedEve
 import type * as migrations_eventVisibility from "../migrations/eventVisibility.js";
 import type * as migrations_referenceIds from "../migrations/referenceIds.js";
 import type * as migrations_userVerticals from "../migrations/userVerticals.js";
+import type * as onboarding from "../onboarding.js";
 import type * as openMic from "../openMic.js";
 import type * as organizationImporter from "../organizationImporter.js";
 import type * as paymentProof from "../paymentProof.js";
@@ -146,6 +149,7 @@ declare const fullApi: ApiFromModules<{
   account: typeof account;
   adminDeletes: typeof adminDeletes;
   auth: typeof auth;
+  bandApplications: typeof bandApplications;
   bandPayments: typeof bandPayments;
   bootstrap: typeof bootstrap;
   capabilityDefinitions: typeof capabilityDefinitions;
@@ -227,6 +231,7 @@ declare const fullApi: ApiFromModules<{
   "lib/invoicePaymentStatus": typeof lib_invoicePaymentStatus;
   "lib/invoiceSeries": typeof lib_invoiceSeries;
   "lib/marketingContent": typeof lib_marketingContent;
+  "lib/onboardingLinks": typeof lib_onboardingLinks;
   "lib/openMicAddon": typeof lib_openMicAddon;
   "lib/otForecast": typeof lib_otForecast;
   "lib/paymentProof": typeof lib_paymentProof;
@@ -255,6 +260,7 @@ declare const fullApi: ApiFromModules<{
   "migrations/eventVisibility": typeof migrations_eventVisibility;
   "migrations/referenceIds": typeof migrations_referenceIds;
   "migrations/userVerticals": typeof migrations_userVerticals;
+  onboarding: typeof onboarding;
   openMic: typeof openMic;
   organizationImporter: typeof organizationImporter;
   paymentProof: typeof paymentProof;

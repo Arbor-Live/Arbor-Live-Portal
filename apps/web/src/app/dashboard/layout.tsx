@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { AppSidebar } from "@/components/app-sidebar";
+import { OnboardingBanner } from "@/components/onboarding/onboarding-banner";
 import { Separator } from "@/components/ui/separator";
 import {
   SidebarInset,
@@ -27,6 +28,7 @@ export default async function DashboardLayout({
           <Separator orientation="vertical" className="h-4" />
           <p className="font-medium">Dashboard</p>
         </header>
+        <OnboardingBanner />
         <main className="flex-1 p-6">{children}</main>
       </SidebarInset>
     </SidebarProvider>

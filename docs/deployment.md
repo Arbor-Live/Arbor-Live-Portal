@@ -40,7 +40,7 @@ set in Vercel for that environment.
 - **Convex production deployment** (dashboard → Settings → Environment
   Variables): everything the backend reads — `BETTER_AUTH_SECRET`, `SITE_URL`,
   `ARBOR_ENV=production`, `RESEND_API_KEY`, `RESEND_INBOUND_WEBHOOK_SECRET`,
-  `EMAIL_FROM`, `BOOTSTRAP_ADMIN_SECRET`, R2 vars, Immich vars. Full list in
+  `EMAIL_FROM`, R2 vars, Immich vars. Full list in
   [environment-variables.md](environment-variables.md).
 
 `ARBOR_ENV=production` must be set **only** on the production Convex

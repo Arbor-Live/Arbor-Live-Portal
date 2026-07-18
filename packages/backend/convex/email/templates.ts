@@ -16,6 +16,11 @@ import {
   renderSchedulePublishedEmail,
   renderScheduleReminderEmail,
   renderUserInviteEmail,
+  renderOnboardingCompletedEmail,
+  renderOnboardingReminderEmail,
+  renderBandApplicationReceivedEmail,
+  renderBandApplicationApprovedEmail,
+  renderBandApplicationDeclinedEmail,
 } from "@arbor/email/render";
 import type {
   BookingQuoteReadyEmailProps,
@@ -35,6 +40,10 @@ import type {
   SchedulePublishedEmailProps,
   ScheduleReminderEmailProps,
   UserInviteEmailProps,
+  OnboardingCompletedEmailProps,
+  OnboardingReminderEmailProps,
+  BandApplicationReceivedEmailProps,
+  BandApplicationDecisionEmailProps,
 } from "@arbor/email/types";
 import type { EmailTemplate } from "./constants";
 
@@ -74,5 +83,15 @@ export async function renderEmailHtml(template: EmailTemplate, payload: unknown)
       return renderBandPaymentCompletedEmail(payload as BandPaymentCompletedEmailProps);
     case "band_payment_payee_required":
       return renderBandPaymentPayeeRequiredEmail(payload as BandPaymentPayeeRequiredEmailProps);
+    case "onboarding_completed":
+      return renderOnboardingCompletedEmail(payload as OnboardingCompletedEmailProps);
+    case "onboarding_reminder":
+      return renderOnboardingReminderEmail(payload as OnboardingReminderEmailProps);
+    case "band_application_received":
+      return renderBandApplicationReceivedEmail(payload as BandApplicationReceivedEmailProps);
+    case "band_application_approved":
+      return renderBandApplicationApprovedEmail(payload as BandApplicationDecisionEmailProps);
+    case "band_application_declined":
+      return renderBandApplicationDeclinedEmail(payload as BandApplicationDecisionEmailProps);
   }
 }

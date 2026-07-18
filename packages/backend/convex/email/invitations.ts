@@ -126,7 +126,16 @@ export async function scheduleUserInviteEmail(
   const inviterName = await getInviterName(ctx, args.inviterId);
   const expiresAtLabel = formatInviteExpiry(args.expiresAt);
 
-  let inviteUrl = signInUrl(args.email);
+  const orgProfile = await ctx.db
+    .query("organizationProfiles")
+    .withIndex("by_organizationId", (q) => q.eq("organizationId", args.organizationId))
+    .unique();
+  const onboardingPath =
+    orgProfile?.organizationType === "band" || orgProfile?.organizationType === "dj"
+      ? "/onboarding/band"
+      : "/onboarding";
+
+  let inviteUrl = signInUrl(args.email, onboardingPath);
   if (!args.isExistingUser) {
     const token = await upsertPendingInviteToken(ctx, {
       invitationId: args.invitationId,

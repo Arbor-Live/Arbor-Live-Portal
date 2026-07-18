@@ -792,6 +792,66 @@ export default defineSchema({
     .index("by_userId", ["userId"])
     .index("by_organizationId", ["organizationId"]),
 
+  /** Crew (arbor_internal) onboarding checklist — one row per user. */
+  userOnboarding: defineTable({
+    userId: v.string(),
+    flow: v.literal("crew"),
+    status: v.union(
+      v.literal("not_started"),
+      v.literal("in_progress"),
+      v.literal("completed"),
+      v.literal("waived"),
+    ),
+    profileCompletedAt: v.optional(v.number()),
+    whatsappAcknowledgedAt: v.optional(v.number()),
+    instagramAcknowledgedAt: v.optional(v.number()),
+    hasFederalWorkStudy: v.optional(v.union(v.boolean(), v.null())),
+    fwsAcknowledgedAt: v.optional(v.number()),
+    narcanCompletedAt: v.optional(v.number()),
+    soberMonitorCompletedAt: v.optional(v.number()),
+    emergencySopsAcknowledgedAt: v.optional(v.number()),
+    crewExpectationsAcknowledgedAt: v.optional(v.number()),
+    liftingCompletedAt: v.optional(v.number()),
+    hasValidDriversLicense: v.optional(v.boolean()),
+    cartTrainingCompletedAt: v.optional(v.number()),
+    oseHiringFormCompletedAt: v.optional(v.number()),
+    timecardAcknowledgedAt: v.optional(v.number()),
+    agreedToOnboardingDocAt: v.optional(v.number()),
+    signatureLegalName: v.optional(v.string()),
+    signatureUserAgent: v.optional(v.string()),
+    completedAt: v.optional(v.number()),
+    waivedAt: v.optional(v.number()),
+    waivedByUserId: v.optional(v.string()),
+    lastReminderSentAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_status", ["status"]),
+
+  /** Band/DJ org onboarding checklist — one row per organization. */
+  organizationOnboarding: defineTable({
+    organizationId: v.string(),
+    status: v.union(
+      v.literal("not_started"),
+      v.literal("in_progress"),
+      v.literal("completed"),
+      v.literal("waived"),
+    ),
+    identityCompletedAt: v.optional(v.number()),
+    heroCompletedAt: v.optional(v.number()),
+    socialsCompletedAt: v.optional(v.number()),
+    ratesPayeeCompletedAt: v.optional(v.number()),
+    membersCompletedAt: v.optional(v.number()),
+    paymentExplainedAt: v.optional(v.number()),
+    soloAcknowledgedAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+    waivedAt: v.optional(v.number()),
+    waivedByUserId: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_organizationId", ["organizationId"]).index("by_status", ["status"]),
+
   dashboardPreferences: defineTable({
     userId: v.string(),
     dashboardKey: dashboardKeyValue,
@@ -984,6 +1044,11 @@ export default defineSchema({
       v.literal("band_payment_confirmation"),
       v.literal("band_payment_completed"),
       v.literal("band_payment_payee_required"),
+      v.literal("onboarding_completed"),
+      v.literal("onboarding_reminder"),
+      v.literal("band_application_received"),
+      v.literal("band_application_approved"),
+      v.literal("band_application_declined"),
     ),
     status: v.union(v.literal("queued"), v.literal("sent"), v.literal("failed")),
     to: v.string(),
@@ -1280,4 +1345,42 @@ export default defineSchema({
     .index("by_eventId_and_status", ["eventId", "status"])
     .index("by_status_and_performedAt", ["status", "performedAt"])
     .index("by_email", ["email"]),
+
+  /** Public self-serve applications to join Arbor as a band/DJ. */
+  bandApplications: defineTable({
+    status: v.union(
+      v.literal("submitted"),
+      v.literal("approved"),
+      v.literal("declined"),
+    ),
+    contactName: v.string(),
+    contactEmail: v.string(),
+    contactPhone: v.optional(v.string()),
+    bandDisplayName: v.string(),
+    oneLiner: v.optional(v.string()),
+    bio: v.optional(v.string()),
+    publicWebsiteUrl: v.optional(v.string()),
+    publicInstagramUrl: v.optional(v.string()),
+    publicYoutubeUrl: v.optional(v.string()),
+    demoURL: v.optional(v.string()),
+    publicHeroImageUrl: v.optional(v.string()),
+    genres: v.optional(v.array(v.string())),
+    isSolo: v.boolean(),
+    members: v.array(
+      v.object({
+        name: v.string(),
+        email: v.optional(v.string()),
+      }),
+    ),
+    submittedAt: v.number(),
+    reviewedAt: v.optional(v.number()),
+    reviewedByUserId: v.optional(v.string()),
+    declineReason: v.optional(v.string()),
+    organizationId: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_status", ["status"])
+    .index("by_contactEmail", ["contactEmail"])
+    .index("by_submittedAt", ["submittedAt"]),
 });

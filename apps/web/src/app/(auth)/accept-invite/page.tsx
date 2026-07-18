@@ -48,7 +48,7 @@ export default function AcceptInvitePage() {
     const signInResult = await authClient.signIn.email({
       email: result.email,
       password: values.password,
-      callbackURL: "/dashboard",
+      callbackURL: result.onboardingPath || "/onboarding",
     });
     if (signInResult.error) {
       throw new Error(
@@ -101,7 +101,11 @@ export default function AcceptInvitePage() {
                 </AlertDescription>
               </Alert>
               <Button asChild className="w-full">
-                <Link href={`/sign-in?email=${encodeURIComponent(invite.email)}`}>Sign in</Link>
+                <Link
+                  href={`/sign-in?email=${encodeURIComponent(invite.email)}&redirect=${encodeURIComponent(invite.onboardingPath)}`}
+                >
+                  Sign in
+                </Link>
               </Button>
             </div>
           ) : (

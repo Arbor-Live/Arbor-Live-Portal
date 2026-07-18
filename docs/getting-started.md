@@ -40,32 +40,18 @@ The first run provisions a Convex dev deployment and writes
 `packages/backend/.env.local` with `CONVEX_DEPLOYMENT` and `CONVEX_URL`.
 Leave this running: it watches `packages/backend/convex/` and pushes changes.
 
-Set the backend env vars (Better Auth, Resend, R2, Immich, bootstrap secret)
-in the Convex dashboard for this deployment — see
-[environment-variables.md](environment-variables.md).
+Set the backend env vars (Better Auth, Resend, R2, Immich) in the Convex
+dashboard for this deployment — see [environment-variables.md](environment-variables.md).
 
 ## 4. Create the first admin account
 
-There is no self-serve sign-up. The first admin is created via the
-`bootstrapAdmin` mutation in `packages/backend/convex/bootstrap.ts`, gated by
-the `BOOTSTRAP_ADMIN_SECRET` env var on the Convex deployment:
+There is no self-serve sign-up. With the web app running and **no admin** yet,
+any route redirects to `/setup`. Fill in name, email, and password to create
+the first admin and the Arbor Live organization.
 
-```bash
-cd packages/backend
-npx convex run bootstrap:bootstrapAdmin '{
-  "secret": "<value of BOOTSTRAP_ADMIN_SECRET>",
-  "email": "you@example.com",
-  "password": "a-strong-password",
-  "name": "Your Name"
-}'
-```
-
-This creates the user with the `admin` role, a credential account, the
-"Arbor Live" internal organization, and all required memberships. Once an
-admin exists, bootstrap refuses to mint a different admin — re-running it for
-the same email is allowed (idempotent), any other email is rejected.
-
-Additional users are invited from the app (Users section) via email invites.
+Once any admin exists, `/setup` locks permanently and redirects to sign-in.
+Additional users are invited from the app (Users section) via email invites;
+new crew land on `/onboarding` after accepting.
 
 ## 5. Start the web app
 
@@ -75,8 +61,34 @@ In another terminal:
 pnpm dev:web
 ```
 
-Visit `http://localhost:3000`, sign in at `/sign-in` with the bootstrap
-credentials, and you should land on the dashboard.
+Visit `http://localhost:3000` (redirects to `/setup` the first time) or
+`/sign-in` after an admin exists, then the dashboard.
+
+## Dev preview wizards
+
+When iterating on first-admin setup or crew/band onboarding UI, local
+development exposes a floating **Dev** menu (bottom-right) that opens:
+
+| Wizard | URL |
+|---|---|
+| First-admin setup | `/setup?devPreview=1` |
+| Crew onboarding | `/onboarding?devPreview=1` |
+| Band onboarding | `/onboarding/band?devPreview=1` |
+
+`?devPreview=1` only works when `NODE_ENV === "development"`. In production
+builds the query param is ignored and the Dev menu is not rendered.
+
+What it does:
+
+- Skips **client-side** redirects that would otherwise bounce you away (setup
+  already locked, onboarding completed/waived, wrong role).
+- Lets you walk the wizard UI without a matching onboarding row (mutations are
+  skipped in that case — UI-only).
+- Does **not** bypass Convex auth or server-side mutation guards. Crew/band
+  routes still require a signed-in session.
+
+Do not rely on this for production testing, and never ship a build with
+`NODE_ENV=development`.
 
 ## Common failure modes
 

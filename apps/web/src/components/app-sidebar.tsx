@@ -116,6 +116,7 @@ const usersSubItems: NavSubItem[] = [
   { title: "Overview", url: "/dashboard/users" },
   { title: "Access & Invites", url: "/dashboard/users/access" },
   { title: "Organizations", url: "/dashboard/users/organizations" },
+  { title: "Band applications", url: "/dashboard/users/band-applications", adminOnly: true },
   { title: "Crew Rates", url: "/dashboard/users/crew-rates" },
 ]
 

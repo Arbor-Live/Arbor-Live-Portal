@@ -164,3 +164,32 @@ export type BandPaymentPayeeRequiredEmailProps = {
   eventDateLabel: string;
   payeeSettingsUrl: string;
 };
+
+export type OnboardingCompletedEmailProps = {
+  crewName: string;
+  crewEmail: string;
+  hasFederalWorkStudy: boolean;
+  hasValidDriversLicense: boolean;
+  signatureLegalName: string;
+  dashboardUsersUrl: string;
+};
+
+export type OnboardingReminderEmailProps = {
+  recipientName?: string;
+  onboardingUrl: string;
+  incompleteStepCount: number;
+};
+
+export type BandApplicationReceivedEmailProps = {
+  bandName: string;
+  contactName: string;
+  contactEmail: string;
+  reviewUrl: string;
+};
+
+export type BandApplicationDecisionEmailProps = {
+  recipientName?: string;
+  bandName: string;
+  acceptInviteUrl?: string;
+  declineReason?: string;
+};
