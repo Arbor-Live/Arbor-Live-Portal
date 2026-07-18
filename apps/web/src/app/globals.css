@@ -125,8 +125,14 @@
   body {
     @apply bg-background text-foreground;
   }
+  /* FloatingMarketingNav is fixed at the top (~80px). scroll-padding-top
+     ensures skip-to-content and fragment anchors land below it. Pages that
+     place content under the nav must add their own pt-* offset (matching the
+     nav height + desired breathing room). See PublicPageHero for the pattern:
+     it uses pt-24 (~96px, leaving ~16px visible below the nav).              */
   html {
     @apply font-sans;
+    scroll-padding-top: 6rem;
   }
   h1,
   h2,

@@ -23,6 +23,8 @@ const publicEventCardValue = v.object({
   startAt: v.number(),
   endAt: v.number(),
   venueName: v.optional(v.string()),
+  venueAddress: v.optional(v.string()),
+  googleMapsUrl: v.optional(v.string()),
   host: v.optional(v.string()),
   posterImageUrl: v.optional(v.string()),
   caption: v.optional(v.string()),
@@ -36,6 +38,8 @@ async function mapPublicEventCard(
   ctx: QueryCtx,
   event: Doc<"events">,
   design?: DesignDoc | null,
+  venueAddress?: string,
+  googleMapsUrl?: string,
 ) {
   const posterImageUrl = design?.imageUrl
     ? ((await resolveStoredR2AssetUrl(design.imageUrl)) ?? undefined)
@@ -47,6 +51,8 @@ async function mapPublicEventCard(
     startAt: event.startAt,
     endAt: event.endAt,
     venueName: event.venueName,
+    venueAddress,
+    googleMapsUrl,
     host: event.host,
     posterImageUrl,
     caption: design?.caption,
@@ -71,7 +77,11 @@ async function loadPublishedDesignsByEventId(ctx: QueryCtx) {
 }
 
 async function listPublicUpcomingEvents(ctx: QueryCtx, now: number) {
-  const events = await ctx.db.query("events").withIndex("by_startAt").order("asc").take(300);
+  const events = await ctx.db
+    .query("events")
+    .withIndex("by_startAt", (q) => q.gte("startAt", now))
+    .order("asc")
+    .take(500);
   return events.filter(
     (event) =>
       isPublicSiteListableVisibility(event.visibility) &&
@@ -126,6 +136,17 @@ export const getByEventId = query({
     const published = design
       .filter((row) => row.status === "published")
       .sort((a, b) => b.updatedAt - a.updatedAt)[0];
-    return mapPublicEventCard(ctx, event, published ?? null);
+
+    let venueAddress: string | undefined;
+    let googleMapsUrl: string | undefined;
+    if (event.venueId) {
+      const venue = await ctx.db.get(event.venueId);
+      if (venue) {
+        venueAddress = venue.address ?? undefined;
+        googleMapsUrl = venue.googleMapsUrl ?? undefined;
+      }
+    }
+
+    return mapPublicEventCard(ctx, event, published ?? null, venueAddress, googleMapsUrl);
   },
 });

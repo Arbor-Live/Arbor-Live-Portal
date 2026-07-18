@@ -112,24 +112,7 @@ export function LandingHero() {
                 transition={landingSpring}
               >
                 {landingHero.headline}{" "}
-                <motion.span
-                  className="hero-slot-word inline-block text-primary-foreground"
-                  animate={
-                    reduceMotion
-                      ? undefined
-                      : {
-                          rotate: [0, -1.5, 1.5, 0],
-                          y: [0, -3, 0],
-                        }
-                  }
-                  transition={{
-                    duration: 4,
-                    repeat: Infinity,
-                    ease: "easeInOut",
-                  }}
-                >
-                  {landingHero.accentWord}
-                </motion.span>{" "}
+                <span className="text-primary-foreground">{landingHero.accentWord}</span>{" "}
                 {landingHero.headlineEnd}
               </motion.h1>
 

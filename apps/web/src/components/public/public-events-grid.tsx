@@ -23,12 +23,12 @@ type PublicEventCard = {
 function EventCard({ event }: { event: PublicEventCard }) {
   return (
     <Card className="h-full overflow-hidden ring-foreground/15">
-      {event.posterImageUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={event.posterImageUrl} alt="" className="aspect-[4/5] w-full object-cover" />
-      ) : (
-        <div className="aspect-[4/5] w-full bg-muted" />
-      )}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={event.posterImageUrl ?? "/event-placeholder.svg"}
+        alt=""
+        className="aspect-[4/5] w-full object-cover"
+      />
       <CardContent className="space-y-3 p-4">
         <div>
           <h3 className="font-semibold text-foreground">{event.title}</h3>
@@ -96,7 +96,7 @@ export function PublicEventsGrid({
 
 export function LandingUpcomingEvents() {
   const [now] = useState(() => Date.now());
-  const events = useQuery(api.publicEvents.listUpcomingTwoWeeks, { now });
+  const events = useQuery(api.publicEvents.listUpcoming, { now });
 
   return (
     <section className="border-b bg-muted/35 py-12 sm:py-16">
@@ -104,7 +104,7 @@ export function LandingUpcomingEvents() {
         <div className="flex items-end justify-between gap-4">
           <div>
             <h2 className="text-2xl font-semibold tracking-tight text-foreground">Upcoming events</h2>
-            <p className="mt-2 text-sm text-foreground/70">The next two weeks at Arbor Live.</p>
+            <p className="mt-2 text-sm text-foreground/70">Next events at Arbor Live.</p>
           </div>
           <Link
             href="/events"
