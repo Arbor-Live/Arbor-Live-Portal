@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PublicMarketingLayout } from "@/components/public/public-marketing-layout";
+import { PublicEventPoster } from "@/components/public/public-event-poster";
 import { api } from "@/lib/convex-api";
 import { fetchPublicQuerySafe } from "@/lib/convex-server";
 
@@ -25,13 +26,12 @@ export default async function PublicEventDetailPage({ params }: EventDetailPageP
             aria-hidden
             className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_-10%,color-mix(in_oklch,var(--color-primary)_30%,transparent),transparent)]"
           />
-          <div className="relative mx-auto max-w-5xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
+          <div className="relative mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
             <div className="grid gap-8 md:grid-cols-2">
-              <div>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={event.posterImageUrl ?? "/event-placeholder.svg"}
-                  alt=""
+              <div className="min-h-0">
+                <PublicEventPoster
+                  imageUrl={event.posterImageUrl}
+                  eventId={event.eventId}
                   className="w-full rounded-xl object-cover"
                 />
               </div>

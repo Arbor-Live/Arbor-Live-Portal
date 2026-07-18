@@ -6,6 +6,7 @@ import { useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Reveal, Stagger, StaggerItem } from "@/components/landing/landing-motion";
+import { PublicEventPoster } from "@/components/public/public-event-poster";
 
 type PublicEventCard = {
   eventId: string;
@@ -22,12 +23,11 @@ type PublicEventCard = {
 
 function EventCard({ event }: { event: PublicEventCard }) {
   return (
-    <Card className="h-full overflow-hidden ring-foreground/15">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={event.posterImageUrl ?? "/event-placeholder.svg"}
-        alt=""
-        className="aspect-[4/5] w-full object-cover"
+    <Card className="h-full gap-0 overflow-hidden py-0 ring-foreground/15">
+      <PublicEventPoster
+        imageUrl={event.posterImageUrl}
+        eventId={event.eventId}
+        className="w-full"
       />
       <CardContent className="space-y-3 p-4">
         <div>

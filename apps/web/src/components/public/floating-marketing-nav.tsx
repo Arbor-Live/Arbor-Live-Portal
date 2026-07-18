@@ -72,7 +72,7 @@ export function FloatingMarketingNav() {
           reduceMotion ? "bg-border/60" : "marketing-nav-glow",
         )}
       >
-        <div className="flex items-center justify-between gap-3 bg-background/70 px-4 py-3 backdrop-blur-xl sm:gap-4 sm:px-5 sm:py-3.5">
+        <div className="flex items-center justify-between gap-3 bg-background/70 px-4 py-2.5 backdrop-blur-xl sm:gap-4 sm:px-5 sm:py-3">
           <Link href="/" className="flex shrink-0 items-center gap-2">
             <Image
               src="/logo.svg"
