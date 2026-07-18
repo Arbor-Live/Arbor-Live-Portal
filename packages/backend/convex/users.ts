@@ -67,6 +67,10 @@ type InvitationRow = {
   inviterId?: string;
 };
 
+export function getAuthRecordId(row: { id?: string; _id?: string } | null | undefined) {
+  return getRecordId(row);
+}
+
 function getRecordId(row: { id?: string; _id?: string } | null | undefined) {
   return row?.id ?? row?._id ?? "";
 }
@@ -114,7 +118,7 @@ async function getAllOrganizations(ctx: QueryCtx | MutationCtx) {
   return await fetchAllBetterAuthRows<OrganizationRow>(ctx, "organization", 500);
 }
 
-async function resolveOrCreateOrganization(ctx: MutationCtx, name: string) {
+export async function resolveOrCreateOrganization(ctx: MutationCtx, name: string) {
   const slug = toSlug(name);
   const existing = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
     model: "organization",
@@ -153,7 +157,7 @@ async function getOrganizationType(ctx: QueryCtx | MutationCtx, organizationId: 
   return resolveOrganizationType(organization, profile);
 }
 
-async function ensureUserProfileDefaults(
+export async function ensureUserProfileDefaults(
   ctx: MutationCtx,
   userId: string,
   {
@@ -239,7 +243,7 @@ async function normalizeMembershipRole(
   return "org_member";
 }
 
-async function upsertOrgMembership(
+export async function upsertOrgMembership(
   ctx: MutationCtx,
   args: { userId: string; organizationId: string; role: string; active: boolean },
 ) {
@@ -1270,6 +1274,7 @@ export const getActiveBandProfile = query({
       publicWebsiteUrl: profile?.publicWebsiteUrl ?? "",
       publicInstagramUrl: profile?.publicInstagramUrl ?? "",
       publicYoutubeUrl: profile?.publicYoutubeUrl ?? "",
+      demoURL: profile?.demoURL ?? "",
       publicListing: profile?.publicListing ?? false,
       publicSlug: profile?.publicSlug ?? "",
       publicHeroImageUrl: profile?.publicHeroImageUrl ?? "",
@@ -1289,6 +1294,7 @@ export const updateActiveBandProfile = mutation({
     publicWebsiteUrl: v.optional(v.string()),
     publicInstagramUrl: v.optional(v.string()),
     publicYoutubeUrl: v.optional(v.string()),
+    demoURL: v.optional(v.string()),
     publicListing: v.optional(v.boolean()),
     publicSlug: v.optional(v.string()),
     publicHeroImageUrl: v.optional(v.string()),
@@ -1338,6 +1344,8 @@ export const updateActiveBandProfile = mutation({
         publicWebsiteUrl: args.publicWebsiteUrl?.trim() || undefined,
         publicInstagramUrl: args.publicInstagramUrl?.trim() || undefined,
         publicYoutubeUrl: args.publicYoutubeUrl?.trim() || undefined,
+        demoURL:
+          args.demoURL !== undefined ? args.demoURL.trim() || undefined : existing.demoURL,
         publicListing: publicListing ?? existing.publicListing,
         publicSlug: publicSlug ?? (publicListing === false ? undefined : existing.publicSlug),
         publicHeroImageUrl: normalizeOptionalAssetReference(args.publicHeroImageUrl),
@@ -1361,6 +1369,7 @@ export const updateActiveBandProfile = mutation({
       publicWebsiteUrl: args.publicWebsiteUrl?.trim() || undefined,
       publicInstagramUrl: args.publicInstagramUrl?.trim() || undefined,
       publicYoutubeUrl: args.publicYoutubeUrl?.trim() || undefined,
+      demoURL: args.demoURL?.trim() || undefined,
       publicListing: publicListing ?? false,
       publicSlug: publicListing ? publicSlug : undefined,
       publicHeroImageUrl: normalizeOptionalAssetReference(args.publicHeroImageUrl),

@@ -23,7 +23,10 @@ function useIsClient() {
   return useSyncExternalStore(emptySubscribe, () => true, () => false);
 }
 
-/** True in local development when the URL has `?devPreview=1`. */
+/**
+ * True in local development when the URL has `?devPreview=1`.
+ * Always false in production builds (`NODE_ENV !== "development"`).
+ */
 export function useDevPreview(): boolean {
   return useSyncExternalStore(
     subscribeDevPreview,

@@ -7,6 +7,8 @@ type PosterPlaceholderProps = {
   seed: string;
   title?: string;
   className?: string;
+  /** Defaults to the Arbor event wordmark. Use `/arbor-artist.svg` for artist posters. */
+  logoSrc?: string;
 };
 
 type Palette = {
@@ -214,7 +216,12 @@ function useIsDark() {
   return useSyncExternalStore(subscribeDark, getIsDark, () => false);
 }
 
-export function PosterPlaceholder({ seed, title, className }: PosterPlaceholderProps) {
+export function PosterPlaceholder({
+  seed,
+  title,
+  className,
+  logoSrc = "/arbor-event.svg",
+}: PosterPlaceholderProps) {
   const isDark = useIsDark();
   const hash = Math.abs(hashString(seed));
   const palette = (isDark ? DARK_PALETTES : LIGHT_PALETTES)[hash % DARK_PALETTES.length]!;
@@ -350,7 +357,7 @@ export function PosterPlaceholder({ seed, title, className }: PosterPlaceholderP
 
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src="/arbor-event.svg"
+        src={logoSrc}
         alt=""
         className={cn(
           "absolute inset-0 size-full object-contain brightness-0",

@@ -64,6 +64,32 @@ pnpm dev:web
 Visit `http://localhost:3000/setup` (first time) or `/sign-in`, then the
 dashboard.
 
+## Dev preview wizards
+
+When iterating on first-admin setup or crew/band onboarding UI, local
+development exposes a floating **Dev** menu (bottom-right) that opens:
+
+| Wizard | URL |
+|---|---|
+| First-admin setup | `/setup?devPreview=1` |
+| Crew onboarding | `/onboarding?devPreview=1` |
+| Band onboarding | `/onboarding/band?devPreview=1` |
+
+`?devPreview=1` only works when `NODE_ENV === "development"`. In production
+builds the query param is ignored and the Dev menu is not rendered.
+
+What it does:
+
+- Skips **client-side** redirects that would otherwise bounce you away (setup
+  already locked, onboarding completed/waived, wrong role).
+- Lets you walk the wizard UI without a matching onboarding row (mutations are
+  skipped in that case — UI-only).
+- Does **not** bypass Convex auth or server-side mutation guards. Crew/band
+  routes still require a signed-in session.
+
+Do not rely on this for production testing, and never ship a build with
+`NODE_ENV=development`.
+
 ## Common failure modes
 
 | Symptom | Likely cause |

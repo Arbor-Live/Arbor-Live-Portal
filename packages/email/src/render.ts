@@ -18,6 +18,9 @@ import { ScheduleReminderEmail } from "../emails/schedule-reminder";
 import { UserInviteEmail } from "../emails/user-invite";
 import { OnboardingCompletedEmail } from "../emails/onboarding-completed";
 import { OnboardingReminderEmail } from "../emails/onboarding-reminder";
+import { BandApplicationReceivedEmail } from "../emails/band-application-received";
+import { BandApplicationApprovedEmail } from "../emails/band-application-approved";
+import { BandApplicationDeclinedEmail } from "../emails/band-application-declined";
 import type {
   BookingQuoteReadyEmailProps,
   BookingRequestReceivedEmailProps,
@@ -38,6 +41,8 @@ import type {
   UserInviteEmailProps,
   OnboardingCompletedEmailProps,
   OnboardingReminderEmailProps,
+  BandApplicationReceivedEmailProps,
+  BandApplicationDecisionEmailProps,
 } from "./types";
 
 export async function renderEventCancelledEmail(props: EventEmailProps) {
@@ -114,4 +119,22 @@ export async function renderOnboardingCompletedEmail(props: OnboardingCompletedE
 
 export async function renderOnboardingReminderEmail(props: OnboardingReminderEmailProps) {
   return render(OnboardingReminderEmail(props));
+}
+
+export async function renderBandApplicationReceivedEmail(
+  props: BandApplicationReceivedEmailProps,
+) {
+  return render(BandApplicationReceivedEmail(props));
+}
+
+export async function renderBandApplicationApprovedEmail(
+  props: BandApplicationDecisionEmailProps,
+) {
+  return render(BandApplicationApprovedEmail(props));
+}
+
+export async function renderBandApplicationDeclinedEmail(
+  props: BandApplicationDecisionEmailProps,
+) {
+  return render(BandApplicationDeclinedEmail(props));
 }

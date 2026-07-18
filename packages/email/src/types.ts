@@ -179,3 +179,17 @@ export type OnboardingReminderEmailProps = {
   onboardingUrl: string;
   incompleteStepCount: number;
 };
+
+export type BandApplicationReceivedEmailProps = {
+  bandName: string;
+  contactName: string;
+  contactEmail: string;
+  reviewUrl: string;
+};
+
+export type BandApplicationDecisionEmailProps = {
+  recipientName?: string;
+  bandName: string;
+  acceptInviteUrl?: string;
+  declineReason?: string;
+};

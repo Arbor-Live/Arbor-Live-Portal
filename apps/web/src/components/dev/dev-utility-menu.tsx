@@ -23,6 +23,9 @@ const LINKS = [
 /**
  * Floating menu (development only) to jump into onboarding wizards with
  * `?devPreview=1`, which skips completion / availability redirects.
+ *
+ * Gated on `NODE_ENV === "development"` — never renders in production builds.
+ * See docs/getting-started.md ("Dev preview wizards").
  */
 export function DevUtilityMenu() {
   if (process.env.NODE_ENV !== "development") {

@@ -67,6 +67,7 @@ type FormState = {
   publicWebsiteUrl: string;
   publicInstagramUrl: string;
   publicYoutubeUrl: string;
+  demoURL: string;
   publicListing: boolean;
   publicSlug: string;
   performerHourlyRateUsd: number;
@@ -87,6 +88,7 @@ const EMPTY_FORM: FormState = {
   publicWebsiteUrl: "",
   publicInstagramUrl: "",
   publicYoutubeUrl: "",
+  demoURL: "",
   publicListing: false,
   publicSlug: "",
   performerHourlyRateUsd: 0,
@@ -110,6 +112,44 @@ function isValidEmail(email: string) {
 
 const PENDING_PAYEE_PREFIX = "pending:";
 
+
+function firstIncompleteStepIndex(onboarding: {
+  identityCompletedAt?: number;
+  heroCompletedAt?: number;
+  socialsCompletedAt?: number;
+  membersCompletedAt?: number;
+  soloAcknowledgedAt?: number;
+  ratesPayeeCompletedAt?: number;
+  paymentExplainedAt?: number;
+}): number {
+  const done = {
+    identity: Boolean(onboarding.identityCompletedAt),
+    hero: Boolean(onboarding.heroCompletedAt),
+    socials: Boolean(onboarding.socialsCompletedAt),
+    members: Boolean(onboarding.membersCompletedAt || onboarding.soloAcknowledgedAt),
+    rates: Boolean(onboarding.ratesPayeeCompletedAt),
+    payment: Boolean(onboarding.paymentExplainedAt),
+  };
+  const hasProgress = Object.values(done).some(Boolean);
+  for (let i = 0; i < STEP_ORDER.length; i += 1) {
+    const id = STEP_ORDER[i]!;
+    if (id === "welcome") {
+      if (hasProgress) continue;
+      return i;
+    }
+    if (id === "thankYou") return i;
+    if (id === "identity" && done.identity) continue;
+    if (id === "hero" && done.hero) continue;
+    if (id === "socials" && done.socials) continue;
+    if (id === "members" && done.members) continue;
+    if (id === "rates" && done.rates) continue;
+    if (id === "payment" && done.payment) continue;
+    return i;
+  }
+  return 0;
+}
+
+
 export function BandOnboardingWizard() {
   const router = useRouter();
   const prefersReducedMotion = useReducedMotion();
@@ -130,10 +170,10 @@ export function BandOnboardingWizard() {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [inviteConfirmation, setInviteConfirmation] = useState<string | null>(null);
-  /** Emails already invited this session (or already pending) — never re-send. */
-  const sentInviteEmailsRef = useRef(new Set<string>());
+  /** Emails invited this session (beyond server pending invites). */
+  const [sessionSentEmails, setSessionSentEmails] = useState<string[]>([]);
   const hydratedRef = useRef(false);
-  const pendingHydratedRef = useRef(false);
+  const stepHydratedRef = useRef(false);
 
   useEffect(() => {
     if (!profile || hydratedRef.current) return;
@@ -146,6 +186,7 @@ export function BandOnboardingWizard() {
       publicWebsiteUrl: profile.publicWebsiteUrl ?? "",
       publicInstagramUrl: profile.publicInstagramUrl ?? "",
       publicYoutubeUrl: profile.publicYoutubeUrl ?? "",
+      demoURL: profile.demoURL ?? "",
       publicListing: profile.publicListing ?? false,
       publicSlug: profile.publicSlug ?? "",
       performerHourlyRateUsd: profile.performerHourlyRateUsd ?? 0,
@@ -156,22 +197,27 @@ export function BandOnboardingWizard() {
     }));
   }, [profile]);
 
+  const pendingEmails = useMemo(
+    () =>
+      (pendingInvites ?? [])
+        .map((invite) => normalizeEmail(invite.email))
+        .filter(Boolean),
+    [pendingInvites],
+  );
+  const sentInviteEmails = useMemo(
+    () => Array.from(new Set([...pendingEmails, ...sessionSentEmails])),
+    [pendingEmails, sessionSentEmails],
+  );
+  const displayedInviteEmails = useMemo(
+    () => Array.from(new Set([...form.inviteEmails, ...pendingEmails])),
+    [form.inviteEmails, pendingEmails],
+  );
+
   useEffect(() => {
-    if (!pendingInvites || pendingHydratedRef.current) return;
-    pendingHydratedRef.current = true;
-    const emails = pendingInvites
-      .map((invite) => normalizeEmail(invite.email))
-      .filter(Boolean);
-    for (const email of emails) {
-      sentInviteEmailsRef.current.add(email);
-    }
-    if (emails.length > 0) {
-      setForm((prev) => ({
-        ...prev,
-        inviteEmails: Array.from(new Set([...prev.inviteEmails, ...emails])),
-      }));
-    }
-  }, [pendingInvites]);
+    if (!onboarding || stepHydratedRef.current) return;
+    stepHydratedRef.current = true;
+    setStepIndex(firstIncompleteStepIndex(onboarding));
+  }, [onboarding]);
 
   useEffect(() => {
     if (!previewReady || devPreview) return;
@@ -277,6 +323,7 @@ export function BandOnboardingWizard() {
           publicWebsiteUrl: form.publicWebsiteUrl.trim() || undefined,
           publicInstagramUrl: form.publicInstagramUrl.trim() || undefined,
           publicYoutubeUrl: form.publicYoutubeUrl.trim() || undefined,
+          demoURL: form.demoURL.trim() || undefined,
           publicListing: form.publicListing,
           publicSlug: form.publicSlug.trim() || undefined,
         });
@@ -286,9 +333,14 @@ export function BandOnboardingWizard() {
       }
 
       if (currentStep === "members") {
-        const queued = form.inviteEmails.map(normalizeEmail).filter(Boolean);
-        const hasPendingOrSent =
-          queued.length > 0 || sentInviteEmailsRef.current.size > 0;
+        const queued = Array.from(
+          new Set([
+            ...form.inviteEmails.map(normalizeEmail).filter(Boolean),
+            ...pendingEmails,
+          ]),
+        );
+        const sentSet = new Set(sentInviteEmails);
+        const hasPendingOrSent = queued.length > 0 || sentSet.size > 0;
         if (!form.isSolo && !hasPendingOrSent) {
           setFieldError("Add at least one bandmate email, or confirm you're performing solo.");
           return;
@@ -302,10 +354,12 @@ export function BandOnboardingWizard() {
           await saveBandOnboardingStep({ soloAcknowledged: true });
           setInviteConfirmation(null);
         } else {
-          const toSend = queued.filter((email) => !sentInviteEmailsRef.current.has(email));
+          const toSend = queued.filter((email) => !sentSet.has(email));
           for (const email of toSend) {
             await inviteMember({ email, role: "org_member" });
-            sentInviteEmailsRef.current.add(email);
+          }
+          if (toSend.length > 0) {
+            setSessionSentEmails((prev) => Array.from(new Set([...prev, ...toSend])));
           }
           await saveBandOnboardingStep({ membersCompleted: true });
           if (toSend.length > 0) {
@@ -372,8 +426,10 @@ export function BandOnboardingWizard() {
     currentStep,
     form,
     inviteMember,
+    pendingEmails,
     previewOnly,
     saveBandOnboardingStep,
+    sentInviteEmails,
     updateActiveBandProfile,
   ]);
 
@@ -390,6 +446,49 @@ export function BandOnboardingWizard() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [currentStep, goNext]);
+
+  const payeeOptions = useMemo(() => {
+    const memberOptions = (members ?? []).map((user) => ({
+      value: user.userId,
+      label: user.name,
+      email: user.email,
+      description: user.email,
+    }));
+    const memberEmails = new Set(
+      memberOptions.map((option) => normalizeEmail(option.email ?? "")).filter(Boolean),
+    );
+
+    const pendingEmails = new Set<string>();
+    for (const invite of pendingInvites ?? []) {
+      const email = normalizeEmail(invite.email);
+      if (email) pendingEmails.add(email);
+    }
+    for (const email of form.inviteEmails) {
+      const normalized = normalizeEmail(email);
+      if (normalized) pendingEmails.add(normalized);
+    }
+    for (const email of sentInviteEmails) {
+      if (email) pendingEmails.add(email);
+    }
+
+    const pendingOptions = Array.from(pendingEmails)
+      .filter((email) => !memberEmails.has(email))
+      .sort((a, b) => a.localeCompare(b))
+      .map((email) => ({
+        value: `${PENDING_PAYEE_PREFIX}${email}`,
+        label: email,
+        email,
+        description: "Pending invite",
+      }));
+
+    return [...memberOptions, ...pendingOptions];
+  }, [form.inviteEmails, members, pendingInvites, sentInviteEmails]);
+
+  const payeeSelectValue = form.designatedPayeeUserId
+    ? form.designatedPayeeUserId
+    : form.designatedPayeeEmail
+      ? `${PENDING_PAYEE_PREFIX}${normalizeEmail(form.designatedPayeeEmail)}`
+      : "";
 
   if (onboarding === undefined || profile === undefined) {
     return (
@@ -425,49 +524,6 @@ export function BandOnboardingWizard() {
       inviteDraft: "",
     });
   };
-
-  const payeeOptions = useMemo(() => {
-    const memberOptions = (members ?? []).map((user) => ({
-      value: user.userId,
-      label: user.name,
-      email: user.email,
-      description: user.email,
-    }));
-    const memberEmails = new Set(
-      memberOptions.map((option) => normalizeEmail(option.email ?? "")).filter(Boolean),
-    );
-
-    const pendingEmails = new Set<string>();
-    for (const invite of pendingInvites ?? []) {
-      const email = normalizeEmail(invite.email);
-      if (email) pendingEmails.add(email);
-    }
-    for (const email of form.inviteEmails) {
-      const normalized = normalizeEmail(email);
-      if (normalized) pendingEmails.add(normalized);
-    }
-    for (const email of sentInviteEmailsRef.current) {
-      if (email) pendingEmails.add(email);
-    }
-
-    const pendingOptions = Array.from(pendingEmails)
-      .filter((email) => !memberEmails.has(email))
-      .sort((a, b) => a.localeCompare(b))
-      .map((email) => ({
-        value: `${PENDING_PAYEE_PREFIX}${email}`,
-        label: email,
-        email,
-        description: "Pending invite",
-      }));
-
-    return [...memberOptions, ...pendingOptions];
-  }, [form.inviteEmails, members, pendingInvites]);
-
-  const payeeSelectValue = form.designatedPayeeUserId
-    ? form.designatedPayeeUserId
-    : form.designatedPayeeEmail
-      ? `${PENDING_PAYEE_PREFIX}${normalizeEmail(form.designatedPayeeEmail)}`
-      : "";
 
   return (
     <>
@@ -619,7 +675,17 @@ export function BandOnboardingWizard() {
                       placeholder="https://youtube.com/…"
                     />
                   </div>
-                  <OnboardingAckCheckbox
+                  
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label htmlFor="band-demo">Demo / listening link</Label>
+                    <Input
+                      id="band-demo"
+                      value={form.demoURL}
+                      onChange={(event) => patch({ demoURL: event.target.value })}
+                      placeholder="Spotify, SoundCloud, Drive…"
+                    />
+                  </div>
+<OnboardingAckCheckbox
                     checked={form.publicListing}
                     onChange={(next) => patch({ publicListing: next })}
                     label="List us on the public artists page."
@@ -686,10 +752,10 @@ export function BandOnboardingWizard() {
                         </Button>
                       </div>
 
-                      {form.inviteEmails.length > 0 ? (
+                      {displayedInviteEmails.length > 0 ? (
                         <ul className="space-y-2">
-                          {form.inviteEmails.map((email) => {
-                            const alreadySent = sentInviteEmailsRef.current.has(email);
+                          {displayedInviteEmails.map((email) => {
+                            const alreadySent = sentInviteEmails.includes(email);
                             return (
                               <li
                                 key={email}

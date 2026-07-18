@@ -1046,6 +1046,9 @@ export default defineSchema({
       v.literal("band_payment_payee_required"),
       v.literal("onboarding_completed"),
       v.literal("onboarding_reminder"),
+      v.literal("band_application_received"),
+      v.literal("band_application_approved"),
+      v.literal("band_application_declined"),
     ),
     status: v.union(v.literal("queued"), v.literal("sent"), v.literal("failed")),
     to: v.string(),
@@ -1342,4 +1345,42 @@ export default defineSchema({
     .index("by_eventId_and_status", ["eventId", "status"])
     .index("by_status_and_performedAt", ["status", "performedAt"])
     .index("by_email", ["email"]),
+
+  /** Public self-serve applications to join Arbor as a band/DJ. */
+  bandApplications: defineTable({
+    status: v.union(
+      v.literal("submitted"),
+      v.literal("approved"),
+      v.literal("declined"),
+    ),
+    contactName: v.string(),
+    contactEmail: v.string(),
+    contactPhone: v.optional(v.string()),
+    bandDisplayName: v.string(),
+    oneLiner: v.optional(v.string()),
+    bio: v.optional(v.string()),
+    publicWebsiteUrl: v.optional(v.string()),
+    publicInstagramUrl: v.optional(v.string()),
+    publicYoutubeUrl: v.optional(v.string()),
+    demoURL: v.optional(v.string()),
+    publicHeroImageUrl: v.optional(v.string()),
+    genres: v.optional(v.array(v.string())),
+    isSolo: v.boolean(),
+    members: v.array(
+      v.object({
+        name: v.string(),
+        email: v.optional(v.string()),
+      }),
+    ),
+    submittedAt: v.number(),
+    reviewedAt: v.optional(v.number()),
+    reviewedByUserId: v.optional(v.string()),
+    declineReason: v.optional(v.string()),
+    organizationId: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_status", ["status"])
+    .index("by_contactEmail", ["contactEmail"])
+    .index("by_submittedAt", ["submittedAt"]),
 });

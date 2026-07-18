@@ -77,6 +77,11 @@ With the web app running and zero admins on the deployment, open
 locks permanently once any admin exists. Invite additional users from the
 Users dashboard; they land on `/onboarding` after accept-invite.
 
+To re-open setup / crew / band onboarding UIs after they would normally
+redirect away, use the floating **Dev** menu (or `?devPreview=1`) — local
+`NODE_ENV=development` only. Details: `docs/getting-started.md` (“Dev preview
+wizards”).
+
 ### Non-obvious runtime notes
 
 - After schema/backend API edits, run `pnpm --filter backend codegen` (or just

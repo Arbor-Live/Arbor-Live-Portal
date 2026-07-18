@@ -11,6 +11,7 @@
 import type * as account from "../account.js";
 import type * as adminDeletes from "../adminDeletes.js";
 import type * as auth from "../auth.js";
+import type * as bandApplications from "../bandApplications.js";
 import type * as bandPayments from "../bandPayments.js";
 import type * as bootstrap from "../bootstrap.js";
 import type * as capabilityDefinitions from "../capabilityDefinitions.js";
@@ -148,6 +149,7 @@ declare const fullApi: ApiFromModules<{
   account: typeof account;
   adminDeletes: typeof adminDeletes;
   auth: typeof auth;
+  bandApplications: typeof bandApplications;
   bandPayments: typeof bandPayments;
   bootstrap: typeof bootstrap;
   capabilityDefinitions: typeof capabilityDefinitions;
