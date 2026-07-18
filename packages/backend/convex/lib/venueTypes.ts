@@ -1,6 +1,16 @@
 export const VENUE_KINDS = ["building", "indoor", "outdoor"] as const;
 export type VenueKind = (typeof VENUE_KINDS)[number];
 
+export const VENUE_KIND_LABELS = {
+  building: "Building",
+  indoor: "Indoor",
+  outdoor: "Outdoor",
+} as const satisfies Record<VenueKind, string>;
+
+export function formatVenueKindLabel(kind: VenueKind): string {
+  return VENUE_KIND_LABELS[kind];
+}
+
 export const VENUE_TYPES_BY_KIND = {
   building: ["Dorm", "Academic", "Leisure Space"],
   indoor: ["Classroom", "Theater", "Conference Room", "Common Space", "Other"],

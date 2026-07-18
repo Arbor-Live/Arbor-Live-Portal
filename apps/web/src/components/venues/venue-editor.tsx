@@ -1,27 +1,42 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useMemo, type ReactNode } from "react";
 import { useMutation } from "convex/react";
+import { CaretDownIcon } from "@phosphor-icons/react";
 import { api, type Id } from "@/lib/convex-api";
 import { EMPTY_LEXICAL_STATE } from "@/components/editor/lexical-theme";
 import { VenueDocumentUploadButton } from "@/components/files/file-upload-field";
+import { StoredAssetLink } from "@/components/files/stored-asset-image";
 import { FormSaveBar } from "@/components/forms";
 import { TextFormField } from "@/components/forms/text-form-field";
 import { TextareaFormField } from "@/components/forms/textarea-form-field";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { Form } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import {
   emptyVenueForm,
+  formatVenueKindLabel,
   isEmptyLexicalJson,
+  resolveClientInheritedVenueFields,
+  venueFormHasOwnAddress,
+  venueFormHasOwnContact,
+  venueFormHasOwnFiles,
+  venueFormHasOwnLinks,
+  venueFormHasOwnMapsUrl,
   venueSchema,
   venueTypesForKind,
   VENUE_KINDS,
   type VenueFormValues,
+  type VenueInheritableRow,
   type VenueKind,
 } from "@/lib/validations/venues";
 
@@ -30,12 +45,141 @@ const LexicalEditor = dynamic(
   { ssr: false },
 );
 
-type VenueRow = {
-  _id: Id<"venues">;
-  name: string;
-  path: string;
-  parentId?: Id<"venues">;
-};
+function InheritedFrom({ path }: { path: string }) {
+  return (
+    <p className="text-xs text-muted-foreground">
+      From <span className="font-medium text-foreground/80">{path}</span>
+    </p>
+  );
+}
+
+function OverrideCollapsible({
+  label,
+  defaultOpen,
+  children,
+}: {
+  label: string;
+  defaultOpen: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <Collapsible defaultOpen={defaultOpen} className="rounded-md border">
+      <CollapsibleTrigger asChild>
+        <button
+          type="button"
+          className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm font-medium"
+        >
+          <span>{label}</span>
+          <CaretDownIcon className="size-4 shrink-0 text-muted-foreground" />
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="space-y-2 border-t px-3 py-3">{children}</div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+function DocumentationLinksEditor({
+  documentationLinks,
+  onChange,
+}: {
+  documentationLinks: VenueFormValues["documentationLinks"];
+  onChange: (next: VenueFormValues["documentationLinks"]) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      {documentationLinks.map((link, index) => (
+        <div key={`link-${index}`} className="grid grid-cols-[1fr_1fr_auto] gap-1">
+          <Input
+            placeholder="Title"
+            value={link.title}
+            onChange={(e) => {
+              const next = [...documentationLinks];
+              next[index] = { ...next[index]!, title: e.target.value };
+              onChange(next);
+            }}
+          />
+          <Input
+            placeholder="URL"
+            value={link.url}
+            onChange={(e) => {
+              const next = [...documentationLinks];
+              next[index] = { ...next[index]!, url: e.target.value };
+              onChange(next);
+            }}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => onChange(documentationLinks.filter((_, i) => i !== index))}
+          >
+            ×
+          </Button>
+        </div>
+      ))}
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => onChange([...documentationLinks, { title: "", url: "" }])}
+      >
+        Add link
+      </Button>
+    </div>
+  );
+}
+
+function VenueFilesEditor({
+  files,
+  venueId,
+  onChange,
+}: {
+  files: VenueFormValues["files"];
+  venueId?: Id<"venues">;
+  onChange: (next: VenueFormValues["files"]) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      {files.map((file, index) => (
+        <div
+          key={`file-${index}`}
+          className="flex items-center justify-between gap-2 rounded-md border px-2 py-1 text-sm"
+        >
+          <StoredAssetLink
+            storedValue={file.r2Key}
+            className="truncate text-primary underline underline-offset-2"
+          >
+            {file.title || file.fileName}
+          </StoredAssetLink>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => onChange(files.filter((_, i) => i !== index))}
+          >
+            Remove
+          </Button>
+        </div>
+      ))}
+      <VenueDocumentUploadButton
+        venueId={venueId}
+        onUploaded={(uploaded) =>
+          onChange([
+            ...files,
+            {
+              title: uploaded.title,
+              r2Key: uploaded.r2Key,
+              fileName: uploaded.fileName,
+              contentType: uploaded.contentType,
+            },
+          ])
+        }
+      />
+    </div>
+  );
+}
 
 function normalizeCapacity(value: VenueFormValues["capacity"]): number | undefined {
   if (value === "" || value === undefined || Number.isNaN(value as number)) return undefined;
@@ -51,7 +195,7 @@ export function VenueEditor({
 }: {
   editingId: Id<"venues"> | null;
   initial: VenueFormValues;
-  venues: VenueRow[];
+  venues: VenueInheritableRow[];
   onCancel: () => void;
   onSaved: (savedId?: Id<"venues">) => void;
 }) {
@@ -76,10 +220,35 @@ export function VenueEditor({
   }, [initial, form]);
 
   const kind = form.watch("kind") as VenueKind;
+  const parentId = form.watch("parentId");
   const nicknames = form.watch("nicknames");
   const circuits = form.watch("circuits");
   const documentationLinks = form.watch("documentationLinks");
   const files = form.watch("files");
+  const contactName = form.watch("contactName");
+  const contactEmail = form.watch("contactEmail");
+  const contactPhone = form.watch("contactPhone");
+  const address = form.watch("address");
+  const googleMapsUrl = form.watch("googleMapsUrl");
+
+  const inherited = useMemo(
+    () =>
+      resolveClientInheritedVenueFields(
+        venues,
+        parentId && parentId !== editingId ? parentId : undefined,
+      ),
+    [venues, parentId, editingId],
+  );
+
+  const hasOwnLocation =
+    venueFormHasOwnAddress({ address }) || venueFormHasOwnMapsUrl({ googleMapsUrl });
+  const hasOwnContact = venueFormHasOwnContact({
+    contactName,
+    contactEmail,
+    contactPhone,
+  });
+  const hasOwnLinks = venueFormHasOwnLinks({ documentationLinks });
+  const hasOwnFiles = venueFormHasOwnFiles({ files });
 
   const persist = useCallback(
     async (values: VenueFormValues) => {
@@ -217,7 +386,7 @@ export function VenueEditor({
                   >
                     {VENUE_KINDS.map((k) => (
                       <option key={k} value={k}>
-                        {k}
+                        {formatVenueKindLabel(k)}
                       </option>
                     ))}
                   </select>
@@ -264,8 +433,51 @@ export function VenueEditor({
               </div>
 
               <TextFormField name="capacity" label="Capacity" type="number" />
-              <TextareaFormField name="address" label="Address" />
-              <TextFormField name="googleMapsUrl" label="Google Maps URL" />
+
+              <div className="space-y-2">
+                <Label>Location</Label>
+                {(inherited.address || inherited.googleMapsUrl) && (
+                  <div className="space-y-2 rounded-md border bg-muted/30 px-3 py-2 text-sm">
+                    {inherited.address ? (
+                      <div className="space-y-1">
+                        <InheritedFrom path={inherited.address.source.path} />
+                        <p className="whitespace-pre-wrap">{inherited.address.value}</p>
+                      </div>
+                    ) : null}
+                    {inherited.googleMapsUrl ? (
+                      <div className="space-y-1">
+                        {!inherited.address ||
+                        inherited.address.source.path !==
+                          inherited.googleMapsUrl.source.path ? (
+                          <InheritedFrom path={inherited.googleMapsUrl.source.path} />
+                        ) : null}
+                        <a
+                          href={inherited.googleMapsUrl.value}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary underline underline-offset-2"
+                        >
+                          Open in Google Maps
+                        </a>
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+                {inherited.address || inherited.googleMapsUrl ? (
+                  <OverrideCollapsible
+                    label="Add location for this space"
+                    defaultOpen={hasOwnLocation}
+                  >
+                    <TextareaFormField name="address" label="Address" />
+                    <TextFormField name="googleMapsUrl" label="Google Maps URL" />
+                  </OverrideCollapsible>
+                ) : (
+                  <>
+                    <TextareaFormField name="address" label="Address" />
+                    <TextFormField name="googleMapsUrl" label="Google Maps URL" />
+                  </>
+                )}
+              </div>
 
               <div className="space-y-2">
                 <Label>Circuits</Label>
@@ -338,10 +550,48 @@ export function VenueEditor({
                 </Button>
               </div>
 
-              <div className="grid gap-2">
-                <TextFormField name="contactName" label="Contact name" />
-                <TextFormField name="contactEmail" label="Contact email" />
-                <TextFormField name="contactPhone" label="Contact phone" />
+              <div className="space-y-2">
+                <Label>Contact</Label>
+                {inherited.contact ? (
+                  <div className="space-y-1 rounded-md border bg-muted/30 px-3 py-2 text-sm">
+                    <InheritedFrom path={inherited.contact.source.path} />
+                    {inherited.contact.contactName ? (
+                      <p>{inherited.contact.contactName}</p>
+                    ) : null}
+                    {inherited.contact.contactEmail ? (
+                      <a
+                        href={`mailto:${inherited.contact.contactEmail}`}
+                        className="block text-primary underline underline-offset-2"
+                      >
+                        {inherited.contact.contactEmail}
+                      </a>
+                    ) : null}
+                    {inherited.contact.contactPhone ? (
+                      <a
+                        href={`tel:${inherited.contact.contactPhone}`}
+                        className="block text-primary underline underline-offset-2"
+                      >
+                        {inherited.contact.contactPhone}
+                      </a>
+                    ) : null}
+                  </div>
+                ) : null}
+                {inherited.contact ? (
+                  <OverrideCollapsible
+                    label="Add additional contact for this space"
+                    defaultOpen={hasOwnContact}
+                  >
+                    <TextFormField name="contactName" label="Contact name" />
+                    <TextFormField name="contactEmail" label="Contact email" />
+                    <TextFormField name="contactPhone" label="Contact phone" />
+                  </OverrideCollapsible>
+                ) : (
+                  <div className="grid gap-2">
+                    <TextFormField name="contactName" label="Contact name" />
+                    <TextFormField name="contactEmail" label="Contact email" />
+                    <TextFormField name="contactPhone" label="Contact phone" />
+                  </div>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -360,100 +610,80 @@ export function VenueEditor({
 
               <div className="space-y-2">
                 <Label>Documentation links</Label>
-                {documentationLinks.map((link, index) => (
-                  <div key={`link-${index}`} className="grid grid-cols-[1fr_1fr_auto] gap-1">
-                    <Input
-                      placeholder="Title"
-                      value={link.title}
-                      onChange={(e) => {
-                        const next = [...documentationLinks];
-                        next[index] = { ...next[index]!, title: e.target.value };
-                        form.setValue("documentationLinks", next, { shouldDirty: true });
-                      }}
-                    />
-                    <Input
-                      placeholder="URL"
-                      value={link.url}
-                      onChange={(e) => {
-                        const next = [...documentationLinks];
-                        next[index] = { ...next[index]!, url: e.target.value };
-                        form.setValue("documentationLinks", next, { shouldDirty: true });
-                      }}
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        form.setValue(
-                          "documentationLinks",
-                          documentationLinks.filter((_, i) => i !== index),
-                          { shouldDirty: true },
-                        )
+                {inherited.documentationLinks.length > 0 ? (
+                  <ul className="space-y-1 rounded-md border bg-muted/30 px-3 py-2 text-sm">
+                    {inherited.documentationLinks.map((link, index) => (
+                      <li key={`inh-link-${link.url}-${index}`} className="space-y-0.5">
+                        <InheritedFrom path={link.source.path} />
+                        <a
+                          href={link.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary underline underline-offset-2"
+                        >
+                          {link.title || link.url}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+                {inherited.documentationLinks.length > 0 ? (
+                  <OverrideCollapsible
+                    label="Add links for this space"
+                    defaultOpen={hasOwnLinks}
+                  >
+                    <DocumentationLinksEditor
+                      documentationLinks={documentationLinks}
+                      onChange={(next) =>
+                        form.setValue("documentationLinks", next, { shouldDirty: true })
                       }
-                    >
-                      ×
-                    </Button>
-                  </div>
-                ))}
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    form.setValue(
-                      "documentationLinks",
-                      [...documentationLinks, { title: "", url: "" }],
-                      { shouldDirty: true },
-                    )
-                  }
-                >
-                  Add link
-                </Button>
+                    />
+                  </OverrideCollapsible>
+                ) : (
+                  <DocumentationLinksEditor
+                    documentationLinks={documentationLinks}
+                    onChange={(next) =>
+                      form.setValue("documentationLinks", next, { shouldDirty: true })
+                    }
+                  />
+                )}
               </div>
 
               <div className="space-y-2">
                 <Label>Files (VWX, PDF, etc.)</Label>
-                {files.map((file, index) => (
-                  <div
-                    key={`file-${index}`}
-                    className="flex items-center justify-between gap-2 rounded-md border px-2 py-1 text-sm"
+                {inherited.files.length > 0 ? (
+                  <ul className="space-y-1 rounded-md border bg-muted/30 px-3 py-2 text-sm">
+                    {inherited.files.map((file, index) => (
+                      <li key={`inh-file-${file.r2Key}-${index}`} className="space-y-0.5">
+                        <InheritedFrom path={file.source.path} />
+                        <StoredAssetLink
+                          storedValue={file.r2Key}
+                          className="text-primary underline underline-offset-2"
+                        >
+                          {file.title || file.fileName}
+                        </StoredAssetLink>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+                {inherited.files.length > 0 ? (
+                  <OverrideCollapsible
+                    label="Add files for this space"
+                    defaultOpen={hasOwnFiles}
                   >
-                    <span className="truncate">{file.title || file.fileName}</span>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        form.setValue(
-                          "files",
-                          files.filter((_, i) => i !== index),
-                          { shouldDirty: true },
-                        )
-                      }
-                    >
-                      Remove
-                    </Button>
-                  </div>
-                ))}
-                <VenueDocumentUploadButton
-                  venueId={editingId ?? undefined}
-                  onUploaded={(uploaded) =>
-                    form.setValue(
-                      "files",
-                      [
-                        ...files,
-                        {
-                          title: uploaded.title,
-                          r2Key: uploaded.r2Key,
-                          fileName: uploaded.fileName,
-                          contentType: uploaded.contentType,
-                        },
-                      ],
-                      { shouldDirty: true },
-                    )
-                  }
-                />
+                    <VenueFilesEditor
+                      files={files}
+                      venueId={editingId ?? undefined}
+                      onChange={(next) => form.setValue("files", next, { shouldDirty: true })}
+                    />
+                  </OverrideCollapsible>
+                ) : (
+                  <VenueFilesEditor
+                    files={files}
+                    venueId={editingId ?? undefined}
+                    onChange={(next) => form.setValue("files", next, { shouldDirty: true })}
+                  />
+                )}
               </div>
 
               {!editingId ? (

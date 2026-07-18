@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import {
+  formatVenueKindLabel,
   VENUE_KINDS,
   venueTypesForKind,
   type VenueKind,
@@ -51,7 +52,7 @@ export function VenuePicker({
         label: venue.name,
         description: [
           venue.path !== venue.name ? venue.path : null,
-          `${venue.kind} · ${venue.venueType}`,
+          `${formatVenueKindLabel(venue.kind as VenueKind)} · ${venue.venueType}`,
           venue.nicknames.length ? venue.nicknames.join(" · ") : null,
         ]
           .filter(Boolean)
@@ -146,7 +147,7 @@ export function VenuePicker({
                 >
                   {VENUE_KINDS.map((k) => (
                     <option key={k} value={k}>
-                      {k}
+                      {formatVenueKindLabel(k)}
                     </option>
                   ))}
                 </select>

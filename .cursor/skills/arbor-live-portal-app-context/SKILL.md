@@ -33,6 +33,7 @@ Human-readable docs live in `docs/` (`getting-started.md`, `architecture.md`, `d
 ### Venues
 - Hierarchical `venues` table (optional parent, computed path). Admin-only CRUD at `/dashboard/events/venues`.
 - Events/series/requests use `venueId` + denormalized `venueName` (path). Pick via `VenuePicker` (fuzzy search + nicknames; admins can create inline).
+- Nested spaces inherit address, maps URL, contact, links, and files from ancestors (own contact/links/files are additive; own address/maps override).
 
 ### Event Basics
 - Event types:

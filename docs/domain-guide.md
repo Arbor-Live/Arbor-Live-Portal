@@ -29,8 +29,11 @@ canonical description of the domain itself.
   aliases (e.g. Llaga/Yaga).
 - Admin-only management under Events → Venues. Events, series, and booking
   requests store `venueId` plus a denormalized `venueName` (the venue path) for
-  display/emails. Venue records also hold capacity, address, Google Maps URL,
+  display/emails. - Venue records also hold capacity, address, Google Maps URL,
   circuits, contacts, Lexical notes, documentation links, and R2 file uploads.
+  Nested spaces inherit address, maps URL, contact, documentation links, and
+  files from the nearest ancestor that has them (child-specific values are
+  additive for contact/links/files, and override for address/maps).
 
 ## Events
 

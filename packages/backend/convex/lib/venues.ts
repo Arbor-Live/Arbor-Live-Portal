@@ -33,6 +33,125 @@ export async function buildVenuePath(
   return `${parent.path} > ${name}`;
 }
 
+export type VenueInheritedSource = {
+  venueId: Id<"venues">;
+  path: string;
+  name: string;
+};
+
+export type VenueInheritedFields = {
+  address?: { value: string; source: VenueInheritedSource };
+  googleMapsUrl?: { value: string; source: VenueInheritedSource };
+  contact?: {
+    contactName?: string;
+    contactEmail?: string;
+    contactPhone?: string;
+    source: VenueInheritedSource;
+  };
+  documentationLinks: Array<{
+    title: string;
+    url: string;
+    source: VenueInheritedSource;
+  }>;
+  files: Array<{
+    title: string;
+    r2Key: string;
+    fileName: string;
+    contentType: string;
+    source: VenueInheritedSource;
+  }>;
+};
+
+function toInheritedSource(venue: Doc<"venues">): VenueInheritedSource {
+  return { venueId: venue._id, path: venue.path, name: venue.name };
+}
+
+function hasContact(venue: Doc<"venues">) {
+  return Boolean(
+    venue.contactName?.trim() || venue.contactEmail?.trim() || venue.contactPhone?.trim(),
+  );
+}
+
+/** Walk parent → … → root. Nearest parent first. */
+export async function loadVenueAncestors(
+  ctx: DbCtx,
+  parentId: Id<"venues"> | undefined,
+): Promise<Doc<"venues">[]> {
+  const ancestors: Doc<"venues">[] = [];
+  let pointerId: Id<"venues"> | undefined = parentId;
+  const seen = new Set<string>();
+  while (pointerId) {
+    if (seen.has(pointerId)) break;
+    seen.add(pointerId);
+    const current: Doc<"venues"> | null = await ctx.db.get(pointerId);
+    if (!current) break;
+    ancestors.push(current);
+    pointerId = current.parentId;
+  }
+  return ancestors;
+}
+
+/**
+ * Fields inherited from ancestors when the venue itself has no value.
+ * Address / maps / contact: nearest ancestor with a value.
+ * Links / files: all ancestors from root → nearest (then callers append own).
+ */
+export async function resolveInheritedVenueFields(
+  ctx: DbCtx,
+  parentId: Id<"venues"> | undefined,
+): Promise<VenueInheritedFields> {
+  const ancestors = await loadVenueAncestors(ctx, parentId);
+  const result: VenueInheritedFields = {
+    documentationLinks: [],
+    files: [],
+  };
+
+  for (const ancestor of ancestors) {
+    if (!result.address && ancestor.address?.trim()) {
+      result.address = {
+        value: ancestor.address,
+        source: toInheritedSource(ancestor),
+      };
+    }
+    if (!result.googleMapsUrl && ancestor.googleMapsUrl?.trim()) {
+      result.googleMapsUrl = {
+        value: ancestor.googleMapsUrl,
+        source: toInheritedSource(ancestor),
+      };
+    }
+    if (!result.contact && hasContact(ancestor)) {
+      result.contact = {
+        contactName: ancestor.contactName,
+        contactEmail: ancestor.contactEmail,
+        contactPhone: ancestor.contactPhone,
+        source: toInheritedSource(ancestor),
+      };
+    }
+  }
+
+  // Root → nearest so building-level docs appear before nested overrides' parents.
+  for (const ancestor of [...ancestors].reverse()) {
+    const source = toInheritedSource(ancestor);
+    for (const link of ancestor.documentationLinks ?? []) {
+      result.documentationLinks.push({ ...link, source });
+    }
+    for (const file of ancestor.files ?? []) {
+      result.files.push({ ...file, source });
+    }
+  }
+
+  return result;
+}
+
+export async function resolveEffectiveVenueAddress(
+  ctx: DbCtx,
+  venue: Doc<"venues">,
+): Promise<string | undefined> {
+  if (venue.address?.trim()) return venue.address;
+  const inherited = await resolveInheritedVenueFields(ctx, venue.parentId);
+  return inherited.address?.value;
+}
+
 export async function resolveVenueLink(
   ctx: DbCtx,
   venueId: Id<"venues"> | null | undefined,
@@ -45,7 +164,7 @@ export async function resolveVenueLink(
   return {
     venueId: venue._id,
     venueName: venue.path,
-    venueAddress: venue.address,
+    venueAddress: await resolveEffectiveVenueAddress(ctx, venue),
   };
 }
 
@@ -92,9 +211,10 @@ export async function syncDenormalizedVenueName(
     .take(500);
   for (const request of requests) {
     const venue = await ctx.db.get(venueId);
+    const venueAddress = venue ? await resolveEffectiveVenueAddress(ctx, venue) : undefined;
     await ctx.db.patch(request._id, {
       venueName,
-      venueAddress: venue?.address,
+      venueAddress,
       updatedAt: Date.now(),
     });
   }

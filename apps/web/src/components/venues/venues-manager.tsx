@@ -9,7 +9,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { VenueEditor } from "./venue-editor";
-import { emptyVenueForm, type VenueFormValues } from "@/lib/validations/venues";
+import {
+  emptyVenueForm,
+  formatVenueKindLabel,
+  type VenueFormValues,
+  type VenueKind,
+} from "@/lib/validations/venues";
 
 function toFormValues(venue: {
   name: string;
@@ -175,7 +180,7 @@ export function VenuesManager() {
                     </td>
                     <td className="p-2">{venue.path}</td>
                     <td className="p-2">
-                      {venue.kind} · {venue.venueType}
+                      {formatVenueKindLabel(venue.kind as VenueKind)} · {venue.venueType}
                     </td>
                     <td className="p-2">
                       <Button
@@ -211,6 +216,13 @@ export function VenuesManager() {
           name: venue.name,
           path: venue.path,
           parentId: venue.parentId,
+          address: venue.address,
+          googleMapsUrl: venue.googleMapsUrl,
+          contactName: venue.contactName,
+          contactEmail: venue.contactEmail,
+          contactPhone: venue.contactPhone,
+          documentationLinks: venue.documentationLinks,
+          files: venue.files,
         }))}
         onCancel={() => setEditingId(null)}
         onSaved={(savedId) => {

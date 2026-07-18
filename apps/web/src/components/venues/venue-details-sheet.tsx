@@ -13,12 +13,21 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { isEmptyLexicalJson } from "@/lib/validations/venues";
+import { formatVenueKindLabel, isEmptyLexicalJson, type VenueKind } from "@/lib/validations/venues";
 
 const LexicalViewer = dynamic(
   () => import("@/components/editor/lexical-viewer").then((m) => m.LexicalViewer),
   { ssr: false },
 );
+
+function SourceHint({ sourcePath, inherited }: { sourcePath: string; inherited: boolean }) {
+  if (!inherited) return null;
+  return (
+    <p className="text-xs text-muted-foreground">
+      From <span className="font-medium text-foreground/80">{sourcePath}</span>
+    </p>
+  );
+}
 
 export function VenueDetailsButton({
   venueId,
@@ -73,7 +82,7 @@ export function VenueDetailsSheet({
                 Type
               </p>
               <p>
-                {details.kind} · {details.venueType}
+                {formatVenueKindLabel(details.kind as VenueKind)} · {details.venueType}
               </p>
               {details.nicknames.length > 0 ? (
                 <p className="text-muted-foreground">Also known as: {details.nicknames.join(" · ")}</p>
@@ -88,16 +97,34 @@ export function VenueDetailsSheet({
                   Location
                 </p>
                 {details.capacity !== undefined ? <p>Capacity: {details.capacity}</p> : null}
-                {details.address ? <p className="whitespace-pre-wrap">{details.address}</p> : null}
+                {details.address ? (
+                  <div className="space-y-0.5">
+                    {details.addressMeta ? (
+                      <SourceHint
+                        sourcePath={details.addressMeta.sourcePath}
+                        inherited={details.addressMeta.inherited}
+                      />
+                    ) : null}
+                    <p className="whitespace-pre-wrap">{details.address}</p>
+                  </div>
+                ) : null}
                 {details.googleMapsUrl ? (
-                  <a
-                    href={details.googleMapsUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary underline underline-offset-2"
-                  >
-                    Open in Google Maps
-                  </a>
+                  <div className="space-y-0.5">
+                    {details.googleMapsUrlMeta ? (
+                      <SourceHint
+                        sourcePath={details.googleMapsUrlMeta.sourcePath}
+                        inherited={details.googleMapsUrlMeta.inherited}
+                      />
+                    ) : null}
+                    <a
+                      href={details.googleMapsUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary underline underline-offset-2"
+                    >
+                      Open in Google Maps
+                    </a>
+                  </div>
                 ) : null}
               </section>
             )}
@@ -117,30 +144,35 @@ export function VenueDetailsSheet({
               </section>
             ) : null}
 
-            {(details.contactName || details.contactEmail || details.contactPhone) && (
-              <section className="space-y-1">
+            {details.contacts.length > 0 ? (
+              <section className="space-y-3">
                 <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   Contact
                 </p>
-                {details.contactName ? <p>{details.contactName}</p> : null}
-                {details.contactEmail ? (
-                  <a
-                    href={`mailto:${details.contactEmail}`}
-                    className="block text-primary underline underline-offset-2"
-                  >
-                    {details.contactEmail}
-                  </a>
-                ) : null}
-                {details.contactPhone ? (
-                  <a
-                    href={`tel:${details.contactPhone}`}
-                    className="block text-primary underline underline-offset-2"
-                  >
-                    {details.contactPhone}
-                  </a>
-                ) : null}
+                {details.contacts.map((contact, index) => (
+                  <div key={`${contact.sourcePath}-${index}`} className="space-y-1">
+                    <SourceHint sourcePath={contact.sourcePath} inherited={contact.inherited} />
+                    {contact.contactName ? <p>{contact.contactName}</p> : null}
+                    {contact.contactEmail ? (
+                      <a
+                        href={`mailto:${contact.contactEmail}`}
+                        className="block text-primary underline underline-offset-2"
+                      >
+                        {contact.contactEmail}
+                      </a>
+                    ) : null}
+                    {contact.contactPhone ? (
+                      <a
+                        href={`tel:${contact.contactPhone}`}
+                        className="block text-primary underline underline-offset-2"
+                      >
+                        {contact.contactPhone}
+                      </a>
+                    ) : null}
+                  </div>
+                ))}
               </section>
-            )}
+            ) : null}
 
             {details.notesJson && !isEmptyLexicalJson(details.notesJson) ? (
               <section className="space-y-2">
@@ -156,9 +188,10 @@ export function VenueDetailsSheet({
                 <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   Documentation
                 </p>
-                <ul className="space-y-1">
+                <ul className="space-y-2">
                   {details.documentationLinks.map((link, index) => (
-                    <li key={`${link.url}-${index}`}>
+                    <li key={`${link.url}-${index}`} className="space-y-0.5">
+                      <SourceHint sourcePath={link.sourcePath} inherited={link.inherited} />
                       <a
                         href={link.url}
                         target="_blank"
@@ -178,9 +211,10 @@ export function VenueDetailsSheet({
                 <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   Files
                 </p>
-                <ul className="space-y-1">
+                <ul className="space-y-2">
                   {details.files.map((file, index) => (
-                    <li key={`${file.r2Key}-${index}`}>
+                    <li key={`${file.r2Key}-${index}`} className="space-y-0.5">
+                      <SourceHint sourcePath={file.sourcePath} inherited={file.inherited} />
                       <StoredAssetLink
                         storedValue={file.r2Key}
                         className="text-primary underline underline-offset-2"

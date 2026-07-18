@@ -12,6 +12,7 @@ import {
   isVenueDescendant,
   normalizeNicknames,
   normalizeVenueName,
+  resolveInheritedVenueFields,
   syncDenormalizedVenueName,
 } from "./lib/venues";
 
@@ -134,6 +135,85 @@ export const getDetails = query({
     await requireArborInternalContext(ctx);
     const venue = await ctx.db.get(args.id);
     if (!venue) return null;
+
+    const inherited = await resolveInheritedVenueFields(ctx, venue.parentId);
+    const ownContact = Boolean(
+      venue.contactName?.trim() || venue.contactEmail?.trim() || venue.contactPhone?.trim(),
+    );
+    const address = venue.address?.trim()
+      ? { value: venue.address, sourcePath: venue.path, inherited: false as const }
+      : inherited.address
+        ? {
+            value: inherited.address.value,
+            sourcePath: inherited.address.source.path,
+            inherited: true as const,
+          }
+        : null;
+    const googleMapsUrl = venue.googleMapsUrl?.trim()
+      ? { value: venue.googleMapsUrl, sourcePath: venue.path, inherited: false as const }
+      : inherited.googleMapsUrl
+        ? {
+            value: inherited.googleMapsUrl.value,
+            sourcePath: inherited.googleMapsUrl.source.path,
+            inherited: true as const,
+          }
+        : null;
+
+    const contacts = [
+      ...(inherited.contact
+        ? [
+            {
+              contactName: inherited.contact.contactName,
+              contactEmail: inherited.contact.contactEmail,
+              contactPhone: inherited.contact.contactPhone,
+              sourcePath: inherited.contact.source.path,
+              inherited: true as const,
+            },
+          ]
+        : []),
+      ...(ownContact
+        ? [
+            {
+              contactName: venue.contactName,
+              contactEmail: venue.contactEmail,
+              contactPhone: venue.contactPhone,
+              sourcePath: venue.path,
+              inherited: false as const,
+            },
+          ]
+        : []),
+    ];
+
+    const documentationLinks = [
+      ...inherited.documentationLinks.map((link) => ({
+        title: link.title,
+        url: link.url,
+        sourcePath: link.source.path,
+        inherited: true as const,
+      })),
+      ...(venue.documentationLinks ?? []).map((link) => ({
+        ...link,
+        sourcePath: venue.path,
+        inherited: false as const,
+      })),
+    ];
+
+    const files = [
+      ...inherited.files.map((file) => ({
+        title: file.title,
+        r2Key: file.r2Key,
+        fileName: file.fileName,
+        contentType: file.contentType,
+        sourcePath: file.source.path,
+        inherited: true as const,
+      })),
+      ...(venue.files ?? []).map((file) => ({
+        ...file,
+        sourcePath: venue.path,
+        inherited: false as const,
+      })),
+    ];
+
     return {
       _id: venue._id,
       name: venue.name,
@@ -142,12 +222,17 @@ export const getDetails = query({
       venueType: venue.venueType,
       nicknames: venue.nicknames ?? [],
       capacity: venue.capacity,
-      address: venue.address,
-      googleMapsUrl: venue.googleMapsUrl,
+      /** Effective address (own, else nearest ancestor). */
+      address: address?.value,
+      addressMeta: address,
+      googleMapsUrl: googleMapsUrl?.value,
+      googleMapsUrlMeta: googleMapsUrl,
       notesJson: venue.notesJson,
       circuits: venue.circuits ?? [],
-      documentationLinks: venue.documentationLinks ?? [],
-      files: venue.files ?? [],
+      contacts,
+      documentationLinks,
+      files,
+      /** Own-only contact fields (edit surfaces). */
       contactName: venue.contactName,
       contactEmail: venue.contactEmail,
       contactPhone: venue.contactPhone,
