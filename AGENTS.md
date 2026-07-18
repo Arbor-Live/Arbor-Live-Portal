@@ -72,8 +72,8 @@ npx convex env set EMAIL_TEST_MODE "true"
 
 ### First admin (no self-serve signup)
 
-With the web app running and zero admins on the deployment, open
-`http://localhost:3000/setup` and create the first admin account. `/setup`
+With the web app running and zero admins on the deployment, any page
+redirects to `/setup` so you can create the first admin account. `/setup`
 locks permanently once any admin exists. Invite additional users from the
 Users dashboard; they land on `/onboarding` after accept-invite.
 

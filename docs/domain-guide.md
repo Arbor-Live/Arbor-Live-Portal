@@ -12,7 +12,8 @@ canonical description of the domain itself.
 - Staff-only functionality is guarded by `requireArborInternalContext`; band
   portal surfaces (linked events, media albums, payout status) use
   `requireBandContext` plus `lib/eventBandAccess.ts`.
-- The first admin is created at `/setup` while zero admins exist
+- The first admin is created at `/setup` while zero admins exist (any other
+  route redirects there until setup completes)
   (see [getting-started.md](getting-started.md)); everyone else is invited
   (`userInvites.ts`, accept-invite → `/onboarding` or `/onboarding/band`).
 - Crew onboarding progress lives in `userOnboarding`; band org setup in
