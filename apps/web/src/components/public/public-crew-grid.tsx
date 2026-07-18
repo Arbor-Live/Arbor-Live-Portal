@@ -11,7 +11,7 @@ function CrewCard({ member }: { member: { id: string; name: string; imageUrl?: s
   const resolvedImageUrl = useResolvedAssetUrl(member.imageUrl);
 
   return (
-    <Card className="h-full overflow-hidden ring-foreground/15">
+    <Card className="h-full gap-0 overflow-hidden border border-border py-0 shadow-sm ring-0">
       <div className="aspect-[4/5] w-full overflow-hidden bg-muted">
         {resolvedImageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element

@@ -179,6 +179,16 @@
   .marketing-nav-glow {
     background-image: radial-gradient(
       200px circle at var(--glow-x, 50%) var(--glow-y, 0%),
+      color-mix(in oklch, var(--primary) 55%, transparent),
+      color-mix(in oklch, var(--primary) 22%, transparent) 30%,
+      color-mix(in oklch, var(--border) 90%, transparent) 65%,
+      color-mix(in oklch, var(--border) 75%, transparent) 100%
+    );
+  }
+
+  .dark .marketing-nav-glow {
+    background-image: radial-gradient(
+      200px circle at var(--glow-x, 50%) var(--glow-y, 0%),
       color-mix(in oklch, white 55%, transparent),
       color-mix(in oklch, white 18%, transparent) 30%,
       color-mix(in oklch, var(--border) 65%, transparent) 65%,
@@ -630,3 +640,31 @@
     font-weight: 600;
   }
 }
+/* Unlayered: scrollbar pseudo-elements lose to UA defaults when inside @layer. */
+.marketing-carousel-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklch, var(--primary) 70%, transparent)
+    color-mix(in oklch, var(--foreground) 8%, transparent);
+}
+
+.marketing-carousel-scroll::-webkit-scrollbar {
+  height: 8px;
+}
+
+.marketing-carousel-scroll::-webkit-scrollbar-track {
+  margin-inline: 1rem;
+  border-radius: 9999px;
+  background: color-mix(in oklch, var(--foreground) 8%, transparent);
+}
+
+.marketing-carousel-scroll::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  background-color: color-mix(in oklch, var(--primary) 70%, transparent);
+}
+
+.marketing-carousel-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: var(--primary);
+}
+

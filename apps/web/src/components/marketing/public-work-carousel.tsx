@@ -27,7 +27,7 @@ export function LandingWorkCarousel({ posts }: { posts: PublicWorkPostCard[] }) 
           </Link>
         </Reveal>
 
-        <div className="mt-8 -mx-4 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+        <div className="marketing-carousel-scroll mt-8 -mx-4 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
           <div className="flex snap-x snap-mandatory gap-4">
             {posts.map((post, index) => (
               <Link
@@ -35,7 +35,7 @@ export function LandingWorkCarousel({ posts }: { posts: PublicWorkPostCard[] }) 
                 href={`/work/${post.slug}`}
                 className="group w-[min(100%,320px)] shrink-0 snap-start sm:w-[340px]"
               >
-                <article className="h-full overflow-hidden border border-foreground/12 bg-card shadow-sm transition-shadow group-hover:ring-2 group-hover:ring-primary/30">
+                <article className="h-full overflow-hidden border border-border bg-card shadow-sm transition-[border-color,box-shadow] group-hover:border-primary/40 group-hover:shadow-md">
                   <div
                     className={cn(
                       "relative h-40 bg-gradient-to-br",

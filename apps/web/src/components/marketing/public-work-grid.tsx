@@ -56,7 +56,7 @@ export function PublicWorkGrid({ posts }: { posts: PublicWorkPostCard[] }) {
         </div>
 
         {filteredPosts.length === 0 ? (
-          <Card className="ring-foreground/15">
+          <Card className="border border-border shadow-sm ring-0">
             <CardHeader>
               <CardTitle>Coming soon</CardTitle>
             </CardHeader>
@@ -69,7 +69,7 @@ export function PublicWorkGrid({ posts }: { posts: PublicWorkPostCard[] }) {
             {filteredPosts.map((post, index) => (
               <StaggerItem key={post.slug}>
                 <Link href={`/work/${post.slug}`} className="group block h-full">
-                  <Card className="h-full overflow-hidden py-0 ring-foreground/15 transition-shadow group-hover:ring-2 group-hover:ring-primary/30">
+                  <Card className="h-full gap-0 overflow-hidden border border-border py-0 shadow-sm ring-0 transition-[border-color,box-shadow] group-hover:border-primary/40 group-hover:shadow-md">
                     <div
                       className={cn(
                         "relative h-36 bg-gradient-to-br",

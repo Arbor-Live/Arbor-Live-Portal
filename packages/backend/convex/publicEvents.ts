@@ -91,13 +91,18 @@ async function listPublicUpcomingEvents(ctx: QueryCtx, now: number) {
 }
 
 export const listUpcoming = query({
-  args: { now: v.number() },
+  args: {
+    now: v.number(),
+    limit: v.optional(v.number()),
+  },
   returns: v.array(publicEventCardValue),
   handler: async (ctx, args) => {
     const events = await listPublicUpcomingEvents(ctx, args.now);
+    const limited =
+      args.limit !== undefined ? events.slice(0, Math.max(0, args.limit)) : events;
     const designsByEventId = await loadPublishedDesignsByEventId(ctx);
     return Promise.all(
-      events.map((event) =>
+      limited.map((event) =>
         mapPublicEventCard(ctx, event, designsByEventId.get(event._id) ?? null),
       ),
     );

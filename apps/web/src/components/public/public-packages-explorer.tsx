@@ -95,7 +95,7 @@ export function PublicPackagesExplorer({
                 <Stagger className="grid gap-6 md:grid-cols-2">
                   {group.items.map((row, index) => (
                     <StaggerItem key={row.package._id}>
-                      <Card className="group gap-0 overflow-hidden py-0 transition-shadow hover:ring-2 hover:ring-primary/20 has-[>div:first-child]:pt-0">
+                      <Card className="group gap-0 overflow-hidden border border-border py-0 shadow-sm ring-0 transition-[border-color,box-shadow] hover:border-primary/40 hover:shadow-md has-[>div:first-child]:pt-0">
                         {row.package.publicHeroImageUrl ? (
                           <div className="relative h-44 w-full overflow-hidden border-b bg-zinc-950">
                             <OptimizedRemoteImage
@@ -107,7 +107,7 @@ export function PublicPackagesExplorer({
                             />
                             <div
                               aria-hidden
-                              className="pointer-events-none absolute inset-0 bg-gradient-to-t from-background/80 via-transparent to-transparent"
+                              className="pointer-events-none absolute inset-0 bg-gradient-to-t from-zinc-950/80 via-transparent to-transparent"
                             />
                           </div>
                         ) : (
