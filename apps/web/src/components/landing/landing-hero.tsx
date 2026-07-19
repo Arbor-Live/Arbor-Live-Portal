@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { landingHero } from "@/lib/landing-content";
@@ -21,87 +21,148 @@ const heroItem = {
   visible: { opacity: 1, y: 0 },
 };
 
-function useHeroVideoAutoplay(
-  videoRef: React.RefObject<HTMLVideoElement | null>,
-  enabled: boolean,
-  /** Remount / source swap token — re-run play attempts when the file changes. */
-  sourceKey: string,
-) {
+function subscribeMobileHero(onStoreChange: () => void) {
+  const mq = window.matchMedia("(max-width: 1024px), (pointer: coarse)");
+  mq.addEventListener("change", onStoreChange);
+  return () => mq.removeEventListener("change", onStoreChange);
+}
+
+function getMobileHeroSnapshot() {
+  return window.matchMedia("(max-width: 1024px), (pointer: coarse)").matches;
+}
+
+/** SSR mobile-first so iPhone never hydrates into the 20MB desktop sources. */
+function getMobileHeroServerSnapshot() {
+  return true;
+}
+
+function useMobileHeroVideo() {
+  return useSyncExternalStore(
+    subscribeMobileHero,
+    getMobileHeroSnapshot,
+    getMobileHeroServerSnapshot,
+  );
+}
+
+/**
+ * iOS Safari autoplay is picky: needs muted set as a DOM property before play(),
+ * a direct `src` (not only <source> children), playsInline, and often a gesture
+ * retry when Low Power Mode blocks the first attempt.
+ */
+function HeroBackgroundVideo({
+  src,
+  poster,
+}: {
+  src: string;
+  poster?: string;
+}) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [playing, setPlaying] = useState(false);
+
   useEffect(() => {
-    if (!enabled) return;
     const video = videoRef.current;
     if (!video) return;
 
-    // iOS Safari is strict: muted + playsInline must be set before play().
-    video.defaultMuted = true;
-    video.muted = true;
-    video.playsInline = true;
-    video.setAttribute("muted", "");
-    video.setAttribute("playsinline", "");
+    let cancelled = false;
+
+    const unlockMuted = () => {
+      video.defaultMuted = true;
+      video.muted = true;
+      video.volume = 0;
+      video.playsInline = true;
+      video.setAttribute("muted", "");
+      video.setAttribute("playsinline", "");
+      video.setAttribute("webkit-playsinline", "");
+    };
 
     const tryPlay = () => {
-      const playPromise = video.play();
-      if (playPromise !== undefined) {
-        void playPromise.catch(() => {
-          // Autoplay can still be blocked (Low Power Mode, etc.).
-        });
+      if (cancelled) return;
+      unlockMuted();
+      const result = video.play();
+      if (result !== undefined) {
+        void result
+          .then(() => {
+            if (!cancelled) setPlaying(true);
+          })
+          .catch(() => {
+            // Low Power Mode / data saver — retry on gesture below.
+          });
       }
     };
 
+    unlockMuted();
+    // src is set via JSX; call load() so iOS picks it up after muted is applied.
+    video.load();
     tryPlay();
+
+    video.addEventListener("loadedmetadata", tryPlay);
     video.addEventListener("loadeddata", tryPlay);
     video.addEventListener("canplay", tryPlay);
-    video.addEventListener("canplaythrough", tryPlay);
+    video.addEventListener("playing", () => {
+      if (!cancelled) setPlaying(true);
+    });
+
+    const onGesture = () => tryPlay();
+    document.addEventListener("touchstart", onGesture, { passive: true });
+    document.addEventListener("touchend", onGesture, { passive: true });
+    document.addEventListener("click", onGesture);
 
     return () => {
+      cancelled = true;
+      video.removeEventListener("loadedmetadata", tryPlay);
       video.removeEventListener("loadeddata", tryPlay);
       video.removeEventListener("canplay", tryPlay);
-      video.removeEventListener("canplaythrough", tryPlay);
+      document.removeEventListener("touchstart", onGesture);
+      document.removeEventListener("touchend", onGesture);
+      document.removeEventListener("click", onGesture);
     };
-  }, [enabled, sourceKey, videoRef]);
+  }, [src]);
+
+  return (
+    <div aria-hidden className="pointer-events-none absolute inset-0 z-0">
+      {poster ? (
+        // eslint-disable-next-line @next/next/no-img-element -- static public asset poster
+        <img
+          src={poster}
+          alt=""
+          className={`absolute inset-0 size-full object-cover transition-opacity duration-500 ${
+            playing ? "opacity-0" : "opacity-60"
+          }`}
+        />
+      ) : null}
+      <video
+        ref={videoRef}
+        src={src}
+        autoPlay
+        muted
+        loop
+        playsInline
+        preload="auto"
+        poster={poster}
+        controls={false}
+        disablePictureInPicture
+        // Keep visible — iOS may skip decoding/autoplay for visibility:hidden.
+        // translateZ(0) forces a composited layer (avoids blank frames on some iOS versions).
+        className="size-full object-cover opacity-60 [transform:translateZ(0)]"
+      />
+    </div>
+  );
 }
 
 export function LandingHero() {
-  const { lite, reduceMotion, coarsePointer, spring, springBouncy } = useLandingMotion();
-  const videoRef = useRef<HTMLVideoElement>(null);
-  // Keep video in the tree as soon as we know motion is allowed — don't wait on
-  // a separate mounted gate (that delayed first paint / autoplay on phones).
+  const { lite, reduceMotion, spring, springBouncy } = useLandingMotion();
+  const useMobileVideo = useMobileHeroVideo();
+  // Still respect reduced-motion, but never block the iPhone path on "lite"
+  // (coarse pointer) — that was hiding the video while desktop still played.
   const showVideo = !reduceMotion;
-  const useMobileVideo = coarsePointer;
-  const sourceKey = useMobileVideo ? "mobile" : "desktop";
-
-  useHeroVideoAutoplay(videoRef, showVideo, sourceKey);
+  const videoSrc = useMobileVideo
+    ? landingHero.backgroundVideoSrcMobile
+    : landingHero.backgroundVideoSrc;
+  const poster = useMobileVideo ? landingHero.backgroundVideoPosterMobile : undefined;
 
   return (
     <section className="relative overflow-hidden bg-zinc-950 text-zinc-50">
-      {showVideo ? (
-        <div aria-hidden className="pointer-events-none absolute inset-0 z-0">
-          <video
-            ref={videoRef}
-            key={sourceKey}
-            autoPlay
-            muted
-            loop
-            playsInline
-            preload="auto"
-            disablePictureInPicture
-            disableRemotePlayback
-            className="size-full object-cover opacity-60"
-          >
-            {useMobileVideo ? (
-              <source src={landingHero.backgroundVideoSrcMobile} type="video/mp4" />
-            ) : (
-              <>
-                <source
-                  src={landingHero.backgroundVideoSrcHevc}
-                  type='video/mp4; codecs="hvc1"'
-                />
-                <source src={landingHero.backgroundVideoSrc} type="video/mp4" />
-              </>
-            )}
-          </video>
-        </div>
-      ) : null}
+      {showVideo ? <HeroBackgroundVideo src={videoSrc} poster={poster} /> : null}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 z-[1] bg-zinc-950/35"
