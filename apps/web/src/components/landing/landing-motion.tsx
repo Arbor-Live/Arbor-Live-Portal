@@ -23,9 +23,9 @@ function getCoarsePointerSnapshot() {
   return window.matchMedia("(pointer: coarse)").matches;
 }
 
-/** SSR assumes fine pointer so desktop HTML stays rich; video/orbs still wait for mount. */
+/** SSR prefers mobile so phones don't hydrate into the 20MB desktop sources. */
 function getCoarsePointerServerSnapshot() {
-  return false;
+  return true;
 }
 
 export function useCoarsePointer() {

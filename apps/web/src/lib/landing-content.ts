@@ -40,7 +40,7 @@ export const landingHero = {
   /** H.264 plays in Chrome/Firefox; HEVC is smaller and used on Safari when supported. */
   backgroundVideoSrc: "/dnm-opti-h264.mp4",
   backgroundVideoSrcHevc: "/dnm-opti-265.mp4",
-  /** 9:16 center-crop, 540×960, ~0.5 Mbps — for phones/tablets. */
+  /** 9:16 center-crop, 720×1280, ~30s loop — for phones/tablets. */
   backgroundVideoSrcMobile: "/dnm-opti-mobile.mp4",
   backgroundVideoCredit: {
     label: "Verducci Event Productions",

@@ -21,23 +21,56 @@ const heroItem = {
   visible: { opacity: 1, y: 0 },
 };
 
-export function LandingHero() {
-  const { lite, reduceMotion, coarsePointer, mounted, spring, springBouncy } =
-    useLandingMotion();
-  const videoRef = useRef<HTMLVideoElement>(null);
-  // Phones get a small vertical cut; desktop keeps the full landscape sources.
-  // prefers-reduced-motion still skips video entirely.
-  const showVideo = mounted && !reduceMotion;
-  const useMobileVideo = coarsePointer;
-
+function useHeroVideoAutoplay(
+  videoRef: React.RefObject<HTMLVideoElement | null>,
+  enabled: boolean,
+  /** Remount / source swap token — re-run play attempts when the file changes. */
+  sourceKey: string,
+) {
   useEffect(() => {
-    if (!showVideo) return;
+    if (!enabled) return;
     const video = videoRef.current;
     if (!video) return;
-    void video.play().catch(() => {
-      // Autoplay can be blocked by the browser; muted playback usually still works.
-    });
-  }, [showVideo, useMobileVideo]);
+
+    // iOS Safari is strict: muted + playsInline must be set before play().
+    video.defaultMuted = true;
+    video.muted = true;
+    video.playsInline = true;
+    video.setAttribute("muted", "");
+    video.setAttribute("playsinline", "");
+
+    const tryPlay = () => {
+      const playPromise = video.play();
+      if (playPromise !== undefined) {
+        void playPromise.catch(() => {
+          // Autoplay can still be blocked (Low Power Mode, etc.).
+        });
+      }
+    };
+
+    tryPlay();
+    video.addEventListener("loadeddata", tryPlay);
+    video.addEventListener("canplay", tryPlay);
+    video.addEventListener("canplaythrough", tryPlay);
+
+    return () => {
+      video.removeEventListener("loadeddata", tryPlay);
+      video.removeEventListener("canplay", tryPlay);
+      video.removeEventListener("canplaythrough", tryPlay);
+    };
+  }, [enabled, sourceKey, videoRef]);
+}
+
+export function LandingHero() {
+  const { lite, reduceMotion, coarsePointer, spring, springBouncy } = useLandingMotion();
+  const videoRef = useRef<HTMLVideoElement>(null);
+  // Keep video in the tree as soon as we know motion is allowed — don't wait on
+  // a separate mounted gate (that delayed first paint / autoplay on phones).
+  const showVideo = !reduceMotion;
+  const useMobileVideo = coarsePointer;
+  const sourceKey = useMobileVideo ? "mobile" : "desktop";
+
+  useHeroVideoAutoplay(videoRef, showVideo, sourceKey);
 
   return (
     <section className="relative overflow-hidden bg-zinc-950 text-zinc-50">
@@ -45,12 +78,14 @@ export function LandingHero() {
         <div aria-hidden className="pointer-events-none absolute inset-0 z-0">
           <video
             ref={videoRef}
-            key={useMobileVideo ? "mobile" : "desktop"}
+            key={sourceKey}
             autoPlay
             muted
             loop
             playsInline
-            preload="metadata"
+            preload="auto"
+            disablePictureInPicture
+            disableRemotePlayback
             className="size-full object-cover opacity-60"
           >
             {useMobileVideo ? (
