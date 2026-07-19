@@ -2,8 +2,8 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { motion } from "framer-motion";
+import { useEffect, useRef, useSyncExternalStore } from "react";
+import { motion, useReducedMotion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { landingHero } from "@/lib/landing-content";
 import { FloatOrb, useLandingMotion } from "./landing-motion";
@@ -21,148 +21,72 @@ const heroItem = {
   visible: { opacity: 1, y: 0 },
 };
 
-function subscribeMobileHero(onStoreChange: () => void) {
-  const mq = window.matchMedia("(max-width: 1024px), (pointer: coarse)");
+function subscribeMobileVideo(onStoreChange: () => void) {
+  const mq = window.matchMedia("(pointer: coarse)");
   mq.addEventListener("change", onStoreChange);
   return () => mq.removeEventListener("change", onStoreChange);
 }
 
-function getMobileHeroSnapshot() {
-  return window.matchMedia("(max-width: 1024px), (pointer: coarse)").matches;
-}
-
-/** SSR mobile-first so iPhone never hydrates into the 20MB desktop sources. */
-function getMobileHeroServerSnapshot() {
-  return true;
-}
-
+/**
+ * Mobile-first SSR snapshot so iPhone hydrates with the same <source> list it
+ * will keep — swapping sources after mount forces load() and breaks iOS autoplay
+ * until a user gesture (e.g. scroll).
+ */
 function useMobileHeroVideo() {
   return useSyncExternalStore(
-    subscribeMobileHero,
-    getMobileHeroSnapshot,
-    getMobileHeroServerSnapshot,
-  );
-}
-
-/**
- * iOS Safari autoplay is picky: needs muted set as a DOM property before play(),
- * a direct `src` (not only <source> children), playsInline, and often a gesture
- * retry when Low Power Mode blocks the first attempt.
- */
-function HeroBackgroundVideo({
-  src,
-  poster,
-}: {
-  src: string;
-  poster?: string;
-}) {
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const [playing, setPlaying] = useState(false);
-
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    let cancelled = false;
-
-    const unlockMuted = () => {
-      video.defaultMuted = true;
-      video.muted = true;
-      video.volume = 0;
-      video.playsInline = true;
-      video.setAttribute("muted", "");
-      video.setAttribute("playsinline", "");
-      video.setAttribute("webkit-playsinline", "");
-    };
-
-    const tryPlay = () => {
-      if (cancelled) return;
-      unlockMuted();
-      const result = video.play();
-      if (result !== undefined) {
-        void result
-          .then(() => {
-            if (!cancelled) setPlaying(true);
-          })
-          .catch(() => {
-            // Low Power Mode / data saver — retry on gesture below.
-          });
-      }
-    };
-
-    unlockMuted();
-    // src is set via JSX; call load() so iOS picks it up after muted is applied.
-    video.load();
-    tryPlay();
-
-    video.addEventListener("loadedmetadata", tryPlay);
-    video.addEventListener("loadeddata", tryPlay);
-    video.addEventListener("canplay", tryPlay);
-    video.addEventListener("playing", () => {
-      if (!cancelled) setPlaying(true);
-    });
-
-    const onGesture = () => tryPlay();
-    document.addEventListener("touchstart", onGesture, { passive: true });
-    document.addEventListener("touchend", onGesture, { passive: true });
-    document.addEventListener("click", onGesture);
-
-    return () => {
-      cancelled = true;
-      video.removeEventListener("loadedmetadata", tryPlay);
-      video.removeEventListener("loadeddata", tryPlay);
-      video.removeEventListener("canplay", tryPlay);
-      document.removeEventListener("touchstart", onGesture);
-      document.removeEventListener("touchend", onGesture);
-      document.removeEventListener("click", onGesture);
-    };
-  }, [src]);
-
-  return (
-    <div aria-hidden className="pointer-events-none absolute inset-0 z-0">
-      {poster ? (
-        // eslint-disable-next-line @next/next/no-img-element -- static public asset poster
-        <img
-          src={poster}
-          alt=""
-          className={`absolute inset-0 size-full object-cover transition-opacity duration-500 ${
-            playing ? "opacity-0" : "opacity-60"
-          }`}
-        />
-      ) : null}
-      <video
-        ref={videoRef}
-        src={src}
-        autoPlay
-        muted
-        loop
-        playsInline
-        preload="auto"
-        poster={poster}
-        controls={false}
-        disablePictureInPicture
-        // Keep visible — iOS may skip decoding/autoplay for visibility:hidden.
-        // translateZ(0) forces a composited layer (avoids blank frames on some iOS versions).
-        className="size-full object-cover opacity-60 [transform:translateZ(0)]"
-      />
-    </div>
+    subscribeMobileVideo,
+    () => window.matchMedia("(pointer: coarse)").matches,
+    () => true,
   );
 }
 
 export function LandingHero() {
-  const { lite, reduceMotion, spring, springBouncy } = useLandingMotion();
-  const useMobileVideo = useMobileHeroVideo();
-  // Still respect reduced-motion, but never block the iPhone path on "lite"
-  // (coarse pointer) — that was hiding the video while desktop still played.
-  const showVideo = !reduceMotion;
-  const videoSrc = useMobileVideo
-    ? landingHero.backgroundVideoSrcMobile
-    : landingHero.backgroundVideoSrc;
-  const poster = useMobileVideo ? landingHero.backgroundVideoPosterMobile : undefined;
+  const reduceMotion = useReducedMotion();
+  const { lite, spring, springBouncy } = useLandingMotion();
+  const mobileVideo = useMobileHeroVideo();
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  // Same autoplay path as the original hero — only reduceMotion gates play().
+  // Desktop may SSR with the mobile source (mobile-first); reload only then.
+  useEffect(() => {
+    if (reduceMotion) return;
+    const video = videoRef.current;
+    if (!video) return;
+    if (!mobileVideo) {
+      video.load();
+    }
+    void video.play().catch(() => {
+      // Autoplay can be blocked by the browser; muted playback usually still works.
+    });
+  }, [reduceMotion, mobileVideo]);
 
   return (
     <section className="relative overflow-hidden bg-zinc-950 text-zinc-50">
-      {showVideo ? <HeroBackgroundVideo src={videoSrc} poster={poster} /> : null}
+      {!reduceMotion ? (
+        <div aria-hidden className="pointer-events-none absolute inset-0 z-0">
+          <video
+            ref={videoRef}
+            autoPlay
+            muted
+            loop
+            playsInline
+            preload="auto"
+            className="size-full object-cover opacity-60"
+          >
+            {mobileVideo ? (
+              <source src={landingHero.backgroundVideoSrcMobile} type="video/mp4" />
+            ) : (
+              <>
+                <source
+                  src={landingHero.backgroundVideoSrcHevc}
+                  type='video/mp4; codecs="hvc1"'
+                />
+                <source src={landingHero.backgroundVideoSrc} type="video/mp4" />
+              </>
+            )}
+          </video>
+        </div>
+      ) : null}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 z-[1] bg-zinc-950/35"
@@ -194,7 +118,7 @@ export function LandingHero() {
       <div className="relative z-[2] px-4 sm:px-5">
         <motion.div
           className="mx-auto flex min-h-[min(92vh,56rem)] max-w-6xl flex-col justify-center px-5 py-28 sm:px-6 sm:py-32"
-          initial={lite ? false : "hidden"}
+          initial={lite || reduceMotion ? false : "hidden"}
           animate="visible"
           variants={heroStagger}
         >
@@ -239,8 +163,8 @@ export function LandingHero() {
                 transition={springBouncy}
               >
                 <motion.div
-                  whileHover={lite ? undefined : { scale: 1.03 }}
-                  whileTap={lite ? undefined : { scale: 0.98 }}
+                  whileHover={lite || reduceMotion ? undefined : { scale: 1.03 }}
+                  whileTap={lite || reduceMotion ? undefined : { scale: 0.98 }}
                 >
                   <Button asChild size="lg" className="h-11 px-6">
                     <Link href={landingHero.primaryCta.href}>
@@ -249,8 +173,8 @@ export function LandingHero() {
                   </Button>
                 </motion.div>
                 <motion.div
-                  whileHover={lite ? undefined : { scale: 1.03 }}
-                  whileTap={lite ? undefined : { scale: 0.98 }}
+                  whileHover={lite || reduceMotion ? undefined : { scale: 1.03 }}
+                  whileTap={lite || reduceMotion ? undefined : { scale: 0.98 }}
                 >
                   <Button
                     asChild
@@ -269,7 +193,7 @@ export function LandingHero() {
         </motion.div>
       </div>
 
-      {showVideo ? (
+      {!reduceMotion ? (
         <p className="absolute right-4 bottom-4 z-[2] text-[10px] tracking-wide text-zinc-400/80 sm:right-6 sm:bottom-6 sm:text-xs">
           Video by{" "}
           <a

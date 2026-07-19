@@ -1,7 +1,7 @@
 "use client";
 
-import { motion, useInView, useReducedMotion, type Transition, type Variants } from "framer-motion";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { motion, useReducedMotion, type Transition, type Variants } from "framer-motion";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { cn } from "@/lib/utils";
 
 export const landingSpring = { type: "spring" as const, stiffness: 380, damping: 36 };
@@ -23,9 +23,9 @@ function getCoarsePointerSnapshot() {
   return window.matchMedia("(pointer: coarse)").matches;
 }
 
-/** SSR prefers mobile so phones don't hydrate into the 20MB desktop sources. */
+/** SSR assumes fine pointer so markup matches the original desktop source list. */
 function getCoarsePointerServerSnapshot() {
-  return true;
+  return false;
 }
 
 export function useCoarsePointer() {
@@ -88,9 +88,7 @@ type RevealProps = {
 };
 
 export function Reveal({ children, className, delay = 0, variant = "fadeUp" }: RevealProps) {
-  const { lite, mounted, enterTransition } = useLandingMotion();
-  const ref = useRef<HTMLDivElement>(null);
-  const isInView = useInView(ref, { once: true, margin: "0px" });
+  const { lite, enterTransition } = useLandingMotion();
   const variants =
     variant === "fadeIn" ? fadeInVariants : variant === "scaleIn" ? scaleInVariants : fadeUpVariants;
 
@@ -98,15 +96,12 @@ export function Reveal({ children, className, delay = 0, variant = "fadeUp" }: R
     return <div className={className}>{children}</div>;
   }
 
-  // SSR + first paint stay visible. After mount, below-fold content can enter from hidden.
-  const state = !mounted || isInView ? "visible" : "hidden";
-
   return (
     <motion.div
-      ref={ref}
       className={className}
-      initial="visible"
-      animate={state}
+      initial="hidden"
+      whileInView="visible"
+      viewport={{ once: true, margin: "0px" }}
       variants={variants}
       transition={{ ...enterTransition, delay }}
     >
@@ -121,24 +116,19 @@ type StaggerProps = {
 };
 
 export function Stagger({ children, className }: StaggerProps) {
-  const { lite, mounted, enterTransition } = useLandingMotion();
-  const ref = useRef<HTMLDivElement>(null);
-  const isInView = useInView(ref, { once: true, margin: "0px" });
+  const { lite } = useLandingMotion();
 
   if (lite) {
     return <div className={className}>{children}</div>;
   }
 
-  const state = !mounted || isInView ? "visible" : "hidden";
-
   return (
     <motion.div
-      ref={ref}
       className={className}
-      initial="visible"
-      animate={state}
+      initial="hidden"
+      whileInView="visible"
+      viewport={{ once: true, margin: "0px" }}
       variants={staggerContainerVariants}
-      transition={enterTransition}
     >
       {children}
     </motion.div>
