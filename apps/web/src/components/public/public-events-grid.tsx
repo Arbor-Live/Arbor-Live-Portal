@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Reveal, Stagger, StaggerItem } from "@/components/landing/landing-motion";
 import { PublicEventPoster } from "@/components/public/public-event-poster";
 
-type PublicEventCard = {
+export type PublicEventCard = {
   eventId: string;
   title: string;
   startAt: number;
@@ -141,15 +141,93 @@ export function PublicEventsGrid({
     <Stagger className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
       {events.map((event) => (
         <StaggerItem key={event.eventId}>
-          <Reveal>
-            <EventCard event={event} />
-          </Reveal>
+          <EventCard event={event} />
         </StaggerItem>
       ))}
     </Stagger>
   );
 }
 
+const EAGER_POSTER_COUNT = 3;
+
+export function UpcomingEventsCarousel({
+  events,
+}: {
+  events: PublicEventCard[] | undefined;
+}) {
+  if (events === undefined) {
+    return <UpcomingEventsCarouselSkeleton />;
+  }
+  if (events.length === 0) {
+    return <p className="text-sm text-foreground/70">No upcoming public events right now.</p>;
+  }
+  return (
+    <div className="flex snap-x snap-mandatory gap-3">
+      {events.map((event, index) => {
+        const eager = index < EAGER_POSTER_COUNT;
+        return (
+          <Link
+            key={event.eventId}
+            href={event.publicEventUrl}
+            className="group w-[168px] shrink-0 snap-start sm:w-[196px]"
+          >
+            <article className="h-full overflow-hidden border border-border bg-card shadow-sm transition-[border-color,box-shadow] group-hover:border-primary/40 group-hover:shadow-md">
+              <PublicEventPoster
+                imageUrl={event.posterImageUrl}
+                eventId={event.eventId}
+                className="w-full"
+                loading={eager ? "eager" : "lazy"}
+                fetchPriority={eager ? "high" : undefined}
+              />
+              <div className="space-y-1 bg-card p-3">
+                <h3 className="line-clamp-2 text-sm font-semibold leading-snug text-foreground">
+                  {event.title}
+                </h3>
+                <p className="line-clamp-2 text-xs text-muted-foreground">
+                  {formatEventWhen(event.startAt)}
+                  {event.venueName ? ` · ${event.venueName}` : ""}
+                </p>
+              </div>
+            </article>
+          </Link>
+        );
+      })}
+    </div>
+  );
+}
+
+export function LandingUpcomingEventsSection({
+  events,
+}: {
+  events: PublicEventCard[];
+}) {
+  return (
+    <section className="border-b bg-muted/35 py-12 sm:py-16">
+      <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+        <Reveal className="flex items-end justify-between gap-4">
+          <div>
+            <h2 className="text-2xl font-semibold tracking-tight text-foreground">
+              Upcoming events
+            </h2>
+            <p className="mt-2 text-sm text-foreground/70">Next events at Arbor Live.</p>
+          </div>
+          <Link
+            href="/events"
+            className="text-sm font-medium text-emerald-800 underline-offset-4 hover:underline dark:text-primary"
+          >
+            View all →
+          </Link>
+        </Reveal>
+
+        <div className="marketing-carousel-scroll mt-8 -mx-4 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+          <UpcomingEventsCarousel events={events} />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/** Client-fetched variant for pages that need live updates (e.g. event detail). */
 export function LandingUpcomingEvents({
   excludeEventId,
   limit = 10,
@@ -185,38 +263,7 @@ export function LandingUpcomingEvents({
         </Reveal>
 
         <div className="marketing-carousel-scroll mt-8 -mx-4 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
-          {visibleEvents === undefined ? (
-            <UpcomingEventsCarouselSkeleton />
-          ) : visibleEvents.length === 0 ? (
-            <p className="text-sm text-foreground/70">No upcoming public events right now.</p>
-          ) : (
-            <div className="flex snap-x snap-mandatory gap-3">
-              {visibleEvents.map((event) => (
-                <Link
-                  key={event.eventId}
-                  href={event.publicEventUrl}
-                  className="group w-[168px] shrink-0 snap-start sm:w-[196px]"
-                >
-                  <article className="h-full overflow-hidden border border-border bg-card shadow-sm transition-[border-color,box-shadow] group-hover:border-primary/40 group-hover:shadow-md">
-                    <PublicEventPoster
-                      imageUrl={event.posterImageUrl}
-                      eventId={event.eventId}
-                      className="w-full"
-                    />
-                    <div className="space-y-1 bg-card p-3">
-                      <h3 className="line-clamp-2 text-sm font-semibold leading-snug text-foreground">
-                        {event.title}
-                      </h3>
-                      <p className="line-clamp-2 text-xs text-muted-foreground">
-                        {formatEventWhen(event.startAt)}
-                        {event.venueName ? ` · ${event.venueName}` : ""}
-                      </p>
-                    </div>
-                  </article>
-                </Link>
-              ))}
-            </div>
-          )}
+          <UpcomingEventsCarousel events={visibleEvents} />
         </div>
       </div>
     </section>

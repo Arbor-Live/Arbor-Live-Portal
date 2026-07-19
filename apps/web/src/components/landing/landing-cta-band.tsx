@@ -1,19 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { motion, useReducedMotion } from "framer-motion";
+import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { Reveal, landingSpringBouncy } from "./landing-motion";
+import { Reveal, useLandingMotion } from "./landing-motion";
 
 export function LandingCtaBand() {
-  const reduceMotion = useReducedMotion();
+  const { lite, springBouncy } = useLandingMotion();
 
   return (
     <section className="relative overflow-hidden bg-primary py-14 text-primary-foreground sm:py-16">
       <motion.div
         aria-hidden
         className="pointer-events-none absolute inset-x-0 h-32 bg-[radial-gradient(ellipse_at_center,color-mix(in_oklch,white_12%,transparent),transparent)]"
-        animate={reduceMotion ? undefined : { opacity: [0.4, 0.8, 0.4] }}
+        animate={lite ? undefined : { opacity: [0.4, 0.8, 0.4] }}
         transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
       />
       <div className="relative mx-auto flex max-w-6xl flex-col items-start gap-6 px-4 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
@@ -26,9 +26,9 @@ export function LandingCtaBand() {
           </p>
         </Reveal>
         <motion.div
-          whileHover={reduceMotion ? undefined : { scale: 1.05, rotate: -1 }}
-          whileTap={reduceMotion ? undefined : { scale: 0.97 }}
-          transition={landingSpringBouncy}
+          whileHover={lite ? undefined : { scale: 1.05, rotate: -1 }}
+          whileTap={lite ? undefined : { scale: 0.97 }}
+          transition={springBouncy}
         >
           <Button
             asChild

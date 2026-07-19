@@ -2,7 +2,6 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useReducedMotion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import { ListIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
@@ -14,18 +13,19 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { useLandingMotion } from "@/components/landing/landing-motion";
 import { landingNavLinks } from "@/lib/landing-content";
 import { cn } from "@/lib/utils";
 
 const GLOW_EASE = 0.14;
 
 export function FloatingMarketingNav() {
-  const reduceMotion = useReducedMotion();
+  const { lite } = useLandingMotion();
   const shellRef = useRef<HTMLDivElement>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
-    if (reduceMotion) return;
+    if (lite) return;
     const shell = shellRef.current;
     if (!shell) return;
 
@@ -61,7 +61,7 @@ export function FloatingMarketingNav() {
       cancelAnimationFrame(raf);
       window.removeEventListener("pointermove", onPointerMove);
     };
-  }, [reduceMotion]);
+  }, [lite]);
 
   return (
     <header className="pointer-events-none fixed inset-x-0 top-0 z-40 p-3 sm:p-4">
@@ -69,7 +69,7 @@ export function FloatingMarketingNav() {
         ref={shellRef}
         className={cn(
           "pointer-events-auto relative mx-auto max-w-6xl p-px shadow-[0_8px_28px_rgba(0,0,0,0.12)]",
-          reduceMotion ? "bg-border/60" : "marketing-nav-glow",
+          lite ? "bg-border/60" : "marketing-nav-glow",
         )}
       >
         <div className="flex items-center justify-between gap-3 bg-background/70 px-4 py-2.5 backdrop-blur-xl sm:gap-4 sm:px-5 sm:py-3">

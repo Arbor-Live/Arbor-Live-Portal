@@ -1,11 +1,11 @@
 "use client";
 
-import { motion, useReducedMotion } from "framer-motion";
+import { motion } from "framer-motion";
 import { landingEventTypes } from "@/lib/landing-content";
-import { Reveal, Stagger, StaggerItem } from "./landing-motion";
+import { Reveal, Stagger, StaggerItem, useLandingMotion } from "./landing-motion";
 
 export function LandingEventTypes() {
-  const reduceMotion = useReducedMotion();
+  const { lite } = useLandingMotion();
 
   return (
     <section id="events" className="border-b bg-background py-16 sm:py-24">
@@ -26,7 +26,7 @@ export function LandingEventTypes() {
               <motion.span
                 className="inline-block rounded-none border bg-card px-3 py-2 text-sm font-medium text-foreground ring-1 ring-foreground/10"
                 whileHover={
-                  reduceMotion
+                  lite
                     ? undefined
                     : {
                         scale: 1.06,

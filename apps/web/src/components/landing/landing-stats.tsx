@@ -1,11 +1,11 @@
 "use client";
 
-import { motion, useReducedMotion } from "framer-motion";
+import { motion } from "framer-motion";
 import { landingStats } from "@/lib/landing-content";
-import { Stagger, StaggerItem, landingSpringBouncy } from "./landing-motion";
+import { Stagger, StaggerItem, useLandingMotion } from "./landing-motion";
 
 export function LandingStats() {
-  const reduceMotion = useReducedMotion();
+  const { lite, springBouncy } = useLandingMotion();
 
   return (
     <section className="border-b bg-muted/40 py-14 sm:py-16">
@@ -15,8 +15,8 @@ export function LandingStats() {
             <StaggerItem key={stat.label}>
               <motion.div
                 className="text-center sm:text-left"
-                whileHover={reduceMotion ? undefined : { scale: 1.04 }}
-                transition={landingSpringBouncy}
+                whileHover={lite ? undefined : { scale: 1.04 }}
+                transition={springBouncy}
               >
                 <p className="display-tight text-4xl font-semibold tracking-tight text-primary sm:text-5xl">
                   {stat.value}

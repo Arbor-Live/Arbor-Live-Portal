@@ -3,10 +3,10 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef } from "react";
-import { motion, useReducedMotion } from "framer-motion";
+import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { landingHero } from "@/lib/landing-content";
-import { FloatOrb, landingSpring, landingSpringBouncy } from "./landing-motion";
+import { FloatOrb, useLandingMotion } from "./landing-motion";
 
 const heroStagger = {
   hidden: {},
@@ -15,42 +15,55 @@ const heroStagger = {
   },
 };
 
+/** Y-only entrance so hero copy stays readable if JS is delayed. */
 const heroItem = {
-  hidden: { opacity: 0, y: 32 },
+  hidden: { opacity: 1, y: 24 },
   visible: { opacity: 1, y: 0 },
 };
 
 export function LandingHero() {
-  const reduceMotion = useReducedMotion();
+  const { lite, reduceMotion, coarsePointer, mounted, spring, springBouncy } =
+    useLandingMotion();
   const videoRef = useRef<HTMLVideoElement>(null);
+  // Phones get a small vertical cut; desktop keeps the full landscape sources.
+  // prefers-reduced-motion still skips video entirely.
+  const showVideo = mounted && !reduceMotion;
+  const useMobileVideo = coarsePointer;
 
   useEffect(() => {
-    if (reduceMotion) return;
+    if (!showVideo) return;
     const video = videoRef.current;
     if (!video) return;
     void video.play().catch(() => {
       // Autoplay can be blocked by the browser; muted playback usually still works.
     });
-  }, [reduceMotion]);
+  }, [showVideo, useMobileVideo]);
 
   return (
     <section className="relative overflow-hidden bg-zinc-950 text-zinc-50">
-      {!reduceMotion ? (
+      {showVideo ? (
         <div aria-hidden className="pointer-events-none absolute inset-0 z-0">
           <video
             ref={videoRef}
+            key={useMobileVideo ? "mobile" : "desktop"}
             autoPlay
             muted
             loop
             playsInline
-            preload="auto"
+            preload="metadata"
             className="size-full object-cover opacity-60"
           >
-            <source
-              src={landingHero.backgroundVideoSrcHevc}
-              type='video/mp4; codecs="hvc1"'
-            />
-            <source src={landingHero.backgroundVideoSrc} type="video/mp4" />
+            {useMobileVideo ? (
+              <source src={landingHero.backgroundVideoSrcMobile} type="video/mp4" />
+            ) : (
+              <>
+                <source
+                  src={landingHero.backgroundVideoSrcHevc}
+                  type='video/mp4; codecs="hvc1"'
+                />
+                <source src={landingHero.backgroundVideoSrc} type="video/mp4" />
+              </>
+            )}
           </video>
         </div>
       ) : null}
@@ -85,7 +98,7 @@ export function LandingHero() {
       <div className="relative z-[2] px-4 sm:px-5">
         <motion.div
           className="mx-auto flex min-h-[min(92vh,56rem)] max-w-6xl flex-col justify-center px-5 py-28 sm:px-6 sm:py-32"
-          initial={reduceMotion ? false : "hidden"}
+          initial={lite ? false : "hidden"}
           animate="visible"
           variants={heroStagger}
         >
@@ -93,7 +106,7 @@ export function LandingHero() {
             <motion.div
               className="shrink-0"
               variants={heroItem}
-              transition={landingSpring}
+              transition={spring}
             >
               <Image
                 src="/icon.svg"
@@ -109,7 +122,7 @@ export function LandingHero() {
               <motion.h1
                 className="display-tight text-3xl font-semibold tracking-tight text-zinc-50 sm:text-4xl lg:text-5xl"
                 variants={heroItem}
-                transition={landingSpring}
+                transition={spring}
               >
                 {landingHero.headline}{" "}
                 <span className="text-primary-foreground">{landingHero.accentWord}</span>{" "}
@@ -119,7 +132,7 @@ export function LandingHero() {
               <motion.p
                 className="mx-auto mt-5 text-base leading-relaxed text-zinc-300 sm:text-lg"
                 variants={heroItem}
-                transition={landingSpring}
+                transition={spring}
               >
                 {landingHero.subheadline}
               </motion.p>
@@ -127,11 +140,11 @@ export function LandingHero() {
               <motion.div
                 className="mt-8 flex flex-wrap justify-center gap-3"
                 variants={heroItem}
-                transition={landingSpringBouncy}
+                transition={springBouncy}
               >
                 <motion.div
-                  whileHover={reduceMotion ? undefined : { scale: 1.03 }}
-                  whileTap={reduceMotion ? undefined : { scale: 0.98 }}
+                  whileHover={lite ? undefined : { scale: 1.03 }}
+                  whileTap={lite ? undefined : { scale: 0.98 }}
                 >
                   <Button asChild size="lg" className="h-11 px-6">
                     <Link href={landingHero.primaryCta.href}>
@@ -140,8 +153,8 @@ export function LandingHero() {
                   </Button>
                 </motion.div>
                 <motion.div
-                  whileHover={reduceMotion ? undefined : { scale: 1.03 }}
-                  whileTap={reduceMotion ? undefined : { scale: 0.98 }}
+                  whileHover={lite ? undefined : { scale: 1.03 }}
+                  whileTap={lite ? undefined : { scale: 0.98 }}
                 >
                   <Button
                     asChild
@@ -160,17 +173,19 @@ export function LandingHero() {
         </motion.div>
       </div>
 
-      <p className="absolute right-4 bottom-4 z-[2] text-[10px] tracking-wide text-zinc-400/80 sm:right-6 sm:bottom-6 sm:text-xs">
-        Video by{" "}
-        <a
-          href={landingHero.backgroundVideoCredit.href}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-zinc-300/90 underline-offset-2 hover:text-white hover:underline"
-        >
-          {landingHero.backgroundVideoCredit.label}
-        </a>
-      </p>
+      {showVideo ? (
+        <p className="absolute right-4 bottom-4 z-[2] text-[10px] tracking-wide text-zinc-400/80 sm:right-6 sm:bottom-6 sm:text-xs">
+          Video by{" "}
+          <a
+            href={landingHero.backgroundVideoCredit.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-zinc-300/90 underline-offset-2 hover:text-white hover:underline"
+          >
+            {landingHero.backgroundVideoCredit.label}
+          </a>
+        </p>
+      ) : null}
     </section>
   );
 }

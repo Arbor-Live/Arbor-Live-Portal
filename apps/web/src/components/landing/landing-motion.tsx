@@ -1,17 +1,60 @@
 "use client";
 
-import { motion, useReducedMotion, type Variants } from "framer-motion";
+import { motion, useInView, useReducedMotion, type Transition, type Variants } from "framer-motion";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { cn } from "@/lib/utils";
 
 export const landingSpring = { type: "spring" as const, stiffness: 380, damping: 36 };
 export const landingSpringBouncy = { type: "spring" as const, stiffness: 420, damping: 22 };
 
+const landingTween: Transition = {
+  type: "tween",
+  duration: 0.35,
+  ease: [0.22, 1, 0.36, 1],
+};
+
+function subscribeCoarsePointer(onStoreChange: () => void) {
+  const mq = window.matchMedia("(pointer: coarse)");
+  mq.addEventListener("change", onStoreChange);
+  return () => mq.removeEventListener("change", onStoreChange);
+}
+
+function getCoarsePointerSnapshot() {
+  return window.matchMedia("(pointer: coarse)").matches;
+}
+
+/** SSR assumes fine pointer so desktop HTML stays rich; video/orbs still wait for mount. */
+function getCoarsePointerServerSnapshot() {
+  return false;
+}
+
+export function useCoarsePointer() {
+  return useSyncExternalStore(
+    subscribeCoarsePointer,
+    getCoarsePointerSnapshot,
+    getCoarsePointerServerSnapshot,
+  );
+}
+
 export function useLandingMotion() {
-  const reduceMotion = useReducedMotion();
+  const reduceMotion = useReducedMotion() ?? false;
+  const coarsePointer = useCoarsePointer();
+  const lite = reduceMotion || coarsePointer;
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   return {
-    reduceMotion: reduceMotion ?? false,
-    spring: landingSpring,
-    springBouncy: landingSpringBouncy,
+    reduceMotion,
+    coarsePointer,
+    /** Touch devices or prefers-reduced-motion — skip heavy continuous effects. */
+    lite,
+    mounted,
+    spring: lite ? landingTween : landingSpring,
+    springBouncy: lite ? landingTween : landingSpringBouncy,
+    enterTransition: lite ? landingTween : landingSpring,
   };
 }
 
@@ -45,22 +88,27 @@ type RevealProps = {
 };
 
 export function Reveal({ children, className, delay = 0, variant = "fadeUp" }: RevealProps) {
-  const { reduceMotion } = useLandingMotion();
+  const { lite, mounted, enterTransition } = useLandingMotion();
+  const ref = useRef<HTMLDivElement>(null);
+  const isInView = useInView(ref, { once: true, margin: "0px" });
   const variants =
     variant === "fadeIn" ? fadeInVariants : variant === "scaleIn" ? scaleInVariants : fadeUpVariants;
 
-  if (reduceMotion) {
+  if (lite) {
     return <div className={className}>{children}</div>;
   }
 
+  // SSR + first paint stay visible. After mount, below-fold content can enter from hidden.
+  const state = !mounted || isInView ? "visible" : "hidden";
+
   return (
     <motion.div
+      ref={ref}
       className={className}
-      initial="hidden"
-      whileInView="visible"
-      viewport={{ once: true, margin: "-8% 0px" }}
+      initial="visible"
+      animate={state}
       variants={variants}
-      transition={{ ...landingSpring, delay }}
+      transition={{ ...enterTransition, delay }}
     >
       {children}
     </motion.div>
@@ -73,19 +121,24 @@ type StaggerProps = {
 };
 
 export function Stagger({ children, className }: StaggerProps) {
-  const { reduceMotion } = useLandingMotion();
+  const { lite, mounted, enterTransition } = useLandingMotion();
+  const ref = useRef<HTMLDivElement>(null);
+  const isInView = useInView(ref, { once: true, margin: "0px" });
 
-  if (reduceMotion) {
+  if (lite) {
     return <div className={className}>{children}</div>;
   }
 
+  const state = !mounted || isInView ? "visible" : "hidden";
+
   return (
     <motion.div
+      ref={ref}
       className={className}
-      initial="hidden"
-      whileInView="visible"
-      viewport={{ once: true, margin: "-6% 0px" }}
+      initial="visible"
+      animate={state}
       variants={staggerContainerVariants}
+      transition={enterTransition}
     >
       {children}
     </motion.div>
@@ -98,9 +151,9 @@ type StaggerItemProps = {
 };
 
 export function StaggerItem({ children, className }: StaggerItemProps) {
-  const { reduceMotion, springBouncy } = useLandingMotion();
+  const { lite, springBouncy } = useLandingMotion();
 
-  if (reduceMotion) {
+  if (lite) {
     return <div className={className}>{children}</div>;
   }
 
@@ -123,10 +176,14 @@ type FloatOrbProps = {
 };
 
 export function FloatOrb({ className, duration = 8, delay = 0 }: FloatOrbProps) {
-  const { reduceMotion } = useLandingMotion();
+  const { lite, mounted } = useLandingMotion();
+  const staticOrb = (
+    <div aria-hidden className={cn("pointer-events-none absolute rounded-full blur-3xl", className)} />
+  );
 
-  if (reduceMotion) {
-    return <div aria-hidden className={cn("pointer-events-none absolute rounded-full blur-3xl", className)} />;
+  // Wait for mount so SSR never schedules infinite work; lite stays static.
+  if (!mounted || lite) {
+    return staticOrb;
   }
 
   return (

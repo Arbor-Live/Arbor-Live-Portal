@@ -1,14 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { motion, useReducedMotion } from "framer-motion";
+import { motion } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { landingMission, landingPrograms } from "@/lib/landing-content";
 import { cn } from "@/lib/utils";
-import { Reveal, Stagger, StaggerItem } from "./landing-motion";
+import { Reveal, Stagger, StaggerItem, useLandingMotion } from "./landing-motion";
 
 function ProgramCard({ program }: { program: (typeof landingPrograms)[number] }) {
-  const reduceMotion = useReducedMotion();
+  const { lite } = useLandingMotion();
 
   return (
     <Card
@@ -20,7 +20,7 @@ function ProgramCard({ program }: { program: (typeof landingPrograms)[number] })
       <motion.div
         aria-hidden
         className={cn("relative h-36 bg-gradient-to-br sm:h-40", program.imageGradient)}
-        whileHover={reduceMotion ? undefined : { scale: 1.03 }}
+        whileHover={lite ? undefined : { scale: 1.03 }}
         transition={{ duration: 0.35 }}
       >
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,color-mix(in_oklch,white_18%,transparent),transparent_55%)]" />
