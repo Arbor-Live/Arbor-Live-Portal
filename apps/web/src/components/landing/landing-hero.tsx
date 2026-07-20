@@ -7,7 +7,6 @@ import { motion, useReducedMotion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { landingHero } from "@/lib/landing-content";
 import {
-  FloatOrb,
   landingSpring,
   landingSpringBouncy,
   useLandingMotion,
@@ -28,19 +27,34 @@ const heroItem = {
 export function LandingHero() {
   const { reduceMotion } = useLandingMotion();
   const prefersReducedMotion = useReducedMotion();
+  const sectionRef = useRef<HTMLElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
     if (prefersReducedMotion) return;
+    const section = sectionRef.current;
     const video = videoRef.current;
-    if (!video) return;
-    void video.play().catch(() => {
-      // Autoplay can be blocked by the browser; muted playback usually still works.
-    });
+    if (!section || !video) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) {
+          void video.play().catch(() => {
+            // Autoplay can be blocked by the browser; muted playback usually still works.
+          });
+        } else {
+          video.pause();
+        }
+      },
+      { threshold: 0.1 },
+    );
+
+    observer.observe(section);
+    return () => observer.disconnect();
   }, [prefersReducedMotion]);
 
   return (
-    <section className="relative overflow-hidden bg-zinc-950 text-zinc-50">
+    <section ref={sectionRef} className="relative overflow-hidden bg-zinc-950 text-zinc-50">
       {!prefersReducedMotion ? (
         <div aria-hidden className="pointer-events-none absolute inset-0 z-0">
           <video
@@ -67,21 +81,6 @@ export function LandingHero() {
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 z-[1] opacity-30 [background-image:linear-gradient(to_right,color-mix(in_oklch,white_6%,transparent)_1px,transparent_1px),linear-gradient(to_bottom,color-mix(in_oklch,white_6%,transparent)_1px,transparent_1px)] [background-size:4rem_4rem]"
-      />
-
-      <FloatOrb
-        className="z-[1] left-[8%] top-[18%] size-48 bg-primary/25"
-        duration={9}
-      />
-      <FloatOrb
-        className="z-[1] right-[12%] top-[28%] size-36 bg-emerald-400/15"
-        duration={11}
-        delay={1.2}
-      />
-      <FloatOrb
-        className="z-[1] bottom-[12%] left-[42%] size-56 bg-primary/15"
-        duration={13}
-        delay={0.6}
       />
 
       <div className="relative z-[2] px-4 sm:px-5">

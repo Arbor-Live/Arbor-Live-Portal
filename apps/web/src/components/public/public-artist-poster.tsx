@@ -1,4 +1,4 @@
-import { PosterPlaceholder } from "@/components/public/poster-placeholder";
+import { PosterPlaceholderImage } from "@/components/public/poster-placeholder-image";
 
 type PublicArtistPosterProps = {
   imageUrl?: string;
@@ -19,11 +19,11 @@ export function PublicArtistPoster({
   }
 
   return (
-    <PosterPlaceholder
+    <PosterPlaceholderImage
       seed={seed}
       title={title}
-      logoSrc="/arbor-artist.svg"
-      className={`aspect-[4/5] ${className}`}
+      variant="artist"
+      className={className}
     />
   );
 }
