@@ -93,7 +93,7 @@ function ShowSlotPanel({
   };
 }) {
   const crossesMidnight = endsOnNextDay(slot.startTime, slot.endTime);
-  const label = index === 0 ? "Show" : `Show ${index + 1}`;
+  const label = index === 0 ? "Event" : `Event ${index + 1}`;
   const selectedDateLabel = slot.date ? formatSelectedDateLabel(slot.date) : "Select a date on the calendar";
 
   return (
@@ -121,7 +121,7 @@ function ShowSlotPanel({
 
       {errors.date ? <p className="text-sm text-destructive">{errors.date}</p> : null}
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4">
         <div>
           <TimePicker
             label="Start time"
@@ -258,10 +258,10 @@ export function EventScheduleField() {
           void revalidateSchedule();
         }}
       >
-        Add another show
+        Add another event
       </Button>
       <p className="text-xs text-muted-foreground">
-        Optional. Use this for multiple performances, matinee and evening shows, or different
+        Optional. Use this for multiple performances, matinee and evening events, or different
         dates and times.
       </p>
 
