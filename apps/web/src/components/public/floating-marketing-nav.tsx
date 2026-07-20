@@ -2,9 +2,9 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useReducedMotion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import { ListIcon } from "@phosphor-icons/react";
+import { useLandingMotion } from "@/components/landing/landing-motion";
 import { Button } from "@/components/ui/button";
 import { DashboardNavLink } from "@/components/public/dashboard-nav-link";
 import {
@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils";
 const GLOW_EASE = 0.14;
 
 export function FloatingMarketingNav() {
-  const reduceMotion = useReducedMotion();
+  const { reduceMotion } = useLandingMotion();
   const shellRef = useRef<HTMLDivElement>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -30,7 +30,6 @@ export function FloatingMarketingNav() {
     if (!shell) return;
 
     let raf = 0;
-    let running = true;
     const current = { x: 50, y: 0 };
     const target = { x: 50, y: 0 };
 
@@ -40,39 +39,44 @@ export function FloatingMarketingNav() {
       const height = rect.height || 1;
       target.x = ((event.clientX - rect.left) / width) * 100;
       target.y = ((event.clientY - rect.top) / height) * 100;
+      if (!raf) {
+        raf = requestAnimationFrame(tick);
+      }
     };
 
     const tick = () => {
-      if (!running) return;
+      raf = 0;
       current.x += (target.x - current.x) * GLOW_EASE;
       current.y += (target.y - current.y) * GLOW_EASE;
       shell.style.setProperty("--glow-x", `${current.x}%`);
       shell.style.setProperty("--glow-y", `${current.y}%`);
-      raf = requestAnimationFrame(tick);
+      if (Math.abs(target.x - current.x) > 0.05 || Math.abs(target.y - current.y) > 0.05) {
+        raf = requestAnimationFrame(tick);
+      }
     };
 
     shell.style.setProperty("--glow-x", "50%");
     shell.style.setProperty("--glow-y", "0%");
     window.addEventListener("pointermove", onPointerMove, { passive: true });
-    raf = requestAnimationFrame(tick);
 
     return () => {
-      running = false;
       cancelAnimationFrame(raf);
       window.removeEventListener("pointermove", onPointerMove);
     };
   }, [reduceMotion]);
 
   return (
-    <header className="pointer-events-none fixed inset-x-0 top-0 z-40 p-3 sm:p-4">
+    // Avoid pointer-events-none on this shell: Radix Sheet portals from here, and
+    // iOS Safari often drops taps on dialog content nested under pointer-events-none.
+    <header className="fixed inset-x-0 top-0 z-40 flex justify-center p-3 sm:p-4">
       <div
         ref={shellRef}
         className={cn(
-          "pointer-events-auto relative mx-auto max-w-6xl p-px shadow-[0_8px_28px_rgba(0,0,0,0.12)]",
+          "relative w-full max-w-6xl p-px shadow-[0_8px_28px_rgba(0,0,0,0.12)]",
           reduceMotion ? "bg-border/60" : "marketing-nav-glow",
         )}
       >
-        <div className="flex items-center justify-between gap-3 bg-background/70 px-4 py-2.5 backdrop-blur-xl sm:gap-4 sm:px-5 sm:py-3">
+        <div className="flex items-center justify-between gap-3 bg-background/95 px-4 py-2.5 sm:gap-4 sm:bg-background/70 sm:px-5 sm:py-3 sm:backdrop-blur-xl">
           <Link href="/" className="flex shrink-0 items-center gap-2">
             <Image
               src="/logo.svg"
@@ -116,7 +120,10 @@ export function FloatingMarketingNav() {
                   <ListIcon className="size-4" />
                 </Button>
               </SheetTrigger>
-              <SheetContent side="right" className="w-[min(100%,20rem)] gap-0 p-0">
+              <SheetContent
+                side="right"
+                className="z-[60] w-[min(100%,20rem)] gap-0 p-0 pointer-events-auto"
+              >
                 <SheetHeader className="border-b px-5 py-4 text-left">
                   <SheetTitle className="font-heading text-base">Menu</SheetTitle>
                 </SheetHeader>

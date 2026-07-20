@@ -2,7 +2,6 @@
 
 import { useSyncExternalStore } from "react";
 import { motion, useReducedMotion, type Variants } from "framer-motion";
-import { cn } from "@/lib/utils";
 
 export const landingSpring = { type: "spring" as const, stiffness: 380, damping: 36 };
 export const landingSpringBouncy = { type: "spring" as const, stiffness: 420, damping: 22 };
@@ -132,37 +131,5 @@ export function StaggerItem({ children, className }: StaggerItemProps) {
     >
       {children}
     </motion.div>
-  );
-}
-
-type FloatOrbProps = {
-  className?: string;
-  duration?: number;
-  delay?: number;
-};
-
-export function FloatOrb({ className, duration = 8, delay = 0 }: FloatOrbProps) {
-  const { reduceMotion } = useLandingMotion();
-
-  if (reduceMotion) {
-    return <div aria-hidden className={cn("pointer-events-none absolute rounded-full blur-3xl", className)} />;
-  }
-
-  return (
-    <motion.div
-      aria-hidden
-      className={cn("pointer-events-none absolute rounded-full blur-3xl", className)}
-      animate={{
-        y: [0, -18, 8, 0],
-        x: [0, 12, -8, 0],
-        scale: [1, 1.08, 0.96, 1],
-      }}
-      transition={{
-        duration,
-        delay,
-        repeat: Infinity,
-        ease: "easeInOut",
-      }}
-    />
   );
 }

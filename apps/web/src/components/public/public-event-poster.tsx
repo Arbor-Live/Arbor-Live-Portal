@@ -1,4 +1,4 @@
-import { PosterPlaceholder } from "@/components/public/poster-placeholder";
+import { PosterPlaceholderImage } from "@/components/public/poster-placeholder-image";
 
 type PublicEventPosterProps = {
   imageUrl?: string;
@@ -9,7 +9,7 @@ type PublicEventPosterProps = {
 export function PublicEventPoster({ imageUrl, eventId, className = "" }: PublicEventPosterProps) {
   if (imageUrl) {
     return (
-      // eslint-disable-next-line @next/next/no-img-element -- signed or unknown hosts
+      // eslint-disable-next-line @next/next/no-img-element
       <img
         src={imageUrl}
         alt=""
@@ -20,5 +20,5 @@ export function PublicEventPoster({ imageUrl, eventId, className = "" }: PublicE
     );
   }
 
-  return <PosterPlaceholder seed={eventId} className={`aspect-[4/5] ${className}`} />;
+  return <PosterPlaceholderImage seed={eventId} variant="event" className={className} />;
 }
