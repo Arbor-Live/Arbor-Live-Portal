@@ -6,7 +6,12 @@ import { useEffect, useRef } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { landingHero } from "@/lib/landing-content";
-import { FloatOrb, landingSpring, landingSpringBouncy } from "./landing-motion";
+import {
+  FloatOrb,
+  landingSpring,
+  landingSpringBouncy,
+  useLandingMotion,
+} from "./landing-motion";
 
 const heroStagger = {
   hidden: {},
@@ -21,21 +26,22 @@ const heroItem = {
 };
 
 export function LandingHero() {
-  const reduceMotion = useReducedMotion();
+  const { reduceMotion } = useLandingMotion();
+  const prefersReducedMotion = useReducedMotion();
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
-    if (reduceMotion) return;
+    if (prefersReducedMotion) return;
     const video = videoRef.current;
     if (!video) return;
     void video.play().catch(() => {
       // Autoplay can be blocked by the browser; muted playback usually still works.
     });
-  }, [reduceMotion]);
+  }, [prefersReducedMotion]);
 
   return (
     <section className="relative overflow-hidden bg-zinc-950 text-zinc-50">
-      {!reduceMotion ? (
+      {!prefersReducedMotion ? (
         <div aria-hidden className="pointer-events-none absolute inset-0 z-0">
           <video
             ref={videoRef}
@@ -43,14 +49,10 @@ export function LandingHero() {
             muted
             loop
             playsInline
-            preload="auto"
+            preload="metadata"
             className="size-full object-cover opacity-60"
           >
-            <source
-              src={landingHero.backgroundVideoSrcHevc}
-              type='video/mp4; codecs="hvc1"'
-            />
-            <source src={landingHero.backgroundVideoSrc} type="video/mp4" />
+            <source src="/hero-video" type="video/mp4" />
           </video>
         </div>
       ) : null}

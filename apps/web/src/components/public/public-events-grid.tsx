@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Reveal, Stagger, StaggerItem } from "@/components/landing/landing-motion";
 import { PublicEventPoster } from "@/components/public/public-event-poster";
 
-type PublicEventCard = {
+export type PublicEventCard = {
   eventId: string;
   title: string;
   startAt: number;
@@ -153,16 +153,18 @@ export function PublicEventsGrid({
 export function LandingUpcomingEvents({
   excludeEventId,
   limit = 10,
+  initialEvents,
 }: {
   excludeEventId?: string;
   limit?: number;
+  initialEvents?: PublicEventCard[];
 } = {}) {
   const [now] = useState(() => Date.now());
   const events = useQuery(api.publicEvents.listUpcoming, {
     now,
     limit: excludeEventId ? limit + 1 : limit,
   });
-  const visibleEvents = events
+  const visibleEvents = (events ?? initialEvents)
     ?.filter((event) => event.eventId !== excludeEventId)
     .slice(0, limit);
 

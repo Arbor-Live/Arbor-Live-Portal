@@ -1,15 +1,34 @@
 "use client";
 
+import { useSyncExternalStore } from "react";
 import { motion, useReducedMotion, type Variants } from "framer-motion";
 import { cn } from "@/lib/utils";
 
 export const landingSpring = { type: "spring" as const, stiffness: 380, damping: 36 };
 export const landingSpringBouncy = { type: "spring" as const, stiffness: 420, damping: 22 };
 
+const mobileMotionQuery = "(max-width: 767px), (pointer: coarse)";
+
+function subscribeToMobileMotion(callback: () => void) {
+  const mediaQuery = window.matchMedia(mobileMotionQuery);
+  mediaQuery.addEventListener("change", callback);
+  return () => mediaQuery.removeEventListener("change", callback);
+}
+
+function isMobileMotionDevice() {
+  return window.matchMedia(mobileMotionQuery).matches;
+}
+
 export function useLandingMotion() {
   const reduceMotion = useReducedMotion();
+  const mobileMotionDevice = useSyncExternalStore(
+    subscribeToMobileMotion,
+    isMobileMotionDevice,
+    () => true,
+  );
+
   return {
-    reduceMotion: reduceMotion ?? false,
+    reduceMotion: (reduceMotion ?? false) || mobileMotionDevice,
     spring: landingSpring,
     springBouncy: landingSpringBouncy,
   };
