@@ -45,9 +45,15 @@ type ContactLookup =
   | {
       found: true;
       firstName: string;
+      lastName: string;
+      phone: string;
       groups: ReturningGroup[];
     }
   | { found: false };
+
+function contactDetailsComplete(lookup: Extract<ContactLookup, { found: true }>) {
+  return Boolean(lookup.firstName.trim() && lookup.lastName.trim() && lookup.phone.trim());
+}
 
 function StepSubheader({ text }: { text: string }) {
   const paragraphs = text.split("\n\n");
@@ -83,16 +89,19 @@ export function BookingRequestWizard() {
   const servicesNeeded = form.watch("servicesNeeded");
   const skipSponsor = requestContext === "group" || requestContext === "personal";
   const showReturningUser = contactLookup?.found === true;
+  const skipContact =
+    contactLookup?.found === true && contactDetailsComplete(contactLookup);
   const includeLighting = servicesNeeded.includes("Lighting");
 
   const activeSteps = useMemo(
     () =>
       getActiveSteps({
         showReturningUser,
+        skipContact,
         skipSponsor,
         includeLighting,
       }),
-    [showReturningUser, skipSponsor, includeLighting],
+    [showReturningUser, skipContact, skipSponsor, includeLighting],
   );
 
   const currentStep = activeSteps[stepIndex] ?? activeSteps[0]!;
@@ -180,6 +189,13 @@ export function BookingRequestWizard() {
       setContactLookup(lookup);
       if (lookup.found) {
         form.setValue("firstName", lookup.firstName, { shouldDirty: true });
+        form.setValue("lastName", lookup.lastName, { shouldDirty: true });
+        form.setValue("phone", lookup.phone, { shouldDirty: true });
+      } else if (contactLookup?.found) {
+        // Drop autofilled details when switching from a known contact to a new email.
+        form.setValue("firstName", "", { shouldDirty: true });
+        form.setValue("lastName", "", { shouldDirty: true });
+        form.setValue("phone", "", { shouldDirty: true });
       }
       advance();
       return;
@@ -221,7 +237,7 @@ export function BookingRequestWizard() {
     }
 
     advance();
-  }, [activeSteps, advance, convex, form, stepIndex]);
+  }, [activeSteps, advance, contactLookup, convex, form, stepIndex]);
 
   const goBack = useCallback(() => {
     if (stepIndex === 0 || currentStep.id === "thankYou") return;

@@ -427,11 +427,13 @@ const BASE_STEPS: BookingRequestStepConfig[] = [
 
 export function getActiveSteps(options: {
   showReturningUser: boolean;
+  skipContact: boolean;
   skipSponsor: boolean;
   includeLighting: boolean;
 }) {
   return BASE_STEPS.filter((step) => {
     if (step.id === "returningUser" && !options.showReturningUser) return false;
+    if (step.id === "contact" && options.skipContact) return false;
     if (step.id === "sponsorType" && options.skipSponsor) return false;
     if (step.id === "lighting" && !options.includeLighting) return false;
     return true;

@@ -224,6 +224,8 @@ export const lookupContactByEmail = query({
     v.object({
       found: v.literal(true),
       firstName: v.string(),
+      lastName: v.string(),
+      phone: v.string(),
       groups: v.array(
         v.object({
           groupId: v.id("invoiceGroups"),
@@ -250,8 +252,17 @@ export const lookupContactByEmail = query({
       return { found: false as const };
     }
 
-    const primary = activeContacts[0]!;
-    const { firstName } = resolveContactNameParts(primary);
+    // Prefer the contact record with the most complete details for autofill.
+    const primary = [...activeContacts].sort((a, b) => {
+      const score = (row: (typeof activeContacts)[number]) => {
+        const { firstName, lastName } = resolveContactNameParts(row);
+        return (
+          (firstName ? 1 : 0) + (lastName ? 1 : 0) + (row.phone?.trim() ? 1 : 0)
+        );
+      };
+      return score(b) - score(a);
+    })[0]!;
+    const { firstName, lastName } = resolveContactNameParts(primary);
     const groups = (
       await Promise.all(
         activeContacts.map(async (contact) => {
@@ -273,6 +284,8 @@ export const lookupContactByEmail = query({
     return {
       found: true as const,
       firstName,
+      lastName,
+      phone: primary.phone?.trim() ?? "",
       groups: uniqueGroups,
     };
   },
