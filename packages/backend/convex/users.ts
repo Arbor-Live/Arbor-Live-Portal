@@ -5,6 +5,7 @@ import { mutation, query } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import {
   getActiveOrganizationContextOrNull,
+  getCurrentUserOrNull,
   getUserId,
   isAdmin,
   requireAdmin,
@@ -498,16 +499,23 @@ export const listMyOrganizations = query({
 
 export const getViewer = query({
   args: {},
-  returns: v.object({
-    userId: v.string(),
-    role: v.optional(v.string()),
-    isAdmin: v.boolean(),
-    isCrewOnly: v.boolean(),
-    verticals: v.array(userVerticalValue),
-    disciplines: v.array(userDisciplineValue),
-  }),
+  returns: v.union(
+    v.object({
+      userId: v.string(),
+      role: v.optional(v.string()),
+      isAdmin: v.boolean(),
+      isCrewOnly: v.boolean(),
+      verticals: v.array(userVerticalValue),
+      disciplines: v.array(userDisciplineValue),
+    }),
+    v.null(),
+  ),
   handler: async (ctx) => {
-    const user = await requireAuth(ctx);
+    // Return null for guests instead of throwing — public surfaces (e.g. booking
+    // VenuePicker) may subscribe without auth, and Convex React surfaces thrown
+    // query errors as uncaught render failures.
+    const user = await getCurrentUserOrNull(ctx);
+    if (!user) return null;
     const userId = getUserId(user);
     const orgContext = await getActiveOrganizationContextOrNull(ctx);
     const profile = await ctx.db

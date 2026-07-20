@@ -515,7 +515,14 @@ export const submitPublic = mutation({
     const requestNumber = await allocateRequestNumber(ctx);
     const publicToken = await generateUniquePublicToken(ctx);
 
-    const venueLink = await resolveVenueLink(ctx, args.venueId);
+    // Public booking collects freeform venue text; staff links a real venue later.
+    const venueLink = args.venueId
+      ? await resolveVenueLink(ctx, args.venueId)
+      : {
+          venueId: undefined,
+          venueName: trimOptional(args.venueName),
+          venueAddress: trimOptional(args.venueAddress),
+        };
     const id = await ctx.db.insert("eventRequests", {
       status: "submitted",
       requestNumber,

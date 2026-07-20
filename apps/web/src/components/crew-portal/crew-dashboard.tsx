@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 export function CrewDashboard() {
   const viewer = useQuery(api.users.getViewer, {});
 
-  if (viewer === undefined) {
+  if (!viewer) {
     return (
       <div className="grid gap-4 md:grid-cols-2">
         <Skeleton className="h-48 w-full" />

@@ -10,7 +10,7 @@ export function TimecardsPageClient() {
   const viewer = useQuery(api.users.getViewer, {});
   const activeOrganization = useQuery(api.users.getActiveOrganization, {});
 
-  if (viewer === undefined || activeOrganization === undefined) {
+  if (!viewer || activeOrganization === undefined) {
     return <Skeleton className="h-48 w-full" />;
   }
 

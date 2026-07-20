@@ -31,7 +31,9 @@ export function VenuePicker({
   placeholder = "Search venues…",
 }: VenuePickerProps) {
   const venues = useQuery(api.venues.listForPicker, {});
-  const viewer = useQuery(api.users.getViewer, {});
+  // Public booking uses this picker with allowCreate=false; skip auth so guests
+  // are not crashed by getViewer throwing "You must be signed in."
+  const viewer = useQuery(api.users.getViewer, allowCreate ? {} : "skip");
   const createQuick = useMutation(api.venues.createQuick);
   const [createOpen, setCreateOpen] = useState(false);
   const [draftName, setDraftName] = useState("");

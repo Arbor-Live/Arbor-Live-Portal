@@ -25,7 +25,7 @@ export function DashboardHomeClient() {
     }
   }, [viewer, activeOrganization, router]);
 
-  if (viewer === undefined || activeOrganization === undefined) {
+  if (!viewer || activeOrganization === undefined) {
     return <Skeleton className="h-48 w-full" />;
   }
 
