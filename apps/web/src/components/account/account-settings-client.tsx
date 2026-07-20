@@ -7,6 +7,7 @@ import { authClient } from "@/lib/auth-client";
 import { api } from "@/lib/convex-api";
 import { Form } from "@/components/ui/form";
 import { TextFormField } from "@/components/forms/text-form-field";
+import { TextareaFormField } from "@/components/forms/textarea-form-field";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -71,7 +72,13 @@ export function AccountSettingsClient() {
 
   const profileForm = useConvexForm<ProfileFormValues>({
     schema: profileSchema,
-    defaultValues: { name: "", phone: "", title: "", calendarInviteEmail: "" },
+    defaultValues: {
+      name: "",
+      phone: "",
+      title: "",
+      publicCrewDescription: "",
+      calendarInviteEmail: "",
+    },
     mode: "onTouched",
   });
 
@@ -105,6 +112,7 @@ export function AccountSettingsClient() {
       name: account.name,
       phone: account.phone ?? "",
       title: account.title ?? "",
+      publicCrewDescription: account.publicCrewDescription ?? "",
       calendarInviteEmail: account.calendarInviteEmail ?? "",
     });
   }, [account, profileForm]);
@@ -126,6 +134,7 @@ export function AccountSettingsClient() {
     await updateMyProfileDetails({
       phone: values.phone?.trim() || undefined,
       title: values.title?.trim() || undefined,
+      publicCrewDescription: values.publicCrewDescription?.trim() || undefined,
       calendarInviteEmail: values.calendarInviteEmail?.trim() || undefined,
     });
     await refetchSession();
@@ -322,6 +331,13 @@ export function AccountSettingsClient() {
               <TextFormField name="name" label="Display name" />
               <TextFormField name="title" label="Job title" />
               <TextFormField name="phone" label="Phone" type="tel" />
+              <TextareaFormField
+                name="publicCrewDescription"
+                label="Public crew description"
+                description="Short blurb shown on the public crew page when you’re listed."
+                placeholder="A sentence or two about yourself…"
+                rows={3}
+              />
               <TextFormField
                 name="calendarInviteEmail"
                 label="Calendar invite email"

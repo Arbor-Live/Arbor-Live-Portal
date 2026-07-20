@@ -110,16 +110,26 @@ export function EventTimelineScheduler({
     const extraDays = Math.floor((range.duration + minutesInDay(range.start)) / MINUTES_PER_DAY);
     return Math.max(max, block.dayIndex + extraDays);
   }, 0);
+  /** Day rows to render — grows when blocks spill past midnight after show end. */
   const safeDayCount = Math.max(1, dayCount, maxDerivedDay + 1);
+  /** Drag/select may use any rendered day (including overnight strike spill). */
+  const allowedDayCount = safeDayCount;
+  const maxGlobalMinutes = allowedDayCount * MINUTES_PER_DAY;
 
   function updateBlockByGlobalRange(index: number, nextStartGlobal: number, nextEndGlobal: number) {
     const original = blocks[index];
     const originalStart = parseInputDate(original.startsAt);
     if (!originalStart) return;
-    const snappedStart = snapMinutes(nextStartGlobal);
-    const snappedEnd = Math.max(snappedStart + SNAP_MINUTES, snapMinutes(nextEndGlobal));
+    const snappedStart = snapMinutes(clamp(nextStartGlobal, 0, maxGlobalMinutes - SNAP_MINUTES));
+    const snappedEnd = Math.max(
+      snappedStart + SNAP_MINUTES,
+      snapMinutes(clamp(nextEndGlobal, snappedStart + SNAP_MINUTES, maxGlobalMinutes * 2)),
+    );
     const oldDayZero = new Date(startOfDay(originalStart).getTime() - original.dayIndex * MS_PER_DAY);
-    const startDayIndex = Math.floor(snappedStart / MINUTES_PER_DAY);
+    const startDayIndex = Math.min(
+      allowedDayCount - 1,
+      Math.max(0, Math.floor(snappedStart / MINUTES_PER_DAY)),
+    );
     const startMinute = ((snappedStart % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY;
     const duration = Math.max(SNAP_MINUTES, Math.round(snappedEnd - snappedStart));
     const endAbsolute = startMinute + duration;
@@ -157,7 +167,7 @@ export function EventTimelineScheduler({
       const rowOffset = state.dayIndex * MINUTES_PER_DAY;
       if (state.mode === "move") {
         const duration = range.endGlobal - range.startGlobal;
-        const nextStart = rowOffset + clamp(snappedOnRow, 0, MINUTES_PER_DAY * 2 - duration);
+        const nextStart = rowOffset + clamp(snappedOnRow, 0, maxGlobalMinutes - rowOffset - duration);
         updateBlockByGlobalRange(state.index, nextStart, nextStart + duration);
         return;
       }
@@ -350,11 +360,29 @@ export function EventTimelineScheduler({
               }
             />
             <SearchableSelect
-              value={String(block.dayIndex)}
-              onChange={(value) =>
-                onChange(blocks.map((row, i) => (i === index ? { ...row, dayIndex: Number(value) } : row)))
-              }
-              options={Array.from({ length: safeDayCount }).map((__, idx) => ({
+              value={String(Math.min(block.dayIndex, allowedDayCount - 1))}
+              onChange={(value) => {
+                const nextDayIndex = clamp(Number(value), 0, allowedDayCount - 1);
+                onChange(
+                  blocks.map((row, i) => {
+                    if (i !== index) return row;
+                    const deltaDays = nextDayIndex - row.dayIndex;
+                    if (deltaDays === 0) return { ...row, dayIndex: nextDayIndex };
+                    const shift = (input: string) => {
+                      const date = parseInputDate(input);
+                      if (!date) return input;
+                      return toLocalInput(new Date(date.getTime() + deltaDays * MS_PER_DAY));
+                    };
+                    return {
+                      ...row,
+                      dayIndex: nextDayIndex,
+                      startsAt: shift(row.startsAt),
+                      endsAt: shift(row.endsAt),
+                    };
+                  }),
+                );
+              }}
+              options={Array.from({ length: allowedDayCount }).map((__, idx) => ({
                 value: String(idx),
                 label: `Day ${idx + 1}`,
               }))}

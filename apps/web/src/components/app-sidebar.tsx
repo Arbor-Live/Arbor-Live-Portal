@@ -117,6 +117,7 @@ const usersSubItems: NavSubItem[] = [
   { title: "Access & Invites", url: "/dashboard/users/access" },
   { title: "Organizations", url: "/dashboard/users/organizations" },
   { title: "Band applications", url: "/dashboard/users/band-applications", adminOnly: true },
+  { title: "Crew applications", url: "/dashboard/users/crew-applications", adminOnly: true },
   { title: "Crew Rates", url: "/dashboard/users/crew-rates" },
 ]
 
@@ -201,6 +202,14 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
   const pendingAvailabilityCount = useQuery(
     api.eventCrewAvailability.getMyPendingAvailabilityCount,
     activeOrganization?.organizationType === "arbor_internal" ? { now } : "skip",
+  )
+  const pendingBandApplicationsCount = useQuery(
+    api.bandApplications.countPendingSubmitted,
+    isAdmin ? {} : "skip",
+  )
+  const pendingCrewApplicationsCount = useQuery(
+    api.crewApplications.countPendingSubmitted,
+    isAdmin ? {} : "skip",
   )
   const unconfirmedCrewCount = useQuery(
     api.eventCrewAvailability.listForAdminOverview,
@@ -358,6 +367,20 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
                                   unconfirmedEventCount > 0 ? (
                                     <span className="ml-auto rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
                                       {unconfirmedEventCount}
+                                    </span>
+                                  ) : null}
+                                  {subItem.url === "/dashboard/users/band-applications" &&
+                                  pendingBandApplicationsCount &&
+                                  pendingBandApplicationsCount > 0 ? (
+                                    <span className="ml-auto rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+                                      {pendingBandApplicationsCount}
+                                    </span>
+                                  ) : null}
+                                  {subItem.url === "/dashboard/users/crew-applications" &&
+                                  pendingCrewApplicationsCount &&
+                                  pendingCrewApplicationsCount > 0 ? (
+                                    <span className="ml-auto rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+                                      {pendingCrewApplicationsCount}
                                     </span>
                                   ) : null}
                                 </Link>

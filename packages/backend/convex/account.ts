@@ -20,6 +20,7 @@ export const getMyAccount = query({
     phone: v.optional(v.string()),
     title: v.optional(v.string()),
     calendarInviteEmail: v.optional(v.string()),
+    publicCrewDescription: v.optional(v.string()),
   }),
   handler: async (ctx) => {
     const user = await requireAuth(ctx);
@@ -44,6 +45,7 @@ export const getMyAccount = query({
       phone: profile?.phone,
       title: profile?.title,
       calendarInviteEmail: profile?.calendarInviteEmail ?? "",
+      publicCrewDescription: profile?.publicCrewDescription,
     };
   },
 });
@@ -131,6 +133,7 @@ export const updateMyProfileDetails = mutation({
     phone: v.optional(v.string()),
     title: v.optional(v.string()),
     calendarInviteEmail: v.optional(v.string()),
+    publicCrewDescription: v.optional(v.string()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -140,6 +143,7 @@ export const updateMyProfileDetails = mutation({
     const phone = args.phone?.trim() || undefined;
     const title = args.title?.trim() || undefined;
     const calendarInviteEmail = args.calendarInviteEmail?.trim().toLowerCase() || undefined;
+    const publicCrewDescription = args.publicCrewDescription?.trim() || undefined;
     if (calendarInviteEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(calendarInviteEmail)) {
       throw new Error("Enter a valid calendar invite email address.");
     }
@@ -154,6 +158,7 @@ export const updateMyProfileDetails = mutation({
         phone,
         title,
         calendarInviteEmail,
+        publicCrewDescription,
         updatedAt: now,
       });
       return null;
@@ -164,6 +169,7 @@ export const updateMyProfileDetails = mutation({
       phone,
       title,
       calendarInviteEmail,
+      publicCrewDescription,
       active: true,
       verticals: [],
       disciplines: [],

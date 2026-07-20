@@ -21,6 +21,11 @@ import { OnboardingReminderEmail } from "../emails/onboarding-reminder";
 import { BandApplicationReceivedEmail } from "../emails/band-application-received";
 import { BandApplicationApprovedEmail } from "../emails/band-application-approved";
 import { BandApplicationDeclinedEmail } from "../emails/band-application-declined";
+import { BandApplicationConfirmationEmail } from "../emails/band-application-confirmation";
+import { CrewApplicationReceivedEmail } from "../emails/crew-application-received";
+import { CrewApplicationClosedEmail } from "../emails/crew-application-closed";
+import { CrewApplicationConfirmationEmail } from "../emails/crew-application-confirmation";
+import { CrewTraineeIntroEmail } from "../emails/crew-trainee-intro";
 import type {
   BookingQuoteReadyEmailProps,
   BookingRequestReceivedEmailProps,
@@ -43,6 +48,11 @@ import type {
   OnboardingReminderEmailProps,
   BandApplicationReceivedEmailProps,
   BandApplicationDecisionEmailProps,
+  BandApplicationConfirmationEmailProps,
+  CrewApplicationReceivedEmailProps,
+  CrewApplicationClosedEmailProps,
+  CrewApplicationConfirmationEmailProps,
+  CrewTraineeIntroEmailProps,
 } from "./types";
 
 export async function renderEventCancelledEmail(props: EventEmailProps) {
@@ -137,4 +147,30 @@ export async function renderBandApplicationDeclinedEmail(
   props: BandApplicationDecisionEmailProps,
 ) {
   return render(BandApplicationDeclinedEmail(props));
+}
+
+export async function renderBandApplicationConfirmationEmail(
+  props: BandApplicationConfirmationEmailProps,
+) {
+  return render(BandApplicationConfirmationEmail(props));
+}
+
+export async function renderCrewApplicationReceivedEmail(
+  props: CrewApplicationReceivedEmailProps,
+) {
+  return render(CrewApplicationReceivedEmail(props));
+}
+
+export async function renderCrewApplicationClosedEmail(props: CrewApplicationClosedEmailProps) {
+  return render(CrewApplicationClosedEmail(props));
+}
+
+export async function renderCrewApplicationConfirmationEmail(
+  props: CrewApplicationConfirmationEmailProps,
+) {
+  return render(CrewApplicationConfirmationEmail(props));
+}
+
+export async function renderCrewTraineeIntroEmail(props: CrewTraineeIntroEmailProps) {
+  return render(CrewTraineeIntroEmail(props));
 }

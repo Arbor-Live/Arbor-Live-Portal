@@ -902,6 +902,8 @@ export default defineSchema({
     role: v.string(),
     personName: v.optional(v.string()),
     userId: v.optional(v.string()),
+    /** Trainee shifts link to a crew application instead of a portal user. */
+    crewApplicationId: v.optional(v.id("crewApplications")),
     callTime: v.optional(v.number()),
     startsAt: v.number(),
     endsAt: v.number(),
@@ -916,7 +918,8 @@ export default defineSchema({
     .index("by_eventId_and_startsAt", ["eventId", "startsAt"])
     .index("by_scheduleBlockId", ["scheduleBlockId"])
     .index("by_expenseReportId", ["expenseReportId"])
-    .index("by_userId_and_startsAt", ["userId", "startsAt"]),
+    .index("by_userId_and_startsAt", ["userId", "startsAt"])
+    .index("by_crewApplicationId", ["crewApplicationId"]),
 
   eventCrewMediaStatus: defineTable({
     eventId: v.id("events"),
@@ -1049,6 +1052,11 @@ export default defineSchema({
       v.literal("band_application_received"),
       v.literal("band_application_approved"),
       v.literal("band_application_declined"),
+      v.literal("band_application_confirmation"),
+      v.literal("crew_application_received"),
+      v.literal("crew_application_closed"),
+      v.literal("crew_application_confirmation"),
+      v.literal("crew_trainee_intro"),
     ),
     status: v.union(v.literal("queued"), v.literal("sent"), v.literal("failed")),
     to: v.string(),
@@ -1382,5 +1390,54 @@ export default defineSchema({
   })
     .index("by_status", ["status"])
     .index("by_contactEmail", ["contactEmail"])
+    .index("by_submittedAt", ["submittedAt"]),
+
+  /** Public self-serve applications to join Arbor Live crew / staff. */
+  crewApplications: defineTable({
+    status: v.union(
+      v.literal("submitted"),
+      v.literal("closed"),
+      v.literal("trainee"),
+      v.literal("converted"),
+    ),
+    name: v.string(),
+    email: v.string(),
+    phone: v.string(),
+    heardAboutUs: v.string(),
+    vertical: v.union(
+      v.literal("Operations"),
+      v.literal("Crew"),
+      v.literal("Trivia"),
+      v.literal("Marketing"),
+    ),
+    discipline: v.optional(
+      v.union(
+        v.literal("Sound"),
+        v.literal("Lights"),
+        v.literal("Design"),
+        v.literal("unsure"),
+      ),
+    ),
+    crewAvailabilityDays: v.optional(
+      v.array(v.union(v.literal("friday"), v.literal("saturday"))),
+    ),
+    stanfordPosition: v.union(
+      v.literal("undergrad"),
+      v.literal("coterm"),
+      v.literal("masters"),
+      v.literal("phd"),
+      v.literal("postdoc"),
+      v.literal("other"),
+    ),
+    gradYear: v.optional(v.number()),
+    submittedAt: v.number(),
+    reviewedAt: v.optional(v.number()),
+    reviewedByUserId: v.optional(v.string()),
+    convertedUserId: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_status", ["status"])
+    .index("by_email", ["email"])
     .index("by_submittedAt", ["submittedAt"]),
 });

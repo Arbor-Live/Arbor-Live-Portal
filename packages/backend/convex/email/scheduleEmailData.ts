@@ -15,6 +15,7 @@ export type CrewShiftLike = {
   startsAt: number;
   endsAt: number;
   userId?: string;
+  crewApplicationId?: Id<"crewApplications">;
 };
 
 export function formatBlockTimeRange(startsAt: number, endsAt: number, timezone: string) {

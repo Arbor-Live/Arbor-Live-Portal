@@ -59,6 +59,19 @@ export default function UsersPage() {
           </Card>
           <Card>
             <CardHeader>
+              <CardTitle>Crew applications</CardTitle>
+              <CardDescription>
+                Review public crew join requests, assign trainees, and convert to members.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button asChild>
+                <Link href="/dashboard/users/crew-applications">Open Crew Applications</Link>
+              </Button>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
               <CardTitle>Crew Rates</CardTitle>
               <CardDescription>Manage invoice global crew rates and per-user compensation rates.</CardDescription>
             </CardHeader>

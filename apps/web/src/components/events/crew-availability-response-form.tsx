@@ -1,13 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useMutation } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { DateTimePicker } from "@/components/ui/date-time-picker";
-import { SearchableSelect } from "@/components/inventory/searchable-select";
+import { ScheduleBlockWindowFields } from "@/components/events/schedule-block-window-fields";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import {
   type CrewAvailabilityResponseStatus,
@@ -97,15 +96,6 @@ export function CrewAvailabilityResponseForm({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  const blockOptions = useMemo(
-    () =>
-      scheduleBlocks.map((block) => ({
-        value: block._id,
-        label: `${block.label} (${block.blockType})`,
-      })),
-    [scheduleBlocks],
-  );
-
   async function handleSubmit() {
     setSaving(true);
     setSaveError(null);
@@ -139,23 +129,6 @@ export function CrewAvailabilityResponseForm({
     } finally {
       setSaving(false);
     }
-  }
-
-  function applyBlockToWindow(index: number, blockId: string) {
-    const block = scheduleBlocks.find((entry) => entry._id === blockId);
-    if (!block) return;
-    setPartialWindows((prev) =>
-      prev.map((window, i) =>
-        i === index
-          ? {
-              ...window,
-              scheduleBlockId: block._id,
-              startsAtInput: toLocalDateTimeInput(new Date(block.startsAt)),
-              endsAtInput: toLocalDateTimeInput(new Date(block.endsAt)),
-            }
-          : window,
-      ),
-    );
   }
 
   return (
@@ -201,45 +174,31 @@ export function CrewAvailabilityResponseForm({
                   </Button>
                 ) : null}
               </div>
-              {blockOptions.length > 0 ? (
-                <SearchableSelect
-                  value={window.scheduleBlockId ?? ""}
-                  onChange={(value) => applyBlockToWindow(index, value)}
-                  options={blockOptions}
-                  placeholder="Link to schedule block..."
-                  emptyLabel="Custom times"
-                />
-              ) : null}
-              <div className="grid gap-2 md:grid-cols-2">
-                <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">Start</p>
-                  <DateTimePicker
-                    value={window.startsAtInput}
-                    onChange={(value) =>
-                      setPartialWindows((prev) =>
-                        prev.map((entry, i) => (i === index ? { ...entry, startsAtInput: value } : entry)),
-                      )
-                    }
-                  />
-                </div>
-                <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">End</p>
-                  <DateTimePicker
-                    value={window.endsAtInput}
-                    onChange={(value) =>
-                      setPartialWindows((prev) =>
-                        prev.map((entry, i) => (i === index ? { ...entry, endsAtInput: value } : entry)),
-                      )
-                    }
-                  />
-                </div>
-              </div>
-              <Input
-                placeholder="Notes for this window (optional)"
-                value={window.notes}
-                onChange={(e) =>
+              <ScheduleBlockWindowFields
+                scheduleBlocks={scheduleBlocks}
+                scheduleBlockId={window.scheduleBlockId}
+                startsAtInput={window.startsAtInput}
+                endsAtInput={window.endsAtInput}
+                notes={window.notes}
+                onNotesChange={(value) =>
                   setPartialWindows((prev) =>
-                    prev.map((entry, i) => (i === index ? { ...entry, notes: e.target.value } : entry)),
+                    prev.map((entry, i) => (i === index ? { ...entry, notes: value } : entry)),
+                  )
+                }
+                onChange={(next) =>
+                  setPartialWindows((prev) =>
+                    prev.map((entry, i) =>
+                      i === index
+                        ? {
+                            ...entry,
+                            scheduleBlockId: next.scheduleBlockId
+                              ? (next.scheduleBlockId as Id<"eventScheduleBlocks">)
+                              : undefined,
+                            startsAtInput: next.startsAtInput,
+                            endsAtInput: next.endsAtInput,
+                          }
+                        : entry,
+                    ),
                   )
                 }
               />

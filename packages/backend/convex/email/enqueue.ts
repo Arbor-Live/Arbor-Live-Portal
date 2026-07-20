@@ -30,6 +30,11 @@ const emailTemplateValue = v.union(
   v.literal("band_application_received"),
   v.literal("band_application_approved"),
   v.literal("band_application_declined"),
+  v.literal("band_application_confirmation"),
+  v.literal("crew_application_received"),
+  v.literal("crew_application_closed"),
+  v.literal("crew_application_confirmation"),
+  v.literal("crew_trainee_intro"),
 );
 
 const emailStatusValue = v.union(

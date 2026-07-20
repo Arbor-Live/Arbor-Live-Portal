@@ -49,7 +49,12 @@ export type EmailTemplate =
   | "onboarding_reminder"
   | "band_application_received"
   | "band_application_approved"
-  | "band_application_declined";
+  | "band_application_declined"
+  | "band_application_confirmation"
+  | "crew_application_received"
+  | "crew_application_closed"
+  | "crew_application_confirmation"
+  | "crew_trainee_intro";
 
 export function eventDashboardUrl(eventId: string) {
   return `${SITE_URL}/dashboard/events/${eventId}`;
@@ -81,6 +86,10 @@ export function onboardingUrl(path: "/onboarding" | "/onboarding/band" = "/onboa
 
 export function bandApplicationsAdminUrl() {
   return `${SITE_URL}/dashboard/users/band-applications`;
+}
+
+export function crewApplicationsAdminUrl() {
+  return `${SITE_URL}/dashboard/users/crew-applications`;
 }
 
 export function requestTrackingUrl(token: string) {
@@ -145,6 +154,16 @@ export function subjectForTemplate(template: EmailTemplate, context: string) {
       return `You're approved: ${context}`;
     case "band_application_declined":
       return `Update on your Arbor Live application: ${context}`;
+    case "band_application_confirmation":
+      return `We got your application: ${context}`;
+    case "crew_application_received":
+      return `New crew application: ${context}`;
+    case "crew_application_closed":
+      return `Update on your Arbor Live crew application`;
+    case "crew_application_confirmation":
+      return `We got your crew application`;
+    case "crew_trainee_intro":
+      return `You're training with us: ${context}`;
   }
 }
 

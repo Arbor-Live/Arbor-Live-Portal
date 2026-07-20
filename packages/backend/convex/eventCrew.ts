@@ -44,6 +44,7 @@ export const upsertShifts = mutation({
         role: v.string(),
         personName: v.optional(v.string()),
         userId: v.optional(v.string()),
+        crewApplicationId: v.optional(v.id("crewApplications")),
         callTime: v.optional(v.number()),
         startsAt: v.number(),
         endsAt: v.number(),
@@ -88,6 +89,7 @@ export const upsertShifts = mutation({
       startsAt: row.startsAt,
       endsAt: row.endsAt,
       userId: row.userId,
+      crewApplicationId: row.crewApplicationId,
     }));
     const keepIds = new Set(args.shifts.map((s) => s.id).filter(Boolean));
     for (const row of existing) {
@@ -109,6 +111,7 @@ export const upsertShifts = mutation({
           role: shift.role.trim(),
           personName: shift.personName?.trim() || undefined,
           userId: shift.userId?.trim() || undefined,
+          crewApplicationId: shift.crewApplicationId,
           callTime: shift.callTime,
           startsAt: shift.startsAt,
           endsAt: shift.endsAt,
@@ -126,6 +129,7 @@ export const upsertShifts = mutation({
           role: shift.role.trim(),
           personName: shift.personName?.trim() || undefined,
           userId: shift.userId?.trim() || undefined,
+          crewApplicationId: shift.crewApplicationId,
           callTime: shift.callTime,
           startsAt: shift.startsAt,
           endsAt: shift.endsAt,
@@ -166,6 +170,7 @@ export const upsertShifts = mutation({
         startsAt: shift.startsAt,
         endsAt: shift.endsAt,
         userId: shift.userId?.trim() || undefined,
+        crewApplicationId: shift.crewApplicationId,
       })),
     );
     return null;

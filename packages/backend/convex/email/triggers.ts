@@ -206,7 +206,73 @@ export async function scheduleCrewScheduledEmails(
     });
   }
 
-  if (assignedUserIds.length === 0) return;
+  const previousApplicationIds = [
+    ...new Set(
+      previousShifts
+        .filter((shift) => !shift.userId?.trim() && shift.crewApplicationId)
+        .map((shift) => shift.crewApplicationId!)
+        .filter(Boolean),
+    ),
+  ];
+  const assignedApplicationIds = [
+    ...new Set(
+      nextShifts
+        .filter((shift) => !shift.userId?.trim() && shift.crewApplicationId)
+        .map((shift) => shift.crewApplicationId!)
+        .filter(Boolean),
+    ),
+  ];
+  const assignedApplicationIdSet = new Set(assignedApplicationIds);
+
+  for (const applicationId of previousApplicationIds) {
+    if (assignedApplicationIdSet.has(applicationId)) continue;
+
+    const scheduleDebounceKey = `crew_scheduled:${eventId}:application:${applicationId}`;
+    await cancelPendingDebouncedEmail(ctx, scheduleDebounceKey);
+
+    const previousAppShifts = previousShifts.filter(
+      (shift) => shift.crewApplicationId === applicationId && !shift.userId?.trim(),
+    );
+    if (previousAppShifts.length === 0) continue;
+
+    const hadInvite = await hasSentDebouncedEmail(ctx, scheduleDebounceKey);
+    if (!hadInvite) continue;
+
+    const application = await ctx.db.get(applicationId);
+    if (!application?.email) continue;
+
+    const previousAssignmentSummaries = previousAppShifts.map((shift) =>
+      formatAssignmentSummary(shift, blockLabelById, timezone),
+    );
+    const icsEvents = [
+      buildSingleIcsEventForUserShifts({
+        eventId,
+        userId: `application:${applicationId}`,
+        eventTitle: event.title,
+        venueName: event.venueName,
+        shifts: previousAppShifts,
+        blockLabelById,
+        timezone,
+      }),
+    ];
+    const previousFingerprint = shiftGroupFingerprint(previousAppShifts);
+
+    await enqueueDebouncedEmail(ctx, {
+      template: "crew_unscheduled",
+      to: application.email,
+      subject: subjectForTemplate("crew_unscheduled", event.title),
+      eventId,
+      debounceKey: `crew_unscheduled:${eventId}:application:${applicationId}`,
+      idempotencyKey: `crew_unscheduled:${eventId}:application:${applicationId}:${previousFingerprint}:${Date.now()}`,
+      payload: {
+        ...buildBasePayload(event, application.name),
+        eventLeadName,
+        previousAssignmentSummaries,
+        icsEvents,
+        timezone,
+      },
+    });
+  }
 
   const subject = subjectForTemplate("crew_scheduled", event.title);
 
@@ -255,6 +321,59 @@ export async function scheduleCrewScheduledEmails(
       idempotencyKey: `crew_scheduled:${eventId}:${userId}:${nextFingerprint}:${Date.now()}`,
       payload: {
         ...buildBasePayload(event, recipient.name),
+        eventLeadName,
+        assignmentSummaries,
+        fullScheduleSummaries: coversEntireEvent ? [] : fullScheduleSummaries,
+        coversEntireEvent,
+        icsEvents,
+        timezone,
+      },
+    });
+  }
+
+  for (const applicationId of assignedApplicationIds) {
+    await cancelPendingDebouncedEmail(ctx, `crew_unscheduled:${eventId}:application:${applicationId}`);
+
+    const application = await ctx.db.get(applicationId);
+    if (!application?.email) continue;
+
+    const previousAppShifts = previousShifts.filter(
+      (shift) => shift.crewApplicationId === applicationId && !shift.userId?.trim(),
+    );
+    const nextAppShifts = nextShifts.filter(
+      (shift) => shift.crewApplicationId === applicationId && !shift.userId?.trim(),
+    );
+    if (nextAppShifts.length === 0) continue;
+
+    const previousFingerprint = shiftGroupFingerprint(previousAppShifts);
+    const nextFingerprint = shiftGroupFingerprint(nextAppShifts);
+    if (previousFingerprint === nextFingerprint) continue;
+
+    const coversEntireEvent = userCoversEntireSchedule(nextAppShifts, blocks);
+    const assignmentSummaries = nextAppShifts.map((shift) =>
+      formatAssignmentSummary(shift, blockLabelById, timezone),
+    );
+    const icsEvents = [
+      buildSingleIcsEventForUserShifts({
+        eventId,
+        userId: `application:${applicationId}`,
+        eventTitle: event.title,
+        venueName: event.venueName,
+        shifts: nextAppShifts,
+        blockLabelById,
+        timezone,
+      }),
+    ];
+
+    await enqueueDebouncedEmail(ctx, {
+      template: "crew_scheduled",
+      to: application.email,
+      subject,
+      eventId,
+      debounceKey: `crew_scheduled:${eventId}:application:${applicationId}`,
+      idempotencyKey: `crew_scheduled:${eventId}:application:${applicationId}:${nextFingerprint}:${Date.now()}`,
+      payload: {
+        ...buildBasePayload(event, application.name),
         eventLeadName,
         assignmentSummaries,
         fullScheduleSummaries: coversEntireEvent ? [] : fullScheduleSummaries,
