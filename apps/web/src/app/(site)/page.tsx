@@ -12,12 +12,18 @@ import { fetchPublicQuerySafe } from "@/lib/convex-server";
 export const revalidate = 3600;
 
 export default async function Home() {
-  const featuredPosts = await fetchPublicQuerySafe(api.publicMarketing.listFeaturedPosts, {}, []);
+  // This timestamp is intentionally captured once for the server-side event snapshot.
+  // eslint-disable-next-line react-hooks/purity
+  const now = Date.now();
+  const [featuredPosts, upcomingEvents] = await Promise.all([
+    fetchPublicQuerySafe(api.publicMarketing.listFeaturedPosts, {}, []),
+    fetchPublicQuerySafe(api.publicEvents.listUpcoming, { now, limit: 10 }, []),
+  ]);
 
   return (
     <LandingLayout>
       <LandingHero />
-      <LandingUpcomingEvents />
+      <LandingUpcomingEvents initialEvents={upcomingEvents} />
       <LandingWorkCarousel posts={featuredPosts} />
       <LandingPrograms />
       <LandingStats />
