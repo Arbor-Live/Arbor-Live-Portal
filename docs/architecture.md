@@ -78,7 +78,8 @@ Dependency direction: `web` depends on `backend` (generated API bindings),
   QR page), `sign-in`, `accept-invite`, password reset.
 - `components/` — feature components grouped by domain (`events/`,
   `financial/`, `inventory/`, `users/`, `marketing/`, `request/`, `ui/` for
-  shadcn primitives).
+  shadcn primitives). User photo / Boring Avatar fallbacks live in
+  `components/account/user-avatar.tsx` (stable seed: email → user id → name).
 - Data access is Convex live queries (`useQuery`/`useMutation` from
   `convex/react`) in client components; a few server actions use
   `fetchMutation` (e.g. `app/public/request/actions.ts`).

@@ -87,7 +87,9 @@ Human-readable docs live in `docs/` (`getting-started.md`, `architecture.md`, `d
 ## Select/Dropdown UI Conventions
 - Global form consistency: dropdown/select controls should match text input visual system.
 - Reusable searchable select exists at `apps/web/src/components/inventory/searchable-select.tsx`.
-- User picker should use boring avatar style consistent with sidebar (`boring-avatars`).
+- User avatars: use `@/components/account/user-avatar` (`UserAvatar` / `BoringUserAvatar`).
+  Do not import `boring-avatars` directly. Seed is stable — account email, else user id,
+  else display name (see module docs in that file).
 
 ## Recent High-Risk Areas
 - Event editor state hydration can overwrite in-progress edits if not guarded.

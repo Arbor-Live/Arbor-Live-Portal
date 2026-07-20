@@ -105,6 +105,8 @@ const STEP_HEADLINES: Record<StepId, string> = {
 
 type FormState = {
   name: string;
+  /** Account email — Boring Avatar seed (not calendar invite). */
+  email: string;
   calendarInviteEmail: string;
   showOnPublicCrewPage: boolean;
   publicCrewDescription: string;
@@ -128,6 +130,7 @@ type FormState = {
 
 const EMPTY_FORM: FormState = {
   name: "",
+  email: "",
   calendarInviteEmail: "",
   showOnPublicCrewPage: false,
   publicCrewDescription: "",
@@ -181,29 +184,46 @@ export function CrewOnboardingWizard() {
   }, [ensureOnboarding]);
 
   useEffect(() => {
-    if (!onboarding || hydratedRef.current) return;
-    hydratedRef.current = true;
-    setForm({
-      name: onboarding.profile.name ?? "",
-      calendarInviteEmail: onboarding.profile.calendarInviteEmail ?? "",
-      showOnPublicCrewPage: onboarding.profile.showOnPublicCrewPage ?? false,
-      publicCrewDescription: onboarding.profile.publicCrewDescription ?? "",
-      avatarUrl: onboarding.profile.avatarUrl ?? "",
-      whatsappAcknowledged: Boolean(onboarding.whatsappAcknowledgedAt),
-      instagramAcknowledged: Boolean(onboarding.instagramAcknowledgedAt),
-      hasFederalWorkStudy: onboarding.hasFederalWorkStudy ?? null,
-      fwsAcknowledged: Boolean(onboarding.fwsAcknowledgedAt),
-      narcanCompleted: Boolean(onboarding.narcanCompletedAt),
-      soberMonitorCompleted: Boolean(onboarding.soberMonitorCompletedAt),
-      emergencySopsAcknowledged: Boolean(onboarding.emergencySopsAcknowledgedAt),
-      crewExpectationsAcknowledged: Boolean(onboarding.crewExpectationsAcknowledgedAt),
-      liftingCompleted: Boolean(onboarding.liftingCompletedAt),
-      hasValidDriversLicense: Boolean(onboarding.hasValidDriversLicense),
-      cartTrainingCompleted: Boolean(onboarding.cartTrainingCompletedAt),
-      oseHiringFormCompleted: Boolean(onboarding.oseHiringFormCompletedAt),
-      timecardAcknowledged: Boolean(onboarding.timecardAcknowledgedAt),
-      signatureLegalName: onboarding.signatureLegalName ?? "",
-      agreedToDoc: Boolean(onboarding.agreedToOnboardingDocAt),
+    if (!onboarding) return;
+    if (!hydratedRef.current) {
+      hydratedRef.current = true;
+      setForm({
+        name: onboarding.profile.name ?? "",
+        email: onboarding.profile.email ?? "",
+        calendarInviteEmail: onboarding.profile.calendarInviteEmail ?? "",
+        showOnPublicCrewPage: onboarding.profile.showOnPublicCrewPage ?? false,
+        publicCrewDescription: onboarding.profile.publicCrewDescription ?? "",
+        avatarUrl: onboarding.profile.avatarUrl ?? "",
+        whatsappAcknowledged: Boolean(onboarding.whatsappAcknowledgedAt),
+        instagramAcknowledged: Boolean(onboarding.instagramAcknowledgedAt),
+        hasFederalWorkStudy: onboarding.hasFederalWorkStudy ?? null,
+        fwsAcknowledged: Boolean(onboarding.fwsAcknowledgedAt),
+        narcanCompleted: Boolean(onboarding.narcanCompletedAt),
+        soberMonitorCompleted: Boolean(onboarding.soberMonitorCompletedAt),
+        emergencySopsAcknowledged: Boolean(onboarding.emergencySopsAcknowledgedAt),
+        crewExpectationsAcknowledged: Boolean(onboarding.crewExpectationsAcknowledgedAt),
+        liftingCompleted: Boolean(onboarding.liftingCompletedAt),
+        hasValidDriversLicense: Boolean(onboarding.hasValidDriversLicense),
+        cartTrainingCompleted: Boolean(onboarding.cartTrainingCompletedAt),
+        oseHiringFormCompleted: Boolean(onboarding.oseHiringFormCompletedAt),
+        timecardAcknowledged: Boolean(onboarding.timecardAcknowledgedAt),
+        signatureLegalName: onboarding.signatureLegalName ?? "",
+        agreedToDoc: Boolean(onboarding.agreedToOnboardingDocAt),
+      });
+      return;
+    }
+    // Avatar can arrive after the first hydrate (ensure-row race). Keep a
+    // local blob preview if the user just uploaded.
+    const nextAvatar = onboarding.profile.avatarUrl;
+    if (!nextAvatar) return;
+    setForm((prev) => {
+      if (prev.avatarUrl.startsWith("blob:")) return prev;
+      if (prev.avatarUrl) return prev;
+      return {
+        ...prev,
+        avatarUrl: nextAvatar,
+        email: onboarding.profile.email || prev.email,
+      };
     });
   }, [onboarding]);
 
@@ -592,7 +612,7 @@ function StepBody({
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
             <UserAvatarUploadPreview
               name={form.name || "Crew member"}
-              email={form.calendarInviteEmail || "crew"}
+              email={form.email || "crew"}
               imageUrl={form.avatarUrl || null}
             />
             <div className="space-y-2">

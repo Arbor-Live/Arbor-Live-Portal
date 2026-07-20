@@ -2,7 +2,7 @@
 
 import { useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
-import BoringAvatar from "boring-avatars";
+import { BoringUserAvatar } from "@/components/account/user-avatar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Reveal, Stagger, StaggerItem } from "@/components/landing/landing-motion";
 import { useResolvedAssetUrl } from "@/components/files/stored-asset-image";
@@ -17,13 +17,8 @@ function CrewCard({ member }: { member: { id: string; name: string; imageUrl?: s
           // eslint-disable-next-line @next/next/no-img-element
           <img src={resolvedImageUrl} alt="" className="size-full object-cover" />
         ) : (
-          <div className="flex size-full items-center justify-center" aria-hidden>
-            <BoringAvatar
-              size={400}
-              name={member.name}
-              variant="beam"
-              colors={["#3d7a5c", "#1a3d2e", "#6b9e7a", "#0f1f17", "#a8d5ba"]}
-            />
+          <div className="flex size-full items-center justify-center">
+            <BoringUserAvatar userId={member.id} name={member.name} size={400} />
           </div>
         )}
       </div>

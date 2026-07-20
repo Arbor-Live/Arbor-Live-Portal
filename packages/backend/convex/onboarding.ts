@@ -379,21 +379,6 @@ export const getMyCrewOnboarding = query({
       .withIndex("by_userId", (q) => q.eq("userId", userId))
       .unique();
 
-    // Queries cannot insert; surface a synthetic not_started if missing.
-    if (!row) {
-      return {
-        status: "not_started" as const,
-        incompleteStepCount: 12,
-        links: ONBOARDING_LINKS,
-        fwsJobInfo: FWS_JOB_INFO,
-        profile: {
-          name: user.name ?? user.email ?? "User",
-          email: user.email ?? "",
-          showOnPublicCrewPage: false,
-        },
-      };
-    }
-
     const profile = await ctx.db
       .query("userAdminProfiles")
       .withIndex("by_userId", (q) => q.eq("userId", userId))
@@ -402,15 +387,31 @@ export const getMyCrewOnboarding = query({
     if (profile?.avatarStorageId) {
       avatarUrl = (await ctx.storage.getUrl(profile.avatarStorageId)) ?? undefined;
     }
+    if (!avatarUrl) {
+      avatarUrl = (user as { image?: string | null }).image ?? undefined;
+    }
 
-    return serializeCrewOnboarding(row, {
+    const profilePayload = {
       name: user.name ?? user.email ?? "User",
       email: user.email ?? "",
       avatarUrl,
       calendarInviteEmail: profile?.calendarInviteEmail,
       showOnPublicCrewPage: profile?.showOnPublicCrewPage ?? false,
       publicCrewDescription: profile?.publicCrewDescription,
-    });
+    };
+
+    // Queries cannot insert; surface a synthetic not_started if missing.
+    if (!row) {
+      return {
+        status: "not_started" as const,
+        incompleteStepCount: 12,
+        links: ONBOARDING_LINKS,
+        fwsJobInfo: FWS_JOB_INFO,
+        profile: profilePayload,
+      };
+    }
+
+    return serializeCrewOnboarding(row, profilePayload);
   },
 });
 
