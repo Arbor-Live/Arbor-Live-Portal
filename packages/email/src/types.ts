@@ -78,6 +78,16 @@ export type BookingRequestReceivedEmailProps = {
   trackingUrl: string;
 };
 
+export type BookingRequestAdminEmailProps = {
+  requesterName: string;
+  requesterEmail: string;
+  requestNumber: string;
+  eventName: string;
+  eventDateText: string;
+  organization?: string;
+  reviewUrl: string;
+};
+
 export type BookingQuoteReadyEmailProps = {
   recipientName?: string;
   requestNumber: string;

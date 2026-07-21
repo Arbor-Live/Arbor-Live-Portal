@@ -1,13 +1,27 @@
 import type { Doc } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
-import { requestTrackingUrl, subjectForTemplate } from "./constants";
+import { listAdminEmailsForVertical } from "../lib/auth";
+import {
+  bookingRequestsAdminUrl,
+  requestTrackingUrl,
+  subjectForTemplate,
+} from "./constants";
 import { enqueueEmail } from "./enqueue";
 
 export async function scheduleBookingRequestReceivedEmail(
   ctx: MutationCtx,
   request: Pick<
     Doc<"eventRequests">,
-    "_id" | "email" | "firstName" | "requestNumber" | "eventName" | "eventDateText" | "publicToken" | "submittedAt"
+    | "_id"
+    | "email"
+    | "firstName"
+    | "lastName"
+    | "requestNumber"
+    | "eventName"
+    | "eventDateText"
+    | "organization"
+    | "publicToken"
+    | "submittedAt"
   >,
 ) {
   const requestNumber = request.requestNumber ?? `LEGACY-${request._id}`;
@@ -31,6 +45,31 @@ export async function scheduleBookingRequestReceivedEmail(
       trackingUrl: requestTrackingUrl(publicToken),
     },
   });
+
+  const requesterName =
+    [request.firstName, request.lastName].map((part) => part.trim()).filter(Boolean).join(" ") ||
+    recipientName ||
+    "Requester";
+  const reviewUrl = bookingRequestsAdminUrl(request._id);
+  const adminSubject = subjectForTemplate("booking_request_admin", eventName);
+
+  for (const to of await listAdminEmailsForVertical(ctx, "Crew")) {
+    await enqueueEmail(ctx, {
+      template: "booking_request_admin",
+      to,
+      subject: adminSubject,
+      idempotencyKey: `booking_request_admin:${request._id}:${to}`,
+      payload: {
+        requesterName,
+        requesterEmail: request.email,
+        requestNumber,
+        eventName,
+        eventDateText: request.eventDateText,
+        organization: request.organization?.trim() || undefined,
+        reviewUrl,
+      },
+    });
+  }
 }
 
 export async function scheduleBookingQuoteReadyEmail(

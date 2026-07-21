@@ -160,7 +160,7 @@ export function CrewApplicationForm() {
       <section className="space-y-4">
         <h2 className="font-heading text-lg font-semibold">Team interest</h2>
         <div className="space-y-2">
-          <Label htmlFor="vertical">Vertical</Label>
+          <Label htmlFor="vertical">Area of interest</Label>
           <select
             id="vertical"
             className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"

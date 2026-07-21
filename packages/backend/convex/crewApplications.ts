@@ -1,10 +1,11 @@
 import { v } from "convex/values";
 import { components } from "./_generated/api";
-import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
+import { mutation, query, type MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { formatDateTime } from "@arbor/format";
 import {
   getUserId,
+  listAdminEmailsForVertical,
   requireAdmin,
   type AuthUser,
 } from "./lib/auth";
@@ -20,7 +21,6 @@ import {
   type UserDiscipline,
   type UserVertical,
 } from "./lib/userVerticals";
-import { ONBOARDING_LEADERSHIP_EMAILS } from "./lib/onboardingLinks";
 import {
   crewApplicationsAdminUrl,
   EVENT_TIMEZONE,
@@ -92,15 +92,6 @@ function hoursBetween(start: number, end: number) {
   return Number(((end - start) / 3_600_000).toFixed(2));
 }
 
-async function listAdminAuthUsers(ctx: QueryCtx | MutationCtx) {
-  const result = await ctx.runQuery(components.betterAuth.adapter.findMany, {
-    model: "user",
-    paginationOpts: { cursor: null, numItems: 500 },
-  });
-  const users = (result?.page ?? []) as AuthUser[];
-  return users.filter((user) => user.role === "admin" && user.email);
-}
-
 async function scheduleApplicationReceivedEmails(
   ctx: MutationCtx,
   args: {
@@ -110,15 +101,7 @@ async function scheduleApplicationReceivedEmails(
     vertical: string;
   },
 ) {
-  const admins = await listAdminAuthUsers(ctx);
-  const recipients = new Set<string>();
-  for (const admin of admins) {
-    if (admin.email) recipients.add(admin.email.trim().toLowerCase());
-  }
-  for (const email of ONBOARDING_LEADERSHIP_EMAILS) {
-    recipients.add(email.toLowerCase());
-  }
-
+  const recipients = await listAdminEmailsForVertical(ctx, "Crew");
   const reviewUrl = crewApplicationsAdminUrl();
   for (const to of recipients) {
     await enqueueEmail(ctx, {

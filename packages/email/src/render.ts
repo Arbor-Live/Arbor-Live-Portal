@@ -1,5 +1,6 @@
 import { render } from "@react-email/render";
 import { BookingQuoteReadyEmail } from "../emails/booking-quote-ready";
+import { BookingRequestAdminEmail } from "../emails/booking-request-admin";
 import { BookingRequestReceivedEmail } from "../emails/booking-request-received";
 import { EventCancelledEmail } from "../emails/event-cancelled";
 import { PasswordResetEmail } from "../emails/password-reset";
@@ -28,6 +29,7 @@ import { CrewApplicationConfirmationEmail } from "../emails/crew-application-con
 import { CrewTraineeIntroEmail } from "../emails/crew-trainee-intro";
 import type {
   BookingQuoteReadyEmailProps,
+  BookingRequestAdminEmailProps,
   BookingRequestReceivedEmailProps,
   EventEmailProps,
   PasswordResetEmailProps,
@@ -93,6 +95,10 @@ export async function renderChangeEmailConfirmationEmail(props: ChangeEmailConfi
 
 export async function renderBookingRequestReceivedEmail(props: BookingRequestReceivedEmailProps) {
   return render(BookingRequestReceivedEmail(props));
+}
+
+export async function renderBookingRequestAdminEmail(props: BookingRequestAdminEmailProps) {
+  return render(BookingRequestAdminEmail(props));
 }
 
 export async function renderBookingQuoteReadyEmail(props: BookingQuoteReadyEmailProps) {

@@ -79,7 +79,7 @@ export const landingPrograms: LandingProgram[] = [
     schedule: { when: "Wed · 7pm", where: "Varies!" },
     cta: {
       label: "When's the next jam?",
-      href: `${ARBOR_EXTERNAL_SITE}/socials`,
+      href: `https://arbor.st/ig`,
       external: true,
     },
     imageSrc: "/promo/jam.jpeg",
@@ -95,6 +95,7 @@ export const landingPrograms: LandingProgram[] = [
       label: "Sign up to perform",
       href: "/open-mic",
     },
+    imageSrc: "/promo/coho.jpg",
     imageGradient: "from-violet-950/80 via-primary/25 to-zinc-900",
   },
   {
@@ -105,7 +106,7 @@ export const landingPrograms: LandingProgram[] = [
     schedule: { when: "Tue · 8pm", where: "OnCall Café" },
     cta: {
       label: "Check out OnCall Café",
-      href: `${ARBOR_EXTERNAL_SITE}/socials`,
+      href: `https://arbor.st/ig`,
       external: true,
     },
     imageSrc: "/promo/oncall.jpeg",
@@ -118,7 +119,7 @@ export const landingPrograms: LandingProgram[] = [
       "Join us every week during Fall and Spring quarters and listen to the best bands on campus perform in a relaxed setting. Grab dinner, hang out, and party like it's 1999.",
     cta: {
       label: "See what's on",
-      href: `${ARBOR_EXTERNAL_SITE}/socials`,
+      href: `https://arbor.st/ig`,
       external: true,
     },
     imageSrc: "/promo/arbor-stage.jpeg",

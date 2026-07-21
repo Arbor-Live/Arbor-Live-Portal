@@ -222,3 +222,28 @@ export async function requireAnyVerticalOrAdmin(
   }
   return user;
 }
+
+/** Portal admins whose profile includes the given vertical (for staff inbox emails). */
+export async function listAdminEmailsForVertical(
+  ctx: QueryCtx | MutationCtx,
+  vertical: UserVertical,
+): Promise<string[]> {
+  const result = await ctx.runQuery(components.betterAuth.adapter.findMany, {
+    model: "user",
+    paginationOpts: { cursor: null, numItems: 500 },
+  });
+  const users = (result?.page ?? []) as AuthUser[];
+  const emails = new Set<string>();
+
+  for (const user of users) {
+    if (user.role !== "admin" || !user.email) continue;
+    const userId = getUserId(user);
+    if (!userId) continue;
+    const profile = await getUserAdminProfile(ctx, userId);
+    const { verticals } = resolveProfileMembership(profile ?? {});
+    if (!hasVertical(verticals, vertical)) continue;
+    emails.add(user.email.trim().toLowerCase());
+  }
+
+  return [...emails];
+}

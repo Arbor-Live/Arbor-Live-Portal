@@ -1,9 +1,10 @@
 import { v } from "convex/values";
 import { components } from "./_generated/api";
-import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
+import { mutation, query, type MutationCtx } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import {
   getUserId,
+  listAdminEmailsForVertical,
   requireAdmin,
   type AuthUser,
 } from "./lib/auth";
@@ -17,7 +18,6 @@ import {
   markInvitationAccepted,
   scheduleUserInviteEmail,
 } from "./email/invitations";
-import { ONBOARDING_LEADERSHIP_EMAILS } from "./lib/onboardingLinks";
 import { ensureOrganizationOnboarding } from "./onboarding";
 import { enforceRateLimit, HOUR_MS } from "./rateLimit";
 import {
@@ -55,15 +55,6 @@ function isValidEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 }
 
-async function listAdminAuthUsers(ctx: QueryCtx | MutationCtx) {
-  const result = await ctx.runQuery(components.betterAuth.adapter.findMany, {
-    model: "user",
-    paginationOpts: { cursor: null, numItems: 500 },
-  });
-  const users = (result?.page ?? []) as AuthUser[];
-  return users.filter((user) => user.role === "admin" && user.email);
-}
-
 async function scheduleApplicationReceivedEmails(
   ctx: MutationCtx,
   args: {
@@ -73,15 +64,7 @@ async function scheduleApplicationReceivedEmails(
     contactEmail: string;
   },
 ) {
-  const admins = await listAdminAuthUsers(ctx);
-  const recipients = new Set<string>();
-  for (const admin of admins) {
-    if (admin.email) recipients.add(admin.email.trim().toLowerCase());
-  }
-  for (const email of ONBOARDING_LEADERSHIP_EMAILS) {
-    recipients.add(email.toLowerCase());
-  }
-
+  const recipients = await listAdminEmailsForVertical(ctx, "Crew");
   const reviewUrl = bandApplicationsAdminUrl();
   for (const to of recipients) {
     await enqueueEmail(ctx, {

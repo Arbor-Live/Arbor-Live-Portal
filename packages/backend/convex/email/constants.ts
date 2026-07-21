@@ -38,6 +38,7 @@ export type EmailTemplate =
   | "email_verification"
   | "change_email_confirmation"
   | "booking_request_received"
+  | "booking_request_admin"
   | "booking_quote_ready"
   | "payment_proof_reminder"
   | "payment_proof_submitted"
@@ -92,6 +93,11 @@ export function crewApplicationsAdminUrl() {
   return `${SITE_URL}/dashboard/users/crew-applications`;
 }
 
+export function bookingRequestsAdminUrl(requestId?: string) {
+  if (requestId) return `${SITE_URL}/dashboard/events/requests/${requestId}`;
+  return `${SITE_URL}/dashboard/events/requests`;
+}
+
 export function requestTrackingUrl(token: string) {
   return `${SITE_URL}/request/track/${encodeURIComponent(token)}`;
 }
@@ -130,6 +136,8 @@ export function subjectForTemplate(template: EmailTemplate, context: string) {
       return "Approve your Arbor Live email change";
     case "booking_request_received":
       return `Request received: ${context}`;
+    case "booking_request_admin":
+      return `New booking request: ${context}`;
     case "booking_quote_ready":
       return `Your quote is ready: ${context}`;
     case "payment_proof_reminder":
