@@ -39,6 +39,11 @@ export function CrewTraineeIntroEmail({
       </BodyCopy>
 
       <BodyCopy>
+        If your call time doesn&apos;t allow for 30 minutes at a dining hall, a meal from CoHo or
+        TreeHouse is included.
+      </BodyCopy>
+
+      <BodyCopy>
         <strong>Meet at storage</strong>
         <br />
         Start at the {storageClosetLabel}.{" "}
