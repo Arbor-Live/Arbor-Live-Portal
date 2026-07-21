@@ -138,10 +138,10 @@ export const landingPrograms: LandingProgram[] = [
 ];
 
 export const landingStats: LandingStat[] = [
-  { value: "200+", label: "Events per year" },
-  { value: "40+", label: "Trusted campus orgs" },
+  { value: "270+", label: "Events per year" },
+  { value: "70+", label: "Trusted campus orgs" },
   { value: "30+", label: "Student producers" },
-  { value: "10+", label: "Years of experience" },
+  { value: "2022", label: "Since" },
 ];
 
 export const landingEventTypes: string[] = [
