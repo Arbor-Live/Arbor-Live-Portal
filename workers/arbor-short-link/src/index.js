@@ -26,13 +26,16 @@ export default {
     }
 
     const lookupUrl = `${convexSiteUrl}/short-link?slug=${encodeURIComponent(key)}`;
+    // redirect: "manual" — Workers follow 302s by default, so we'd get the
+    // destination's status (often 429/200) instead of Convex's Location header.
     const res = await fetch(lookupUrl, {
+      redirect: "manual",
       headers: {
         Authorization: `Bearer ${env.SHORT_LINK_WORKER_SECRET}`,
       },
     });
 
-    if (res.status === 302) {
+    if (res.status === 301 || res.status === 302 || res.status === 307 || res.status === 308) {
       const location = res.headers.get("Location");
       if (location) {
         const dest = new URL(location);
