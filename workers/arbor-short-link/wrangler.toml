@@ -1,4 +1,4 @@
-name = "arbor-short-link"
+name = 'url-shortener'
 main = "src/index.js"
 compatibility_date = "2024-01-01"
 
