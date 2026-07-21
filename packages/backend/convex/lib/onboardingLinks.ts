@@ -44,8 +44,7 @@ export const FWS_JOB_INFO = {
 export const ONBOARDING_LEADERSHIP_EMAILS = [
   "emorenoa@stanford.edu",
   "selise@stanford.edu",
-  "mollyom@stanford.edu",
-  "qwgs2005@stanford.edu",
+  "luciano8@stanford.edu",
   "leilani1@stanford.edu",
   "sky3@stanford.edu",
 ] as const;
