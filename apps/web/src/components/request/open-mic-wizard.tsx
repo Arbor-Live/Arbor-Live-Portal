@@ -9,7 +9,7 @@ import { api } from "@/lib/convex-api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { PublicMarketingLayout } from "@/components/public/public-marketing-layout";
-import { submitOpenMicSignup } from "@/app/public/open-mic/actions";
+import { submitOpenMicSignup } from "@/app/(site)/open-mic/actions";
 import { RequestWizardNav } from "@/components/request/request-wizard-nav";
 import { RequestWizardShell } from "@/components/request/request-wizard-shell";
 import { MultiChoiceField } from "@/components/request/fields/multi-choice-field";

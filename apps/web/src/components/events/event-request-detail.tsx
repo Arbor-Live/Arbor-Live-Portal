@@ -84,7 +84,7 @@ export function EventRequestDetailClient({ requestId }: { requestId: Id<"eventRe
         </Button>
         {request.publicToken ? (
           <Button asChild variant="outline" size="sm">
-            <Link href={`/public/request/track/${request.publicToken}`} target="_blank">
+            <Link href={`/request/track/${request.publicToken}`} target="_blank">
               Client request portal
             </Link>
           </Button>

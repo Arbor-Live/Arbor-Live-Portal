@@ -451,7 +451,7 @@ export const getDocumentData = query({
       .take(500);
     const digitalQuoteUrl =
       invoice.publicApprovalToken && args.siteOrigin
-        ? `${args.siteOrigin}/public/quote/${invoice.publicApprovalToken}`
+        ? `${args.siteOrigin}/event/${invoice.publicApprovalToken}`
         : undefined;
     return await buildInvoiceDocumentData(ctx, invoice, lineItems, digitalQuoteUrl);
   },

@@ -6,5 +6,5 @@ export default async function PublicQuotePage({
   params: Promise<{ token: string }>;
 }) {
   const { token } = await params;
-  redirect(`/public/event/${token}`);
+  redirect(`/event/${token}`);
 }

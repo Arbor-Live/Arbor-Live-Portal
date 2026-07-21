@@ -105,7 +105,7 @@ export function FloatingMarketingNav() {
           <div className="flex items-center gap-2">
             <DashboardNavLink className="hidden sm:inline-flex" />
             <Button asChild size="sm" className="hidden sm:inline-flex">
-              <Link href="/public/request">Book us</Link>
+              <Link href="/request">Book us</Link>
             </Button>
 
             <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
@@ -146,7 +146,7 @@ export function FloatingMarketingNav() {
                   />
                   <div className="mt-2 border-t pt-3">
                     <Button asChild className="w-full">
-                      <Link href="/public/request" onClick={() => setMobileOpen(false)}>
+                      <Link href="/request" onClick={() => setMobileOpen(false)}>
                         Book us
                       </Link>
                     </Button>

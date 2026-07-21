@@ -33,7 +33,7 @@ export function OpenMicEventsInbox() {
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <Button asChild className="ml-auto">
-          <Link href="/public/open-mic" target="_blank">
+          <Link href="/open-mic" target="_blank">
             Open public form
           </Link>
         </Button>

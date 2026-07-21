@@ -164,7 +164,7 @@ export function InvoicesListClient() {
                   />
                   {invoice.publicApprovalToken ? (
                     <Button asChild size="sm" variant="outline">
-                      <Link href={`/public/quote/${invoice.publicApprovalToken}`} target="_blank" rel="noreferrer">
+                      <Link href={`/event/${invoice.publicApprovalToken}`} target="_blank" rel="noreferrer">
                         Quote Link
                       </Link>
                     </Button>

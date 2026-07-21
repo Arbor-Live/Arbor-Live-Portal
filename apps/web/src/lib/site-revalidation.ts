@@ -25,15 +25,15 @@ export function marketingRevalidatePaths(slug?: string) {
 
 export function inventoryPackageRevalidatePaths(packageId?: string) {
   const paths = [
-    "/public/packages",
-    "/public/packages/lighting",
-    "/public/packages/sound",
-    "/public/packages/environmental",
-    "/public/packages/staging",
-    "/public/packages/misc",
+    "/packages",
+    "/packages/lighting",
+    "/packages/sound",
+    "/packages/environmental",
+    "/packages/staging",
+    "/packages/misc",
   ];
   if (packageId) {
-    paths.push(`/public/packages/view/${packageId}`);
+    paths.push(`/packages/view/${packageId}`);
   }
   return paths;
 }
@@ -46,11 +46,11 @@ export function publicEventsRevalidatePaths(eventId?: string) {
 
 export function inventoryTypeRevalidatePaths() {
   return [
-    "/public/types",
-    "/public/types/lighting",
-    "/public/types/sound",
-    "/public/types/environmental",
-    "/public/types/staging",
-    "/public/types/misc",
+    "/types",
+    "/types/lighting",
+    "/types/sound",
+    "/types/environmental",
+    "/types/staging",
+    "/types/misc",
   ];
 }

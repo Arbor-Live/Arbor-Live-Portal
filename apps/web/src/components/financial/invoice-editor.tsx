@@ -879,9 +879,9 @@ export function InvoiceEditor({
   const origin = typeof window === "undefined" ? "" : window.location.origin;
   const requestPortalUrl =
     sourceRequest?.publicToken && origin
-      ? `${origin}/public/request/track/${sourceRequest.publicToken}`
+      ? `${origin}/request/track/${sourceRequest.publicToken}`
       : sourceRequest?.publicToken
-        ? `/public/request/track/${sourceRequest.publicToken}`
+        ? `/request/track/${sourceRequest.publicToken}`
         : "";
 
   return (
@@ -1429,14 +1429,14 @@ export function InvoiceEditor({
                   readOnly
                   value={
                     approvalToken && origin
-                      ? `${origin}/public/quote/${approvalToken}`
+                      ? `${origin}/event/${approvalToken}`
                       : "Save draft to generate link."
                   }
                 />
                 <div className="flex flex-wrap gap-2">
                   <Button type="button" variant="outline" size="sm" disabled={!approvalToken} onClick={() => {
                     if (!approvalToken || !origin) return;
-                    void navigator.clipboard.writeText(`${origin}/public/quote/${approvalToken}`);
+                    void navigator.clipboard.writeText(`${origin}/event/${approvalToken}`);
                   }}>
                     Copy link
                   </Button>

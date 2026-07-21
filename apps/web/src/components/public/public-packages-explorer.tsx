@@ -150,7 +150,7 @@ export function PublicPackagesExplorer({
                           )}
                           <Link
                             className="inline-flex text-sm font-medium text-primary hover:underline"
-                            href={`/public/packages/view/${row.package._id}`}
+                            href={`/packages/view/${row.package._id}`}
                           >
                             View package →
                           </Link>

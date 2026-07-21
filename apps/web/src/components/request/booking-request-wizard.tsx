@@ -10,7 +10,7 @@ import { api } from "@/lib/convex-api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { PublicMarketingLayout } from "@/components/public/public-marketing-layout";
-import { submitBookingRequest } from "@/app/public/request/actions";
+import { submitBookingRequest } from "@/app/(site)/request/actions";
 import { RequestWizardNav } from "@/components/request/request-wizard-nav";
 import { RequestWizardShell } from "@/components/request/request-wizard-shell";
 import { EventScheduleField } from "@/components/request/fields/event-schedule-field";
@@ -460,7 +460,7 @@ function StepBody({
               <p className="font-medium">Request {trackingInfo.requestNumber}</p>
               <p className="mt-1">Save this link to track your request status:</p>
               <Button asChild className="mt-3" variant="outline">
-                <Link href={`/public/request/track/${trackingInfo.publicToken}`}>Open request tracker</Link>
+                <Link href={`/request/track/${trackingInfo.publicToken}`}>Open request tracker</Link>
               </Button>
             </div>
           ) : null}

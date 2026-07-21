@@ -93,11 +93,11 @@ export function crewApplicationsAdminUrl() {
 }
 
 export function requestTrackingUrl(token: string) {
-  return `${SITE_URL}/public/request/track/${encodeURIComponent(token)}`;
+  return `${SITE_URL}/request/track/${encodeURIComponent(token)}`;
 }
 
 export function publicQuoteUrl(token: string) {
-  return `${SITE_URL}/public/event/${encodeURIComponent(token)}`;
+  return `${SITE_URL}/event/${encodeURIComponent(token)}`;
 }
 
 export function formatInviteExpiry(expiresAt: number, timezone: string = EVENT_TIMEZONE) {

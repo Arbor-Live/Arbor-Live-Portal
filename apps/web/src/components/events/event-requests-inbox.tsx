@@ -50,7 +50,7 @@ export function EventRequestsInbox() {
           />
         </div>
         <Button asChild className="ml-auto">
-          <Link href="/public/request" target="_blank">
+          <Link href="/request" target="_blank">
             Open public form
           </Link>
         </Button>

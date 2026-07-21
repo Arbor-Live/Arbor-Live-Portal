@@ -80,7 +80,7 @@ export function PublicPackageDetailContent({
         title={data.package.name}
         eyebrow={`${bucketLabel} package`}
         imageUrl={data.package.publicHeroImageUrl}
-        backLink={{ href: "/public/packages", label: "← All packages" }}
+        backLink={{ href: "/packages", label: "← All packages" }}
       />
 
       <div className="mx-auto max-w-6xl space-y-10 px-4 py-12 sm:px-6 lg:px-8">

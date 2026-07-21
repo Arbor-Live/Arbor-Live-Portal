@@ -36,7 +36,7 @@ export function LandingCtaBand() {
             variant="secondary"
             className="h-11 shrink-0 bg-primary-foreground text-primary hover:bg-primary-foreground/90"
           >
-            <Link href="/public/request">Start a booking request</Link>
+            <Link href="/request">Start a booking request</Link>
           </Button>
         </motion.div>
       </div>

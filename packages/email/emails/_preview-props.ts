@@ -92,7 +92,7 @@ export const bookingRequestReceivedPreviewProps: BookingRequestReceivedEmailProp
   requestNumber: "ALREQ-4K8Z2NP",
   eventName: "Spring Concert 2026",
   eventDateText: "Saturday, Apr 12, 2026",
-  trackingUrl: `${ARBOR_WEBSITE_URL}/public/request/track/demo-request`,
+  trackingUrl: `${ARBOR_WEBSITE_URL}/request/track/demo-request`,
 };
 
 export const bookingQuoteReadyPreviewProps: BookingQuoteReadyEmailProps = {
@@ -101,7 +101,7 @@ export const bookingQuoteReadyPreviewProps: BookingQuoteReadyEmailProps = {
   eventName: "Spring Concert 2026",
   invoiceNumber: "ALINV-4K8Z2NP",
   quoteTotalUsd: 4250,
-  trackingUrl: `${ARBOR_WEBSITE_URL}/public/request/track/demo-request`,
+  trackingUrl: `${ARBOR_WEBSITE_URL}/request/track/demo-request`,
   managerName: "Alex Chen",
   managerEmail: "alex.chen@stanford.edu",
 };
@@ -113,7 +113,7 @@ export const paymentProofReminderPreviewProps: PaymentProofReminderEmailProps = 
   dateRangeLabel: eventDefaults.dateRangeLabel,
   invoiceNumber: "ALINV-4K8Z2NP",
   quoteTotalUsd: 4250,
-  portalUrl: `${ARBOR_WEBSITE_URL}/public/event/demo-event`,
+  portalUrl: `${ARBOR_WEBSITE_URL}/event/demo-event`,
   reminderKind: "first",
   lateFeeUsd: 25,
   isOverdue: false,
@@ -130,7 +130,7 @@ export const paymentProofSubmittedPreviewProps: PaymentProofSubmittedEmailProps 
   paymentMethodLabel: "ASSU ePay",
   paymentReference: "EPAY-20260412-001",
   financeContactEmail: "finance@stanford.edu",
-  portalUrl: `${ARBOR_WEBSITE_URL}/public/event/demo-event`,
+  portalUrl: `${ARBOR_WEBSITE_URL}/event/demo-event`,
   managerName: "Alex Chen",
   managerEmail: "alex.chen@stanford.edu",
 };

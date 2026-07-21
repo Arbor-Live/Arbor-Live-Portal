@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,10 +20,23 @@ function ProgramCard({ program }: { program: (typeof landingPrograms)[number] })
     >
       <motion.div
         aria-hidden
-        className={cn("relative h-36 bg-gradient-to-br sm:h-40", program.imageGradient)}
+        className={cn(
+          "relative h-36 overflow-hidden bg-gradient-to-br sm:h-40",
+          program.imageGradient,
+        )}
         whileHover={reduceMotion ? undefined : { scale: 1.03 }}
         transition={{ duration: 0.35 }}
       >
+        {program.imageSrc ? (
+          <Image
+            src={program.imageSrc}
+            alt=""
+            fill
+            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+            className="object-cover"
+          />
+        ) : null}
+        <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/85 via-zinc-950/25 to-zinc-950/10" />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,color-mix(in_oklch,white_18%,transparent),transparent_55%)]" />
         {program.schedule ? (
           <div className="absolute bottom-3 left-3 right-3 flex flex-wrap gap-2">

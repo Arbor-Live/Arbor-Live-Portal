@@ -115,6 +115,19 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: repoRoot,
   },
+  async redirects() {
+    return [
+      { source: "/public/packages", destination: "/packages", permanent: true },
+      { source: "/public/packages/:path*", destination: "/packages/:path*", permanent: true },
+      { source: "/public/types", destination: "/types", permanent: true },
+      { source: "/public/types/:path*", destination: "/types/:path*", permanent: true },
+      { source: "/public/request", destination: "/request", permanent: true },
+      { source: "/public/request/:path*", destination: "/request/:path*", permanent: true },
+      { source: "/public/open-mic", destination: "/open-mic", permanent: true },
+      { source: "/public/event/:token", destination: "/event/:token", permanent: true },
+      { source: "/public/quote/:token", destination: "/quote/:token", permanent: true },
+    ];
+  },
   images: {
     remotePatterns: imageRemotePatterns,
     formats: ["image/avif", "image/webp"],
