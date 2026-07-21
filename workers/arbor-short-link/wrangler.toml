@@ -4,6 +4,6 @@ compatibility_date = "2024-01-01"
 
 [vars]
 FALLBACK_BASE_URL = "https://arborlive.stanford.edu"
+CONVEX_SITE_URL = "https://greedy-cricket-158.convex.site"
 
 # Set secrets via: wrangler secret put SHORT_LINK_WORKER_SECRET
-# Set CONVEX_SITE_URL in wrangler.toml [vars] or dashboard for your deployment.
