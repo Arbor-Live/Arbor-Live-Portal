@@ -40,4 +40,11 @@ crons.cron(
   {},
 );
 
+crons.interval(
+  "prune expired short links",
+  { hours: 24 },
+  internal.shortLinks.pruneExpired,
+  {},
+);
+
 export default crons;

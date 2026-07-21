@@ -135,6 +135,12 @@ const organizationTypeValue = v.union(v.literal("arbor_internal"), v.literal("ba
 
 const marketingPostKindValue = v.union(v.literal("case_study"), v.literal("blog"));
 
+const shortLinkExpiryModeValue = v.union(
+  v.literal("none"),
+  v.literal("manual"),
+  v.literal("event_plus_30_days"),
+);
+
 const marketingFeaturedStatValue = v.object({
   label: v.string(),
   value: v.string(),
@@ -1307,6 +1313,24 @@ export default defineSchema({
   })
     .index("by_key", ["key"])
     .index("by_windowStartMs", ["windowStartMs"]),
+
+  /** Custom arbor.st short-link overrides (Worker → Convex lookup). */
+  shortLinks: defineTable({
+    slug: v.string(),
+    destinationUrl: v.string(),
+    label: v.optional(v.string()),
+    enabled: v.boolean(),
+    eventId: v.optional(v.id("events")),
+    expiryMode: shortLinkExpiryModeValue,
+    expiresAt: v.optional(v.number()),
+    clickCount: v.number(),
+    lastClickedAt: v.optional(v.number()),
+    createdByUserId: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_slug", ["slug"])
+    .index("by_expiresAt", ["expiresAt"]),
 
   /** Singleton row: global marketing feature flags. Extend with new fields as
    *  more sections gain admin-toggled marketing boosts. */

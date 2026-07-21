@@ -2,10 +2,17 @@ import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { authComponent, createAuth } from "./auth";
+import { handleShortLinkLookup } from "./http/shortLinkRedirect";
 
 const http = httpRouter();
 
 authComponent.registerRoutes(http, createAuth);
+
+http.route({
+  path: "/short-link",
+  method: "GET",
+  handler: handleShortLinkLookup,
+});
 
 http.route({
   path: "/webhooks/resend/inbound",

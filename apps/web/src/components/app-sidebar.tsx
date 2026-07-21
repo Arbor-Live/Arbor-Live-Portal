@@ -124,6 +124,7 @@ const usersSubItems: NavSubItem[] = [
 const marketingSubItems: NavSubItem[] = [
   { title: "Design board", url: "/dashboard/marketing/designs" },
   { title: "Work & stories", url: "/dashboard/marketing/work" },
+  { title: "Short links", url: "/dashboard/marketing/links" },
   { title: "Settings", url: "/dashboard/marketing/settings" },
 ]
 

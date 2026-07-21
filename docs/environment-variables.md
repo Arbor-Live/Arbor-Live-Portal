@@ -32,6 +32,8 @@ Where variables live:
 | `POSTPEER_ACCESS_KEY` or `POSTPEER_SECRET` | yes (IG publish) | PostPeer API key (`marketingInstagramActions.ts`) — header `x-access-key` |
 | `POSTPEER_INSTAGRAM_ACCOUNT_ID` | yes (IG publish) | PostPeer Instagram account id for `platforms[].accountId` |
 | `REVALIDATE_SECRET` | yes (public site) | Bearer token for Next.js `/api/revalidate` (`lib/siteRevalidation.ts`) |
+| `SHORT_LINK_WORKER_SECRET` | yes (arbor.st) | Bearer token for Worker → Convex `/short-link` lookup (`http/shortLinkRedirect.ts`) |
+| `SHORT_LINK_FALLBACK_BASE_URL` | no | Pass-through base when a slug is missing; default `https://arborlive.stanford.edu` |
 | `CONVEX_CLOUD_URL`, `CONVEX_SITE_URL` | auto | Provided by Convex; also read as fallbacks by the web build script |
 
 ## Web (read by Next.js)
@@ -41,6 +43,7 @@ Where variables live:
 | `NEXT_PUBLIC_CONVEX_URL` | yes | Convex client URL (`lib/convex-env.ts`); in prod it is materialized at build time from `CONVEX_URL` (see [deployment.md](deployment.md)) |
 | `NEXT_PUBLIC_CONVEX_SITE_URL` | yes | Convex HTTP-actions origin (auth routes) |
 | `NEXT_PUBLIC_SITE_URL` | no | Public origin used for absolute links; defaults to localhost in dev |
+| `NEXT_PUBLIC_SHORT_LINK_BASE_URL` | no | Dashboard copy-link base; default `https://arbor.st` |
 | `NEXT_PUBLIC_IMMICH_URL` | no | Allows Immich-hosted images through `next/image` (`next.config.ts`) |
 | `CONVEX_URL` | build | Exported by `convex deploy --cmd`; consumed by `scripts/materialize-convex-public-env.mjs` and `next.config.ts` |
 

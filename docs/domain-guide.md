@@ -167,3 +167,8 @@ Event types (drive which editor tabs and quick-add blocks appear):
   published/featured flags, rendered publicly via `publicMarketing.ts`
   (`/work`). Public crew and artist directories come from
   `publicDirectory.ts` with per-profile opt-in flags.
+- `shortLinks.ts` — custom `arbor.st` redirect overrides managed at
+  `/dashboard/marketing/links`. The Cloudflare Worker calls a Convex HTTP
+  lookup; unknown slugs pass through to `arborlive.stanford.edu/{slug}`.
+  Links can expire manually or 30 days after a linked event; click counts
+  are tracked on redirect.

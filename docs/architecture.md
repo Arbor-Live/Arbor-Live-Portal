@@ -46,6 +46,7 @@ Dependency direction: `web` depends on `backend` (generated API bindings),
 | Invoicing | `invoices.ts`, `invoiceGroups.ts`, `invoiceContacts.ts`, `invoiceTerms.ts`, `invoiceFeeDefinitions.ts`, `invoiceSettings.ts`, `invoicePdf.ts`, `invoicePdfDownload.ts`, `paymentProof*.ts`, `bandPayments.ts` |
 | Inventory | `inventoryTypes.ts`, `inventoryItems.ts`, `inventoryCategories.ts`, `inventoryPackages.ts`, `inventoryR2.ts`, `storageLocations.ts`, `lostFoundSettings.ts` |
 | Media (Immich) | `immich.ts`, `immichActions.ts`, `immichDb.ts`, `immichEnsure.ts`, `marketingImmich*.ts` |
+| Marketing | `marketingDesigns.ts`, `marketingPosts.ts`, `marketingSettings.ts`, `shortLinks.ts`, `marketingInstagram*.ts` |
 | Public (unauthenticated) | `publicDirectory.ts`, `publicInventory.ts`, `publicMarketing.ts`, `paymentProofPublic.ts`, `health.ts` |
 | Shared helpers | `lib/` (auth guards, booking-quote provisioning, crew cost, Immich client, public tokens, ...) |
 
