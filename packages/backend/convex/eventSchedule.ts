@@ -49,10 +49,17 @@ export const upsertBlocks = mutation({
     const event = await ctx.db.get(args.eventId);
     if (!event) throw new Error("Event not found.");
     for (const block of args.blocks) {
-      if (block.endsAt <= block.startsAt) throw new Error("Schedule block end must be after start.");
-      if (block.dayIndex < 0) throw new Error("Schedule block day index cannot be negative.");
-      if (!event.spansMultipleDays && block.dayIndex !== 0) {
-        throw new Error("Single-day events only allow day index 0.");
+      if (block.endsAt <= block.startsAt) {
+        throw new Error("Schedule block end must be after start.");
+      }
+      // dayIndex is timeline row placement from the client — do not recompute or
+      // gate it against event.endAt / spansMultipleDays. Overnight strike often
+      // sits on day 1 while show end stays the previous evening.
+      if (!Number.isFinite(block.dayIndex) || block.dayIndex < 0) {
+        throw new Error("Schedule block day index cannot be negative.");
+      }
+      if (block.dayIndex > 60) {
+        throw new Error("Schedule block day index is unreasonably large.");
       }
     }
     // Overlapping blocks are allowed: the timeline renders overlaps on
@@ -85,35 +92,38 @@ export const upsertBlocks = mutation({
       notes?: string;
     }> = [];
     for (const block of args.blocks) {
+      const label = block.label.trim();
+      const notes = block.notes?.trim() || undefined;
+      const dayIndex = Math.floor(block.dayIndex);
       if (block.id) {
         await ctx.db.patch(block.id, {
           blockType: block.blockType,
-          label: block.label.trim(),
-          dayIndex: block.dayIndex,
+          label,
+          dayIndex,
           startsAt: block.startsAt,
           endsAt: block.endsAt,
-          notes: block.notes?.trim() || undefined,
+          notes,
           updatedAt: now,
         });
         savedBlocks.push({
           id: block.id,
           clientId: block.clientId,
           blockType: block.blockType,
-          label: block.label.trim(),
-          dayIndex: block.dayIndex,
+          label,
+          dayIndex,
           startsAt: block.startsAt,
           endsAt: block.endsAt,
-          notes: block.notes?.trim() || undefined,
+          notes,
         });
       } else {
         const insertedId = await ctx.db.insert("eventScheduleBlocks", {
           eventId: args.eventId,
           blockType: block.blockType,
-          label: block.label.trim(),
-          dayIndex: block.dayIndex,
+          label,
+          dayIndex,
           startsAt: block.startsAt,
           endsAt: block.endsAt,
-          notes: block.notes?.trim() || undefined,
+          notes,
           createdAt: now,
           updatedAt: now,
         });
@@ -121,11 +131,11 @@ export const upsertBlocks = mutation({
           id: insertedId,
           clientId: block.clientId,
           blockType: block.blockType,
-          label: block.label.trim(),
-          dayIndex: block.dayIndex,
+          label,
+          dayIndex,
           startsAt: block.startsAt,
           endsAt: block.endsAt,
-          notes: block.notes?.trim() || undefined,
+          notes,
         });
       }
     }

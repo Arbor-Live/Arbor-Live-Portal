@@ -67,7 +67,7 @@ import { getConvexErrorMessage } from "@/lib/convex-error";
 import { FormSaveBar } from "@/components/forms";
 import { StoredAssetImage, StoredAssetLink } from "@/components/files/stored-asset-image";
 import { isImageAssetReference } from "@/lib/r2-assets";
-import { formatDateTime, formatUsd, payPeriodForDate } from "@/lib/format";
+import { formatDateTime, formatUsd, payPeriodForDate, pacificScheduleDayCount } from "@/lib/format";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { WarningCircleIcon } from "@phosphor-icons/react";
 
@@ -108,6 +108,7 @@ type ShiftDraft = {
   expenseReportId?: Id<"eventExpenseReports">;
   role: string;
   userId?: string;
+  crewApplicationId?: Id<"crewApplications">;
   personName: string;
   startsAt: string;
   endsAt: string;
@@ -340,6 +341,7 @@ export function EventEditor({
         expenseReportId: row.expenseReportId,
         role: row.role,
         userId: row.userId ?? undefined,
+        crewApplicationId: row.crewApplicationId ?? undefined,
         personName: row.personName ?? "",
         startsAt: toLocalDateTimeInput(row.startsAt),
         endsAt: toLocalDateTimeInput(row.endsAt),
@@ -391,6 +393,7 @@ export function EventEditor({
       expenseReportId: row.expenseReportId,
       role: row.role,
       userId: row.userId ?? undefined,
+      crewApplicationId: row.crewApplicationId ?? undefined,
       personName: row.personName ?? "",
       startsAt: toLocalDateTimeInput(row.startsAt),
       endsAt: toLocalDateTimeInput(row.endsAt),
@@ -424,12 +427,22 @@ export function EventEditor({
   }, [activeTab, visibleTabs, eventId, router]);
 
   const dayCount = useMemo(() => {
-    if (!startAt || !endAt) return 1;
-    const start = new Date(startAt);
-    const end = new Date(endAt);
-    const diff = Math.max(0, end.getTime() - start.getTime());
-    return Math.max(1, Math.floor(diff / (24 * 60 * 60 * 1000)) + 1);
-  }, [startAt, endAt]);
+    if (!startAt) return 1;
+    const startMs = new Date(startAt).getTime();
+    if (!Number.isFinite(startMs)) return 1;
+    // Day rows follow the schedule span from event start through the latest of
+    // event end and any block times — so 11pm show end + 1am strike gets Day 2
+    // without forcing events.endAt past midnight.
+    let latestMs = Number.isFinite(new Date(endAt).getTime()) ? new Date(endAt).getTime() : startMs;
+    for (const block of blocks) {
+      const blockStart = new Date(block.startsAt).getTime();
+      const blockEnd = new Date(block.endsAt).getTime();
+      if (Number.isFinite(blockStart)) latestMs = Math.max(latestMs, blockStart);
+      if (Number.isFinite(blockEnd)) latestMs = Math.max(latestMs, blockEnd);
+    }
+    if (latestMs < startMs) latestMs = startMs;
+    return pacificScheduleDayCount(startMs, latestMs);
+  }, [startAt, endAt, blocks]);
 
   const statusOptions: SearchableSelectOption[] = useMemo(
     () =>
@@ -708,7 +721,12 @@ export function EventEditor({
   async function saveSchedule() {
     if (!eventId) return;
     try {
-      const blocksWithRefs = withStableBlockRefs(blocks);
+      const blocksWithRefs = withStableBlockRefs(
+        blocks.map((row) => ({
+          ...row,
+          dayIndex: Math.max(0, row.dayIndex),
+        })),
+      );
       const savedBlocks = await upsertBlocks({
         eventId,
         blocks: blocksWithRefs.map((row) => ({
@@ -799,6 +817,7 @@ export function EventEditor({
                 : undefined) ?? undefined,
           role: row.role,
           userId: row.userId || undefined,
+          crewApplicationId: row.crewApplicationId,
           personName: row.personName || undefined,
           startsAt: new Date(row.startsAt).getTime(),
           endsAt: new Date(row.endsAt).getTime(),
@@ -1586,25 +1605,33 @@ export function EventEditor({
                                 )
                               }
                             />
-                            <UserSelect
-                              value={row.userId ?? ""}
-                              onChange={(value) =>
-                                setShifts((prev) =>
-                                  prev.map((shift, i) =>
-                                    i === shiftIndex
-                                      ? {
-                                          ...shift,
-                                          userId: value || undefined,
-                                          personName:
-                                            userOptions.find((option) => option.value === value)?.label ?? shift.personName,
-                                        }
-                                      : shift,
-                                  ),
-                                )
-                              }
-                              options={userSelectOptions}
-                              emptyLabel="Select crew user"
-                            />
+                            {row.crewApplicationId ? (
+                              <div className="flex h-9 items-center rounded-md border bg-muted/40 px-3 text-sm">
+                                <span className="truncate font-medium">{row.personName || "Trainee"}</span>
+                                <span className="ml-1.5 shrink-0 text-xs text-muted-foreground">trainee</span>
+                              </div>
+                            ) : (
+                              <UserSelect
+                                value={row.userId ?? ""}
+                                onChange={(value) =>
+                                  setShifts((prev) =>
+                                    prev.map((shift, i) =>
+                                      i === shiftIndex
+                                        ? {
+                                            ...shift,
+                                            userId: value || undefined,
+                                            personName:
+                                              userOptions.find((option) => option.value === value)?.label ??
+                                              shift.personName,
+                                          }
+                                        : shift,
+                                    ),
+                                  )
+                                }
+                                options={userSelectOptions}
+                                emptyLabel="Select crew user"
+                              />
+                            )}
                             <DateTimePicker
                               value={row.startsAt}
                               onChange={(value) =>
@@ -1654,14 +1681,86 @@ export function EventEditor({
                 );
               })}
               {shifts.some((shift) => !shift.scheduleBlockRef) ? (
-                <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-700">
-                  <span>
-                    Some legacy shifts are not assigned to a schedule block yet. Assign them by adding personnel on a
-                    block.
-                  </span>
-                  <Button type="button" variant="outline" size="sm" onClick={() => void removeLegacyUnassignedShifts()}>
-                    Delete Legacy Unassigned Shifts
-                  </Button>
+                <div className="space-y-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-amber-700">
+                    <span>
+                      Some shifts are not linked to a schedule block (common for trainees assigned as entire event /
+                      first 8 hours). They still count as scheduled.
+                    </span>
+                    <Button type="button" variant="outline" size="sm" onClick={() => void removeLegacyUnassignedShifts()}>
+                      Delete Unassigned Shifts
+                    </Button>
+                  </div>
+                  {shifts
+                    .map((shift, shiftIndex) => ({ shift, shiftIndex }))
+                    .filter(({ shift }) => !shift.scheduleBlockRef)
+                    .map(({ shift, shiftIndex }) => (
+                      <div
+                        key={shift.id ?? `unassigned-${shiftIndex}`}
+                        className="grid gap-2 rounded-md border border-amber-500/20 bg-background/80 p-2 md:grid-cols-5"
+                      >
+                        <Input
+                          placeholder="Role"
+                          value={shift.role}
+                          onChange={(e) =>
+                            setShifts((prev) =>
+                              prev.map((row, i) => (i === shiftIndex ? { ...row, role: e.target.value } : row)),
+                            )
+                          }
+                        />
+                        {shift.crewApplicationId ? (
+                          <div className="flex h-9 items-center rounded-md border bg-muted/40 px-3 text-sm">
+                            <span className="truncate font-medium">{shift.personName || "Trainee"}</span>
+                            <span className="ml-1.5 shrink-0 text-xs text-muted-foreground">trainee</span>
+                          </div>
+                        ) : (
+                          <UserSelect
+                            value={shift.userId ?? ""}
+                            onChange={(value) =>
+                              setShifts((prev) =>
+                                prev.map((row, i) =>
+                                  i === shiftIndex
+                                    ? {
+                                        ...row,
+                                        userId: value || undefined,
+                                        personName:
+                                          userOptions.find((option) => option.value === value)?.label ?? row.personName,
+                                      }
+                                    : row,
+                                ),
+                              )
+                            }
+                            options={userSelectOptions}
+                            emptyLabel="Select crew user"
+                          />
+                        )}
+                        <DateTimePicker
+                          value={shift.startsAt}
+                          onChange={(value) =>
+                            setShifts((prev) =>
+                              prev.map((row, i) => (i === shiftIndex ? { ...row, startsAt: value } : row)),
+                            )
+                          }
+                          placeholder="Shift start"
+                        />
+                        <DateTimePicker
+                          value={shift.endsAt}
+                          onChange={(value) =>
+                            setShifts((prev) =>
+                              prev.map((row, i) => (i === shiftIndex ? { ...row, endsAt: value } : row)),
+                            )
+                          }
+                          placeholder="Shift end"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setShifts((prev) => prev.filter((_, i) => i !== shiftIndex))}
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    ))}
                 </div>
               ) : null}
             </div>

@@ -10,8 +10,8 @@ import {
 } from "@phosphor-icons/react/dist/ssr";
 import { Reveal, Stagger, StaggerItem } from "@/components/landing/landing-motion";
 import { Button } from "@/components/ui/button";
-import { ARBOR_CONTACT_EMAIL } from "@/lib/landing-content";
 import { cn } from "@/lib/utils";
+import Link from "next/link";
 
 const GLASS =
   "border border-border/50 bg-background/70 shadow-[0_8px_24px_rgba(0,0,0,0.06)] backdrop-blur-xl";
@@ -65,8 +65,6 @@ const BENEFITS: Benefit[] = [
   },
 ];
 
-const JOIN_MAILTO = `mailto:${ARBOR_CONTACT_EMAIL}?subject=${encodeURIComponent("Join the Arbor Live crew")}`;
-
 export function CrewJoinSection() {
   return (
     <section className="relative overflow-hidden border-t bg-muted/35 py-16 sm:py-20">
@@ -88,7 +86,7 @@ export function CrewJoinSection() {
             </p>
           </div>
           <Button asChild size="lg" className="shrink-0 self-start sm:self-auto">
-            <a href={JOIN_MAILTO}>Join the crew</a>
+            <Link href="/crew/apply">Join the crew</Link>
           </Button>
         </Reveal>
 

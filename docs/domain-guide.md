@@ -24,11 +24,22 @@ canonical description of the domain itself.
   the band org (no auto public listing), invites the contact/members, and
   pre-stamps identity/members/socials so they only finish rates + payout in
   `/onboarding/band`. Admin-invite onboarding for existing bands is unchanged.
+- Public self-serve crew applications: `/crew/apply` → `crewApplications`
+  table → admin queue at `/dashboard/users/crew-applications`. Statuses:
+  `submitted` → `closed` (farewell email), `trainee` (no Better Auth user —
+  shifts use `crewApplicationId`; ICS + trainee intro email go to the
+  application email once every required field passes the send gate), or
+  `converted` (invite into Arbor Live via the normal member invite path →
+  `/accept-invite` → crew onboarding). Crew applicants pick a vertical
+  (`Operations` / `Crew` / `Trivia` / `Marketing`); Crew also picks specialty
+  (`Sound` / `Lights` / `Design` / unsure) and Fri/Sat standing availability
+  (5pm–midnight PT) as a scheduling preference only — not auto-matched to shifts.
 - Local UI iteration: `?devPreview=1` (Dev menu) re-opens setup/onboarding
   wizards without redirect — development builds only; see
   [getting-started.md](getting-started.md#dev-preview-wizards).
-- Staff capabilities/teams: `Design`, `Marketing`, `Lighting`, `Sound`,
-  `Operations` (see `capabilityDefinitions.ts` and `userAdminProfiles`).
+- Staff capabilities/teams: verticals `Operations`, `Crew`, `Trivia`,
+  `Marketing` with Crew disciplines `Sound`, `Lights`, `Design`
+  (see `userVerticals.ts` and `userAdminProfiles`).
 
 ## Venues
 
@@ -67,11 +78,15 @@ Event types (drive which editor tabs and quick-add blocks appear):
 - **Schedule blocks** (`eventScheduleBlocks`) are the planning unit: typed
   (`setup`/`show`/`strike`/`custom`), snapped to 15-minute increments, may
   overlap (the timeline renders overlaps on separate lanes) and may cross
-  midnight. Multi-day events use `dayIndex`.
+  midnight. `dayIndex` is anchored to the event **start** calendar day —
+  strike may run past midnight after an ~11pm show end without moving
+  `events.endAt` (show end and strike end are independent).
 - **Crew shifts** (`eventCrewShifts`) attach to schedule blocks via optional
   `scheduleBlockId`. Legacy shifts without a block must be handled without
   crashing. Shift hours feed expense-report totals and the event's
-  `crewCostUsd` (`lib/crewCost.ts`).
+  `crewCostUsd` (`lib/crewCost.ts`). Trainee applicants can be assigned without
+  a portal user via optional `crewApplicationId` (ICS goes to the application
+  email).
 - Event costs are direct fields on `events` (`crewCostUsd`, `bandsCostUsd`,
   `externalRentalsCostUsd`) — there is no generated expense-report workflow.
 - **Event series** (`eventSeries.ts`) generate recurring occurrences and have

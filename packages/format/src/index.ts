@@ -72,6 +72,48 @@ export function pacificDateKey(ms: number, timezone: string = PORTAL_TIMEZONE) {
   }).format(new Date(ms));
 }
 
+/**
+ * Calendar-day span for schedule dayIndex (America/Los_Angeles by default).
+ * Count from an anchor (usually event start) to a later instant (event end,
+ * or a block start/end). Overnight strike after an 11pm show end is 2 days
+ * even when `events.endAt` is still the same evening — pass the block end.
+ */
+export function pacificScheduleDayCount(
+  startMs: number,
+  endMs: number,
+  timezone: string = PORTAL_TIMEZONE,
+) {
+  const start = getPacificDateParts(startMs, timezone);
+  const end = getPacificDateParts(endMs, timezone);
+  const startUtc = Date.UTC(start.year, start.month - 1, start.day);
+  const endUtc = Date.UTC(end.year, end.month - 1, end.day);
+  const dayDiff = Math.round((endUtc - startUtc) / (24 * 60 * 60 * 1000));
+  return Math.max(1, dayDiff + 1);
+}
+
+/** Max schedule dayIndex allowed for a block given the event's start anchor. */
+export function pacificScheduleMaxDayIndex(
+  eventStartMs: number,
+  blockStartsAt: number,
+  blockEndsAt: number,
+  timezone: string = PORTAL_TIMEZONE,
+) {
+  return Math.max(
+    0,
+    pacificScheduleDayCount(eventStartMs, blockStartsAt, timezone) - 1,
+    pacificScheduleDayCount(eventStartMs, blockEndsAt, timezone) - 1,
+  );
+}
+
+/** dayIndex for a block start, relative to the event start calendar day. */
+export function pacificDayIndexFromAnchor(
+  eventStartMs: number,
+  blockStartsAt: number,
+  timezone: string = PORTAL_TIMEZONE,
+) {
+  return Math.max(0, pacificScheduleDayCount(eventStartMs, blockStartsAt, timezone) - 1);
+}
+
 export function formatDateTimeRange(
   startMs: number,
   endMs: number,

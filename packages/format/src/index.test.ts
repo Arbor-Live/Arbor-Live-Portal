@@ -5,6 +5,9 @@ import {
   formatUsd,
   formatUsdOptional,
   pacificDateKey,
+  pacificScheduleDayCount,
+  pacificScheduleMaxDayIndex,
+  pacificDayIndexFromAnchor,
 } from "./index";
 
 describe("formatUsd", () => {
@@ -42,6 +45,50 @@ describe("pacificDateKey", () => {
   });
 });
 
+describe("pacificScheduleDayCount", () => {
+  it("is 1 when start and end fall on the same Pacific calendar day", () => {
+    const start = Date.UTC(2025, 5, 15, 19, 0, 0); // noon PDT
+    const end = Date.UTC(2025, 5, 16, 6, 0, 0); // 11pm PDT same day
+    expect(pacificScheduleDayCount(start, end)).toBe(1);
+  });
+
+  it("is 2 for overnight events under 24h (strike past midnight)", () => {
+    // Mon 8pm PDT → Tue 2am PDT
+    const start = Date.UTC(2025, 5, 17, 3, 0, 0); // Jun 16 8pm PDT
+    const end = Date.UTC(2025, 5, 17, 9, 0, 0); // Jun 17 2am PDT
+    expect(pacificDateKey(start)).toBe("2025-06-16");
+    expect(pacificDateKey(end)).toBe("2025-06-17");
+    expect(pacificScheduleDayCount(start, end)).toBe(2);
+  });
+
+  it("honors an explicit timezone override", () => {
+    const start = Date.UTC(2025, 0, 1, 5, 0, 0);
+    const end = Date.UTC(2025, 0, 1, 6, 0, 0);
+    expect(pacificScheduleDayCount(start, end, "UTC")).toBe(1);
+    expect(pacificScheduleDayCount(start, end, PORTAL_TIMEZONE)).toBe(1);
+  });
+});
+
+describe("pacificScheduleMaxDayIndex", () => {
+  it("allows day 1 when strike ends after midnight even if show end is 11pm", () => {
+    // Event/show: Jun 16 8pm–11pm PDT. Strike ends 1am Jun 17.
+    const eventStart = Date.UTC(2025, 5, 17, 3, 0, 0); // jun 16 8pm PDT
+    const showEnd = Date.UTC(2025, 5, 17, 6, 0, 0); // jun 16 11pm PDT
+    const strikeEnd = Date.UTC(2025, 5, 17, 8, 0, 0); // jun 17 1am PDT
+    expect(pacificScheduleDayCount(eventStart, showEnd)).toBe(1);
+    expect(pacificScheduleMaxDayIndex(eventStart, showEnd, strikeEnd)).toBe(1);
+  });
+});
+
+describe("pacificDayIndexFromAnchor", () => {
+  it("is 0 for a same-evening strike start and 1 after midnight", () => {
+    const eventStart = Date.UTC(2025, 5, 17, 3, 0, 0); // jun 16 8pm PDT
+    const strikeStartEvening = Date.UTC(2025, 5, 17, 6, 0, 0); // jun 16 11pm
+    const strikeStartMorning = Date.UTC(2025, 5, 17, 8, 0, 0); // jun 17 1am
+    expect(pacificDayIndexFromAnchor(eventStart, strikeStartEvening)).toBe(0);
+    expect(pacificDayIndexFromAnchor(eventStart, strikeStartMorning)).toBe(1);
+  });
+});
 describe("formatDateTimeRange", () => {
   it("collapses to a single day with a time-only end", () => {
     const start = Date.UTC(2025, 5, 15, 19, 0, 0); // noon PDT

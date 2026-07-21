@@ -21,6 +21,11 @@ import {
   renderBandApplicationReceivedEmail,
   renderBandApplicationApprovedEmail,
   renderBandApplicationDeclinedEmail,
+  renderBandApplicationConfirmationEmail,
+  renderCrewApplicationReceivedEmail,
+  renderCrewApplicationClosedEmail,
+  renderCrewApplicationConfirmationEmail,
+  renderCrewTraineeIntroEmail,
 } from "@arbor/email/render";
 import type {
   BookingQuoteReadyEmailProps,
@@ -44,6 +49,11 @@ import type {
   OnboardingReminderEmailProps,
   BandApplicationReceivedEmailProps,
   BandApplicationDecisionEmailProps,
+  BandApplicationConfirmationEmailProps,
+  CrewApplicationReceivedEmailProps,
+  CrewApplicationClosedEmailProps,
+  CrewApplicationConfirmationEmailProps,
+  CrewTraineeIntroEmailProps,
 } from "@arbor/email/types";
 import type { EmailTemplate } from "./constants";
 
@@ -93,5 +103,19 @@ export async function renderEmailHtml(template: EmailTemplate, payload: unknown)
       return renderBandApplicationApprovedEmail(payload as BandApplicationDecisionEmailProps);
     case "band_application_declined":
       return renderBandApplicationDeclinedEmail(payload as BandApplicationDecisionEmailProps);
+    case "band_application_confirmation":
+      return renderBandApplicationConfirmationEmail(
+        payload as BandApplicationConfirmationEmailProps,
+      );
+    case "crew_application_received":
+      return renderCrewApplicationReceivedEmail(payload as CrewApplicationReceivedEmailProps);
+    case "crew_application_closed":
+      return renderCrewApplicationClosedEmail(payload as CrewApplicationClosedEmailProps);
+    case "crew_application_confirmation":
+      return renderCrewApplicationConfirmationEmail(
+        payload as CrewApplicationConfirmationEmailProps,
+      );
+    case "crew_trainee_intro":
+      return renderCrewTraineeIntroEmail(payload as CrewTraineeIntroEmailProps);
   }
 }

@@ -254,6 +254,17 @@ export const submitPublic = mutation({
       contactEmail,
     });
 
+    await enqueueEmail(ctx, {
+      template: "band_application_confirmation",
+      to: contactEmail,
+      subject: subjectForTemplate("band_application_confirmation", bandDisplayName),
+      idempotencyKey: `band_application_confirmation:${applicationId}`,
+      payload: {
+        recipientName: contactName.split(" ")[0] ?? contactName,
+        bandName: bandDisplayName,
+      },
+    });
+
     return { applicationId };
   },
 });
@@ -319,6 +330,19 @@ export const listAdmin = query({
         declineReason: row.declineReason,
         organizationId: row.organizationId,
       }));
+  },
+});
+
+export const countPendingSubmitted = query({
+  args: {},
+  returns: v.number(),
+  handler: async (ctx) => {
+    await requireAdmin(ctx);
+    const rows = await ctx.db
+      .query("bandApplications")
+      .withIndex("by_status", (q) => q.eq("status", "submitted"))
+      .take(200);
+    return rows.length;
   },
 });
 

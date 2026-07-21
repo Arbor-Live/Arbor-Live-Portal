@@ -52,6 +52,8 @@ Human-readable docs live in `docs/` (`getting-started.md`, `architecture.md`, `d
   - snapping (15-minute increments)
   - overlap lane stacking (overlapping blocks render on separate rows)
   - cross-midnight rendering across day rows
+- `dayIndex` is anchored to the event **start** day. Strike may run past midnight
+  after an ~11pm show end without moving `events.endAt` / `spansMultipleDays`.
 - Quick Add intent by event type:
   - `Dry Rental`: Delivery + Return slots
   - `Rental with Crew`: Setup + Strike
@@ -85,8 +87,20 @@ Human-readable docs live in `docs/` (`getting-started.md`, `architecture.md`, `d
 - Prevent input layout shift from focus/popup styling.
 
 ## Select/Dropdown UI Conventions
+- **Searchable lists must use `SearchableSelect`**
+  (`apps/web/src/components/inventory/searchable-select.tsx`). Do not use native
+  `<select>` for searchable / long option lists (events, venues, users, blocks,
+  packages, invoices, etc.).
+- Prefer domain wrappers that already wrap `SearchableSelect`:
+  - Events: `apps/web/src/components/events/event-select.tsx` (`EventSelect`)
+  - Users: `apps/web/src/components/users/user-select.tsx` (`UserSelect`)
+  - Venues: `apps/web/src/components/venues/venue-picker.tsx` (`VenuePicker`)
+- Schedule-block + start/end windows (crew availability partial responses and
+  trainee assign): reuse
+  `apps/web/src/components/events/schedule-block-window-fields.tsx`
+  (`ScheduleBlockWindowFields`) — it already uses `SearchableSelect` +
+  `DateTimePicker`.
 - Global form consistency: dropdown/select controls should match text input visual system.
-- Reusable searchable select exists at `apps/web/src/components/inventory/searchable-select.tsx`.
 - User avatars: use `@/components/account/user-avatar` (`UserAvatar` / `BoringUserAvatar`).
   Do not import `boring-avatars` directly. Seed is stable — account email, else user id,
   else display name (see module docs in that file).

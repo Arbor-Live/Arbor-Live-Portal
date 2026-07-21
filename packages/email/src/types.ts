@@ -193,3 +193,46 @@ export type BandApplicationDecisionEmailProps = {
   acceptInviteUrl?: string;
   declineReason?: string;
 };
+
+export type BandApplicationConfirmationEmailProps = {
+  recipientName?: string;
+  bandName: string;
+};
+
+export type CrewApplicationReceivedEmailProps = {
+  applicantName: string;
+  applicantEmail: string;
+  vertical: string;
+  reviewUrl: string;
+};
+
+export type CrewApplicationClosedEmailProps = {
+  recipientName?: string;
+};
+
+export type CrewApplicationConfirmationEmailProps = {
+  recipientName?: string;
+  vertical?: string;
+};
+
+export type CrewTraineeIntroContact = {
+  role: "event_manager" | "day_of_lead";
+  name: string;
+  email: string;
+  phone: string;
+};
+
+export type CrewTraineeIntroEmailProps = {
+  recipientName?: string;
+  eventTitle: string;
+  dateRangeLabel: string;
+  venueName: string;
+  venueAddress: string;
+  venueGoogleMapsUrl?: string;
+  storageClosetLabel: string;
+  storageClosetMapsUrl: string;
+  callTimeLabel: string;
+  contacts: CrewTraineeIntroContact[];
+  contactsCollapsed: boolean;
+  arborContactEmail: string;
+};
