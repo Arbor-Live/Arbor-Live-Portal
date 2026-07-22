@@ -32,7 +32,7 @@ function getBarcodeDetector():
 export function AssetScanner({
   onSubmit,
   disabled,
-  placeholder = "Scan or type asset tag / arbor.st/e/…",
+  placeholder = "Scan or type ALE-0041 / arbor.st/e/…",
   autoFocus,
 }: AssetScannerProps) {
   const [value, setValue] = useState("");

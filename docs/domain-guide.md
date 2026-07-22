@@ -12,8 +12,9 @@ canonical description of the domain itself.
 - Staff-only functionality is guarded by `requireArborInternalContext`; band
   portal surfaces (linked events, media albums, payout status) use
   `requireBandContext` plus `lib/eventBandAccess.ts`.
-- The first admin is created at `/setup` while zero admins exist (any other
-  route redirects there until setup completes)
+- The first admin is created at `/setup` while zero admins exist
+  (visit that URL directly on a fresh deployment; other routes no longer
+  auto-redirect there)
   (see [getting-started.md](getting-started.md)); everyone else is invited
   (`userInvites.ts`, accept-invite → `/onboarding` or `/onboarding/band`).
 - Crew onboarding progress lives in `userOnboarding`; band org setup in
@@ -149,7 +150,8 @@ Event types (drive which editor tabs and quick-add blocks appear):
 - Rental fulfillment (dry hire / rental with crew): event pull lists remain the
   planning qty source. Crew run **Process delivery** / **Process return** from
   the event Equipment tab (`eventRentalFulfillment.ts`) with camera or typed
-  asset scans (`arbor.st/e/{assetId}` or bare tags). Scanning a packout/container
+  asset scans (`https://arbor.st/e/{assetId}`, schemeless `arbor.st/e/…`, or bare
+  tags like `ALE-0041`). Scanning a packout/container
   always auto-checks the asset and every nested contained item. Outbound complete requires
   an explicit disposition (`replace` / `no_tag` / `removed`) for every unchecked
   unit; return complete requires `scanned` / `no_tag` / `missing` / `damaged` /

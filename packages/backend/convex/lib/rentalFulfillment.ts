@@ -1,6 +1,12 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
-import { normalizeAssetScanInput } from "./assetScan";
+import {
+  assetIdLookupCandidates,
+  normalizeAssetScanInput,
+  parseAssetScanInput,
+} from "./assetScan";
+import { isShortLinkExpired } from "./shortLinks";
+import { normalizeShortLinkSlug } from "./shortLinkSlug";
 
 export type OutboundStatus = Doc<"eventRentalUnits">["outboundStatus"];
 export type ReturnStatus = NonNullable<Doc<"eventRentalUnits">["returnStatus"]>;
@@ -11,16 +17,61 @@ export async function requireEvent(ctx: QueryCtx | MutationCtx, eventId: Id<"eve
   return event;
 }
 
+async function findItemByAssetIdCandidates(
+  ctx: QueryCtx | MutationCtx,
+  assetId: string,
+): Promise<Doc<"inventoryItems"> | null> {
+  for (const candidate of assetIdLookupCandidates(assetId)) {
+    const item = await ctx.db
+      .query("inventoryItems")
+      .withIndex("by_assetId", (q) => q.eq("assetId", candidate))
+      .unique();
+    if (item) return item;
+  }
+  return null;
+}
+
+async function resolveViaShortLinkSlug(
+  ctx: QueryCtx | MutationCtx,
+  slug: string,
+): Promise<Doc<"inventoryItems"> | null> {
+  let normalizedSlug: string;
+  try {
+    normalizedSlug = normalizeShortLinkSlug(slug);
+  } catch {
+    return null;
+  }
+  const link = await ctx.db
+    .query("shortLinks")
+    .withIndex("by_slug", (q) => q.eq("slug", normalizedSlug))
+    .unique();
+  if (!link || isShortLinkExpired(link)) return null;
+  const destinationAssetId = normalizeAssetScanInput(link.destinationUrl);
+  if (!destinationAssetId) return null;
+  return await findItemByAssetIdCandidates(ctx, destinationAssetId);
+}
+
 export async function resolveInventoryItemByScan(
   ctx: QueryCtx | MutationCtx,
   raw: string,
 ): Promise<Doc<"inventoryItems"> | null> {
-  const assetId = normalizeAssetScanInput(raw);
-  if (!assetId) return null;
-  return await ctx.db
-    .query("inventoryItems")
-    .withIndex("by_assetId", (q) => q.eq("assetId", assetId))
-    .unique();
+  const parsed = parseAssetScanInput(raw);
+
+  if (parsed.assetId) {
+    const direct = await findItemByAssetIdCandidates(ctx, parsed.assetId);
+    if (direct) return direct;
+
+    // Some QRs encode arbor.st/e/{slug} where {slug} is a short-link override.
+    const viaEmbeddedSlug = await resolveViaShortLinkSlug(ctx, parsed.assetId);
+    if (viaEmbeddedSlug) return viaEmbeddedSlug;
+  }
+
+  if (parsed.shortLinkSlug) {
+    const viaShort = await resolveViaShortLinkSlug(ctx, parsed.shortLinkSlug);
+    if (viaShort) return viaShort;
+  }
+
+  return null;
 }
 
 /** Root asset plus every nested contained asset (BFS). Always includes the root. */

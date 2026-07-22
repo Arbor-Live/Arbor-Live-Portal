@@ -116,13 +116,18 @@ function DamageReportWizardForm({
         <AssetScanner onSubmit={(raw) => setRawScan(raw)} autoFocus />
       ) : null}
 
-      {effectiveItemId ? (
-        <p className="text-sm text-muted-foreground">
-          Asset selected
-          {resolved?.assetId ? `: ${resolved.assetId} (${resolved.typeName})` : null}
-          {initialInventoryItemId && !resolved ? " (from item)" : null}
-        </p>
-      ) : null}
+          {effectiveItemId ? (
+            <p className="text-sm text-muted-foreground">
+              Asset selected
+              {resolved?.assetId ? `: ${resolved.assetId} (${resolved.typeName})` : null}
+              {initialInventoryItemId && !resolved ? " (from item)" : null}
+            </p>
+          ) : rawScan.trim() && resolved === null ? (
+            <p className="text-sm text-destructive">
+              No inventory item found for “{rawScan.trim()}”. Try an asset tag like ALE-0041 or
+              https://arbor.st/e/….
+            </p>
+          ) : null}
 
       {hasChildren ? (
         <div className="space-y-2">
@@ -272,7 +277,8 @@ export function DamageReportWizard({
         <SheetHeader>
           <SheetTitle>Report damage</SheetTitle>
           <SheetDescription>
-            Any crew can report damage. Prefer linking an event when known.
+            Any crew can report damage. Prefer linking an event when known. Scan a QR
+            (`https://arbor.st/e/…`) or type an asset tag like `ALE-0041`.
           </SheetDescription>
         </SheetHeader>
         {open ? (
