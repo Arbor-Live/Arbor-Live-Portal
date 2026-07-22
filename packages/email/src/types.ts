@@ -246,3 +246,26 @@ export type CrewTraineeIntroEmailProps = {
   contactsCollapsed: boolean;
   arborContactEmail: string;
 };
+
+export type RentalOutboundPackedEmailProps = {
+  recipientName?: string;
+  eventTitle: string;
+  venueName?: string;
+  dateRangeLabel: string;
+  fulfillmentMode: "delivery" | "will_call";
+  itemSummaries: string[];
+  eventUrl: string;
+};
+
+export type RentalReturnProcessedEmailProps = {
+  recipientName?: string;
+  eventTitle: string;
+  venueName?: string;
+  dateRangeLabel: string;
+  exceptionItems: Array<{
+    label: string;
+    assetId?: string;
+    status: "missing" | "damaged";
+  }>;
+  eventUrl: string;
+};

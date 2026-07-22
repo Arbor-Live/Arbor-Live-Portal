@@ -184,6 +184,45 @@ const eventPullListSourceValue = v.union(
 
 const eventPullListLineKindValue = v.union(v.literal("type"), v.literal("package"));
 
+const rentalFulfillmentDirectionValue = v.union(v.literal("outbound"), v.literal("return"));
+
+const rentalFulfillmentStatusValue = v.union(v.literal("in_progress"), v.literal("completed"));
+
+const rentalOutboundStatusValue = v.union(
+  v.literal("pending"),
+  v.literal("scanned"),
+  v.literal("replace"),
+  v.literal("no_tag"),
+  v.literal("removed"),
+);
+
+const rentalReturnStatusValue = v.union(
+  v.literal("pending"),
+  v.literal("scanned"),
+  v.literal("no_tag"),
+  v.literal("missing"),
+  v.literal("damaged"),
+  v.literal("manual"),
+);
+
+const damageReportScopeValue = v.union(
+  v.literal("this_only"),
+  v.literal("all_including_children"),
+  v.literal("children_only"),
+  v.literal("some_children"),
+);
+
+const damageReportOperabilityValue = v.union(
+  v.literal("functional"),
+  v.literal("needs_repair"),
+);
+
+const damageReportStatusValue = v.union(
+  v.literal("open"),
+  v.literal("in_progress"),
+  v.literal("resolved"),
+);
+
 const immichAlbumEntityTypeValue = v.union(v.literal("band"), v.literal("event"));
 
 const immichAssetTypeValue = v.union(v.literal("IMAGE"), v.literal("VIDEO"));
@@ -1017,7 +1056,57 @@ export default defineSchema({
     .index("by_organizationId", ["organizationId"])
     .index("by_eventId_and_organizationId", ["eventId", "organizationId"]),
 
-  // Phase 2: eventPullListAssetAssignments (pullListItemId, inventoryItemId, checkedOutAt)
+  eventRentalFulfillments: defineTable({
+    eventId: v.id("events"),
+    direction: rentalFulfillmentDirectionValue,
+    status: rentalFulfillmentStatusValue,
+    startedAt: v.number(),
+    completedAt: v.optional(v.number()),
+    completedByUserId: v.optional(v.string()),
+  })
+    .index("by_eventId", ["eventId"])
+    .index("by_eventId_and_direction", ["eventId", "direction"]),
+
+  eventRentalUnits: defineTable({
+    eventId: v.id("events"),
+    fulfillmentId: v.id("eventRentalFulfillments"),
+    pullListItemId: v.optional(v.id("eventPullListItems")),
+    inventoryItemId: v.optional(v.id("inventoryItems")),
+    assetId: v.optional(v.string()),
+    typeId: v.optional(v.id("inventoryTypes")),
+    label: v.string(),
+    outboundStatus: rentalOutboundStatusValue,
+    returnStatus: v.optional(rentalReturnStatusValue),
+    damageReportId: v.optional(v.id("damageReports")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_eventId", ["eventId"])
+    .index("by_fulfillmentId", ["fulfillmentId"])
+    .index("by_inventoryItemId", ["inventoryItemId"])
+    .index("by_assetId", ["assetId"]),
+
+  damageReports: defineTable({
+    inventoryItemId: v.id("inventoryItems"),
+    assetId: v.string(),
+    typeId: v.optional(v.id("inventoryTypes")),
+    eventId: v.optional(v.id("events")),
+    scope: damageReportScopeValue,
+    scopedItemIds: v.array(v.id("inventoryItems")),
+    operability: damageReportOperabilityValue,
+    severity: v.number(),
+    notes: v.optional(v.string()),
+    photoR2Key: v.optional(v.string()),
+    status: damageReportStatusValue,
+    reportedByUserId: v.string(),
+    reportedAt: v.number(),
+    updatedAt: v.number(),
+    resolvedAt: v.optional(v.number()),
+  })
+    .index("by_status", ["status"])
+    .index("by_eventId", ["eventId"])
+    .index("by_inventoryItemId", ["inventoryItemId"]),
+
   pendingUserInvites: defineTable({
     invitationId: v.string(),
     token: v.string(),
@@ -1064,6 +1153,8 @@ export default defineSchema({
       v.literal("crew_application_closed"),
       v.literal("crew_application_confirmation"),
       v.literal("crew_trainee_intro"),
+      v.literal("rental_outbound_packed"),
+      v.literal("rental_return_processed"),
     ),
     status: v.union(v.literal("queued"), v.literal("sent"), v.literal("failed")),
     to: v.string(),

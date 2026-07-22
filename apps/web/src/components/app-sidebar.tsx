@@ -82,6 +82,7 @@ const navItems: NavItem[] = [
 const inventorySubItems: NavSubItem[] = [
   { title: "Overview", url: "/dashboard/inventory" },
   { title: "Inventory Items", url: "/dashboard/inventory/items" },
+  { title: "Damage & Repair", url: "/dashboard/inventory/damage" },
   { title: "Types", url: "/dashboard/inventory/types", adminOnly: true },
   { title: "Packages", url: "/dashboard/inventory/packages" },
   { title: "Storage Locations", url: "/dashboard/inventory/storage-locations" },

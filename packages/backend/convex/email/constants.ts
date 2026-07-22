@@ -55,7 +55,9 @@ export type EmailTemplate =
   | "crew_application_received"
   | "crew_application_closed"
   | "crew_application_confirmation"
-  | "crew_trainee_intro";
+  | "crew_trainee_intro"
+  | "rental_outbound_packed"
+  | "rental_return_processed";
 
 export function eventDashboardUrl(eventId: string) {
   return `${SITE_URL}/dashboard/events/${eventId}`;
@@ -172,6 +174,10 @@ export function subjectForTemplate(template: EmailTemplate, context: string) {
       return `We got your crew application`;
     case "crew_trainee_intro":
       return `You're training with us: ${context}`;
+    case "rental_outbound_packed":
+      return `Equipment packed: ${context}`;
+    case "rental_return_processed":
+      return `Return processed: ${context}`;
   }
 }
 

@@ -146,6 +146,18 @@ Event types (drive which editor tabs and quick-add blocks appear):
   (`publicInventory.equipmentByAssetId` + `lostFoundSettings`).
 - Images/files upload to Cloudflare R2 (`inventoryR2.ts`,
   [r2-storage.md](r2-storage.md)).
+- Rental fulfillment (dry hire / rental with crew): event pull lists remain the
+  planning qty source. Crew run **Process delivery** / **Process return** from
+  the event Equipment tab (`eventRentalFulfillment.ts`) with camera or typed
+  asset scans (`arbor.st/e/{assetId}` or bare tags). Scanning a packout/container
+  always auto-checks the asset and every nested contained item. Outbound complete requires
+  an explicit disposition (`replace` / `no_tag` / `removed`) for every unchecked
+  unit; return complete requires `scanned` / `no_tag` / `missing` / `damaged` /
+  `manual`. Client emails go to the linked invoice `clientEmail` only
+  (`rental_outbound_packed`, `rental_return_processed`).
+- Damage reports (`damageReports.ts`): any arbor_internal crew can create
+  reports (scope for containers, operability, severity, photo, optional event).
+  Operations/admin triage at `/dashboard/inventory/damage`.
 
 ## Media (Immich)
 
