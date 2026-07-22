@@ -171,6 +171,23 @@ export const list = query({
   },
 });
 
+export const countPending = query({
+  args: {},
+  returns: v.number(),
+  handler: async (ctx) => {
+    await requireCrew(ctx);
+    const open = await ctx.db
+      .query("damageReports")
+      .withIndex("by_status", (q) => q.eq("status", "open"))
+      .take(500);
+    const inProgress = await ctx.db
+      .query("damageReports")
+      .withIndex("by_status", (q) => q.eq("status", "in_progress"))
+      .take(500);
+    return open.length + inProgress.length;
+  },
+});
+
 export const create = mutation({
   args: {
     inventoryItemId: v.id("inventoryItems"),
@@ -285,6 +302,34 @@ export const updateStatus = mutation({
         });
       }
     }
+    return null;
+  },
+});
+
+/** Resolve the report and mark the inventory asset as decommissioned (out of service). */
+export const decommission = mutation({
+  args: { reportId: v.id("damageReports") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requireAnyVerticalOrAdmin(ctx, ["Operations"]);
+    const report = await ctx.db.get(args.reportId);
+    if (!report) throw new Error("Damage report not found.");
+    if (report.status === "resolved") {
+      throw new Error("This damage report is already resolved.");
+    }
+    const item = await ctx.db.get(report.inventoryItemId);
+    if (!item) throw new Error("Inventory item not found.");
+
+    const now = Date.now();
+    await ctx.db.patch(report._id, {
+      status: "resolved",
+      updatedAt: now,
+      resolvedAt: now,
+    });
+    await ctx.db.patch(item._id, {
+      status: "decommissioned",
+      updatedAt: now,
+    });
     return null;
   },
 });

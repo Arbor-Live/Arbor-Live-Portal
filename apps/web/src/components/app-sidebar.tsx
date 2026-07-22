@@ -213,6 +213,10 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
     api.crewApplications.countPendingSubmitted,
     isAdmin ? {} : "skip",
   )
+  const pendingDamageReportsCount = useQuery(
+    api.damageReports.countPending,
+    activeOrganization?.organizationType === "arbor_internal" ? {} : "skip",
+  )
   const unconfirmedCrewCount = useQuery(
     api.eventCrewAvailability.listForAdminOverview,
     activeOrganization?.organizationType === "arbor_internal" && isAdmin
@@ -247,6 +251,32 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
   const unconfirmedEventCount = unconfirmedCrewCount?.length ?? 0
   const scopedNavItems = navItems.filter((item) => canAccessNavItem(item, navAccess))
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({})
+
+  function pendingChipCountForUrl(url: string): number {
+    switch (url) {
+      case "/dashboard/events/my-availability":
+        return pendingAvailabilityCount ?? 0
+      case "/dashboard/events/crew-scheduling":
+        return unconfirmedEventCount
+      case "/dashboard/users/band-applications":
+        return pendingBandApplicationsCount ?? 0
+      case "/dashboard/users/crew-applications":
+        return pendingCrewApplicationsCount ?? 0
+      case "/dashboard/inventory/damage":
+        return pendingDamageReportsCount ?? 0
+      default:
+        return 0
+    }
+  }
+
+  function PendingCountChip({ count }: { count: number }) {
+    if (count <= 0) return null
+    return (
+      <span className="ml-auto rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+        {count}
+      </span>
+    )
+  }
 
   return (
     <Sidebar variant="inset" {...props}>
@@ -309,15 +339,18 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
               pathname.startsWith(`${item.url}/`) ||
               (item.url === "/dashboard/financial-hub" &&
                 pathname.startsWith("/dashboard/timecards"))
+            const sectionOpen = hasCollapsibleSubItems
+              ? isParentActive || (openSections[item.url] ?? false)
+              : true
+            const parentPendingCount = (subItems ?? []).reduce(
+              (sum, subItem) => sum + pendingChipCountForUrl(subItem.url),
+              0,
+            )
             return (
               <Collapsible
                 key={item.url}
                 asChild
-                open={
-                  hasCollapsibleSubItems
-                    ? isParentActive || (openSections[item.url] ?? false)
-                    : true
-                }
+                open={sectionOpen}
                 onOpenChange={(isOpen) => {
                   if (!hasCollapsibleSubItems) return
                   // Avoid no-op state updates, which can cause update loops in controlled collapsibles.
@@ -334,6 +367,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
                         <SidebarMenuButton isActive={isParentActive} className="text-sm">
                           <Icon />
                           <span>{item.title}</span>
+                          {!sectionOpen ? <PendingCountChip count={parentPendingCount} /> : null}
                         </SidebarMenuButton>
                       </CollapsibleTrigger>
                       <CollapsibleTrigger asChild>
@@ -358,33 +392,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
                               >
                                 <Link href={subItem.url}>
                                   <span>{subItem.title}</span>
-                                  {subItem.url === "/dashboard/events/my-availability" &&
-                                  pendingAvailabilityCount &&
-                                  pendingAvailabilityCount > 0 ? (
-                                    <span className="ml-auto rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
-                                      {pendingAvailabilityCount}
-                                    </span>
-                                  ) : null}
-                                  {subItem.url === "/dashboard/events/crew-scheduling" &&
-                                  unconfirmedEventCount > 0 ? (
-                                    <span className="ml-auto rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
-                                      {unconfirmedEventCount}
-                                    </span>
-                                  ) : null}
-                                  {subItem.url === "/dashboard/users/band-applications" &&
-                                  pendingBandApplicationsCount &&
-                                  pendingBandApplicationsCount > 0 ? (
-                                    <span className="ml-auto rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
-                                      {pendingBandApplicationsCount}
-                                    </span>
-                                  ) : null}
-                                  {subItem.url === "/dashboard/users/crew-applications" &&
-                                  pendingCrewApplicationsCount &&
-                                  pendingCrewApplicationsCount > 0 ? (
-                                    <span className="ml-auto rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
-                                      {pendingCrewApplicationsCount}
-                                    </span>
-                                  ) : null}
+                                  <PendingCountChip count={pendingChipCountForUrl(subItem.url)} />
                                 </Link>
                               </SidebarMenuSubButton>
                             </SidebarMenuSubItem>

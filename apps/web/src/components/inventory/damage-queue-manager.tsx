@@ -15,6 +15,7 @@ export function DamageQueueManager() {
   const [wizardOpen, setWizardOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const updateStatus = useMutation(api.damageReports.updateStatus);
+  const decommission = useMutation(api.damageReports.decommission);
   const reports = useQuery(api.damageReports.list, {
     status: statusFilter === "all" ? undefined : statusFilter,
   });
@@ -118,7 +119,26 @@ export function DamageQueueManager() {
                       }).catch((err) => setError(getConvexErrorMessage(err)))
                     }
                   >
-                    Resolve
+                    Resolve (repaired)
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => {
+                      if (
+                        !window.confirm(
+                          `Decommission ${report.assetId}? It will be marked out of service and this report will close.`,
+                        )
+                      ) {
+                        return;
+                      }
+                      void decommission({
+                        reportId: report._id as Id<"damageReports">,
+                      }).catch((err) => setError(getConvexErrorMessage(err)));
+                    }}
+                  >
+                    Decommission
                   </Button>
                 </div>
               ) : null}
