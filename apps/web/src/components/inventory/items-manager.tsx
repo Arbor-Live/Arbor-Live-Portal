@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { DamageReportWizard } from "./damage-report-wizard";
 import { InventoryItemEditor } from "./inventory-item-editor";
 import { toCategoryOptions } from "./constants";
 
@@ -37,6 +38,7 @@ export function ItemsManager() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editorInitial, setEditorInitial] = useState(defaultForm);
+  const [damageItemId, setDamageItemId] = useState<string | null>(null);
   const rowRefs = useRef(new Map<string, HTMLTableRowElement>());
 
   const categories = useQuery(api.inventoryCategories.list, { activeOnly: true });
@@ -249,7 +251,7 @@ export function ItemsManager() {
                       ) : null}
                     </td>
                     <td className="p-2">
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap gap-2">
                         <Button
                           size="sm"
                           variant="outline"
@@ -267,6 +269,13 @@ export function ItemsManager() {
                           }}
                         >
                           Edit
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setDamageItemId(item._id)}
+                        >
+                          Damage
                         </Button>
                         <Button size="sm" variant="destructive" onClick={() => void removeItem({ id: item._id })}>
                           Delete
@@ -295,6 +304,14 @@ export function ItemsManager() {
         onSaved={() => {
           if (!editingId) setEditorInitial(defaultForm);
         }}
+      />
+
+      <DamageReportWizard
+        open={Boolean(damageItemId)}
+        onOpenChange={(open) => {
+          if (!open) setDamageItemId(null);
+        }}
+        initialInventoryItemId={damageItemId as never}
       />
     </div>
   );

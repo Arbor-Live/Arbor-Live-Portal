@@ -8,6 +8,11 @@ const modules = [
     description: "Physical tracked assets with serial numbers and storage assignment.",
   },
   {
+    title: "Damage & Repair",
+    href: "/dashboard/inventory/damage",
+    description: "Crew damage reports and Operations triage queue.",
+  },
+  {
     title: "Types",
     href: "/dashboard/inventory/types",
     description: "Model database with pricing, manuals, capabilities, and imagery.",

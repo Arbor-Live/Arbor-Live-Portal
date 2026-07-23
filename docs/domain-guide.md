@@ -12,8 +12,9 @@ canonical description of the domain itself.
 - Staff-only functionality is guarded by `requireArborInternalContext`; band
   portal surfaces (linked events, media albums, payout status) use
   `requireBandContext` plus `lib/eventBandAccess.ts`.
-- The first admin is created at `/setup` while zero admins exist (any other
-  route redirects there until setup completes)
+- The first admin is created at `/setup` while zero admins exist
+  (visit that URL directly on a fresh deployment; other routes no longer
+  auto-redirect there)
   (see [getting-started.md](getting-started.md)); everyone else is invited
   (`userInvites.ts`, accept-invite → `/onboarding` or `/onboarding/band`).
 - Crew onboarding progress lives in `userOnboarding`; band org setup in
@@ -146,6 +147,21 @@ Event types (drive which editor tabs and quick-add blocks appear):
   (`publicInventory.equipmentByAssetId` + `lostFoundSettings`).
 - Images/files upload to Cloudflare R2 (`inventoryR2.ts`,
   [r2-storage.md](r2-storage.md)).
+- Rental fulfillment (dry hire / rental with crew): event pull lists remain the
+  planning qty source. Crew run **Process delivery** / **Process return** from
+  the event Equipment tab (`eventRentalFulfillment.ts`) with camera or typed
+  asset scans (`https://arbor.st/e/{assetId}`, schemeless `arbor.st/e/…`, or bare
+  tags like `ALE-0041`). Scanning a packout/container
+  always auto-checks the asset and every nested contained item. Outbound complete requires
+  an explicit disposition (`replace` / `no_tag` / `removed`) for every unchecked
+  unit; return complete requires `scanned` / `no_tag` / `missing` / `damaged` /
+  `manual`. Client emails go to the linked invoice `clientEmail` only
+  (`rental_outbound_packed`, `rental_return_processed`); series-linked invoices
+  count. Completing without a client email still succeeds but surfaces a warning
+  and a resend action once an invoice email exists.
+- Damage reports (`damageReports.ts`): any arbor_internal crew can create
+  reports (scope for containers, operability, severity, photo, optional event).
+  Operations/admin triage at `/dashboard/inventory/damage`.
 
 ## Media (Immich)
 

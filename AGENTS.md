@@ -72,10 +72,10 @@ npx convex env set EMAIL_TEST_MODE "true"
 
 ### First admin (no self-serve signup)
 
-With the web app running and zero admins on the deployment, any page
-redirects to `/setup` so you can create the first admin account. `/setup`
-locks permanently once any admin exists. Invite additional users from the
-Users dashboard; they land on `/onboarding` after accept-invite.
+With the web app running and zero admins on the deployment, open `/setup`
+directly to create the first admin account. `/setup` locks permanently once
+any admin exists. Invite additional users from the Users dashboard; they land
+on `/onboarding` after accept-invite.
 
 To re-open setup / crew / band onboarding UIs after they would normally
 redirect away, use the floating **Dev** menu (or `?devPreview=1`) — local

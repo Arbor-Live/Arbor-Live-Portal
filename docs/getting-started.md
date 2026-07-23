@@ -46,8 +46,8 @@ dashboard for this deployment — see [environment-variables.md](environment-var
 ## 4. Create the first admin account
 
 There is no self-serve sign-up. With the web app running and **no admin** yet,
-any route redirects to `/setup`. Fill in name, email, and password to create
-the first admin and the Arbor Live organization.
+open `/setup` directly. Fill in name, email, and password to create the first
+admin and the Arbor Live organization.
 
 Once any admin exists, `/setup` locks permanently and redirects to sign-in.
 Additional users are invited from the app (Users section) via email invites;
@@ -61,8 +61,8 @@ In another terminal:
 pnpm dev:web
 ```
 
-Visit `http://localhost:3000` (redirects to `/setup` the first time) or
-`/sign-in` after an admin exists, then the dashboard.
+Visit `http://localhost:3000/setup` for first-admin bootstrap (fresh
+deployment only), or `/sign-in` after an admin exists, then the dashboard.
 
 ## Dev preview wizards
 

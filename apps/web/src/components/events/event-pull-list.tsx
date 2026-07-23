@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SearchableSelect, type SearchableSelectOption } from "@/components/inventory/searchable-select";
+import { DamageReportWizard } from "@/components/inventory/damage-report-wizard";
+import { RentalFulfillmentSheet } from "@/components/events/rental-fulfillment-sheet";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { pullListFormSchema, type PullListFormValues } from "@/lib/validations/event";
@@ -73,6 +75,12 @@ type EventPullListProps = {
   onSaved?: (message: string) => void;
   onError?: (message: string) => void;
 };
+
+const RENTAL_EVENT_TYPES = new Set(["Dry Hire", "Dry Rental", "Rental with Crew"]);
+
+function isRentalEventType(eventType: string) {
+  return RENTAL_EVENT_TYPES.has(eventType);
+}
 
 function formatQty(value: number) {
   return new Intl.NumberFormat("en-US").format(value);
@@ -140,6 +148,17 @@ export function EventPullList({
   const [newPackageId, setNewPackageId] = useState("");
   const [newQty, setNewQty] = useState("1");
   const [showManage, setShowManage] = useState(false);
+  const [fulfillmentOpen, setFulfillmentOpen] = useState(false);
+  const [fulfillmentDirection, setFulfillmentDirection] = useState<"outbound" | "return">(
+    "outbound",
+  );
+  const [damageOpen, setDamageOpen] = useState(false);
+
+  const fulfillmentSummary = useQuery(
+    api.eventRentalFulfillment.getFulfillmentSummary,
+    eventId && isRentalEventType(eventType) ? { eventId } : "skip",
+  );
+  const showRentalFulfillment = Boolean(eventId && isRentalEventType(eventType));
 
   const form = useConvexForm<PullListFormValues>({
     schema: pullListFormSchema,
@@ -370,6 +389,43 @@ export function EventPullList({
           ) : null}
         </div>
         <div className="flex flex-wrap gap-2">
+          {showRentalFulfillment ? (
+            <>
+              <Button
+                type="button"
+                variant="default"
+                disabled={!eventId}
+                onClick={() => {
+                  setFulfillmentDirection("outbound");
+                  setFulfillmentOpen(true);
+                }}
+              >
+                Process delivery
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={
+                  !eventId ||
+                  (!fulfillmentSummary?.outboundCompleted && !fulfillmentSummary?.activeRentedCount)
+                }
+                onClick={() => {
+                  setFulfillmentDirection("return");
+                  setFulfillmentOpen(true);
+                }}
+              >
+                Process return
+              </Button>
+            </>
+          ) : null}
+          <Button
+            type="button"
+            variant="outline"
+            disabled={!eventId}
+            onClick={() => setDamageOpen(true)}
+          >
+            Report damage
+          </Button>
           <Button
             type="button"
             variant="outline"
@@ -549,6 +605,27 @@ export function EventPullList({
           }}
           onRetry={() => void form.handleSubmit(savePullList)()}
         />
+      ) : null}
+
+      {eventId ? (
+        <>
+          {showRentalFulfillment ? (
+            <RentalFulfillmentSheet
+              open={fulfillmentOpen}
+              onOpenChange={setFulfillmentOpen}
+              eventId={eventId}
+              direction={fulfillmentDirection}
+              onMessage={(message) => onSaved?.(message)}
+              onError={(message) => onError?.(message)}
+            />
+          ) : null}
+          <DamageReportWizard
+            open={damageOpen}
+            onOpenChange={setDamageOpen}
+            initialEventId={eventId}
+            onCreated={() => onSaved?.("Damage report submitted.")}
+          />
+        </>
       ) : null}
     </div>
   );
