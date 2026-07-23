@@ -22,10 +22,12 @@ import {
   listUnitsForEvent,
   listUnitsForFulfillment,
   missingClientEmailWarning,
+  formatScannedAssetLabel,
   requireEvent,
   resolveInventoryItemByScan,
   syncPullListProgressFromUnits,
   typeLabel,
+  withContentsSuffix,
 } from "./lib/rentalFulfillment";
 import { normalizeAssetScanInput } from "./lib/assetScan";
 
@@ -466,8 +468,8 @@ export const scanOutboundAsset = mutation({
       const normalized = normalizeAssetScanInput(args.raw);
       throw new Error(
         normalized
-          ? `No inventory item found for “${normalized}”.`
-          : "Could not parse asset tag from scan.",
+          ? `No inventory item matches “${normalized}”. Check the tag and try again.`
+          : "Couldn’t read that scan. Try typing the asset tag (for example ALE-0041).",
       );
     }
 
@@ -475,6 +477,8 @@ export const scanOutboundAsset = mutation({
     const bundle = await listItemWithDescendants(ctx, root._id);
     let units = await listUnitsForFulfillment(ctx, fulfillment._id);
     const now = Date.now();
+    const scannedLabel = await formatScannedAssetLabel(ctx, root);
+    const subject = withContentsSuffix(scannedLabel, bundle.length > 1);
 
     let primaryUnitId: Id<"eventRentalUnits"> | null = null;
     let checkedOffCount = 0;
@@ -553,9 +557,9 @@ export const scanOutboundAsset = mutation({
 
     if (!primaryUnitId || checkedOffCount + addedCount === 0) {
       throw new Error(
-        `Asset ${root.assetId}${bundle.length > 1 ? " and its contents" : ""} ${
-          skippedAlreadyCount > 0 ? "are already checked off." : "could not be checked off."
-        }`,
+        skippedAlreadyCount > 0
+          ? `${subject} ${bundle.length > 1 ? "are" : "is"} already packed.`
+          : `Couldn’t pack ${subject}. Try scanning again.`,
       );
     }
 
@@ -598,6 +602,49 @@ export const setOutboundDisposition = mutation({
       outboundStatus: args.status,
       inventoryItemId: args.status === "no_tag" || args.status === "replace" ? undefined : unit.inventoryItemId,
       assetId: args.status === "no_tag" || args.status === "replace" ? undefined : unit.assetId,
+      updatedAt: now,
+    });
+    await syncPullListProgressFromUnits(
+      ctx,
+      unit.eventId,
+      await listUnitsForFulfillment(ctx, unit.fulfillmentId),
+    );
+    return null;
+  },
+});
+
+/** Reset a scanned or dispositioned outbound unit back to pending (or delete extras added by scan). */
+export const undoOutboundUnit = mutation({
+  args: { unitId: v.id("eventRentalUnits") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requireCrew(ctx);
+    const unit = await ctx.db.get(args.unitId);
+    if (!unit) throw new Error("Rental unit not found.");
+    const fulfillment = await ctx.db.get(unit.fulfillmentId);
+    if (!fulfillment || fulfillment.direction !== "outbound" || fulfillment.status !== "in_progress") {
+      throw new Error("Outbound fulfillment is not in progress.");
+    }
+    if (unit.outboundStatus === "pending") {
+      return null;
+    }
+
+    // Extra units created by scanning assets not on the pull list: remove them entirely.
+    if (!unit.pullListItemId) {
+      await ctx.db.delete(unit._id);
+      await syncPullListProgressFromUnits(
+        ctx,
+        unit.eventId,
+        await listUnitsForFulfillment(ctx, unit.fulfillmentId),
+      );
+      return null;
+    }
+
+    const now = Date.now();
+    await ctx.db.patch(unit._id, {
+      outboundStatus: "pending",
+      inventoryItemId: undefined,
+      assetId: undefined,
       updatedAt: now,
     });
     await syncPullListProgressFromUnits(
@@ -745,8 +792,8 @@ export const scanReturnAsset = mutation({
       const normalized = normalizeAssetScanInput(args.raw);
       throw new Error(
         normalized
-          ? `No inventory item found for “${normalized}”.`
-          : "Could not parse asset tag from scan.",
+          ? `No inventory item matches “${normalized}”. Check the tag and try again.`
+          : "Couldn’t read that scan. Try typing the asset tag (for example ALE-0041).",
       );
     }
 
@@ -756,6 +803,8 @@ export const scanReturnAsset = mutation({
       isActiveRentedOutbound(unit.outboundStatus),
     );
     const now = Date.now();
+    const scannedLabel = await formatScannedAssetLabel(ctx, root);
+    const subject = withContentsSuffix(scannedLabel, bundle.length > 1);
 
     let primaryUnitId: Id<"eventRentalUnits"> | null = null;
     let primaryLabel = root.assetId;
@@ -791,16 +840,19 @@ export const scanReturnAsset = mutation({
     if (!primaryUnitId || checkedInCount === 0) {
       if (skippedAlreadyCount > 0) {
         throw new Error(
-          `Asset ${root.assetId}${bundle.length > 1 ? " and its contents" : ""} are already checked in.`,
+          bundle.length > 1
+            ? `${subject} are already checked in.`
+            : `${subject} is already checked in.`,
         );
       }
-      throw new Error(
-        `Asset ${root.assetId}${bundle.length > 1 ? " and its contents" : ""} ${
-          skippedNotOnListCount > 0
-            ? "are not on this rental return list."
-            : "could not be checked in."
-        }`,
-      );
+      if (skippedNotOnListCount > 0) {
+        throw new Error(
+          bundle.length > 1
+            ? `${subject} aren’t on this return — they weren’t packed for this rental (or went out as “no tag”). Use Remaining to mark No tag / Missing instead of scanning.`
+            : `${subject} isn’t on this return — it wasn’t packed for this rental (or went out as “no tag”). Use Remaining to mark No tag / Missing instead of scanning.`,
+        );
+      }
+      throw new Error(`Couldn’t check in ${subject}. Try scanning again.`);
     }
 
     return {
@@ -841,6 +893,31 @@ export const setReturnDisposition = mutation({
     await ctx.db.patch(unit._id, {
       returnStatus: args.status,
       damageReportId: args.damageReportId,
+      updatedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
+/** Reset a checked-in or dispositioned return unit back to pending. */
+export const undoReturnUnit = mutation({
+  args: { unitId: v.id("eventRentalUnits") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requireCrew(ctx);
+    const unit = await ctx.db.get(args.unitId);
+    if (!unit) throw new Error("Rental unit not found.");
+    const returnSession = await getActiveFulfillment(ctx, unit.eventId, "return");
+    if (!returnSession) throw new Error("Return fulfillment is not in progress.");
+    if (!isActiveRentedOutbound(unit.outboundStatus)) {
+      throw new Error("Unit is not part of the active rented set.");
+    }
+    if ((unit.returnStatus ?? "pending") === "pending") {
+      return null;
+    }
+    await ctx.db.patch(unit._id, {
+      returnStatus: "pending",
+      damageReportId: undefined,
       updatedAt: Date.now(),
     });
     return null;

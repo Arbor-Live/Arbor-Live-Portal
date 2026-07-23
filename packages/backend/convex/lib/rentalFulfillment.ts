@@ -162,6 +162,20 @@ export async function typeLabel(
   return type?.name ?? fallback;
 }
 
+/** Human-readable scan target, e.g. "QuikPunch (127)". */
+export async function formatScannedAssetLabel(
+  ctx: QueryCtx | MutationCtx,
+  item: Doc<"inventoryItems">,
+) {
+  const name = await typeLabel(ctx, item.typeId, item.assetId);
+  if (name === item.assetId) return item.assetId;
+  return `${name} (${item.assetId})`;
+}
+
+export function withContentsSuffix(label: string, includesContents: boolean) {
+  return includesContents ? `${label} and its contents` : label;
+}
+
 export async function expandPullListNeeds(
   ctx: QueryCtx | MutationCtx,
   eventId: Id<"events">,

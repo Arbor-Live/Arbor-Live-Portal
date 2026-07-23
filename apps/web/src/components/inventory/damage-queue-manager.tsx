@@ -7,6 +7,10 @@ import { DamageReportWizard } from "@/components/inventory/damage-report-wizard"
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import {
+  optimisticDecommissionDamageReport,
+  optimisticUpdateDamageStatus,
+} from "@/lib/damage-reports-optimistic";
 
 export function DamageQueueManager() {
   const [statusFilter, setStatusFilter] = useState<"open" | "in_progress" | "resolved" | "all">(
@@ -14,9 +18,12 @@ export function DamageQueueManager() {
   );
   const [wizardOpen, setWizardOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const updateStatus = useMutation(api.damageReports.updateStatus);
-  const decommission = useMutation(api.damageReports.decommission);
-  const reports = useQuery(api.damageReports.list, {
+  const updateStatus = useMutation(api.damageReports.updateStatus).withOptimisticUpdate(
+    optimisticUpdateDamageStatus,
+  );
+  const decommission = useMutation(api.damageReports.decommission).withOptimisticUpdate(
+    optimisticDecommissionDamageReport,
+  );  const reports = useQuery(api.damageReports.list, {
     status: statusFilter === "all" ? undefined : statusFilter,
   });
 
