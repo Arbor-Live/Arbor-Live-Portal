@@ -75,7 +75,11 @@ Event types (drive which editor tabs and quick-add blocks appear):
 | `Dry Rental` | Equipment only | Delivery + Return |
 | `Services Only` | No schedule/crew tabs | — |
 
-- All event times are fixed to `America/Los_Angeles` in backend logic.
+- **Timezone:** the whole portal uses Pacific Time (`America/Los_Angeles` /
+  `PORTAL_TIMEZONE` in `@arbor/format`). Display, input hydration/save, day
+  keys, and FullCalendar grids must go through that package (or
+  `@/lib/format` / `@/lib/crew-availability` wrappers) — never browser local
+  time. See `.cursor/rules/portal-timezone.mdc`.
 - **Schedule blocks** (`eventScheduleBlocks`) are the planning unit: typed
   (`setup`/`show`/`strike`/`custom`), snapped to 15-minute increments, may
   overlap (the timeline renders overlaps on separate lanes) and may cross
@@ -129,12 +133,17 @@ Event types (drive which editor tabs and quick-add blocks appear):
 ## Band payments
 
 - Payouts to performing bands (`eventBandPayments` in `bandPayments.ts`).
-  Each band org has a designated payee (name/email/mailing address on
-  `organizationProfiles`).
-- Confirmation loop: an email is sent to the payee with a token in the
-  subject; the payee's reply hits the Resend inbound webhook
-  (`http/resendInbound.ts`), which verifies the svix signature *and* that the
-  reply's From matches the designated payee before recording confirmation.
+  Each band org has a designated payee (name/email/mailing address + linked
+  user id on `organizationProfiles`).
+- Confirmation loop: admin sends a signature-request email from the payout
+  queue; the designated payee e-signs under **Bands and Performers → Payments**
+  (typed legal name + amount checkbox). Admin then marks paid with a GrantEd
+  transfer / Service Payment number; all band members are notified that Stanford
+  is processing the payout. The Payments subtab shows a pending chip when the
+  payee needs to sign or payee setup is incomplete.
+- Once signed, admins and band members can download an agreement PDF
+  (`bandPaymentPdfDownload.ts` via `@arbor/invoice-document`) showing the
+  Arbor sender and the payee signature.
 - A daily cron promotes payments for ended events into the payable queue.
 
 ## Inventory

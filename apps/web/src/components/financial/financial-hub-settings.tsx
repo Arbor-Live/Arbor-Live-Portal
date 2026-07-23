@@ -24,14 +24,13 @@ export function FinancialHubSettings() {
   const terms = useQuery(api.invoiceTerms.list, {});
   const invoiceSettings = useQuery(api.invoiceSettings.get, {});
   const updateInvoiceSettings = useMutation(api.invoiceSettings.update);
-  const [crewBufferPercent, setCrewBufferPercent] = useState("");
+  const [crewBufferOverride, setCrewBufferOverride] = useState<string | null>(null);
   const [bufferMessage, setBufferMessage] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (invoiceSettings?.crewCostBufferPercent !== undefined) {
-      setCrewBufferPercent(String(invoiceSettings.crewCostBufferPercent));
-    }
-  }, [invoiceSettings?.crewCostBufferPercent]);
+  const crewBufferPercent =
+    crewBufferOverride ??
+    (invoiceSettings?.crewCostBufferPercent !== undefined
+      ? String(invoiceSettings.crewCostBufferPercent)
+      : "");
 
   const addFeeForm = useConvexForm<FeeDefinitionFormValues>({
     schema: feeDefinitionSchema,
@@ -142,7 +141,7 @@ export function FinancialHubSettings() {
               step={0.5}
               className="flex h-9 w-full rounded-md border bg-background px-3 py-1 text-sm"
               value={crewBufferPercent}
-              onChange={(e) => setCrewBufferPercent(e.target.value)}
+              onChange={(e) => setCrewBufferOverride(e.target.value)}
             />
           </div>
           {bufferMessage ? <p className="text-xs text-emerald-700">{bufferMessage}</p> : null}
@@ -153,6 +152,7 @@ export function FinancialHubSettings() {
               await updateInvoiceSettings({
                 crewCostBufferPercent: Number(crewBufferPercent || "0"),
               });
+              setCrewBufferOverride(null);
               setBufferMessage("Crew cost buffer saved.");
             }}
           >

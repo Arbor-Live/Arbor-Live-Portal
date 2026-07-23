@@ -83,7 +83,7 @@ export function EventSeriesScheduleEditor({
   const regenerateBlocks = useMutation(api.eventSeries.regenerateFutureBlocks);
   const importSchedule = useMutation(api.eventSeries.importScheduleFromOccurrence);
   const localBlockCounterRef = useRef(0);
-  const [blocks, setBlocks] = useState<TimelineBlockDraft[]>([]);
+  const [blocksOverride, setBlocksOverride] = useState<TimelineBlockDraft[] | null>(null);
   const [blocksDirty, setBlocksDirty] = useState(false);
 
   const form = useConvexForm<SeriesScheduleEditorFormValues>({
@@ -106,9 +106,19 @@ export function EventSeriesScheduleEditor({
     [blockTemplates, anchorStartAt],
   );
 
-  useEffect(() => {
-    setBlocks(initialBlocks);
+  // Reset local block edits whenever the template identity changes (adjusting
+  // state in response to a prop change, computed during render rather than in
+  // an effect). Keeps form.reset — a library call, not React state — in the
+  // effect below.
+  const [syncedInitialBlocks, setSyncedInitialBlocks] = useState(initialBlocks);
+  if (initialBlocks !== syncedInitialBlocks) {
+    setSyncedInitialBlocks(initialBlocks);
+    setBlocksOverride(null);
     setBlocksDirty(false);
+  }
+  const blocks = blocksOverride ?? initialBlocks;
+
+  useEffect(() => {
     form.reset({
       applyScope: "all",
       fromOccurrenceIndex: "0",
@@ -189,7 +199,7 @@ export function EventSeriesScheduleEditor({
   }
 
   function handleDiscard() {
-    setBlocks(initialBlocks);
+    setBlocksOverride(null);
     setBlocksDirty(false);
     form.reset({
       applyScope: "all",
@@ -254,13 +264,13 @@ export function EventSeriesScheduleEditor({
             dayCount={dayCount}
             blocks={blocks}
             onChange={(next) => {
-              setBlocks(withStableBlockRefs(next));
+              setBlocksOverride(withStableBlockRefs(next));
               setBlocksDirty(true);
             }}
             quickAddLabel={quickAddLabel}
             quickAddDisabled={false}
             onQuickAdd={() => {
-              setBlocks(
+              setBlocksOverride(
                 withStableBlockRefs(
                   buildSeriesQuickAddBlocks({
                     eventType: resolvedEventType,

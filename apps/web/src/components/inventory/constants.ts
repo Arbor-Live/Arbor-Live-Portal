@@ -1,4 +1,4 @@
-import { formatUsd, formatUsdOptional } from "@/lib/format";
+import { formatUsdOptional } from "@/lib/format";
 
 export const DEFAULT_INVENTORY_CATEGORIES = [
   { value: "sound", label: "Sound" },

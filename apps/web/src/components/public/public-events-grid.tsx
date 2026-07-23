@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Reveal, Stagger, StaggerItem } from "@/components/landing/landing-motion";
 import { PublicEventPoster } from "@/components/public/public-event-poster";
+import { formatDateTime } from "@/lib/format";
 
 export type PublicEventCard = {
   eventId: string;
@@ -23,13 +24,7 @@ export type PublicEventCard = {
 };
 
 function formatEventWhen(startAt: number) {
-  return new Date(startAt).toLocaleString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  return formatDateTime(startAt, "short");
 }
 
 function EventCardSkeleton() {

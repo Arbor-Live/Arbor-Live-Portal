@@ -103,6 +103,9 @@ function EventBandPaymentsPanel({ eventId }: { eventId: Id<"events"> }) {
                   <p className="text-muted-foreground">
                     {formatUsd(payment.totalUsd)} · {payment.statusLabel}
                   </p>
+                  <p className="text-xs text-muted-foreground">
+                    Payment ID: {payment.confirmationToken}
+                  </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {payment.status !== "paid" ? (
@@ -390,7 +393,7 @@ function EventBandPaymentForm({
                   be sent until payee info is on file.
                 </p>
                 <Button asChild size="sm" variant="outline" className="mt-2">
-                  <Link href="/dashboard/bands-and-performers#payment-payee">
+                  <Link href="/dashboard/bands-and-performers/payments#payee">
                     Open band payee settings
                   </Link>
                 </Button>

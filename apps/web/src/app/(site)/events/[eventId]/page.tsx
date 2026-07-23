@@ -5,6 +5,7 @@ import { PublicEventPoster } from "@/components/public/public-event-poster";
 import { LandingUpcomingEvents } from "@/components/public/public-events-grid";
 import { api } from "@/lib/convex-api";
 import { fetchPublicQuerySafe } from "@/lib/convex-server";
+import { formatDateTime } from "@/lib/format";
 
 type EventDetailPageProps = {
   params: Promise<{ eventId: string }>;
@@ -40,14 +41,7 @@ export default async function PublicEventDetailPage({ params }: EventDetailPageP
                 <div>
                   <h1 className="text-3xl font-semibold tracking-tight">{event.title}</h1>
                   <p className="mt-2 text-muted-foreground dark:text-zinc-300">
-                    {new Date(event.startAt).toLocaleString("en-US", {
-                      weekday: "long",
-                      year: "numeric",
-                      month: "long",
-                      day: "numeric",
-                      hour: "numeric",
-                      minute: "2-digit",
-                    })}
+                    {formatDateTime(event.startAt, "long")}
                   </p>
                 </div>
 

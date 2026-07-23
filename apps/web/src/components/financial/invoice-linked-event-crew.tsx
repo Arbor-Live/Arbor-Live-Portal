@@ -26,6 +26,7 @@ import {
   withStableBlockRefs,
   type EventShiftDraft,
 } from "@/lib/event-schedule-draft";
+import { requireLocalDateTimeInputMs } from "@/lib/crew-availability";
 import { getEventEditorTabPath } from "@/lib/event-editor-tabs";
 import { buildCrewRowsFromShifts, type InvoiceCrewRow } from "@/lib/invoice-crew-from-event";
 import { FormSaveBar } from "@/components/forms";
@@ -101,7 +102,7 @@ export function InvoiceLinkedEventCrewSection({
   const localBlockCounterRef = useRef(0);
   const hydratedEventIdRef = useRef<Id<"events"> | null>(null);
   const scheduleHydratedRef = useRef(false);
-  const lastSavedSignatureRef = useRef("");
+  const [lastSavedSignature, setLastSavedSignature] = useState("");
   const [blocks, setBlocks] = useState<TimelineBlockDraft[]>([]);
   const [shifts, setShifts] = useState<EventShiftDraft[]>([]);
   const [selectedCrewUserId, setSelectedCrewUserId] = useState("");
@@ -196,7 +197,7 @@ export function InvoiceLinkedEventCrewSection({
     setBlocks(nextBlocks);
     setShifts(linkedShifts);
     scheduleHydratedRef.current = true;
-    lastSavedSignatureRef.current = JSON.stringify({ blocks: nextBlocks, shifts: linkedShifts });
+    setLastSavedSignature(JSON.stringify({ blocks: nextBlocks, shifts: linkedShifts }));
   }, [eventData]);
 
   useEffect(() => {
@@ -220,8 +221,8 @@ export function InvoiceLinkedEventCrewSection({
             blockType: row.blockType,
             label: row.label,
             dayIndex: row.dayIndex,
-            startsAt: new Date(row.startsAt).getTime(),
-            endsAt: new Date(row.endsAt).getTime(),
+            startsAt: requireLocalDateTimeInputMs(row.startsAt, "block start"),
+            endsAt: requireLocalDateTimeInputMs(row.endsAt, "block end"),
             notes: row.notes || undefined,
           })),
         });
@@ -237,8 +238,8 @@ export function InvoiceLinkedEventCrewSection({
             role: row.role,
             userId: row.userId || undefined,
             personName: row.personName || undefined,
-            startsAt: new Date(row.startsAt).getTime(),
-            endsAt: new Date(row.endsAt).getTime(),
+            startsAt: requireLocalDateTimeInputMs(row.startsAt, "block start"),
+            endsAt: requireLocalDateTimeInputMs(row.endsAt, "block end"),
             estimatedHourlyRateUsd: row.userId?.trim()
               ? row.estimatedHourlyRateUsd
               : (row.estimatedHourlyRateUsd ?? defaultCrewHourlyRateUsd),
@@ -249,7 +250,7 @@ export function InvoiceLinkedEventCrewSection({
 
         setBlocks(nextBlocks);
         setShifts(linkedShifts);
-        lastSavedSignatureRef.current = JSON.stringify({ blocks: nextBlocks, shifts: linkedShifts });
+        setLastSavedSignature(JSON.stringify({ blocks: nextBlocks, shifts: linkedShifts }));
         hydratedEventIdRef.current = null;
 
         onMessage?.("Event schedule and crew slots saved.");
@@ -274,9 +275,7 @@ export function InvoiceLinkedEventCrewSection({
     [blocks, shifts],
   );
 
-  const scheduleDirty =
-    lastSavedSignatureRef.current !== "" &&
-    scheduleSignature !== lastSavedSignatureRef.current;
+  const scheduleDirty = lastSavedSignature !== "" && scheduleSignature !== lastSavedSignature;
 
   const quickAddDisabled = !startAt || !endAt;
   const quickAddDisabledReason = quickAddDisabled ? "Event start and end are required." : undefined;

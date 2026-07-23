@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -10,6 +10,7 @@ import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { EventSelect } from "@/components/events/event-select";
 import { ScheduleBlockWindowFields } from "@/components/events/schedule-block-window-fields";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { formatDateTime } from "@/lib/format";
 import {
   localDateTimeInputToMs,
   toLocalDateTimeInput,
@@ -60,7 +61,8 @@ function TraineeAssignPanel({
   const [scheduleBlockId, setScheduleBlockId] = useState("");
   const [startsAtInput, setStartsAtInput] = useState("");
   const [endsAtInput, setEndsAtInput] = useState("");
-  const [callTimeInput, setCallTimeInput] = useState("");
+  // null = not yet manually set; defaults to the event's start time once loaded.
+  const [callTimeOverride, setCallTimeOverride] = useState<string | null>(null);
 
   const eventDetails = useQuery(
     api.events.get,
@@ -69,12 +71,9 @@ function TraineeAssignPanel({
 
   const scheduleBlocks = eventDetails?.blocks ?? [];
 
-  useEffect(() => {
-    if (!eventDetails?.event) return;
-    if (!callTimeInput) {
-      setCallTimeInput(toLocalDateTimeInput(new Date(eventDetails.event.startAt)));
-    }
-  }, [eventDetails, callTimeInput]);
+  const callTimeInput =
+    callTimeOverride ??
+    (eventDetails?.event ? toLocalDateTimeInput(new Date(eventDetails.event.startAt)) : "");
 
   return (
     <div className="space-y-3 border-t border-border/50 pt-3">
@@ -89,7 +88,7 @@ function TraineeAssignPanel({
             setScheduleBlockId("");
             setStartsAtInput("");
             setEndsAtInput("");
-            setCallTimeInput("");
+            setCallTimeOverride(null);
           }}
         />
       </div>
@@ -137,8 +136,8 @@ function TraineeAssignPanel({
                   setScheduleBlockId(next.scheduleBlockId ?? "");
                   setStartsAtInput(next.startsAtInput);
                   setEndsAtInput(next.endsAtInput);
-                  if (next.startsAtInput && !callTimeInput) {
-                    setCallTimeInput(next.startsAtInput);
+                  if (next.startsAtInput && callTimeOverride === null) {
+                    setCallTimeOverride(next.startsAtInput);
                   }
                 }}
               />
@@ -147,7 +146,7 @@ function TraineeAssignPanel({
 
           <div className="space-y-1">
             <p className="text-xs text-muted-foreground">Call time</p>
-            <DateTimePicker value={callTimeInput} onChange={setCallTimeInput} />
+            <DateTimePicker value={callTimeInput} onChange={setCallTimeOverride} />
           </div>
         </div>
       ) : null}
@@ -302,7 +301,7 @@ export function CrewApplicationsAdminClient() {
                     {app.email} · {app.phone}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Submitted {new Date(app.submittedAt).toLocaleString()} · {app.status}
+                    Submitted {formatDateTime(app.submittedAt)} · {app.status}
                   </p>
                 </div>
                 {app.status !== "converted" ? (

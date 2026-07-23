@@ -98,7 +98,7 @@ export function EventSeriesShiftEditor({
   const regenerateShifts = useMutation(api.eventSeries.regenerateFutureShifts);
   const importShifts = useMutation(api.eventSeries.importShiftsFromOccurrence);
   const localShiftCounterRef = useRef(0);
-  const [shifts, setShifts] = useState<SeriesShiftTemplateDraft[]>([]);
+  const [shiftsOverride, setShiftsOverride] = useState<SeriesShiftTemplateDraft[] | null>(null);
   const [shiftsDirty, setShiftsDirty] = useState(false);
 
   const form = useConvexForm<SeriesShiftEditorFormValues>({
@@ -136,9 +136,19 @@ export function EventSeriesShiftEditor({
     [shiftTemplates],
   );
 
-  useEffect(() => {
-    setShifts(initialShifts);
+  // Reset local shift edits whenever the template identity changes (adjusting
+  // state in response to a prop change, computed during render rather than in
+  // an effect). Keeps form.reset — a library call, not React state — in the
+  // effect below.
+  const [syncedInitialShifts, setSyncedInitialShifts] = useState(initialShifts);
+  if (initialShifts !== syncedInitialShifts) {
+    setSyncedInitialShifts(initialShifts);
+    setShiftsOverride(null);
     setShiftsDirty(false);
+  }
+  const shifts = shiftsOverride ?? initialShifts;
+
+  useEffect(() => {
     form.reset({
       applyScope: "all",
       fromOccurrenceIndex: "0",
@@ -168,19 +178,19 @@ export function EventSeriesShiftEditor({
 
   function updateShift(clientId: string, patch: Partial<SeriesShiftTemplateDraft>) {
     setShiftsDirty(true);
-    setShifts((prev) => prev.map((row) => (row.clientId === clientId ? { ...row, ...patch } : row)));
+    setShiftsOverride(shifts.map((row) => (row.clientId === clientId ? { ...row, ...patch } : row)));
   }
 
   function removeShift(clientId: string) {
     setShiftsDirty(true);
-    setShifts((prev) => prev.filter((row) => row.clientId !== clientId));
+    setShiftsOverride(shifts.filter((row) => row.clientId !== clientId));
   }
 
   function addShiftForBlock(blockTemplateIndex: number) {
     const block = blockOptions.find((option) => option.index === blockTemplateIndex);
     if (!block) return;
-    setShifts((prev) => [
-      ...prev,
+    setShiftsOverride([
+      ...shifts,
       createShiftDraftForBlock({
         blockTemplateIndex,
         block,
@@ -238,7 +248,7 @@ export function EventSeriesShiftEditor({
   }
 
   function handleDiscard() {
-    setShifts(initialShifts);
+    setShiftsOverride(null);
     setShiftsDirty(false);
     form.reset({
       applyScope: "all",

@@ -339,7 +339,7 @@ export function TurnoutField() {
 
         {count >= 200 ? (
           <p className="mt-1 text-xs text-amber-700">
-            Campus sensation territory. We'll reach out with extra coordination after you submit.
+            Campus sensation territory. We&apos;ll reach out with extra coordination after you submit.
           </p>
         ) : null}
       </motion.div>

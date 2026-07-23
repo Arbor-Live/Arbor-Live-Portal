@@ -17,6 +17,8 @@ export type TimelineBlockDraft = {
   notes: string;
 };
 
+import { localDateTimeInputToMs } from "@/lib/crew-availability";
+
 const MINUTES_PER_DAY = 24 * 60;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const SNAP_MINUTES = 15;
@@ -25,6 +27,7 @@ function startOfDay(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
+/** Wall-clock digits only — timezone applied when persisting via localDateTimeInputToMs. */
 function toLocalInput(date: Date) {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
@@ -35,7 +38,14 @@ function toLocalInput(date: Date) {
 }
 
 function parseInputDate(value: string) {
-  const date = new Date(value);
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(value.trim());
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const date = new Date(year, month - 1, day, hour, minute, 0, 0);
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
@@ -62,10 +72,15 @@ function toTimelineRange(block: TimelineBlockDraft) {
   const start = parseInputDate(block.startsAt);
   const end = parseInputDate(block.endsAt);
   if (!start || !end) return null;
-  const duration = Math.max(15, Math.round((end.getTime() - start.getTime()) / 60000));
+  const startMs = localDateTimeInputToMs(block.startsAt);
+  const endMs = localDateTimeInputToMs(block.endsAt);
+  const durationMinutes =
+    startMs != null && endMs != null
+      ? Math.max(15, Math.round((endMs - startMs) / 60000))
+      : Math.max(15, Math.round((end.getTime() - start.getTime()) / 60000));
   const startGlobal = block.dayIndex * MINUTES_PER_DAY + minutesInDay(start);
-  const endGlobal = startGlobal + duration;
-  return { start, end, duration, startGlobal, endGlobal };
+  const endGlobal = startGlobal + durationMinutes;
+  return { start, end, duration: durationMinutes, startGlobal, endGlobal };
 }
 
 type DragMode = "move" | "resizeStart" | "resizeEnd";

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { PackageIcon } from "@phosphor-icons/react";
 import { api, type Id } from "@/lib/convex-api";
@@ -165,21 +165,12 @@ export function EventPullList({
     defaultValues: toFormValues(initialItems),
     mode: "onChange",
   });
-  const { reset, formState } = form;
+  const { reset } = form;
 
-  const initialSyncKey = useMemo(
-    () =>
-      initialItems
-        .map((row) => `${row.id ?? "new"}:${row.lineKind}:${row.typeId ?? row.packageId}:${row.quantityRequired}`)
-        .join("|"),
-    [initialItems],
-  );
-
-  useEffect(() => {
-    if (formState.isDirty) return;
-    setItems(initialItems);
-    reset(toFormValues(initialItems));
-  }, [initialSyncKey, initialItems, reset, formState.isDirty]);
+  // The parent remounts this component (via a `key` derived from the same
+  // initial-items signature) whenever the persisted pull list changes, so
+  // `items`/the form's defaultValues are already fresh on every mount and no
+  // resync effect is needed here.
 
   const typeOptions: SearchableSelectOption[] = useMemo(
     () =>

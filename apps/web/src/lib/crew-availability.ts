@@ -1,4 +1,11 @@
-import { formatDateTime } from "@/lib/format";
+import {
+  formatDateTime,
+  pacificDateKey,
+  pacificDateTimeInputToMs,
+  pacificEndOfDayMs,
+  pacificStartOfDayMs,
+  toPacificDateTimeInput,
+} from "@/lib/format";
 
 export type CrewAvailabilityResponseStatus = "yes" | "partial" | "only_if_necessary" | "no";
 
@@ -6,39 +13,41 @@ export const DEFAULT_AVAILABILITY_WEEKS = 3;
 export const EXTENDED_AVAILABILITY_WEEKS = 12;
 export const ADMIN_CREW_SCHEDULING_DEFAULT_WEEKS = 2;
 
-export function toLocalDateInput(date: Date) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+/** Calendar date (`YYYY-MM-DD`) in portal timezone. */
+export function toLocalDateInput(date: Date | number) {
+  const ms = typeof date === "number" ? date : date.getTime();
+  return pacificDateKey(ms);
 }
 
-export function startOfLocalDay(date: Date) {
-  const copy = new Date(date);
-  copy.setHours(0, 0, 0, 0);
-  return copy.getTime();
+export function startOfLocalDay(date: Date | number) {
+  const ms = typeof date === "number" ? date : date.getTime();
+  const [year, month, day] = pacificDateKey(ms).split("-").map(Number);
+  return pacificStartOfDayMs(year, month, day);
 }
 
-export function endOfLocalDay(date: Date) {
-  const copy = new Date(date);
-  copy.setHours(23, 59, 59, 999);
-  return copy.getTime();
+export function endOfLocalDay(date: Date | number) {
+  const ms = typeof date === "number" ? date : date.getTime();
+  const [year, month, day] = pacificDateKey(ms).split("-").map(Number);
+  return pacificEndOfDayMs(year, month, day);
 }
 
 export function parseLocalDateInput(value: string) {
   if (!value) return null;
-  const date = new Date(`${value}T00:00:00`);
-  return Number.isNaN(date.getTime()) ? null : date;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const ms = pacificStartOfDayMs(year, month, day);
+  return new Date(ms);
 }
 
 export function getDefaultAdminSchedulingDateInputs() {
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setDate(end.getDate() + ADMIN_CREW_SCHEDULING_DEFAULT_WEEKS * 7);
+  const startMs = startOfLocalDay(Date.now());
+  const endMs = startMs + ADMIN_CREW_SCHEDULING_DEFAULT_WEEKS * 7 * 24 * 60 * 60 * 1000;
   return {
-    startDate: toLocalDateInput(start),
-    endDate: toLocalDateInput(end),
+    startDate: toLocalDateInput(startMs),
+    endDate: toLocalDateInput(endMs),
   };
 }
 
@@ -131,17 +140,19 @@ export function getAvailabilityNotesForDisplay(
   return lines;
 }
 
-export function toLocalDateTimeInput(date: Date) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  const hh = String(date.getHours()).padStart(2, "0");
-  const mm = String(date.getMinutes()).padStart(2, "0");
-  return `${y}-${m}-${d}T${hh}:${mm}`;
+/** Hydrate a datetime input from stored ms (always Pacific wall clock). */
+export function toLocalDateTimeInput(value: number | Date) {
+  const ms = value instanceof Date ? value.getTime() : value;
+  return toPacificDateTimeInput(ms);
 }
 
+/** Persist a datetime input string as Pacific wall clock → ms. */
 export function localDateTimeInputToMs(value: string) {
-  if (!value) return null;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date.getTime();
+  return pacificDateTimeInputToMs(value);
+}
+
+export function requireLocalDateTimeInputMs(value: string, label = "date/time") {
+  const ms = localDateTimeInputToMs(value);
+  if (ms == null) throw new Error(`Invalid ${label}.`);
+  return ms;
 }

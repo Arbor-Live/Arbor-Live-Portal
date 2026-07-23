@@ -159,7 +159,8 @@ export const bandPaymentConfirmationPreviewProps: BandPaymentConfirmationEmailPr
   totalUsd: 562.5,
   designatedPayeeName: "Jules Jackson",
   photoAlbumUrl: "https://photos.arbor.st/share/demo-album",
-  confirmationToken: "ALBPAY-demo123",
+  confirmationToken: "ALBPAY-4K8Z2NP",
+  signUrl: "https://portal.arbor.st/dashboard/bands-and-performers#payment-history",
 };
 
 export const bandPaymentCompletedPreviewProps: BandPaymentCompletedEmailProps = {

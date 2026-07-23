@@ -11,6 +11,7 @@ import { api } from "@/lib/convex-api";
 import {
   formatSelectedDateLabel,
   monthDateRange,
+  parseDateInput,
   UNAVAILABLE_DAY_WARNING,
 } from "@/lib/booking-day-load";
 import { createDefaultShowSlot, endsOnNextDay } from "@/lib/event-schedule";
@@ -160,8 +161,8 @@ export function EventScheduleField() {
   const activeIndex = Math.min(activeSlotIndex, Math.max(showSlots.length - 1, 0));
   const activeSlot = showSlots[activeIndex] ?? showSlots[0] ?? createDefaultShowSlot();
   const visibleMonth = useMemo(() => {
-    const parsed = activeSlot.date ? new Date(`${activeSlot.date}T12:00:00`) : new Date();
-    return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+    const parsed = activeSlot.date ? parseDateInput(activeSlot.date) : new Date();
+    return parsed ?? new Date();
   }, [activeSlot.date]);
   const { rangeStart, rangeEnd } = useMemo(() => monthDateRange(visibleMonth), [visibleMonth]);
   const dayLoad = useQuery(api.eventRequests.getPublicBookingDayLoad, { rangeStart, rangeEnd });

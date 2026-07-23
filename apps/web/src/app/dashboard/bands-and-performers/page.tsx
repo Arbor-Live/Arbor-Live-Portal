@@ -14,7 +14,8 @@ export default function BandsAndPerformersPage() {
         <CardHeader>
           <CardTitle>Bands and Performers</CardTitle>
           <CardDescription>
-            Band organizations can manage their profile and team access.
+            Band organizations can manage their public profile and team access. Payments live under
+            the Payments subtab.
           </CardDescription>
         </CardHeader>
       </Card>

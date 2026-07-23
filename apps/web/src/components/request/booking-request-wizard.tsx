@@ -85,6 +85,7 @@ export function BookingRequestWizard() {
     mode: "onTouched",
   });
 
+  // eslint-disable-next-line react-hooks/incompatible-library -- React Hook Form watch() is intentionally used for step routing
   const requestContext = form.watch("requestContext");
   const servicesNeeded = form.watch("servicesNeeded");
   const skipSponsor = requestContext === "group" || requestContext === "personal";

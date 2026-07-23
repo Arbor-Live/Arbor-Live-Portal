@@ -1,0 +1,26 @@
+export type BandPaymentAgreementDocumentData = {
+  confirmationToken: string;
+  bandName: string;
+  eventTitle: string;
+  venueName?: string;
+  eventDateLabel: string;
+  pricingMode: "per_member_hourly" | "fixed_total";
+  ratePerMemberPerHourUsd?: number;
+  performanceHoursLabel: string;
+  memberCount?: number;
+  totalUsd: number;
+  designatedPayeeName: string;
+  designatedPayeeEmail?: string;
+  designatedPayeeMailingAddress?: string;
+  adminRequesterName?: string;
+  adminRequesterEmail?: string;
+  adminApproverName?: string;
+  adminApproverEmail?: string;
+  adminSentAtLabel?: string;
+  signatureTypedName?: string;
+  signedAtLabel?: string;
+  legacyReplyFrom?: string;
+  servicePaymentNumber?: string;
+  paidAtLabel?: string;
+  status: "confirmed" | "paid" | string;
+};

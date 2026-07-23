@@ -1,12 +1,10 @@
 import type { MarketingPostKind } from "@/lib/validations/marketing";
 import { marketingPostKindLabels } from "@/lib/validations/marketing";
 
+import { formatDate } from "@/lib/format";
+
 export function formatWorkPostDate(timestamp: number) {
-  return new Date(timestamp).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  return formatDate(timestamp);
 }
 
 export function WorkPostKindBadge({ kind }: { kind: MarketingPostKind }) {

@@ -6,6 +6,7 @@ import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { Input } from "@/components/ui/input";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
 import { toLocalDateTimeInput } from "@/lib/crew-availability";
+import { formatDateTime } from "@/lib/format";
 
 export type ScheduleBlockOption = {
   _id: Id<"eventScheduleBlocks">;
@@ -50,7 +51,7 @@ export function ScheduleBlockWindowFields({
       scheduleBlocks.map((block) => ({
         value: block._id,
         label: `${block.label} (${block.blockType})`,
-        description: `${new Date(block.startsAt).toLocaleString()} – ${new Date(block.endsAt).toLocaleTimeString()}`,
+        description: `${formatDateTime(block.startsAt)} – ${formatDateTime(block.endsAt, "timeOnly")}`,
       })),
     [scheduleBlocks],
   );
