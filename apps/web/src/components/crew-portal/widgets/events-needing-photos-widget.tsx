@@ -10,12 +10,15 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatDateTime } from "@/lib/format";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { optimisticResolveMyEventMedia } from "@/lib/crew-portal-optimistic";
 
 export function EventsNeedingPhotosWidget() {
   const [now] = useState(() => Date.now());
   const [message, setMessage] = useState<string | null>(null);
   const events = useQuery(api.crewPortal.listMyEventsNeedingPhotos, { now });
-  const resolveMedia = useMutation(api.crewPortal.resolveMyEventMedia);
+  const resolveMedia = useMutation(
+    api.crewPortal.resolveMyEventMedia,
+  ).withOptimisticUpdate(optimisticResolveMyEventMedia);
 
   return (
     <Card>

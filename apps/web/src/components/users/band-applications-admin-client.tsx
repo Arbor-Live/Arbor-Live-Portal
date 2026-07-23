@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { optimisticDeclineBandApplication } from "@/lib/band-applications-optimistic";
 
 type StatusFilter = "submitted" | "approved" | "declined" | "all";
 
@@ -22,7 +23,9 @@ export function BandApplicationsAdminClient() {
     status === "all" ? {} : { status },
   );
   const approve = useMutation(api.bandApplications.approve);
-  const decline = useMutation(api.bandApplications.decline);
+  const decline = useMutation(api.bandApplications.decline).withOptimisticUpdate(
+    optimisticDeclineBandApplication,
+  );
 
   async function onApprove(applicationId: Id<"bandApplications">) {
     setError(null);

@@ -7,6 +7,7 @@ import { api, type Id } from "@/lib/convex-api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDate, formatUsd } from "@/lib/format";
+import { optimisticMarkPaymentReceived } from "@/lib/payment-proof-optimistic";
 
 type PaymentQueue = "payment_pending" | "proof_no_receipt" | "payment_received" | "overdue";
 
@@ -20,7 +21,9 @@ const QUEUE_LABELS: Record<PaymentQueue, string> = {
 export function FinancialHubPaymentsClient() {
   const [queue, setQueue] = useState<PaymentQueue>("payment_pending");
   const rows = useQuery(api.paymentProof.listByQueue, { queue });
-  const markReceived = useMutation(api.paymentProof.markPaymentReceived);
+  const markReceived = useMutation(
+    api.paymentProof.markPaymentReceived,
+  ).withOptimisticUpdate(optimisticMarkPaymentReceived);
   const invalidateSubmission = useMutation(api.paymentProof.invalidateSubmission);
   const generateUploadUrl = useMutation(api.paymentProof.generateReceiptUploadUrl);
   const attachReceipt = useMutation(api.paymentProof.attachReceipt);
