@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { formatDateTime } from "@/lib/format";
 import {
   formatEventVisibilityLabel,
   type EventVisibility,
@@ -31,7 +32,7 @@ function emptyLink(): AdditionalLink {
 }
 
 function formatEventMeta(startAt: number, venueName?: string) {
-  const when = new Date(startAt).toLocaleString();
+  const when = formatDateTime(startAt);
   return venueName ? `${when} · ${venueName}` : when;
 }
 

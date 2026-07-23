@@ -43,7 +43,7 @@ Human-readable docs live in `docs/` (`getting-started.md`, `architecture.md`, `d
   - `Services Only`
 - Teams of interest:
   - `Design`, `Marketing`, `Lighting`, `Sound`, `Operations`
-- Event timezone is fixed to `America/Los_Angeles` in backend logic.
+- Event timezone is fixed to `America/Los_Angeles` (**entire portal**, not only events). See **Timezone (Pacific)** below.
 
 ### Scheduling
 - Schedule blocks are stored in `eventScheduleBlocks`.
@@ -79,6 +79,26 @@ Human-readable docs live in `docs/` (`getting-started.md`, `architecture.md`, `d
 - Booking request numbers use `ALREQ-` with the same suffix format.
 - Public quote link token workflow exists on invoices (`publicApprovalToken`).
 - Quote approval status is unified for table display.
+
+## Timezone (Pacific)
+
+**Everything is Pacific Time** (`America/Los_Angeles`). Never rely on the browser/OS timezone.
+
+| Concern | Use |
+|---|---|
+| Constant | `PORTAL_TIMEZONE` in `packages/format` (`@arbor/format`), re-exported as `@/lib/format` |
+| Display | `formatDate`, `formatDateTime`, `formatDateTimeRange` |
+| ms → input string | `toPacificDateTimeInput` / `toLocalDateTimeInput` (`@/lib/crew-availability`) |
+| input string → ms | `pacificDateTimeInputToMs` / `localDateTimeInputToMs` / `requireLocalDateTimeInputMs` |
+| Calendar day key | `pacificDateKey` |
+| Date + `HH:mm` | `pacificDateAndTimeToMs` |
+| FullCalendar grids | `timeZone={PORTAL_TIMEZONE}` (dashboard events calendar) |
+
+**Avoid:** bare `toLocaleString` / `toLocaleDateString`; `new Date(datetimeLocalString).getTime()` for saves; extracting wall clock from instants with `getHours()` / `getFullYear()`.
+
+`DateTimePicker` stores naive `YYYY-MM-DDTHH:mm` digits; those digits are Pacific wall clock and must cross the ms boundary only via the helpers above.
+
+Cursor rule: `.cursor/rules/portal-timezone.mdc` (always applied).
 
 ## Date/Time UX Conventions
 - Avoid native `datetime-local` picker popovers for core event UX.

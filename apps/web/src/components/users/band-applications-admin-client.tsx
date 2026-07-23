@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { formatDateTime } from "@/lib/format";
 
 type StatusFilter = "submitted" | "approved" | "declined" | "all";
 
@@ -102,7 +103,7 @@ export function BandApplicationsAdminClient() {
                   {app.contactPhone ? ` · ${app.contactPhone}` : ""}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Submitted {new Date(app.submittedAt).toLocaleString()} · {app.status}
+                  Submitted {formatDateTime(app.submittedAt)} · {app.status}
                 </p>
               </div>
               {app.status === "submitted" ? (

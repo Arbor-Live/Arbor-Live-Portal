@@ -14,7 +14,9 @@ function toLocalDateInput(date: Date) {
 
 function parseLocalDateInput(value: string) {
   if (!value) return null;
-  const date = new Date(`${value}T12:00:00`);
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  if (!match) return null;
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12, 0, 0, 0);
   return Number.isNaN(date.getTime()) ? null : date;
 }
 

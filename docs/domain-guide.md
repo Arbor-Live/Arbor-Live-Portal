@@ -74,7 +74,11 @@ Event types (drive which editor tabs and quick-add blocks appear):
 | `Dry Rental` | Equipment only | Delivery + Return |
 | `Services Only` | No schedule/crew tabs | — |
 
-- All event times are fixed to `America/Los_Angeles` in backend logic.
+- **Timezone:** the whole portal uses Pacific Time (`America/Los_Angeles` /
+  `PORTAL_TIMEZONE` in `@arbor/format`). Display, input hydration/save, day
+  keys, and FullCalendar grids must go through that package (or
+  `@/lib/format` / `@/lib/crew-availability` wrappers) — never browser local
+  time. See `.cursor/rules/portal-timezone.mdc`.
 - **Schedule blocks** (`eventScheduleBlocks`) are the planning unit: typed
   (`setup`/`show`/`strike`/`custom`), snapped to 15-minute increments, may
   overlap (the timeline renders overlaps on separate lanes) and may cross

@@ -10,6 +10,7 @@ import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { EventSelect } from "@/components/events/event-select";
 import { ScheduleBlockWindowFields } from "@/components/events/schedule-block-window-fields";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { formatDateTime } from "@/lib/format";
 import {
   localDateTimeInputToMs,
   toLocalDateTimeInput,
@@ -302,7 +303,7 @@ export function CrewApplicationsAdminClient() {
                     {app.email} · {app.phone}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Submitted {new Date(app.submittedAt).toLocaleString()} · {app.status}
+                    Submitted {formatDateTime(app.submittedAt)} · {app.status}
                   </p>
                 </div>
                 {app.status !== "converted" ? (

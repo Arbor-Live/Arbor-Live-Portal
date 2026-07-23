@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { UserSelect } from "@/components/users/user-select";
 import { BandHeroUploadField } from "@/components/files/file-upload-field";
 import { useConvexForm } from "@/hooks/use-convex-form";
+import { formatDate } from "@/lib/format";
 import {
   bandInviteSchema,
   bandProfileSchema,
@@ -305,7 +306,7 @@ export function BandSelfServiceClient() {
               <div key={invite.invitationId} className="flex items-center justify-between gap-3 border border-dashed p-3 text-sm">
                 <div>
                   <p className="font-medium">{invite.email}</p>
-                  <p className="text-xs text-muted-foreground">{invite.role === "org_admin" ? "Admin" : "Member"} access · expires {invite.expiresAt ? new Date(invite.expiresAt).toLocaleDateString() : "soon"}</p>
+                  <p className="text-xs text-muted-foreground">{invite.role === "org_admin" ? "Admin" : "Member"} access · expires {invite.expiresAt ? formatDate(invite.expiresAt) : "soon"}</p>
                 </div>
                 <span className="text-xs text-muted-foreground">Pending</span>
               </div>

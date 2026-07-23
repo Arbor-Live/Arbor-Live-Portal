@@ -4,10 +4,13 @@ import {
   formatDateTimeRange,
   formatUsd,
   formatUsdOptional,
+  pacificDateAndTimeToMs,
   pacificDateKey,
+  pacificDateTimeInputToMs,
   pacificScheduleDayCount,
   pacificScheduleMaxDayIndex,
   pacificDayIndexFromAnchor,
+  toPacificDateTimeInput,
 } from "./index";
 
 describe("formatUsd", () => {
@@ -104,6 +107,38 @@ describe("formatDateTimeRange", () => {
     const end = Date.UTC(2025, 5, 16, 22, 0, 0);
     const label = formatDateTimeRange(start, end);
     expect(label.match(/Jun/g)?.length).toBe(2);
+  });
+});
+
+describe("toPacificDateTimeInput / pacificDateTimeInputToMs", () => {
+  it("round-trips a PDT afternoon instant", () => {
+    // 2025-06-16 18:00 PDT = 2025-06-17 01:00 UTC
+    const ms = Date.UTC(2025, 5, 17, 1, 0, 0);
+    expect(toPacificDateTimeInput(ms)).toBe("2025-06-16T18:00");
+    expect(pacificDateTimeInputToMs("2025-06-16T18:00")).toBe(ms);
+  });
+
+  it("round-trips a PST winter instant", () => {
+    // 2025-01-15 09:30 PST = 2025-01-15 17:30 UTC
+    const ms = Date.UTC(2025, 0, 15, 17, 30, 0);
+    expect(toPacificDateTimeInput(ms)).toBe("2025-01-15T09:30");
+    expect(pacificDateTimeInputToMs("2025-01-15T09:30")).toBe(ms);
+  });
+
+  it("parses seconds when present", () => {
+    const ms = pacificDateTimeInputToMs("2025-06-16T18:00:59");
+    expect(ms).toBe(Date.UTC(2025, 5, 17, 1, 0, 59));
+  });
+
+  it("returns null for empty or invalid input", () => {
+    expect(pacificDateTimeInputToMs("")).toBeNull();
+    expect(pacificDateTimeInputToMs("not-a-date")).toBeNull();
+  });
+});
+
+describe("pacificDateAndTimeToMs", () => {
+  it("combines date and time in portal timezone", () => {
+    expect(pacificDateAndTimeToMs("2025-06-16", "18:00")).toBe(Date.UTC(2025, 5, 17, 1, 0, 0));
   });
 });
 

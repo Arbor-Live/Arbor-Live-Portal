@@ -73,6 +73,74 @@ export function pacificDateKey(ms: number, timezone: string = PORTAL_TIMEZONE) {
 }
 
 /**
+ * Format an instant as a `datetime-local` value (`YYYY-MM-DDTHH:mm`) in the
+ * portal timezone. Use this whenever hydrating inputs from stored ms.
+ */
+export function toPacificDateTimeInput(
+  ms: number | Date,
+  timezone: string = PORTAL_TIMEZONE,
+) {
+  const date = ms instanceof Date ? ms : new Date(ms);
+  if (Number.isNaN(date.getTime())) return "";
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const get = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? "";
+  return `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}`;
+}
+
+/**
+ * Parse a `datetime-local` / wall-clock string as portal timezone.
+ * Accepts `YYYY-MM-DDTHH:mm` or `YYYY-MM-DDTHH:mm:ss`.
+ */
+export function pacificDateTimeInputToMs(
+  value: string,
+  timezone: string = PORTAL_TIMEZONE,
+) {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(trimmed);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const second = Number(match[6] ?? "0");
+  if (
+    ![year, month, day, hour, minute, second].every((n) => Number.isFinite(n)) ||
+    month < 1 ||
+    month > 12 ||
+    day < 1 ||
+    day > 31 ||
+    hour > 23 ||
+    minute > 59 ||
+    second > 59
+  ) {
+    return null;
+  }
+  const startOfDay = pacificStartOfDayMs(year, month, day, timezone);
+  return startOfDay + ((hour * 60 + minute) * 60 + second) * 1000;
+}
+
+/** Parse `YYYY-MM-DD` + `HH:mm` as portal timezone wall clock. */
+export function pacificDateAndTimeToMs(
+  date: string,
+  time: string,
+  timezone: string = PORTAL_TIMEZONE,
+) {
+  if (!date || !time) return null;
+  return pacificDateTimeInputToMs(`${date}T${time}`, timezone);
+}
+
+/**
  * Calendar-day span for schedule dayIndex (America/Los_Angeles by default).
  * Count from an anchor (usually event start) to a later instant (event end,
  * or a block start/end). Overnight strike after an 11pm show end is 2 days

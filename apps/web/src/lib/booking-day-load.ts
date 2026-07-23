@@ -1,3 +1,5 @@
+import { formatDate, pacificDateAndTimeToMs } from "@/lib/format";
+
 export type BookingDayLoadLevel = "free" | "busy" | "unavailable";
 
 export const BOOKING_DAY_LOAD_LEGEND: Array<{
@@ -32,9 +34,12 @@ export function toDateInput(date: Date) {
   return `${y}-${m}-${d}`;
 }
 
+/** Parse YYYY-MM-DD into a Date whose local Y-M-D matches (calendar UI). */
 export function parseDateInput(value: string) {
   if (!value) return null;
-  const date = new Date(`${value}T12:00:00`);
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  if (!match) return null;
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12, 0, 0, 0);
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
@@ -47,12 +52,10 @@ export function monthDateRange(date: Date) {
   };
 }
 
-import { formatDate } from "@/lib/format";
-
 export function formatSelectedDateLabel(dateKey: string) {
-  const parsed = parseDateInput(dateKey);
-  if (!parsed) return dateKey;
-  return formatDate(parsed.getTime());
+  const ms = pacificDateAndTimeToMs(dateKey, "12:00");
+  if (ms == null) return dateKey;
+  return formatDate(ms);
 }
 
 export const UNAVAILABLE_DAY_WARNING =

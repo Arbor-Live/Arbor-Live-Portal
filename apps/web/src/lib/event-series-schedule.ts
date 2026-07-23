@@ -1,5 +1,9 @@
 import type { TimelineBlockDraft } from "@/components/events/event-timeline-scheduler";
-import { toLocalDateTimeInput } from "@/lib/crew-availability";
+import {
+  localDateTimeInputToMs,
+  toLocalDateTimeInput,
+} from "@/lib/crew-availability";
+import { pacificDayIndexFromAnchor, pacificScheduleDayCount } from "@/lib/format";
 
 export type SeriesBlockTemplate = {
   blockType: "setup" | "show" | "strike" | "custom";
@@ -25,8 +29,8 @@ export function templatesToTimelineDrafts(
         blockType: template.blockType,
         label: template.label,
         dayIndex: template.dayIndex,
-        startsAt: toLocalDateTimeInput(new Date(startsAt)),
-        endsAt: toLocalDateTimeInput(new Date(endsAt)),
+        startsAt: toLocalDateTimeInput(startsAt),
+        endsAt: toLocalDateTimeInput(endsAt),
         notes: template.notes ?? "",
       };
     });
@@ -38,10 +42,13 @@ export function timelineDraftsToTemplates(
 ): SeriesBlockTemplate[] {
   return blocks
     .slice()
-    .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())
+    .sort(
+      (a, b) =>
+        (localDateTimeInputToMs(a.startsAt) ?? 0) - (localDateTimeInputToMs(b.startsAt) ?? 0),
+    )
     .map((block) => {
-      const startsAt = new Date(block.startsAt).getTime();
-      const endsAt = new Date(block.endsAt).getTime();
+      const startsAt = localDateTimeInputToMs(block.startsAt) ?? anchorStartAt;
+      const endsAt = localDateTimeInputToMs(block.endsAt) ?? startsAt;
       return {
         blockType: block.blockType,
         label: block.label,
@@ -62,19 +69,13 @@ export function buildSeriesQuickAddBlocks(args: {
   anchorStartAt: number;
   anchorEndAt: number;
 }): TimelineBlockDraft[] {
-  const showStart = new Date(args.anchorStartAt);
-  const showEnd = new Date(args.anchorEndAt);
-  const setupStart = new Date(showStart.getTime() - 3 * 60 * 60 * 1000);
-  const strikeEnd = new Date(showEnd.getTime() + 2 * 60 * 60 * 1000);
-  const deliveryStart = new Date(showStart.getTime() - 2 * 60 * 60 * 1000);
-  const returnEnd = new Date(showEnd.getTime() + 2 * 60 * 60 * 1000);
-  const anchorDayStart = new Date(
-    showStart.getFullYear(),
-    showStart.getMonth(),
-    showStart.getDate(),
-  ).getTime();
-  const dayIndexFrom = (timeMs: number) =>
-    Math.max(0, Math.floor((timeMs - anchorDayStart) / (24 * 60 * 60 * 1000)));
+  const showStartMs = args.anchorStartAt;
+  const showEndMs = args.anchorEndAt;
+  const setupStartMs = showStartMs - 3 * 60 * 60 * 1000;
+  const strikeEndMs = showEndMs + 2 * 60 * 60 * 1000;
+  const deliveryStartMs = showStartMs - 2 * 60 * 60 * 1000;
+  const returnEndMs = showEndMs + 2 * 60 * 60 * 1000;
+  const dayIndexFrom = (timeMs: number) => pacificDayIndexFromAnchor(showStartMs, timeMs);
 
   if (args.eventType === "Dry Hire") {
     const outboundLabel =
@@ -85,17 +86,17 @@ export function buildSeriesQuickAddBlocks(args: {
       {
         blockType: "setup",
         label: outboundLabel,
-        dayIndex: dayIndexFrom(deliveryStart.getTime()),
-        startsAt: toLocalDateTimeInput(deliveryStart),
-        endsAt: toLocalDateTimeInput(showStart),
+        dayIndex: dayIndexFrom(deliveryStartMs),
+        startsAt: toLocalDateTimeInput(deliveryStartMs),
+        endsAt: toLocalDateTimeInput(showStartMs),
         notes: "",
       },
       {
         blockType: "strike",
         label: returnLabel,
-        dayIndex: dayIndexFrom(showEnd.getTime()),
-        startsAt: toLocalDateTimeInput(showEnd),
-        endsAt: toLocalDateTimeInput(returnEnd),
+        dayIndex: dayIndexFrom(showEndMs),
+        startsAt: toLocalDateTimeInput(showEndMs),
+        endsAt: toLocalDateTimeInput(returnEndMs),
         notes: "",
       },
     ];
@@ -105,17 +106,17 @@ export function buildSeriesQuickAddBlocks(args: {
     {
       blockType: "setup",
       label: "Setup",
-      dayIndex: dayIndexFrom(setupStart.getTime()),
-      startsAt: toLocalDateTimeInput(setupStart),
-      endsAt: toLocalDateTimeInput(showStart),
+      dayIndex: dayIndexFrom(setupStartMs),
+      startsAt: toLocalDateTimeInput(setupStartMs),
+      endsAt: toLocalDateTimeInput(showStartMs),
       notes: "",
     },
     {
       blockType: "strike",
       label: "Strike",
-      dayIndex: dayIndexFrom(showEnd.getTime()),
-      startsAt: toLocalDateTimeInput(showEnd),
-      endsAt: toLocalDateTimeInput(strikeEnd),
+      dayIndex: dayIndexFrom(showEndMs),
+      startsAt: toLocalDateTimeInput(showEndMs),
+      endsAt: toLocalDateTimeInput(strikeEndMs),
       notes: "",
     },
   ];
@@ -125,8 +126,8 @@ export function buildSeriesQuickAddBlocks(args: {
       blockType: "show",
       label: "Show",
       dayIndex: 0,
-      startsAt: toLocalDateTimeInput(showStart),
-      endsAt: toLocalDateTimeInput(showEnd),
+      startsAt: toLocalDateTimeInput(showStartMs),
+      endsAt: toLocalDateTimeInput(showEndMs),
       notes: "",
     });
   }
@@ -135,8 +136,5 @@ export function buildSeriesQuickAddBlocks(args: {
 }
 
 export function seriesDayCount(anchorStartAt: number, anchorEndAt: number) {
-  return Math.max(
-    1,
-    Math.floor(Math.max(0, anchorEndAt - anchorStartAt) / (24 * 60 * 60 * 1000)) + 1,
-  );
+  return pacificScheduleDayCount(anchorStartAt, anchorEndAt);
 }
