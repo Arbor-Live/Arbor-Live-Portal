@@ -12,6 +12,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { api, type Id } from "@/lib/convex-api";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { optimisticResolveMyEventMedia } from "@/lib/crew-portal-optimistic";
 import { uploadFileToImmichShare } from "@/lib/immich-upload";
 import { useBeforeUnload } from "@/hooks/use-before-unload";
 import { cn } from "@/lib/utils";
@@ -90,7 +91,9 @@ export function MediaUploadDropzone({
 }: MediaUploadDropzoneProps) {
   const convex = useConvex();
   const recordUploadedAsset = useMutation(api.immich.recordUploadedAsset);
-  const resolveMyEventMedia = useMutation(api.crewPortal.resolveMyEventMedia);
+  const resolveMyEventMedia = useMutation(
+    api.crewPortal.resolveMyEventMedia,
+  ).withOptimisticUpdate(optimisticResolveMyEventMedia);
   const inputRef = useRef<HTMLInputElement>(null);
   const [items, setItems] = useState<UploadItem[]>([]);
   const [busy, setBusy] = useState(false);

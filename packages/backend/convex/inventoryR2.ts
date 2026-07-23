@@ -66,6 +66,7 @@ const inventoryPurposeValue = v.union(
   v.literal("promo"),
   v.literal("manual"),
   v.literal("gdtf"),
+  v.literal("damage"),
 );
 
 const marketingImageKindValue = v.union(v.literal("hero"), v.literal("content"));
@@ -73,7 +74,7 @@ const marketingImageKindValue = v.union(v.literal("hero"), v.literal("content"))
 export const generateR2UploadUrl = mutation({
   args: {
     scope: uploadScopeValue,
-    entityKind: v.optional(v.union(v.literal("package"), v.literal("type"))),
+    entityKind: v.optional(v.union(v.literal("package"), v.literal("type"), v.literal("item"))),
     purpose: v.union(inventoryPurposeValue, v.literal("artifact"), v.literal("document")),
     entityId: v.optional(v.string()),
     eventId: v.optional(v.id("events")),
@@ -188,7 +189,7 @@ export const generateR2UploadUrl = mutation({
 
 export const generateInventoryUploadUrl = mutation({
   args: {
-    entityKind: v.union(v.literal("package"), v.literal("type")),
+    entityKind: v.union(v.literal("package"), v.literal("type"), v.literal("item")),
     purpose: inventoryPurposeValue,
     entityId: v.optional(v.string()),
     fileName: v.string(),

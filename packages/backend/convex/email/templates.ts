@@ -27,6 +27,8 @@ import {
   renderCrewApplicationClosedEmail,
   renderCrewApplicationConfirmationEmail,
   renderCrewTraineeIntroEmail,
+  renderRentalOutboundPackedEmail,
+  renderRentalReturnProcessedEmail,
 } from "@arbor/email/render";
 import type {
   BookingQuoteReadyEmailProps,
@@ -56,6 +58,8 @@ import type {
   CrewApplicationClosedEmailProps,
   CrewApplicationConfirmationEmailProps,
   CrewTraineeIntroEmailProps,
+  RentalOutboundPackedEmailProps,
+  RentalReturnProcessedEmailProps,
 } from "@arbor/email/types";
 import type { EmailTemplate } from "./constants";
 
@@ -121,5 +125,9 @@ export async function renderEmailHtml(template: EmailTemplate, payload: unknown)
       );
     case "crew_trainee_intro":
       return renderCrewTraineeIntroEmail(payload as CrewTraineeIntroEmailProps);
+    case "rental_outbound_packed":
+      return renderRentalOutboundPackedEmail(payload as RentalOutboundPackedEmailProps);
+    case "rental_return_processed":
+      return renderRentalReturnProcessedEmail(payload as RentalReturnProcessedEmailProps);
   }
 }

@@ -1,6 +1,7 @@
 export const inventoryUploadEntityKind = {
   package: "package",
   type: "type",
+  item: "item",
 } as const;
 
 export type InventoryUploadEntityKind =
@@ -12,6 +13,7 @@ export const inventoryUploadPurpose = {
   promo: "promo",
   manual: "manual",
   gdtf: "gdtf",
+  damage: "damage",
   artifact: "artifact",
 } as const;
 
@@ -76,6 +78,19 @@ function purposeFolder(purpose: InventoryFilePurpose): string {
       return "manuals";
     case "gdtf":
       return "gdtf";
+    case "damage":
+      return "damage";
+  }
+}
+
+function entityKindFolder(entityKind: InventoryUploadEntityKind): string {
+  switch (entityKind) {
+    case "package":
+      return "packages";
+    case "type":
+      return "types";
+    case "item":
+      return "items";
   }
 }
 
@@ -89,7 +104,7 @@ export function buildInventoryObjectKey(args: {
   const entitySegment = args.entityId?.trim() || `draft/${args.uploadId}`;
   const safeName = sanitizeInventoryFileName(args.fileName);
   const folder = purposeFolder(args.purpose);
-  const plural = args.entityKind === "package" ? "packages" : "types";
+  const plural = entityKindFolder(args.entityKind);
   return `inventory/${plural}/${entitySegment}/${folder}/${args.uploadId}-${safeName}`;
 }
 
@@ -262,6 +277,18 @@ export function validateInventoryUploadRequest(args: {
 
   if (args.entityKind === "type" && args.purpose === "hero") {
     throw new Error("Hero uploads are only supported for packages.");
+  }
+
+  if (args.entityKind === "item") {
+    if (args.purpose !== "damage") {
+      throw new Error("Inventory items only support damage photo uploads.");
+    }
+    validateImageUpload(contentType, args.contentLength);
+    return;
+  }
+
+  if (args.purpose === "damage") {
+    throw new Error("Damage photos are only supported for inventory items.");
   }
 
   if (args.purpose === "hero" || args.purpose === "icon" || args.purpose === "promo") {

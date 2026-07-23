@@ -7,8 +7,8 @@ import { formatStoredR2Asset } from "@/lib/r2-assets";
 
 export type R2UploadScope = "inventory" | "event" | "marketing" | "organization" | "venue";
 
-export type InventoryUploadEntityKind = "package" | "type";
-export type InventoryUploadPurpose = "hero" | "icon" | "promo" | "manual" | "gdtf";
+export type InventoryUploadEntityKind = "package" | "type" | "item";
+export type InventoryUploadPurpose = "hero" | "icon" | "promo" | "manual" | "gdtf" | "damage";
 
 export type R2UploadArgs =
   | {

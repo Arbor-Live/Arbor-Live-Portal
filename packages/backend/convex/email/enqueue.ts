@@ -36,6 +36,8 @@ const emailTemplateValue = v.union(
   v.literal("crew_application_closed"),
   v.literal("crew_application_confirmation"),
   v.literal("crew_trainee_intro"),
+  v.literal("rental_outbound_packed"),
+  v.literal("rental_return_processed"),
 );
 
 const emailStatusValue = v.union(

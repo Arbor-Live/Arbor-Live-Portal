@@ -27,6 +27,8 @@ import { CrewApplicationReceivedEmail } from "../emails/crew-application-receive
 import { CrewApplicationClosedEmail } from "../emails/crew-application-closed";
 import { CrewApplicationConfirmationEmail } from "../emails/crew-application-confirmation";
 import { CrewTraineeIntroEmail } from "../emails/crew-trainee-intro";
+import { RentalOutboundPackedEmail } from "../emails/rental-outbound-packed";
+import { RentalReturnProcessedEmail } from "../emails/rental-return-processed";
 import type {
   BookingQuoteReadyEmailProps,
   BookingRequestAdminEmailProps,
@@ -55,6 +57,8 @@ import type {
   CrewApplicationClosedEmailProps,
   CrewApplicationConfirmationEmailProps,
   CrewTraineeIntroEmailProps,
+  RentalOutboundPackedEmailProps,
+  RentalReturnProcessedEmailProps,
 } from "./types";
 
 export async function renderEventCancelledEmail(props: EventEmailProps) {
@@ -179,4 +183,12 @@ export async function renderCrewApplicationConfirmationEmail(
 
 export async function renderCrewTraineeIntroEmail(props: CrewTraineeIntroEmailProps) {
   return render(CrewTraineeIntroEmail(props));
+}
+
+export async function renderRentalOutboundPackedEmail(props: RentalOutboundPackedEmailProps) {
+  return render(RentalOutboundPackedEmail(props));
+}
+
+export async function renderRentalReturnProcessedEmail(props: RentalReturnProcessedEmailProps) {
+  return render(RentalReturnProcessedEmail(props));
 }
