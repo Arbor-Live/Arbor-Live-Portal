@@ -64,21 +64,26 @@ export function EventMediaSection({ eventId }: { eventId: Id<"events"> }) {
   const ensureUploadAlbum = useAction(api.immichEnsure.ensureUploadAlbum);
   const upsertParticipations = useMutation(api.eventBands.upsertParticipations);
 
-  const [drafts, setDrafts] = useState<ParticipationDraft[]>([]);
+  const [draftsOverride, setDraftsOverride] = useState<ParticipationDraft[] | null>(null);
   const [ensuring, setEnsuring] = useState(false);
   const [savingBands, setSavingBands] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [albumReady, setAlbumReady] = useState(false);
 
-  useEffect(() => {
-    if (!participations) return;
-    setDrafts(
-      participations.map((row) => ({
+  const participationDrafts = useMemo(
+    () =>
+      (participations ?? []).map((row) => ({
         organizationId: row.organizationId,
         role: row.role,
       })),
-    );
-  }, [participations]);
+    [participations],
+  );
+  // Local edits (add/remove/change row) take precedence over the live query
+  // until the next successful save, so in-progress edits are never clobbered.
+  const drafts = draftsOverride ?? participationDrafts;
+  const setDrafts = (updater: (prev: ParticipationDraft[]) => ParticipationDraft[]) => {
+    setDraftsOverride(updater(drafts));
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -116,6 +121,7 @@ export function EventMediaSection({ eventId }: { eventId: Id<"events"> }) {
         eventId,
         participations: drafts.filter((row) => row.organizationId),
       });
+      setDraftsOverride(null);
       setMessage("Linked bands saved.");
     } catch (error) {
       setMessage(getConvexErrorMessage(error));

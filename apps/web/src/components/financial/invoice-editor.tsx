@@ -48,7 +48,6 @@ type FeeRow = { feeDefinitionId: string; label: string; quantity: string; rateUs
 
 import {
   INVOICE_GROUP_TYPE_LABELS,
-  EQUIPMENT_PRICING_MODE_LABELS,
   EQUIPMENT_PRICING_MODE_OPTIONS,
   type EquipmentPricingMode,
 } from "@/lib/invoice-group-labels";
@@ -159,7 +158,7 @@ export function InvoiceEditor({
   const [newContactEmail, setNewContactEmail] = useState("");
   const [newContactPhone, setNewContactPhone] = useState("");
 
-  const lastSavedSignatureRef = useRef("");
+  const [lastSavedSignature, setLastSavedSignature] = useState("");
   const saveRequestIdRef = useRef(0);
   const hasHydratedFromServerRef = useRef(false);
   const crewBootstrappedRef = useRef(false);
@@ -198,10 +197,6 @@ export function InvoiceEditor({
   const selectedGroup = useMemo(
     () => (groups ?? []).find((group) => group._id === groupId),
     [groups, groupId],
-  );
-  const selectedContact = useMemo(
-    () => (contacts ?? []).find((contact) => contact._id === contactId),
-    [contacts, contactId],
   );
   const contactOptions = useMemo(
     () =>
@@ -277,7 +272,6 @@ export function InvoiceEditor({
 
     const { invoice, lineItems } = invoiceData;
     hasHydratedFromServerRef.current = true;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setActiveInvoiceId(invoice._id);
     setApprovalToken(invoice.publicApprovalToken ?? "");
     setIssueDate(invoice.issueDate);
@@ -382,7 +376,6 @@ export function InvoiceEditor({
     }
 
     if (savedCrewSnapshotRef.current.length) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setCrewRows(savedCrewSnapshotRef.current);
     }
   }, [invoiceId, invoiceFieldsHydrated, linkedEvent, linkedSeries, seriesCostData, activeInvoiceId]);
@@ -607,7 +600,7 @@ export function InvoiceEditor({
     const signature = JSON.stringify(payload);
     const approvedQuoteEdited =
       invoiceData?.invoice?.clientApprovalStatus === "approved" &&
-      signature !== lastSavedSignatureRef.current;
+      signature !== lastSavedSignature;
 
     if (approvedQuoteEdited && reapprovalDecisionRef.current === null) {
       reapprovalDecisionRef.current = window.confirm(
@@ -635,7 +628,7 @@ export function InvoiceEditor({
         setActiveInvoiceId(result.id);
         setApprovalToken(result.publicApprovalToken ?? "");
       }
-      lastSavedSignatureRef.current = signature;
+      setLastSavedSignature(signature);
       if (requestId === saveRequestIdRef.current) {
         setSaveMessage("Invoice saved.");
         setAutoSaveState("saved");
@@ -653,22 +646,12 @@ export function InvoiceEditor({
     }
   }
 
-  async function save() {
-    await persistDraft();
-  }
-
   async function regenerateToken() {
     if (!activeInvoiceId) return;
     if (!window.confirm("Regenerate the public quote token? Old links will stop working.")) return;
     const result = await regeneratePublicApprovalToken({ id: activeInvoiceId });
     setApprovalToken(result.token);
     setSaveMessage("Public quote link regenerated.");
-  }
-
-  async function resetQuoteToPending() {
-    if (!activeInvoiceId) return;
-    await resetApprovalToPending({ id: activeInvoiceId });
-    setSaveMessage("Quote status reset to pending.");
   }
 
   async function markReadyOnRequestPortal() {
@@ -686,6 +669,7 @@ export function InvoiceEditor({
   const draftSignature = useMemo(() => {
     const payload = buildPayload();
     return payload ? JSON.stringify(payload) : "";
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- buildPayload is recreated each render; deps are its closed-over fields
   }, [
     issueDate,
     dueDate,
@@ -722,7 +706,7 @@ export function InvoiceEditor({
     editorBaselineReady &&
     invoiceFieldsHydrated &&
     draftSignature !== "" &&
-    draftSignature !== lastSavedSignatureRef.current;
+    draftSignature !== lastSavedSignature;
 
   useEffect(() => {
     if (!baselineSignaturePendingRef.current || !invoiceFieldsHydrated) return;
@@ -737,9 +721,14 @@ export function InvoiceEditor({
     const payload = buildPayload();
     if (!payload) return;
 
-    lastSavedSignatureRef.current = JSON.stringify(payload);
+    // One-time baseline establishment once all async dependencies (linked
+    // event/series, groups, contacts, crew bootstrap) have settled, guarded
+    // by baselineSignaturePendingRef so it never re-fires after that.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setLastSavedSignature(JSON.stringify(payload));
     baselineSignaturePendingRef.current = false;
     setEditorBaselineReady(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- buildPayload is recreated each render; deps are its closed-over fields
   }, [
     invoiceFieldsHydrated,
     invoiceId,
@@ -812,6 +801,7 @@ export function InvoiceEditor({
         typeId: row.typeId,
       })),
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- buildLineItems is recreated each render; deps are its closed-over fields
   }, [
     equipmentPricingMode,
     discountType,
@@ -871,6 +861,7 @@ export function InvoiceEditor({
       void persistDraft();
     }, 2500);
     return () => window.clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- persistDraft is recreated each render; draftSignature covers content changes
   }, [draftSignature, activeInvoiceId, invoiceFieldsHydrated, editorBaselineReady, isDraftDirty, saving, autoSaveState]);
 
   const isRequestLinkedQuote = Boolean(invoiceData?.invoice?.sourceEventRequestId);

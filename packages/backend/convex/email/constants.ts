@@ -112,6 +112,10 @@ export function formatInviteExpiry(expiresAt: number, timezone: string = EVENT_T
   return formatDateTime(expiresAt, "long", timezone);
 }
 
+export function bandPaymentHistoryUrl() {
+  return `${SITE_URL}/dashboard/bands-and-performers#payment-history`;
+}
+
 export function bandPayeeSettingsUrl() {
   return `${SITE_URL}/dashboard/bands-and-performers#payment-payee`;
 }
@@ -149,9 +153,9 @@ export function subjectForTemplate(template: EmailTemplate, context: string) {
     case "paying_party_added":
       return `You've been added as the paying party: ${context}`;
     case "band_payment_confirmation":
-      return `Payment confirmation needed: ${context}`;
+      return `Payment ready for your signature: ${context}`;
     case "band_payment_completed":
-      return `Band payment processed: ${context}`;
+      return `Band payment submitted for processing: ${context}`;
     case "band_payment_payee_required":
       return `Payment payee info needed: ${context}`;
     case "onboarding_completed":

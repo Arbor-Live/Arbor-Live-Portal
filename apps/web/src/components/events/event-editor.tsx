@@ -244,8 +244,8 @@ export function EventEditor({
   const [seriesEndAt, setSeriesEndAt] = useState("");
   const [editScopeModalOpen, setEditScopeModalOpen] = useState(false);
   const hydratedEventIdRef = useRef<string | null>(null);
-  const lastSavedOverviewSignatureRef = useRef("");
-  const lastSavedScheduleSignatureRef = useRef("");
+  const [lastSavedOverviewSignature, setLastSavedOverviewSignature] = useState("");
+  const [lastSavedScheduleSignature, setLastSavedScheduleSignature] = useState("");
   const localBlockCounterRef = useRef(0);
   const createDefaultsAppliedRef = useRef(false);
 
@@ -288,6 +288,7 @@ export function EventEditor({
     const dateParam = new URLSearchParams(window.location.search).get("date")?.trim() ?? "";
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dateParam)) return;
     // Default show window for board "+" : 6pm–10pm Pacific wall clock.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time create-mode default, guarded by createDefaultsAppliedRef
     setStartAt(`${dateParam}T18:00`);
     setEndAt(`${dateParam}T22:00`);
   }, [isCreate]);
@@ -298,6 +299,9 @@ export function EventEditor({
     // Wait for host groups so we can match legacy free-text hosts by name.
     if (hostGroups === undefined) return;
     hydratedEventIdRef.current = eventData.event._id;
+    // One-time hydration per loaded event id (guarded by hydratedEventIdRef above) so
+    // in-progress edits are never overwritten by a later re-run of this effect.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time hydration per event id, see hydratedEventIdRef guard
     setTitle(eventData.event.title);
     setStatus(normalizeEventStatus(eventData.event.status));
     setVisibility(normalizeEventVisibility(eventData.event.visibility));
@@ -371,7 +375,7 @@ export function EventEditor({
       eventData.event.rentalFulfillmentMode as RentalFulfillmentMode | "pickup" | undefined,
     );
     const rentalTypes = ["Dry Hire", "Rental with Crew"] as EventType[];
-    lastSavedOverviewSignatureRef.current = JSON.stringify({
+    setLastSavedOverviewSignature(JSON.stringify({
       title: eventData.event.title.trim(),
       status: normalizeEventStatus(eventData.event.status),
       visibility: normalizeEventVisibility(eventData.event.visibility),
@@ -391,7 +395,7 @@ export function EventEditor({
       notes: eventData.event.notes || undefined,
       openMicEnabled: eventData.event.openMicEnabled === true,
       openMicNotes: eventData.event.openMicNotes || undefined,
-    });
+    }));
     const hydratedBlocks = eventData.blocks.map((row) => ({
       id: row._id,
       clientId: row._id,
@@ -416,10 +420,12 @@ export function EventEditor({
       postedToExpense: row.postedToExpense,
       notes: row.notes ?? "",
     }));
-    lastSavedScheduleSignatureRef.current = JSON.stringify({
-      blocks: hydratedBlocks,
-      shifts: hydratedShifts,
-    });
+    setLastSavedScheduleSignature(
+      JSON.stringify({
+        blocks: hydratedBlocks,
+        shifts: hydratedShifts,
+      }),
+    );
   }, [eventData, hostGroups]);
 
   const hideSchedule = eventType === "Services Only";
@@ -708,7 +714,7 @@ export function EventEditor({
       ...payload,
       editScope: seriesMeta && editScope ? editScope : undefined,
     });
-    lastSavedOverviewSignatureRef.current = JSON.stringify(payload);
+    setLastSavedOverviewSignature(JSON.stringify(payload));
     setMessageTone("success");
     setMessage("Overview saved.");
   }
@@ -799,18 +805,19 @@ export function EventEditor({
           notes: row.notes ?? "",
         })),
       );
-      setShifts((prev) => {
-        const next = prev.map((shift) => {
-          const persistedId =
-            shift.scheduleBlockId ??
-            (shift.scheduleBlockRef ? persistedBlockIdByRef.get(shift.scheduleBlockRef) : undefined);
-          return {
-            ...shift,
-            scheduleBlockId: persistedId,
-            scheduleBlockRef: shift.scheduleBlockRef ?? persistedId,
-          };
-        });
-        lastSavedScheduleSignatureRef.current = JSON.stringify({
+      const nextShifts = shifts.map((shift) => {
+        const persistedId =
+          shift.scheduleBlockId ??
+          (shift.scheduleBlockRef ? persistedBlockIdByRef.get(shift.scheduleBlockRef) : undefined);
+        return {
+          ...shift,
+          scheduleBlockId: persistedId,
+          scheduleBlockRef: shift.scheduleBlockRef ?? persistedId,
+        };
+      });
+      setShifts(nextShifts);
+      setLastSavedScheduleSignature(
+        JSON.stringify({
           blocks: savedBlocks.map((row) => ({
             id: row.id,
             clientId: row.clientId ?? row.id,
@@ -821,10 +828,9 @@ export function EventEditor({
             endsAt: toLocalDateTimeInput(row.endsAt),
             notes: row.notes ?? "",
           })),
-          shifts: next,
-        });
-        return next;
-      });
+          shifts: nextShifts,
+        }),
+      );
       setMessageTone("success");
       setMessage("Schedule saved.");
     } catch (error) {
@@ -860,7 +866,7 @@ export function EventEditor({
           notes: row.notes || undefined,
         })),
       });
-      lastSavedScheduleSignatureRef.current = JSON.stringify({ blocks, shifts });
+      setLastSavedScheduleSignature(JSON.stringify({ blocks, shifts }));
       setMessageTone("success");
       setMessage("Schedule personnel saved.");
     } catch (error) {
@@ -920,7 +926,8 @@ export function EventEditor({
   }
 
   const currentEventId = eventId ?? eventData?.event?._id;
-  const payPeriod = useMemo(() => payPeriodForDate(Date.now()), []);
+  const [nowMs] = useState(() => Date.now());
+  const payPeriod = useMemo(() => payPeriodForDate(nowMs), [nowMs]);
   const otForecast = useQuery(
     api.eventCrew.getOtForecastForUser,
     selectedCrewUserId && canEdit
@@ -997,6 +1004,7 @@ export function EventEditor({
 
   const overviewSignature = useMemo(
     () => JSON.stringify(buildOverviewPayload()),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- buildOverviewPayload is recreated each render; deps are its closed-over fields
     [
       title,
       status,
@@ -1029,10 +1037,17 @@ export function EventEditor({
   const hasUnsavedChanges = useMemo(() => {
     if (isCreate) return true;
     if (resolvedActiveTab === "schedule") {
-      return scheduleSignature !== lastSavedScheduleSignatureRef.current;
+      return scheduleSignature !== lastSavedScheduleSignature;
     }
-    return overviewSignature !== lastSavedOverviewSignatureRef.current;
-  }, [isCreate, resolvedActiveTab, overviewSignature, scheduleSignature]);
+    return overviewSignature !== lastSavedOverviewSignature;
+  }, [
+    isCreate,
+    resolvedActiveTab,
+    overviewSignature,
+    scheduleSignature,
+    lastSavedOverviewSignature,
+    lastSavedScheduleSignature,
+  ]);
 
   const saveTier = resolvedActiveTab === "overview" ? "B" : "C";
   const saveStatus =

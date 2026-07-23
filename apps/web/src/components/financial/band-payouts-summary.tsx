@@ -22,10 +22,10 @@ export function BandPayoutsSummary() {
           <span className="font-medium">Needs payee:</span> {counts.needs_payee}
         </p>
         <p>
-          <span className="font-medium">Needs email:</span> {counts.needs_email}
+          <span className="font-medium">Needs signature request:</span> {counts.needs_email}
         </p>
         <p>
-          <span className="font-medium">Awaiting reply:</span> {counts.awaiting_reply}
+          <span className="font-medium">Awaiting signature:</span> {counts.awaiting_reply}
         </p>
         <p>
           <span className="font-medium">Ready to pay:</span> {counts.ready_to_pay}

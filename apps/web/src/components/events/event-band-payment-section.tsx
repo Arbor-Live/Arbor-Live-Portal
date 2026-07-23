@@ -103,6 +103,9 @@ function EventBandPaymentsPanel({ eventId }: { eventId: Id<"events"> }) {
                   <p className="text-muted-foreground">
                     {formatUsd(payment.totalUsd)} · {payment.statusLabel}
                   </p>
+                  <p className="text-xs text-muted-foreground">
+                    Payment ID: {payment.confirmationToken}
+                  </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {payment.status !== "paid" ? (

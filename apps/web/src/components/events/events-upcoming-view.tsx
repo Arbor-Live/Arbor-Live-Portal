@@ -4,7 +4,6 @@ import Link from "next/link";
 import { EventStateBadges, getDerivedLifecycleState } from "@/components/events/event-state-badges";
 import { Button } from "@/components/ui/button";
 
-import { normalizeEventStatus } from "@/lib/event-status";
 import { formatDateTime } from "@/lib/format";
 
 type DashboardEvent = {

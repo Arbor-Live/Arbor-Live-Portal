@@ -1266,7 +1266,12 @@ export default defineSchema({
     confirmationEmailSentAt: v.optional(v.number()),
     confirmationEmailNotificationId: v.optional(v.id("emailNotifications")),
     confirmationResendEmailId: v.optional(v.string()),
+    confirmationSentByUserId: v.optional(v.string()),
+    confirmationSentByName: v.optional(v.string()),
     confirmedAt: v.optional(v.number()),
+    signedByUserId: v.optional(v.string()),
+    signatureTypedName: v.optional(v.string()),
+    /** Legacy email-reply confirmation fields (no longer written). */
     confirmationReplyFrom: v.optional(v.string()),
     confirmationReplyBody: v.optional(v.string()),
     confirmationReplyEmailId: v.optional(v.string()),

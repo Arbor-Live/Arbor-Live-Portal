@@ -8,7 +8,8 @@ export default function FinancialHubBandPayoutsPage() {
         <div>
           <h1 className="text-2xl font-semibold">Band Payouts</h1>
           <p className="text-sm text-muted-foreground">
-            Send band payment confirmation emails, track replies, and mark GrantEd payouts complete.
+            Send signature requests, track e-signatures, download agreements, and mark GrantEd payouts
+            complete.
           </p>
         </div>
         <FinancialHubBandPayoutsClient />

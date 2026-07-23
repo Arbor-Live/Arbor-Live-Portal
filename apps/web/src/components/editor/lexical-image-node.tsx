@@ -15,9 +15,7 @@ import {
   $parseSerializedNode,
   COMMAND_PRIORITY_EDITOR,
   createCommand,
-  type EditorConfig,
   type ElementFormatType,
-  type LexicalEditor,
   type LexicalNode,
   type NodeKey,
   type Spread,
@@ -62,6 +60,11 @@ function ImageComponent({
   const editable = useLexicalEditable();
   const notifyContentChange = useMarketingEditorChange();
   const [caption, setCaption] = useState(altText);
+  const [syncedAltText, setSyncedAltText] = useState(altText);
+  if (altText !== syncedAltText) {
+    setSyncedAltText(altText);
+    setCaption(altText);
+  }
   const trimmed = src.trim();
   const needsResolve = trimmed.length > 0 && shouldResolveAssetReference(trimmed);
   const resolved = useQuery(
@@ -74,10 +77,6 @@ function ImageComponent({
       ? trimmed
       : undefined;
   const isLoading = needsResolve && resolved === undefined;
-
-  useEffect(() => {
-    setCaption(altText);
-  }, [altText]);
 
   function handleCaptionChange(next: string) {
     setCaption(next);
@@ -206,7 +205,7 @@ export class ImageNode extends DecoratorBlockNode {
     return self;
   }
 
-  decorate(_editor: LexicalEditor, _config: EditorConfig): ReactElement {
+  decorate(): ReactElement {
     return (
       <BlockWithAlignableContents
         nodeKey={this.getKey()}

@@ -77,6 +77,7 @@ Human-readable docs live in `docs/` (`getting-started.md`, `architecture.md`, `d
 ## Invoice and Public Quote Context
 - Invoice numbers use `ALINV-` with a 7-character nanoid suffix (e.g. `ALINV-4K8Z2NP`).
 - Booking request numbers use `ALREQ-` with the same suffix format.
+- Band payment IDs use `ALBPAY-` with the same suffix format.
 - Public quote link token workflow exists on invoices (`publicApprovalToken`).
 - Quote approval status is unified for table display.
 

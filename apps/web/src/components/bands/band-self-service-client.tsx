@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
+import { BandPaymentHistorySection } from "@/components/bands/band-payment-history-section";
 import { FormSaveBar } from "@/components/forms";
 import { Form, FormField } from "@/components/ui/form";
 import { TextFormField } from "@/components/forms/text-form-field";
@@ -127,6 +128,8 @@ export function BandSelfServiceClient() {
 
   return (
     <div className="space-y-4 pb-20">
+      <BandPaymentHistorySection />
+
       <Form {...profileForm}>
         <form className="space-y-4">
       <Card>
@@ -187,6 +190,10 @@ export function BandSelfServiceClient() {
       <Card id="payment-payee">
         <CardHeader>
           <CardTitle>Payment Payee</CardTitle>
+          <CardDescription>
+            Designate who receives Arbor Live payouts. The payee must be a band member account so
+            they can e-sign payments in the portal.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {!profile.payeeComplete ? (

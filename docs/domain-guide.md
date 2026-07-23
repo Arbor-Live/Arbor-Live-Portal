@@ -133,12 +133,16 @@ Event types (drive which editor tabs and quick-add blocks appear):
 ## Band payments
 
 - Payouts to performing bands (`eventBandPayments` in `bandPayments.ts`).
-  Each band org has a designated payee (name/email/mailing address on
-  `organizationProfiles`).
-- Confirmation loop: an email is sent to the payee with a token in the
-  subject; the payee's reply hits the Resend inbound webhook
-  (`http/resendInbound.ts`), which verifies the svix signature *and* that the
-  reply's From matches the designated payee before recording confirmation.
+  Each band org has a designated payee (name/email/mailing address + linked
+  user id on `organizationProfiles`).
+- Confirmation loop: admin sends a signature-request email from the payout
+  queue; the designated payee e-signs in the band portal (typed legal name +
+  amount checkbox). Admin then marks paid with a GrantEd transfer / Service
+  Payment number; all band members are notified that Stanford is processing
+  the payout.
+- Once signed, admins and band members can download an agreement PDF
+  (`bandPaymentPdfDownload.ts` via `@arbor/invoice-document`) showing the
+  Arbor sender and the payee signature.
 - A daily cron promotes payments for ended events into the payable queue.
 
 ## Inventory

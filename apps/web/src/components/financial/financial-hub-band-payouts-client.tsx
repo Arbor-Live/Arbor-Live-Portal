@@ -4,12 +4,13 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
+import { BandPaymentAgreementPdfButton } from "@/components/financial/band-payment-agreement-pdf-button";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getConvexErrorMessage } from "@/lib/convex-error";
-import { formatDate, formatUsd } from "@/lib/format";
+import { formatDate, formatDateTime, formatUsd } from "@/lib/format";
 
 type BandPaymentQueue =
   | "all_pending"
@@ -22,8 +23,8 @@ type BandPaymentQueue =
 const QUEUE_LABELS: Record<BandPaymentQueue, string> = {
   all_pending: "All pending",
   needs_payee: "Needs payee info",
-  needs_email: "Needs confirmation email",
-  awaiting_reply: "Awaiting band reply",
+  needs_email: "Needs signature request",
+  awaiting_reply: "Awaiting signature",
   ready_to_pay: "Ready to pay",
   paid: "Paid",
 };
@@ -48,18 +49,10 @@ export function FinancialHubBandPayoutsClient() {
     api.bandPayments.buildConfirmationPreview,
     previewTarget ? { paymentId: previewTarget } : "skip",
   );
-  const [settingsDraft, setSettingsDraft] = useState({
-    photoAlbumUrl: "",
-  });
+  const [settingsDraft, setSettingsDraft] = useState<{ photoAlbumUrl: string } | null>(null);
   const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!settings) return;
-    setSettingsDraft({
-      photoAlbumUrl: settings.photoAlbumUrl,
-    });
-  }, [settings]);
+  const photoAlbumUrl = settingsDraft?.photoAlbumUrl ?? settings?.photoAlbumUrl ?? "";
 
   useEffect(() => {
     void syncStalePayeePayments({});
@@ -108,8 +101,9 @@ export function FinancialHubBandPayoutsClient() {
     setSettingsMessage(null);
     try {
       await updateSettings({
-        photoAlbumUrl: settingsDraft.photoAlbumUrl,
+        photoAlbumUrl,
       });
+      setSettingsDraft(null);
       setSettingsMessage("Settings saved.");
     } catch (error) {
       setSettingsMessage(getConvexErrorMessage(error));
@@ -139,8 +133,8 @@ export function FinancialHubBandPayoutsClient() {
           <div className="space-y-1">
             <Label>Default photo album URL</Label>
             <Input
-              value={settingsDraft.photoAlbumUrl}
-              onChange={(e) => setSettingsDraft((prev) => ({ ...prev, photoAlbumUrl: e.target.value }))}
+              value={photoAlbumUrl}
+              onChange={(e) => setSettingsDraft({ photoAlbumUrl: e.target.value })}
               placeholder="https://photos.arbor.st/share/..."
             />
           </div>
@@ -207,6 +201,9 @@ export function FinancialHubBandPayoutsClient() {
                       : "Not configured"}
                   </p>
                   <p>
+                    <span className="font-medium">Payment ID:</span> {row.confirmationToken}
+                  </p>
+                  <p>
                     <span className="font-medium">Status:</span> {row.statusLabel}
                   </p>
                   {row.designatedPayeeMailingAddress ? (
@@ -216,24 +213,25 @@ export function FinancialHubBandPayoutsClient() {
                   ) : null}
                   {row.confirmationEmailSentAt ? (
                     <p>
-                      <span className="font-medium">Confirmation sent:</span>{" "}
-                      {formatDate(row.confirmationEmailSentAt)}
+                      <span className="font-medium">Signature request sent:</span>{" "}
+                      {formatDateTime(row.confirmationEmailSentAt)}
+                      {row.confirmationSentByName ? ` · ${row.confirmationSentByName}` : ""}
                     </p>
                   ) : null}
                   {row.confirmedAt ? (
                     <p>
-                      <span className="font-medium">Confirmed:</span> {formatDate(row.confirmedAt)}
-                      {row.confirmationReplyFrom ? ` · ${row.confirmationReplyFrom}` : ""}
-                    </p>
-                  ) : null}
-                  {row.confirmationReplyBody ? (
-                    <p className="whitespace-pre-wrap rounded-md border bg-muted/20 px-3 py-2 sm:col-span-2">
-                      <span className="font-medium">Reply:</span> {row.confirmationReplyBody}
+                      <span className="font-medium">Signed:</span> {formatDateTime(row.confirmedAt)}
+                      {row.signatureTypedName
+                        ? ` · ${row.signatureTypedName}`
+                        : row.confirmationReplyFrom
+                          ? ` · ${row.confirmationReplyFrom}`
+                          : ""}
                     </p>
                   ) : null}
                   {row.servicePaymentNumber ? (
                     <p>
-                      <span className="font-medium">Service Payment #:</span> {row.servicePaymentNumber}
+                      <span className="font-medium">Transfer / Service Payment #:</span>{" "}
+                      {row.servicePaymentNumber}
                     </p>
                   ) : null}
                 </div>
@@ -269,20 +267,23 @@ export function FinancialHubBandPayoutsClient() {
                         onClick={() => void onSendConfirmation(row._id)}
                       >
                         {row.status === "awaiting_confirmation"
-                          ? "Resend confirmation email"
-                          : "Send confirmation email"}
+                          ? "Resend signature request"
+                          : "Send signature request"}
                       </Button>
                     </>
                   ) : null}
                   {!row.payeeComplete && row.status !== "pending_payee" ? (
                     <p className="self-center text-xs text-muted-foreground">
-                      Payee info incomplete — confirmation email blocked.
+                      Payee info incomplete — signature request blocked.
                     </p>
                   ) : null}
                   {row.status === "confirmed" ? (
                     <Button type="button" size="sm" onClick={() => setPayTarget(row._id)}>
                       Mark paid
                     </Button>
+                  ) : null}
+                  {row.canDownloadAgreementPdf ? (
+                    <BandPaymentAgreementPdfButton paymentId={row._id} />
                   ) : null}
                   {row.status !== "paid" && row.status !== "cancelled" ? (
                     <Button
@@ -305,7 +306,7 @@ export function FinancialHubBandPayoutsClient() {
       {previewTarget && preview ? (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Confirmation email preview</CardTitle>
+            <CardTitle className="text-base">Signature request email preview</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="space-y-1">
@@ -332,11 +333,11 @@ export function FinancialHubBandPayoutsClient() {
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              Enter the GrantEd Service Payment number after submitting evidence. Band members will be notified
-              automatically.
+              Enter the GrantEd transfer / Service Payment number after submitting evidence. Band members
+              will be notified that Stanford is processing the payment.
             </p>
             <div className="space-y-1">
-              <Label>Service Payment number</Label>
+              <Label>Transfer / Service Payment number</Label>
               <Input
                 value={servicePaymentNumber}
                 onChange={(e) => setServicePaymentNumber(e.target.value)}

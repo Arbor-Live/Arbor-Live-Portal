@@ -292,8 +292,9 @@ function formatWeekRangeLabel(weekDayKeys: string[]) {
 }
 
 export function EventsBoardView({ events }: { events: DashboardEvent[] }) {
-  const todayKey = pacificDateKey(Date.now());
-  const [weekAnchorKey, setWeekAnchorKey] = useState(() => weekStartKeyFromAnchor(Date.now()));
+  const [now] = useState(() => Date.now());
+  const todayKey = pacificDateKey(now);
+  const [weekAnchorKey, setWeekAnchorKey] = useState(() => weekStartKeyFromAnchor(now));
 
   const dayKeys = useMemo(
     () => Array.from({ length: VISIBLE_DAYS }, (_, index) => addPacificDays(weekAnchorKey, index)),

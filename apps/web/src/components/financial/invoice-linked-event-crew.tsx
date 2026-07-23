@@ -102,7 +102,7 @@ export function InvoiceLinkedEventCrewSection({
   const localBlockCounterRef = useRef(0);
   const hydratedEventIdRef = useRef<Id<"events"> | null>(null);
   const scheduleHydratedRef = useRef(false);
-  const lastSavedSignatureRef = useRef("");
+  const [lastSavedSignature, setLastSavedSignature] = useState("");
   const [blocks, setBlocks] = useState<TimelineBlockDraft[]>([]);
   const [shifts, setShifts] = useState<EventShiftDraft[]>([]);
   const [selectedCrewUserId, setSelectedCrewUserId] = useState("");
@@ -197,7 +197,7 @@ export function InvoiceLinkedEventCrewSection({
     setBlocks(nextBlocks);
     setShifts(linkedShifts);
     scheduleHydratedRef.current = true;
-    lastSavedSignatureRef.current = JSON.stringify({ blocks: nextBlocks, shifts: linkedShifts });
+    setLastSavedSignature(JSON.stringify({ blocks: nextBlocks, shifts: linkedShifts }));
   }, [eventData]);
 
   useEffect(() => {
@@ -250,7 +250,7 @@ export function InvoiceLinkedEventCrewSection({
 
         setBlocks(nextBlocks);
         setShifts(linkedShifts);
-        lastSavedSignatureRef.current = JSON.stringify({ blocks: nextBlocks, shifts: linkedShifts });
+        setLastSavedSignature(JSON.stringify({ blocks: nextBlocks, shifts: linkedShifts }));
         hydratedEventIdRef.current = null;
 
         onMessage?.("Event schedule and crew slots saved.");
@@ -275,9 +275,7 @@ export function InvoiceLinkedEventCrewSection({
     [blocks, shifts],
   );
 
-  const scheduleDirty =
-    lastSavedSignatureRef.current !== "" &&
-    scheduleSignature !== lastSavedSignatureRef.current;
+  const scheduleDirty = lastSavedSignature !== "" && scheduleSignature !== lastSavedSignature;
 
   const quickAddDisabled = !startAt || !endAt;
   const quickAddDisabledReason = quickAddDisabled ? "Event start and end are required." : undefined;
