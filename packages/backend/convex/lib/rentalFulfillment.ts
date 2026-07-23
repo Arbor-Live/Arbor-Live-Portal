@@ -220,17 +220,34 @@ export function isActiveRentedOutbound(status: OutboundStatus) {
   return status === "scanned" || status === "replace" || status === "no_tag";
 }
 
+export async function resolveInvoiceIdForEvent(
+  ctx: QueryCtx | MutationCtx,
+  event: Doc<"events">,
+): Promise<Id<"invoices"> | null> {
+  if (event.invoiceId) return event.invoiceId;
+  if (!event.seriesId) return null;
+  const series = await ctx.db.get(event.seriesId);
+  return series?.invoiceId ?? null;
+}
+
+/** Client notify target for rental outbound/return emails (invoice clientEmail only). */
 export async function getClientEmailForEvent(
   ctx: QueryCtx | MutationCtx,
   event: Doc<"events">,
 ): Promise<{ email: string; name?: string } | null> {
-  if (!event.invoiceId) return null;
-  const invoice = await ctx.db.get(event.invoiceId);
+  const invoiceId = await resolveInvoiceIdForEvent(ctx, event);
+  if (!invoiceId) return null;
+  const invoice = await ctx.db.get(invoiceId);
   if (!invoice?.clientEmail?.trim()) return null;
   return {
     email: invoice.clientEmail.trim(),
     name: invoice.clientContactName?.trim() || undefined,
   };
+}
+
+export function missingClientEmailWarning(kind: "outbound" | "return") {
+  const label = kind === "outbound" ? "delivery" : "return";
+  return `No invoice client email found for this ${label} notification. Link an invoice with a client email, then resend.`;
 }
 
 export async function syncPullListProgressFromUnits(

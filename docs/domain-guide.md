@@ -156,7 +156,9 @@ Event types (drive which editor tabs and quick-add blocks appear):
   an explicit disposition (`replace` / `no_tag` / `removed`) for every unchecked
   unit; return complete requires `scanned` / `no_tag` / `missing` / `damaged` /
   `manual`. Client emails go to the linked invoice `clientEmail` only
-  (`rental_outbound_packed`, `rental_return_processed`).
+  (`rental_outbound_packed`, `rental_return_processed`); series-linked invoices
+  count. Completing without a client email still succeeds but surfaces a warning
+  and a resend action once an invoice email exists.
 - Damage reports (`damageReports.ts`): any arbor_internal crew can create
   reports (scope for containers, operability, severity, photo, optional event).
   Operations/admin triage at `/dashboard/inventory/damage`.

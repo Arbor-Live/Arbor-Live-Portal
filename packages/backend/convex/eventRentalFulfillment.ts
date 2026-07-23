@@ -21,6 +21,7 @@ import {
   listItemWithDescendants,
   listUnitsForEvent,
   listUnitsForFulfillment,
+  missingClientEmailWarning,
   requireEvent,
   resolveInventoryItemByScan,
   syncPullListProgressFromUnits,
@@ -44,6 +45,12 @@ const returnStatusValue = v.union(
   v.literal("damaged"),
   v.literal("manual"),
 );
+
+const clientNotifyValidator = v.object({
+  email: v.union(v.string(), v.null()),
+  name: v.optional(v.string()),
+  canNotify: v.boolean(),
+});
 
 const unitValidator = v.object({
   _id: v.id("eventRentalUnits"),
@@ -129,6 +136,98 @@ function summarizeNeeds(
   });
 }
 
+async function clientNotifyForEvent(ctx: Parameters<typeof requireAuth>[0], event: Doc<"events">) {
+  const client = await getClientEmailForEvent(ctx, event);
+  return {
+    email: client?.email ?? null,
+    name: client?.name,
+    canNotify: Boolean(client?.email),
+  };
+}
+
+async function enqueueOutboundPackedEmail(
+  ctx: MutationCtx,
+  event: Doc<"events">,
+  fulfillment: Doc<"eventRentalFulfillments">,
+  units: Doc<"eventRentalUnits">[],
+  opts?: { forceResend?: boolean },
+) {
+  const client = await getClientEmailForEvent(ctx, event);
+  if (!client) {
+    return {
+      emailSent: false as const,
+      emailWarning: missingClientEmailWarning("outbound"),
+    };
+  }
+
+  const rented = units.filter((unit) => isActiveRentedOutbound(unit.outboundStatus));
+  const mode = event.rentalFulfillmentMode === "will_call" ? "will_call" : "delivery";
+  const summaryLines = rented.map((unit) =>
+    unit.assetId ? `${unit.label} (${unit.assetId})` : `${unit.label} (no tag)`,
+  );
+  const baseKey = `rental_outbound_packed:${fulfillment._id}`;
+  await enqueueEmail(ctx, {
+    template: "rental_outbound_packed",
+    to: client.email,
+    subject: subjectForTemplate("rental_outbound_packed", event.title),
+    eventId: event._id,
+    idempotencyKey: opts?.forceResend ? `${baseKey}:resend:${Date.now()}` : baseKey,
+    payload: {
+      recipientName: client.name,
+      eventTitle: event.title,
+      venueName: event.venueName,
+      dateRangeLabel: formatEventDateRange(event.startAt, event.endAt, event.timezone),
+      fulfillmentMode: mode,
+      itemSummaries: summaryLines,
+      eventUrl: eventDashboardUrl(event._id),
+    },
+  });
+
+  return { emailSent: true as const, emailWarning: undefined };
+}
+
+async function enqueueReturnProcessedEmail(
+  ctx: MutationCtx,
+  event: Doc<"events">,
+  returnSession: Doc<"eventRentalFulfillments">,
+  units: Doc<"eventRentalUnits">[],
+  opts?: { forceResend?: boolean },
+) {
+  const client = await getClientEmailForEvent(ctx, event);
+  if (!client) {
+    return {
+      emailSent: false as const,
+      emailWarning: missingClientEmailWarning("return"),
+    };
+  }
+
+  const exceptions = units.filter(
+    (unit) => unit.returnStatus === "missing" || unit.returnStatus === "damaged",
+  );
+  const baseKey = `rental_return_processed:${returnSession._id}`;
+  await enqueueEmail(ctx, {
+    template: "rental_return_processed",
+    to: client.email,
+    subject: subjectForTemplate("rental_return_processed", event.title),
+    eventId: event._id,
+    idempotencyKey: opts?.forceResend ? `${baseKey}:resend:${Date.now()}` : baseKey,
+    payload: {
+      recipientName: client.name,
+      eventTitle: event.title,
+      venueName: event.venueName,
+      dateRangeLabel: formatEventDateRange(event.startAt, event.endAt, event.timezone),
+      exceptionItems: exceptions.map((unit) => ({
+        label: unit.label,
+        assetId: unit.assetId,
+        status: unit.returnStatus === "damaged" ? "damaged" : "missing",
+      })),
+      eventUrl: eventDashboardUrl(event._id),
+    },
+  });
+
+  return { emailSent: true as const, emailWarning: undefined };
+}
+
 export const resolveAssetScan = query({
   args: { raw: v.string() },
   returns: v.union(
@@ -208,23 +307,35 @@ export const getOutboundWorkspace = query({
       units: v.array(unitValidator),
       needs: v.array(needSummaryValidator),
       pendingCount: v.number(),
+      clientNotify: clientNotifyValidator,
+      clientEmailAlreadyQueued: v.boolean(),
     }),
   ),
   handler: async (ctx, args) => {
     await requireCrew(ctx);
-    await requireEvent(ctx, args.eventId);
+    const event = await requireEvent(ctx, args.eventId);
     const active = await getActiveFulfillment(ctx, args.eventId, "outbound");
     const completed = active ? null : await getLatestCompletedOutbound(ctx, args.eventId);
     const fulfillment = active ?? completed;
     if (!fulfillment) return null;
     const units = await listUnitsForFulfillment(ctx, fulfillment._id);
     const needs = summarizeNeeds(await expandPullListNeeds(ctx, args.eventId), units);
+    const existingEmail = await ctx.db
+      .query("emailNotifications")
+      .withIndex("by_idempotencyKey", (q) =>
+        q.eq("idempotencyKey", `rental_outbound_packed:${fulfillment._id}`),
+      )
+      .unique();
     return {
       fulfillmentId: fulfillment._id,
       status: fulfillment.status,
       units,
       needs,
       pendingCount: units.filter((unit) => unit.outboundStatus === "pending").length,
+      clientNotify: await clientNotifyForEvent(ctx, event),
+      clientEmailAlreadyQueued: Boolean(
+        existingEmail && (existingEmail.status === "queued" || existingEmail.status === "sent"),
+      ),
     };
   },
 });
@@ -238,11 +349,13 @@ export const getReturnWorkspace = query({
       status: v.union(v.literal("in_progress"), v.literal("completed")),
       units: v.array(unitValidator),
       pendingCount: v.number(),
+      clientNotify: clientNotifyValidator,
+      clientEmailAlreadyQueued: v.boolean(),
     }),
   ),
   handler: async (ctx, args) => {
     await requireCrew(ctx);
-    await requireEvent(ctx, args.eventId);
+    const event = await requireEvent(ctx, args.eventId);
     const outbound = await getLatestCompletedOutbound(ctx, args.eventId);
     if (!outbound) return null;
 
@@ -267,11 +380,24 @@ export const getReturnWorkspace = query({
       ...unit,
       returnStatus: unit.returnStatus ?? ("pending" as const),
     }));
+    const notifyFulfillmentId = returnActive?._id ?? returnCompleted?._id;
+    const existingEmail = notifyFulfillmentId
+      ? await ctx.db
+          .query("emailNotifications")
+          .withIndex("by_idempotencyKey", (q) =>
+            q.eq("idempotencyKey", `rental_return_processed:${notifyFulfillmentId}`),
+          )
+          .unique()
+      : null;
     return {
       fulfillmentId,
       status,
       units,
       pendingCount: units.filter((unit) => (unit.returnStatus ?? "pending") === "pending").length,
+      clientNotify: await clientNotifyForEvent(ctx, event),
+      clientEmailAlreadyQueued: Boolean(
+        existingEmail && (existingEmail.status === "queued" || existingEmail.status === "sent"),
+      ),
     };
   },
 });
@@ -514,37 +640,32 @@ export const completeOutbound = mutation({
     await syncPullListProgressFromUnits(ctx, args.eventId, units);
 
     const rented = units.filter((unit) => isActiveRentedOutbound(unit.outboundStatus));
-    const client = await getClientEmailForEvent(ctx, event);
-    if (!client) {
-      return {
-        emailSent: false,
-        emailWarning: "Outbound completed, but no invoice client email was found to notify.",
-        rentedCount: rented.length,
-      };
-    }
+    const emailResult = await enqueueOutboundPackedEmail(ctx, event, fulfillment, units);
+    return {
+      emailSent: emailResult.emailSent,
+      emailWarning: emailResult.emailSent
+        ? undefined
+        : `Delivery completed, but the client was not emailed. ${emailResult.emailWarning ?? ""}`.trim(),
+      rentedCount: rented.length,
+    };
+  },
+});
 
-    const mode = event.rentalFulfillmentMode === "will_call" ? "will_call" : "delivery";
-    const summaryLines = rented.map((unit) =>
-      unit.assetId ? `${unit.label} (${unit.assetId})` : `${unit.label} (no tag)`,
-    );
-    await enqueueEmail(ctx, {
-      template: "rental_outbound_packed",
-      to: client.email,
-      subject: subjectForTemplate("rental_outbound_packed", event.title),
-      eventId: event._id,
-      idempotencyKey: `rental_outbound_packed:${fulfillment._id}`,
-      payload: {
-        recipientName: client.name,
-        eventTitle: event.title,
-        venueName: event.venueName,
-        dateRangeLabel: formatEventDateRange(event.startAt, event.endAt, event.timezone),
-        fulfillmentMode: mode,
-        itemSummaries: summaryLines,
-        eventUrl: eventDashboardUrl(event._id),
-      },
+export const resendOutboundClientEmail = mutation({
+  args: { eventId: v.id("events") },
+  returns: v.object({
+    emailSent: v.boolean(),
+    emailWarning: v.optional(v.string()),
+  }),
+  handler: async (ctx, args) => {
+    await requireCrew(ctx);
+    const event = await requireEvent(ctx, args.eventId);
+    const fulfillment = await getLatestCompletedOutbound(ctx, args.eventId);
+    if (!fulfillment) throw new Error("No completed outbound to notify for.");
+    const units = await listUnitsForFulfillment(ctx, fulfillment._id);
+    return await enqueueOutboundPackedEmail(ctx, event, fulfillment, units, {
+      forceResend: true,
     });
-
-    return { emailSent: true, rentedCount: rented.length };
   },
 });
 
@@ -759,37 +880,40 @@ export const completeReturn = mutation({
       completedByUserId: getUserId(user),
     });
 
-    const exceptions = units.filter(
-      (unit) => unit.returnStatus === "missing" || unit.returnStatus === "damaged",
+    const emailResult = await enqueueReturnProcessedEmail(ctx, event, returnSession, units);
+    return {
+      emailSent: emailResult.emailSent,
+      emailWarning: emailResult.emailSent
+        ? undefined
+        : `Return completed, but the client was not emailed. ${emailResult.emailWarning ?? ""}`.trim(),
+    };
+  },
+});
+
+export const resendReturnClientEmail = mutation({
+  args: { eventId: v.id("events") },
+  returns: v.object({
+    emailSent: v.boolean(),
+    emailWarning: v.optional(v.string()),
+  }),
+  handler: async (ctx, args) => {
+    await requireCrew(ctx);
+    const event = await requireEvent(ctx, args.eventId);
+    const outbound = await getLatestCompletedOutbound(ctx, args.eventId);
+    if (!outbound) throw new Error("No completed outbound found.");
+    const returnRows = await ctx.db
+      .query("eventRentalFulfillments")
+      .withIndex("by_eventId_and_direction", (q) =>
+        q.eq("eventId", args.eventId).eq("direction", "return"),
+      )
+      .take(20);
+    const returnSession = returnRows.find((row) => row.status === "completed");
+    if (!returnSession) throw new Error("No completed return to notify for.");
+    const units = (await listUnitsForFulfillment(ctx, outbound._id)).filter((unit) =>
+      isActiveRentedOutbound(unit.outboundStatus),
     );
-    const client = await getClientEmailForEvent(ctx, event);
-    if (!client) {
-      return {
-        emailSent: false,
-        emailWarning: "Return completed, but no invoice client email was found to notify.",
-      };
-    }
-
-    await enqueueEmail(ctx, {
-      template: "rental_return_processed",
-      to: client.email,
-      subject: subjectForTemplate("rental_return_processed", event.title),
-      eventId: event._id,
-      idempotencyKey: `rental_return_processed:${returnSession._id}`,
-      payload: {
-        recipientName: client.name,
-        eventTitle: event.title,
-        venueName: event.venueName,
-        dateRangeLabel: formatEventDateRange(event.startAt, event.endAt, event.timezone),
-        exceptionItems: exceptions.map((unit) => ({
-          label: unit.label,
-          assetId: unit.assetId,
-          status: unit.returnStatus === "damaged" ? "damaged" : "missing",
-        })),
-        eventUrl: eventDashboardUrl(event._id),
-      },
+    return await enqueueReturnProcessedEmail(ctx, event, returnSession, units, {
+      forceResend: true,
     });
-
-    return { emailSent: true };
   },
 });
