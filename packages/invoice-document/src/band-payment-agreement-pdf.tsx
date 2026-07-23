@@ -65,11 +65,14 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: 700,
   },
-  signatureLine: {
-    marginTop: 8,
-    paddingTop: 8,
+  signatureBlock: {
+    marginTop: 10,
+    paddingTop: 10,
     borderTopWidth: 1,
     borderTopColor: invoiceTheme.border,
+    gap: 6,
+  },
+  signatureLine: {
     fontSize: 12,
     fontWeight: 700,
   },
@@ -133,24 +136,21 @@ export function BandPaymentAgreementPdf({
               ) : null}
               <Detail label="Total" value={currency(data.totalUsd)} />
               <Detail label="Designated payee" value={data.designatedPayeeName} />
-              {data.designatedPayeeEmail ? (
-                <Detail label="Payee email" value={data.designatedPayeeEmail} />
-              ) : null}
-              {data.designatedPayeeMailingAddress ? (
-                <Detail label="Mailing address" value={data.designatedPayeeMailingAddress} />
-              ) : null}
               <Text style={styles.emphasis}>Agreed total: {currency(data.totalUsd)}</Text>
             </View>
           </View>
 
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Arbor Live — signature request</Text>
+            <Text style={styles.cardTitle}>Arbor Live — authorization</Text>
             <View style={styles.cardBody}>
               <Text>
-                An Arbor Live staff member sent this payment to the designated payee for e-signature
-                agreement to the amount above.
+                An Arbor Live staff member authorized this payment amount and sent it to the
+                designated payee for e-signature agreement.
               </Text>
-              <Detail label="Sent by" value={data.adminSenderName ?? "Arbor staff"} />
+              <Detail label="Requester name" value={data.adminRequesterName ?? "—"} />
+              <Detail label="Requester email" value={data.adminRequesterEmail ?? "—"} />
+              <Detail label="Approver name" value={data.adminApproverName ?? "—"} />
+              <Detail label="Approver email" value={data.adminApproverEmail ?? "—"} />
               <Detail label="Sent at" value={data.adminSentAtLabel ?? "—"} />
             </View>
           </View>
@@ -159,11 +159,18 @@ export function BandPaymentAgreementPdf({
             <Text style={styles.cardTitle}>Band — payment agreement</Text>
             <View style={styles.cardBody}>
               <Text>
-                The designated payee agrees that the payment details and total above are accurate, and
-                authorizes Arbor Live to proceed with payout processing.
+                The designated payee agrees that the payment details and total above are accurate,
+                and authorizes Arbor Live to proceed with payout processing.
               </Text>
-              <Text style={styles.signatureLine}>Signed: {payeeAgreement}</Text>
-              <Detail label="Signed at" value={data.signedAtLabel ?? "—"} />
+              <View style={styles.signatureBlock}>
+                <Text style={styles.signatureLine}>Signed: {payeeAgreement}</Text>
+                <Detail label="Payee email" value={data.designatedPayeeEmail ?? "—"} />
+                <Detail
+                  label="Mailing address"
+                  value={data.designatedPayeeMailingAddress ?? "—"}
+                />
+                <Detail label="Signed at" value={data.signedAtLabel ?? "—"} />
+              </View>
             </View>
           </View>
 

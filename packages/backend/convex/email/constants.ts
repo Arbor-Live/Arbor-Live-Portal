@@ -113,11 +113,11 @@ export function formatInviteExpiry(expiresAt: number, timezone: string = EVENT_T
 }
 
 export function bandPaymentHistoryUrl() {
-  return `${SITE_URL}/dashboard/bands-and-performers#payment-history`;
+  return `${SITE_URL}/dashboard/bands-and-performers/payments`;
 }
 
 export function bandPayeeSettingsUrl() {
-  return `${SITE_URL}/dashboard/bands-and-performers#payment-payee`;
+  return `${SITE_URL}/dashboard/bands-and-performers/payments#payee`;
 }
 
 export function subjectForTemplate(template: EmailTemplate, context: string) {

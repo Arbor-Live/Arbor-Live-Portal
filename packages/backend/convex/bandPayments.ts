@@ -129,7 +129,10 @@ const agreementDocumentValidator = v.object({
   designatedPayeeName: v.string(),
   designatedPayeeEmail: v.optional(v.string()),
   designatedPayeeMailingAddress: v.optional(v.string()),
-  adminSenderName: v.optional(v.string()),
+  adminRequesterName: v.optional(v.string()),
+  adminRequesterEmail: v.optional(v.string()),
+  adminApproverName: v.optional(v.string()),
+  adminApproverEmail: v.optional(v.string()),
   adminSentAtLabel: v.optional(v.string()),
   signatureTypedName: v.optional(v.string()),
   signedAtLabel: v.optional(v.string()),
@@ -139,12 +142,44 @@ const agreementDocumentValidator = v.object({
   status: statusValue,
 });
 
+async function resolveAuthUserIdentity(
+  ctx: QueryCtx | MutationCtx,
+  userId: string | undefined,
+): Promise<{ name: string; email: string } | null> {
+  if (!userId) return null;
+  const user = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
+    model: "user",
+    where: [{ field: "id", value: userId }],
+  })) as { id?: string; email?: string; name?: string } | null;
+  const email = user?.email?.trim();
+  if (!email) return null;
+  const name = user?.name?.trim() || email;
+  return { name, email };
+}
+
 async function resolveBandName(ctx: QueryCtx | MutationCtx, organizationId: string) {
   const profile = await ctx.db
     .query("organizationProfiles")
     .withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId))
     .unique();
-  return profile?.displayName?.trim() || organizationId;
+  const displayName = profile?.displayName?.trim();
+  if (displayName) return displayName;
+
+  // Prefer `_id` (adapter fast path), then `id`, matching lib/auth.ts.
+  let org = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
+    model: "organization",
+    where: [{ field: "_id", value: organizationId }],
+  })) as { name?: string } | null;
+  if (!org) {
+    org = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
+      model: "organization",
+      where: [{ field: "id", value: organizationId }],
+    })) as { name?: string } | null;
+  }
+  const orgName = org?.name?.trim();
+  if (orgName) return orgName;
+
+  return "Band";
 }
 
 async function getOrganizationProfilePayee(ctx: QueryCtx | MutationCtx, organizationId: string) {
@@ -683,7 +718,13 @@ export const sendConfirmationEmail = mutation({
     if (!event) throw new Error("Event not found.");
 
     const senderUserId = getUserId(user);
-    const senderName = (user.name?.trim() || user.email || "Arbor staff").trim();
+    const senderIdentity = await resolveAuthUserIdentity(ctx, senderUserId);
+    const senderName =
+      senderIdentity?.name ||
+      user.name?.trim() ||
+      user.email?.trim() ||
+      "Arbor staff";
+    const senderEmail = senderIdentity?.email || user.email?.trim() || undefined;
 
     await scheduleBandPaymentConfirmationEmail(ctx, { payment, event });
 
@@ -692,6 +733,7 @@ export const sendConfirmationEmail = mutation({
       confirmationEmailSentAt: Date.now(),
       confirmationSentByUserId: senderUserId || undefined,
       confirmationSentByName: senderName,
+      confirmationSentByEmail: senderEmail,
       updatedAt: Date.now(),
     });
     return null;
@@ -738,11 +780,19 @@ export const markPaid = mutation({
     if (!event) throw new Error("Event not found.");
 
     const now = Date.now();
+    const paidByUserId = getUserId(user);
+    const paidByIdentity = await resolveAuthUserIdentity(ctx, paidByUserId);
+    const paidByName =
+      paidByIdentity?.name || user.name?.trim() || user.email?.trim() || "Arbor staff";
+    const paidByEmail = paidByIdentity?.email || user.email?.trim() || undefined;
+
     await ctx.db.patch(payment._id, {
       status: "paid",
       servicePaymentNumber,
       paidAt: now,
-      paidByUserId: getUserId(user),
+      paidByUserId,
+      paidByName,
+      paidByEmail,
       updatedAt: now,
     });
 
@@ -900,7 +950,6 @@ export const listForActiveBand = query({
     const bandContext = await requireBandContext(ctx);
     const user = await requireAuth(ctx);
     const userId = getUserId(user);
-    const nowMs = Date.now();
     const payments = await ctx.db
       .query("eventBandPayments")
       .withIndex("by_organizationId", (q) => q.eq("organizationId", bandContext.organizationId))
@@ -939,6 +988,45 @@ export const listForActiveBand = query({
       });
     }
     return rows.sort((a, b) => b.eventStartAt - a.eventStartAt);
+  },
+});
+
+export const countPendingActionsForActiveBand = query({
+  args: {},
+  returns: v.number(),
+  handler: async (ctx) => {
+    const bandContext = await requireBandContext(ctx);
+    const user = await requireAuth(ctx);
+    const userId = getUserId(user);
+    const profile = await ctx.db
+      .query("organizationProfiles")
+      .withIndex("by_organizationId", (q) => q.eq("organizationId", bandContext.organizationId))
+      .unique();
+    const payeeComplete = isBandPayeeComplete(payeeFieldsFromProfile(profile));
+
+    const payments = await ctx.db
+      .query("eventBandPayments")
+      .withIndex("by_organizationId", (q) => q.eq("organizationId", bandContext.organizationId))
+      .take(200);
+
+    let awaitingSignatureForMe = 0;
+    let waitingOnPayeeSetup = 0;
+    for (const payment of payments) {
+      if (payment.status === "cancelled" || payment.status === "draft") continue;
+      if (
+        payment.status === "awaiting_confirmation" &&
+        payment.designatedPayeeUserId &&
+        payment.designatedPayeeUserId === userId
+      ) {
+        awaitingSignatureForMe += 1;
+      }
+      if (payment.status === "pending_payee" && !payeeComplete) {
+        waitingOnPayeeSetup += 1;
+      }
+    }
+
+    // Count payee-setup as one actionable chip item for the band, not one per payment.
+    return awaitingSignatureForMe + (waitingOnPayeeSetup > 0 ? 1 : 0);
   },
 });
 
@@ -994,6 +1082,25 @@ async function buildAgreementDocumentData(
   const event = await ctx.db.get(payment.eventId);
   if (!event) throw new Error("Event not found.");
   const timezone = event.timezone || EVENT_TIMEZONE;
+
+  const requesterLookup = await resolveAuthUserIdentity(ctx, payment.confirmationSentByUserId);
+  const adminRequesterName =
+    payment.confirmationSentByName?.trim() || requesterLookup?.name || undefined;
+  const adminRequesterEmail =
+    payment.confirmationSentByEmail?.trim() || requesterLookup?.email || undefined;
+
+  const paidByLookup = await resolveAuthUserIdentity(ctx, payment.paidByUserId);
+  const adminApproverName =
+    payment.paidByName?.trim() ||
+    paidByLookup?.name ||
+    adminRequesterName ||
+    undefined;
+  const adminApproverEmail =
+    payment.paidByEmail?.trim() ||
+    paidByLookup?.email ||
+    adminRequesterEmail ||
+    undefined;
+
   return {
     confirmationToken: payment.confirmationToken,
     bandName: await resolveBandName(ctx, payment.organizationId),
@@ -1008,7 +1115,10 @@ async function buildAgreementDocumentData(
     designatedPayeeName: payment.designatedPayeeName ?? "Designated payee",
     designatedPayeeEmail: payment.designatedPayeeEmail,
     designatedPayeeMailingAddress: payment.designatedPayeeMailingAddress,
-    adminSenderName: payment.confirmationSentByName,
+    adminRequesterName,
+    adminRequesterEmail,
+    adminApproverName,
+    adminApproverEmail,
     adminSentAtLabel: payment.confirmationEmailSentAt
       ? formatDateTime(payment.confirmationEmailSentAt, "long", timezone)
       : undefined,

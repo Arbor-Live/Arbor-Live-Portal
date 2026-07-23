@@ -12,7 +12,10 @@ export type BandPaymentAgreementDocumentData = {
   designatedPayeeName: string;
   designatedPayeeEmail?: string;
   designatedPayeeMailingAddress?: string;
-  adminSenderName?: string;
+  adminRequesterName?: string;
+  adminRequesterEmail?: string;
+  adminApproverName?: string;
+  adminApproverEmail?: string;
   adminSentAtLabel?: string;
   signatureTypedName?: string;
   signedAtLabel?: string;

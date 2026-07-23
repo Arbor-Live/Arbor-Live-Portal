@@ -136,10 +136,11 @@ Event types (drive which editor tabs and quick-add blocks appear):
   Each band org has a designated payee (name/email/mailing address + linked
   user id on `organizationProfiles`).
 - Confirmation loop: admin sends a signature-request email from the payout
-  queue; the designated payee e-signs in the band portal (typed legal name +
-  amount checkbox). Admin then marks paid with a GrantEd transfer / Service
-  Payment number; all band members are notified that Stanford is processing
-  the payout.
+  queue; the designated payee e-signs under **Bands and Performers → Payments**
+  (typed legal name + amount checkbox). Admin then marks paid with a GrantEd
+  transfer / Service Payment number; all band members are notified that Stanford
+  is processing the payout. The Payments subtab shows a pending chip when the
+  payee needs to sign or payee setup is incomplete.
 - Once signed, admins and band members can download an agreement PDF
   (`bandPaymentPdfDownload.ts` via `@arbor/invoice-document`) showing the
   Arbor sender and the payee signature.
