@@ -7,6 +7,7 @@ import { api } from "@/lib/convex-api";
 import { Button } from "@/components/ui/button";
 import { formatDateTime } from "@/lib/format";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { optimisticSetOpenMicStatus } from "@/lib/open-mic-optimistic";
 
 function statusLabel(status: string) {
   switch (status) {
@@ -25,7 +26,9 @@ function statusLabel(status: string) {
 
 export function OpenMicEventsInbox() {
   const events = useQuery(api.openMic.listEvents, {});
-  const setOpenMicStatus = useMutation(api.openMic.setOpenMicStatus);
+  const setOpenMicStatus = useMutation(api.openMic.setOpenMicStatus).withOptimisticUpdate(
+    optimisticSetOpenMicStatus,
+  );
   const updateEvent = useMutation(api.events.update);
   const [now] = useState(() => Date.now());
 

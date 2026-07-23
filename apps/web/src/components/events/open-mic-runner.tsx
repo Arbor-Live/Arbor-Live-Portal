@@ -8,6 +8,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDateTime } from "@/lib/format";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import {
+  optimisticAdvanceCurrent,
+  optimisticMarkNotHere,
+  optimisticRemoveSignup,
+} from "@/lib/open-mic-optimistic";
 
 type RunnerSignup = {
   _id: Id<"openMicSignups">;
@@ -42,9 +47,15 @@ function EquipmentChips({ equipment }: { equipment: string[] }) {
 export function OpenMicRunner({ eventId }: { eventId: Id<"events"> }) {
   const state = useQuery(api.openMic.getRunnerState, { eventId });
   const leaderboard = useQuery(api.openMic.getLeaderboard, {});
-  const advance = useMutation(api.openMic.advanceCurrent);
-  const markNotHere = useMutation(api.openMic.markNotHere);
-  const remove = useMutation(api.openMic.removeSignup);
+  const advance = useMutation(api.openMic.advanceCurrent).withOptimisticUpdate(
+    optimisticAdvanceCurrent,
+  );
+  const markNotHere = useMutation(api.openMic.markNotHere).withOptimisticUpdate(
+    optimisticMarkNotHere,
+  );
+  const remove = useMutation(api.openMic.removeSignup).withOptimisticUpdate(
+    optimisticRemoveSignup,
+  );
 
   const { current, queued, performed } = useMemo(() => {
     const signups = (state?.signups ?? []) as RunnerSignup[];

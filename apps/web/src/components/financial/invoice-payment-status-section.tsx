@@ -15,6 +15,7 @@ import {
   type PaymentProofSubmissionFormValues,
 } from "@/lib/validations/payment-proof";
 import { formatDate, formatDateTime, formatUsd } from "@/lib/format";
+import { optimisticMarkPaymentReceived } from "@/lib/payment-proof-optimistic";
 
 type PaymentStatus = "not_applicable" | "payment_received" | "proof_submitted" | "payment_pending" | "overdue";
 
@@ -27,7 +28,9 @@ const STATUS_LABELS: Record<Exclude<PaymentStatus, "not_applicable">, string> = 
 
 export function InvoicePaymentStatusSection({ invoiceId }: { invoiceId: Id<"invoices"> }) {
   const details = useQuery(api.paymentProof.getByInvoiceId, { invoiceId });
-  const markReceived = useMutation(api.paymentProof.markPaymentReceived);
+  const markReceived = useMutation(
+    api.paymentProof.markPaymentReceived,
+  ).withOptimisticUpdate(optimisticMarkPaymentReceived);
   const invalidateSubmission = useMutation(api.paymentProof.invalidateSubmission);
   const generateUploadUrl = useMutation(api.paymentProof.generateReceiptUploadUrl);
   const attachReceipt = useMutation(api.paymentProof.attachReceipt);
