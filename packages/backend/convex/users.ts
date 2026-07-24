@@ -163,15 +163,6 @@ function resolveOrganizationType(
   return profile?.organizationType ?? "band";
 }
 
-async function getOrganizationType(ctx: QueryCtx | MutationCtx, organizationId: string) {
-  const profile = await ctx.db
-    .query("organizationProfiles")
-    .withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId))
-    .unique();
-  const organization = await getOrganizationById(ctx, organizationId);
-  return resolveOrganizationType(organization ?? undefined, profile);
-}
-
 export async function ensureUserProfileDefaults(
   ctx: MutationCtx,
   userId: string,

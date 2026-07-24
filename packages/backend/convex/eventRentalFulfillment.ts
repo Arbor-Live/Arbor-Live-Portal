@@ -379,9 +379,6 @@ export const getReturnWorkspace = query({
     const outbound = await getLatestCompletedOutbound(ctx, args.eventId);
     if (!outbound) return null;
 
-    const rented = (await listUnitsForFulfillment(ctx, outbound._id)).filter((unit) =>
-      isActiveRentedOutbound(unit.outboundStatus),
-    );
     const returnActive = await getActiveFulfillment(ctx, args.eventId, "return");
     const returnRows = await ctx.db
       .query("eventRentalFulfillments")
@@ -390,25 +387,25 @@ export const getReturnWorkspace = query({
       )
       .take(20);
     const returnCompleted = returnRows.find((row) => row.status === "completed");
-    const status = returnActive
-      ? ("in_progress" as const)
-      : returnCompleted
-        ? ("completed" as const)
-        : ("completed" as const);
-    const fulfillmentId = returnActive?._id ?? returnCompleted?._id ?? outbound._id;
+    // Not started yet — return null so the sheet shows "Start return" instead of a
+    // false "completed" receipt (status previously defaulted to "completed").
+    if (!returnActive && !returnCompleted) return null;
+
+    const rented = (await listUnitsForFulfillment(ctx, outbound._id)).filter((unit) =>
+      isActiveRentedOutbound(unit.outboundStatus),
+    );
+    const status = returnActive ? ("in_progress" as const) : ("completed" as const);
+    const fulfillmentId = (returnActive ?? returnCompleted)!._id;
     const units = rented.map((unit) => ({
       ...unit,
       returnStatus: unit.returnStatus ?? ("pending" as const),
     }));
-    const notifyFulfillmentId = returnActive?._id ?? returnCompleted?._id;
-    const existingEmail = notifyFulfillmentId
-      ? await ctx.db
-          .query("emailNotifications")
-          .withIndex("by_idempotencyKey", (q) =>
-            q.eq("idempotencyKey", `rental_return_processed:${notifyFulfillmentId}`),
-          )
-          .unique()
-      : null;
+    const existingEmail = await ctx.db
+      .query("emailNotifications")
+      .withIndex("by_idempotencyKey", (q) =>
+        q.eq("idempotencyKey", `rental_return_processed:${fulfillmentId}`),
+      )
+      .unique();
     return {
       fulfillmentId,
       status,
