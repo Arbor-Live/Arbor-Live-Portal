@@ -194,16 +194,17 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
   const [now] = useState(() => Date.now())
   const [adminSchedulingRange] = useState(() => getDefaultAdminSchedulingRange())
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({})
-  // Defer nav badge queries on heavy event-editor routes so schedule/overview
-  // subscriptions aren't competing with sidebar counters.
-  const onEventEditorHeavyRoute =
-    pathname.startsWith("/dashboard/events/") &&
-    (pathname.includes("/schedule") ||
-      pathname.includes("/equipment") ||
-      pathname.includes("/artifacts") ||
-      pathname.includes("/media") ||
-      pathname.includes("/expenses") ||
-      /^\/dashboard\/events\/[^/]+$/.test(pathname))
+  // Defer nav badge queries on heavy routes so page subscriptions aren't
+  // competing with sidebar counters under slow anonymous Convex.
+  const deferSidebarBadges =
+    (pathname.startsWith("/dashboard/events/") &&
+      (pathname.includes("/schedule") ||
+        pathname.includes("/equipment") ||
+        pathname.includes("/artifacts") ||
+        pathname.includes("/media") ||
+        pathname.includes("/expenses") ||
+        /^\/dashboard\/events\/[^/]+$/.test(pathname))) ||
+    pathname.startsWith("/dashboard/financial-hub")
   const viewer = useQuery(api.users.getViewer, {})
   const account = useQuery(api.account.getMyAccount, {})
   const activeOrganization = useQuery(api.users.getActiveOrganization, {})
@@ -220,27 +221,27 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
     viewerVerticals.length === 0
   const pendingAvailabilityCount = useQuery(
     api.eventCrewAvailability.getMyPendingAvailabilityCount,
-    activeOrganization?.organizationType === "arbor_internal" && !onEventEditorHeavyRoute
+    activeOrganization?.organizationType === "arbor_internal" && !deferSidebarBadges
       ? { now }
       : "skip",
   )
   const pendingBandApplicationsCount = useQuery(
     api.bandApplications.countPendingSubmitted,
-    isAdmin && !onEventEditorHeavyRoute ? {} : "skip",
+    isAdmin && !deferSidebarBadges ? {} : "skip",
   )
   const pendingCrewApplicationsCount = useQuery(
     api.crewApplications.countPendingSubmitted,
-    isAdmin && !onEventEditorHeavyRoute ? {} : "skip",
+    isAdmin && !deferSidebarBadges ? {} : "skip",
   )
   const pendingDamageReportsCount = useQuery(
     api.damageReports.countPending,
-    activeOrganization?.organizationType === "arbor_internal" && !onEventEditorHeavyRoute
+    activeOrganization?.organizationType === "arbor_internal" && !deferSidebarBadges
       ? {}
       : "skip",
   )
   const unconfirmedCrewCount = useQuery(
     api.eventCrewAvailability.countUnconfirmedForAdminOverview,
-    activeOrganization?.organizationType === "arbor_internal" && isAdmin && !onEventEditorHeavyRoute
+    activeOrganization?.organizationType === "arbor_internal" && isAdmin && !deferSidebarBadges
       ? {
           rangeStart: adminSchedulingRange.rangeStart,
           rangeEnd: adminSchedulingRange.rangeEnd,

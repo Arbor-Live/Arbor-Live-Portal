@@ -1902,6 +1902,42 @@ export const getBandPaymentState = query({
   },
 });
 
+/**
+ * Test-only: mark a confirmed band payment paid without the heavy payouts queue UI.
+ */
+export const markBandPaymentPaid = mutation({
+  args: {
+    paymentId: v.id("eventBandPayments"),
+    servicePaymentNumber: v.string(),
+  },
+  returns: v.object({
+    status: v.literal("paid"),
+    servicePaymentNumber: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const payment = await ctx.db.get(args.paymentId);
+    if (!payment) throw new Error("Band payment not found.");
+    if (payment.status !== "confirmed") {
+      throw new Error(`Expected confirmed payment, got ${payment.status}.`);
+    }
+    const servicePaymentNumber = args.servicePaymentNumber.trim();
+    if (!servicePaymentNumber) throw new Error("Service payment number is required.");
+    const now = Date.now();
+    await ctx.db.patch(payment._id, {
+      status: "paid",
+      servicePaymentNumber,
+      paidAt: now,
+      paidByUserId: "e2e-manager",
+      paidByName: "E2E Admin",
+      paidByEmail: "e2e-admin@arborlive.test",
+      bandNotifiedAt: now,
+      updatedAt: now,
+    });
+    return { status: "paid" as const, servicePaymentNumber };
+  },
+});
+
 export const getLatestCrewApplicationByEmail = query({
   args: { email: v.string() },
   returns: v.union(
