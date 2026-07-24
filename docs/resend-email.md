@@ -23,7 +23,9 @@ variants) must use an address on a verified domain, e.g. `noreply@arbor.st`.
 |----------|----------|-------------|
 | `RESEND_API_KEY` | Yes | Resend API key (`re_...`); used by both the component and the raw SDK |
 | `EMAIL_FROM` | Yes | Default From address, e.g. `Arbor Notifications <noreply@arbor.st>` |
-| `EMAIL_TEST_MODE` | No | `"true"` routes sends through the component's test mode (no real delivery) |
+| `EMAIL_TEST_MODE` | No | `"true"` restricts `@convex-dev/resend` to Resend test addresses (`delivered@…`); those sends still count against Resend quota |
+| `E2E_HELPERS` | No (local e2e) | Enables Playwright seed helpers; localhost `SITE_URL` required |
+| `E2E_EMAIL_MOCK` | No (local e2e) | With `E2E_HELPERS`, skips Resend entirely after render (no quota). Set by `pnpm test:e2e` |
 | `ORGANIZER_EMAIL` | No | Organizer contact shown in emails; defaults to the address in `EMAIL_FROM` |
 | `PAYMENTS_EMAIL_FROM` | No | From address for band-payment emails; has a default |
 | `BAND_PAYMENTS_CC_EMAIL` | No | CC on band-payment emails; has a default |

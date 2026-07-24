@@ -33,6 +33,10 @@ yarn-error.log*
 # build artifacts
 dist/
 coverage/
+apps/web/e2e-report/
+apps/web/test-results/
+apps/web/playwright-report/
+apps/web/e2e/.auth/
 
 # dev package instances
 package.json

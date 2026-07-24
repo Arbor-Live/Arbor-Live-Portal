@@ -19,6 +19,17 @@ export const resendClient = new Resend(components.resend, {
   testMode: process.env.EMAIL_TEST_MODE === "true",
 });
 
+/**
+ * Local e2e only: render + queue, never call Resend (saves quota).
+ * Requires E2E_HELPERS + E2E_EMAIL_MOCK and a localhost SITE_URL.
+ */
+function isE2eEmailMockEnabled() {
+  if (process.env.E2E_EMAIL_MOCK !== "true") return false;
+  if (process.env.E2E_HELPERS !== "true") return false;
+  const siteUrl = process.env.SITE_URL ?? "";
+  return siteUrl.includes("localhost") || siteUrl.includes("127.0.0.1");
+}
+
 function getResendSdk() {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
@@ -99,6 +110,54 @@ export const sendQueuedEmail = internalAction({
 
     try {
       const html = await renderEmailHtml(notification.template, notification.payload);
+      if (!html?.trim()) {
+        throw new Error("Email template rendered empty HTML.");
+      }
+
+      // E2E mock: exercise render (+ attachments) without spending Resend quota.
+      if (isE2eEmailMockEnabled()) {
+        if (notification.template === "booking_quote_ready") {
+          const payload = notification.payload as BookingQuoteReadyPayload;
+          if (!payload.invoiceId) {
+            throw new Error("Quote email payload is missing invoiceId.");
+          }
+          const document = await ctx.runQuery(internal.email.invoiceEmailData.getInvoiceDocument, {
+            invoiceId: payload.invoiceId,
+          });
+          if (!document) {
+            throw new Error("Invoice not found for quote email attachment.");
+          }
+          await renderInvoicePdfBuffer(document);
+        } else if (
+          notification.template === "crew_scheduled" ||
+          notification.template === "crew_unscheduled"
+        ) {
+          const payload = notification.payload as
+            | CrewScheduledEmailPayload
+            | CrewUnscheduledEmailPayload;
+          const icsMethod = notification.template === "crew_unscheduled" ? "CANCEL" : "REQUEST";
+          buildScheduleIcs({
+            timezone: payload.timezone,
+            organizerEmail: ORGANIZER_EMAIL,
+            attendeeEmail: notification.to,
+            method: icsMethod,
+            events: payload.icsEvents.map((event) => ({
+              uid: event.uid,
+              title: event.title,
+              description: event.description,
+              location: event.location,
+              startAt: new Date(event.startAt),
+              endAt: new Date(event.endAt),
+            })),
+          });
+        }
+
+        await ctx.runMutation(internal.email.enqueue.markSent, {
+          notificationId: args.notificationId,
+          resendId: `e2e-mock:${args.notificationId}`,
+        });
+        return null;
+      }
 
       if (notification.template === "booking_quote_ready") {
         const payload = notification.payload as BookingQuoteReadyPayload;
