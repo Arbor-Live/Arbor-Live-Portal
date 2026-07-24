@@ -146,8 +146,8 @@ export const list = query({
       ? await ctx.db
           .query("inventoryTypes")
           .withIndex("by_category", (q) => q.eq("category", args.category!))
-          .collect()
-      : await ctx.db.query("inventoryTypes").collect();
+          .take(2000)
+      : await ctx.db.query("inventoryTypes").take(2000);
 
     const loweredSearch = args.search?.trim().toLowerCase();
     const loweredManufacturer = args.manufacturer?.trim().toLowerCase();

@@ -46,7 +46,7 @@ export const list = query({
   args: {},
   handler: async (ctx) => {
     await requireAuth(ctx);
-    const packages = await ctx.db.query("inventoryPackages").collect();
+    const packages = await ctx.db.query("inventoryPackages").take(500);
 
     return await Promise.all(
       packages
@@ -55,7 +55,7 @@ export const list = query({
           const rows = await ctx.db
             .query("inventoryPackageItems")
             .withIndex("by_packageId", (q) => q.eq("packageId", pkg._id))
-            .collect();
+            .take(500);
 
           const hydratedRows = await Promise.all(
             rows.map(async (row) => ({

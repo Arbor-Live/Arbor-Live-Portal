@@ -136,12 +136,6 @@ export function EventPullList({
   onSaved,
   onError,
 }: EventPullListProps) {
-  const inventoryTypes = useQuery(api.inventoryTypes.list, {});
-  const inventoryPackages = useQuery(api.inventoryPackages.list, {});
-  const upsertItems = useMutation(api.eventPullLists.upsertItems);
-  const scaffoldFromInvoice = useMutation(api.eventPullLists.scaffoldFromInvoice);
-  const removeItem = useMutation(api.eventPullLists.removeItem);
-
   const [items, setItems] = useState<PullListItemDraft[]>(initialItems);
   const [addKind, setAddKind] = useState<"type" | "package">("type");
   const [newTypeId, setNewTypeId] = useState("");
@@ -153,6 +147,15 @@ export function EventPullList({
     "outbound",
   );
   const [damageOpen, setDamageOpen] = useState(false);
+
+  // Catalog lists are only needed when editing the pull list. Loading them on every
+  // equipment visit ran unbounded inventoryTypes/inventoryPackages queries (N+1 on
+  // packages) and starved rental mutations under constrained Convex (~1s).
+  const inventoryTypes = useQuery(api.inventoryTypes.list, showManage ? {} : "skip");
+  const inventoryPackages = useQuery(api.inventoryPackages.list, showManage ? {} : "skip");
+  const upsertItems = useMutation(api.eventPullLists.upsertItems);
+  const scaffoldFromInvoice = useMutation(api.eventPullLists.scaffoldFromInvoice);
+  const removeItem = useMutation(api.eventPullLists.removeItem);
 
   const fulfillmentSummary = useQuery(
     api.eventRentalFulfillment.getFulfillmentSummary,
