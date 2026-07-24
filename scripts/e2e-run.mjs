@@ -3,22 +3,27 @@
  * Boots Convex + Next (or reuses an existing stack), then runs Playwright e2e.
  *
  * Env:
- *   E2E_SKIP_BOOT=1     — assume services already running on :3000
- *   E2E_BASE_URL        — default http://localhost:3000
+ *   E2E_SKIP_BOOT=1        — assume services already running on :3000
+ *   E2E_BASE_URL           — default http://localhost:3000
  *   E2E_ADMIN_EMAIL / E2E_ADMIN_PASSWORD / E2E_ADMIN_NAME
- *   CONVEX_AGENT_MODE=anonymous — optional for CI without Convex login
+ *   CONVEX_AGENT_MODE=anonymous — CI / no Convex login (default when CI=true)
+ *   BETTER_AUTH_SECRET     — written to local .env and Convex deployment env
  */
-import { spawn } from "child_process";
+import { spawn, execFileSync } from "child_process";
 import { setTimeout as delay } from "timers/promises";
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
+import crypto from "crypto";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const backendDir = path.join(root, "packages/backend");
 const webDir = path.join(root, "apps/web");
 const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
 const skipBoot = process.env.E2E_SKIP_BOOT === "1";
+const isCi = process.env.CI === "true" || process.env.CI === "1";
+const agentMode =
+  process.env.CONVEX_AGENT_MODE ?? (isCi ? "anonymous" : undefined);
 
 const children = [];
 
@@ -78,58 +83,131 @@ process.on("SIGTERM", () => {
   process.exit(143);
 });
 
-async function ensureE2eHelpersEnv() {
-  // Best-effort; a failed set should not block the suite when already configured.
-  const sets = [
+function resolveBetterAuthSecret() {
+  const existing = process.env.BETTER_AUTH_SECRET?.trim();
+  if (existing && existing.length >= 32) return existing;
+  return crypto.randomBytes(32).toString("hex");
+}
+
+/**
+ * Local `.env` must not contain placeholder CONVEX_* URLs — next.config keeps
+ * the first value and would shadow `.env.local` from `convex dev`.
+ */
+function ensureLocalBackendEnvFile(secret) {
+  const envPath = path.join(backendDir, ".env");
+  const contents = [
+    `BETTER_AUTH_SECRET=${secret}`,
+    "SITE_URL=http://localhost:3000",
+    "EMAIL_TEST_MODE=true",
+    "",
+  ].join("\n");
+
+  if (isCi || !fs.existsSync(envPath)) {
+    fs.writeFileSync(envPath, contents);
+    console.log(`Wrote ${path.relative(root, envPath)} for e2e`);
+    return;
+  }
+
+  const current = fs.readFileSync(envPath, "utf8");
+  if (/CONVEX_CLOUD_URL=https:\/\/your-convex-deployment/.test(current)) {
+    const stripped = current
+      .split("\n")
+      .filter((line) => !/^\s*CONVEX_(CLOUD|SITE)_URL=/.test(line))
+      .join("\n");
+    fs.writeFileSync(envPath, stripped.endsWith("\n") ? stripped : `${stripped}\n`);
+    console.log("Stripped placeholder CONVEX_* URLs from packages/backend/.env");
+  }
+}
+
+function convexEnv(extra = {}) {
+  return {
+    ...process.env,
+    ...(agentMode ? { CONVEX_AGENT_MODE: agentMode } : {}),
+    ...extra,
+  };
+}
+
+function setConvexEnv(key, value) {
+  execFileSync("pnpm", ["exec", "convex", "env", "set", key, value], {
+    cwd: backendDir,
+    encoding: "utf8",
+    env: convexEnv(),
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+}
+
+async function waitForConvexReady(timeoutMs = 240_000) {
+  const envLocal = path.join(backendDir, ".env.local");
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    if (fs.existsSync(envLocal)) {
+      try {
+        execFileSync("pnpm", ["exec", "convex", "env", "list"], {
+          cwd: backendDir,
+          env: convexEnv(),
+          stdio: "pipe",
+        });
+        return;
+      } catch {
+        // deployment still provisioning / functions not pushed
+      }
+    }
+    await delay(2000);
+  }
+  throw new Error("Timed out waiting for Convex deployment to become ready.");
+}
+
+async function ensureConvexDeploymentEnv(secret) {
+  const pairs = [
+    ["BETTER_AUTH_SECRET", secret],
+    ["SITE_URL", "http://localhost:3000"],
+    ["EMAIL_TEST_MODE", "true"],
     ["E2E_HELPERS", "true"],
-    // Mock Resend in e2e so sends never consume Resend quota.
     ["E2E_EMAIL_MOCK", "true"],
   ];
-  for (const [key, value] of sets) {
-    await new Promise((resolve) => {
-      const child = spawn(
-        "pnpm",
-        ["exec", "convex", "env", "set", key, value],
-        { cwd: backendDir, stdio: "ignore", env: process.env },
-      );
-      child.on("exit", () => resolve());
-    });
+  for (const [key, value] of pairs) {
+    try {
+      setConvexEnv(key, value);
+      console.log(`Set Convex env ${key}`);
+    } catch (error) {
+      console.warn(`Could not set Convex env ${key}: ${error.message}`);
+    }
   }
 }
 
 async function main() {
+  const secret = resolveBetterAuthSecret();
+  process.env.BETTER_AUTH_SECRET = secret;
+
   if (!skipBoot) {
-    console.log("Starting Convex…");
+    ensureLocalBackendEnvFile(secret);
+
+    console.log(
+      `Starting Convex…${agentMode ? ` (CONVEX_AGENT_MODE=${agentMode})` : ""}`,
+    );
     run("pnpm", ["exec", "convex", "dev"], {
       cwd: backendDir,
       prefix: "convex",
-      env: {
-        ...process.env,
-        ...(process.env.CONVEX_AGENT_MODE ? { CONVEX_AGENT_MODE: process.env.CONVEX_AGENT_MODE } : {}),
-      },
+      env: convexEnv(),
     });
 
-    // Wait for .env.local CONVEX_URL or existing deployment readiness.
-    const envLocal = path.join(backendDir, ".env.local");
-    const start = Date.now();
-    while (Date.now() - start < 120_000) {
-      if (fs.existsSync(envLocal)) break;
-      await delay(500);
-    }
-
-    await ensureE2eHelpersEnv().catch((error) => {
-      console.warn(`Could not set E2E_HELPERS (continuing): ${error.message}`);
-    });
+    await waitForConvexReady();
+    await ensureConvexDeploymentEnv(secret);
 
     console.log("Starting Next.js…");
     run("pnpm", ["dev"], {
       cwd: webDir,
       prefix: "web",
+      env: {
+        ...process.env,
+        BETTER_AUTH_SECRET: secret,
+        SITE_URL: "http://localhost:3000",
+      },
     });
   } else {
     console.log("E2E_SKIP_BOOT=1 — reusing existing stack");
-    await ensureE2eHelpersEnv().catch((error) => {
-      console.warn(`Could not set E2E_HELPERS (continuing): ${error.message}`);
+    await ensureConvexDeploymentEnv(secret).catch((error) => {
+      console.warn(`Could not set Convex e2e env (continuing): ${error.message}`);
     });
   }
 
@@ -146,6 +224,7 @@ async function main() {
       env: {
         ...process.env,
         E2E_BASE_URL: baseURL,
+        BETTER_AUTH_SECRET: secret,
       },
     },
   );
