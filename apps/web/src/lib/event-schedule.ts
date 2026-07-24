@@ -1,3 +1,5 @@
+import { pacificDateAndTimeToMs, pacificDateKey, PORTAL_TIMEZONE } from "@/lib/format";
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export type ShowSlotInput = {
@@ -13,9 +15,7 @@ export type ResolvedShowSlot = ShowSlotInput & {
 };
 
 export function combineDateAndTime(date: string, time: string): number | null {
-  if (!date || !time) return null;
-  const parsed = new Date(`${date}T${time}:00`);
-  return Number.isNaN(parsed.getTime()) ? null : parsed.getTime();
+  return pacificDateAndTimeToMs(date, time);
 }
 
 export function endsOnNextDay(startTime: string, endTime: string) {
@@ -53,22 +53,25 @@ export function resolveShowSlots(slots: ShowSlotInput[]): ResolvedShowSlot[] {
 }
 
 export function formatLongDate(date: string) {
-  const parsed = new Date(`${date}T12:00:00`);
-  if (Number.isNaN(parsed.getTime())) return date;
-  return parsed.toLocaleDateString("en-US", {
+  const ms = pacificDateAndTimeToMs(date, "12:00");
+  if (ms == null) return date;
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: PORTAL_TIMEZONE,
     month: "long",
     day: "numeric",
     year: "numeric",
-  });
+  }).format(new Date(ms));
 }
 
 export function formatDisplayTime(time: string) {
-  const parsed = new Date(`1970-01-01T${time}:00`);
-  if (Number.isNaN(parsed.getTime())) return time;
-  return parsed.toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  const match = /^(\d{1,2}):(\d{2})$/.exec(time.trim());
+  if (!match) return time;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute) || hour > 23 || minute > 59) return time;
+  const suffix = hour >= 12 ? "PM" : "AM";
+  const hour12 = hour % 12 === 0 ? 12 : hour % 12;
+  return `${hour12}:${String(minute).padStart(2, "0")} ${suffix}`;
 }
 
 export function formatEventEndTimeText(startTime: string, endTime: string) {
@@ -158,13 +161,9 @@ export function getEarliestShowSlot(slots: ShowSlotInput[]): ShowSlotInput | nul
 }
 
 export function addDaysToDateInput(date: string, days: number) {
-  const parsed = new Date(`${date}T12:00:00`);
-  if (Number.isNaN(parsed.getTime())) return date;
-  parsed.setDate(parsed.getDate() + days);
-  const y = parsed.getFullYear();
-  const m = String(parsed.getMonth() + 1).padStart(2, "0");
-  const d = String(parsed.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+  const ms = pacificDateAndTimeToMs(date, "12:00");
+  if (ms == null) return date;
+  return pacificDateKey(ms + days * DAY_MS);
 }
 
 export function createDefaultShowSlot(): ShowSlotInput {

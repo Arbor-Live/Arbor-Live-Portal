@@ -4,7 +4,7 @@ import { internal } from "../_generated/api";
 import {
   BAND_PAYMENTS_CC_EMAIL,
   EVENT_TIMEZONE,
-  PAYMENTS_EMAIL_FROM,
+  bandPaymentHistoryUrl,
   bandPayeeSettingsUrl,
   formatEventDateRange,
   subjectForTemplate,
@@ -31,7 +31,6 @@ export async function scheduleBandPaymentConfirmationEmail(
     template: "band_payment_confirmation",
     to: payment.designatedPayeeEmail ?? "",
     cc: [BAND_PAYMENTS_CC_EMAIL],
-    replyTo: [PAYMENTS_EMAIL_FROM.match(/<([^>]+)>/)?.[1] ?? "payments@arbor.st"],
     subject: subjectForTemplate("band_payment_confirmation", `${event.title} [${payment.confirmationToken}]`),
     eventId: event._id,
     idempotencyKey: `band-payment-confirmation:${payment._id}:${payment.confirmationEmailSentAt ?? 0}`,
@@ -48,6 +47,7 @@ export async function scheduleBandPaymentConfirmationEmail(
       designatedPayeeName: payment.designatedPayeeName ?? "Designated payee",
       photoAlbumUrl: payment.photoAlbumUrl,
       confirmationToken: payment.confirmationToken,
+      signUrl: bandPaymentHistoryUrl(),
     },
   });
 

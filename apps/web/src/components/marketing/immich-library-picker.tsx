@@ -18,6 +18,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
+import { formatDate } from "@/lib/format";
 
 type LibraryAsset = {
   id: string;
@@ -50,11 +51,7 @@ type ImmichLibraryPickerProps = {
 };
 
 function formatAssetDate(timestamp: number) {
-  return new Date(timestamp).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  return formatDate(timestamp);
 }
 
 const modeLabels: Record<BrowseMode, string> = {

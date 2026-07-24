@@ -1,0 +1,33 @@
+---
+description: Portal timezone is always Pacific (America/Los_Angeles). Use @arbor/format — never browser local time.
+alwaysApply: true
+---
+
+# Portal timezone (Pacific Time)
+
+Arbor Live Portal is **always** Pacific Time. Do not use the browser/OS timezone for display, parsing, calendar grids, or persisted wall-clock inputs.
+
+## Canonical source
+
+- Constant: `PORTAL_TIMEZONE` (`"America/Los_Angeles"`) in `packages/format` (`@arbor/format`)
+- Web re-export: `@/lib/format` and helpers in `@/lib/crew-availability`
+
+## Do
+
+- **Display:** `formatDate`, `formatDateTime`, `formatDateTimeRange` from `@/lib/format` / `@arbor/format`
+- **Hydrate inputs from ms:** `toPacificDateTimeInput` / `toLocalDateTimeInput` (crew-availability wrapper)
+- **Persist input strings → ms:** `pacificDateTimeInputToMs` / `localDateTimeInputToMs` / `requireLocalDateTimeInputMs`
+- **Date + time strings:** `pacificDateAndTimeToMs`, `pacificDateKey`
+- **FullCalendar:** set `timeZone={PORTAL_TIMEZONE}` (see `events-calendar-view.tsx`)
+- **Date-only calendars:** treat `YYYY-MM-DD` as Pacific calendar dates; parse/format via `@arbor/format` when converting to/from ms
+
+## Do not
+
+- `toLocaleString()` / `toLocaleDateString()` / `toLocaleTimeString()` without `timeZone: PORTAL_TIMEZONE`
+- `new Date("YYYY-MM-DDTHH:mm").getTime()` or `new Date(input).getTime()` to save wall-clock values (that uses **browser** local)
+- `getHours()` / `getFullYear()` etc. on stored instants to build input strings (use `toPacificDateTimeInput`)
+- Assume the user's machine is in Pacific
+
+## Picker nuance
+
+`DateTimePicker` keeps **naive wall-clock digits** in the UI string (`YYYY-MM-DDTHH:mm`). Those digits mean Pacific; convert only at the ms boundary with the helpers above.

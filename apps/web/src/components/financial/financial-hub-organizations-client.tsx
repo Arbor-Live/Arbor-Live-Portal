@@ -314,7 +314,7 @@ function EditGroupForm({
   useEffect(() => {
     if (formState.isDirty) return;
     reset(initial);
-  }, [groupId, initial.name, initial.type, initial.equipmentPricingMode, reset, formState.isDirty]);
+  }, [groupId, initial, reset, formState.isDirty]);
 
   const persist = useCallback(
     async (values: InvoiceGroupFormValues) => {

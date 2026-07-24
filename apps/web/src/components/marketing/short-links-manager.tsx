@@ -28,6 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useConvexForm } from "@/hooks/use-convex-form";
+import { pacificDateKey } from "@/lib/format";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import {
   formatExpiresAt,
@@ -128,12 +129,7 @@ export function ShortLinksManager() {
     if (link.expiryMode === "manual" && link.expiresAt != null) {
       form.setValue(
         "manualExpiresAtDate",
-        new Intl.DateTimeFormat("en-CA", {
-          timeZone: "America/Los_Angeles",
-          year: "numeric",
-          month: "2-digit",
-          day: "2-digit",
-        }).format(new Date(link.expiresAt)),
+        pacificDateKey(link.expiresAt),
       );
     }
   };

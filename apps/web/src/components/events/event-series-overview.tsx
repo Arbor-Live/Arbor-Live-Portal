@@ -76,7 +76,6 @@ function costsFromSeries(series: SeriesDoc): EventSeriesCostsFormValues {
 
 export function EventSeriesOverview({ seriesId }: { seriesId: Id<"eventSeries"> }) {
   const router = useRouter();
-  const viewer = useQuery(api.users.getViewer, {});
   const session = authClient.useSession();
   const data = useQuery(api.eventSeries.get, { id: seriesId });
   const invoices = useQuery(api.invoices.list, { status: "draft" });
@@ -89,7 +88,7 @@ export function EventSeriesOverview({ seriesId }: { seriesId: Id<"eventSeries"> 
   const createDraftForSeries = useMutation(api.invoices.createDraftForSeries);
   const scaffoldPullList = useMutation(api.eventSeriesPullLists.scaffoldFromInvoice);
 
-  const [invoiceLinkId, setInvoiceLinkId] = useState("");
+  const [invoiceLinkOverride, setInvoiceLinkOverride] = useState<string | null>(null);
 
   const costsForm = useConvexForm<EventSeriesCostsFormValues>({
     schema: eventSeriesCostsSchema,
@@ -105,8 +104,11 @@ export function EventSeriesOverview({ seriesId }: { seriesId: Id<"eventSeries"> 
     if (!data?.series) return;
     if (costsForm.formState.isDirty) return;
     costsForm.reset(costsFromSeries(data.series));
-    setInvoiceLinkId(data.series.invoiceId ?? "");
   }, [data?.series, costsForm]);
+
+  // The "link draft invoice" picker only renders while no invoice is linked;
+  // derive its value from the series rather than syncing it in an effect.
+  const invoiceLinkId = invoiceLinkOverride ?? (data?.series?.invoiceId ?? "");
 
   const billableOccurrenceCount = useMemo(() => {
     const rows = data?.occurrences ?? [];
@@ -283,7 +285,10 @@ export function EventSeriesOverview({ seriesId }: { seriesId: Id<"eventSeries"> 
                 size="sm"
                 onClick={() =>
                   void unlinkInvoice({ id: seriesId })
-                    .then(() => setMessage("Invoice unlinked from series."))
+                    .then(() => {
+                      setInvoiceLinkOverride(null);
+                      setMessage("Invoice unlinked from series.");
+                    })
                     .catch((error) =>
                       setMessage(getConvexErrorMessage(error, "Failed to unlink invoice.")),
                     )
@@ -320,7 +325,7 @@ export function EventSeriesOverview({ seriesId }: { seriesId: Id<"eventSeries"> 
                 <Label>Link draft invoice</Label>
                 <SearchableSelect
                   value={invoiceLinkId}
-                  onChange={setInvoiceLinkId}
+                  onChange={setInvoiceLinkOverride}
                   options={invoiceOptions}
                   placeholder="Search invoices..."
                   emptyLabel="Select invoice"
@@ -331,7 +336,10 @@ export function EventSeriesOverview({ seriesId }: { seriesId: Id<"eventSeries"> 
                 disabled={!invoiceLinkId}
                 onClick={() =>
                   void linkInvoice({ id: seriesId, invoiceId: invoiceLinkId as Id<"invoices"> })
-                    .then(() => setMessage("Invoice linked to series and all active occurrences."))
+                    .then(() => {
+                      setInvoiceLinkOverride(null);
+                      setMessage("Invoice linked to series and all active occurrences.");
+                    })
                     .catch((error) =>
                       setMessage(getConvexErrorMessage(error, "Failed to link invoice.")),
                     )

@@ -110,7 +110,6 @@ type FormState = {
   calendarInviteEmail: string;
   showOnPublicCrewPage: boolean;
   publicCrewDescription: string;
-  avatarUrl: string;
   whatsappAcknowledged: boolean;
   instagramAcknowledged: boolean;
   hasFederalWorkStudy: boolean | null;
@@ -134,7 +133,6 @@ const EMPTY_FORM: FormState = {
   calendarInviteEmail: "",
   showOnPublicCrewPage: false,
   publicCrewDescription: "",
-  avatarUrl: "",
   whatsappAcknowledged: false,
   instagramAcknowledged: false,
   hasFederalWorkStudy: null,
@@ -174,6 +172,9 @@ export function CrewOnboardingWizard() {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [avatarBusy, setAvatarBusy] = useState(false);
+  // Local blob preview from an in-progress upload; server avatarUrl (which may
+  // arrive slightly after the onboarding row is created) is used otherwise.
+  const [avatarPreviewOverride, setAvatarPreviewOverride] = useState<string | null>(null);
   const hydratedRef = useRef(false);
   const ensuredRef = useRef(false);
 
@@ -184,48 +185,38 @@ export function CrewOnboardingWizard() {
   }, [ensureOnboarding]);
 
   useEffect(() => {
-    if (!onboarding) return;
-    if (!hydratedRef.current) {
-      hydratedRef.current = true;
-      setForm({
-        name: onboarding.profile.name ?? "",
-        email: onboarding.profile.email ?? "",
-        calendarInviteEmail: onboarding.profile.calendarInviteEmail ?? "",
-        showOnPublicCrewPage: onboarding.profile.showOnPublicCrewPage ?? false,
-        publicCrewDescription: onboarding.profile.publicCrewDescription ?? "",
-        avatarUrl: onboarding.profile.avatarUrl ?? "",
-        whatsappAcknowledged: Boolean(onboarding.whatsappAcknowledgedAt),
-        instagramAcknowledged: Boolean(onboarding.instagramAcknowledgedAt),
-        hasFederalWorkStudy: onboarding.hasFederalWorkStudy ?? null,
-        fwsAcknowledged: Boolean(onboarding.fwsAcknowledgedAt),
-        narcanCompleted: Boolean(onboarding.narcanCompletedAt),
-        soberMonitorCompleted: Boolean(onboarding.soberMonitorCompletedAt),
-        emergencySopsAcknowledged: Boolean(onboarding.emergencySopsAcknowledgedAt),
-        crewExpectationsAcknowledged: Boolean(onboarding.crewExpectationsAcknowledgedAt),
-        liftingCompleted: Boolean(onboarding.liftingCompletedAt),
-        hasValidDriversLicense: Boolean(onboarding.hasValidDriversLicense),
-        cartTrainingCompleted: Boolean(onboarding.cartTrainingCompletedAt),
-        oseHiringFormCompleted: Boolean(onboarding.oseHiringFormCompletedAt),
-        timecardAcknowledged: Boolean(onboarding.timecardAcknowledgedAt),
-        signatureLegalName: onboarding.signatureLegalName ?? "",
-        agreedToDoc: Boolean(onboarding.agreedToOnboardingDocAt),
-      });
-      return;
-    }
-    // Avatar can arrive after the first hydrate (ensure-row race). Keep a
-    // local blob preview if the user just uploaded.
-    const nextAvatar = onboarding.profile.avatarUrl;
-    if (!nextAvatar) return;
-    setForm((prev) => {
-      if (prev.avatarUrl.startsWith("blob:")) return prev;
-      if (prev.avatarUrl) return prev;
-      return {
-        ...prev,
-        avatarUrl: nextAvatar,
-        email: onboarding.profile.email || prev.email,
-      };
+    if (!onboarding || hydratedRef.current) return;
+    hydratedRef.current = true;
+    setForm({
+      name: onboarding.profile.name ?? "",
+      email: onboarding.profile.email ?? "",
+      calendarInviteEmail: onboarding.profile.calendarInviteEmail ?? "",
+      showOnPublicCrewPage: onboarding.profile.showOnPublicCrewPage ?? false,
+      publicCrewDescription: onboarding.profile.publicCrewDescription ?? "",
+      whatsappAcknowledged: Boolean(onboarding.whatsappAcknowledgedAt),
+      instagramAcknowledged: Boolean(onboarding.instagramAcknowledgedAt),
+      hasFederalWorkStudy: onboarding.hasFederalWorkStudy ?? null,
+      fwsAcknowledged: Boolean(onboarding.fwsAcknowledgedAt),
+      narcanCompleted: Boolean(onboarding.narcanCompletedAt),
+      soberMonitorCompleted: Boolean(onboarding.soberMonitorCompletedAt),
+      emergencySopsAcknowledged: Boolean(onboarding.emergencySopsAcknowledgedAt),
+      crewExpectationsAcknowledged: Boolean(onboarding.crewExpectationsAcknowledgedAt),
+      liftingCompleted: Boolean(onboarding.liftingCompletedAt),
+      hasValidDriversLicense: Boolean(onboarding.hasValidDriversLicense),
+      cartTrainingCompleted: Boolean(onboarding.cartTrainingCompletedAt),
+      oseHiringFormCompleted: Boolean(onboarding.oseHiringFormCompletedAt),
+      timecardAcknowledged: Boolean(onboarding.timecardAcknowledgedAt),
+      signatureLegalName: onboarding.signatureLegalName ?? "",
+      agreedToDoc: Boolean(onboarding.agreedToOnboardingDocAt),
     });
   }, [onboarding]);
+
+  // Avatar/email seed for the avatar preview are decorative-only (not part of
+  // the submitted profile payload), so they're derived directly from the live
+  // query instead of copied into `form` — this also naturally covers the
+  // avatar arriving after the initial hydrate (ensure-row race).
+  const avatarUrl = avatarPreviewOverride ?? onboarding?.profile.avatarUrl ?? "";
+  const avatarSeedEmail = onboarding?.profile.email || form.email || "crew";
 
   useEffect(() => {
     if (!previewReady || devPreview) return;
@@ -469,7 +460,7 @@ export function CrewOnboardingWizard() {
 
   async function onAvatarSelected(file: File) {
     if (previewOnly) {
-      setForm((prev) => ({ ...prev, avatarUrl: URL.createObjectURL(file) }));
+      setAvatarPreviewOverride(URL.createObjectURL(file));
       return;
     }
     setAvatarBusy(true);
@@ -490,7 +481,7 @@ export function CrewOnboardingWizard() {
       if (!response.ok) throw new Error("Upload failed.");
       const { storageId } = (await response.json()) as { storageId: Id<"_storage"> };
       await setMyAvatar({ storageId });
-      setForm((prev) => ({ ...prev, avatarUrl: URL.createObjectURL(file) }));
+      setAvatarPreviewOverride(URL.createObjectURL(file));
     } catch (uploadError) {
       setError(getConvexErrorMessage(uploadError));
     } finally {
@@ -563,6 +554,8 @@ export function CrewOnboardingWizard() {
                 setForm={setForm}
                 fieldError={fieldError}
                 avatarBusy={avatarBusy}
+                avatarUrl={avatarUrl}
+                avatarSeedEmail={avatarSeedEmail}
                 onAvatarSelected={onAvatarSelected}
                 onGoToDashboard={goToDashboard}
               />
@@ -580,6 +573,8 @@ function StepBody({
   setForm,
   fieldError,
   avatarBusy,
+  avatarUrl,
+  avatarSeedEmail,
   onAvatarSelected,
   onGoToDashboard,
 }: {
@@ -588,6 +583,8 @@ function StepBody({
   setForm: React.Dispatch<React.SetStateAction<FormState>>;
   fieldError: string | null;
   avatarBusy: boolean;
+  avatarUrl: string;
+  avatarSeedEmail: string;
   onAvatarSelected: (file: File) => void;
   onGoToDashboard: () => void;
 }) {
@@ -612,8 +609,8 @@ function StepBody({
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
             <UserAvatarUploadPreview
               name={form.name || "Crew member"}
-              email={form.email || "crew"}
-              imageUrl={form.avatarUrl || null}
+              email={avatarSeedEmail}
+              imageUrl={avatarUrl || null}
             />
             <div className="space-y-2">
               <input

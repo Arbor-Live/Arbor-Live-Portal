@@ -1,7 +1,7 @@
 import type { Id } from "@/lib/convex-api";
 import type { TimelineBlockDraft } from "@/components/events/event-timeline-scheduler";
 import type { CrewAvailabilityResponseStatus } from "@/lib/crew-availability";
-import { toLocalDateTimeInput } from "@/lib/crew-availability";
+import { localDateTimeInputToMs, toLocalDateTimeInput } from "@/lib/crew-availability";
 
 export const MAX_AUTO_ASSIGN_HOURS = 8;
 
@@ -57,8 +57,7 @@ function sortRespondersForAssignment(responders: AssignableResponder[]) {
 }
 
 function parseLocalMs(value: string) {
-  const ms = new Date(value).getTime();
-  return Number.isNaN(ms) ? null : ms;
+  return localDateTimeInputToMs(value);
 }
 
 export function hoursBetweenLocal(startsAt: string, endsAt: string) {
@@ -93,7 +92,7 @@ function clipRangeToMaxHours(range: TimeRange, maxHours: number): TimeRange | nu
 
   return {
     startsAt: range.startsAt,
-    endsAt: toLocalDateTimeInput(new Date(startMs + maxHours * 3_600_000)),
+    endsAt: toLocalDateTimeInput(startMs + maxHours * 3_600_000),
   };
 }
 

@@ -1,6 +1,11 @@
 import type { Id } from "@/lib/convex-api";
 import type { TimelineBlockDraft } from "@/components/events/event-timeline-scheduler";
 import { hoursBetweenLocal } from "@/lib/crew-shift-assign";
+import {
+  localDateTimeInputToMs,
+  toLocalDateTimeInput,
+} from "@/lib/crew-availability";
+import { pacificDayIndexFromAnchor, pacificScheduleDayCount } from "@/lib/format";
 
 export type EventShiftDraft = {
   id?: Id<"eventCrewShifts">;
@@ -17,15 +22,7 @@ export type EventShiftDraft = {
   notes: string;
 };
 
-export function toLocalDateTimeInput(value: number | Date) {
-  const date = value instanceof Date ? value : new Date(value);
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  const hh = String(date.getHours()).padStart(2, "0");
-  const mm = String(date.getMinutes()).padStart(2, "0");
-  return `${y}-${m}-${d}T${hh}:${mm}`;
-}
+export { toLocalDateTimeInput };
 
 export function getBlockRef(block: TimelineBlockDraft) {
   return block.clientId ?? block.id;
@@ -59,10 +56,10 @@ export function mapPersistedBlockIdByRef(inputBlocks: TimelineBlockDraft[]) {
 
 export function eventDayCount(startAt: string, endAt: string) {
   if (!startAt || !endAt) return 1;
-  const start = new Date(startAt);
-  const end = new Date(endAt);
-  const diff = Math.max(0, end.getTime() - start.getTime());
-  return Math.max(1, Math.floor(diff / (24 * 60 * 60 * 1000)) + 1);
+  const startMs = localDateTimeInputToMs(startAt);
+  const endMs = localDateTimeInputToMs(endAt);
+  if (startMs == null || endMs == null) return 1;
+  return pacificScheduleDayCount(startMs, endMs);
 }
 
 type EventType = "Crewed Event" | "Rental with Crew" | "Dry Hire" | "Services Only";
@@ -76,18 +73,19 @@ export function buildQuickAddScheduleBlocks(args: {
   withStableRefs: (blocks: TimelineBlockDraft[]) => TimelineBlockDraft[];
 }) {
   const { eventType, startAt, endAt, rentalFulfillmentMode, withStableRefs } = args;
-  const showStart = new Date(startAt);
-  const showEnd = new Date(endAt);
-  const setupStart = new Date(showStart.getTime() - 3 * 60 * 60 * 1000);
-  const strikeEnd = new Date(showEnd.getTime() + 2 * 60 * 60 * 1000);
-  const deliveryStart = new Date(showStart.getTime() - 2 * 60 * 60 * 1000);
-  const returnEnd = new Date(showEnd.getTime() + 2 * 60 * 60 * 1000);
-  const anchorDayStart = new Date(showStart.getFullYear(), showStart.getMonth(), showStart.getDate()).getTime();
-  const setupDayIndex = Math.max(0, Math.floor((setupStart.getTime() - anchorDayStart) / (24 * 60 * 60 * 1000)));
+  const showStartMs = localDateTimeInputToMs(startAt);
+  const showEndMs = localDateTimeInputToMs(endAt);
+  if (showStartMs == null || showEndMs == null) return withStableRefs([]);
+
+  const setupStartMs = showStartMs - 3 * 60 * 60 * 1000;
+  const strikeEndMs = showEndMs + 2 * 60 * 60 * 1000;
+  const deliveryStartMs = showStartMs - 2 * 60 * 60 * 1000;
+  const returnEndMs = showEndMs + 2 * 60 * 60 * 1000;
+  const setupDayIndex = pacificDayIndexFromAnchor(showStartMs, setupStartMs);
   const showDayIndex = 0;
-  const strikeDayIndex = Math.max(0, Math.floor((showEnd.getTime() - anchorDayStart) / (24 * 60 * 60 * 1000)));
-  const deliveryDayIndex = Math.max(0, Math.floor((deliveryStart.getTime() - anchorDayStart) / (24 * 60 * 60 * 1000)));
-  const returnDayIndex = Math.max(0, Math.floor((showEnd.getTime() - anchorDayStart) / (24 * 60 * 60 * 1000)));
+  const strikeDayIndex = pacificDayIndexFromAnchor(showStartMs, showEndMs);
+  const deliveryDayIndex = pacificDayIndexFromAnchor(showStartMs, deliveryStartMs);
+  const returnDayIndex = pacificDayIndexFromAnchor(showStartMs, showEndMs);
 
   if (eventType === "Dry Hire") {
     const outboundLabel = rentalFulfillmentMode === "will_call" ? "Check-out Window" : "Drop-off Window";
@@ -97,16 +95,16 @@ export function buildQuickAddScheduleBlocks(args: {
         blockType: "setup",
         label: outboundLabel,
         dayIndex: deliveryDayIndex,
-        startsAt: toLocalDateTimeInput(deliveryStart),
-        endsAt: toLocalDateTimeInput(showStart),
+        startsAt: toLocalDateTimeInput(deliveryStartMs),
+        endsAt: toLocalDateTimeInput(showStartMs),
         notes: "",
       },
       {
         blockType: "strike",
         label: returnLabel,
         dayIndex: returnDayIndex,
-        startsAt: toLocalDateTimeInput(showEnd),
-        endsAt: toLocalDateTimeInput(returnEnd),
+        startsAt: toLocalDateTimeInput(showEndMs),
+        endsAt: toLocalDateTimeInput(returnEndMs),
         notes: "",
       },
     ]);
@@ -117,16 +115,16 @@ export function buildQuickAddScheduleBlocks(args: {
       blockType: "setup",
       label: "Setup",
       dayIndex: setupDayIndex,
-      startsAt: toLocalDateTimeInput(setupStart),
-      endsAt: toLocalDateTimeInput(showStart),
+      startsAt: toLocalDateTimeInput(setupStartMs),
+      endsAt: toLocalDateTimeInput(showStartMs),
       notes: "",
     },
     {
       blockType: "strike",
       label: "Strike",
       dayIndex: strikeDayIndex,
-      startsAt: toLocalDateTimeInput(showEnd),
-      endsAt: toLocalDateTimeInput(strikeEnd),
+      startsAt: toLocalDateTimeInput(showEndMs),
+      endsAt: toLocalDateTimeInput(strikeEndMs),
       notes: "",
     },
   ];
@@ -136,8 +134,8 @@ export function buildQuickAddScheduleBlocks(args: {
       blockType: "show",
       label: "Show",
       dayIndex: showDayIndex,
-      startsAt: toLocalDateTimeInput(showStart),
-      endsAt: toLocalDateTimeInput(showEnd),
+      startsAt: toLocalDateTimeInput(showStartMs),
+      endsAt: toLocalDateTimeInput(showEndMs),
       notes: "",
     });
   }

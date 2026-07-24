@@ -13,8 +13,9 @@ packages/
   backend              Convex backend + Better Auth (the only stateful service)
   email                @arbor/email — react-email templates + ICS helpers
   format               @arbor/format — shared formatting utilities (dates, money)
-  invoice-document     @arbor/invoice-document — invoice/quote document model,
-                       web renderer (./web) and PDF renderer (./pdf, @react-pdf/renderer)
+  invoice-document     @arbor/invoice-document — invoice/quote + band-payment
+                       agreement document models; web renderer (./web) and PDF
+                       renderer (./pdf, @react-pdf/renderer)
 ```
 
 Dependency direction: `web` depends on `backend` (generated API bindings),
@@ -31,9 +32,7 @@ Dependency direction: `web` depends on `backend` (generated API bindings),
 - `crons.ts` — daily schedule reminders, payment-proof reminders, and band
   payment promotion (see `email/reminders.ts`, `email/paymentProofReminders.ts`,
   `bandPayments.ts`).
-- `http.ts` + `http/resendInbound.ts` — HTTP router; the only inbound webhook
-  is Resend inbound email (svix-verified) used for band-payment confirmation
-  replies.
+- `http.ts` — HTTP router (short-link lookup for `arbor.st`; Better Auth routes).
 - `migrations/` — one-off data migrations (see the convex-migration-helper
   skill for the process).
 
@@ -43,7 +42,7 @@ Dependency direction: `web` depends on `backend` (generated API bindings),
 |---|---|
 | Auth & users | `auth.ts`, `auth.config.ts`, `betterAuth/`, `users.ts`, `userInvites.ts`, `account.ts`, `bootstrap.ts`, `capabilityDefinitions.ts` |
 | Events | `events.ts`, `eventSchedule.ts`, `eventCrew.ts`, `eventCrewAvailability.ts`, `eventAssignments.ts`, `eventArtifacts.ts`, `eventExpenses.ts`, `eventPullLists.ts`, `eventSeries.ts`, `eventSeriesPullLists.ts`, `eventBands.ts`, `eventRequests.ts` |
-| Invoicing | `invoices.ts`, `invoiceGroups.ts`, `invoiceContacts.ts`, `invoiceTerms.ts`, `invoiceFeeDefinitions.ts`, `invoiceSettings.ts`, `invoicePdf.ts`, `invoicePdfDownload.ts`, `paymentProof*.ts`, `bandPayments.ts` |
+| Invoicing | `invoices.ts`, `invoiceGroups.ts`, `invoiceContacts.ts`, `invoiceTerms.ts`, `invoiceFeeDefinitions.ts`, `invoiceSettings.ts`, `invoicePdf.ts`, `invoicePdfDownload.ts`, `paymentProof*.ts`, `bandPayments.ts`, `bandPaymentPdfDownload.ts` |
 | Inventory | `inventoryTypes.ts`, `inventoryItems.ts`, `inventoryCategories.ts`, `inventoryPackages.ts`, `inventoryR2.ts`, `storageLocations.ts`, `lostFoundSettings.ts` |
 | Media (Immich) | `immich.ts`, `immichActions.ts`, `immichDb.ts`, `immichEnsure.ts`, `marketingImmich*.ts` |
 | Marketing | `marketingDesigns.ts`, `marketingPosts.ts`, `marketingSettings.ts`, `shortLinks.ts`, `marketingInstagram*.ts` |

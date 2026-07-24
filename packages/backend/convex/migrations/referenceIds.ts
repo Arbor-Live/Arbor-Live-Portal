@@ -1,8 +1,10 @@
 import { v } from "convex/values";
 import { internalMutation } from "../_generated/server";
 import {
+  allocateBandPaymentConfirmationToken,
   allocateInvoiceNumber,
   allocateRequestNumber,
+  isBandPaymentReferenceId,
   isInvoiceReferenceId,
   isRequestReferenceId,
 } from "../lib/publicReferenceIds";
@@ -61,6 +63,39 @@ export const migrateRequestReferenceIds = internalMutation({
       const requestNumber = await allocateRequestNumber(ctx);
       await ctx.db.patch(row._id, {
         requestNumber,
+        updatedAt: Date.now(),
+      });
+      migrated += 1;
+    }
+
+    return {
+      migrated,
+      remaining: Math.max(0, pending.length - migrated),
+    };
+  },
+});
+
+/**
+ * Backfill band payment confirmation tokens to ALBPAY-XXXXXXX.
+ * Run repeatedly until `remaining` is 0:
+ *   npx convex run migrations/referenceIds:migrateBandPaymentReferenceIds
+ */
+export const migrateBandPaymentReferenceIds = internalMutation({
+  args: { limit: v.optional(v.number()) },
+  returns: v.object({
+    migrated: v.number(),
+    remaining: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const limit = Math.max(1, Math.min(args.limit ?? 100, 200));
+    const rows = await ctx.db.query("eventBandPayments").take(500);
+    const pending = rows.filter((row) => !isBandPaymentReferenceId(row.confirmationToken));
+    let migrated = 0;
+
+    for (const row of pending.slice(0, limit)) {
+      const confirmationToken = await allocateBandPaymentConfirmationToken(ctx);
+      await ctx.db.patch(row._id, {
+        confirmationToken,
         updatedAt: Date.now(),
       });
       migrated += 1;

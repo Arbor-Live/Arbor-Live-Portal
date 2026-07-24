@@ -49,7 +49,15 @@ import {
   normalizeEventVisibility,
   type EventVisibility,
 } from "@/lib/event-visibility";
-import { getAvailabilityNotesForDisplay } from "@/lib/crew-availability";
+import {
+  buildQuickAddScheduleBlocks,
+} from "@/lib/event-schedule-draft";
+import {
+  getAvailabilityNotesForDisplay,
+  localDateTimeInputToMs,
+  requireLocalDateTimeInputMs,
+  toLocalDateTimeInput,
+} from "@/lib/crew-availability";
 import {
   EVENT_EDITOR_TAB_LABELS,
   EVENT_EDITOR_TABS,
@@ -67,7 +75,13 @@ import { getConvexErrorMessage } from "@/lib/convex-error";
 import { FormSaveBar } from "@/components/forms";
 import { StoredAssetImage, StoredAssetLink } from "@/components/files/stored-asset-image";
 import { isImageAssetReference } from "@/lib/r2-assets";
-import { formatDateTime, formatUsd, payPeriodForDate, pacificScheduleDayCount } from "@/lib/format";
+import {
+  formatDateTime,
+  formatUsd,
+  payPeriodForDate,
+  pacificEndOfDayMs,
+  pacificScheduleDayCount,
+} from "@/lib/format";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { WarningCircleIcon } from "@phosphor-icons/react";
 
@@ -131,16 +145,6 @@ const TEAM_ICONS: Record<EventTeam, Icon> = {
   Sound: SpeakerHighIcon,
   Operations: WrenchIcon,
 };
-
-function toLocalDateTimeInput(value: number | Date) {
-  const date = value instanceof Date ? value : new Date(value);
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  const hh = String(date.getHours()).padStart(2, "0");
-  const mm = String(date.getMinutes()).padStart(2, "0");
-  return `${y}-${m}-${d}T${hh}:${mm}`;
-}
 
 function formatHours(value: number) {
   return `${value.toFixed(2)}h`;
@@ -240,9 +244,10 @@ export function EventEditor({
   const [seriesEndAt, setSeriesEndAt] = useState("");
   const [editScopeModalOpen, setEditScopeModalOpen] = useState(false);
   const hydratedEventIdRef = useRef<string | null>(null);
-  const lastSavedOverviewSignatureRef = useRef("");
-  const lastSavedScheduleSignatureRef = useRef("");
+  const [lastSavedOverviewSignature, setLastSavedOverviewSignature] = useState("");
+  const [lastSavedScheduleSignature, setLastSavedScheduleSignature] = useState("");
   const localBlockCounterRef = useRef(0);
+  const createDefaultsAppliedRef = useRef(false);
 
   function makeLocalBlockRef() {
     localBlockCounterRef.current += 1;
@@ -277,11 +282,26 @@ export function EventEditor({
   }
 
   useEffect(() => {
+    if (!isCreate || createDefaultsAppliedRef.current) return;
+    createDefaultsAppliedRef.current = true;
+    if (typeof window === "undefined") return;
+    const dateParam = new URLSearchParams(window.location.search).get("date")?.trim() ?? "";
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateParam)) return;
+    // Default show window for board "+" : 6pm–10pm Pacific wall clock.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time create-mode default, guarded by createDefaultsAppliedRef
+    setStartAt(`${dateParam}T18:00`);
+    setEndAt(`${dateParam}T22:00`);
+  }, [isCreate]);
+
+  useEffect(() => {
     if (!eventData?.event) return;
     if (hydratedEventIdRef.current === eventData.event._id) return;
     // Wait for host groups so we can match legacy free-text hosts by name.
     if (hostGroups === undefined) return;
     hydratedEventIdRef.current = eventData.event._id;
+    // One-time hydration per loaded event id (guarded by hydratedEventIdRef above) so
+    // in-progress edits are never overwritten by a later re-run of this effect.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time hydration per event id, see hydratedEventIdRef guard
     setTitle(eventData.event.title);
     setStatus(normalizeEventStatus(eventData.event.status));
     setVisibility(normalizeEventVisibility(eventData.event.visibility));
@@ -355,7 +375,7 @@ export function EventEditor({
       eventData.event.rentalFulfillmentMode as RentalFulfillmentMode | "pickup" | undefined,
     );
     const rentalTypes = ["Dry Hire", "Rental with Crew"] as EventType[];
-    lastSavedOverviewSignatureRef.current = JSON.stringify({
+    setLastSavedOverviewSignature(JSON.stringify({
       title: eventData.event.title.trim(),
       status: normalizeEventStatus(eventData.event.status),
       visibility: normalizeEventVisibility(eventData.event.visibility),
@@ -375,7 +395,7 @@ export function EventEditor({
       notes: eventData.event.notes || undefined,
       openMicEnabled: eventData.event.openMicEnabled === true,
       openMicNotes: eventData.event.openMicNotes || undefined,
-    });
+    }));
     const hydratedBlocks = eventData.blocks.map((row) => ({
       id: row._id,
       clientId: row._id,
@@ -400,10 +420,12 @@ export function EventEditor({
       postedToExpense: row.postedToExpense,
       notes: row.notes ?? "",
     }));
-    lastSavedScheduleSignatureRef.current = JSON.stringify({
-      blocks: hydratedBlocks,
-      shifts: hydratedShifts,
-    });
+    setLastSavedScheduleSignature(
+      JSON.stringify({
+        blocks: hydratedBlocks,
+        shifts: hydratedShifts,
+      }),
+    );
   }, [eventData, hostGroups]);
 
   const hideSchedule = eventType === "Services Only";
@@ -428,17 +450,17 @@ export function EventEditor({
 
   const dayCount = useMemo(() => {
     if (!startAt) return 1;
-    const startMs = new Date(startAt).getTime();
-    if (!Number.isFinite(startMs)) return 1;
+    const startMs = localDateTimeInputToMs(startAt);
+    if (startMs == null) return 1;
     // Day rows follow the schedule span from event start through the latest of
     // event end and any block times — so 11pm show end + 1am strike gets Day 2
     // without forcing events.endAt past midnight.
-    let latestMs = Number.isFinite(new Date(endAt).getTime()) ? new Date(endAt).getTime() : startMs;
+    let latestMs = localDateTimeInputToMs(endAt) ?? startMs;
     for (const block of blocks) {
-      const blockStart = new Date(block.startsAt).getTime();
-      const blockEnd = new Date(block.endsAt).getTime();
-      if (Number.isFinite(blockStart)) latestMs = Math.max(latestMs, blockStart);
-      if (Number.isFinite(blockEnd)) latestMs = Math.max(latestMs, blockEnd);
+      const blockStart = localDateTimeInputToMs(block.startsAt);
+      const blockEnd = localDateTimeInputToMs(block.endsAt);
+      if (blockStart != null) latestMs = Math.max(latestMs, blockStart);
+      if (blockEnd != null) latestMs = Math.max(latestMs, blockEnd);
     }
     if (latestMs < startMs) latestMs = startMs;
     return pacificScheduleDayCount(startMs, latestMs);
@@ -537,20 +559,28 @@ export function EventEditor({
   const recurrencePreview = useMemo(() => {
     if (!isCreate || !isRecurring || !startAt) return { starts: [] as number[], error: null as string | null };
     try {
-      const anchorStartAt = new Date(startAt).getTime();
+      const anchorStartAt = localDateTimeInputToMs(startAt);
+      if (anchorStartAt == null) {
+        return { starts: [] as number[], error: "Invalid start time." };
+      }
       const parsedInterval = Number(intervalWeeks);
       if (!Number.isFinite(parsedInterval) || parsedInterval < 1) {
         return { starts: [] as number[], error: "Interval must be at least 1 week." };
       }
+      const seriesEndMs =
+        recurrenceEndMode === "date" && seriesEndAt
+          ? (() => {
+              const [year, month, day] = seriesEndAt.split("-").map(Number);
+              if (![year, month, day].every((n) => Number.isFinite(n))) return undefined;
+              return pacificEndOfDayMs(year, month, day);
+            })()
+          : undefined;
       const starts = computeOccurrenceStarts({
         anchorStartAt,
         intervalWeeks: parsedInterval,
         occurrenceCount:
           recurrenceEndMode === "count" ? Number(occurrenceCount || "0") : undefined,
-        seriesEndAt:
-          recurrenceEndMode === "date" && seriesEndAt
-            ? new Date(`${seriesEndAt}T23:59:59`).getTime()
-            : undefined,
+        seriesEndAt: seriesEndMs,
       });
       return { starts, error: null };
     } catch (error) {
@@ -595,13 +625,15 @@ export function EventEditor({
   }
 
   function buildOverviewPayload() {
+    const startAtMs = localDateTimeInputToMs(startAt);
+    const endAtMs = localDateTimeInputToMs(endAt);
     const base = {
       title: title.trim(),
       status,
       visibility,
       invoiceId: invoiceId ? (invoiceId as Id<"invoices">) : undefined,
-      startAt: new Date(startAt).getTime(),
-      endAt: new Date(endAt).getTime(),
+      startAt: startAtMs ?? Number.NaN,
+      endAt: endAtMs ?? Number.NaN,
       venueId: venueId ? (venueId as Id<"venues">) : null,
       eventType: eventType || undefined,
       rentalFulfillmentMode: showFulfillmentPicker ? rentalFulfillmentMode : undefined,
@@ -629,6 +661,9 @@ export function EventEditor({
 
   async function persistOverview(editScope?: SeriesEditScope) {
     const payload = buildOverviewPayload();
+    if (!Number.isFinite(payload.startAt) || !Number.isFinite(payload.endAt)) {
+      throw new Error("Start and end times are required.");
+    }
     if (isCreate) {
       if (isRecurring) {
         const parsedInterval = Number(intervalWeeks);
@@ -644,7 +679,13 @@ export function EventEditor({
             recurrenceEndMode === "count" ? Number(occurrenceCount || "0") : undefined,
           seriesEndAt:
             recurrenceEndMode === "date" && seriesEndAt
-              ? new Date(`${seriesEndAt}T23:59:59`).getTime()
+              ? (() => {
+                  const [year, month, day] = seriesEndAt.split("-").map(Number);
+                  if (![year, month, day].every((n) => Number.isFinite(n))) {
+                    throw new Error("Invalid series end date.");
+                  }
+                  return pacificEndOfDayMs(year, month, day);
+                })()
               : undefined,
           venueId: payload.venueId ?? undefined,
           eventType: payload.eventType,
@@ -673,7 +714,7 @@ export function EventEditor({
       ...payload,
       editScope: seriesMeta && editScope ? editScope : undefined,
     });
-    lastSavedOverviewSignatureRef.current = JSON.stringify(payload);
+    setLastSavedOverviewSignature(JSON.stringify(payload));
     setMessageTone("success");
     setMessage("Overview saved.");
   }
@@ -735,8 +776,8 @@ export function EventEditor({
           blockType: row.blockType,
           label: row.label,
           dayIndex: row.dayIndex,
-          startsAt: new Date(row.startsAt).getTime(),
-          endsAt: new Date(row.endsAt).getTime(),
+          startsAt: requireLocalDateTimeInputMs(row.startsAt, "block start"),
+          endsAt: requireLocalDateTimeInputMs(row.endsAt, "block end"),
           notes: row.notes || undefined,
         })),
       });
@@ -764,18 +805,19 @@ export function EventEditor({
           notes: row.notes ?? "",
         })),
       );
-      setShifts((prev) => {
-        const next = prev.map((shift) => {
-          const persistedId =
-            shift.scheduleBlockId ??
-            (shift.scheduleBlockRef ? persistedBlockIdByRef.get(shift.scheduleBlockRef) : undefined);
-          return {
-            ...shift,
-            scheduleBlockId: persistedId,
-            scheduleBlockRef: shift.scheduleBlockRef ?? persistedId,
-          };
-        });
-        lastSavedScheduleSignatureRef.current = JSON.stringify({
+      const nextShifts = shifts.map((shift) => {
+        const persistedId =
+          shift.scheduleBlockId ??
+          (shift.scheduleBlockRef ? persistedBlockIdByRef.get(shift.scheduleBlockRef) : undefined);
+        return {
+          ...shift,
+          scheduleBlockId: persistedId,
+          scheduleBlockRef: shift.scheduleBlockRef ?? persistedId,
+        };
+      });
+      setShifts(nextShifts);
+      setLastSavedScheduleSignature(
+        JSON.stringify({
           blocks: savedBlocks.map((row) => ({
             id: row.id,
             clientId: row.clientId ?? row.id,
@@ -786,10 +828,9 @@ export function EventEditor({
             endsAt: toLocalDateTimeInput(row.endsAt),
             notes: row.notes ?? "",
           })),
-          shifts: next,
-        });
-        return next;
-      });
+          shifts: nextShifts,
+        }),
+      );
       setMessageTone("success");
       setMessage("Schedule saved.");
     } catch (error) {
@@ -819,13 +860,13 @@ export function EventEditor({
           userId: row.userId || undefined,
           crewApplicationId: row.crewApplicationId,
           personName: row.personName || undefined,
-          startsAt: new Date(row.startsAt).getTime(),
-          endsAt: new Date(row.endsAt).getTime(),
+          startsAt: requireLocalDateTimeInputMs(row.startsAt, "block start"),
+          endsAt: requireLocalDateTimeInputMs(row.endsAt, "block end"),
           postedToExpense: row.expenseReportId ? row.postedToExpense : false,
           notes: row.notes || undefined,
         })),
       });
-      lastSavedScheduleSignatureRef.current = JSON.stringify({ blocks, shifts });
+      setLastSavedScheduleSignature(JSON.stringify({ blocks, shifts }));
       setMessageTone("success");
       setMessage("Schedule personnel saved.");
     } catch (error) {
@@ -885,7 +926,8 @@ export function EventEditor({
   }
 
   const currentEventId = eventId ?? eventData?.event?._id;
-  const payPeriod = useMemo(() => payPeriodForDate(Date.now()), []);
+  const [nowMs] = useState(() => Date.now());
+  const payPeriod = useMemo(() => payPeriodForDate(nowMs), [nowMs]);
   const otForecast = useQuery(
     api.eventCrew.getOtForecastForUser,
     selectedCrewUserId && canEdit
@@ -962,6 +1004,7 @@ export function EventEditor({
 
   const overviewSignature = useMemo(
     () => JSON.stringify(buildOverviewPayload()),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- buildOverviewPayload is recreated each render; deps are its closed-over fields
     [
       title,
       status,
@@ -994,10 +1037,17 @@ export function EventEditor({
   const hasUnsavedChanges = useMemo(() => {
     if (isCreate) return true;
     if (resolvedActiveTab === "schedule") {
-      return scheduleSignature !== lastSavedScheduleSignatureRef.current;
+      return scheduleSignature !== lastSavedScheduleSignature;
     }
-    return overviewSignature !== lastSavedOverviewSignatureRef.current;
-  }, [isCreate, resolvedActiveTab, overviewSignature, scheduleSignature]);
+    return overviewSignature !== lastSavedOverviewSignature;
+  }, [
+    isCreate,
+    resolvedActiveTab,
+    overviewSignature,
+    scheduleSignature,
+    lastSavedOverviewSignature,
+    lastSavedScheduleSignature,
+  ]);
 
   const saveTier = resolvedActiveTab === "overview" ? "B" : "C";
   const saveStatus =
@@ -1431,95 +1481,16 @@ export function EventEditor({
               quickAddDisabled={quickAddDisabled}
               quickAddDisabledReason={quickAddDisabledReason}
               onQuickAdd={() => {
-                if (quickAddDisabled) return;
-                const showStart = new Date(startAt);
-                const showEnd = new Date(endAt);
-                const setupStart = new Date(showStart.getTime() - 3 * 60 * 60 * 1000);
-                const strikeEnd = new Date(showEnd.getTime() + 2 * 60 * 60 * 1000);
-                const deliveryStart = new Date(showStart.getTime() - 2 * 60 * 60 * 1000);
-                const returnEnd = new Date(showEnd.getTime() + 2 * 60 * 60 * 1000);
-                const anchorDayStart = new Date(
-                  showStart.getFullYear(),
-                  showStart.getMonth(),
-                  showStart.getDate(),
-                ).getTime();
-                const setupDayIndex = Math.max(
-                  0,
-                  Math.floor((setupStart.getTime() - anchorDayStart) / (24 * 60 * 60 * 1000)),
+                if (quickAddDisabled || !eventType) return;
+                setBlocks(
+                  buildQuickAddScheduleBlocks({
+                    eventType,
+                    startAt,
+                    endAt,
+                    rentalFulfillmentMode,
+                    withStableRefs: withStableBlockRefs,
+                  }),
                 );
-                const showDayIndex = 0;
-                const strikeDayIndex = Math.max(
-                  0,
-                  Math.floor((showEnd.getTime() - anchorDayStart) / (24 * 60 * 60 * 1000)),
-                );
-                const deliveryDayIndex = Math.max(
-                  0,
-                  Math.floor((deliveryStart.getTime() - anchorDayStart) / (24 * 60 * 60 * 1000)),
-                );
-                const returnDayIndex = Math.max(
-                  0,
-                  Math.floor((showEnd.getTime() - anchorDayStart) / (24 * 60 * 60 * 1000)),
-                );
-
-                if (eventType === "Dry Hire") {
-                  const outboundLabel =
-                    rentalFulfillmentMode === "will_call" ? "Check-out Window" : "Drop-off Window";
-                  const returnLabel =
-                    rentalFulfillmentMode === "will_call" ? "Return Window" : "Pickup Window";
-                  setBlocks(
-                    withStableBlockRefs([
-                      {
-                        blockType: "setup",
-                        label: outboundLabel,
-                        dayIndex: deliveryDayIndex,
-                        startsAt: toLocalDateTimeInput(deliveryStart),
-                        endsAt: toLocalDateTimeInput(showStart),
-                        notes: "",
-                      },
-                      {
-                        blockType: "strike",
-                        label: returnLabel,
-                        dayIndex: returnDayIndex,
-                        startsAt: toLocalDateTimeInput(showEnd),
-                        endsAt: toLocalDateTimeInput(returnEnd),
-                        notes: "",
-                      },
-                    ]),
-                  );
-                  return;
-                }
-
-                const baseBlocks: TimelineBlockDraft[] = [
-                  {
-                    blockType: "setup",
-                    label: "Setup",
-                    dayIndex: setupDayIndex,
-                    startsAt: toLocalDateTimeInput(setupStart),
-                    endsAt: toLocalDateTimeInput(showStart),
-                    notes: "",
-                  },
-                  {
-                    blockType: "strike",
-                    label: "Strike",
-                    dayIndex: strikeDayIndex,
-                    startsAt: toLocalDateTimeInput(showEnd),
-                    endsAt: toLocalDateTimeInput(strikeEnd),
-                    notes: "",
-                  },
-                ];
-
-                if (eventType === "Crewed Event") {
-                  baseBlocks.splice(1, 0, {
-                    blockType: "show",
-                    label: "Show",
-                    dayIndex: showDayIndex,
-                    startsAt: toLocalDateTimeInput(showStart),
-                    endsAt: toLocalDateTimeInput(showEnd),
-                    notes: "",
-                  });
-                }
-
-                setBlocks(withStableBlockRefs(baseBlocks));
               }}
             />
             <div className="space-y-2 rounded-md border p-3">

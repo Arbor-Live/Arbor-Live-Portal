@@ -5,7 +5,8 @@ import DatePicker from "react-datepicker";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
-function toLocalDateTimeInput(date: Date) {
+/** Format picker Date → wall-clock string (digits only; timezone applied on save). */
+function toNaiveDateTimeInput(date: Date) {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
@@ -14,9 +15,17 @@ function toLocalDateTimeInput(date: Date) {
   return `${y}-${m}-${d}T${hh}:${mm}`;
 }
 
-function parseLocalDateTimeInput(value: string) {
+/** Parse wall-clock string into a Date whose local components match (picker UI). */
+function parseNaiveDateTimeInput(value: string) {
   if (!value) return null;
-  const date = new Date(value);
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(value.trim());
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const date = new Date(year, month - 1, day, hour, minute, 0, 0);
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
@@ -48,12 +57,12 @@ export function DateTimePicker({
   placeholder?: string;
   className?: string;
 }) {
-  const selected = useMemo(() => parseLocalDateTimeInput(value), [value]);
+  const selected = useMemo(() => parseNaiveDateTimeInput(value), [value]);
 
   return (
     <DatePicker
       selected={selected}
-      onChange={(date: Date | null) => onChange(date ? toLocalDateTimeInput(date) : "")}
+      onChange={(date: Date | null) => onChange(date ? toNaiveDateTimeInput(date) : "")}
       showTimeSelect
       timeIntervals={15}
       dateFormat="yyyy-MM-dd HH:mm"
@@ -69,4 +78,3 @@ export function DateTimePicker({
     />
   );
 }
-

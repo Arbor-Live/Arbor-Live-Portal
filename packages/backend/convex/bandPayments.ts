@@ -1,4 +1,4 @@
-import { formatUsd } from "@arbor/format";
+import { formatDateTime, formatUsd } from "@arbor/format";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
@@ -10,12 +10,12 @@ import {
   type QueryCtx,
 } from "./_generated/server";
 import { components, internal } from "./_generated/api";
-import { getUserId, requireArborInternalContext, requireAuth } from "./lib/auth";
+import { getUserId, getActiveOrganizationContextOrNull, requireArborInternalContext, requireAuth, requireBandContext } from "./lib/auth";
 import {
   BAND_PAYMENT_SETTINGS_KEY,
+  bandPaymentHasAgreementPdf,
   bandPaymentStatusLabel,
   computeBandPaymentTotal,
-  createBandPaymentConfirmationToken,
   formatBandPaymentDate,
   formatPerformanceHours,
   getBandPaymentSettings,
@@ -27,12 +27,14 @@ import {
   type BandPaymentPricingMode,
   type BandPaymentStatus,
 } from "./lib/bandPayments";
+import { allocateBandPaymentConfirmationToken } from "./lib/publicReferenceIds";
 import {
   scheduleBandPaymentCompletedEmails,
   scheduleBandPaymentConfirmationEmail,
   scheduleBandPaymentPayeeRequiredEmail,
 } from "./email/bandPaymentEmails";
 import { upsertEventBandParticipation } from "./eventBands";
+import { EVENT_TIMEZONE } from "./email/constants";
 
 const pricingModeValue = v.union(v.literal("per_member_hourly"), v.literal("fixed_total"));
 const statusValue = v.union(
@@ -75,21 +77,109 @@ const bandPaymentRowValidator = v.object({
   statusLabel: v.string(),
   confirmationToken: v.string(),
   confirmationEmailSentAt: v.optional(v.number()),
+  confirmationSentByUserId: v.optional(v.string()),
+  confirmationSentByName: v.optional(v.string()),
   confirmedAt: v.optional(v.number()),
+  signedByUserId: v.optional(v.string()),
+  signatureTypedName: v.optional(v.string()),
   confirmationReplyFrom: v.optional(v.string()),
   confirmationReplyBody: v.optional(v.string()),
   servicePaymentNumber: v.optional(v.string()),
   paidAt: v.optional(v.number()),
   photoAlbumUrl: v.optional(v.string()),
   eventEnded: v.boolean(),
+  canDownloadAgreementPdf: v.boolean(),
 });
+
+const bandFacingPaymentRowValidator = v.object({
+  _id: v.id("eventBandPayments"),
+  eventId: v.id("events"),
+  eventTitle: v.string(),
+  eventStartAt: v.number(),
+  venueName: v.optional(v.string()),
+  pricingMode: pricingModeValue,
+  ratePerMemberPerHourUsd: v.optional(v.number()),
+  performanceHours: v.optional(v.number()),
+  memberCount: v.optional(v.number()),
+  totalUsd: v.number(),
+  designatedPayeeName: v.optional(v.string()),
+  status: statusValue,
+  statusLabel: v.string(),
+  confirmationToken: v.string(),
+  confirmationEmailSentAt: v.optional(v.number()),
+  confirmedAt: v.optional(v.number()),
+  signatureTypedName: v.optional(v.string()),
+  servicePaymentNumber: v.optional(v.string()),
+  paidAt: v.optional(v.number()),
+  canSign: v.boolean(),
+  canDownloadAgreementPdf: v.boolean(),
+});
+
+const agreementDocumentValidator = v.object({
+  confirmationToken: v.string(),
+  bandName: v.string(),
+  eventTitle: v.string(),
+  venueName: v.optional(v.string()),
+  eventDateLabel: v.string(),
+  pricingMode: pricingModeValue,
+  ratePerMemberPerHourUsd: v.optional(v.number()),
+  performanceHoursLabel: v.string(),
+  memberCount: v.optional(v.number()),
+  totalUsd: v.number(),
+  designatedPayeeName: v.string(),
+  designatedPayeeEmail: v.optional(v.string()),
+  designatedPayeeMailingAddress: v.optional(v.string()),
+  adminRequesterName: v.optional(v.string()),
+  adminRequesterEmail: v.optional(v.string()),
+  adminApproverName: v.optional(v.string()),
+  adminApproverEmail: v.optional(v.string()),
+  adminSentAtLabel: v.optional(v.string()),
+  signatureTypedName: v.optional(v.string()),
+  signedAtLabel: v.optional(v.string()),
+  legacyReplyFrom: v.optional(v.string()),
+  servicePaymentNumber: v.optional(v.string()),
+  paidAtLabel: v.optional(v.string()),
+  status: statusValue,
+});
+
+async function resolveAuthUserIdentity(
+  ctx: QueryCtx | MutationCtx,
+  userId: string | undefined,
+): Promise<{ name: string; email: string } | null> {
+  if (!userId) return null;
+  const user = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
+    model: "user",
+    where: [{ field: "id", value: userId }],
+  })) as { id?: string; email?: string; name?: string } | null;
+  const email = user?.email?.trim();
+  if (!email) return null;
+  const name = user?.name?.trim() || email;
+  return { name, email };
+}
 
 async function resolveBandName(ctx: QueryCtx | MutationCtx, organizationId: string) {
   const profile = await ctx.db
     .query("organizationProfiles")
     .withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId))
     .unique();
-  return profile?.displayName?.trim() || organizationId;
+  const displayName = profile?.displayName?.trim();
+  if (displayName) return displayName;
+
+  // Prefer `_id` (adapter fast path), then `id`, matching lib/auth.ts.
+  let org = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
+    model: "organization",
+    where: [{ field: "_id", value: organizationId }],
+  })) as { name?: string } | null;
+  if (!org) {
+    org = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
+      model: "organization",
+      where: [{ field: "id", value: organizationId }],
+    })) as { name?: string } | null;
+  }
+  const orgName = org?.name?.trim();
+  if (orgName) return orgName;
+
+  return "Band";
 }
 
 async function getOrganizationProfilePayee(ctx: QueryCtx | MutationCtx, organizationId: string) {
@@ -205,13 +295,18 @@ async function buildBandPaymentRow(
     statusLabel: bandPaymentStatusLabel(payment.status),
     confirmationToken: payment.confirmationToken,
     confirmationEmailSentAt: payment.confirmationEmailSentAt,
+    confirmationSentByUserId: payment.confirmationSentByUserId,
+    confirmationSentByName: payment.confirmationSentByName,
     confirmedAt: payment.confirmedAt,
+    signedByUserId: payment.signedByUserId,
+    signatureTypedName: payment.signatureTypedName,
     confirmationReplyFrom: payment.confirmationReplyFrom,
     confirmationReplyBody: payment.confirmationReplyBody,
     servicePaymentNumber: payment.servicePaymentNumber,
     paidAt: payment.paidAt,
     photoAlbumUrl: payment.photoAlbumUrl,
     eventEnded: event.endAt <= nowMs,
+    canDownloadAgreementPdf: bandPaymentHasAgreementPdf(payment),
   };
 }
 
@@ -529,7 +624,7 @@ export const upsertForEvent = mutation({
 
     const paymentId = await ctx.db.insert("eventBandPayments", {
       ...payload,
-      confirmationToken: createBandPaymentConfirmationToken(),
+      confirmationToken: await allocateBandPaymentConfirmationToken(ctx),
       createdAt: now,
     });
     await syncEventBandsCost(ctx, args.eventId);
@@ -600,6 +695,7 @@ export const sendConfirmationEmail = mutation({
   args: { paymentId: v.id("eventBandPayments") },
   returns: v.null(),
   handler: async (ctx, args) => {
+    const user = await requireAuth(ctx);
     await requireArborInternalContext(ctx);
     const existing = await ctx.db.get(args.paymentId);
     if (!existing) throw new Error("Band payment not found.");
@@ -608,21 +704,36 @@ export const sendConfirmationEmail = mutation({
       throw new Error("This payment is no longer active.");
     }
     if (payment.status !== "pending_email" && payment.status !== "awaiting_confirmation") {
-      throw new Error("Confirmation email can only be sent from the payment queue.");
+      throw new Error("Signature request emails can only be sent from the payment queue.");
     }
     const effectivePayee = await getEffectivePayeeForPayment(ctx, payment);
     if (!isBandPayeeComplete(effectivePayee)) {
       throw new Error("Designated payee name, email, and mailing address are required before sending.");
     }
+    if (!effectivePayee.designatedPayeeUserId) {
+      throw new Error("Designated payee must be linked to a band member account before sending.");
+    }
 
     const event = await ctx.db.get(payment.eventId);
     if (!event) throw new Error("Event not found.");
+
+    const senderUserId = getUserId(user);
+    const senderIdentity = await resolveAuthUserIdentity(ctx, senderUserId);
+    const senderName =
+      senderIdentity?.name ||
+      user.name?.trim() ||
+      user.email?.trim() ||
+      "Arbor staff";
+    const senderEmail = senderIdentity?.email || user.email?.trim() || undefined;
 
     await scheduleBandPaymentConfirmationEmail(ctx, { payment, event });
 
     await ctx.db.patch(payment._id, {
       status: "awaiting_confirmation",
       confirmationEmailSentAt: Date.now(),
+      confirmationSentByUserId: senderUserId || undefined,
+      confirmationSentByName: senderName,
+      confirmationSentByEmail: senderEmail,
       updatedAt: Date.now(),
     });
     return null;
@@ -659,21 +770,29 @@ export const markPaid = mutation({
     const payment = await ctx.db.get(args.paymentId);
     if (!payment) throw new Error("Band payment not found.");
     if (payment.status !== "confirmed") {
-      throw new Error("Band confirmation is required before marking paid.");
+      throw new Error("Band e-signature is required before marking paid.");
     }
 
     const servicePaymentNumber = args.servicePaymentNumber.trim();
-    if (!servicePaymentNumber) throw new Error("Service Payment number is required.");
+    if (!servicePaymentNumber) throw new Error("Transfer / Service Payment number is required.");
 
     const event = await ctx.db.get(payment.eventId);
     if (!event) throw new Error("Event not found.");
 
     const now = Date.now();
+    const paidByUserId = getUserId(user);
+    const paidByIdentity = await resolveAuthUserIdentity(ctx, paidByUserId);
+    const paidByName =
+      paidByIdentity?.name || user.name?.trim() || user.email?.trim() || "Arbor staff";
+    const paidByEmail = paidByIdentity?.email || user.email?.trim() || undefined;
+
     await ctx.db.patch(payment._id, {
       status: "paid",
       servicePaymentNumber,
       paidAt: now,
-      paidByUserId: getUserId(user),
+      paidByUserId,
+      paidByName,
+      paidByEmail,
       updatedAt: now,
     });
 
@@ -824,51 +943,213 @@ export const listBandOrgNotificationEmails = internalQuery({
   },
 });
 
-export const getByConfirmationToken = internalQuery({
-  args: { confirmationToken: v.string() },
-  returns: v.union(
-    v.object({
-      _id: v.id("eventBandPayments"),
-      designatedPayeeEmail: v.optional(v.string()),
-      status: statusValue,
-    }),
-    v.null(),
-  ),
-  handler: async (ctx, args) => {
-    const payment = await ctx.db
+export const listForActiveBand = query({
+  args: {},
+  returns: v.array(bandFacingPaymentRowValidator),
+  handler: async (ctx) => {
+    const bandContext = await requireBandContext(ctx);
+    const user = await requireAuth(ctx);
+    const userId = getUserId(user);
+    const payments = await ctx.db
       .query("eventBandPayments")
-      .withIndex("by_confirmationToken", (q) => q.eq("confirmationToken", args.confirmationToken))
-      .unique();
-    if (!payment) return null;
-    return {
-      _id: payment._id,
-      designatedPayeeEmail: payment.designatedPayeeEmail,
-      status: payment.status,
-    };
+      .withIndex("by_organizationId", (q) => q.eq("organizationId", bandContext.organizationId))
+      .take(200);
+    const rows = [];
+    for (const payment of payments) {
+      if (payment.status === "cancelled" || payment.status === "draft") continue;
+      const event = await ctx.db.get(payment.eventId);
+      if (!event) continue;
+      const canSign =
+        payment.status === "awaiting_confirmation" &&
+        Boolean(payment.designatedPayeeUserId) &&
+        payment.designatedPayeeUserId === userId;
+      rows.push({
+        _id: payment._id,
+        eventId: payment.eventId,
+        eventTitle: event.title,
+        eventStartAt: event.startAt,
+        venueName: event.venueName,
+        pricingMode: payment.pricingMode,
+        ratePerMemberPerHourUsd: payment.ratePerMemberPerHourUsd,
+        performanceHours: payment.performanceHours,
+        memberCount: payment.memberCount,
+        totalUsd: payment.totalUsd,
+        designatedPayeeName: payment.designatedPayeeName,
+        status: payment.status,
+        statusLabel: bandPaymentStatusLabel(payment.status),
+        confirmationToken: payment.confirmationToken,
+        confirmationEmailSentAt: payment.confirmationEmailSentAt,
+        confirmedAt: payment.confirmedAt,
+        signatureTypedName: payment.signatureTypedName,
+        servicePaymentNumber: payment.servicePaymentNumber,
+        paidAt: payment.paidAt,
+        canSign,
+        canDownloadAgreementPdf: bandPaymentHasAgreementPdf(payment),
+      });
+    }
+    return rows.sort((a, b) => b.eventStartAt - a.eventStartAt);
   },
 });
 
-export const recordConfirmationReply = internalMutation({
+export const countPendingActionsForActiveBand = query({
+  args: {},
+  returns: v.number(),
+  handler: async (ctx) => {
+    const bandContext = await requireBandContext(ctx);
+    const user = await requireAuth(ctx);
+    const userId = getUserId(user);
+    const profile = await ctx.db
+      .query("organizationProfiles")
+      .withIndex("by_organizationId", (q) => q.eq("organizationId", bandContext.organizationId))
+      .unique();
+    const payeeComplete = isBandPayeeComplete(payeeFieldsFromProfile(profile));
+
+    const payments = await ctx.db
+      .query("eventBandPayments")
+      .withIndex("by_organizationId", (q) => q.eq("organizationId", bandContext.organizationId))
+      .take(200);
+
+    let awaitingSignatureForMe = 0;
+    let waitingOnPayeeSetup = 0;
+    for (const payment of payments) {
+      if (payment.status === "cancelled" || payment.status === "draft") continue;
+      if (
+        payment.status === "awaiting_confirmation" &&
+        payment.designatedPayeeUserId &&
+        payment.designatedPayeeUserId === userId
+      ) {
+        awaitingSignatureForMe += 1;
+      }
+      if (payment.status === "pending_payee" && !payeeComplete) {
+        waitingOnPayeeSetup += 1;
+      }
+    }
+
+    // Count payee-setup as one actionable chip item for the band, not one per payment.
+    return awaitingSignatureForMe + (waitingOnPayeeSetup > 0 ? 1 : 0);
+  },
+});
+
+export const signPayment = mutation({
   args: {
     paymentId: v.id("eventBandPayments"),
-    replyFrom: v.string(),
-    replyBody: v.string(),
-    replyEmailId: v.string(),
+    typedName: v.string(),
+    agreed: v.boolean(),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
+    const bandContext = await requireBandContext(ctx);
+    const user = await requireAuth(ctx);
+    const userId = getUserId(user);
+    if (!userId) throw new Error("You must be signed in.");
+    if (!args.agreed) throw new Error("You must agree to the payment amount before signing.");
+
+    const typedName = args.typedName.trim();
+    if (typedName.length < 2) throw new Error("Enter your full legal name to sign.");
+
     const payment = await ctx.db.get(args.paymentId);
-    if (!payment) return null;
-    if (payment.status === "paid" || payment.status === "cancelled") return null;
+    if (!payment || payment.organizationId !== bandContext.organizationId) {
+      throw new Error("Band payment not found.");
+    }
+    if (payment.status !== "awaiting_confirmation") {
+      throw new Error("This payment is not awaiting signature.");
+    }
+    if (!payment.designatedPayeeUserId) {
+      throw new Error("Designated payee is not linked to a band member account.");
+    }
+    if (payment.designatedPayeeUserId !== userId) {
+      throw new Error("Only the designated payee can sign this payment.");
+    }
+
     await ctx.db.patch(payment._id, {
       status: "confirmed",
       confirmedAt: Date.now(),
-      confirmationReplyFrom: args.replyFrom.trim(),
-      confirmationReplyBody: args.replyBody.trim(),
-      confirmationReplyEmailId: args.replyEmailId,
+      signedByUserId: userId,
+      signatureTypedName: typedName,
       updatedAt: Date.now(),
     });
     return null;
+  },
+});
+
+async function buildAgreementDocumentData(
+  ctx: QueryCtx | MutationCtx,
+  payment: Doc<"eventBandPayments">,
+) {
+  if (!bandPaymentHasAgreementPdf(payment)) {
+    throw new Error("Agreement PDF is available after the payee signs.");
+  }
+  const event = await ctx.db.get(payment.eventId);
+  if (!event) throw new Error("Event not found.");
+  const timezone = event.timezone || EVENT_TIMEZONE;
+
+  const requesterLookup = await resolveAuthUserIdentity(ctx, payment.confirmationSentByUserId);
+  const adminRequesterName =
+    payment.confirmationSentByName?.trim() || requesterLookup?.name || undefined;
+  const adminRequesterEmail =
+    payment.confirmationSentByEmail?.trim() || requesterLookup?.email || undefined;
+
+  const paidByLookup = await resolveAuthUserIdentity(ctx, payment.paidByUserId);
+  const adminApproverName =
+    payment.paidByName?.trim() ||
+    paidByLookup?.name ||
+    adminRequesterName ||
+    undefined;
+  const adminApproverEmail =
+    payment.paidByEmail?.trim() ||
+    paidByLookup?.email ||
+    adminRequesterEmail ||
+    undefined;
+
+  return {
+    confirmationToken: payment.confirmationToken,
+    bandName: await resolveBandName(ctx, payment.organizationId),
+    eventTitle: event.title,
+    venueName: event.venueName,
+    eventDateLabel: formatBandPaymentDate(event.startAt, timezone),
+    pricingMode: payment.pricingMode,
+    ratePerMemberPerHourUsd: payment.ratePerMemberPerHourUsd,
+    performanceHoursLabel: formatPerformanceHours(payment.performanceHours),
+    memberCount: payment.memberCount,
+    totalUsd: payment.totalUsd,
+    designatedPayeeName: payment.designatedPayeeName ?? "Designated payee",
+    designatedPayeeEmail: payment.designatedPayeeEmail,
+    designatedPayeeMailingAddress: payment.designatedPayeeMailingAddress,
+    adminRequesterName,
+    adminRequesterEmail,
+    adminApproverName,
+    adminApproverEmail,
+    adminSentAtLabel: payment.confirmationEmailSentAt
+      ? formatDateTime(payment.confirmationEmailSentAt, "long", timezone)
+      : undefined,
+    signatureTypedName: payment.signatureTypedName,
+    signedAtLabel: payment.confirmedAt
+      ? formatDateTime(payment.confirmedAt, "long", timezone)
+      : undefined,
+    legacyReplyFrom: payment.signatureTypedName ? undefined : payment.confirmationReplyFrom,
+    servicePaymentNumber: payment.servicePaymentNumber,
+    paidAtLabel: payment.paidAt ? formatDateTime(payment.paidAt, "long", timezone) : undefined,
+    status: payment.status,
+  };
+}
+
+export const getAgreementDocumentData = query({
+  args: { paymentId: v.id("eventBandPayments") },
+  returns: agreementDocumentValidator,
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    const payment = await ctx.db.get(args.paymentId);
+    if (!payment) throw new Error("Band payment not found.");
+
+    const orgContext = await getActiveOrganizationContextOrNull(ctx);
+    if (!orgContext) throw new Error("You do not have access to this payment agreement.");
+    const isArbor = orgContext.organizationType === "arbor_internal";
+    const isBandMember = orgContext.organizationId === payment.organizationId;
+    if (!isArbor && !isBandMember) {
+      throw new Error("You do not have access to this payment agreement.");
+    }
+
+    return await buildAgreementDocumentData(ctx, payment);
   },
 });
 
@@ -903,11 +1184,11 @@ export const buildConfirmationPreview = query({
     if (!event) throw new Error("Event not found.");
     const payeeFirstName =
       payment.designatedPayeeName?.split(" ")[0] ?? payment.designatedPayeeName ?? "there";
-    const subject = `Payment confirmation needed: ${event.title} [${payment.confirmationToken}]`;
+    const subject = `Payment ready for your signature: ${event.title} [${payment.confirmationToken}]`;
     const lines = [
       `Hi ${payeeFirstName}!`,
       "",
-      "As part of payment processing for your band's performance, could you confirm the following details are accurate?",
+      "A payment for your band's performance is ready for your signature in the Arbor Live portal.",
       `Date: ${formatBandPaymentDate(event.startAt, event.timezone)}`,
       `Event: ${event.title}`,
       `Location: ${event.venueName ?? "Arbor Stage"}`,
@@ -921,7 +1202,7 @@ export const buildConfirmationPreview = query({
       "",
       `Band designated payee: ${payment.designatedPayeeName}`,
       "",
-      "If all these details are correct, email me back your confirmation and I can get started on the payment process.",
+      "Sign in to the band portal to review the amount and e-sign your agreement.",
       "",
     );
     if (payment.photoAlbumUrl) {

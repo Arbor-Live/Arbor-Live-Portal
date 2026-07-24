@@ -1,10 +1,9 @@
-import { nanoid } from "nanoid";
 import type { Doc } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { EVENT_TIMEZONE } from "../email/constants";
 
 export const BAND_PAYMENT_SETTINGS_KEY = "default";
-export const BAND_PAYMENT_TOKEN_PREFIX = "ALBPAY-";
+export { BAND_PAYMENT_REFERENCE_PREFIX as BAND_PAYMENT_TOKEN_PREFIX } from "./publicReferenceIds";
 
 export type BandPaymentPricingMode = "per_member_hourly" | "fixed_total";
 export type BandPaymentStatus =
@@ -57,17 +56,6 @@ export function resolvePayeeSnapshot(
 
 export function queueStatusForEndedEvent(payeeComplete: boolean): "pending_payee" | "pending_email" {
   return payeeComplete ? "pending_email" : "pending_payee";
-}
-
-export function createBandPaymentConfirmationToken() {
-  return `${BAND_PAYMENT_TOKEN_PREFIX}${nanoid(10)}`;
-}
-
-export function extractBandPaymentToken(subject: string | undefined | null) {
-  if (!subject) return null;
-  const match = subject.match(/\[ALBPAY-[A-Za-z0-9_-]+\]/);
-  if (!match) return null;
-  return match[0]!.slice(1, -1);
 }
 
 export function computeBandPaymentTotal(args: {
@@ -139,9 +127,9 @@ export function bandPaymentStatusLabel(status: BandPaymentStatus) {
     case "pending_payee":
       return "Needs payee info";
     case "pending_email":
-      return "Needs confirmation email";
+      return "Needs signature request";
     case "awaiting_confirmation":
-      return "Awaiting band reply";
+      return "Awaiting signature";
     case "confirmed":
       return "Ready to pay";
     case "paid":
@@ -149,4 +137,19 @@ export function bandPaymentStatusLabel(status: BandPaymentStatus) {
     case "cancelled":
       return "Cancelled";
   }
+}
+
+export function bandPaymentHasAgreementPdf(payment: {
+  status: BandPaymentStatus;
+  confirmedAt?: number;
+  signatureTypedName?: string;
+  confirmationReplyFrom?: string;
+  confirmationEmailSentAt?: number;
+}) {
+  if (payment.status !== "confirmed" && payment.status !== "paid") return false;
+  if (!payment.confirmedAt) return false;
+  const hasPayeeAgreement = Boolean(
+    payment.signatureTypedName?.trim() || payment.confirmationReplyFrom?.trim(),
+  );
+  return hasPayeeAgreement && Boolean(payment.confirmationEmailSentAt);
 }

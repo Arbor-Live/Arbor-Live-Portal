@@ -12,7 +12,7 @@ import { Avatar, AvatarFallback, AvatarGroup, AvatarGroupCount, AvatarImage } fr
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 import { normalizeEventStatus } from "@/lib/event-status";
-import { formatDateTime, formatDateTimeRange } from "@/lib/format";
+import { PORTAL_TIMEZONE, formatDateTime, formatDateTimeRange } from "@/lib/format";
 
 type DashboardEvent = {
   _id: string;
@@ -161,6 +161,7 @@ export function EventsCalendarView({ events }: { events: DashboardEvent[] }) {
           key={view}
           plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
           initialView={view}
+          timeZone={PORTAL_TIMEZONE}
           allDaySlot={false}
           nowIndicator
           dayMaxEvents
@@ -171,6 +172,7 @@ export function EventsCalendarView({ events }: { events: DashboardEvent[] }) {
           expandRows
           dayHeaderFormat={{ weekday: "short", month: "numeric", day: "numeric" }}
           eventTimeFormat={{ hour: "numeric", minute: "2-digit", meridiem: "short" }}
+          slotLabelFormat={{ hour: "numeric", minute: "2-digit", meridiem: "short" }}
           headerToolbar={{
             left: "prev,next today",
             center: "title",

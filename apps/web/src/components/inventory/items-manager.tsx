@@ -48,7 +48,6 @@ export function ItemsManager() {
   });
   const types = useQuery(api.inventoryTypes.list, {});
   const locations = useQuery(api.storageLocations.list, {});
-  const createItem = useMutation(api.inventoryItems.create);
   const removeItem = useMutation(api.inventoryItems.remove);
   const sortedItems = useMemo(() => {
     const rows = [...(items ?? [])];

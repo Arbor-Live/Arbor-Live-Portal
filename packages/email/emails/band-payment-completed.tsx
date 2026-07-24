@@ -25,19 +25,24 @@ export function BandPaymentCompletedEmail({
   const greeting = recipientName ? `Hi ${recipientName},` : "Hi!";
 
   return (
-    <EmailLayout preview={`Payment processed for ${eventTitle}`} heading="Band Payment Processed">
+    <EmailLayout
+      preview={`Payment submitted for processing: ${eventTitle}`}
+      heading="Band Payment Submitted for Processing"
+    >
       <BodyCopy>{greeting}</BodyCopy>
       <BodyCopy>
-        Payment for {bandName}&apos;s performance at {eventTitle} has been submitted through GrantEd.
+        Payment for {bandName}&apos;s performance at {eventTitle} has been submitted and is being
+        processed by Stanford. You will be contacted if any additional information is required.
       </BodyCopy>
       <EventDetailsSection eventTitle={eventTitle} venueName={venueName} dateRangeLabel={dateRangeLabel} />
       <DataCard title="Payment">
         <DetailRow label="Total" value={currency(totalUsd)} emphasis />
-        <DetailRow label="Service Payment number" value={servicePaymentNumber} emphasis />
+        <DetailRow label="Transfer / Service Payment number" value={servicePaymentNumber} emphasis />
         <DetailRow label="Designated payee" value={designatedPayeeName} />
       </DataCard>
       <AlertBanner>
-        Funds were sent to your band&apos;s designated payee ({designatedPayeeName}) for distribution among members.
+        Funds will be sent to your band&apos;s designated payee ({designatedPayeeName}) for distribution
+        among members once Stanford processing completes.
       </AlertBanner>
       <MutedCopy>You are receiving this because you are a member of {bandName}.</MutedCopy>
       <EmailSignOff />

@@ -1270,6 +1270,9 @@ export default defineSchema({
     confirmationSentByName: v.optional(v.string()),
     confirmationSentByEmail: v.optional(v.string()),
     confirmedAt: v.optional(v.number()),
+    signedByUserId: v.optional(v.string()),
+    signatureTypedName: v.optional(v.string()),
+    /** Legacy email-reply confirmation fields (no longer written). */
     confirmationReplyFrom: v.optional(v.string()),
     confirmationReplyBody: v.optional(v.string()),
     confirmationReplyEmailId: v.optional(v.string()),
@@ -1279,6 +1282,8 @@ export default defineSchema({
     servicePaymentNumber: v.optional(v.string()),
     paidAt: v.optional(v.number()),
     paidByUserId: v.optional(v.string()),
+    paidByName: v.optional(v.string()),
+    paidByEmail: v.optional(v.string()),
     bandNotifiedAt: v.optional(v.number()),
     photoAlbumUrl: v.optional(v.string()),
     createdAt: v.number(),

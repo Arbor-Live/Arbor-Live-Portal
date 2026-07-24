@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
+import { EventsBoardView } from "@/components/events/events-board-view";
 import { EventsUpcomingView } from "@/components/events/events-upcoming-view";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
 import { Button } from "@/components/ui/button";
@@ -20,7 +21,7 @@ const EventsCalendarView = dynamic(
   },
 );
 
-type EventsView = "calendar" | "upcoming";
+type EventsView = "calendar" | "board" | "upcoming";
 
 export function EventsMainPageClient() {
   const [view, setView] = useState<EventsView>("calendar");
@@ -56,12 +57,15 @@ export function EventsMainPageClient() {
           <input type="checkbox" checked={linkedOnly} onChange={(e) => setLinkedOnly(e.target.checked)} />
           Linked invoice only
         </label>
-        <div className="ml-auto flex gap-2">
+        <div className="ml-auto flex flex-wrap gap-2">
           <Button type="button" variant={view === "calendar" ? "default" : "outline"} onClick={() => setView("calendar")}>
-            Calendar View
+            Calendar
+          </Button>
+          <Button type="button" variant={view === "board" ? "default" : "outline"} onClick={() => setView("board")}>
+            Board
           </Button>
           <Button type="button" variant={view === "upcoming" ? "default" : "outline"} onClick={() => setView("upcoming")}>
-            Upcoming View
+            Upcoming
           </Button>
           <Button asChild>
             <Link href="/dashboard/events/new">Create Event</Link>
@@ -71,6 +75,7 @@ export function EventsMainPageClient() {
 
       {!rows ? <p className="text-sm text-muted-foreground">Loading events...</p> : null}
       {rows && view === "calendar" ? <EventsCalendarView events={rows} /> : null}
+      {rows && view === "board" ? <EventsBoardView events={rows} /> : null}
       {rows && view === "upcoming" ? <EventsUpcomingView events={rows} /> : null}
     </div>
   );

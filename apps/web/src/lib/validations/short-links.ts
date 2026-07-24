@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { formatDate, formatDateTime } from "@/lib/format";
 
 export const shortLinkExpiryModes = ["none", "manual", "event_plus_30_days"] as const;
 
@@ -78,18 +79,10 @@ export function formatRelativeTime(ms: number | null | undefined) {
   if (hours < 48) return `${hours}h ago`;
   const days = Math.round(hours / 24);
   if (days < 14) return `${days}d ago`;
-  return new Date(ms).toLocaleDateString();
+  return formatDate(ms);
 }
 
 export function formatExpiresAt(ms: number | null | undefined) {
   if (ms == null) return "Never";
-  return new Date(ms).toLocaleString("en-US", {
-    timeZone: "America/Los_Angeles",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    timeZoneName: "short",
-  });
+  return formatDateTime(ms, "long");
 }

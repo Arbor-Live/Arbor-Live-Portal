@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
 import { SearchableSelect, type SearchableSelectOption } from "@/components/inventory/searchable-select";
+import { formatDate } from "@/lib/format";
 
 /**
  * Searchable event picker — wraps `SearchableSelect`.
@@ -29,7 +30,7 @@ export function EventSelect({
       .map((event) => ({
         value: event._id as string,
         label: event.title,
-        description: [new Date(event.startAt).toLocaleDateString(), event.venueName]
+        description: [formatDate(event.startAt), event.venueName]
           .filter(Boolean)
           .join(" · "),
         keywords: [event.venueName, event.status, event.eventType].filter(Boolean).join(" "),

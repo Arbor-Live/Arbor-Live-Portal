@@ -129,12 +129,18 @@ const marketingSubItems: NavSubItem[] = [
   { title: "Settings", url: "/dashboard/marketing/settings" },
 ]
 
+const bandsSubItems: NavSubItem[] = [
+  { title: "Profile", url: "/dashboard/bands-and-performers" },
+  { title: "Payments", url: "/dashboard/bands-and-performers/payments" },
+]
+
 const sectionSubItems: Record<string, NavSubItem[]> = {
   "/dashboard/events": eventsSubItems,
   "/dashboard/financial-hub": financialHubSubItems,
   "/dashboard/inventory": inventorySubItems,
   "/dashboard/users": usersSubItems,
   "/dashboard/marketing": marketingSubItems,
+  "/dashboard/bands-and-performers": bandsSubItems,
 }
 
 function visibleSubItems(
@@ -187,6 +193,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
   const { data } = authClient.useSession()
   const [now] = useState(() => Date.now())
   const [adminSchedulingRange] = useState(() => getDefaultAdminSchedulingRange())
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({})
   const viewer = useQuery(api.users.getViewer, {})
   const account = useQuery(api.account.getMyAccount, {})
   const activeOrganization = useQuery(api.users.getActiveOrganization, {})
@@ -227,6 +234,12 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
         }
       : "skip",
   )
+  // Keep this last among useQuery calls: if it errors (e.g. not yet pushed),
+  // earlier hooks still ran with a stable count for this render attempt.
+  const pendingBandPaymentActionsCount = useQuery(
+    api.bandPayments.countPendingActionsForActiveBand,
+    activeOrganization?.organizationType === "band" ? {} : "skip",
+  )
 
   const userName = data?.user?.name ?? "Unknown user"
   const userEmail = data?.user?.email ?? "No email"
@@ -250,7 +263,6 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
   }
   const unconfirmedEventCount = unconfirmedCrewCount?.length ?? 0
   const scopedNavItems = navItems.filter((item) => canAccessNavItem(item, navAccess))
-  const [openSections, setOpenSections] = useState<Record<string, boolean>>({})
 
   function pendingChipCountForUrl(url: string): number {
     switch (url) {
@@ -264,6 +276,8 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
         return pendingCrewApplicationsCount ?? 0
       case "/dashboard/inventory/damage":
         return pendingDamageReportsCount ?? 0
+      case "/dashboard/bands-and-performers/payments":
+        return pendingBandPaymentActionsCount ?? 0
       default:
         return 0
     }

@@ -60,6 +60,7 @@ export function OpenMicWizard() {
   const [confirmation, setConfirmation] = useState<{ nightTitle: string; nightStartAt: number } | null>(null);
   const directionRef = useRef(1);
 
+  // eslint-disable-next-line react-hooks/incompatible-library -- React Hook Form watch() is intentionally used for step routing
   const equipment = form.watch("equipment");
   const showBgMusicLink = equipment.includes("Background Music");
 

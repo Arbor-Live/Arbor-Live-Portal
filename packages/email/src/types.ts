@@ -153,6 +153,7 @@ export type BandPaymentConfirmationEmailProps = {
   designatedPayeeName: string;
   photoAlbumUrl?: string;
   confirmationToken: string;
+  signUrl: string;
 };
 
 export type BandPaymentCompletedEmailProps = {

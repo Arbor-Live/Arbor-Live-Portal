@@ -6,7 +6,6 @@ import { api, type Id } from "@/lib/convex-api";
 import { FormSaveBar } from "@/components/forms";
 import { Form } from "@/components/ui/form";
 import { TextFormField } from "@/components/forms/text-form-field";
-import { TextareaFormField } from "@/components/forms/textarea-form-field";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useConvexForm } from "@/hooks/use-convex-form";

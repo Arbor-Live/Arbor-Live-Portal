@@ -1,6 +1,6 @@
-# Resend for transactional & inbound email
+# Resend for transactional email
 
-The portal sends transactional email (schedules, invites, booking quotes, band-payment requests, auth flows) through [Resend](https://resend.com), and receives **inbound** replies to confirm band payments. Outbound delivery uses the official [`@convex-dev/resend`](https://www.convex.dev/components/resend) Convex component (for durable, queued sends) alongside the raw `resend` SDK (for sends that carry PDF/ICS attachments). Inbound email arrives via a signed webhook handled in Convex HTTP actions.
+The portal sends transactional email (schedules, invites, booking quotes, band-payment requests, auth flows) through [Resend](https://resend.com). Outbound delivery uses the official [`@convex-dev/resend`](https://www.convex.dev/components/resend) Convex component (for durable, queued sends) alongside the raw `resend` SDK (for sends that carry PDF/ICS attachments).
 
 ## Outbound sending
 
@@ -14,8 +14,8 @@ The portal sends transactional email (schedules, invites, booking quotes, band-p
 
 Resend only delivers from a **verified sending domain**. In the Resend
 dashboard: **Domains → Add Domain**, then add the DNS records it lists (SPF,
-DKIM, and — for inbound — an MX record). `EMAIL_FROM` (and the payments
-variants) must use an address on a verified domain, e.g. `noreply@arbor.st`.
+DKIM). `EMAIL_FROM` (and the payments variants) must use an address on a
+verified domain, e.g. `noreply@arbor.st`.
 
 ### Outbound environment variables
 
@@ -37,69 +37,23 @@ npx convex env set EMAIL_FROM "Arbor Notifications <noreply@arbor.st>"
 npx convex env set PAYMENTS_EMAIL_FROM "Arbor Live — Financial Manager <payments@arbor.st>"
 ```
 
-## Inbound webhook (band-payment confirmations)
+## Band payment emails
 
-Band payees confirm a payment by **replying to the confirmation email**. Resend
-receives that reply and posts an `email.received` webhook to Convex, which
-matches the reply to a pending payment and marks it confirmed.
+Band payouts use outbound-only emails:
 
-Flow, handled in [`http.ts`](../packages/backend/convex/http.ts) →
-[`http/resendInbound.ts`](../packages/backend/convex/http/resendInbound.ts):
+1. **Signature request** (`band_payment_confirmation`) — admin sends from the
+   payout queue; payee gets a CTA into the band portal to e-sign.
+2. **Payee required** — nudges the band when designated payee info is missing.
+3. **Submitted for processing** (`band_payment_completed`) — after admin marks
+   paid with a transfer / Service Payment number, all active band members are
+   notified that Stanford is processing the payout.
 
-1. Resend `POST`s to `/webhooks/resend/inbound` with Svix signature headers
-   (`svix-id`, `svix-timestamp`, `svix-signature`).
-2. The handler verifies the signature with `RESEND_INBOUND_WEBHOOK_SECRET`;
-   unsigned/invalid requests are rejected with `400`.
-3. Only `email.received` events proceed. The full message is fetched from Resend,
-   a band-payment token is parsed from the subject, and the matching payment is
-   looked up.
-4. **Fail-closed on sender:** the reply is only accepted if its `From` address
-   provably matches the payment's designated payee. A missing/unparseable `From`
-   is rejected.
+Agreement is recorded in-portal (typed legal name + checkbox), not by email
+reply. There is no Resend inbound webhook.
 
-### Webhook setup
+## Local testing checklist
 
-1. In Resend, verify the domain's **inbound** MX record so Resend can receive
-   mail for the reply address.
-2. **Webhooks → Add Endpoint**, pointing at your Convex **site** URL:
-
-   ```
-   https://<your-convex-deployment>.convex.site/webhooks/resend/inbound
-   ```
-
-   (This is `CONVEX_SITE_URL` + `/webhooks/resend/inbound`, not the app origin.)
-3. Subscribe the endpoint to the `email.received` event.
-4. Copy the endpoint's **signing secret** into `RESEND_INBOUND_WEBHOOK_SECRET`.
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `RESEND_INBOUND_WEBHOOK_SECRET` | Yes (band payments) | Svix signing secret for the inbound webhook endpoint |
-
-```bash
-npx convex env set RESEND_INBOUND_WEBHOOK_SECRET "whsec_xxxxxxxx"
-```
-
-## Email preview workflow
-
-Templates live as React Email components in [`packages/email/emails`](../packages/email/emails) with sample props in `emails/_preview-props.ts`. Preview them in a browser without sending:
-
-```bash
-pnpm dev:email
-# → react-email dev server on http://localhost:3001
-```
-
-Note: the root `pnpm dev` already starts this preview server in parallel with
-the web and backend dev processes (see [`getting-started.md`](./getting-started.md)),
-so a standalone `pnpm dev:email` is only needed when working on templates alone.
-
-Because the same `@arbor/email` render helpers back both the preview server and
-the Convex send path, what you see at `:3001` is what recipients receive.
-
-## Verification
-
-1. Set `RESEND_API_KEY` + `EMAIL_FROM` (verified domain) on the deployment.
-2. Trigger a send (e.g. publish a schedule) and confirm delivery / a row in the
-   Resend dashboard logs. Set `EMAIL_TEST_MODE=true` first to dry-run.
-3. For inbound: set `RESEND_INBOUND_WEBHOOK_SECRET`, send a band-payment
-   confirmation email, reply from the payee address, and confirm the webhook
-   marks the payment confirmed. A reply from any other address must be ignored.
+1. Set `RESEND_API_KEY` and `EMAIL_FROM` on the Convex deployment.
+2. Optionally set `EMAIL_TEST_MODE=true` so sends stay in test mode.
+3. Trigger a band-payment signature request from Financial Hub → Band Payouts
+   and confirm the payee email + portal CTA.
