@@ -3,13 +3,11 @@
  * Boots Convex + Next (or reuses an existing stack), then runs Playwright e2e.
  *
  * Env:
- *   E2E_SKIP_BOOT=1           — assume services already running on :3000
- *   E2E_BASE_URL              — default http://localhost:3000
+ *   E2E_SKIP_BOOT=1        — assume services already running on :3000
+ *   E2E_BASE_URL           — default http://localhost:3000
  *   E2E_ADMIN_EMAIL / E2E_ADMIN_PASSWORD / E2E_ADMIN_NAME
- *   CONVEX_DEPLOY_KEY         — prefer cloud deployment (recommended for CI).
- *                               When set, skips CONVEX_AGENT_MODE=anonymous.
- *   CONVEX_AGENT_MODE=anonymous — local backend (default in CI only when no deploy key)
- *   BETTER_AUTH_SECRET        — written to local .env and Convex deployment env
+ *   CONVEX_AGENT_MODE=anonymous — CI / no Convex login (default when CI=true)
+ *   BETTER_AUTH_SECRET     — written to local .env and Convex deployment env
  */
 import { spawn, execFileSync } from "child_process";
 import { setTimeout as delay } from "timers/promises";
@@ -24,14 +22,8 @@ const webDir = path.join(root, "apps/web");
 const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
 const skipBoot = process.env.E2E_SKIP_BOOT === "1";
 const isCi = process.env.CI === "true" || process.env.CI === "1";
-const deployKey = process.env.CONVEX_DEPLOY_KEY?.trim() || "";
-const useCloudDeployment = Boolean(deployKey);
-// Anonymous local backends are fine for zero-setup local runs, but under CI
-// subscription storms they regularly hit the 1s function budget. Prefer cloud
-// whenever a deploy key is available.
-const agentMode = useCloudDeployment
-  ? undefined
-  : (process.env.CONVEX_AGENT_MODE ?? (isCi ? "anonymous" : undefined));
+const agentMode =
+  process.env.CONVEX_AGENT_MODE ?? (isCi ? "anonymous" : undefined);
 
 const children = [];
 
@@ -128,21 +120,11 @@ function ensureLocalBackendEnvFile(secret) {
 }
 
 function convexEnv(extra = {}) {
-  const env = {
+  return {
     ...process.env,
+    ...(agentMode ? { CONVEX_AGENT_MODE: agentMode } : {}),
     ...extra,
   };
-  if (deployKey) {
-    env.CONVEX_DEPLOY_KEY = deployKey;
-  }
-  if (agentMode) {
-    env.CONVEX_AGENT_MODE = agentMode;
-  } else {
-    // Ensure a leftover anonymous mode from the workflow/shell does not win
-    // when we intentionally target cloud.
-    delete env.CONVEX_AGENT_MODE;
-  }
-  return env;
 }
 
 function setConvexEnv(key, value) {
@@ -158,7 +140,7 @@ async function waitForConvexReady(timeoutMs = 240_000) {
   const envLocal = path.join(backendDir, ".env.local");
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    if (fs.existsSync(envLocal) || useCloudDeployment) {
+    if (fs.existsSync(envLocal)) {
       try {
         execFileSync("pnpm", ["exec", "convex", "env", "list"], {
           cwd: backendDir,
@@ -230,13 +212,9 @@ async function main() {
   if (!skipBoot) {
     ensureLocalBackendEnvFile(secret);
 
-    if (useCloudDeployment) {
-      console.log("Starting Convex against cloud deployment (CONVEX_DEPLOY_KEY)…");
-    } else {
-      console.log(
-        `Starting Convex…${agentMode ? ` (CONVEX_AGENT_MODE=${agentMode})` : ""}`,
-      );
-    }
+    console.log(
+      `Starting Convex…${agentMode ? ` (CONVEX_AGENT_MODE=${agentMode})` : ""}`,
+    );
     run("pnpm", ["exec", "convex", "dev", "--typecheck", "disable"], {
       cwd: backendDir,
       prefix: "convex",
@@ -256,7 +234,6 @@ async function main() {
         ...process.env,
         BETTER_AUTH_SECRET: secret,
         SITE_URL: "http://localhost:3000",
-        ...(deployKey ? { CONVEX_DEPLOY_KEY: deployKey } : {}),
       },
     });
   } else {
