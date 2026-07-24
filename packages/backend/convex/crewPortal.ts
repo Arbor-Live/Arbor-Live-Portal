@@ -2,17 +2,17 @@ import { pacificDateKey, recentPayPeriods } from "@arbor/format";
 import { v } from "convex/values";
 import { components } from "./_generated/api";
 import { mutation, query, type QueryCtx } from "./_generated/server";
-import type { Doc, Id } from "./_generated/dataModel";
+import type { Id } from "./_generated/dataModel";
 import {
   getUserId,
   requireAdmin,
   requireArborInternalContext,
   requireAuth,
 } from "./lib/auth";
+import { listCrewedEventsInRange } from "./lib/crewedEvents";
 import {
   DEFAULT_AVAILABILITY_WEEKS,
   eventMatchesUserTeams,
-  isCrewedEventType,
 } from "./lib/crewTeams";
 import { getDisciplinesForEventMatching, resolveProfileMembership } from "./lib/userVerticals";
 import { normalizeEventStatus } from "./lib/eventStatus";
@@ -65,12 +65,6 @@ function weeksToMs(weeks: number) {
   return weeks * 7 * 24 * 60 * 60 * 1000;
 }
 
-function isUpcomingCrewedEvent(event: Doc<"events">, now: number, windowEnd: number) {
-  if (!isCrewedEventType(event.eventType)) return false;
-  if (normalizeEventStatus(event.status) === "cancelled") return false;
-  return event.endAt >= now && event.startAt <= windowEnd;
-}
-
 async function getCurrentUserProfile(ctx: QueryCtx, userId: string) {
   return await ctx.db
     .query("userAdminProfiles")
@@ -95,49 +89,45 @@ export const listMyPendingAvailability = query({
     const weeksAhead = args.weeksAhead ?? DEFAULT_AVAILABILITY_WEEKS;
     const windowEnd = args.now + weeksToMs(weeksAhead);
 
-    const events = await ctx.db.query("events").withIndex("by_startAt").take(300);
-    const matchedEvents = events
-      .filter(
-        (event) =>
-          isUpcomingCrewedEvent(event, args.now, windowEnd) &&
-          eventMatchesUserTeams(event.teamsInterested, userDisciplines),
-      )
-      .sort((a, b) => a.startAt - b.startAt);
+    const matchedEvents = (
+      await listCrewedEventsInRange(ctx, args.now, windowEnd)
+    ).filter((event) =>
+      eventMatchesUserTeams(event.teamsInterested, userDisciplines),
+    );
 
-    const results = [];
-    for (const event of matchedEvents) {
-      const existing = await ctx.db
-        .query("eventCrewAvailabilityResponses")
-        .withIndex("by_eventId_and_userId", (q) =>
-          q.eq("eventId", event._id).eq("userId", userId),
-        )
-        .unique();
-      if (existing) continue;
+    const myResponses = await ctx.db
+      .query("eventCrewAvailabilityResponses")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .take(500);
+    const respondedEventIds = new Set(myResponses.map((response) => response.eventId));
 
-      const blocks = await ctx.db
-        .query("eventScheduleBlocks")
-        .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", event._id))
-        .take(100);
+    const pendingEvents = matchedEvents.filter((event) => !respondedEventIds.has(event._id));
+    const blockPages = await Promise.all(
+      pendingEvents.map((event) =>
+        ctx.db
+          .query("eventScheduleBlocks")
+          .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", event._id))
+          .take(100),
+      ),
+    );
 
-      results.push({
-        _id: event._id,
-        title: event.title,
-        status: normalizeEventStatus(event.status),
-        eventType: event.eventType,
-        venueName: event.venueName,
-        startAt: event.startAt,
-        endAt: event.endAt,
-        scheduleBlocks: blocks.map((block) => ({
-          _id: block._id,
-          blockType: block.blockType,
-          label: block.label,
-          startsAt: block.startsAt,
-          endsAt: block.endsAt,
-          notes: block.notes,
-        })),
-      });
-    }
-    return results;
+    return pendingEvents.map((event, index) => ({
+      _id: event._id,
+      title: event.title,
+      status: normalizeEventStatus(event.status),
+      eventType: event.eventType,
+      venueName: event.venueName,
+      startAt: event.startAt,
+      endAt: event.endAt,
+      scheduleBlocks: (blockPages[index] ?? []).map((block) => ({
+        _id: block._id,
+        blockType: block.blockType,
+        label: block.label,
+        startsAt: block.startsAt,
+        endsAt: block.endsAt,
+        notes: block.notes,
+      })),
+    }));
   },
 });
 

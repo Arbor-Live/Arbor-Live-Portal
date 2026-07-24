@@ -42,51 +42,61 @@ async function assertUniquePackagePublicSlug(
   }
 }
 
+const MAX_PACKAGE_LIST = 500;
+const MAX_PACKAGE_ITEMS = 200;
+
 export const list = query({
-  args: {},
-  handler: async (ctx) => {
+  args: {
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
     await requireAuth(ctx);
-    const packages = await ctx.db.query("inventoryPackages").take(500);
+    const limit = Math.min(Math.max(args.limit ?? MAX_PACKAGE_LIST, 1), MAX_PACKAGE_LIST);
+    const packages = await ctx.db.query("inventoryPackages").take(limit);
+    const sorted = packages.sort((a, b) => a.name.localeCompare(b.name));
 
-    return await Promise.all(
-      packages
-        .sort((a, b) => a.name.localeCompare(b.name))
-        .map(async (pkg) => {
-          const rows = await ctx.db
-            .query("inventoryPackageItems")
-            .withIndex("by_packageId", (q) => q.eq("packageId", pkg._id))
-            .take(500);
-
-          const hydratedRows = await Promise.all(
-            rows.map(async (row) => ({
-              ...row,
-              type: await ctx.db.get(row.typeId),
-            })),
-          );
-
-          const estimatedRentalValueUsd = hydratedRows.reduce((acc, row) => {
-            const normalRate =
-              row.type?.nonSubsidizedRentalPriceUsd ?? row.type?.rentalPriceUsd;
-            if (!normalRate) return acc;
-            return acc + row.quantity * normalRate;
-          }, 0);
-          const estimatedSubsidizedRentalValueUsd = hydratedRows.reduce((acc, row) => {
-            const subsidizedRate = row.type?.subsidizedRentalPriceUsd;
-            if (!subsidizedRate) return acc;
-            return acc + row.quantity * subsidizedRate;
-          }, 0);
-
-          return {
-            ...pkg,
-            items: hydratedRows,
-            estimatedRentalValueUsd,
-            estimatedSubsidizedRentalValueUsd,
-          };
-        }),
+    const packageItemRows = await Promise.all(
+      sorted.map((pkg) =>
+        ctx.db
+          .query("inventoryPackageItems")
+          .withIndex("by_packageId", (q) => q.eq("packageId", pkg._id))
+          .take(MAX_PACKAGE_ITEMS),
+      ),
     );
+
+    const typeIds = Array.from(
+      new Set(packageItemRows.flat().map((row) => row.typeId)),
+    );
+    const types = await Promise.all(typeIds.map((id) => ctx.db.get(id)));
+    const typeById = new Map(typeIds.map((id, index) => [id, types[index] ?? null]));
+
+    return sorted.map((pkg, index) => {
+      const hydratedRows = (packageItemRows[index] ?? []).map((row) => ({
+        ...row,
+        type: typeById.get(row.typeId) ?? null,
+      }));
+
+      const estimatedRentalValueUsd = hydratedRows.reduce((acc, row) => {
+        const normalRate =
+          row.type?.nonSubsidizedRentalPriceUsd ?? row.type?.rentalPriceUsd;
+        if (!normalRate) return acc;
+        return acc + row.quantity * normalRate;
+      }, 0);
+      const estimatedSubsidizedRentalValueUsd = hydratedRows.reduce((acc, row) => {
+        const subsidizedRate = row.type?.subsidizedRentalPriceUsd;
+        if (!subsidizedRate) return acc;
+        return acc + row.quantity * subsidizedRate;
+      }, 0);
+
+      return {
+        ...pkg,
+        items: hydratedRows,
+        estimatedRentalValueUsd,
+        estimatedSubsidizedRentalValueUsd,
+      };
+    });
   },
 });
-
 async function validatePackageItems(
   ctx: MutationCtx,
   items: Array<{ typeId: Id<"inventoryTypes">; quantity: number }>,
