@@ -37,7 +37,7 @@ const DateTimeInput = forwardRef<HTMLInputElement, ComponentProps<typeof Input>>
     <Input
       ref={ref}
       {...props}
-      data-testid={props["data-testid"] ?? "date-time-picker"}
+      data-testid="date-time-picker"
       className={cn(
         "focus-visible:ring-0 focus-visible:border-input",
         props.className,
