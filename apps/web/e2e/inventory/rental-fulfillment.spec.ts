@@ -33,7 +33,7 @@ test.describe("rental fulfillment", () => {
     });
     await page.getByRole("button", { name: "Complete delivery" }).click();
     await expect(
-      page.getByText(/Delivery already completed|Complete delivery/i).first(),
+      page.getByText(/Delivery completed|Rented equipment|client was not emailed/i).first(),
     ).toBeVisible({ timeout: 25_000 });
 
     const afterDelivery = await pollConvex<{
@@ -59,6 +59,9 @@ test.describe("rental fulfillment", () => {
       timeout: 20_000,
     });
     await page.getByRole("button", { name: "Complete return" }).click();
+    await expect(
+      page.getByText(/Return completed|client was not emailed|Send client email/i).first(),
+    ).toBeVisible({ timeout: 25_000 });
 
     const afterReturn = await pollConvex<{
       outboundCompleted: boolean;
