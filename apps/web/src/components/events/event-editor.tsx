@@ -178,14 +178,20 @@ export function EventEditor({
   const router = useRouter();
   const session = authClient.useSession();
   const isCreate = !eventId;
+  const loadOverviewLookups = isCreate || activeTab === "overview";
   const eventData = useQuery(api.events.get, eventId ? { id: eventId } : "skip");
   const viewer = useQuery(api.users.getViewer, {});
-  const invoices = useQuery(api.invoices.list, {});
-  const hostGroups = useQuery(api.invoiceGroups.list, { activeOnly: true });
-  const managerList = useQuery(api.invoices.listManagers, {});
+  // Billing/host lookups are overview-only — schedule/equipment tabs were fan-out
+  // saturating local Convex (and slowing prod) for fields they never render.
+  const invoices = useQuery(api.invoices.list, loadOverviewLookups ? {} : "skip");
+  const hostGroups = useQuery(
+    api.invoiceGroups.list,
+    loadOverviewLookups ? { activeOnly: true } : "skip",
+  );
+  const managerList = useQuery(api.invoices.listManagers, loadOverviewLookups ? {} : "skip");
   const posterAssignment = useQuery(
     api.marketingDesigns.getPosterAssignmentForEvent,
-    eventId ? { eventId } : "skip",
+    eventId && activeTab === "overview" ? { eventId } : "skip",
   );
   const createEvent = useMutation(api.events.create);
   const createEventSeries = useMutation(api.eventSeries.create);
@@ -940,11 +946,13 @@ export function EventEditor({
   );
   const computedCrewCost = useQuery(
     api.eventCrew.getComputedCrewCost,
-    currentEventId ? { eventId: currentEventId } : "skip",
+    currentEventId && activeTab === "expenses" ? { eventId: currentEventId } : "skip",
   );
   const availabilitySummary = useQuery(
     api.eventCrewAvailability.getSummaryForEvent,
-    currentEventId && (eventType === "Crewed Event" || eventType === "Rental with Crew")
+    currentEventId &&
+      activeTab === "schedule" &&
+      (eventType === "Crewed Event" || eventType === "Rental with Crew")
       ? { eventId: currentEventId }
       : "skip",
   );

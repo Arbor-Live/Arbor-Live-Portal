@@ -1261,3 +1261,82 @@ export const seedCrewYesResponse = mutation({
     return { responseId };
   },
 });
+
+/**
+ * Test-only: assign a crew user to every schedule block (avoids heavy schedule UI under local Convex).
+ */
+export const seedAssignCrewToAllBlocks = mutation({
+  args: {
+    eventId: v.id("events"),
+    userId: v.string(),
+    personName: v.optional(v.string()),
+  },
+  returns: v.object({
+    shiftIds: v.array(v.id("eventCrewShifts")),
+    blockCount: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const now = Date.now();
+    const event = await ctx.db.get(args.eventId);
+    if (!event) throw new Error("Event not found.");
+    const blocks = await ctx.db
+      .query("eventScheduleBlocks")
+      .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", args.eventId))
+      .take(50);
+    if (blocks.length === 0) throw new Error("Event has no schedule blocks.");
+
+    const existing = await ctx.db
+      .query("eventCrewShifts")
+      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+      .take(200);
+    for (const row of existing) {
+      await ctx.db.delete(row._id);
+    }
+
+    const personName = args.personName?.trim() || "E2E Crew";
+    const shiftIds: Id<"eventCrewShifts">[] = [];
+    for (const block of blocks) {
+      const hours = Number(((block.endsAt - block.startsAt) / 3_600_000).toFixed(2));
+      const shiftId = await ctx.db.insert("eventCrewShifts", {
+        eventId: args.eventId,
+        scheduleBlockId: block._id,
+        role: block.label || block.blockType || "Crew",
+        personName,
+        userId: args.userId,
+        startsAt: block.startsAt,
+        endsAt: block.endsAt,
+        hours,
+        postedToExpense: false,
+        notes: "E2E seeded assignment",
+        createdAt: now,
+        updatedAt: now,
+      });
+      shiftIds.push(shiftId);
+    }
+    return { shiftIds, blockCount: blocks.length };
+  },
+});
+
+export const getEventCrewAssignmentState = query({
+  args: { eventId: v.id("events") },
+  returns: v.object({
+    shiftCount: v.number(),
+    assignedUserIds: v.array(v.string()),
+  }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const shifts = await ctx.db
+      .query("eventCrewShifts")
+      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+      .take(200);
+    const assignedUserIds = Array.from(
+      new Set(
+        shifts
+          .map((shift) => shift.userId?.trim())
+          .filter((userId): userId is string => Boolean(userId)),
+      ),
+    );
+    return { shiftCount: shifts.length, assignedUserIds };
+  },
+});

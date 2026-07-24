@@ -10,12 +10,13 @@ test.describe("event edit and dry hire", () => {
 
     const nextTitle = `${seeded.title} Updated`;
     await page.goto(seeded.path);
-    await expect(page.getByText("Edit Event").first()).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText("Edit Event").first()).toBeVisible({ timeout: 45_000 });
 
     const titleInput = page
       .locator("div.space-y-1")
       .filter({ has: page.getByText("Title", { exact: true }) })
       .getByRole("textbox");
+    await expect(titleInput).toBeVisible({ timeout: 30_000 });
     await titleInput.fill(nextTitle);
     await page.getByRole("button", { name: "Save Event" }).first().click();
     await expect(page.getByText(/Saved/i).first()).toBeVisible({ timeout: 20_000 });
