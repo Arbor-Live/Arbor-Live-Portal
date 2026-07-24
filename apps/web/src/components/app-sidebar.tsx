@@ -7,6 +7,7 @@ import { useState, type ComponentProps } from "react"
 import { authClient } from "@/lib/auth-client"
 import { useMutation, useQuery } from "convex/react"
 import { api } from "@/lib/convex-api"
+import { useSessionShell } from "@/components/session-shell-provider"
 import { getDefaultAdminSchedulingRange } from "@/lib/crew-availability"
 import {
   Select,
@@ -204,12 +205,12 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
       pathname.includes("/media") ||
       pathname.includes("/expenses") ||
       /^\/dashboard\/events\/[^/]+$/.test(pathname))
-  const shell = useQuery(api.users.getSessionShell, {})
-  const activeOrganization = useQuery(api.users.getActiveOrganization, {})
-  const myOrganizations = useQuery(api.users.listMyOrganizations, {})
+  const shell = useSessionShell()
   const setActiveOrganization = useMutation(api.users.setActiveOrganization)
   const viewer = shell?.viewer
   const account = shell?.account
+  const activeOrganization = shell?.activeOrganization
+  const myOrganizations = shell?.organizations
   const isAdmin = viewer?.isAdmin ?? false
   const viewerVerticals = viewer?.verticals ?? []
   const hasOperationsAccess = isAdmin || viewerVerticals.includes("Operations")
@@ -219,41 +220,25 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
     viewerVerticals.includes("Crew") ||
     viewerVerticals.includes("Trivia") ||
     viewerVerticals.length === 0
-  const pendingAvailabilityCount = useQuery(
-    api.eventCrewAvailability.getMyPendingAvailabilityCount,
-    activeOrganization?.organizationType === "arbor_internal" && !onEventEditorHeavyRoute
-      ? { now }
-      : "skip",
-  )
-  const pendingBandApplicationsCount = useQuery(
-    api.bandApplications.countPendingSubmitted,
-    isAdmin && !onEventEditorHeavyRoute ? {} : "skip",
-  )
-  const pendingCrewApplicationsCount = useQuery(
-    api.crewApplications.countPendingSubmitted,
-    isAdmin && !onEventEditorHeavyRoute ? {} : "skip",
-  )
-  const pendingDamageReportsCount = useQuery(
-    api.damageReports.countPending,
-    activeOrganization?.organizationType === "arbor_internal" && !onEventEditorHeavyRoute
-      ? {}
-      : "skip",
-  )
-  const unconfirmedCrewCount = useQuery(
-    api.eventCrewAvailability.countUnconfirmedForAdminOverview,
-    activeOrganization?.organizationType === "arbor_internal" && isAdmin && !onEventEditorHeavyRoute
+  const navBadges = useQuery(
+    api.navBadges.getNavBadges,
+    !onEventEditorHeavyRoute && shell
       ? {
+          now,
           rangeStart: adminSchedulingRange.rangeStart,
           rangeEnd: adminSchedulingRange.rangeEnd,
+          includeArborInternal: activeOrganization?.organizationType === "arbor_internal",
+          includeAdmin: isAdmin,
+          includeBand: activeOrganization?.organizationType === "band",
         }
       : "skip",
   )
-  // Keep this last among useQuery calls: if it errors (e.g. not yet pushed),
-  // earlier hooks still ran with a stable count for this render attempt.
-  const pendingBandPaymentActionsCount = useQuery(
-    api.bandPayments.countPendingActionsForActiveBand,
-    activeOrganization?.organizationType === "band" ? {} : "skip",
-  )
+  const pendingAvailabilityCount = navBadges?.pendingAvailability
+  const pendingBandApplicationsCount = navBadges?.pendingBandApplications
+  const pendingCrewApplicationsCount = navBadges?.pendingCrewApplications
+  const pendingDamageReportsCount = navBadges?.pendingDamageReports
+  const unconfirmedCrewCount = navBadges?.unconfirmedCrew
+  const pendingBandPaymentActionsCount = navBadges?.pendingBandPaymentActions
 
   const userName = data?.user?.name ?? "Unknown user"
   const userEmail = data?.user?.email ?? "No email"

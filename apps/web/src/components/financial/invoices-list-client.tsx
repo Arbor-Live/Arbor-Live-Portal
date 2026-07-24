@@ -6,6 +6,7 @@ import { useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
 import { AdminCascadeDeleteDialog } from "@/components/admin/admin-cascade-delete-dialog";
 import { InvoicePdfDownloadButton } from "@/components/financial/invoice-pdf-download-button";
+import { useSessionViewer } from "@/components/session-shell-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatUsd } from "@/lib/format";
@@ -36,7 +37,7 @@ function statusBadgeClass(invoice: {
 }
 
 export function InvoicesListClient() {
-  const viewer = useQuery(api.users.getViewer, {});
+  const viewer = useSessionViewer();
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [approvalFilter, setApprovalFilter] = useState<ApprovalFilter>("all");
   const [search, setSearch] = useState("");

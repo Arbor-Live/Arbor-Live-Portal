@@ -99,6 +99,12 @@ export const list = query({
   },
 });
 
+/** Recent events for calendar/board/upcoming — keep fan-out takes tight. */
+const DASHBOARD_EVENT_TAKE = 150;
+const DASHBOARD_BLOCK_TAKE = 40;
+const DASHBOARD_SHIFT_TAKE = 200;
+const DASHBOARD_PULL_LIST_TAKE = 200;
+
 export const listForDashboard = query({
   args: {
     status: v.optional(eventStatusValue),
@@ -109,7 +115,10 @@ export const listForDashboard = query({
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
     const filterStatus = args.status ? normalizeEventStatus(args.status) : undefined;
-    const baseRows = await ctx.db.query("events").withIndex("by_createdAt").take(200);
+    const baseRows = await ctx.db
+      .query("events")
+      .withIndex("by_createdAt")
+      .take(DASHBOARD_EVENT_TAKE);
     const q = args.query?.trim().toLowerCase();
     const rows = baseRows
       .map((row) => ({ ...row, status: normalizeEventStatus(row.status) }))
@@ -131,7 +140,7 @@ export const listForDashboard = query({
         ctx.db
           .query("eventScheduleBlocks")
           .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", row._id))
-          .take(200),
+          .take(DASHBOARD_BLOCK_TAKE),
       ),
     );
     const perEventShifts = await Promise.all(
@@ -139,7 +148,7 @@ export const listForDashboard = query({
         ctx.db
           .query("eventCrewShifts")
           .withIndex("by_eventId", (q) => q.eq("eventId", row._id))
-          .take(500),
+          .take(DASHBOARD_SHIFT_TAKE),
       ),
     );
     const perEventPullList = await Promise.all(
@@ -147,7 +156,7 @@ export const listForDashboard = query({
         ctx.db
           .query("eventPullListItems")
           .withIndex("by_eventId", (q) => q.eq("eventId", row._id))
-          .take(500),
+          .take(DASHBOARD_PULL_LIST_TAKE),
       ),
     );
 
@@ -162,14 +171,19 @@ export const listForDashboard = query({
       seriesIds.map(async (seriesId) => {
         const series = await ctx.db.get(seriesId);
         if (!series) return;
-        const occurrences = await ctx.db
-          .query("events")
-          .withIndex("by_seriesId_and_occurrenceIndex", (q) => q.eq("seriesId", seriesId))
-          .take(200);
+        // Prefer denormalized occurrenceCount — avoid scanning siblings when set.
+        let totalOccurrences = series.occurrenceCount;
+        if (totalOccurrences === undefined) {
+          const occurrences = await ctx.db
+            .query("events")
+            .withIndex("by_seriesId_and_occurrenceIndex", (q) => q.eq("seriesId", seriesId))
+            .take(200);
+          totalOccurrences = occurrences.length;
+        }
         seriesById.set(seriesId, {
           title: series.title,
           occurrenceCount: series.occurrenceCount,
-          totalOccurrences: series.occurrenceCount ?? occurrences.length,
+          totalOccurrences,
         });
       }),
     );

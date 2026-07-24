@@ -2,9 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useQuery } from "convex/react";
 import { XIcon } from "@phosphor-icons/react";
-import { api } from "@/lib/convex-api";
+import { useSessionShell } from "@/components/session-shell-provider";
 import { Button } from "@/components/ui/button";
 
 const DISMISS_KEY_PREFIX = "arbor-onboarding-banner-dismissed:";
@@ -28,8 +27,7 @@ function readDismissedKeys(): Set<string> {
 }
 
 export function OnboardingBanner() {
-  // Same query as AppSidebar — Convex dedupes the subscription.
-  const shell = useQuery(api.users.getSessionShell, {});
+  const shell = useSessionShell();
   const status = shell?.onboarding;
   const [dismissedKeys, setDismissedKeys] = useState<Set<string>>(readDismissedKeys);
 

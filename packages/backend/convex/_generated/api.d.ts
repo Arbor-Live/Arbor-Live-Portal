@@ -133,6 +133,7 @@ import type * as migrations_convertedEventLinks from "../migrations/convertedEve
 import type * as migrations_eventVisibility from "../migrations/eventVisibility.js";
 import type * as migrations_referenceIds from "../migrations/referenceIds.js";
 import type * as migrations_userVerticals from "../migrations/userVerticals.js";
+import type * as navBadges from "../navBadges.js";
 import type * as onboarding from "../onboarding.js";
 import type * as openMic from "../openMic.js";
 import type * as organizationImporter from "../organizationImporter.js";
@@ -283,6 +284,7 @@ declare const fullApi: ApiFromModules<{
   "migrations/eventVisibility": typeof migrations_eventVisibility;
   "migrations/referenceIds": typeof migrations_referenceIds;
   "migrations/userVerticals": typeof migrations_userVerticals;
+  navBadges: typeof navBadges;
   onboarding: typeof onboarding;
   openMic: typeof openMic;
   organizationImporter: typeof organizationImporter;

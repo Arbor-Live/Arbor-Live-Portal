@@ -11,6 +11,7 @@ import {
   InventoryPackageSearchSelect,
   InventoryTypeSearchSelect,
 } from "@/components/inventory/inventory-search-select";
+import { useSessionViewer } from "@/components/session-shell-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -66,7 +67,7 @@ export function InvoiceEditor({
   initialIssueDate?: string;
 }) {
   const router = useRouter();
-  const viewer = useQuery(api.users.getViewer, {});
+  const viewer = useSessionViewer();
   const [groupId, setGroupId] = useState("");
   const [contactId, setContactId] = useState("");
   const session = authClient.useSession();

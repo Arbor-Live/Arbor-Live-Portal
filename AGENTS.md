@@ -86,3 +86,5 @@ wizards”).
 
 - After schema/backend API edits, run `pnpm --filter backend codegen` (or just
   keep `convex dev` running, which pushes automatically).
+- Dashboard query efficiency (session shell, search pickers, nav badges): see
+  `docs/convex-efficiency.md`.

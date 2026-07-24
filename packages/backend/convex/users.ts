@@ -560,7 +560,8 @@ const onboardingStatusValue = v.union(
 
 /**
  * One auth-resolved payload for shell chrome (sidebar + onboarding banner).
- * Prefer this over stacking getViewer + getMyAccount + getMyStatus.
+ * Prefer this over stacking getViewer + getMyAccount + getMyStatus +
+ * getActiveOrganization + listMyOrganizations.
  */
 export const getSessionShell = query({
   args: {},
@@ -598,6 +599,25 @@ export const getSessionShell = query({
           v.object({ applicable: v.literal(false) }),
         ),
       }),
+      activeOrganization: v.union(
+        v.object({
+          organizationId: v.string(),
+          name: v.string(),
+          slug: v.string(),
+          role: v.string(),
+          organizationType: v.optional(v.string()),
+        }),
+        v.null(),
+      ),
+      organizations: v.array(
+        v.object({
+          organizationId: v.string(),
+          name: v.string(),
+          slug: v.string(),
+          role: v.string(),
+          organizationType: v.optional(v.string()),
+        }),
+      ),
     }),
     v.null(),
   ),
@@ -617,7 +637,42 @@ export const getSessionShell = query({
       avatarUrl = (await ctx.storage.getUrl(profile.avatarStorageId)) ?? undefined;
     }
 
-    const onboarding = await resolveMyOnboardingStatus(ctx, userId);
+    const [onboarding, memberships] = await Promise.all([
+      resolveMyOnboardingStatus(ctx, userId),
+      ctx.db
+        .query("userOrganizationMemberships")
+        .withIndex("by_userId", (q) => q.eq("userId", userId))
+        .take(200),
+    ]);
+
+    const activeMemberships = memberships.filter((row) => row.active);
+    const organizations = (
+      await Promise.all(
+        activeMemberships.map(async (row) => {
+          const [organization, orgProfile] = await Promise.all([
+            getOrganizationById(ctx, row.organizationId),
+            ctx.db
+              .query("organizationProfiles")
+              .withIndex("by_organizationId", (q) => q.eq("organizationId", row.organizationId))
+              .unique(),
+          ]);
+          return {
+            organizationId: row.organizationId,
+            name: organization?.name ?? "Organization",
+            slug: organization?.slug ?? "",
+            role: row.role,
+            organizationType: resolveOrganizationType(organization ?? undefined, orgProfile),
+          };
+        }),
+      )
+    ).sort((a, b) => a.name.localeCompare(b.name));
+
+    const activeOrganization =
+      (orgContext
+        ? organizations.find((org) => org.organizationId === orgContext.organizationId)
+        : undefined) ??
+      organizations[0] ??
+      null;
 
     return {
       viewer: {
@@ -635,6 +690,8 @@ export const getSessionShell = query({
         avatarUrl,
       },
       onboarding,
+      activeOrganization,
+      organizations,
     };
   },
 });

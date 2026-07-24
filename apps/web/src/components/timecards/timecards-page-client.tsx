@@ -1,15 +1,14 @@
 "use client";
 
-import { useQuery } from "convex/react";
-import { api } from "@/lib/convex-api";
+import { useSessionShell } from "@/components/session-shell-provider";
 import { AdminTimecardsOverviewClient } from "@/components/timecards/admin-timecards-overview-client";
 import { TimecardsClient } from "@/components/timecards/timecards-client";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export function TimecardsPageClient() {
-  const viewer = useQuery(api.users.getViewer, {});
-  const activeOrganization = useQuery(api.users.getActiveOrganization, {});
-
+  const shell = useSessionShell();
+  const viewer = shell?.viewer;
+  const activeOrganization = shell === undefined ? undefined : (shell?.activeOrganization ?? null);
   if (!viewer || activeOrganization === undefined) {
     return <Skeleton className="h-48 w-full" />;
   }

@@ -31,6 +31,7 @@ import { Button } from "@/components/ui/button";
 import { SearchableSelect, type SearchableSelectOption } from "@/components/inventory/searchable-select";
 import { VenuePicker } from "@/components/venues/venue-picker";
 import { VenueDetailsButton } from "@/components/venues/venue-details-sheet";
+import { useSessionViewer } from "@/components/session-shell-provider";
 import { EventBandPaymentSection } from "@/components/events/event-band-payment-section";
 import { EventMediaSection } from "@/components/events/event-media-section";
 import { EventPullList, mapPullListRow, type PullListItemDraft } from "@/components/events/event-pull-list";
@@ -184,7 +185,7 @@ export function EventEditor({
     api.events.get,
     eventId ? { id: eventId, detail: eventDetail } : "skip",
   );
-  const viewer = useQuery(api.users.getViewer, {});
+  const viewer = useSessionViewer();
   // Billing/host lookups are overview-only — schedule/equipment tabs were fan-out
   // saturating local Convex (and slowing prod) for fields they never render.
   const invoices = useQuery(api.invoices.list, loadOverviewLookups ? {} : "skip");

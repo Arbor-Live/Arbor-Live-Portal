@@ -8,7 +8,7 @@ description: Core implementation context for Arbor Live Portal (Next.js + Convex
 ## Purpose
 Use this skill to quickly align with how this app is built and avoid regressions in the event/invoice domains.
 
-Human-readable docs live in `docs/` (`getting-started.md`, `architecture.md`, `domain-guide.md`, `environment-variables.md`, `deployment.md`, `r2-storage.md`). Keep `docs/domain-guide.md` in sync when domain behavior described here changes.
+Human-readable docs live in `docs/` (`getting-started.md`, `architecture.md`, `domain-guide.md`, `environment-variables.md`, `deployment.md`, `r2-storage.md`, `convex-efficiency.md`). Keep `docs/domain-guide.md` in sync when domain behavior described here changes.
 
 ## Stack and Structure
 - Monorepo with `pnpm` workspaces.
@@ -27,6 +27,7 @@ Human-readable docs live in `docs/` (`getting-started.md`, `architecture.md`, `d
 - After schema or backend API changes, run `pnpm --filter backend codegen`.
 - Keep queries bounded (`take(...)`), avoid unbounded collection patterns.
 - Use indexes for query access paths.
+- Follow `docs/convex-efficiency.md`: dashboard uses `getSessionShell` + `SessionShellProvider` / `useSessionViewer` (not stacked `getViewer` + org queries); large catalogs use search-on-demand pickers; sidebar badges use `navBadges.getNavBadges`.
 
 ## Event Domain (Current Behavior)
 

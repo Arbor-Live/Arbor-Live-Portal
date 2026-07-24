@@ -7,6 +7,7 @@ import {
   SearchableSelect,
   type SearchableSelectOption,
 } from "@/components/inventory/searchable-select";
+import { useSessionViewer } from "@/components/session-shell-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -85,7 +86,7 @@ export function VenuePicker({
   const [createOpen, setCreateOpen] = useState(false);
   const parentVenues = useQuery(api.venues.listForPicker, createOpen ? { limit: 300 } : "skip");
 
-  const viewer = useQuery(api.users.getViewer, allowCreate ? {} : "skip");
+  const viewer = useSessionViewer();
   const createQuick = useMutation(api.venues.createQuick);
   const [draftName, setDraftName] = useState("");
   const [nicknamesText, setNicknamesText] = useState("");

@@ -2,16 +2,16 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useQuery } from "convex/react";
-import { api } from "@/lib/convex-api";
 import { AdminDashboard } from "@/components/admin-dashboard/admin-dashboard";
 import { CrewDashboard } from "@/components/crew-portal/crew-dashboard";
+import { useSessionShell } from "@/components/session-shell-provider";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export function DashboardHomeClient() {
   const router = useRouter();
-  const viewer = useQuery(api.users.getViewer, {});
-  const activeOrganization = useQuery(api.users.getActiveOrganization, {});
+  const shell = useSessionShell();
+  const viewer = shell?.viewer;
+  const activeOrganization = shell === undefined ? undefined : (shell?.activeOrganization ?? null);
 
   useEffect(() => {
     if (!viewer || activeOrganization === undefined) return;
