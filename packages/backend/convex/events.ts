@@ -255,12 +255,17 @@ export const listForDashboard = query({
 });
 
 export const get = query({
-  args: { id: v.id("events") },
+  args: {
+    id: v.id("events"),
+    /** `schedule` skips pull-list/artifact enrichment used only by other tabs. */
+    detail: v.optional(v.union(v.literal("full"), v.literal("schedule"))),
+  },
   handler: async (ctx, args) => {
     const user = await requireAuth(ctx);
     await requireArborInternalContext(ctx);
     const event = await ctx.db.get(args.id);
     if (!event) return null;
+    const detail = args.detail ?? "full";
     const blocks = await ctx.db
       .query("eventScheduleBlocks")
       .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", args.id))
@@ -273,6 +278,22 @@ export const get = query({
       .query("eventPeopleAssignments")
       .withIndex("by_eventId", (q) => q.eq("eventId", args.id))
       .take(500);
+    const canEdit = canEditEventForUser(user, event, assignments);
+
+    if (detail === "schedule") {
+      return {
+        canEdit,
+        event: { ...event, status: normalizeEventStatus(event.status) },
+        series: null,
+        blocks,
+        shifts,
+        assignments,
+        artifacts: [],
+        expenseReports: [],
+        pullListItems: [],
+      };
+    }
+
     const artifacts = await ctx.db
       .query("eventArtifacts")
       .withIndex("by_eventId", (q) => q.eq("eventId", args.id))
@@ -293,7 +314,6 @@ export const get = query({
       .take(500);
     const sortedPullList = pullListItems.sort((a, b) => a.sortOrder - b.sortOrder || a.createdAt - b.createdAt);
     const enrichedPullList = await enrichPullListItems(ctx, sortedPullList);
-    const canEdit = canEditEventForUser(user, event, assignments);
     return {
       canEdit,
       event: { ...event, status: normalizeEventStatus(event.status) },

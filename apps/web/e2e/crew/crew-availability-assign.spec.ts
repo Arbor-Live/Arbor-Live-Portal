@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import { crewAuthFile } from "../helpers/auth";
 import { e2eEnv } from "../helpers/env";
 import { runConvex } from "../helpers/convex";
@@ -22,8 +22,23 @@ test.describe("crew availability respond", () => {
   });
 });
 
+async function waitForScheduleAssignControls(page: Page) {
+  const allBlocks = page.getByRole("button", { name: "All blocks" });
+  // Local Convex can stall the first subscription burst; one reload usually recovers.
+  try {
+    await expect(allBlocks).toBeVisible({ timeout: 45_000 });
+  } catch {
+    await page.reload();
+    await expect(page.getByText("Schedule", { exact: true }).first()).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(allBlocks).toBeVisible({ timeout: 60_000 });
+  }
+  return allBlocks;
+}
+
 test.describe("schedule assign from yes response", () => {
-  test("seeded yes responder can be assigned to all schedule blocks", async () => {
+  test("admin can assign yes responder on the schedule page and save", async ({ page }) => {
     const crew = runConvex("e2eHelpers:ensureCrewUser", {
       email: e2eEnv.crewEmail,
       password: e2eEnv.crewPassword,
@@ -32,30 +47,29 @@ test.describe("schedule assign from yes response", () => {
 
     const seeded = runConvex("e2eHelpers:seedCrewedEventWithSchedule", {
       title: `E2E Assign ${Date.now()}`,
-    }) as { eventId: string };
+    }) as { schedulePath: string; eventId: string };
 
     runConvex("e2eHelpers:seedCrewYesResponse", {
       eventId: seeded.eventId,
       userId: crew.userId,
     });
 
-    // Avoid the event schedule editor UI: under anonymous local Convex it fans
-    // out too many subscriptions and flakes. Exercise the assignment write path
-    // via helpers and assert persisted shifts.
-    const assigned = runConvex("e2eHelpers:seedAssignCrewToAllBlocks", {
-      eventId: seeded.eventId,
-      userId: crew.userId,
-      personName: e2eEnv.crewName,
-    }) as { shiftIds: string[]; blockCount: number };
+    await page.goto(seeded.schedulePath);
+    await expect(page.getByText("Schedule", { exact: true }).first()).toBeVisible({
+      timeout: 30_000,
+    });
 
-    expect(assigned.blockCount).toBeGreaterThan(0);
-    expect(assigned.shiftIds.length).toBe(assigned.blockCount);
+    const allBlocks = await waitForScheduleAssignControls(page);
+    await expect(page.getByText(e2eEnv.crewName, { exact: true }).first()).toBeVisible();
+
+    await allBlocks.click();
+    await page.getByRole("button", { name: /Save Schedule & Personnel/i }).first().click();
+    await expect(page.getByText(/On schedule/i).first()).toBeVisible({ timeout: 30_000 });
 
     const state = runConvex("e2eHelpers:getEventCrewAssignmentState", {
       eventId: seeded.eventId,
     }) as { shiftCount: number; assignedUserIds: string[] };
-
-    expect(state.shiftCount).toBe(assigned.blockCount);
+    expect(state.shiftCount).toBeGreaterThan(0);
     expect(state.assignedUserIds).toContain(crew.userId);
   });
 });
