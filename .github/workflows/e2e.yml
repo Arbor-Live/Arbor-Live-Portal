@@ -5,8 +5,9 @@ on:
   push:
     branches: [main]
 
+# Serialize against the shared e2e Convex deployment (when CONVEX_DEPLOY_KEY is set).
 concurrency:
-  group: e2e-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: e2e-shared
   cancel-in-progress: true
 
 jobs:
@@ -16,8 +17,9 @@ jobs:
     timeout-minutes: 45
     env:
       CI: "true"
-      CONVEX_AGENT_MODE: anonymous
-      # Local-only secret for anonymous Convex + Better Auth in CI.
+      # Prefer a dedicated cloud deploy key (repo secret). Falls back to anonymous
+      # local Convex only when the secret is missing / empty.
+      CONVEX_DEPLOY_KEY: ${{ secrets.E2E_CONVEX_DEPLOY_KEY }}
       BETTER_AUTH_SECRET: e2e-ci-better-auth-secret-32chars-min
 
     steps:

@@ -110,9 +110,18 @@ Do not rely on this for production testing, and never ship a build with
 | `pnpm codegen:backend` | Regenerate Convex bindings after schema/API changes |
 | `pnpm lint` / `pnpm typecheck` | Lint / typecheck all workspace packages |
 | `pnpm --filter web build` | Full Next.js production build (best cross-file type check) |
-| `pnpm test:e2e` | Boot anonymous Convex + Next, then run Playwright (`E2E_SKIP_BOOT=1` to reuse a running stack) |
+| `pnpm test:e2e` | Boot Convex + Next, then run Playwright (`E2E_SKIP_BOOT=1` to reuse a running stack) |
 
-CI runs the same suite on PRs and pushes to `main` (`.github/workflows/e2e.yml`) with `CONVEX_AGENT_MODE=anonymous` and `E2E_EMAIL_MOCK` so Resend is never called.
+CI (`.github/workflows/e2e.yml`) prefers a **cloud** Convex deployment via repo secret `E2E_CONVEX_DEPLOY_KEY` (avoids anonymous-local 1s timeouts under load). Without that secret it falls back to `CONVEX_AGENT_MODE=anonymous`. Both paths set `E2E_EMAIL_MOCK` so Resend is never called.
+
+To mint the CI deploy key against a dedicated e2e/dev deployment (not prod, not your personal `dev`):
+
+```bash
+cd packages/backend
+npx convex deployment create --type dev --select team:project:dev/e2e-ci
+npx convex deployment token create e2e-ci --save-env
+# Copy the deploy key into GitHub → Settings → Secrets → E2E_CONVEX_DEPLOY_KEY
+```
 
 Note: root `pnpm dev` runs *every* package's `dev` script in parallel,
 including the email preview server. Use the targeted `dev:web` / `dev:backend`
