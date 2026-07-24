@@ -87,7 +87,7 @@ export function PackagesManager() {
 
   const packages = useQuery(api.inventoryPackages.list, {});
   const types = useQuery(api.inventoryTypes.list, {});
-  const inventoryItems = useQuery(api.inventoryItems.list, {});
+  const inventoryItems = useQuery(api.inventoryItems.listSummaries, {});
   const categories = useQuery(api.inventoryCategories.list, { activeOnly: true });
   type InventoryTypeRow = NonNullable<typeof types>[number];
 

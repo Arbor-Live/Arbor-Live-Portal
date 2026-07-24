@@ -7,6 +7,7 @@ import {
   requireArborInternalContext,
   requireAuth,
 } from "./lib/auth";
+import { listCrewedEventsInRange } from "./lib/crewedEvents";
 import {
   DEFAULT_AVAILABILITY_WEEKS,
   eventMatchesUserTeams,
@@ -18,6 +19,7 @@ import {
   isStaffMember,
   resolveProfileMembership,
 } from "./lib/userVerticals";
+
 
 const crewAvailabilityResponseStatusValue = v.union(
   v.literal("yes"),
@@ -222,43 +224,9 @@ async function getCurrentUserProfile(ctx: QueryCtx, userId: string) {
     .unique();
 }
 
-function isCrewedEventInRange(
-  event: Doc<"events">,
-  rangeStart: number,
-  rangeEnd: number,
-) {
-  const status = normalizeEventStatus(event.status);
-  if (status === "cancelled") return false;
-  if (!isCrewedEventType(event.eventType)) return false;
-  return event.startAt <= rangeEnd && event.endAt >= rangeStart;
-}
-
-function isUpcomingCrewedEvent(
-  event: Doc<"events">,
-  now: number,
-  windowEnd: number,
-) {
-  return isCrewedEventInRange(event, now, windowEnd);
-}
-
-async function listCrewedEventsInRange(
-  ctx: QueryCtx,
-  rangeStart: number,
-  rangeEnd: number,
-) {
-  // Index on startAt: only scan events that start in/near the window.
-  const startedInRange = await ctx.db
-    .query("events")
-    .withIndex("by_startAt", (q) => q.gte("startAt", rangeStart).lte("startAt", rangeEnd))
-    .take(150);
-  return startedInRange
-    .filter((event) => isCrewedEventInRange(event, rangeStart, rangeEnd))
-    .sort((a, b) => a.startAt - b.startAt);
-}
-
 /**
- * Lightweight badge count for the admin sidebar — avoids loading the full
- * listForAdminOverview payload (responders, users, eligible-crew scan) on every page.
+ * Lightweight badge count for the admin sidebar — ranged events only, parallel
+ * shift checks, no responders/users/eligible-crew scan.
  */
 export const countUnconfirmedForAdminOverview = query({
   args: {
@@ -273,18 +241,17 @@ export const countUnconfirmedForAdminOverview = query({
     }
 
     const upcomingCrewed = await listCrewedEventsInRange(ctx, args.rangeStart, args.rangeEnd);
-    let unconfirmed = 0;
-    for (const event of upcomingCrewed) {
-      const shifts = await ctx.db
-        .query("eventCrewShifts")
-        .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
-        .take(200);
-      if (!computeShiftStats(shifts).isCrewConfirmed) unconfirmed += 1;
-    }
-    return unconfirmed;
+    const shiftPages = await Promise.all(
+      upcomingCrewed.map((event) =>
+        ctx.db
+          .query("eventCrewShifts")
+          .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
+          .take(100),
+      ),
+    );
+    return shiftPages.filter((shifts) => !computeShiftStats(shifts).isCrewConfirmed).length;
   },
 });
-
 export const listForAdminOverview = query({
   args: {
     rangeStart: v.number(),
@@ -447,18 +414,11 @@ export const listForCrewMember = query({
     const weeksAhead = args.weeksAhead ?? DEFAULT_AVAILABILITY_WEEKS;
     const windowEnd = args.now + weeksToMs(weeksAhead);
 
-    const events = await ctx.db
-      .query("events")
-      .withIndex("by_startAt")
-      .take(300);
-
-    const matchedEvents = events
-      .filter(
-        (event) =>
-          isUpcomingCrewedEvent(event, args.now, windowEnd) &&
-          eventMatchesUserTeams(event.teamsInterested, userDisciplines),
-      )
-      .sort((a, b) => a.startAt - b.startAt);
+    const matchedEvents = (
+      await listCrewedEventsInRange(ctx, args.now, windowEnd)
+    ).filter((event) =>
+      eventMatchesUserTeams(event.teamsInterested, userDisciplines),
+    );
 
     const bundles = await Promise.all(
       matchedEvents.map(async (event) => {
@@ -545,6 +505,10 @@ export const listForCrewMember = query({
   },
 });
 
+/**
+ * Sidebar badge: ranged crewed events + one by_userId response scan.
+ * Avoids per-event response lookups and unbounded startAt scans.
+ */
 export const getMyPendingAvailabilityCount = query({
   args: {
     now: v.number(),
@@ -563,31 +527,22 @@ export const getMyPendingAvailabilityCount = query({
     const weeksAhead = args.weeksAhead ?? DEFAULT_AVAILABILITY_WEEKS;
     const windowEnd = args.now + weeksToMs(weeksAhead);
 
-    const events = await ctx.db
-      .query("events")
-      .withIndex("by_startAt")
-      .take(300);
-
-    const matchedEvents = events.filter(
-      (event) =>
-        isUpcomingCrewedEvent(event, args.now, windowEnd) &&
-        eventMatchesUserTeams(event.teamsInterested, userDisciplines),
+    const matchedEvents = (
+      await listCrewedEventsInRange(ctx, args.now, windowEnd)
+    ).filter((event) =>
+      eventMatchesUserTeams(event.teamsInterested, userDisciplines),
     );
+    if (matchedEvents.length === 0) return 0;
 
-    let pending = 0;
-    for (const event of matchedEvents) {
-      const existing = await ctx.db
-        .query("eventCrewAvailabilityResponses")
-        .withIndex("by_eventId_and_userId", (q) =>
-          q.eq("eventId", event._id).eq("userId", userId),
-        )
-        .unique();
-      if (!existing) pending += 1;
-    }
-    return pending;
+    const myResponses = await ctx.db
+      .query("eventCrewAvailabilityResponses")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .take(500);
+    const respondedEventIds = new Set(myResponses.map((response) => response.eventId));
+
+    return matchedEvents.filter((event) => !respondedEventIds.has(event._id)).length;
   },
 });
-
 export const getEventForCrewResponse = query({
   args: {
     eventId: v.id("events"),
