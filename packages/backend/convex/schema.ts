@@ -1423,6 +1423,10 @@ export default defineSchema({
     eventId: v.optional(v.id("events")),
     expiryMode: shortLinkExpiryModeValue,
     expiresAt: v.optional(v.number()),
+    /**
+     * Baseline click total from before append-only `shortLinkClicks`.
+     * Display total = clickCount + count(shortLinkClicks for this link).
+     */
     clickCount: v.number(),
     lastClickedAt: v.optional(v.number()),
     createdByUserId: v.optional(v.string()),
@@ -1431,6 +1435,12 @@ export default defineSchema({
   })
     .index("by_slug", ["slug"])
     .index("by_expiresAt", ["expiresAt"]),
+
+  /** Append-only click log for arbor.st short links (avoids OCC on shortLinks). */
+  shortLinkClicks: defineTable({
+    shortLinkId: v.id("shortLinks"),
+    clickedAt: v.number(),
+  }).index("by_shortLinkId", ["shortLinkId"]),
 
   /** Singleton row: global marketing feature flags. Extend with new fields as
    *  more sections gain admin-toggled marketing boosts. */

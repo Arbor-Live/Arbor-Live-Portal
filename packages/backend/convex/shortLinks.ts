@@ -1,5 +1,12 @@
 import { v } from "convex/values";
-import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import {
+  internalMutation,
+  internalQuery,
+  mutation,
+  query,
+  type MutationCtx,
+  type QueryCtx,
+} from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { getUserId, requireVerticalOrAdmin } from "./lib/auth";
 import { assertUniqueShortLinkSlug, normalizeShortLinkSlug } from "./lib/shortLinkSlug";
@@ -9,6 +16,10 @@ import {
   shortLinkStatus,
   validateShortLinkDestinationUrl,
 } from "./lib/shortLinks";
+
+/** Bound per-link click reads so list/detail stay within transaction limits. */
+const MAX_CLICKS_PER_LINK = 10_000;
+const CLICK_DELETE_BATCH = 200;
 
 const expiryModeValue = v.union(
   v.literal("none"),
@@ -74,11 +85,47 @@ function manualDateFromExpiresAt(expiresAt?: number) {
   }).format(new Date(expiresAt));
 }
 
-function toListRow(
+async function clickStatsFor(
+  ctx: QueryCtx | MutationCtx,
+  link: Pick<Doc<"shortLinks">, "_id" | "clickCount" | "lastClickedAt">,
+) {
+  const clicks = await ctx.db
+    .query("shortLinkClicks")
+    .withIndex("by_shortLinkId", (q) => q.eq("shortLinkId", link._id))
+    .take(MAX_CLICKS_PER_LINK);
+  let lastClickedAt = link.lastClickedAt ?? null;
+  for (const click of clicks) {
+    if (lastClickedAt == null || click.clickedAt > lastClickedAt) {
+      lastClickedAt = click.clickedAt;
+    }
+  }
+  return {
+    clickCount: link.clickCount + clicks.length,
+    lastClickedAt,
+  };
+}
+
+async function deleteClicksFor(ctx: MutationCtx, shortLinkId: Id<"shortLinks">) {
+  for (;;) {
+    const batch = await ctx.db
+      .query("shortLinkClicks")
+      .withIndex("by_shortLinkId", (q) => q.eq("shortLinkId", shortLinkId))
+      .take(CLICK_DELETE_BATCH);
+    if (batch.length === 0) break;
+    for (const click of batch) {
+      await ctx.db.delete(click._id);
+    }
+    if (batch.length < CLICK_DELETE_BATCH) break;
+  }
+}
+
+async function toListRow(
+  ctx: QueryCtx | MutationCtx,
   link: Doc<"shortLinks">,
   eventTitle: string | null,
   now = Date.now(),
 ) {
+  const stats = await clickStatsFor(ctx, link);
   return {
     _id: link._id,
     slug: link.slug,
@@ -89,8 +136,8 @@ function toListRow(
     eventTitle,
     expiryMode: link.expiryMode,
     expiresAt: link.expiresAt ?? null,
-    clickCount: link.clickCount,
-    lastClickedAt: link.lastClickedAt ?? null,
+    clickCount: stats.clickCount,
+    lastClickedAt: stats.lastClickedAt,
     status: shortLinkStatus(link, now),
     createdAt: link.createdAt,
     updatedAt: link.updatedAt,
@@ -105,7 +152,9 @@ export const list = query({
     const links = sortByRecency(await ctx.db.query("shortLinks").take(500));
     const now = Date.now();
     return Promise.all(
-      links.map(async (link) => toListRow(link, await eventTitleFor(ctx, link.eventId), now)),
+      links.map(async (link) =>
+        toListRow(ctx, link, await eventTitleFor(ctx, link.eventId), now),
+      ),
     );
   },
 });
@@ -119,7 +168,7 @@ export const getById = query({
     if (!link) return null;
     const now = Date.now();
     return {
-      ...toListRow(link, await eventTitleFor(ctx, link.eventId), now),
+      ...(await toListRow(ctx, link, await eventTitleFor(ctx, link.eventId), now)),
       manualExpiresAtDate:
         link.expiryMode === "manual" ? manualDateFromExpiresAt(link.expiresAt) : "",
     };
@@ -213,6 +262,7 @@ export const remove = mutation({
     if (!existing) {
       throw new Error("Short link not found.");
     }
+    await deleteClicksFor(ctx, args.id);
     await ctx.db.delete(args.id);
     return null;
   },
@@ -249,11 +299,10 @@ export const recordClick = internalMutation({
     if (!link || isShortLinkExpired(link)) {
       return null;
     }
-    const now = Date.now();
-    await ctx.db.patch(link._id, {
-      clickCount: link.clickCount + 1,
-      lastClickedAt: now,
-      updatedAt: now,
+    // Insert-only: concurrent clicks do not contend on the shortLinks row.
+    await ctx.db.insert("shortLinkClicks", {
+      shortLinkId: link._id,
+      clickedAt: Date.now(),
     });
     return null;
   },
@@ -270,6 +319,7 @@ export const pruneExpired = internalMutation({
       .take(500);
     for (const link of expired) {
       if (link.expiresAt != null && link.expiresAt <= now) {
+        await deleteClicksFor(ctx, link._id);
         await ctx.db.delete(link._id);
       }
     }
