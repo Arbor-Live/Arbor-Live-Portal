@@ -241,6 +241,50 @@ function isUpcomingCrewedEvent(
   return isCrewedEventInRange(event, now, windowEnd);
 }
 
+async function listCrewedEventsInRange(
+  ctx: QueryCtx,
+  rangeStart: number,
+  rangeEnd: number,
+) {
+  // Index on startAt: only scan events that start in/near the window.
+  const startedInRange = await ctx.db
+    .query("events")
+    .withIndex("by_startAt", (q) => q.gte("startAt", rangeStart).lte("startAt", rangeEnd))
+    .take(150);
+  return startedInRange
+    .filter((event) => isCrewedEventInRange(event, rangeStart, rangeEnd))
+    .sort((a, b) => a.startAt - b.startAt);
+}
+
+/**
+ * Lightweight badge count for the admin sidebar — avoids loading the full
+ * listForAdminOverview payload (responders, users, eligible-crew scan) on every page.
+ */
+export const countUnconfirmedForAdminOverview = query({
+  args: {
+    rangeStart: v.number(),
+    rangeEnd: v.number(),
+  },
+  returns: v.number(),
+  handler: async (ctx, args) => {
+    await requireArborInternalContext(ctx);
+    if (args.rangeEnd < args.rangeStart) {
+      throw new Error("Date range end must be on or after the start.");
+    }
+
+    const upcomingCrewed = await listCrewedEventsInRange(ctx, args.rangeStart, args.rangeEnd);
+    let unconfirmed = 0;
+    for (const event of upcomingCrewed) {
+      const shifts = await ctx.db
+        .query("eventCrewShifts")
+        .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
+        .take(200);
+      if (!computeShiftStats(shifts).isCrewConfirmed) unconfirmed += 1;
+    }
+    return unconfirmed;
+  },
+});
+
 export const listForAdminOverview = query({
   args: {
     rangeStart: v.number(),
@@ -276,7 +320,6 @@ export const listForAdminOverview = query({
     }),
   ),
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
     await requireArborInternalContext(ctx);
 
     const unconfirmedOnly = args.unconfirmedOnly ?? true;
@@ -284,15 +327,7 @@ export const listForAdminOverview = query({
       throw new Error("Date range end must be on or after the start.");
     }
 
-    const events = await ctx.db
-      .query("events")
-      .withIndex("by_startAt")
-      .take(300);
-
-    const upcomingCrewed = events
-      .filter((event) => isCrewedEventInRange(event, args.rangeStart, args.rangeEnd))
-      .sort((a, b) => a.startAt - b.startAt);
-
+    const upcomingCrewed = await listCrewedEventsInRange(ctx, args.rangeStart, args.rangeEnd);
     const crewProfiles = await getActiveCrewProfiles(ctx);
 
     const bundles = await Promise.all(
@@ -709,17 +744,13 @@ export const getSummaryForEvent = query({
     v.null(),
   ),
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
     await requireArborInternalContext(ctx);
 
     const bundle = await loadEventBundle(ctx, args.eventId);
     if (!bundle) return null;
 
-    const crewProfiles = await getActiveCrewProfiles(ctx);
     const shiftStats = computeShiftStats(bundle.shifts);
     const responseCounts = aggregateResponses(bundle.responses);
-    const eligibleCrew = countEligibleCrewForEvent(bundle.event.teamsInterested, crewProfiles);
-    const pending = Math.max(0, eligibleCrew - responseCounts.responded);
 
     const assignedUserIds = new Set(
       bundle.shifts
@@ -749,13 +780,16 @@ export const getSummaryForEvent = query({
         return a.respondedAt - b.respondedAt;
       });
 
+    // Eligible/pending totals come from the crew-scheduling overview. Scanning
+    // every active crew profile here routinely blew the 1s budget on CI and
+    // blocked the assignable-responder list the schedule UI actually needs.
     return {
       ...shiftStats,
       responseCounts: {
         ...responseCounts,
         onlyIfNecessary: responseCounts.onlyIfNecessary,
-        pending,
-        eligibleCrew,
+        pending: 0,
+        eligibleCrew: responseCounts.responded,
       },
       assignableResponders,
     };

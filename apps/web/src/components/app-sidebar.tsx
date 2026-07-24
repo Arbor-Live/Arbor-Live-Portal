@@ -225,12 +225,11 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
     activeOrganization?.organizationType === "arbor_internal" ? {} : "skip",
   )
   const unconfirmedCrewCount = useQuery(
-    api.eventCrewAvailability.listForAdminOverview,
+    api.eventCrewAvailability.countUnconfirmedForAdminOverview,
     activeOrganization?.organizationType === "arbor_internal" && isAdmin
       ? {
           rangeStart: adminSchedulingRange.rangeStart,
           rangeEnd: adminSchedulingRange.rangeEnd,
-          unconfirmedOnly: true,
         }
       : "skip",
   )
@@ -261,7 +260,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
     isCrewContext,
     isAdminHomeContext,
   }
-  const unconfirmedEventCount = unconfirmedCrewCount?.length ?? 0
+  const unconfirmedEventCount = unconfirmedCrewCount ?? 0
   const scopedNavItems = navItems.filter((item) => canAccessNavItem(item, navAccess))
 
   function pendingChipCountForUrl(url: string): number {

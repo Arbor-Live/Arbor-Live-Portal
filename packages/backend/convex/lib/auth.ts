@@ -29,33 +29,65 @@ export type AuthUser = {
   banned?: boolean | null;
 };
 
+type AuthCtx = QueryCtx | MutationCtx;
+
+/** Per-request memo: most handlers call requireAuth + requireArborInternalContext. */
+const currentUserCache = new WeakMap<AuthCtx, Promise<AuthUser | null>>();
+const activeOrgCache = new WeakMap<AuthCtx, Promise<ActiveOrganizationContext | null>>();
+
 export function getUserId(user: AuthUser): string {
   return user.id ?? user._id ?? "";
 }
 
 export async function getCurrentUserOrNull(
-  ctx: QueryCtx | MutationCtx,
+  ctx: AuthCtx,
 ): Promise<AuthUser | null> {
-  const identity = await ctx.auth.getUserIdentity();
-  if (!identity?.email) return null;
-  // Defense in depth: we resolve the Better Auth user purely by the identity's
-  // email claim, so an identity whose email is provably unverified must not be
-  // trusted to map onto an account. Current providers (email/password, passkey)
-  // never assert `emailVerified === false` here; this guard exists so that
-  // adding a social provider with unverified emails can't become an
-  // account-takeover vector.
-  if (identity.emailVerified === false) return null;
-  const user = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
-    model: "user",
-    where: [{ field: "email", value: identity.email }],
-  })) as AuthUser | null;
-  if (!user) return null;
-  if (user.banned) return null;
-  return user;
+  const cached = currentUserCache.get(ctx);
+  if (cached) return cached;
+
+  const pending = (async (): Promise<AuthUser | null> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity?.email) return null;
+    // Defense in depth: we resolve the Better Auth user purely by the identity's
+    // email claim, so an identity whose email is provably unverified must not be
+    // trusted to map onto an account. Current providers (email/password, passkey)
+    // never assert `emailVerified === false` here; this guard exists so that
+    // adding a social provider with unverified emails can't become an
+    // account-takeover vector.
+    if (identity.emailVerified === false) return null;
+    // Prefer subject/_id when present (point lookup) before email scan.
+    const subject = typeof identity.subject === "string" ? identity.subject.trim() : "";
+    if (subject) {
+      let byId = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
+        model: "user",
+        where: [{ field: "_id", value: subject }],
+      })) as AuthUser | null;
+      if (!byId) {
+        byId = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
+          model: "user",
+          where: [{ field: "id", value: subject }],
+        })) as AuthUser | null;
+      }
+      if (byId) {
+        if (byId.banned) return null;
+        return byId;
+      }
+    }
+    const user = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
+      model: "user",
+      where: [{ field: "email", value: identity.email }],
+    })) as AuthUser | null;
+    if (!user) return null;
+    if (user.banned) return null;
+    return user;
+  })();
+
+  currentUserCache.set(ctx, pending);
+  return pending;
 }
 
 export async function requireAuth(
-  ctx: QueryCtx | MutationCtx,
+  ctx: AuthCtx,
 ): Promise<AuthUser> {
   const user = await getCurrentUserOrNull(ctx);
   if (!user) throw new Error("You must be signed in.");
@@ -63,7 +95,7 @@ export async function requireAuth(
 }
 
 export async function requireAdmin(
-  ctx: QueryCtx | MutationCtx,
+  ctx: AuthCtx,
 ): Promise<AuthUser> {
   const user = await requireAuth(ctx);
   if (user.role !== "admin") {
@@ -100,59 +132,67 @@ function deriveOrganizationType(
 }
 
 export async function getActiveOrganizationContextOrNull(
-  ctx: QueryCtx | MutationCtx,
+  ctx: AuthCtx,
 ): Promise<ActiveOrganizationContext | null> {
-  const user = await getCurrentUserOrNull(ctx);
-  if (!user) return null;
-  const userId = getUserId(user);
-  if (!userId) return null;
+  const cached = activeOrgCache.get(ctx);
+  if (cached) return cached;
 
-  const memberships = await ctx.db
-    .query("userOrganizationMemberships")
-    .withIndex("by_userId", (q) => q.eq("userId", userId))
-    .take(100);
-  const activeMemberships = memberships.filter((membership) => membership.active);
-  if (!activeMemberships.length) return null;
-  const activeRow = await ctx.db
-    .query("userActiveOrganizations")
-    .withIndex("by_userId", (q) => q.eq("userId", userId))
-    .unique();
-  const selectedOrganizationId = activeRow?.organizationId ?? activeMemberships[0].organizationId;
-  const selectedMembership = activeMemberships.find(
-    (membership) => membership.organizationId === selectedOrganizationId,
-  );
-  if (!selectedMembership) return null;
+  const pending = (async (): Promise<ActiveOrganizationContext | null> => {
+    const user = await getCurrentUserOrNull(ctx);
+    if (!user) return null;
+    const userId = getUserId(user);
+    if (!userId) return null;
 
-  // Look up by _id first: the better-auth adapter resolves _id with ctx.db.get
-  // (fast path), while `field: "id"` falls back to a scan. This runs on nearly
-  // every request, so avoid paging the whole organization table.
-  let org = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
-    model: "organization",
-    where: [{ field: "_id", value: selectedOrganizationId }],
-  })) as AuthOrganization | null;
-  if (!org) {
-    org = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
+    const memberships = await ctx.db
+      .query("userOrganizationMemberships")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .take(100);
+    const activeMemberships = memberships.filter((membership) => membership.active);
+    if (!activeMemberships.length) return null;
+    const activeRow = await ctx.db
+      .query("userActiveOrganizations")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .unique();
+    const selectedOrganizationId = activeRow?.organizationId ?? activeMemberships[0].organizationId;
+    const selectedMembership = activeMemberships.find(
+      (membership) => membership.organizationId === selectedOrganizationId,
+    );
+    if (!selectedMembership) return null;
+
+    // Look up by _id first: the better-auth adapter resolves _id with ctx.db.get
+    // (fast path), while `field: "id"` falls back to a scan. This runs on nearly
+    // every request, so avoid paging the whole organization table.
+    let org = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
       model: "organization",
-      where: [{ field: "id", value: selectedOrganizationId }],
+      where: [{ field: "_id", value: selectedOrganizationId }],
     })) as AuthOrganization | null;
-  }
-  const orgProfile = await ctx.db
-    .query("organizationProfiles")
-    .withIndex("by_organizationId", (q) => q.eq("organizationId", selectedOrganizationId))
-    .unique();
-  return {
-    organizationId: selectedOrganizationId,
-    organizationName: org?.name ?? "Organization",
-    organizationSlug: org?.slug ?? "",
-    organizationType:
-      deriveOrganizationType(org) === "arbor_internal"
-        ? "arbor_internal"
-        : (orgProfile?.organizationType ?? "band"),
-  };
+    if (!org) {
+      org = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
+        model: "organization",
+        where: [{ field: "id", value: selectedOrganizationId }],
+      })) as AuthOrganization | null;
+    }
+    const orgProfile = await ctx.db
+      .query("organizationProfiles")
+      .withIndex("by_organizationId", (q) => q.eq("organizationId", selectedOrganizationId))
+      .unique();
+    return {
+      organizationId: selectedOrganizationId,
+      organizationName: org?.name ?? "Organization",
+      organizationSlug: org?.slug ?? "",
+      organizationType:
+        deriveOrganizationType(org) === "arbor_internal"
+          ? "arbor_internal"
+          : (orgProfile?.organizationType ?? "band"),
+    };
+  })();
+
+  activeOrgCache.set(ctx, pending);
+  return pending;
 }
 
 export async function requireActiveOrganizationContext(
-  ctx: QueryCtx | MutationCtx,
+  ctx: AuthCtx,
 ): Promise<ActiveOrganizationContext> {
   const context = await getActiveOrganizationContextOrNull(ctx);
   if (!context) throw new Error("No active organization context.");
@@ -160,7 +200,7 @@ export async function requireActiveOrganizationContext(
 }
 
 export async function requireArborInternalContext(
-  ctx: QueryCtx | MutationCtx,
+  ctx: AuthCtx,
 ): Promise<ActiveOrganizationContext> {
   const context = await requireActiveOrganizationContext(ctx);
   if (context.organizationType !== "arbor_internal") {
@@ -170,7 +210,7 @@ export async function requireArborInternalContext(
 }
 
 export async function requireBandContext(
-  ctx: QueryCtx | MutationCtx,
+  ctx: AuthCtx,
 ): Promise<ActiveOrganizationContext> {
   const context = await requireActiveOrganizationContext(ctx);
   if (context.organizationType !== "band" && context.organizationType !== "dj") {
@@ -179,14 +219,14 @@ export async function requireBandContext(
   return context;
 }
 
-async function getUserAdminProfile(ctx: QueryCtx | MutationCtx, userId: string) {
+async function getUserAdminProfile(ctx: AuthCtx, userId: string) {
   return await ctx.db
     .query("userAdminProfiles")
     .withIndex("by_userId", (q) => q.eq("userId", userId))
     .unique();
 }
 
-export async function getViewerMembership(ctx: QueryCtx | MutationCtx) {
+export async function getViewerMembership(ctx: AuthCtx) {
   const user = await requireAuth(ctx);
   const profile = await getUserAdminProfile(ctx, getUserId(user));
   return {
@@ -196,7 +236,7 @@ export async function getViewerMembership(ctx: QueryCtx | MutationCtx) {
 }
 
 export async function requireVerticalOrAdmin(
-  ctx: QueryCtx | MutationCtx,
+  ctx: AuthCtx,
   vertical: UserVertical,
 ): Promise<AuthUser> {
   const user = await requireAuth(ctx);
@@ -210,7 +250,7 @@ export async function requireVerticalOrAdmin(
 }
 
 export async function requireAnyVerticalOrAdmin(
-  ctx: QueryCtx | MutationCtx,
+  ctx: AuthCtx,
   candidates: readonly UserVertical[],
 ): Promise<AuthUser> {
   const user = await requireAuth(ctx);
@@ -225,7 +265,7 @@ export async function requireAnyVerticalOrAdmin(
 
 /** Portal admins whose profile includes the given vertical (for staff inbox emails). */
 export async function listAdminEmailsForVertical(
-  ctx: QueryCtx | MutationCtx,
+  ctx: AuthCtx,
   vertical: UserVertical,
 ): Promise<string[]> {
   const result = await ctx.runQuery(components.betterAuth.adapter.findMany, {
