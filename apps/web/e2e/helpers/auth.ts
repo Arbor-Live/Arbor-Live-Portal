@@ -5,6 +5,7 @@ import { e2eEnv } from "./env";
 
 export const adminAuthFile = path.join(__dirname, "../.auth/admin.json");
 export const crewAuthFile = path.join(__dirname, "../.auth/crew.json");
+export const bandAuthFile = path.join(__dirname, "../.auth/band.json");
 
 export function ensureAuthDir() {
   fs.mkdirSync(path.dirname(adminAuthFile), { recursive: true });
@@ -30,6 +31,10 @@ export async function signInAsAdmin(page: Page) {
 
 export async function signInAsCrew(page: Page) {
   await signInWithCredentials(page, e2eEnv.crewEmail, e2eEnv.crewPassword);
+}
+
+export async function signInAsBand(page: Page) {
+  await signInWithCredentials(page, e2eEnv.bandEmail, e2eEnv.bandPassword);
 }
 
 export async function completeFirstAdminSetup(page: Page) {

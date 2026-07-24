@@ -163,15 +163,6 @@ function resolveOrganizationType(
   return profile?.organizationType ?? "band";
 }
 
-async function getOrganizationType(ctx: QueryCtx | MutationCtx, organizationId: string) {
-  const profile = await ctx.db
-    .query("organizationProfiles")
-    .withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId))
-    .unique();
-  const organization = await getOrganizationById(ctx, organizationId);
-  return resolveOrganizationType(organization ?? undefined, profile);
-}
-
 export async function ensureUserProfileDefaults(
   ctx: MutationCtx,
   userId: string,
@@ -492,15 +483,22 @@ export const listMyOrganizations = query({
     const activeMemberships = memberships.filter((row) => row.active);
     const organizations = await Promise.all(
       activeMemberships.map(async (membership) => {
-        const [organization, profile] = await Promise.all([
-          getOrganizationById(ctx, membership.organizationId),
-          ctx.db
-            .query("organizationProfiles")
-            .withIndex("by_organizationId", (q) =>
-              q.eq("organizationId", membership.organizationId),
-            )
-            .unique(),
-        ]);
+        const profile = await ctx.db
+          .query("organizationProfiles")
+          .withIndex("by_organizationId", (q) =>
+            q.eq("organizationId", membership.organizationId),
+          )
+          .unique();
+        if (profile?.organizationType === "arbor_internal") {
+          return {
+            organizationId: membership.organizationId,
+            name: "Arbor Live",
+            slug: "arbor-live",
+            role: membership.role,
+            organizationType: "arbor_internal" as const,
+          };
+        }
+        const organization = await getOrganizationById(ctx, membership.organizationId);
         return {
           organizationId: membership.organizationId,
           name: organization?.name ?? "Organization",
@@ -712,14 +710,33 @@ export const getActiveOrganization = query({
     const membership = memberships.find((row) => row.active && row.organizationId === activeRow?.organizationId) ??
       memberships.find((row) => row.active);
     if (!membership) return null;
+
+    // Local profile first — avoids a Better Auth org round-trip for arbor_internal
+    // (same path requireArborInternalContext uses). Previously this also called
+    // getOrganizationType which re-fetched the org a second time.
+    const profile = await ctx.db
+      .query("organizationProfiles")
+      .withIndex("by_organizationId", (q) =>
+        q.eq("organizationId", membership.organizationId),
+      )
+      .unique();
+    if (profile?.organizationType === "arbor_internal") {
+      return {
+        organizationId: membership.organizationId,
+        name: "Arbor Live",
+        slug: "arbor-live",
+        role: membership.role,
+        organizationType: "arbor_internal" as const,
+      };
+    }
+
     const organization = await getOrganizationById(ctx, membership.organizationId);
-    const organizationType = await getOrganizationType(ctx, membership.organizationId);
     return {
       organizationId: membership.organizationId,
       name: organization?.name ?? "Organization",
       slug: organization?.slug ?? "",
       role: membership.role,
-      organizationType,
+      organizationType: resolveOrganizationType(organization ?? undefined, profile),
     };
   },
 });

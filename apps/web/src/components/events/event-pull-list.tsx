@@ -141,10 +141,6 @@ export function EventPullList({
   onSaved,
   onError,
 }: EventPullListProps) {
-  const upsertItems = useMutation(api.eventPullLists.upsertItems);
-  const scaffoldFromInvoice = useMutation(api.eventPullLists.scaffoldFromInvoice);
-  const removeItem = useMutation(api.eventPullLists.removeItem);
-
   const [items, setItems] = useState<PullListItemDraft[]>(initialItems);
   const [addKind, setAddKind] = useState<"type" | "package">("type");
   const [newTypeId, setNewTypeId] = useState("");
@@ -158,6 +154,11 @@ export function EventPullList({
     "outbound",
   );
   const [damageOpen, setDamageOpen] = useState(false);
+
+  // Search-on-demand pickers — do not preload inventoryTypes/packages catalogs here.
+  const upsertItems = useMutation(api.eventPullLists.upsertItems);
+  const scaffoldFromInvoice = useMutation(api.eventPullLists.scaffoldFromInvoice);
+  const removeItem = useMutation(api.eventPullLists.removeItem);
 
   const fulfillmentSummary = useQuery(
     api.eventRentalFulfillment.getFulfillmentSummary,

@@ -195,16 +195,17 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
   const [now] = useState(() => Date.now())
   const [adminSchedulingRange] = useState(() => getDefaultAdminSchedulingRange())
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({})
-  // Defer nav badge queries on heavy event-editor routes so schedule/overview
-  // subscriptions aren't competing with sidebar counters.
-  const onEventEditorHeavyRoute =
-    pathname.startsWith("/dashboard/events/") &&
-    (pathname.includes("/schedule") ||
-      pathname.includes("/equipment") ||
-      pathname.includes("/artifacts") ||
-      pathname.includes("/media") ||
-      pathname.includes("/expenses") ||
-      /^\/dashboard\/events\/[^/]+$/.test(pathname))
+  // Defer nav badge queries on heavy routes so page subscriptions aren't
+  // competing with sidebar counters under slow anonymous Convex.
+  const deferSidebarBadges =
+    (pathname.startsWith("/dashboard/events/") &&
+      (pathname.includes("/schedule") ||
+        pathname.includes("/equipment") ||
+        pathname.includes("/artifacts") ||
+        pathname.includes("/media") ||
+        pathname.includes("/expenses") ||
+        /^\/dashboard\/events\/[^/]+$/.test(pathname))) ||
+    pathname.startsWith("/dashboard/financial-hub")
   const shell = useSessionShell()
   const setActiveOrganization = useMutation(api.users.setActiveOrganization)
   const viewer = shell?.viewer
@@ -222,7 +223,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
     viewerVerticals.length === 0
   const navBadges = useQuery(
     api.navBadges.getNavBadges,
-    !onEventEditorHeavyRoute && shell
+    !deferSidebarBadges && shell
       ? {
           now,
           rangeStart: adminSchedulingRange.rangeStart,

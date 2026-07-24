@@ -19,7 +19,6 @@ import {
   getLatestCompletedOutbound,
   isActiveRentedOutbound,
   listItemWithDescendants,
-  listUnitsForEvent,
   listUnitsForFulfillment,
   missingClientEmailWarning,
   formatScannedAssetLabel,
@@ -275,17 +274,29 @@ export const getFulfillmentSummary = query({
   handler: async (ctx, args) => {
     await requireCrew(ctx);
     await requireEvent(ctx, args.eventId);
-    const outboundActive = await getActiveFulfillment(ctx, args.eventId, "outbound");
-    const outboundDone = await getLatestCompletedOutbound(ctx, args.eventId);
-    const returnActive = await getActiveFulfillment(ctx, args.eventId, "return");
-    const returnRows = await ctx.db
+    // Single by_eventId read instead of 3–4 direction-scoped queries.
+    const fulfillments = await ctx.db
       .query("eventRentalFulfillments")
-      .withIndex("by_eventId_and_direction", (q) =>
-        q.eq("eventId", args.eventId).eq("direction", "return"),
-      )
+      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
       .take(20);
-    const returnCompleted = returnRows.some((row) => row.status === "completed");
-    const units = await listUnitsForEvent(ctx, args.eventId);
+    const outboundActive = fulfillments.find(
+      (row) => row.direction === "outbound" && row.status === "in_progress",
+    );
+    const outboundDone = fulfillments
+      .filter((row) => row.direction === "outbound" && row.status === "completed")
+      .sort((a, b) => (b.completedAt ?? b.startedAt) - (a.completedAt ?? a.startedAt))[0];
+    const returnActive = fulfillments.find(
+      (row) => row.direction === "return" && row.status === "in_progress",
+    );
+    const returnCompleted = fulfillments.some(
+      (row) => row.direction === "return" && row.status === "completed",
+    );
+    // Prefer units for the completed outbound (rented set) over scanning all event units.
+    const units = outboundDone
+      ? await listUnitsForFulfillment(ctx, outboundDone._id)
+      : outboundActive
+        ? await listUnitsForFulfillment(ctx, outboundActive._id)
+        : [];
     const activeRentedCount = units.filter((unit) =>
       isActiveRentedOutbound(unit.outboundStatus),
     ).length;
@@ -321,13 +332,20 @@ export const getOutboundWorkspace = query({
     const fulfillment = active ?? completed;
     if (!fulfillment) return null;
     const units = await listUnitsForFulfillment(ctx, fulfillment._id);
-    const needs = summarizeNeeds(await expandPullListNeeds(ctx, args.eventId), units);
-    const existingEmail = await ctx.db
-      .query("emailNotifications")
-      .withIndex("by_idempotencyKey", (q) =>
-        q.eq("idempotencyKey", `rental_outbound_packed:${fulfillment._id}`),
-      )
-      .unique();
+    // Needs are only used while packing; skip pull-list expansion on completed outbound.
+    const needs =
+      fulfillment.status === "in_progress"
+        ? summarizeNeeds(await expandPullListNeeds(ctx, args.eventId), units)
+        : [];
+    const existingEmail =
+      fulfillment.status === "completed"
+        ? await ctx.db
+            .query("emailNotifications")
+            .withIndex("by_idempotencyKey", (q) =>
+              q.eq("idempotencyKey", `rental_outbound_packed:${fulfillment._id}`),
+            )
+            .unique()
+        : null;
     return {
       fulfillmentId: fulfillment._id,
       status: fulfillment.status,
@@ -361,9 +379,6 @@ export const getReturnWorkspace = query({
     const outbound = await getLatestCompletedOutbound(ctx, args.eventId);
     if (!outbound) return null;
 
-    const rented = (await listUnitsForFulfillment(ctx, outbound._id)).filter((unit) =>
-      isActiveRentedOutbound(unit.outboundStatus),
-    );
     const returnActive = await getActiveFulfillment(ctx, args.eventId, "return");
     const returnRows = await ctx.db
       .query("eventRentalFulfillments")
@@ -372,25 +387,25 @@ export const getReturnWorkspace = query({
       )
       .take(20);
     const returnCompleted = returnRows.find((row) => row.status === "completed");
-    const status = returnActive
-      ? ("in_progress" as const)
-      : returnCompleted
-        ? ("completed" as const)
-        : ("completed" as const);
-    const fulfillmentId = returnActive?._id ?? returnCompleted?._id ?? outbound._id;
+    // Not started yet — return null so the sheet shows "Start return" instead of a
+    // false "completed" receipt (status previously defaulted to "completed").
+    if (!returnActive && !returnCompleted) return null;
+
+    const rented = (await listUnitsForFulfillment(ctx, outbound._id)).filter((unit) =>
+      isActiveRentedOutbound(unit.outboundStatus),
+    );
+    const status = returnActive ? ("in_progress" as const) : ("completed" as const);
+    const fulfillmentId = (returnActive ?? returnCompleted)!._id;
     const units = rented.map((unit) => ({
       ...unit,
       returnStatus: unit.returnStatus ?? ("pending" as const),
     }));
-    const notifyFulfillmentId = returnActive?._id ?? returnCompleted?._id;
-    const existingEmail = notifyFulfillmentId
-      ? await ctx.db
-          .query("emailNotifications")
-          .withIndex("by_idempotencyKey", (q) =>
-            q.eq("idempotencyKey", `rental_return_processed:${notifyFulfillmentId}`),
-          )
-          .unique()
-      : null;
+    const existingEmail = await ctx.db
+      .query("emailNotifications")
+      .withIndex("by_idempotencyKey", (q) =>
+        q.eq("idempotencyKey", `rental_return_processed:${fulfillmentId}`),
+      )
+      .unique();
     return {
       fulfillmentId,
       status,
@@ -743,6 +758,8 @@ export const startReturn = mutation({
     );
     if (!rented.length) throw new Error("No rented equipment to return.");
 
+    // Workspace treats missing returnStatus as "pending" — no per-unit patches needed
+    // (those writes were saturating subscriptions right as Start return ran).
     const fulfillmentId = await ctx.db.insert("eventRentalFulfillments", {
       eventId: args.eventId,
       direction: "return",
@@ -750,17 +767,6 @@ export const startReturn = mutation({
       startedAt: Date.now(),
     });
 
-    const now = Date.now();
-    for (const unit of rented) {
-      // Keep return state on the outbound unit rows; link conceptually via event.
-      await ctx.db.patch(unit._id, {
-        returnStatus: unit.returnStatus ?? "pending",
-        updatedAt: now,
-      });
-    }
-
-    // Store return fulfillment id on a lightweight marker by copying unit refs is unnecessary;
-    // workspace uses outbound units + active return session.
     return { fulfillmentId };
   },
 });
