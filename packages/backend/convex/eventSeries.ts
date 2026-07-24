@@ -1,3 +1,4 @@
+import { occurrenceStartAt } from "@arbor/format";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
@@ -384,11 +385,14 @@ export const updateTemplate = mutation({
       }
 
       const occurrenceIndex = occurrence.occurrenceIndex ?? 0;
-      const intervalMs = series.intervalWeeks * 7 * 24 * 60 * 60 * 1000;
       const startAt =
         scope === "this"
           ? occurrence.startAt
-          : updatedSeries.anchorStartAt + occurrenceIndex * intervalMs;
+          : occurrenceStartAt(
+              updatedSeries.anchorStartAt,
+              occurrenceIndex,
+              updatedSeries.intervalWeeks,
+            );
       const patch = buildEventPatchFromSeriesTemplate(updatedSeries, startAt);
       await ctx.db.patch(occurrence._id, { ...patch, updatedAt: now });
     }
@@ -602,18 +606,19 @@ export const addOccurrences = mutation({
     if (!series) throw new Error("Event series not found.");
     const existing = await listOccurrencesForSeries(ctx, args.id);
     const lastIndex = existing.length > 0 ? (existing[existing.length - 1]!.occurrenceIndex ?? 0) : -1;
-    const lastStart =
-      existing.length > 0
-        ? existing[existing.length - 1]!.startAt
-        : series.anchorStartAt - series.intervalWeeks * 7 * 24 * 60 * 60 * 1000;
 
     let newStarts: number[] = [];
     if (args.additionalCount !== undefined) {
-      const intervalMs = series.intervalWeeks * 7 * 24 * 60 * 60 * 1000;
-      newStarts = Array.from({ length: args.additionalCount }, (_, offset) => lastStart + (offset + 1) * intervalMs);
+      newStarts = Array.from({ length: args.additionalCount }, (_, offset) =>
+        occurrenceStartAt(series.anchorStartAt, lastIndex + 1 + offset, series.intervalWeeks),
+      );
     } else if (args.newSeriesEndAt !== undefined) {
       newStarts = computeOccurrenceStarts({
-        anchorStartAt: lastStart + series.intervalWeeks * 7 * 24 * 60 * 60 * 1000,
+        anchorStartAt: occurrenceStartAt(
+          series.anchorStartAt,
+          lastIndex + 1,
+          series.intervalWeeks,
+        ),
         intervalWeeks: series.intervalWeeks,
         seriesEndAt: args.newSeriesEndAt,
       });
@@ -678,6 +683,74 @@ export const detachOccurrence = mutation({
       seriesDetached: true,
       updatedAt: Date.now(),
     });
+  },
+});
+
+export const reattachOccurrence = mutation({
+  args: { eventId: v.id("events") },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    const event = await ctx.db.get(args.eventId);
+    if (!event) throw new Error("Event not found.");
+    if (!event.seriesId) throw new Error("Event is not part of a series.");
+    if (!event.seriesDetached) throw new Error("Event is already attached to the series.");
+
+    const series = await ctx.db.get(event.seriesId);
+    if (!series) throw new Error("Event series not found.");
+
+    const now = Date.now();
+    const occurrenceIndex = event.occurrenceIndex ?? 0;
+    const startAt = occurrenceStartAt(
+      series.anchorStartAt,
+      occurrenceIndex,
+      series.intervalWeeks,
+    );
+    const patch = buildEventPatchFromSeriesTemplate(series, startAt);
+    await ctx.db.patch(args.eventId, {
+      ...patch,
+      seriesDetached: false,
+      invoiceId: series.invoiceId,
+      updatedAt: now,
+    });
+
+    const blockTemplates = series.blockTemplates ?? undefined;
+    if (blockTemplates && blockTemplates.length > 0) {
+      await replaceScheduleBlocksFromTemplates(ctx, args.eventId, startAt, blockTemplates, now);
+    }
+
+    const shiftTemplates = series.shiftTemplates ?? undefined;
+    if (shiftTemplates && shiftTemplates.length > 0) {
+      await replaceEmptyShiftsFromTemplates(
+        ctx,
+        args.eventId,
+        startAt,
+        shiftTemplates,
+        blockTemplates,
+        await resolveDefaultCrewHourlyRateUsd(ctx),
+        now,
+      );
+      await syncEventCrewCostUsd(ctx, args.eventId, now);
+    } else {
+      await ctx.db.patch(args.eventId, {
+        crewCostUsd: series.occurrenceBudgetCrewCostUsd,
+        updatedAt: now,
+      });
+    }
+
+    if (series.invoiceId) {
+      const refreshed = await ctx.db.get(args.eventId);
+      if (refreshed) {
+        await syncEventStatusForLinkedInvoice(
+          ctx,
+          args.eventId,
+          series.invoiceId,
+          refreshed.status,
+        );
+      }
+    }
+
+    return args.eventId;
   },
 });
 

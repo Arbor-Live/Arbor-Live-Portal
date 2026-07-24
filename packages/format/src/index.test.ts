@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   PORTAL_TIMEZONE,
+  addPacificWeeks,
   formatDateTimeRange,
   formatUsd,
   formatUsdOptional,
+  occurrenceEndAtFromAnchor,
+  occurrenceStartAt,
   pacificDateAndTimeToMs,
   pacificDateKey,
   pacificDateTimeInputToMs,
@@ -134,11 +137,57 @@ describe("toPacificDateTimeInput / pacificDateTimeInputToMs", () => {
     expect(pacificDateTimeInputToMs("")).toBeNull();
     expect(pacificDateTimeInputToMs("not-a-date")).toBeNull();
   });
+
+  it("round-trips 3am on the Nov 2025 fall-back day", () => {
+    const ms = pacificDateTimeInputToMs("2025-11-02T03:00");
+    expect(ms).not.toBeNull();
+    expect(toPacificDateTimeInput(ms!)).toBe("2025-11-02T03:00");
+  });
+
+  it("returns null for a spring-forward gap time", () => {
+    // 2026-03-08 jumps 2:00 → 3:00; 2:30 does not exist.
+    expect(pacificDateTimeInputToMs("2026-03-08T02:30")).toBeNull();
+  });
 });
 
 describe("pacificDateAndTimeToMs", () => {
   it("combines date and time in portal timezone", () => {
     expect(pacificDateAndTimeToMs("2025-06-16", "18:00")).toBe(Date.UTC(2025, 5, 17, 1, 0, 0));
+  });
+});
+
+describe("addPacificWeeks / occurrenceStartAt / occurrenceEndAtFromAnchor", () => {
+  it("keeps weekly 8pm across Nov 2025 DST fall-back", () => {
+    // 2025-11-01 20:00 PDT (UTC-7) → one week later is PST (UTC-8)
+    const anchor = pacificDateTimeInputToMs("2025-11-01T20:00")!;
+    const next = addPacificWeeks(anchor, 1);
+    expect(toPacificDateTimeInput(next)).toBe("2025-11-08T20:00");
+    // Absolute UTC offset shifts by 1h (not a fixed 7-day ms step).
+    expect(next - anchor).toBe(7 * 24 * 60 * 60 * 1000 + 60 * 60 * 1000);
+    expect(occurrenceStartAt(anchor, 1, 1)).toBe(next);
+  });
+
+  it("keeps weekly 8pm across Mar 2026 spring-forward", () => {
+    // 2026-03-07 20:00 PST (UTC-8) → one week later is PDT (UTC-7)
+    const anchor = pacificDateTimeInputToMs("2026-03-07T20:00")!;
+    const next = addPacificWeeks(anchor, 1);
+    expect(toPacificDateTimeInput(next)).toBe("2026-03-14T20:00");
+    expect(next - anchor).toBe(7 * 24 * 60 * 60 * 1000 - 60 * 60 * 1000);
+    expect(occurrenceStartAt(anchor, 1, 1)).toBe(next);
+  });
+
+  it("preserves overnight end wall-clock across a DST-crossing week", () => {
+    // Anchor spans the Nov 2 2025 fall-back (8pm → 3am). Elapsed ms includes the
+    // repeated hour; wall-clock end must stay 3am on the following week.
+    const anchorStart = pacificDateTimeInputToMs("2025-11-01T20:00")!;
+    const anchorEnd = pacificDateTimeInputToMs("2025-11-02T03:00")!;
+    expect(toPacificDateTimeInput(anchorEnd)).toBe("2025-11-02T03:00");
+    const nextStart = occurrenceStartAt(anchorStart, 1, 1);
+    const nextEnd = occurrenceEndAtFromAnchor(nextStart, anchorStart, anchorEnd);
+    expect(toPacificDateTimeInput(nextStart)).toBe("2025-11-08T20:00");
+    expect(toPacificDateTimeInput(nextEnd)).toBe("2025-11-09T03:00");
+    // Fixed-ms duration would land an hour late after fall-back.
+    expect(nextEnd).not.toBe(nextStart + (anchorEnd - anchorStart));
   });
 });
 

@@ -1,11 +1,16 @@
-import { pacificDateKey, PORTAL_TIMEZONE } from "@arbor/format";
+import {
+  occurrenceEndAtFromAnchor,
+  occurrenceStartAt,
+  addPacificWeeks,
+  pacificDateKey,
+  PORTAL_TIMEZONE,
+} from "@arbor/format";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { syncEventCrewCostUsd } from "./crewCost";
 import { syncEventStatusForLinkedInvoice, type EventStatus } from "./eventStatus";
 
 export const EVENT_TIMEZONE = PORTAL_TIMEZONE;
-const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 export type EventSeriesBlockTemplate = {
   blockType: "setup" | "show" | "strike" | "custom";
@@ -224,22 +229,20 @@ export function computeOccurrenceStarts(args: {
     throw new Error("Provide either occurrence count or series end date, not both.");
   }
 
-  const intervalMs = args.intervalWeeks * WEEK_MS;
   const starts: number[] = [];
-  let current = args.anchorStartAt;
 
   if (args.occurrenceCount !== undefined) {
     for (let index = 0; index < args.occurrenceCount; index += 1) {
-      starts.push(current);
-      current += intervalMs;
+      starts.push(occurrenceStartAt(args.anchorStartAt, index, args.intervalWeeks));
     }
     return starts;
   }
 
   const endBound = args.seriesEndAt!;
+  let current = args.anchorStartAt;
   while (current <= endBound) {
     starts.push(current);
-    current += intervalMs;
+    current = addPacificWeeks(current, args.intervalWeeks);
   }
   if (starts.length === 0) {
     throw new Error("No occurrences fall within the selected end date.");
@@ -272,8 +275,7 @@ export function blocksToTemplates(
 }
 
 export function occurrenceEndAt(startAt: number, anchorStartAt: number, anchorEndAt: number) {
-  const durationMs = anchorEndAt - anchorStartAt;
-  return startAt + durationMs;
+  return occurrenceEndAtFromAnchor(startAt, anchorStartAt, anchorEndAt);
 }
 
 export function spansMultipleDays(startAt: number, endAt: number) {
@@ -494,7 +496,6 @@ export async function propagateOverviewToSeriesOccurrences(
     .query("events")
     .withIndex("by_seriesId_and_occurrenceIndex", (q) => q.eq("seriesId", series._id))
     .take(200);
-  const intervalMs = series.intervalWeeks * 7 * 24 * 60 * 60 * 1000;
 
   const affected: SeriesOverviewAffectedOccurrence[] = [];
 
@@ -508,7 +509,11 @@ export async function propagateOverviewToSeriesOccurrences(
     }
 
     const occurrenceIndex = occurrence.occurrenceIndex ?? 0;
-    const startAt = series.anchorStartAt + occurrenceIndex * intervalMs;
+    const startAt = occurrenceStartAt(
+      series.anchorStartAt,
+      occurrenceIndex,
+      series.intervalWeeks,
+    );
     const patch = buildEventPatchFromSeriesTemplate(series, startAt);
     await ctx.db.patch(occurrence._id, { ...patch, ...overrides, updatedAt: now });
     affected.push({
