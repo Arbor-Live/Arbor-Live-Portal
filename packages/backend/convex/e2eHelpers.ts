@@ -7,7 +7,10 @@ import type { Id } from "./_generated/dataModel";
 import { inviteAcceptUrl } from "./email/constants";
 import { enqueueEmail } from "./email/enqueue";
 import { scheduleUserInviteEmail } from "./email/invitations";
-import { allocateRequestNumber } from "./lib/publicReferenceIds";
+import {
+  allocateBandPaymentConfirmationToken,
+  allocateRequestNumber,
+} from "./lib/publicReferenceIds";
 
 const makeToken = customAlphabet("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz", 24);
 const makeInvoiceSuffix = customAlphabet(
@@ -1338,5 +1341,591 @@ export const getEventCrewAssignmentState = query({
       ),
     );
     return { shiftCount: shifts.length, assignedUserIds };
+  },
+});
+
+/**
+ * Test-only: booking request conversion state for staff convert assertions.
+ */
+export const getBookingRequestState = query({
+  args: { requestId: v.id("eventRequests") },
+  returns: v.union(
+    v.null(),
+    v.object({
+      status: v.string(),
+      convertedEventId: v.union(v.id("events"), v.null()),
+      linkedInvoiceId: v.union(v.id("invoices"), v.null()),
+      requestNumber: v.union(v.string(), v.null()),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const request = await ctx.db.get(args.requestId);
+    if (!request) return null;
+    return {
+      status: request.status,
+      convertedEventId: request.convertedEventId ?? null,
+      linkedInvoiceId: request.linkedInvoiceId ?? null,
+      requestNumber: request.requestNumber ?? null,
+    };
+  },
+});
+
+/**
+ * Test-only: Dry Hire event with inventory type, asset, and pull-list line for fulfillment UI.
+ */
+export const seedDryHireWithPullList = mutation({
+  args: {
+    title: v.optional(v.string()),
+    assetId: v.optional(v.string()),
+  },
+  returns: v.object({
+    eventId: v.id("events"),
+    title: v.string(),
+    typeId: v.id("inventoryTypes"),
+    inventoryItemId: v.id("inventoryItems"),
+    assetId: v.string(),
+    pullListItemId: v.id("eventPullListItems"),
+    path: v.string(),
+    equipmentPath: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const now = Date.now();
+    const { startAt, endAt } = futureEventWindow(10);
+    const title = args.title?.trim() || `E2E Dry Hire ${now}`;
+    const assetId = args.assetId?.trim() || `E2E-ALE-${String(now).slice(-6)}`;
+
+    const typeId = await ctx.db.insert("inventoryTypes", {
+      name: `E2E Mic ${now}`,
+      category: "misc",
+      model: "E2E-MIC-1",
+      manualUrls: [],
+      capabilities: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    const inventoryItemId = await ctx.db.insert("inventoryItems", {
+      assetId,
+      typeId,
+      status: "functional",
+      createdAt: now,
+      updatedAt: now,
+    });
+    const eventId = await ctx.db.insert("events", {
+      title,
+      status: "tentative",
+      visibility: "internal",
+      publicToken: makeToken(),
+      startAt,
+      endAt,
+      timezone: "America/Los_Angeles",
+      spansMultipleDays: false,
+      setupOnly: false,
+      strikeOnly: false,
+      requiresShowWindow: false,
+      eventType: "Dry Hire",
+      rentalFulfillmentMode: "delivery",
+      teamsInterested: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    const pullListItemId = await ctx.db.insert("eventPullListItems", {
+      eventId,
+      lineKind: "type",
+      typeId,
+      label: "E2E Mic",
+      quantityRequired: 1,
+      quantityPulled: 0,
+      quantityCheckedOut: 0,
+      source: "manual",
+      sortOrder: 0,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    return {
+      eventId,
+      title,
+      typeId,
+      inventoryItemId,
+      assetId,
+      pullListItemId,
+      path: `/dashboard/events/${eventId}`,
+      equipmentPath: `/dashboard/events/${eventId}/equipment`,
+    };
+  },
+});
+
+export const getRentalFulfillmentState = query({
+  args: { eventId: v.id("events") },
+  returns: v.object({
+    outboundCompleted: v.boolean(),
+    returnCompleted: v.boolean(),
+    scannedAssetIds: v.array(v.string()),
+    unitCount: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const fulfillments = await ctx.db
+      .query("eventRentalFulfillments")
+      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+      .take(20);
+    const outboundCompleted = fulfillments.some(
+      (row) => row.direction === "outbound" && row.status === "completed",
+    );
+    const returnCompleted = fulfillments.some(
+      (row) => row.direction === "return" && row.status === "completed",
+    );
+    const units = await ctx.db
+      .query("eventRentalUnits")
+      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+      .take(100);
+    const scannedAssetIds = units
+      .map((unit) => unit.assetId?.trim())
+      .filter((id): id is string => Boolean(id));
+    return {
+      outboundCompleted,
+      returnCompleted,
+      scannedAssetIds,
+      unitCount: units.length,
+    };
+  },
+});
+
+/**
+ * Test-only: open damage report for triage UI (skips wizard photo/scan).
+ */
+export const seedOpenDamageReport = mutation({
+  args: {
+    assetId: v.optional(v.string()),
+    reportedByUserId: v.optional(v.string()),
+  },
+  returns: v.object({
+    reportId: v.id("damageReports"),
+    inventoryItemId: v.id("inventoryItems"),
+    assetId: v.string(),
+    typeId: v.id("inventoryTypes"),
+    queuePath: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const now = Date.now();
+    const assetId = args.assetId?.trim() || `E2E-DMG-${String(now).slice(-6)}`;
+    const typeId = await ctx.db.insert("inventoryTypes", {
+      name: `E2E Damaged ${now}`,
+      category: "misc",
+      model: "E2E-DMG-1",
+      manualUrls: [],
+      capabilities: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    const inventoryItemId = await ctx.db.insert("inventoryItems", {
+      assetId,
+      typeId,
+      status: "needs_repair",
+      createdAt: now,
+      updatedAt: now,
+    });
+    const reportId = await ctx.db.insert("damageReports", {
+      inventoryItemId,
+      assetId,
+      typeId,
+      scope: "this_only",
+      scopedItemIds: [inventoryItemId],
+      operability: "needs_repair",
+      severity: 3,
+      notes: "E2E seeded damage",
+      status: "open",
+      reportedByUserId: args.reportedByUserId?.trim() || "e2e-reporter",
+      reportedAt: now,
+      updatedAt: now,
+    });
+    return {
+      reportId,
+      inventoryItemId,
+      assetId,
+      typeId,
+      queuePath: "/dashboard/inventory/damage",
+    };
+  },
+});
+
+export const getDamageReportState = query({
+  args: { reportId: v.id("damageReports") },
+  returns: v.union(
+    v.null(),
+    v.object({
+      status: v.string(),
+      assetId: v.string(),
+      severity: v.number(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const report = await ctx.db.get(args.reportId);
+    if (!report) return null;
+    return {
+      status: report.status,
+      assetId: report.assetId,
+      severity: report.severity,
+    };
+  },
+});
+
+/**
+ * Test-only: band payee user with active band org for e-sign flows.
+ */
+export const ensureBandPayeeUser = mutation({
+  args: {
+    email: v.string(),
+    password: v.string(),
+    name: v.optional(v.string()),
+    bandName: v.optional(v.string()),
+  },
+  returns: v.object({
+    ok: v.literal(true),
+    email: v.string(),
+    userId: v.string(),
+    organizationId: v.string(),
+    bandName: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const email = args.email.trim().toLowerCase();
+    const name = (args.name ?? "E2E Band Payee").trim() || "E2E Band Payee";
+    const bandName = (args.bandName ?? "E2E Test Band").trim() || "E2E Test Band";
+    if (!email) throw new Error("Email is required.");
+    if (args.password.length < 8) throw new Error("Password must be at least 8 characters.");
+
+    const now = Date.now();
+    const existingUser = await ctx.runQuery(components.betterAuth.adapter.findOne, {
+      model: "user",
+      where: [{ field: "email", value: email }],
+    });
+
+    let userId = getId(existingUser);
+    if (!existingUser) {
+      const createdUser = await ctx.runMutation(components.betterAuth.adapter.create, {
+        input: {
+          model: "user",
+          data: {
+            name,
+            email,
+            emailVerified: true,
+            createdAt: now,
+            updatedAt: now,
+            role: "user",
+          },
+        },
+      });
+      userId = getId(createdUser);
+    } else {
+      await ctx.runMutation(components.betterAuth.adapter.updateOne, {
+        input: {
+          model: "user",
+          where: [{ field: "email", value: email }],
+          update: { name, updatedAt: now, emailVerified: true },
+        },
+      });
+    }
+    if (!userId) throw new Error("Unable to resolve e2e band user id.");
+
+    const passwordHash = await hashPassword(args.password);
+    const existingCredentialAccount = await ctx.runQuery(components.betterAuth.adapter.findOne, {
+      model: "account",
+      where: [
+        { field: "providerId", value: "credential" },
+        { connector: "AND", field: "accountId", value: email },
+      ],
+    });
+    if (!existingCredentialAccount) {
+      await ctx.runMutation(components.betterAuth.adapter.create, {
+        input: {
+          model: "account",
+          data: {
+            accountId: email,
+            providerId: "credential",
+            userId,
+            password: passwordHash,
+            createdAt: now,
+            updatedAt: now,
+          },
+        },
+      });
+    } else {
+      await ctx.runMutation(components.betterAuth.adapter.updateOne, {
+        input: {
+          model: "account",
+          where: [
+            { field: "providerId", value: "credential" },
+            { connector: "AND", field: "accountId", value: email },
+          ],
+          update: { password: passwordHash, updatedAt: now },
+        },
+      });
+    }
+
+    const slug = "e2e-test-band";
+    const existingOrg = await ctx.runQuery(components.betterAuth.adapter.findOne, {
+      model: "organization",
+      where: [{ field: "slug", value: slug }],
+    });
+    let organizationId = getId(existingOrg);
+    if (!organizationId) {
+      const createdOrg = await ctx.runMutation(components.betterAuth.adapter.create, {
+        input: {
+          model: "organization",
+          data: { name: bandName, slug, createdAt: now },
+        },
+      });
+      organizationId = getId(createdOrg);
+    }
+    if (!organizationId) throw new Error("Unable to resolve e2e band organization.");
+
+    const existingMember = await ctx.runQuery(components.betterAuth.adapter.findOne, {
+      model: "member",
+      where: [
+        { field: "organizationId", value: organizationId },
+        { connector: "AND", field: "userId", value: userId },
+      ],
+    });
+    if (!existingMember) {
+      await ctx.runMutation(components.betterAuth.adapter.create, {
+        input: {
+          model: "member",
+          data: {
+            organizationId,
+            userId,
+            role: "owner",
+            createdAt: now,
+          },
+        },
+      });
+    }
+
+    const existingAppMembership = await ctx.db
+      .query("userOrganizationMemberships")
+      .withIndex("by_userId_and_organizationId", (q) =>
+        q.eq("userId", userId!).eq("organizationId", organizationId!),
+      )
+      .unique();
+    if (existingAppMembership) {
+      await ctx.db.patch(existingAppMembership._id, {
+        role: "owner",
+        active: true,
+        updatedAt: now,
+      });
+    } else {
+      await ctx.db.insert("userOrganizationMemberships", {
+        userId,
+        organizationId,
+        role: "owner",
+        active: true,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    const existingOrgProfile = await ctx.db
+      .query("organizationProfiles")
+      .withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId!))
+      .unique();
+    const payeePatch = {
+      organizationType: "band" as const,
+      displayName: bandName,
+      designatedPayeeUserId: userId,
+      designatedPayeeName: name,
+      designatedPayeeEmail: email,
+      designatedPayeeMailingAddress: "450 Serra Mall, Stanford, CA 94305",
+      updatedAt: now,
+    };
+    if (existingOrgProfile) {
+      await ctx.db.patch(existingOrgProfile._id, payeePatch);
+    } else {
+      await ctx.db.insert("organizationProfiles", {
+        organizationId,
+        ...payeePatch,
+      });
+    }
+
+    const existingActiveOrg = await ctx.db
+      .query("userActiveOrganizations")
+      .withIndex("by_userId", (q) => q.eq("userId", userId!))
+      .unique();
+    if (existingActiveOrg) {
+      await ctx.db.patch(existingActiveOrg._id, {
+        organizationId,
+        updatedAt: now,
+      });
+    } else {
+      await ctx.db.insert("userActiveOrganizations", {
+        userId,
+        organizationId,
+        updatedAt: now,
+      });
+    }
+
+    const existingOnboarding = await ctx.db
+      .query("organizationOnboarding")
+      .withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId!))
+      .unique();
+    if (existingOnboarding) {
+      await ctx.db.patch(existingOnboarding._id, {
+        status: "waived",
+        waivedAt: now,
+        updatedAt: now,
+      });
+    } else {
+      await ctx.db.insert("organizationOnboarding", {
+        organizationId,
+        status: "waived",
+        waivedAt: now,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    return { ok: true as const, email, userId, organizationId, bandName };
+  },
+});
+
+/**
+ * Test-only: ended event + band payment ready for signature-request / e-sign.
+ */
+export const seedBandPaymentForEsign = mutation({
+  args: {
+    organizationId: v.string(),
+    payeeUserId: v.string(),
+    payeeName: v.string(),
+    payeeEmail: v.string(),
+    status: v.optional(
+      v.union(v.literal("pending_email"), v.literal("awaiting_confirmation")),
+    ),
+    eventTitle: v.optional(v.string()),
+  },
+  returns: v.object({
+    paymentId: v.id("eventBandPayments"),
+    eventId: v.id("events"),
+    confirmationToken: v.string(),
+    status: v.string(),
+    eventTitle: v.string(),
+    adminPath: v.string(),
+    bandPath: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const now = Date.now();
+    const status = args.status ?? "pending_email";
+    const eventTitle = args.eventTitle?.trim() || `E2E Band Pay ${now}`;
+    const endAt = now - 2 * 24 * 60 * 60 * 1000;
+    const startAt = endAt - 4 * 60 * 60 * 1000;
+    const eventId = await ctx.db.insert("events", {
+      title: eventTitle,
+      status: "ready",
+      visibility: "internal",
+      publicToken: makeToken(),
+      startAt,
+      endAt,
+      timezone: "America/Los_Angeles",
+      spansMultipleDays: false,
+      setupOnly: false,
+      strikeOnly: false,
+      requiresShowWindow: true,
+      eventType: "Crewed Event",
+      teamsInterested: [],
+      venueName: "E2E Stage",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert("eventBandParticipations", {
+      eventId,
+      organizationId: args.organizationId,
+      role: "headliner",
+      createdAt: now,
+      updatedAt: now,
+    });
+    const confirmationToken = await allocateBandPaymentConfirmationToken(ctx);
+    const paymentId = await ctx.db.insert("eventBandPayments", {
+      eventId,
+      organizationId: args.organizationId,
+      pricingMode: "fixed_total",
+      totalUsd: 250,
+      designatedPayeeUserId: args.payeeUserId,
+      designatedPayeeName: args.payeeName.trim(),
+      designatedPayeeEmail: args.payeeEmail.trim().toLowerCase(),
+      designatedPayeeMailingAddress: "450 Serra Mall, Stanford, CA 94305",
+      status,
+      confirmationToken,
+      confirmationEmailSentAt: status === "awaiting_confirmation" ? now - 60_000 : undefined,
+      confirmationSentByUserId: status === "awaiting_confirmation" ? "e2e-manager" : undefined,
+      confirmationSentByName: status === "awaiting_confirmation" ? "E2E Admin" : undefined,
+      confirmationSentByEmail:
+        status === "awaiting_confirmation" ? "e2e-admin@arborlive.test" : undefined,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return {
+      paymentId,
+      eventId,
+      confirmationToken,
+      status,
+      eventTitle,
+      adminPath: "/dashboard/financial-hub/band-payouts",
+      bandPath: "/dashboard/bands-and-performers/payments",
+    };
+  },
+});
+
+export const getBandPaymentState = query({
+  args: { paymentId: v.id("eventBandPayments") },
+  returns: v.union(
+    v.null(),
+    v.object({
+      status: v.string(),
+      confirmationToken: v.string(),
+      servicePaymentNumber: v.union(v.string(), v.null()),
+      signatureTypedName: v.union(v.string(), v.null()),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const payment = await ctx.db.get(args.paymentId);
+    if (!payment) return null;
+    return {
+      status: payment.status,
+      confirmationToken: payment.confirmationToken,
+      servicePaymentNumber: payment.servicePaymentNumber ?? null,
+      signatureTypedName: payment.signatureTypedName ?? null,
+    };
+  },
+});
+
+export const getLatestCrewApplicationByEmail = query({
+  args: { email: v.string() },
+  returns: v.union(
+    v.null(),
+    v.object({
+      applicationId: v.id("crewApplications"),
+      status: v.string(),
+      name: v.string(),
+      email: v.string(),
+      vertical: v.string(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const email = args.email.trim().toLowerCase();
+    const rows = await ctx.db.query("crewApplications").order("desc").take(50);
+    const match = rows.find((row) => row.email === email);
+    if (!match) return null;
+    return {
+      applicationId: match._id,
+      status: match.status,
+      name: match.name,
+      email: match.email,
+      vertical: match.vertical,
+    };
   },
 });
