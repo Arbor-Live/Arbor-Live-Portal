@@ -13,6 +13,7 @@ import {
 import { computeSeriesCostSummary } from "./lib/eventSeriesCosts";
 import { listEventsByInvoiceId } from "./lib/invoiceEvents";
 import { RENTAL_EVENT_TYPES, enrichPullListItems, summarizePullList } from "./eventPullLists";
+import { deleteEventRecord } from "./lib/bookingChainDelete";
 import { propagateOverviewToSeriesOccurrences, propagateInvoiceIdToSeriesOccurrences, type SeriesEditScope, type SeriesOverviewAffectedOccurrence, type SeriesOverviewOverride } from "./lib/eventSeriesGeneration";
 import { resolveSeriesMetadataForInvoice } from "./lib/invoiceSeries";
 import { assertNoOpenMicOverlap } from "./lib/openMicAddon";
@@ -772,6 +773,20 @@ export const setStatus = mutation({
     if (nextStatus === "cancelled" && !wasCancelled) {
       await scheduleEventCancelledEmails(ctx, args.id, now);
     }
+  },
+});
+
+export const deleteEvent = mutation({
+  args: { id: v.id("events") },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    await requireArborInternalContext(ctx);
+    const existing = await ctx.db.get(args.id);
+    if (!existing) throw new Error("Event not found.");
+    if (normalizeEventStatus(existing.status) !== "cancelled") {
+      throw new Error("Only cancelled events can be deleted.");
+    }
+    await deleteEventRecord(ctx, args.id);
   },
 });
 

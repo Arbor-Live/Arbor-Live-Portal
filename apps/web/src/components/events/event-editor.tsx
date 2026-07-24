@@ -203,6 +203,8 @@ export function EventEditor({
   const reattachOccurrence = useMutation(api.eventSeries.reattachOccurrence);
   const createHostGroup = useMutation(api.invoiceGroups.create);
   const updateEvent = useMutation(api.events.update);
+  const setEventStatus = useMutation(api.events.setStatus);
+  const deleteEventAdmin = useMutation(api.events.deleteEvent);
   const upsertBlocks = useMutation(api.eventSchedule.upsertBlocks);
   const upsertShifts = useMutation(api.eventCrew.upsertShifts);
   const deleteUnassignedShifts = useMutation(api.eventCrew.deleteUnassignedShifts);
@@ -921,6 +923,39 @@ export function EventEditor({
     }
   }
 
+  async function deleteEventPermanently() {
+    if (!eventId) return;
+    const shouldDelete = window.confirm(
+      "Permanently delete this cancelled event and all of its schedule, crew, and pull-list data? This cannot be undone.",
+    );
+    if (!shouldDelete) return;
+    try {
+      await deleteEventAdmin({ id: eventId });
+      router.push("/dashboard/events");
+    } catch (error) {
+      setMessageTone("error");
+      setMessage(getConvexErrorMessage(error));
+    }
+  }
+
+  async function cancelAndDeleteEvent() {
+    if (!eventId) return;
+    const shouldDelete = window.confirm(
+      "Cancel this event and permanently delete it, including all schedule, crew, and pull-list data? This cannot be undone.",
+    );
+    if (!shouldDelete) return;
+    try {
+      if (normalizeEventStatus(eventData?.event.status) !== "cancelled") {
+        await setEventStatus({ id: eventId, status: "cancelled" });
+      }
+      await deleteEventAdmin({ id: eventId });
+      router.push("/dashboard/events");
+    } catch (error) {
+      setMessageTone("error");
+      setMessage(getConvexErrorMessage(error));
+    }
+  }
+
   async function removeLegacyUnassignedShifts() {
     if (!eventId) return;
     const shouldDelete = window.confirm(
@@ -1142,9 +1177,22 @@ export function EventEditor({
               <Link href={getEventEditorTabPath(eventId, tab)}>{EVENT_EDITOR_TAB_LABELS[tab]}</Link>
             </Button>
           ))}
-          <Button type="button" onClick={() => void saveCore()} className="ml-auto" disabled={readOnly}>
-            {isCreate ? (isRecurring ? "Create Series" : "Create Event") : "Save Event"}
-          </Button>
+          <div className="ml-auto flex flex-wrap gap-2">
+            {isAdmin && eventId ? (
+              normalizeEventStatus(eventData?.event.status) === "cancelled" ? (
+                <Button type="button" variant="destructive" onClick={() => void deleteEventPermanently()}>
+                  Delete Event
+                </Button>
+              ) : (
+                <Button type="button" variant="destructive" onClick={() => void cancelAndDeleteEvent()}>
+                  Cancel &amp; Delete
+                </Button>
+              )
+            ) : null}
+            <Button type="button" onClick={() => void saveCore()} disabled={readOnly}>
+              {isCreate ? (isRecurring ? "Create Series" : "Create Event") : "Save Event"}
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
