@@ -175,7 +175,7 @@ export function CsvImporter() {
 
   const existingTypesQuery = useQuery(api.inventoryTypes.list, {});
   const existingLocationsQuery = useQuery(api.storageLocations.list, {});
-  const existingItemsQuery = useQuery(api.inventoryItems.list, {});
+  const existingItemsQuery = useQuery(api.inventoryItems.listAssetIds, {});
   const existingCategoriesQuery = useQuery(api.inventoryCategories.list, { activeOnly: false });
 
   const ensureDefaultCategories = useMutation(api.inventoryCategories.ensureDefaults);

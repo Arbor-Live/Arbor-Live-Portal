@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -42,15 +42,24 @@ export function ItemsManager() {
   const rowRefs = useRef(new Map<string, HTMLTableRowElement>());
 
   const categories = useQuery(api.inventoryCategories.list, { activeOnly: true });
-  const items = useQuery(api.inventoryItems.list, {
-    search: search || undefined,
-    category: category || undefined,
-  });
+  const {
+    results: items,
+    status: itemsStatus,
+    loadMore,
+  } = usePaginatedQuery(
+    api.inventoryItems.list,
+    {
+      search: search || undefined,
+      category: category || undefined,
+    },
+    { initialNumItems: 100 },
+  );
+  const itemSummaries = useQuery(api.inventoryItems.listSummaries, {});
   const types = useQuery(api.inventoryTypes.list, {});
   const locations = useQuery(api.storageLocations.list, {});
   const removeItem = useMutation(api.inventoryItems.remove);
   const sortedItems = useMemo(() => {
-    const rows = [...(items ?? [])];
+    const rows = [...items];
     rows.sort((a, b) => {
       const direction = sortDir === "asc" ? 1 : -1;
       if (sortBy === "category") {
@@ -75,8 +84,16 @@ export function ItemsManager() {
         category: item.type?.category ?? "unknown",
       });
     }
+    for (const item of itemSummaries ?? []) {
+      if (map.has(item._id)) continue;
+      map.set(item._id, {
+        assetId: item.assetId,
+        name: `${item.type?.name ?? "Unknown"} ${item.type?.model ?? ""}`.trim(),
+        category: item.type?.category ?? "unknown",
+      });
+    }
     return map;
-  }, [sortedItems]);
+  }, [itemSummaries, sortedItems]);
 
   async function bulkDeleteSelected() {
     try {
@@ -286,6 +303,16 @@ export function ItemsManager() {
               </tbody>
             </table>
           </div>
+          {itemsStatus === "CanLoadMore" || itemsStatus === "LoadingMore" ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={itemsStatus === "LoadingMore"}
+              onClick={() => loadMore(100)}
+            >
+              {itemsStatus === "LoadingMore" ? "Loading…" : "Load more"}
+            </Button>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -294,7 +321,11 @@ export function ItemsManager() {
         initial={editorInitial}
         types={types ?? []}
         locations={locations ?? []}
-        items={sortedItems}
+        items={(itemSummaries ?? []).map((item) => ({
+          _id: item._id,
+          assetId: item.assetId,
+          typeId: item.typeId,
+        }))}
         siteBase={siteBase}
         onCancel={() => {
           setEditingId(null);
