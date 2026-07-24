@@ -29,7 +29,7 @@ import {
   type UserDiscipline,
   type UserVertical,
 } from "./lib/userVerticals";
-import { ensureOnboardingForOrgMembership, ensureOrganizationOnboarding } from "./onboarding";
+import { ensureOnboardingForOrgMembership, ensureOrganizationOnboarding, resolveMyOnboardingStatus } from "./onboarding";
 
 const invitationStatusValue = v.union(
   v.literal("pending"),
@@ -545,6 +545,151 @@ export const getViewer = query({
       isCrewOnly: !isAdmin(user) && orgContext?.organizationType === "arbor_internal",
       verticals: membership.verticals,
       disciplines: membership.disciplines,
+    };
+  },
+});
+
+const onboardingStatusValue = v.union(
+  v.literal("not_started"),
+  v.literal("in_progress"),
+  v.literal("completed"),
+  v.literal("waived"),
+);
+
+/**
+ * One auth-resolved payload for shell chrome (sidebar + onboarding banner).
+ * Prefer this over stacking getViewer + getMyAccount + getMyStatus +
+ * getActiveOrganization + listMyOrganizations.
+ */
+export const getSessionShell = query({
+  args: {},
+  returns: v.union(
+    v.object({
+      viewer: v.object({
+        userId: v.string(),
+        role: v.optional(v.string()),
+        isAdmin: v.boolean(),
+        isCrewOnly: v.boolean(),
+        verticals: v.array(userVerticalValue),
+        disciplines: v.array(userDisciplineValue),
+      }),
+      account: v.object({
+        name: v.string(),
+        email: v.string(),
+        image: v.optional(v.string()),
+        avatarUrl: v.optional(v.string()),
+      }),
+      onboarding: v.object({
+        crew: v.union(
+          v.object({
+            status: onboardingStatusValue,
+            incompleteStepCount: v.number(),
+            applicable: v.literal(true),
+          }),
+          v.object({ applicable: v.literal(false) }),
+        ),
+        band: v.union(
+          v.object({
+            status: onboardingStatusValue,
+            applicable: v.literal(true),
+            organizationId: v.string(),
+          }),
+          v.object({ applicable: v.literal(false) }),
+        ),
+      }),
+      activeOrganization: v.union(
+        v.object({
+          organizationId: v.string(),
+          name: v.string(),
+          slug: v.string(),
+          role: v.string(),
+          organizationType: v.optional(v.string()),
+        }),
+        v.null(),
+      ),
+      organizations: v.array(
+        v.object({
+          organizationId: v.string(),
+          name: v.string(),
+          slug: v.string(),
+          role: v.string(),
+          organizationType: v.optional(v.string()),
+        }),
+      ),
+    }),
+    v.null(),
+  ),
+  handler: async (ctx) => {
+    const user = await getCurrentUserOrNull(ctx);
+    if (!user) return null;
+    const userId = getUserId(user);
+    const orgContext = await getActiveOrganizationContextOrNull(ctx);
+    const profile = await ctx.db
+      .query("userAdminProfiles")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .unique();
+    const membership = resolveProfileMembership(profile ?? {});
+
+    let avatarUrl: string | undefined;
+    if (profile?.avatarStorageId) {
+      avatarUrl = (await ctx.storage.getUrl(profile.avatarStorageId)) ?? undefined;
+    }
+
+    const [onboarding, memberships] = await Promise.all([
+      resolveMyOnboardingStatus(ctx, userId),
+      ctx.db
+        .query("userOrganizationMemberships")
+        .withIndex("by_userId", (q) => q.eq("userId", userId))
+        .take(200),
+    ]);
+
+    const activeMemberships = memberships.filter((row) => row.active);
+    const organizations = (
+      await Promise.all(
+        activeMemberships.map(async (row) => {
+          const [organization, orgProfile] = await Promise.all([
+            getOrganizationById(ctx, row.organizationId),
+            ctx.db
+              .query("organizationProfiles")
+              .withIndex("by_organizationId", (q) => q.eq("organizationId", row.organizationId))
+              .unique(),
+          ]);
+          return {
+            organizationId: row.organizationId,
+            name: organization?.name ?? "Organization",
+            slug: organization?.slug ?? "",
+            role: row.role,
+            organizationType: resolveOrganizationType(organization ?? undefined, orgProfile),
+          };
+        }),
+      )
+    ).sort((a, b) => a.name.localeCompare(b.name));
+
+    const activeOrganization =
+      (orgContext
+        ? organizations.find((org) => org.organizationId === orgContext.organizationId)
+        : undefined) ??
+      organizations[0] ??
+      null;
+
+    return {
+      viewer: {
+        userId,
+        role: user.role ?? undefined,
+        isAdmin: isAdmin(user),
+        isCrewOnly: !isAdmin(user) && orgContext?.organizationType === "arbor_internal",
+        verticals: membership.verticals,
+        disciplines: membership.disciplines,
+      },
+      account: {
+        name: user.name ?? user.email ?? "User",
+        email: user.email ?? "",
+        image: (user as { image?: string | null }).image ?? undefined,
+        avatarUrl,
+      },
+      onboarding,
+      activeOrganization,
+      organizations,
     };
   },
 });

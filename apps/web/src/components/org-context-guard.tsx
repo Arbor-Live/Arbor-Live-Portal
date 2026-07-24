@@ -1,11 +1,11 @@
 "use client";
 
-import { useQuery } from "convex/react";
-import { api } from "@/lib/convex-api";
+import { useSessionShell } from "@/components/session-shell-provider";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export function ArborOnlyGuard({ children }: { children: React.ReactNode }) {
-  const activeOrg = useQuery(api.users.getActiveOrganization, {});
+  const shell = useSessionShell();
+  const activeOrg = shell === undefined ? undefined : (shell?.activeOrganization ?? null);
 
   if (activeOrg === undefined) return null;
   if (!activeOrg) {
@@ -37,7 +37,8 @@ export function ArborOnlyGuard({ children }: { children: React.ReactNode }) {
 }
 
 export function BandOnlyGuard({ children }: { children: React.ReactNode }) {
-  const activeOrg = useQuery(api.users.getActiveOrganization, {});
+  const shell = useSessionShell();
+  const activeOrg = shell === undefined ? undefined : (shell?.activeOrganization ?? null);
   if (activeOrg === undefined) return null;
   if (!activeOrg) {
     return (

@@ -79,10 +79,61 @@ function countIncompleteCrewSteps(row: CrewOnboardingDoc): number {
   for (const ok of checks) {
     if (!ok) missing += 1;
   }
-  if (row.hasValidDriversLicense && !row.cartTrainingCompletedAt) {
-    missing += 1;
-  }
+  if (row.hasValidDriversLicense && !row.cartTrainingCompletedAt) missing += 1;
   return missing;
+}
+
+export type MyOnboardingStatus = {
+  crew:
+    | { status: CrewOnboardingDoc["status"]; incompleteStepCount: number; applicable: true }
+    | { applicable: false };
+  band:
+    | {
+        status: Doc<"organizationOnboarding">["status"];
+        applicable: true;
+        organizationId: string;
+      }
+    | { applicable: false };
+};
+
+export async function resolveMyOnboardingStatus(
+  ctx: QueryCtx,
+  userId: string,
+): Promise<MyOnboardingStatus> {
+  const orgContext = await getActiveOrganizationContextOrNull(ctx);
+
+  let crew: MyOnboardingStatus["crew"] = { applicable: false };
+  let band: MyOnboardingStatus["band"] = { applicable: false };
+
+  if (orgContext?.organizationType === "arbor_internal") {
+    const row = await ctx.db
+      .query("userOnboarding")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .unique();
+    if (row) {
+      crew = {
+        applicable: true,
+        status: row.status,
+        incompleteStepCount: countIncompleteCrewSteps(row),
+      };
+    } else {
+      crew = { applicable: true, status: "not_started", incompleteStepCount: 12 };
+    }
+  }
+
+  if (orgContext && (orgContext.organizationType === "band" || orgContext.organizationType === "dj")) {
+    const row = await ctx.db
+      .query("organizationOnboarding")
+      .withIndex("by_organizationId", (q) => q.eq("organizationId", orgContext.organizationId))
+      .unique();
+    band = {
+      applicable: true,
+      status: row?.status ?? "not_started",
+      organizationId: orgContext.organizationId,
+    };
+  }
+
+  return { crew, band };
 }
 
 export async function ensureCrewOnboarding(
@@ -306,49 +357,7 @@ export const getMyStatus = query({
   }),
   handler: async (ctx) => {
     const user = await requireAuth(ctx);
-    const userId = getUserId(user);
-    const orgContext = await getActiveOrganizationContextOrNull(ctx);
-
-    let crew:
-      | { status: CrewOnboardingDoc["status"]; incompleteStepCount: number; applicable: true }
-      | { applicable: false } = { applicable: false };
-    let band:
-      | {
-          status: Doc<"organizationOnboarding">["status"];
-          applicable: true;
-          organizationId: string;
-        }
-      | { applicable: false } = { applicable: false };
-
-    if (orgContext?.organizationType === "arbor_internal") {
-      const row = await ctx.db
-        .query("userOnboarding")
-        .withIndex("by_userId", (q) => q.eq("userId", userId))
-        .unique();
-      if (row) {
-        crew = {
-          applicable: true,
-          status: row.status,
-          incompleteStepCount: countIncompleteCrewSteps(row),
-        };
-      } else {
-        crew = { applicable: true, status: "not_started", incompleteStepCount: 12 };
-      }
-    }
-
-    if (orgContext && (orgContext.organizationType === "band" || orgContext.organizationType === "dj")) {
-      const row = await ctx.db
-        .query("organizationOnboarding")
-        .withIndex("by_organizationId", (q) => q.eq("organizationId", orgContext.organizationId))
-        .unique();
-      band = {
-        applicable: true,
-        status: row?.status ?? "not_started",
-        organizationId: orgContext.organizationId,
-      };
-    }
-
-    return { crew, band };
+    return await resolveMyOnboardingStatus(ctx, getUserId(user));
   },
 });
 

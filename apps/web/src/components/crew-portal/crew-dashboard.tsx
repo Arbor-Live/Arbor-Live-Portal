@@ -1,14 +1,12 @@
 "use client";
 
-import { useQuery } from "convex/react";
-import { api } from "@/lib/convex-api";
 import { CustomizableWidgetDashboard } from "@/components/dashboard/customizable-widget-dashboard";
 import { getWidgetsForDisciplines } from "@/components/crew-portal/widget-registry";
+import { useSessionViewer } from "@/components/session-shell-provider";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export function CrewDashboard() {
-  const viewer = useQuery(api.users.getViewer, {});
-
+  const viewer = useSessionViewer();
   if (!viewer) {
     return (
       <div className="grid gap-4 md:grid-cols-2">

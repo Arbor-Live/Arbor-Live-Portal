@@ -8,6 +8,7 @@ import { api, type Id } from "@/lib/convex-api";
 import { AdminCascadeDeleteDialog } from "@/components/admin/admin-cascade-delete-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { useSessionViewer } from "@/components/session-shell-provider";
 import { formatDate, formatDateTime } from "@/lib/format";
 
 function DetailRow({ label, value }: { label: string; value?: string | number | null }) {
@@ -22,7 +23,7 @@ function DetailRow({ label, value }: { label: string; value?: string | number | 
 
 export function EventRequestDetailClient({ requestId }: { requestId: Id<"eventRequests"> }) {
   const router = useRouter();
-  const viewer = useQuery(api.users.getViewer, {});
+  const viewer = useSessionViewer();
   const request = useQuery(api.eventRequests.get, { id: requestId });
   const linkedInvoice = useQuery(
     api.invoices.get,

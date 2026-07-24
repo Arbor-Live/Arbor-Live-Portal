@@ -27,6 +27,10 @@ export function SearchableSelect({
   createLabel,
   renderOption,
   renderSelected,
+  onQueryChange,
+  minQueryLength = 0,
+  searchHint,
+  searching = false,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -37,6 +41,11 @@ export function SearchableSelect({
   createLabel?: string;
   renderOption?: (option: SearchableSelectOption) => React.ReactNode;
   renderSelected?: (option: SearchableSelectOption | undefined) => React.ReactNode;
+  /** When set, parent owns search (server-backed). Local fuzzy filter is skipped. */
+  onQueryChange?: (query: string) => void;
+  minQueryLength?: number;
+  searchHint?: string;
+  searching?: boolean;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -48,6 +57,7 @@ export function SearchableSelect({
     left: number;
     width: number;
   } | null>(null);
+  const serverBacked = Boolean(onQueryChange);
 
   useEffect(() => {
     function onDocumentPointerDown(event: MouseEvent) {
@@ -57,10 +67,11 @@ export function SearchableSelect({
       if (menuRef.current?.contains(target)) return;
       setOpen(false);
       setQuery("");
+      onQueryChange?.("");
     }
     document.addEventListener("mousedown", onDocumentPointerDown);
     return () => document.removeEventListener("mousedown", onDocumentPointerDown);
-  }, []);
+  }, [onQueryChange]);
 
   useEffect(() => {
     if (!open) return;
@@ -88,7 +99,13 @@ export function SearchableSelect({
     () => options.find((option) => option.value === value),
     [options, value],
   );
-  const filtered = useMemo(() => {
+  const listOptions = useMemo(() => {
+    if (serverBacked) {
+      if (query.trim().length < minQueryLength) {
+        return selected ? [selected] : [];
+      }
+      return options;
+    }
     const lowered = query.trim();
     if (!lowered) return options;
     return options
@@ -99,12 +116,21 @@ export function SearchableSelect({
       .filter((row) => row.score > 0)
       .sort((a, b) => b.score - a.score || a.option.label.localeCompare(b.option.label))
       .map((row) => row.option);
-  }, [options, query]);
+  }, [minQueryLength, options, query, selected, serverBacked]);
+
   const normalizedQuery = query.trim().toLowerCase();
   const canCreate =
     Boolean(onCreate) &&
     normalizedQuery.length > 0 &&
     !options.some((option) => option.label.trim().toLowerCase() === normalizedQuery);
+
+  function updateQuery(next: string) {
+    setQuery(next);
+    onQueryChange?.(next);
+  }
+
+  const showSearchHint = serverBacked && query.trim().length < minQueryLength && !searching;
+  const showEmpty = !searching && !showSearchHint && listOptions.length === 0;
 
   return (
     <div className="relative" ref={rootRef}>
@@ -136,12 +162,21 @@ export function SearchableSelect({
             >
               <Input
                 value={query}
-                onChange={(event) => setQuery(event.target.value)}
+                onChange={(event) => updateQuery(event.target.value)}
                 placeholder={placeholder}
+                autoFocus
               />
               <div className="mt-2 max-h-52 overflow-auto">
-                {filtered.length ? (
-                  filtered.map((option) => (
+                {searching ? (
+                  <p className="px-2 py-1 text-xs text-muted-foreground">Searching…</p>
+                ) : null}
+                {showSearchHint ? (
+                  <p className="px-2 py-1 text-xs text-muted-foreground">
+                    {searchHint ?? `Type at least ${minQueryLength} characters to search`}
+                  </p>
+                ) : null}
+                {!searching && listOptions.length ? (
+                  listOptions.map((option) => (
                     <button
                       key={option.value}
                       type="button"
@@ -149,7 +184,7 @@ export function SearchableSelect({
                       onClick={() => {
                         onChange(option.value);
                         setOpen(false);
-                        setQuery("");
+                        updateQuery("");
                       }}
                     >
                       {renderOption ? (
@@ -164,9 +199,10 @@ export function SearchableSelect({
                       )}
                     </button>
                   ))
-                ) : (
+                ) : null}
+                {showEmpty ? (
                   <p className="px-2 py-1 text-xs text-muted-foreground">No matches.</p>
-                )}
+                ) : null}
                 {canCreate ? (
                   <button
                     type="button"
@@ -174,7 +210,7 @@ export function SearchableSelect({
                     onClick={() => {
                       onCreate?.(query.trim());
                       setOpen(false);
-                      setQuery("");
+                      updateQuery("");
                     }}
                   >
                     {createLabel ?? "New"}: &quot;{query.trim()}&quot;

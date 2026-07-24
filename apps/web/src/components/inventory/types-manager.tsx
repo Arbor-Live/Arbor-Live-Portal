@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
 import { FormSaveBar } from "@/components/forms";
 import { Form } from "@/components/ui/form";
@@ -196,17 +196,25 @@ export function TypesManager() {
   });
 
   const categories = useQuery(api.inventoryCategories.list, { activeOnly: false });
-  const allTypes = useQuery(api.inventoryTypes.list, {});
-  const types = useQuery(api.inventoryTypes.list, {
-    search: search.trim() || undefined,
-    category: selectedCategoryIds.length === 1 ? selectedCategoryIds[0] : undefined,
-    capability: selectedCapability || undefined,
-    manufacturer: selectedManufacturer || undefined,
-    publicListing:
-      publicVisibility === "all" ? undefined : publicVisibility === "public",
-    publicProfile:
-      publicProfileFilter === "all" ? undefined : publicProfileFilter === "full",
-  });
+  const manufacturerOptions = useQuery(api.inventoryTypes.listManufacturers, {}) ?? [];
+  const {
+    results: types,
+    status: typesStatus,
+    loadMore,
+  } = usePaginatedQuery(
+    api.inventoryTypes.list,
+    {
+      search: search.trim() || undefined,
+      category: selectedCategoryIds.length === 1 ? selectedCategoryIds[0] : undefined,
+      capability: selectedCapability || undefined,
+      manufacturer: selectedManufacturer || undefined,
+      publicListing:
+        publicVisibility === "all" ? undefined : publicVisibility === "public",
+      publicProfile:
+        publicProfileFilter === "all" ? undefined : publicProfileFilter === "full",
+    },
+    { initialNumItems: 100 },
+  );
   const capabilities = useQuery(api.capabilityDefinitions.list, { activeOnly: false });
 
   const ensureDefaults = useMutation(api.inventoryCategories.ensureDefaults);
@@ -221,7 +229,7 @@ export function TypesManager() {
   const deleteCapability = useMutation(api.capabilityDefinitions.remove);
 
   const rows = useMemo(() => {
-    const base = types ?? [];
+    const base = types;
     if (selectedCategoryIds.length <= 1) return base;
     return base.filter((row) => selectedCategoryIds.includes(row.category));
   }, [selectedCategoryIds, types]);
@@ -235,14 +243,6 @@ export function TypesManager() {
       })),
     [categoryOptions],
   );
-  const manufacturerOptions = useMemo(() => {
-    const manufacturers = new Set<string>();
-    for (const type of allTypes ?? []) {
-      const manufacturer = type.manufacturer?.trim();
-      if (manufacturer) manufacturers.add(manufacturer);
-    }
-    return [...manufacturers].sort((a, b) => a.localeCompare(b));
-  }, [allTypes]);
   const activeFilterCount = useMemo(() => {
     let count = 0;
     if (search.trim()) count += 1;
@@ -617,6 +617,16 @@ export function TypesManager() {
                 ? "No types match the current filters."
                 : "No types found."}
             </p>
+          ) : null}
+          {typesStatus === "CanLoadMore" || typesStatus === "LoadingMore" ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={typesStatus === "LoadingMore"}
+              onClick={() => loadMore(100)}
+            >
+              {typesStatus === "LoadingMore" ? "Loading…" : "Load more"}
+            </Button>
           ) : null}
         </CardContent>
       </Card>

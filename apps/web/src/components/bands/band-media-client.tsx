@@ -16,6 +16,7 @@ import { MediaGallery } from "@/components/media/media-gallery";
 import { MediaAlbumLink } from "@/components/media/media-album-link";
 import { MediaUploadDropzone } from "@/components/media/media-upload-dropzone";
 import { BandOnlyGuard } from "@/components/org-context-guard";
+import { useSessionShell } from "@/components/session-shell-provider";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { formatDate } from "@/lib/format";
 
@@ -24,7 +25,8 @@ function formatEventLabel(title: string, startAt: number) {
 }
 
 export function BandMediaClient() {
-  const activeOrg = useQuery(api.users.getActiveOrganization, {});
+  const shell = useSessionShell();
+  const activeOrg = shell === undefined ? undefined : (shell?.activeOrganization ?? null);
   const linkedEvents = useQuery(api.eventBands.listLinkedEventsForActiveBand, {});
   const ensureUploadAlbum = useAction(api.immichEnsure.ensureUploadAlbum);
 

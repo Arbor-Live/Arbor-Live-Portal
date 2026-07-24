@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
 import { DamageReportWizard } from "@/components/inventory/damage-report-wizard";
+import { useSessionViewer } from "@/components/session-shell-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getConvexErrorMessage } from "@/lib/convex-error";
@@ -27,7 +28,7 @@ export function DamageQueueManager() {
     status: statusFilter === "all" ? undefined : statusFilter,
   });
 
-  const viewer = useQuery(api.users.getViewer, {});
+  const viewer = useSessionViewer();
   const canTriage = Boolean(
     viewer?.isAdmin || viewer?.verticals?.includes("Operations"),
   );

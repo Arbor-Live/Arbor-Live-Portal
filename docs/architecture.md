@@ -111,4 +111,6 @@ flowchart LR
 The most detailed working notes live in
 `.cursor/skills/arbor-live-portal-app-context/SKILL.md` (domain rules,
 UI conventions, known high-risk areas). The human-readable domain overview is
-[domain-guide.md](domain-guide.md).
+[domain-guide.md](domain-guide.md). Query-efficiency patterns for agents
+(session shell, search pickers, bounded lists) are in
+[convex-efficiency.md](convex-efficiency.md).

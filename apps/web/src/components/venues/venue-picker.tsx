@@ -1,9 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
-import { SearchableSelect } from "@/components/inventory/searchable-select";
+import {
+  SearchableSelect,
+  type SearchableSelectOption,
+} from "@/components/inventory/searchable-select";
+import { useSessionViewer } from "@/components/session-shell-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,6 +19,9 @@ import {
   type VenueKind,
 } from "@/lib/validations/venues";
 
+const MIN_QUERY_CHARS = 2;
+const DEBOUNCE_MS = 200;
+
 type VenuePickerProps = {
   value: string;
   onChange: (venueId: string) => void;
@@ -23,19 +30,64 @@ type VenuePickerProps = {
   placeholder?: string;
 };
 
+type VenueOption = {
+  _id: Id<"venues">;
+  name: string;
+  path: string;
+  kind: string;
+  venueType: string;
+  nicknames: string[];
+};
+
+function useDebouncedValue<T>(value: T, delayMs: number) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebounced(value), delayMs);
+    return () => window.clearTimeout(timer);
+  }, [value, delayMs]);
+  return debounced;
+}
+
+function toSelectOption(venue: VenueOption): SearchableSelectOption {
+  return {
+    value: venue._id,
+    label: venue.name,
+    description: [
+      venue.path !== venue.name ? venue.path : null,
+      `${formatVenueKindLabel(venue.kind as VenueKind)} · ${venue.venueType}`,
+      venue.nicknames.length ? venue.nicknames.join(" · ") : null,
+    ]
+      .filter(Boolean)
+      .join(" · "),
+    keywords: [venue.path, ...venue.nicknames].join(" "),
+  };
+}
+
 export function VenuePicker({
   value,
   onChange,
   allowCreate = false,
   emptyLabel = "No venue",
-  placeholder = "Search venues…",
+  placeholder = "Type to search venues…",
 }: VenuePickerProps) {
-  const venues = useQuery(api.venues.listForPicker, {});
-  // Public booking uses this picker with allowCreate=false; skip auth so guests
-  // are not crashed by getViewer throwing "You must be signed in."
-  const viewer = useQuery(api.users.getViewer, allowCreate ? {} : "skip");
-  const createQuick = useMutation(api.venues.createQuick);
+  const [query, setQuery] = useState("");
+  const debouncedQuery = useDebouncedValue(query, DEBOUNCE_MS);
+  const canSearch = debouncedQuery.trim().length >= MIN_QUERY_CHARS;
+
+  const selectedRows = useQuery(
+    api.venues.getOptionsByIds,
+    value ? { ids: [value as Id<"venues">] } : "skip",
+  );
+  const searchRows = useQuery(
+    api.venues.searchOptions,
+    canSearch ? { search: debouncedQuery.trim() } : "skip",
+  );
+  // Parent options only while the create modal is open (admin-only path).
   const [createOpen, setCreateOpen] = useState(false);
+  const parentVenues = useQuery(api.venues.listForPicker, createOpen ? { limit: 300 } : "skip");
+
+  const viewer = useSessionViewer();
+  const createQuick = useMutation(api.venues.createQuick);
   const [draftName, setDraftName] = useState("");
   const [nicknamesText, setNicknamesText] = useState("");
   const [kind, setKind] = useState<VenueKind>("building");
@@ -45,28 +97,20 @@ export function VenuePicker({
   const [error, setError] = useState<string | null>(null);
 
   const canCreate = allowCreate && (viewer?.isAdmin ?? false);
+  const selected = selectedRows?.[0] ?? null;
 
-  const options = useMemo(
-    () => [
-      { value: "", label: emptyLabel },
-      ...(venues ?? []).map((venue) => ({
-        value: venue._id,
-        label: venue.name,
-        description: [
-          venue.path !== venue.name ? venue.path : null,
-          `${formatVenueKindLabel(venue.kind as VenueKind)} · ${venue.venueType}`,
-          venue.nicknames.length ? venue.nicknames.join(" · ") : null,
-        ]
-          .filter(Boolean)
-          .join(" · "),
-        keywords: [venue.path, ...venue.nicknames].join(" "),
-      })),
-    ],
-    [emptyLabel, venues],
-  );
+  const options = useMemo(() => {
+    const byId = new Map<string, SearchableSelectOption>();
+    byId.set("", { value: "", label: emptyLabel });
+    if (selected) byId.set(selected._id, toSelectOption(selected as VenueOption));
+    for (const venue of searchRows ?? []) {
+      byId.set(venue._id, toSelectOption(venue as VenueOption));
+    }
+    return [...byId.values()];
+  }, [emptyLabel, searchRows, selected]);
 
-  function openCreate(query: string) {
-    setDraftName(query);
+  function openCreate(createQuery: string) {
+    setDraftName(createQuery);
     setNicknamesText("");
     setKind("building");
     setVenueType(venueTypesForKind("building")[0]!);
@@ -107,6 +151,10 @@ export function VenuePicker({
         options={options}
         placeholder={placeholder}
         emptyLabel={emptyLabel}
+        onQueryChange={setQuery}
+        minQueryLength={MIN_QUERY_CHARS}
+        searchHint={`Type at least ${MIN_QUERY_CHARS} characters to search`}
+        searching={canSearch && searchRows === undefined}
         onCreate={canCreate ? openCreate : undefined}
         createLabel="Create venue"
         renderOption={(option) => (
@@ -177,7 +225,7 @@ export function VenuePicker({
                 onChange={(e) => setParentId(e.target.value)}
               >
                 <option value="">No parent (top-level)</option>
-                {(venues ?? []).map((venue) => (
+                {(parentVenues ?? []).map((venue) => (
                   <option key={venue._id} value={venue._id}>
                     {venue.path}
                   </option>

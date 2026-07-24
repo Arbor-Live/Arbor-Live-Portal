@@ -7,6 +7,11 @@ import { useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
 import { AdminCascadeDeleteDialog } from "@/components/admin/admin-cascade-delete-dialog";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
+import {
+  InventoryPackageSearchSelect,
+  InventoryTypeSearchSelect,
+} from "@/components/inventory/inventory-search-select";
+import { useSessionViewer } from "@/components/session-shell-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -62,17 +67,13 @@ export function InvoiceEditor({
   initialIssueDate?: string;
 }) {
   const router = useRouter();
-  const viewer = useQuery(api.users.getViewer, {});
+  const viewer = useSessionViewer();
   const [groupId, setGroupId] = useState("");
   const [contactId, setContactId] = useState("");
   const session = authClient.useSession();
   const managerList = useQuery(api.invoices.listManagers, {});
   const groups = useQuery(api.invoiceGroups.list, { activeOnly: true });
-  const feeDefinitions = useQuery(api.invoiceFeeDefinitions.list, { activeOnly: true });
-  const termsDefinitions = useQuery(api.invoiceTerms.list, { activeOnly: true });
   const settings = useQuery(api.invoiceSettings.get, {});
-  const packages = useQuery(api.inventoryPackages.list, {});
-  const types = useQuery(api.inventoryTypes.list, {});
   const invoiceData = useQuery(api.invoices.get, invoiceId ? { id: invoiceId } : "skip");
   const contacts = useQuery(api.invoiceContacts.list, {
     activeOnly: true,
@@ -114,6 +115,8 @@ export function InvoiceEditor({
   const [artists, setArtists] = useState<ArtistRow[]>([]);
   const [crewRows, setCrewRows] = useState<CrewRow[]>([]);
   const [fees, setFees] = useState<FeeRow[]>([]);
+  const [feesCatalogEnabled, setFeesCatalogEnabled] = useState(false);
+  const [termsCatalogEnabled, setTermsCatalogEnabled] = useState(false);
   const [saveWarning, setSaveWarning] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -147,6 +150,14 @@ export function InvoiceEditor({
   const [approvalToken, setApprovalToken] = useState("");
   const [termsIds, setTermsIds] = useState<Id<"invoiceTerms">[]>([]);
   const [additionalTermsMarkdown, setAdditionalTermsMarkdown] = useState("");
+  const feeDefinitions = useQuery(
+    api.invoiceFeeDefinitions.list,
+    feesCatalogEnabled || fees.some((row) => row.feeDefinitionId) ? { activeOnly: true } : "skip",
+  );
+  const termsDefinitions = useQuery(
+    api.invoiceTerms.list,
+    termsCatalogEnabled || termsIds.length > 0 ? { activeOnly: true } : "skip",
+  );
   const [groupModalOpen, setGroupModalOpen] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
   const [newGroupType, setNewGroupType] = useState<"vso" | "house" | "department" | "individual">("department");
@@ -178,14 +189,39 @@ export function InvoiceEditor({
     [managerList],
   );
 
-  const packageOptions = useMemo(
-    () => (packages ?? []).map((p) => ({ value: p._id, label: p.name })),
-    [packages],
+  const selectedPackageIds = useMemo(
+    () =>
+      equipmentPackages
+        .map((row) => row.refId)
+        .filter((id): id is string => Boolean(id)) as Id<"inventoryPackages">[],
+    [equipmentPackages],
   );
-  const typeOptions = useMemo(
-    () => (types ?? []).map((t) => ({ value: t._id, label: `${t.name} · ${t.model}` })),
-    [types],
+  const selectedTypeIds = useMemo(
+    () =>
+      equipmentTypes
+        .map((row) => row.refId)
+        .filter((id): id is string => Boolean(id)) as Id<"inventoryTypes">[],
+    [equipmentTypes],
   );
+  const packages = useQuery(
+    api.inventoryPackages.getOptionsByIds,
+    selectedPackageIds.length ? { ids: selectedPackageIds } : "skip",
+  );
+  const types = useQuery(
+    api.inventoryTypes.getOptionsByIds,
+    selectedTypeIds.length ? { ids: selectedTypeIds } : "skip",
+  );
+  const packageById = useMemo(() => {
+    const map = new Map<string, NonNullable<typeof packages>[number]>();
+    for (const pkg of packages ?? []) map.set(pkg._id, pkg);
+    return map;
+  }, [packages]);
+  const typeById = useMemo(() => {
+    const map = new Map<string, NonNullable<typeof types>[number]>();
+    for (const type of types ?? []) map.set(type._id, type);
+    return map;
+  }, [types]);
+
   const groupOptions = useMemo(
     () =>
       (groups ?? []).map((g) => ({
@@ -477,7 +513,7 @@ export function InvoiceEditor({
     }> = [];
     for (const row of equipmentPackages) {
       if (!row.refId || Number(row.quantity) <= 0) continue;
-      const pkg = (packages ?? []).find((p) => p._id === row.refId);
+      const pkg = packageById.get(row.refId);
       rows.push({
         section: "equipment_package",
         order: order++,
@@ -490,7 +526,7 @@ export function InvoiceEditor({
     }
     for (const row of equipmentTypes) {
       if (!row.refId || Number(row.quantity) <= 0) continue;
-      const type = (types ?? []).find((t) => t._id === row.refId);
+      const type = typeById.get(row.refId);
       rows.push({
         section: "equipment_type",
         order: order++,
@@ -829,14 +865,14 @@ export function InvoiceEditor({
       packages: equipmentPackages
         .filter((row) => row.refId && Number(row.quantity) > 0)
         .map((row) => ({
-          label: (packages ?? []).find((p) => p._id === row.refId)?.name ?? "Package",
+          label: packageById.get(row.refId)?.name ?? "Package",
           quantity: Number(row.quantity),
           basis: row.basis,
         })),
       types: equipmentTypes
         .filter((row) => row.refId && Number(row.quantity) > 0)
         .map((row) => {
-          const type = (types ?? []).find((t) => t._id === row.refId);
+          const type = typeById.get(row.refId);
           return {
             label: type ? `${type.name} · ${type.model}` : "Type",
             quantity: Number(row.quantity),
@@ -844,7 +880,7 @@ export function InvoiceEditor({
           };
         }),
     });
-  }, [billableOccurrenceCount, equipmentPackages, equipmentTypes, packages, types]);
+  }, [billableOccurrenceCount, equipmentPackages, equipmentTypes, packageById, typeById]);
 
   const seriesOccurrenceStale =
     editorBaselineReady &&
@@ -1080,9 +1116,8 @@ export function InvoiceEditor({
           <SectionEquipmentPackages
             rows={equipmentPackages}
             setRows={setEquipmentPackages}
-            options={packageOptions}
             billableOccurrenceCount={billableOccurrenceCount}
-            packages={packages ?? []}
+            packageById={packageById}
             equipmentPricingMode={equipmentPricingMode}
             defaultBasis={defaultEquipmentBasis}
           />
@@ -1091,9 +1126,8 @@ export function InvoiceEditor({
           <SectionEquipmentTypes
             rows={equipmentTypes}
             setRows={setEquipmentTypes}
-            options={typeOptions}
             billableOccurrenceCount={billableOccurrenceCount}
-            types={types ?? []}
+            typeById={typeById}
             equipmentPricingMode={equipmentPricingMode}
             defaultBasis={defaultEquipmentBasis}
           />
@@ -1166,7 +1200,11 @@ export function InvoiceEditor({
             <SectionCrew rows={crewRows} setRows={setCrewRows} rateMode={crewRateMode} />
           )}
           </div>
-          <div id="section-fees">
+          <div
+            id="section-fees"
+            onFocusCapture={() => setFeesCatalogEnabled(true)}
+            onMouseEnter={() => setFeesCatalogEnabled(true)}
+          >
           <SectionFees rows={fees} setRows={setFees} options={feeDefinitions ?? []} />
           </div>
         </div>
@@ -1362,7 +1400,10 @@ export function InvoiceEditor({
             </Card>
           ) : null}
 
-          <Card>
+          <Card
+            onFocusCapture={() => setTermsCatalogEnabled(true)}
+            onMouseEnter={() => setTermsCatalogEnabled(true)}
+          >
             <CardHeader className="pb-2"><CardTitle className="text-base">Terms</CardTitle></CardHeader>
             <CardContent className="space-y-2 text-sm">
               <div className="max-h-32 space-y-1 overflow-y-auto rounded-md border p-2">
@@ -1606,24 +1647,25 @@ export function InvoiceEditor({
 function SectionEquipmentPackages({
   rows,
   setRows,
-  options,
   billableOccurrenceCount,
-  packages,
+  packageById,
   equipmentPricingMode,
   defaultBasis = "total",
 }: {
   rows: EquipmentRow[];
   setRows: Dispatch<SetStateAction<EquipmentRow[]>>;
-  options: Array<{ value: string; label: string }>;
   billableOccurrenceCount: number;
-  packages: Array<{
-    _id: string;
-    name?: string;
-    subsidizedPackagePriceUsd?: number;
-    nonSubsidizedPackagePriceUsd?: number;
-    packagePriceCents: number;
-    items?: Array<{ quantity: number; type?: { name?: string; model?: string } | null }>;
-  }>;
+  packageById: Map<
+    string,
+    {
+      _id: string;
+      name?: string;
+      subsidizedPackagePriceUsd?: number;
+      nonSubsidizedPackagePriceUsd?: number;
+      packagePriceCents: number;
+      items?: Array<{ quantity: number; type?: { name?: string; model?: string } | null }>;
+    }
+  >;
   equipmentPricingMode: "subsidized" | "nonSubsidized";
   defaultBasis?: EquipmentRow["basis"];
 }) {
@@ -1632,7 +1674,7 @@ function SectionEquipmentPackages({
       <CardHeader><CardTitle>Equipment — Packages</CardTitle></CardHeader>
       <CardContent className="space-y-2">
         {rows.map((row, idx) => {
-          const pkg = packages.find((p) => p._id === row.refId);
+          const pkg = packageById.get(row.refId);
           const rate =
             equipmentPricingMode === "subsidized"
               ? (pkg?.subsidizedPackagePriceUsd ??
@@ -1649,7 +1691,12 @@ function SectionEquipmentPackages({
           return (
             <div key={`pkg-${idx}`} className="space-y-1">
             <div className="grid gap-2 md:grid-cols-[1fr_120px_120px_100px_auto]">
-              <SearchableSelect value={row.refId} onChange={(v) => setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, refId: v } : r)))} options={options} placeholder="Search packages..." emptyLabel="Select package" />
+              <InventoryPackageSearchSelect
+                value={row.refId}
+                onChange={(v) =>
+                  setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, refId: v } : r)))
+                }
+              />
               <select
                 className="h-9 rounded-md border bg-background px-2 text-sm"
                 value={basis}
@@ -1709,22 +1756,23 @@ function SectionEquipmentPackages({
 function SectionEquipmentTypes({
   rows,
   setRows,
-  options,
   billableOccurrenceCount,
-  types,
+  typeById,
   equipmentPricingMode,
   defaultBasis = "total",
 }: {
   rows: EquipmentRow[];
   setRows: Dispatch<SetStateAction<EquipmentRow[]>>;
-  options: Array<{ value: string; label: string }>;
   billableOccurrenceCount: number;
-  types: Array<{
-    _id: string;
-    subsidizedRentalPriceUsd?: number;
-    nonSubsidizedRentalPriceUsd?: number;
-    rentalPriceUsd?: number;
-  }>;
+  typeById: Map<
+    string,
+    {
+      _id: string;
+      subsidizedRentalPriceUsd?: number;
+      nonSubsidizedRentalPriceUsd?: number;
+      rentalPriceUsd?: number;
+    }
+  >;
   equipmentPricingMode: "subsidized" | "nonSubsidized";
   defaultBasis?: EquipmentRow["basis"];
 }) {
@@ -1733,7 +1781,7 @@ function SectionEquipmentTypes({
       <CardHeader><CardTitle>Equipment — Individual Asset Types</CardTitle></CardHeader>
       <CardContent className="space-y-2">
         {rows.map((row, idx) => {
-          const type = types.find((t) => t._id === row.refId);
+          const type = typeById.get(row.refId);
           const rate =
             equipmentPricingMode === "subsidized"
               ? (type?.subsidizedRentalPriceUsd ??
@@ -1750,7 +1798,12 @@ function SectionEquipmentTypes({
           const lineTotal = billedQty * rate;
           return (
             <div key={`type-${idx}`} className="grid gap-2 md:grid-cols-[1fr_120px_120px_100px_auto]">
-              <SearchableSelect value={row.refId} onChange={(v) => setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, refId: v } : r)))} options={options} placeholder="Search types..." emptyLabel="Select type" />
+              <InventoryTypeSearchSelect
+                value={row.refId}
+                onChange={(v) =>
+                  setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, refId: v } : r)))
+                }
+              />
               <select
                 className="h-9 rounded-md border bg-background px-2 text-sm"
                 value={basis}
