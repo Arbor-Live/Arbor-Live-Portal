@@ -28,7 +28,9 @@ function readDismissedKeys(): Set<string> {
 }
 
 export function OnboardingBanner() {
-  const status = useQuery(api.onboarding.getMyStatus, {});
+  // Same query as AppSidebar — Convex dedupes the subscription.
+  const shell = useQuery(api.users.getSessionShell, {});
+  const status = shell?.onboarding;
   const [dismissedKeys, setDismissedKeys] = useState<Set<string>>(readDismissedKeys);
 
   const target: BannerTarget | null = (() => {

@@ -1,3 +1,4 @@
+import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx } from "./_generated/server";
@@ -131,8 +132,41 @@ function matchesInventoryTypeSearch(type: Doc<"inventoryTypes">, loweredSearch: 
   return type.capabilities.some((capability) => capability.toLowerCase().includes(loweredSearch));
 }
 
+const MAX_TYPE_OPTIONS = 2000;
+
+function matchesInventoryTypeFilters(
+  type: Doc<"inventoryTypes">,
+  args: {
+    capability?: string;
+    manufacturer?: string;
+    publicListing?: boolean;
+    publicProfile?: boolean;
+    search?: string;
+  },
+) {
+  if (args.capability && !type.capabilities.includes(args.capability)) return false;
+  if (args.publicListing !== undefined && Boolean(type.publicListing) !== args.publicListing) {
+    return false;
+  }
+  if (args.publicProfile !== undefined && Boolean(type.publicProfile) !== args.publicProfile) {
+    return false;
+  }
+  const loweredManufacturer = args.manufacturer?.trim().toLowerCase();
+  if (
+    loweredManufacturer &&
+    (type.manufacturer ?? "").trim().toLowerCase() !== loweredManufacturer
+  ) {
+    return false;
+  }
+  const loweredSearch = args.search?.trim().toLowerCase();
+  if (!loweredSearch) return true;
+  return matchesInventoryTypeSearch(type, loweredSearch);
+}
+
+/** Paginated types list for the types manager. */
 export const list = query({
   args: {
+    paginationOpts: paginationOptsValidator,
     category: v.optional(v.string()),
     capability: v.optional(v.string()),
     manufacturer: v.optional(v.string()),
@@ -142,35 +176,111 @@ export const list = query({
   },
   handler: async (ctx, args) => {
     await requireAuth(ctx);
+    const result = args.category
+      ? await ctx.db
+          .query("inventoryTypes")
+          .withIndex("by_category", (q) => q.eq("category", args.category!))
+          .paginate(args.paginationOpts)
+      : await ctx.db.query("inventoryTypes").paginate(args.paginationOpts);
+
+    const page = result.page
+      .filter((type) => matchesInventoryTypeFilters(type, args))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    return { ...result, page };
+  },
+});
+
+/**
+ * Bounded catalog for admin surfaces that still need a full-ish option list
+ * (CSV import, packages manager filters). Pickers should use `searchOptions`.
+ */
+export const listOptions = query({
+  args: {
+    limit: v.optional(v.number()),
+    category: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    const limit = Math.min(Math.max(args.limit ?? 1500, 1), MAX_TYPE_OPTIONS);
     const types = args.category
       ? await ctx.db
           .query("inventoryTypes")
           .withIndex("by_category", (q) => q.eq("category", args.category!))
-          .collect()
-      : await ctx.db.query("inventoryTypes").collect();
-
-    const loweredSearch = args.search?.trim().toLowerCase();
-    const loweredManufacturer = args.manufacturer?.trim().toLowerCase();
+          .take(limit)
+      : await ctx.db.query("inventoryTypes").take(limit);
 
     return types
-      .filter((type) => {
-        if (args.capability && !type.capabilities.includes(args.capability)) return false;
-        if (args.publicListing !== undefined && Boolean(type.publicListing) !== args.publicListing) {
-          return false;
-        }
-        if (args.publicProfile !== undefined && Boolean(type.publicProfile) !== args.publicProfile) {
-          return false;
-        }
-        if (
-          loweredManufacturer &&
-          (type.manufacturer ?? "").trim().toLowerCase() !== loweredManufacturer
-        ) {
-          return false;
-        }
-        if (!loweredSearch) return true;
-        return matchesInventoryTypeSearch(type, loweredSearch);
-      })
+      .map(toTypeOption)
       .sort((a, b) => a.name.localeCompare(b.name));
+  },
+});
+
+const MIN_SEARCH_CHARS = 2;
+const DEFAULT_SEARCH_LIMIT = 40;
+
+function toTypeOption(type: Doc<"inventoryTypes">) {
+  return {
+    _id: type._id,
+    name: type.name,
+    model: type.model,
+    manufacturer: type.manufacturer,
+    category: type.category,
+    subsidizedRentalPriceUsd: type.subsidizedRentalPriceUsd,
+    nonSubsidizedRentalPriceUsd: type.nonSubsidizedRentalPriceUsd,
+    rentalPriceUsd: type.rentalPriceUsd,
+  };
+}
+
+/**
+ * Search-on-demand picker results. Returns [] until the query has enough chars.
+ * Does not run on invoice/pull-list mount.
+ */
+export const searchOptions = query({
+  args: {
+    search: v.string(),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    const lowered = args.search.trim().toLowerCase();
+    if (lowered.length < MIN_SEARCH_CHARS) return [];
+
+    const limit = Math.min(Math.max(args.limit ?? DEFAULT_SEARCH_LIMIT, 1), 60);
+    // Bounded scan + filter only while the user is actively searching.
+    const candidates = await ctx.db.query("inventoryTypes").take(1200);
+    return candidates
+      .filter((type) => matchesInventoryTypeSearch(type, lowered))
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .slice(0, limit)
+      .map(toTypeOption);
+  },
+});
+
+/** Resolve selected picker rows (labels + rates) without loading the catalog. */
+export const getOptionsByIds = query({
+  args: {
+    ids: v.array(v.id("inventoryTypes")),
+  },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    const uniqueIds = Array.from(new Set(args.ids)).slice(0, 100);
+    const rows = await Promise.all(uniqueIds.map((id) => ctx.db.get(id)));
+    return rows.filter((row): row is Doc<"inventoryTypes"> => Boolean(row)).map(toTypeOption);
+  },
+});
+
+/** Cheap manufacturer filter options for the types manager. */
+export const listManufacturers = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireAuth(ctx);
+    const types = await ctx.db.query("inventoryTypes").take(MAX_TYPE_OPTIONS);
+    const manufacturers = new Set<string>();
+    for (const type of types) {
+      const manufacturer = type.manufacturer?.trim();
+      if (manufacturer) manufacturers.add(manufacturer);
+    }
+    return [...manufacturers].sort((a, b) => a.localeCompare(b));
   },
 });
 

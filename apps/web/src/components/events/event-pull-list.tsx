@@ -8,7 +8,12 @@ import { FormSaveBar } from "@/components/forms";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { SearchableSelect, type SearchableSelectOption } from "@/components/inventory/searchable-select";
+import {
+  InventoryPackageSearchSelect,
+  InventoryTypeSearchSelect,
+  type InventoryPackageOption,
+  type InventoryTypeOption,
+} from "@/components/inventory/inventory-search-select";
 import { DamageReportWizard } from "@/components/inventory/damage-report-wizard";
 import { RentalFulfillmentSheet } from "@/components/events/rental-fulfillment-sheet";
 import { useConvexForm } from "@/hooks/use-convex-form";
@@ -136,8 +141,6 @@ export function EventPullList({
   onSaved,
   onError,
 }: EventPullListProps) {
-  const inventoryTypes = useQuery(api.inventoryTypes.list, {});
-  const inventoryPackages = useQuery(api.inventoryPackages.list, {});
   const upsertItems = useMutation(api.eventPullLists.upsertItems);
   const scaffoldFromInvoice = useMutation(api.eventPullLists.scaffoldFromInvoice);
   const removeItem = useMutation(api.eventPullLists.removeItem);
@@ -146,6 +149,8 @@ export function EventPullList({
   const [addKind, setAddKind] = useState<"type" | "package">("type");
   const [newTypeId, setNewTypeId] = useState("");
   const [newPackageId, setNewPackageId] = useState("");
+  const [selectedType, setSelectedType] = useState<InventoryTypeOption | null>(null);
+  const [selectedPackage, setSelectedPackage] = useState<InventoryPackageOption | null>(null);
   const [newQty, setNewQty] = useState("1");
   const [showManage, setShowManage] = useState(false);
   const [fulfillmentOpen, setFulfillmentOpen] = useState(false);
@@ -171,28 +176,6 @@ export function EventPullList({
   // initial-items signature) whenever the persisted pull list changes, so
   // `items`/the form's defaultValues are already fresh on every mount and no
   // resync effect is needed here.
-
-  const typeOptions: SearchableSelectOption[] = useMemo(
-    () =>
-      (inventoryTypes ?? []).map((type) => ({
-        value: type._id,
-        label: type.name,
-        description: [type.category, type.model].filter(Boolean).join(" • "),
-      })),
-    [inventoryTypes],
-  );
-
-  const packageOptions: SearchableSelectOption[] = useMemo(
-    () =>
-      (inventoryPackages ?? [])
-        .filter((pkg) => pkg.active)
-        .map((pkg) => ({
-          value: pkg._id,
-          label: pkg.name,
-          description: `${pkg.items.length} type${pkg.items.length === 1 ? "" : "s"} in package`,
-        })),
-    [inventoryPackages],
-  );
 
   const totalPieces = useMemo(
     () => items.reduce((sum, item) => sum + item.quantityRequired, 0),
@@ -283,9 +266,8 @@ export function EventPullList({
   async function addManualLine() {
     const quantityRequired = Math.max(1, Math.floor(Number(newQty) || 1));
     if (addKind === "package") {
-      if (!newPackageId) return;
-      const pkg = (inventoryPackages ?? []).find((row) => row._id === newPackageId);
-      if (!pkg) return;
+      if (!newPackageId || !selectedPackage) return;
+      const pkg = selectedPackage;
       const nextItems = [
         ...items,
         {
@@ -305,14 +287,14 @@ export function EventPullList({
         },
       ];
       setNewPackageId("");
+      setSelectedPackage(null);
       setNewQty("1");
       await form.runMutation(() => persistItems(nextItems, "Added package to pull list"));
       return;
     }
 
-    if (!newTypeId) return;
-    const type = (inventoryTypes ?? []).find((row) => row._id === newTypeId);
-    if (!type) return;
+    if (!newTypeId || !selectedType) return;
+    const type = selectedType;
     const nextItems = [
       ...items,
       {
@@ -328,6 +310,7 @@ export function EventPullList({
       },
     ];
     setNewTypeId("");
+    setSelectedType(null);
     setNewQty("1");
     await form.runMutation(() => persistItems(nextItems, "Added to pull list"));
   }
@@ -514,20 +497,21 @@ export function EventPullList({
             <div className="space-y-1">
               <Label>{addKind === "package" ? "Package" : "Inventory type"}</Label>
               {addKind === "package" ? (
-                <SearchableSelect
+                <InventoryPackageSearchSelect
                   value={newPackageId}
-                  onChange={setNewPackageId}
-                  options={packageOptions}
-                  placeholder="Search packages..."
-                  emptyLabel="Select package"
+                  activeOnly
+                  onChange={(id, option) => {
+                    setNewPackageId(id);
+                    setSelectedPackage(option);
+                  }}
                 />
               ) : (
-                <SearchableSelect
+                <InventoryTypeSearchSelect
                   value={newTypeId}
-                  onChange={setNewTypeId}
-                  options={typeOptions}
-                  placeholder="Search inventory types..."
-                  emptyLabel="Select type"
+                  onChange={(id, option) => {
+                    setNewTypeId(id);
+                    setSelectedType(option);
+                  }}
                 />
               )}
             </div>

@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import type { Doc } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import { requireAdmin, requireArborInternalContext, requireAuth } from "./lib/auth";
 import {
@@ -113,7 +114,7 @@ export const list = query({
   handler: async (ctx) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
-    const venues = await ctx.db.query("venues").withIndex("by_path").collect();
+    const venues = await ctx.db.query("venues").withIndex("by_path").take(500);
     return venues.sort((a, b) => a.path.localeCompare(b.path));
   },
 });
@@ -241,11 +242,14 @@ export const getDetails = query({
   },
 });
 
-/** Limited fields for pickers (staff + public booking). */
+/** Limited fields for pickers (staff + public booking). Prefer searchOptions. */
 export const listForPicker = query({
-  args: {},
-  handler: async (ctx) => {
-    const venues = await ctx.db.query("venues").withIndex("by_path").collect();
+  args: {
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const limit = Math.min(Math.max(args.limit ?? 300, 1), 500);
+    const venues = await ctx.db.query("venues").withIndex("by_path").take(limit);
     return venues
       .map((venue) => ({
         _id: venue._id,
@@ -259,6 +263,69 @@ export const listForPicker = query({
         parentId: venue.parentId,
       }))
       .sort((a, b) => a.path.localeCompare(b.path));
+  },
+});
+
+const MIN_VENUE_SEARCH_CHARS = 2;
+
+function toVenuePickerOption(venue: Doc<"venues">) {
+  return {
+    _id: venue._id,
+    name: venue.name,
+    path: venue.path,
+    kind: venue.kind,
+    venueType: venue.venueType,
+    nicknames: venue.nicknames ?? [],
+    address: venue.address,
+    googleMapsUrl: venue.googleMapsUrl,
+    parentId: venue.parentId,
+  };
+}
+
+function matchesVenueSearch(
+  venue: {
+    name: string;
+    path: string;
+    nicknames?: string[];
+    address?: string;
+  },
+  lowered: string,
+) {
+  if (venue.name.toLowerCase().includes(lowered)) return true;
+  if (venue.path.toLowerCase().includes(lowered)) return true;
+  if ((venue.address ?? "").toLowerCase().includes(lowered)) return true;
+  return (venue.nicknames ?? []).some((nickname) => nickname.toLowerCase().includes(lowered));
+}
+
+/** Search-on-demand venue picker (public booking + staff). Empty until user types. */
+export const searchOptions = query({
+  args: {
+    search: v.string(),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const lowered = args.search.trim().toLowerCase();
+    if (lowered.length < MIN_VENUE_SEARCH_CHARS) return [];
+    const limit = Math.min(Math.max(args.limit ?? 40, 1), 60);
+    const candidates = await ctx.db.query("venues").withIndex("by_path").take(500);
+    return candidates
+      .filter((venue) => matchesVenueSearch(venue, lowered))
+      .sort((a, b) => a.path.localeCompare(b.path))
+      .slice(0, limit)
+      .map(toVenuePickerOption);
+  },
+});
+
+export const getOptionsByIds = query({
+  args: {
+    ids: v.array(v.id("venues")),
+  },
+  handler: async (ctx, args) => {
+    const uniqueIds = Array.from(new Set(args.ids)).slice(0, 50);
+    const rows = await Promise.all(uniqueIds.map((id) => ctx.db.get(id)));
+    return rows
+      .filter((row): row is Doc<"venues"> => Boolean(row))
+      .map(toVenuePickerOption);
   },
 });
 

@@ -204,11 +204,12 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
       pathname.includes("/media") ||
       pathname.includes("/expenses") ||
       /^\/dashboard\/events\/[^/]+$/.test(pathname))
-  const viewer = useQuery(api.users.getViewer, {})
-  const account = useQuery(api.account.getMyAccount, {})
+  const shell = useQuery(api.users.getSessionShell, {})
   const activeOrganization = useQuery(api.users.getActiveOrganization, {})
   const myOrganizations = useQuery(api.users.listMyOrganizations, {})
   const setActiveOrganization = useMutation(api.users.setActiveOrganization)
+  const viewer = shell?.viewer
+  const account = shell?.account
   const isAdmin = viewer?.isAdmin ?? false
   const viewerVerticals = viewer?.verticals ?? []
   const hasOperationsAccess = isAdmin || viewerVerticals.includes("Operations")

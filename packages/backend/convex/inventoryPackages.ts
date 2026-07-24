@@ -1,6 +1,6 @@
 import { v } from "convex/values";
-import { mutation, query, type MutationCtx } from "./_generated/server";
-import type { Id } from "./_generated/dataModel";
+import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
 import { requireAuth } from "./lib/auth";
 import { normalizeOptionalAssetReference } from "./lib/inventoryUpload";
 import { scheduleInventoryPackageSiteRevalidation } from "./lib/scheduleSiteRevalidation";
@@ -97,6 +97,88 @@ export const list = query({
     });
   },
 });
+
+const MIN_PACKAGE_SEARCH_CHARS = 2;
+const DEFAULT_PACKAGE_SEARCH_LIMIT = 40;
+
+async function hydratePackageOptions(ctx: QueryCtx, packages: Doc<"inventoryPackages">[]) {
+  const packageItemRows = await Promise.all(
+    packages.map((pkg) =>
+      ctx.db
+        .query("inventoryPackageItems")
+        .withIndex("by_packageId", (q) => q.eq("packageId", pkg._id))
+        .take(MAX_PACKAGE_ITEMS),
+    ),
+  );
+  const typeIds = Array.from(new Set(packageItemRows.flat().map((row) => row.typeId)));
+  const types = await Promise.all(typeIds.map((id) => ctx.db.get(id)));
+  const typeById = new Map(typeIds.map((id, index) => [id, types[index] ?? null]));
+
+  return packages.map((pkg, index) => {
+    const items = (packageItemRows[index] ?? []).map((row) => ({
+      typeId: row.typeId,
+      quantity: row.quantity,
+      type: typeById.get(row.typeId)
+        ? {
+            name: typeById.get(row.typeId)!.name,
+            model: typeById.get(row.typeId)!.model,
+          }
+        : null,
+    }));
+    return {
+      _id: pkg._id,
+      name: pkg.name,
+      active: pkg.active,
+      packagePriceCents: pkg.packagePriceCents,
+      subsidizedPackagePriceUsd: pkg.subsidizedPackagePriceUsd,
+      nonSubsidizedPackagePriceUsd: pkg.nonSubsidizedPackagePriceUsd,
+      items,
+    };
+  });
+}
+
+/** Search-on-demand package picker results. Empty until the user types. */
+export const searchOptions = query({
+  args: {
+    search: v.string(),
+    limit: v.optional(v.number()),
+    activeOnly: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    const lowered = args.search.trim().toLowerCase();
+    if (lowered.length < MIN_PACKAGE_SEARCH_CHARS) return [];
+
+    const limit = Math.min(
+      Math.max(args.limit ?? DEFAULT_PACKAGE_SEARCH_LIMIT, 1),
+      60,
+    );
+    const candidates = await ctx.db.query("inventoryPackages").take(MAX_PACKAGE_LIST);
+    const matched = candidates
+      .filter((pkg) => {
+        if (args.activeOnly && !pkg.active) return false;
+        return pkg.name.toLowerCase().includes(lowered);
+      })
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .slice(0, limit);
+
+    return await hydratePackageOptions(ctx, matched);
+  },
+});
+
+export const getOptionsByIds = query({
+  args: {
+    ids: v.array(v.id("inventoryPackages")),
+  },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    const uniqueIds = Array.from(new Set(args.ids)).slice(0, 100);
+    const rows = await Promise.all(uniqueIds.map((id) => ctx.db.get(id)));
+    const packages = rows.filter((row): row is Doc<"inventoryPackages"> => Boolean(row));
+    return await hydratePackageOptions(ctx, packages);
+  },
+});
+
 async function validatePackageItems(
   ctx: MutationCtx,
   items: Array<{ typeId: Id<"inventoryTypes">; quantity: number }>,

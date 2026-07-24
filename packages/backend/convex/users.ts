@@ -29,7 +29,7 @@ import {
   type UserDiscipline,
   type UserVertical,
 } from "./lib/userVerticals";
-import { ensureOnboardingForOrgMembership, ensureOrganizationOnboarding } from "./onboarding";
+import { ensureOnboardingForOrgMembership, ensureOrganizationOnboarding, resolveMyOnboardingStatus } from "./onboarding";
 
 const invitationStatusValue = v.union(
   v.literal("pending"),
@@ -547,6 +547,94 @@ export const getViewer = query({
       isCrewOnly: !isAdmin(user) && orgContext?.organizationType === "arbor_internal",
       verticals: membership.verticals,
       disciplines: membership.disciplines,
+    };
+  },
+});
+
+const onboardingStatusValue = v.union(
+  v.literal("not_started"),
+  v.literal("in_progress"),
+  v.literal("completed"),
+  v.literal("waived"),
+);
+
+/**
+ * One auth-resolved payload for shell chrome (sidebar + onboarding banner).
+ * Prefer this over stacking getViewer + getMyAccount + getMyStatus.
+ */
+export const getSessionShell = query({
+  args: {},
+  returns: v.union(
+    v.object({
+      viewer: v.object({
+        userId: v.string(),
+        role: v.optional(v.string()),
+        isAdmin: v.boolean(),
+        isCrewOnly: v.boolean(),
+        verticals: v.array(userVerticalValue),
+        disciplines: v.array(userDisciplineValue),
+      }),
+      account: v.object({
+        name: v.string(),
+        email: v.string(),
+        image: v.optional(v.string()),
+        avatarUrl: v.optional(v.string()),
+      }),
+      onboarding: v.object({
+        crew: v.union(
+          v.object({
+            status: onboardingStatusValue,
+            incompleteStepCount: v.number(),
+            applicable: v.literal(true),
+          }),
+          v.object({ applicable: v.literal(false) }),
+        ),
+        band: v.union(
+          v.object({
+            status: onboardingStatusValue,
+            applicable: v.literal(true),
+            organizationId: v.string(),
+          }),
+          v.object({ applicable: v.literal(false) }),
+        ),
+      }),
+    }),
+    v.null(),
+  ),
+  handler: async (ctx) => {
+    const user = await getCurrentUserOrNull(ctx);
+    if (!user) return null;
+    const userId = getUserId(user);
+    const orgContext = await getActiveOrganizationContextOrNull(ctx);
+    const profile = await ctx.db
+      .query("userAdminProfiles")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .unique();
+    const membership = resolveProfileMembership(profile ?? {});
+
+    let avatarUrl: string | undefined;
+    if (profile?.avatarStorageId) {
+      avatarUrl = (await ctx.storage.getUrl(profile.avatarStorageId)) ?? undefined;
+    }
+
+    const onboarding = await resolveMyOnboardingStatus(ctx, userId);
+
+    return {
+      viewer: {
+        userId,
+        role: user.role ?? undefined,
+        isAdmin: isAdmin(user),
+        isCrewOnly: !isAdmin(user) && orgContext?.organizationType === "arbor_internal",
+        verticals: membership.verticals,
+        disciplines: membership.disciplines,
+      },
+      account: {
+        name: user.name ?? user.email ?? "User",
+        email: user.email ?? "",
+        image: (user as { image?: string | null }).image ?? undefined,
+        avatarUrl,
+      },
+      onboarding,
     };
   },
 });

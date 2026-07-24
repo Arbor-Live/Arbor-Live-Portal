@@ -55,7 +55,7 @@ export function ItemsManager() {
     { initialNumItems: 100 },
   );
   const itemSummaries = useQuery(api.inventoryItems.listSummaries, {});
-  const types = useQuery(api.inventoryTypes.list, {});
+  const types = useQuery(api.inventoryTypes.listOptions, {});
   const locations = useQuery(api.storageLocations.list, {});
   const removeItem = useMutation(api.inventoryItems.remove);
   const sortedItems = useMemo(() => {
