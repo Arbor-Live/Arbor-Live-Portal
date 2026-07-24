@@ -199,6 +199,7 @@ export function EventEditor({
   );
   const createEvent = useMutation(api.events.create);
   const createEventSeries = useMutation(api.eventSeries.create);
+  const reattachOccurrence = useMutation(api.eventSeries.reattachOccurrence);
   const createHostGroup = useMutation(api.invoiceGroups.create);
   const updateEvent = useMutation(api.events.update);
   const upsertBlocks = useMutation(api.eventSchedule.upsertBlocks);
@@ -936,6 +937,24 @@ export function EventEditor({
     }
   }
 
+  async function resetToSeries() {
+    if (!eventId || readOnly) return;
+    const shouldReset = window.confirm(
+      "Reset this occurrence to the series template? This restores overview fields, times, schedule blocks, and unassigned crew shifts, and clears the detached state. Assigned crew shifts are kept.",
+    );
+    if (!shouldReset) return;
+    try {
+      await reattachOccurrence({ eventId });
+      // Allow the load effect to re-hydrate local form state from the restored occurrence.
+      hydratedEventIdRef.current = null;
+      setMessageTone("success");
+      setMessage("Occurrence reset to series template.");
+    } catch (error) {
+      setMessageTone("error");
+      setMessage(getConvexErrorMessage(error, "Failed to reset occurrence."));
+    }
+  }
+
   const currentEventId = eventId ?? eventData?.event?._id;
   const [nowMs] = useState(() => Date.now());
   const payPeriod = useMemo(() => payPeriodForDate(nowMs), [nowMs]);
@@ -1089,14 +1108,27 @@ export function EventEditor({
         <CardHeader>
           <CardTitle>{isCreate ? "Create Event" : "Edit Event"}</CardTitle>
           {seriesMeta ? (
-            <p className="text-sm text-muted-foreground">
-              Recurring · occurrence {(seriesMeta.occurrenceIndex ?? 0) + 1} of {seriesMeta.totalOccurrences}
-              {seriesMeta.seriesDetached ? " · detached from series updates" : ""}
-              {" · "}
-              <Link href={`/dashboard/events/series/${seriesMeta._id}`} className="underline">
-                View series
-              </Link>
-            </p>
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">
+                Recurring · occurrence {(seriesMeta.occurrenceIndex ?? 0) + 1} of {seriesMeta.totalOccurrences}
+                {seriesMeta.seriesDetached ? " · detached from series updates" : ""}
+                {" · "}
+                <Link href={`/dashboard/events/series/${seriesMeta._id}`} className="underline">
+                  View series
+                </Link>
+              </p>
+              {seriesMeta.seriesDetached ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={readOnly}
+                  onClick={() => void resetToSeries()}
+                >
+                  Reset to series
+                </Button>
+              ) : null}
+            </div>
           ) : null}
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">

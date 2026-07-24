@@ -1,6 +1,5 @@
+import { addPacificWeeks, occurrenceStartAt } from "@arbor/format";
 import { formatDateTime } from "@/lib/format";
-
-const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 export type RecurrenceEndMode = "count" | "date";
 
@@ -23,22 +22,20 @@ export function computeOccurrenceStarts(args: {
     throw new Error("Provide either occurrence count or series end date, not both.");
   }
 
-  const intervalMs = args.intervalWeeks * WEEK_MS;
   const starts: number[] = [];
-  let current = args.anchorStartAt;
 
   if (args.occurrenceCount !== undefined) {
     for (let index = 0; index < args.occurrenceCount; index += 1) {
-      starts.push(current);
-      current += intervalMs;
+      starts.push(occurrenceStartAt(args.anchorStartAt, index, args.intervalWeeks));
     }
     return starts;
   }
 
   const endBound = args.seriesEndAt!;
+  let current = args.anchorStartAt;
   while (current <= endBound) {
     starts.push(current);
-    current += intervalMs;
+    current = addPacificWeeks(current, args.intervalWeeks);
   }
   if (starts.length === 0) {
     throw new Error("No occurrences fall within the selected end date.");
