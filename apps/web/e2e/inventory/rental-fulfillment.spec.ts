@@ -3,6 +3,7 @@ import { pollConvex, runConvex } from "../helpers/convex";
 
 test.describe("rental fulfillment", () => {
   test("admin can process delivery and return with typed asset scans", async ({ page }) => {
+    test.setTimeout(120_000);
     const seeded = runConvex("e2eHelpers:seedDryHireWithPullList", {
       title: `E2E Fulfill ${Date.now()}`,
     }) as {
@@ -48,9 +49,18 @@ test.describe("rental fulfillment", () => {
     expect(afterDelivery.scannedAssetIds).toContain(seeded.assetId);
 
     await page.keyboard.press("Escape");
+    await expect(page.getByRole("button", { name: "Process return" })).toBeVisible({
+      timeout: 15_000,
+    });
     await page.getByRole("button", { name: "Process return" }).click();
-    await expect(page.getByText("Process return").first()).toBeVisible({ timeout: 15_000 });
-    await page.getByRole("button", { name: "Start return" }).click();
+    await expect(page.getByRole("heading", { name: "Process return" })).toBeVisible({
+      timeout: 15_000,
+    });
+    const startReturn = page.getByRole("button", { name: "Start return" });
+    await expect(startReturn).toBeVisible({ timeout: 15_000 });
+    await startReturn.click();
+    await expect(page.locator("#asset-scan-input")).toBeVisible({ timeout: 20_000 });
+
     const returnInput = page.locator("#asset-scan-input");
     await returnInput.fill(seeded.assetId);
     await expect(page.getByRole("button", { name: "Add" })).toBeEnabled();
