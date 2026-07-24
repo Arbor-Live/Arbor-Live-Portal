@@ -194,6 +194,16 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
   const [now] = useState(() => Date.now())
   const [adminSchedulingRange] = useState(() => getDefaultAdminSchedulingRange())
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({})
+  // Defer nav badge queries on heavy event-editor routes so schedule/overview
+  // subscriptions aren't competing with sidebar counters.
+  const onEventEditorHeavyRoute =
+    pathname.startsWith("/dashboard/events/") &&
+    (pathname.includes("/schedule") ||
+      pathname.includes("/equipment") ||
+      pathname.includes("/artifacts") ||
+      pathname.includes("/media") ||
+      pathname.includes("/expenses") ||
+      /^\/dashboard\/events\/[^/]+$/.test(pathname))
   const viewer = useQuery(api.users.getViewer, {})
   const account = useQuery(api.account.getMyAccount, {})
   const activeOrganization = useQuery(api.users.getActiveOrganization, {})
@@ -210,27 +220,30 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
     viewerVerticals.length === 0
   const pendingAvailabilityCount = useQuery(
     api.eventCrewAvailability.getMyPendingAvailabilityCount,
-    activeOrganization?.organizationType === "arbor_internal" ? { now } : "skip",
+    activeOrganization?.organizationType === "arbor_internal" && !onEventEditorHeavyRoute
+      ? { now }
+      : "skip",
   )
   const pendingBandApplicationsCount = useQuery(
     api.bandApplications.countPendingSubmitted,
-    isAdmin ? {} : "skip",
+    isAdmin && !onEventEditorHeavyRoute ? {} : "skip",
   )
   const pendingCrewApplicationsCount = useQuery(
     api.crewApplications.countPendingSubmitted,
-    isAdmin ? {} : "skip",
+    isAdmin && !onEventEditorHeavyRoute ? {} : "skip",
   )
   const pendingDamageReportsCount = useQuery(
     api.damageReports.countPending,
-    activeOrganization?.organizationType === "arbor_internal" ? {} : "skip",
+    activeOrganization?.organizationType === "arbor_internal" && !onEventEditorHeavyRoute
+      ? {}
+      : "skip",
   )
   const unconfirmedCrewCount = useQuery(
-    api.eventCrewAvailability.listForAdminOverview,
-    activeOrganization?.organizationType === "arbor_internal" && isAdmin
+    api.eventCrewAvailability.countUnconfirmedForAdminOverview,
+    activeOrganization?.organizationType === "arbor_internal" && isAdmin && !onEventEditorHeavyRoute
       ? {
           rangeStart: adminSchedulingRange.rangeStart,
           rangeEnd: adminSchedulingRange.rangeEnd,
-          unconfirmedOnly: true,
         }
       : "skip",
   )
@@ -261,7 +274,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
     isCrewContext,
     isAdminHomeContext,
   }
-  const unconfirmedEventCount = unconfirmedCrewCount?.length ?? 0
+  const unconfirmedEventCount = unconfirmedCrewCount ?? 0
   const scopedNavItems = navItems.filter((item) => canAccessNavItem(item, navAccess))
 
   function pendingChipCountForUrl(url: string): number {

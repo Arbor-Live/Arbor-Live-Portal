@@ -111,6 +111,7 @@ export function SearchableSelect({
       <button
         ref={triggerRef}
         type="button"
+        data-testid="searchable-select-trigger"
         className={cn(filterControlClassName, "flex items-center justify-between text-left")}
         onClick={() => setOpen((prev) => !prev)}
       >

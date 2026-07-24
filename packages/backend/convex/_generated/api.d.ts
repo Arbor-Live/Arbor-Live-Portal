@@ -22,6 +22,7 @@ import type * as crons from "../crons.js";
 import type * as damageReports from "../damageReports.js";
 import type * as dashboardHome from "../dashboardHome.js";
 import type * as dashboardPreferences from "../dashboardPreferences.js";
+import type * as e2eHelpers from "../e2eHelpers.js";
 import type * as email_authEmails from "../email/authEmails.js";
 import type * as email_bandPaymentEmails from "../email/bandPaymentEmails.js";
 import type * as email_bookingRequestEmails from "../email/bookingRequestEmails.js";
@@ -170,6 +171,7 @@ declare const fullApi: ApiFromModules<{
   damageReports: typeof damageReports;
   dashboardHome: typeof dashboardHome;
   dashboardPreferences: typeof dashboardPreferences;
+  e2eHelpers: typeof e2eHelpers;
   "email/authEmails": typeof email_authEmails;
   "email/bandPaymentEmails": typeof email_bandPaymentEmails;
   "email/bookingRequestEmails": typeof email_bookingRequestEmails;

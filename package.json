@@ -20,6 +20,10 @@
     "typecheck": "pnpm -r typecheck",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e": "node scripts/e2e-run.mjs",
+    "test:e2e:skip-boot": "E2E_SKIP_BOOT=1 node scripts/e2e-run.mjs",
+    "test:e2e:ui": "pnpm --filter web exec playwright test --ui",
+    "test:e2e:codegen": "pnpm --filter web exec playwright codegen http://localhost:3000",
     "setup:worktree-env": "node scripts/link-worktree-env.mjs",
     "prepare": "git config core.hooksPath .githooks 2>/dev/null || true && node scripts/link-worktree-env.mjs 2>/dev/null || true"
   },

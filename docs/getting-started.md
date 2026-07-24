@@ -110,7 +110,9 @@ Do not rely on this for production testing, and never ship a build with
 | `pnpm codegen:backend` | Regenerate Convex bindings after schema/API changes |
 | `pnpm lint` / `pnpm typecheck` | Lint / typecheck all workspace packages |
 | `pnpm --filter web build` | Full Next.js production build (best cross-file type check) |
+| `pnpm test:e2e` | Boot anonymous Convex + Next, then run Playwright (`E2E_SKIP_BOOT=1` to reuse a running stack) |
 
+CI runs the same suite on PRs and pushes to `main` (`.github/workflows/e2e.yml`) with `CONVEX_AGENT_MODE=anonymous` and `E2E_EMAIL_MOCK` so Resend is never called.
 Note: root `pnpm dev` runs *every* package's `dev` script in parallel,
 including the email preview server. Use the targeted `dev:web` / `dev:backend`
 scripts if you only want the app.

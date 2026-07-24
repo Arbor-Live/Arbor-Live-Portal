@@ -119,6 +119,21 @@ async function getAllOrganizations(ctx: QueryCtx | MutationCtx) {
   return await fetchAllBetterAuthRows<OrganizationRow>(ctx, "organization", 500);
 }
 
+async function getOrganizationById(ctx: QueryCtx | MutationCtx, organizationId: string) {
+  // Prefer `_id` (ctx.db.get fast path). Fall back to `id` for older rows.
+  let organization = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
+    model: "organization",
+    where: [{ field: "_id", value: organizationId }],
+  })) as OrganizationRow | null;
+  if (!organization) {
+    organization = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
+      model: "organization",
+      where: [{ field: "id", value: organizationId }],
+    })) as OrganizationRow | null;
+  }
+  return organization;
+}
+
 export async function resolveOrCreateOrganization(ctx: MutationCtx, name: string) {
   const slug = toSlug(name);
   const existing = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
@@ -153,9 +168,8 @@ async function getOrganizationType(ctx: QueryCtx | MutationCtx, organizationId: 
     .query("organizationProfiles")
     .withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId))
     .unique();
-  const organizations = await getAllOrganizations(ctx);
-  const organization = organizations.find((entry) => getRecordId(entry) === organizationId);
-  return resolveOrganizationType(organization, profile);
+  const organization = await getOrganizationById(ctx, organizationId);
+  return resolveOrganizationType(organization ?? undefined, profile);
 }
 
 export async function ensureUserProfileDefaults(
@@ -476,24 +490,27 @@ export const listMyOrganizations = query({
       .withIndex("by_userId", (q) => q.eq("userId", userId))
       .take(200);
     const activeMemberships = memberships.filter((row) => row.active);
-    const organizations = await getAllOrganizations(ctx);
-    const profileRows = await ctx.db.query("organizationProfiles").withIndex("by_organizationType").take(500);
-    const profileByOrgId = new Map(profileRows.map((row) => [row.organizationId, row]));
-    return activeMemberships
-      .map((membership) => {
-        const organization = organizations.find((entry) => getRecordId(entry) === membership.organizationId);
+    const organizations = await Promise.all(
+      activeMemberships.map(async (membership) => {
+        const [organization, profile] = await Promise.all([
+          getOrganizationById(ctx, membership.organizationId),
+          ctx.db
+            .query("organizationProfiles")
+            .withIndex("by_organizationId", (q) =>
+              q.eq("organizationId", membership.organizationId),
+            )
+            .unique(),
+        ]);
         return {
           organizationId: membership.organizationId,
           name: organization?.name ?? "Organization",
           slug: organization?.slug ?? "",
           role: membership.role,
-          organizationType: resolveOrganizationType(
-            organization,
-            profileByOrgId.get(membership.organizationId),
-          ),
+          organizationType: resolveOrganizationType(organization ?? undefined, profile),
         };
-      })
-      .sort((a, b) => a.name.localeCompare(b.name));
+      }),
+    );
+    return organizations.sort((a, b) => a.name.localeCompare(b.name));
   },
 });
 
@@ -550,8 +567,7 @@ export const getActiveOrganization = query({
     const membership = memberships.find((row) => row.active && row.organizationId === activeRow?.organizationId) ??
       memberships.find((row) => row.active);
     if (!membership) return null;
-    const organizations = await getAllOrganizations(ctx);
-    const organization = organizations.find((entry) => getRecordId(entry) === membership.organizationId);
+    const organization = await getOrganizationById(ctx, membership.organizationId);
     const organizationType = await getOrganizationType(ctx, membership.organizationId);
     return {
       organizationId: membership.organizationId,
