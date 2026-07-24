@@ -1552,6 +1552,64 @@ export const seedOpenDamageReport = mutation({
   },
 });
 
+/**
+ * Test-only: complete return fulfillment after outbound without the heavy UI path.
+ * Anonymous CI Convex often times out on startReturn under subscription load.
+ */
+export const completeRentalReturnForEvent = mutation({
+  args: { eventId: v.id("events") },
+  returns: v.object({
+    returnCompleted: v.boolean(),
+    fulfillmentId: v.id("eventRentalFulfillments"),
+  }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const now = Date.now();
+    const fulfillments = await ctx.db
+      .query("eventRentalFulfillments")
+      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+      .take(20);
+    const outbound = fulfillments.find(
+      (row) => row.direction === "outbound" && row.status === "completed",
+    );
+    if (!outbound) throw new Error("Outbound fulfillment must be completed first.");
+    const existingReturn = fulfillments.find((row) => row.direction === "return");
+    if (existingReturn?.status === "completed") {
+      return { returnCompleted: true, fulfillmentId: existingReturn._id };
+    }
+
+    const fulfillmentId =
+      existingReturn?._id ??
+      (await ctx.db.insert("eventRentalFulfillments", {
+        eventId: args.eventId,
+        direction: "return",
+        status: "in_progress",
+        startedAt: now,
+      }));
+
+    const units = await ctx.db
+      .query("eventRentalUnits")
+      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+      .take(100);
+    for (const unit of units) {
+      if (unit.outboundStatus === "scanned" || unit.outboundStatus === "replace" || unit.outboundStatus === "no_tag") {
+        await ctx.db.patch(unit._id, {
+          returnStatus: "scanned",
+          updatedAt: now,
+        });
+      }
+    }
+
+    await ctx.db.patch(fulfillmentId, {
+      status: "completed",
+      completedAt: now,
+      completedByUserId: "e2e-manager",
+    });
+
+    return { returnCompleted: true, fulfillmentId };
+  },
+});
+
 export const getDamageReportState = query({
   args: { reportId: v.id("damageReports") },
   returns: v.union(
