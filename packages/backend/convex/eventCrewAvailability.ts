@@ -88,7 +88,25 @@ async function fetchUsersByIds(ctx: QueryCtx, userIds: string[]) {
   for (const user of (usersResult?.page ?? []) as AuthUserRecord[]) {
     const key = getUserKey(user);
     if (key) userByKey.set(key, user);
+    if (user.id) userByKey.set(user.id, user);
+    if (user._id) userByKey.set(user._id, user);
   }
+
+  const missing = userIds.filter((userId) => !userByKey.has(userId));
+  if (missing.length > 0) {
+    const byIdResult = await ctx.runQuery(components.betterAuth.adapter.findMany, {
+      model: "user",
+      where: [{ field: "id", operator: "in", value: missing }],
+      paginationOpts: { cursor: null, numItems: missing.length },
+    });
+    for (const user of (byIdResult?.page ?? []) as AuthUserRecord[]) {
+      const key = getUserKey(user);
+      if (key) userByKey.set(key, user);
+      if (user.id) userByKey.set(user.id, user);
+      if (user._id) userByKey.set(user._id, user);
+    }
+  }
+
   return userByKey;
 }
 

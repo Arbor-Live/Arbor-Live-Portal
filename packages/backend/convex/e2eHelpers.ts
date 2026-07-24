@@ -459,6 +459,58 @@ function futureEventWindow(daysAhead = 14) {
   return { startAt: start.getTime(), endAt: end.getTime() };
 }
 
+async function insertSubmittedBookingRequest(ctx: MutationCtx, eventName?: string) {
+  const now = Date.now();
+  const { startAt, endAt } = futureEventWindow(18);
+  const requestNumber = await allocateRequestNumber(ctx);
+  const publicToken = makeToken();
+  const resolvedEventName = eventName?.trim() || `E2E Booking ${now}`;
+  const start = new Date(startAt);
+  const end = new Date(endAt);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const eventDateText = `${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}`;
+  const eventStartTimeText = `${pad(start.getHours())}:${pad(start.getMinutes())}`;
+  const eventEndTimeText = `${pad(end.getHours())}:${pad(end.getMinutes())}`;
+
+  const requestId = await ctx.db.insert("eventRequests", {
+    status: "submitted",
+    requestNumber,
+    publicToken,
+    firstName: "E2E",
+    lastName: "Requester",
+    email: "e2e.requester@stanford.edu",
+    phone: "6505550100",
+    organization: "E2E Test Org",
+    sponsorType: "Large Volunteer Student Organization",
+    venueName: "E2E Venue",
+    eventDateText,
+    eventStartTimeText,
+    eventEndTimeText,
+    earliestSetupText: "2 hours before",
+    eventStartAtMs: startAt,
+    eventEndAtMs: endAt,
+    setupAtMs: startAt - 2 * 60 * 60 * 1000,
+    flexibleSetupTime: true,
+    eventName: resolvedEventName,
+    eventCategory: "Concert / Showcase",
+    crewOrRental: "Crewed event",
+    servicesNeeded: ["Sound"],
+    expectedTurnout: 80,
+    submittedAt: now,
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  return {
+    requestId,
+    requestNumber,
+    publicToken,
+    eventName: resolvedEventName,
+    startAt,
+    endAt,
+  };
+}
+
 /**
  * Test-only: latest email notification for assertions (invite/quote/etc.).
  */
@@ -847,57 +899,119 @@ export const seedSubmittedBookingRequest = mutation({
   }),
   handler: async (ctx, args) => {
     assertE2eHelpersEnabled();
-    const now = Date.now();
-    const { startAt, endAt } = futureEventWindow(18);
-    const requestNumber = await allocateRequestNumber(ctx);
-    const publicToken = makeToken();
-    const eventName = args.eventName?.trim() || `E2E Booking ${now}`;
-    const start = new Date(startAt);
-    const end = new Date(endAt);
-    const pad = (n: number) => String(n).padStart(2, "0");
-    const eventDateText = `${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}`;
-    const eventStartTimeText = `${pad(start.getHours())}:${pad(start.getMinutes())}`;
-    const eventEndTimeText = `${pad(end.getHours())}:${pad(end.getMinutes())}`;
-
-    const requestId = await ctx.db.insert("eventRequests", {
-      status: "submitted",
-      requestNumber,
-      publicToken,
-      firstName: "E2E",
-      lastName: "Requester",
-      email: "e2e.requester@stanford.edu",
-      phone: "6505550100",
-      organization: "E2E Test Org",
-      sponsorType: "Large Volunteer Student Organization",
-      venueName: "E2E Venue",
-      eventDateText,
-      eventStartTimeText,
-      eventEndTimeText,
-      earliestSetupText: "2 hours before",
-      eventStartAtMs: startAt,
-      eventEndAtMs: endAt,
-      setupAtMs: startAt - 2 * 60 * 60 * 1000,
-      flexibleSetupTime: true,
-      eventName,
-      eventCategory: "Concert / Showcase",
-      crewOrRental: "Crewed event",
-      servicesNeeded: ["Sound"],
-      expectedTurnout: 80,
-      submittedAt: now,
-      createdAt: now,
-      updatedAt: now,
-    });
-
+    const seeded = await insertSubmittedBookingRequest(ctx, args.eventName);
     return {
-      requestId,
-      requestNumber,
-      publicToken,
-      path: `/dashboard/events/requests/${requestId}`,
-      trackPath: `/request/track/${publicToken}`,
+      requestId: seeded.requestId,
+      requestNumber: seeded.requestNumber,
+      publicToken: seeded.publicToken,
+      path: `/dashboard/events/requests/${seeded.requestId}`,
+      trackPath: `/request/track/${seeded.publicToken}`,
     };
   },
 });
 
+/**
+ * Test-only: converted booking request with quote already on the request track portal.
+ * Avoids the heavy invoice-editor UI path that flakes under anonymous CI Convex limits.
+ */
+export const seedBookingReadyForTrackApprove = mutation({
+  args: {
+    eventName: v.optional(v.string()),
+  },
+  returns: v.object({
+    requestId: v.id("eventRequests"),
+    invoiceId: v.id("invoices"),
+    eventId: v.id("events"),
+    requestNumber: v.string(),
+    publicToken: v.string(),
+    trackPath: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const now = Date.now();
+    const seeded = await insertSubmittedBookingRequest(ctx, args.eventName);
+    const invoiceNumber = `ALINV-${makeInvoiceSuffix()}`;
+    const invoiceId = await ctx.db.insert("invoices", {
+      invoiceNumber,
+      status: "finalized",
+      issueDate: new Date(now).toISOString().slice(0, 10),
+      managerUserId: "e2e-manager",
+      managerName: "E2E Admin",
+      managerEmail: "e2e-admin@arborlive.test",
+      clientGroupName: seeded.eventName,
+      clientContactName: "E2E Requester",
+      clientEmail: "e2e.requester@stanford.edu",
+      clientPhone: "6505550100",
+      equipmentPricingMode: "nonSubsidized",
+      crewRateMode: "normal",
+      discountType: "amount",
+      discountValue: 0,
+      discountAmountUsd: 0,
+      equipmentSubtotalUsd: 100,
+      externalRentalsSubtotalUsd: 0,
+      artistsSubtotalUsd: 0,
+      crewSubtotalUsd: 0,
+      feesSubtotalUsd: 0,
+      subtotalUsd: 100,
+      totalUsd: 100,
+      clientApprovalStatus: "pending",
+      sourceEventRequestId: seeded.requestId,
+      clientReviewReadyAt: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert("invoiceLineItems", {
+      invoiceId,
+      section: "equipment_type",
+      order: 0,
+      label: "E2E Track Quote Line",
+      quantity: 1,
+      rateUsd: 100,
+      amountUsd: 100,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const eventId = await ctx.db.insert("events", {
+      title: seeded.eventName,
+      status: "tentative",
+      visibility: "public",
+      publicToken: makeToken(),
+      startAt: seeded.startAt,
+      endAt: seeded.endAt,
+      timezone: "America/Los_Angeles",
+      spansMultipleDays: false,
+      setupOnly: false,
+      strikeOnly: false,
+      requiresShowWindow: true,
+      venueName: "E2E Venue",
+      eventType: "Crewed Event",
+      teamsInterested: ["Sound"],
+      category: "Concert / Showcase",
+      host: "E2E Test Org",
+      expectedTurnout: 80,
+      invoiceId,
+      sourceEventRequestId: seeded.requestId,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.patch(seeded.requestId, {
+      status: "converted",
+      convertedEventId: eventId,
+      convertedEventIds: [eventId],
+      linkedInvoiceId: invoiceId,
+      reviewedByUserId: "e2e-manager",
+      updatedAt: now,
+    });
+    return {
+      requestId: seeded.requestId,
+      invoiceId,
+      eventId,
+      requestNumber: seeded.requestNumber,
+      publicToken: seeded.publicToken,
+      trackPath: `/request/track/${seeded.publicToken}`,
+    };
+  },
+});
 /**
  * Test-only: upsert a crew member with Sound discipline for availability flows.
  */

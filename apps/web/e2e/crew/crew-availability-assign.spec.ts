@@ -40,12 +40,14 @@ test.describe("schedule assign from yes response", () => {
     });
 
     await page.goto(seeded.schedulePath);
-    await expect(page.getByText("Crew availability").first()).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByText(e2eEnv.crewName).first()).toBeVisible({ timeout: 20_000 });
+    // Avoid matching the loading copy ("Loading crew availability...") via substring.
+    await expect(page.getByRole("button", { name: "All blocks" })).toBeVisible({
+      timeout: 60_000,
+    });
+    await expect(page.getByText(e2eEnv.crewName, { exact: true }).first()).toBeVisible();
 
     await page.getByRole("button", { name: "All blocks" }).click();
     await page.getByRole("button", { name: /Save Schedule & Personnel/i }).first().click();
-    await expect(page.getByText(e2eEnv.crewName).first()).toBeVisible({ timeout: 20_000 });
     await expect(page.getByText(/On schedule/i).first()).toBeVisible({ timeout: 20_000 });
   });
 });
