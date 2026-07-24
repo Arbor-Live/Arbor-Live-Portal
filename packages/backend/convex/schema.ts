@@ -1276,9 +1276,6 @@ export default defineSchema({
     confirmationReplyFrom: v.optional(v.string()),
     confirmationReplyBody: v.optional(v.string()),
     confirmationReplyEmailId: v.optional(v.string()),
-    /** Legacy typed signature captured at confirmation time. */
-    signatureTypedName: v.optional(v.string()),
-    signedByUserId: v.optional(v.string()),
     servicePaymentNumber: v.optional(v.string()),
     paidAt: v.optional(v.number()),
     paidByUserId: v.optional(v.string()),
