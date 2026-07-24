@@ -175,6 +175,36 @@ async function ensureConvexDeploymentEnv(secret) {
   }
 }
 
+async function waitForE2eHelpersReady(timeoutMs = 300_000) {
+  const start = Date.now();
+  let lastError = "";
+  while (Date.now() - start < timeoutMs) {
+    try {
+      execFileSync(
+        "pnpm",
+        ["exec", "convex", "run", "e2eHelpers:getLatestEmailNotification", "{}"],
+        {
+          cwd: backendDir,
+          env: convexEnv(),
+          stdio: "pipe",
+        },
+      );
+      console.log("e2eHelpers are deployed and callable");
+      return;
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
+      if (error && typeof error === "object" && "stderr" in error) {
+        const stderr = String(/** @type {{ stderr?: Buffer | string }} */ (error).stderr ?? "");
+        if (stderr.trim()) lastError = stderr.trim().slice(-500);
+      }
+    }
+    await delay(3000);
+  }
+  throw new Error(
+    `Timed out waiting for e2eHelpers after Convex boot. Last error:\n${lastError}`,
+  );
+}
+
 async function main() {
   const secret = resolveBetterAuthSecret();
   process.env.BETTER_AUTH_SECRET = secret;
@@ -185,7 +215,7 @@ async function main() {
     console.log(
       `Starting Convex…${agentMode ? ` (CONVEX_AGENT_MODE=${agentMode})` : ""}`,
     );
-    run("pnpm", ["exec", "convex", "dev"], {
+    run("pnpm", ["exec", "convex", "dev", "--typecheck", "disable"], {
       cwd: backendDir,
       prefix: "convex",
       env: convexEnv(),
@@ -193,6 +223,8 @@ async function main() {
 
     await waitForConvexReady();
     await ensureConvexDeploymentEnv(secret);
+    // Env changes force a re-push; wait until helpers exist before starting web/tests.
+    await waitForE2eHelpersReady();
 
     console.log("Starting Next.js…");
     run("pnpm", ["dev"], {
@@ -208,6 +240,9 @@ async function main() {
     console.log("E2E_SKIP_BOOT=1 — reusing existing stack");
     await ensureConvexDeploymentEnv(secret).catch((error) => {
       console.warn(`Could not set Convex e2e env (continuing): ${error.message}`);
+    });
+    await waitForE2eHelpersReady().catch((error) => {
+      console.warn(`e2eHelpers not ready (continuing): ${error.message}`);
     });
   }
 
