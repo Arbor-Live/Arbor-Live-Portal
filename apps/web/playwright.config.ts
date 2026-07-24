@@ -30,13 +30,18 @@ export default defineConfig({
       dependencies: ["setup"],
     },
     {
+      name: "setup-band",
+      testMatch: /band\.setup\.ts/,
+      dependencies: ["setup"],
+    },
+    {
       name: "chromium",
       use: {
         ...devices["Desktop Chrome"],
         storageState: authFile,
       },
-      dependencies: ["setup", "setup-crew"],
-      testIgnore: /global\.setup\.ts|crew\.setup\.ts/,
+      dependencies: ["setup", "setup-crew", "setup-band"],
+      testIgnore: /global\.setup\.ts|crew\.setup\.ts|band\.setup\.ts/,
     },
   ],
 });

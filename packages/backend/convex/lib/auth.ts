@@ -159,9 +159,42 @@ export async function getActiveOrganizationContextOrNull(
     );
     if (!selectedMembership) return null;
 
-    // Look up by _id first: the better-auth adapter resolves _id with ctx.db.get
-    // (fast path), while `field: "id"` falls back to a scan. This runs on nearly
-    // every request, so avoid paging the whole organization table.
+    // Prefer local organizationProfiles before Better Auth org lookups. Auth gates
+    // (requireArborInternalContext) only need organizationType; under anonymous /
+    // constrained Convex the adapter findOne calls were eating most of the ~1s budget.
+    const orgProfile = await ctx.db
+      .query("organizationProfiles")
+      .withIndex("by_organizationId", (q) => q.eq("organizationId", selectedOrganizationId))
+      .unique();
+    if (orgProfile?.organizationType === "arbor_internal") {
+      return {
+        organizationId: selectedOrganizationId,
+        organizationName: "Arbor Live",
+        organizationSlug: "arbor-live",
+        organizationType: "arbor_internal",
+      };
+    }
+    if (orgProfile?.organizationType === "band" || orgProfile?.organizationType === "dj") {
+      // Still need display name/slug from Better Auth for band/dj orgs.
+      let org = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
+        model: "organization",
+        where: [{ field: "_id", value: selectedOrganizationId }],
+      })) as AuthOrganization | null;
+      if (!org) {
+        org = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
+          model: "organization",
+          where: [{ field: "id", value: selectedOrganizationId }],
+        })) as AuthOrganization | null;
+      }
+      return {
+        organizationId: selectedOrganizationId,
+        organizationName: org?.name ?? "Organization",
+        organizationSlug: org?.slug ?? "",
+        organizationType: orgProfile.organizationType,
+      };
+    }
+
+    // Legacy rows without a profile: fall back to Better Auth name/slug derivation.
     let org = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
       model: "organization",
       where: [{ field: "_id", value: selectedOrganizationId }],
@@ -172,18 +205,12 @@ export async function getActiveOrganizationContextOrNull(
         where: [{ field: "id", value: selectedOrganizationId }],
       })) as AuthOrganization | null;
     }
-    const orgProfile = await ctx.db
-      .query("organizationProfiles")
-      .withIndex("by_organizationId", (q) => q.eq("organizationId", selectedOrganizationId))
-      .unique();
     return {
       organizationId: selectedOrganizationId,
       organizationName: org?.name ?? "Organization",
       organizationSlug: org?.slug ?? "",
       organizationType:
-        deriveOrganizationType(org) === "arbor_internal"
-          ? "arbor_internal"
-          : (orgProfile?.organizationType ?? "band"),
+        deriveOrganizationType(org) === "arbor_internal" ? "arbor_internal" : "band",
     };
   })();
 

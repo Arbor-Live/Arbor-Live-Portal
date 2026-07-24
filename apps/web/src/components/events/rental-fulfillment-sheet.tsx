@@ -170,11 +170,15 @@ export function RentalFulfillmentSheet({
 
   const rented = useQuery(
     api.eventRentalFulfillment.listRentedEquipment,
-    showReceipt || (direction === "outbound" && outbound?.status === "completed")
+    open &&
+      (showReceipt || (direction === "outbound" && outbound?.status === "completed"))
       ? { eventId }
       : "skip",
   );
-  const summary = useQuery(api.eventRentalFulfillment.getFulfillmentSummary, { eventId });
+  const summary = useQuery(
+    api.eventRentalFulfillment.getFulfillmentSummary,
+    open ? { eventId } : "skip",
+  );
 
   const outboundUnits = useMemo(
     () => (outbound?.units ?? []) as OutboundUnit[],
