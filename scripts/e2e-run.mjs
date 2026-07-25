@@ -24,6 +24,16 @@ const skipBoot = process.env.E2E_SKIP_BOOT === "1";
 const isCi = process.env.CI === "true" || process.env.CI === "1";
 const agentMode =
   process.env.CONVEX_AGENT_MODE ?? (isCi ? "anonymous" : undefined);
+/**
+ * "dev" runs `next dev`; "prod" builds and runs `next start`.
+ *
+ * CI defaults to prod. Dev mode compiles routes on first request, and Convex's
+ * 1s function-execution limit is wall-clock — so on a 4-vCPU runner where the
+ * compiler, Convex, Chromium and the test runner share cores, first-visit
+ * assertions time out queries that are not actually slow. Locally dev stays the
+ * default so the boot stays fast.
+ */
+const webMode = (process.env.E2E_WEB_MODE ?? (isCi ? "prod" : "dev")).toLowerCase();
 
 const children = [];
 
@@ -47,6 +57,15 @@ function run(command, args, options = {}) {
   });
   children.push(child);
   return child;
+}
+
+/** Run a command to completion, streaming output; throws on a non-zero exit. */
+async function runToCompletion(command, args, options = {}) {
+  const child = run(command, args, options);
+  const code = await new Promise((resolve) => child.on("exit", resolve));
+  if (code !== 0) {
+    throw new Error(`${command} ${args.join(" ")} exited with code ${code}`);
+  }
 }
 
 async function waitForUrl(url, timeoutMs = 180_000) {
@@ -227,6 +246,53 @@ async function waitForE2eHelpersReady(timeoutMs = 300_000) {
   );
 }
 
+/**
+ * Delete stale seeded events before the suite runs.
+ *
+ * Seeded events cluster on near-identical `startAt` values and several product
+ * queries page with `.take(150)`/`.take(200)` — `listCrewedEventsInRange` is the
+ * one that bites. Once enough runs accumulate on a shared deployment, a freshly
+ * seeded event sorts past the cap and specs fail for reasons unrelated to the
+ * code under test.
+ *
+ * Batched deliberately: the pruner reads each event's children, and one 200-row
+ * pass already measured 3314 reads against Convex's 4096 limit.
+ */
+async function pruneStaleSeedData() {
+  if (process.env.E2E_SKIP_PRUNE === "1") {
+    console.log("E2E_SKIP_PRUNE=1 — leaving seeded data in place");
+    return;
+  }
+  let deleted = 0;
+  for (let pass = 0; pass < 20; pass += 1) {
+    let result;
+    try {
+      const raw = execFileSync(
+        "pnpm",
+        [
+          "exec",
+          "convex",
+          "run",
+          "e2eHelpers:pruneE2eSeedData",
+          JSON.stringify({ olderThanHours: 2, limit: 50 }),
+        ],
+        { cwd: backendDir, encoding: "utf8", env: convexEnv(), stdio: ["ignore", "pipe", "pipe"] },
+      );
+      const match = raw.match(/\{[\s\S]*\}/);
+      result = match ? JSON.parse(match[0]) : null;
+    } catch (error) {
+      // Never block the suite on housekeeping.
+      console.warn(
+        `Seed prune unavailable (continuing): ${error instanceof Error ? error.message.split("\n")[0] : String(error)}`,
+      );
+      return;
+    }
+    if (!result?.deletedEvents) break;
+    deleted += result.deletedEvents;
+  }
+  console.log(deleted ? `Pruned ${deleted} stale e2e events` : "No stale e2e events to prune");
+}
+
 async function main() {
   const secret = resolveBetterAuthSecret();
   process.env.BETTER_AUTH_SECRET = secret;
@@ -247,17 +313,29 @@ async function main() {
     await ensureConvexDeploymentEnv(secret, { includeAuthSecret: true });
     // Env changes force a re-push; wait until helpers exist before starting web/tests.
     await waitForE2eHelpersReady();
+    await pruneStaleSeedData();
 
-    console.log("Starting Next.js…");
-    run("pnpm", ["dev"], {
-      cwd: webDir,
-      prefix: "web",
-      env: {
-        ...process.env,
-        BETTER_AUTH_SECRET: secret,
-        SITE_URL: "http://localhost:3000",
-      },
-    });
+    const webEnv = {
+      ...process.env,
+      BETTER_AUTH_SECRET: secret,
+      SITE_URL: "http://localhost:3000",
+    };
+
+    if (webMode === "prod") {
+      // Must build *after* Convex boots: `materialize-convex-public-env.mjs`
+      // reads the deployment URL out of packages/backend/.env.local.
+      console.log("Building Next.js (production)…");
+      await runToCompletion("pnpm", ["build"], {
+        cwd: webDir,
+        prefix: "build",
+        env: webEnv,
+      });
+      console.log("Starting Next.js (production)…");
+      run("pnpm", ["start"], { cwd: webDir, prefix: "web", env: webEnv });
+    } else {
+      console.log("Starting Next.js (dev)…");
+      run("pnpm", ["dev"], { cwd: webDir, prefix: "web", env: webEnv });
+    }
   } else {
     console.log("E2E_SKIP_BOOT=1 — reusing existing stack");
     // Do not rotate BETTER_AUTH_SECRET on a shared cloud deployment — that
@@ -268,6 +346,7 @@ async function main() {
     await waitForE2eHelpersReady().catch((error) => {
       console.warn(`e2eHelpers not ready (continuing): ${error.message}`);
     });
+    await pruneStaleSeedData();
   }
 
   console.log(`Waiting for ${baseURL}…`);

@@ -40,3 +40,4 @@ apps/web/e2e/.auth/
 
 # dev package instances
 package.json
+apps/web/e2e-results.json
