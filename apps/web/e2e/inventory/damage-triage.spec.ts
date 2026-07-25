@@ -9,12 +9,17 @@ test.describe("damage triage", () => {
       queuePath: string;
     };
 
+    // Other specs leave open reports behind, so always act inside this
+    // report's own card rather than on the first matching button.
+    const card = () =>
+      page.locator('[data-slot="card"]').filter({ hasText: seeded.assetId }).first();
+
     await page.goto(seeded.queuePath);
     await expect(page.getByText("Damage & repair").first()).toBeVisible({ timeout: 25_000 });
     await page.getByRole("button", { name: "open", exact: true }).click();
-    await expect(page.getByText(seeded.assetId).first()).toBeVisible({ timeout: 20_000 });
+    await expect(card()).toBeVisible({ timeout: 20_000 });
 
-    await page.getByRole("button", { name: "Mark in progress" }).click();
+    await card().getByRole("button", { name: "Mark in progress" }).click();
 
     await pollConvex(
       "e2eHelpers:getDamageReportState",
@@ -23,8 +28,8 @@ test.describe("damage triage", () => {
     );
 
     await page.getByRole("button", { name: "in progress", exact: true }).click();
-    await expect(page.getByText(seeded.assetId).first()).toBeVisible({ timeout: 20_000 });
-    await page.getByRole("button", { name: "Resolve (repaired)" }).click();
+    await expect(card()).toBeVisible({ timeout: 20_000 });
+    await card().getByRole("button", { name: "Resolve (repaired)" }).click();
 
     const resolved = await pollConvex<{ status: string; assetId: string }>(
       "e2eHelpers:getDamageReportState",
@@ -35,6 +40,6 @@ test.describe("damage triage", () => {
     expect(resolved.assetId).toBe(seeded.assetId);
 
     await page.getByRole("button", { name: "resolved", exact: true }).click();
-    await expect(page.getByText(seeded.assetId).first()).toBeVisible({ timeout: 20_000 });
+    await expect(card()).toBeVisible({ timeout: 20_000 });
   });
 });

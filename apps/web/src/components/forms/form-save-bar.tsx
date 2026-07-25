@@ -1,9 +1,11 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { CheckIcon, CircleNotchIcon, WarningCircleIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { useOptionalSidebar } from "@/components/ui/sidebar";
+import { useFormSaveBarStack } from "@/components/forms/form-save-bar-stack";
 import { cn } from "@/lib/utils";
 import type { SaveStatus } from "@/hooks/use-convex-form";
 
@@ -37,6 +39,7 @@ export function FormSaveBar({
   summary,
 }: FormSaveBarProps) {
   const sidebar = useOptionalSidebar();
+  const stackContainer = useFormSaveBarStack();
 
   const isSaving = saveStatus === "saving" || isSubmitting;
   const isError = saveStatus === "error";
@@ -60,13 +63,15 @@ export function FormSaveBar({
     return null;
   }
 
-  return (
+  const bar = (
     <div
       role="status"
       aria-live="polite"
       className={cn(
-        "fixed bottom-0 z-40 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80",
-        horizontalPosition,
+        "border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80",
+        // Inside a stack the container owns positioning; standalone bars keep
+        // pinning themselves to the bottom of the viewport.
+        stackContainer ? "pointer-events-auto w-full" : cn("fixed bottom-0 z-40", horizontalPosition),
         className,
       )}
     >
@@ -127,4 +132,6 @@ export function FormSaveBar({
       </div>
     </div>
   );
+
+  return stackContainer ? createPortal(bar, stackContainer) : bar;
 }

@@ -13,6 +13,10 @@ export function runConvex(functionName: string, args: unknown = {}) {
       env: process.env,
     },
   );
+  // `convex run` prints nothing at all for a null result (the CLI exits 0), so
+  // an empty body is a successful null rather than a parse failure.
+  if (!raw.trim()) return null;
+
   const match = raw.match(/\{[\s\S]*\}\s*$|null\s*$|\[[\s\S]*\]\s*$/);
   if (!match) {
     throw new Error(`Unexpected convex run output for ${functionName}:\n${raw}`);

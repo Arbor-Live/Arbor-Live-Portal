@@ -1,3 +1,4 @@
+import { payPeriodForDate } from "@arbor/format";
 import { v } from "convex/values";
 import { customAlphabet } from "nanoid";
 import { hashPassword } from "better-auth/crypto";
@@ -712,6 +713,11 @@ export const enqueueSmokeEmail = mutation({
 export const seedCrewedEventWithSchedule = mutation({
   args: {
     title: v.optional(v.string()),
+    /**
+     * Also seed the venue + event-manager contact that
+     * `assertTraineeIntroReady` requires before a trainee can be assigned.
+     */
+    traineeReady: v.optional(v.boolean()),
   },
   returns: v.object({
     eventId: v.id("events"),
@@ -768,6 +774,29 @@ export const seedCrewedEventWithSchedule = mutation({
         updatedAt: now,
       });
       blockIds.push(blockId);
+    }
+
+    if (args.traineeReady) {
+      const venueName = `E2E Trainee Venue ${now}`;
+      const venueId = await ctx.db.insert("venues", {
+        name: venueName,
+        path: venueName,
+        kind: "indoor",
+        venueType: "Test Venue",
+        address: "450 Serra Mall, Stanford, CA 94305",
+        createdAt: now,
+        updatedAt: now,
+      });
+      await ctx.db.patch(eventId, { venueId, venueName, updatedAt: now });
+      await ctx.db.insert("eventPeopleAssignments", {
+        eventId,
+        assignmentType: "event_manager",
+        personName: "E2E Event Manager",
+        contactEmail: "e2e-manager@arborlive.test",
+        contactPhone: "6505550100",
+        createdAt: now,
+        updatedAt: now,
+      });
     }
 
     return {
@@ -1383,6 +1412,7 @@ export const seedDryHireWithPullList = mutation({
     eventId: v.id("events"),
     title: v.string(),
     typeId: v.id("inventoryTypes"),
+    typeName: v.string(),
     inventoryItemId: v.id("inventoryItems"),
     assetId: v.string(),
     pullListItemId: v.id("eventPullListItems"),
@@ -1396,8 +1426,9 @@ export const seedDryHireWithPullList = mutation({
     const title = args.title?.trim() || `E2E Dry Hire ${now}`;
     const assetId = args.assetId?.trim() || `E2E-ALE-${String(now).slice(-6)}`;
 
+    const typeName = `E2E Mic ${now}`;
     const typeId = await ctx.db.insert("inventoryTypes", {
-      name: `E2E Mic ${now}`,
+      name: typeName,
       category: "misc",
       model: "E2E-MIC-1",
       manualUrls: [],
@@ -1448,6 +1479,7 @@ export const seedDryHireWithPullList = mutation({
       eventId,
       title,
       typeId,
+      typeName,
       inventoryItemId,
       assetId,
       pullListItemId,
@@ -1583,6 +1615,8 @@ export const ensureBandPayeeUser = mutation({
     password: v.string(),
     name: v.optional(v.string()),
     bandName: v.optional(v.string()),
+    /** Override to get a band org isolated from the shared e-sign fixture. */
+    orgSlug: v.optional(v.string()),
   },
   returns: v.object({
     ok: v.literal(true),
@@ -1667,7 +1701,7 @@ export const ensureBandPayeeUser = mutation({
       });
     }
 
-    const slug = "e2e-test-band";
+    const slug = args.orgSlug?.trim() || "e2e-test-band";
     const existingOrg = await ctx.runQuery(components.betterAuth.adapter.findOne, {
       model: "organization",
       where: [{ field: "slug", value: slug }],
@@ -1801,7 +1835,11 @@ export const seedBandPaymentForEsign = mutation({
     payeeName: v.string(),
     payeeEmail: v.string(),
     status: v.optional(
-      v.union(v.literal("pending_email"), v.literal("awaiting_confirmation")),
+      v.union(
+        v.literal("pending_email"),
+        v.literal("awaiting_confirmation"),
+        v.literal("confirmed"),
+      ),
     ),
     eventTitle: v.optional(v.string()),
   },
@@ -1858,11 +1896,13 @@ export const seedBandPaymentForEsign = mutation({
       designatedPayeeMailingAddress: "450 Serra Mall, Stanford, CA 94305",
       status,
       confirmationToken,
-      confirmationEmailSentAt: status === "awaiting_confirmation" ? now - 60_000 : undefined,
-      confirmationSentByUserId: status === "awaiting_confirmation" ? "e2e-manager" : undefined,
-      confirmationSentByName: status === "awaiting_confirmation" ? "E2E Admin" : undefined,
+      confirmationEmailSentAt: status === "pending_email" ? undefined : now - 60_000,
+      confirmationSentByUserId: status === "pending_email" ? undefined : "e2e-manager",
+      confirmationSentByName: status === "pending_email" ? undefined : "E2E Admin",
       confirmationSentByEmail:
-        status === "awaiting_confirmation" ? "e2e-admin@arborlive.test" : undefined,
+        status === "pending_email" ? undefined : "e2e-admin@arborlive.test",
+      confirmedAt: status === "confirmed" ? now - 30_000 : undefined,
+      signatureTypedName: status === "confirmed" ? args.payeeName.trim() : undefined,
       createdAt: now,
       updatedAt: now,
     });
@@ -2165,5 +2205,558 @@ export const clearAuthJwks = mutation({
       deleted += 1;
     }
     return { deleted };
+  },
+});
+
+/* ------------------------------------------------------------------ *
+ * Batch 4 — hiring completion (crew triage, crew/band onboarding)
+ * ------------------------------------------------------------------ */
+
+/**
+ * Test-only: submitted crew application ready for admin triage
+ * (trainee / convert / turn away) without driving the public apply form.
+ */
+export const seedSubmittedCrewApplication = mutation({
+  args: {
+    name: v.optional(v.string()),
+    email: v.optional(v.string()),
+  },
+  returns: v.object({
+    applicationId: v.id("crewApplications"),
+    name: v.string(),
+    email: v.string(),
+    queuePath: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const now = Date.now();
+    const name = args.name?.trim() || `E2E Triage Applicant ${now}`;
+    const email =
+      args.email?.trim().toLowerCase() || `e2e.triage.${now}@stanford.edu`;
+
+    const applicationId = await ctx.db.insert("crewApplications", {
+      status: "submitted",
+      name,
+      email,
+      phone: "6505550199",
+      heardAboutUs: "E2E test suite",
+      vertical: "Crew",
+      discipline: "Sound",
+      crewAvailabilityDays: ["friday"],
+      stanfordPosition: "undergrad",
+      gradYear: 2028,
+      submittedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    return {
+      applicationId,
+      name,
+      email,
+      queuePath: "/dashboard/users/crew-applications",
+    };
+  },
+});
+
+/**
+ * Test-only: crew application triage state (status + trainee shift + convert).
+ */
+export const getCrewApplicationState = query({
+  args: { applicationId: v.id("crewApplications") },
+  returns: v.union(
+    v.null(),
+    v.object({
+      applicationId: v.id("crewApplications"),
+      status: v.string(),
+      name: v.string(),
+      email: v.string(),
+      reviewedAt: v.union(v.number(), v.null()),
+      convertedUserId: v.union(v.string(), v.null()),
+      traineeShiftCount: v.number(),
+      traineeShiftEventIds: v.array(v.id("events")),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const application = await ctx.db.get(args.applicationId);
+    if (!application) return null;
+    const shifts = await ctx.db
+      .query("eventCrewShifts")
+      .withIndex("by_crewApplicationId", (q) =>
+        q.eq("crewApplicationId", args.applicationId),
+      )
+      .take(50);
+    return {
+      applicationId: application._id,
+      status: application.status,
+      name: application.name,
+      email: application.email,
+      reviewedAt: application.reviewedAt ?? null,
+      convertedUserId: application.convertedUserId ?? null,
+      traineeShiftCount: shifts.length,
+      traineeShiftEventIds: shifts.map((shift) => shift.eventId),
+    };
+  },
+});
+
+/**
+ * Test-only: put a crew user's onboarding back to not_started so the wizard
+ * runs from the top. `ensureCrewUser` waives onboarding for other specs.
+ */
+export const resetCrewOnboarding = mutation({
+  args: { userId: v.string() },
+  returns: v.object({ ok: v.literal(true), userId: v.string() }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const now = Date.now();
+    const row = await ctx.db
+      .query("userOnboarding")
+      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+      .unique();
+
+    if (row) {
+      await ctx.db.patch(row._id, {
+        status: "not_started",
+        profileCompletedAt: undefined,
+        whatsappAcknowledgedAt: undefined,
+        instagramAcknowledgedAt: undefined,
+        hasFederalWorkStudy: undefined,
+        fwsAcknowledgedAt: undefined,
+        narcanCompletedAt: undefined,
+        soberMonitorCompletedAt: undefined,
+        emergencySopsAcknowledgedAt: undefined,
+        crewExpectationsAcknowledgedAt: undefined,
+        liftingCompletedAt: undefined,
+        hasValidDriversLicense: undefined,
+        cartTrainingCompletedAt: undefined,
+        oseHiringFormCompletedAt: undefined,
+        timecardAcknowledgedAt: undefined,
+        agreedToOnboardingDocAt: undefined,
+        signatureLegalName: undefined,
+        signatureUserAgent: undefined,
+        completedAt: undefined,
+        waivedAt: undefined,
+        waivedByUserId: undefined,
+        updatedAt: now,
+      });
+    } else {
+      await ctx.db.insert("userOnboarding", {
+        userId: args.userId,
+        flow: "crew",
+        status: "not_started",
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    return { ok: true as const, userId: args.userId };
+  },
+});
+
+/**
+ * Test-only: crew onboarding completion state for wizard assertions.
+ */
+export const getCrewOnboardingState = query({
+  args: { userId: v.string() },
+  returns: v.union(
+    v.null(),
+    v.object({
+      userId: v.string(),
+      status: v.string(),
+      signatureLegalName: v.union(v.string(), v.null()),
+      completedAt: v.union(v.number(), v.null()),
+      hasFederalWorkStudy: v.union(v.boolean(), v.null()),
+      timecardAcknowledged: v.boolean(),
+      narcanCompleted: v.boolean(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const row = await ctx.db
+      .query("userOnboarding")
+      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+      .unique();
+    if (!row) return null;
+    return {
+      userId: row.userId,
+      status: row.status,
+      signatureLegalName: row.signatureLegalName ?? null,
+      completedAt: row.completedAt ?? null,
+      hasFederalWorkStudy: row.hasFederalWorkStudy ?? null,
+      timecardAcknowledged: Boolean(row.timecardAcknowledgedAt),
+      narcanCompleted: Boolean(row.narcanCompletedAt),
+    };
+  },
+});
+
+/**
+ * Test-only: put a band org's onboarding back to not_started and clear the
+ * profile fields the wizard fills, so `/onboarding/band` runs from the top.
+ */
+export const resetBandOnboarding = mutation({
+  args: { organizationId: v.string() },
+  returns: v.object({ ok: v.literal(true), organizationId: v.string() }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const now = Date.now();
+
+    const row = await ctx.db
+      .query("organizationOnboarding")
+      .withIndex("by_organizationId", (q) => q.eq("organizationId", args.organizationId))
+      .unique();
+    if (row) {
+      await ctx.db.patch(row._id, {
+        status: "not_started",
+        identityCompletedAt: undefined,
+        heroCompletedAt: undefined,
+        socialsCompletedAt: undefined,
+        ratesPayeeCompletedAt: undefined,
+        membersCompletedAt: undefined,
+        paymentExplainedAt: undefined,
+        soloAcknowledgedAt: undefined,
+        completedAt: undefined,
+        waivedAt: undefined,
+        waivedByUserId: undefined,
+        updatedAt: now,
+      });
+    } else {
+      await ctx.db.insert("organizationOnboarding", {
+        organizationId: args.organizationId,
+        status: "not_started",
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    const profile = await ctx.db
+      .query("organizationProfiles")
+      .withIndex("by_organizationId", (q) => q.eq("organizationId", args.organizationId))
+      .unique();
+    if (profile) {
+      await ctx.db.patch(profile._id, {
+        performerHourlyRateUsd: undefined,
+        updatedAt: now,
+      });
+    }
+
+    return { ok: true as const, organizationId: args.organizationId };
+  },
+});
+
+/**
+ * Test-only: band onboarding completion state plus the rate the wizard saved.
+ */
+export const getBandOnboardingState = query({
+  args: { organizationId: v.string() },
+  returns: v.union(
+    v.null(),
+    v.object({
+      organizationId: v.string(),
+      status: v.string(),
+      identityCompleted: v.boolean(),
+      ratesPayeeCompleted: v.boolean(),
+      paymentExplained: v.boolean(),
+      soloAcknowledged: v.boolean(),
+      completedAt: v.union(v.number(), v.null()),
+      displayName: v.union(v.string(), v.null()),
+      performerHourlyRateUsd: v.union(v.number(), v.null()),
+      designatedPayeeName: v.union(v.string(), v.null()),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const row = await ctx.db
+      .query("organizationOnboarding")
+      .withIndex("by_organizationId", (q) => q.eq("organizationId", args.organizationId))
+      .unique();
+    if (!row) return null;
+    const profile = await ctx.db
+      .query("organizationProfiles")
+      .withIndex("by_organizationId", (q) => q.eq("organizationId", args.organizationId))
+      .unique();
+    return {
+      organizationId: row.organizationId,
+      status: row.status,
+      identityCompleted: Boolean(row.identityCompletedAt),
+      ratesPayeeCompleted: Boolean(row.ratesPayeeCompletedAt),
+      paymentExplained: Boolean(row.paymentExplainedAt),
+      soloAcknowledged: Boolean(row.soloAcknowledgedAt),
+      completedAt: row.completedAt ?? null,
+      displayName: profile?.displayName ?? null,
+      performerHourlyRateUsd: profile?.performerHourlyRateUsd ?? null,
+      designatedPayeeName: profile?.designatedPayeeName ?? null,
+    };
+  },
+});
+
+/* ------------------------------------------------------------------ *
+ * Batch 5 — ops depth (pull list, damage create, scheduling, series)
+ * ------------------------------------------------------------------ */
+
+/**
+ * Test-only: persisted pull-list lines after the Equipment tab editor saves.
+ */
+export const getPullListState = query({
+  args: { eventId: v.id("events") },
+  returns: v.object({
+    lineCount: v.number(),
+    totalPieces: v.number(),
+    lines: v.array(
+      v.object({
+        id: v.id("eventPullListItems"),
+        label: v.string(),
+        lineKind: v.string(),
+        quantityRequired: v.number(),
+      }),
+    ),
+  }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const rows = await ctx.db
+      .query("eventPullListItems")
+      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+      .take(200);
+    return {
+      lineCount: rows.length,
+      totalPieces: rows.reduce((sum, row) => sum + row.quantityRequired, 0),
+      lines: rows.map((row) => ({
+        id: row._id,
+        label: row.label,
+        lineKind: row.lineKind ?? (row.packageId ? "package" : "type"),
+        quantityRequired: row.quantityRequired,
+      })),
+    };
+  },
+});
+
+/**
+ * Test-only: newest damage report for an asset tag (damage wizard create).
+ */
+export const getLatestDamageReportByAssetId = query({
+  args: { assetId: v.string() },
+  returns: v.union(
+    v.null(),
+    v.object({
+      reportId: v.id("damageReports"),
+      status: v.string(),
+      assetId: v.string(),
+      severity: v.union(v.number(), v.null()),
+      operability: v.union(v.string(), v.null()),
+      notes: v.union(v.string(), v.null()),
+      eventId: v.union(v.id("events"), v.null()),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const assetId = args.assetId.trim();
+    const item = await ctx.db
+      .query("inventoryItems")
+      .withIndex("by_assetId", (q) => q.eq("assetId", assetId))
+      .unique();
+    if (!item) return null;
+    const rows = await ctx.db
+      .query("damageReports")
+      .withIndex("by_inventoryItemId", (q) => q.eq("inventoryItemId", item._id))
+      .order("desc")
+      .take(20);
+    const match = rows[0];
+    if (!match) return null;
+    return {
+      reportId: match._id,
+      status: match.status,
+      assetId,
+      severity: match.severity ?? null,
+      operability: match.operability ?? null,
+      notes: match.notes ?? null,
+      eventId: match.eventId ?? null,
+    };
+  },
+});
+
+/**
+ * Test-only: series shape behind an occurrence event (recurring create).
+ */
+export const getEventSeriesStateByEventId = query({
+  args: { eventId: v.id("events") },
+  returns: v.union(
+    v.null(),
+    v.object({
+      seriesId: v.id("eventSeries"),
+      title: v.string(),
+      intervalWeeks: v.number(),
+      occurrenceCount: v.number(),
+      occurrenceTitles: v.array(v.string()),
+      seriesPath: v.string(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const event = await ctx.db.get(args.eventId);
+    if (!event?.seriesId) return null;
+    const series = await ctx.db.get(event.seriesId);
+    if (!series) return null;
+    const occurrences = await ctx.db
+      .query("events")
+      .withIndex("by_seriesId_and_occurrenceIndex", (q) => q.eq("seriesId", series._id))
+      .take(100);
+    return {
+      seriesId: series._id,
+      title: series.title,
+      intervalWeeks: series.intervalWeeks,
+      occurrenceCount: occurrences.length,
+      occurrenceTitles: occurrences.map((row) => row.title),
+      seriesPath: `/dashboard/events/series/${series._id}`,
+    };
+  },
+});
+
+/* ------------------------------------------------------------------ *
+ * Batch 6 — secondary surfaces (timecards, short links, public pages)
+ * ------------------------------------------------------------------ */
+
+/**
+ * Test-only: a finished crew shift inside the current pay period, so it shows
+ * on `/dashboard/timecards/mine` and the admin overview. Timecards are derived
+ * from `eventCrewShifts` — there is no timecard row to seed directly.
+ */
+export const seedTimecardShift = mutation({
+  args: {
+    userId: v.string(),
+    title: v.optional(v.string()),
+  },
+  returns: v.object({
+    eventId: v.id("events"),
+    shiftId: v.id("eventCrewShifts"),
+    title: v.string(),
+    hours: v.number(),
+    periodLabel: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const now = Date.now();
+    const title = args.title?.trim() || `E2E Timecard Event ${now}`;
+    const period = payPeriodForDate(now);
+
+    // Keep the whole shift inside the current period so both the crew view and
+    // the admin overview (which defaults to period index 0) pick it up.
+    const endsAt = Math.min(now - 60_000, period.endMs - 60_000);
+    const startsAt = Math.max(endsAt - 3 * 60 * 60 * 1000, period.startMs + 60_000);
+    const hours = Math.max(0, (endsAt - startsAt) / (60 * 60 * 1000));
+
+    const eventId = await ctx.db.insert("events", {
+      title,
+      status: "completed",
+      visibility: "internal",
+      publicToken: makeToken(),
+      startAt: startsAt,
+      endAt: endsAt,
+      timezone: "America/Los_Angeles",
+      spansMultipleDays: false,
+      setupOnly: false,
+      strikeOnly: false,
+      requiresShowWindow: true,
+      eventType: "Crewed Event",
+      teamsInterested: ["Sound"],
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const shiftId = await ctx.db.insert("eventCrewShifts", {
+      eventId,
+      role: "Sound",
+      userId: args.userId,
+      startsAt,
+      endsAt,
+      hours,
+      postedToExpense: false,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    return { eventId, shiftId, title, hours, periodLabel: period.label };
+  },
+});
+
+/**
+ * Test-only: short link lookup by slug for CRUD assertions.
+ */
+export const getShortLinkBySlug = query({
+  args: { slug: v.string() },
+  returns: v.union(
+    v.null(),
+    v.object({
+      shortLinkId: v.id("shortLinks"),
+      slug: v.string(),
+      destinationUrl: v.string(),
+      label: v.union(v.string(), v.null()),
+      enabled: v.boolean(),
+      expiryMode: v.string(),
+      clickCount: v.number(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const slug = args.slug.trim().toLowerCase();
+    const match = await ctx.db
+      .query("shortLinks")
+      .withIndex("by_slug", (q) => q.eq("slug", slug))
+      .unique();
+    if (!match) return null;
+    return {
+      shortLinkId: match._id,
+      slug: match.slug,
+      destinationUrl: match.destinationUrl,
+      label: match.label ?? null,
+      enabled: match.enabled,
+      expiryMode: match.expiryMode,
+      clickCount: match.clickCount,
+    };
+  },
+});
+
+/**
+ * Test-only: standalone inventory item with an asset tag for the public
+ * lost-and-found page at `/e/{assetId}`.
+ */
+export const seedLostFoundAsset = mutation({
+  args: { assetId: v.optional(v.string()) },
+  returns: v.object({
+    inventoryItemId: v.id("inventoryItems"),
+    typeId: v.id("inventoryTypes"),
+    assetId: v.string(),
+    typeName: v.string(),
+    publicPath: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const now = Date.now();
+    const assetId = args.assetId?.trim() || `E2E-LF-${String(now).slice(-6)}`;
+    const typeName = `E2E Lost Found Type ${now}`;
+
+    const typeId = await ctx.db.insert("inventoryTypes", {
+      name: typeName,
+      category: "misc",
+      model: "E2E-LF-1",
+      manualUrls: [],
+      capabilities: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    const inventoryItemId = await ctx.db.insert("inventoryItems", {
+      assetId,
+      typeId,
+      status: "functional",
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    return {
+      inventoryItemId,
+      typeId,
+      assetId,
+      typeName,
+      publicPath: `/e/${assetId}`,
+    };
   },
 });

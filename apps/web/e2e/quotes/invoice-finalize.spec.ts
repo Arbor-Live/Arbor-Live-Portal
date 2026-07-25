@@ -38,7 +38,7 @@ test.describe("staff invoice create", () => {
     }>(
       "e2eHelpers:getInvoiceEditorState",
       { invoiceId },
-      (row) => Boolean(row?.publicApprovalToken) && Boolean(row.invoiceNumber),
+      (row) => Boolean(row?.publicApprovalToken) && Boolean(row?.invoiceNumber),
     );
     expect(state.status).toBe("draft");
     expect(state.invoiceNumber).toMatch(/^ALINV-/);
