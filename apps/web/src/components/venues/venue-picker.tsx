@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
 import {
@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { useDebouncedValue } from "@/lib/use-debounced-value";
 import {
   formatVenueKindLabel,
   VENUE_KINDS,
@@ -38,15 +39,6 @@ type VenueOption = {
   venueType: string;
   nicknames: string[];
 };
-
-function useDebouncedValue<T>(value: T, delayMs: number) {
-  const [debounced, setDebounced] = useState(value);
-  useEffect(() => {
-    const timer = window.setTimeout(() => setDebounced(value), delayMs);
-    return () => window.clearTimeout(timer);
-  }, [value, delayMs]);
-  return debounced;
-}
 
 function toSelectOption(venue: VenueOption): SearchableSelectOption {
   return {

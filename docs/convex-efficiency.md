@@ -31,12 +31,20 @@ Use for large, growing catalogs:
 | Inventory types | `inventoryTypes.searchOptions` + `getOptionsByIds` → `InventoryTypeSearchSelect` |
 | Inventory packages | `inventoryPackages.searchOptions` + `getOptionsByIds` → `InventoryPackageSearchSelect` |
 | Venues | `venues.searchOptions` + `getOptionsByIds` → `VenuePicker` |
+| Events | `events.searchOptions` + `getOptionsByIds` → `EventSelect` |
 
 Conventions:
 
 - Min query length (usually 2 chars) + debounce before searching.
 - Hydrate selected IDs with `getOptionsByIds` so labels survive without a full catalog.
+- Debounce via the shared `useDebouncedValue` hook (`apps/web/src/lib/use-debounced-value.ts`).
 - Do **not** convert small fixed lists (managers, categories, capabilities, storage locations) to type-to-search.
+
+`events.searchOptions` is the one picker backed by a real Convex search index
+(`events.search_title`), so title matches are genuinely uncapped. Its bounded
+`by_startAt` scan supplements that with recent venue/host/type matches only —
+it is not the selection path, and widening or removing it does not change which
+events are reachable by title.
 
 ## List / fan-out queries
 

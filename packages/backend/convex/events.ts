@@ -1,7 +1,7 @@
 import { pacificDateKey } from "@arbor/format";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { components } from "./_generated/api";
 import { requireAdmin, requireArborInternalContext, requireAuth } from "./lib/auth";
 import { canEditEventForUser, requireEventEditAccess } from "./lib/eventAccess";
@@ -84,6 +84,7 @@ export const list = query({
     const filterStatus = args.status ? normalizeEventStatus(args.status) : undefined;
     // `.order("desc")` matters: the default ascending order would take the
     // 200 *oldest* events, so newly created ones would never show up here.
+    // Pickers must not use this cap at all — see `searchOptions`.
     const baseRows = await ctx.db
       .query("events")
       .withIndex("by_createdAt")
@@ -103,6 +104,85 @@ export const list = query({
         return haystack.includes(q);
       });
     return rows.sort((a, b) => b.startAt - a.startAt);
+  },
+});
+
+const MIN_EVENT_SEARCH_CHARS = 2;
+const DEFAULT_EVENT_SEARCH_LIMIT = 40;
+/** Recency window for the venue/host/type supplement only — titles are uncapped. */
+const EVENT_SEARCH_SUPPLEMENT_SCAN = 400;
+
+function toEventPickerOption(event: Doc<"events">) {
+  return {
+    _id: event._id,
+    title: event.title,
+    startAt: event.startAt,
+    status: normalizeEventStatus(event.status),
+    venueName: event.venueName,
+    eventType: event.eventType,
+    host: event.host,
+  };
+}
+
+function matchesEventMetadata(event: Doc<"events">, lowered: string) {
+  const haystack = [event.venueName, event.host, event.eventType, ...(event.teamsInterested ?? [])]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return haystack.includes(lowered);
+}
+
+/**
+ * Search-on-demand event picker (see `docs/convex-efficiency.md`). Empty until
+ * the user types.
+ *
+ * Title matches come from the `search_title` search index and are therefore
+ * uncapped — every event in the table is reachable, which a bounded scan plus a
+ * client filter could never guarantee. The bounded scan below only supplements
+ * that with recent venue/host/type matches, which the title index cannot see.
+ */
+export const searchOptions = query({
+  args: { search: v.string(), limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    const trimmed = args.search.trim();
+    if (trimmed.length < MIN_EVENT_SEARCH_CHARS) return [];
+    const limit = Math.min(Math.max(args.limit ?? DEFAULT_EVENT_SEARCH_LIMIT, 1), 60);
+    const lowered = trimmed.toLowerCase();
+
+    const titleMatches = await ctx.db
+      .query("events")
+      .withSearchIndex("search_title", (q) => q.search("title", trimmed))
+      .take(limit);
+
+    const byId = new Map(titleMatches.map((event) => [event._id, event]));
+    if (byId.size < limit) {
+      const recent = await ctx.db
+        .query("events")
+        .withIndex("by_startAt")
+        .order("desc")
+        .take(EVENT_SEARCH_SUPPLEMENT_SCAN);
+      for (const event of recent) {
+        if (byId.size >= limit) break;
+        if (byId.has(event._id)) continue;
+        if (matchesEventMetadata(event, lowered)) byId.set(event._id, event);
+      }
+    }
+
+    return [...byId.values()].map(toEventPickerOption);
+  },
+});
+
+/** Hydrate selected event IDs so a chosen event keeps its label without the catalog. */
+export const getOptionsByIds = query({
+  args: { ids: v.array(v.id("events")) },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    const uniqueIds = Array.from(new Set(args.ids)).slice(0, 50);
+    const rows = await Promise.all(uniqueIds.map((id) => ctx.db.get(id)));
+    return rows.filter((row): row is Doc<"events"> => Boolean(row)).map(toEventPickerOption);
   },
 });
 
