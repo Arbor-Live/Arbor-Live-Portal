@@ -2,7 +2,7 @@
 
 export const ONBOARDING_LINKS = {
   whatsappInvite: "https://chat.whatsapp.com/EAfCFXRAgS4JuB8Qy4pEgF?mode=r_c",
-  whatsappGroupName: "Arbor 2024-25",
+  whatsappGroupName: "Arbor Live",
   instagramArbor: "https://www.instagram.com/thearborstanford/",
   instagramArborHandle: "@thearborstanford",
   instagramTrivia: "https://www.instagram.com/arbortrivia/",
