@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { crewAuthFile } from "../helpers/auth";
 import { e2eEnv } from "../helpers/env";
-import { pollConvex, runConvex } from "../helpers/convex";
+import { pollConvex, resolveConvexUrl, runConvex } from "../helpers/convex";
 
 /**
  * `AdminOnlyGuard` is client-side, so it only makes a refusal legible — it is
@@ -13,8 +13,9 @@ import { pollConvex, runConvex } from "../helpers/convex";
  * even when every guard in the UI is still intact.
  */
 
-const convexUrl =
-  process.env.NEXT_PUBLIC_CONVEX_URL ?? "https://industrious-chinchilla-247.convex.cloud";
+// Resolved from the same source the app builds against — never hardcoded, or
+// CI ends up calling a different deployment than the one issuing its tokens.
+const convexUrl = resolveConvexUrl();
 
 type ConvexResponse = { status: string; errorMessage?: string; value?: unknown };
 
