@@ -176,7 +176,7 @@ export function InvoiceEditor({
   const linkedEventCrewInitializedRef = useRef(false);
   const baselineSignaturePendingRef = useRef(false);
   const savedCrewSnapshotRef = useRef<CrewRow[]>([]);
-  const [invoiceFieldsHydrated, setInvoiceFieldsHydrated] = useState(false);
+  const [invoiceFieldsHydrated, setInvoiceFieldsHydrated] = useState(() => !invoiceId);
   const [editorBaselineReady, setEditorBaselineReady] = useState(() => !invoiceId);
   const reapprovalDecisionRef = useRef<null | boolean>(null);
 
@@ -297,7 +297,9 @@ export function InvoiceEditor({
     baselineSignaturePendingRef.current = false;
     savedCrewSnapshotRef.current = [];
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setInvoiceFieldsHydrated(false);
+    // New invoices have no server hydrate step — treat empty defaults as hydrated so
+    // FormSaveBar dirty tracking works on /invoices/new.
+    setInvoiceFieldsHydrated(!invoiceId);
     setEditorBaselineReady(!invoiceId);
   }, [invoiceId]);
 
@@ -663,6 +665,7 @@ export function InvoiceEditor({
         const result = await createDraft(payload);
         setActiveInvoiceId(result.id);
         setApprovalToken(result.publicApprovalToken ?? "");
+        router.replace(`/dashboard/financial-hub/invoices/${result.id}`);
       }
       setLastSavedSignature(signature);
       if (requestId === saveRequestIdRef.current) {

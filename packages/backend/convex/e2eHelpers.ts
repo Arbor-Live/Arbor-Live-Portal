@@ -1965,3 +1965,205 @@ export const getLatestCrewApplicationByEmail = query({
     };
   },
 });
+
+/**
+ * Test-only: latest booking request for a Stanford email (public wizard submit).
+ */
+export const getLatestBookingRequestByEmail = query({
+  args: { email: v.string() },
+  returns: v.union(
+    v.null(),
+    v.object({
+      requestId: v.id("eventRequests"),
+      status: v.string(),
+      requestNumber: v.union(v.string(), v.null()),
+      publicToken: v.union(v.string(), v.null()),
+      eventName: v.union(v.string(), v.null()),
+      email: v.string(),
+      path: v.string(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const email = args.email.trim().toLowerCase();
+    const rows = await ctx.db
+      .query("eventRequests")
+      .withIndex("by_email", (q) => q.eq("email", email))
+      .order("desc")
+      .take(20);
+    const match = rows[0];
+    if (!match) return null;
+    return {
+      requestId: match._id,
+      status: match.status,
+      requestNumber: match.requestNumber ?? null,
+      publicToken: match.publicToken ?? null,
+      eventName: match.eventName ?? null,
+      email: match.email,
+      path: `/dashboard/events/requests/${match._id}`,
+    };
+  },
+});
+
+/**
+ * Test-only: invoice editor / payment state by id.
+ */
+export const getInvoiceEditorState = query({
+  args: { invoiceId: v.id("invoices") },
+  returns: v.union(
+    v.null(),
+    v.object({
+      invoiceId: v.id("invoices"),
+      invoiceNumber: v.string(),
+      status: v.string(),
+      publicApprovalToken: v.union(v.string(), v.null()),
+      publicPath: v.union(v.string(), v.null()),
+      paymentReceivedAt: v.union(v.number(), v.null()),
+      clientApprovalStatus: v.union(v.string(), v.null()),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const invoice = await ctx.db.get(args.invoiceId);
+    if (!invoice) return null;
+    const token = invoice.publicApprovalToken ?? null;
+    return {
+      invoiceId: invoice._id,
+      invoiceNumber: invoice.invoiceNumber,
+      status: invoice.status,
+      publicApprovalToken: token,
+      publicPath: token ? `/event/${token}` : null,
+      paymentReceivedAt: invoice.paymentReceivedAt ?? null,
+      clientApprovalStatus: invoice.clientApprovalStatus ?? null,
+    };
+  },
+});
+
+/**
+ * Test-only: latest band application by contact email.
+ */
+export const getLatestBandApplicationByEmail = query({
+  args: { email: v.string() },
+  returns: v.union(
+    v.null(),
+    v.object({
+      applicationId: v.id("bandApplications"),
+      status: v.string(),
+      contactName: v.string(),
+      contactEmail: v.string(),
+      bandDisplayName: v.string(),
+      organizationId: v.union(v.string(), v.null()),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const email = args.email.trim().toLowerCase();
+    const rows = await ctx.db
+      .query("bandApplications")
+      .withIndex("by_contactEmail", (q) => q.eq("contactEmail", email))
+      .order("desc")
+      .take(20);
+    const match = rows[0];
+    if (!match) return null;
+    return {
+      applicationId: match._id,
+      status: match.status,
+      contactName: match.contactName,
+      contactEmail: match.contactEmail,
+      bandDisplayName: match.bandDisplayName,
+      organizationId: match.organizationId ?? null,
+    };
+  },
+});
+
+/**
+ * Test-only: event venue linkage after VenuePicker save.
+ */
+export const getEventVenueState = query({
+  args: { eventId: v.id("events") },
+  returns: v.union(
+    v.null(),
+    v.object({
+      eventId: v.id("events"),
+      title: v.string(),
+      venueId: v.union(v.id("venues"), v.null()),
+      venueName: v.union(v.string(), v.null()),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const event = await ctx.db.get(args.eventId);
+    if (!event) return null;
+    return {
+      eventId: event._id,
+      title: event.title,
+      venueId: event.venueId ?? null,
+      venueName: event.venueName ?? null,
+    };
+  },
+});
+
+/**
+ * Test-only: resolve venue by exact name (most recent).
+ */
+export const getLatestVenueByName = query({
+  args: { name: v.string() },
+  returns: v.union(
+    v.null(),
+    v.object({
+      venueId: v.id("venues"),
+      name: v.string(),
+      path: v.string(),
+      kind: v.string(),
+      venueType: v.string(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const name = args.name.trim();
+    const rows = await ctx.db.query("venues").order("desc").take(100);
+    const match = rows.find((row) => row.name === name);
+    if (!match) return null;
+    return {
+      venueId: match._id,
+      name: match.name,
+      path: match.path,
+      kind: match.kind,
+      venueType: match.venueType,
+    };
+  },
+});
+
+/**
+ * Test-only: drop Better Auth JWKS so keys regenerate under the current secret.
+ * Needed after accidental BETTER_AUTH_SECRET rotation against a shared deployment.
+ */
+export const clearAuthJwks = mutation({
+  args: {},
+  returns: v.object({ deleted: v.number() }),
+  handler: async (ctx) => {
+    assertE2eHelpersEnabled();
+    const rows = await ctx.runQuery(components.betterAuth.adapter.findMany, {
+      model: "jwks",
+      paginationOpts: { cursor: null, numItems: 100 },
+    });
+    const list = Array.isArray(rows)
+      ? rows
+      : Array.isArray((rows as { page?: unknown[] })?.page)
+        ? ((rows as { page: unknown[] }).page ?? [])
+        : [];
+    let deleted = 0;
+    for (const row of list) {
+      const id = getId(row);
+      if (!id) continue;
+      await ctx.runMutation(components.betterAuth.adapter.deleteOne, {
+        input: {
+          model: "jwks",
+          where: [{ field: "_id", value: id }],
+        },
+      });
+      deleted += 1;
+    }
+    return { deleted };
+  },
+});

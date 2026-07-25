@@ -16,13 +16,33 @@ export async function signInWithCredentials(
   email: string,
   password: string,
 ) {
-  await page.goto("/sign-in");
+  // Turbopack may still be compiling the sign-in chunk on first hit; a native
+  // form submit before hydration GETs credentials into the query string.
+  await page.goto("/sign-in", { waitUntil: "domcontentloaded" });
   await page.getByText("Welcome back").waitFor({ state: "visible" });
-  // FormLabel is not htmlFor-associated, so prefer roles over getByLabel.
-  await page.getByRole("textbox").first().fill(email);
-  await page.locator('input[type="password"]').fill(password);
-  await page.getByRole("button", { name: "Sign in to dashboard" }).click();
-  await page.waitForURL(/\/dashboard/, { timeout: 30_000 });
+  await page.waitForLoadState("networkidle").catch(() => undefined);
+  await expect(page.getByRole("button", { name: "Sign in to dashboard" })).toBeEnabled({
+    timeout: 30_000,
+  });
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    // FormLabel is not htmlFor-associated, so prefer roles over getByLabel.
+    await page.getByRole("textbox").first().fill(email);
+    await page.locator('input[type="password"]').fill(password);
+    await page.getByRole("button", { name: "Sign in to dashboard" }).click();
+
+    try {
+      await page.waitForURL(/\/dashboard/, { timeout: 30_000 });
+      return;
+    } catch (error) {
+      const url = page.url();
+      const hydratedTooLate = /[?&]password=/.test(url);
+      if (!hydratedTooLate || attempt === 1) throw error;
+      await page.goto("/sign-in", { waitUntil: "domcontentloaded" });
+      await page.getByText("Welcome back").waitFor({ state: "visible" });
+      await page.waitForLoadState("networkidle").catch(() => undefined);
+    }
+  }
 }
 
 export async function signInAsAdmin(page: Page) {
@@ -60,7 +80,9 @@ export async function selectSearchableOption(
   await field.getByTestId("searchable-select-trigger").click();
   const menu = page.locator("body > div").filter({ has: page.getByPlaceholder(/Search/i) }).last();
   await menu.getByPlaceholder(/Search/i).fill(optionLabel);
-  await page.getByRole("button", { name: optionLabel, exact: true }).click();
+  const option = page.getByRole("button", { name: new RegExp(optionLabel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")) }).first();
+  await expect(option).toBeVisible({ timeout: 20_000 });
+  await option.click();
 }
 
 /** Set a DateTimePicker near a label via the react-datepicker calendar UI. */
