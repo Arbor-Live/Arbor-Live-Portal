@@ -44,6 +44,7 @@ test.describe("crew onboarding wizard", () => {
     // Profile
     await expect(page.getByLabel("Full name")).toBeVisible({ timeout: 20_000 });
     await page.getByLabel("Full name").fill(onboardingCrewName);
+    await page.getByLabel("Phone number").fill("6505550144");
     await next(page);
 
     // WhatsApp

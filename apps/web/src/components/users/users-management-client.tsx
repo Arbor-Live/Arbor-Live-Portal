@@ -170,6 +170,7 @@ export function UsersManagementClient({
   const cancelInvite = useMutation(api.users.cancelInviteAdmin);
   const createUser = useMutation(api.users.createUserAdmin);
   const sendPasswordReset = useMutation(api.users.sendPasswordResetAdmin);
+  const setUserAccess = useMutation(api.users.setUserAccessAdmin);
   const backfillDefaults = useMutation(api.users.backfillUserAdminDefaults);
 
   const [organizationName, setOrganizationName] = useState("");
@@ -180,6 +181,7 @@ export function UsersManagementClient({
   const [expandedUserIds, setExpandedUserIds] = useState<Record<string, boolean>>({});
   const [expandedBandOrgIds, setExpandedBandOrgIds] = useState<Record<string, boolean>>({});
   const [onboardingFilter, setOnboardingFilter] = useState<"all" | "incomplete">("all");
+  const [accessFilter, setAccessFilter] = useState<"active" | "removed" | "all">("active");
   const showOrganizations = view === "all" || view === "organizations";
   const showAccess = view === "all" || view === "access";
   const showRates = view === "all";
@@ -195,14 +197,19 @@ export function UsersManagementClient({
   }, [crewOnboarding]);
 
   const filteredUsers = useMemo(() => {
-    const list = users ?? [];
+    let list = users ?? [];
+    if (accessFilter === "active") {
+      list = list.filter((user) => user.active && !user.banned);
+    } else if (accessFilter === "removed") {
+      list = list.filter((user) => !user.active || user.banned);
+    }
     if (onboardingFilter !== "incomplete") return list;
     return list.filter((user) => {
       const row = onboardingByUserId.get(user.id);
       if (!row) return true;
       return row.status === "not_started" || row.status === "in_progress";
     });
-  }, [users, onboardingFilter, onboardingByUserId]);
+  }, [users, accessFilter, onboardingFilter, onboardingByUserId]);
 
   async function onCreateOrganization() {
     if (!organizationName.trim()) return;
@@ -250,6 +257,17 @@ export function UsersManagementClient({
     try {
       await sendPasswordReset({ userId: user.id });
       setMessage(`Password reset sent for ${user.name}.`);
+    } catch (error) {
+      setMessage(getConvexErrorMessage(error));
+    }
+  }
+
+  async function onSetUserAccess(user: AdminUser, removed: boolean) {
+    const action = removed ? "Remove access for" : "Reactivate";
+    if (!window.confirm(`${action} ${user.name}?`)) return;
+    try {
+      await setUserAccess({ userId: user.id, removed });
+      setMessage(removed ? `Removed access for ${user.name}.` : `Reactivated ${user.name}.`);
     } catch (error) {
       setMessage(getConvexErrorMessage(error));
     }
@@ -361,20 +379,38 @@ export function UsersManagementClient({
             <CardTitle>Users</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            <div className="max-w-[240px] space-y-1">
-              <Label>Onboarding</Label>
-              <Select
-                value={onboardingFilter}
-                onValueChange={(value) => setOnboardingFilter(value as "all" | "incomplete")}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All</SelectItem>
-                  <SelectItem value="incomplete">Incomplete only</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="flex flex-wrap gap-3">
+              <div className="max-w-[240px] space-y-1">
+                <Label>Access</Label>
+                <Select
+                  value={accessFilter}
+                  onValueChange={(value) => setAccessFilter(value as "active" | "removed" | "all")}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="removed">Removed</SelectItem>
+                    <SelectItem value="all">All</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="max-w-[240px] space-y-1">
+                <Label>Onboarding</Label>
+                <Select
+                  value={onboardingFilter}
+                  onValueChange={(value) => setOnboardingFilter(value as "all" | "incomplete")}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="incomplete">Incomplete only</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div className="overflow-x-auto rounded-md border">
               <table className="min-w-full text-sm">
@@ -405,6 +441,7 @@ export function UsersManagementClient({
                         setExpandedUserIds((prev) => ({ ...prev, [user.id]: !prev[user.id] }))
                       }
                       onPasswordReset={() => void onUserPasswordReset(user)}
+                      onSetAccess={(removed) => void onSetUserAccess(user, removed)}
                       onWaiveOnboarding={async () => {
                         try {
                           await waiveOnboarding({ userId: user.id });
@@ -595,6 +632,10 @@ function SaveStatusIcon({ saveStatus, saveError }: { saveStatus: string; saveErr
   return null;
 }
 
+function isUserRemoved(user: AdminUser) {
+  return !user.active || user.banned;
+}
+
 function UserAdminRow({
   user,
   onboarding,
@@ -603,6 +644,7 @@ function UserAdminRow({
   expanded,
   onToggleExpanded,
   onPasswordReset,
+  onSetAccess,
   onWaiveOnboarding,
   onMessage,
 }: {
@@ -613,12 +655,14 @@ function UserAdminRow({
   expanded: boolean;
   onToggleExpanded: () => void;
   onPasswordReset: () => void;
+  onSetAccess: (removed: boolean) => void;
   onWaiveOnboarding: () => Promise<void>;
   onMessage: (message: string) => void;
 }) {
   const updateUser = useMutation(api.users.updateUserAdmin);
   const addMembership = useMutation(api.users.addUserOrganizationMembershipAdmin);
   const removeMembership = useMutation(api.users.removeUserOrganizationMembershipAdmin);
+  const removed = isUserRemoved(user);
   const [membershipDraft, setMembershipDraft] = useState<MembershipDraft>({
     organizationId: "",
     role: "org_member",
@@ -714,7 +758,7 @@ function UserAdminRow({
 
   return (
     <>
-      <tr className="border-b align-top">
+      <tr className={`border-b align-top ${removed ? "text-muted-foreground" : ""}`}>
         <td className="px-3 py-2">{user.name}</td>
         <td className="px-3 py-2">{user.email}</td>
         <td className="px-3 py-2">
@@ -786,14 +830,17 @@ function UserAdminRow({
           </Select>
         </td>
         <td className="px-3 py-2">
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={form.watch("active")}
-              onChange={(e) => form.setValue("active", e.target.checked, { shouldDirty: true })}
-            />
-            Active
-          </label>
+          <div className="space-y-1">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={form.watch("active")}
+                onChange={(e) => form.setValue("active", e.target.checked, { shouldDirty: true })}
+              />
+              Active
+            </label>
+            {removed ? <p className="text-xs text-muted-foreground">Removed</p> : null}
+          </div>
         </td>
         <td className="px-3 py-2">
           <div className="flex flex-wrap items-center gap-2">
@@ -813,6 +860,8 @@ function UserAdminRow({
                 if (action === "reset") onPasswordReset();
                 if (action === "toggle_details") onToggleExpanded();
                 if (action === "waive") void onWaiveOnboarding();
+                if (action === "remove_access") onSetAccess(true);
+                if (action === "reactivate") onSetAccess(false);
               }}
             >
               <SelectTrigger className="min-w-[140px]">
@@ -825,6 +874,11 @@ function UserAdminRow({
                 (onboarding.status === "not_started" || onboarding.status === "in_progress") ? (
                   <SelectItem value="waive">Waive onboarding</SelectItem>
                 ) : null}
+                {removed ? (
+                  <SelectItem value="reactivate">Reactivate</SelectItem>
+                ) : (
+                  <SelectItem value="remove_access">Remove access</SelectItem>
+                )}
               </SelectContent>
             </Select>
             <SaveStatusIcon saveStatus={form.saveStatus} saveError={form.saveError} />
