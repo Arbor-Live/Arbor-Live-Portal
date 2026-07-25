@@ -1,4 +1,4 @@
-import { ArborOnlyGuard } from "@/components/org-context-guard";
+import { AdminOnlyGuard, ArborOnlyGuard } from "@/components/org-context-guard";
 import { BandApplicationsAdminClient } from "@/components/users/band-applications-admin-client";
 
 export default function BandApplicationsPage() {
@@ -13,7 +13,9 @@ export default function BandApplicationsPage() {
         </p>
       </div>
       <ArborOnlyGuard>
-        <BandApplicationsAdminClient />
+        <AdminOnlyGuard>
+          <BandApplicationsAdminClient />
+        </AdminOnlyGuard>
       </ArborOnlyGuard>
     </div>
   );

@@ -5,7 +5,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { CrewSchedulingDashboard } from "@/components/events/crew-scheduling-dashboard";
-import { ArborOnlyGuard } from "@/components/org-context-guard";
+import { AdminOnlyGuard, ArborOnlyGuard } from "@/components/org-context-guard";
 
 export default function CrewSchedulingPage() {
   return (
@@ -19,7 +19,9 @@ export default function CrewSchedulingPage() {
         </CardHeader>
       </Card>
       <ArborOnlyGuard>
-        <CrewSchedulingDashboard />
+        <AdminOnlyGuard>
+          <CrewSchedulingDashboard />
+        </AdminOnlyGuard>
       </ArborOnlyGuard>
     </div>
   );

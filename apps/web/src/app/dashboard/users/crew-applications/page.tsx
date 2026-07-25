@@ -1,4 +1,4 @@
-import { ArborOnlyGuard } from "@/components/org-context-guard";
+import { AdminOnlyGuard, ArborOnlyGuard } from "@/components/org-context-guard";
 import { CrewApplicationsAdminClient } from "@/components/users/crew-applications-admin-client";
 
 export default function CrewApplicationsPage() {
@@ -12,7 +12,9 @@ export default function CrewApplicationsPage() {
         </p>
       </div>
       <ArborOnlyGuard>
-        <CrewApplicationsAdminClient />
+        <AdminOnlyGuard>
+          <CrewApplicationsAdminClient />
+        </AdminOnlyGuard>
       </ArborOnlyGuard>
     </div>
   );

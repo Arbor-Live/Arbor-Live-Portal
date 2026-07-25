@@ -82,7 +82,13 @@ export const list = query({
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
     const filterStatus = args.status ? normalizeEventStatus(args.status) : undefined;
-    const baseRows = await ctx.db.query("events").withIndex("by_createdAt").take(200);
+    // `.order("desc")` matters: the default ascending order would take the
+    // 200 *oldest* events, so newly created ones would never show up here.
+    const baseRows = await ctx.db
+      .query("events")
+      .withIndex("by_createdAt")
+      .order("desc")
+      .take(200);
     const q = args.query?.trim().toLowerCase();
     const rows = baseRows
       .map((row) => ({ ...row, status: normalizeEventStatus(row.status) }))
@@ -119,6 +125,7 @@ export const listForDashboard = query({
     const baseRows = await ctx.db
       .query("events")
       .withIndex("by_createdAt")
+      .order("desc")
       .take(DASHBOARD_EVENT_TAKE);
     const q = args.query?.trim().toLowerCase();
     const rows = baseRows

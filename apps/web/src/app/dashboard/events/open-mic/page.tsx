@@ -5,7 +5,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { OpenMicEventsInbox } from "@/components/events/open-mic-nights-inbox";
-import { ArborOnlyGuard } from "@/components/org-context-guard";
+import { AdminOnlyGuard, ArborOnlyGuard } from "@/components/org-context-guard";
 
 export default function OpenMicPage() {
   return (
@@ -20,7 +20,9 @@ export default function OpenMicPage() {
         </CardHeader>
       </Card>
       <ArborOnlyGuard>
-        <OpenMicEventsInbox />
+        <AdminOnlyGuard>
+          <OpenMicEventsInbox />
+        </AdminOnlyGuard>
       </ArborOnlyGuard>
     </div>
   );

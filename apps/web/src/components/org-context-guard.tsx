@@ -1,7 +1,40 @@
 "use client";
 
-import { useSessionShell } from "@/components/session-shell-provider";
+import { useSessionShell, useSessionViewer } from "@/components/session-shell-provider";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+
+/**
+ * Blocks non-admin members of Arbor Live.
+ *
+ * `ArborOnlyGuard` only checks organization *type*, so a crew member — who is a
+ * genuine `arbor_internal` member — walks straight through it and then trips
+ * `requireAdmin` in Convex, landing on the generic "Something went wrong" error
+ * boundary. That fails closed but reads as a crash.
+ *
+ * This is defence-in-depth for legibility only: the Convex guards remain the
+ * real boundary, since anything rendered client-side can be bypassed.
+ */
+export function AdminOnlyGuard({ children }: { children: React.ReactNode }) {
+  const shell = useSessionShell();
+  const viewer = useSessionViewer();
+
+  // Shell still loading — render nothing rather than flashing a denial.
+  if (shell === undefined) return null;
+  if (!viewer?.isAdmin) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Admin access required</CardTitle>
+        </CardHeader>
+        <CardContent className="text-sm text-muted-foreground">
+          This section is limited to Arbor Live admins. Ask an admin if you need access.
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return <>{children}</>;
+}
 
 export function ArborOnlyGuard({ children }: { children: React.ReactNode }) {
   const shell = useSessionShell();
