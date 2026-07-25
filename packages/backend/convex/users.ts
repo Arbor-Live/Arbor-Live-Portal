@@ -1508,8 +1508,13 @@ export const updateActiveBandProfile = mutation({
     if (existing) {
       await ctx.db.patch(existing._id, {
         organizationType: existing.organizationType ?? "band",
-        displayName: args.displayName?.trim() || undefined,
-        bio: args.bio?.trim() || undefined,
+        // Callers send partial payloads (the onboarding wizard saves one step
+        // at a time), so every field here preserves `existing` when omitted.
+        displayName:
+          args.displayName !== undefined
+            ? args.displayName.trim() || undefined
+            : existing.displayName,
+        bio: args.bio !== undefined ? args.bio.trim() || undefined : existing.bio,
         performerHourlyRateUsd: args.performerHourlyRateUsd ?? existing.performerHourlyRateUsd,
         designatedPayeeUserId:
           args.designatedPayeeUserId !== undefined
@@ -1527,14 +1532,26 @@ export const updateActiveBandProfile = mutation({
           args.designatedPayeeMailingAddress !== undefined
             ? args.designatedPayeeMailingAddress.trim() || undefined
             : existing.designatedPayeeMailingAddress,
-        publicWebsiteUrl: args.publicWebsiteUrl?.trim() || undefined,
-        publicInstagramUrl: args.publicInstagramUrl?.trim() || undefined,
-        publicYoutubeUrl: args.publicYoutubeUrl?.trim() || undefined,
+        publicWebsiteUrl:
+          args.publicWebsiteUrl !== undefined
+            ? args.publicWebsiteUrl.trim() || undefined
+            : existing.publicWebsiteUrl,
+        publicInstagramUrl:
+          args.publicInstagramUrl !== undefined
+            ? args.publicInstagramUrl.trim() || undefined
+            : existing.publicInstagramUrl,
+        publicYoutubeUrl:
+          args.publicYoutubeUrl !== undefined
+            ? args.publicYoutubeUrl.trim() || undefined
+            : existing.publicYoutubeUrl,
         demoURL:
           args.demoURL !== undefined ? args.demoURL.trim() || undefined : existing.demoURL,
         publicListing: publicListing ?? existing.publicListing,
         publicSlug: publicSlug ?? (publicListing === false ? undefined : existing.publicSlug),
-        publicHeroImageUrl: normalizeOptionalAssetReference(args.publicHeroImageUrl),
+        publicHeroImageUrl:
+          args.publicHeroImageUrl !== undefined
+            ? normalizeOptionalAssetReference(args.publicHeroImageUrl)
+            : existing.publicHeroImageUrl,
         updatedAt: now,
       });
       await ctx.runMutation(internal.bandPayments.refreshPendingPayeePaymentsForOrg, {

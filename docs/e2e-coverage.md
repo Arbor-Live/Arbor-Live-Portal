@@ -8,7 +8,7 @@ Update this file whenever specs or helpers land (or when a batch ships).
 - Runner: `pnpm test:e2e` ([`scripts/e2e-run.mjs`](../scripts/e2e-run.mjs))
 - CI: [`.github/workflows/e2e.yml`](../.github/workflows/e2e.yml)
 
-**Last updated:** 2026-07-25 (Batches 1–2 on `main`; Batch 3 green locally, uncommitted; 4–6 planned)
+**Last updated:** 2026-07-25 (Batches 1–3 landed; Batch 4–5 green locally, uncommitted; 6 planned)
 
 ## Batch history
 
@@ -16,10 +16,10 @@ Update this file whenever specs or helpers land (or when a batch ships).
 |-------|-----|-------------|
 | **1** | [#54](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/54) | Auth, invite accept, event create/schedule, public quote smoke + approve/changes/payment-proof submit, crew availability→assign, email queue, booking track-approve |
 | **2** | [#56](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/56) | Staff booking convert, dry-hire delivery+return scans, damage triage, band e-sign→mark paid (helper), public crew apply→admin list |
-| **3** | local (uncommitted) | Public booking submit, staff invoice create→public link, staff payment-proof verify, band apply+approve, venue create+pick |
-| **4** | planned | Hiring completion — see [Planned batches](#planned-batches-4–6) |
-| **5** | planned | Ops depth — see [Planned batches](#planned-batches-4–6) |
-| **6** | planned | Secondary surfaces — see [Planned batches](#planned-batches-4–6) |
+| **3** | [#61](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/61) | Public booking submit, staff invoice create→public link, staff payment-proof verify, band apply+approve, venue create+pick |
+| **4** | local (uncommitted) | Crew application triage (turn away / convert / trainee assign), crew `/onboarding` completion, band `/onboarding/band` completion |
+| **5** | local (uncommitted) | Pull-list edit (qty + add type), damage report create, crew scheduling board, event series create |
+| **6** | planned | Secondary surfaces — see [Planned batches](#planned-batches-6) |
 
 ## Status legend
 
@@ -43,8 +43,8 @@ Update this file whenever specs or helpers land (or when a batch ships).
 | Email queue (mocked Resend) | Covered | `email/email-queue.spec.ts` (no UI) |
 | First-admin `/setup` | None | Dev-only unlock exists; not e2e’d |
 | Users invite UI (`/dashboard/users/access`) | None | Invite created via helper, not Users UI |
-| Full crew `/onboarding` completion | None | Invite lands on onboarding only |
-| Full band `/onboarding/band` completion | None | — |
+| Full crew `/onboarding` completion | Covered | `crew/crew-onboarding-complete.spec.ts` (Batch 4) |
+| Full band `/onboarding/band` completion | Covered | `bands/band-onboarding-complete.spec.ts` (Batch 4) |
 
 ### Booking requests
 
@@ -76,8 +76,8 @@ Update this file whenever specs or helpers land (or when a batch ships).
 | Event title edit persist | Covered | `events/event-edit-dry-hire.spec.ts` |
 | Crew availability Yes + admin assign | Covered | `crew/crew-availability-assign.spec.ts` |
 | Venue create + pick on event | Covered | `events/venue-create-pick.spec.ts` (Batch 3) |
-| Event series create/generate | None | Deferred (Batch 5) |
-| Crew scheduling board | None | Deferred (Batch 5); assign covered on event schedule page |
+| Event series create/generate | Covered | `events/event-series-smoke.spec.ts` (Batch 5) |
+| Crew scheduling board | Covered | `crew/crew-scheduling-board.spec.ts` (Batch 5) |
 | Open Mic public + runner | None | Deferred |
 | FullCalendar drag/resize | Deferred | Flaky; keep unit/manual |
 
@@ -87,8 +87,8 @@ Update this file whenever specs or helpers land (or when a batch ships).
 |---------|--------|--------------|
 | Dry-hire Process delivery + return (typed scans) | Covered | `inventory/rental-fulfillment.spec.ts` |
 | Damage triage (open → in progress → resolved) | Covered | `inventory/damage-triage.spec.ts` |
-| Damage report create | None | Deferred |
-| Pull-list edit UI | None | Seeded for fulfillment; no edit UI test |
+| Damage report create | Covered | `inventory/damage-create.spec.ts` (Batch 5) |
+| Pull-list edit UI | Covered | `inventory/pull-list-edit.spec.ts` (Batch 5) |
 | Inventory catalog CRUD (types/items/packages) | None | Deferred |
 | Lost-and-found `/e/[assetId]` | None | Deferred |
 
@@ -97,7 +97,7 @@ Update this file whenever specs or helpers land (or when a batch ships).
 | Surface | Status | Spec / notes |
 |---------|--------|--------------|
 | Public `/crew/apply` → admin list | Covered | `crew/crew-application.spec.ts` |
-| Admin trainee / convert / close | None | Deferred (Batch 4+) |
+| Admin trainee / convert / turn away | Covered | `crew/crew-application-triage.spec.ts` (Batch 4) |
 
 ### Bands and payouts
 
@@ -106,7 +106,7 @@ Update this file whenever specs or helpers land (or when a batch ships).
 | Payee e-sign → mark paid | Partial | `bands/band-payment-esign.spec.ts` — mark-paid via helper, not payouts queue UI |
 | Public `/artists/apply` → admin approve | Covered | `bands/band-application.spec.ts` (Batch 3) |
 | Band payouts admin queue UI | Deferred | Known CI flakiness (Batch 6 stretch) |
-| Band portal beyond e-sign | None | Deferred (Batch 4 onboarding) |
+| Band portal beyond e-sign | Partial | Onboarding covered (Batch 4); settings/payouts still deferred |
 
 ### Marketing and public site
 
@@ -150,11 +150,18 @@ Update this file whenever specs or helpers land (or when a batch ships).
 | `quotes/invoice-finalize.spec.ts` | Staff invoice create → public link (Batch 3) |
 | `quotes/payment-proof-verify.spec.ts` | Staff mark payment received (Batch 3) |
 | `events/venue-create-pick.spec.ts` | Venue create + pick on event (Batch 3) |
+| `crew/crew-application-triage.spec.ts` | Turn away / convert / trainee assign (Batch 4) |
+| `crew/crew-onboarding-complete.spec.ts` | Crew onboarding wizard end-to-end (Batch 4) |
+| `bands/band-onboarding-complete.spec.ts` | Band onboarding wizard end-to-end (Batch 4) |
+| `inventory/pull-list-edit.spec.ts` | Pull-list qty edit + add type (Batch 5) |
+| `inventory/damage-create.spec.ts` | Damage report create from queue (Batch 5) |
+| `crew/crew-scheduling-board.spec.ts` | Scheduling board range/filter + assign link (Batch 5) |
+| `events/event-series-smoke.spec.ts` | Recurring series create + overview (Batch 5) |
 | `email/email-queue.spec.ts` | Mocked email pipeline |
 
-## Planned batches 4–6
+## Planned batches 6
 
-Subagent-ready briefs. Follow Batch 1–2 patterns: seed with `e2eHelpers` (gate `assertE2eHelpersEnabled`), drive UI with Playwright, assert via `pollConvex`. Keep `E2E_EMAIL_MOCK`. Do **not** touch Immich/Instagram. Update this file when each batch lands.
+Subagent-ready brief. Follow Batch 1–5 patterns: seed with `e2eHelpers` (gate `assertE2eHelpersEnabled`), drive UI with Playwright, assert via `pollConvex`. Keep `E2E_EMAIL_MOCK`. Do **not** touch Immich/Instagram. Update this file when each batch lands.
 
 Shared conventions:
 - Specs under `apps/web/e2e/<domain>/`
@@ -162,38 +169,6 @@ Shared conventions:
 - Dual-context public+admin: mirror [`crew-application.spec.ts`](../apps/web/e2e/crew/crew-application.spec.ts)
 - Local: `E2E_SKIP_BOOT=1 pnpm test:e2e` against running stack; CI uses anonymous Convex
 
-### Batch 4 — Hiring completion
-
-**Theme:** Finish crew/band hiring after Batch 2 apply + Batch 3 band approve.
-
-| # | Spec file | Flow | Helpers to add | Assert |
-|---|-----------|------|----------------|--------|
-| 1 | `crew/crew-application-triage.spec.ts` | After public apply (or seed submitted app): admin on `/dashboard/users/crew-applications` → mark **Trainee** and/or **Convert** (invite) and/or **Close** | `seedSubmittedCrewApplication`, `getCrewApplicationState` | Status `trainee` / `converted` / `closed`; convert creates invite |
-| 2 | `crew/crew-onboarding-complete.spec.ts` | Seed pending invite for converted crew → accept → complete `/onboarding` required steps → dashboard without incomplete banner | May extend `createPendingInvite` / onboarding seed | `userOnboarding` complete (or waived) |
-| 3 | `bands/band-onboarding-complete.spec.ts` | After Batch 3 approve path (or seed approved band + invite): accept invite → finish `/onboarding/band` rates + payout | `seedApprovedBandApplication` or reuse approve side-effects | `organizationOnboarding` complete for rates/payout |
-
-**Out of scope:** Design board, Immich, full Users admin matrix.
-
-**Depends on:** Batch 3 band-apply helpers if reusing approve; otherwise seed approved band org directly.
-
----
-
-### Batch 5 — Ops depth
-
-**Theme:** Event/inventory ops beyond fulfillment and schedule-assign.
-
-| # | Spec file | Flow | Helpers to add | Assert |
-|---|-----------|------|----------------|--------|
-| 1 | `inventory/pull-list-edit.spec.ts` | Seed dry hire (reuse `seedDryHireWithPullList` or empty list) → Equipment tab → Edit list → add package/qty → save → reload | Possibly none; or `getPullListState` | Lines persist with expected qty |
-| 2 | `inventory/damage-create.spec.ts` | Admin/crew creates damage report from inventory/event UI → appears in `/dashboard/inventory/damage` | Optional thin seed for inventory item; reuse triage asserts | Report `open` with notes |
-| 3 | `crew/crew-scheduling-board.spec.ts` | `/dashboard/events/crew-scheduling` loads seeded event with open shifts → assign or filter | `seedCrewedEventWithSchedule` + yes-response | Board shows event/shift; assignment reflected |
-| 4 | `events/event-series-smoke.spec.ts` | Create series (or seed) → generate occurrence → open occurrence event | `seedEventSeries` / `getSeriesState` | Series has ≥1 occurrence with expected title/dates |
-
-**Out of scope:** FullCalendar drag/resize, Open Mic (Batch 6 if needed), rental scan path (already Batch 2).
-
-**Depends on:** Stable Equipment tab (Batch 2 rental learnings).
-
----
 
 ### Batch 6 — Secondary surfaces
 
