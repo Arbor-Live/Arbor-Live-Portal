@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { AppSidebar } from "@/components/app-sidebar";
+import { FormSaveBarStackProvider } from "@/components/forms";
 import { OnboardingBanner } from "@/components/onboarding/onboarding-banner";
 import { SessionShellProvider } from "@/components/session-shell-provider";
 import { Separator } from "@/components/ui/separator";
@@ -31,7 +32,11 @@ export default async function DashboardLayout({
             <p className="font-medium">Dashboard</p>
           </header>
           <OnboardingBanner />
-          <main className="flex-1 p-6">{children}</main>
+          {/* Stacks every FormSaveBar on the page so two forms on one tab
+              (e.g. event overview + pull list) don't cover each other. */}
+          <FormSaveBarStackProvider>
+            <main className="flex-1 p-6">{children}</main>
+          </FormSaveBarStackProvider>
         </SidebarInset>
       </SidebarProvider>
     </SessionShellProvider>

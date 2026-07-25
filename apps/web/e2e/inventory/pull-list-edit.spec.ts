@@ -47,11 +47,9 @@ test.describe("pull list editor", () => {
       .first();
     await editorRow.locator("input").fill("4");
 
-    // KNOWN UI ISSUE: the event editor's save bar and the pull-list save bar are
-    // both `fixed bottom-0 z-40`, and a seeded event hydrates its overview as
-    // dirty — so the event bar sits on top and swallows real clicks here.
-    // Dispatch straight at the button; the click handler itself is unchanged.
-    await page.getByRole("button", { name: "Save pull list" }).dispatchEvent("click");
+    // Both this form and the event overview can show a save bar at once; they
+    // stack via FormSaveBarStackProvider, so a real click reaches this one.
+    await page.getByRole("button", { name: "Save pull list" }).click();
 
     const saved = await pollConvex<PullListState>(
       "e2eHelpers:getPullListState",
