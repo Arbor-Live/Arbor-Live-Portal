@@ -1228,6 +1228,51 @@ export const createUserAdmin = mutation({
   },
 });
 
+const REMOVED_BY_ADMIN_BAN_REASON = "Removed by admin";
+
+function assertCanChangeUserAccess(
+  adminUser: AuthUser,
+  target: AuthUser,
+  allUsers: AuthUser[],
+  removing: boolean,
+) {
+  const adminId = getUserId(adminUser);
+  const targetId = getUserId(target);
+  if (!targetId) throw new Error("User not found.");
+  if (removing && adminId && adminId === targetId) {
+    throw new Error("You cannot remove your own access.");
+  }
+  if (!removing) return;
+  if (!isAdmin(target) || target.banned) return;
+  const otherActiveAdmins = allUsers.filter((user) => {
+    const id = getUserId(user);
+    return id && id !== targetId && isAdmin(user) && !user.banned;
+  });
+  if (otherActiveAdmins.length === 0) {
+    throw new Error("Cannot remove the last remaining admin.");
+  }
+}
+
+async function setAuthUserBanState(
+  ctx: MutationCtx,
+  email: string,
+  banned: boolean,
+  now: number,
+) {
+  await ctx.runMutation(components.betterAuth.adapter.updateOne, {
+    input: {
+      model: "user",
+      where: [{ field: "email", value: email }],
+      update: {
+        banned,
+        banReason: banned ? REMOVED_BY_ADMIN_BAN_REASON : null,
+        banExpires: null,
+        updatedAt: now,
+      },
+    },
+  });
+}
+
 export const updateUserAdmin = mutation({
   args: {
     userId: v.string(),
@@ -1274,13 +1319,18 @@ export const updateUserAdmin = mutation({
       .query("userAdminProfiles")
       .withIndex("by_userId", (q) => q.eq("userId", args.userId))
       .unique();
+    const nextActive = args.active ?? existingProfile?.active ?? true;
+    if (args.active !== undefined && args.active !== (existingProfile?.active ?? true)) {
+      assertCanChangeUserAccess(adminUser, target, users, !args.active);
+      await setAuthUserBanState(ctx, target.email, !args.active, now);
+    }
     const existingMembership = existingProfile
       ? resolveProfileMembership(existingProfile)
       : { verticals: [], disciplines: [] };
     await ensureUserProfileDefaults(ctx, args.userId, {
       title: args.title?.trim() ?? existingProfile?.title,
       phone: args.phone ?? existingProfile?.phone,
-      active: args.active ?? existingProfile?.active ?? true,
+      active: nextActive,
       verticals: args.verticals ?? existingMembership.verticals,
       disciplines: args.disciplines ?? existingMembership.disciplines,
       showOnPublicCrewPage:
@@ -1332,6 +1382,45 @@ export const updateUserAdmin = mutation({
         });
       }
     }
+    return { ok: true };
+  },
+});
+
+export const setUserAccessAdmin = mutation({
+  args: {
+    userId: v.string(),
+    removed: v.boolean(),
+  },
+  returns: v.object({ ok: v.boolean() }),
+  handler: async (ctx, args) => {
+    const adminUser = await requireAdmin(ctx);
+    const users = await getAllAuthUsers(ctx);
+    const target = users.find((user) => getUserId(user) === args.userId);
+    if (!target?.email) throw new Error("User not found.");
+
+    assertCanChangeUserAccess(adminUser, target, users, args.removed);
+
+    const now = Date.now();
+    await setAuthUserBanState(ctx, target.email, args.removed, now);
+
+    const existingProfile = await ctx.db
+      .query("userAdminProfiles")
+      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+      .unique();
+    const existingMembership = existingProfile
+      ? resolveProfileMembership(existingProfile)
+      : { verticals: [], disciplines: [] };
+    await ensureUserProfileDefaults(ctx, args.userId, {
+      title: existingProfile?.title,
+      phone: existingProfile?.phone,
+      active: !args.removed,
+      verticals: existingMembership.verticals,
+      disciplines: existingMembership.disciplines,
+      showOnPublicCrewPage: existingProfile?.showOnPublicCrewPage,
+      publicCrewDescription: existingProfile?.publicCrewDescription,
+      defaultOrganizationId: existingProfile?.defaultOrganizationId,
+    });
+
     return { ok: true };
   },
 });

@@ -292,6 +292,7 @@ const crewOnboardingReturn = v.object({
     name: v.string(),
     email: v.string(),
     avatarUrl: v.optional(v.string()),
+    phone: v.optional(v.string()),
     calendarInviteEmail: v.optional(v.string()),
     showOnPublicCrewPage: v.boolean(),
     publicCrewDescription: v.optional(v.string()),
@@ -304,6 +305,7 @@ function serializeCrewOnboarding(
     name: string;
     email: string;
     avatarUrl?: string;
+    phone?: string;
     calendarInviteEmail?: string;
     showOnPublicCrewPage: boolean;
     publicCrewDescription?: string;
@@ -404,6 +406,7 @@ export const getMyCrewOnboarding = query({
       name: user.name ?? user.email ?? "User",
       email: user.email ?? "",
       avatarUrl,
+      phone: profile?.phone,
       calendarInviteEmail: profile?.calendarInviteEmail,
       showOnPublicCrewPage: profile?.showOnPublicCrewPage ?? false,
       publicCrewDescription: profile?.publicCrewDescription,
@@ -449,6 +452,7 @@ export const ensureMyCrewOnboarding = mutation({
 export const saveCrewProfileStep = mutation({
   args: {
     name: v.string(),
+    phone: v.string(),
     calendarInviteEmail: v.optional(v.string()),
     showOnPublicCrewPage: v.boolean(),
     publicCrewDescription: v.optional(v.string()),
@@ -461,6 +465,8 @@ export const saveCrewProfileStep = mutation({
     const now = Date.now();
     const name = args.name.trim();
     if (!name) throw new Error("Name is required.");
+    const phone = args.phone.trim();
+    if (!phone) throw new Error("Phone number is required.");
     const calendarInviteEmail = args.calendarInviteEmail?.trim().toLowerCase() || undefined;
     if (calendarInviteEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(calendarInviteEmail)) {
       throw new Error("Enter a valid calendar invite email.");
@@ -482,6 +488,7 @@ export const saveCrewProfileStep = mutation({
       .unique();
     if (profile) {
       await ctx.db.patch(profile._id, {
+        phone,
         calendarInviteEmail,
         showOnPublicCrewPage: args.showOnPublicCrewPage,
         publicCrewDescription: args.publicCrewDescription?.trim() || undefined,
@@ -493,6 +500,7 @@ export const saveCrewProfileStep = mutation({
         active: true,
         verticals: [],
         disciplines: [],
+        phone,
         calendarInviteEmail,
         showOnPublicCrewPage: args.showOnPublicCrewPage,
         publicCrewDescription: args.publicCrewDescription?.trim() || undefined,

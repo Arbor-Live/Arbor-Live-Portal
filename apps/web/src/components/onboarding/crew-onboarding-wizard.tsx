@@ -55,6 +55,7 @@ type CrewOnboardingData = {
     name: string;
     email: string;
     avatarUrl?: string;
+    phone?: string;
     calendarInviteEmail?: string;
     showOnPublicCrewPage: boolean;
     publicCrewDescription?: string;
@@ -107,6 +108,7 @@ type FormState = {
   name: string;
   /** Account email — Boring Avatar seed (not calendar invite). */
   email: string;
+  phone: string;
   calendarInviteEmail: string;
   showOnPublicCrewPage: boolean;
   publicCrewDescription: string;
@@ -130,6 +132,7 @@ type FormState = {
 const EMPTY_FORM: FormState = {
   name: "",
   email: "",
+  phone: "",
   calendarInviteEmail: "",
   showOnPublicCrewPage: false,
   publicCrewDescription: "",
@@ -190,6 +193,7 @@ export function CrewOnboardingWizard() {
     setForm({
       name: onboarding.profile.name ?? "",
       email: onboarding.profile.email ?? "",
+      phone: onboarding.profile.phone ?? "",
       calendarInviteEmail: onboarding.profile.calendarInviteEmail ?? "",
       showOnPublicCrewPage: onboarding.profile.showOnPublicCrewPage ?? false,
       publicCrewDescription: onboarding.profile.publicCrewDescription ?? "",
@@ -280,6 +284,10 @@ export function CrewOnboardingWizard() {
           setFieldError("Enter your name.");
           return;
         }
+        if (!form.phone.trim()) {
+          setFieldError("Enter your phone number.");
+          return;
+        }
         if (previewOnly) {
           advance();
           return;
@@ -287,6 +295,7 @@ export function CrewOnboardingWizard() {
         setIsSubmitting(true);
         await saveProfileStep({
           name: form.name.trim(),
+          phone: form.phone.trim(),
           calendarInviteEmail: form.calendarInviteEmail.trim() || undefined,
           showOnPublicCrewPage: form.showOnPublicCrewPage,
           publicCrewDescription: form.publicCrewDescription.trim() || undefined,
@@ -645,6 +654,18 @@ function StepBody({
               onChange={(event) => patch({ name: event.target.value })}
               placeholder="Your full name"
               autoFocus
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="crew-phone">Phone number</Label>
+            <Input
+              id="crew-phone"
+              type="tel"
+              value={form.phone}
+              onChange={(event) => patch({ phone: event.target.value })}
+              placeholder="Your phone number"
+              autoComplete="tel"
             />
           </div>
 
