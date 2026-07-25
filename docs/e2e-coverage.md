@@ -8,7 +8,7 @@ Update this file whenever specs or helpers land (or when a batch ships).
 - Runner: `pnpm test:e2e` ([`scripts/e2e-run.mjs`](../scripts/e2e-run.mjs))
 - CI: [`.github/workflows/e2e.yml`](../.github/workflows/e2e.yml)
 
-**Last updated:** 2026-07-25 (Batches 1–6 landed; 45 specs green locally)
+**Last updated:** 2026-07-25 (Batches 1–6 landed; 47 specs green locally)
 
 ## Batch history
 
@@ -19,7 +19,7 @@ Update this file whenever specs or helpers land (or when a batch ships).
 | **3** | [#61](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/61) | Public booking submit, staff invoice create→public link, staff payment-proof verify, band apply+approve, venue create+pick |
 | **4** | on branch | Crew application triage (turn away / convert / trainee assign), crew `/onboarding` completion, band `/onboarding/band` completion |
 | **5** | on branch | Pull-list edit (qty + add type), damage report create, crew scheduling board, event series create |
-| **6** | on branch | Timecard read path, short-link create/delete, public lost-and-found, public directories |
+| **6** | on branch | Timecard read path, short-link create/delete, public lost-and-found, public directories, band payouts queue |
 
 ## Status legend
 
@@ -103,9 +103,9 @@ Update this file whenever specs or helpers land (or when a batch ships).
 
 | Surface | Status | Spec / notes |
 |---------|--------|--------------|
-| Payee e-sign → mark paid | Partial | `bands/band-payment-esign.spec.ts` — mark-paid via helper, not payouts queue UI |
+| Payee e-sign → mark paid | Covered | `bands/band-payment-esign.spec.ts` (e-sign) + `bands/band-payouts-queue.spec.ts` (mark paid via queue UI) |
 | Public `/artists/apply` → admin approve | Covered | `bands/band-application.spec.ts` (Batch 3) |
-| Band payouts admin queue UI | Deferred | Known CI flakiness (Batch 6 stretch) |
+| Band payouts admin queue UI | Covered | `bands/band-payouts-queue.spec.ts` — send signature request + mark paid |
 | Band portal beyond e-sign | Partial | Onboarding covered (Batch 4); settings/payouts still deferred |
 
 ### Marketing and public site
@@ -161,6 +161,7 @@ Update this file whenever specs or helpers land (or when a batch ships).
 | `marketing/short-link-crud.spec.ts` | Short link create → delete (Batch 6) |
 | `inventory/lost-found-public.spec.ts` | Public `/e/{assetId}` found + not-found (Batch 6) |
 | `smoke/public-directories.spec.ts` | `/crew`, `/artists`, `/events` render (Batch 6) |
+| `bands/band-payouts-queue.spec.ts` | Send signature request + mark paid from the queue (Batch 6) |
 | `email/email-queue.spec.ts` | Mocked email pipeline |
 
 ## Remaining gaps
@@ -169,7 +170,6 @@ Batches 1–6 cover the shipped happy paths. What is still out of the suite, and
 
 | Surface | Why it is out |
 |---------|---------------|
-| Band payouts admin queue | Known CI flakiness; e-sign path is covered instead |
 | Marketing design board / Instagram publish | Immich + Instagram external deps |
 | Immich media albums | External service |
 | R2 upload happy path | Needs R2 credentials in CI |

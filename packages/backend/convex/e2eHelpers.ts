@@ -1835,7 +1835,11 @@ export const seedBandPaymentForEsign = mutation({
     payeeName: v.string(),
     payeeEmail: v.string(),
     status: v.optional(
-      v.union(v.literal("pending_email"), v.literal("awaiting_confirmation")),
+      v.union(
+        v.literal("pending_email"),
+        v.literal("awaiting_confirmation"),
+        v.literal("confirmed"),
+      ),
     ),
     eventTitle: v.optional(v.string()),
   },
@@ -1892,11 +1896,13 @@ export const seedBandPaymentForEsign = mutation({
       designatedPayeeMailingAddress: "450 Serra Mall, Stanford, CA 94305",
       status,
       confirmationToken,
-      confirmationEmailSentAt: status === "awaiting_confirmation" ? now - 60_000 : undefined,
-      confirmationSentByUserId: status === "awaiting_confirmation" ? "e2e-manager" : undefined,
-      confirmationSentByName: status === "awaiting_confirmation" ? "E2E Admin" : undefined,
+      confirmationEmailSentAt: status === "pending_email" ? undefined : now - 60_000,
+      confirmationSentByUserId: status === "pending_email" ? undefined : "e2e-manager",
+      confirmationSentByName: status === "pending_email" ? undefined : "E2E Admin",
       confirmationSentByEmail:
-        status === "awaiting_confirmation" ? "e2e-admin@arborlive.test" : undefined,
+        status === "pending_email" ? undefined : "e2e-admin@arborlive.test",
+      confirmedAt: status === "confirmed" ? now - 30_000 : undefined,
+      signatureTypedName: status === "confirmed" ? args.payeeName.trim() : undefined,
       createdAt: now,
       updatedAt: now,
     });
