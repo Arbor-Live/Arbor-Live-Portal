@@ -86,6 +86,28 @@ process.on("SIGTERM", () => {
 function resolveBetterAuthSecret() {
   const existing = process.env.BETTER_AUTH_SECRET?.trim();
   if (existing && existing.length >= 32) return existing;
+
+  // Prefer the worktree/shared backend .env so SKIP_BOOT runs don't rotate the
+  // deployment secret out from under a already-running Next.js process.
+  const envPath = path.join(backendDir, ".env");
+  if (fs.existsSync(envPath)) {
+    const match = fs
+      .readFileSync(envPath, "utf8")
+      .split("\n")
+      .map((line) => line.trim())
+      .find((line) => line.startsWith("BETTER_AUTH_SECRET="));
+    if (match) {
+      let value = match.slice("BETTER_AUTH_SECRET=".length).trim();
+      if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.slice(1, -1);
+      }
+      if (value.length >= 32) return value;
+    }
+  }
+
   return crypto.randomBytes(32).toString("hex");
 }
 
@@ -157,9 +179,9 @@ async function waitForConvexReady(timeoutMs = 240_000) {
   throw new Error("Timed out waiting for Convex deployment to become ready.");
 }
 
-async function ensureConvexDeploymentEnv(secret) {
+async function ensureConvexDeploymentEnv(secret, { includeAuthSecret = true } = {}) {
   const pairs = [
-    ["BETTER_AUTH_SECRET", secret],
+    ...(includeAuthSecret ? [["BETTER_AUTH_SECRET", secret]] : []),
     ["SITE_URL", "http://localhost:3000"],
     ["EMAIL_TEST_MODE", "true"],
     ["E2E_HELPERS", "true"],
@@ -222,7 +244,7 @@ async function main() {
     });
 
     await waitForConvexReady();
-    await ensureConvexDeploymentEnv(secret);
+    await ensureConvexDeploymentEnv(secret, { includeAuthSecret: true });
     // Env changes force a re-push; wait until helpers exist before starting web/tests.
     await waitForE2eHelpersReady();
 
@@ -238,7 +260,9 @@ async function main() {
     });
   } else {
     console.log("E2E_SKIP_BOOT=1 — reusing existing stack");
-    await ensureConvexDeploymentEnv(secret).catch((error) => {
+    // Do not rotate BETTER_AUTH_SECRET on a shared cloud deployment — that
+    // invalidates Better Auth JWKS and breaks /api/auth/convex/token.
+    await ensureConvexDeploymentEnv(secret, { includeAuthSecret: false }).catch((error) => {
       console.warn(`Could not set Convex e2e env (continuing): ${error.message}`);
     });
     await waitForE2eHelpersReady().catch((error) => {

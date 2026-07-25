@@ -103,7 +103,11 @@ export default function SignInPage() {
           </div>
 
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <form
+              method="post"
+              onSubmit={form.handleSubmit(onSubmit)}
+              className="space-y-4"
+            >
               <TextFormField name="email" label="Email" type="email" />
               <TextFormField name="password" label="Password" type="password" />
 
