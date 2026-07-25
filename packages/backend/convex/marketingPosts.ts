@@ -2,7 +2,11 @@ import { v } from "convex/values";
 import { internalQuery, mutation, query } from "./_generated/server";
 import { getUserId, requireAdmin } from "./lib/auth";
 import { normalizeOptionalAssetReference } from "./lib/inventoryUpload";
-import { normalizeFeaturedStats, resolveLexicalContentJson } from "./lib/marketingContent";
+import {
+  EMPTY_LEXICAL_STATE,
+  normalizeFeaturedStats,
+  resolveLexicalContentJson,
+} from "./lib/marketingContent";
 import { scheduleMarketingSiteRevalidation } from "./lib/scheduleSiteRevalidation";
 import {
   assertUniqueMarketingPostSlug,
@@ -16,26 +20,6 @@ const featuredStatInputValue = v.object({
   value: v.string(),
 });
 
-const EMPTY_LEXICAL_STATE = JSON.stringify({
-  root: {
-    children: [
-      {
-        children: [],
-        direction: null,
-        format: "",
-        indent: 0,
-        type: "paragraph",
-        version: 1,
-      },
-    ],
-    direction: null,
-    format: "",
-    indent: 0,
-    type: "root",
-    version: 1,
-  },
-});
-
 function normalizeContentJson(raw: string | undefined) {
   const value = raw?.trim();
   if (!value) return EMPTY_LEXICAL_STATE;
@@ -47,13 +31,7 @@ function normalizeContentJson(raw: string | undefined) {
   }
 }
 
-function sortPostsByRecency<T extends { publishedAt?: number; updatedAt: number }>(posts: T[]) {
-  return posts.slice().sort((a, b) => {
-    const aTime = a.publishedAt ?? a.updatedAt;
-    const bTime = b.publishedAt ?? b.updatedAt;
-    return bTime - aTime;
-  });
-}
+const ADMIN_POST_LIST_LIMIT = 200;
 
 export const assertAdminInternal = internalQuery({
   args: {},
@@ -64,12 +42,21 @@ export const assertAdminInternal = internalQuery({
   },
 });
 
+/**
+ * Admin post index. Ordered by `updatedAt` so the take is a recency cap, and
+ * deliberately without `contentJson` — the editor loads a single post's body
+ * through `getById` instead of shipping every body to the list.
+ */
 export const listAdmin = query({
   args: {},
   handler: async (ctx) => {
     await requireAdmin(ctx);
-    const posts = await ctx.db.query("marketingPosts").take(500);
-    return sortPostsByRecency(posts).map((post) => ({
+    const posts = await ctx.db
+      .query("marketingPosts")
+      .withIndex("by_updatedAt")
+      .order("desc")
+      .take(ADMIN_POST_LIST_LIMIT);
+    return posts.map((post) => ({
       _id: post._id,
       title: post.title,
       slug: post.slug ?? "",
@@ -77,7 +64,6 @@ export const listAdmin = query({
       kind: post.kind,
       heroImageUrl: post.heroImageUrl ?? "",
       featuredStats: post.featuredStats ?? [],
-      contentJson: post.contentJson,
       published: post.published,
       featured: post.featured,
       publishedAt: post.publishedAt ?? null,

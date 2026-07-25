@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
 import { EMPTY_LEXICAL_STATE } from "@/components/editor/lexical-theme";
@@ -80,7 +80,16 @@ export function WorkPostsManager() {
   const [message, setMessage] = useState<string | null>(null);
   const [slugTouched, setSlugTouched] = useState(false);
 
-  type AdminPost = NonNullable<typeof posts>[number];
+  // `listAdmin` no longer ships every post body, so the editor loads the
+  // selected post's `contentJson` on demand.
+  const selectedPost = useQuery(
+    api.marketingPosts.getById,
+    selectedId ? { id: selectedId as Id<"marketingPosts"> } : "skip",
+  );
+  const loadedPostIdRef = useRef<string | null>(null);
+  const postLoading = Boolean(selectedId) && selectedPost === undefined;
+
+  type AdminPost = NonNullable<typeof selectedPost>;
 
   const form = useConvexForm<MarketingPostFormValues>({
     schema: marketingPostFormSchema,
@@ -112,8 +121,19 @@ export function WorkPostsManager() {
     setSlugTouched(Boolean(post.slug));
   };
 
+  // Seed the form once per selected post, when its body arrives. Keyed on the
+  // loaded id so re-renders (and the post-save reset) never clobber edits.
+  useEffect(() => {
+    if (!selectedPost) return;
+    if (loadedPostIdRef.current === selectedPost._id) return;
+    loadedPostIdRef.current = selectedPost._id;
+    resetToPost(selectedPost);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedPost]);
+
   const startNewPost = () => {
     setSelectedId(null);
+    loadedPostIdRef.current = null;
     setSlugTouched(false);
     form.reset(defaultValues);
   };
@@ -121,8 +141,6 @@ export function WorkPostsManager() {
   const selectPost = (id: string) => {
     setSelectedId(id);
     setSlugTouched(true);
-    const post = posts?.find((row) => row._id === id);
-    if (post) resetToPost(post);
   };
 
   const onSave = form.submitMutation(
@@ -233,6 +251,13 @@ export function WorkPostsManager() {
             </Alert>
           ) : null}
 
+          {postLoading ? (
+            <p className="mb-4 text-sm text-muted-foreground">Loading post…</p>
+          ) : null}
+
+          {/* Keep the form mounted while the body loads. Unmounting it round-trips
+              the bare Type <Select> through an uncontrolled render, which writes an
+              invalid `kind` into form state and makes the next save fail silently. */}
           <Form {...form}>
             <form className="space-y-4" onSubmit={form.handleSubmit(onSave)}>
               <TextFormField name="title" label="Title" />
@@ -419,7 +444,7 @@ export function WorkPostsManager() {
               </div>
 
               <div className="flex flex-wrap gap-2">
-                <Button type="submit" disabled={form.formState.isSubmitting}>
+                <Button type="submit" disabled={form.formState.isSubmitting || postLoading}>
                   {form.formState.isSubmitting ? "Saving…" : "Save"}
                 </Button>
                 {selectedId ? (

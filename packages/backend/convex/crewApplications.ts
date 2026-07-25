@@ -249,12 +249,12 @@ export const listAdmin = query({
     const rows = args.status
       ? await ctx.db
           .query("crewApplications")
-          .withIndex("by_status", (q) => q.eq("status", args.status!))
+          .withIndex("by_status_and_submittedAt", (q) => q.eq("status", args.status!))
+          .order("desc")
           .take(200)
       : await ctx.db.query("crewApplications").withIndex("by_submittedAt").order("desc").take(200);
 
     return rows
-      .sort((a, b) => b.submittedAt - a.submittedAt)
       .map((row) => ({
         _id: row._id,
         status: row.status,

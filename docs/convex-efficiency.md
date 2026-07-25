@@ -57,6 +57,21 @@ Ask:
 3. Is the table large enough that search + `getByIds` beats a bounded list?
 4. Are all `.take()` limits intentional and documented?
 
+## The sort-after-take smell
+
+A `.take(N)` followed by a JS sort on a time field is a smell — if the result needs
+re-sorting by recency, the take already selected the wrong N. Bound the query by a
+predicate (owner, status, date range) and let `.take()` be the safety valve, or use
+`.order("desc")` on a matching index when a recency cap really is the intent.
+
+Note that a status-filtered branch needs a **composite** index (`["status","submittedAt"]`,
+not `by_status`) — ordering a `by_status` take cannot recover rows the take never saw.
+
+These takes are correct as written and should not be "fixed": `eventArtifacts.ts:25/29`
+(per event), `invoicePdf.ts:12` (per invoice), `publicEvents.ts:140` (per event),
+`immich.ts:78` and `lib/immichAlbumLinks.ts:16` (per album link). Each sits behind a
+deterministic predicate, so the take is a safety valve rather than the selection.
+
 ## Related docs / skills
 
 - Architecture overview: `docs/architecture.md`

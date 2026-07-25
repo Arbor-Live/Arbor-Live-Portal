@@ -127,7 +127,8 @@ export const list = query({
     } else if (args.status) {
       rows = await ctx.db
         .query("damageReports")
-        .withIndex("by_status", (q) => q.eq("status", args.status!))
+        .withIndex("by_status_and_reportedAt", (q) => q.eq("status", args.status!))
+        .order("desc")
         .take(500);
     } else {
       rows = await ctx.db.query("damageReports").order("desc").take(500);

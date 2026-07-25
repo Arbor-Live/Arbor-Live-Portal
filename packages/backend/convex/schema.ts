@@ -572,6 +572,7 @@ export default defineSchema({
   })
     .index("by_invoiceNumber", ["invoiceNumber"])
     .index("by_status", ["status"])
+    .index("by_status_and_createdAt", ["status", "createdAt"])
     .index("by_clientApprovalStatus", ["clientApprovalStatus"])
     .index("by_publicApprovalToken", ["publicApprovalToken"])
     .index("by_sourceEventRequestId", ["sourceEventRequestId"])
@@ -1104,6 +1105,7 @@ export default defineSchema({
     resolvedAt: v.optional(v.number()),
   })
     .index("by_status", ["status"])
+    .index("by_status_and_reportedAt", ["status", "reportedAt"])
     .index("by_eventId", ["eventId"])
     .index("by_inventoryItemId", ["inventoryItemId"]),
 
@@ -1371,7 +1373,9 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_eventId", ["eventId"])
+    .index("by_updatedAt", ["updatedAt"])
     .index("by_assigneeUserId_and_status", ["assigneeUserId", "status"])
+    .index("by_assigneeUserId_and_updatedAt", ["assigneeUserId", "updatedAt"])
     .index("by_status", ["status"]),
 
   marketingPublishJobs: defineTable({
@@ -1401,6 +1405,7 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_slug", ["slug"])
+    .index("by_updatedAt", ["updatedAt"])
     .index("by_published_and_publishedAt", ["published", "publishedAt"])
     .index("by_published_and_featured", ["published", "featured"]),
 
@@ -1430,6 +1435,7 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_slug", ["slug"])
+    .index("by_updatedAt", ["updatedAt"])
     .index("by_expiresAt", ["expiresAt"]),
 
   /** Singleton row: global marketing feature flags. Extend with new fields as
@@ -1513,6 +1519,7 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_status", ["status"])
+    .index("by_status_and_submittedAt", ["status", "submittedAt"])
     .index("by_contactEmail", ["contactEmail"])
     .index("by_submittedAt", ["submittedAt"]),
 
@@ -1562,6 +1569,7 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_status", ["status"])
+    .index("by_status_and_submittedAt", ["status", "submittedAt"])
     .index("by_email", ["email"])
     .index("by_submittedAt", ["submittedAt"]),
 });

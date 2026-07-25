@@ -382,37 +382,93 @@ export const listInvoiceManagersForAdmin = query({
   },
 });
 
+const INVOICE_LIST_LIMIT = 200;
+
+const invoiceListStatusValue = v.union(
+  v.literal("draft"),
+  v.literal("finalized"),
+  v.literal("void"),
+);
+
+/**
+ * Newest `INVOICE_LIST_LIMIT` invoices. Both branches read a createdAt-ordered
+ * index descending so the take is a recency cap, not an arbitrary slice — a
+ * `.take()` that needs a JS re-sort afterwards already picked the wrong rows.
+ */
+async function recentInvoices(
+  ctx: QueryCtx,
+  status: "draft" | "finalized" | "void" | undefined,
+) {
+  if (status) {
+    return await ctx.db
+      .query("invoices")
+      .withIndex("by_status_and_createdAt", (q) => q.eq("status", status))
+      .order("desc")
+      .take(INVOICE_LIST_LIMIT);
+  }
+  return await ctx.db
+    .query("invoices")
+    .withIndex("by_createdAt")
+    .order("desc")
+    .take(INVOICE_LIST_LIMIT);
+}
+
+/**
+ * Series / linked-event labels for the invoice list. Deliberately lighter than
+ * `resolveSeriesMetadataForInvoice`, which scans up to 200 series occurrences
+ * per invoice to compute counts the list never renders.
+ */
+async function resolveInvoiceListLabels(ctx: QueryCtx, invoiceId: Id<"invoices">) {
+  const series = await findSeriesByInvoiceId(ctx, invoiceId);
+  const linkedEvents = await listEventsByInvoiceId(ctx, invoiceId);
+  if (series) {
+    return { seriesTitle: series.title, linkedEventTitle: linkedEvents[0]?.title };
+  }
+  const seriesIds = [
+    ...new Set(
+      linkedEvents.map((row) => row.seriesId).filter((id): id is Id<"eventSeries"> => Boolean(id)),
+    ),
+  ];
+  const seriesDoc = seriesIds.length === 1 ? await ctx.db.get(seriesIds[0]!) : null;
+  return { seriesTitle: seriesDoc?.title, linkedEventTitle: linkedEvents[0]?.title };
+}
+
 export const list = query({
-  args: { status: v.optional(v.union(v.literal("draft"), v.literal("finalized"), v.literal("void"))) },
+  args: { status: v.optional(invoiceListStatusValue) },
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
-    const rows = args.status
-      ? await ctx.db.query("invoices").withIndex("by_status", (q) => q.eq("status", args.status!)).take(200)
-      : await ctx.db.query("invoices").take(200);
-    return rows.sort((a, b) => b.createdAt - a.createdAt);
+    return await recentInvoices(ctx, args.status);
   },
 });
 
+/**
+ * Invoice list rows. Returns an explicit slim projection rather than spreading
+ * the whole doc — the list table renders seven columns, not sixty fields.
+ */
 export const listEnriched = query({
-  args: { status: v.optional(v.union(v.literal("draft"), v.literal("finalized"), v.literal("void"))) },
+  args: { status: v.optional(invoiceListStatusValue) },
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
-    const rows = args.status
-      ? await ctx.db.query("invoices").withIndex("by_status", (q) => q.eq("status", args.status!)).take(200)
-      : await ctx.db.query("invoices").take(200);
-    const sorted = rows.sort((a, b) => b.createdAt - a.createdAt);
+    const rows = await recentInvoices(ctx, args.status);
     return await Promise.all(
-      sorted.map(async (invoice) => {
-        const series = await resolveSeriesMetadataForInvoice(ctx, invoice._id);
-        const linkedEvents = await listEventsByInvoiceId(ctx, invoice._id);
+      rows.map(async (invoice) => {
+        const { seriesTitle, linkedEventTitle } = await resolveInvoiceListLabels(ctx, invoice._id);
         return {
-          ...invoice,
-          seriesTitle: series?.title,
-          seriesId: series?.seriesId,
-          linkedEventCount: linkedEvents.length,
-          linkedEventTitle: linkedEvents[0]?.title,
+          _id: invoice._id,
+          invoiceNumber: invoice.invoiceNumber,
+          status: invoice.status,
+          clientApprovalStatus: invoice.clientApprovalStatus,
+          managerName: invoice.managerName,
+          issueDate: invoice.issueDate,
+          totalUsd: invoice.totalUsd,
+          publicApprovalToken: invoice.publicApprovalToken,
+          clientGroupName: invoice.clientGroupName,
+          clientContactName: invoice.clientContactName,
+          createdAt: invoice.createdAt,
+          seriesTitle,
+          linkedEventTitle,
         };
       }),
     );
