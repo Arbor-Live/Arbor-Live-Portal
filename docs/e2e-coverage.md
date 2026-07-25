@@ -8,7 +8,7 @@ Update this file whenever specs or helpers land (or when a batch ships).
 - Runner: `pnpm test:e2e` ([`scripts/e2e-run.mjs`](../scripts/e2e-run.mjs))
 - CI: [`.github/workflows/e2e.yml`](../.github/workflows/e2e.yml)
 
-**Last updated:** 2026-07-25 (Batches 1–5 landed; Batch 6 green locally, uncommitted)
+**Last updated:** 2026-07-25 (Batches 1–6 landed; 45 specs green locally)
 
 ## Batch history
 
@@ -17,9 +17,9 @@ Update this file whenever specs or helpers land (or when a batch ships).
 | **1** | [#54](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/54) | Auth, invite accept, event create/schedule, public quote smoke + approve/changes/payment-proof submit, crew availability→assign, email queue, booking track-approve |
 | **2** | [#56](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/56) | Staff booking convert, dry-hire delivery+return scans, damage triage, band e-sign→mark paid (helper), public crew apply→admin list |
 | **3** | [#61](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/61) | Public booking submit, staff invoice create→public link, staff payment-proof verify, band apply+approve, venue create+pick |
-| **4** | local (uncommitted) | Crew application triage (turn away / convert / trainee assign), crew `/onboarding` completion, band `/onboarding/band` completion |
-| **5** | local (uncommitted) | Pull-list edit (qty + add type), damage report create, crew scheduling board, event series create |
-| **6** | local (uncommitted) | Timecard read path, short-link create/delete, public lost-and-found, public directories |
+| **4** | on branch | Crew application triage (turn away / convert / trainee assign), crew `/onboarding` completion, band `/onboarding/band` completion |
+| **5** | on branch | Pull-list edit (qty + add type), damage report create, crew scheduling board, event series create |
+| **6** | on branch | Timecard read path, short-link create/delete, public lost-and-found, public directories |
 
 ## Status legend
 
