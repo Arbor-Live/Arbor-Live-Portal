@@ -8,7 +8,7 @@ Update this file whenever specs or helpers land (or when a batch ships).
 - Runner: `pnpm test:e2e` ([`scripts/e2e-run.mjs`](../scripts/e2e-run.mjs))
 - CI: [`.github/workflows/e2e.yml`](../.github/workflows/e2e.yml)
 
-**Last updated:** 2026-07-25 (Batches 1–3 landed; Batch 4–5 green locally, uncommitted; 6 planned)
+**Last updated:** 2026-07-25 (Batches 1–5 landed; Batch 6 green locally, uncommitted)
 
 ## Batch history
 
@@ -19,7 +19,7 @@ Update this file whenever specs or helpers land (or when a batch ships).
 | **3** | [#61](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/61) | Public booking submit, staff invoice create→public link, staff payment-proof verify, band apply+approve, venue create+pick |
 | **4** | local (uncommitted) | Crew application triage (turn away / convert / trainee assign), crew `/onboarding` completion, band `/onboarding/band` completion |
 | **5** | local (uncommitted) | Pull-list edit (qty + add type), damage report create, crew scheduling board, event series create |
-| **6** | planned | Secondary surfaces — see [Planned batches](#planned-batches-6) |
+| **6** | local (uncommitted) | Timecard read path, short-link create/delete, public lost-and-found, public directories |
 
 ## Status legend
 
@@ -90,7 +90,7 @@ Update this file whenever specs or helpers land (or when a batch ships).
 | Damage report create | Covered | `inventory/damage-create.spec.ts` (Batch 5) |
 | Pull-list edit UI | Covered | `inventory/pull-list-edit.spec.ts` (Batch 5) |
 | Inventory catalog CRUD (types/items/packages) | None | Deferred |
-| Lost-and-found `/e/[assetId]` | None | Deferred |
+| Lost-and-found `/e/[assetId]` | Covered | `inventory/lost-found-public.spec.ts` (Batch 6) |
 
 ### Crew hiring
 
@@ -113,15 +113,15 @@ Update this file whenever specs or helpers land (or when a batch ships).
 | Surface | Status | Spec / notes |
 |---------|--------|--------------|
 | Design board / poster publish | Deferred | Immich / Instagram deps |
-| Short links CRUD | Deferred | — |
+| Short links CRUD | Covered | `marketing/short-link-crud.spec.ts` (Batch 6); Worker redirect still out of suite |
 | Work/stories publish | Deferred | — |
-| Public directories (`/crew`, `/artists`, `/events`) | None | Low risk |
+| Public directories (`/crew`, `/artists`, `/events`) | Covered | `smoke/public-directories.spec.ts` (Batch 6) |
 
 ### Other
 
 | Surface | Status | Spec / notes |
 |---------|--------|--------------|
-| Timecards | None | Deferred |
+| Timecards | Covered | `timecards/timecard-view.spec.ts` (Batch 6) — read-only; app has no submit mutation |
 | Immich media albums | Deferred | External service |
 | R2 upload happy path | Deferred | Needs R2 in CI |
 
@@ -157,34 +157,34 @@ Update this file whenever specs or helpers land (or when a batch ships).
 | `inventory/damage-create.spec.ts` | Damage report create from queue (Batch 5) |
 | `crew/crew-scheduling-board.spec.ts` | Scheduling board range/filter + assign link (Batch 5) |
 | `events/event-series-smoke.spec.ts` | Recurring series create + overview (Batch 5) |
+| `timecards/timecard-view.spec.ts` | Crew + admin timecard read path (Batch 6) |
+| `marketing/short-link-crud.spec.ts` | Short link create → delete (Batch 6) |
+| `inventory/lost-found-public.spec.ts` | Public `/e/{assetId}` found + not-found (Batch 6) |
+| `smoke/public-directories.spec.ts` | `/crew`, `/artists`, `/events` render (Batch 6) |
 | `email/email-queue.spec.ts` | Mocked email pipeline |
 
-## Planned batches 6
+## Remaining gaps
 
-Subagent-ready brief. Follow Batch 1–5 patterns: seed with `e2eHelpers` (gate `assertE2eHelpersEnabled`), drive UI with Playwright, assert via `pollConvex`. Keep `E2E_EMAIL_MOCK`. Do **not** touch Immich/Instagram. Update this file when each batch lands.
+Batches 1–6 cover the shipped happy paths. What is still out of the suite, and why:
 
-Shared conventions:
+| Surface | Why it is out |
+|---------|---------------|
+| Band payouts admin queue | Known CI flakiness; e-sign path is covered instead |
+| Marketing design board / Instagram publish | Immich + Instagram external deps |
+| Immich media albums | External service |
+| R2 upload happy path | Needs R2 credentials in CI |
+| Open Mic public + runner | Low product priority |
+| Short-link Worker redirect | Lives in the Cloudflare Worker, not the Next app |
+| FullCalendar drag/resize | Flaky; covered by unit/manual testing |
+| Inventory catalog CRUD, PDF download/void, host orgs | Low risk relative to cost |
+
+Conventions for any new batch:
 - Specs under `apps/web/e2e/<domain>/`
-- Helpers in `packages/backend/convex/e2eHelpers.ts`
-- Dual-context public+admin: mirror [`crew-application.spec.ts`](../apps/web/e2e/crew/crew-application.spec.ts)
-- Local: `E2E_SKIP_BOOT=1 pnpm test:e2e` against running stack; CI uses anonymous Convex
+- Helpers in `packages/backend/convex/e2eHelpers.ts`, gated by `assertE2eHelpersEnabled`
+- Seed with `e2eHelpers`, drive the UI with Playwright, assert via `pollConvex`
+- Scope locators to the row you seeded — the shared deployment accumulates fixtures
+- Local: `E2E_SKIP_BOOT=1 pnpm test:e2e` against a running stack; CI uses anonymous Convex
 
-
-### Batch 6 — Secondary surfaces
-
-**Theme:** Lower-risk shipped surfaces; still no external media deps.
-
-| # | Spec file | Flow | Helpers to add | Assert |
-|---|-----------|------|----------------|--------|
-| 1 | `timecards/timecard-submit.spec.ts` | Crew submits `/dashboard/timecards/mine` entry; admin sees `/dashboard/timecards` | `ensureCrewUser`, `getTimecardState` | Row exists with expected hours/status |
-| 2 | `marketing/short-link-crud.spec.ts` | Admin `/dashboard/marketing/links` create slug → list shows it → delete/expire | `getShortLinkBySlug` | Convex row + UI list; skip Worker HTTP redirect in CI unless easy |
-| 3 | `inventory/lost-found-public.spec.ts` | Seed inventory item with `assetId` → public `/e/{assetId}` renders | Extend inventory seed from rental helpers | Page shows asset identity / lost-found copy |
-| 4 | `smoke/public-directories.spec.ts` | `/crew`, `/artists`, `/events` return 200 and a heading | Optional seed public profiles | No crash; key heading visible |
-| 5 | `bands/band-payouts-queue.spec.ts` *(stretch)* | Admin `/dashboard/financial-hub/band-payouts` send signature request (if UI stable) | Reuse `seedBandPaymentForEsign` | Email queued / status awaiting_confirmation — **skip or quarantine if CI-flaky** |
-
-**Still deferred after Batch 6:** Marketing design board / Instagram publish, Immich uploads, R2 upload happy path, Open Mic runner (promote only if product priority).
-
----
 
 ## How to update this doc
 

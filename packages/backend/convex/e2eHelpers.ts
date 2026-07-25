@@ -1,3 +1,4 @@
+import { payPeriodForDate } from "@arbor/format";
 import { v } from "convex/values";
 import { customAlphabet } from "nanoid";
 import { hashPassword } from "better-auth/crypto";
@@ -2600,6 +2601,156 @@ export const getEventSeriesStateByEventId = query({
       occurrenceCount: occurrences.length,
       occurrenceTitles: occurrences.map((row) => row.title),
       seriesPath: `/dashboard/events/series/${series._id}`,
+    };
+  },
+});
+
+/* ------------------------------------------------------------------ *
+ * Batch 6 — secondary surfaces (timecards, short links, public pages)
+ * ------------------------------------------------------------------ */
+
+/**
+ * Test-only: a finished crew shift inside the current pay period, so it shows
+ * on `/dashboard/timecards/mine` and the admin overview. Timecards are derived
+ * from `eventCrewShifts` — there is no timecard row to seed directly.
+ */
+export const seedTimecardShift = mutation({
+  args: {
+    userId: v.string(),
+    title: v.optional(v.string()),
+  },
+  returns: v.object({
+    eventId: v.id("events"),
+    shiftId: v.id("eventCrewShifts"),
+    title: v.string(),
+    hours: v.number(),
+    periodLabel: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const now = Date.now();
+    const title = args.title?.trim() || `E2E Timecard Event ${now}`;
+    const period = payPeriodForDate(now);
+
+    // Keep the whole shift inside the current period so both the crew view and
+    // the admin overview (which defaults to period index 0) pick it up.
+    const endsAt = Math.min(now - 60_000, period.endMs - 60_000);
+    const startsAt = Math.max(endsAt - 3 * 60 * 60 * 1000, period.startMs + 60_000);
+    const hours = Math.max(0, (endsAt - startsAt) / (60 * 60 * 1000));
+
+    const eventId = await ctx.db.insert("events", {
+      title,
+      status: "completed",
+      visibility: "internal",
+      publicToken: makeToken(),
+      startAt: startsAt,
+      endAt: endsAt,
+      timezone: "America/Los_Angeles",
+      spansMultipleDays: false,
+      setupOnly: false,
+      strikeOnly: false,
+      requiresShowWindow: true,
+      eventType: "Crewed Event",
+      teamsInterested: ["Sound"],
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const shiftId = await ctx.db.insert("eventCrewShifts", {
+      eventId,
+      role: "Sound",
+      userId: args.userId,
+      startsAt,
+      endsAt,
+      hours,
+      postedToExpense: false,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    return { eventId, shiftId, title, hours, periodLabel: period.label };
+  },
+});
+
+/**
+ * Test-only: short link lookup by slug for CRUD assertions.
+ */
+export const getShortLinkBySlug = query({
+  args: { slug: v.string() },
+  returns: v.union(
+    v.null(),
+    v.object({
+      shortLinkId: v.id("shortLinks"),
+      slug: v.string(),
+      destinationUrl: v.string(),
+      label: v.union(v.string(), v.null()),
+      enabled: v.boolean(),
+      expiryMode: v.string(),
+      clickCount: v.number(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const slug = args.slug.trim().toLowerCase();
+    const match = await ctx.db
+      .query("shortLinks")
+      .withIndex("by_slug", (q) => q.eq("slug", slug))
+      .unique();
+    if (!match) return null;
+    return {
+      shortLinkId: match._id,
+      slug: match.slug,
+      destinationUrl: match.destinationUrl,
+      label: match.label ?? null,
+      enabled: match.enabled,
+      expiryMode: match.expiryMode,
+      clickCount: match.clickCount,
+    };
+  },
+});
+
+/**
+ * Test-only: standalone inventory item with an asset tag for the public
+ * lost-and-found page at `/e/{assetId}`.
+ */
+export const seedLostFoundAsset = mutation({
+  args: { assetId: v.optional(v.string()) },
+  returns: v.object({
+    inventoryItemId: v.id("inventoryItems"),
+    typeId: v.id("inventoryTypes"),
+    assetId: v.string(),
+    typeName: v.string(),
+    publicPath: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const now = Date.now();
+    const assetId = args.assetId?.trim() || `E2E-LF-${String(now).slice(-6)}`;
+    const typeName = `E2E Lost Found Type ${now}`;
+
+    const typeId = await ctx.db.insert("inventoryTypes", {
+      name: typeName,
+      category: "misc",
+      model: "E2E-LF-1",
+      manualUrls: [],
+      capabilities: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    const inventoryItemId = await ctx.db.insert("inventoryItems", {
+      assetId,
+      typeId,
+      status: "functional",
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    return {
+      inventoryItemId,
+      typeId,
+      assetId,
+      typeName,
+      publicPath: `/e/${assetId}`,
     };
   },
 });
