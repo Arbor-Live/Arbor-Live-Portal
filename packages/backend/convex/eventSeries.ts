@@ -111,7 +111,11 @@ export const list = query({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
-    const rows = await ctx.db.query("eventSeries").withIndex("by_createdAt").take(200);
+    const rows = await ctx.db
+      .query("eventSeries")
+      .withIndex("by_createdAt")
+      .order("desc")
+      .take(200);
     const filtered = args.status ? rows.filter((row) => row.status === args.status) : rows;
     return filtered.sort((a, b) => b.createdAt - a.createdAt);
   },
