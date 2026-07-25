@@ -168,13 +168,18 @@ async function enqueuePublishJobs(ctx: MutationCtx, designId: Id<"eventMarketing
   await schedulePublicEventsSiteRevalidation(ctx, String((await ctx.db.get(designId))?.eventId));
 }
 
+const DESIGN_LIST_LIMIT = 200;
+
 export const listForBoard = query({
   args: {},
   handler: async (ctx) => {
     await requireAnyVerticalOrAdmin(ctx, ["Marketing", "Operations"]);
-    const designs = await ctx.db.query("eventMarketingDesigns").take(500);
-    const sorted = designs.sort((a, b) => b.updatedAt - a.updatedAt);
-    return Promise.all(sorted.map((design) => serializeDesign(ctx, design)));
+    const designs = await ctx.db
+      .query("eventMarketingDesigns")
+      .withIndex("by_updatedAt")
+      .order("desc")
+      .take(DESIGN_LIST_LIMIT);
+    return Promise.all(designs.map((design) => serializeDesign(ctx, design)));
   },
 });
 
@@ -185,10 +190,10 @@ export const listMine = query({
     const userId = getUserId(user);
     const designs = await ctx.db
       .query("eventMarketingDesigns")
-      .withIndex("by_assigneeUserId_and_status", (q) => q.eq("assigneeUserId", userId))
-      .take(200);
-    const sorted = designs.sort((a, b) => b.updatedAt - a.updatedAt);
-    return Promise.all(sorted.map((design) => serializeDesign(ctx, design)));
+      .withIndex("by_assigneeUserId_and_updatedAt", (q) => q.eq("assigneeUserId", userId))
+      .order("desc")
+      .take(DESIGN_LIST_LIMIT);
+    return Promise.all(designs.map((design) => serializeDesign(ctx, design)));
   },
 });
 

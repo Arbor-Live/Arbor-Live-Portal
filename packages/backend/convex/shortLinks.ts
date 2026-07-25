@@ -1,5 +1,11 @@
 import { v } from "convex/values";
-import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import {
+  internalMutation,
+  internalQuery,
+  mutation,
+  query,
+  type QueryCtx,
+} from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { getUserId, requireVerticalOrAdmin } from "./lib/auth";
 import { assertUniqueShortLinkSlug, normalizeShortLinkSlug } from "./lib/shortLinkSlug";
@@ -51,8 +57,18 @@ const detailValue = v.object({
   updatedAt: v.number(),
 });
 
-function sortByRecency(links: Doc<"shortLinks">[]) {
-  return links.slice().sort((a, b) => b.updatedAt - a.updatedAt);
+const SHORT_LINK_LIST_LIMIT = 200;
+
+/**
+ * Titles for every distinct event referenced by a page of links. One lookup per
+ * event rather than one per link — several links commonly point at the same event.
+ */
+async function eventTitlesFor(ctx: QueryCtx, links: Doc<"shortLinks">[]) {
+  const ids = [...new Set(links.map((link) => link.eventId).filter(Boolean))] as Id<"events">[];
+  const entries = await Promise.all(
+    ids.map(async (id) => [id, (await ctx.db.get(id))?.title ?? null] as const),
+  );
+  return new Map(entries);
 }
 
 async function eventTitleFor(
@@ -102,10 +118,15 @@ export const list = query({
   returns: v.array(listRowValue),
   handler: async (ctx) => {
     await requireVerticalOrAdmin(ctx, "Marketing");
-    const links = sortByRecency(await ctx.db.query("shortLinks").take(500));
+    const links = await ctx.db
+      .query("shortLinks")
+      .withIndex("by_updatedAt")
+      .order("desc")
+      .take(SHORT_LINK_LIST_LIMIT);
+    const titles = await eventTitlesFor(ctx, links);
     const now = Date.now();
-    return Promise.all(
-      links.map(async (link) => toListRow(link, await eventTitleFor(ctx, link.eventId), now)),
+    return links.map((link) =>
+      toListRow(link, link.eventId ? (titles.get(link.eventId) ?? null) : null, now),
     );
   },
 });

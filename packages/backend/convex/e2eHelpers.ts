@@ -5,6 +5,7 @@ import { hashPassword } from "better-auth/crypto";
 import { components } from "./_generated/api";
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
+import { assertE2eHelpersEnabled } from "./lib/e2eGuard";
 import { inviteAcceptUrl } from "./email/constants";
 import { enqueueEmail } from "./email/enqueue";
 import { scheduleUserInviteEmail } from "./email/invitations";
@@ -27,15 +28,6 @@ function getId(record: unknown): string | null {
   return null;
 }
 
-function assertE2eHelpersEnabled() {
-  if (process.env.E2E_HELPERS !== "true") {
-    throw new Error("E2E helpers are disabled. Set E2E_HELPERS=true on the Convex deployment.");
-  }
-  const siteUrl = process.env.SITE_URL ?? "";
-  if (!siteUrl.includes("localhost") && !siteUrl.includes("127.0.0.1")) {
-    throw new Error("E2E helpers only run when SITE_URL points at localhost.");
-  }
-}
 
 /**
  * Test-only: upsert a known admin user/password for Playwright login.
