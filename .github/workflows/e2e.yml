@@ -19,6 +19,10 @@ jobs:
       CONVEX_AGENT_MODE: anonymous
       # Local-only secret for anonymous Convex + Better Auth in CI.
       BETTER_AUTH_SECRET: e2e-ci-better-auth-secret-32chars-min
+      # Build once and serve, rather than compiling routes on first request.
+      # Convex's 1s function limit is wall-clock, so dev-mode compilation
+      # competing for the runner's 4 vCPUs times out queries that aren't slow.
+      E2E_WEB_MODE: prod
 
     steps:
       - name: Checkout
@@ -36,8 +40,31 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Chromium is ~150MB; the lockfile pins the Playwright version, so the
+      # cache only misses when that version actually changes.
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('pnpm-lock.yaml') }}
+
       - name: Install Playwright Chromium
         run: pnpm --filter web exec playwright install --with-deps chromium
+
+      # `.next/cache` carries the compiler cache across runs. Keyed on source so
+      # an unchanged tree reuses it, with a lockfile-scoped fallback so a source
+      # change still starts from the last build rather than cold.
+      - name: Cache Next.js build
+        uses: actions/cache@v4
+        with:
+          path: apps/web/.next/cache
+          key: >-
+            ${{ runner.os }}-nextjs-${{ hashFiles('pnpm-lock.yaml') }}-${{
+            hashFiles('apps/web/src/**', 'apps/web/next.config.ts') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-${{ hashFiles('pnpm-lock.yaml') }}-
+            ${{ runner.os }}-nextjs-
 
       - name: Run e2e suite
         run: pnpm test:e2e
