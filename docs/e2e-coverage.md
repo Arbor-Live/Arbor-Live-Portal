@@ -8,7 +8,7 @@ Update this file whenever specs or helpers land (or when a batch ships).
 - Runner: `pnpm test:e2e` ([`scripts/e2e-run.mjs`](../scripts/e2e-run.mjs))
 - CI: [`.github/workflows/e2e.yml`](../.github/workflows/e2e.yml)
 
-**Last updated:** 2026-07-25 (Batches 1–6 landed; 47 specs green locally)
+**Last updated:** 2026-07-25 (Batches 1–6 on `main`; Batch 7 on branch; 81 specs green locally)
 
 ## Batch history
 
@@ -17,9 +17,10 @@ Update this file whenever specs or helpers land (or when a batch ships).
 | **1** | [#54](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/54) | Auth, invite accept, event create/schedule, public quote smoke + approve/changes/payment-proof submit, crew availability→assign, email queue, booking track-approve |
 | **2** | [#56](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/56) | Staff booking convert, dry-hire delivery+return scans, damage triage, band e-sign→mark paid (helper), public crew apply→admin list |
 | **3** | [#61](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/61) | Public booking submit, staff invoice create→public link, staff payment-proof verify, band apply+approve, venue create+pick |
-| **4** | on branch | Crew application triage (turn away / convert / trainee assign), crew `/onboarding` completion, band `/onboarding/band` completion |
-| **5** | on branch | Pull-list edit (qty + add type), damage report create, crew scheduling board, event series create |
-| **6** | on branch | Timecard read path, short-link create/delete, public lost-and-found, public directories, band payouts queue |
+| **4** | [#62](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/62) | Crew application triage (turn away / convert / trainee assign), crew `/onboarding` completion, band `/onboarding/band` completion |
+| **5** | [#62](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/62) | Pull-list edit (qty + add type), damage report create, crew scheduling board, event series create |
+| **6** | [#62](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/62) | Timecard read path, short-link create/delete, public lost-and-found, public directories, band payouts queue |
+| **7** | on branch | Authorization boundaries: admin route guards, Convex-level enforcement, org-type separation, plus an `AdminOnlyGuard` so refusals read as refusals |
 
 ## Status legend
 
@@ -45,6 +46,9 @@ Update this file whenever specs or helpers land (or when a batch ships).
 | Users invite UI (`/dashboard/users/access`) | None | Invite created via helper, not Users UI |
 | Full crew `/onboarding` completion | Covered | `crew/crew-onboarding-complete.spec.ts` (Batch 4) |
 | Full band `/onboarding/band` completion | Covered | `bands/band-onboarding-complete.spec.ts` (Batch 4) |
+| Non-admin refused on admin routes | Covered | `auth/admin-route-guards.spec.ts` (Batch 7) |
+| Convex refuses privileged calls from a crew token | Covered | `auth/backend-enforcement.spec.ts` (Batch 7) — bypasses the UI entirely |
+| Org-type separation (Arbor-only / band-only) | Covered | `auth/org-context-guards.spec.ts` (Batch 7) |
 
 ### Booking requests
 
@@ -162,6 +166,9 @@ Update this file whenever specs or helpers land (or when a batch ships).
 | `inventory/lost-found-public.spec.ts` | Public `/e/{assetId}` found + not-found (Batch 6) |
 | `smoke/public-directories.spec.ts` | `/crew`, `/artists`, `/events` render (Batch 6) |
 | `bands/band-payouts-queue.spec.ts` | Send signature request + mark paid from the queue (Batch 6) |
+| `auth/admin-route-guards.spec.ts` | Non-admin refused on the 9 sidebar `adminOnly` routes (Batch 7) |
+| `auth/backend-enforcement.spec.ts` | Convex refuses privileged query/mutation from a crew JWT (Batch 7) |
+| `auth/org-context-guards.spec.ts` | Arbor-only vs band-only route separation (Batch 7) |
 | `email/email-queue.spec.ts` | Mocked email pipeline |
 
 ## Remaining gaps
@@ -177,6 +184,17 @@ Batches 1–6 cover the shipped happy paths. What is still out of the suite, and
 | Short-link Worker redirect | Lives in the Cloudflare Worker, not the Next app |
 | FullCalendar drag/resize | Flaky; covered by unit/manual testing |
 | Inventory catalog CRUD, PDF download/void, host orgs | Low risk relative to cost |
+
+### Keeping the shared deployment usable
+
+Seeded events all land on the same `startAt`, and several product queries page
+with `.take(150)`/`.take(200)`. Once runs accumulate past those caps the newest
+seeded row sorts out of range and specs fail for reasons unrelated to the code
+under test — this broke `crew-availability-assign` outright at ~265 events.
+
+Run `convex run e2eHelpers:pruneE2eSeedData '{"dryRun":true}'` to check, then
+drop `dryRun` to clear `E2E `-prefixed events older than two hours along with
+their child rows. Batch with `limit` to stay inside mutation limits.
 
 Conventions for any new batch:
 - Specs under `apps/web/e2e/<domain>/`

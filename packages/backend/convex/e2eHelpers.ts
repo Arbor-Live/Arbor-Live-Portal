@@ -2760,3 +2760,167 @@ export const seedLostFoundAsset = mutation({
     };
   },
 });
+
+/**
+ * Test-only: delete events seeded by the e2e suite, plus everything hanging off
+ * them.
+ *
+ * Seeded events cluster on identical `startAt` values, and several product
+ * queries page with `.take(150)`/`.take(200)`. Once enough runs accumulate, the
+ * newest seeded event sorts past the cap and specs start failing on a shared
+ * deployment for reasons that have nothing to do with the code under test.
+ *
+ * Only touches rows whose event title starts with the e2e prefix, and only ones
+ * older than `olderThanHours` so a concurrently running suite is left alone.
+ */
+export const pruneE2eSeedData = mutation({
+  args: {
+    olderThanHours: v.optional(v.number()),
+    limit: v.optional(v.number()),
+    /** Report what would be deleted without deleting it. */
+    dryRun: v.optional(v.boolean()),
+  },
+  returns: v.object({
+    scannedEvents: v.number(),
+    matchedEvents: v.number(),
+    deletedEvents: v.number(),
+    deletedChildren: v.number(),
+    dryRun: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const olderThanHours = args.olderThanHours ?? 2;
+    const limit = Math.min(args.limit ?? 200, 500);
+    const dryRun = args.dryRun ?? false;
+    const cutoff = Date.now() - olderThanHours * 60 * 60 * 1000;
+
+    const candidates = await ctx.db.query("events").withIndex("by_createdAt").take(2000);
+    const doomed = candidates
+      .filter((event) => event.title.startsWith("E2E ") && event.createdAt < cutoff)
+      .slice(0, limit);
+
+    if (dryRun) {
+      return {
+        scannedEvents: candidates.length,
+        matchedEvents: doomed.length,
+        deletedEvents: 0,
+        deletedChildren: 0,
+        dryRun: true,
+      };
+    }
+
+    let deletedChildren = 0;
+    for (const event of doomed) {
+      // Unrolled rather than looped over a table-name array: Convex cannot infer
+      // a shared `by_eventId` index across a union of table names.
+      for (const row of await ctx.db
+        .query("eventScheduleBlocks")
+        .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
+        .take(500)) {
+        await ctx.db.delete(row._id);
+        deletedChildren += 1;
+      }
+      for (const row of await ctx.db
+        .query("eventCrewShifts")
+        .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
+        .take(500)) {
+        await ctx.db.delete(row._id);
+        deletedChildren += 1;
+      }
+      for (const row of await ctx.db
+        .query("eventCrewAvailabilityResponses")
+        .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
+        .take(500)) {
+        await ctx.db.delete(row._id);
+        deletedChildren += 1;
+      }
+      for (const row of await ctx.db
+        .query("eventPeopleAssignments")
+        .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
+        .take(500)) {
+        await ctx.db.delete(row._id);
+        deletedChildren += 1;
+      }
+      for (const row of await ctx.db
+        .query("eventPullListItems")
+        .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
+        .take(500)) {
+        await ctx.db.delete(row._id);
+        deletedChildren += 1;
+      }
+      for (const row of await ctx.db
+        .query("eventArtifacts")
+        .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
+        .take(500)) {
+        await ctx.db.delete(row._id);
+        deletedChildren += 1;
+      }
+      for (const row of await ctx.db
+        .query("eventExpenseReports")
+        .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
+        .take(500)) {
+        await ctx.db.delete(row._id);
+        deletedChildren += 1;
+      }
+      for (const row of await ctx.db
+        .query("eventBandParticipations")
+        .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
+        .take(500)) {
+        await ctx.db.delete(row._id);
+        deletedChildren += 1;
+      }
+      for (const row of await ctx.db
+        .query("eventBandPayments")
+        .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
+        .take(500)) {
+        await ctx.db.delete(row._id);
+        deletedChildren += 1;
+      }
+      for (const row of await ctx.db
+        .query("eventRentalFulfillments")
+        .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
+        .take(500)) {
+        await ctx.db.delete(row._id);
+        deletedChildren += 1;
+      }
+      for (const row of await ctx.db
+        .query("eventRentalUnits")
+        .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
+        .take(500)) {
+        await ctx.db.delete(row._id);
+        deletedChildren += 1;
+      }
+      for (const row of await ctx.db
+        .query("eventPaymentProofSubmissions")
+        .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
+        .take(500)) {
+        await ctx.db.delete(row._id);
+        deletedChildren += 1;
+      }
+      for (const row of await ctx.db
+        .query("eventMarketingDesigns")
+        .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
+        .take(500)) {
+        await ctx.db.delete(row._id);
+        deletedChildren += 1;
+      }
+      for (const row of await ctx.db
+        .query("damageReports")
+        .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
+        .take(500)) {
+        await ctx.db.delete(row._id);
+        deletedChildren += 1;
+      }
+
+      await ctx.db.delete(event._id);
+    }
+
+    return {
+      scannedEvents: candidates.length,
+      matchedEvents: doomed.length,
+      deletedEvents: doomed.length,
+      deletedChildren,
+      dryRun: false,
+    };
+  },
+});
