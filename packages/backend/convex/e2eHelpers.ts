@@ -2929,3 +2929,468 @@ export const pruneE2eSeedData = mutation({
     };
   },
 });
+
+/* -------------------------------------------------------------------------- */
+/* Batch 8: invoice editor, billing entities, payment proof                    */
+/* -------------------------------------------------------------------------- */
+
+const e2eInvoiceLineValidator = v.object({
+  section: v.string(),
+  order: v.number(),
+  label: v.string(),
+  provider: v.union(v.string(), v.null()),
+  quantity: v.number(),
+  rateUsd: v.number(),
+  amountUsd: v.number(),
+});
+
+/**
+ * Test-only: server-side totals plus the persisted line items.
+ *
+ * The editor computes a draft total in the browser (`computeInvoiceDraftTotals`)
+ * while the server recomputes independently in `invoices.computeTotals`. Specs
+ * assert against this, not the DOM, so a divergence between the two shows up as
+ * a failure instead of a passing test that only ever read one of them.
+ */
+export const getInvoiceTotalsState = query({
+  args: { invoiceId: v.id("invoices") },
+  returns: v.union(
+    v.null(),
+    v.object({
+      invoiceNumber: v.string(),
+      status: v.string(),
+      discountType: v.string(),
+      discountValue: v.number(),
+      discountAmountUsd: v.number(),
+      discountWarning: v.union(v.string(), v.null()),
+      equipmentSubtotalUsd: v.number(),
+      externalRentalsSubtotalUsd: v.number(),
+      artistsSubtotalUsd: v.number(),
+      crewSubtotalUsd: v.number(),
+      feesSubtotalUsd: v.number(),
+      subtotalUsd: v.number(),
+      totalUsd: v.number(),
+      lineItems: v.array(e2eInvoiceLineValidator),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const invoice = await ctx.db.get(args.invoiceId);
+    if (!invoice) return null;
+    const lines = await ctx.db
+      .query("invoiceLineItems")
+      .withIndex("by_invoiceId_and_order", (q) => q.eq("invoiceId", args.invoiceId))
+      .take(200);
+    return {
+      invoiceNumber: invoice.invoiceNumber,
+      status: invoice.status,
+      discountType: invoice.discountType,
+      discountValue: invoice.discountValue,
+      discountAmountUsd: invoice.discountAmountUsd,
+      discountWarning: invoice.discountWarning ?? null,
+      equipmentSubtotalUsd: invoice.equipmentSubtotalUsd,
+      externalRentalsSubtotalUsd: invoice.externalRentalsSubtotalUsd,
+      artistsSubtotalUsd: invoice.artistsSubtotalUsd,
+      crewSubtotalUsd: invoice.crewSubtotalUsd,
+      feesSubtotalUsd: invoice.feesSubtotalUsd,
+      subtotalUsd: invoice.subtotalUsd,
+      totalUsd: invoice.totalUsd,
+      lineItems: lines
+        .sort((a, b) => a.order - b.order)
+        .map((line) => ({
+          section: line.section,
+          order: line.order,
+          label: line.label,
+          provider: line.provider ?? null,
+          quantity: line.quantity,
+          rateUsd: line.rateUsd,
+          amountUsd: line.amountUsd,
+        })),
+    };
+  },
+});
+
+/**
+ * Test-only: review/approval state for the two mutually exclusive editor cards.
+ *
+ * `invoice-editor.tsx` renders "Request portal" when `sourceEventRequestId` is
+ * set and "Quote approval" otherwise, and the backend enforces the same split
+ * (`markReadyForClientReview` and `regeneratePublicApprovalToken` each reject
+ * the other kind). Specs read `isRequestLinked` to assert they seeded the shape
+ * the flow under test actually requires.
+ */
+export const getInvoiceReviewState = query({
+  args: { invoiceId: v.id("invoices") },
+  returns: v.union(
+    v.null(),
+    v.object({
+      invoiceNumber: v.string(),
+      status: v.string(),
+      isRequestLinked: v.boolean(),
+      clientReviewReadyAt: v.union(v.number(), v.null()),
+      clientReadyMessage: v.union(v.string(), v.null()),
+      clientApprovalStatus: v.union(v.string(), v.null()),
+      clientApprovalSignedName: v.union(v.string(), v.null()),
+      approvedAt: v.union(v.number(), v.null()),
+      publicApprovalToken: v.union(v.string(), v.null()),
+      requestTrackPath: v.union(v.string(), v.null()),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const invoice = await ctx.db.get(args.invoiceId);
+    if (!invoice) return null;
+    const request = invoice.sourceEventRequestId
+      ? await ctx.db.get(invoice.sourceEventRequestId)
+      : null;
+    return {
+      invoiceNumber: invoice.invoiceNumber,
+      status: invoice.status,
+      isRequestLinked: Boolean(invoice.sourceEventRequestId),
+      clientReviewReadyAt: invoice.clientReviewReadyAt ?? null,
+      clientReadyMessage: invoice.clientReadyMessage ?? null,
+      clientApprovalStatus: invoice.clientApprovalStatus ?? null,
+      clientApprovalSignedName: invoice.clientApprovalSignedName ?? null,
+      approvedAt: invoice.approvedAt ?? null,
+      publicApprovalToken: invoice.publicApprovalToken ?? null,
+      requestTrackPath: request ? `/request/track/${request.publicToken}` : null,
+    };
+  },
+});
+
+/**
+ * Test-only: booking-request-linked quote that has NOT been sent for review yet.
+ *
+ * Deliberately separate from `seedBookingReadyForTrackApprove`, which seeds
+ * `clientReviewReadyAt` already set and therefore renders "Withdraw". The
+ * send-for-review spec needs to start from the "Ready for review" state.
+ */
+export const seedRequestLinkedDraftQuote = mutation({
+  args: {
+    eventName: v.optional(v.string()),
+  },
+  returns: v.object({
+    requestId: v.id("eventRequests"),
+    invoiceId: v.id("invoices"),
+    eventId: v.id("events"),
+    invoiceNumber: v.string(),
+    requestNumber: v.string(),
+    publicToken: v.string(),
+    trackPath: v.string(),
+    editorPath: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const now = Date.now();
+    const seeded = await insertSubmittedBookingRequest(ctx, args.eventName);
+    const invoiceNumber = `ALINV-${makeInvoiceSuffix()}`;
+    const invoiceId = await ctx.db.insert("invoices", {
+      invoiceNumber,
+      status: "draft",
+      issueDate: new Date(now).toISOString().slice(0, 10),
+      managerUserId: "e2e-manager",
+      managerName: "E2E Admin",
+      managerEmail: "e2e-admin@arborlive.test",
+      clientGroupName: seeded.eventName,
+      clientContactName: "E2E Requester",
+      clientEmail: "e2e.requester@stanford.edu",
+      clientPhone: "6505550100",
+      equipmentPricingMode: "nonSubsidized",
+      crewRateMode: "normal",
+      discountType: "amount",
+      discountValue: 0,
+      discountAmountUsd: 0,
+      equipmentSubtotalUsd: 250,
+      externalRentalsSubtotalUsd: 0,
+      artistsSubtotalUsd: 0,
+      crewSubtotalUsd: 0,
+      feesSubtotalUsd: 0,
+      subtotalUsd: 250,
+      totalUsd: 250,
+      clientApprovalStatus: "pending",
+      sourceEventRequestId: seeded.requestId,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert("invoiceLineItems", {
+      invoiceId,
+      section: "equipment_type",
+      order: 0,
+      label: "E2E Request Quote Line",
+      quantity: 1,
+      rateUsd: 250,
+      amountUsd: 250,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const eventId = await ctx.db.insert("events", {
+      title: seeded.eventName,
+      status: "tentative",
+      visibility: "public",
+      publicToken: makeToken(),
+      startAt: seeded.startAt,
+      endAt: seeded.endAt,
+      timezone: "America/Los_Angeles",
+      spansMultipleDays: false,
+      setupOnly: false,
+      strikeOnly: false,
+      requiresShowWindow: true,
+      venueName: "E2E Venue",
+      eventType: "Crewed Event",
+      teamsInterested: ["Sound"],
+      category: "Concert / Showcase",
+      host: "E2E Test Org",
+      expectedTurnout: 80,
+      invoiceId,
+      sourceEventRequestId: seeded.requestId,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.patch(seeded.requestId, {
+      status: "converted",
+      convertedEventId: eventId,
+      convertedEventIds: [eventId],
+      linkedInvoiceId: invoiceId,
+      reviewedByUserId: "e2e-manager",
+      updatedAt: now,
+    });
+    return {
+      requestId: seeded.requestId,
+      invoiceId,
+      eventId,
+      invoiceNumber,
+      requestNumber: seeded.requestNumber,
+      publicToken: seeded.publicToken,
+      trackPath: `/request/track/${seeded.publicToken}`,
+      editorPath: `/dashboard/financial-hub/invoices/${invoiceId}`,
+    };
+  },
+});
+
+/**
+ * Test-only: approved quote + linked event + an ACTIVE payment proof submission.
+ *
+ * `financial-hub-payments-client.tsx` only renders "Invalidate proof" and
+ * "Attach receipt" when `row.submission && !row.paymentReceivedAt`, and
+ * `listByQueue` only surfaces invoices whose approval status is `approved` and
+ * whose event is within the 90-day lookback — so all three have to be seeded
+ * together for those buttons to exist at all.
+ */
+export const seedInvoiceWithProofSubmission = mutation({
+  args: {
+    clientGroupName: v.optional(v.string()),
+  },
+  returns: v.object({
+    invoiceId: v.id("invoices"),
+    eventId: v.id("events"),
+    submissionId: v.id("eventPaymentProofSubmissions"),
+    invoiceNumber: v.string(),
+    paymentReference: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const now = Date.now();
+    const { startAt, endAt } = futureEventWindow(10);
+    const invoiceNumber = `ALINV-${makeInvoiceSuffix()}`;
+    const paymentReference = `E2E-REF-${makeInvoiceSuffix()}`;
+    const invoiceId = await ctx.db.insert("invoices", {
+      invoiceNumber,
+      status: "finalized",
+      issueDate: new Date(now).toISOString().slice(0, 10),
+      managerUserId: "e2e-manager",
+      managerName: "E2E Admin",
+      managerEmail: "e2e-admin@arborlive.test",
+      clientGroupName: args.clientGroupName?.trim() || "E2E Proof Client",
+      clientContactName: "E2E Contact",
+      clientEmail: "e2e-client@example.com",
+      equipmentPricingMode: "nonSubsidized",
+      crewRateMode: "normal",
+      discountType: "amount",
+      discountValue: 0,
+      discountAmountUsd: 0,
+      equipmentSubtotalUsd: 400,
+      externalRentalsSubtotalUsd: 0,
+      artistsSubtotalUsd: 0,
+      crewSubtotalUsd: 0,
+      feesSubtotalUsd: 0,
+      subtotalUsd: 400,
+      totalUsd: 400,
+      clientApprovalStatus: "approved",
+      approvedAt: now - 60_000,
+      clientApprovalSignedName: "E2E Signer",
+      clientIsPaymentSubmitter: true,
+      publicApprovalToken: makeToken(),
+      publicApprovalTokenExpiresAt: now + 14 * 24 * 60 * 60 * 1000,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert("invoiceLineItems", {
+      invoiceId,
+      section: "equipment_type",
+      order: 0,
+      label: "E2E Proof Line",
+      quantity: 1,
+      rateUsd: 400,
+      amountUsd: 400,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const eventId = await ctx.db.insert("events", {
+      title: `E2E Proof Event ${now}`,
+      status: "ready",
+      visibility: "public",
+      publicToken: makeToken(),
+      invoiceId,
+      startAt,
+      endAt,
+      timezone: "America/Los_Angeles",
+      spansMultipleDays: false,
+      setupOnly: false,
+      strikeOnly: false,
+      requiresShowWindow: true,
+      eventType: "Crewed Event",
+      teamsInterested: ["Sound"],
+      createdAt: now,
+      updatedAt: now,
+    });
+    const submissionId = await ctx.db.insert("eventPaymentProofSubmissions", {
+      eventId,
+      invoiceId,
+      paymentMethod: "ijournal",
+      paymentReference,
+      financeContactEmail: "e2e-finance@example.com",
+      status: "active",
+      submittedAt: now,
+      createdAt: now,
+    });
+    return { invoiceId, eventId, submissionId, invoiceNumber, paymentReference };
+  },
+});
+
+/**
+ * Test-only: payment proof submissions plus receipt state for one invoice.
+ */
+export const getPaymentProofState = query({
+  args: { invoiceId: v.id("invoices") },
+  returns: v.object({
+    hasReceipt: v.boolean(),
+    paymentReceivedAt: v.union(v.number(), v.null()),
+    submissions: v.array(
+      v.object({
+        submissionId: v.id("eventPaymentProofSubmissions"),
+        status: v.union(v.string(), v.null()),
+        paymentReference: v.string(),
+        invalidationNote: v.union(v.string(), v.null()),
+        invalidatedAt: v.union(v.number(), v.null()),
+      }),
+    ),
+  }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const invoice = await ctx.db.get(args.invoiceId);
+    const submissions = await ctx.db
+      .query("eventPaymentProofSubmissions")
+      .withIndex("by_invoiceId", (q) => q.eq("invoiceId", args.invoiceId))
+      .take(20);
+    return {
+      hasReceipt: Boolean(invoice?.paymentReceiptStorageFileId),
+      paymentReceivedAt: invoice?.paymentReceivedAt ?? null,
+      submissions: submissions.map((row) => ({
+        submissionId: row._id,
+        status: row.status ?? null,
+        paymentReference: row.paymentReference,
+        invalidationNote: row.invalidationNote ?? null,
+        invalidatedAt: row.invalidatedAt ?? null,
+      })),
+    };
+  },
+});
+
+/**
+ * Test-only: host org by exact name, with its linked contacts.
+ *
+ * Scoped by the name the spec seeded rather than "the newest group" — the
+ * shared deployment accumulates rows across runs and across worktrees.
+ */
+export const getInvoiceGroupByName = query({
+  args: { name: v.string() },
+  returns: v.union(
+    v.null(),
+    v.object({
+      groupId: v.id("invoiceGroups"),
+      name: v.string(),
+      type: v.string(),
+      active: v.boolean(),
+      equipmentPricingMode: v.string(),
+      contacts: v.array(
+        v.object({
+          contactId: v.id("invoiceContacts"),
+          email: v.union(v.string(), v.null()),
+          active: v.boolean(),
+        }),
+      ),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const group = await ctx.db
+      .query("invoiceGroups")
+      .withIndex("by_name", (q) => q.eq("name", args.name.trim()))
+      .first();
+    if (!group) return null;
+    const contacts = await ctx.db
+      .query("invoiceContacts")
+      .withIndex("by_groupId", (q) => q.eq("groupId", group._id))
+      .take(100);
+    return {
+      groupId: group._id,
+      name: group.name,
+      type: group.type,
+      active: group.active,
+      equipmentPricingMode: group.equipmentPricingMode ?? "subsidized",
+      contacts: contacts.map((row) => ({
+        contactId: row._id,
+        email: row.email ?? null,
+        active: row.active,
+      })),
+    };
+  },
+});
+
+/**
+ * Test-only: the billing identity denormalized onto an invoice.
+ *
+ * `invoices.createDraft` copies the selected host/contact into
+ * `clientGroupName` / `clientContactName` alongside the `groupId` / `contactId`
+ * references, so a spec that only checked the ids would miss the snapshot
+ * fields the PDF and public quote page actually render.
+ */
+export const getInvoiceClientState = query({
+  args: { invoiceId: v.id("invoices") },
+  returns: v.union(
+    v.null(),
+    v.object({
+      hasGroupId: v.boolean(),
+      hasContactId: v.boolean(),
+      clientGroupName: v.union(v.string(), v.null()),
+      clientGroupType: v.union(v.string(), v.null()),
+      clientContactName: v.union(v.string(), v.null()),
+      clientEmail: v.union(v.string(), v.null()),
+      equipmentPricingMode: v.string(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const invoice = await ctx.db.get(args.invoiceId);
+    if (!invoice) return null;
+    return {
+      hasGroupId: Boolean(invoice.groupId),
+      hasContactId: Boolean(invoice.contactId),
+      clientGroupName: invoice.clientGroupName ?? null,
+      clientGroupType: invoice.clientGroupType ?? null,
+      clientContactName: invoice.clientContactName ?? null,
+      clientEmail: invoice.clientEmail ?? null,
+      equipmentPricingMode: invoice.equipmentPricingMode,
+    };
+  },
+});
