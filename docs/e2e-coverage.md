@@ -8,7 +8,7 @@ Update this file whenever specs or helpers land (or when a batch ships).
 - Runner: `pnpm test:e2e` ([`scripts/e2e-run.mjs`](../scripts/e2e-run.mjs))
 - CI: [`.github/workflows/e2e.yml`](../.github/workflows/e2e.yml)
 
-**Last updated:** 2026-07-25 (Batches 1–6 on `main`; Batch 7 on branch; 81 specs green locally)
+**Last updated:** 2026-07-26 (Batches 1–7 on `main`; Batch 8 on branch)
 
 ## Batch history
 
@@ -20,7 +20,9 @@ Update this file whenever specs or helpers land (or when a batch ships).
 | **4** | [#62](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/62) | Crew application triage (turn away / convert / trainee assign), crew `/onboarding` completion, band `/onboarding/band` completion |
 | **5** | [#62](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/62) | Pull-list edit (qty + add type), damage report create, crew scheduling board, event series create |
 | **6** | [#62](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/62) | Timecard read path, short-link create/delete, public lost-and-found, public directories, band payouts queue |
-| **7** | on branch | Authorization boundaries: admin route guards, Convex-level enforcement, org-type separation, plus an `AdminOnlyGuard` so refusals read as refusals |
+| **7** | [#64](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/64) | Authorization boundaries: admin route guards, Convex-level enforcement, org-type separation, plus an `AdminOnlyGuard` so refusals read as refusals |
+| — | [#65](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/65) | Not a batch: the ascending-`take` fix shipped five `*-list-recency` specs plus `marketing/work-posts-admin.spec.ts` |
+| **8** | on branch | Money paths: invoice line items + totals, discounts, send-for-review round trip, approval-token rotation, approval reset + duplicate, host orgs/contacts, payment-proof invalidate + receipt |
 
 ## Status legend
 
@@ -68,8 +70,17 @@ Update this file whenever specs or helpers land (or when a batch ships).
 | Client submit payment proof | Covered | `quotes/public-quote-flows.spec.ts` |
 | Staff draft create → public link | Covered | `quotes/invoice-finalize.spec.ts` (Batch 3; no separate Finalize UI — draft + `/event/{token}`) |
 | Staff mark payment received | Covered | `quotes/payment-proof-verify.spec.ts` (Batch 3) |
+| Line item add / edit / remove + totals | Covered | `quotes/invoice-line-items.spec.ts` (Batch 8) — asserts the browser's `computeInvoiceDraftTotals` and the server's `computeTotals` agree |
+| Discount amount / percent + clamp + warning | Covered | `quotes/invoice-discount.spec.ts` (Batch 8) |
+| Send quote to client → withdraw → re-send | Covered | `quotes/invoice-send-for-review.spec.ts` (Batch 8) — request-linked quotes only |
+| Approval token regeneration | Covered | `quotes/invoice-token-regeneration.spec.ts` (Batch 8) — asserts the old link dies, and that dismissing the confirm changes nothing |
+| Editing an approved quote resets approval | Covered | `quotes/invoice-reset-and-duplicate.spec.ts` (Batch 8) |
+| Duplicate invoice | Covered | `quotes/invoice-reset-and-duplicate.spec.ts` (Batch 8) — new number + token, no inherited approval |
+| Staff invalidate payment proof / attach receipt | Covered | `quotes/payment-proof-manage.spec.ts` (Batch 8) |
+| Host orgs + client contacts | Covered | `quotes/invoice-organizations.spec.ts` (Batch 8) — create → bill an invoice → archive |
 | PDF download / void | None | Deferred |
-| Host orgs / managers | None | Deferred |
+| Invoice managers (`/financial-hub/managers`) | None | — |
+| Invoice settings (global crew rates) | Deferred | `invoiceSettings.update` writes **global** crew rates. On the shared deployment that silently re-prices every other worktree's crew lines, so it is not safe to drive from a spec |
 
 ### Events and schedule
 
@@ -169,11 +180,24 @@ Update this file whenever specs or helpers land (or when a batch ships).
 | `auth/admin-route-guards.spec.ts` | Non-admin refused on the 9 sidebar `adminOnly` routes (Batch 7) |
 | `auth/backend-enforcement.spec.ts` | Convex refuses privileged query/mutation from a crew JWT (Batch 7) |
 | `auth/org-context-guards.spec.ts` | Arbor-only vs band-only route separation (Batch 7) |
+| `bands/band-application-list-recency.spec.ts` | Newest band application is listed (#65) |
+| `crew/crew-application-list-recency.spec.ts` | Newest crew application is listed (#65) |
+| `inventory/damage-queue-recency.spec.ts` | Newest damage report is listed (#65) |
+| `marketing/short-link-list-recency.spec.ts` | Newest short link is listed (#65) |
+| `quotes/invoice-list-recency.spec.ts` | Newest invoice is listed (#65) |
+| `marketing/work-posts-admin.spec.ts` | Work post admin editor (#65) |
+| `quotes/invoice-line-items.spec.ts` | Line items across sections + totals (Batch 8) |
+| `quotes/invoice-discount.spec.ts` | Discount math, zero clamp, warning (Batch 8) |
+| `quotes/invoice-send-for-review.spec.ts` | Send sheet → withdraw → re-send + emails (Batch 8) |
+| `quotes/invoice-token-regeneration.spec.ts` | Approval token rotation revokes the old link (Batch 8) |
+| `quotes/invoice-reset-and-duplicate.spec.ts` | Approval reset on edit; duplicate (Batch 8) |
+| `quotes/invoice-organizations.spec.ts` | Host org + contact → invoice → archive (Batch 8) |
+| `quotes/payment-proof-manage.spec.ts` | Invalidate submission; attach receipt (Batch 8) |
 | `email/email-queue.spec.ts` | Mocked email pipeline |
 
 ## Remaining gaps
 
-Batches 1–6 cover the shipped happy paths. What is still out of the suite, and why:
+Batches 1–8 cover the shipped happy paths. What is still out of the suite, and why:
 
 | Surface | Why it is out |
 |---------|---------------|
@@ -183,7 +207,15 @@ Batches 1–6 cover the shipped happy paths. What is still out of the suite, and
 | Open Mic public + runner | Low product priority |
 | Short-link Worker redirect | Lives in the Cloudflare Worker, not the Next app |
 | FullCalendar drag/resize | Flaky; covered by unit/manual testing |
-| Inventory catalog CRUD, PDF download/void, host orgs | Low risk relative to cost |
+| Global invoice settings (crew rates) | Shared-deployment hazard — see the Quotes and invoices table |
+| Inventory catalog CRUD, PDF download/void | Not yet batched |
+
+### Candidates for the next batches
+
+| Batch | Surface | Why |
+|-------|---------|-----|
+| **9** | Users, access, and rates | `users-management-client.tsx` is ~1600 lines and 14 mutations that the suite never drives — invites are seeded via helper, not the UI. Roles are the thing Batch 7's refusals depend on, so a spec that grants a role and watches a refusal flip closes that loop. `setHourlyRate` feeds both timecards and invoice crew lines |
+| **10** | Inventory catalog CRUD | ~3k lines across `types-manager` / `packages-manager` / `package-items-editor`, and every other spec seeds against this data model — the widest blast radius in the app, currently listed as low risk. Type visibility also drives the public `/types/[bucket]` pages, which have no coverage |
 
 ### Keeping the shared deployment usable
 
@@ -202,6 +234,43 @@ Conventions for any new batch:
 - Seed with `e2eHelpers`, drive the UI with Playwright, assert via `pollConvex`
 - Scope locators to the row you seeded — the shared deployment accumulates fixtures
 - Local: `E2E_SKIP_BOOT=1 pnpm test:e2e` against a running stack; CI uses anonymous Convex
+
+### Traps this codebase sets for Playwright
+
+Four things in this app fail in ways that do not look like what they are. All
+four cost real debugging time in Batch 8.
+
+1. **`window.confirm` guards mutations.** `regeneratePublicApprovalToken`,
+   host/contact archive, and the re-approval prompt on saving an edited approved
+   quote all sit behind a native confirm. Playwright **dismisses dialogs by
+   default**, so the mutation silently never runs and the spec times out polling
+   for a change that was never requested. Register `page.once("dialog", d =>
+   d.accept())` before the click. Dismissing is worth asserting too — that is the
+   "operator declined" path.
+2. **`SearchableSelect` portals its menu.** It renders into `document.body` at
+   `position: fixed`, computed as `trigger.bottom + 4` with no flip-up, and
+   recomputes on every scroll event. Opening it while the trigger is below the
+   fold puts the menu off-screen ("outside of the viewport"), and Playwright's
+   own scroll-into-view retriggers the reposition so the "stable" actionability
+   check never settles. Scroll the trigger to `block: "center"` first, then click
+   the option with `force`, then assert the trigger's text changed — `force`
+   skips the hit test, so a missed click otherwise leaves the menu open and every
+   later click on the page inherits the instability. A hardened
+   `pickSearchableOption` lives in `e2e/quotes/invoice-organizations.spec.ts`;
+   the older `selectSearchableOption` in `e2e/helpers/auth.ts` does neither and
+   only works on fields high enough on the page to dodge the problem.
+3. **`SearchableSelect` also renders a `New <thing>: "<query>"` button** whenever
+   the query is not an exact label match, and it is the *only* hit until the
+   options query resolves. A loose name locator can settle on it and open the
+   create modal instead of selecting anything. Match on something only the real
+   option carries, like the contact's email.
+4. **Saving from `/invoices/new` remounts the editor.** `router.replace` moves it
+   into the `[id]` route, which re-hydrates every field from the saved invoice
+   and reverts anything typed in that window — and the pass is not observable
+   from the outgoing component. `createDraftInvoiceWithArtistLine` in
+   `e2e/helpers/invoice.ts` absorbs this by loading the canonical URL once and
+   waiting for hydration. Client-side navigations also fire no `load` event, so
+   `page.waitForURL` can hang for its full timeout; poll `page.url()` instead.
 
 
 ## How to update this doc

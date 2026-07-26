@@ -974,6 +974,7 @@ export function InvoiceEditor({
           ) : null}
           {activeInvoiceId ? (
             <Button
+              data-testid="invoice-duplicate"
               type="button"
               variant="outline"
               onClick={() =>
@@ -1290,7 +1291,7 @@ export function InvoiceEditor({
           <Card>
             <CardHeader className="pb-2"><CardTitle className="text-base">Client</CardTitle></CardHeader>
             <CardContent className="grid gap-3">
-              <div className="space-y-2">
+              <div className="space-y-2" data-testid="invoice-host-select">
                 <Label>Host</Label>
                 <SearchableSelect
                   value={groupId}
@@ -1302,7 +1303,7 @@ export function InvoiceEditor({
                   createLabel="New Host"
                 />
               </div>
-              <div className="space-y-2">
+              <div className="space-y-2" data-testid="invoice-contact-select">
                 <Label>Contact</Label>
                 <SearchableSelect
                   value={contactId}
@@ -1361,20 +1362,20 @@ export function InvoiceEditor({
               <CardTitle className="text-base">{isDraftDirty ? "Draft total" : "Total"}</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-1 text-sm">
-              <p>Equipment: {formatUsd(draftTotals.equipmentSubtotalUsd)}</p>
-              <p>External: {formatUsd(draftTotals.externalRentalsSubtotalUsd)}</p>
-              <p>Artists: {formatUsd(draftTotals.artistsSubtotalUsd)}</p>
-              <p>Crew: {formatUsd(draftTotals.crewSubtotalUsd)}</p>
-              <p>Fees: {formatUsd(draftTotals.feesSubtotalUsd)}</p>
-              <p>Subtotal: {formatUsd(draftTotals.subtotalUsd)}</p>
-              <p>Discount: -{formatUsd(draftTotals.discountAmountUsd)}</p>
-              <p className="border-t pt-2 font-semibold">{formatUsd(draftTotals.totalUsd)}</p>
+              <p data-testid="invoice-total-equipment">Equipment: {formatUsd(draftTotals.equipmentSubtotalUsd)}</p>
+              <p data-testid="invoice-total-external">External: {formatUsd(draftTotals.externalRentalsSubtotalUsd)}</p>
+              <p data-testid="invoice-total-artists">Artists: {formatUsd(draftTotals.artistsSubtotalUsd)}</p>
+              <p data-testid="invoice-total-crew">Crew: {formatUsd(draftTotals.crewSubtotalUsd)}</p>
+              <p data-testid="invoice-total-fees">Fees: {formatUsd(draftTotals.feesSubtotalUsd)}</p>
+              <p data-testid="invoice-total-subtotal">Subtotal: {formatUsd(draftTotals.subtotalUsd)}</p>
+              <p data-testid="invoice-total-discount">Discount: -{formatUsd(draftTotals.discountAmountUsd)}</p>
+              <p className="border-t pt-2 font-semibold" data-testid="invoice-total-grand">{formatUsd(draftTotals.totalUsd)}</p>
               {pricingUnsaved && isDraftDirty ? (
                 <p className="text-xs text-amber-700">Pricing differs from last saved total.</p>
               ) : null}
               {(draftTotals.discountAmountUsd > draftTotals.equipmentSubtotalUsd ||
                 invoiceData?.invoice?.discountWarning) ? (
-                <p className="text-xs text-amber-700">
+                <p className="text-xs text-amber-700" data-testid="invoice-discount-warning">
                   {invoiceData?.invoice?.discountWarning ?? "Discount exceeds equipment rental subtotal."}
                 </p>
               ) : null}
@@ -1386,14 +1387,14 @@ export function InvoiceEditor({
             <CardContent className="grid gap-3">
               <div className="space-y-2">
                 <Label>Discount type</Label>
-                <select className="h-9 w-full rounded-md border bg-background px-3 text-sm" value={discountType} onChange={(e) => setDiscountType(e.target.value as "amount" | "percent")}>
+                <select data-testid="invoice-discount-type" className="h-9 w-full rounded-md border bg-background px-3 text-sm" value={discountType} onChange={(e) => setDiscountType(e.target.value as "amount" | "percent")}>
                   <option value="amount">Amount</option>
                   <option value="percent">Percent</option>
                 </select>
               </div>
               <div className="space-y-2">
                 <Label>Discount value</Label>
-                <Input value={discountValue} onChange={(e) => setDiscountValue(e.target.value)} />
+                <Input data-testid="invoice-discount-value" value={discountValue} onChange={(e) => setDiscountValue(e.target.value)} />
               </div>
               <div className="space-y-2">
                 <Label>Notes</Label>
@@ -1469,16 +1470,17 @@ export function InvoiceEditor({
           </Card>
 
           {isRequestLinkedQuote ? (
-            <Card>
+            <Card data-testid="invoice-request-portal">
               <CardHeader className="pb-2"><CardTitle className="text-base">Request portal</CardTitle></CardHeader>
               <CardContent className="space-y-2 text-sm">
-                <Input readOnly value={requestPortalUrl || "Save to load portal link."} />
+                <Input data-testid="invoice-request-portal-link" readOnly value={requestPortalUrl || "Save to load portal link."} />
                 {requestPortalReady ? (
-                  <Button type="button" variant="outline" size="sm" onClick={() => void withdrawFromRequestPortal()}>
+                  <Button data-testid="invoice-withdraw-review" type="button" variant="outline" size="sm" onClick={() => void withdrawFromRequestPortal()}>
                     Withdraw
                   </Button>
                 ) : (
                   <Button
+                    data-testid="invoice-send-quote-to-client"
                     type="button"
                     size="sm"
                     disabled={!activeInvoiceId || !sourceRequest?.email}
@@ -1493,10 +1495,11 @@ export function InvoiceEditor({
               </CardContent>
             </Card>
           ) : (
-            <Card>
+            <Card data-testid="invoice-quote-approval">
               <CardHeader className="pb-2"><CardTitle className="text-base">Quote approval</CardTitle></CardHeader>
               <CardContent className="space-y-2 text-sm">
                 <Input
+                  data-testid="invoice-approval-link"
                   readOnly
                   value={
                     approvalToken && origin
@@ -1511,7 +1514,7 @@ export function InvoiceEditor({
                   }}>
                     Copy link
                   </Button>
-                  <Button type="button" variant="outline" size="sm" disabled={!activeInvoiceId} onClick={() => void regenerateToken()}>
+                  <Button data-testid="invoice-regenerate-token" type="button" variant="outline" size="sm" disabled={!activeInvoiceId} onClick={() => void regenerateToken()}>
                     Regenerate
                   </Button>
                 </div>
@@ -1582,6 +1585,7 @@ export function InvoiceEditor({
               <div className="space-y-2">
                 <Label>Type</Label>
                 <select
+                 
                   className="h-9 w-full rounded-md border bg-background px-3 text-sm"
                   value={newGroupType}
                   onChange={(e) => setNewGroupType(e.target.value as "vso" | "house" | "department" | "individual")}
@@ -1888,7 +1892,7 @@ function SectionExternalRentals({
       <CardHeader><CardTitle>External Rentals</CardTitle></CardHeader>
       <CardContent className="space-y-2">
         {rows.map((row, idx) => (
-          <div key={`ext-${idx}`} className="grid gap-2 md:grid-cols-5">
+          <div key={`ext-${idx}`} className="grid gap-2 md:grid-cols-5" data-testid={`invoice-row-external-rental-${idx}`}>
             <Input placeholder="Provider" value={row.provider} onChange={(e) => setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, provider: e.target.value } : r)))} />
             <Input placeholder="Line item" value={row.label} onChange={(e) => setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, label: e.target.value } : r)))} />
             <Input placeholder="Qty" value={row.quantity} onChange={(e) => setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, quantity: e.target.value } : r)))} />
@@ -1914,7 +1918,7 @@ function SectionArtists({
       <CardHeader><CardTitle>Artists (placeholder)</CardTitle></CardHeader>
       <CardContent className="space-y-2">
         {rows.map((row, idx) => (
-          <div key={`artist-${idx}`} className="grid gap-2 md:grid-cols-4">
+          <div key={`artist-${idx}`} className="grid gap-2 md:grid-cols-4" data-testid={`invoice-row-artist-${idx}`}>
             <Input placeholder="Artist / role" value={row.label} onChange={(e) => setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, label: e.target.value } : r)))} />
             <Input placeholder="Qty" value={row.quantity} onChange={(e) => setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, quantity: e.target.value } : r)))} />
             <Input placeholder="Rate" value={row.rateUsd} onChange={(e) => setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, rateUsd: e.target.value } : r)))} />
@@ -1950,7 +1954,7 @@ function SectionCrew({
       </CardHeader>
       <CardContent className="space-y-2">
         {rows.map((row, idx) => (
-          <div key={`crew-${idx}`} className={`grid gap-2 ${rateMode === "custom" ? "md:grid-cols-4" : "md:grid-cols-3"}`}>
+          <div key={`crew-${idx}`} className={`grid gap-2 ${rateMode === "custom" ? "md:grid-cols-4" : "md:grid-cols-3"}`} data-testid={`invoice-row-crew-${idx}`}>
             <Input placeholder="Crew role" value={row.label} onChange={(e) => setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, label: e.target.value } : r)))} />
             <Input placeholder="Qty/hours" value={row.quantity} onChange={(e) => setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, quantity: e.target.value } : r)))} />
             {rateMode === "custom" ? (
@@ -2048,7 +2052,7 @@ function SectionFees({
       <CardHeader><CardTitle>Fees</CardTitle></CardHeader>
       <CardContent className="space-y-2">
         {rows.map((row, idx) => (
-          <div key={`fee-${idx}`} className="grid gap-2 md:grid-cols-5">
+          <div key={`fee-${idx}`} className="grid gap-2 md:grid-cols-5" data-testid={`invoice-row-fee-${idx}`}>
             <SearchableSelect
               value={row.feeDefinitionId}
               onChange={(value) => {
