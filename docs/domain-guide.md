@@ -20,6 +20,15 @@ canonical description of the domain itself.
 - Crew onboarding progress lives in `userOnboarding`; band org setup in
   `organizationOnboarding`. Incomplete crew get a dashboard banner and weekly
   reminder email; admins see status under Users and can waive.
+- Arbor Live crew invites (and convert-to-member) require a **compensation rate
+  mode** (`normal` / `lead` / `custom`) and a **payroll method**
+  (`stanford` / `external`). Normal/Lead resolve live from
+  `invoiceSettings` (so global rate changes apply automatically); Custom keeps
+  a fixed `userCompensationRates.hourlyRateUsd`. Legacy rows without
+  `rateMode` behave as Custom. Missing `payrollMethod` defaults to Stanford.
+- Crew onboarding branches on payroll method: Stanford keeps FWS → OSE hiring →
+  Sequoia hours; External skips those and uses a contractor pay step (email W9
+  + biweekly invoice to `arborlive@stanford.edu`).
 - Public self-serve band applications: `/artists/apply` → `bandApplications`
   table → admin review at `/dashboard/users/band-applications`. Approval creates
   the band org (no auto public listing), invites the contact/members, and

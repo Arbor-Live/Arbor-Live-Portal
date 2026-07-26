@@ -19,7 +19,7 @@ import {
   OnboardingTextarea,
   OnboardingYesNoChoice,
 } from "@/components/onboarding/onboarding-ui";
-import { FWS_JOB_INFO, ONBOARDING_LINKS } from "@/lib/onboarding-links";
+import { CONTRACTOR_PAY_INFO, FWS_JOB_INFO, ONBOARDING_LINKS } from "@/lib/onboarding-links";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { useDevPreviewReady } from "@/hooks/use-dev-preview";
 
@@ -34,6 +34,7 @@ const spring = { type: "spring" as const, stiffness: 380, damping: 36 };
 type CrewOnboardingData = {
   status: "not_started" | "in_progress" | "completed" | "waived";
   incompleteStepCount: number;
+  payrollMethod?: "stanford" | "external";
   profileCompletedAt?: number;
   whatsappAcknowledgedAt?: number;
   instagramAcknowledgedAt?: number;
@@ -48,6 +49,7 @@ type CrewOnboardingData = {
   cartTrainingCompletedAt?: number;
   oseHiringFormCompletedAt?: number;
   timecardAcknowledgedAt?: number;
+  contractorPayAcknowledgedAt?: number;
   agreedToOnboardingDocAt?: number;
   signatureLegalName?: string;
   completedAt?: number;
@@ -71,10 +73,11 @@ type StepId =
   | "training"
   | "gettingPaid"
   | "hours"
+  | "contractorPay"
   | "signature"
   | "thankYou";
 
-const STEP_ORDER: StepId[] = [
+const STANFORD_STEP_ORDER: StepId[] = [
   "welcome",
   "profile",
   "whatsapp",
@@ -87,9 +90,20 @@ const STEP_ORDER: StepId[] = [
   "thankYou",
 ];
 
-const PROGRESS_STEPS: StepId[] = STEP_ORDER.filter(
-  (id) => id !== "welcome" && id !== "thankYou",
-);
+const EXTERNAL_STEP_ORDER: StepId[] = [
+  "welcome",
+  "profile",
+  "whatsapp",
+  "instagram",
+  "training",
+  "contractorPay",
+  "signature",
+  "thankYou",
+];
+
+function stepOrderForPayroll(payrollMethod: "stanford" | "external" | undefined): StepId[] {
+  return payrollMethod === "external" ? EXTERNAL_STEP_ORDER : STANFORD_STEP_ORDER;
+}
 
 const STEP_HEADLINES: Record<StepId, string> = {
   welcome: "Welcome to Arbor Live",
@@ -100,6 +114,7 @@ const STEP_HEADLINES: Record<StepId, string> = {
   training: "Required training",
   gettingPaid: "Getting paid",
   hours: "Logging your hours",
+  contractorPay: "Getting paid as a contractor",
   signature: "Sign your onboarding agreement",
   thankYou: "You're all set!",
 };
@@ -125,6 +140,7 @@ type FormState = {
   cartTrainingCompleted: boolean;
   oseHiringFormCompleted: boolean;
   timecardAcknowledged: boolean;
+  contractorPayAcknowledged: boolean;
   signatureLegalName: string;
   agreedToDoc: boolean;
 };
@@ -149,6 +165,7 @@ const EMPTY_FORM: FormState = {
   cartTrainingCompleted: false,
   oseHiringFormCompleted: false,
   timecardAcknowledged: false,
+  contractorPayAcknowledged: false,
   signatureLegalName: "",
   agreedToDoc: false,
 };
@@ -210,6 +227,7 @@ export function CrewOnboardingWizard() {
       cartTrainingCompleted: Boolean(onboarding.cartTrainingCompletedAt),
       oseHiringFormCompleted: Boolean(onboarding.oseHiringFormCompletedAt),
       timecardAcknowledged: Boolean(onboarding.timecardAcknowledgedAt),
+      contractorPayAcknowledged: Boolean(onboarding.contractorPayAcknowledgedAt),
       signatureLegalName: onboarding.signatureLegalName ?? "",
       agreedToDoc: Boolean(onboarding.agreedToOnboardingDocAt),
     });
@@ -233,14 +251,20 @@ export function CrewOnboardingWizard() {
     }
   }, [onboarding, router, previewReady, devPreview]);
 
-  const currentStep = STEP_ORDER[stepIndex] ?? "welcome";
-  const progressIndex = Math.max(0, PROGRESS_STEPS.indexOf(currentStep));
+  const payrollMethod = onboarding?.payrollMethod ?? "stanford";
+  const stepOrder = stepOrderForPayroll(payrollMethod);
+  const progressSteps = stepOrder.filter((id) => id !== "welcome" && id !== "thankYou");
+  const currentStep = stepOrder[stepIndex] ?? "welcome";
+  const progressIndex = Math.max(
+    0,
+    progressSteps.findIndex((id) => id === currentStep),
+  );
   const progressPercent =
     currentStep === "welcome"
       ? 0
       : currentStep === "thankYou"
         ? 100
-        : ((progressIndex + 1) / PROGRESS_STEPS.length) * 100;
+        : ((progressIndex + 1) / progressSteps.length) * 100;
 
   const slideVariants = useMemo(
     () => ({
@@ -260,8 +284,8 @@ export function CrewOnboardingWizard() {
 
   const advance = useCallback(() => {
     setDirection(1);
-    setStepIndex((index) => Math.min(index + 1, STEP_ORDER.length - 1));
-  }, []);
+    setStepIndex((index) => Math.min(index + 1, stepOrder.length - 1));
+  }, [stepOrder.length]);
 
   const goBack = useCallback(() => {
     setDirection(-1);
@@ -412,6 +436,21 @@ export function CrewOnboardingWizard() {
         }
         setIsSubmitting(true);
         await saveOnboardingStep({ timecardAcknowledged: true });
+        advance();
+        return;
+      }
+
+      if (currentStep === "contractorPay") {
+        if (!form.contractorPayAcknowledged) {
+          setFieldError("Confirm you understand the W9 and invoice process to continue.");
+          return;
+        }
+        if (previewOnly) {
+          advance();
+          return;
+        }
+        setIsSubmitting(true);
+        await saveOnboardingStep({ contractorPayAcknowledged: true });
         advance();
         return;
       }
@@ -1008,6 +1047,39 @@ function StepBody({
             checked={form.timecardAcknowledged}
             onChange={(next) => patch({ timecardAcknowledged: next })}
             label="I understand how to log my hours in Sequoia."
+          />
+          {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
+        </div>
+      );
+
+    case "contractorPay":
+      return (
+        <div className="space-y-4">
+          <p className="text-sm text-foreground/70">
+            You&apos;re set up on external payroll. Email a completed W9 to{" "}
+            <a
+              className="font-medium text-primary underline-offset-4 hover:underline"
+              href={`mailto:${CONTRACTOR_PAY_INFO.w9Email}`}
+            >
+              {CONTRACTOR_PAY_INFO.w9Email}
+            </a>
+            , then submit an invoice for your worked hours {CONTRACTOR_PAY_INFO.invoiceCadence} to
+            the same address.
+          </p>
+          <ol className="list-decimal space-y-2 pl-4 text-sm text-foreground/70">
+            <li>
+              Complete a W9 and email it to{" "}
+              <span className="font-medium text-foreground">{CONTRACTOR_PAY_INFO.w9Email}</span>.
+            </li>
+            <li>
+              Every two weeks, email an invoice for hours worked (include dates, hours, and rate)
+              to the same address.
+            </li>
+          </ol>
+          <OnboardingAckCheckbox
+            checked={form.contractorPayAcknowledged}
+            onChange={(next) => patch({ contractorPayAcknowledged: next })}
+            label="I understand I need to submit a W9 and invoice Arbor Live every two weeks."
           />
           {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
         </div>

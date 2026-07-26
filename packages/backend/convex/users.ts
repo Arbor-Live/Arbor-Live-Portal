@@ -30,6 +30,16 @@ import {
   type UserVertical,
 } from "./lib/userVerticals";
 import { ensureOnboardingForOrgMembership, ensureOrganizationOnboarding, resolveMyOnboardingStatus } from "./onboarding";
+import {
+  applyPayrollMethodToProfile,
+  loadInvoiceCrewRateSettings,
+  normalizeCompensationRateMode,
+  normalizePayrollMethod,
+  resolveUserCompensationHourlyRateUsd,
+  upsertUserCompensationRate,
+  type PayrollMethod,
+  type UserCompensationRateMode,
+} from "./lib/crewCompensation";
 
 const invitationStatusValue = v.union(
   v.literal("pending"),
@@ -38,6 +48,12 @@ const invitationStatusValue = v.union(
   v.literal("cancelled"),
 );
 const externalOrgRoleValue = v.union(v.literal("org_admin"), v.literal("org_member"));
+const userCompensationRateModeValue = v.union(
+  v.literal("normal"),
+  v.literal("lead"),
+  v.literal("custom"),
+);
+const payrollMethodValue = v.union(v.literal("stanford"), v.literal("external"));
 
 type OrganizationRow = {
   id?: string;
@@ -174,6 +190,7 @@ export async function ensureUserProfileDefaults(
     disciplines = [],
     showOnPublicCrewPage,
     publicCrewDescription,
+    payrollMethod,
     defaultOrganizationId,
   }: {
     title?: string;
@@ -183,6 +200,7 @@ export async function ensureUserProfileDefaults(
     disciplines?: UserDiscipline[];
     showOnPublicCrewPage?: boolean;
     publicCrewDescription?: string;
+    payrollMethod?: PayrollMethod;
     defaultOrganizationId?: string;
   },
 ) {
@@ -203,6 +221,7 @@ export async function ensureUserProfileDefaults(
         showOnPublicCrewPage !== undefined ? showOnPublicCrewPage : existing.showOnPublicCrewPage,
       publicCrewDescription:
         publicCrewDescription !== undefined ? normalizedDescription : existing.publicCrewDescription,
+      payrollMethod: payrollMethod ?? existing.payrollMethod,
       defaultOrganizationId: defaultOrganizationId ?? existing.defaultOrganizationId,
       updatedAt: now,
     });
@@ -217,10 +236,69 @@ export async function ensureUserProfileDefaults(
     disciplines,
     showOnPublicCrewPage,
     publicCrewDescription: normalizedDescription,
+    payrollMethod,
     defaultOrganizationId,
     createdAt: now,
     updatedAt: now,
   });
+}
+
+async function assertArborCrewInviteCompensation(
+  ctx: QueryCtx | MutationCtx,
+  organizationId: string,
+  args: {
+    rateMode?: UserCompensationRateMode;
+    customHourlyRateUsd?: number;
+    payrollMethod?: PayrollMethod;
+  },
+) {
+  const orgProfile = await ctx.db
+    .query("organizationProfiles")
+    .withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId))
+    .unique();
+  const organizations = await getAllOrganizations(ctx);
+  const org = organizations.find((entry) => getRecordId(entry) === organizationId);
+  const isArbor =
+    orgProfile?.organizationType === "arbor_internal" || isArborOrganization(org);
+  if (!isArbor) {
+    return { isArbor: false as const };
+  }
+  if (!args.rateMode) {
+    throw new Error("Rate mode is required for Arbor Live crew invites.");
+  }
+  if (!args.payrollMethod) {
+    throw new Error("Payment method is required for Arbor Live crew invites.");
+  }
+  if (args.rateMode === "custom") {
+    if (args.customHourlyRateUsd === undefined || args.customHourlyRateUsd < 0) {
+      throw new Error("Custom hourly rate is required.");
+    }
+  }
+  return {
+    isArbor: true as const,
+    rateMode: args.rateMode,
+    customHourlyRateUsd: args.customHourlyRateUsd,
+    payrollMethod: args.payrollMethod,
+  };
+}
+
+async function applyCrewCompensationAndPayroll(
+  ctx: MutationCtx,
+  args: {
+    userId: string;
+    rateMode: UserCompensationRateMode;
+    customHourlyRateUsd?: number;
+    payrollMethod: PayrollMethod;
+    updatedByUserId?: string;
+  },
+) {
+  await upsertUserCompensationRate(ctx, {
+    userId: args.userId,
+    rateMode: args.rateMode,
+    hourlyRateUsd: args.rateMode === "custom" ? args.customHourlyRateUsd : 0,
+    updatedByUserId: args.updatedByUserId,
+  });
+  await applyPayrollMethodToProfile(ctx, args.userId, args.payrollMethod);
 }
 
 function isArborOrganization(org: OrganizationRow | undefined) {
@@ -775,16 +853,32 @@ export const listWithRates = query({
     await requireAdmin(ctx);
     const users = await getAllAuthUsers(ctx);
     const rates = await ctx.db.query("userCompensationRates").withIndex("by_updatedAt").take(1000);
-    const rateByUserId = new Map(rates.map((rate) => [rate.userId, rate.hourlyRateUsd]));
+    const settings = await loadInvoiceCrewRateSettings(ctx);
+    const rateByUserId = new Map(
+      rates.map((rate) => [
+        rate.userId,
+        {
+          rateMode: normalizeCompensationRateMode(rate.rateMode),
+          customHourlyRateUsd: rate.hourlyRateUsd,
+          hourlyRateUsd: resolveUserCompensationHourlyRateUsd(rate, settings),
+        },
+      ]),
+    );
+    const profiles = await ctx.db.query("userAdminProfiles").withIndex("by_active").take(2000);
+    const profileByUserId = new Map(profiles.map((profile) => [profile.userId, profile]));
     return users
       .map((user) => {
         const id = getUserId(user);
+        const rate = rateByUserId.get(id);
         return {
           id,
           name: user.name ?? user.email ?? "Unknown user",
           email: user.email ?? "",
           role: user.role ?? "",
-          hourlyRateUsd: rateByUserId.get(id) ?? null,
+          rateMode: rate?.rateMode ?? null,
+          customHourlyRateUsd: rate?.customHourlyRateUsd ?? null,
+          hourlyRateUsd: rate?.hourlyRateUsd ?? null,
+          payrollMethod: normalizePayrollMethod(profileByUserId.get(id)?.payrollMethod),
         };
       })
       .filter((user) => Boolean(user.id))
@@ -804,7 +898,17 @@ export const listUsersForAdmin = query({
     const organizations = await getAllOrganizations(ctx);
     const organizationById = new Map(organizations.map((org) => [getRecordId(org), org]));
     const rates = await ctx.db.query("userCompensationRates").withIndex("by_updatedAt").take(1000);
-    const rateByUserId = new Map(rates.map((rate) => [rate.userId, rate.hourlyRateUsd]));
+    const settings = await loadInvoiceCrewRateSettings(ctx);
+    const rateByUserId = new Map(
+      rates.map((rate) => [
+        rate.userId,
+        {
+          rateMode: normalizeCompensationRateMode(rate.rateMode),
+          customHourlyRateUsd: rate.hourlyRateUsd,
+          hourlyRateUsd: resolveUserCompensationHourlyRateUsd(rate, settings),
+        },
+      ]),
+    );
     const profiles = await ctx.db.query("userAdminProfiles").withIndex("by_active").take(2000);
     const profileByUserId = new Map(profiles.map((profile) => [profile.userId, profile]));
     const orgMemberships = await ctx.db.query("userOrganizationMemberships").withIndex("by_userId").take(5000);
@@ -820,6 +924,7 @@ export const listUsersForAdmin = query({
       .map((user) => {
         const id = getUserId(user);
         const profile = profileByUserId.get(id);
+        const rate = rateByUserId.get(id);
         const memberships = (membershipsByUserId.get(id) ?? [])
           .map((membership) => ({
             organizationId: membership.organizationId,
@@ -845,7 +950,10 @@ export const listUsersForAdmin = query({
           publicCrewDescription: profile?.publicCrewDescription ?? "",
           defaultOrganizationId: profile?.defaultOrganizationId ?? "",
           organizationMemberships: memberships,
-          hourlyRateUsd: rateByUserId.get(id) ?? null,
+          rateMode: rate?.rateMode ?? null,
+          customHourlyRateUsd: rate?.customHourlyRateUsd ?? null,
+          hourlyRateUsd: rate?.hourlyRateUsd ?? null,
+          payrollMethod: normalizePayrollMethod(profile?.payrollMethod),
         };
       })
       .filter((user) => {
@@ -929,6 +1037,9 @@ export const inviteUserAdmin = mutation({
     role: v.optional(v.string()),
     verticals: v.optional(v.array(userVerticalValue)),
     disciplines: v.optional(v.array(userDisciplineValue)),
+    rateMode: v.optional(userCompensationRateModeValue),
+    customHourlyRateUsd: v.optional(v.number()),
+    payrollMethod: v.optional(payrollMethodValue),
   },
   handler: async (ctx, args) => {
     const admin = await requireAdmin(ctx);
@@ -938,6 +1049,12 @@ export const inviteUserAdmin = mutation({
     if (!email) throw new Error("Email is required.");
     const now = Date.now();
     const expiresAt = now + 14 * 24 * 60 * 60 * 1000;
+
+    const crewInvite = await assertArborCrewInviteCompensation(ctx, args.organizationId, {
+      rateMode: args.rateMode,
+      customHourlyRateUsd: args.customHourlyRateUsd,
+      payrollMethod: args.payrollMethod,
+    });
 
     const membershipRole = await normalizeMembershipRole(ctx, args.organizationId, args.role ?? "member");
     const created = (await ctx.runMutation(components.betterAuth.adapter.create, {
@@ -966,6 +1083,7 @@ export const inviteUserAdmin = mutation({
         verticals: args.verticals ?? [],
         disciplines: args.disciplines ?? [],
         defaultOrganizationId: args.organizationId,
+        payrollMethod: crewInvite.isArbor ? crewInvite.payrollMethod : undefined,
       });
       await upsertOrgMembership(ctx, {
         userId: existingUserId,
@@ -973,6 +1091,15 @@ export const inviteUserAdmin = mutation({
         role: membershipRole,
         active: true,
       });
+      if (crewInvite.isArbor) {
+        await applyCrewCompensationAndPayroll(ctx, {
+          userId: existingUserId,
+          rateMode: crewInvite.rateMode,
+          customHourlyRateUsd: crewInvite.customHourlyRateUsd,
+          payrollMethod: crewInvite.payrollMethod,
+          updatedByUserId: adminId,
+        });
+      }
       await ensureOnboardingForOrgMembership(ctx, {
         userId: existingUserId,
         organizationId: args.organizationId,
@@ -992,6 +1119,9 @@ export const inviteUserAdmin = mutation({
       expiresAt,
       verticals: args.verticals,
       disciplines: args.disciplines,
+      rateMode: crewInvite.isArbor ? crewInvite.rateMode : undefined,
+      customHourlyRateUsd: crewInvite.isArbor ? crewInvite.customHourlyRateUsd : undefined,
+      payrollMethod: crewInvite.isArbor ? crewInvite.payrollMethod : undefined,
       isExistingUser: Boolean(existingUserId),
     });
 
@@ -1025,6 +1155,10 @@ export const resendInviteAdmin = mutation({
         },
       },
     });
+    const pending = await ctx.db
+      .query("pendingUserInvites")
+      .withIndex("by_invitationId", (q) => q.eq("invitationId", args.invitationId))
+      .unique();
     await scheduleUserInviteEmail(ctx, {
       invitationId: args.invitationId,
       email: invite.email,
@@ -1032,6 +1166,11 @@ export const resendInviteAdmin = mutation({
       role: invite.role ?? "member",
       inviterId: invite.inviterId ?? "",
       expiresAt,
+      verticals: pending?.verticals as UserVertical[] | undefined,
+      disciplines: pending?.disciplines as UserDiscipline[] | undefined,
+      rateMode: pending?.rateMode,
+      customHourlyRateUsd: pending?.customHourlyRateUsd,
+      payrollMethod: pending?.payrollMethod,
       isExistingUser: await userExistsForInvite(ctx, invite.email),
       resendKey: String(now),
     });
@@ -1127,15 +1266,30 @@ export const createUserAdmin = mutation({
     title: v.optional(v.string()),
     verticals: v.optional(v.array(userVerticalValue)),
     disciplines: v.optional(v.array(userDisciplineValue)),
+    rateMode: v.optional(userCompensationRateModeValue),
+    customHourlyRateUsd: v.optional(v.number()),
     hourlyRateUsd: v.optional(v.number()),
+    payrollMethod: v.optional(payrollMethodValue),
   },
   handler: async (ctx, args) => {
     const membershipRole = await normalizeMembershipRole(ctx, args.organizationId, args.role);
     const adminUser = await requireAdmin(ctx);
+    const adminId = getUserId(adminUser) || undefined;
     const email = args.email.trim().toLowerCase();
     if (!email) throw new Error("Email is required.");
     if (args.tempPassword.length < 8) throw new Error("Temporary password must be at least 8 characters.");
     const now = Date.now();
+
+    const crewInvite = await assertArborCrewInviteCompensation(ctx, args.organizationId, {
+      rateMode:
+        args.rateMode ??
+        (args.hourlyRateUsd !== undefined || args.customHourlyRateUsd !== undefined
+          ? "custom"
+          : undefined),
+      customHourlyRateUsd: args.customHourlyRateUsd ?? args.hourlyRateUsd,
+      payrollMethod: args.payrollMethod,
+    });
+
     const existing = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
       model: "user",
       where: [{ field: "email", value: email }],
@@ -1191,6 +1345,7 @@ export const createUserAdmin = mutation({
       verticals: args.verticals ?? [],
       disciplines: args.disciplines ?? [],
       defaultOrganizationId: args.organizationId,
+      payrollMethod: crewInvite.isArbor ? crewInvite.payrollMethod : args.payrollMethod,
     });
     await upsertOrgMembership(ctx, {
       userId,
@@ -1198,27 +1353,21 @@ export const createUserAdmin = mutation({
       role: membershipRole,
       active: true,
     });
-    if (args.hourlyRateUsd !== undefined) {
-      if (args.hourlyRateUsd < 0) throw new Error("Hourly rate must be a positive number.");
-      const existingRate = await ctx.db
-        .query("userCompensationRates")
-        .withIndex("by_userId", (q) => q.eq("userId", userId))
-        .unique();
-      if (existingRate) {
-        await ctx.db.patch(existingRate._id, {
-          hourlyRateUsd: args.hourlyRateUsd,
-          updatedByUserId: getUserId(adminUser) || undefined,
-          updatedAt: now,
-        });
-      } else {
-        await ctx.db.insert("userCompensationRates", {
-          userId,
-          hourlyRateUsd: args.hourlyRateUsd,
-          updatedByUserId: getUserId(adminUser) || undefined,
-          createdAt: now,
-          updatedAt: now,
-        });
-      }
+    if (crewInvite.isArbor) {
+      await applyCrewCompensationAndPayroll(ctx, {
+        userId,
+        rateMode: crewInvite.rateMode,
+        customHourlyRateUsd: crewInvite.customHourlyRateUsd,
+        payrollMethod: crewInvite.payrollMethod,
+        updatedByUserId: adminId,
+      });
+    } else if (args.hourlyRateUsd !== undefined || args.customHourlyRateUsd !== undefined) {
+      await upsertUserCompensationRate(ctx, {
+        userId,
+        rateMode: args.rateMode ?? "custom",
+        hourlyRateUsd: args.customHourlyRateUsd ?? args.hourlyRateUsd ?? 0,
+        updatedByUserId: adminId,
+      });
     }
     await ensureOnboardingForOrgMembership(ctx, {
       userId,
@@ -1285,7 +1434,10 @@ export const updateUserAdmin = mutation({
     showOnPublicCrewPage: v.optional(v.boolean()),
     publicCrewDescription: v.optional(v.string()),
     defaultOrganizationId: v.optional(v.string()),
+    rateMode: v.optional(userCompensationRateModeValue),
+    customHourlyRateUsd: v.optional(v.number()),
     hourlyRateUsd: v.optional(v.number()),
+    payrollMethod: v.optional(payrollMethodValue),
     organizationMemberships: v.optional(
       v.array(
         v.object({
@@ -1341,30 +1493,20 @@ export const updateUserAdmin = mutation({
         args.publicCrewDescription !== undefined
           ? args.publicCrewDescription
           : existingProfile?.publicCrewDescription,
+      payrollMethod: args.payrollMethod ?? existingProfile?.payrollMethod,
       defaultOrganizationId: args.defaultOrganizationId ?? existingProfile?.defaultOrganizationId,
     });
 
-    if (args.hourlyRateUsd !== undefined) {
-      if (args.hourlyRateUsd < 0) throw new Error("Hourly rate must be a positive number.");
-      const existingRate = await ctx.db
-        .query("userCompensationRates")
-        .withIndex("by_userId", (q) => q.eq("userId", args.userId))
-        .unique();
-      if (existingRate) {
-        await ctx.db.patch(existingRate._id, {
-          hourlyRateUsd: args.hourlyRateUsd,
-          updatedByUserId: getUserId(adminUser) || undefined,
-          updatedAt: now,
-        });
-      } else {
-        await ctx.db.insert("userCompensationRates", {
-          userId: args.userId,
-          hourlyRateUsd: args.hourlyRateUsd,
-          updatedByUserId: getUserId(adminUser) || undefined,
-          createdAt: now,
-          updatedAt: now,
-        });
-      }
+    if (args.rateMode !== undefined || args.hourlyRateUsd !== undefined || args.customHourlyRateUsd !== undefined) {
+      const rateMode =
+        args.rateMode ??
+        (args.hourlyRateUsd !== undefined || args.customHourlyRateUsd !== undefined ? "custom" : "custom");
+      await upsertUserCompensationRate(ctx, {
+        userId: args.userId,
+        rateMode,
+        hourlyRateUsd: args.customHourlyRateUsd ?? args.hourlyRateUsd,
+        updatedByUserId: getUserId(adminUser) || undefined,
+      });
     }
 
     if (args.organizationMemberships) {
@@ -1425,6 +1567,24 @@ export const setUserAccessAdmin = mutation({
   },
 });
 
+export const setCompensationRate = mutation({
+  args: {
+    userId: v.string(),
+    rateMode: userCompensationRateModeValue,
+    hourlyRateUsd: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const adminUser = await requireAdmin(ctx);
+    return await upsertUserCompensationRate(ctx, {
+      userId: args.userId,
+      rateMode: args.rateMode,
+      hourlyRateUsd: args.hourlyRateUsd,
+      updatedByUserId: getUserId(adminUser) || undefined,
+    });
+  },
+});
+
+/** @deprecated Prefer setCompensationRate with rateMode. */
 export const setHourlyRate = mutation({
   args: {
     userId: v.string(),
@@ -1432,29 +1592,24 @@ export const setHourlyRate = mutation({
   },
   handler: async (ctx, args) => {
     const adminUser = await requireAdmin(ctx);
-    if (args.hourlyRateUsd < 0) {
-      throw new Error("Hourly rate must be a positive number.");
-    }
-    const existing = await ctx.db
-      .query("userCompensationRates")
-      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
-      .unique();
-    const now = Date.now();
-    if (existing) {
-      await ctx.db.patch(existing._id, {
-        hourlyRateUsd: args.hourlyRateUsd,
-        updatedByUserId: getUserId(adminUser) || undefined,
-        updatedAt: now,
-      });
-      return existing._id;
-    }
-    return await ctx.db.insert("userCompensationRates", {
+    return await upsertUserCompensationRate(ctx, {
       userId: args.userId,
+      rateMode: "custom",
       hourlyRateUsd: args.hourlyRateUsd,
       updatedByUserId: getUserId(adminUser) || undefined,
-      createdAt: now,
-      updatedAt: now,
     });
+  },
+});
+
+export const setPayrollMethod = mutation({
+  args: {
+    userId: v.string(),
+    payrollMethod: payrollMethodValue,
+  },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    await applyPayrollMethodToProfile(ctx, args.userId, args.payrollMethod);
+    return { ok: true };
   },
 });
 

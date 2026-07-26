@@ -39,3 +39,8 @@ export const FWS_JOB_INFO = {
   hrAdminName: "Stefanie Ky",
   hrAdminEmail: "sky3@stanford.edu",
 } as const;
+
+export const CONTRACTOR_PAY_INFO = {
+  w9Email: "arborlive@stanford.edu",
+  invoiceCadence: "every two weeks",
+} as const;

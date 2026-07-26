@@ -36,6 +36,7 @@ import {
 import { buildSingleIcsEventForUserShifts } from "./email/scheduleEmailData";
 import { enforceRateLimit, HOUR_MS } from "./rateLimit";
 import { ensureOnboardingForOrgMembership } from "./onboarding";
+import { upsertUserCompensationRate } from "./lib/crewCompensation";
 import {
   ensureUserProfileDefaults,
   getAuthRecordId,
@@ -507,6 +508,9 @@ export const convertToMember = mutation({
     applicationId: v.id("crewApplications"),
     verticals: v.optional(v.array(userVerticalValue)),
     disciplines: v.optional(v.array(userDisciplineValue)),
+    rateMode: v.union(v.literal("normal"), v.literal("lead"), v.literal("custom")),
+    customHourlyRateUsd: v.optional(v.number()),
+    payrollMethod: v.union(v.literal("stanford"), v.literal("external")),
   },
   returns: v.object({ invitationId: v.string(), email: v.string() }),
   handler: async (ctx, args) => {
@@ -521,6 +525,11 @@ export const convertToMember = mutation({
     }
     if (application.status === "closed") {
       throw new Error("Closed applications cannot be converted.");
+    }
+    if (args.rateMode === "custom") {
+      if (args.customHourlyRateUsd === undefined || args.customHourlyRateUsd < 0) {
+        throw new Error("Custom hourly rate is required.");
+      }
     }
 
     const defaults = defaultVerticalsAndDisciplines(application);
@@ -560,12 +569,19 @@ export const convertToMember = mutation({
         verticals,
         disciplines,
         defaultOrganizationId: arborOrg.id,
+        payrollMethod: args.payrollMethod,
       });
       await upsertOrgMembership(ctx, {
         userId: existingUserId,
         organizationId: arborOrg.id,
         role: "member",
         active: true,
+      });
+      await upsertUserCompensationRate(ctx, {
+        userId: existingUserId,
+        rateMode: args.rateMode,
+        hourlyRateUsd: args.rateMode === "custom" ? args.customHourlyRateUsd : 0,
+        updatedByUserId: adminId,
       });
       await ensureOnboardingForOrgMembership(ctx, {
         userId: existingUserId,
@@ -583,6 +599,9 @@ export const convertToMember = mutation({
       expiresAt,
       verticals,
       disciplines,
+      rateMode: args.rateMode,
+      customHourlyRateUsd: args.customHourlyRateUsd,
+      payrollMethod: args.payrollMethod,
       isExistingUser: Boolean(existingUserId),
     });
 

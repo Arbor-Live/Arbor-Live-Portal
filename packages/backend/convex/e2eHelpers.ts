@@ -2324,6 +2324,7 @@ export const resetCrewOnboarding = mutation({
         cartTrainingCompletedAt: undefined,
         oseHiringFormCompletedAt: undefined,
         timecardAcknowledgedAt: undefined,
+        contractorPayAcknowledgedAt: undefined,
         agreedToOnboardingDocAt: undefined,
         signatureLegalName: undefined,
         signatureUserAgent: undefined,
@@ -2338,6 +2339,18 @@ export const resetCrewOnboarding = mutation({
         flow: "crew",
         status: "not_started",
         createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    // Stanford path is what the Playwright wizard spec walks; keep it deterministic.
+    const profile = await ctx.db
+      .query("userAdminProfiles")
+      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+      .unique();
+    if (profile) {
+      await ctx.db.patch(profile._id, {
+        payrollMethod: "stanford",
         updatedAt: now,
       });
     }
