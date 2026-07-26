@@ -81,6 +81,7 @@ import type * as lib_bookingChainDelete from "../lib/bookingChainDelete.js";
 import type * as lib_bookingDayLoad from "../lib/bookingDayLoad.js";
 import type * as lib_bookingRequestQuote from "../lib/bookingRequestQuote.js";
 import type * as lib_contactName from "../lib/contactName.js";
+import type * as lib_crewCompensation from "../lib/crewCompensation.js";
 import type * as lib_crewCost from "../lib/crewCost.js";
 import type * as lib_crewTeams from "../lib/crewTeams.js";
 import type * as lib_crewTraineeIntro from "../lib/crewTraineeIntro.js";
@@ -234,6 +235,7 @@ declare const fullApi: ApiFromModules<{
   "lib/bookingDayLoad": typeof lib_bookingDayLoad;
   "lib/bookingRequestQuote": typeof lib_bookingRequestQuote;
   "lib/contactName": typeof lib_contactName;
+  "lib/crewCompensation": typeof lib_crewCompensation;
   "lib/crewCost": typeof lib_crewCost;
   "lib/crewTeams": typeof lib_crewTeams;
   "lib/crewTraineeIntro": typeof lib_crewTraineeIntro;

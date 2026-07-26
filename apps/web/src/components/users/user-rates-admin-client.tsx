@@ -8,6 +8,8 @@ import { Form } from "@/components/ui/form";
 import { TextFormField } from "@/components/forms/text-form-field";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import {
   globalCrewRatesSchema,
@@ -47,6 +49,9 @@ export function UserRatesAdminClient() {
   });
 
   const rows = useMemo(() => users ?? [], [users]);
+  const normalRate = invoiceSettings?.crewNormalRateUsd ?? 0;
+  const leadRate =
+    invoiceSettings?.crewLeadRateUsd ?? invoiceSettings?.crewOtRateUsd ?? 0;
 
   return (
     <div className="space-y-4 pb-24">
@@ -56,8 +61,8 @@ export function UserRatesAdminClient() {
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            Normal and Lead rates for invoice crew pricing. Empty shift cost estimates default to
-            the average of both.
+            Normal and Lead rates for invoice crew pricing and for users pinned to those modes.
+            Empty shift cost estimates default to the average of both.
           </p>
           <Form {...globalForm}>
             <form
@@ -90,7 +95,8 @@ export function UserRatesAdminClient() {
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            Admin only: set each user hourly rate used for event crew cost calculations.
+            Pin users to Normal or Lead (auto-syncs when globals change), or set a Custom fixed
+            rate. Existing users stay Custom until pinned.
           </p>
           <div className="space-y-2">
             {rows.map((user) => (
@@ -98,8 +104,12 @@ export function UserRatesAdminClient() {
                 key={user.id}
                 userId={user.id}
                 name={user.name}
-                meta={[user.role, user.email].filter(Boolean).join(" • ")}
-                hourlyRateUsd={user.hourlyRateUsd}
+                meta={[user.role, user.email, user.payrollMethod].filter(Boolean).join(" • ")}
+                rateMode={user.rateMode ?? "custom"}
+                customHourlyRateUsd={user.customHourlyRateUsd}
+                effectiveHourlyRateUsd={user.hourlyRateUsd}
+                normalRate={normalRate}
+                leadRate={leadRate}
               />
             ))}
             {users === undefined ? (
@@ -137,29 +147,55 @@ function UserRateRow({
   userId,
   name,
   meta,
-  hourlyRateUsd,
+  rateMode,
+  customHourlyRateUsd,
+  effectiveHourlyRateUsd,
+  normalRate,
+  leadRate,
 }: {
   userId: string;
   name: string;
   meta: string;
-  hourlyRateUsd: number | null;
+  rateMode: "normal" | "lead" | "custom";
+  customHourlyRateUsd: number | null;
+  effectiveHourlyRateUsd: number | null;
+  normalRate: number;
+  leadRate: number;
 }) {
-  const setHourlyRate = useMutation(api.users.setHourlyRate);
+  const setCompensationRate = useMutation(api.users.setCompensationRate);
 
   const form = useConvexForm<UserRateFormValues>({
     schema: userRateSchema,
-    defaultValues: { hourlyRateUsd: hourlyRateUsd ?? 0 },
+    defaultValues: {
+      rateMode,
+      hourlyRateUsd: customHourlyRateUsd ?? effectiveHourlyRateUsd ?? 0,
+    },
     mode: "onChange",
   });
 
   useEffect(() => {
     if (form.formState.isDirty) return;
-    form.reset({ hourlyRateUsd: hourlyRateUsd ?? 0 });
-  }, [hourlyRateUsd, form]);
+    form.reset({
+      rateMode,
+      hourlyRateUsd: customHourlyRateUsd ?? effectiveHourlyRateUsd ?? 0,
+    });
+  }, [rateMode, customHourlyRateUsd, effectiveHourlyRateUsd, form]);
+
+  const watchedMode = form.watch("rateMode");
+  const previewRate =
+    watchedMode === "normal"
+      ? normalRate
+      : watchedMode === "lead"
+        ? leadRate
+        : form.watch("hourlyRateUsd");
 
   const onSave = form.submitMutation(
     async (values) => {
-      await setHourlyRate({ userId, hourlyRateUsd: values.hourlyRateUsd });
+      await setCompensationRate({
+        userId,
+        rateMode: values.rateMode,
+        hourlyRateUsd: values.rateMode === "custom" ? values.hourlyRateUsd : undefined,
+      });
       return values;
     },
     {
@@ -170,24 +206,47 @@ function UserRateRow({
   );
 
   return (
-    <div className="grid gap-2 rounded-md border p-3 md:grid-cols-[1fr_1fr_24px]">
+    <div className="grid gap-2 rounded-md border p-3 md:grid-cols-[1fr_1.4fr_24px]">
       <div>
         <p className="text-sm font-medium">{name}</p>
         <p className="text-xs text-muted-foreground">{meta}</p>
+        <p className="text-xs text-muted-foreground mt-1">Effective: ${previewRate}/hr</p>
       </div>
       <Form {...form}>
         <form
           onSubmit={form.handleSubmit(onSave)}
-          className="flex items-end gap-2"
+          className="flex flex-wrap items-end gap-2"
         >
-          <div className="min-w-0 flex-1">
-            <TextFormField
-              name="hourlyRateUsd"
-              label=""
-              type="number"
-              placeholder="Hourly rate (USD)"
-            />
+          <div className="min-w-[140px] space-y-1">
+            <Label className="text-xs">Mode</Label>
+            <Select
+              value={form.watch("rateMode")}
+              onValueChange={(value) =>
+                form.setValue("rateMode", value as UserRateFormValues["rateMode"], {
+                  shouldDirty: true,
+                })
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="normal">Normal (${normalRate})</SelectItem>
+                <SelectItem value="lead">Lead (${leadRate})</SelectItem>
+                <SelectItem value="custom">Custom</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
+          {watchedMode === "custom" ? (
+            <div className="min-w-0 flex-1">
+              <TextFormField
+                name="hourlyRateUsd"
+                label="Custom USD"
+                type="number"
+                placeholder="Hourly rate (USD)"
+              />
+            </div>
+          ) : null}
           {form.formState.isDirty ? (
             <Button type="submit" size="sm" disabled={form.saveStatus === "saving"}>
               Save

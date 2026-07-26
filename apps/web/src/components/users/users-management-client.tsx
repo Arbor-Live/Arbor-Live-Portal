@@ -17,6 +17,8 @@ import { BandHeroUploadField } from "@/components/files/file-upload-field";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import {
+  CREW_RATE_MODE_OPTIONS,
+  PAYROLL_METHOD_OPTIONS,
   USER_DISCIPLINE_OPTIONS,
   USER_VERTICAL_OPTIONS,
   bandOrgProfileSchema,
@@ -120,7 +122,9 @@ function userValuesFromRow(user: AdminUser, resolvedOrgId: string): UserAdminRow
     publicCrewDescription: user.publicCrewDescription ?? "",
     title: user.title || "",
     phone: user.phone || "",
-    hourlyRateUsd: (user.hourlyRateUsd ?? 0).toString(),
+    rateMode: (user.rateMode ?? "custom") as UserAdminRowFormValues["rateMode"],
+    hourlyRateUsd: (user.customHourlyRateUsd ?? user.hourlyRateUsd ?? 0).toString(),
+    payrollMethod: (user.payrollMethod ?? "stanford") as UserAdminRowFormValues["payrollMethod"],
     verticals: (user.verticals ?? []) as UserVerticalOption[],
     disciplines: (user.disciplines ?? []) as UserDisciplineOption[],
     defaultOrganizationId: user.defaultOrganizationId || resolvedOrgId,
@@ -691,7 +695,9 @@ function UserAdminRow({
       verticals: values.verticals,
       disciplines: values.disciplines,
       defaultOrganizationId: values.defaultOrganizationId || undefined,
-      hourlyRateUsd: Number(values.hourlyRateUsd || "0"),
+      rateMode: values.rateMode,
+      customHourlyRateUsd: values.rateMode === "custom" ? Number(values.hourlyRateUsd || "0") : undefined,
+      payrollMethod: values.payrollMethod,
       organizationMemberships: values.defaultOrganizationId
         ? [
             {
@@ -800,10 +806,56 @@ function UserAdminRow({
           />
         </td>
         <td className="px-3 py-2">
-          <Input
-            value={form.watch("hourlyRateUsd")}
-            onChange={(e) => form.setValue("hourlyRateUsd", e.target.value, { shouldDirty: true })}
-          />
+          <div className="space-y-1">
+            <Select
+              value={form.watch("rateMode")}
+              onValueChange={(value) =>
+                form.setValue(
+                  "rateMode",
+                  value as (typeof CREW_RATE_MODE_OPTIONS)[number],
+                  { shouldDirty: true },
+                )
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="normal">Normal</SelectItem>
+                <SelectItem value="lead">Lead</SelectItem>
+                <SelectItem value="custom">Custom</SelectItem>
+              </SelectContent>
+            </Select>
+            {form.watch("rateMode") === "custom" ? (
+              <Input
+                value={form.watch("hourlyRateUsd")}
+                onChange={(e) => form.setValue("hourlyRateUsd", e.target.value, { shouldDirty: true })}
+                placeholder="USD"
+              />
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                ${user.hourlyRateUsd ?? 0}/hr (synced)
+              </p>
+            )}
+            <Select
+              value={form.watch("payrollMethod")}
+              onValueChange={(value) =>
+                form.setValue(
+                  "payrollMethod",
+                  value as (typeof PAYROLL_METHOD_OPTIONS)[number],
+                  { shouldDirty: true },
+                )
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="stanford">Stanford</SelectItem>
+                <SelectItem value="external">External</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </td>
         <td className="px-3 py-2">
           <Select
@@ -1239,20 +1291,50 @@ function InviteUserModal({
 }) {
   const form = useConvexForm<InviteUserFormValues>({
     schema: inviteUserSchema,
-    defaultValues: { email: "", role: "member", verticals: [], disciplines: [] },
+    defaultValues: {
+      email: "",
+      role: "member",
+      verticals: [],
+      disciplines: [],
+      rateMode: "normal",
+      customHourlyRateUsd: "0",
+      payrollMethod: "stanford",
+    },
     mode: "onTouched",
   });
 
+  const arborInvite = isArborOrg(orgOptions, orgId);
+
   const onSubmit = form.submitMutation(async (values) => {
     if (!orgId) throw new Error("Create or select an organization first.");
+    if (arborInvite && !values.rateMode) {
+      throw new Error("Select a rate mode.");
+    }
+    if (arborInvite && !values.payrollMethod) {
+      throw new Error("Select a payment method.");
+    }
     await inviteUser({
       organizationId: orgId,
       email: values.email.trim(),
       role: values.role,
       verticals: values.verticals,
       disciplines: values.disciplines,
+      rateMode: arborInvite ? values.rateMode : undefined,
+      customHourlyRateUsd:
+        arborInvite && values.rateMode === "custom"
+          ? Number(values.customHourlyRateUsd || "0")
+          : undefined,
+      payrollMethod: arborInvite ? values.payrollMethod : undefined,
     });
-    form.reset({ email: "", role: "member", verticals: [], disciplines: [] });
+    form.reset({
+      email: "",
+      role: "member",
+      verticals: [],
+      disciplines: [],
+      rateMode: "normal",
+      customHourlyRateUsd: "0",
+      payrollMethod: "stanford",
+    });
     onInvited();
   });
 
@@ -1302,6 +1384,56 @@ function InviteUserModal({
                   idPrefix="invite-discipline"
                 />
               </div>
+              {arborInvite ? (
+                <div className="grid gap-2 md:grid-cols-2">
+                  <div className="space-y-1">
+                    <Label>Rate</Label>
+                    <Select
+                      value={form.watch("rateMode") ?? "normal"}
+                      onValueChange={(value) =>
+                        form.setValue(
+                          "rateMode",
+                          value as (typeof CREW_RATE_MODE_OPTIONS)[number],
+                          { shouldDirty: true },
+                        )
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="normal">Normal</SelectItem>
+                        <SelectItem value="lead">Lead</SelectItem>
+                        <SelectItem value="custom">Custom</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Payment method</Label>
+                    <Select
+                      value={form.watch("payrollMethod") ?? "stanford"}
+                      onValueChange={(value) =>
+                        form.setValue(
+                          "payrollMethod",
+                          value as (typeof PAYROLL_METHOD_OPTIONS)[number],
+                          { shouldDirty: true },
+                        )
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="stanford">Stanford payroll</SelectItem>
+                        <SelectItem value="external">External payroll</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {form.watch("rateMode") === "custom" ? (
+                    <TextFormField name="customHourlyRateUsd" label="Custom hourly rate (USD)" />
+                  ) : null}
+                </div>
+              ) : null}
               <div className="flex gap-2">
                 <Button type="submit" disabled={form.saveStatus === "saving"}>
                   Send Invite
@@ -1322,7 +1454,15 @@ function InviteUserModal({
         saveLabel="Send Invite"
         onSave={() => void form.handleSubmit(onSubmit)()}
         onDiscard={() => {
-          form.reset({ email: "", role: "member", verticals: [], disciplines: [] });
+          form.reset({
+            email: "",
+            role: "member",
+            verticals: [],
+            disciplines: [],
+            rateMode: "normal",
+            customHourlyRateUsd: "0",
+            payrollMethod: "stanford",
+          });
           onClose();
         }}
         onRetry={() => void form.handleSubmit(onSubmit)()}
@@ -1465,10 +1605,14 @@ function CreateUserModal({
       role: "member",
       verticals: [],
       disciplines: [],
+      rateMode: "normal",
       hourlyRateUsd: "0",
+      payrollMethod: "stanford",
     },
     mode: "onTouched",
   });
+
+  const arborCreate = isArborOrg(orgOptions, orgId);
 
   const onSubmit = form.submitMutation(async (values) => {
     if (!orgId) throw new Error("Create or select an organization first.");
@@ -1481,7 +1625,12 @@ function CreateUserModal({
       role: values.role,
       verticals: values.verticals,
       disciplines: values.disciplines,
-      hourlyRateUsd: Number(values.hourlyRateUsd || "0"),
+      rateMode: arborCreate ? values.rateMode : undefined,
+      customHourlyRateUsd:
+        arborCreate && values.rateMode === "custom"
+          ? Number(values.hourlyRateUsd || "0")
+          : undefined,
+      payrollMethod: arborCreate ? values.payrollMethod : undefined,
     });
     form.reset({
       name: "",
@@ -1491,7 +1640,9 @@ function CreateUserModal({
       role: "member",
       verticals: [],
       disciplines: [],
+      rateMode: "normal",
       hourlyRateUsd: "0",
+      payrollMethod: "stanford",
     });
     onCreated();
   });
@@ -1528,7 +1679,63 @@ function CreateUserModal({
                     </SelectContent>
                   </Select>
                 </div>
-                <TextFormField name="hourlyRateUsd" label="Hourly rate (USD)" />
+                {arborCreate ? (
+                  <>
+                    <div className="space-y-1">
+                      <Label>Rate</Label>
+                      <Select
+                        value={form.watch("rateMode")}
+                        onValueChange={(value) =>
+                          form.setValue(
+                            "rateMode",
+                            value as (typeof CREW_RATE_MODE_OPTIONS)[number],
+                            { shouldDirty: true },
+                          )
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="normal">Normal</SelectItem>
+                          <SelectItem value="lead">Lead</SelectItem>
+                          <SelectItem value="custom">Custom</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {form.watch("rateMode") === "custom" ? (
+                      <TextFormField name="hourlyRateUsd" label="Custom hourly rate (USD)" />
+                    ) : (
+                      <div className="space-y-1">
+                        <Label>Effective rate</Label>
+                        <p className="text-sm text-muted-foreground pt-2">
+                          Uses global {form.watch("rateMode")} rate
+                        </p>
+                      </div>
+                    )}
+                    <div className="space-y-1">
+                      <Label>Payment method</Label>
+                      <Select
+                        value={form.watch("payrollMethod")}
+                        onValueChange={(value) =>
+                          form.setValue(
+                            "payrollMethod",
+                            value as (typeof PAYROLL_METHOD_OPTIONS)[number],
+                            { shouldDirty: true },
+                          )
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="stanford">Stanford payroll</SelectItem>
+                          <SelectItem value="external">External payroll</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </>
+                ) : null}
               </div>
               <div className="grid gap-2 md:grid-cols-2">
                 <MembershipCheckboxes
@@ -1574,7 +1781,9 @@ function CreateUserModal({
             role: "member",
             verticals: [],
             disciplines: [],
-            hourlyRateUsd: "0",
+            rateMode: "normal",
+      hourlyRateUsd: "0",
+      payrollMethod: "stanford",
           });
           onClose();
         }}

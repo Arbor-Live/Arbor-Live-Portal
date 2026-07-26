@@ -16,6 +16,12 @@ import {
   type UserVertical,
 } from "./lib/userVerticals";
 import { ensureOnboardingForOrgMembership } from "./onboarding";
+import {
+  applyPayrollMethodToProfile,
+  upsertUserCompensationRate,
+  type PayrollMethod,
+  type UserCompensationRateMode,
+} from "./lib/crewCompensation";
 
 type AuthUser = {
   id?: string;
@@ -36,6 +42,7 @@ async function ensureUserProfileDefaults(
     verticals?: UserVertical[];
     disciplines?: UserDiscipline[];
     defaultOrganizationId?: string;
+    payrollMethod?: PayrollMethod;
   },
 ) {
   const now = Date.now();
@@ -49,6 +56,7 @@ async function ensureUserProfileDefaults(
       verticals: args.verticals ?? existing.verticals ?? [],
       disciplines: args.disciplines ?? existing.disciplines ?? [],
       defaultOrganizationId: args.defaultOrganizationId ?? existing.defaultOrganizationId,
+      payrollMethod: args.payrollMethod ?? existing.payrollMethod,
       updatedAt: now,
     });
     return;
@@ -59,6 +67,7 @@ async function ensureUserProfileDefaults(
     verticals: args.verticals ?? [],
     disciplines: args.disciplines ?? [],
     defaultOrganizationId: args.defaultOrganizationId,
+    payrollMethod: args.payrollMethod,
     createdAt: now,
     updatedAt: now,
   });
@@ -228,12 +237,24 @@ export const acceptInviteWithPassword = mutation({
       verticals: membership.verticals,
       disciplines: membership.disciplines,
       defaultOrganizationId: pending.organizationId,
+      payrollMethod: pending.payrollMethod,
     });
     await upsertOrgMembership(ctx, {
       userId,
       organizationId: pending.organizationId,
       role: pending.role,
     });
+
+    if (pending.rateMode) {
+      await upsertUserCompensationRate(ctx, {
+        userId,
+        rateMode: pending.rateMode as UserCompensationRateMode,
+        hourlyRateUsd: pending.rateMode === "custom" ? pending.customHourlyRateUsd : 0,
+      });
+    }
+    if (pending.payrollMethod) {
+      await applyPayrollMethodToProfile(ctx, userId, pending.payrollMethod as PayrollMethod);
+    }
 
     const existingActiveOrg = await ctx.db
       .query("userActiveOrganizations")

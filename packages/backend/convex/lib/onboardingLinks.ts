@@ -40,6 +40,11 @@ export const FWS_JOB_INFO = {
   hrAdminEmail: "sky3@stanford.edu",
 } as const;
 
+export const CONTRACTOR_PAY_INFO = {
+  w9Email: "arborlive@stanford.edu",
+  invoiceCadence: "every two weeks",
+} as const;
+
 /** Recipients notified when crew finish onboarding / for FWS questions. */
 export const ONBOARDING_LEADERSHIP_EMAILS = [
   "emorenoa@stanford.edu",

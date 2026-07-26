@@ -1,6 +1,7 @@
 import { components } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
+import { resolveUserCompensationHourlyRateUsd } from "./crewCompensation";
 
 function roundCurrency(value: number) {
   return Math.round(value * 100) / 100;
@@ -30,7 +31,12 @@ export async function calculateCrewCost(ctx: QueryCtx | MutationCtx, eventId: Id
     .take(500);
   const userIds = Array.from(new Set(shifts.map((shift) => shift.userId).filter(Boolean) as string[]));
   const rates = await ctx.db.query("userCompensationRates").withIndex("by_updatedAt").take(1000);
-  const rateByUserId = new Map(rates.map((rate) => [rate.userId, rate.hourlyRateUsd]));
+  const rateByUserId = new Map(
+    rates.map((rate) => [
+      rate.userId,
+      resolveUserCompensationHourlyRateUsd(rate, settings),
+    ]),
+  );
 
   const scheduleBlocks = await ctx.db
     .query("eventScheduleBlocks")

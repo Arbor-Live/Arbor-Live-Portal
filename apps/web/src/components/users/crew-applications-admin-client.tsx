@@ -5,7 +5,9 @@ import { useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { EventSelect } from "@/components/events/event-select";
 import { ScheduleBlockWindowFields } from "@/components/events/schedule-block-window-fields";
@@ -199,6 +201,13 @@ export function CrewApplicationsAdminClient() {
 
   const [convertVerticals, setConvertVerticals] = useState<Record<string, string[]>>({});
   const [convertDisciplines, setConvertDisciplines] = useState<Record<string, string[]>>({});
+  const [convertRateMode, setConvertRateMode] = useState<
+    Record<string, "normal" | "lead" | "custom">
+  >({});
+  const [convertCustomRate, setConvertCustomRate] = useState<Record<string, string>>({});
+  const [convertPayroll, setConvertPayroll] = useState<
+    Record<string, "stanford" | "external">
+  >({});
 
   const applications = useQuery(
     api.crewApplications.listAdmin,
@@ -429,18 +438,85 @@ export function CrewApplicationsAdminClient() {
                       })}
                     </div>
                   </div>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>Rate</Label>
+                      <Select
+                        value={convertRateMode[app._id] ?? "normal"}
+                        onValueChange={(value) =>
+                          setConvertRateMode((prev) => ({
+                            ...prev,
+                            [app._id]: value as "normal" | "lead" | "custom",
+                          }))
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="normal">Normal</SelectItem>
+                          <SelectItem value="lead">Lead</SelectItem>
+                          <SelectItem value="custom">Custom</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Payment method</Label>
+                      <Select
+                        value={convertPayroll[app._id] ?? "stanford"}
+                        onValueChange={(value) =>
+                          setConvertPayroll((prev) => ({
+                            ...prev,
+                            [app._id]: value as "stanford" | "external",
+                          }))
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="stanford">Stanford payroll</SelectItem>
+                          <SelectItem value="external">External payroll</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {(convertRateMode[app._id] ?? "normal") === "custom" ? (
+                      <div className="space-y-2">
+                        <Label htmlFor={`convert-rate-${app._id}`}>Custom hourly rate (USD)</Label>
+                        <Input
+                          id={`convert-rate-${app._id}`}
+                          type="number"
+                          min={0}
+                          value={convertCustomRate[app._id] ?? "0"}
+                          onChange={(event) =>
+                            setConvertCustomRate((prev) => ({
+                              ...prev,
+                              [app._id]: event.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                    ) : null}
+                  </div>
                   <Button
                     type="button"
                     size="sm"
                     disabled={busyId === app._id}
                     onClick={() =>
                       void runAction(app._id, async () => {
+                        const rateMode = convertRateMode[app._id] ?? "normal";
                         await convertToMember({
                           applicationId: app._id,
                           verticals: verticals as Array<
                             "Operations" | "Crew" | "Trivia" | "Marketing"
                           >,
                           disciplines: disciplines as Array<"Sound" | "Lights" | "Design">,
+                          rateMode,
+                          customHourlyRateUsd:
+                            rateMode === "custom"
+                              ? Number(convertCustomRate[app._id] || "0")
+                              : undefined,
+                          payrollMethod: convertPayroll[app._id] ?? "stanford",
                         });
                       })
                     }

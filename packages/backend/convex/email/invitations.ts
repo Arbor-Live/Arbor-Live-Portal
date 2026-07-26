@@ -74,6 +74,9 @@ export async function upsertPendingInviteToken(
     teams?: string[];
     verticals?: string[];
     disciplines?: string[];
+    rateMode?: "normal" | "lead" | "custom";
+    customHourlyRateUsd?: number;
+    payrollMethod?: "stanford" | "external";
     expiresAt: number;
   },
 ) {
@@ -93,6 +96,9 @@ export async function upsertPendingInviteToken(
     teams: args.teams,
     verticals: args.verticals,
     disciplines: args.disciplines,
+    rateMode: args.rateMode,
+    customHourlyRateUsd: args.customHourlyRateUsd,
+    payrollMethod: args.payrollMethod,
     expiresAt: args.expiresAt,
     createdAt: now,
   };
@@ -118,6 +124,9 @@ export async function scheduleUserInviteEmail(
     teams?: string[];
     verticals?: string[];
     disciplines?: string[];
+    rateMode?: "normal" | "lead" | "custom";
+    customHourlyRateUsd?: number;
+    payrollMethod?: "stanford" | "external";
     isExistingUser: boolean;
     resendKey?: string;
   },
@@ -145,6 +154,9 @@ export async function scheduleUserInviteEmail(
       teams: args.teams,
       verticals: args.verticals,
       disciplines: args.disciplines,
+      rateMode: args.rateMode,
+      customHourlyRateUsd: args.customHourlyRateUsd,
+      payrollMethod: args.payrollMethod,
       expiresAt: args.expiresAt,
     });
     inviteUrl = inviteAcceptUrl(token);
@@ -178,6 +190,9 @@ export async function updatePendingInviteDetails(
     teams?: string[];
     verticals?: string[];
     disciplines?: string[];
+    rateMode?: "normal" | "lead" | "custom";
+    customHourlyRateUsd?: number;
+    payrollMethod?: "stanford" | "external";
   },
 ) {
   const pending = await ctx.db
@@ -190,10 +205,16 @@ export async function updatePendingInviteDetails(
     teams?: string[];
     verticals?: string[];
     disciplines?: string[];
+    rateMode?: "normal" | "lead" | "custom";
+    customHourlyRateUsd?: number;
+    payrollMethod?: "stanford" | "external";
   } = { role: args.role };
   if (args.teams !== undefined) patch.teams = args.teams;
   if (args.verticals !== undefined) patch.verticals = args.verticals;
   if (args.disciplines !== undefined) patch.disciplines = args.disciplines;
+  if (args.rateMode !== undefined) patch.rateMode = args.rateMode;
+  if (args.customHourlyRateUsd !== undefined) patch.customHourlyRateUsd = args.customHourlyRateUsd;
+  if (args.payrollMethod !== undefined) patch.payrollMethod = args.payrollMethod;
   await ctx.db.patch(pending._id, patch);
 }
 

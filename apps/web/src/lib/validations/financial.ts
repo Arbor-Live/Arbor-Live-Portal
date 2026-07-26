@@ -44,9 +44,20 @@ export const termsDefinitionSchema = z.object({
 
 export type TermsDefinitionFormValues = z.infer<typeof termsDefinitionSchema>;
 
-export const userRateSchema = z.object({
-  hourlyRateUsd: z.coerce.number().min(0, "Rate must be non-negative"),
-});
+export const userRateSchema = z
+  .object({
+    rateMode: z.enum(["normal", "lead", "custom"]),
+    hourlyRateUsd: z.coerce.number().min(0, "Rate must be non-negative"),
+  })
+  .superRefine((values, ctx) => {
+    if (values.rateMode === "custom" && values.hourlyRateUsd < 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Custom rate must be non-negative",
+        path: ["hourlyRateUsd"],
+      });
+    }
+  });
 
 export type UserRateFormValues = z.infer<typeof userRateSchema>;
 

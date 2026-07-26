@@ -27,6 +27,10 @@ import {
   markPayingPartyNotified,
   schedulePayingPartyAddedEmail,
 } from "./email/payingPartyEmails";
+import {
+  loadInvoiceCrewRateSettings,
+  resolveUserCompensationHourlyRateUsd,
+} from "./lib/crewCompensation";
 
 const equipmentPricingModeValue = v.union(v.literal("subsidized"), v.literal("nonSubsidized"));
 const crewRateModeValue = v.union(
@@ -313,10 +317,11 @@ export const listManagers = query({
       image?: string | null;
     }>;
     const showRates = isAdmin(currentUser);
+    const settings = showRates ? await loadInvoiceCrewRateSettings(ctx) : null;
     const rateByUserId = showRates
       ? new Map(
           (await ctx.db.query("userCompensationRates").withIndex("by_updatedAt").take(1000)).map(
-            (rate) => [rate.userId, rate.hourlyRateUsd],
+            (rate) => [rate.userId, resolveUserCompensationHourlyRateUsd(rate, settings)],
           ),
         )
       : null;

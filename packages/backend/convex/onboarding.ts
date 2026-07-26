@@ -22,6 +22,10 @@ import {
   ONBOARDING_LEADERSHIP_EMAILS,
   ONBOARDING_LINKS,
 } from "./lib/onboardingLinks";
+import {
+  normalizePayrollMethod,
+  type PayrollMethod,
+} from "./lib/crewCompensation";
 
 const onboardingStatusValue = v.union(
   v.literal("not_started"),
@@ -34,23 +38,13 @@ const REMINDER_COOLDOWN_MS = 6 * 24 * 60 * 60 * 1000;
 
 type CrewOnboardingDoc = Doc<"userOnboarding">;
 
-function crewRequiredStepsComplete(row: CrewOnboardingDoc): boolean {
+function trainingStepsComplete(row: CrewOnboardingDoc): boolean {
   const base =
-    Boolean(row.profileCompletedAt) &&
-    Boolean(row.whatsappAcknowledgedAt) &&
-    Boolean(row.instagramAcknowledgedAt) &&
-    row.hasFederalWorkStudy !== undefined &&
-    row.hasFederalWorkStudy !== null &&
-    Boolean(row.fwsAcknowledgedAt) &&
     Boolean(row.narcanCompletedAt) &&
     Boolean(row.soberMonitorCompletedAt) &&
     Boolean(row.emergencySopsAcknowledgedAt) &&
     Boolean(row.crewExpectationsAcknowledgedAt) &&
-    Boolean(row.liftingCompletedAt) &&
-    Boolean(row.oseHiringFormCompletedAt) &&
-    Boolean(row.timecardAcknowledgedAt) &&
-    Boolean(row.agreedToOnboardingDocAt) &&
-    Boolean(row.signatureLegalName?.trim());
+    Boolean(row.liftingCompletedAt);
   if (!base) return false;
   if (row.hasValidDriversLicense) {
     return Boolean(row.cartTrainingCompletedAt);
@@ -58,29 +52,78 @@ function crewRequiredStepsComplete(row: CrewOnboardingDoc): boolean {
   return true;
 }
 
-function countIncompleteCrewSteps(row: CrewOnboardingDoc): number {
+function crewRequiredStepsComplete(
+  row: CrewOnboardingDoc,
+  payrollMethod: PayrollMethod,
+): boolean {
+  const shared =
+    Boolean(row.profileCompletedAt) &&
+    Boolean(row.whatsappAcknowledgedAt) &&
+    Boolean(row.instagramAcknowledgedAt) &&
+    trainingStepsComplete(row) &&
+    Boolean(row.agreedToOnboardingDocAt) &&
+    Boolean(row.signatureLegalName?.trim());
+  if (!shared) return false;
+  if (payrollMethod === "external") {
+    return Boolean(row.contractorPayAcknowledgedAt);
+  }
+  return (
+    row.hasFederalWorkStudy !== undefined &&
+    row.hasFederalWorkStudy !== null &&
+    Boolean(row.fwsAcknowledgedAt) &&
+    Boolean(row.oseHiringFormCompletedAt) &&
+    Boolean(row.timecardAcknowledgedAt)
+  );
+}
+
+function countIncompleteCrewSteps(
+  row: CrewOnboardingDoc,
+  payrollMethod: PayrollMethod,
+): number {
   let missing = 0;
-  const checks: Array<boolean> = [
+  const sharedChecks: Array<boolean> = [
     Boolean(row.profileCompletedAt),
     Boolean(row.whatsappAcknowledgedAt),
     Boolean(row.instagramAcknowledgedAt),
-    row.hasFederalWorkStudy !== undefined &&
-      row.hasFederalWorkStudy !== null &&
-      Boolean(row.fwsAcknowledgedAt),
     Boolean(row.narcanCompletedAt),
     Boolean(row.soberMonitorCompletedAt),
     Boolean(row.emergencySopsAcknowledgedAt),
     Boolean(row.crewExpectationsAcknowledgedAt),
     Boolean(row.liftingCompletedAt),
-    Boolean(row.oseHiringFormCompletedAt),
-    Boolean(row.timecardAcknowledgedAt),
     Boolean(row.agreedToOnboardingDocAt) && Boolean(row.signatureLegalName?.trim()),
   ];
-  for (const ok of checks) {
+  for (const ok of sharedChecks) {
     if (!ok) missing += 1;
   }
   if (row.hasValidDriversLicense && !row.cartTrainingCompletedAt) missing += 1;
+
+  if (payrollMethod === "external") {
+    if (!row.contractorPayAcknowledgedAt) missing += 1;
+  } else {
+    if (
+      !(
+        row.hasFederalWorkStudy !== undefined &&
+        row.hasFederalWorkStudy !== null &&
+        Boolean(row.fwsAcknowledgedAt)
+      )
+    ) {
+      missing += 1;
+    }
+    if (!row.oseHiringFormCompletedAt) missing += 1;
+    if (!row.timecardAcknowledgedAt) missing += 1;
+  }
   return missing;
+}
+
+async function getPayrollMethodForUser(
+  ctx: QueryCtx | MutationCtx,
+  userId: string,
+): Promise<PayrollMethod> {
+  const profile = await ctx.db
+    .query("userAdminProfiles")
+    .withIndex("by_userId", (q) => q.eq("userId", userId))
+    .unique();
+  return normalizePayrollMethod(profile?.payrollMethod);
 }
 
 export type MyOnboardingStatus = {
@@ -110,14 +153,19 @@ export async function resolveMyOnboardingStatus(
       .query("userOnboarding")
       .withIndex("by_userId", (q) => q.eq("userId", userId))
       .unique();
+    const payrollMethod = await getPayrollMethodForUser(ctx, userId);
     if (row) {
       crew = {
         applicable: true,
         status: row.status,
-        incompleteStepCount: countIncompleteCrewSteps(row),
+        incompleteStepCount: countIncompleteCrewSteps(row, payrollMethod),
       };
     } else {
-      crew = { applicable: true, status: "not_started", incompleteStepCount: 12 };
+      crew = {
+        applicable: true,
+        status: "not_started",
+        incompleteStepCount: payrollMethod === "external" ? 10 : 12,
+      };
     }
   }
 
@@ -269,6 +317,7 @@ async function scheduleOnboardingCompletedEmails(
 const crewOnboardingReturn = v.object({
   status: onboardingStatusValue,
   incompleteStepCount: v.number(),
+  payrollMethod: v.union(v.literal("stanford"), v.literal("external")),
   profileCompletedAt: v.optional(v.number()),
   whatsappAcknowledgedAt: v.optional(v.number()),
   instagramAcknowledgedAt: v.optional(v.number()),
@@ -283,6 +332,7 @@ const crewOnboardingReturn = v.object({
   cartTrainingCompletedAt: v.optional(v.number()),
   oseHiringFormCompletedAt: v.optional(v.number()),
   timecardAcknowledgedAt: v.optional(v.number()),
+  contractorPayAcknowledgedAt: v.optional(v.number()),
   agreedToOnboardingDocAt: v.optional(v.number()),
   signatureLegalName: v.optional(v.string()),
   completedAt: v.optional(v.number()),
@@ -310,10 +360,12 @@ function serializeCrewOnboarding(
     showOnPublicCrewPage: boolean;
     publicCrewDescription?: string;
   },
+  payrollMethod: PayrollMethod,
 ) {
   return {
     status: row.status,
-    incompleteStepCount: countIncompleteCrewSteps(row),
+    incompleteStepCount: countIncompleteCrewSteps(row, payrollMethod),
+    payrollMethod,
     profileCompletedAt: row.profileCompletedAt,
     whatsappAcknowledgedAt: row.whatsappAcknowledgedAt,
     instagramAcknowledgedAt: row.instagramAcknowledgedAt,
@@ -328,6 +380,7 @@ function serializeCrewOnboarding(
     cartTrainingCompletedAt: row.cartTrainingCompletedAt,
     oseHiringFormCompletedAt: row.oseHiringFormCompletedAt,
     timecardAcknowledgedAt: row.timecardAcknowledgedAt,
+    contractorPayAcknowledgedAt: row.contractorPayAcknowledgedAt,
     agreedToOnboardingDocAt: row.agreedToOnboardingDocAt,
     signatureLegalName: row.signatureLegalName,
     completedAt: row.completedAt,
@@ -412,18 +465,21 @@ export const getMyCrewOnboarding = query({
       publicCrewDescription: profile?.publicCrewDescription,
     };
 
+    const payrollMethod = normalizePayrollMethod(profile?.payrollMethod);
+
     // Queries cannot insert; surface a synthetic not_started if missing.
     if (!row) {
       return {
         status: "not_started" as const,
-        incompleteStepCount: 12,
+        incompleteStepCount: payrollMethod === "external" ? 10 : 12,
+        payrollMethod,
         links: ONBOARDING_LINKS,
         fwsJobInfo: FWS_JOB_INFO,
         profile: profilePayload,
       };
     }
 
-    return serializeCrewOnboarding(row, profilePayload);
+    return serializeCrewOnboarding(row, profilePayload, payrollMethod);
   },
 });
 
@@ -539,6 +595,7 @@ export const saveCrewOnboardingStep = mutation({
     cartTrainingCompleted: v.optional(v.boolean()),
     oseHiringFormCompleted: v.optional(v.boolean()),
     timecardAcknowledged: v.optional(v.boolean()),
+    contractorPayAcknowledged: v.optional(v.boolean()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -578,6 +635,7 @@ export const saveCrewOnboardingStep = mutation({
     if (args.cartTrainingCompleted) patch.cartTrainingCompletedAt = now;
     if (args.oseHiringFormCompleted) patch.oseHiringFormCompletedAt = now;
     if (args.timecardAcknowledged) patch.timecardAcknowledgedAt = now;
+    if (args.contractorPayAcknowledged) patch.contractorPayAcknowledgedAt = now;
 
     await ctx.db.patch(row._id, patch);
     return null;
@@ -615,7 +673,8 @@ export const completeCrewOnboarding = mutation({
       signatureUserAgent: args.signatureUserAgent?.trim() || undefined,
     };
 
-    if (!crewRequiredStepsComplete(next)) {
+    const payrollMethod = await getPayrollMethodForUser(ctx, userId);
+    if (!crewRequiredStepsComplete(next, payrollMethod)) {
       throw new Error("Please complete all required onboarding steps before signing.");
     }
 
@@ -671,6 +730,7 @@ export const listCrewOnboardingForAdmin = query({
       userId: v.string(),
       status: onboardingStatusValue,
       incompleteStepCount: v.number(),
+      payrollMethod: v.union(v.literal("stanford"), v.literal("external")),
       hasFederalWorkStudy: v.optional(v.union(v.boolean(), v.null())),
       hasValidDriversLicense: v.optional(v.boolean()),
       signatureLegalName: v.optional(v.string()),
@@ -687,16 +747,24 @@ export const listCrewOnboardingForAdmin = query({
       cartTrainingCompletedAt: v.optional(v.number()),
       oseHiringFormCompletedAt: v.optional(v.number()),
       timecardAcknowledgedAt: v.optional(v.number()),
+      contractorPayAcknowledgedAt: v.optional(v.number()),
       agreedToOnboardingDocAt: v.optional(v.number()),
     }),
   ),
   handler: async (ctx) => {
     await requireAdmin(ctx);
     const rows = await ctx.db.query("userOnboarding").withIndex("by_status").take(2000);
-    return rows.map((row) => ({
+    const profiles = await ctx.db.query("userAdminProfiles").withIndex("by_active").take(2000);
+    const payrollByUserId = new Map(
+      profiles.map((profile) => [profile.userId, normalizePayrollMethod(profile.payrollMethod)]),
+    );
+    return rows.map((row) => {
+      const payrollMethod = payrollByUserId.get(row.userId) ?? "stanford";
+      return {
       userId: row.userId,
       status: row.status,
-      incompleteStepCount: countIncompleteCrewSteps(row),
+      incompleteStepCount: countIncompleteCrewSteps(row, payrollMethod),
+      payrollMethod,
       hasFederalWorkStudy: row.hasFederalWorkStudy,
       hasValidDriversLicense: row.hasValidDriversLicense,
       signatureLegalName: row.signatureLegalName,
@@ -713,8 +781,10 @@ export const listCrewOnboardingForAdmin = query({
       cartTrainingCompletedAt: row.cartTrainingCompletedAt,
       oseHiringFormCompletedAt: row.oseHiringFormCompletedAt,
       timecardAcknowledgedAt: row.timecardAcknowledgedAt,
+      contractorPayAcknowledgedAt: row.contractorPayAcknowledgedAt,
       agreedToOnboardingDocAt: row.agreedToOnboardingDocAt,
-    }));
+    };
+    });
   },
 });
 
@@ -902,6 +972,7 @@ export const remindIncomplete = internalMutation({
       if (!email) continue;
 
       const dayKey = new Date(now).toISOString().slice(0, 10);
+      const payrollMethod = await getPayrollMethodForUser(ctx, row.userId);
       await enqueueEmail(ctx, {
         template: "onboarding_reminder",
         to: email,
@@ -910,7 +981,7 @@ export const remindIncomplete = internalMutation({
         payload: {
           recipientName: authUser?.name ?? undefined,
           onboardingUrl: `${SITE_URL}/onboarding`,
-          incompleteStepCount: countIncompleteCrewSteps(row),
+          incompleteStepCount: countIncompleteCrewSteps(row, payrollMethod),
         },
       });
       await ctx.db.patch(row._id, { lastReminderSentAt: now, updatedAt: now });

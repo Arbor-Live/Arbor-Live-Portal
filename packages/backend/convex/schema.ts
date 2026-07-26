@@ -53,6 +53,13 @@ const crewRateModeValue = v.union(
   v.literal("custom"),
   v.literal("ot"),
 );
+/** Per-user compensation rate mode (event crew cost). Missing/legacy ⇒ custom. */
+const userCompensationRateModeValue = v.union(
+  v.literal("normal"),
+  v.literal("lead"),
+  v.literal("custom"),
+);
+const payrollMethodValue = v.union(v.literal("stanford"), v.literal("external"));
 const discountTypeValue = v.union(v.literal("amount"), v.literal("percent"));
 
 const invoiceLineSectionValue = v.union(
@@ -751,6 +758,8 @@ export default defineSchema({
 
   userCompensationRates: defineTable({
     userId: v.string(),
+    /** Missing/legacy ⇒ treat as custom (use hourlyRateUsd). */
+    rateMode: v.optional(userCompensationRateModeValue),
     hourlyRateUsd: v.number(),
     updatedByUserId: v.optional(v.string()),
     createdAt: v.number(),
@@ -774,6 +783,8 @@ export default defineSchema({
     /** Admin-written blurb shown on the public /crew page. */
     publicCrewDescription: v.optional(v.string()),
     calendarInviteEmail: v.optional(v.string()),
+    /** Missing/legacy ⇒ stanford payroll. */
+    payrollMethod: v.optional(payrollMethodValue),
     defaultOrganizationId: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -864,6 +875,8 @@ export default defineSchema({
     cartTrainingCompletedAt: v.optional(v.number()),
     oseHiringFormCompletedAt: v.optional(v.number()),
     timecardAcknowledgedAt: v.optional(v.number()),
+    /** External payroll: W9 + biweekly invoice instructions acknowledged. */
+    contractorPayAcknowledgedAt: v.optional(v.number()),
     agreedToOnboardingDocAt: v.optional(v.number()),
     signatureLegalName: v.optional(v.string()),
     signatureUserAgent: v.optional(v.string()),
@@ -1121,6 +1134,10 @@ export default defineSchema({
     teams: v.optional(v.array(v.string())),
     verticals: v.optional(v.array(v.string())),
     disciplines: v.optional(v.array(v.string())),
+    /** Arbor Live crew invites: compensation + payroll applied on accept. */
+    rateMode: v.optional(userCompensationRateModeValue),
+    customHourlyRateUsd: v.optional(v.number()),
+    payrollMethod: v.optional(payrollMethodValue),
     expiresAt: v.number(),
     createdAt: v.number(),
   })
