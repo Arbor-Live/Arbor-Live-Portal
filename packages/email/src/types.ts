@@ -97,6 +97,7 @@ export type BookingQuoteReadyEmailProps = {
   trackingUrl: string;
   managerName: string;
   managerEmail?: string;
+  managerMessage: string;
 };
 
 export type PaymentProofReminderEmailProps = {

@@ -1169,7 +1169,10 @@ export const createDraftForSeries = mutation({
 });
 
 export const markReadyForClientReview = mutation({
-  args: { id: v.id("invoices") },
+  args: {
+    id: v.id("invoices"),
+    clientMessage: v.string(),
+  },
   returns: v.null(),
   handler: async (ctx, args) => {
     await requireAuth(ctx);
@@ -1180,10 +1183,15 @@ export const markReadyForClientReview = mutation({
       throw new Error("Only booking-request quotes can be sent on the request portal.");
     }
     if (invoice.status === "void") throw new Error("Cannot publish a void quote.");
+    const clientReadyMessage = args.clientMessage.trim();
+    if (!clientReadyMessage) {
+      throw new Error("A message to the client is required before sending the quote.");
+    }
     const now = Date.now();
     await ctx.db.patch(args.id, {
       status: "finalized",
       clientReviewReadyAt: now,
+      clientReadyMessage,
       updatedAt: now,
     });
 
@@ -1200,6 +1208,7 @@ export const markReadyForClientReview = mutation({
             managerName: updatedInvoice.managerName,
             managerEmail: updatedInvoice.managerEmail,
             clientReviewReadyAt: now,
+            clientReadyMessage,
           },
         });
       }

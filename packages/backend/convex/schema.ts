@@ -548,6 +548,8 @@ export default defineSchema({
     publicApprovalTokenExpiresAt: v.optional(v.number()),
     sourceEventRequestId: v.optional(v.id("eventRequests")),
     clientReviewReadyAt: v.optional(v.number()),
+    /** Manager message included in the quote-ready email to the client. */
+    clientReadyMessage: v.optional(v.string()),
     approvedAt: v.optional(v.number()),
     changesRequestedAt: v.optional(v.number()),
     clientApprovalNote: v.optional(v.string()),

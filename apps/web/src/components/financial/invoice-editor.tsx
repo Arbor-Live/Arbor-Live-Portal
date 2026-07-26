@@ -44,6 +44,7 @@ import { FormSaveBar } from "@/components/forms";
 import { computeInvoiceDraftTotals } from "@/lib/compute-invoice-draft-totals";
 import { equipmentDivisionWarnings } from "@/lib/equipment-division-warnings";
 import { InvoicePdfDownloadButton } from "@/components/financial/invoice-pdf-download-button";
+import { SendQuoteToClientSheet } from "@/components/financial/send-quote-to-client-sheet";
 
 type EquipmentRow = { refId: string; quantity: string; basis?: "total" | "per_occurrence" };
 type ExternalRentalRow = { provider: string; label: string; quantity: string; rateUsd: string };
@@ -128,6 +129,9 @@ export function InvoiceEditor({
     activeInvoiceId ? { invoiceId: activeInvoiceId } : "skip",
   );
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [sendQuoteOpen, setSendQuoteOpen] = useState(false);
+  const [sendQuoteFormKey, setSendQuoteFormKey] = useState(0);
+  const [sendingQuote, setSendingQuote] = useState(false);
   const linkedEvent = useQuery(
     api.events.getByInvoiceId,
     activeInvoiceId ? { invoiceId: activeInvoiceId } : "skip",
@@ -693,10 +697,17 @@ export function InvoiceEditor({
     setSaveMessage("Public quote link regenerated.");
   }
 
-  async function markReadyOnRequestPortal() {
+  async function sendQuoteToClient(clientMessage: string) {
     if (!activeInvoiceId) return;
-    await markReadyForClientReview({ id: activeInvoiceId });
-    setSaveMessage("Quote is ready for client review on the request portal.");
+    setSendingQuote(true);
+    try {
+      await markReadyForClientReview({ id: activeInvoiceId, clientMessage });
+      setSaveMessage("Quote emailed to the client and marked ready on the request portal.");
+    } catch (error) {
+      throw new Error(getConvexErrorMessage(error) ?? "Failed to send quote email.");
+    } finally {
+      setSendingQuote(false);
+    }
   }
 
   async function withdrawFromRequestPortal() {
@@ -905,6 +916,12 @@ export function InvoiceEditor({
 
   const isRequestLinkedQuote = Boolean(invoiceData?.invoice?.sourceEventRequestId);
   const requestPortalReady = Boolean(invoiceData?.invoice?.clientReviewReadyAt);
+  const quoteReadySubjectPreview = (() => {
+    const eventName = sourceRequest?.eventName?.trim();
+    const requestNumber = sourceRequest?.requestNumber?.trim();
+    const context = eventName || requestNumber || "your event";
+    return `Your quote is ready: ${context}`;
+  })();
 
   const origin = typeof window === "undefined" ? "" : window.location.origin;
   const requestPortalUrl =
@@ -975,6 +992,17 @@ export function InvoiceEditor({
           ) : null}
         </div>
       </div>
+
+      <SendQuoteToClientSheet
+        key={sendQuoteFormKey}
+        open={sendQuoteOpen}
+        onOpenChange={setSendQuoteOpen}
+        toEmail={sourceRequest?.email ?? ""}
+        managerEmail={managerEmail || undefined}
+        subjectPreview={quoteReadySubjectPreview}
+        sending={sendingQuote}
+        onSend={sendQuoteToClient}
+      />
 
       {sourceRequest ? (
         <Card>
@@ -1450,8 +1478,16 @@ export function InvoiceEditor({
                     Withdraw
                   </Button>
                 ) : (
-                  <Button type="button" size="sm" onClick={() => void markReadyOnRequestPortal()}>
-                    Ready for review
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={!activeInvoiceId || !sourceRequest?.email}
+                    onClick={() => {
+                      setSendQuoteFormKey((key) => key + 1);
+                      setSendQuoteOpen(true);
+                    }}
+                  >
+                    Send quote to client
                   </Button>
                 )}
               </CardContent>

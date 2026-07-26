@@ -14,6 +14,9 @@ export const PAYMENTS_EMAIL_FROM =
 export const BAND_PAYMENTS_CC_EMAIL =
   process.env.BAND_PAYMENTS_CC_EMAIL ?? "arborlive@stanford.edu";
 
+/** Shared inbox included on client quote Reply-To (and public contact). */
+export const ARBOR_CONTACT_EMAIL = "arborlive@stanford.edu";
+
 function parseEmailAddress(from: string) {
   const match = from.match(/<([^>]+)>/);
   if (match) return match[1]!.trim().toLowerCase();
