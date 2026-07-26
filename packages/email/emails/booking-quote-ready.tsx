@@ -21,12 +21,20 @@ export function BookingQuoteReadyEmail({
   trackingUrl,
   managerName,
   managerEmail,
+  managerMessage,
 }: BookingQuoteReadyEmailProps) {
   const greeting = recipientName ? `Hi ${recipientName},` : "Hi!";
+  const messageParagraphs = managerMessage
+    .split(/\n+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
 
   return (
     <EmailLayout preview={`Your quote for ${eventName ?? requestNumber} is ready`} heading="Quote Ready">
       <BodyCopy>{greeting}</BodyCopy>
+      {messageParagraphs.map((paragraph, index) => (
+        <BodyCopy key={index}>{paragraph}</BodyCopy>
+      ))}
       <BodyCopy>
         Your Arbor Live quote is ready for review. A PDF copy is attached, and you can approve the
         quote on your request tracker.

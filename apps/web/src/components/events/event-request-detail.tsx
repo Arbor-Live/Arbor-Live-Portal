@@ -126,7 +126,7 @@ export function EventRequestDetailClient({ requestId }: { requestId: Id<"eventRe
       {request.status === "converted" ? (
         <Alert>
           <AlertDescription>
-            Build the quote, then use &quot;Ready for client review&quot; in the quote editor. The client
+            Build the quote, then use &quot;Send quote to client&quot; in the quote editor. The client
             will review and approve on their request portal link — no separate approval URL is needed.
           </AlertDescription>
         </Alert>

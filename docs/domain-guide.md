@@ -109,7 +109,11 @@ Event types (drive which editor tabs and quick-add blocks appear):
 2. Staff review requests in the dashboard (`eventRequests.list/get`), can
    convert them to one or more events (`convertToEvent`), and create a draft
    quote linked to the request.
-3. The requester tracks status and approves/requests changes on the quote via
+3. Staff use **Send quote to client** (`markReadyForClientReview`) with a
+   required personal message. That finalizes the quote, emails
+   `booking_quote_ready` (PDF attached; Reply-To = invoice manager +
+   `arborlive@stanford.edu`), and sets `clientReviewReadyAt`.
+4. The requester tracks status and approves/requests changes on the quote via
    their token URL — no account needed.
 
 ## Invoices and quotes

@@ -104,6 +104,8 @@ export const bookingQuoteReadyPreviewProps: BookingQuoteReadyEmailProps = {
   trackingUrl: `${ARBOR_WEBSITE_URL}/request/track/demo-request`,
   managerName: "Alex Chen",
   managerEmail: "alex.chen@stanford.edu",
+  managerMessage:
+    "Thank you for reaching out! Here is the quote I have prepared for you. Please feel free to let me know if you have any questions.",
 };
 
 export const paymentProofReminderPreviewProps: PaymentProofReminderEmailProps = {

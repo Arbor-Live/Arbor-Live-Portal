@@ -2,11 +2,24 @@ import type { Doc } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { listAdminEmailsForVertical } from "../lib/auth";
 import {
+  ARBOR_CONTACT_EMAIL,
   bookingRequestsAdminUrl,
   requestTrackingUrl,
   subjectForTemplate,
 } from "./constants";
 import { enqueueEmail } from "./enqueue";
+
+function buildQuoteReadyReplyTo(managerEmail: string | undefined): string[] {
+  const addresses: string[] = [];
+  const normalizedManager = managerEmail?.trim().toLowerCase();
+  if (managerEmail?.trim()) {
+    addresses.push(managerEmail.trim());
+  }
+  if (ARBOR_CONTACT_EMAIL.toLowerCase() !== normalizedManager) {
+    addresses.push(ARBOR_CONTACT_EMAIL);
+  }
+  return addresses;
+}
 
 export async function scheduleBookingRequestReceivedEmail(
   ctx: MutationCtx,
@@ -81,26 +94,34 @@ export async function scheduleBookingQuoteReadyEmail(
     >;
     invoice: Pick<
       Doc<"invoices">,
-      "_id" | "invoiceNumber" | "totalUsd" | "managerName" | "managerEmail" | "clientReviewReadyAt"
+      | "_id"
+      | "invoiceNumber"
+      | "totalUsd"
+      | "managerName"
+      | "managerEmail"
+      | "clientReviewReadyAt"
+      | "clientReadyMessage"
     >;
   },
 ) {
   const { request, invoice } = args;
   const publicToken = request.publicToken;
   const readyAt = invoice.clientReviewReadyAt;
-  if (!publicToken || !readyAt) return;
+  const managerMessage = invoice.clientReadyMessage?.trim();
+  if (!publicToken || !readyAt || !managerMessage) return;
 
   const requestNumber = request.requestNumber ?? `LEGACY-${request._id}`;
   const recipientName = request.firstName.trim() || undefined;
   const eventName = request.eventName?.trim() || undefined;
   const subjectContext = eventName ?? requestNumber;
   const managerEmail = invoice.managerEmail?.trim();
+  const replyTo = buildQuoteReadyReplyTo(managerEmail);
 
   await enqueueEmail(ctx, {
     template: "booking_quote_ready",
     to: request.email,
     cc: managerEmail ? [managerEmail] : undefined,
-    replyTo: managerEmail ? [managerEmail] : undefined,
+    replyTo,
     subject: subjectForTemplate("booking_quote_ready", subjectContext),
     idempotencyKey: `booking_quote_ready:${invoice._id}:${readyAt}`,
     payload: {
@@ -112,6 +133,7 @@ export async function scheduleBookingQuoteReadyEmail(
       trackingUrl: requestTrackingUrl(publicToken),
       managerName: invoice.managerName,
       managerEmail,
+      managerMessage,
       invoiceId: invoice._id,
     },
   });
