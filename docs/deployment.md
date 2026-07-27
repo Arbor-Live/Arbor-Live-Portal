@@ -28,10 +28,24 @@ Sequence on every Vercel deploy:
    `apps/web/.env.production.local` so Next.js can inline the
    `NEXT_PUBLIC_*` values.
 5. `next build` runs.
+6. `convex run migrations:runAll` runs pending
+   [`@convex-dev/migrations`](https://www.convex.dev/components/migrations)
+   jobs (defined in `packages/backend/convex/migrations.ts`). Already-completed
+   migrations are skipped; failures fail the Vercel build so deploys don’t
+   silently leave data half-migrated.
 
 If the build fails with "Convex URL missing at build time", either the deploy
 was not run through `convex deploy --cmd`, or `NEXT_PUBLIC_CONVEX_URL` is not
 set in Vercel for that environment.
+
+## Data migrations
+
+- Use the official `@convex-dev/migrations` component (`convex/migrations.ts`).
+- Append new jobs to `runAll` (never reorder completed ones).
+- Local / manual: `pnpm --filter backend migrate` (or
+  `npx convex run migrations:runAll`).
+- Status: `npx convex run --component migrations lib:getStatus --watch`
+- Dry run one job: `npx convex run migrations:backfillHostOrgNormalizedNames '{"dryRun":true}'`
 
 ## Environment variables per surface
 
@@ -54,7 +68,7 @@ deployment; it gates production-only behavior (e.g. real email sending paths).
   changes, redeploy the previous commit instead so both sides stay in sync.
 - Convex schema changes are additive-safe by default; for breaking changes
   follow the widen–migrate–narrow process (see the `convex-migration-helper`
-  skill and `convex/migrations/`).
+  skill and `convex/migrations.ts` / `@convex-dev/migrations`).
 
 ## Deploy failure triage
 

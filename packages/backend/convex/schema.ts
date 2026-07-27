@@ -440,6 +440,8 @@ export default defineSchema({
 
   invoiceGroups: defineTable({
     name: v.string(),
+    /** Lowercased/trimmed name for exact reuse. Optional until backfill. */
+    normalizedName: v.optional(v.string()),
     type: invoiceGroupTypeValue,
     equipmentPricingMode: v.optional(equipmentPricingModeValue),
     active: v.boolean(),
@@ -448,12 +450,36 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_name", ["name"])
+    .index("by_normalizedName", ["normalizedName"])
     .index("by_active", ["active"])
     .index("by_lastUsedAt", ["lastUsedAt"])
     .index("by_type_and_name", ["type", "name"]),
 
+  /** Alternate names for a host org (e.g. "OSE" → "Office of Student Engagement"). */
+  invoiceGroupAliases: defineTable({
+    groupId: v.id("invoiceGroups"),
+    alias: v.string(),
+    normalizedAlias: v.string(),
+    source: v.union(v.literal("manual"), v.literal("merge"), v.literal("rename")),
+    createdAt: v.number(),
+  })
+    .index("by_groupId", ["groupId"])
+    .index("by_normalizedAlias", ["normalizedAlias"]),
+
+  /** Shared person identity for billing contacts (email-keyed). */
+  invoicePeople: defineTable({
+    email: v.string(),
+    firstName: v.optional(v.string()),
+    lastName: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    active: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_email", ["email"]),
+
   invoiceContacts: defineTable({
     groupId: v.optional(v.id("invoiceGroups")),
+    personId: v.optional(v.id("invoicePeople")),
     /** @deprecated Migrated to firstName/lastName. */
     name: v.optional(v.string()),
     firstName: v.optional(v.string()),
@@ -467,6 +493,7 @@ export default defineSchema({
   })
     .index("by_email", ["email"])
     .index("by_groupId", ["groupId"])
+    .index("by_personId", ["personId"])
     .index("by_active", ["active"])
     .index("by_lastUsedAt", ["lastUsedAt"])
     .index("by_groupId_and_lastName", ["groupId", "lastName"]),
@@ -587,7 +614,8 @@ export default defineSchema({
     .index("by_sourceEventRequestId", ["sourceEventRequestId"])
     .index("by_managerUserId", ["managerUserId"])
     .index("by_issueDate", ["issueDate"])
-    .index("by_createdAt", ["createdAt"]),
+    .index("by_createdAt", ["createdAt"])
+    .index("by_groupId", ["groupId"]),
 
   invoiceLineItems: defineTable({
     invoiceId: v.id("invoices"),
@@ -1268,7 +1296,8 @@ export default defineSchema({
     .index("by_publicToken", ["publicToken"])
     .index("by_requestNumber", ["requestNumber"])
     .index("by_linkedInvoiceId", ["linkedInvoiceId"])
-    .index("by_venueId", ["venueId"]),
+    .index("by_venueId", ["venueId"])
+    .index("by_invoiceGroupId", ["invoiceGroupId"]),
 
   eventBandPayments: defineTable({
     eventId: v.id("events"),

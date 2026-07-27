@@ -10,8 +10,9 @@
     "dev": "convex dev",
     "build": "pnpm --dir ../../apps/web run build",
     "codegen": "convex codegen",
+    "migrate": "convex run migrations:runAll",
     "auth:generate": "cd convex/betterAuth && better-auth generate -y",
-    "deploy": "convex deploy",
+    "deploy": "convex deploy && convex run migrations:runAll",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -20,6 +21,7 @@
     "@arbor/invoice-document": "workspace:*",
     "@better-auth/passkey": "^1.6.23",
     "@convex-dev/better-auth": "^0.12.3",
+    "@convex-dev/migrations": "^0.3.5",
     "@convex-dev/r2": "^0.10.2",
     "@convex-dev/resend": "^0.2.5",
     "@react-email/components": "^1.0.12",
