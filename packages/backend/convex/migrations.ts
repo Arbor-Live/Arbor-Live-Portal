@@ -18,9 +18,10 @@ import { legacyTeamsToMembership } from "./lib/userVerticals";
 /**
  * Official @convex-dev/migrations runner.
  *
- * Post-deploy (Vercel): `convex run migrations:runAll` after `convex deploy`
- * (see `apps/web/vercel.json`). The deploy key needs
- * `deployment:functions:runInternalMutations` in addition to `deployment:deploy`.
+ * Post-deploy (Vercel): `scripts/vercel-deploy.sh` — production uses
+ * `convex run migrations:runAll`; preview uses `--preview-run` (preview keys
+ * cannot target a branch deployment with a separate `convex run`).
+ * Production deploy key needs `deployment:functions:runInternalMutations`.
  *
  * Manual:
  *   pnpm --filter backend migrate
