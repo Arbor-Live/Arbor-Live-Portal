@@ -206,11 +206,17 @@ function UserRateRow({
   );
 
   return (
-    <div className="grid gap-2 rounded-md border p-3 md:grid-cols-[1fr_1.4fr_24px]">
+    <div
+      className="grid gap-2 rounded-md border p-3 md:grid-cols-[1fr_1.4fr_24px]"
+      data-testid="user-rate-row"
+      data-user-id={userId}
+    >
       <div>
         <p className="text-sm font-medium">{name}</p>
         <p className="text-xs text-muted-foreground">{meta}</p>
-        <p className="text-xs text-muted-foreground mt-1">Effective: ${previewRate}/hr</p>
+        <p className="text-xs text-muted-foreground mt-1" data-testid="user-rate-effective">
+          Effective: ${previewRate}/hr
+        </p>
       </div>
       <Form {...form}>
         <form
@@ -227,7 +233,7 @@ function UserRateRow({
                 })
               }
             >
-              <SelectTrigger>
+              <SelectTrigger data-testid="user-rate-mode-trigger">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -248,7 +254,12 @@ function UserRateRow({
             </div>
           ) : null}
           {form.formState.isDirty ? (
-            <Button type="submit" size="sm" disabled={form.saveStatus === "saving"}>
+            <Button
+              type="submit"
+              size="sm"
+              data-testid="user-rate-save"
+              disabled={form.saveStatus === "saving"}
+            >
               Save
             </Button>
           ) : null}

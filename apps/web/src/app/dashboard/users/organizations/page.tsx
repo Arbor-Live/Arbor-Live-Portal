@@ -4,7 +4,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { ArborOnlyGuard } from "@/components/org-context-guard";
+import { AdminOnlyGuard, ArborOnlyGuard } from "@/components/org-context-guard";
 import { UsersManagementClient } from "@/components/users/users-management-client";
 import { OrganizationCSVImporter } from "@/components/org-csv-importer";
 
@@ -20,8 +20,10 @@ export default function UsersOrganizationsPage() {
         </CardHeader>
       </Card>
       <ArborOnlyGuard>
-        <UsersManagementClient view="organizations" />
-        <OrganizationCSVImporter />
+        <AdminOnlyGuard>
+          <UsersManagementClient view="organizations" />
+          <OrganizationCSVImporter />
+        </AdminOnlyGuard>
       </ArborOnlyGuard>
     </div>
   );

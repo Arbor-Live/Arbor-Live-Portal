@@ -3394,3 +3394,415 @@ export const getInvoiceClientState = query({
     };
   },
 });
+
+/* -------------------------------------------------------------------------- */
+/* Batch 9: users, access, and rates                                           */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Emails the Batch 9 helpers are allowed to create and destroy.
+ *
+ * Every other suite works by seeding new rows with a unique stamp, but users
+ * cannot be seeded that way: `listUsersForAdmin` returns *every* auth user and
+ * the Users table has no pagination, so one throwaway user per run would grow
+ * the shared deployment's user list forever. These specs instead reuse fixed
+ * addresses and reset them, which keeps the footprint constant.
+ *
+ * The prefix is deliberately narrower than `e2e-`: the shared admin, crew, and
+ * band fixtures are all `e2e-*@arborlive.test`, and deleting one of those would
+ * take down every other spec's sign-in.
+ */
+const MANAGED_USER_PREFIX = "e2e-managed-";
+
+function assertManagedEmail(email: string) {
+  const normalized = email.trim().toLowerCase();
+  if (!normalized.startsWith(MANAGED_USER_PREFIX)) {
+    throw new Error(
+      `Refusing to manage ${normalized}: Batch 9 helpers only touch ${MANAGED_USER_PREFIX}* addresses.`,
+    );
+  }
+  return normalized;
+}
+
+async function findAuthUserByEmail(ctx: MutationCtx, email: string) {
+  return await ctx.runQuery(components.betterAuth.adapter.findOne, {
+    model: "user",
+    where: [{ field: "email", value: email }],
+  });
+}
+
+/**
+ * Test-only: delete a managed user and every row that hangs off them.
+ *
+ * Specs call this before driving the create/invite UI so each run starts from
+ * "this person does not exist". That matters beyond tidiness for invites:
+ * `inviteUserAdmin` marks an invitation accepted on the spot when a user with
+ * that email already exists, so a leftover user turns the pending-invite spec
+ * into a no-op that still passes.
+ */
+export const resetManagedUserByEmail = mutation({
+  args: { email: v.string() },
+  returns: v.object({
+    email: v.string(),
+    deletedUser: v.boolean(),
+    deletedRows: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const email = assertManagedEmail(args.email);
+    const existing = await findAuthUserByEmail(ctx, email);
+    const userId = getId(existing);
+    let deletedRows = 0;
+
+    if (userId) {
+      for (const row of await ctx.db
+        .query("userAdminProfiles")
+        .withIndex("by_userId", (q) => q.eq("userId", userId))
+        .take(10)) {
+        await ctx.db.delete(row._id);
+        deletedRows += 1;
+      }
+      for (const row of await ctx.db
+        .query("userOrganizationMemberships")
+        .withIndex("by_userId", (q) => q.eq("userId", userId))
+        .take(50)) {
+        await ctx.db.delete(row._id);
+        deletedRows += 1;
+      }
+      for (const row of await ctx.db
+        .query("userActiveOrganizations")
+        .withIndex("by_userId", (q) => q.eq("userId", userId))
+        .take(10)) {
+        await ctx.db.delete(row._id);
+        deletedRows += 1;
+      }
+      for (const row of await ctx.db
+        .query("userOnboarding")
+        .withIndex("by_userId", (q) => q.eq("userId", userId))
+        .take(10)) {
+        await ctx.db.delete(row._id);
+        deletedRows += 1;
+      }
+      for (const row of await ctx.db
+        .query("userCompensationRates")
+        .withIndex("by_userId", (q) => q.eq("userId", userId))
+        .take(10)) {
+        await ctx.db.delete(row._id);
+        deletedRows += 1;
+      }
+
+      // Better Auth rows last: the app tables above are keyed by this user id,
+      // so dropping the auth user first would orphan them beyond reach.
+      for (const model of ["session", "account", "member"] as const) {
+        const rows = await ctx.runQuery(components.betterAuth.adapter.findMany, {
+          model,
+          where: [{ field: "userId", value: userId }],
+          paginationOpts: { cursor: null, numItems: 200 },
+        });
+        for (const row of (rows?.page ?? []) as unknown[]) {
+          const id = getId(row);
+          if (!id) continue;
+          await ctx.runMutation(components.betterAuth.adapter.deleteOne, {
+            input: { model, where: [{ field: "_id", value: id }] },
+          });
+          deletedRows += 1;
+        }
+      }
+      await ctx.runMutation(components.betterAuth.adapter.deleteOne, {
+        input: { model: "user", where: [{ field: "_id", value: userId }] },
+      });
+    }
+
+    return { email, deletedUser: Boolean(userId), deletedRows };
+  },
+});
+
+/**
+ * Test-only: drop every invitation for a managed email.
+ *
+ * Invitations are never deleted by the product — cancelling only flips a status
+ * — so without this the invite spec would stack a new row on the shared
+ * deployment every run, and its "the newest invite for this email" assertions
+ * would be reading whichever row `findMany` happened to return first.
+ */
+export const clearInvitationsForEmail = mutation({
+  args: { email: v.string() },
+  returns: v.object({ deletedInvitations: v.number(), deletedPending: v.number() }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const email = assertManagedEmail(args.email);
+
+    const result = await ctx.runQuery(components.betterAuth.adapter.findMany, {
+      model: "invitation",
+      where: [{ field: "email", value: email }],
+      paginationOpts: { cursor: null, numItems: 200 },
+    });
+    let deletedInvitations = 0;
+    let deletedPending = 0;
+    for (const row of (result?.page ?? []) as unknown[]) {
+      const invitationId = getId(row);
+      if (!invitationId) continue;
+      const pending = await ctx.db
+        .query("pendingUserInvites")
+        .withIndex("by_invitationId", (q) => q.eq("invitationId", invitationId))
+        .unique();
+      if (pending) {
+        await ctx.db.delete(pending._id);
+        deletedPending += 1;
+      }
+      await ctx.runMutation(components.betterAuth.adapter.deleteOne, {
+        input: { model: "invitation", where: [{ field: "_id", value: invitationId }] },
+      });
+      deletedInvitations += 1;
+    }
+    return { deletedInvitations, deletedPending };
+  },
+});
+
+/**
+ * Test-only: everything the Users table renders for one person, by email.
+ *
+ * Deliberately reads the underlying rows rather than calling
+ * `users.listUsersForAdmin`, so a spec still fails if that query starts
+ * reporting something the database does not say.
+ */
+export const getUserAdminStateByEmail = query({
+  args: { email: v.string() },
+  returns: v.union(
+    v.null(),
+    v.object({
+      userId: v.string(),
+      name: v.string(),
+      email: v.string(),
+      role: v.string(),
+      banned: v.boolean(),
+      active: v.boolean(),
+      title: v.union(v.string(), v.null()),
+      phone: v.union(v.string(), v.null()),
+      verticals: v.array(v.string()),
+      disciplines: v.array(v.string()),
+      payrollMethod: v.union(v.string(), v.null()),
+      rateMode: v.union(v.string(), v.null()),
+      customHourlyRateUsd: v.union(v.number(), v.null()),
+      effectiveHourlyRateUsd: v.union(v.number(), v.null()),
+      onboardingStatus: v.union(v.string(), v.null()),
+      defaultOrganizationId: v.union(v.string(), v.null()),
+      memberships: v.array(
+        v.object({
+          organizationId: v.string(),
+          organizationName: v.string(),
+          role: v.string(),
+          active: v.boolean(),
+        }),
+      ),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const email = args.email.trim().toLowerCase();
+    const user = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
+      model: "user",
+      where: [{ field: "email", value: email }],
+    })) as { name?: string; email?: string; role?: string; banned?: boolean } | null;
+    const userId = getId(user);
+    if (!user || !userId) return null;
+
+    const profile = await ctx.db
+      .query("userAdminProfiles")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .unique();
+    const rate = await ctx.db
+      .query("userCompensationRates")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .unique();
+    const onboarding = await ctx.db
+      .query("userOnboarding")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .unique();
+    const settings = await ctx.db
+      .query("invoiceSettings")
+      .withIndex("by_key", (q) => q.eq("key", "default"))
+      .unique();
+    const memberships = await ctx.db
+      .query("userOrganizationMemberships")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .take(50);
+
+    const organizations = await ctx.runQuery(components.betterAuth.adapter.findMany, {
+      model: "organization",
+      paginationOpts: { cursor: null, numItems: 200 },
+    });
+    const orgNameById = new Map<string, string>();
+    for (const org of (organizations?.page ?? []) as Array<{ name?: string }>) {
+      const id = getId(org);
+      if (id) orgNameById.set(id, org.name ?? id);
+    }
+
+    const rateMode = rate?.rateMode ?? (rate ? "custom" : null);
+    const effectiveHourlyRateUsd = !rate
+      ? null
+      : rateMode === "normal"
+        ? Math.max(0, settings?.crewNormalRateUsd ?? 0)
+        : rateMode === "lead"
+          ? Math.max(0, settings?.crewLeadRateUsd ?? settings?.crewOtRateUsd ?? 0)
+          : Math.max(0, rate.hourlyRateUsd);
+
+    return {
+      userId,
+      name: user.name ?? "",
+      email: user.email ?? email,
+      role: user.role ?? "member",
+      banned: Boolean(user.banned),
+      active: profile?.active ?? true,
+      title: profile?.title ?? null,
+      phone: profile?.phone ?? null,
+      verticals: (profile?.verticals ?? []) as string[],
+      disciplines: (profile?.disciplines ?? []) as string[],
+      payrollMethod: profile?.payrollMethod ?? null,
+      rateMode,
+      customHourlyRateUsd: rate?.hourlyRateUsd ?? null,
+      effectiveHourlyRateUsd,
+      onboardingStatus: onboarding?.status ?? null,
+      defaultOrganizationId: profile?.defaultOrganizationId ?? null,
+      memberships: memberships.map((row) => ({
+        organizationId: row.organizationId,
+        organizationName: orgNameById.get(row.organizationId) ?? row.organizationId,
+        role: row.role,
+        active: row.active,
+      })),
+    };
+  },
+});
+
+/**
+ * Test-only: the newest invitation for an email, plus its pending-invite row.
+ *
+ * The two live in different stores — the invitation in the Better Auth
+ * component, the verticals/disciplines/rate payload in `pendingUserInvites` —
+ * and the Invitations table joins them, so both belong in one assertion.
+ */
+export const getInvitationStateByEmail = query({
+  args: { email: v.string() },
+  returns: v.union(
+    v.null(),
+    v.object({
+      invitationId: v.string(),
+      email: v.string(),
+      role: v.string(),
+      status: v.string(),
+      organizationId: v.string(),
+      createdAt: v.number(),
+      expiresAt: v.number(),
+      verticals: v.array(v.string()),
+      disciplines: v.array(v.string()),
+      rateMode: v.union(v.string(), v.null()),
+      payrollMethod: v.union(v.string(), v.null()),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const email = args.email.trim().toLowerCase();
+    const result = await ctx.runQuery(components.betterAuth.adapter.findMany, {
+      model: "invitation",
+      where: [{ field: "email", value: email }],
+      paginationOpts: { cursor: null, numItems: 200 },
+    });
+    const invites = ((result?.page ?? []) as Array<{
+      email?: string;
+      role?: string;
+      status?: string;
+      organizationId?: string;
+      createdAt?: number;
+      expiresAt?: number;
+    }>)
+      .filter((row) => Boolean(getId(row)))
+      .sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
+    const invite = invites[0];
+    if (!invite) return null;
+    const invitationId = getId(invite)!;
+
+    const pending = await ctx.db
+      .query("pendingUserInvites")
+      .withIndex("by_invitationId", (q) => q.eq("invitationId", invitationId))
+      .unique();
+
+    return {
+      invitationId,
+      email: invite.email ?? email,
+      role: invite.role ?? "member",
+      status: invite.status ?? "pending",
+      organizationId: invite.organizationId ?? "",
+      createdAt: invite.createdAt ?? 0,
+      expiresAt: invite.expiresAt ?? 0,
+      verticals: (pending?.verticals ?? []) as string[],
+      disciplines: (pending?.disciplines ?? []) as string[],
+      rateMode: pending?.rateMode ?? null,
+      payrollMethod: pending?.payrollMethod ?? null,
+    };
+  },
+});
+
+/**
+ * Test-only: read the global crew rates.
+ *
+ * Read-only on purpose. `invoiceSettings.update` writes these globally, and on
+ * the shared deployment that silently re-prices every other worktree's crew
+ * lines — so the rates spec pins a user to Normal and checks it resolves to
+ * whatever this returns, rather than setting a value it controls.
+ */
+export const getGlobalCrewRates = query({
+  args: {},
+  returns: v.object({
+    normalRateUsd: v.number(),
+    leadRateUsd: v.number(),
+  }),
+  handler: async (ctx) => {
+    assertE2eHelpersEnabled();
+    const settings = await ctx.db
+      .query("invoiceSettings")
+      .withIndex("by_key", (q) => q.eq("key", "default"))
+      .unique();
+    return {
+      normalRateUsd: Math.max(0, settings?.crewNormalRateUsd ?? 0),
+      leadRateUsd: Math.max(0, settings?.crewLeadRateUsd ?? settings?.crewOtRateUsd ?? 0),
+    };
+  },
+});
+
+/**
+ * Test-only: force a user's access state without going through `requireAdmin`.
+ *
+ * The access spec drives the "you cannot remove your own access" guard from the
+ * admin's own row. That guard lives in Convex, so if it ever regresses the spec
+ * would ban the shared e2e admin and every later spec would fail to sign in.
+ * This exists so that spec can restore access unconditionally afterwards, from
+ * outside the auth path it just tried to break.
+ */
+export const setUserAccessByEmail = mutation({
+  args: { email: v.string(), removed: v.boolean() },
+  returns: v.object({ ok: v.boolean(), userId: v.string() }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const email = args.email.trim().toLowerCase();
+    const user = await findAuthUserByEmail(ctx, email);
+    const userId = getId(user);
+    if (!userId) throw new Error(`No user for ${email}.`);
+    const now = Date.now();
+
+    await ctx.runMutation(components.betterAuth.adapter.updateOne, {
+      input: {
+        model: "user",
+        where: [{ field: "email", value: email }],
+        update: { banned: args.removed, updatedAt: now },
+      },
+    });
+    const profile = await ctx.db
+      .query("userAdminProfiles")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .unique();
+    if (profile) {
+      await ctx.db.patch(profile._id, { active: !args.removed, updatedAt: now });
+    }
+    return { ok: true, userId };
+  },
+});

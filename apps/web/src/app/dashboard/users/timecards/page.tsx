@@ -4,7 +4,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { ArborOnlyGuard } from "@/components/org-context-guard";
+import { AdminOnlyGuard, ArborOnlyGuard } from "@/components/org-context-guard";
 import { AdminTimecardsOverviewClient } from "@/components/timecards/admin-timecards-overview-client";
 
 export default function AdminTimecardsPage() {
@@ -19,7 +19,9 @@ export default function AdminTimecardsPage() {
         </CardHeader>
       </Card>
       <ArborOnlyGuard>
-        <AdminTimecardsOverviewClient />
+        <AdminOnlyGuard>
+          <AdminTimecardsOverviewClient />
+        </AdminOnlyGuard>
       </ArborOnlyGuard>
     </div>
   );

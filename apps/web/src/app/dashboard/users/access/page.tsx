@@ -4,7 +4,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { ArborOnlyGuard } from "@/components/org-context-guard";
+import { AdminOnlyGuard, ArborOnlyGuard } from "@/components/org-context-guard";
 import { UsersManagementClient } from "@/components/users/users-management-client";
 
 export default function UsersAccessPage() {
@@ -19,7 +19,9 @@ export default function UsersAccessPage() {
         </CardHeader>
       </Card>
       <ArborOnlyGuard>
-        <UsersManagementClient view="access" />
+        <AdminOnlyGuard>
+          <UsersManagementClient view="access" />
+        </AdminOnlyGuard>
       </ArborOnlyGuard>
     </div>
   );
