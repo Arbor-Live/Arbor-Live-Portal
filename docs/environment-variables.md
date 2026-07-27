@@ -50,7 +50,7 @@ Where variables live:
 
 | Variable | Purpose |
 |---|---|
-| `CONVEX_DEPLOY_KEY` | Lets the Vercel build run `convex deploy` against the right deployment |
+| `CONVEX_DEPLOY_KEY` | Production and Preview need **different** keys (same var name, different Vercel env scopes). Prod key: `deployment:deploy` + `runInternalMutations`. Preview key: from project settings. See [deployment.md](deployment.md) |
 
 ## Keeping this file honest
 

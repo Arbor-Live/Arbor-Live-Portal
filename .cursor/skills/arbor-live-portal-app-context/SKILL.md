@@ -36,6 +36,14 @@ Human-readable docs live in `docs/` (`getting-started.md`, `architecture.md`, `d
 - Events/series/requests use `venueId` + denormalized `venueName` (path). Pick via `VenuePicker` (fuzzy search + nicknames; admins can create inline).
 - Nested spaces inherit address, maps URL, contact, links, and files from ancestors (own contact/links/files are additive; own address/maps override).
 
+### Host organizations (billing / event hosts)
+- Tables: `invoiceGroups`, `invoiceContacts`, `invoicePeople` (email identity), `invoiceGroupAliases`.
+- Admin: `/dashboard/financial-hub/organizations` — create, aliases, merge duplicates, contacts.
+- Create refuses exact/alias name collisions; staff host modals offer “Did you mean…?”.
+- Booking: `searchHostOrganizationsPublic` + free-text create via `provisionBillingProfileFromRequest` (alias-aware).
+- Helpers: `lib/hostOrgIdentity.ts`, `lib/invoicePeople.ts`, `lib/hostOrgs.ts` (`resolveHostLink`).
+- Backfills: `@convex-dev/migrations` in `convex/migrations.ts` (`runAll` on deploy). Host-org jobs: `backfillHostOrgNormalizedNames`, `backfillInvoicePeople`.
+
 ### Event Basics
 - Event types:
   - `Crewed Event`

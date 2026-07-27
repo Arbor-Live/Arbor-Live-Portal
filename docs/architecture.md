@@ -33,8 +33,9 @@ Dependency direction: `web` depends on `backend` (generated API bindings),
   payment promotion (see `email/reminders.ts`, `email/paymentProofReminders.ts`,
   `bandPayments.ts`).
 - `http.ts` — HTTP router (short-link lookup for `arbor.st`; Better Auth routes).
-- `migrations/` — one-off data migrations (see the convex-migration-helper
-  skill for the process).
+- `migrations.ts` — `@convex-dev/migrations` runner (`runAll` after deploy).
+  Append new jobs to the end of `runAll`; never reorder completed ones.
+- See the convex-migration-helper skill for widen–migrate–narrow.
 
 ### Module tour
 

@@ -3357,6 +3357,49 @@ export const getInvoiceGroupByName = query({
   },
 });
 
+/** Test-only: create a host org with normalizedName (for booking search specs). */
+export const seedInvoiceGroup = mutation({
+  args: {
+    name: v.string(),
+    type: v.optional(
+      v.union(
+        v.literal("vso"),
+        v.literal("house"),
+        v.literal("department"),
+        v.literal("individual"),
+      ),
+    ),
+    alias: v.optional(v.string()),
+  },
+  returns: v.id("invoiceGroups"),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const now = Date.now();
+    const name = args.name.trim();
+    const groupId = await ctx.db.insert("invoiceGroups", {
+      name,
+      normalizedName: name.trim().toLowerCase().replace(/\s+/g, " "),
+      type: args.type ?? "department",
+      equipmentPricingMode: "subsidized",
+      active: true,
+      createdAt: now,
+      updatedAt: now,
+      lastUsedAt: now,
+    });
+    const alias = args.alias?.trim();
+    if (alias) {
+      await ctx.db.insert("invoiceGroupAliases", {
+        groupId,
+        alias,
+        normalizedAlias: alias.toLowerCase().replace(/\s+/g, " "),
+        source: "manual",
+        createdAt: now,
+      });
+    }
+    return groupId;
+  },
+});
+
 /**
  * Test-only: the billing identity denormalized onto an invoice.
  *

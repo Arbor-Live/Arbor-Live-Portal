@@ -1,5 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "installCommand": "pnpm install --dir ../..",
-  "buildCommand": "cd ../../packages/backend && pnpm convex deploy --cmd 'pnpm run build'"
+  "buildCommand": "cd ../../packages/backend && sh ./scripts/vercel-deploy.sh"
 }

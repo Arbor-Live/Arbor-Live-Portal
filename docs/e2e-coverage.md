@@ -84,7 +84,7 @@ Update this file whenever specs or helpers land (or when a batch ships).
 | Editing an approved quote resets approval | Covered | `quotes/invoice-reset-and-duplicate.spec.ts` (Batch 8) |
 | Duplicate invoice | Covered | `quotes/invoice-reset-and-duplicate.spec.ts` (Batch 8) — new number + token, no inherited approval |
 | Staff invalidate payment proof / attach receipt | Covered | `quotes/payment-proof-manage.spec.ts` (Batch 8) |
-| Host orgs + client contacts | Covered | `quotes/invoice-organizations.spec.ts` (Batch 8) — create → bill an invoice → archive |
+| Host orgs + client contacts | Covered | `quotes/invoice-organizations.spec.ts` (Batch 8) — create → bill an invoice → archive; merge duplicate hosts |
 | PDF download / void | None | Deferred |
 | Invoice managers (`/financial-hub/managers`) | None | — |
 | Invoice settings (global crew rates) | Deferred | `invoiceSettings.update` writes **global** crew rates. On the shared deployment that silently re-prices every other worktree's crew lines, so it is not safe to drive from a spec |
@@ -198,7 +198,7 @@ Update this file whenever specs or helpers land (or when a batch ships).
 | `quotes/invoice-send-for-review.spec.ts` | Send sheet → withdraw → re-send + emails (Batch 8) |
 | `quotes/invoice-token-regeneration.spec.ts` | Approval token rotation revokes the old link (Batch 8) |
 | `quotes/invoice-reset-and-duplicate.spec.ts` | Approval reset on edit; duplicate (Batch 8) |
-| `quotes/invoice-organizations.spec.ts` | Host org + contact → invoice → archive (Batch 8) |
+| `quotes/invoice-organizations.spec.ts` | Host org + contact → invoice → archive; merge duplicates (Batch 8) |
 | `quotes/payment-proof-manage.spec.ts` | Invalidate submission; attach receipt (Batch 8) |
 | `users/user-invite-lifecycle.spec.ts` | Invite → edit → resend → cancel (Batch 9) |
 | `users/user-create-and-access.spec.ts` | Direct create; access remove/reactivate; last-admin guard (Batch 9) |
