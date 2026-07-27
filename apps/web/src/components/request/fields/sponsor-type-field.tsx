@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useFormContext } from "react-hook-form";
 import { SingleChoiceField } from "@/components/request/fields/single-choice-field";
-import { TextField } from "@/components/request/fields/text-field";
+import { OrganizationSearchField } from "@/components/request/fields/organization-search-field";
 import {
   INDIVIDUAL_SPONSOR_TYPE,
   requiresOrganizationName,
@@ -22,6 +22,7 @@ export function SponsorTypeField() {
   useEffect(() => {
     if (!showOrganization) {
       setValue("organization", "", { shouldDirty: true, shouldValidate: true });
+      setValue("invoiceGroupId", "", { shouldDirty: true });
     }
   }, [showOrganization, setValue]);
 
@@ -34,19 +35,7 @@ export function SponsorTypeField() {
         otherTriggerValue="Other"
         otherPlaceholder="Who is sponsoring this event?"
       />
-      {showOrganization ? (
-        <div className="space-y-2">
-          <TextField
-            name="organization"
-            label="Organization / group name"
-            placeholder="e.g. Stanford Concert Network"
-            autoFocus
-          />
-          <p className="text-xs text-muted-foreground">
-            We use this to set up your organization&apos;s billing profile.
-          </p>
-        </div>
-      ) : null}
+      {showOrganization ? <OrganizationSearchField /> : null}
       {sponsorType === INDIVIDUAL_SPONSOR_TYPE ? (
         <p className="text-xs text-muted-foreground">
           Personal requests do not need an organization name.

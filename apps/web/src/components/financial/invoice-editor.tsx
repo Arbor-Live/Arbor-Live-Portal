@@ -167,6 +167,12 @@ export function InvoiceEditor({
   const [newGroupType, setNewGroupType] = useState<"vso" | "house" | "department" | "individual">("department");
   const [newGroupEquipmentPricingMode, setNewGroupEquipmentPricingMode] =
     useState<EquipmentPricingMode>("subsidized");
+  const groupNameSuggestion = useQuery(
+    api.invoiceGroups.suggestByName,
+    groupModalOpen && newGroupName.trim().length >= 2
+      ? { name: newGroupName.trim() }
+      : "skip",
+  );
   const [contactModalOpen, setContactModalOpen] = useState(false);
   const [newContactFirstName, setNewContactFirstName] = useState("");
   const [newContactLastName, setNewContactLastName] = useState("");
@@ -458,15 +464,25 @@ export function InvoiceEditor({
 
   async function submitCreateGroup() {
     if (!newGroupName.trim()) return;
-    const id = await createGroup({
-      name: newGroupName.trim(),
-      type: newGroupType,
-      equipmentPricingMode: newGroupEquipmentPricingMode,
-      active: true,
-    });
-    setGroupModalOpen(false);
-    onGroupChange(id);
-    setNewGroupName("");
+    if (groupNameSuggestion && groupNameSuggestion.matchKind !== "similar") {
+      setGroupModalOpen(false);
+      onGroupChange(groupNameSuggestion._id);
+      setNewGroupName("");
+      return;
+    }
+    try {
+      const id = await createGroup({
+        name: newGroupName.trim(),
+        type: newGroupType,
+        equipmentPricingMode: newGroupEquipmentPricingMode,
+        active: true,
+      });
+      setGroupModalOpen(false);
+      onGroupChange(id);
+      setNewGroupName("");
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Failed to create host.");
+    }
   }
 
   function openCreateContact(prefill: string) {
@@ -1582,6 +1598,27 @@ export function InvoiceEditor({
                 <Label>Name</Label>
                 <Input value={newGroupName} onChange={(e) => setNewGroupName(e.target.value)} />
               </div>
+              {groupNameSuggestion ? (
+                <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
+                  <p>
+                    Did you mean <span className="font-medium">{groupNameSuggestion.name}</span>
+                    {groupNameSuggestion.matchKind === "alias" ? " (alias match)" : ""}?
+                  </p>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="mt-2"
+                    variant="outline"
+                    onClick={() => {
+                      setGroupModalOpen(false);
+                      onGroupChange(groupNameSuggestion._id);
+                      setNewGroupName("");
+                    }}
+                  >
+                    Use existing host
+                  </Button>
+                </div>
+              ) : null}
               <div className="space-y-2">
                 <Label>Type</Label>
                 <select

@@ -37,20 +37,38 @@ const emptyContactDefaults: InvoiceContactFormValues = {
 export function FinancialHubOrganizationsClient() {
   const [includeInactive, setIncludeInactive] = useState(false);
   const [selectedGroupId, setSelectedGroupId] = useState<Id<"invoiceGroups"> | "">("");
+  const [mergeOpen, setMergeOpen] = useState(false);
+  const [mergeVictimIds, setMergeVictimIds] = useState<Id<"invoiceGroups">[]>([]);
+  const [aliasDraft, setAliasDraft] = useState("");
+  const [mergeBusy, setMergeBusy] = useState(false);
 
   const groups = useQuery(api.invoiceGroups.listForAdmin, { includeInactive });
   const contacts = useQuery(
     api.invoiceContacts.listForAdmin,
     selectedGroupId ? { groupId: selectedGroupId, includeInactive } : "skip",
   );
+  const aliases = useQuery(
+    api.invoiceGroups.listAliases,
+    selectedGroupId ? { groupId: selectedGroupId } : "skip",
+  );
+  const mergePreview = useQuery(
+    api.invoiceGroups.getMergePreview,
+    mergeOpen && selectedGroupId && mergeVictimIds.length > 0
+      ? { survivorId: selectedGroupId, victimIds: mergeVictimIds }
+      : "skip",
+  );
 
   const createGroup = useMutation(api.invoiceGroups.create);
   const archiveGroup = useMutation(api.invoiceGroups.archive);
   const createContact = useMutation(api.invoiceContacts.create);
   const archiveContact = useMutation(api.invoiceContacts.archive);
+  const addAlias = useMutation(api.invoiceGroups.addAlias);
+  const removeAlias = useMutation(api.invoiceGroups.removeAlias);
+  const mergeGroups = useMutation(api.invoiceGroups.merge);
 
   const groupRows = useMemo(() => groups ?? [], [groups]);
   const contactRows = useMemo(() => contacts ?? [], [contacts]);
+  const aliasRows = useMemo(() => aliases ?? [], [aliases]);
   const selectedGroup = groupRows.find((group) => group._id === selectedGroupId);
   const selectedGroupInitial = useMemo(
     () =>
@@ -62,6 +80,11 @@ export function FinancialHubOrganizationsClient() {
           }
         : null,
     [selectedGroup],
+  );
+
+  const mergeCandidates = useMemo(
+    () => groupRows.filter((group) => group.active && group._id !== selectedGroupId),
+    [groupRows, selectedGroupId],
   );
 
   const newGroupForm = useConvexForm<InvoiceGroupFormValues>({
@@ -118,6 +141,47 @@ export function FinancialHubOrganizationsClient() {
     await archiveContact({ id: contactId });
   }
 
+  async function handleAddAlias() {
+    if (!selectedGroupId || !aliasDraft.trim()) return;
+    try {
+      await addAlias({ groupId: selectedGroupId, alias: aliasDraft.trim() });
+      setAliasDraft("");
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Could not add alias.");
+    }
+  }
+
+  async function handleMerge() {
+    if (!selectedGroupId || mergeVictimIds.length === 0) return;
+    const names = mergeVictimIds
+      .map((id) => groupRows.find((g) => g._id === id)?.name)
+      .filter(Boolean)
+      .join(", ");
+    if (
+      !window.confirm(
+        `Merge ${names} into "${selectedGroup?.name}"? Those hosts will be archived and their names kept as aliases.`,
+      )
+    ) {
+      return;
+    }
+    setMergeBusy(true);
+    try {
+      await mergeGroups({ survivorId: selectedGroupId, victimIds: mergeVictimIds });
+      setMergeOpen(false);
+      setMergeVictimIds([]);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Merge failed.");
+    } finally {
+      setMergeBusy(false);
+    }
+  }
+
+  function toggleMergeVictim(id: Id<"invoiceGroups">) {
+    setMergeVictimIds((prev) =>
+      prev.includes(id) ? prev.filter((row) => row !== id) : [...prev, id],
+    );
+  }
+
   return (
     <div className="space-y-4 pb-24">
       <Card>
@@ -135,7 +199,8 @@ export function FinancialHubOrganizationsClient() {
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
             Host orgs appear on invoices and booking requests. Link invoices to a host using the dropdown — not
-            freeform text.
+            freeform text. Use aliases and merge to keep duplicate names (e.g. OSE vs full name) under one
+            canonical host.
           </p>
 
           <Form {...newGroupForm}>
@@ -204,7 +269,10 @@ export function FinancialHubOrganizationsClient() {
                   <span className="text-sm text-muted-foreground">
                     {EQUIPMENT_PRICING_MODE_LABELS[group.equipmentPricingMode]}
                   </span>
-                  <span className="text-sm text-muted-foreground">{group.contactCount} clients</span>
+                  <span className="text-sm text-muted-foreground">
+                    {group.contactCount} clients
+                    {group.aliasCount > 0 ? ` · ${group.aliasCount} aliases` : ""}
+                  </span>
                   <span className="text-sm text-muted-foreground">{group.active ? "Active" : "Archived"}</span>
                 </button>
               ))
@@ -226,6 +294,104 @@ export function FinancialHubOrganizationsClient() {
               active={selectedGroup.active}
               onArchive={() => void handleArchiveGroup()}
             />
+
+            <div className="space-y-3 border-t pt-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-medium">Aliases</p>
+                {selectedGroup.active ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setMergeOpen((open) => !open);
+                      setMergeVictimIds([]);
+                    }}
+                  >
+                    {mergeOpen ? "Cancel merge" : "Merge into this host…"}
+                  </Button>
+                ) : null}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Alternate spellings that should resolve to this host (e.g. acronyms).
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <input
+                  className="h-9 min-w-[12rem] flex-1 rounded-md border bg-background px-3 text-sm"
+                  placeholder="Add alias"
+                  value={aliasDraft}
+                  onChange={(e) => setAliasDraft(e.target.value)}
+                  data-testid="host-alias-input"
+                />
+                <Button type="button" variant="outline" size="sm" onClick={() => void handleAddAlias()}>
+                  Add alias
+                </Button>
+              </div>
+              {aliasRows.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No aliases yet.</p>
+              ) : (
+                <ul className="space-y-1" data-testid="host-alias-list">
+                  {aliasRows.map((alias) => (
+                    <li
+                      key={alias._id}
+                      className="flex items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm"
+                    >
+                      <span>
+                        {alias.alias}{" "}
+                        <span className="text-xs text-muted-foreground">({alias.source})</span>
+                      </span>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => void removeAlias({ aliasId: alias._id })}
+                      >
+                        Remove
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {mergeOpen ? (
+                <div className="space-y-3 rounded-md border p-3" data-testid="host-merge-panel">
+                  <p className="text-sm font-medium">Merge other hosts into {selectedGroup.name}</p>
+                  <div className="max-h-48 space-y-1 overflow-y-auto">
+                    {mergeCandidates.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No other active hosts to merge.</p>
+                    ) : (
+                      mergeCandidates.map((group) => (
+                        <label key={group._id} className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={mergeVictimIds.includes(group._id)}
+                            onChange={() => toggleMergeVictim(group._id)}
+                          />
+                          <span>{group.name}</span>
+                        </label>
+                      ))
+                    )}
+                  </div>
+                  {mergePreview && mergePreview.victims.length > 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      Will move{" "}
+                      {mergePreview.victims.reduce((sum, row) => sum + row.contactCount, 0)} contacts,{" "}
+                      {mergePreview.victims.reduce((sum, row) => sum + row.eventCount, 0)} events,{" "}
+                      {mergePreview.victims.reduce((sum, row) => sum + row.invoiceCount, 0)} invoices,{" "}
+                      {mergePreview.victims.reduce((sum, row) => sum + row.requestCount, 0)} requests.
+                    </p>
+                  ) : null}
+                  <Button
+                    type="button"
+                    disabled={mergeVictimIds.length === 0 || mergeBusy}
+                    onClick={() => void handleMerge()}
+                    data-testid="host-merge-confirm"
+                  >
+                    {mergeBusy ? "Merging…" : "Confirm merge"}
+                  </Button>
+                </div>
+              ) : null}
+            </div>
 
             <div className="border-t pt-4">
               <p className="mb-3 text-sm font-medium">Client contacts</p>

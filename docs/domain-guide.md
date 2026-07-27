@@ -9,6 +9,11 @@ canonical description of the domain itself.
 
 - Users belong to Better Auth organizations. `organizationProfiles` classifies
   each as `arbor_internal` (staff — the "Arbor Live" org) or `band`.
+- **Host organizations** (clients / event hosts) are a separate domain:
+  `invoiceGroups` + `invoiceContacts`, not Better Auth orgs. Contacts are
+  per-org billing memberships; shared person identity lives in `invoicePeople`
+  (keyed by email). Alternate names are stored in `invoiceGroupAliases`;
+  admins can merge duplicate hosts in Financial Hub → Organizations.
 - Staff-only functionality is guarded by `requireArborInternalContext`; band
   portal surfaces (linked events, media albums, payout status) use
   `requireBandContext` plus `lib/eventBandAccess.ts`.
@@ -134,7 +139,9 @@ Event types (drive which editor tabs and quick-add blocks appear):
 - Line items live in a child table, sectioned as equipment package/type,
   external rental, artist, crew, fee. Totals are recomputed server-side
   (`recalculateTotals`); equipment pricing is `subsidized`/`nonSubsidized`
-  per client group.
+  per host organization (`invoiceGroups`). Host orgs support aliases and admin
+  merge so duplicate names resolve to one canonical record; booking can search
+  existing hosts or create from free text.
 - Every invoice carries a `publicApprovalToken` for the client-facing quote
   page (`/public/quote/[token]`): view, approve, request changes, set payment
   contacts, download PDF — all token-gated, no login.

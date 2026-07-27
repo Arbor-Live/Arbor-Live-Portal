@@ -5,6 +5,8 @@ import type { MutationCtx } from "./_generated/server";
 import { getUserId, requireArborInternalContext, requireAuth } from "./lib/auth";
 import { normalizeEventStatus } from "./lib/eventStatus";
 import { createDraftInvoiceFromBookingRequest, mapGroupTypeToSponsor, mapSponsorTypeToGroupType, provisionBillingProfileFromRequest } from "./lib/bookingRequestQuote";
+import { searchHostOrganizations } from "./lib/hostOrgIdentity";
+import { resolveHostLink } from "./lib/hostOrgs";
 import {
   approveInvoiceQuote,
   loadPublicQuoteView,
@@ -243,13 +245,33 @@ export const lookupContactByEmail = query({
       return { found: false as const };
     }
 
-    const contacts = await ctx.db
-      .query("invoiceContacts")
+    const person = await ctx.db
+      .query("invoicePeople")
       .withIndex("by_email", (q) => q.eq("email", email))
-      .take(20);
+      .first();
+
+    const contacts = person
+      ? await ctx.db
+          .query("invoiceContacts")
+          .withIndex("by_personId", (q) => q.eq("personId", person._id))
+          .take(50)
+      : await ctx.db
+          .query("invoiceContacts")
+          .withIndex("by_email", (q) => q.eq("email", email))
+          .take(20);
+
     const activeContacts = contacts.filter((row) => row.active);
-    if (!activeContacts.length) {
+    if (!activeContacts.length && !person) {
       return { found: false as const };
+    }
+    if (!activeContacts.length && person) {
+      return {
+        found: true as const,
+        firstName: person.firstName?.trim() ?? "",
+        lastName: person.lastName?.trim() ?? "",
+        phone: person.phone?.trim() ?? "",
+        groups: [],
+      };
     }
 
     // Prefer the contact record with the most complete details for autofill.
@@ -262,6 +284,13 @@ export const lookupContactByEmail = query({
       };
       return score(b) - score(a);
     })[0]!;
+    const fromPerson = person
+      ? {
+          firstName: person.firstName?.trim() ?? "",
+          lastName: person.lastName?.trim() ?? "",
+          phone: person.phone?.trim() ?? "",
+        }
+      : null;
     const { firstName, lastName } = resolveContactNameParts(primary);
     const groups = (
       await Promise.all(
@@ -283,11 +312,38 @@ export const lookupContactByEmail = query({
 
     return {
       found: true as const,
-      firstName,
-      lastName,
-      phone: primary.phone?.trim() ?? "",
+      firstName: fromPerson?.firstName || firstName,
+      lastName: fromPerson?.lastName || lastName,
+      phone: fromPerson?.phone || primary.phone?.trim() || "",
       groups: uniqueGroups,
     };
+  },
+});
+
+export const searchHostOrganizationsPublic = query({
+  args: {
+    query: v.string(),
+    limit: v.optional(v.number()),
+  },
+  returns: v.array(
+    v.object({
+      groupId: v.id("invoiceGroups"),
+      name: v.string(),
+      type: v.string(),
+      sponsorType: v.string(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const query = args.query.trim();
+    if (query.length < 2) return [];
+    const limit = Math.max(1, Math.min(args.limit ?? 12, 30));
+    const groups = await searchHostOrganizations(ctx, query, limit);
+    return groups.map((group) => ({
+      groupId: group._id,
+      name: group.name,
+      type: group.type,
+      sponsorType: mapGroupTypeToSponsor(group.type),
+    }));
   },
 });
 
@@ -871,7 +927,10 @@ export const convertToEvent = mutation({
       request.eventName?.trim() ||
       request.venueName?.trim() ||
       `${request.eventCategory} — ${request.firstName} ${request.lastName}`;
-    const host = request.organization?.trim() || request.sponsorType;
+    const hostLink = await resolveHostLink(ctx, request.invoiceGroupId);
+    const host =
+      hostLink.host ??
+      (request.organization?.trim() ? request.organization.trim() : request.sponsorType);
     const multiDay = dayPlans.length > 1;
     const now = Date.now();
 
@@ -924,6 +983,7 @@ export const convertToEvent = mutation({
           | undefined,
         teamsInterested: teamsInterested.length > 0 ? teamsInterested : undefined,
         category: request.eventCategory,
+        hostGroupId: hostLink.hostGroupId,
         host,
         expectedTurnout: request.expectedTurnout,
         invoiceId,

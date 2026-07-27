@@ -7,12 +7,14 @@ import {
   resolveContactNameParts,
   splitContactName,
 } from "./lib/contactName";
+import { upsertInvoicePerson } from "./lib/invoicePeople";
 
 const staleCutoffMs = 365 * 24 * 60 * 60 * 1000;
 
 type ContactDoc = {
   _id: import("./_generated/dataModel").Id<"invoiceContacts">;
   groupId?: import("./_generated/dataModel").Id<"invoiceGroups">;
+  personId?: import("./_generated/dataModel").Id<"invoicePeople">;
   name?: string;
   firstName?: string;
   lastName?: string;
@@ -127,12 +129,22 @@ export const create = mutation({
     await requireArborInternalContext(ctx);
     const now = Date.now();
     const { firstName, lastName } = normalizeContactInput(args);
-    return await ctx.db.insert("invoiceContacts", {
-      groupId: args.groupId,
+    const email = args.email?.trim() || undefined;
+    const phone = args.phone?.trim() || undefined;
+    const personId = await upsertInvoicePerson(ctx, {
+      email,
       firstName,
       lastName,
-      email: args.email?.trim() || undefined,
-      phone: args.phone?.trim() || undefined,
+      phone,
+      now,
+    });
+    return await ctx.db.insert("invoiceContacts", {
+      groupId: args.groupId,
+      personId,
+      firstName,
+      lastName,
+      email,
+      phone,
       active: args.active ?? true,
       createdAt: now,
       updatedAt: now,
@@ -160,14 +172,25 @@ export const update = mutation({
     if (!firstName || !lastName) {
       throw new Error("First and last name are required.");
     }
-    await ctx.db.patch(args.id, {
-      groupId: args.groupId ?? existing.groupId,
+    const email = args.email?.trim() ?? existing.email;
+    const phone = args.phone?.trim() ?? existing.phone;
+    const now = Date.now();
+    const personId = await upsertInvoicePerson(ctx, {
+      email,
       firstName,
       lastName,
-      email: args.email?.trim() ?? existing.email,
-      phone: args.phone?.trim() ?? existing.phone,
+      phone,
+      now,
+    });
+    await ctx.db.patch(args.id, {
+      groupId: args.groupId ?? existing.groupId,
+      personId: personId ?? existing.personId,
+      firstName,
+      lastName,
+      email,
+      phone,
       active: args.active ?? existing.active,
-      updatedAt: Date.now(),
+      updatedAt: now,
     });
   },
 });

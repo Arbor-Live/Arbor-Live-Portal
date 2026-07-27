@@ -210,4 +210,55 @@ test.describe("invoice host organizations and contacts", () => {
       timeout: 25_000,
     });
   });
+
+  test("admin merges duplicate hosts and keeps invoice on survivor", async ({ page }) => {
+    test.setTimeout(180_000);
+    const stamp = Date.now();
+    const survivorName = `E2E Merge Survivor ${stamp}`;
+    const victimName = `E2E Merge Victim ${stamp}`;
+
+    await page.goto("/dashboard/financial-hub/organizations");
+    await expect(page.getByText("Host organizations").first()).toBeVisible({ timeout: 25_000 });
+
+    const createForm = page.locator("form").filter({ has: page.getByPlaceholder("New host name") });
+    await createForm.getByPlaceholder("New host name").fill(survivorName);
+    await createForm.getByRole("button", { name: "Add host" }).click();
+    await pollConvex<GroupState>(
+      "e2eHelpers:getInvoiceGroupByName",
+      { name: survivorName },
+      (row) => Boolean(row?.groupId),
+    );
+
+    await createForm.getByPlaceholder("New host name").fill(victimName);
+    await createForm.getByRole("button", { name: "Add host" }).click();
+    await pollConvex<GroupState>(
+      "e2eHelpers:getInvoiceGroupByName",
+      { name: victimName },
+      (row) => Boolean(row?.groupId),
+    );
+
+    await page.getByRole("button").filter({ hasText: survivorName }).first().click();
+    await expect(page.getByText(`Edit host: ${survivorName}`)).toBeVisible({ timeout: 25_000 });
+    await page.getByRole("button", { name: "Merge into this host…" }).click();
+    await expect(page.getByTestId("host-merge-panel")).toBeVisible();
+    await page.getByRole("checkbox", { name: victimName }).check();
+    page.once("dialog", (dialog) => void dialog.accept());
+    await page.getByTestId("host-merge-confirm").click();
+
+    const survivor = await pollConvex<GroupState>(
+      "e2eHelpers:getInvoiceGroupByName",
+      { name: survivorName },
+      (row) => Boolean(row?.groupId && row.active),
+    );
+    expect(survivor.active).toBe(true);
+
+    const victim = await pollConvex<GroupState>(
+      "e2eHelpers:getInvoiceGroupByName",
+      { name: victimName },
+      (row) => row?.active === false,
+    );
+    expect(victim.active).toBe(false);
+
+    await expect(page.getByTestId("host-alias-list")).toContainText(victimName, { timeout: 25_000 });
+  });
 });

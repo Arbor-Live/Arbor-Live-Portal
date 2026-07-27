@@ -1,5 +1,7 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
+import { findGroupByNameOrAlias, normalizeHostOrgName } from "./hostOrgIdentity";
+import { upsertInvoicePerson } from "./invoicePeople";
 import { allocateInvoiceNumber } from "./publicReferenceIds";
 
 type GroupType = "vso" | "house" | "department" | "individual";
@@ -100,9 +102,18 @@ async function ensureContactLinkedToGroup(
   const lastName = args.lastName.trim();
   const phone = args.phone.trim();
 
+  const personId = await upsertInvoicePerson(ctx, {
+    email,
+    firstName,
+    lastName,
+    phone,
+    now: args.now,
+  });
+
   const existingForGroup = await findActiveContactByEmailAndGroup(ctx, email, args.groupId);
   if (existingForGroup) {
     await ctx.db.patch(existingForGroup._id, {
+      personId: personId ?? existingForGroup.personId,
       firstName,
       lastName,
       phone,
@@ -116,6 +127,7 @@ async function ensureContactLinkedToGroup(
   if (ungroupedByEmail && !ungroupedByEmail.groupId) {
     await ctx.db.patch(ungroupedByEmail._id, {
       groupId: args.groupId,
+      personId: personId ?? ungroupedByEmail.personId,
       firstName,
       lastName,
       phone,
@@ -127,6 +139,7 @@ async function ensureContactLinkedToGroup(
 
   return await ctx.db.insert("invoiceContacts", {
     groupId: args.groupId,
+    personId,
     firstName,
     lastName,
     email,
@@ -153,9 +166,18 @@ async function ensureContactRecord(
   const lastName = args.lastName.trim();
   const phone = args.phone.trim();
 
+  const personId = await upsertInvoicePerson(ctx, {
+    email,
+    firstName,
+    lastName,
+    phone,
+    now: args.now,
+  });
+
   const existing = await findActiveContactByEmail(ctx, email);
   if (existing) {
     await ctx.db.patch(existing._id, {
+      personId: personId ?? existing.personId,
       firstName,
       lastName,
       phone,
@@ -166,6 +188,7 @@ async function ensureContactRecord(
   }
 
   return await ctx.db.insert("invoiceContacts", {
+    personId,
     firstName,
     lastName,
     email,
@@ -197,16 +220,14 @@ export async function provisionBillingProfileFromRequest(
   const groupType = mapSponsorTypeToGroupType(args.sponsorType);
 
   if (!invoiceGroupId && organization && groupType !== "individual") {
-    const existingGroup = await ctx.db
-      .query("invoiceGroups")
-      .withIndex("by_name", (q) => q.eq("name", organization))
-      .first();
+    const existingGroup = await findGroupByNameOrAlias(ctx, organization);
     if (existingGroup) {
       invoiceGroupId = existingGroup._id;
       await ctx.db.patch(existingGroup._id, { lastUsedAt: now, updatedAt: now });
     } else {
       invoiceGroupId = await ctx.db.insert("invoiceGroups", {
         name: organization,
+        normalizedName: normalizeHostOrgName(organization),
         type: groupType,
         equipmentPricingMode: "subsidized",
         active: true,
