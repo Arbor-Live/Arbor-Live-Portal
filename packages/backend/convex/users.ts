@@ -399,7 +399,11 @@ export const listBandOrganizationsAdmin = query({
           designatedPayeeName: profile?.designatedPayeeName ?? "",
           designatedPayeeEmail: profile?.designatedPayeeEmail ?? "",
           designatedPayeeMailingAddress: profile?.designatedPayeeMailingAddress ?? "",
-          designatedPayeePayoutMethod: profile?.designatedPayeePayoutMethod ?? "",
+          designatedPayeePayoutMethod:
+            profile?.designatedPayeePayoutMethod === "pickup" ||
+            profile?.designatedPayeePayoutMethod === "delivery"
+              ? profile.designatedPayeePayoutMethod
+              : "",
           publicWebsiteUrl: profile?.publicWebsiteUrl ?? "",
           publicInstagramUrl: profile?.publicInstagramUrl ?? "",
           publicYoutubeUrl: profile?.publicYoutubeUrl ?? "",
@@ -1705,7 +1709,11 @@ export const getActiveBandProfile = query({
       designatedPayeeName: profile?.designatedPayeeName ?? "",
       designatedPayeeEmail: profile?.designatedPayeeEmail ?? "",
       designatedPayeeMailingAddress: profile?.designatedPayeeMailingAddress ?? "",
-      designatedPayeePayoutMethod: profile?.designatedPayeePayoutMethod ?? "",
+      designatedPayeePayoutMethod:
+        profile?.designatedPayeePayoutMethod === "pickup" ||
+        profile?.designatedPayeePayoutMethod === "delivery"
+          ? profile.designatedPayeePayoutMethod
+          : "",
       payeeComplete: isBandPayeeComplete({
         designatedPayeeName: profile?.designatedPayeeName,
         designatedPayeeEmail: profile?.designatedPayeeEmail,
