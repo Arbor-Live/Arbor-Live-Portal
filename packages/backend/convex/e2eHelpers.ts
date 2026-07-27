@@ -1765,6 +1765,7 @@ export const ensureBandPayeeUser = mutation({
       designatedPayeeName: name,
       designatedPayeeEmail: email,
       designatedPayeeMailingAddress: "450 Serra Mall, Stanford, CA 94305",
+      designatedPayeePayoutMethod: "pickup" as const,
       updatedAt: now,
     };
     if (existingOrgProfile) {
@@ -1886,6 +1887,7 @@ export const seedBandPaymentForEsign = mutation({
       designatedPayeeName: args.payeeName.trim(),
       designatedPayeeEmail: args.payeeEmail.trim().toLowerCase(),
       designatedPayeeMailingAddress: "450 Serra Mall, Stanford, CA 94305",
+      designatedPayeePayoutMethod: "pickup" as const,
       status,
       confirmationToken,
       confirmationEmailSentAt: status === "pending_email" ? undefined : now - 60_000,
@@ -2467,6 +2469,7 @@ export const getBandOnboardingState = query({
       displayName: v.union(v.string(), v.null()),
       performerHourlyRateUsd: v.union(v.number(), v.null()),
       designatedPayeeName: v.union(v.string(), v.null()),
+      designatedPayeePayoutMethod: v.union(v.literal("pickup"), v.literal("delivery"), v.null()),
     }),
   ),
   handler: async (ctx, args) => {
@@ -2480,6 +2483,7 @@ export const getBandOnboardingState = query({
       .query("organizationProfiles")
       .withIndex("by_organizationId", (q) => q.eq("organizationId", args.organizationId))
       .unique();
+    const payoutMethod = profile?.designatedPayeePayoutMethod;
     return {
       organizationId: row.organizationId,
       status: row.status,
@@ -2491,6 +2495,8 @@ export const getBandOnboardingState = query({
       displayName: profile?.displayName ?? null,
       performerHourlyRateUsd: profile?.performerHourlyRateUsd ?? null,
       designatedPayeeName: profile?.designatedPayeeName ?? null,
+      designatedPayeePayoutMethod:
+        payoutMethod === "pickup" || payoutMethod === "delivery" ? payoutMethod : null,
     };
   },
 });

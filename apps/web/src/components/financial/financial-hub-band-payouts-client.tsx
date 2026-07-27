@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { formatDate, formatDateTime, formatUsd } from "@/lib/format";
+import { formatBandPayeePayoutMethod } from "@/lib/band-payout-copy";
 
 type BandPaymentQueue =
   | "all_pending"
@@ -206,9 +207,14 @@ export function FinancialHubBandPayoutsClient() {
                   <p>
                     <span className="font-medium">Status:</span> {row.statusLabel}
                   </p>
+                  <p>
+                    <span className="font-medium">Payout method:</span>{" "}
+                    {formatBandPayeePayoutMethod(row.designatedPayeePayoutMethod)}
+                  </p>
                   {row.designatedPayeeMailingAddress ? (
                     <p className="whitespace-pre-wrap sm:col-span-2">
-                      <span className="font-medium">Mailing address:</span> {row.designatedPayeeMailingAddress}
+                      <span className="font-medium">Mailing address:</span>{" "}
+                      {row.designatedPayeeMailingAddress}
                     </p>
                   ) : null}
                   {row.confirmationEmailSentAt ? (

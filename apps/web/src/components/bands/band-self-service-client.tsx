@@ -76,6 +76,7 @@ export function BandSelfServiceClient() {
       designatedPayeeName: profile?.designatedPayeeName,
       designatedPayeeEmail: profile?.designatedPayeeEmail,
       designatedPayeeMailingAddress: profile?.designatedPayeeMailingAddress,
+      designatedPayeePayoutMethod: profile?.designatedPayeePayoutMethod,
       publicWebsiteUrl: values.publicWebsiteUrl || undefined,
       publicInstagramUrl: values.publicInstagramUrl || undefined,
       publicYoutubeUrl: values.publicYoutubeUrl || undefined,

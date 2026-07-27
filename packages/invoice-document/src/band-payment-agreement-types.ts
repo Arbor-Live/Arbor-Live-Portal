@@ -12,6 +12,7 @@ export type BandPaymentAgreementDocumentData = {
   designatedPayeeName: string;
   designatedPayeeEmail?: string;
   designatedPayeeMailingAddress?: string;
+  designatedPayeePayoutMethod?: "pickup" | "delivery";
   adminRequesterName?: string;
   adminRequesterEmail?: string;
   adminApproverName?: string;

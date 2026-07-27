@@ -15,18 +15,28 @@ export type BandPaymentStatus =
   | "paid"
   | "cancelled";
 
+export type BandPayeePayoutMethod = "pickup" | "delivery";
+
 export type BandPayeeFields = {
   designatedPayeeUserId?: string;
   designatedPayeeName?: string;
   designatedPayeeEmail?: string;
   designatedPayeeMailingAddress?: string;
+  designatedPayeePayoutMethod?: BandPayeePayoutMethod;
 };
+
+export function formatBandPayeePayoutMethod(method?: BandPayeePayoutMethod) {
+  if (method === "pickup") return "Pickup (ASSU office)";
+  if (method === "delivery") return "Delivery";
+  return "—";
+}
 
 export function isBandPayeeComplete(payee: BandPayeeFields) {
   const name = payee.designatedPayeeName?.trim();
   const email = payee.designatedPayeeEmail?.trim().toLowerCase();
   const address = payee.designatedPayeeMailingAddress?.trim();
-  return Boolean(name && email?.includes("@") && address);
+  const method = payee.designatedPayeePayoutMethod;
+  return Boolean(name && email?.includes("@") && address && method);
 }
 
 export function payeeFieldsFromProfile(
@@ -38,6 +48,11 @@ export function payeeFieldsFromProfile(
     designatedPayeeName: profile.designatedPayeeName?.trim() || undefined,
     designatedPayeeEmail: profile.designatedPayeeEmail?.trim().toLowerCase() || undefined,
     designatedPayeeMailingAddress: profile.designatedPayeeMailingAddress?.trim() || undefined,
+    designatedPayeePayoutMethod:
+      profile.designatedPayeePayoutMethod === "pickup" ||
+      profile.designatedPayeePayoutMethod === "delivery"
+        ? profile.designatedPayeePayoutMethod
+        : undefined,
   };
 }
 
@@ -51,6 +66,7 @@ export function resolvePayeeSnapshot(
     designatedPayeeName: merged.designatedPayeeName,
     designatedPayeeEmail: merged.designatedPayeeEmail,
     designatedPayeeMailingAddress: merged.designatedPayeeMailingAddress,
+    designatedPayeePayoutMethod: merged.designatedPayeePayoutMethod,
   };
 }
 
