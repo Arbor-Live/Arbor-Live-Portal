@@ -119,6 +119,7 @@ export function EventSeriesScheduleEditor({
   const blocks = blocksOverride ?? initialBlocks;
 
   useEffect(() => {
+    if (form.formState.isDirty) return;
     form.reset({
       applyScope: "all",
       fromOccurrenceIndex: "0",

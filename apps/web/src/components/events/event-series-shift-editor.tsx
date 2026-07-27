@@ -149,6 +149,7 @@ export function EventSeriesShiftEditor({
   const shifts = shiftsOverride ?? initialShifts;
 
   useEffect(() => {
+    if (form.formState.isDirty) return;
     form.reset({
       applyScope: "all",
       fromOccurrenceIndex: "0",
