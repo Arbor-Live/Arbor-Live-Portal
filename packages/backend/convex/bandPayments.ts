@@ -739,6 +739,11 @@ export const sendConfirmationEmail = mutation({
     await scheduleBandPaymentConfirmationEmail(ctx, { payment, event });
 
     await ctx.db.patch(payment._id, {
+      designatedPayeeName: effectivePayee.designatedPayeeName,
+      designatedPayeeEmail: effectivePayee.designatedPayeeEmail,
+      designatedPayeeUserId: effectivePayee.designatedPayeeUserId,
+      designatedPayeeMailingAddress: effectivePayee.designatedPayeeMailingAddress,
+      designatedPayeePayoutMethod: effectivePayee.designatedPayeePayoutMethod,
       status: "awaiting_confirmation",
       confirmationEmailSentAt: Date.now(),
       confirmationSentByUserId: senderUserId || undefined,
@@ -1074,11 +1079,21 @@ export const signPayment = mutation({
       throw new Error("Only the designated payee can sign this payment.");
     }
 
+    const effectivePayee = await getEffectivePayeeForPayment(ctx, payment);
+
     await ctx.db.patch(payment._id, {
       status: "confirmed",
       confirmedAt: Date.now(),
       signedByUserId: userId,
       signatureTypedName: typedName,
+      // Freeze current org payee details (incl. payout method) onto the payment
+      // so agreement PDFs don't depend on later profile edits.
+      designatedPayeeName: effectivePayee.designatedPayeeName ?? payment.designatedPayeeName,
+      designatedPayeeEmail: effectivePayee.designatedPayeeEmail ?? payment.designatedPayeeEmail,
+      designatedPayeeMailingAddress:
+        effectivePayee.designatedPayeeMailingAddress ?? payment.designatedPayeeMailingAddress,
+      designatedPayeePayoutMethod:
+        effectivePayee.designatedPayeePayoutMethod ?? payment.designatedPayeePayoutMethod,
       updatedAt: Date.now(),
     });
     return null;
@@ -1114,6 +1129,10 @@ async function buildAgreementDocumentData(
     adminRequesterEmail ||
     undefined;
 
+  // Prefer payment snapshot; fall back to org profile for fields added later
+  // (e.g. payout method) that older signed rows may not have stored.
+  const effectivePayee = await getEffectivePayeeForPayment(ctx, payment);
+
   return {
     confirmationToken: payment.confirmationToken,
     bandName: await resolveBandName(ctx, payment.organizationId),
@@ -1125,10 +1144,10 @@ async function buildAgreementDocumentData(
     performanceHoursLabel: formatPerformanceHours(payment.performanceHours),
     memberCount: payment.memberCount,
     totalUsd: payment.totalUsd,
-    designatedPayeeName: payment.designatedPayeeName ?? "Designated payee",
-    designatedPayeeEmail: payment.designatedPayeeEmail,
-    designatedPayeeMailingAddress: payment.designatedPayeeMailingAddress,
-    designatedPayeePayoutMethod: payment.designatedPayeePayoutMethod,
+    designatedPayeeName: effectivePayee.designatedPayeeName ?? "Designated payee",
+    designatedPayeeEmail: effectivePayee.designatedPayeeEmail,
+    designatedPayeeMailingAddress: effectivePayee.designatedPayeeMailingAddress,
+    designatedPayeePayoutMethod: effectivePayee.designatedPayeePayoutMethod,
     adminRequesterName,
     adminRequesterEmail,
     adminApproverName,

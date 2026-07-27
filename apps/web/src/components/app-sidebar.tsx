@@ -235,6 +235,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
       : "skip",
   )
   const pendingAvailabilityCount = navBadges?.pendingAvailability
+  const pendingBookingRequestsCount = navBadges?.pendingBookingRequests
   const pendingBandApplicationsCount = navBadges?.pendingBandApplications
   const pendingCrewApplicationsCount = navBadges?.pendingCrewApplications
   const pendingDamageReportsCount = navBadges?.pendingDamageReports
@@ -268,6 +269,8 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
     switch (url) {
       case "/dashboard/events/my-availability":
         return pendingAvailabilityCount ?? 0
+      case "/dashboard/events/requests":
+        return pendingBookingRequestsCount ?? 0
       case "/dashboard/events/crew-scheduling":
         return unconfirmedEventCount
       case "/dashboard/users/band-applications":
