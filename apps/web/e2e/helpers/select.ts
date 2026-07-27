@@ -15,9 +15,15 @@ import { expect, type Locator, type Page } from "@playwright/test";
  * is positioned rather than scrolled. In Batch 9 this first appeared as a bare
  * three-minute test timeout with no failing assertion attached to it.
  *
- * So this drives the menu the way a keyboard user does: open it, use Radix's
- * built-in typeahead to highlight the option by its label, and press Enter. No
- * coordinates are involved, so the length of the list stops mattering.
+ * So this drives the menu by keyboard: open it, walk the highlight to the option
+ * by its label, and press Enter. No coordinates are involved, so the length of
+ * the list stops mattering.
+ *
+ * It walks rather than using Radix's typeahead, because Radix treats Space as a
+ * *selection* key. Typing a label with a space in it ("Arbor Live") selects
+ * whatever is highlighted at the space, closes the menu, and then the trailing
+ * Enter reopens it — leaving a menu that is open, a value that was never chosen
+ * on purpose, and a helper waiting on a close that already happened.
  *
  * The Users table renders several selects per row, most of them showing only an
  * icon and a value, so pass a `data-testid`-scoped trigger rather than trying to
@@ -45,9 +51,34 @@ export async function pickSelectOption(
   // global count never reaches zero and the helper hangs on a menu it already
   // closed.
   await expect(trigger).toHaveAttribute("aria-expanded", "true", { timeout: 15_000 });
-  // Typeahead matches on the item's label prefix, so the full label is safe even
-  // where one option's label is a prefix of another's.
-  await page.keyboard.type(optionLabel, { delay: 20 });
+
+  // Scope to *this* trigger's menu via `aria-controls`, which Radix sets while
+  // open. A page-wide `[data-highlighted]` lookup can latch onto the leftover
+  // highlight of a menu that is still animating out, so the walk reads one menu
+  // while Enter lands in another — the pick silently keeps its old value.
+  const contentId = await trigger.getAttribute("aria-controls");
+  const menu = contentId
+    ? page.locator(`[id="${contentId}"]`)
+    : page.locator("[data-slot='select-content']").last();
+
+  // Home first: the highlight starts on the checked item, which may be below the
+  // one we want, and Radix's ArrowDown does not wrap.
+  const highlighted = menu.locator("[data-slot='select-item'][data-highlighted]");
+  await page.keyboard.press("Home");
+  await expect(highlighted).toHaveCount(1, { timeout: 15_000 });
+
+  let landed = false;
+  for (let step = 0; step < 200; step += 1) {
+    const text = (await highlighted.first().textContent())?.trim() ?? "";
+    if (text === optionLabel) {
+      landed = true;
+      break;
+    }
+    await page.keyboard.press("ArrowDown");
+  }
+  if (!landed) {
+    throw new Error(`No option labelled "${optionLabel}" in this select.`);
+  }
   await page.keyboard.press("Enter");
 
   // Radix keeps the menu mounted through its close animation, and a later click
@@ -55,8 +86,6 @@ export async function pickSelectOption(
   // move on too early.
   await expect(trigger).toHaveAttribute("aria-expanded", "false", { timeout: 15_000 });
 
-  // Typeahead that matched nothing still closes the menu on Enter, having
-  // selected whatever was highlighted — so confirm the pick actually landed.
   const expected = options?.expectTriggerText;
   if (expected === false) return;
   await expect(trigger).toHaveText(expected ?? optionLabel, { timeout: 15_000 });

@@ -1507,6 +1507,12 @@ function EditInviteModal({
   });
 
   useEffect(() => {
+    // Bail once edited, the way every other row in this file does.
+    // `useConvexForm` busts its memo on `isDirty`, so without this guard the
+    // first change re-runs the effect and resets the field straight back to the
+    // invitation's stored values — leaving the role and team pickers unable to
+    // hold any edit at all.
+    if (form.formState.isDirty) return;
     form.reset({ role: invite.role, verticals: invite.verticals, disciplines: invite.disciplines });
   }, [invite, form]);
 

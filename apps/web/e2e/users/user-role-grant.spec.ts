@@ -2,6 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { signInWithCredentials } from "../helpers/auth";
 import { pickSelectOption } from "../helpers/select";
 import {
+  cardByTitle,
   ensureManagedUser,
   managedUserPassword,
   managedUsers,
@@ -51,7 +52,9 @@ test.describe("granting admin flips the refusal", () => {
 
   async function expectAdmitted(memberPage: Page) {
     await memberPage.goto("/dashboard/users");
-    await expect(memberPage.getByText("Access & Invites")).toBeVisible({ timeout: 30_000 });
+    // The card, not the sidebar link of the same name — once the grant lands,
+    // "Access & Invites" is on the page twice.
+    await expect(cardByTitle(memberPage, "Access & Invites")).toBeVisible({ timeout: 30_000 });
     await expect(memberPage.getByText("Admin access required")).toHaveCount(0);
   }
 
@@ -89,12 +92,18 @@ test.describe("granting admin flips the refusal", () => {
       await expectAdmitted(memberPage);
 
       // The sidebar has to agree with the guard — an admin who cannot find the
-      // page is only marginally better off than one who is refused. "Users" is
-      // a button, not a link: it owns a submenu.
-      const nav = memberPage.getByRole("navigation").first();
-      await expect(nav.getByRole("button", { name: "Users", exact: true })).toBeVisible({
-        timeout: 25_000,
+      // page is only marginally better off than one who is refused.
+      //
+      // Asserted on the sub-link rather than the "Users" parent scoped to
+      // `getByRole("navigation")`: that role does not resolve in this sidebar,
+      // which makes the `toHaveCount(0)` half of this pair pass for the wrong
+      // reason. The link only renders under the `adminOnly` Users menu, and its
+      // name does not collide with the card of the same title (a `div`).
+      const sidebarUsersLink = memberPage.getByRole("link", {
+        name: "Access & Invites",
+        exact: true,
       });
+      await expect(sidebarUsersLink).toBeVisible({ timeout: 25_000 });
 
       // ---- demote ------------------------------------------------------
       await openUsersAccessPage(page);
@@ -106,7 +115,7 @@ test.describe("granting admin flips the refusal", () => {
       await pollUserState(email, (state) => state?.role === "member");
 
       await expectRefused(memberPage);
-      await expect(nav.getByRole("button", { name: "Users", exact: true })).toHaveCount(0);
+      await expect(sidebarUsersLink).toHaveCount(0);
     } finally {
       await memberContext.close();
     }

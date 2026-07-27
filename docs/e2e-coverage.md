@@ -23,7 +23,7 @@ Update this file whenever specs or helpers land (or when a batch ships).
 | **7** | [#64](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/64) | Authorization boundaries: admin route guards, Convex-level enforcement, org-type separation, plus an `AdminOnlyGuard` so refusals read as refusals |
 | — | [#65](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/65) | Not a batch: the ascending-`take` fix shipped five `*-list-recency` specs plus `marketing/work-posts-admin.spec.ts` |
 | **8** | [#71](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/71) | Money paths: invoice line items + totals, discounts, send-for-review round trip, approval-token rotation, approval reset + duplicate, host orgs/contacts, payment-proof invalidate + receipt |
-| **9** | on branch | Users, access, and rates: invite lifecycle, direct user create, access remove/reactivate + last-admin guard, role grant flipping a Batch 7 refusal, per-user compensation, org memberships — plus `AdminOnlyGuard` on the four `/dashboard/users` pages that shipped without it |
+| **9** | on branch | Users, access, and rates: invite lifecycle, direct user create, access remove/reactivate + last-admin guard, role grant flipping a Batch 7 refusal, per-user compensation, org memberships. Shipped two fixes the specs found: `AdminOnlyGuard` on the four `/dashboard/users` pages that had only `ArborOnlyGuard`, and a missing dirty guard that made the Edit Invitation modal unable to hold *any* edit |
 
 ## Status legend
 
@@ -249,8 +249,8 @@ Conventions for any new batch:
 
 ### Traps this codebase sets for Playwright
 
-These fail in ways that do not look like what they are. 1–4 and 8 cost real
-debugging time in Batch 8; 5–7 came out of Batch 9.
+These fail in ways that do not look like what they are. 1–4 and 9 cost real
+debugging time in Batch 8; 5–8 came out of Batch 9.
 
 1. **`window.confirm` guards mutations.** `regeneratePublicApprovalToken`,
    host/contact archive, and the re-approval prompt on saving an edited approved
@@ -286,15 +286,23 @@ debugging time in Batch 8; 5–7 came out of Batch 9.
    wait — and neither does scrolling, because the menu is positioned rather than
    scrolled. It first appeared as a bare three-minute test timeout with no
    failing assertion attached. `pickSelectOption` in `e2e/helpers/select.ts`
-   drives the menu by keyboard instead (open, typeahead the label, Enter), so
-   list length stops mattering, and confirms the trigger's text changed so a
-   typeahead that matched nothing fails immediately. Pass
-   `expectTriggerText: false` for the per-row Options menu, whose value is always
-   `""` and never reflects the action taken.
-   Open/closed is read from the trigger's `aria-expanded`, **not** from
-   `getByRole("listbox")`: these pages carry a listbox that is never the one you
-   opened, so a global `toHaveCount(0)` never settles and the helper hangs on a
-   menu it has already closed.
+   drives the menu by keyboard instead — open, `Home`, then walk the highlight
+   with `ArrowDown` until it reads the label, then Enter — so list length stops
+   mattering. Pass `expectTriggerText: false` for the per-row Options menu, whose
+   value is always `""` and never reflects the action taken.
+   Three details in that helper are each load-bearing, and each cost a run:
+   - **Do not use Radix's typeahead.** Radix treats Space as a *selection* key,
+     so typing a label containing one ("Arbor Live") selects whatever is
+     highlighted at the space, closes the menu, and lets the trailing Enter
+     reopen it. You end up with a menu that is open, a value nobody chose, and a
+     helper waiting on a close that already happened.
+   - **Read open/closed from the trigger's `aria-expanded`,** not from
+     `getByRole("listbox")`. These pages carry a listbox that is never the one
+     you opened, so a global `toHaveCount(0)` never settles.
+   - **Scope the highlighted item to `aria-controls`.** A page-wide
+     `[data-highlighted]` lookup can latch onto the leftover highlight of a menu
+     still animating out, so the walk reads one menu while Enter lands in
+     another — the select silently keeps its old value.
 5. **`FormLabel` labels a `<div>`, not the input.** `FormControl` is a wrapper
    div that takes `formItemId` rather than forwarding it to the control inside,
    so every `TextFormField` in the app is unlabelled as far as the accessibility
@@ -302,19 +310,29 @@ debugging time in Batch 8; 5–7 came out of Batch 9.
    `formFieldInput` from `e2e/helpers/forms.ts`, which scopes to the
    `form-item` wrapper instead. (The checkboxes in `MembershipCheckboxes` *do*
    work with `getByLabel`, because the input is nested inside its `<label>`.)
-6. **`CardTitle` is a `div`, and cards contain other cards' titles.** Filtering a
-   card by any text inside it matches the modal *and* the card holding the
-   button that opened it — "Invite User" is both a title and a button label. Use
-   `cardByTitle` in `e2e/helpers/users.ts`, which matches the `card-title` slot
-   with an anchored regex; a substring match would tie "Invitations" to the page
-   header's "User Access & Invitations".
-7. **Users cannot be seeded per run.** `listUsersForAdmin` returns every auth
+6. **`CardTitle` is a `div`, and cards contain other cards' titles.** So
+   `getByRole("heading")` never matches one, and filtering a card by any text
+   inside it matches the modal *and* the card holding the button that opened it
+   — "Invite User" is both a title and a button label. Use `cardByTitle` in
+   `e2e/helpers/users.ts`, which matches the `card-title` slot with an anchored
+   regex; a substring match would tie "Invitations" to the page header's "User
+   Access & Invitations". Sidebar links share names with card titles too, so
+   plain `getByText("Access & Invites")` is a strict-mode violation for any user
+   who can see both.
+7. **`useConvexForm` busts its memo on `isDirty`.** That is deliberate — save
+   bars need to see the change — but it means any `useEffect` that calls
+   `form.reset(...)` with `form` in its deps re-runs on the *first edit* and
+   throws that edit away. Guard every such effect with
+   `if (form.formState.isDirty) return;`. `EditInviteModal` was missing it, which
+   made the invitation role and team pickers unable to hold a change at all;
+   `user-invite-lifecycle.spec.ts` is what caught it.
+8. **Users cannot be seeded per run.** `listUsersForAdmin` returns every auth
    user into an unpaginated table, so a stamped throwaway user per run grows the
    shared deployment forever. Batch 9 reuses fixed `e2e-managed-*` addresses and
    hard-deletes them in `resetManagedUserByEmail`, which refuses anything
    outside that prefix — the admin, crew, and band fixtures are all
    `e2e-*@arborlive.test`, and deleting one would take down every sign-in.
-8. **Saving from `/invoices/new` remounts the editor.** `router.replace` moves it
+9. **Saving from `/invoices/new` remounts the editor.** `router.replace` moves it
    into the `[id]` route, which re-hydrates every field from the saved invoice
    and reverts anything typed in that window — and the pass is not observable
    from the outgoing component. `createDraftInvoiceWithArtistLine` in
