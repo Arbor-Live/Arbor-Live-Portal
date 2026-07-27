@@ -539,7 +539,11 @@ export function UsersManagementClient({
                 </thead>
                 <tbody>
                   {(invitations ?? []).map((invite) => (
-                    <tr key={invite.id} className="border-b last:border-b-0">
+                    <tr
+                      key={invite.id}
+                      data-testid={`invite-row-${invite.id}`}
+                      className="border-b last:border-b-0"
+                    >
                       <td className="px-3 py-2">{invite.email}</td>
                       <td className="px-3 py-2">{invite.organizationName}</td>
                       <td className="px-3 py-2">{invite.role}</td>
@@ -776,7 +780,10 @@ function UserAdminRow({
 
   return (
     <>
-      <tr className={`border-b align-top ${removed ? "text-muted-foreground" : ""}`}>
+      <tr
+        data-testid={`user-row-${user.id}`}
+        className={`border-b align-top ${removed ? "text-muted-foreground" : ""}`}
+      >
         <td className="px-3 py-2">{user.name}</td>
         <td className="px-3 py-2">{user.email}</td>
         <td className="px-3 py-2">
@@ -950,7 +957,7 @@ function UserAdminRow({
         </td>
       </tr>
       {expanded ? (
-        <tr className="border-b bg-muted/20">
+        <tr data-testid={`user-details-${user.id}`} className="border-b bg-muted/20">
           <td className="px-3 py-2 text-xs text-muted-foreground">Advanced fields</td>
           <td className="px-3 py-2" colSpan={9}>
             <div className="grid gap-2 md:grid-cols-2">
@@ -1025,7 +1032,7 @@ function UserAdminRow({
                   </div>
                 </div>
               </div>
-              <div className="rounded-md border p-2">
+              <div data-testid={`user-memberships-${user.id}`} className="rounded-md border p-2">
                 <p className="mb-2 text-xs font-medium">Organization Memberships</p>
                 <div className="space-y-1 text-xs text-muted-foreground">
                   {user.organizationMemberships.map((membership) => (
@@ -1375,7 +1382,10 @@ function InviteUserModal({
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 pb-24">
+    <div
+      data-testid="invite-user-modal"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 pb-24"
+    >
       <Card className="w-full max-w-lg">
         <CardHeader>
           <CardTitle>Invite User</CardTitle>
@@ -1527,6 +1537,11 @@ function EditInviteModal({
   });
 
   useEffect(() => {
+    // Bail while dirty, as every other `useConvexForm` row does. `form` is in
+    // the deps and `useConvexForm` returns a new object whenever `isDirty`
+    // flips, so without this the first edit re-runs the effect and resets
+    // itself away — the role could never actually be changed.
+    if (form.formState.isDirty) return;
     form.reset({ role: invite.role, verticals: invite.verticals, disciplines: invite.disciplines });
   }, [invite, form]);
 
@@ -1541,7 +1556,10 @@ function EditInviteModal({
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 pb-24">
+    <div
+      data-testid="edit-invite-modal"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 pb-24"
+    >
       <Card className="w-full max-w-lg">
         <CardHeader>
           <CardTitle>Edit Invitation</CardTitle>
@@ -1684,7 +1702,10 @@ function CreateUserModal({
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 pb-24">
+    <div
+      data-testid="create-user-modal"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 pb-24"
+    >
       <Card className="w-full max-w-2xl">
         <CardHeader>
           <CardTitle>Create User (Direct)</CardTitle>

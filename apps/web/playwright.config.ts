@@ -20,6 +20,15 @@ export default defineConfig({
   expect: { timeout: 15_000 },
   use: {
     baseURL,
+    /**
+     * Playwright's default is 0 — no limit — which means a locator that matches
+     * nothing turns `click()`/`fill()` into a silent wait for the *entire* test
+     * timeout: no error, no screenshot, no browser traffic, so it reads as a
+     * hung app rather than a bad selector. Two mistyped locators cost ~10
+     * minutes of Batch 9's runtime that way. 45s is far longer than any real
+     * interaction here (expect is 15s) and still fails fast enough to attribute.
+     */
+    actionTimeout: 45_000,
     trace: "on-first-retry",
     screenshot: "only-on-failure",
     video: "retain-on-failure",

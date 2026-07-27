@@ -3,8 +3,15 @@ import { v } from "convex/values";
 import { customAlphabet } from "nanoid";
 import { hashPassword } from "better-auth/crypto";
 import { components } from "./_generated/api";
-import { mutation, query, type MutationCtx } from "./_generated/server";
+import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
+import {
+  loadInvoiceCrewRateSettings,
+  normalizeCompensationRateMode,
+  normalizePayrollMethod,
+  resolveUserCompensationHourlyRateUsd,
+} from "./lib/crewCompensation";
+import { resolveProfileMembership } from "./lib/userVerticals";
 import { assertE2eHelpersEnabled } from "./lib/e2eGuard";
 import { inviteAcceptUrl } from "./email/constants";
 import { enqueueEmail } from "./email/enqueue";
@@ -1085,7 +1092,18 @@ export const ensureCrewUser = mutation({
         input: {
           model: "user",
           where: [{ field: "email", value: email }],
-          update: { name, updatedAt: now, emailVerified: true },
+          update: {
+            name,
+            updatedAt: now,
+            emailVerified: true,
+            // Clear any ban left behind by a remove-access spec that failed
+            // before it reactivated. Otherwise the next run starts with a user
+            // the app treats as signed-out, and every later step fails for a
+            // reason that has nothing to do with the code under test.
+            banned: false,
+            banReason: null,
+            banExpires: null,
+          },
         },
       });
     }
@@ -3441,5 +3459,302 @@ export const getInvoiceClientState = query({
       clientEmail: invoice.clientEmail ?? null,
       equipmentPricingMode: invoice.equipmentPricingMode,
     };
+  },
+});
+
+/* ------------------------------------------------------------------ *
+ * Batch 9 — users, access, and rates
+ * ------------------------------------------------------------------ */
+
+async function findAuthOrganizationNames(ctx: QueryCtx | MutationCtx) {
+  const result = await ctx.runQuery(components.betterAuth.adapter.findMany, {
+    model: "organization",
+    paginationOpts: { cursor: null, numItems: 200 },
+  });
+  const rows = (result?.page ?? []) as Array<{ id?: string; _id?: string; name?: string }>;
+  const byId = new Map<string, string>();
+  for (const row of rows) {
+    const id = getId(row);
+    if (id) byId.set(id, row.name ?? id);
+  }
+  return byId;
+}
+
+/**
+ * Test-only: everything the Users admin table can change about one user.
+ *
+ * `authRole` is the field that actually decides admin-ness — `requireAdmin`
+ * compares `user.role === "admin"` on the better-auth row, and the client
+ * `AdminOnlyGuard` reads the same value through `getSessionShell`. The app-side
+ * `userOrganizationMemberships.role` is a separate value that the Users row
+ * writes at the same time, so both are returned: a spec that only checked one
+ * could pass while the other never moved.
+ */
+export const getUserAdminStateByEmail = query({
+  args: { email: v.string() },
+  returns: v.union(
+    v.null(),
+    v.object({
+      userId: v.string(),
+      name: v.string(),
+      email: v.string(),
+      authRole: v.string(),
+      banned: v.boolean(),
+      active: v.boolean(),
+      title: v.string(),
+      phone: v.string(),
+      verticals: v.array(v.string()),
+      disciplines: v.array(v.string()),
+      defaultOrganizationId: v.string(),
+      payrollMethod: v.string(),
+      rateMode: v.union(v.string(), v.null()),
+      storedHourlyRateUsd: v.union(v.number(), v.null()),
+      effectiveHourlyRateUsd: v.union(v.number(), v.null()),
+      memberships: v.array(
+        v.object({
+          organizationId: v.string(),
+          organizationName: v.string(),
+          role: v.string(),
+          active: v.boolean(),
+        }),
+      ),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const email = args.email.trim().toLowerCase();
+    const user = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
+      model: "user",
+      where: [{ field: "email", value: email }],
+    })) as {
+      id?: string;
+      _id?: string;
+      name?: string;
+      email?: string;
+      role?: string;
+      banned?: boolean;
+    } | null;
+    if (!user) return null;
+    const userId = getId(user);
+    if (!userId) return null;
+
+    const profile = await ctx.db
+      .query("userAdminProfiles")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .unique();
+    const membership = resolveProfileMembership(profile ?? {});
+    const rate = await ctx.db
+      .query("userCompensationRates")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .unique();
+    const settings = await loadInvoiceCrewRateSettings(ctx);
+    const orgNames = await findAuthOrganizationNames(ctx);
+    const memberships = await ctx.db
+      .query("userOrganizationMemberships")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .take(50);
+
+    return {
+      userId,
+      name: user.name ?? "",
+      email: user.email ?? email,
+      authRole: user.role ?? "",
+      banned: Boolean(user.banned),
+      active: profile?.active ?? true,
+      title: profile?.title ?? "",
+      phone: profile?.phone ?? "",
+      verticals: membership.verticals as string[],
+      disciplines: membership.disciplines as string[],
+      defaultOrganizationId: profile?.defaultOrganizationId ?? "",
+      payrollMethod: normalizePayrollMethod(profile?.payrollMethod),
+      rateMode: rate ? normalizeCompensationRateMode(rate.rateMode) : null,
+      // The raw stored number. For a pinned (normal/lead) user this is 0 and the
+      // effective rate comes from the global settings instead.
+      storedHourlyRateUsd: rate ? rate.hourlyRateUsd : null,
+      effectiveHourlyRateUsd: rate
+        ? resolveUserCompensationHourlyRateUsd(rate, settings)
+        : null,
+      memberships: memberships.map((row) => ({
+        organizationId: row.organizationId,
+        organizationName: orgNames.get(row.organizationId) ?? row.organizationId,
+        role: row.role,
+        active: row.active,
+      })),
+    };
+  },
+});
+
+/**
+ * Test-only: the invitation for an email, plus the app-side pending row.
+ *
+ * The invite lives in two places — a better-auth `invitation` (status/role) and
+ * a `pendingUserInvites` row (token, verticals, rate, payroll). Cancelling
+ * deletes the second and only flips the status on the first, so `pending*`
+ * fields are nullable rather than optional.
+ */
+export const getInvitationStateByEmail = query({
+  args: { email: v.string() },
+  returns: v.union(
+    v.null(),
+    v.object({
+      invitationId: v.string(),
+      email: v.string(),
+      status: v.string(),
+      role: v.string(),
+      organizationId: v.string(),
+      expiresAt: v.number(),
+      pendingRole: v.union(v.string(), v.null()),
+      pendingVerticals: v.array(v.string()),
+      pendingDisciplines: v.array(v.string()),
+      pendingRateMode: v.union(v.string(), v.null()),
+      pendingCustomHourlyRateUsd: v.union(v.number(), v.null()),
+      pendingPayrollMethod: v.union(v.string(), v.null()),
+      hasPendingToken: v.boolean(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const email = args.email.trim().toLowerCase();
+    const result = await ctx.runQuery(components.betterAuth.adapter.findMany, {
+      model: "invitation",
+      paginationOpts: { cursor: null, numItems: 2000 },
+    });
+    const rows = (result?.page ?? []) as Array<{
+      id?: string;
+      _id?: string;
+      email?: string;
+      status?: string;
+      role?: string;
+      organizationId?: string;
+      expiresAt?: number;
+      createdAt?: number;
+    }>;
+    const matches = rows.filter((row) => (row.email ?? "").toLowerCase() === email);
+    if (matches.length === 0) return null;
+    const invite = matches.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))[0];
+    const invitationId = getId(invite);
+    if (!invitationId) return null;
+
+    const pending = await ctx.db
+      .query("pendingUserInvites")
+      .withIndex("by_invitationId", (q) => q.eq("invitationId", invitationId))
+      .unique();
+
+    return {
+      invitationId,
+      email: invite.email ?? email,
+      status: invite.status ?? "",
+      role: invite.role ?? "",
+      organizationId: invite.organizationId ?? "",
+      expiresAt: invite.expiresAt ?? 0,
+      pendingRole: pending?.role ?? null,
+      pendingVerticals: (pending?.verticals ?? []) as string[],
+      pendingDisciplines: (pending?.disciplines ?? []) as string[],
+      pendingRateMode: pending?.rateMode ?? null,
+      pendingCustomHourlyRateUsd: pending?.customHourlyRateUsd ?? null,
+      pendingPayrollMethod: pending?.payrollMethod ?? null,
+      hasPendingToken: Boolean(pending?.token),
+    };
+  },
+});
+
+/**
+ * Test-only: read the global crew rates without writing them.
+ *
+ * `invoiceSettings.update` writes these globally, which on the shared e2e
+ * deployment re-prices every other worktree's crew lines — so the rates spec
+ * reads them here and asserts a pinned user resolves to them, instead of
+ * setting them.
+ */
+export const getGlobalCrewRates = query({
+  args: {},
+  returns: v.object({
+    normalRateUsd: v.number(),
+    leadRateUsd: v.number(),
+  }),
+  handler: async (ctx) => {
+    assertE2eHelpersEnabled();
+    const settings = await loadInvoiceCrewRateSettings(ctx);
+    return {
+      normalRateUsd: Math.max(0, settings?.crewNormalRateUsd ?? 0),
+      leadRateUsd: Math.max(0, settings?.crewLeadRateUsd ?? settings?.crewOtRateUsd ?? 0),
+    };
+  },
+});
+
+/**
+ * Test-only: drop the invitations for an email so the invite spec does not
+ * accumulate a row per run on the shared deployment. `listInvitationsAdmin`
+ * pages with `.take(2000)`, and `resendInviteAdmin` updates by email rather
+ * than by id, so stale duplicates for one address are actively harmful.
+ */
+export const deleteInvitationsByEmail = mutation({
+  args: { email: v.string() },
+  returns: v.object({ deletedInvitations: v.number(), deletedPending: v.number() }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const email = args.email.trim().toLowerCase();
+    if (!email) throw new Error("Email is required.");
+    const result = await ctx.runQuery(components.betterAuth.adapter.findMany, {
+      model: "invitation",
+      paginationOpts: { cursor: null, numItems: 2000 },
+    });
+    const rows = (result?.page ?? []) as Array<{ id?: string; _id?: string; email?: string }>;
+    let deletedInvitations = 0;
+    let deletedPending = 0;
+    for (const row of rows) {
+      if ((row.email ?? "").toLowerCase() !== email) continue;
+      const invitationId = getId(row);
+      if (!invitationId) continue;
+      const pending = await ctx.db
+        .query("pendingUserInvites")
+        .withIndex("by_invitationId", (q) => q.eq("invitationId", invitationId))
+        .unique();
+      if (pending) {
+        await ctx.db.delete(pending._id);
+        deletedPending += 1;
+      }
+      await ctx.runMutation(components.betterAuth.adapter.deleteOne, {
+        input: {
+          model: "invitation",
+          where: [{ field: "_id", value: invitationId }],
+        },
+      });
+      deletedInvitations += 1;
+    }
+    return { deletedInvitations, deletedPending };
+  },
+});
+
+/**
+ * Test-only: force a user's better-auth role.
+ *
+ * Cleanup only. The promote spec grants admin through the UI (that grant is the
+ * thing under test) and demotes the same way, but if it fails in between, an
+ * extra admin would be left on the shared deployment for every later run.
+ */
+export const setAuthUserRole = mutation({
+  args: {
+    email: v.string(),
+    role: v.union(v.literal("admin"), v.literal("member"), v.literal("user")),
+  },
+  returns: v.object({ ok: v.literal(true), userId: v.string(), role: v.string() }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const email = args.email.trim().toLowerCase();
+    const user = await ctx.runQuery(components.betterAuth.adapter.findOne, {
+      model: "user",
+      where: [{ field: "email", value: email }],
+    });
+    const userId = getId(user);
+    if (!userId) throw new Error(`No user for ${email}.`);
+    await ctx.runMutation(components.betterAuth.adapter.updateOne, {
+      input: {
+        model: "user",
+        where: [{ field: "email", value: email }],
+        update: { role: args.role, updatedAt: Date.now() },
+      },
+    });
+    return { ok: true as const, userId, role: args.role };
   },
 });

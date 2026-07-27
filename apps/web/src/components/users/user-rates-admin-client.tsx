@@ -206,7 +206,10 @@ function UserRateRow({
   );
 
   return (
-    <div className="grid gap-2 rounded-md border p-3 md:grid-cols-[1fr_1.4fr_24px]">
+    <div
+      data-testid={`user-rate-row-${userId}`}
+      className="grid gap-2 rounded-md border p-3 md:grid-cols-[1fr_1.4fr_24px]"
+    >
       <div>
         <p className="text-sm font-medium">{name}</p>
         <p className="text-xs text-muted-foreground">{meta}</p>

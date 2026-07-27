@@ -4,7 +4,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { ArborOnlyGuard } from "@/components/org-context-guard";
+import { AdminOnlyGuard, ArborOnlyGuard } from "@/components/org-context-guard";
 import { UserRatesAdminClient } from "@/components/users/user-rates-admin-client";
 
 export default function CrewRatesPage() {
@@ -21,7 +21,9 @@ export default function CrewRatesPage() {
         </CardHeader>
       </Card>
       <ArborOnlyGuard>
-        <UserRatesAdminClient />
+        <AdminOnlyGuard>
+          <UserRatesAdminClient />
+        </AdminOnlyGuard>
       </ArborOnlyGuard>
     </div>
   );
