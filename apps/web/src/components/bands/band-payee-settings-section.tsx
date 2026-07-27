@@ -10,7 +10,15 @@ import { TextareaFormField } from "@/components/forms/textarea-form-field";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { UserSelect } from "@/components/users/user-select";
+import { BandPayeePayoutMethodField } from "@/components/bands/band-payee-payout-method-field";
 import { useConvexForm } from "@/hooks/use-convex-form";
+import {
+  BAND_PAYEE_1099_NOTICE,
+  BAND_PAYEE_MAILING_ADDRESS_HINT,
+  BAND_PAYEE_MAILING_ADDRESS_PLACEHOLDER,
+  DEFAULT_BAND_PAYEE_PAYOUT_METHOD,
+  type BandPayeePayoutMethod,
+} from "@/lib/band-payout-copy";
 import { bandPayeeSchema, type BandPayeeFormValues } from "@/lib/validations/bands";
 
 export function BandPayeeSettingsSection() {
@@ -25,6 +33,7 @@ export function BandPayeeSettingsSection() {
       designatedPayeeName: "",
       designatedPayeeEmail: "",
       designatedPayeeMailingAddress: "",
+      designatedPayeePayoutMethod: DEFAULT_BAND_PAYEE_PAYOUT_METHOD,
     },
     mode: "onChange",
   });
@@ -32,12 +41,27 @@ export function BandPayeeSettingsSection() {
   useEffect(() => {
     if (!profile) return;
     if (form.formState.isDirty) return;
+    const payoutMethod =
+      profile.designatedPayeePayoutMethod === "pickup" ||
+      profile.designatedPayeePayoutMethod === "delivery"
+        ? profile.designatedPayeePayoutMethod
+        : DEFAULT_BAND_PAYEE_PAYOUT_METHOD;
     form.reset({
       designatedPayeeUserId: profile.designatedPayeeUserId ?? "",
       designatedPayeeName: profile.designatedPayeeName ?? "",
       designatedPayeeEmail: profile.designatedPayeeEmail ?? "",
       designatedPayeeMailingAddress: profile.designatedPayeeMailingAddress ?? "",
+      designatedPayeePayoutMethod: payoutMethod,
     });
+    if (
+      !profile.payeeComplete &&
+      profile.designatedPayeePayoutMethod !== "pickup" &&
+      profile.designatedPayeePayoutMethod !== "delivery"
+    ) {
+      form.setValue("designatedPayeePayoutMethod", DEFAULT_BAND_PAYEE_PAYOUT_METHOD, {
+        shouldDirty: true,
+      });
+    }
   }, [profile, form]);
 
   const onSave = form.submitMutation(
@@ -52,6 +76,7 @@ export function BandPayeeSettingsSection() {
         designatedPayeeName: values.designatedPayeeName || undefined,
         designatedPayeeEmail: values.designatedPayeeEmail || undefined,
         designatedPayeeMailingAddress: values.designatedPayeeMailingAddress || undefined,
+        designatedPayeePayoutMethod: values.designatedPayeePayoutMethod,
         publicWebsiteUrl: profile.publicWebsiteUrl,
         publicInstagramUrl: profile.publicInstagramUrl,
         publicYoutubeUrl: profile.publicYoutubeUrl,
@@ -69,6 +94,7 @@ export function BandPayeeSettingsSection() {
   );
 
   const payeeUserId = form.watch("designatedPayeeUserId");
+  const payoutMethod = form.watch("designatedPayeePayoutMethod") ?? DEFAULT_BAND_PAYEE_PAYOUT_METHOD;
 
   if (profile === undefined) {
     return <p className="text-sm text-muted-foreground">Loading payee settings…</p>;
@@ -90,7 +116,8 @@ export function BandPayeeSettingsSection() {
               {!profile.payeeComplete ? (
                 <p className="rounded-md border border-dashed px-3 py-2 text-sm text-amber-800 dark:text-amber-200">
                   Required before band payments can be processed. Provide one designated payee who
-                  receives and distributes payment, plus a mailing address for GrantEd.
+                  receives and distributes payment, a mailing address, and pickup or delivery for
+                  GrantEd.
                 </p>
               ) : (
                 <p className="text-sm text-muted-foreground">
@@ -123,11 +150,20 @@ export function BandPayeeSettingsSection() {
                 <TextFormField name="designatedPayeeName" label="Payee name" />
                 <TextFormField name="designatedPayeeEmail" label="Payee email" type="email" />
               </div>
+              <BandPayeePayoutMethodField
+                value={payoutMethod}
+                onChange={(method: BandPayeePayoutMethod) => {
+                  form.setValue("designatedPayeePayoutMethod", method, { shouldDirty: true });
+                }}
+                idPrefix="band-payee-settings"
+              />
               <TextareaFormField
                 name="designatedPayeeMailingAddress"
                 label="Mailing address"
-                placeholder={"123 Example St\nStanford, CA 94305"}
+                placeholder={BAND_PAYEE_MAILING_ADDRESS_PLACEHOLDER}
+                description={BAND_PAYEE_MAILING_ADDRESS_HINT}
               />
+              <p className="text-sm text-muted-foreground">{BAND_PAYEE_1099_NOTICE}</p>
             </CardContent>
           </Card>
         </form>
@@ -146,6 +182,11 @@ export function BandPayeeSettingsSection() {
             designatedPayeeName: profile.designatedPayeeName ?? "",
             designatedPayeeEmail: profile.designatedPayeeEmail ?? "",
             designatedPayeeMailingAddress: profile.designatedPayeeMailingAddress ?? "",
+            designatedPayeePayoutMethod:
+              profile.designatedPayeePayoutMethod === "pickup" ||
+              profile.designatedPayeePayoutMethod === "delivery"
+                ? profile.designatedPayeePayoutMethod
+                : DEFAULT_BAND_PAYEE_PAYOUT_METHOD,
           });
         }}
         onRetry={() => void form.handleSubmit(onSave)()}

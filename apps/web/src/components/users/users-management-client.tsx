@@ -17,6 +17,14 @@ import { BandHeroUploadField } from "@/components/files/file-upload-field";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import {
+  BAND_PAYEE_1099_NOTICE,
+  BAND_PAYEE_MAILING_ADDRESS_HINT,
+  BAND_PAYEE_MAILING_ADDRESS_PLACEHOLDER,
+  DEFAULT_BAND_PAYEE_PAYOUT_METHOD,
+  type BandPayeePayoutMethod,
+} from "@/lib/band-payout-copy";
+import { BandPayeePayoutMethodField } from "@/components/bands/band-payee-payout-method-field";
+import {
   CREW_RATE_MODE_OPTIONS,
   PAYROLL_METHOD_OPTIONS,
   USER_DISCIPLINE_OPTIONS,
@@ -140,6 +148,10 @@ function bandOrgValuesFromRow(org: BandOrgRow): BandOrgProfileFormValues {
     designatedPayeeName: org.designatedPayeeName ?? "",
     designatedPayeeEmail: org.designatedPayeeEmail ?? "",
     designatedPayeeMailingAddress: org.designatedPayeeMailingAddress ?? "",
+    designatedPayeePayoutMethod:
+      org.designatedPayeePayoutMethod === "pickup" || org.designatedPayeePayoutMethod === "delivery"
+        ? org.designatedPayeePayoutMethod
+        : DEFAULT_BAND_PAYEE_PAYOUT_METHOD,
     publicWebsiteUrl: org.publicWebsiteUrl ?? "",
     publicInstagramUrl: org.publicInstagramUrl ?? "",
     publicYoutubeUrl: org.publicYoutubeUrl ?? "",
@@ -1108,6 +1120,11 @@ function BandOrgAdminRow({
   }, [org, form]);
 
   const persist = async (values: BandOrgProfileFormValues) => {
+    const payoutMethod =
+      values.designatedPayeePayoutMethod === "pickup" ||
+      values.designatedPayeePayoutMethod === "delivery"
+        ? values.designatedPayeePayoutMethod
+        : DEFAULT_BAND_PAYEE_PAYOUT_METHOD;
     await updateBandOrganizationProfileAdmin({
       organizationId: org.organizationId,
       displayName: values.displayName || undefined,
@@ -1117,6 +1134,7 @@ function BandOrgAdminRow({
       designatedPayeeName: values.designatedPayeeName || undefined,
       designatedPayeeEmail: values.designatedPayeeEmail || undefined,
       designatedPayeeMailingAddress: values.designatedPayeeMailingAddress || undefined,
+      designatedPayeePayoutMethod: payoutMethod,
       publicWebsiteUrl: values.publicWebsiteUrl || undefined,
       publicInstagramUrl: values.publicInstagramUrl || undefined,
       publicYoutubeUrl: values.publicYoutubeUrl || undefined,
@@ -1137,6 +1155,13 @@ function BandOrgAdminRow({
       },
     },
   );
+
+  const payoutMethod =
+    form.watch("designatedPayeePayoutMethod") === "delivery"
+      ? "delivery"
+      : form.watch("designatedPayeePayoutMethod") === "pickup"
+        ? "pickup"
+        : DEFAULT_BAND_PAYEE_PAYOUT_METHOD;
 
   return (
     <>
@@ -1233,14 +1258,25 @@ function BandOrgAdminRow({
                   }
                 />
               </div>
+              <BandPayeePayoutMethodField
+                value={payoutMethod}
+                onChange={(method: BandPayeePayoutMethod) => {
+                  form.setValue("designatedPayeePayoutMethod", method, { shouldDirty: true });
+                }}
+                idPrefix={`admin-band-${org.organizationId}`}
+              />
               <textarea
                 className="min-h-20 w-full rounded-md border bg-background px-3 py-2 text-sm"
-                placeholder="Mailing address"
+                placeholder={BAND_PAYEE_MAILING_ADDRESS_PLACEHOLDER}
                 value={form.watch("designatedPayeeMailingAddress")}
                 onChange={(e) =>
-                  form.setValue("designatedPayeeMailingAddress", e.target.value, { shouldDirty: true })
+                  form.setValue("designatedPayeeMailingAddress", e.target.value, {
+                    shouldDirty: true,
+                  })
                 }
               />
+              <p className="text-xs text-muted-foreground">{BAND_PAYEE_MAILING_ADDRESS_HINT}</p>
+              <p className="text-xs text-muted-foreground">{BAND_PAYEE_1099_NOTICE}</p>
             </div>
             <div className="mt-3 grid gap-2 md:grid-cols-2">
               <label className="flex items-center gap-2 text-xs">

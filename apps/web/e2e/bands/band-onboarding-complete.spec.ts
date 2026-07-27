@@ -61,10 +61,11 @@ test.describe("band onboarding wizard", () => {
     await page.getByRole("button", { name: /performing solo/i }).click();
     await next(page);
 
-    // Rates & payout
+    // Rates & payout — payee is pre-seeded; confirm recommended ASSU pickup.
     const rateField = page.getByLabel("Performer hourly rate (USD)");
     await expect(rateField).toBeVisible({ timeout: 20_000 });
     await rateField.fill(String(hourlyRateUsd));
+    await page.getByLabel(/Pickup \(ASSU office\)/i).check();
     await next(page);
 
     // Payout explainer — the last step submits with "Finish setup", not "Next".
@@ -80,6 +81,7 @@ test.describe("band onboarding wizard", () => {
       displayName: string | null;
       performerHourlyRateUsd: number | null;
       designatedPayeeName: string | null;
+      designatedPayeePayoutMethod: "pickup" | "delivery" | null;
     }>(
       "e2eHelpers:getBandOnboardingState",
       { organizationId: band.organizationId },
@@ -92,6 +94,7 @@ test.describe("band onboarding wizard", () => {
     expect(state.displayName).toBe(bandDisplayName);
     expect(state.performerHourlyRateUsd).toBe(hourlyRateUsd);
     expect(state.designatedPayeeName).toBe(onboardingBandName);
+    expect(state.designatedPayeePayoutMethod).toBe("pickup");
 
     // Completed onboarding sends the wizard back to the dashboard.
     await page.waitForURL(/\/dashboard/, { timeout: 30_000 });

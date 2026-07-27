@@ -12,6 +12,7 @@ import { SearchableSelect } from "@/components/inventory/searchable-select";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { ArborOnlyGuard } from "@/components/org-context-guard";
 import { formatUsd } from "@/lib/format";
+import { formatBandPayeePayoutMethod } from "@/lib/band-payout-copy";
 
 type PricingMode = "per_member_hourly" | "fixed_total";
 
@@ -266,6 +267,8 @@ function EventBandPaymentForm({
   const displayPayeeEmail = payment?.designatedPayeeEmail ?? orgPayee?.designatedPayeeEmail ?? "";
   const displayPayeeAddress =
     payment?.designatedPayeeMailingAddress ?? orgPayee?.designatedPayeeMailingAddress ?? "";
+  const displayPayoutMethod =
+    payment?.designatedPayeePayoutMethod ?? orgPayee?.designatedPayeePayoutMethod;
 
   return (
     <div className="space-y-4 rounded-md border bg-muted/10 p-4">
@@ -384,13 +387,19 @@ function EventBandPaymentForm({
                 <p>
                   <span className="font-medium">Payee:</span> {displayPayeeName} ({displayPayeeEmail})
                 </p>
-                <p className="mt-1 whitespace-pre-wrap text-muted-foreground">{displayPayeeAddress}</p>
+                <p className="mt-1">
+                  <span className="font-medium">Payout method:</span>{" "}
+                  {formatBandPayeePayoutMethod(displayPayoutMethod)}
+                </p>
+                {displayPayeeAddress ? (
+                  <p className="mt-1 whitespace-pre-wrap text-muted-foreground">{displayPayeeAddress}</p>
+                ) : null}
               </div>
             ) : (
               <div className="rounded-md border border-dashed px-3 py-3 text-sm">
                 <p className="text-muted-foreground">
-                  This band has not configured a designated payee with mailing address. Confirmation emails cannot
-                  be sent until payee info is on file.
+                  This band has not configured a designated payee with mailing address and payout
+                  method. Confirmation emails cannot be sent until payee info is on file.
                 </p>
                 <Button asChild size="sm" variant="outline" className="mt-2">
                   <Link href="/dashboard/bands-and-performers/payments#payee">

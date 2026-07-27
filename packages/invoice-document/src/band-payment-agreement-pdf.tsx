@@ -166,6 +166,16 @@ export function BandPaymentAgreementPdf({
                 <Text style={styles.signatureLine}>Signed: {payeeAgreement}</Text>
                 <Detail label="Payee email" value={data.designatedPayeeEmail ?? "—"} />
                 <Detail
+                  label="Payout method"
+                  value={
+                    data.designatedPayeePayoutMethod === "pickup"
+                      ? "Pickup (ASSU office)"
+                      : data.designatedPayeePayoutMethod === "delivery"
+                        ? "Delivery"
+                        : "—"
+                  }
+                />
+                <Detail
                   label="Mailing address"
                   value={data.designatedPayeeMailingAddress ?? "—"}
                 />

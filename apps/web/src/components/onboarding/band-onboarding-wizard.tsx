@@ -14,12 +14,20 @@ import { RequestWizardNav } from "@/components/request/request-wizard-nav";
 import { RequestWizardShell } from "@/components/request/request-wizard-shell";
 import { BandHeroUploadField } from "@/components/files/file-upload-field";
 import { UserSelect } from "@/components/users/user-select";
+import { BandPayeePayoutMethodField } from "@/components/bands/band-payee-payout-method-field";
 import {
   OnboardingAckCheckbox,
   OnboardingSkipButton,
   OnboardingTextarea,
 } from "@/components/onboarding/onboarding-ui";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import {
+  BAND_PAYEE_1099_NOTICE,
+  BAND_PAYEE_MAILING_ADDRESS_HINT,
+  BAND_PAYEE_MAILING_ADDRESS_PLACEHOLDER,
+  DEFAULT_BAND_PAYEE_PAYOUT_METHOD,
+  type BandPayeePayoutMethod,
+} from "@/lib/band-payout-copy";
 import { useDevPreviewReady } from "@/hooks/use-dev-preview";
 
 const spring = { type: "spring" as const, stiffness: 380, damping: 36 };
@@ -75,6 +83,7 @@ type FormState = {
   designatedPayeeName: string;
   designatedPayeeEmail: string;
   designatedPayeeMailingAddress: string;
+  designatedPayeePayoutMethod: BandPayeePayoutMethod;
   inviteDraft: string;
   inviteEmails: string[];
   isSolo: boolean;
@@ -96,6 +105,7 @@ const EMPTY_FORM: FormState = {
   designatedPayeeName: "",
   designatedPayeeEmail: "",
   designatedPayeeMailingAddress: "",
+  designatedPayeePayoutMethod: DEFAULT_BAND_PAYEE_PAYOUT_METHOD,
   inviteDraft: "",
   inviteEmails: [],
   isSolo: false,
@@ -194,6 +204,11 @@ export function BandOnboardingWizard() {
       designatedPayeeName: profile.designatedPayeeName ?? "",
       designatedPayeeEmail: profile.designatedPayeeEmail ?? "",
       designatedPayeeMailingAddress: profile.designatedPayeeMailingAddress ?? "",
+      designatedPayeePayoutMethod:
+        profile.designatedPayeePayoutMethod === "pickup" ||
+        profile.designatedPayeePayoutMethod === "delivery"
+          ? profile.designatedPayeePayoutMethod
+          : DEFAULT_BAND_PAYEE_PAYOUT_METHOD,
     }));
   }, [profile]);
 
@@ -381,6 +396,14 @@ export function BandOnboardingWizard() {
           setFieldError("Hourly rate must be 0 or greater.");
           return;
         }
+        if (!form.designatedPayeeName.trim() || !form.designatedPayeeEmail.trim()) {
+          setFieldError("Choose or enter a designated payee name and email.");
+          return;
+        }
+        if (!form.designatedPayeeMailingAddress.trim()) {
+          setFieldError("Enter a mailing address (required for Stanford / GrantEd).");
+          return;
+        }
         if (previewOnly) {
           advance();
           return;
@@ -392,6 +415,7 @@ export function BandOnboardingWizard() {
           designatedPayeeName: form.designatedPayeeName.trim() || undefined,
           designatedPayeeEmail: form.designatedPayeeEmail.trim() || undefined,
           designatedPayeeMailingAddress: form.designatedPayeeMailingAddress.trim() || undefined,
+          designatedPayeePayoutMethod: form.designatedPayeePayoutMethod,
         });
         await saveBandOnboardingStep({ ratesPayeeCompleted: true });
         advance();
@@ -865,13 +889,25 @@ export function BandOnboardingWizard() {
                         placeholder="Payee email"
                       />
                     </div>
-                    <OnboardingTextarea
-                      value={form.designatedPayeeMailingAddress}
-                      onChange={(event) =>
-                        patch({ designatedPayeeMailingAddress: event.target.value })
-                      }
-                      placeholder={"Mailing address\n123 Example St\nStanford, CA 94305"}
+                    <BandPayeePayoutMethodField
+                      value={form.designatedPayeePayoutMethod}
+                      onChange={(method) => patch({ designatedPayeePayoutMethod: method })}
+                      idPrefix="band-onboarding"
                     />
+                    <div className="space-y-1">
+                      <Label htmlFor="band-payee-mailing-address">Mailing address</Label>
+                      <OnboardingTextarea
+                        id="band-payee-mailing-address"
+                        value={form.designatedPayeeMailingAddress}
+                        onChange={(event) =>
+                          patch({ designatedPayeeMailingAddress: event.target.value })
+                        }
+                        placeholder={BAND_PAYEE_MAILING_ADDRESS_PLACEHOLDER}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        {BAND_PAYEE_MAILING_ADDRESS_HINT}
+                      </p>
+                    </div>
                   </div>
                   {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
                 </div>
@@ -888,6 +924,7 @@ export function BandOnboardingWizard() {
                       Your payee is responsible for distributing payment to the rest of the band.
                       You can update your payee or rate anytime from your band settings.
                     </p>
+                    <p>{BAND_PAYEE_1099_NOTICE}</p>
                   </div>
                   <OnboardingAckCheckbox
                     checked={form.paymentExplainedAck}

@@ -1,10 +1,13 @@
 import { z } from "zod";
 
+export const bandPayeePayoutMethodSchema = z.enum(["pickup", "delivery"]);
+
 export const bandPayeeSchema = z.object({
   designatedPayeeUserId: z.string().optional(),
   designatedPayeeName: z.string().optional(),
   designatedPayeeEmail: z.string().optional(),
   designatedPayeeMailingAddress: z.string().optional(),
+  designatedPayeePayoutMethod: bandPayeePayoutMethodSchema.optional(),
 });
 
 export type BandPayeeFormValues = z.infer<typeof bandPayeeSchema>;

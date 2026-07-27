@@ -843,6 +843,9 @@ export default defineSchema({
     designatedPayeeName: v.optional(v.string()),
     designatedPayeeEmail: v.optional(v.string()),
     designatedPayeeMailingAddress: v.optional(v.string()),
+    designatedPayeePayoutMethod: v.optional(
+      v.union(v.literal("pickup"), v.literal("delivery")),
+    ),
     publicWebsiteUrl: v.optional(v.string()),
     publicInstagramUrl: v.optional(v.string()),
     publicYoutubeUrl: v.optional(v.string()),
@@ -1311,6 +1314,9 @@ export default defineSchema({
     designatedPayeeEmail: v.optional(v.string()),
     designatedPayeeUserId: v.optional(v.string()),
     designatedPayeeMailingAddress: v.optional(v.string()),
+    designatedPayeePayoutMethod: v.optional(
+      v.union(v.literal("pickup"), v.literal("delivery")),
+    ),
     status: bandPaymentStatusValue,
     confirmationToken: v.string(),
     confirmationEmailSentAt: v.optional(v.number()),
