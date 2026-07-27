@@ -50,7 +50,7 @@ Where variables live:
 
 | Variable | Purpose |
 |---|---|
-| `CONVEX_DEPLOY_KEY` | Lets the Vercel build run `convex deploy` against the right deployment |
+| `CONVEX_DEPLOY_KEY` | Lets the Vercel build run `convex deploy` and `convex run migrations:runAll`. Needs `deployment:deploy` + `deployment:functions:runInternalMutations` (see [deployment.md](deployment.md)) |
 
 ## Keeping this file honest
 

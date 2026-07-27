@@ -11,8 +11,9 @@
     "build": "pnpm --dir ../../apps/web run build",
     "codegen": "convex codegen",
     "migrate": "convex run migrations:runAll",
+    "migrate:prod": "convex run migrations:runAll --prod",
     "auth:generate": "cd convex/betterAuth && better-auth generate -y",
-    "deploy": "convex deploy && convex run migrations:runAll",
+    "deploy": "convex deploy",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

@@ -18,14 +18,16 @@ import { legacyTeamsToMembership } from "./lib/userVerticals";
 /**
  * Official @convex-dev/migrations runner.
  *
- * After deploy (Vercel / CLI), run:
- *   npx convex run migrations:runAll
- * Completed migrations are skipped automatically.
+ * Post-deploy (Vercel): `convex run migrations:runAll` after `convex deploy`
+ * (see `apps/web/vercel.json`). The deploy key needs
+ * `deployment:functions:runInternalMutations` in addition to `deployment:deploy`.
  *
- * Status:
+ * Manual:
+ *   pnpm --filter backend migrate
+ *   pnpm --filter backend migrate:prod
  *   npx convex run --component migrations lib:getStatus --watch
  *
- * Append new jobs to `runAll` only — never reorder or remove completed ones.
+ * Append new jobs to `MIGRATION_SERIES` only — never reorder or remove completed ones.
  */
 export const migrations = new Migrations<DataModel>(components.migrations, {
   internalMutation,
@@ -196,7 +198,7 @@ export const migrateConvertedEventLinks = migrations.define({
  * Ordered post-deploy series. Add new migrations to the end of this list —
  * never reorder or remove completed ones (reset requires an explicit reset:true).
  */
-export const runAll = migrations.runner([
+const MIGRATION_SERIES = [
   internal.migrations.backfillHostOrgNormalizedNames,
   internal.migrations.backfillInvoicePeople,
   internal.migrations.backfillUserVerticals,
@@ -205,4 +207,6 @@ export const runAll = migrations.runner([
   internal.migrations.migrateRequestReferenceIds,
   internal.migrations.migrateBandPaymentReferenceIds,
   internal.migrations.migrateConvertedEventLinks,
-]);
+] as const;
+
+export const runAll = migrations.runner([...MIGRATION_SERIES]);
