@@ -444,14 +444,16 @@ export const merge = mutation({
         });
       }
 
+      // Archive first so ensureAlias does not treat the victim's own name as a
+      // colliding active host when recording it as a merge alias on the survivor.
+      await ctx.db.patch(victim._id, { active: false, updatedAt: now });
+
       await ensureAlias(ctx, args.survivorId, victim.name, "merge");
       const victimAliases = await listAliasesForGroup(ctx, victim._id);
       for (const alias of victimAliases) {
         await ensureAlias(ctx, args.survivorId, alias.alias, "merge");
         await ctx.db.delete(alias._id);
       }
-
-      await ctx.db.patch(victim._id, { active: false, updatedAt: now });
     }
 
     await ctx.db.patch(args.survivorId, {
