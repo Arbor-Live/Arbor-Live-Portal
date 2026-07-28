@@ -615,7 +615,9 @@ export default defineSchema({
     .index("by_managerUserId", ["managerUserId"])
     .index("by_issueDate", ["issueDate"])
     .index("by_createdAt", ["createdAt"])
-    .index("by_groupId", ["groupId"]),
+    .index("by_groupId", ["groupId"])
+    .index("by_paymentReceivedAt", ["paymentReceivedAt"])
+    .index("by_approvedAt", ["approvedAt"]),
 
   invoiceLineItems: defineTable({
     invoiceId: v.id("invoices"),
@@ -1350,7 +1352,8 @@ export default defineSchema({
     .index("by_organizationId", ["organizationId"])
     .index("by_status", ["status"])
     .index("by_eventId_and_organizationId", ["eventId", "organizationId"])
-    .index("by_confirmationToken", ["confirmationToken"]),
+    .index("by_confirmationToken", ["confirmationToken"])
+    .index("by_paidAt", ["paidAt"]),
 
   bandPaymentSettings: defineTable({
     key: v.string(),

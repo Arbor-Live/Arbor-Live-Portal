@@ -10,6 +10,7 @@
 
 import type * as account from "../account.js";
 import type * as adminDeletes from "../adminDeletes.js";
+import type * as analytics from "../analytics.js";
 import type * as auth from "../auth.js";
 import type * as bandApplications from "../bandApplications.js";
 import type * as bandPaymentPdfDownload from "../bandPaymentPdfDownload.js";
@@ -74,6 +75,7 @@ import type * as invoicePdfDownload from "../invoicePdfDownload.js";
 import type * as invoiceSettings from "../invoiceSettings.js";
 import type * as invoiceTerms from "../invoiceTerms.js";
 import type * as invoices from "../invoices.js";
+import type * as lib_analyticsTime from "../lib/analyticsTime.js";
 import type * as lib_assetScan from "../lib/assetScan.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_bandPayments from "../lib/bandPayments.js";
@@ -163,6 +165,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   account: typeof account;
   adminDeletes: typeof adminDeletes;
+  analytics: typeof analytics;
   auth: typeof auth;
   bandApplications: typeof bandApplications;
   bandPaymentPdfDownload: typeof bandPaymentPdfDownload;
@@ -227,6 +230,7 @@ declare const fullApi: ApiFromModules<{
   invoiceSettings: typeof invoiceSettings;
   invoiceTerms: typeof invoiceTerms;
   invoices: typeof invoices;
+  "lib/analyticsTime": typeof lib_analyticsTime;
   "lib/assetScan": typeof lib_assetScan;
   "lib/auth": typeof lib_auth;
   "lib/bandPayments": typeof lib_bandPayments;

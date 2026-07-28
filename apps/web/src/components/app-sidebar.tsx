@@ -93,6 +93,7 @@ const inventorySubItems: NavSubItem[] = [
 
 const financialHubSubItems: NavSubItem[] = [
   { title: "Overview", url: "/dashboard/financial-hub" },
+  { title: "Insights", url: "/dashboard/financial-hub/insights" },
   { title: "Invoices", url: "/dashboard/financial-hub/invoices" },
   { title: "Payments", url: "/dashboard/financial-hub/payments" },
   { title: "Band Payouts", url: "/dashboard/financial-hub/band-payouts" },
