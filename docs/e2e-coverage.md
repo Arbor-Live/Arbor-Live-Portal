@@ -250,7 +250,7 @@ Batches 1–10 cover the shipped happy paths. What is still out of the suite, an
 |-------|---------|-----|
 | **11** | Band org profile + organizations page | The other half of `users-management-client.tsx` (`updateBandOrganizationProfileAdmin`, `createOrganizationAdmin`, the CSV importer). Left out of Batch 9 because creating orgs leaves rows the shared deployment cannot prune, so it needs a cleanup helper first — `deleteInventoryCatalogFixtures` is the shape to copy |
 | **12** | Inventory CSV import | The last uncovered inventory surface, and the one that can do the most damage: it creates types and items in bulk from a file. Batch 10's catalog assertions (`getInventoryTypeByName` / `getInventoryItemByAssetId`) are already the right oracles for it |
-| **13** | Event series editors | `events/event-series-schedule-editor.tsx:121` and `event-series-shift-editor.tsx:151` still carry the unguarded reset effect — see **Still unfixed** below |
+| **13** | Event series editors | `eventSeries.ts` is 880 lines behind a single create-and-open smoke, and [#75](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/75) just fixed the `applyScope` reset in both series editors with no test holding it. An `applyScope` regression turns an edit meant for one occurrence into an edit of every one |
 
 ### Keeping the shared deployment usable
 
@@ -338,13 +338,14 @@ re-validates every capability on save and throws on the missing key. Reasoned
 from the code; Batch 10's taxonomy spec deletes the type first, so it does not
 exercise the broken order.
 
-**Still unfixed, found while investigating the Batch 9 bugs:**
-`events/event-series-schedule-editor.tsx:121` and
-`events/event-series-shift-editor.tsx:151` have the same unguarded reset effect
-with `form` in its deps, resetting to constants (`applyScope: "all"`) — so their
-`applyScope` pickers are very likely stuck the same way. Neither has e2e
-coverage, so this is reasoned from the code, not observed. A batch that covers
-event series should start there.
+**Fixed since, still untested:** the same unguarded reset effect in
+`events/event-series-schedule-editor.tsx` and
+`events/event-series-shift-editor.tsx` — which Batch 9 predicted would leave
+their `applyScope` pickers stuck on "all" — was fixed by
+[#75](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/75), which added the
+`if (form.formState.isDirty) return;` guard to both. Nothing covers it: a
+regression there silently re-points an edit meant for one occurrence at the
+whole series, so a batch covering event series should start by pinning #75 down.
 
 ### Known local flakes
 
