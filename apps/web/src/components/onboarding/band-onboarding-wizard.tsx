@@ -85,7 +85,8 @@ type FormState = {
   designatedPayeeMailingAddress: string;
   designatedPayeePayoutMethod: BandPayeePayoutMethod;
   inviteDraft: string;
-  inviteEmails: string[];
+  inviteRoleDraft: string;
+  inviteEmails: Array<{ email: string; bandRole: string }>;
   isSolo: boolean;
   paymentExplainedAck: boolean;
 };
@@ -107,6 +108,7 @@ const EMPTY_FORM: FormState = {
   designatedPayeeMailingAddress: "",
   designatedPayeePayoutMethod: DEFAULT_BAND_PAYEE_PAYOUT_METHOD,
   inviteDraft: "",
+  inviteRoleDraft: "",
   inviteEmails: [],
   isSolo: false,
   paymentExplainedAck: false,
@@ -224,8 +226,26 @@ export function BandOnboardingWizard() {
     [pendingEmails, sessionSentEmails],
   );
   const displayedInviteEmails = useMemo(
-    () => Array.from(new Set([...form.inviteEmails, ...pendingEmails])),
-    [form.inviteEmails, pendingEmails],
+    () =>
+      Array.from(
+        new Map(
+          [
+            ...form.inviteEmails.map((row) => ({
+              email: normalizeEmail(row.email),
+              bandRole: row.bandRole,
+              pending: false,
+            })),
+            ...pendingEmails.map((email) => ({
+              email,
+              bandRole:
+                pendingInvites?.find((invite) => normalizeEmail(invite.email) === email)?.bandRole ??
+                "",
+              pending: true,
+            })),
+          ].map((row) => [row.email, row]),
+        ).values(),
+      ),
+    [form.inviteEmails, pendingEmails, pendingInvites],
   );
 
   useEffect(() => {
@@ -349,10 +369,17 @@ export function BandOnboardingWizard() {
 
       if (currentStep === "members") {
         const queued = Array.from(
-          new Set([
-            ...form.inviteEmails.map(normalizeEmail).filter(Boolean),
-            ...pendingEmails,
-          ]),
+          new Map(
+            [
+              ...form.inviteEmails.map((row) => ({
+                email: normalizeEmail(row.email),
+                bandRole: row.bandRole.trim(),
+              })),
+              ...pendingEmails.map((email) => ({ email, bandRole: "" })),
+            ]
+              .filter((row) => row.email)
+              .map((row) => [row.email, row]),
+          ).values(),
         );
         const sentSet = new Set(sentInviteEmails);
         const hasPendingOrSent = queued.length > 0 || sentSet.size > 0;
@@ -369,23 +396,26 @@ export function BandOnboardingWizard() {
           await saveBandOnboardingStep({ soloAcknowledged: true });
           setInviteConfirmation(null);
         } else {
-          const toSend = queued.filter((email) => !sentSet.has(email));
-          for (const email of toSend) {
-            await inviteMember({ email, role: "org_member" });
+          const toSend = queued.filter((row) => !sentSet.has(row.email));
+          for (const row of toSend) {
+            await inviteMember({
+              email: row.email,
+              role: "org_member",
+              bandRole: row.bandRole || undefined,
+            });
           }
           if (toSend.length > 0) {
-            setSessionSentEmails((prev) => Array.from(new Set([...prev, ...toSend])));
-          }
-          await saveBandOnboardingStep({ membersCompleted: true });
-          if (toSend.length > 0) {
+            setSessionSentEmails((prev) => [
+              ...prev,
+              ...toSend.map((row) => row.email),
+            ]);
             setInviteConfirmation(
               toSend.length === 1
-                ? `Invitation sent to ${toSend[0]}.`
+                ? `Invitation sent to ${toSend[0]!.email}.`
                 : `Invitations sent to ${toSend.length} bandmates.`,
             );
-          } else if (queued.length > 0) {
-            setInviteConfirmation("Invitations already sent — no new emails were notified.");
           }
+          await saveBandOnboardingStep({ membersCompleted: true });
         }
         advance();
         return;
@@ -487,8 +517,8 @@ export function BandOnboardingWizard() {
       const email = normalizeEmail(invite.email);
       if (email) pendingEmails.add(email);
     }
-    for (const email of form.inviteEmails) {
-      const normalized = normalizeEmail(email);
+    for (const row of form.inviteEmails) {
+      const normalized = normalizeEmail(row.email);
       if (normalized) pendingEmails.add(normalized);
     }
     for (const email of sentInviteEmails) {
@@ -538,14 +568,18 @@ export function BandOnboardingWizard() {
       setFieldError("Enter a valid email address.");
       return;
     }
-    if (form.inviteEmails.includes(email)) {
+    if (form.inviteEmails.some((row) => row.email === email)) {
       setFieldError("That email is already on the invite list.");
       return;
     }
     setFieldError(null);
     patch({
-      inviteEmails: [...form.inviteEmails, email],
+      inviteEmails: [
+        ...form.inviteEmails,
+        { email, bandRole: form.inviteRoleDraft.trim() },
+      ],
       inviteDraft: "",
+      inviteRoleDraft: "",
     });
   };
 
@@ -748,8 +782,8 @@ export function BandOnboardingWizard() {
                   />
                   {!form.isSolo ? (
                     <div className="space-y-3">
-                      <div className="flex gap-2">
-                        <div className="min-w-0 flex-1 space-y-2">
+                      <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+                        <div className="min-w-0 space-y-2">
                           <Label htmlFor="band-invite-email">Bandmate email</Label>
                           <Input
                             id="band-invite-email"
@@ -765,10 +799,25 @@ export function BandOnboardingWizard() {
                             placeholder="name@example.com"
                           />
                         </div>
+                        <div className="min-w-0 space-y-2">
+                          <Label htmlFor="band-invite-role">Role in band</Label>
+                          <Input
+                            id="band-invite-role"
+                            value={form.inviteRoleDraft}
+                            onChange={(event) => patch({ inviteRoleDraft: event.target.value })}
+                            onKeyDown={(event) => {
+                              if (event.key !== "Enter") return;
+                              event.preventDefault();
+                              event.stopPropagation();
+                              addInviteEmail();
+                            }}
+                            placeholder="Guitarist, Manager…"
+                          />
+                        </div>
                         <Button
                           type="button"
                           variant="secondary"
-                          className="mt-7 shrink-0 gap-1.5"
+                          className="shrink-0 gap-1.5 sm:mb-0"
                           onClick={addInviteEmail}
                         >
                           <PlusIcon className="size-4" weight="bold" />
@@ -778,15 +827,20 @@ export function BandOnboardingWizard() {
 
                       {displayedInviteEmails.length > 0 ? (
                         <ul className="space-y-2">
-                          {displayedInviteEmails.map((email) => {
-                            const alreadySent = sentInviteEmails.includes(email);
+                          {displayedInviteEmails.map((row) => {
+                            const alreadySent = sentInviteEmails.includes(row.email) || row.pending;
                             return (
                               <li
-                                key={email}
+                                key={row.email}
                                 className="flex items-center justify-between gap-2 border border-border/50 bg-background/50 px-3 py-2 text-sm"
                               >
                                 <span className="min-w-0 truncate">
-                                  {email}
+                                  {row.email}
+                                  {row.bandRole ? (
+                                    <span className="ml-2 text-xs text-muted-foreground">
+                                      {row.bandRole}
+                                    </span>
+                                  ) : null}
                                   {alreadySent ? (
                                     <span className="ml-2 text-xs text-muted-foreground">
                                       invited
@@ -799,10 +853,12 @@ export function BandOnboardingWizard() {
                                     className="shrink-0 text-muted-foreground hover:text-foreground"
                                     onClick={() =>
                                       patch({
-                                        inviteEmails: form.inviteEmails.filter((row) => row !== email),
+                                        inviteEmails: form.inviteEmails.filter(
+                                          (entry) => entry.email !== row.email,
+                                        ),
                                       })
                                     }
-                                    aria-label={`Remove ${email}`}
+                                    aria-label={`Remove ${row.email}`}
                                   >
                                     <XIcon className="size-4" weight="bold" />
                                   </button>
@@ -813,8 +869,8 @@ export function BandOnboardingWizard() {
                         </ul>
                       ) : (
                         <p className="text-xs text-muted-foreground">
-                          Add each bandmate&apos;s email, then continue. Invites send when you click
-                          Next.
+                          Add each bandmate&apos;s email and role, then continue. Invites send when
+                          you click Next.
                         </p>
                       )}
                     </div>

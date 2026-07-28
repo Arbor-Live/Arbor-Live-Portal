@@ -84,10 +84,11 @@ test.describe("band payouts queue", () => {
     const card = await openQueueCard(page, /Ready to pay/, seeded.eventTitle);
     await card.getByRole("button", { name: "Mark paid" }).click();
 
-    // The pay form renders below the queue, not inside the card.
-    await expect(page.getByText("Mark band payment paid")).toBeVisible({ timeout: 15_000 });
-    await page.getByPlaceholder("SP-2026-0042").fill(servicePaymentNumber);
-    await page.getByRole("button", { name: "Confirm paid" }).click();
+    // Mark paid opens a centered dialog (not an inline card under the queue).
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText("Mark band payment paid")).toBeVisible({ timeout: 15_000 });
+    await dialog.getByPlaceholder("SP-2026-0042").fill(servicePaymentNumber);
+    await dialog.getByRole("button", { name: "Confirm paid" }).click();
 
     const state = await pollConvex<PaymentState>(
       "e2eHelpers:getBandPaymentState",

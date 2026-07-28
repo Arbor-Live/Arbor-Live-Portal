@@ -825,6 +825,8 @@ export default defineSchema({
     userId: v.string(),
     organizationId: v.string(),
     role: v.string(),
+    /** Free-text role in the band (e.g. Guitarist, Manager) — not org access. */
+    bandRole: v.optional(v.string()),
     active: v.boolean(),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -1161,6 +1163,8 @@ export default defineSchema({
     email: v.string(),
     organizationId: v.string(),
     role: v.string(),
+    /** Free-text role in the band (e.g. Guitarist) — band orgs only. */
+    bandRole: v.optional(v.string()),
     /** @deprecated Use verticals + disciplines on invite acceptance. */
     teams: v.optional(v.array(v.string())),
     verticals: v.optional(v.array(v.string())),

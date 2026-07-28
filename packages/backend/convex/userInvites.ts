@@ -75,9 +75,10 @@ async function ensureUserProfileDefaults(
 
 async function upsertOrgMembership(
   ctx: MutationCtx,
-  args: { userId: string; organizationId: string; role: string },
+  args: { userId: string; organizationId: string; role: string; bandRole?: string },
 ) {
   const now = Date.now();
+  const bandRole = args.bandRole?.trim() || undefined;
   const existing = await ctx.db
     .query("userOrganizationMemberships")
     .withIndex("by_userId_and_organizationId", (q) =>
@@ -88,6 +89,7 @@ async function upsertOrgMembership(
     await ctx.db.patch(existing._id, {
       role: args.role,
       active: true,
+      ...(args.bandRole !== undefined ? { bandRole } : {}),
       updatedAt: now,
     });
     return;
@@ -96,6 +98,7 @@ async function upsertOrgMembership(
     userId: args.userId,
     organizationId: args.organizationId,
     role: args.role,
+    bandRole,
     active: true,
     createdAt: now,
     updatedAt: now,
@@ -243,6 +246,7 @@ export const acceptInviteWithPassword = mutation({
       userId,
       organizationId: pending.organizationId,
       role: pending.role,
+      bandRole: pending.bandRole,
     });
 
     if (pending.rateMode) {

@@ -40,22 +40,19 @@ test.describe("user invite lifecycle", () => {
     await page.goto("/dashboard/users/access");
     await expect(page.getByText("User Access & Invitations")).toBeVisible({ timeout: 30_000 });
 
-    const invitationsCard = page
+    const usersCard = page
       .locator("[data-slot='card']")
-      .filter({ has: page.getByText("Invitations", { exact: true }) });
+      .filter({ has: page.getByText("Users", { exact: true }) });
 
-    // The invite is scoped to whatever org this select shows, and the org
-    // decides the shape of the form: Arbor Live offers Member/Admin plus the
-    // rate and payroll fields, an external org offers Org Member/Org Admin and
-    // hides them. `listOrganizationsAdmin` sorts by name, so Arbor Live is the
-    // default — assert that rather than clicking, so a new org sorting ahead of
-    // it fails here instead of halfway down the form.
-    await expect(invitationsCard.locator("[data-slot='select-trigger']").first()).toHaveText(
+    // The invite is scoped to the shared organization filter above Users.
+    // Arbor Live is the default (arbor_internal), which unlocks Member/Admin
+    // plus rate and payroll fields on the invite form.
+    await expect(usersCard.locator("[data-slot='select-trigger']").first()).toHaveText(
       "Arbor Live",
       { timeout: 30_000 },
     );
 
-    await invitationsCard.getByRole("button", { name: "Invite User" }).click();
+    await usersCard.getByRole("button", { name: "Invite User" }).click();
 
     const modal = page.getByTestId("invite-user-modal");
     await expect(modal).toBeVisible({ timeout: 20_000 });

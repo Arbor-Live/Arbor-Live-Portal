@@ -147,10 +147,14 @@ export function BandPaymentAgreementPdf({
                 An Arbor Live staff member authorized this payment amount and sent it to the
                 designated payee for e-signature agreement.
               </Text>
-              <Detail label="Requester name" value={data.adminRequesterName ?? "—"} />
-              <Detail label="Requester email" value={data.adminRequesterEmail ?? "—"} />
-              <Detail label="Approver name" value={data.adminApproverName ?? "—"} />
-              <Detail label="Approver email" value={data.adminApproverEmail ?? "—"} />
+              <Detail label="Approved By name" value={data.adminRequesterName ?? "—"} />
+              <Detail label="Approved By email" value={data.adminRequesterEmail ?? "—"} />
+              {data.status === "paid" || data.paidAtLabel ? (
+                <>
+                  <Detail label="Paid By name" value={data.adminApproverName ?? "—"} />
+                  <Detail label="Paid By email" value={data.adminApproverEmail ?? "—"} />
+                </>
+              ) : null}
               <Detail label="Sent at" value={data.adminSentAtLabel ?? "—"} />
             </View>
           </View>

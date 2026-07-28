@@ -45,14 +45,14 @@ test.describe("create user and grant admin", () => {
     await page.goto("/dashboard/users/access");
     await expect(page.getByText("User Access & Invitations")).toBeVisible({ timeout: 30_000 });
 
-    const invitationsCard = page
+    const usersCard = page
       .locator("[data-slot='card']")
-      .filter({ has: page.getByText("Invitations", { exact: true }) });
-    await expect(invitationsCard.locator("[data-slot='select-trigger']").first()).toHaveText(
+      .filter({ has: page.getByText("Users", { exact: true }) });
+    await expect(usersCard.locator("[data-slot='select-trigger']").first()).toHaveText(
       "Arbor Live",
       { timeout: 30_000 },
     );
-    await invitationsCard.getByRole("button", { name: "Create User" }).click();
+    await usersCard.getByRole("button", { name: "Create User" }).click();
 
     const modal = page.getByTestId("create-user-modal");
     await expect(modal).toBeVisible({ timeout: 20_000 });

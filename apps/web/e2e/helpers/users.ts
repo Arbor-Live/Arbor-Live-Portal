@@ -76,18 +76,24 @@ export async function openUserRow(page: Page, userId: string): Promise<Locator> 
 
 /**
  * Cells of a Users table row, by the column headers the table itself renders:
- * Name, Email, Role, Onboarding, Title, Phone, Hourly Rate, Default Org,
- * Active, Options.
+ * Name, Email, Role, Onboarding, Active, Options.
+ *
+ * Title / Phone / Hourly Rate / Default Org live in the expanded details panel
+ * (`user-details-{id}` / `user-rate-{id}`).
  */
 export const userRowCell = {
   role: (row: Locator) => row.locator("td").nth(2),
-  title: (row: Locator) => row.locator("td").nth(4),
-  phone: (row: Locator) => row.locator("td").nth(5),
-  rate: (row: Locator) => row.locator("td").nth(6),
-  defaultOrg: (row: Locator) => row.locator("td").nth(7),
-  active: (row: Locator) => row.locator("td").nth(8),
-  options: (row: Locator) => row.locator("td").nth(9),
+  active: (row: Locator) => row.locator("td").nth(4),
+  options: (row: Locator) => row.locator("td").nth(5),
 };
+
+export function userDetailsPanel(page: Page, userId: string) {
+  return page.getByTestId(`user-details-${userId}`);
+}
+
+export function userRatePanel(page: Page, userId: string) {
+  return page.getByTestId(`user-rate-${userId}`);
+}
 
 /** The row's Save button, which only exists while the row form is dirty. */
 export function userRowSave(row: Locator) {

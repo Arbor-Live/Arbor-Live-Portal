@@ -1,8 +1,12 @@
 import { test, expect, type Locator } from "@playwright/test";
 import { runConvex } from "../helpers/convex";
 import { formField } from "../helpers/form";
-import { pickSelectOption } from "../helpers/select";
-import { userRowCell, waitForUserAdminState } from "../helpers/users";
+import { chooseRowAction, pickSelectOption } from "../helpers/select";
+import {
+  userRatePanel,
+  userRowActionMenu,
+  waitForUserAdminState,
+} from "../helpers/users";
 
 const targetEmail = "e2e-rates-target@arborlive.test";
 const targetPassword = "E2eTestPassword1!";
@@ -77,7 +81,7 @@ test.describe.serial("per-user crew rates", () => {
 
   test("the Users table shows the same rate the rates page set", async ({ page }) => {
     // Two editors write `userCompensationRates`: this page and the Hourly Rate
-    // cell in the Users table. The table renders the *resolved* rate for a
+    // field in the Users details panel. The table renders the *resolved* rate for a
     // pinned user ("synced") rather than a stored one, so a mode set here has to
     // be legible there.
     const target = await waitForUserAdminState(targetEmail, (state) => state?.rateMode === "normal");
@@ -86,9 +90,11 @@ test.describe.serial("per-user crew rates", () => {
     await page.goto("/dashboard/users/access");
     const row = page.getByTestId(`user-row-${target.userId}`);
     await expect(row).toBeVisible({ timeout: 30_000 });
-    await expect(userRowCell.rate(row)).toContainText(`$${globals.normalRateUsd}/hr (synced)`, {
-      timeout: 30_000,
-    });
+    await chooseRowAction(page, userRowActionMenu(row), "Show details");
+    await expect(userRatePanel(page, target.userId)).toContainText(
+      `$${globals.normalRateUsd}/hr (synced)`,
+      { timeout: 30_000 },
+    );
   });
 });
 
