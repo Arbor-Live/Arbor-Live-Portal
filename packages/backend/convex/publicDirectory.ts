@@ -3,7 +3,7 @@ import { components } from "./_generated/api";
 import { query } from "./_generated/server";
 import type { QueryCtx } from "./_generated/server";
 import { resolveStoredR2AssetUrl } from "./inventoryR2";
-import { getUserId, type AuthUser } from "./lib/auth";
+import { getUserId, findAuthOrganizationById, type AuthUser } from "./lib/auth";
 import {
   getPrimaryVertical,
   getSecondaryTags,
@@ -257,17 +257,7 @@ export const getPublicArtistBySlug = query({
       return null;
     }
 
-    const result = await ctx.runQuery(components.betterAuth.adapter.findOne, {
-      model: "organization",
-      where: [{ field: "id", value: profile.organizationId }],
-    });
-    const organization = result as OrganizationRow | null;
-    const orgResult = organization
-      ? organization
-      : ((await ctx.runQuery(components.betterAuth.adapter.findOne, {
-          model: "organization",
-          where: [{ field: "_id", value: profile.organizationId }],
-        })) as OrganizationRow | null);
+    const orgResult = await findAuthOrganizationById(ctx, profile.organizationId);
 
     return {
       slug: profile.publicSlug!,

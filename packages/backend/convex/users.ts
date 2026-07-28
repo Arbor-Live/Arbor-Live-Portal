@@ -4,6 +4,7 @@ import { components, internal } from "./_generated/api";
 import { mutation, query } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import {
+  findAuthOrganizationById,
   getActiveOrganizationContextOrNull,
   getCurrentUserOrNull,
   getUserId,
@@ -136,18 +137,7 @@ async function getAllOrganizations(ctx: QueryCtx | MutationCtx) {
 }
 
 async function getOrganizationById(ctx: QueryCtx | MutationCtx, organizationId: string) {
-  // Prefer `_id` (ctx.db.get fast path). Fall back to `id` for older rows.
-  let organization = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
-    model: "organization",
-    where: [{ field: "_id", value: organizationId }],
-  })) as OrganizationRow | null;
-  if (!organization) {
-    organization = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
-      model: "organization",
-      where: [{ field: "id", value: organizationId }],
-    })) as OrganizationRow | null;
-  }
-  return organization;
+  return await findAuthOrganizationById(ctx, organizationId);
 }
 
 export async function resolveOrCreateOrganization(ctx: MutationCtx, name: string) {

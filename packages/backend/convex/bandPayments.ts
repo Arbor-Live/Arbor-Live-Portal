@@ -9,8 +9,16 @@ import {
   type MutationCtx,
   type QueryCtx,
 } from "./_generated/server";
-import { components, internal } from "./_generated/api";
-import { getUserId, getActiveOrganizationContextOrNull, requireArborInternalContext, requireAuth, requireBandContext } from "./lib/auth";
+import { internal } from "./_generated/api";
+import {
+  findAuthOrganizationById,
+  findAuthUserById,
+  getUserId,
+  getActiveOrganizationContextOrNull,
+  requireArborInternalContext,
+  requireAuth,
+  requireBandContext,
+} from "./lib/auth";
 import {
   BAND_PAYMENT_SETTINGS_KEY,
   bandPaymentHasAgreementPdf,
@@ -149,10 +157,7 @@ async function resolveAuthUserIdentity(
   userId: string | undefined,
 ): Promise<{ name: string; email: string } | null> {
   if (!userId) return null;
-  const user = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
-    model: "user",
-    where: [{ field: "id", value: userId }],
-  })) as { id?: string; email?: string; name?: string } | null;
+  const user = await findAuthUserById(ctx, userId);
   const email = user?.email?.trim();
   if (!email) return null;
   const name = user?.name?.trim() || email;
@@ -167,17 +172,7 @@ async function resolveBandName(ctx: QueryCtx | MutationCtx, organizationId: stri
   const displayName = profile?.displayName?.trim();
   if (displayName) return displayName;
 
-  // Prefer `_id` (adapter fast path), then `id`, matching lib/auth.ts.
-  let org = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
-    model: "organization",
-    where: [{ field: "_id", value: organizationId }],
-  })) as { name?: string } | null;
-  if (!org) {
-    org = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
-      model: "organization",
-      where: [{ field: "id", value: organizationId }],
-    })) as { name?: string } | null;
-  }
+  const org = await findAuthOrganizationById(ctx, organizationId);
   const orgName = org?.name?.trim();
   if (orgName) return orgName;
 
@@ -368,10 +363,7 @@ export const listBandMemberEmails = internalQuery({
   handler: async (ctx, args) => {
     const rows = [];
     for (const userId of args.userIds) {
-      const user = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
-        model: "user",
-        where: [{ field: "id", value: userId }],
-      })) as { id?: string; email?: string; name?: string } | null;
+      const user = await findAuthUserById(ctx, userId);
       if (!user?.email) continue;
       const membership = await ctx.db
         .query("userOrganizationMemberships")
@@ -947,10 +939,7 @@ export const listBandOrgNotificationEmails = internalQuery({
     const targets = admins.length > 0 ? admins : active;
     const rows = [];
     for (const membership of targets) {
-      const user = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
-        model: "user",
-        where: [{ field: "id", value: membership.userId }],
-      })) as { email?: string; name?: string } | null;
+      const user = await findAuthUserById(ctx, membership.userId);
       if (!user?.email) continue;
       rows.push({
         email: user.email,

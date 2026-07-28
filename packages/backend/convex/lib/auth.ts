@@ -25,8 +25,16 @@ export type AuthUser = {
   id?: string;
   name?: string;
   email?: string;
+  image?: string | null;
   role?: string | null;
   banned?: boolean | null;
+};
+
+type AuthOrganization = {
+  id?: string;
+  _id?: string;
+  name?: string;
+  slug?: string;
 };
 
 type AuthCtx = QueryCtx | MutationCtx;
@@ -37,6 +45,92 @@ const activeOrgCache = new WeakMap<AuthCtx, Promise<ActiveOrganizationContext | 
 
 export function getUserId(user: AuthUser): string {
   return user.id ?? user._id ?? "";
+}
+
+/**
+ * Point-lookup a Better Auth user by id. Prefer Convex `_id` (fast path) and
+ * only fall back to adapter `id` (unindexed scan) when needed.
+ */
+export async function findAuthUserById(
+  ctx: AuthCtx,
+  userId: string | undefined | null,
+): Promise<AuthUser | null> {
+  const id = userId?.trim();
+  if (!id) return null;
+  let user = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
+    model: "user",
+    where: [{ field: "_id", value: id }],
+  })) as AuthUser | null;
+  if (!user) {
+    user = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
+      model: "user",
+      where: [{ field: "id", value: id }],
+    })) as AuthUser | null;
+  }
+  return user;
+}
+
+/**
+ * Batch-lookup Better Auth users by id. Uses `_id`+`in` first, then `id`+`in`
+ * only for ids still missing. Map is keyed by both `_id` and `id` when present.
+ */
+export async function findAuthUsersByIds(
+  ctx: AuthCtx,
+  userIds: readonly string[],
+): Promise<Map<string, AuthUser>> {
+  const userByKey = new Map<string, AuthUser>();
+  const uniqueIds = [
+    ...new Set(userIds.map((id) => id.trim()).filter((id) => id.length > 0)),
+  ];
+  if (uniqueIds.length === 0) return userByKey;
+
+  const indexUser = (user: AuthUser) => {
+    if (user.id) userByKey.set(user.id, user);
+    if (user._id) userByKey.set(user._id, user);
+  };
+
+  const byIdResult = await ctx.runQuery(components.betterAuth.adapter.findMany, {
+    model: "user",
+    where: [{ field: "_id", operator: "in", value: uniqueIds }],
+    paginationOpts: { cursor: null, numItems: uniqueIds.length },
+  });
+  for (const user of (byIdResult?.page ?? []) as AuthUser[]) {
+    indexUser(user);
+  }
+
+  const missing = uniqueIds.filter((id) => !userByKey.has(id));
+  if (missing.length > 0) {
+    const byAliasResult = await ctx.runQuery(components.betterAuth.adapter.findMany, {
+      model: "user",
+      where: [{ field: "id", operator: "in", value: missing }],
+      paginationOpts: { cursor: null, numItems: missing.length },
+    });
+    for (const user of (byAliasResult?.page ?? []) as AuthUser[]) {
+      indexUser(user);
+    }
+  }
+
+  return userByKey;
+}
+
+/** Prefer `_id` then `id` for Better Auth organization point lookups. */
+export async function findAuthOrganizationById(
+  ctx: AuthCtx,
+  organizationId: string | undefined | null,
+): Promise<AuthOrganization | null> {
+  const id = organizationId?.trim();
+  if (!id) return null;
+  let org = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
+    model: "organization",
+    where: [{ field: "_id", value: id }],
+  })) as AuthOrganization | null;
+  if (!org) {
+    org = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
+      model: "organization",
+      where: [{ field: "id", value: id }],
+    })) as AuthOrganization | null;
+  }
+  return org;
 }
 
 export async function getCurrentUserOrNull(
@@ -58,16 +152,7 @@ export async function getCurrentUserOrNull(
     // Prefer subject/_id when present (point lookup) before email scan.
     const subject = typeof identity.subject === "string" ? identity.subject.trim() : "";
     if (subject) {
-      let byId = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
-        model: "user",
-        where: [{ field: "_id", value: subject }],
-      })) as AuthUser | null;
-      if (!byId) {
-        byId = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
-          model: "user",
-          where: [{ field: "id", value: subject }],
-        })) as AuthUser | null;
-      }
+      const byId = await findAuthUserById(ctx, subject);
       if (byId) {
         if (byId.banned) return null;
         return byId;
@@ -107,13 +192,6 @@ export async function requireAdmin(
 export function isAdmin(user: AuthUser | null | undefined): boolean {
   return Boolean(user && user.role === "admin");
 }
-
-type AuthOrganization = {
-  id?: string;
-  _id?: string;
-  name?: string;
-  slug?: string;
-};
 
 export type ActiveOrganizationContext = {
   organizationId: string;
@@ -176,16 +254,7 @@ export async function getActiveOrganizationContextOrNull(
     }
     if (orgProfile?.organizationType === "band" || orgProfile?.organizationType === "dj") {
       // Still need display name/slug from Better Auth for band/dj orgs.
-      let org = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
-        model: "organization",
-        where: [{ field: "_id", value: selectedOrganizationId }],
-      })) as AuthOrganization | null;
-      if (!org) {
-        org = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
-          model: "organization",
-          where: [{ field: "id", value: selectedOrganizationId }],
-        })) as AuthOrganization | null;
-      }
+      const org = await findAuthOrganizationById(ctx, selectedOrganizationId);
       return {
         organizationId: selectedOrganizationId,
         organizationName: org?.name ?? "Organization",
@@ -195,16 +264,7 @@ export async function getActiveOrganizationContextOrNull(
     }
 
     // Legacy rows without a profile: fall back to Better Auth name/slug derivation.
-    let org = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
-      model: "organization",
-      where: [{ field: "_id", value: selectedOrganizationId }],
-    })) as AuthOrganization | null;
-    if (!org) {
-      org = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
-        model: "organization",
-        where: [{ field: "id", value: selectedOrganizationId }],
-      })) as AuthOrganization | null;
-    }
+    const org = await findAuthOrganizationById(ctx, selectedOrganizationId);
     return {
       organizationId: selectedOrganizationId,
       organizationName: org?.name ?? "Organization",

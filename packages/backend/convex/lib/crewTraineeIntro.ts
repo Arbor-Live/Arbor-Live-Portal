@@ -1,6 +1,6 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
-import { components } from "../_generated/api";
+import { findAuthUserById } from "./auth";
 import { resolveInheritedVenueFields } from "./venues";
 
 export const CREW_STORAGE_CLOSET_MAPS_URL = "https://maps.app.goo.gl/8d2dQF96sLV2QrBk7";
@@ -31,17 +31,6 @@ export type TraineeIntroReady = {
   /** True when manager and lead resolve to the same person. */
   contactsCollapsed: boolean;
 };
-
-type AuthUserRecord = {
-  id?: string;
-  _id?: string;
-  name?: string;
-  email?: string;
-};
-
-function getUserKey(user: AuthUserRecord) {
-  return user.id ?? user._id ?? "";
-}
 
 function isValidEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
@@ -87,10 +76,7 @@ async function resolveUserContact(
   ctx: QueryCtx | MutationCtx,
   userId: string,
 ): Promise<{ name?: string; email?: string; phone?: string } | null> {
-  const user = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
-    model: "user",
-    where: [{ field: "_id", value: userId }],
-  })) as AuthUserRecord | null;
+  const user = await findAuthUserById(ctx, userId);
   if (!user) return null;
   const profile = await ctx.db
     .query("userAdminProfiles")
