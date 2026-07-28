@@ -3,11 +3,12 @@
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-export type InsightsTabId = "finances" | "demand" | "crew" | "ops";
+export type InsightsTabId = "finances" | "demand" | "events" | "crew" | "ops";
 
 const TABS: Array<{ id: InsightsTabId; label: string }> = [
   { id: "finances", label: "Finances" },
   { id: "demand", label: "Demand" },
+  { id: "events", label: "Events" },
   { id: "crew", label: "Crew" },
   { id: "ops", label: "Ops" },
 ];

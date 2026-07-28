@@ -33,6 +33,11 @@ export async function loadEventsInRange(ctx: QueryCtx, startMs: number, endMs: n
   return { events: rows, truncated: rows.length >= EVENT_SCAN_LIMIT };
 }
 
+/** Events with `startAt` in `[startMs, endMs]` (inclusive), capped by `EVENT_SCAN_LIMIT`. */
+export async function loadEventsFromNow(ctx: QueryCtx, startMs: number, endMs: number) {
+  return loadEventsInRange(ctx, startMs, endMs);
+}
+
 export function isShiftFilled(shift: Doc<"eventCrewShifts">) {
   return Boolean(shift.userId?.trim());
 }

@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/card";
 import { InsightsCrewPanel } from "@/components/insights/insights-crew-panel";
 import { InsightsDemandPanel } from "@/components/insights/insights-demand-panel";
+import { InsightsEventsPanel } from "@/components/insights/insights-events-panel";
 import { InsightsFinancesPanel } from "@/components/insights/insights-finances-panel";
 import { InsightsOpsPanel } from "@/components/insights/insights-ops-panel";
 import { InsightsRangePicker } from "@/components/insights/insights-range-picker";
@@ -33,8 +34,8 @@ export function InsightsPageClient() {
         <CardHeader>
           <CardTitle>Insights</CardTitle>
           <CardDescription>
-            Trends in Pacific Time across finances, demand, crew, and ops — complements the
-            operational queues.
+            Trends in Pacific Time across finances, demand, events, crew, and ops — including
+            upcoming calendar readiness — complements the operational queues.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -60,6 +61,9 @@ export function InsightsPageClient() {
         <div data-testid="insights-demand-panel">
           <InsightsDemandPanel startMs={range.startMs} endMs={range.endMs} />
         </div>
+      ) : null}
+      {range && tab === "events" ? (
+        <InsightsEventsPanel startMs={range.startMs} endMs={range.endMs} />
       ) : null}
       {range && tab === "crew" ? (
         <div data-testid="insights-crew-panel">

@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 
 test.describe("insights dashboard", () => {
-  test("admin can open Insights and switch Finances / Demand / Crew / Ops tabs", async ({
+  test("admin can open Insights and switch Finances / Demand / Events / Crew / Ops tabs", async ({
     page,
   }) => {
     test.setTimeout(120_000);
@@ -13,15 +13,26 @@ test.describe("insights dashboard", () => {
     // Default Finances tab
     await expect(page.getByTestId("insights-finances-panel")).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText("Recognized revenue").first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText("Booked ahead (90d)").first()).toBeVisible();
     await expect(page.getByText("AR snapshot").first()).toBeVisible();
 
     await page.getByRole("button", { name: "Demand", exact: true }).click();
     await expect(page.getByTestId("insights-demand-panel")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText("Upcoming (30d)").first()).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText("Booking funnel").first()).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText("Decline reasons").first()).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText("Quote engagement").first()).toBeVisible();
     await expect(page.getByText("Delivery quality").first()).toBeVisible();
     await expect(page.getByText("Calendar load").first()).toBeVisible();
+
+    await page.getByRole("button", { name: "Events", exact: true }).click();
+    await expect(page.getByTestId("insights-events-panel")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText("Next 7 days").first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText("Next 30 days").first()).toBeVisible();
+    await expect(page.getByText("Next 90 days").first()).toBeVisible();
+    await expect(page.getByText("Booked ahead").first()).toBeVisible();
+    await expect(page.getByText("Ops readiness").first()).toBeVisible();
+    await expect(page.getByText("Upcoming by status").first()).toBeVisible();
 
     await page.getByRole("button", { name: "Crew", exact: true }).click();
     await expect(page.getByTestId("insights-crew-panel")).toBeVisible({ timeout: 30_000 });

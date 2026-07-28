@@ -34,6 +34,7 @@ export function InsightsFinancesPanel({ startMs, endMs }: InsightsFinancesPanelP
   const arSnapshot = useQuery(api.analytics.getArSnapshot, {});
   const quoteCycle = useQuery(api.analytics.getQuoteCashCycle, rangeArgs);
   const topClients = useQuery(api.analytics.getTopClients, { startMs, endMs, limit: 10 });
+  const upcoming = useQuery(api.analyticsEvents.getUpcomingEventsInsights, {});
 
   const anyTruncated =
     summary?.truncated ||
@@ -41,7 +42,8 @@ export function InsightsFinancesPanel({ startMs, endMs }: InsightsFinancesPanelP
     revenueMix?.truncated ||
     arSnapshot?.truncated ||
     quoteCycle?.truncated ||
-    topClients?.truncated;
+    topClients?.truncated ||
+    upcoming?.truncated;
 
   return (
     <div className="space-y-4">
@@ -51,7 +53,7 @@ export function InsightsFinancesPanel({ startMs, endMs }: InsightsFinancesPanelP
         </p>
       ) : null}
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader>
             <CardTitle>Recognized revenue</CardTitle>
@@ -78,6 +80,21 @@ export function InsightsFinancesPanel({ startMs, endMs }: InsightsFinancesPanelP
             ) : (
               <p className="text-2xl font-semibold tabular-nums">
                 {formatUsd(summary.revenueBookedUsd)}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Booked ahead (90d)</CardTitle>
+            <CardDescription>See Events tab for upcoming calendar detail</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {upcoming === undefined ? (
+              <p className="text-sm text-muted-foreground">Loading…</p>
+            ) : (
+              <p className="text-2xl font-semibold tabular-nums">
+                {formatUsd(upcoming.horizons.d90.bookedRevenueUsd)}
               </p>
             )}
           </CardContent>
