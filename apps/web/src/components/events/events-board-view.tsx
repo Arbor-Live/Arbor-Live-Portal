@@ -418,7 +418,7 @@ export function EventsBoardView({ events }: { events: DashboardEvent[] }) {
           </Button>
         </div>
         <p className="text-sm font-medium">{rangeLabel}</p>
-        <p className="text-xs text-muted-foreground">{VISIBLE_WEEKS} weeks · Pacific Time</p>
+        <p className="text-xs text-muted-foreground">{VISIBLE_WEEKS} weeks</p>
       </div>
 
       <div className="space-y-4">

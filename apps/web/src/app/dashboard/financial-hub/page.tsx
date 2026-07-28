@@ -61,7 +61,7 @@ export default function FinancialHubPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Revenue</CardTitle>
-                <CardDescription>Trailing 12 Pacific months</CardDescription>
+                <CardDescription>Trailing 12 months</CardDescription>
               </CardHeader>
               <CardContent>
                 <FinancialHubRevenueCard />
@@ -70,7 +70,7 @@ export default function FinancialHubPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Expenses</CardTitle>
-                <CardDescription>Trailing 12 Pacific months</CardDescription>
+                <CardDescription>Trailing 12 months</CardDescription>
               </CardHeader>
               <CardContent>
                 <FinancialHubExpensesCard />

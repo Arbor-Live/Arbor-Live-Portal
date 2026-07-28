@@ -34,8 +34,8 @@ export function InsightsPageClient() {
         <CardHeader>
           <CardTitle>Insights</CardTitle>
           <CardDescription>
-            Trends in Pacific Time across finances, demand, events, crew, and ops — including
-            upcoming calendar readiness — complements the operational queues.
+            Trends across finances, demand, events, crew, and ops — including upcoming calendar
+            readiness — complements the operational queues.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">

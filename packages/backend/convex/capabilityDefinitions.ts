@@ -78,12 +78,23 @@ export const update = mutation({
   },
 });
 
+const MAX_TYPE_SCAN = 2000;
+
 export const remove = mutation({
   args: { id: v.id("capabilityDefinitions") },
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Capability definition not found.");
+
+    // inventoryTypes.update re-validates every capability key on save. Deleting
+    // a key still referenced by a type leaves that type permanently un-saveable.
+    const types = await ctx.db.query("inventoryTypes").take(MAX_TYPE_SCAN);
+    const linkedType = types.find((type) => type.capabilities.includes(existing.key));
+    if (linkedType) {
+      throw new Error("Cannot delete capability while it is used by inventory types.");
+    }
+
     await ctx.db.delete(args.id);
   },
 });

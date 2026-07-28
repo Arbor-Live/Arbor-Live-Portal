@@ -186,7 +186,7 @@ export function InsightsDemandPanel({ startMs, endMs }: InsightsDemandPanelProps
         <Card>
           <CardHeader>
             <CardTitle>Events over time</CardTitle>
-            <CardDescription>By Pacific start month</CardDescription>
+            <CardDescription>By start month</CardDescription>
           </CardHeader>
           <CardContent>
             {volume === undefined ? (

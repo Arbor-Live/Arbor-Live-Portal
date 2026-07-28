@@ -114,20 +114,20 @@ export function InvoiceQuoteApprovalDetails({
           ) : null}
           {invoice.approvedAt ? (
             <p>
-              <span className="font-medium">Approved:</span> {formatTimestamp(invoice.approvedAt)} Pacific
+              <span className="font-medium">Approved:</span> {formatTimestamp(invoice.approvedAt)}
             </p>
           ) : null}
           {invoice.changesRequestedAt ? (
             <p>
               <span className="font-medium">Changes requested:</span>{" "}
-              {formatTimestamp(invoice.changesRequestedAt)} Pacific
+              {formatTimestamp(invoice.changesRequestedAt)}
             </p>
           ) : null}
           {invoice.termsVersionAccepted ? (
             <p>
               <span className="font-medium">Terms accepted:</span> {invoice.termsVersionAccepted}
               {invoice.termsAcceptedAt
-                ? ` · ${formatTimestamp(invoice.termsAcceptedAt)} Pacific`
+                ? ` · ${formatTimestamp(invoice.termsAcceptedAt)}`
                 : ""}
             </p>
           ) : null}
@@ -182,7 +182,7 @@ export function InvoiceQuoteApprovalDetails({
 
             {invoice.payingPartyNotifiedAt && invoice.payingPartyNotifiedEmail ? (
               <p className="text-muted-foreground">
-                Paying party notified {formatTimestamp(invoice.payingPartyNotifiedAt)} Pacific at{" "}
+                Paying party notified {formatTimestamp(invoice.payingPartyNotifiedAt)} at{" "}
                 {invoice.payingPartyNotifiedEmail}
               </p>
             ) : !clientIsPaymentSubmitter && paymentSubmitterEmail ? (

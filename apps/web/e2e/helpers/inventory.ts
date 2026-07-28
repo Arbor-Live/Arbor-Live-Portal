@@ -175,12 +175,9 @@ export function itemRow(page: Page, itemId: string): Locator {
 /**
  * Wait for a row, paging the list if it is not on the first page.
  *
- * `inventoryItems.list` still `paginate()`s the raw table and applies its search
- * filter to the *page* it produced, so the search box narrows the hundred rows
- * already loaded rather than the table — and pagination is by `_creationTime`
- * ascending, which puts a row created seconds ago at the very end. (Batch 10
- * fixed the same bug in `inventoryTypes.list`; the items list needs a hydration
- * budget decision of its own, so it is still paged here.)
+ * Unfiltered `inventoryItems.list` still paginates (100/page). Specs that
+ * search first should already land the row on the finished filtered page;
+ * this helper still covers the unfiltered path and slow first paints.
  *
  * Never `break` on a missing Load-more button: changing a filter puts the query
  * into `LoadingFirstPage`, where neither the rows nor the button exist, so an
