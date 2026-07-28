@@ -29,6 +29,7 @@ export type BandProfileFormValues = z.infer<typeof bandProfileSchema>;
 export const bandInviteSchema = z.object({
   email: z.string().email("Enter a valid email"),
   role: z.enum(["org_admin", "org_member"]),
+  bandRole: z.string().optional(),
 });
 
 export type BandInviteFormValues = z.infer<typeof bandInviteSchema>;

@@ -1117,17 +1117,16 @@ async function buildAgreementDocumentData(
   const adminRequesterEmail =
     payment.confirmationSentByEmail?.trim() || requesterLookup?.email || undefined;
 
-  const paidByLookup = await resolveAuthUserIdentity(ctx, payment.paidByUserId);
-  const adminApproverName =
-    payment.paidByName?.trim() ||
-    paidByLookup?.name ||
-    adminRequesterName ||
-    undefined;
-  const adminApproverEmail =
-    payment.paidByEmail?.trim() ||
-    paidByLookup?.email ||
-    adminRequesterEmail ||
-    undefined;
+  const isPaid = payment.status === "paid" || Boolean(payment.paidAt);
+  const paidByLookup = isPaid
+    ? await resolveAuthUserIdentity(ctx, payment.paidByUserId)
+    : null;
+  const adminApproverName = isPaid
+    ? payment.paidByName?.trim() || paidByLookup?.name || undefined
+    : undefined;
+  const adminApproverEmail = isPaid
+    ? payment.paidByEmail?.trim() || paidByLookup?.email || undefined
+    : undefined;
 
   // Prefer payment snapshot; fall back to org profile for fields added later
   // (e.g. payout method) that older signed rows may not have stored.

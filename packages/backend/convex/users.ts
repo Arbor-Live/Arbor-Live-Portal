@@ -329,9 +329,16 @@ async function normalizeMembershipRole(
 
 export async function upsertOrgMembership(
   ctx: MutationCtx,
-  args: { userId: string; organizationId: string; role: string; active: boolean },
+  args: {
+    userId: string;
+    organizationId: string;
+    role: string;
+    active: boolean;
+    bandRole?: string;
+  },
 ) {
   const now = Date.now();
+  const bandRole = args.bandRole?.trim() || undefined;
   const existing = await ctx.db
     .query("userOrganizationMemberships")
     .withIndex("by_userId_and_organizationId", (q) =>
@@ -342,6 +349,7 @@ export async function upsertOrgMembership(
     await ctx.db.patch(existing._id, {
       role: args.role,
       active: args.active,
+      ...(args.bandRole !== undefined ? { bandRole } : {}),
       updatedAt: now,
     });
     return existing._id;
@@ -350,6 +358,7 @@ export async function upsertOrgMembership(
     userId: args.userId,
     organizationId: args.organizationId,
     role: args.role,
+    bandRole,
     active: args.active,
     createdAt: now,
     updatedAt: now,
@@ -1877,6 +1886,7 @@ export const listMembersForActiveOrganization = query({
           name: user?.name ?? user?.email ?? membership.userId,
           email: user?.email ?? "",
           title: profile?.title ?? "",
+          bandRole: membership.bandRole ?? "",
           role: membership.role,
           active: membership.active,
         };
@@ -1893,14 +1903,23 @@ export const listPendingInvitesForActiveOrganization = query({
       model: "invitation",
       paginationOpts: { cursor: null, numItems: 500 },
     });
+    const pendingMeta = await ctx.db.query("pendingUserInvites").take(2000);
+    const metaByInvitationId = new Map(
+      pendingMeta.map((row) => [row.invitationId, row]),
+    );
     return ((result?.page ?? []) as InvitationRow[])
       .filter((invite) => invite.organizationId === context.organizationId && invite.status === "pending")
-      .map((invite) => ({
-        invitationId: getRecordId(invite),
-        email: invite.email ?? "",
-        role: invite.role ?? "org_member",
-        expiresAt: invite.expiresAt ?? 0,
-      }))
+      .map((invite) => {
+        const invitationId = getRecordId(invite);
+        const meta = metaByInvitationId.get(invitationId);
+        return {
+          invitationId,
+          email: invite.email ?? "",
+          role: invite.role ?? "org_member",
+          bandRole: meta?.bandRole ?? "",
+          expiresAt: invite.expiresAt ?? 0,
+        };
+      })
       .filter((invite) => Boolean(invite.invitationId))
       .sort((a, b) => a.expiresAt - b.expiresAt);
   },
@@ -1910,6 +1929,7 @@ export const inviteMemberToActiveOrganization = mutation({
   args: {
     email: v.string(),
     role: externalOrgRoleValue,
+    bandRole: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const context = await requireBandContext(ctx);
@@ -1918,6 +1938,7 @@ export const inviteMemberToActiveOrganization = mutation({
     const now = Date.now();
     const email = args.email.trim().toLowerCase();
     if (!email) throw new Error("Email is required.");
+    const bandRole = args.bandRole?.trim() || undefined;
     const expiresAt = now + 14 * 24 * 60 * 60 * 1000;
     const created = await ctx.runMutation(components.betterAuth.adapter.create, {
       input: {
@@ -1945,6 +1966,7 @@ export const inviteMemberToActiveOrganization = mutation({
         organizationId: context.organizationId,
         role: args.role,
         active: true,
+        bandRole,
       });
       await ensureOnboardingForOrgMembership(ctx, {
         userId: existingUserId,
@@ -1957,11 +1979,56 @@ export const inviteMemberToActiveOrganization = mutation({
       email,
       organizationId: context.organizationId,
       role: args.role,
+      bandRole,
       inviterId: adminId,
       expiresAt,
       isExistingUser: Boolean(existingUserId),
     });
     return { invitationId };
+  },
+});
+
+export const updateMemberBandRole = mutation({
+  args: {
+    userId: v.string(),
+    bandRole: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const context = await requireBandContext(ctx);
+    const actor = await requireAuth(ctx);
+    const actorId = getUserId(actor);
+    const targetUserId = args.userId.trim();
+    if (!targetUserId) throw new Error("User is required.");
+
+    const actorMembership = await ctx.db
+      .query("userOrganizationMemberships")
+      .withIndex("by_userId_and_organizationId", (q) =>
+        q.eq("userId", actorId).eq("organizationId", context.organizationId),
+      )
+      .unique();
+    const isOrgAdmin =
+      actorMembership?.role === "org_admin" ||
+      actorMembership?.role === "admin" ||
+      isAdmin(actor);
+    if (actorId !== targetUserId && !isOrgAdmin) {
+      throw new Error("Only band admins can edit another member's role.");
+    }
+
+    const membership = await ctx.db
+      .query("userOrganizationMemberships")
+      .withIndex("by_userId_and_organizationId", (q) =>
+        q.eq("userId", targetUserId).eq("organizationId", context.organizationId),
+      )
+      .unique();
+    if (!membership || !membership.active) {
+      throw new Error("Member not found in this band.");
+    }
+    await ctx.db.patch(membership._id, {
+      bandRole: args.bandRole.trim() || undefined,
+      updatedAt: Date.now(),
+    });
+    return null;
   },
 });
 

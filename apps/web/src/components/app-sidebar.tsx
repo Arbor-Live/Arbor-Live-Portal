@@ -319,15 +319,17 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
             }}
             disabled={!myOrganizations?.length || !activeOrganization?.organizationId}
           >
-            <SelectTrigger className="w-full bg-background">
+            <SelectTrigger className="w-full min-w-0 bg-background [&>span]:min-w-0 [&>span]:truncate">
               <SelectValue placeholder="Select active organization" />
             </SelectTrigger>
             <SelectContent>
               {(myOrganizations ?? []).map((org) => (
-                <SelectItem key={org.organizationId} value={org.organizationId}>
-                  {org.name}
-                  <span className="ml-2 text-xs text-muted-foreground">
-                    {org.organizationType === "arbor_internal" ? "Arbor Internal" : "Band"}
+                <SelectItem key={org.organizationId} value={org.organizationId} className="min-w-0">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="truncate">{org.name}</span>
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      {org.organizationType === "arbor_internal" ? "Arbor Internal" : "Band"}
+                    </span>
                   </span>
                 </SelectItem>
               ))}

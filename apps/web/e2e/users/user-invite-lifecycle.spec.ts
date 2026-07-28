@@ -40,22 +40,22 @@ test.describe("user invite lifecycle", () => {
     await page.goto("/dashboard/users/access");
     await expect(page.getByText("User Access & Invitations")).toBeVisible({ timeout: 30_000 });
 
+    const usersCard = page
+      .locator("[data-slot='card']")
+      .filter({ has: page.getByText("Users", { exact: true }) });
     const invitationsCard = page
       .locator("[data-slot='card']")
       .filter({ has: page.getByText("Invitations", { exact: true }) });
 
-    // The invite is scoped to whatever org this select shows, and the org
-    // decides the shape of the form: Arbor Live offers Member/Admin plus the
-    // rate and payroll fields, an external org offers Org Member/Org Admin and
-    // hides them. `listOrganizationsAdmin` sorts by name, so Arbor Live is the
-    // default — assert that rather than clicking, so a new org sorting ahead of
-    // it fails here instead of halfway down the form.
-    await expect(invitationsCard.locator("[data-slot='select-trigger']").first()).toHaveText(
+    // The invite is scoped to the shared organization filter above Users.
+    // Arbor Live is the default (arbor_internal), which unlocks Member/Admin
+    // plus rate and payroll fields on the invite form.
+    await expect(usersCard.locator("[data-slot='select-trigger']").first()).toHaveText(
       "Arbor Live",
       { timeout: 30_000 },
     );
 
-    await invitationsCard.getByRole("button", { name: "Invite User" }).click();
+    await usersCard.getByRole("button", { name: "Invite User" }).click();
 
     const modal = page.getByTestId("invite-user-modal");
     await expect(modal).toBeVisible({ timeout: 20_000 });
@@ -136,10 +136,14 @@ test.describe("user invite lifecycle", () => {
     // cancelled invite redeemable.
     expect(cancelled.hasPendingToken).toBe(false);
 
-    // A cancelled invite loses its actions; only pending rows are actionable.
-    await expect(inviteRow).toContainText("cancelled", { timeout: 30_000 });
-    await expect(inviteRow.getByRole("button", { name: "Resend" })).toHaveCount(0);
-    await expect(inviteRow.getByRole("button", { name: "Edit" })).toHaveCount(0);
+    // Default status filter is Pending, so cancelled rows drop out of the table
+    // until the operator switches the filter.
+    await pickSelectOption(page, selectByLabel(invitationsCard, "Status Filter"), "Cancelled");
+
+    const cancelledInviteRow = page.getByTestId(`invite-row-${invited.invitationId}`);
+    await expect(cancelledInviteRow).toContainText("cancelled", { timeout: 30_000 });
+    await expect(cancelledInviteRow.getByRole("button", { name: "Resend" })).toHaveCount(0);
+    await expect(cancelledInviteRow.getByRole("button", { name: "Edit" })).toHaveCount(0);
   });
 
   test("dismissing the cancel confirm leaves the invite pending", async ({ page }) => {
