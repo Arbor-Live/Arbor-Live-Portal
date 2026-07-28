@@ -32,12 +32,24 @@ export function BandPaymentPayeeRequiredEmail({
       <DataCard title="What we need">
         <DetailRow label="Designated payee" value="One band member who receives and distributes payment" />
         <DetailRow label="Payee email" value="Used for signature request notifications" />
-        <DetailRow label="Mailing address" value="Required for GrantEd payment processing" />
+        <DetailRow
+          label="Payout method"
+          value="Pickup from the ASSU office (recommended) or delivery"
+        />
+        <DetailRow
+          label="Mailing address"
+          value="Required either way — prefer an off-campus personal address, not a Stanford mailbox or dorm"
+        />
       </DataCard>
       <CtaButton href={payeeSettingsUrl} label="Set up payment payee" />
       <BodyCopy>
         Once your payee information is saved, our team can send a signature request and move
         your payout forward.
+      </BodyCopy>
+      <BodyCopy>
+        If the same payee receives more than $2,000 in total across the calendar year from any
+        Stanford VSO (not just Arbor Live), Stanford will issue them a Form 1099. Bands may want
+        to rotate the designated payee among members to stay under that threshold.
       </BodyCopy>
       <MutedCopy>You are receiving this because your band has a pending Arbor Live payout.</MutedCopy>
     </EmailLayout>

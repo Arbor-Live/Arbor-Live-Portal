@@ -72,6 +72,7 @@ const bandPaymentRowValidator = v.object({
   designatedPayeeEmail: v.optional(v.string()),
   designatedPayeeUserId: v.optional(v.string()),
   designatedPayeeMailingAddress: v.optional(v.string()),
+  designatedPayeePayoutMethod: v.optional(v.union(v.literal("pickup"), v.literal("delivery"))),
   payeeComplete: v.boolean(),
   status: statusValue,
   statusLabel: v.string(),
@@ -129,6 +130,7 @@ const agreementDocumentValidator = v.object({
   designatedPayeeName: v.string(),
   designatedPayeeEmail: v.optional(v.string()),
   designatedPayeeMailingAddress: v.optional(v.string()),
+  designatedPayeePayoutMethod: v.optional(v.union(v.literal("pickup"), v.literal("delivery"))),
   adminRequesterName: v.optional(v.string()),
   adminRequesterEmail: v.optional(v.string()),
   adminApproverName: v.optional(v.string()),
@@ -229,6 +231,7 @@ async function syncPayeeFromOrganizationForPayment(
     designatedPayeeEmail: payeeSnapshot.designatedPayeeEmail,
     designatedPayeeUserId: payeeSnapshot.designatedPayeeUserId,
     designatedPayeeMailingAddress: payeeSnapshot.designatedPayeeMailingAddress,
+    designatedPayeePayoutMethod: payeeSnapshot.designatedPayeePayoutMethod,
     updatedAt: nowMs,
   };
   if (payment.status === "pending_payee" && payeeSnapshot.payeeComplete) {
@@ -239,7 +242,8 @@ async function syncPayeeFromOrganizationForPayment(
     payment.designatedPayeeName !== patch.designatedPayeeName ||
     payment.designatedPayeeEmail !== patch.designatedPayeeEmail ||
     payment.designatedPayeeUserId !== patch.designatedPayeeUserId ||
-    payment.designatedPayeeMailingAddress !== patch.designatedPayeeMailingAddress;
+    payment.designatedPayeeMailingAddress !== patch.designatedPayeeMailingAddress ||
+    payment.designatedPayeePayoutMethod !== patch.designatedPayeePayoutMethod;
   if (needsPatch) {
     await ctx.db.patch(payment._id, patch);
     return (await ctx.db.get(payment._id))!;
@@ -290,6 +294,7 @@ async function buildBandPaymentRow(
     designatedPayeeEmail: effectivePayee.designatedPayeeEmail,
     designatedPayeeUserId: effectivePayee.designatedPayeeUserId,
     designatedPayeeMailingAddress: effectivePayee.designatedPayeeMailingAddress,
+    designatedPayeePayoutMethod: effectivePayee.designatedPayeePayoutMethod,
     payeeComplete: isBandPayeeComplete(effectivePayee),
     status: payment.status,
     statusLabel: bandPaymentStatusLabel(payment.status),
@@ -453,6 +458,7 @@ export const getBandPayeeForOrganization = query({
     designatedPayeeName: v.optional(v.string()),
     designatedPayeeEmail: v.optional(v.string()),
     designatedPayeeMailingAddress: v.optional(v.string()),
+    designatedPayeePayoutMethod: v.optional(v.union(v.literal("pickup"), v.literal("delivery"))),
     payeeComplete: v.boolean(),
     performerHourlyRateUsd: v.optional(v.number()),
   }),
@@ -603,6 +609,7 @@ export const upsertForEvent = mutation({
       designatedPayeeEmail: payeeSnapshot.designatedPayeeEmail,
       designatedPayeeUserId: payeeSnapshot.designatedPayeeUserId,
       designatedPayeeMailingAddress: payeeSnapshot.designatedPayeeMailingAddress,
+      designatedPayeePayoutMethod: payeeSnapshot.designatedPayeePayoutMethod,
       status: nextStatus,
       photoAlbumUrl: args.photoAlbumUrl?.trim() || settings.photoAlbumUrl || undefined,
       updatedAt: now,
@@ -682,7 +689,8 @@ export const syncStalePayeePayments = mutation({
         synced.status !== payment.status ||
         synced.designatedPayeeName !== payment.designatedPayeeName ||
         synced.designatedPayeeEmail !== payment.designatedPayeeEmail ||
-        synced.designatedPayeeMailingAddress !== payment.designatedPayeeMailingAddress
+        synced.designatedPayeeMailingAddress !== payment.designatedPayeeMailingAddress ||
+        synced.designatedPayeePayoutMethod !== payment.designatedPayeePayoutMethod
       ) {
         updated += 1;
       }
@@ -708,7 +716,9 @@ export const sendConfirmationEmail = mutation({
     }
     const effectivePayee = await getEffectivePayeeForPayment(ctx, payment);
     if (!isBandPayeeComplete(effectivePayee)) {
-      throw new Error("Designated payee name, email, and mailing address are required before sending.");
+      throw new Error(
+        "Designated payee name, email, mailing address, and payout method are required before sending.",
+      );
     }
     if (!effectivePayee.designatedPayeeUserId) {
       throw new Error("Designated payee must be linked to a band member account before sending.");
@@ -729,6 +739,11 @@ export const sendConfirmationEmail = mutation({
     await scheduleBandPaymentConfirmationEmail(ctx, { payment, event });
 
     await ctx.db.patch(payment._id, {
+      designatedPayeeName: effectivePayee.designatedPayeeName,
+      designatedPayeeEmail: effectivePayee.designatedPayeeEmail,
+      designatedPayeeUserId: effectivePayee.designatedPayeeUserId,
+      designatedPayeeMailingAddress: effectivePayee.designatedPayeeMailingAddress,
+      designatedPayeePayoutMethod: effectivePayee.designatedPayeePayoutMethod,
       status: "awaiting_confirmation",
       confirmationEmailSentAt: Date.now(),
       confirmationSentByUserId: senderUserId || undefined,
@@ -839,6 +854,7 @@ export const promoteEndedPayments = internalMutation({
         designatedPayeeEmail: payeeSnapshot.designatedPayeeEmail,
         designatedPayeeUserId: payeeSnapshot.designatedPayeeUserId,
         designatedPayeeMailingAddress: payeeSnapshot.designatedPayeeMailingAddress,
+        designatedPayeePayoutMethod: payeeSnapshot.designatedPayeePayoutMethod,
         status: nextStatus,
         updatedAt: now,
       });
@@ -862,6 +878,7 @@ export const promoteEndedPayments = internalMutation({
         designatedPayeeEmail: payeeSnapshot.designatedPayeeEmail,
         designatedPayeeUserId: payeeSnapshot.designatedPayeeUserId,
         designatedPayeeMailingAddress: payeeSnapshot.designatedPayeeMailingAddress,
+        designatedPayeePayoutMethod: payeeSnapshot.designatedPayeePayoutMethod,
         status: "pending_email",
         updatedAt: now,
       });
@@ -888,7 +905,8 @@ export const refreshPendingPayeePaymentsForOrg = internalMutation({
         synced.status !== payment.status ||
         synced.designatedPayeeName !== payment.designatedPayeeName ||
         synced.designatedPayeeEmail !== payment.designatedPayeeEmail ||
-        synced.designatedPayeeMailingAddress !== payment.designatedPayeeMailingAddress
+        synced.designatedPayeeMailingAddress !== payment.designatedPayeeMailingAddress ||
+        synced.designatedPayeePayoutMethod !== payment.designatedPayeePayoutMethod
       ) {
         updated += 1;
       }
@@ -1061,11 +1079,21 @@ export const signPayment = mutation({
       throw new Error("Only the designated payee can sign this payment.");
     }
 
+    const effectivePayee = await getEffectivePayeeForPayment(ctx, payment);
+
     await ctx.db.patch(payment._id, {
       status: "confirmed",
       confirmedAt: Date.now(),
       signedByUserId: userId,
       signatureTypedName: typedName,
+      // Freeze current org payee details (incl. payout method) onto the payment
+      // so agreement PDFs don't depend on later profile edits.
+      designatedPayeeName: effectivePayee.designatedPayeeName ?? payment.designatedPayeeName,
+      designatedPayeeEmail: effectivePayee.designatedPayeeEmail ?? payment.designatedPayeeEmail,
+      designatedPayeeMailingAddress:
+        effectivePayee.designatedPayeeMailingAddress ?? payment.designatedPayeeMailingAddress,
+      designatedPayeePayoutMethod:
+        effectivePayee.designatedPayeePayoutMethod ?? payment.designatedPayeePayoutMethod,
       updatedAt: Date.now(),
     });
     return null;
@@ -1089,17 +1117,20 @@ async function buildAgreementDocumentData(
   const adminRequesterEmail =
     payment.confirmationSentByEmail?.trim() || requesterLookup?.email || undefined;
 
-  const paidByLookup = await resolveAuthUserIdentity(ctx, payment.paidByUserId);
-  const adminApproverName =
-    payment.paidByName?.trim() ||
-    paidByLookup?.name ||
-    adminRequesterName ||
-    undefined;
-  const adminApproverEmail =
-    payment.paidByEmail?.trim() ||
-    paidByLookup?.email ||
-    adminRequesterEmail ||
-    undefined;
+  const isPaid = payment.status === "paid" || Boolean(payment.paidAt);
+  const paidByLookup = isPaid
+    ? await resolveAuthUserIdentity(ctx, payment.paidByUserId)
+    : null;
+  const adminApproverName = isPaid
+    ? payment.paidByName?.trim() || paidByLookup?.name || undefined
+    : undefined;
+  const adminApproverEmail = isPaid
+    ? payment.paidByEmail?.trim() || paidByLookup?.email || undefined
+    : undefined;
+
+  // Prefer payment snapshot; fall back to org profile for fields added later
+  // (e.g. payout method) that older signed rows may not have stored.
+  const effectivePayee = await getEffectivePayeeForPayment(ctx, payment);
 
   return {
     confirmationToken: payment.confirmationToken,
@@ -1112,9 +1143,10 @@ async function buildAgreementDocumentData(
     performanceHoursLabel: formatPerformanceHours(payment.performanceHours),
     memberCount: payment.memberCount,
     totalUsd: payment.totalUsd,
-    designatedPayeeName: payment.designatedPayeeName ?? "Designated payee",
-    designatedPayeeEmail: payment.designatedPayeeEmail,
-    designatedPayeeMailingAddress: payment.designatedPayeeMailingAddress,
+    designatedPayeeName: effectivePayee.designatedPayeeName ?? "Designated payee",
+    designatedPayeeEmail: effectivePayee.designatedPayeeEmail,
+    designatedPayeeMailingAddress: effectivePayee.designatedPayeeMailingAddress,
+    designatedPayeePayoutMethod: effectivePayee.designatedPayeePayoutMethod,
     adminRequesterName,
     adminRequesterEmail,
     adminApproverName,

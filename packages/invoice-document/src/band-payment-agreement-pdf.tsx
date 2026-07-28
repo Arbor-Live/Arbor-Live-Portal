@@ -61,6 +61,22 @@ const styles = StyleSheet.create({
   value: {
     flex: 1,
   },
+  personBlock: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  personValue: {
+    flex: 1,
+    gap: 2,
+  },
+  personName: {
+    fontSize: 10,
+  },
+  personEmail: {
+    fontSize: 9,
+    color: invoiceTheme.textMuted,
+    fontStyle: "italic",
+  },
   emphasis: {
     fontSize: 12,
     fontWeight: 700,
@@ -87,6 +103,40 @@ function Detail({ label, value }: { label: string; value: string }) {
   );
 }
 
+function PersonBlock({
+  label,
+  name,
+  email,
+}: {
+  label: string;
+  name?: string;
+  email?: string;
+}) {
+  return (
+    <View style={styles.personBlock}>
+      <Text style={styles.label}>{label}</Text>
+      <View style={styles.personValue}>
+        <Text style={styles.personName}>{name?.trim() || "—"}</Text>
+        <Text style={styles.personEmail}>{email?.trim() || "—"}</Text>
+      </View>
+    </View>
+  );
+}
+
+function samePerson(
+  aName?: string,
+  aEmail?: string,
+  bName?: string,
+  bEmail?: string,
+) {
+  const emailA = aEmail?.trim().toLowerCase() ?? "";
+  const emailB = bEmail?.trim().toLowerCase() ?? "";
+  if (emailA && emailB) return emailA === emailB;
+  const nameA = aName?.trim().toLowerCase() ?? "";
+  const nameB = bName?.trim().toLowerCase() ?? "";
+  return Boolean(nameA && nameB && nameA === nameB);
+}
+
 export function BandPaymentAgreementPdf({
   data,
 }: {
@@ -98,6 +148,16 @@ export function BandPaymentAgreementPdf({
     : data.legacyReplyFrom
       ? `Confirmed by email reply from ${data.legacyReplyFrom}`
       : "—";
+
+  const showPaidBy = data.status === "paid" || Boolean(data.paidAtLabel);
+  const paidBySameAsApprover =
+    showPaidBy &&
+    samePerson(
+      data.adminRequesterName,
+      data.adminRequesterEmail,
+      data.adminApproverName,
+      data.adminApproverEmail,
+    );
 
   return (
     <Document>
@@ -147,10 +207,28 @@ export function BandPaymentAgreementPdf({
                 An Arbor Live staff member authorized this payment amount and sent it to the
                 designated payee for e-signature agreement.
               </Text>
-              <Detail label="Requester name" value={data.adminRequesterName ?? "—"} />
-              <Detail label="Requester email" value={data.adminRequesterEmail ?? "—"} />
-              <Detail label="Approver name" value={data.adminApproverName ?? "—"} />
-              <Detail label="Approver email" value={data.adminApproverEmail ?? "—"} />
+              {paidBySameAsApprover ? (
+                <PersonBlock
+                  label="Approved and Paid By"
+                  name={data.adminRequesterName ?? data.adminApproverName}
+                  email={data.adminRequesterEmail ?? data.adminApproverEmail}
+                />
+              ) : (
+                <>
+                  <PersonBlock
+                    label="Approver"
+                    name={data.adminRequesterName}
+                    email={data.adminRequesterEmail}
+                  />
+                  {showPaidBy ? (
+                    <PersonBlock
+                      label="Paid By"
+                      name={data.adminApproverName}
+                      email={data.adminApproverEmail}
+                    />
+                  ) : null}
+                </>
+              )}
               <Detail label="Sent at" value={data.adminSentAtLabel ?? "—"} />
             </View>
           </View>
@@ -165,6 +243,16 @@ export function BandPaymentAgreementPdf({
               <View style={styles.signatureBlock}>
                 <Text style={styles.signatureLine}>Signed: {payeeAgreement}</Text>
                 <Detail label="Payee email" value={data.designatedPayeeEmail ?? "—"} />
+                <Detail
+                  label="Payout method"
+                  value={
+                    data.designatedPayeePayoutMethod === "pickup"
+                      ? "Pickup (ASSU office)"
+                      : data.designatedPayeePayoutMethod === "delivery"
+                        ? "Delivery"
+                        : "—"
+                  }
+                />
                 <Detail
                   label="Mailing address"
                   value={data.designatedPayeeMailingAddress ?? "—"}

@@ -392,9 +392,10 @@ export const approve = mutation({
       .withIndex("by_organizationId", (q) => q.eq("organizationId", resolved.id))
       .unique();
     if (onboarding) {
+      // Do not stamp identityCompletedAt — name is prefilled from the
+      // application, but the band still needs the identity step for bio.
       const stampPatch: Partial<Doc<"organizationOnboarding">> = {
         status: "in_progress",
-        identityCompletedAt: now,
         updatedAt: now,
       };
       if (application.publicHeroImageUrl) stampPatch.heroCompletedAt = now;

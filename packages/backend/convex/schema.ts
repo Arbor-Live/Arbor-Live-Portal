@@ -600,6 +600,8 @@ export default defineSchema({
     paymentReceivedAt: v.optional(v.number()),
     paymentReceivedByUserId: v.optional(v.string()),
     paymentReceiptStorageFileId: v.optional(v.id("_storage")),
+    publicQuoteLastOpenedAt: v.optional(v.number()),
+    publicQuoteOpenCount: v.optional(v.number()),
 
     billableOccurrenceCountAtSave: v.optional(v.number()),
 
@@ -615,7 +617,9 @@ export default defineSchema({
     .index("by_managerUserId", ["managerUserId"])
     .index("by_issueDate", ["issueDate"])
     .index("by_createdAt", ["createdAt"])
-    .index("by_groupId", ["groupId"]),
+    .index("by_groupId", ["groupId"])
+    .index("by_paymentReceivedAt", ["paymentReceivedAt"])
+    .index("by_approvedAt", ["approvedAt"]),
 
   invoiceLineItems: defineTable({
     invoiceId: v.id("invoices"),
@@ -739,6 +743,18 @@ export default defineSchema({
     hostGroupId: v.optional(v.id("invoiceGroups")),
     host: v.optional(v.string()),
     expectedTurnout: v.optional(v.number()),
+    actualTurnout: v.optional(v.number()),
+    cancelReasonCode: v.optional(
+      v.union(
+        v.literal("client_cancelled"),
+        v.literal("weather"),
+        v.literal("venue"),
+        v.literal("staffing"),
+        v.literal("duplicate"),
+        v.literal("other"),
+      ),
+    ),
+    cancelReasonNote: v.optional(v.string()),
     budgetUsd: v.optional(v.number()),
     dayOfLeadUserId: v.optional(v.string()),
     eventManagerUserId: v.optional(v.string()),
@@ -825,6 +841,8 @@ export default defineSchema({
     userId: v.string(),
     organizationId: v.string(),
     role: v.string(),
+    /** Free-text role in the band (e.g. Guitarist, Manager) — not org access. */
+    bandRole: v.optional(v.string()),
     active: v.boolean(),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -843,6 +861,9 @@ export default defineSchema({
     designatedPayeeName: v.optional(v.string()),
     designatedPayeeEmail: v.optional(v.string()),
     designatedPayeeMailingAddress: v.optional(v.string()),
+    designatedPayeePayoutMethod: v.optional(
+      v.union(v.literal("pickup"), v.literal("delivery")),
+    ),
     publicWebsiteUrl: v.optional(v.string()),
     publicInstagramUrl: v.optional(v.string()),
     publicYoutubeUrl: v.optional(v.string()),
@@ -1158,6 +1179,8 @@ export default defineSchema({
     email: v.string(),
     organizationId: v.string(),
     role: v.string(),
+    /** Free-text role in the band (e.g. Guitarist) — band orgs only. */
+    bandRole: v.optional(v.string()),
     /** @deprecated Use verticals + disciplines on invite acceptance. */
     teams: v.optional(v.array(v.string())),
     verticals: v.optional(v.array(v.string())),
@@ -1287,6 +1310,21 @@ export default defineSchema({
     linkedInvoiceId: v.optional(v.id("invoices")),
     reviewedByUserId: v.optional(v.string()),
     staffNotes: v.optional(v.string()),
+    reviewedAt: v.optional(v.number()),
+    convertedAt: v.optional(v.number()),
+    declinedAt: v.optional(v.number()),
+    declineReasonCode: v.optional(
+      v.union(
+        v.literal("capacity"),
+        v.literal("scope_mismatch"),
+        v.literal("budget"),
+        v.literal("lead_time"),
+        v.literal("duplicate"),
+        v.literal("client_withdrew"),
+        v.literal("other"),
+      ),
+    ),
+    declineReasonNote: v.optional(v.string()),
     submittedAt: v.number(),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -1298,6 +1336,19 @@ export default defineSchema({
     .index("by_linkedInvoiceId", ["linkedInvoiceId"])
     .index("by_venueId", ["venueId"])
     .index("by_invoiceGroupId", ["invoiceGroupId"]),
+
+  statusTransitions: defineTable({
+    entityType: v.union(v.literal("eventRequest"), v.literal("event"), v.literal("invoice")),
+    entityId: v.string(),
+    fromStatus: v.optional(v.string()),
+    toStatus: v.string(),
+    at: v.number(),
+    actorUserId: v.optional(v.string()),
+    reasonCode: v.optional(v.string()),
+    reasonNote: v.optional(v.string()),
+  })
+    .index("by_entityType_and_entityId", ["entityType", "entityId"])
+    .index("by_entityType_and_at", ["entityType", "at"]),
 
   eventBandPayments: defineTable({
     eventId: v.id("events"),
@@ -1311,6 +1362,9 @@ export default defineSchema({
     designatedPayeeEmail: v.optional(v.string()),
     designatedPayeeUserId: v.optional(v.string()),
     designatedPayeeMailingAddress: v.optional(v.string()),
+    designatedPayeePayoutMethod: v.optional(
+      v.union(v.literal("pickup"), v.literal("delivery")),
+    ),
     status: bandPaymentStatusValue,
     confirmationToken: v.string(),
     confirmationEmailSentAt: v.optional(v.number()),
@@ -1340,7 +1394,8 @@ export default defineSchema({
     .index("by_organizationId", ["organizationId"])
     .index("by_status", ["status"])
     .index("by_eventId_and_organizationId", ["eventId", "organizationId"])
-    .index("by_confirmationToken", ["confirmationToken"]),
+    .index("by_confirmationToken", ["confirmationToken"])
+    .index("by_paidAt", ["paidAt"]),
 
   bandPaymentSettings: defineTable({
     key: v.string(),

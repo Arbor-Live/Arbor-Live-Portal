@@ -1,10 +1,13 @@
 import { z } from "zod";
 
+export const bandPayeePayoutMethodSchema = z.enum(["pickup", "delivery"]);
+
 export const bandPayeeSchema = z.object({
   designatedPayeeUserId: z.string().optional(),
   designatedPayeeName: z.string().optional(),
   designatedPayeeEmail: z.string().optional(),
   designatedPayeeMailingAddress: z.string().optional(),
+  designatedPayeePayoutMethod: bandPayeePayoutMethodSchema.optional(),
 });
 
 export type BandPayeeFormValues = z.infer<typeof bandPayeeSchema>;
@@ -26,6 +29,7 @@ export type BandProfileFormValues = z.infer<typeof bandProfileSchema>;
 export const bandInviteSchema = z.object({
   email: z.string().email("Enter a valid email"),
   role: z.enum(["org_admin", "org_member"]),
+  bandRole: z.string().optional(),
 });
 
 export type BandInviteFormValues = z.infer<typeof bandInviteSchema>;

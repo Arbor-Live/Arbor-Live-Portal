@@ -195,8 +195,32 @@ export const migrateConvertedEventLinks = migrations.define({
   },
 });
 
+export const backfillEventRequestMilestoneTimestamps = migrations.define({
+  table: "eventRequests",
+  migrateOne: async (_ctx, request) => {
+    const patch: {
+      reviewedAt?: number;
+      convertedAt?: number;
+      declinedAt?: number;
+      updatedAt?: number;
+    } = {};
+    if (request.status === "in_review" && !request.reviewedAt) {
+      patch.reviewedAt = request.updatedAt;
+    }
+    if (request.status === "converted" && !request.convertedAt) {
+      patch.convertedAt = request.updatedAt;
+      if (!request.reviewedAt) patch.reviewedAt = request.updatedAt;
+    }
+    if (request.status === "declined" && !request.declinedAt) {
+      patch.declinedAt = request.updatedAt;
+    }
+    if (Object.keys(patch).length === 0) return;
+    patch.updatedAt = request.updatedAt;
+    return patch;
+  },
+});
+
 /**
- * Ordered post-deploy series. Add new migrations to the end of this list —
  * never reorder or remove completed ones (reset requires an explicit reset:true).
  */
 const MIGRATION_SERIES = [
@@ -208,6 +232,7 @@ const MIGRATION_SERIES = [
   internal.migrations.migrateRequestReferenceIds,
   internal.migrations.migrateBandPaymentReferenceIds,
   internal.migrations.migrateConvertedEventLinks,
+  internal.migrations.backfillEventRequestMilestoneTimestamps,
 ] as const;
 
 export const runAll = migrations.runner([...MIGRATION_SERIES]);

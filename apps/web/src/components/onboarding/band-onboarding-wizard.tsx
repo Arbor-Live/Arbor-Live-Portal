@@ -14,12 +14,20 @@ import { RequestWizardNav } from "@/components/request/request-wizard-nav";
 import { RequestWizardShell } from "@/components/request/request-wizard-shell";
 import { BandHeroUploadField } from "@/components/files/file-upload-field";
 import { UserSelect } from "@/components/users/user-select";
+import { BandPayeePayoutMethodField } from "@/components/bands/band-payee-payout-method-field";
 import {
   OnboardingAckCheckbox,
   OnboardingSkipButton,
   OnboardingTextarea,
 } from "@/components/onboarding/onboarding-ui";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import {
+  BAND_PAYEE_1099_NOTICE,
+  BAND_PAYEE_MAILING_ADDRESS_HINT,
+  BAND_PAYEE_MAILING_ADDRESS_PLACEHOLDER,
+  DEFAULT_BAND_PAYEE_PAYOUT_METHOD,
+  type BandPayeePayoutMethod,
+} from "@/lib/band-payout-copy";
 import { useDevPreviewReady } from "@/hooks/use-dev-preview";
 
 const spring = { type: "spring" as const, stiffness: 380, damping: 36 };
@@ -75,8 +83,10 @@ type FormState = {
   designatedPayeeName: string;
   designatedPayeeEmail: string;
   designatedPayeeMailingAddress: string;
+  designatedPayeePayoutMethod: BandPayeePayoutMethod;
   inviteDraft: string;
-  inviteEmails: string[];
+  inviteRoleDraft: string;
+  inviteEmails: Array<{ email: string; bandRole: string }>;
   isSolo: boolean;
   paymentExplainedAck: boolean;
 };
@@ -96,7 +106,9 @@ const EMPTY_FORM: FormState = {
   designatedPayeeName: "",
   designatedPayeeEmail: "",
   designatedPayeeMailingAddress: "",
+  designatedPayeePayoutMethod: DEFAULT_BAND_PAYEE_PAYOUT_METHOD,
   inviteDraft: "",
+  inviteRoleDraft: "",
   inviteEmails: [],
   isSolo: false,
   paymentExplainedAck: false,
@@ -194,6 +206,11 @@ export function BandOnboardingWizard() {
       designatedPayeeName: profile.designatedPayeeName ?? "",
       designatedPayeeEmail: profile.designatedPayeeEmail ?? "",
       designatedPayeeMailingAddress: profile.designatedPayeeMailingAddress ?? "",
+      designatedPayeePayoutMethod:
+        profile.designatedPayeePayoutMethod === "pickup" ||
+        profile.designatedPayeePayoutMethod === "delivery"
+          ? profile.designatedPayeePayoutMethod
+          : DEFAULT_BAND_PAYEE_PAYOUT_METHOD,
     }));
   }, [profile]);
 
@@ -209,8 +226,26 @@ export function BandOnboardingWizard() {
     [pendingEmails, sessionSentEmails],
   );
   const displayedInviteEmails = useMemo(
-    () => Array.from(new Set([...form.inviteEmails, ...pendingEmails])),
-    [form.inviteEmails, pendingEmails],
+    () =>
+      Array.from(
+        new Map(
+          [
+            ...form.inviteEmails.map((row) => ({
+              email: normalizeEmail(row.email),
+              bandRole: row.bandRole,
+              pending: false,
+            })),
+            ...pendingEmails.map((email) => ({
+              email,
+              bandRole:
+                pendingInvites?.find((invite) => normalizeEmail(invite.email) === email)?.bandRole ??
+                "",
+              pending: true,
+            })),
+          ].map((row) => [row.email, row]),
+        ).values(),
+      ),
+    [form.inviteEmails, pendingEmails, pendingInvites],
   );
 
   useEffect(() => {
@@ -334,10 +369,17 @@ export function BandOnboardingWizard() {
 
       if (currentStep === "members") {
         const queued = Array.from(
-          new Set([
-            ...form.inviteEmails.map(normalizeEmail).filter(Boolean),
-            ...pendingEmails,
-          ]),
+          new Map(
+            [
+              ...form.inviteEmails.map((row) => ({
+                email: normalizeEmail(row.email),
+                bandRole: row.bandRole.trim(),
+              })),
+              ...pendingEmails.map((email) => ({ email, bandRole: "" })),
+            ]
+              .filter((row) => row.email)
+              .map((row) => [row.email, row]),
+          ).values(),
         );
         const sentSet = new Set(sentInviteEmails);
         const hasPendingOrSent = queued.length > 0 || sentSet.size > 0;
@@ -354,23 +396,26 @@ export function BandOnboardingWizard() {
           await saveBandOnboardingStep({ soloAcknowledged: true });
           setInviteConfirmation(null);
         } else {
-          const toSend = queued.filter((email) => !sentSet.has(email));
-          for (const email of toSend) {
-            await inviteMember({ email, role: "org_member" });
+          const toSend = queued.filter((row) => !sentSet.has(row.email));
+          for (const row of toSend) {
+            await inviteMember({
+              email: row.email,
+              role: "org_member",
+              bandRole: row.bandRole || undefined,
+            });
           }
           if (toSend.length > 0) {
-            setSessionSentEmails((prev) => Array.from(new Set([...prev, ...toSend])));
-          }
-          await saveBandOnboardingStep({ membersCompleted: true });
-          if (toSend.length > 0) {
+            setSessionSentEmails((prev) => [
+              ...prev,
+              ...toSend.map((row) => row.email),
+            ]);
             setInviteConfirmation(
               toSend.length === 1
-                ? `Invitation sent to ${toSend[0]}.`
+                ? `Invitation sent to ${toSend[0]!.email}.`
                 : `Invitations sent to ${toSend.length} bandmates.`,
             );
-          } else if (queued.length > 0) {
-            setInviteConfirmation("Invitations already sent — no new emails were notified.");
           }
+          await saveBandOnboardingStep({ membersCompleted: true });
         }
         advance();
         return;
@@ -379,6 +424,14 @@ export function BandOnboardingWizard() {
       if (currentStep === "rates") {
         if (form.performerHourlyRateUsd < 0) {
           setFieldError("Hourly rate must be 0 or greater.");
+          return;
+        }
+        if (!form.designatedPayeeName.trim() || !form.designatedPayeeEmail.trim()) {
+          setFieldError("Choose or enter a designated payee name and email.");
+          return;
+        }
+        if (!form.designatedPayeeMailingAddress.trim()) {
+          setFieldError("Enter a mailing address (required for Stanford / GrantEd).");
           return;
         }
         if (previewOnly) {
@@ -392,6 +445,7 @@ export function BandOnboardingWizard() {
           designatedPayeeName: form.designatedPayeeName.trim() || undefined,
           designatedPayeeEmail: form.designatedPayeeEmail.trim() || undefined,
           designatedPayeeMailingAddress: form.designatedPayeeMailingAddress.trim() || undefined,
+          designatedPayeePayoutMethod: form.designatedPayeePayoutMethod,
         });
         await saveBandOnboardingStep({ ratesPayeeCompleted: true });
         advance();
@@ -463,8 +517,8 @@ export function BandOnboardingWizard() {
       const email = normalizeEmail(invite.email);
       if (email) pendingEmails.add(email);
     }
-    for (const email of form.inviteEmails) {
-      const normalized = normalizeEmail(email);
+    for (const row of form.inviteEmails) {
+      const normalized = normalizeEmail(row.email);
       if (normalized) pendingEmails.add(normalized);
     }
     for (const email of sentInviteEmails) {
@@ -514,14 +568,18 @@ export function BandOnboardingWizard() {
       setFieldError("Enter a valid email address.");
       return;
     }
-    if (form.inviteEmails.includes(email)) {
+    if (form.inviteEmails.some((row) => row.email === email)) {
       setFieldError("That email is already on the invite list.");
       return;
     }
     setFieldError(null);
     patch({
-      inviteEmails: [...form.inviteEmails, email],
+      inviteEmails: [
+        ...form.inviteEmails,
+        { email, bandRole: form.inviteRoleDraft.trim() },
+      ],
       inviteDraft: "",
+      inviteRoleDraft: "",
     });
   };
 
@@ -724,8 +782,8 @@ export function BandOnboardingWizard() {
                   />
                   {!form.isSolo ? (
                     <div className="space-y-3">
-                      <div className="flex gap-2">
-                        <div className="min-w-0 flex-1 space-y-2">
+                      <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+                        <div className="min-w-0 space-y-2">
                           <Label htmlFor="band-invite-email">Bandmate email</Label>
                           <Input
                             id="band-invite-email"
@@ -741,10 +799,25 @@ export function BandOnboardingWizard() {
                             placeholder="name@example.com"
                           />
                         </div>
+                        <div className="min-w-0 space-y-2">
+                          <Label htmlFor="band-invite-role">Role in band</Label>
+                          <Input
+                            id="band-invite-role"
+                            value={form.inviteRoleDraft}
+                            onChange={(event) => patch({ inviteRoleDraft: event.target.value })}
+                            onKeyDown={(event) => {
+                              if (event.key !== "Enter") return;
+                              event.preventDefault();
+                              event.stopPropagation();
+                              addInviteEmail();
+                            }}
+                            placeholder="Guitarist, Manager…"
+                          />
+                        </div>
                         <Button
                           type="button"
                           variant="secondary"
-                          className="mt-7 shrink-0 gap-1.5"
+                          className="shrink-0 gap-1.5 sm:mb-0"
                           onClick={addInviteEmail}
                         >
                           <PlusIcon className="size-4" weight="bold" />
@@ -754,15 +827,20 @@ export function BandOnboardingWizard() {
 
                       {displayedInviteEmails.length > 0 ? (
                         <ul className="space-y-2">
-                          {displayedInviteEmails.map((email) => {
-                            const alreadySent = sentInviteEmails.includes(email);
+                          {displayedInviteEmails.map((row) => {
+                            const alreadySent = sentInviteEmails.includes(row.email) || row.pending;
                             return (
                               <li
-                                key={email}
+                                key={row.email}
                                 className="flex items-center justify-between gap-2 border border-border/50 bg-background/50 px-3 py-2 text-sm"
                               >
                                 <span className="min-w-0 truncate">
-                                  {email}
+                                  {row.email}
+                                  {row.bandRole ? (
+                                    <span className="ml-2 text-xs text-muted-foreground">
+                                      {row.bandRole}
+                                    </span>
+                                  ) : null}
                                   {alreadySent ? (
                                     <span className="ml-2 text-xs text-muted-foreground">
                                       invited
@@ -775,10 +853,12 @@ export function BandOnboardingWizard() {
                                     className="shrink-0 text-muted-foreground hover:text-foreground"
                                     onClick={() =>
                                       patch({
-                                        inviteEmails: form.inviteEmails.filter((row) => row !== email),
+                                        inviteEmails: form.inviteEmails.filter(
+                                          (entry) => entry.email !== row.email,
+                                        ),
                                       })
                                     }
-                                    aria-label={`Remove ${email}`}
+                                    aria-label={`Remove ${row.email}`}
                                   >
                                     <XIcon className="size-4" weight="bold" />
                                   </button>
@@ -789,8 +869,8 @@ export function BandOnboardingWizard() {
                         </ul>
                       ) : (
                         <p className="text-xs text-muted-foreground">
-                          Add each bandmate&apos;s email, then continue. Invites send when you click
-                          Next.
+                          Add each bandmate&apos;s email and role, then continue. Invites send when
+                          you click Next.
                         </p>
                       )}
                     </div>
@@ -865,13 +945,25 @@ export function BandOnboardingWizard() {
                         placeholder="Payee email"
                       />
                     </div>
-                    <OnboardingTextarea
-                      value={form.designatedPayeeMailingAddress}
-                      onChange={(event) =>
-                        patch({ designatedPayeeMailingAddress: event.target.value })
-                      }
-                      placeholder={"Mailing address\n123 Example St\nStanford, CA 94305"}
+                    <BandPayeePayoutMethodField
+                      value={form.designatedPayeePayoutMethod}
+                      onChange={(method) => patch({ designatedPayeePayoutMethod: method })}
+                      idPrefix="band-onboarding"
                     />
+                    <div className="space-y-1">
+                      <Label htmlFor="band-payee-mailing-address">Mailing address</Label>
+                      <OnboardingTextarea
+                        id="band-payee-mailing-address"
+                        value={form.designatedPayeeMailingAddress}
+                        onChange={(event) =>
+                          patch({ designatedPayeeMailingAddress: event.target.value })
+                        }
+                        placeholder={BAND_PAYEE_MAILING_ADDRESS_PLACEHOLDER}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        {BAND_PAYEE_MAILING_ADDRESS_HINT}
+                      </p>
+                    </div>
                   </div>
                   {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
                 </div>
@@ -888,6 +980,7 @@ export function BandOnboardingWizard() {
                       Your payee is responsible for distributing payment to the rest of the band.
                       You can update your payee or rate anytime from your band settings.
                     </p>
+                    <p>{BAND_PAYEE_1099_NOTICE}</p>
                   </div>
                   <OnboardingAckCheckbox
                     checked={form.paymentExplainedAck}

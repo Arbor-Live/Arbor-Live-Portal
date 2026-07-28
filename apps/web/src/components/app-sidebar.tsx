@@ -93,6 +93,7 @@ const inventorySubItems: NavSubItem[] = [
 
 const financialHubSubItems: NavSubItem[] = [
   { title: "Overview", url: "/dashboard/financial-hub" },
+  { title: "Insights", url: "/dashboard/financial-hub/insights" },
   { title: "Invoices", url: "/dashboard/financial-hub/invoices" },
   { title: "Payments", url: "/dashboard/financial-hub/payments" },
   { title: "Band Payouts", url: "/dashboard/financial-hub/band-payouts" },
@@ -235,6 +236,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
       : "skip",
   )
   const pendingAvailabilityCount = navBadges?.pendingAvailability
+  const pendingBookingRequestsCount = navBadges?.pendingBookingRequests
   const pendingBandApplicationsCount = navBadges?.pendingBandApplications
   const pendingCrewApplicationsCount = navBadges?.pendingCrewApplications
   const pendingDamageReportsCount = navBadges?.pendingDamageReports
@@ -268,6 +270,8 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
     switch (url) {
       case "/dashboard/events/my-availability":
         return pendingAvailabilityCount ?? 0
+      case "/dashboard/events/requests":
+        return pendingBookingRequestsCount ?? 0
       case "/dashboard/events/crew-scheduling":
         return unconfirmedEventCount
       case "/dashboard/users/band-applications":
@@ -316,15 +320,17 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
             }}
             disabled={!myOrganizations?.length || !activeOrganization?.organizationId}
           >
-            <SelectTrigger className="w-full bg-background">
+            <SelectTrigger className="w-full min-w-0 bg-background [&>span]:min-w-0 [&>span]:truncate">
               <SelectValue placeholder="Select active organization" />
             </SelectTrigger>
             <SelectContent>
               {(myOrganizations ?? []).map((org) => (
-                <SelectItem key={org.organizationId} value={org.organizationId}>
-                  {org.name}
-                  <span className="ml-2 text-xs text-muted-foreground">
-                    {org.organizationType === "arbor_internal" ? "Arbor Internal" : "Band"}
+                <SelectItem key={org.organizationId} value={org.organizationId} className="min-w-0">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="truncate">{org.name}</span>
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      {org.organizationType === "arbor_internal" ? "Arbor Internal" : "Band"}
+                    </span>
                   </span>
                 </SelectItem>
               ))}

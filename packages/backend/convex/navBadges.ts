@@ -38,6 +38,7 @@ export const getNavBadges = query({
   returns: v.object({
     pendingAvailability: v.number(),
     unconfirmedCrew: v.number(),
+    pendingBookingRequests: v.number(),
     pendingBandApplications: v.number(),
     pendingCrewApplications: v.number(),
     pendingDamageReports: v.number(),
@@ -49,6 +50,7 @@ export const getNavBadges = query({
     const [
       pendingAvailability,
       unconfirmedCrew,
+      pendingBookingRequests,
       pendingBandApplications,
       pendingCrewApplications,
       pendingDamageReports,
@@ -60,6 +62,7 @@ export const getNavBadges = query({
       args.includeArborInternal && args.includeAdmin
         ? countUnconfirmedCrew(ctx, args.rangeStart, args.rangeEnd)
         : Promise.resolve(0),
+      args.includeArborInternal ? countOpenBookingRequests(ctx) : Promise.resolve(0),
       args.includeAdmin ? countSubmittedBandApplications(ctx) : Promise.resolve(0),
       args.includeAdmin ? countSubmittedCrewApplications(ctx) : Promise.resolve(0),
       args.includeArborInternal ? countPendingDamageReports(ctx) : Promise.resolve(0),
@@ -69,6 +72,7 @@ export const getNavBadges = query({
     return {
       pendingAvailability,
       unconfirmedCrew,
+      pendingBookingRequests,
       pendingBandApplications,
       pendingCrewApplications,
       pendingDamageReports,
@@ -130,6 +134,19 @@ async function countUnconfirmedCrew(ctx: QueryCtx, rangeStart: number, rangeEnd:
     ),
   );
   return shiftPages.filter((shifts) => !computeShiftStats(shifts).isCrewConfirmed).length;
+}
+
+async function countOpenBookingRequests(ctx: QueryCtx) {
+  await requireArborInternalContext(ctx);
+  const submitted = await ctx.db
+    .query("eventRequests")
+    .withIndex("by_status_and_submittedAt", (q) => q.eq("status", "submitted"))
+    .take(200);
+  const inReview = await ctx.db
+    .query("eventRequests")
+    .withIndex("by_status_and_submittedAt", (q) => q.eq("status", "in_review"))
+    .take(200);
+  return submitted.length + inReview.length;
 }
 
 async function countSubmittedBandApplications(ctx: QueryCtx) {

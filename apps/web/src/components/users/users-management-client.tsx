@@ -17,6 +17,14 @@ import { BandHeroUploadField } from "@/components/files/file-upload-field";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import {
+  BAND_PAYEE_1099_NOTICE,
+  BAND_PAYEE_MAILING_ADDRESS_HINT,
+  BAND_PAYEE_MAILING_ADDRESS_PLACEHOLDER,
+  DEFAULT_BAND_PAYEE_PAYOUT_METHOD,
+  type BandPayeePayoutMethod,
+} from "@/lib/band-payout-copy";
+import { BandPayeePayoutMethodField } from "@/components/bands/band-payee-payout-method-field";
+import {
   CREW_RATE_MODE_OPTIONS,
   PAYROLL_METHOD_OPTIONS,
   USER_DISCIPLINE_OPTIONS,
@@ -40,7 +48,12 @@ type MembershipDraft = {
   role: string;
 };
 
-type OrgOption = { id: string; name: string; slug?: string };
+type OrgOption = {
+  id: string;
+  name: string;
+  slug?: string;
+  organizationType?: "arbor_internal" | "band" | "dj" | string;
+};
 
 type AdminUser = NonNullable<ReturnType<typeof useQuery<typeof api.users.listUsersForAdmin>>>[number];
 
@@ -96,9 +109,21 @@ function MembershipCheckboxes<T extends string>({
 function isArborOrg(orgOptions: OrgOption[], orgId: string) {
   const org = orgOptions.find((entry) => entry.id === orgId);
   if (!org) return false;
+  if (org.organizationType === "arbor_internal") return true;
   const name = org.name.trim().toLowerCase();
   const slug = (org.slug ?? "").trim().toLowerCase();
   return name === "arbor live" || slug === "arbor-live";
+}
+
+function findArborLiveOrgId(orgOptions: OrgOption[]) {
+  const byType = orgOptions.find((org) => org.organizationType === "arbor_internal");
+  if (byType) return byType.id;
+  const byName = orgOptions.find((org) => {
+    const name = org.name.trim().toLowerCase();
+    const slug = (org.slug ?? "").trim().toLowerCase();
+    return name === "arbor live" || slug === "arbor-live";
+  });
+  return byName?.id ?? "";
 }
 
 function getRoleOptionsForOrg(orgOptions: OrgOption[], orgId: string) {
@@ -140,6 +165,10 @@ function bandOrgValuesFromRow(org: BandOrgRow): BandOrgProfileFormValues {
     designatedPayeeName: org.designatedPayeeName ?? "",
     designatedPayeeEmail: org.designatedPayeeEmail ?? "",
     designatedPayeeMailingAddress: org.designatedPayeeMailingAddress ?? "",
+    designatedPayeePayoutMethod:
+      org.designatedPayeePayoutMethod === "pickup" || org.designatedPayeePayoutMethod === "delivery"
+        ? org.designatedPayeePayoutMethod
+        : DEFAULT_BAND_PAYEE_PAYOUT_METHOD,
     publicWebsiteUrl: org.publicWebsiteUrl ?? "",
     publicInstagramUrl: org.publicInstagramUrl ?? "",
     publicYoutubeUrl: org.publicYoutubeUrl ?? "",
@@ -157,16 +186,32 @@ export function UsersManagementClient({
   const organizations = useQuery(api.users.listOrganizationsAdmin, {});
   const bandOrganizations = useQuery(api.users.listBandOrganizationsAdmin, {});
   const [selectedOrganizationId, setSelectedOrganizationId] = useState("");
-  const [inviteStatus, setInviteStatus] = useState<"all" | "pending" | "accepted" | "expired" | "cancelled">("all");
-  const users = useQuery(api.users.listUsersForAdmin, {
-    organizationId: selectedOrganizationId || undefined,
-  });
+  const [inviteStatus, setInviteStatus] = useState<"all" | "pending" | "accepted" | "expired" | "cancelled">(
+    "pending",
+  );
+  const orgOptions = useMemo(() => organizations ?? [], [organizations]);
+  const defaultOrgId = useMemo(
+    () => findArborLiveOrgId(orgOptions) || orgOptions[0]?.id || "",
+    [orgOptions],
+  );
+  const resolvedOrgId = selectedOrganizationId || defaultOrgId;
+  const users = useQuery(
+    api.users.listUsersForAdmin,
+    organizations === undefined
+      ? "skip"
+      : { organizationId: resolvedOrgId || undefined },
+  );
   const crewOnboarding = useQuery(api.onboarding.listCrewOnboardingForAdmin, {});
   const waiveOnboarding = useMutation(api.onboarding.waiveCrewOnboarding);
-  const invitations = useQuery(api.users.listInvitationsAdmin, {
-    organizationId: selectedOrganizationId || undefined,
-    status: inviteStatus === "all" ? undefined : inviteStatus,
-  });
+  const invitations = useQuery(
+    api.users.listInvitationsAdmin,
+    organizations === undefined
+      ? "skip"
+      : {
+          organizationId: resolvedOrgId || undefined,
+          status: inviteStatus === "all" ? undefined : inviteStatus,
+        },
+  );
   const createOrganization = useMutation(api.users.createOrganizationAdmin);
   const inviteUser = useMutation(api.users.inviteUserAdmin);
   const resendInvite = useMutation(api.users.resendInviteAdmin);
@@ -190,8 +235,6 @@ export function UsersManagementClient({
   const showAccess = view === "all" || view === "access";
   const showRates = view === "all";
 
-  const orgOptions = useMemo(() => organizations ?? [], [organizations]);
-  const resolvedOrgId = selectedOrganizationId || orgOptions[0]?.id || "";
   const onboardingByUserId = useMemo(() => {
     const map = new Map<string, NonNullable<typeof crewOnboarding>[number]>();
     for (const row of crewOnboarding ?? []) {
@@ -383,6 +426,29 @@ export function UsersManagementClient({
             <CardTitle>Users</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="min-w-[220px] flex-1 space-y-1">
+                <Label>Organization</Label>
+                <Select value={resolvedOrgId} onValueChange={setSelectedOrganizationId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select organization" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {orgOptions.map((org) => (
+                      <SelectItem key={`access-org-${org.id}`} value={org.id}>
+                        {org.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button type="button" onClick={() => setInviteModalOpen(true)}>
+                Invite User
+              </Button>
+              <Button type="button" variant="outline" onClick={() => setCreateModalOpen(true)}>
+                Create User
+              </Button>
+            </div>
             <div className="flex flex-wrap gap-3">
               <div className="max-w-[240px] space-y-1">
                 <Label>Access</Label>
@@ -390,7 +456,7 @@ export function UsersManagementClient({
                   value={accessFilter}
                   onValueChange={(value) => setAccessFilter(value as "active" | "removed" | "all")}
                 >
-                  <SelectTrigger data-testid="user-access-filter">
+                  <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -424,10 +490,6 @@ export function UsersManagementClient({
                     <th className="px-3 py-2 font-medium">Email</th>
                     <th className="px-3 py-2 font-medium">Role</th>
                     <th className="px-3 py-2 font-medium">Onboarding</th>
-                    <th className="px-3 py-2 font-medium">Title</th>
-                    <th className="px-3 py-2 font-medium">Phone</th>
-                    <th className="px-3 py-2 font-medium">Hourly Rate</th>
-                    <th className="px-3 py-2 font-medium">Default Org</th>
                     <th className="px-3 py-2 font-medium">Active</th>
                     <th className="px-3 py-2 font-medium">Options</th>
                   </tr>
@@ -472,47 +534,30 @@ export function UsersManagementClient({
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex flex-wrap items-end gap-3">
-              <div className="min-w-[220px] flex-1 space-y-1">
-                <Label>Organization</Label>
-                <Select value={resolvedOrgId} onValueChange={setSelectedOrganizationId}>
-                  <SelectTrigger data-testid="invitations-org-trigger">
-                    <SelectValue placeholder="Select organization" />
+              <div className="max-w-[240px] space-y-1">
+                <Label>Status Filter</Label>
+                <Select
+                  value={inviteStatus}
+                  onValueChange={(value) =>
+                    setInviteStatus(value as "all" | "pending" | "accepted" | "expired" | "cancelled")
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {orgOptions.map((org) => (
-                      <SelectItem key={`invite-org-${org.id}`} value={org.id}>
-                        {org.name}
-                      </SelectItem>
-                    ))}
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="accepted">Accepted</SelectItem>
+                    <SelectItem value="expired">Expired</SelectItem>
+                    <SelectItem value="cancelled">Cancelled</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-              <Button type="button" onClick={() => setInviteModalOpen(true)}>
-                Invite User
-              </Button>
-              <Button type="button" variant="outline" onClick={() => setCreateModalOpen(true)}>
-                Create User
-              </Button>
-            </div>
-            <div className="max-w-[240px] space-y-1">
-              <Label>Status Filter</Label>
-              <Select
-                value={inviteStatus}
-                onValueChange={(value) =>
-                  setInviteStatus(value as "all" | "pending" | "accepted" | "expired" | "cancelled")
-                }
-              >
-                <SelectTrigger data-testid="invitation-status-filter">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="accepted">Accepted</SelectItem>
-                  <SelectItem value="expired">Expired</SelectItem>
-                  <SelectItem value="cancelled">Cancelled</SelectItem>
-                </SelectContent>
-              </Select>
+              <p className="pb-2 text-xs text-muted-foreground">
+                Filtered to the organization selected above. Accepted and cancelled invites are hidden
+                unless you change the status filter.
+              </p>
             </div>
             <div className="overflow-x-auto rounded-md border">
               <table className="min-w-full text-sm">
@@ -529,9 +574,8 @@ export function UsersManagementClient({
                   {(invitations ?? []).map((invite) => (
                     <tr
                       key={invite.id}
+                      data-testid={`invite-row-${invite.id}`}
                       className="border-b last:border-b-0"
-                      data-testid="invitation-row"
-                      data-invite-email={invite.email}
                     >
                       <td className="px-3 py-2">{invite.email}</td>
                       <td className="px-3 py-2">{invite.organizationName}</td>
@@ -770,9 +814,8 @@ function UserAdminRow({
   return (
     <>
       <tr
+        data-testid={`user-row-${user.id}`}
         className={`border-b align-top ${removed ? "text-muted-foreground" : ""}`}
-        data-testid="user-row"
-        data-user-email={user.email}
       >
         <td className="px-3 py-2">{user.name}</td>
         <td className="px-3 py-2">{user.email}</td>
@@ -781,7 +824,7 @@ function UserAdminRow({
             value={form.watch("role")}
             onValueChange={(value) => form.setValue("role", value, { shouldDirty: true })}
           >
-            <SelectTrigger data-testid="user-role-trigger">
+            <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -803,95 +846,6 @@ function UserAdminRow({
           )}
         </td>
         <td className="px-3 py-2">
-          <Input
-            value={form.watch("title")}
-            onChange={(e) => form.setValue("title", e.target.value, { shouldDirty: true })}
-          />
-        </td>
-        <td className="px-3 py-2">
-          <Input
-            value={form.watch("phone")}
-            onChange={(e) => form.setValue("phone", e.target.value, { shouldDirty: true })}
-          />
-        </td>
-        <td className="px-3 py-2">
-          <div className="space-y-1">
-            <Select
-              value={form.watch("rateMode")}
-              onValueChange={(value) =>
-                form.setValue(
-                  "rateMode",
-                  value as (typeof CREW_RATE_MODE_OPTIONS)[number],
-                  { shouldDirty: true },
-                )
-              }
-            >
-              <SelectTrigger data-testid="user-rate-mode-trigger">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="normal">Normal</SelectItem>
-                <SelectItem value="lead">Lead</SelectItem>
-                <SelectItem value="custom">Custom</SelectItem>
-              </SelectContent>
-            </Select>
-            {form.watch("rateMode") === "custom" ? (
-              <Input
-                data-testid="user-custom-rate-input"
-                value={form.watch("hourlyRateUsd")}
-                onChange={(e) => form.setValue("hourlyRateUsd", e.target.value, { shouldDirty: true })}
-                placeholder="USD"
-              />
-            ) : (
-              <p className="text-xs text-muted-foreground" data-testid="user-synced-rate">
-                ${user.hourlyRateUsd ?? 0}/hr (synced)
-              </p>
-            )}
-            <Select
-              value={form.watch("payrollMethod")}
-              onValueChange={(value) =>
-                form.setValue(
-                  "payrollMethod",
-                  value as (typeof PAYROLL_METHOD_OPTIONS)[number],
-                  { shouldDirty: true },
-                )
-              }
-            >
-              <SelectTrigger data-testid="user-payroll-trigger">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="stanford">Stanford</SelectItem>
-                <SelectItem value="external">External</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </td>
-        <td className="px-3 py-2">
-          <Select
-            value={form.watch("defaultOrganizationId") || NO_DEFAULT_ORG}
-            onValueChange={(value) =>
-              form.setValue(
-                "defaultOrganizationId",
-                value === NO_DEFAULT_ORG ? "" : value,
-                { shouldDirty: true },
-              )
-            }
-          >
-            <SelectTrigger data-testid="user-default-org-trigger">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={NO_DEFAULT_ORG}>No default org</SelectItem>
-              {orgOptions.map((org) => (
-                <SelectItem key={`user-org-${user.id}-${org.id}`} value={org.id}>
-                  {org.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </td>
-        <td className="px-3 py-2">
           <div className="space-y-1">
             <label className="flex items-center gap-2 text-sm">
               <input
@@ -910,7 +864,6 @@ function UserAdminRow({
               <Button
                 type="button"
                 size="sm"
-                data-testid="user-save"
                 disabled={form.saveStatus === "saving"}
                 onClick={() => void form.handleSubmit(onSave)()}
               >
@@ -927,7 +880,7 @@ function UserAdminRow({
                 if (action === "reactivate") onSetAccess(false);
               }}
             >
-              <SelectTrigger className="min-w-[140px]" data-testid="user-actions-trigger">
+              <SelectTrigger className="min-w-[140px]">
                 <SelectValue placeholder="Select..." />
               </SelectTrigger>
               <SelectContent>
@@ -949,10 +902,100 @@ function UserAdminRow({
         </td>
       </tr>
       {expanded ? (
-        <tr className="border-b bg-muted/20" data-testid="user-details-row" data-user-email={user.email}>
-          <td className="px-3 py-2 text-xs text-muted-foreground">Advanced fields</td>
-          <td className="px-3 py-2" colSpan={9}>
+        <tr data-testid={`user-details-${user.id}`} className="border-b bg-muted/20">
+          <td className="px-3 py-2 text-xs text-muted-foreground">Details</td>
+          <td className="px-3 py-2" colSpan={5}>
             <div className="grid gap-2 md:grid-cols-2">
+              <div className="space-y-1">
+                <Label className="text-xs">Title</Label>
+                <Input
+                  value={form.watch("title")}
+                  onChange={(e) => form.setValue("title", e.target.value, { shouldDirty: true })}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Phone</Label>
+                <Input
+                  value={form.watch("phone")}
+                  onChange={(e) => form.setValue("phone", e.target.value, { shouldDirty: true })}
+                />
+              </div>
+              <div data-testid={`user-rate-${user.id}`} className="space-y-1">
+                <Label className="text-xs">Hourly rate</Label>
+                <Select
+                  value={form.watch("rateMode")}
+                  onValueChange={(value) =>
+                    form.setValue(
+                      "rateMode",
+                      value as (typeof CREW_RATE_MODE_OPTIONS)[number],
+                      { shouldDirty: true },
+                    )
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="normal">Normal</SelectItem>
+                    <SelectItem value="lead">Lead</SelectItem>
+                    <SelectItem value="custom">Custom</SelectItem>
+                  </SelectContent>
+                </Select>
+                {form.watch("rateMode") === "custom" ? (
+                  <Input
+                    value={form.watch("hourlyRateUsd")}
+                    onChange={(e) => form.setValue("hourlyRateUsd", e.target.value, { shouldDirty: true })}
+                    placeholder="USD"
+                  />
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    ${user.hourlyRateUsd ?? 0}/hr (synced)
+                  </p>
+                )}
+                <Select
+                  value={form.watch("payrollMethod")}
+                  onValueChange={(value) =>
+                    form.setValue(
+                      "payrollMethod",
+                      value as (typeof PAYROLL_METHOD_OPTIONS)[number],
+                      { shouldDirty: true },
+                    )
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="stanford">Stanford</SelectItem>
+                    <SelectItem value="external">External</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Default organization</Label>
+                <Select
+                  value={form.watch("defaultOrganizationId") || NO_DEFAULT_ORG}
+                  onValueChange={(value) =>
+                    form.setValue(
+                      "defaultOrganizationId",
+                      value === NO_DEFAULT_ORG ? "" : value,
+                      { shouldDirty: true },
+                    )
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NO_DEFAULT_ORG}>No default org</SelectItem>
+                    {orgOptions.map((org) => (
+                      <SelectItem key={`user-org-${user.id}-${org.id}`} value={org.id}>
+                        {org.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               {onboarding ? (
                 <div className="rounded-md border p-2 md:col-span-2">
                   <p className="mb-2 text-xs font-medium">Onboarding checklist</p>
@@ -1024,16 +1067,11 @@ function UserAdminRow({
                   </div>
                 </div>
               </div>
-              <div className="rounded-md border p-2">
+              <div data-testid={`user-memberships-${user.id}`} className="rounded-md border p-2">
                 <p className="mb-2 text-xs font-medium">Organization Memberships</p>
                 <div className="space-y-1 text-xs text-muted-foreground">
                   {user.organizationMemberships.map((membership) => (
-                    <div
-                      key={`${user.id}-${membership.organizationId}`}
-                      className="flex items-center gap-1"
-                      data-testid="user-membership"
-                      data-organization-name={membership.organizationName}
-                    >
+                    <div key={`${user.id}-${membership.organizationId}`} className="flex items-center gap-1">
                       <span>
                         {membership.organizationName} ({membership.role})
                       </span>
@@ -1060,7 +1098,7 @@ function UserAdminRow({
                       });
                     }}
                   >
-                    <SelectTrigger className="h-8 text-xs" data-testid="membership-org-trigger">
+                    <SelectTrigger className="h-8 text-xs">
                       <SelectValue placeholder="Add membership org..." />
                     </SelectTrigger>
                     <SelectContent>
@@ -1077,7 +1115,7 @@ function UserAdminRow({
                     onValueChange={(value) => setMembershipDraft((prev) => ({ ...prev, role: value }))}
                     disabled={!membershipDraft.organizationId}
                   >
-                    <SelectTrigger className="h-8 text-xs" data-testid="membership-role-trigger">
+                    <SelectTrigger className="h-8 text-xs">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -1124,6 +1162,11 @@ function BandOrgAdminRow({
   }, [org, form]);
 
   const persist = async (values: BandOrgProfileFormValues) => {
+    const payoutMethod =
+      values.designatedPayeePayoutMethod === "pickup" ||
+      values.designatedPayeePayoutMethod === "delivery"
+        ? values.designatedPayeePayoutMethod
+        : DEFAULT_BAND_PAYEE_PAYOUT_METHOD;
     await updateBandOrganizationProfileAdmin({
       organizationId: org.organizationId,
       displayName: values.displayName || undefined,
@@ -1133,6 +1176,7 @@ function BandOrgAdminRow({
       designatedPayeeName: values.designatedPayeeName || undefined,
       designatedPayeeEmail: values.designatedPayeeEmail || undefined,
       designatedPayeeMailingAddress: values.designatedPayeeMailingAddress || undefined,
+      designatedPayeePayoutMethod: payoutMethod,
       publicWebsiteUrl: values.publicWebsiteUrl || undefined,
       publicInstagramUrl: values.publicInstagramUrl || undefined,
       publicYoutubeUrl: values.publicYoutubeUrl || undefined,
@@ -1153,6 +1197,13 @@ function BandOrgAdminRow({
       },
     },
   );
+
+  const payoutMethod =
+    form.watch("designatedPayeePayoutMethod") === "delivery"
+      ? "delivery"
+      : form.watch("designatedPayeePayoutMethod") === "pickup"
+        ? "pickup"
+        : DEFAULT_BAND_PAYEE_PAYOUT_METHOD;
 
   return (
     <>
@@ -1249,14 +1300,25 @@ function BandOrgAdminRow({
                   }
                 />
               </div>
+              <BandPayeePayoutMethodField
+                value={payoutMethod}
+                onChange={(method: BandPayeePayoutMethod) => {
+                  form.setValue("designatedPayeePayoutMethod", method, { shouldDirty: true });
+                }}
+                idPrefix={`admin-band-${org.organizationId}`}
+              />
               <textarea
                 className="min-h-20 w-full rounded-md border bg-background px-3 py-2 text-sm"
-                placeholder="Mailing address"
+                placeholder={BAND_PAYEE_MAILING_ADDRESS_PLACEHOLDER}
                 value={form.watch("designatedPayeeMailingAddress")}
                 onChange={(e) =>
-                  form.setValue("designatedPayeeMailingAddress", e.target.value, { shouldDirty: true })
+                  form.setValue("designatedPayeeMailingAddress", e.target.value, {
+                    shouldDirty: true,
+                  })
                 }
               />
+              <p className="text-xs text-muted-foreground">{BAND_PAYEE_MAILING_ADDRESS_HINT}</p>
+              <p className="text-xs text-muted-foreground">{BAND_PAYEE_1099_NOTICE}</p>
             </div>
             <div className="mt-3 grid gap-2 md:grid-cols-2">
               <label className="flex items-center gap-2 text-xs">
@@ -1355,7 +1417,10 @@ function InviteUserModal({
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 pb-24">
+    <div
+      data-testid="invite-user-modal"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 pb-24"
+    >
       <Card className="w-full max-w-lg">
         <CardHeader>
           <CardTitle>Invite User</CardTitle>
@@ -1371,7 +1436,7 @@ function InviteUserModal({
                     value={form.watch("role")}
                     onValueChange={(value) => form.setValue("role", value, { shouldDirty: true })}
                   >
-                    <SelectTrigger data-testid="invite-role-trigger">
+                    <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -1414,7 +1479,7 @@ function InviteUserModal({
                         )
                       }
                     >
-                      <SelectTrigger data-testid="invite-rate-mode-trigger">
+                      <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -1436,7 +1501,7 @@ function InviteUserModal({
                         )
                       }
                     >
-                      <SelectTrigger data-testid="invite-payroll-trigger">
+                      <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -1507,11 +1572,10 @@ function EditInviteModal({
   });
 
   useEffect(() => {
-    // Bail once edited, the way every other row in this file does.
-    // `useConvexForm` busts its memo on `isDirty`, so without this guard the
-    // first change re-runs the effect and resets the field straight back to the
-    // invitation's stored values — leaving the role and team pickers unable to
-    // hold any edit at all.
+    // Bail while dirty, as every other `useConvexForm` row does. `form` is in
+    // the deps and `useConvexForm` returns a new object whenever `isDirty`
+    // flips, so without this the first edit re-runs the effect and resets
+    // itself away — the role could never actually be changed.
     if (form.formState.isDirty) return;
     form.reset({ role: invite.role, verticals: invite.verticals, disciplines: invite.disciplines });
   }, [invite, form]);
@@ -1527,7 +1591,10 @@ function EditInviteModal({
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 pb-24">
+    <div
+      data-testid="edit-invite-modal"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 pb-24"
+    >
       <Card className="w-full max-w-lg">
         <CardHeader>
           <CardTitle>Edit Invitation</CardTitle>
@@ -1545,7 +1612,7 @@ function EditInviteModal({
                   value={form.watch("role")}
                   onValueChange={(value) => form.setValue("role", value, { shouldDirty: true })}
                 >
-                  <SelectTrigger data-testid="edit-invite-role-trigger">
+                  <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -1670,7 +1737,10 @@ function CreateUserModal({
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 pb-24">
+    <div
+      data-testid="create-user-modal"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 pb-24"
+    >
       <Card className="w-full max-w-2xl">
         <CardHeader>
           <CardTitle>Create User (Direct)</CardTitle>
@@ -1689,7 +1759,7 @@ function CreateUserModal({
                     value={form.watch("role")}
                     onValueChange={(value) => form.setValue("role", value, { shouldDirty: true })}
                   >
-                    <SelectTrigger data-testid="create-user-role-trigger">
+                    <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -1715,7 +1785,7 @@ function CreateUserModal({
                           )
                         }
                       >
-                        <SelectTrigger data-testid="create-user-rate-mode-trigger">
+                        <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -1747,7 +1817,7 @@ function CreateUserModal({
                           )
                         }
                       >
-                        <SelectTrigger data-testid="create-user-payroll-trigger">
+                        <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>

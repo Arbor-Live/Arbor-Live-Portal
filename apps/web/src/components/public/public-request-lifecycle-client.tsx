@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -84,10 +85,18 @@ function quoteStatusLabel(status: "pending" | "approved" | "changes_requested") 
 export function PublicRequestLifecycleClient({ token }: { token: string }) {
   const request = useQuery(api.eventRequests.getPublicRequestByToken, { token });
   const quoteData = useQuery(api.eventRequests.getPublicRequestQuoteByToken, { token });
+  const recordQuoteView = useMutation(api.eventRequests.recordPublicQuoteViewByRequestToken);
+  const recordedQuoteView = useRef(false);
   const approve = useMutation(api.eventRequests.approveQuoteByRequestToken);
   const requestChanges = useMutation(api.eventRequests.requestQuoteChangesByRequestToken);
   const updatePaymentContacts = useMutation(api.eventRequests.updatePaymentContactsByRequestToken);
   const submitPaymentProof = useMutation(api.paymentProof.submitByRequestToken);
+
+  useEffect(() => {
+    if (!quoteData || recordedQuoteView.current) return;
+    recordedQuoteView.current = true;
+    void recordQuoteView({ token });
+  }, [quoteData, recordQuoteView, token]);
 
   if (request === undefined) {
     return (

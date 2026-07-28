@@ -26,7 +26,10 @@ export function BandSelfServiceClient() {
   const pendingInvites = useQuery(api.users.listPendingInvitesForActiveOrganization, {});
   const updateProfile = useMutation(api.users.updateActiveBandProfile);
   const inviteMember = useMutation(api.users.inviteMemberToActiveOrganization);
+  const updateMemberBandRole = useMutation(api.users.updateMemberBandRole);
   const [inviteConfirmation, setInviteConfirmation] = useState<string | null>(null);
+  const [bandRoleDrafts, setBandRoleDrafts] = useState<Record<string, string>>({});
+  const [bandRoleBusyId, setBandRoleBusyId] = useState<string | null>(null);
 
   const profileForm = useConvexForm<BandProfileFormValues>({
     schema: bandProfileSchema,
@@ -46,7 +49,7 @@ export function BandSelfServiceClient() {
 
   const inviteForm = useConvexForm<BandInviteFormValues>({
     schema: bandInviteSchema,
-    defaultValues: { email: "", role: "org_member" },
+    defaultValues: { email: "", role: "org_member", bandRole: "" },
     mode: "onTouched",
   });
 
@@ -76,6 +79,11 @@ export function BandSelfServiceClient() {
       designatedPayeeName: profile?.designatedPayeeName,
       designatedPayeeEmail: profile?.designatedPayeeEmail,
       designatedPayeeMailingAddress: profile?.designatedPayeeMailingAddress,
+      designatedPayeePayoutMethod:
+        profile?.designatedPayeePayoutMethod === "pickup" ||
+        profile?.designatedPayeePayoutMethod === "delivery"
+          ? profile.designatedPayeePayoutMethod
+          : undefined,
       publicWebsiteUrl: values.publicWebsiteUrl || undefined,
       publicInstagramUrl: values.publicInstagramUrl || undefined,
       publicYoutubeUrl: values.publicYoutubeUrl || undefined,
@@ -99,16 +107,38 @@ export function BandSelfServiceClient() {
 
   const onInvite = inviteForm.submitMutation(
     async (values) => {
-      await inviteMember({ email: values.email.trim(), role: values.role });
+      await inviteMember({
+        email: values.email.trim(),
+        role: values.role,
+        bandRole: values.bandRole?.trim() || undefined,
+      });
       return values;
     },
     {
       onSuccess: (values) => {
         setInviteConfirmation(`Invitation sent to ${values.email.trim()}.`);
-        inviteForm.reset({ email: "", role: values.role });
+        inviteForm.reset({ email: "", role: values.role, bandRole: "" });
       },
     },
   );
+
+  async function onSaveBandRole(userId: string, currentBandRole: string) {
+    const nextRole = (bandRoleDrafts[userId] ?? currentBandRole).trim();
+    setBandRoleBusyId(userId);
+    try {
+      await updateMemberBandRole({
+        userId,
+        bandRole: nextRole,
+      });
+      setBandRoleDrafts((prev) => {
+        const next = { ...prev };
+        delete next[userId];
+        return next;
+      });
+    } finally {
+      setBandRoleBusyId(null);
+    }
+  }
 
   if (profile === undefined) {
     return <p className="text-sm text-muted-foreground">Loading band profile…</p>;
@@ -188,13 +218,18 @@ export function BandSelfServiceClient() {
           <Form {...inviteForm}>
             <form
               onSubmit={inviteForm.handleSubmit(onInvite)}
-              className="grid gap-3 border p-3 md:grid-cols-[1fr_180px_auto] md:items-end"
+              className="grid gap-3 border p-3 md:grid-cols-[1fr_1fr_180px_auto] md:items-end"
             >
               <TextFormField
                 name="email"
                 label="Email address"
                 placeholder="name@example.com"
                 type="email"
+              />
+              <TextFormField
+                name="bandRole"
+                label="Role in band"
+                placeholder="Guitarist, Manager…"
               />
               <FormField
                 control={inviteForm.control}
@@ -246,23 +281,56 @@ export function BandSelfServiceClient() {
             {(members ?? []).map((member) => (
               <div
                 key={member.userId}
-                className="flex items-center justify-between gap-3 border p-3 text-sm"
+                className="flex flex-col gap-3 border p-3 text-sm sm:flex-row sm:items-end sm:justify-between"
               >
-                <div>
-                  <p className="font-medium">{member.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {[member.email, member.title, member.role].filter(Boolean).join(" • ")}
-                  </p>
+                <div className="min-w-0 flex-1 space-y-2">
+                  <div>
+                    <p className="font-medium">{member.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {[member.email, member.role === "org_admin" ? "Admin" : "Member"]
+                        .filter(Boolean)
+                        .join(" • ")}
+                    </p>
+                  </div>
+                  <label className="grid max-w-sm gap-1 text-xs font-medium">
+                    Role in band
+                    <input
+                      className="h-9 rounded-none border bg-background px-3 text-sm font-normal"
+                      value={bandRoleDrafts[member.userId] ?? member.bandRole ?? ""}
+                      onChange={(event) =>
+                        setBandRoleDrafts((prev) => ({
+                          ...prev,
+                          [member.userId]: event.target.value,
+                        }))
+                      }
+                      placeholder="Guitarist, Manager…"
+                    />
+                  </label>
                 </div>
-                <span
-                  className={
-                    member.active
-                      ? "text-xs text-emerald-700 dark:text-emerald-400"
-                      : "text-xs text-muted-foreground"
-                  }
-                >
-                  {member.active ? "Active" : "Inactive"}
-                </span>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={
+                      bandRoleBusyId === member.userId ||
+                      (bandRoleDrafts[member.userId] ?? member.bandRole ?? "") ===
+                        (member.bandRole ?? "")
+                    }
+                    onClick={() => void onSaveBandRole(member.userId, member.bandRole ?? "")}
+                  >
+                    {bandRoleBusyId === member.userId ? "Saving…" : "Save role"}
+                  </Button>
+                  <span
+                    className={
+                      member.active
+                        ? "text-xs text-emerald-700 dark:text-emerald-400"
+                        : "text-xs text-muted-foreground"
+                    }
+                  >
+                    {member.active ? "Active" : "Inactive"}
+                  </span>
+                </div>
               </div>
             ))}
             {members?.length === 0 ? (
@@ -284,6 +352,7 @@ export function BandSelfServiceClient() {
                 <div>
                   <p className="font-medium">{invite.email}</p>
                   <p className="text-xs text-muted-foreground">
+                    {invite.bandRole ? `${invite.bandRole} · ` : ""}
                     {invite.role === "org_admin" ? "Admin" : "Member"} access · expires{" "}
                     {invite.expiresAt ? formatDate(invite.expiresAt) : "soon"}
                   </p>

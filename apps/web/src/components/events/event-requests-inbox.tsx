@@ -31,6 +31,20 @@ function formatStatusLabel(status: string) {
   }
 }
 
+function statusBadgeClass(status: string) {
+  switch (status) {
+    case "submitted":
+    case "in_review":
+      return "border border-amber-500/30 bg-amber-500/10 text-amber-700";
+    case "converted":
+      return "border border-emerald-500/30 bg-emerald-500/10 text-emerald-700";
+    case "declined":
+      return "border border-rose-500/30 bg-rose-500/10 text-rose-700";
+    default:
+      return "bg-muted text-muted-foreground";
+  }
+}
+
 export function EventRequestsInbox() {
   const [status, setStatus] = useState<(typeof STATUS_OPTIONS)[number]["value"]>("");
   const rows = useQuery(api.eventRequests.list, {
@@ -81,7 +95,9 @@ export function EventRequestsInbox() {
                 </p>
                 <p className="text-xs text-muted-foreground">Event date: {row.eventDateText}</p>
                 <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                  <span className="rounded bg-muted px-2 py-0.5">{formatStatusLabel(row.status)}</span>
+                  <span className={`rounded-full px-2 py-0.5 ${statusBadgeClass(row.status)}`}>
+                    {formatStatusLabel(row.status)}
+                  </span>
                   <span className="rounded bg-muted px-2 py-0.5">Turnout: {row.expectedTurnout}</span>
                   <span className="rounded bg-muted px-2 py-0.5">{row.sponsorType}</span>
                   {row.organization ? (

@@ -6,11 +6,15 @@ import { runConvex } from "../helpers/convex";
 /**
  * Routes the sidebar itself marks `adminOnly: true`
  * (`apps/web/src/components/app-sidebar.tsx`) — the app's own statement of
- * which areas are admin-limited — plus the four pages under `/dashboard/users`
+ * which areas are admin-limited — plus the pages under `/dashboard/users`
  * whose every Convex call is `requireAdmin` but which shipped with only
  * `ArborOnlyGuard`. A crew member walked through that guard, tripped
  * `requireAdmin`, and landed on the generic error boundary; Batch 9 wrapped
  * them so the refusal reads as a refusal.
+ *
+ * `/dashboard/users/timecards` is here for the same reason as its siblings —
+ * it renders `AdminTimecardsOverviewClient`, whose queries are all
+ * `requireAdmin` — but it was the one the first pass missed.
  */
 const adminRoutes = [
   { path: "/dashboard/users", label: "users" },
@@ -21,6 +25,7 @@ const adminRoutes = [
   { path: "/dashboard/users/crew-applications", label: "crew applications" },
   { path: "/dashboard/users/band-applications", label: "band applications" },
   { path: "/dashboard/financial-hub", label: "financial hub" },
+  { path: "/dashboard/financial-hub/insights", label: "insights" },
   { path: "/dashboard/events/crew-scheduling", label: "crew scheduling" },
   { path: "/dashboard/events/venues", label: "venues" },
   { path: "/dashboard/events/open-mic", label: "open mic" },

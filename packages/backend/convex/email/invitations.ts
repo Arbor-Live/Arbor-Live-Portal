@@ -71,6 +71,7 @@ export async function upsertPendingInviteToken(
     email: string;
     organizationId: string;
     role: string;
+    bandRole?: string;
     teams?: string[];
     verticals?: string[];
     disciplines?: string[];
@@ -93,6 +94,7 @@ export async function upsertPendingInviteToken(
     email: args.email,
     organizationId: args.organizationId,
     role: args.role,
+    bandRole: args.bandRole,
     teams: args.teams,
     verticals: args.verticals,
     disciplines: args.disciplines,
@@ -119,6 +121,7 @@ export async function scheduleUserInviteEmail(
     email: string;
     organizationId: string;
     role: string;
+    bandRole?: string;
     inviterId: string;
     expiresAt: number;
     teams?: string[];
@@ -151,6 +154,7 @@ export async function scheduleUserInviteEmail(
       email: args.email,
       organizationId: args.organizationId,
       role: args.role,
+      bandRole: args.bandRole,
       teams: args.teams,
       verticals: args.verticals,
       disciplines: args.disciplines,

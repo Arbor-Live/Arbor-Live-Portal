@@ -16,6 +16,7 @@ import {
 import { buildInvoiceDocumentData } from "./lib/invoiceDocumentBuild";
 import {
   approveInvoiceQuote,
+  incrementPublicQuoteView,
   loadPublicQuoteView,
   requestInvoiceQuoteChanges,
   updateInvoicePaymentContacts,
@@ -531,6 +532,24 @@ export const getPublicQuoteByToken = query({
     if (invoice.status === "void") return null;
 
     return await loadPublicQuoteView(ctx, invoice);
+  },
+});
+
+export const recordPublicQuoteView = mutation({
+  args: { token: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await enforceRateLimit(ctx, `quoteView:${args.token}`, { limit: 120, windowMs: HOUR_MS });
+    const invoice = await ctx.db
+      .query("invoices")
+      .withIndex("by_publicApprovalToken", (q) => q.eq("publicApprovalToken", args.token))
+      .unique();
+    if (!invoice || invoice.status === "void") return null;
+    if (invoice.publicApprovalTokenExpiresAt && invoice.publicApprovalTokenExpiresAt < Date.now()) {
+      return null;
+    }
+    await incrementPublicQuoteView(ctx, invoice);
+    return null;
   },
 });
 

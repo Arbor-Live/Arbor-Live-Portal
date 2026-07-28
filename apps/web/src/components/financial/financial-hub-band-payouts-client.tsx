@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { formatDate, formatDateTime, formatUsd } from "@/lib/format";
+import { formatBandPayeePayoutMethod } from "@/lib/band-payout-copy";
 
 type BandPaymentQueue =
   | "all_pending"
@@ -182,45 +183,52 @@ export function FinancialHubBandPayoutsClient() {
           {rows.map((row) => (
             <Card key={row._id}>
               <CardHeader className="pb-2">
-                <CardTitle className="text-base">
-                  {row.bandName} · {row.eventTitle}
-                </CardTitle>
+                <CardTitle className="text-base">{row.bandName}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 text-sm">
-                <div className="grid gap-1 sm:grid-cols-2">
-                  <p>
-                    <span className="font-medium">Event date:</span> {formatDate(row.eventStartAt)}
-                  </p>
-                  <p>
-                    <span className="font-medium">Total:</span> {formatUsd(row.totalUsd)}
-                  </p>
+                <div className="grid gap-2 sm:grid-cols-2">
                   <p>
                     <span className="font-medium">Payee:</span>{" "}
                     {row.designatedPayeeName
                       ? `${row.designatedPayeeName} (${row.designatedPayeeEmail ?? "no email"})`
                       : "Not configured"}
                   </p>
-                  <p>
-                    <span className="font-medium">Payment ID:</span> {row.confirmationToken}
+                  <p className="whitespace-pre-wrap sm:col-span-2">
+                    <span className="font-medium">Address:</span>{" "}
+                    {row.designatedPayeeMailingAddress?.trim() || "—"}
                   </p>
                   <p>
-                    <span className="font-medium">Status:</span> {row.statusLabel}
+                    <span className="font-medium">Total:</span> {formatUsd(row.totalUsd)}
                   </p>
-                  {row.designatedPayeeMailingAddress ? (
-                    <p className="whitespace-pre-wrap sm:col-span-2">
-                      <span className="font-medium">Mailing address:</span> {row.designatedPayeeMailingAddress}
-                    </p>
-                  ) : null}
+                  <p>
+                    <span className="font-medium">Event:</span> {formatDate(row.eventStartAt)} ·{" "}
+                    {row.eventTitle}
+                  </p>
+                  <p>
+                    <span className="font-medium">Payout method:</span>{" "}
+                    {formatBandPayeePayoutMethod(row.designatedPayeePayoutMethod)}
+                  </p>
+                </div>
+
+                <div className="grid gap-1 border-t border-border/60 pt-2 text-muted-foreground sm:grid-cols-2">
+                  <p>
+                    <span className="font-medium text-foreground">Payment ID:</span>{" "}
+                    {row.confirmationToken}
+                  </p>
+                  <p>
+                    <span className="font-medium text-foreground">Status:</span> {row.statusLabel}
+                  </p>
                   {row.confirmationEmailSentAt ? (
                     <p>
-                      <span className="font-medium">Signature request sent:</span>{" "}
+                      <span className="font-medium text-foreground">Signature request sent:</span>{" "}
                       {formatDateTime(row.confirmationEmailSentAt)}
                       {row.confirmationSentByName ? ` · ${row.confirmationSentByName}` : ""}
                     </p>
                   ) : null}
                   {row.confirmedAt ? (
                     <p>
-                      <span className="font-medium">Signed:</span> {formatDateTime(row.confirmedAt)}
+                      <span className="font-medium text-foreground">Signed:</span>{" "}
+                      {formatDateTime(row.confirmedAt)}
                       {row.signatureTypedName
                         ? ` · ${row.signatureTypedName}`
                         : row.confirmationReplyFrom
@@ -230,7 +238,7 @@ export function FinancialHubBandPayoutsClient() {
                   ) : null}
                   {row.servicePaymentNumber ? (
                     <p>
-                      <span className="font-medium">Transfer / Service Payment #:</span>{" "}
+                      <span className="font-medium text-foreground">Transfer / Service Payment #:</span>{" "}
                       {row.servicePaymentNumber}
                     </p>
                   ) : null}
@@ -327,14 +335,26 @@ export function FinancialHubBandPayoutsClient() {
       ) : null}
 
       {payTarget ? (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Mark band payment paid</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="mark-paid-title"
+          onClick={() => {
+            setPayTarget(null);
+            setServicePaymentNumber("");
+          }}
+        >
+          <div
+            className="w-full max-w-md space-y-4 border border-border bg-background p-5 shadow-lg"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 id="mark-paid-title" className="text-base font-semibold">
+              Mark band payment paid
+            </h2>
             <p className="text-sm text-muted-foreground">
-              Enter the GrantEd transfer / Service Payment number after submitting evidence. Band members
-              will be notified that Stanford is processing the payment.
+              Enter the GrantEd transfer / Service Payment number after submitting evidence. Band
+              members will be notified that Stanford is processing the payment.
             </p>
             <div className="space-y-1">
               <Label>Transfer / Service Payment number</Label>
@@ -342,10 +362,16 @@ export function FinancialHubBandPayoutsClient() {
                 value={servicePaymentNumber}
                 onChange={(e) => setServicePaymentNumber(e.target.value)}
                 placeholder="SP-2026-0042"
+                autoFocus
               />
             </div>
             <div className="flex gap-2">
-              <Button type="button" size="sm" disabled={!servicePaymentNumber.trim()} onClick={() => void onMarkPaid()}>
+              <Button
+                type="button"
+                size="sm"
+                disabled={!servicePaymentNumber.trim() || busyPaymentId === payTarget}
+                onClick={() => void onMarkPaid()}
+              >
                 Confirm paid
               </Button>
               <Button
@@ -360,8 +386,8 @@ export function FinancialHubBandPayoutsClient() {
                 Cancel
               </Button>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       ) : null}
     </div>
   );

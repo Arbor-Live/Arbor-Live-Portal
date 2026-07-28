@@ -49,10 +49,22 @@ export function CrewSchedulingDashboard() {
       : "skip",
   );
 
+  const kpis = useQuery(
+    api.analyticsCrew.getCrewSchedulingKpis,
+    range
+      ? { startMs: range.rangeStart, endMs: range.rangeEnd }
+      : "skip",
+  );
+
   function resetToDefaultRange() {
     const defaults = getDefaultAdminSchedulingDateInputs();
     setStartDate(defaults.startDate);
     setEndDate(defaults.endDate);
+  }
+
+  function formatRate(value: number | null | undefined) {
+    if (value == null || !Number.isFinite(value)) return "—";
+    return `${(value * 100).toFixed(0)}%`;
   }
 
   return (
@@ -90,6 +102,22 @@ export function CrewSchedulingDashboard() {
             {formatEventDateTime(range.rangeEnd)}.
           </p>
         )}
+        {range && kpis !== undefined ? (
+          <div className="grid gap-2 pt-1 sm:grid-cols-3">
+            <div className="rounded-md border px-3 py-2">
+              <p className="text-xs text-muted-foreground">Fill rate</p>
+              <p className="text-sm font-semibold tabular-nums">{formatRate(kpis.fillRate)}</p>
+            </div>
+            <div className="rounded-md border px-3 py-2">
+              <p className="text-xs text-muted-foreground">Unfilled shifts</p>
+              <p className="text-sm font-semibold tabular-nums">{kpis.unfilledShifts}</p>
+            </div>
+            <div className="rounded-md border px-3 py-2">
+              <p className="text-xs text-muted-foreground">Unconfirmed events</p>
+              <p className="text-sm font-semibold tabular-nums">{kpis.unconfirmedEvents}</p>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <div className="flex flex-wrap items-center gap-2">

@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { listEventsByInvoiceId } from "./invoiceEvents";
+import { recordEventStatusTransition } from "./statusTransitions";
 
 export const EVENT_PIPELINE_STATUSES = [
   "tentative",
@@ -68,6 +69,7 @@ export async function syncLinkedEventStatusFromInvoice(
 
     if (isQuoteApproved(clientApprovalStatus) && status === "tentative") {
       await ctx.db.patch(event._id, { status: "logistics", updatedAt: now });
+      await recordEventStatusTransition(ctx, event._id, status, "logistics", { at: now });
       continue;
     }
 
@@ -76,6 +78,7 @@ export async function syncLinkedEventStatusFromInvoice(
       status === "logistics"
     ) {
       await ctx.db.patch(event._id, { status: "tentative", updatedAt: now });
+      await recordEventStatusTransition(ctx, event._id, status, "tentative", { at: now });
     }
   }
 }
@@ -92,7 +95,9 @@ export async function syncEventStatusForLinkedInvoice(
 
   const status = normalizeEventStatus(currentStatus);
   if (isQuoteApproved(invoice.clientApprovalStatus) && status === "tentative") {
-    await ctx.db.patch(eventId, { status: "logistics", updatedAt: Date.now() });
+    const now = Date.now();
+    await ctx.db.patch(eventId, { status: "logistics", updatedAt: now });
+    await recordEventStatusTransition(ctx, eventId, status, "logistics", { at: now });
     return "logistics" as const;
   }
   return status;

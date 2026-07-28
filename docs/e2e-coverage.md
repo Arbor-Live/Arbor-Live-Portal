@@ -8,7 +8,7 @@ Update this file whenever specs or helpers land (or when a batch ships).
 - Runner: `pnpm test:e2e` ([`scripts/e2e-run.mjs`](../scripts/e2e-run.mjs))
 - CI: [`.github/workflows/e2e.yml`](../.github/workflows/e2e.yml)
 
-**Last updated:** 2026-07-27 (Batches 1–8 on `main`; Batch 9 on branch)
+**Last updated:** 2026-07-28 (Batches 1–8 on `main`; Batch 9 on branch)
 
 ## Batch history
 
@@ -23,7 +23,7 @@ Update this file whenever specs or helpers land (or when a batch ships).
 | **7** | [#64](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/64) | Authorization boundaries: admin route guards, Convex-level enforcement, org-type separation, plus an `AdminOnlyGuard` so refusals read as refusals |
 | — | [#65](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/65) | Not a batch: the ascending-`take` fix shipped five `*-list-recency` specs plus `marketing/work-posts-admin.spec.ts` |
 | **8** | [#71](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/71) | Money paths: invoice line items + totals, discounts, send-for-review round trip, approval-token rotation, approval reset + duplicate, host orgs/contacts, payment-proof invalidate + receipt |
-| **9** | on branch | Users, access, and rates: invite lifecycle, direct user create, access remove/reactivate + last-admin guard, role grant flipping a Batch 7 refusal, per-user compensation, org memberships. Shipped two fixes the specs found: `AdminOnlyGuard` on the four `/dashboard/users` pages that had only `ArborOnlyGuard`, and a missing dirty guard that made the Edit Invitation modal unable to hold *any* edit |
+| **9** | on branch | Users, access, and rates: invite lifecycle, direct create, the role grant that flips a Batch 7 refusal, remove/reactivate access, org memberships, per-user crew rates. Found two shipped bugs: the Edit Invitation role picker could not be changed at all, and four Users sub-routes had no `AdminOnlyGuard` so they refused by crashing |
 
 ## Status legend
 
@@ -46,16 +46,16 @@ Update this file whenever specs or helpers land (or when a batch ships).
 | Invite accept → onboarding | Covered | `smoke/invite.spec.ts` |
 | Email queue (mocked Resend) | Covered | `email/email-queue.spec.ts` (no UI) |
 | First-admin `/setup` | None | Dev-only unlock exists; not e2e’d |
-| Users invite UI (`/dashboard/users/access`) | Covered | `users/user-invite-lifecycle.spec.ts` (Batch 9) — invite → edit → resend → cancel, incl. the rate/payroll payload the invite carries to acceptance |
-| Create user directly (`createUserAdmin`) | Covered | `users/user-create-and-access.spec.ts` (Batch 9) |
-| Remove / reactivate access | Covered | `users/user-create-and-access.spec.ts` (Batch 9) — asserts both `active` and Better Auth's `banned` |
-| Admin cannot remove their own access | Covered | `users/user-create-and-access.spec.ts` (Batch 9) — restores access via helper in `afterAll`, so a regressed guard fails one test rather than the suite |
-| Granting a role flips a refusal | Covered | `users/user-role-grant.spec.ts` (Batch 9) — promote → admitted → demote → refused, in a second signed-in context |
-| Per-user compensation rates | Covered | `users/user-compensation-rates.spec.ts` (Batch 9) — custom, pinned-to-global, and the Users table agreeing with the Crew Rates page |
-| Organizations + user memberships | Covered | `users/user-org-memberships.spec.ts` (Batch 9) — create org, add/remove membership, duplicate and default-org guards |
+| Users invite UI (`/dashboard/users/access`) | Covered | `users/user-invite-lifecycle.spec.ts` (Batch 9) — invite → edit role → resend → cancel, plus the declined confirm |
+| Direct user create (`createUserAdmin`) | Covered | `users/user-create-and-promote.spec.ts` (Batch 9) |
+| Role grant flips an admin refusal | Covered | `users/user-create-and-promote.spec.ts` (Batch 9) — member refused → promoted → same session admitted → demoted → refused again |
+| Remove access / reactivate | Covered | `users/user-access-remove-reactivate.spec.ts` (Batch 9) — asserts the `banned` flag as well as the table filter |
+| Admin cannot remove their own access | Covered | `users/user-access-remove-reactivate.spec.ts` (Batch 9) — driven as a second, throwaway admin |
+| Org memberships add / remove | Covered | `users/user-membership-edit.spec.ts` (Batch 9) — includes the default-org removal refusal |
+| Non-admin refused on Users sub-routes | Covered | `users/user-create-and-promote.spec.ts` (Batch 9) — `/users/access`, `/users/organizations`, `/users/crew-rates` |
 | Full crew `/onboarding` completion | Covered | `crew/crew-onboarding-complete.spec.ts` (Batch 4) |
 | Full band `/onboarding/band` completion | Covered | `bands/band-onboarding-complete.spec.ts` (Batch 4) |
-| Non-admin refused on admin routes | Covered | `auth/admin-route-guards.spec.ts` (Batch 7; four `/dashboard/users` pages added in Batch 9) |
+| Non-admin refused on admin routes | Covered | `auth/admin-route-guards.spec.ts` (Batch 7) |
 | Convex refuses privileged calls from a crew token | Covered | `auth/backend-enforcement.spec.ts` (Batch 7) — bypasses the UI entirely |
 | Org-type separation (Arbor-only / band-only) | Covered | `auth/org-context-guards.spec.ts` (Batch 7) |
 
@@ -87,6 +87,7 @@ Update this file whenever specs or helpers land (or when a batch ships).
 | Host orgs + client contacts | Covered | `quotes/invoice-organizations.spec.ts` (Batch 8) — create → bill an invoice → archive; merge duplicate hosts |
 | PDF download / void | None | Deferred |
 | Invoice managers (`/financial-hub/managers`) | None | — |
+| Per-user crew rates (`/users/crew-rates`) | Covered | `users/user-rates-admin.spec.ts` (Batch 9) — custom rate, then a pinned mode resolving to the global rate; reads the globals, never writes them |
 | Invoice settings (global crew rates) | Deferred | `invoiceSettings.update` writes **global** crew rates. On the shared deployment that silently re-prices every other worktree's crew lines, so it is not safe to drive from a spec |
 
 ### Events and schedule
@@ -184,7 +185,7 @@ Update this file whenever specs or helpers land (or when a batch ships).
 | `inventory/lost-found-public.spec.ts` | Public `/e/{assetId}` found + not-found (Batch 6) |
 | `smoke/public-directories.spec.ts` | `/crew`, `/artists`, `/events` render (Batch 6) |
 | `bands/band-payouts-queue.spec.ts` | Send signature request + mark paid from the queue (Batch 6) |
-| `auth/admin-route-guards.spec.ts` | Non-admin refused on the 9 sidebar `adminOnly` routes (Batch 7) |
+| `auth/admin-route-guards.spec.ts` | Non-admin refused on the sidebar `adminOnly` routes, plus the four guarded `/users` sub-routes (Batch 7; extended in Batch 9) |
 | `auth/backend-enforcement.spec.ts` | Convex refuses privileged query/mutation from a crew JWT (Batch 7) |
 | `auth/org-context-guards.spec.ts` | Arbor-only vs band-only route separation (Batch 7) |
 | `bands/band-application-list-recency.spec.ts` | Newest band application is listed (#65) |
@@ -201,15 +202,15 @@ Update this file whenever specs or helpers land (or when a batch ships).
 | `quotes/invoice-organizations.spec.ts` | Host org + contact → invoice → archive; merge duplicates (Batch 8) |
 | `quotes/payment-proof-manage.spec.ts` | Invalidate submission; attach receipt (Batch 8) |
 | `users/user-invite-lifecycle.spec.ts` | Invite → edit → resend → cancel (Batch 9) |
-| `users/user-create-and-access.spec.ts` | Direct create; access remove/reactivate; last-admin guard (Batch 9) |
-| `users/user-role-grant.spec.ts` | Role grant/revoke flips an admin refusal (Batch 9) |
-| `users/user-compensation-rates.spec.ts` | Custom + pinned rates across both editors (Batch 9) |
-| `users/user-org-memberships.spec.ts` | Org create; membership add/remove and its guards (Batch 9) |
+| `users/user-create-and-promote.spec.ts` | Create user; role grant flips the admin refusal (Batch 9) |
+| `users/user-access-remove-reactivate.spec.ts` | Remove access / reactivate; self-lockout guard (Batch 9) |
+| `users/user-membership-edit.spec.ts` | Add/remove an org membership from row details (Batch 9) |
+| `users/user-rates-admin.spec.ts` | Per-user rate mode + resolved rate (Batch 9) |
 | `email/email-queue.spec.ts` | Mocked email pipeline |
 
 ## Remaining gaps
 
-Batches 1–8 cover the shipped happy paths. What is still out of the suite, and why:
+Batches 1–9 cover the shipped happy paths. What is still out of the suite, and why:
 
 | Surface | Why it is out |
 |---------|---------------|
@@ -221,13 +222,15 @@ Batches 1–8 cover the shipped happy paths. What is still out of the suite, and
 | FullCalendar drag/resize | Flaky; covered by unit/manual testing |
 | Global invoice settings (crew rates) | Shared-deployment hazard — see the Quotes and invoices table |
 | Inventory catalog CRUD, PDF download/void | Not yet batched |
+| Password reset from the Users row, onboarding waive | `sendPasswordResetAdmin` hands off to Better Auth's reset flow, and waive only makes sense against a half-finished onboarding — both are cheap follow-ons rather than Batch 9 scope |
+| Band org profile editor (`/users/organizations`) | The row is covered by nothing yet; its hero upload needs R2 |
 
 ### Candidates for the next batches
 
 | Batch | Surface | Why |
 |-------|---------|-----|
-| **10** | Inventory catalog CRUD | ~3k lines across `types-manager` / `packages-manager` / `package-items-editor`, and every other spec seeds against this data model — the widest blast radius in the app, currently listed as low risk. Type visibility also drives the public `/types/[bucket]` pages, which have no coverage. Plan: name rows with the `E2E ` prefix and extend `pruneE2eSeedData` to clear catalog rows, the way seeded events are already kept in check |
-| **11** | Invoice managers + PDF | `/financial-hub/managers` and PDF download/void are the last uncovered money surfaces |
+| **10** | Inventory catalog CRUD | ~3k lines across `types-manager` / `packages-manager` / `package-items-editor`, and every other spec seeds against this data model — the widest blast radius in the app, currently listed as low risk. Type visibility also drives the public `/types/[bucket]` pages, which have no coverage |
+| **11** | Band org profile + organizations page | The other half of `users-management-client.tsx` (`updateBandOrganizationProfileAdmin`, `createOrganizationAdmin`, the CSV importer). Left out of Batch 9 because creating orgs leaves rows the shared deployment cannot prune, so it needs a cleanup helper first |
 
 ### Keeping the shared deployment usable
 
@@ -240,17 +243,57 @@ Run `convex run e2eHelpers:pruneE2eSeedData '{"dryRun":true}'` to check, then
 drop `dryRun` to clear `E2E `-prefixed events older than two hours along with
 their child rows. Batch with `limit` to stay inside mutation limits.
 
+The pruner only knows about events. Batch 9's fixtures are instead **stable
+per-purpose accounts** (`e2e-access-target@`, `e2e-promote-target@`,
+`e2e-rates-target@`, `e2e-membership-target@`, `e2e-guard-admin@`) that each run
+re-seeds in place, so nothing accumulates — and where a stamped identity is
+unavoidable, the spec cleans up after itself
+(`e2eHelpers:deleteInvitationsByEmail`, since invitations are read with
+`.take(2000)` and `resendInviteAdmin` matches on email, not id). Any new batch
+should pick one of those two shapes rather than leaving rows behind.
+
 Conventions for any new batch:
 - Specs under `apps/web/e2e/<domain>/`
 - Helpers in `packages/backend/convex/e2eHelpers.ts`, gated by `assertE2eHelpersEnabled`
 - Seed with `e2eHelpers`, drive the UI with Playwright, assert via `pollConvex`
 - Scope locators to the row you seeded — the shared deployment accumulates fixtures
+- Find form fields with `e2e/helpers/form.ts` and dropdowns with
+  `e2e/helpers/select.ts`; `getByLabel` does not work anywhere in this app (trap 5)
 - Local: `E2E_SKIP_BOOT=1 pnpm test:e2e` against a running stack; CI uses anonymous Convex
+
+### Bugs the suite has caught
+
+Worth recording, because each one argues for the next batch.
+
+| Batch | Bug | Mechanism |
+|-------|-----|-----------|
+| 9 | The Edit Invitation **role picker could not be changed** — every pick snapped back to the invite's current role | `useConvexForm` returns a *new object* whenever `isDirty` flips (deliberately, to wake save bars). `EditInviteModal`'s reset effect had `form` in its deps with no `if (form.formState.isDirty) return;` guard, so the first edit re-ran the effect and reset itself away. Eleven sibling components have the guard; this one did not |
+| 9 | `/users/access`, `/users/organizations`, `/users/crew-rates`, `/users/timecards` refused non-admins **by crashing** | They had `ArborOnlyGuard` but no `AdminOnlyGuard`, so a crew member walked through the org check and then tripped `requireAdmin` inside Convex, landing on the generic error boundary. Batch 7 added `AdminOnlyGuard` only to the routes its own spec listed. `/users/timecards` renders `AdminTimecardsOverviewClient`, whose queries are `requireAdmin` too, and was missed by the first sweep of this batch |
+| — | Ascending `.take()` hid the newest row in six admin lists | See [#65](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/65) |
+
+**Still unfixed, found while investigating the first one:**
+`events/event-series-schedule-editor.tsx:121` and
+`events/event-series-shift-editor.tsx:151` have the same unguarded reset effect
+with `form` in its deps, resetting to constants (`applyScope: "all"`) — so their
+`applyScope` pickers are very likely stuck the same way. Neither has e2e
+coverage, so this is reasoned from the code, not observed. A batch that covers
+event series should start there.
+
+### Known local flakes
+
+`events/event-edit-dry-hire.spec.ts` ("quick-add delivery/return") and
+`quotes/invoice-finalize.spec.ts` each failed once in a 104-test local run and
+passed on a targeted re-run. Both die waiting for an element that a click should
+have produced instantly — `Add artist row` only appends to local state — so the
+click landed before hydration. That is the dev-mode race
+[`scripts/e2e-run.mjs`](../scripts/e2e-run.mjs) documents when it explains why CI
+builds for production; CI's `retries: 2` absorbs it. Worth hardening if either
+starts failing in CI.
 
 ### Traps this codebase sets for Playwright
 
-These fail in ways that do not look like what they are. 1–4 and 9 cost real
-debugging time in Batch 8; 5–8 came out of Batch 9.
+These fail in ways that do not look like what they are. Items 1–4 cost real
+debugging time in Batch 8, items 5–8 in Batch 9.
 
 1. **`window.confirm` guards mutations.** `regeneratePublicApprovalToken`,
    host/contact archive, and the re-approval prompt on saving an edited approved
@@ -276,69 +319,43 @@ debugging time in Batch 8; 5–8 came out of Batch 9.
    options query resolves. A loose name locator can settle on it and open the
    create modal instead of selecting anything. Match on something only the real
    option carries, like the contact's email.
-4. **Radix `Select` options cannot reliably be clicked.** The Users pages are
-   built almost entirely from them, and `selectOption` does not apply — the
-   trigger is a button and the menu is portalled to `document.body`. Worse,
-   Radix aligns the menu so the *checked* item sits over the trigger, so on a
-   long list (the org pickers grow with every band org on the deployment) most
-   options land outside the browser viewport, where Playwright refuses to click.
-   `force` does not help — out-of-viewport is a hard error, not an actionability
-   wait — and neither does scrolling, because the menu is positioned rather than
-   scrolled. It first appeared as a bare three-minute test timeout with no
-   failing assertion attached. `pickSelectOption` in `e2e/helpers/select.ts`
-   drives the menu by keyboard instead — open, `Home`, then walk the highlight
-   with `ArrowDown` until it reads the label, then Enter — so list length stops
-   mattering. Pass `expectTriggerText: false` for the per-row Options menu, whose
-   value is always `""` and never reflects the action taken.
-   Three details in that helper are each load-bearing, and each cost a run:
-   - **Do not use Radix's typeahead.** Radix treats Space as a *selection* key,
-     so typing a label containing one ("Arbor Live") selects whatever is
-     highlighted at the space, closes the menu, and lets the trailing Enter
-     reopen it. You end up with a menu that is open, a value nobody chose, and a
-     helper waiting on a close that already happened.
-   - **Read open/closed from the trigger's `aria-expanded`,** not from
-     `getByRole("listbox")`. These pages carry a listbox that is never the one
-     you opened, so a global `toHaveCount(0)` never settles.
-   - **Scope the highlighted item to `aria-controls`.** A page-wide
-     `[data-highlighted]` lookup can latch onto the leftover highlight of a menu
-     still animating out, so the walk reads one menu while Enter lands in
-     another — the select silently keeps its old value.
-5. **`FormLabel` labels a `<div>`, not the input.** `FormControl` is a wrapper
-   div that takes `formItemId` rather than forwarding it to the control inside,
-   so every `TextFormField` in the app is unlabelled as far as the accessibility
-   tree — and therefore as far as `getByLabel` — is concerned. Use
-   `formFieldInput` from `e2e/helpers/forms.ts`, which scopes to the
-   `form-item` wrapper instead. (The checkboxes in `MembershipCheckboxes` *do*
-   work with `getByLabel`, because the input is nested inside its `<label>`.)
-6. **`CardTitle` is a `div`, and cards contain other cards' titles.** So
-   `getByRole("heading")` never matches one, and filtering a card by any text
-   inside it matches the modal *and* the card holding the button that opened it
-   — "Invite User" is both a title and a button label. Use `cardByTitle` in
-   `e2e/helpers/users.ts`, which matches the `card-title` slot with an anchored
-   regex; a substring match would tie "Invitations" to the page header's "User
-   Access & Invitations". Sidebar links share names with card titles too, so
-   plain `getByText("Access & Invites")` is a strict-mode violation for any user
-   who can see both.
-7. **`useConvexForm` busts its memo on `isDirty`.** That is deliberate — save
-   bars need to see the change — but it means any `useEffect` that calls
-   `form.reset(...)` with `form` in its deps re-runs on the *first edit* and
-   throws that edit away. Guard every such effect with
-   `if (form.formState.isDirty) return;`. `EditInviteModal` was missing it, which
-   made the invitation role and team pickers unable to hold a change at all;
-   `user-invite-lifecycle.spec.ts` is what caught it.
-8. **Users cannot be seeded per run.** `listUsersForAdmin` returns every auth
-   user into an unpaginated table, so a stamped throwaway user per run grows the
-   shared deployment forever. Batch 9 reuses fixed `e2e-managed-*` addresses and
-   hard-deletes them in `resetManagedUserByEmail`, which refuses anything
-   outside that prefix — the admin, crew, and band fixtures are all
-   `e2e-*@arborlive.test`, and deleting one would take down every sign-in.
-9. **Saving from `/invoices/new` remounts the editor.** `router.replace` moves it
+4. **Saving from `/invoices/new` remounts the editor.** `router.replace` moves it
    into the `[id]` route, which re-hydrates every field from the saved invoice
    and reverts anything typed in that window — and the pass is not observable
    from the outgoing component. `createDraftInvoiceWithArtistLine` in
    `e2e/helpers/invoice.ts` absorbs this by loading the canonical URL once and
    waiting for hydration. Client-side navigations also fire no `load` event, so
    `page.waitForURL` can hang for its full timeout; poll `page.url()` instead.
+5. **`getByLabel` reaches nothing in this app, and fails silently.**
+   `FormControl` renders a plain `<div id={formItemId}>` around the input and
+   `FormLabel` points `htmlFor` at that div, so every label is associated with a
+   non-labelable element — `getByLabel("Email")` resolves to zero nodes. Because
+   `actionTimeout` is unset (Playwright's default of 0, i.e. no timeout), the
+   `fill()` then waits out the *entire* test timeout with no error, no
+   screenshot, and no browser traffic: it reads as a hung app, not a bad
+   selector. This burned five minutes per test in Batch 9's first run. Use
+   `formField` / `selectByLabel` / `checkboxByLabel` from `e2e/helpers/form.ts`,
+   which locate by `[data-slot='form-item']` instead.
+6. **Radix `Select` is not `SearchableSelect`.** The shadcn `Select` in
+   `@/components/ui/select` portals its listbox but locks page scroll while open,
+   so it needs none of the centering/`force` handling above — `pickSelectOption`
+   in `e2e/helpers/select.ts` is the right driver, and using the
+   `SearchableSelect` recipe on it just adds flake. Two things still bite: the
+   listbox unmounts on an animation, so clicking a second trigger too early
+   lands on the dismiss layer instead (wait for the option to disappear), and the
+   Users row's action menu pins `value=""` so its trigger text never changes —
+   `chooseRowAction` exists for exactly that case.
+7. **Row forms revert an edit made while a save is in flight.** Every
+   `useConvexForm` row (Users table, `UserRateRow`, band org rows) calls
+   `form.reset(values)` in `onSuccess`, and its Save button only renders while
+   the form is dirty. Editing the same row again before that reset lands means
+   the reset overwrites the second edit — the same shape as the invoice-editor
+   remount, minus the navigation. Wait for the Save button to disappear before
+   touching the row again (`saveRateRow` in `users/user-rates-admin.spec.ts`).
+8. **Refusals also come through `window.alert`.** Removing a user's default-org
+   membership and adding a duplicate membership both refuse client-side via
+   `alert`, which Playwright dismisses silently — so a refused click and a broken
+   click look identical. Capture the dialog and assert its message.
 
 
 ## How to update this doc
