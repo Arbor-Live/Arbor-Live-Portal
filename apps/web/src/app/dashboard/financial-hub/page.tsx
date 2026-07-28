@@ -9,6 +9,10 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { FinancialHubSettings } from "@/components/financial/financial-hub-settings";
 import { BandPayoutsSummary } from "@/components/financial/band-payouts-summary";
+import {
+  FinancialHubExpensesCard,
+  FinancialHubRevenueCard,
+} from "@/components/insights/financial-hub-kpi-cards";
 import { AdminOnlyGuard, ArborOnlyGuard } from "@/components/org-context-guard";
 
 export default function FinancialHubPage() {
@@ -26,6 +30,9 @@ export default function FinancialHubPage() {
             <CardContent className="flex flex-wrap gap-2">
               <Button asChild>
                 <Link href="/dashboard/financial-hub/invoices">Open Invoices</Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link href="/dashboard/financial-hub/insights">Insights</Link>
               </Button>
               <Button asChild variant="outline">
                 <Link href="/dashboard/financial-hub/organizations">Host Organizations</Link>
@@ -54,14 +61,20 @@ export default function FinancialHubPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Revenue</CardTitle>
+                <CardDescription>Trailing 12 Pacific months</CardDescription>
               </CardHeader>
-              <CardContent className="text-muted-foreground">Coming soon.</CardContent>
+              <CardContent>
+                <FinancialHubRevenueCard />
+              </CardContent>
             </Card>
             <Card>
               <CardHeader>
                 <CardTitle>Expenses</CardTitle>
+                <CardDescription>Trailing 12 Pacific months</CardDescription>
               </CardHeader>
-              <CardContent className="text-muted-foreground">Coming soon.</CardContent>
+              <CardContent>
+                <FinancialHubExpensesCard />
+              </CardContent>
             </Card>
             <Card>
               <CardHeader>

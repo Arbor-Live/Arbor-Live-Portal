@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
+import { BOOKING_DECLINE_REASON_CODES, bookingDeclineReasonLabel } from "@arbor/format";
 import { api, type Id } from "@/lib/convex-api";
 import { AdminCascadeDeleteDialog } from "@/components/admin/admin-cascade-delete-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -33,6 +34,8 @@ export function EventRequestDetailClient({ requestId }: { requestId: Id<"eventRe
   const updateStatus = useMutation(api.eventRequests.updateStatus);
   const deleteRequestAdmin = useMutation(api.adminDeletes.deleteRequestAdmin);
   const [staffNotes, setStaffNotes] = useState("");
+  const [declineReasonCode, setDeclineReasonCode] = useState("");
+  const [declineReasonNote, setDeclineReasonNote] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -50,12 +53,34 @@ export function EventRequestDetailClient({ requestId }: { requestId: Id<"eventRe
   }
 
   async function handleDecline() {
+    if (!declineReasonCode) {
+      setError("Select a decline reason.");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
       await updateStatus({
         id: requestId,
         status: "declined",
+        staffNotes: staffNotes.trim() || undefined,
+        declineReasonCode: declineReasonCode as (typeof BOOKING_DECLINE_REASON_CODES)[number]["code"],
+        declineReasonNote: declineReasonNote.trim() || undefined,
+      });
+    } catch (statusError) {
+      setError(statusError instanceof Error ? statusError.message : "Failed to update request.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleMarkInReview() {
+    setSaving(true);
+    setError(null);
+    try {
+      await updateStatus({
+        id: requestId,
+        status: "in_review",
         staffNotes: staffNotes.trim() || undefined,
       });
     } catch (statusError) {
@@ -181,6 +206,14 @@ export function EventRequestDetailClient({ requestId }: { requestId: Id<"eventRe
         <DetailRow label="Lighting" value={request.lightingPreference} />
         <DetailRow label="Additional notes" value={request.additionalNotes} />
         <DetailRow label="Staff notes" value={request.staffNotes} />
+        {request.status === "declined" && request.declineReasonCode ? (
+          <DetailRow
+            label="Decline reason"
+            value={`${bookingDeclineReasonLabel(request.declineReasonCode)}${
+              request.declineReasonNote ? ` — ${request.declineReasonNote}` : ""
+            }`}
+          />
+        ) : null}
       </div>
 
       {request.status !== "converted" && request.status !== "declined" ? (
@@ -192,7 +225,38 @@ export function EventRequestDetailClient({ requestId }: { requestId: Id<"eventRe
             placeholder="Internal notes (optional)"
             className="min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
           />
+          <div className="grid gap-2 sm:grid-cols-2">
+            <label className="grid gap-1 text-sm">
+              <span className="font-medium">Decline reason</span>
+              <select
+                value={declineReasonCode}
+                onChange={(event) => setDeclineReasonCode(event.target.value)}
+                className="rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="">Select a reason…</option>
+                {BOOKING_DECLINE_REASON_CODES.map((reason) => (
+                  <option key={reason.code} value={reason.code}>
+                    {reason.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="grid gap-1 text-sm">
+              <span className="font-medium">Decline note (optional)</span>
+              <input
+                value={declineReasonNote}
+                onChange={(event) => setDeclineReasonNote(event.target.value)}
+                placeholder="Extra context for the team"
+                className="rounded-md border border-input bg-background px-3 py-2 text-sm"
+              />
+            </label>
+          </div>
           <div className="flex flex-wrap gap-2">
+            {request.status === "submitted" ? (
+              <Button type="button" variant="secondary" disabled={saving} onClick={() => void handleMarkInReview()}>
+                Mark in review
+              </Button>
+            ) : null}
             <Button type="button" variant="outline" disabled={saving} onClick={() => void handleDecline()}>
               Decline
             </Button>

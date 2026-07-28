@@ -5,6 +5,7 @@ import { listEventsByInvoiceId } from "./invoiceEvents";
 import { toDocumentLineItem } from "./invoiceDocumentBuild";
 import { resolveBillableOccurrenceCount } from "./invoiceSeries";
 import { loadPaymentProofState, normalizeFinanceContactEmail } from "./paymentProof";
+import { recordInvoiceStatusTransition } from "./statusTransitions";
 import {
   markPayingPartyNotified,
   schedulePayingPartyAddedEmail,
@@ -209,6 +210,15 @@ export async function loadPublicQuoteView(ctx: QueryCtx, invoice: Doc<"invoices"
   };
 }
 
+export async function incrementPublicQuoteView(ctx: MutationCtx, invoice: Doc<"invoices">) {
+  const now = Date.now();
+  await ctx.db.patch(invoice._id, {
+    publicQuoteLastOpenedAt: now,
+    publicQuoteOpenCount: (invoice.publicQuoteOpenCount ?? 0) + 1,
+    updatedAt: now,
+  });
+}
+
 function normalizeSignedName(raw: string) {
   const trimmed = raw.trim().replace(/\s+/g, " ");
   if (trimmed.length < 2) throw new Error("Type your full name to electronically sign.");
@@ -252,6 +262,7 @@ export async function approveInvoiceQuote(
   }
 
   const now = Date.now();
+  const fromStatus = invoice.clientApprovalStatus ?? "pending";
   const { version: termsVersion } = await loadInvoiceTerms(ctx, invoice);
   await ctx.db.patch(invoice._id, {
     clientApprovalStatus: "approved",
@@ -265,6 +276,7 @@ export async function approveInvoiceQuote(
     termsVersionAccepted: termsVersion,
     updatedAt: now,
   });
+  await recordInvoiceStatusTransition(ctx, invoice._id, fromStatus, "approved", { at: now });
   await syncLinkedEventStatusFromInvoice(ctx, invoice._id, "approved");
 
   if (!clientIsPaymentSubmitter && paymentSubmitterEmail) {
@@ -371,11 +383,13 @@ export async function requestInvoiceQuoteChanges(
   }
 
   const now = Date.now();
+  const fromStatus = invoice.clientApprovalStatus ?? "pending";
   await ctx.db.patch(invoice._id, {
     clientApprovalStatus: "changes_requested",
     changesRequestedAt: now,
     clientApprovalNote: trimmed,
     updatedAt: now,
   });
+  await recordInvoiceStatusTransition(ctx, invoice._id, fromStatus, "changes_requested", { at: now });
   await syncLinkedEventStatusFromInvoice(ctx, invoice._id, "changes_requested");
 }
