@@ -96,7 +96,16 @@ function matchesInventoryFilters(
   );
 }
 
-/** Paginated inventory list for the items manager. */
+/**
+ * Paginated inventory list for the items manager.
+ *
+ * Category/search cannot use an items-table index (category lives on the type;
+ * search spans assetId, serial, and type fields). Filtering the paginated page
+ * hid newer rows — same failure inventoryTypes.list had. Filtered reads scan a
+ * bounded window, filter with light type lookups, then fully hydrate only the
+ * matches so we do not pay location/container/children cost on the full scan.
+ * Unfiltered reads still paginate.
+ */
 export const list = query({
   args: {
     paginationOpts: paginationOptsValidator,
@@ -105,6 +114,29 @@ export const list = query({
   },
   handler: async (ctx, args) => {
     await requireAuth(ctx);
+
+    const hasInMemoryFilter =
+      Boolean(args.search?.trim()) || Boolean(args.category);
+
+    if (hasInMemoryFilter) {
+      const candidates = await ctx.db.query("inventoryItems").take(MAX_LIST_LIMIT);
+      const typeIds = Array.from(new Set(candidates.map((item) => item.typeId)));
+      const types = await Promise.all(typeIds.map((id) => ctx.db.get(id)));
+      const typeById = new Map(typeIds.map((id, index) => [id, types[index] ?? null]));
+
+      const matched = candidates
+        .filter((item) =>
+          matchesInventoryFilters(
+            { ...item, type: typeById.get(item.typeId) ?? null },
+            args,
+          ),
+        )
+        .sort((a, b) => a.assetId.localeCompare(b.assetId));
+
+      const page = await hydrateInventoryItems(ctx, matched);
+      return { page, isDone: true, continueCursor: "" };
+    }
+
     const result = await ctx.db.query("inventoryItems").paginate(args.paginationOpts);
     const hydrated = await hydrateInventoryItems(ctx, result.page);
     const page = hydrated

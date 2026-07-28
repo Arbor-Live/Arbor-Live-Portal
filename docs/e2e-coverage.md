@@ -314,7 +314,7 @@ catalog sits against the caps that matter:
 | `inventoryTypes.listOptions` | 1500 | the packages catalog panel and the item editor's Type picker cannot see a new type |
 | `inventoryItems.listSummaries` | 1000 | the item editor's "Contained In Asset" picker cannot see a new asset |
 | `inventoryPackages.list` | 500 | the packages page cannot see a new package |
-| `inventoryItems.list` | 100/page | the items search box finds nothing — see the bug table |
+| `inventoryItems.list` | 100/page unfiltered; 2000 scan when filtered | unfiltered Load more still needed for deep pages; filtered search is one finished page |
 
 At the time of writing: 289 types, 387 items, 2 packages, 2 locations.
 
@@ -349,20 +349,15 @@ Worth recording, because each one argues for the next batch.
 
 **Still unfixed, found by Batch 10:**
 
-`inventoryItems.list` has the identical filter-after-paginate bug as
-`inventoryTypes.list` had, and with 387 items it is already live: searching an
-asset ID outside the oldest 100 finds nothing. It was left alone because the fix
-is not symmetric — the items list hydrates each row with its type, location,
-container and contained assets, so a 2000-row filtered scan cannot simply be
-hydrated the way the types scan can, and picking that budget deserves its own
-change. `revealRow` in `e2e/helpers/inventory.ts` pages around it for now.
+*(none — both Batch 10 leftovers below were fixed after the batch.)*
 
-`capabilityDefinitions.remove` has no in-use guard, unlike
-`inventoryCategories.remove`. Deleting a capability key still referenced by a
-type leaves that type permanently un-saveable, because `inventoryTypes.update`
-re-validates every capability on save and throws on the missing key. Reasoned
-from the code; Batch 10's taxonomy spec deletes the type first, so it does not
-exercise the broken order.
+~~`inventoryItems.list` filter-after-paginate~~ — fixed: filtered reads scan a
+bounded window, filter with light type lookups, then fully hydrate only the
+matches (unfiltered still paginates).
+
+~~`capabilityDefinitions.remove` unguarded delete~~ — fixed: refuses while any
+inventory type still lists the capability key (same idea as
+`inventoryCategories.remove`).
 
 **Fixed since, still untested:** the same unguarded reset effect in
 `events/event-series-schedule-editor.tsx` and

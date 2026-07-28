@@ -107,7 +107,7 @@ export function PublicQuoteApprovalSection({
         {invoice.clientApprovalStatus === "approved" && invoice.approvedAt ? (
           <Alert>
             <AlertDescription>
-              Approved on {formatApprovalDate(invoice.approvedAt)} Pacific
+              Approved on {formatApprovalDate(invoice.approvedAt)}
               {invoice.clientApprovalSignedName ? ` by ${invoice.clientApprovalSignedName}` : ""}.
             </AlertDescription>
           </Alert>
@@ -116,8 +116,8 @@ export function PublicQuoteApprovalSection({
         {invoice.clientApprovalStatus === "changes_requested" && invoice.changesRequestedAt ? (
           <Alert>
             <AlertDescription>
-              Changes requested on {formatApprovalDate(invoice.changesRequestedAt)} Pacific. Our team
-              will follow up with an updated quote.
+              Changes requested on {formatApprovalDate(invoice.changesRequestedAt)}. Our team will
+              follow up with an updated quote.
             </AlertDescription>
           </Alert>
         ) : null}
