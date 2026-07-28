@@ -1,7 +1,6 @@
 import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import { query, type QueryCtx } from "./_generated/server";
-import { requireAdmin, requireArborInternalContext } from "./lib/auth";
 import {
   average,
   listPacificMonthKeys,
@@ -9,22 +8,24 @@ import {
   msToDays,
   pacificMonthKey,
 } from "./lib/analyticsTime";
+import {
+  analyticsRangeArgs,
+  assertValidRange,
+  INVOICE_SCAN_LIMIT,
+  loadEventsInRange,
+  requireAnalyticsAccess,
+} from "./lib/analyticsQuery";
 import { classifyPaymentQueue } from "./lib/invoicePaymentStatus";
 import { getActivePaymentProofSubmission } from "./lib/paymentProof";
 
 /** Bounded scan caps — intentional; return `truncated` when hit. */
-const INVOICE_SCAN_LIMIT = 2000;
-const EVENT_SCAN_LIMIT = 1000;
 const BAND_PAYMENT_SCAN_LIMIT = 1000;
 /** Match paymentProof.listByQueue lookback so AR aligns with Payments queues. */
 const AR_EVENT_LOOKBACK_MS = 90 * 24 * 60 * 60 * 1000;
 const AR_EVENT_SCAN_LIMIT = 500;
 const TOP_CLIENTS_DEFAULT = 10;
 
-const rangeArgs = {
-  startMs: v.number(),
-  endMs: v.number(),
-};
+const rangeArgs = analyticsRangeArgs;
 
 const monthBucketValidator = v.object({
   monthKey: v.string(),
@@ -36,17 +37,6 @@ const sparklinePointValidator = v.object({
   revenueUsd: v.number(),
   expensesUsd: v.number(),
 });
-
-async function requireAnalyticsAccess(ctx: QueryCtx) {
-  await requireAdmin(ctx);
-  await requireArborInternalContext(ctx);
-}
-
-function assertValidRange(startMs: number, endMs: number) {
-  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs < startMs) {
-    throw new Error("Invalid analytics date range.");
-  }
-}
 
 function eventCostUsd(event: Doc<"events">): number {
   return (
@@ -82,14 +72,6 @@ async function loadApprovedInvoicesInRange(ctx: QueryCtx, startMs: number, endMs
       (invoice.clientApprovalStatus ?? "pending") === "approved",
   );
   return { invoices, truncated };
-}
-
-async function loadEventsInRange(ctx: QueryCtx, startMs: number, endMs: number) {
-  const rows = await ctx.db
-    .query("events")
-    .withIndex("by_startAt", (q) => q.gte("startAt", startMs).lte("startAt", endMs))
-    .take(EVENT_SCAN_LIMIT);
-  return { events: rows, truncated: rows.length >= EVENT_SCAN_LIMIT };
 }
 
 async function loadBandPayoutsInRange(ctx: QueryCtx, startMs: number, endMs: number) {

@@ -9,6 +9,7 @@ import { searchHostOrganizations } from "./lib/hostOrgIdentity";
 import { resolveHostLink } from "./lib/hostOrgs";
 import {
   approveInvoiceQuote,
+  incrementPublicQuoteView,
   loadPublicQuoteView,
   requestInvoiceQuoteChanges,
   updateInvoicePaymentContacts,
@@ -28,6 +29,10 @@ import {
   type DayEventPlan,
 } from "./lib/bookingDayLoad";
 import { resolveVenueLink } from "./lib/venues";
+import {
+  bookingDeclineReasonCodeValue,
+  recordEventRequestStatusTransition,
+} from "./lib/statusTransitions";
 
 const eventRequestStatusValue = v.union(
   v.literal("submitted"),
@@ -432,6 +437,23 @@ export const getPublicRequestQuoteByToken = query({
   },
 });
 
+export const recordPublicQuoteViewByRequestToken = mutation({
+  args: { token: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await enforceRateLimit(ctx, `requestQuoteView:${args.token}`, { limit: 120, windowMs: HOUR_MS });
+    const request = await ctx.db
+      .query("eventRequests")
+      .withIndex("by_publicToken", (q) => q.eq("publicToken", args.token))
+      .unique();
+    if (!request?.linkedInvoiceId) return null;
+    const invoice = await ctx.db.get(request.linkedInvoiceId);
+    if (!invoice || invoice.status === "void" || !invoice.clientReviewReadyAt) return null;
+    await incrementPublicQuoteView(ctx, invoice);
+    return null;
+  },
+});
+
 export const approveQuoteByRequestToken = mutation({
   args: {
     token: v.string(),
@@ -752,6 +774,11 @@ export const get = query({
       linkedInvoiceId: v.optional(v.id("invoices")),
       reviewedByUserId: v.optional(v.string()),
       staffNotes: v.optional(v.string()),
+      reviewedAt: v.optional(v.number()),
+      convertedAt: v.optional(v.number()),
+      declinedAt: v.optional(v.number()),
+      declineReasonCode: v.optional(bookingDeclineReasonCodeValue),
+      declineReasonNote: v.optional(v.string()),
       submittedAt: v.number(),
       createdAt: v.number(),
       updatedAt: v.number(),
@@ -860,6 +887,8 @@ export const updateStatus = mutation({
     id: v.id("eventRequests"),
     status: v.union(v.literal("in_review"), v.literal("declined")),
     staffNotes: v.optional(v.string()),
+    declineReasonCode: v.optional(bookingDeclineReasonCodeValue),
+    declineReasonNote: v.optional(v.string()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -870,12 +899,40 @@ export const updateStatus = mutation({
     if (existing.status === "converted") {
       throw new Error("Converted requests cannot be updated.");
     }
+    if (args.status === "declined" && !args.declineReasonCode) {
+      throw new Error("Select a decline reason.");
+    }
     const now = Date.now();
-    await ctx.db.patch(args.id, {
+    const actorUserId = getUserId(user);
+    const patch: {
+      status: "in_review" | "declined";
+      staffNotes?: string;
+      reviewedByUserId: string;
+      updatedAt: number;
+      reviewedAt?: number;
+      declinedAt?: number;
+      declineReasonCode?: typeof args.declineReasonCode;
+      declineReasonNote?: string;
+    } = {
       status: args.status,
       staffNotes: trimOptional(args.staffNotes),
-      reviewedByUserId: getUserId(user),
+      reviewedByUserId: actorUserId,
       updatedAt: now,
+    };
+    if (args.status === "in_review") {
+      patch.reviewedAt = existing.reviewedAt ?? now;
+    }
+    if (args.status === "declined") {
+      patch.declinedAt = now;
+      patch.declineReasonCode = args.declineReasonCode;
+      patch.declineReasonNote = trimOptional(args.declineReasonNote);
+    }
+    await ctx.db.patch(args.id, patch);
+    await recordEventRequestStatusTransition(ctx, args.id, existing.status, args.status, {
+      actorUserId,
+      at: now,
+      reasonCode: args.declineReasonCode,
+      reasonNote: trimOptional(args.declineReasonNote),
     });
     return null;
   },
@@ -1000,7 +1057,13 @@ export const convertToEvent = mutation({
       convertedEventIds: eventIds,
       linkedInvoiceId: invoiceId,
       reviewedByUserId: managerUserId,
+      reviewedAt: request.reviewedAt ?? now,
+      convertedAt: now,
       updatedAt: now,
+    });
+    await recordEventRequestStatusTransition(ctx, args.id, request.status, "converted", {
+      actorUserId: managerUserId,
+      at: now,
     });
 
     return {

@@ -13,6 +13,8 @@ import { formatUsd } from "@/lib/format";
 
 type RevenueBarChartProps = {
   months: Array<{ monthKey: string; amountUsd: number }>;
+  emptyLabel?: string;
+  valueLabel?: string;
 };
 
 function shortMonthLabel(monthKey: string) {
@@ -23,14 +25,18 @@ function shortMonthLabel(monthKey: string) {
   return `${label} ${year?.slice(2) ?? ""}`;
 }
 
-export function RevenueBarChart({ months }: RevenueBarChartProps) {
+export function RevenueBarChart({
+  months,
+  emptyLabel = "No recognized revenue in this range.",
+  valueLabel = "Revenue",
+}: RevenueBarChartProps) {
   const data = months.map((row) => ({
     ...row,
     label: shortMonthLabel(row.monthKey),
   }));
 
   if (data.every((row) => row.amountUsd === 0)) {
-    return <p className="text-sm text-muted-foreground">No recognized revenue in this range.</p>;
+    return <p className="text-sm text-muted-foreground">{emptyLabel}</p>;
   }
 
   return (
@@ -52,7 +58,7 @@ export function RevenueBarChart({ months }: RevenueBarChartProps) {
             formatter={(value) => formatUsd(Number(value ?? 0))}
             labelFormatter={(label) => String(label)}
           />
-          <Bar dataKey="amountUsd" name="Revenue" fill="var(--primary)" radius={[2, 2, 0, 0]} />
+          <Bar dataKey="amountUsd" name={valueLabel} fill="var(--primary)" radius={[2, 2, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </div>

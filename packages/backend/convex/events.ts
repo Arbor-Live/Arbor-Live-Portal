@@ -3,7 +3,7 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { components } from "./_generated/api";
-import { requireAdmin, requireArborInternalContext, requireAuth } from "./lib/auth";
+import { requireAdmin, requireArborInternalContext, requireAuth, getUserId } from "./lib/auth";
 import { canEditEventForUser, requireEventEditAccess } from "./lib/eventAccess";
 import {
   eventStatusValue,
@@ -26,6 +26,10 @@ import { scheduleEventCancelledEmails } from "./email/triggers";
 import { resolveStoredR2AssetUrl } from "./inventoryR2";
 import { resolveVenueLink } from "./lib/venues";
 import { resolveHostLink } from "./lib/hostOrgs";
+import {
+  eventCancelReasonCodeValue,
+  recordEventStatusTransition,
+} from "./lib/statusTransitions";
 
 const eventTypeValue = v.union(
   v.literal("Crewed Event"),
@@ -545,6 +549,7 @@ export const update = mutation({
     hostGroupId: v.optional(v.union(v.id("invoiceGroups"), v.null())),
     host: v.optional(v.string()),
     expectedTurnout: v.optional(v.number()),
+    actualTurnout: v.optional(v.number()),
     budgetUsd: v.optional(v.number()),
     dayOfLeadUserId: v.optional(v.string()),
     eventManagerUserId: v.optional(v.string()),
@@ -560,7 +565,7 @@ export const update = mutation({
     openMicNotes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    const user = await requireAuth(ctx);
     await requireArborInternalContext(ctx);
     await requireEventEditAccess(ctx, args.id);
     const existing = await ctx.db.get(args.id);
@@ -576,6 +581,7 @@ export const update = mutation({
         : resolveRentalFulfillmentMode(nextEventType, existing.rentalFulfillmentMode);
     const nextInvoiceId = args.invoiceId !== undefined ? args.invoiceId : existing.invoiceId;
     const nextStatus = normalizeEventStatus(args.status ?? existing.status);
+    const prevStatus = normalizeEventStatus(existing.status);
     const now = Date.now();
     const nextOpenMicEnabled =
       args.openMicEnabled !== undefined ? args.openMicEnabled === true : existing.openMicEnabled === true;
@@ -624,6 +630,7 @@ export const update = mutation({
       hostGroupId: hostLink.hostGroupId,
       host: hostLink.host,
       expectedTurnout: args.expectedTurnout ?? existing.expectedTurnout,
+      actualTurnout: args.actualTurnout ?? existing.actualTurnout,
       budgetUsd: args.budgetUsd ?? existing.budgetUsd,
       dayOfLeadUserId: args.dayOfLeadUserId?.trim() ?? existing.dayOfLeadUserId,
       eventManagerUserId: args.eventManagerUserId?.trim() ?? existing.eventManagerUserId,
@@ -744,6 +751,13 @@ export const update = mutation({
       });
     }
 
+    if (prevStatus !== nextStatus) {
+      await recordEventStatusTransition(ctx, args.id, prevStatus, nextStatus, {
+        actorUserId: getUserId(user),
+        at: now,
+      });
+    }
+
     const seen = new Set<Id<"events">>();
     for (const occ of affectedOccurrences) {
       if (seen.has(occ.id)) continue;
@@ -763,20 +777,41 @@ export const setStatus = mutation({
   args: {
     id: v.id("events"),
     status: eventStatusValue,
+    cancelReasonCode: v.optional(eventCancelReasonCodeValue),
+    cancelReasonNote: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    const user = await requireAuth(ctx);
     await requireArborInternalContext(ctx);
     await requireEventEditAccess(ctx, args.id);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Event not found.");
     const wasCancelled = normalizeEventStatus(existing.status) === "cancelled";
+    const prevStatus = normalizeEventStatus(existing.status);
     const nextStatus = normalizeEventStatus(args.status);
     const now = Date.now();
-    await ctx.db.patch(args.id, {
+    const patch: {
+      status: typeof nextStatus;
+      updatedAt: number;
+      cancelReasonCode?: typeof args.cancelReasonCode;
+      cancelReasonNote?: string;
+    } = {
       status: nextStatus,
       updatedAt: now,
-    });
+    };
+    if (nextStatus === "cancelled" && !wasCancelled) {
+      patch.cancelReasonCode = args.cancelReasonCode;
+      patch.cancelReasonNote = args.cancelReasonNote?.trim() || undefined;
+    }
+    await ctx.db.patch(args.id, patch);
+    if (prevStatus !== nextStatus) {
+      await recordEventStatusTransition(ctx, args.id, prevStatus, nextStatus, {
+        actorUserId: getUserId(user),
+        at: now,
+        reasonCode: args.cancelReasonCode,
+        reasonNote: args.cancelReasonNote?.trim() || undefined,
+      });
+    }
     if (nextStatus === "cancelled" && !wasCancelled) {
       await scheduleEventCancelledEmails(ctx, args.id, now);
     }

@@ -1,11 +1,11 @@
 import { AdminOnlyGuard, ArborOnlyGuard } from "@/components/org-context-guard";
-import { InsightsFinancesPanel } from "@/components/insights/insights-finances-panel";
+import { InsightsPageClient } from "@/components/insights/insights-page-client";
 
 export default function FinancialHubInsightsPage() {
   return (
     <ArborOnlyGuard>
       <AdminOnlyGuard>
-        <InsightsFinancesPanel />
+        <InsightsPageClient />
       </AdminOnlyGuard>
     </ArborOnlyGuard>
   );

@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
 import { PublicPageHero } from "@/components/public/public-page-hero";
@@ -32,10 +33,18 @@ function quoteStatusLabel(status: "pending" | "approved" | "changes_requested") 
 
 export function PublicEventLifecycleClient({ token }: { token: string }) {
   const data = useQuery(api.invoices.getPublicQuoteByToken, { token });
+  const recordQuoteView = useMutation(api.invoices.recordPublicQuoteView);
+  const recordedQuoteView = useRef(false);
   const approve = useMutation(api.invoices.approveByToken);
   const requestChanges = useMutation(api.invoices.requestChangesByToken);
   const updatePaymentContacts = useMutation(api.invoices.updatePaymentContactsByToken);
   const submitPaymentProof = useMutation(api.paymentProof.submitByQuoteToken);
+
+  useEffect(() => {
+    if (!data || recordedQuoteView.current) return;
+    recordedQuoteView.current = true;
+    void recordQuoteView({ token });
+  }, [data, recordQuoteView, token]);
 
   if (data === undefined) {
     return (

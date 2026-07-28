@@ -1395,6 +1395,10 @@ export const getBookingRequestState = query({
       convertedEventId: v.union(v.id("events"), v.null()),
       linkedInvoiceId: v.union(v.id("invoices"), v.null()),
       requestNumber: v.union(v.string(), v.null()),
+      declineReasonCode: v.union(v.string(), v.null()),
+      declinedAt: v.union(v.number(), v.null()),
+      convertedAt: v.union(v.number(), v.null()),
+      reviewedAt: v.union(v.number(), v.null()),
     }),
   ),
   handler: async (ctx, args) => {
@@ -1406,6 +1410,10 @@ export const getBookingRequestState = query({
       convertedEventId: request.convertedEventId ?? null,
       linkedInvoiceId: request.linkedInvoiceId ?? null,
       requestNumber: request.requestNumber ?? null,
+      declineReasonCode: request.declineReasonCode ?? null,
+      declinedAt: request.declinedAt ?? null,
+      convertedAt: request.convertedAt ?? null,
+      reviewedAt: request.reviewedAt ?? null,
     };
   },
 });
