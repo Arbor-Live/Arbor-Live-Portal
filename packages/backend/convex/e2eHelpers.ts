@@ -2,7 +2,7 @@ import { payPeriodForDate } from "@arbor/format";
 import { v } from "convex/values";
 import { customAlphabet } from "nanoid";
 import { hashPassword } from "better-auth/crypto";
-import { components } from "./_generated/api";
+import { api, components } from "./_generated/api";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import {
@@ -3756,5 +3756,788 @@ export const setAuthUserRole = mutation({
       },
     });
     return { ok: true as const, userId, role: args.role };
+  },
+});
+
+/* -------------------------------------------------------------------------- */
+/* Inventory catalog (Batch 10)                                               */
+/*                                                                            */
+/* The catalog is the one data model every other spec seeds against, and its  */
+/* fixtures are not events, so `pruneE2eSeedData` cannot reach them. Each      */
+/* catalog spec therefore names what it creates and hands those names back to  */
+/* `deleteInventoryCatalogFixtures` in an `afterAll`.                          */
+/* -------------------------------------------------------------------------- */
+
+const inventoryResourceLink = v.object({ title: v.string(), url: v.string() });
+
+/**
+ * Test-only: idempotent category upsert.
+ *
+ * `inventoryTypes.create` refuses a category that is missing or inactive, so a
+ * spec that drives the type form needs its category to exist first. The
+ * shared deployment normally has the defaults, but a fresh anonymous CI
+ * deployment does not — and a spec failing on "Unknown or inactive category
+ * key" reads as a broken form rather than a missing fixture.
+ */
+export const ensureInventoryCategory = mutation({
+  args: {
+    key: v.string(),
+    label: v.optional(v.string()),
+    publicBucket: v.optional(
+      v.union(
+        v.literal("lighting"),
+        v.literal("sound"),
+        v.literal("environmental"),
+        v.literal("staging"),
+        v.literal("misc"),
+      ),
+    ),
+  },
+  returns: v.object({ categoryId: v.id("inventoryCategories"), key: v.string(), label: v.string() }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const key = args.key.trim().toLowerCase();
+    if (!key) throw new Error("Category key is required.");
+    const label = args.label?.trim() || key;
+    const now = Date.now();
+    const existing = await ctx.db
+      .query("inventoryCategories")
+      .withIndex("by_key", (q) => q.eq("key", key))
+      .unique();
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        active: true,
+        publicBucket: args.publicBucket ?? existing.publicBucket,
+        updatedAt: now,
+      });
+      return { categoryId: existing._id, key, label: existing.label };
+    }
+    const categoryId = await ctx.db.insert("inventoryCategories", {
+      key,
+      label,
+      publicBucket: args.publicBucket,
+      active: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return { categoryId, key, label };
+  },
+});
+
+/** Test-only: idempotent capability upsert (same reasoning as the category). */
+export const ensureInventoryCapability = mutation({
+  args: { key: v.string(), label: v.optional(v.string()) },
+  returns: v.object({ capabilityId: v.id("capabilityDefinitions"), key: v.string() }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const key = args.key.trim().toLowerCase();
+    if (!key) throw new Error("Capability key is required.");
+    const now = Date.now();
+    const existing = await ctx.db
+      .query("capabilityDefinitions")
+      .withIndex("by_key", (q) => q.eq("key", key))
+      .unique();
+    if (existing) {
+      await ctx.db.patch(existing._id, { active: true, updatedAt: now });
+      return { capabilityId: existing._id, key };
+    }
+    const capabilityId = await ctx.db.insert("capabilityDefinitions", {
+      key,
+      label: args.label?.trim() || key,
+      active: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return { capabilityId, key };
+  },
+});
+
+/** Test-only: a catalog type for specs whose subject is something else. */
+export const seedInventoryType = mutation({
+  args: {
+    name: v.string(),
+    model: v.optional(v.string()),
+    manufacturer: v.optional(v.string()),
+    category: v.optional(v.string()),
+    msrpUsd: v.optional(v.number()),
+    subsidizedRentalPriceUsd: v.optional(v.number()),
+    nonSubsidizedRentalPriceUsd: v.optional(v.number()),
+    publicListing: v.optional(v.boolean()),
+    publicProfile: v.optional(v.boolean()),
+  },
+  returns: v.object({ typeId: v.id("inventoryTypes"), name: v.string(), model: v.string() }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const now = Date.now();
+    const name = args.name.trim();
+    const model = args.model?.trim() || `${name} Model`;
+    const typeId = await ctx.db.insert("inventoryTypes", {
+      name,
+      model,
+      manufacturer: args.manufacturer?.trim(),
+      category: (args.category ?? "misc").trim().toLowerCase(),
+      msrpUsd: args.msrpUsd,
+      subsidizedRentalPriceUsd: args.subsidizedRentalPriceUsd,
+      nonSubsidizedRentalPriceUsd: args.nonSubsidizedRentalPriceUsd,
+      rentalPriceUsd: args.nonSubsidizedRentalPriceUsd,
+      manualUrls: [],
+      capabilities: [],
+      publicListing: args.publicListing ?? false,
+      publicProfile: args.publicProfile ?? false,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return { typeId, name, model };
+  },
+});
+
+/** Test-only: a storage location, optionally nested under an existing path. */
+export const seedStorageLocation = mutation({
+  args: { name: v.string(), parentPath: v.optional(v.string()) },
+  returns: v.object({
+    locationId: v.id("storageLocations"),
+    name: v.string(),
+    path: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const now = Date.now();
+    const name = args.name.trim();
+    let path = name;
+    let parentId: Id<"storageLocations"> | undefined;
+    const parentPath = args.parentPath?.trim();
+    if (parentPath) {
+      const parent = await ctx.db
+        .query("storageLocations")
+        .withIndex("by_path", (q) => q.eq("path", parentPath))
+        .first();
+      if (!parent) throw new Error(`No storage location at path "${parentPath}".`);
+      parentId = parent._id;
+      path = `${parent.path} > ${name}`;
+    }
+    const locationId = await ctx.db.insert("storageLocations", {
+      name,
+      parentId,
+      path,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return { locationId, name, path };
+  },
+});
+
+/** Test-only: an inventory item pinned to a seeded type. */
+export const seedInventoryItem = mutation({
+  args: {
+    assetId: v.string(),
+    typeName: v.string(),
+    serialNumber: v.optional(v.string()),
+    storageLocationPath: v.optional(v.string()),
+  },
+  returns: v.object({ itemId: v.id("inventoryItems"), assetId: v.string() }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const now = Date.now();
+    const assetId = args.assetId.trim();
+    const type = await ctx.db
+      .query("inventoryTypes")
+      .withIndex("by_name", (q) => q.eq("name", args.typeName.trim()))
+      .first();
+    if (!type) throw new Error(`No inventory type named "${args.typeName}".`);
+    let storageLocationId: Id<"storageLocations"> | undefined;
+    const locationPath = args.storageLocationPath?.trim();
+    if (locationPath) {
+      const location = await ctx.db
+        .query("storageLocations")
+        .withIndex("by_path", (q) => q.eq("path", locationPath))
+        .first();
+      if (!location) throw new Error(`No storage location at path "${locationPath}".`);
+      storageLocationId = location._id;
+    }
+    const itemId = await ctx.db.insert("inventoryItems", {
+      assetId,
+      serialNumber: args.serialNumber?.trim(),
+      typeId: type._id,
+      storageLocationId,
+      status: "functional",
+      createdAt: now,
+      updatedAt: now,
+    });
+    return { itemId, assetId };
+  },
+});
+
+/**
+ * Test-only: everything the types manager writes, read back by name.
+ *
+ * `linkedItemCount` and `packageLineCount` are the two things
+ * `inventoryTypes.remove` refuses on, so a spec asserting the refusal can show
+ * *why* the row survived rather than just that it did.
+ */
+export const getInventoryTypeByName = query({
+  args: { name: v.string() },
+  returns: v.union(
+    v.null(),
+    v.object({
+      typeId: v.id("inventoryTypes"),
+      name: v.string(),
+      model: v.string(),
+      manufacturer: v.union(v.string(), v.null()),
+      category: v.string(),
+      description: v.union(v.string(), v.null()),
+      tips: v.union(v.string(), v.null()),
+      msrpUsd: v.union(v.number(), v.null()),
+      subsidizedRentalPriceUsd: v.union(v.number(), v.null()),
+      nonSubsidizedRentalPriceUsd: v.union(v.number(), v.null()),
+      rentalPriceUsd: v.union(v.number(), v.null()),
+      capabilities: v.array(v.string()),
+      manualUrls: v.array(inventoryResourceLink),
+      gdtfUrls: v.array(inventoryResourceLink),
+      publicListing: v.boolean(),
+      publicProfile: v.boolean(),
+      publicSlug: v.union(v.string(), v.null()),
+      linkedItemCount: v.number(),
+      packageLineCount: v.number(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const type = await ctx.db
+      .query("inventoryTypes")
+      .withIndex("by_name", (q) => q.eq("name", args.name.trim()))
+      .first();
+    if (!type) return null;
+    const linkedItems = await ctx.db
+      .query("inventoryItems")
+      .withIndex("by_typeId", (q) => q.eq("typeId", type._id))
+      .take(50);
+    const packageLines = await ctx.db
+      .query("inventoryPackageItems")
+      .withIndex("by_typeId", (q) => q.eq("typeId", type._id))
+      .take(50);
+    return {
+      typeId: type._id,
+      name: type.name,
+      model: type.model,
+      manufacturer: type.manufacturer ?? null,
+      category: type.category,
+      description: type.description ?? null,
+      tips: type.tips ?? null,
+      msrpUsd: type.msrpUsd ?? null,
+      subsidizedRentalPriceUsd: type.subsidizedRentalPriceUsd ?? null,
+      nonSubsidizedRentalPriceUsd: type.nonSubsidizedRentalPriceUsd ?? null,
+      rentalPriceUsd: type.rentalPriceUsd ?? null,
+      capabilities: type.capabilities,
+      manualUrls: type.manualUrls,
+      gdtfUrls: type.categoryMetadata?.lighting?.gdtfUrls ?? [],
+      publicListing: Boolean(type.publicListing),
+      publicProfile: Boolean(type.publicProfile),
+      publicSlug: type.publicSlug ?? null,
+      linkedItemCount: linkedItems.length,
+      packageLineCount: packageLines.length,
+    };
+  },
+});
+
+/**
+ * Test-only: a package and its line rows, read back by name.
+ *
+ * `inventoryPackages.update` does not patch the line rows — it deletes every
+ * `inventoryPackageItems` row for the package and re-inserts the submitted set.
+ * A spec that only counted lines would miss a re-insert that dropped a
+ * quantity, so the lines come back with their type names attached.
+ */
+export const getInventoryPackageByName = query({
+  args: { name: v.string() },
+  returns: v.union(
+    v.null(),
+    v.object({
+      packageId: v.id("inventoryPackages"),
+      name: v.string(),
+      description: v.union(v.string(), v.null()),
+      active: v.boolean(),
+      packagePriceCents: v.number(),
+      subsidizedPackagePriceUsd: v.union(v.number(), v.null()),
+      nonSubsidizedPackagePriceUsd: v.union(v.number(), v.null()),
+      publicListing: v.boolean(),
+      publicBucket: v.union(v.string(), v.null()),
+      publicSlug: v.union(v.string(), v.null()),
+      items: v.array(
+        v.object({
+          typeId: v.id("inventoryTypes"),
+          typeName: v.string(),
+          quantity: v.number(),
+        }),
+      ),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const pkg = await ctx.db
+      .query("inventoryPackages")
+      .withIndex("by_name", (q) => q.eq("name", args.name.trim()))
+      .first();
+    if (!pkg) return null;
+    const lines = await ctx.db
+      .query("inventoryPackageItems")
+      .withIndex("by_packageId", (q) => q.eq("packageId", pkg._id))
+      .take(200);
+    const items = [];
+    for (const line of lines) {
+      const type = await ctx.db.get(line.typeId);
+      items.push({
+        typeId: line.typeId,
+        typeName: type?.name ?? "(missing type)",
+        quantity: line.quantity,
+      });
+    }
+    items.sort((a, b) => a.typeName.localeCompare(b.typeName));
+    return {
+      packageId: pkg._id,
+      name: pkg.name,
+      description: pkg.description ?? null,
+      active: pkg.active,
+      packagePriceCents: pkg.packagePriceCents,
+      subsidizedPackagePriceUsd: pkg.subsidizedPackagePriceUsd ?? null,
+      nonSubsidizedPackagePriceUsd: pkg.nonSubsidizedPackagePriceUsd ?? null,
+      publicListing: Boolean(pkg.publicListing),
+      publicBucket: pkg.publicBucket ?? null,
+      publicSlug: pkg.publicSlug ?? null,
+      items,
+    };
+  },
+});
+
+/**
+ * Test-only: an inventory item plus the containment/location edges around it.
+ *
+ * `inventoryItems.update` cascades the effective storage location down every
+ * contained asset, and prefers the container's location over the one submitted
+ * on the form. Both of those are invisible from the item's own row, so the
+ * children come back with their resolved paths.
+ */
+export const getInventoryItemByAssetId = query({
+  args: { assetId: v.string() },
+  returns: v.union(
+    v.null(),
+    v.object({
+      itemId: v.id("inventoryItems"),
+      assetId: v.string(),
+      serialNumber: v.union(v.string(), v.null()),
+      typeName: v.union(v.string(), v.null()),
+      status: v.union(v.string(), v.null()),
+      notes: v.union(v.string(), v.null()),
+      storageLocationPath: v.union(v.string(), v.null()),
+      containedInAssetId: v.union(v.string(), v.null()),
+      contains: v.array(
+        v.object({
+          assetId: v.string(),
+          storageLocationPath: v.union(v.string(), v.null()),
+        }),
+      ),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const item = await ctx.db
+      .query("inventoryItems")
+      .withIndex("by_assetId", (q) => q.eq("assetId", args.assetId.trim()))
+      .first();
+    if (!item) return null;
+    const type = await ctx.db.get(item.typeId);
+    const location = item.storageLocationId ? await ctx.db.get(item.storageLocationId) : null;
+    const container = item.containedInAssetId ? await ctx.db.get(item.containedInAssetId) : null;
+    const children = await ctx.db
+      .query("inventoryItems")
+      .withIndex("by_containedInAssetId", (q) => q.eq("containedInAssetId", item._id))
+      .take(50);
+    const contains = [];
+    for (const child of children) {
+      const childLocation = child.storageLocationId
+        ? await ctx.db.get(child.storageLocationId)
+        : null;
+      contains.push({
+        assetId: child.assetId,
+        storageLocationPath: childLocation?.path ?? null,
+      });
+    }
+    contains.sort((a, b) => a.assetId.localeCompare(b.assetId));
+    return {
+      itemId: item._id,
+      assetId: item.assetId,
+      serialNumber: item.serialNumber ?? null,
+      typeName: type?.name ?? null,
+      status: item.status ?? null,
+      notes: item.notes ?? null,
+      storageLocationPath: location?.path ?? null,
+      containedInAssetId: container?.assetId ?? null,
+      contains,
+    };
+  },
+});
+
+/**
+ * Test-only: a storage location by *name*, not path.
+ *
+ * Looking it up by path would make "the path was composed correctly" circular —
+ * the query would only find the row if the assertion already held.
+ */
+export const getStorageLocationByName = query({
+  args: { name: v.string() },
+  returns: v.union(
+    v.null(),
+    v.object({
+      locationId: v.id("storageLocations"),
+      name: v.string(),
+      path: v.string(),
+      parentPath: v.union(v.string(), v.null()),
+      childPaths: v.array(v.string()),
+      linkedItemCount: v.number(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const name = args.name.trim();
+    const candidates = await ctx.db.query("storageLocations").withIndex("by_path").take(2000);
+    const location = candidates.find((row) => row.name === name);
+    if (!location) return null;
+    const parent = location.parentId ? await ctx.db.get(location.parentId) : null;
+    const children = await ctx.db
+      .query("storageLocations")
+      .withIndex("by_parentId", (q) => q.eq("parentId", location._id))
+      .take(50);
+    const linkedItems = await ctx.db
+      .query("inventoryItems")
+      .withIndex("by_storageLocationId", (q) => q.eq("storageLocationId", location._id))
+      .take(50);
+    return {
+      locationId: location._id,
+      name: location.name,
+      path: location.path,
+      parentPath: parent?.path ?? null,
+      childPaths: children.map((row) => row.path).sort(),
+      linkedItemCount: linkedItems.length,
+    };
+  },
+});
+
+/**
+ * Test-only: what the *public* catalog queries expose for a named row.
+ *
+ * Deliberately reads `publicInventory` rather than the tables. The public
+ * `/types` and `/packages` pages are statically rendered with `revalidate =
+ * 3600` and refresh through an on-demand `/api/revalidate` call that needs
+ * `REVALIDATE_SECRET`, which the e2e stack does not set — so a freshly toggled
+ * type will not show up on the rendered page inside a test run. The query is
+ * the real contract; the pages get a separate render smoke.
+ *
+ * The explicit handler return type is load-bearing, not decoration: calling
+ * `ctx.runQuery(api.…)` from a module that `api` itself contains makes the
+ * inferred type circular, and TypeScript gives up with TS7022/TS7023 on every
+ * expression in the body.
+ */
+type PublicInventoryListing = {
+  type: {
+    bucket: string;
+    name: string;
+    publicProfileEnabled: boolean;
+    capabilities: string[];
+    description: string | null;
+    tips: string | null;
+    manualCount: number;
+    publicSlug: string | null;
+  } | null;
+  package: {
+    bucket: string;
+    name: string;
+    description: string | null;
+    publicSlug: string | null;
+  } | null;
+};
+
+export const getPublicInventoryListing = query({
+  args: {
+    typeName: v.optional(v.string()),
+    packageName: v.optional(v.string()),
+  },
+  returns: v.object({
+    type: v.union(
+      v.null(),
+      v.object({
+        bucket: v.string(),
+        name: v.string(),
+        publicProfileEnabled: v.boolean(),
+        capabilities: v.array(v.string()),
+        description: v.union(v.string(), v.null()),
+        tips: v.union(v.string(), v.null()),
+        manualCount: v.number(),
+        publicSlug: v.union(v.string(), v.null()),
+      }),
+    ),
+    package: v.union(
+      v.null(),
+      v.object({
+        bucket: v.string(),
+        name: v.string(),
+        description: v.union(v.string(), v.null()),
+        publicSlug: v.union(v.string(), v.null()),
+      }),
+    ),
+  }),
+  handler: async (ctx, args): Promise<PublicInventoryListing> => {
+    assertE2eHelpersEnabled();
+    const typeName = args.typeName?.trim();
+    const packageName = args.packageName?.trim();
+
+    let type: PublicInventoryListing["type"] = null;
+    if (typeName) {
+      const rows: Array<{
+        bucket: string;
+        type: {
+          name: string;
+          capabilities: string[];
+          description?: string;
+          publicProfileEnabled: boolean;
+          tips?: string;
+          manualUrls?: Array<{ title: string; url: string }>;
+          publicSlug?: string;
+        };
+      }> = await ctx.runQuery(api.publicInventory.listPublicTypes, {});
+      const row = rows.find((entry) => entry.type.name === typeName);
+      if (row) {
+        type = {
+          bucket: row.bucket,
+          name: row.type.name,
+          publicProfileEnabled: row.type.publicProfileEnabled,
+          capabilities: row.type.capabilities,
+          description: row.type.description ?? null,
+          tips: row.type.tips ?? null,
+          manualCount: row.type.manualUrls?.length ?? 0,
+          publicSlug: row.type.publicSlug ?? null,
+        };
+      }
+    }
+
+    let pkg: PublicInventoryListing["package"] = null;
+    if (packageName) {
+      const rows: Array<{
+        bucket: string;
+        package: { name: string; description?: string; publicSlug?: string };
+      }> = await ctx.runQuery(api.publicInventory.listPublicPackages, {});
+      const row = rows.find((entry) => entry.package.name === packageName);
+      if (row) {
+        pkg = {
+          bucket: row.bucket,
+          name: row.package.name,
+          description: row.package.description ?? null,
+          publicSlug: row.package.publicSlug ?? null,
+        };
+      }
+    }
+
+    return { type, package: pkg };
+  },
+});
+
+/**
+ * Test-only: drop the catalog rows a spec named, in dependency order.
+ *
+ * `pruneE2eSeedData` only knows about events, and catalog rows are read with
+ * `.take(500)`/`.take(1500)` caps that a per-run leak would eventually push the
+ * newest fixture out of. Deleting is done through `ctx.db` rather than the
+ * product mutations on purpose: the product guards ("cannot delete a type with
+ * linked items") are the thing under test, and cleanup must not depend on the
+ * behaviour a failing spec may have left half-applied.
+ */
+export const deleteInventoryCatalogFixtures = mutation({
+  args: {
+    assetIds: v.optional(v.array(v.string())),
+    packageNames: v.optional(v.array(v.string())),
+    typeNames: v.optional(v.array(v.string())),
+    locationNames: v.optional(v.array(v.string())),
+    categoryKeys: v.optional(v.array(v.string())),
+    capabilityKeys: v.optional(v.array(v.string())),
+  },
+  returns: v.object({
+    deletedItems: v.number(),
+    deletedPackages: v.number(),
+    deletedPackageLines: v.number(),
+    deletedTypes: v.number(),
+    deletedLocations: v.number(),
+    deletedCategories: v.number(),
+    deletedCapabilities: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    let deletedItems = 0;
+    let deletedPackages = 0;
+    let deletedPackageLines = 0;
+    let deletedTypes = 0;
+    let deletedLocations = 0;
+    let deletedCategories = 0;
+    let deletedCapabilities = 0;
+
+    // Items first: a type or location still referenced by one cannot go away
+    // cleanly, and a contained asset must lose its container before the
+    // container row disappears.
+    for (const rawAssetId of args.assetIds ?? []) {
+      const assetId = rawAssetId.trim();
+      if (!assetId) continue;
+      const item = await ctx.db
+        .query("inventoryItems")
+        .withIndex("by_assetId", (q) => q.eq("assetId", assetId))
+        .first();
+      if (!item) continue;
+      for (const child of await ctx.db
+        .query("inventoryItems")
+        .withIndex("by_containedInAssetId", (q) => q.eq("containedInAssetId", item._id))
+        .take(100)) {
+        await ctx.db.patch(child._id, { containedInAssetId: undefined, updatedAt: Date.now() });
+      }
+      await ctx.db.delete(item._id);
+      deletedItems += 1;
+    }
+
+    for (const rawName of args.packageNames ?? []) {
+      const name = rawName.trim();
+      if (!name) continue;
+      const pkg = await ctx.db
+        .query("inventoryPackages")
+        .withIndex("by_name", (q) => q.eq("name", name))
+        .first();
+      if (!pkg) continue;
+      for (const line of await ctx.db
+        .query("inventoryPackageItems")
+        .withIndex("by_packageId", (q) => q.eq("packageId", pkg._id))
+        .take(200)) {
+        await ctx.db.delete(line._id);
+        deletedPackageLines += 1;
+      }
+      await ctx.db.delete(pkg._id);
+      deletedPackages += 1;
+    }
+
+    for (const rawName of args.typeNames ?? []) {
+      const name = rawName.trim();
+      if (!name) continue;
+      const type = await ctx.db
+        .query("inventoryTypes")
+        .withIndex("by_name", (q) => q.eq("name", name))
+        .first();
+      if (!type) continue;
+      for (const line of await ctx.db
+        .query("inventoryPackageItems")
+        .withIndex("by_typeId", (q) => q.eq("typeId", type._id))
+        .take(200)) {
+        await ctx.db.delete(line._id);
+        deletedPackageLines += 1;
+      }
+      for (const item of await ctx.db
+        .query("inventoryItems")
+        .withIndex("by_typeId", (q) => q.eq("typeId", type._id))
+        .take(100)) {
+        await ctx.db.delete(item._id);
+        deletedItems += 1;
+      }
+      await ctx.db.delete(type._id);
+      deletedTypes += 1;
+    }
+
+    // Deepest paths first, so a parent is never deleted out from under a child.
+    const locationNames = new Set((args.locationNames ?? []).map((name) => name.trim()));
+    if (locationNames.size) {
+      const candidates = await ctx.db.query("storageLocations").withIndex("by_path").take(2000);
+      const doomed = candidates
+        .filter((row) => locationNames.has(row.name))
+        .sort((a, b) => b.path.length - a.path.length);
+      for (const location of doomed) {
+        for (const item of await ctx.db
+          .query("inventoryItems")
+          .withIndex("by_storageLocationId", (q) => q.eq("storageLocationId", location._id))
+          .take(100)) {
+          await ctx.db.patch(item._id, {
+            storageLocationId: undefined,
+            updatedAt: Date.now(),
+          });
+        }
+        await ctx.db.delete(location._id);
+        deletedLocations += 1;
+      }
+    }
+
+    for (const rawKey of args.categoryKeys ?? []) {
+      const key = rawKey.trim().toLowerCase();
+      if (!key) continue;
+      const category = await ctx.db
+        .query("inventoryCategories")
+        .withIndex("by_key", (q) => q.eq("key", key))
+        .unique();
+      if (!category) continue;
+      await ctx.db.delete(category._id);
+      deletedCategories += 1;
+    }
+
+    for (const rawKey of args.capabilityKeys ?? []) {
+      const key = rawKey.trim().toLowerCase();
+      if (!key) continue;
+      const capability = await ctx.db
+        .query("capabilityDefinitions")
+        .withIndex("by_key", (q) => q.eq("key", key))
+        .unique();
+      if (!capability) continue;
+      await ctx.db.delete(capability._id);
+      deletedCapabilities += 1;
+    }
+
+    return {
+      deletedItems,
+      deletedPackages,
+      deletedPackageLines,
+      deletedTypes,
+      deletedLocations,
+      deletedCategories,
+      deletedCapabilities,
+    };
+  },
+});
+
+/**
+ * Test-only: bounded catalog sizes.
+ *
+ * The admin catalog lists are capped (`inventoryTypes.listOptions` takes 1500,
+ * `inventoryPackages.list` takes 500, `inventoryItems.listSummaries` takes
+ * 1000). A spec that seeds a row and then cannot find it in a picker is almost
+ * always looking at one of those caps rather than at a broken selector, so the
+ * numbers are worth being able to read directly.
+ */
+export const getInventoryCatalogCounts = query({
+  args: {},
+  returns: v.object({
+    types: v.number(),
+    items: v.number(),
+    packages: v.number(),
+    locations: v.number(),
+    categories: v.number(),
+    capabilities: v.number(),
+    truncated: v.boolean(),
+  }),
+  handler: async (ctx) => {
+    assertE2eHelpersEnabled();
+    const cap = 4000;
+    const types = await ctx.db.query("inventoryTypes").take(cap);
+    const items = await ctx.db.query("inventoryItems").take(cap);
+    const packages = await ctx.db.query("inventoryPackages").take(cap);
+    const locations = await ctx.db.query("storageLocations").take(cap);
+    const categories = await ctx.db.query("inventoryCategories").take(cap);
+    const capabilities = await ctx.db.query("capabilityDefinitions").take(cap);
+    return {
+      types: types.length,
+      items: items.length,
+      packages: packages.length,
+      locations: locations.length,
+      categories: categories.length,
+      capabilities: capabilities.length,
+      truncated: [types, items, packages, locations].some((rows) => rows.length === cap),
+    };
   },
 });

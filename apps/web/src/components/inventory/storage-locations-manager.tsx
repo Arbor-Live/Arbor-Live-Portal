@@ -92,7 +92,7 @@ export function StorageLocationsManager() {
               </thead>
               <tbody>
                 {filteredLocations.map((location) => (
-                  <tr key={location._id} className="border-t">
+                  <tr key={location._id} data-testid={`location-row-${location._id}`} className="border-t">
                     <td className="p-2">
                       <input
                         type="checkbox"

@@ -152,6 +152,7 @@ export function SearchableSelect({
         ? createPortal(
             <div
               ref={menuRef}
+              data-testid="searchable-select-menu"
               className="z-[100] rounded-none border border-input bg-background p-2 shadow-md"
               style={{
                 position: "fixed",

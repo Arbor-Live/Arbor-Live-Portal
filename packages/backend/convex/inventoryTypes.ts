@@ -163,7 +163,24 @@ function matchesInventoryTypeFilters(
   return matchesInventoryTypeSearch(type, loweredSearch);
 }
 
-/** Paginated types list for the types manager. */
+/**
+ * Paginated types list for the types manager.
+ *
+ * Two modes on purpose. Unfiltered, it pages the table so the manager never
+ * loads the whole catalog. Filtered, it scans a bounded window and returns the
+ * matches as one finished page.
+ *
+ * The second mode is not an optimisation, it is a correctness fix. None of
+ * these filters — substring search, a capability array membership, a
+ * manufacturer or visibility equality — can be served by an index, so they can
+ * only run in memory. Applying them to a *page* means the search box searches
+ * the hundred rows already loaded rather than the catalog: with 289 types and
+ * `initialNumItems: 100`, typing the exact name of a type created five minutes
+ * ago returned "No types match the current filters" until the operator pressed
+ * Load more twice. Pagination is by `_creationTime` ascending, so the rows this
+ * hid were always the newest ones — the same failure #65 fixed in six other
+ * admin lists.
+ */
 export const list = query({
   args: {
     paginationOpts: paginationOptsValidator,
@@ -176,6 +193,33 @@ export const list = query({
   },
   handler: async (ctx, args) => {
     await requireAuth(ctx);
+
+    // `category` is excluded: it is served by `by_category`, so it narrows the
+    // paginated query itself rather than the page it produced.
+    const hasInMemoryFilter =
+      Boolean(args.search?.trim()) ||
+      Boolean(args.capability) ||
+      Boolean(args.manufacturer?.trim()) ||
+      args.publicListing !== undefined ||
+      args.publicProfile !== undefined;
+
+    if (hasInMemoryFilter) {
+      const candidates = args.category
+        ? await ctx.db
+            .query("inventoryTypes")
+            .withIndex("by_category", (q) => q.eq("category", args.category!))
+            .take(MAX_TYPE_OPTIONS)
+        : await ctx.db.query("inventoryTypes").take(MAX_TYPE_OPTIONS);
+
+      const page = candidates
+        .filter((type) => matchesInventoryTypeFilters(type, args))
+        .sort((a, b) => a.name.localeCompare(b.name));
+
+      // One page, already complete: `usePaginatedQuery` must not offer a Load
+      // more button that would page past a result set it has all of.
+      return { page, isDone: true, continueCursor: "" };
+    }
+
     const result = args.category
       ? await ctx.db
           .query("inventoryTypes")
@@ -183,9 +227,7 @@ export const list = query({
           .paginate(args.paginationOpts)
       : await ctx.db.query("inventoryTypes").paginate(args.paginationOpts);
 
-    const page = result.page
-      .filter((type) => matchesInventoryTypeFilters(type, args))
-      .sort((a, b) => a.name.localeCompare(b.name));
+    const page = result.page.sort((a, b) => a.name.localeCompare(b.name));
     return { ...result, page };
   },
 });

@@ -100,7 +100,7 @@ export function InventoryItemEditor({
             >
               <TextFormField name="assetId" label="Asset ID" />
               <TextFormField name="serialNumber" label="Serial Number" />
-              <div className="space-y-2">
+              <div className="space-y-2" data-testid="item-type-field">
                 <label className="text-sm font-medium">Type</label>
                 <SearchableSelect
                   value={form.watch("typeId")}
@@ -113,7 +113,7 @@ export function InventoryItemEditor({
                   emptyLabel="Select type"
                 />
               </div>
-              <div className="space-y-2">
+              <div className="space-y-2" data-testid="item-location-field">
                 <label className="text-sm font-medium">Storage Location</label>
                 <SearchableSelect
                   value={form.watch("storageLocationId") ?? ""}
@@ -131,7 +131,7 @@ export function InventoryItemEditor({
                   emptyLabel="Unassigned"
                 />
               </div>
-              <div className="space-y-2">
+              <div className="space-y-2" data-testid="item-container-field">
                 <label className="text-sm font-medium">Contained In Asset</label>
                 <SearchableSelect
                   value={form.watch("containedInAssetId") ?? ""}

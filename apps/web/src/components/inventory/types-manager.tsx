@@ -558,7 +558,7 @@ export function TypesManager() {
               </thead>
               <tbody>
                 {sortedRows.map((row) => (
-                  <tr key={row._id} className="border-t align-top">
+                  <tr key={row._id} data-testid={`type-row-${row._id}`} className="border-t align-top">
                     <td className="p-2">
                       <input
                         type="checkbox"
@@ -642,7 +642,7 @@ export function TypesManager() {
                 <TextFormField name="name" label="Name" />
                 <TextFormField name="model" label="Model" />
                 <TextFormField name="manufacturer" label="Manufacturer" />
-                <div className="space-y-2">
+                <div className="space-y-2" data-testid="type-category-field">
                   <Label>Category</Label>
                   <SearchableSelect
                     value={typeValues.category}
@@ -673,6 +673,7 @@ export function TypesManager() {
                   <div className="relative">
                     <button
                       type="button"
+                      data-testid="type-capability-picker"
                       className="h-9 w-full rounded-md border bg-background px-3 text-left text-sm"
                       onClick={() => setCapabilityPickerOpen((prev) => !prev)}
                     >
@@ -1099,7 +1100,11 @@ export function TypesManager() {
             </Button>
             <div className="space-y-2">
               {(categories ?? []).map((category) => (
-                <div key={category._id} className="flex items-center justify-between rounded-md border p-2">
+                <div
+                  key={category._id}
+                  data-testid={`category-row-${category.key}`}
+                  className="flex items-center justify-between rounded-md border p-2"
+                >
                   <div>
                     <p className="text-sm font-medium">{category.label}</p>
                     <p className="text-xs text-muted-foreground">{category.key}</p>
@@ -1165,6 +1170,7 @@ export function TypesManager() {
             {capabilityOptions.map((capability) => (
               <div
                 key={capability._id}
+                data-testid={`capability-row-${capability.key}`}
                 className="flex items-center justify-between rounded-md border p-2"
               >
                 <div>

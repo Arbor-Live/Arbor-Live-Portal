@@ -14,11 +14,26 @@ import type { Locator } from "@playwright/test";
  * caps actions at 45s so it fails legibly, but the locator still has to be
  * right — hence this helper.
  */
-export function formField(scope: Locator, label: string) {
+export function formField(scope: Locator, label: string | RegExp) {
   return scope
     .locator("[data-slot='form-item']")
     .filter({ hasText: label })
     .locator("input");
+}
+
+/**
+ * Same lookup as `formField`, for a `TextareaFormField`.
+ *
+ * Both take a `RegExp` as well as a string because `hasText` matches a
+ * substring: on the package editor "Subsidized Package Price (USD)" also
+ * matches the "Non-Subsidized Package Price (USD)" item, and the ambiguity only
+ * surfaces as a strict-mode violation at the point of use.
+ */
+export function formTextarea(scope: Locator, label: string | RegExp) {
+  return scope
+    .locator("[data-slot='form-item']")
+    .filter({ hasText: label })
+    .locator("textarea");
 }
 
 /**

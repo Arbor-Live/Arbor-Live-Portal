@@ -8,7 +8,7 @@ Update this file whenever specs or helpers land (or when a batch ships).
 - Runner: `pnpm test:e2e` ([`scripts/e2e-run.mjs`](../scripts/e2e-run.mjs))
 - CI: [`.github/workflows/e2e.yml`](../.github/workflows/e2e.yml)
 
-**Last updated:** 2026-07-28 (Batches 1–8 on `main`; Batch 9 on branch)
+**Last updated:** 2026-07-28 (Batches 1–9 on `main`; Batch 10 on branch)
 
 ## Batch history
 
@@ -23,7 +23,8 @@ Update this file whenever specs or helpers land (or when a batch ships).
 | **7** | [#64](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/64) | Authorization boundaries: admin route guards, Convex-level enforcement, org-type separation, plus an `AdminOnlyGuard` so refusals read as refusals |
 | — | [#65](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/65) | Not a batch: the ascending-`take` fix shipped five `*-list-recency` specs plus `marketing/work-posts-admin.spec.ts` |
 | **8** | [#71](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/71) | Money paths: invoice line items + totals, discounts, send-for-review round trip, approval-token rotation, approval reset + duplicate, host orgs/contacts, payment-proof invalidate + receipt |
-| **9** | on branch | Users, access, and rates: invite lifecycle, direct create, the role grant that flips a Batch 7 refusal, remove/reactivate access, org memberships, per-user crew rates. Found two shipped bugs: the Edit Invitation role picker could not be changed at all, and three Users sub-routes had no `AdminOnlyGuard` so they refused by crashing |
+| **9** | [#76](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/76) | Users, access, and rates: invite lifecycle, direct create, the role grant that flips a Batch 7 refusal, remove/reactivate access, org memberships, per-user crew rates. Found two shipped bugs: the Edit Invitation role picker could not be changed at all, and three Users sub-routes had no `AdminOnlyGuard` so they refused by crashing |
+| **10** | on branch | Inventory catalog: model type CRUD + derived rates, categories/capabilities, public listing vs full profile, package build/edit/delete, package publishing, items + storage locations with containment and location cascade. Found two shipped bugs: the types manager's search filtered only the page already loaded, and a package could not be listed publicly without a section yet Create silently did nothing |
 
 ## Status legend
 
@@ -112,8 +113,18 @@ Update this file whenever specs or helpers land (or when a batch ships).
 | Damage triage (open → in progress → resolved) | Covered | `inventory/damage-triage.spec.ts` |
 | Damage report create | Covered | `inventory/damage-create.spec.ts` (Batch 5) |
 | Pull-list edit UI | Covered | `inventory/pull-list-edit.spec.ts` (Batch 5) |
-| Inventory catalog CRUD (types/items/packages) | None | Deferred |
+| Model type create / edit / delete | Covered | `inventory/type-crud.spec.ts` (Batch 10) — asserts the rates the server *derives* (5%/10% of MSRP) and the legacy `rentalPriceUsd` mirror, not just the field that was typed |
+| Type delete guards | Covered | `inventory/type-crud.spec.ts` (Batch 10) — refused while an item links the type |
+| Categories + capability keys | Covered | `inventory/type-taxonomy.spec.ts` (Batch 10) — seed defaults, create both, use them on a type, the in-use category refusal |
+| Type public listing / full profile | Covered | `inventory/type-public-visibility.spec.ts` (Batch 10) — asserts a listing-only type does **not** leak tips/slug, plus the bulk visibility bar |
+| Public `/types` and `/types/[bucket]` | Covered | `inventory/type-public-visibility.spec.ts` (Batch 10) — render smoke + unknown-bucket redirect; see the ISR note below |
+| Package create / edit / delete | Covered | `inventory/package-crud.spec.ts` (Batch 10) — catalog panel, quantities, suggested pricing, the discard confirm |
+| Package public listing | Covered | `inventory/package-public-listing.spec.ts` (Batch 10) — section required, bucket mapping, archiving drops it from the public query |
+| Inventory item create / containment | Covered | `inventory/item-storage-crud.spec.ts` (Batch 10) — duplicate asset ID refused, container location inheritance |
+| Storage locations | Covered | `inventory/item-storage-crud.spec.ts` (Batch 10) — nested path composition and both delete guards |
 | Lost-and-found `/e/[assetId]` | Covered | `inventory/lost-found-public.spec.ts` (Batch 6) |
+| Inventory CSV import | None | — |
+| Type icon / promo / manual uploads | Deferred | Needs R2 in CI |
 
 ### Crew hiring
 
@@ -206,11 +217,17 @@ Update this file whenever specs or helpers land (or when a batch ships).
 | `users/user-access-remove-reactivate.spec.ts` | Remove access / reactivate; self-lockout guard (Batch 9) |
 | `users/user-membership-edit.spec.ts` | Add/remove an org membership from row details (Batch 9) |
 | `users/user-rates-admin.spec.ts` | Per-user rate mode + resolved rate (Batch 9) |
+| `inventory/type-crud.spec.ts` | Type create/edit/delete + derived rates + delete guard (Batch 10) |
+| `inventory/type-taxonomy.spec.ts` | Categories and capability keys, and the in-use refusal (Batch 10) |
+| `inventory/type-public-visibility.spec.ts` | Listing vs full profile, bulk visibility, public pages (Batch 10) |
+| `inventory/package-crud.spec.ts` | Package build from the catalog, edit, discard confirm, delete (Batch 10) |
+| `inventory/package-public-listing.spec.ts` | Section required, bucket mapping, archive (Batch 10) |
+| `inventory/item-storage-crud.spec.ts` | Items, containment cascade, storage-location paths (Batch 10) |
 | `email/email-queue.spec.ts` | Mocked email pipeline |
 
 ## Remaining gaps
 
-Batches 1–9 cover the shipped happy paths. What is still out of the suite, and why:
+Batches 1–10 cover the shipped happy paths. What is still out of the suite, and why:
 
 | Surface | Why it is out |
 |---------|---------------|
@@ -221,16 +238,19 @@ Batches 1–9 cover the shipped happy paths. What is still out of the suite, and
 | Short-link Worker redirect | Lives in the Cloudflare Worker, not the Next app |
 | FullCalendar drag/resize | Flaky; covered by unit/manual testing |
 | Global invoice settings (crew rates) | Shared-deployment hazard — see the Quotes and invoices table |
-| Inventory catalog CRUD, PDF download/void | Not yet batched |
+| Invoice PDF download / void | Not yet batched |
 | Password reset from the Users row, onboarding waive | `sendPasswordResetAdmin` hands off to Better Auth's reset flow, and waive only makes sense against a half-finished onboarding — both are cheap follow-ons rather than Batch 9 scope |
 | Band org profile editor (`/users/organizations`) | The row is covered by nothing yet; its hero upload needs R2 |
+| Inventory CSV import (`/inventory/import`) | Batch 10 covered the editors, not the 483-line `csv-importer`. It writes types *and* items in bulk, so it needs the cleanup helper to take a whole import rather than a name list |
+| Inventory image/manual uploads | `FileUploadField` on types and packages goes through R2 |
 
 ### Candidates for the next batches
 
 | Batch | Surface | Why |
 |-------|---------|-----|
-| **10** | Inventory catalog CRUD | ~3k lines across `types-manager` / `packages-manager` / `package-items-editor`, and every other spec seeds against this data model — the widest blast radius in the app, currently listed as low risk. Type visibility also drives the public `/types/[bucket]` pages, which have no coverage |
-| **11** | Band org profile + organizations page | The other half of `users-management-client.tsx` (`updateBandOrganizationProfileAdmin`, `createOrganizationAdmin`, the CSV importer). Left out of Batch 9 because creating orgs leaves rows the shared deployment cannot prune, so it needs a cleanup helper first |
+| **11** | Band org profile + organizations page | The other half of `users-management-client.tsx` (`updateBandOrganizationProfileAdmin`, `createOrganizationAdmin`, the CSV importer). Left out of Batch 9 because creating orgs leaves rows the shared deployment cannot prune, so it needs a cleanup helper first — `deleteInventoryCatalogFixtures` is the shape to copy |
+| **12** | Inventory CSV import | The last uncovered inventory surface, and the one that can do the most damage: it creates types and items in bulk from a file. Batch 10's catalog assertions (`getInventoryTypeByName` / `getInventoryItemByAssetId`) are already the right oracles for it |
+| **13** | Event series editors | `events/event-series-schedule-editor.tsx:121` and `event-series-shift-editor.tsx:151` still carry the unguarded reset effect — see **Still unfixed** below |
 
 ### Keeping the shared deployment usable
 
@@ -252,6 +272,26 @@ unavoidable, the spec cleans up after itself
 `.take(2000)` and `resendInviteAdmin` matches on email, not id). Any new batch
 should pick one of those two shapes rather than leaving rows behind.
 
+Batch 10 uses the second shape throughout: every catalog spec names the rows it
+creates and hands them to `e2eHelpers:deleteInventoryCatalogFixtures` in an
+`afterAll`, which deletes in dependency order (items → package lines and
+packages → types → deepest locations first → categories → capabilities). It
+deletes through `ctx.db` rather than the product mutations on purpose — the
+product's own delete guards are what the specs assert, so cleanup must not
+depend on behaviour a failing run may have left half-applied.
+
+Run `convex run e2eHelpers:getInventoryCatalogCounts '{}'` to see where the
+catalog sits against the caps that matter:
+
+| Read | Cap | Fails as |
+|------|-----|----------|
+| `inventoryTypes.listOptions` | 1500 | the packages catalog panel and the item editor's Type picker cannot see a new type |
+| `inventoryItems.listSummaries` | 1000 | the item editor's "Contained In Asset" picker cannot see a new asset |
+| `inventoryPackages.list` | 500 | the packages page cannot see a new package |
+| `inventoryItems.list` | 100/page | the items search box finds nothing — see the bug table |
+
+At the time of writing: 289 types, 387 items, 2 packages, 2 locations.
+
 Conventions for any new batch:
 - Specs under `apps/web/e2e/<domain>/`
 - Helpers in `packages/backend/convex/e2eHelpers.ts`, gated by `assertE2eHelpersEnabled`
@@ -259,6 +299,14 @@ Conventions for any new batch:
 - Scope locators to the row you seeded — the shared deployment accumulates fixtures
 - Find form fields with `e2e/helpers/form.ts` and dropdowns with
   `e2e/helpers/select.ts`; `getByLabel` does not work anywhere in this app (trap 5)
+- Catalog specs share `e2e/helpers/inventory.ts` (typed state readers, row
+  locators, `revealRow`, fixture cleanup)
+- Assert public catalog state through `e2eHelpers:getPublicInventoryListing`,
+  not the rendered page: `/types`, `/types/[bucket]`, `/packages` and
+  `/packages/[bucket]` are statically generated with `revalidate = 3600` and
+  only refresh early via an `/api/revalidate` call that needs
+  `REVALIDATE_SECRET`, which the e2e stack does not set. The pages get a render
+  smoke; the query is the contract
 - Local: `E2E_SKIP_BOOT=1 pnpm test:e2e` against a running stack; CI uses anonymous Convex
 
 ### Bugs the suite has caught
@@ -267,11 +315,30 @@ Worth recording, because each one argues for the next batch.
 
 | Batch | Bug | Mechanism |
 |-------|-----|-----------|
+| 10 | The types manager's **search box only searched the page already loaded** | None of `inventoryTypes.list`'s filters (substring search, capability membership, manufacturer/visibility equality) can be served by an index, so they ran in memory — against `result.page` from `paginate()`, not the table. With 289 types and `initialNumItems: 100`, typing the exact name of a type created seconds earlier returned "No types match the current filters" until the operator pressed Load more twice. Pagination is `_creationTime` ascending, so the rows this hid were always the newest — the same failure [#65](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/65) fixed elsewhere. Now: filtered reads scan a bounded window (`MAX_TYPE_OPTIONS`, 2000) and return one finished page; unfiltered reads still paginate |
+| 10 | Listing a package publicly without a section made **Create do nothing at all** | The schema's `.refine()` puts the error on `publicBucket`, but the section picker is a plain `<select>` rather than a `FormField`, so no `FormMessage` rendered it — `handleSubmit` just declined to call the mutation. Fixing the render was not enough: `useConvexForm` memoises what it returns on `[form, isDirty, saveStatus, …]`, so the `formState` snapshot it hands back never changes when a validation error appears, and this component's only other re-render trigger is `watch()`. The error line has to subscribe with `useFormState({ control })` |
 | 9 | The Edit Invitation **role picker could not be changed** — every pick snapped back to the invite's current role | `useConvexForm` returns a *new object* whenever `isDirty` flips (deliberately, to wake save bars). `EditInviteModal`'s reset effect had `form` in its deps with no `if (form.formState.isDirty) return;` guard, so the first edit re-ran the effect and reset itself away. Eleven sibling components have the guard; this one did not |
 | 9 | `/users/access`, `/users/organizations`, `/users/crew-rates` refused non-admins **by crashing** | They had `ArborOnlyGuard` but no `AdminOnlyGuard`, so a crew member walked through the org check and then tripped `requireAdmin` inside Convex, landing on the generic error boundary. Batch 7 added `AdminOnlyGuard` only to the routes its own spec listed |
 | — | Ascending `.take()` hid the newest row in six admin lists | See [#65](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/65) |
 
-**Still unfixed, found while investigating the first one:**
+**Still unfixed, found by Batch 10:**
+
+`inventoryItems.list` has the identical filter-after-paginate bug as
+`inventoryTypes.list` had, and with 387 items it is already live: searching an
+asset ID outside the oldest 100 finds nothing. It was left alone because the fix
+is not symmetric — the items list hydrates each row with its type, location,
+container and contained assets, so a 2000-row filtered scan cannot simply be
+hydrated the way the types scan can, and picking that budget deserves its own
+change. `revealRow` in `e2e/helpers/inventory.ts` pages around it for now.
+
+`capabilityDefinitions.remove` has no in-use guard, unlike
+`inventoryCategories.remove`. Deleting a capability key still referenced by a
+type leaves that type permanently un-saveable, because `inventoryTypes.update`
+re-validates every capability on save and throws on the missing key. Reasoned
+from the code; Batch 10's taxonomy spec deletes the type first, so it does not
+exercise the broken order.
+
+**Still unfixed, found while investigating the Batch 9 bugs:**
 `events/event-series-schedule-editor.tsx:121` and
 `events/event-series-shift-editor.tsx:151` have the same unguarded reset effect
 with `form` in its deps, resetting to constants (`applyScope: "all"`) — so their
@@ -293,7 +360,7 @@ starts failing in CI.
 ### Traps this codebase sets for Playwright
 
 These fail in ways that do not look like what they are. Items 1–4 cost real
-debugging time in Batch 8, items 5–8 in Batch 9.
+debugging time in Batch 8, items 5–8 in Batch 9, items 9–13 in Batch 10.
 
 1. **`window.confirm` guards mutations.** `regeneratePublicApprovalToken`,
    host/contact archive, and the re-approval prompt on saving an edited approved
@@ -310,10 +377,14 @@ debugging time in Batch 8, items 5–8 in Batch 9.
    check never settles. Scroll the trigger to `block: "center"` first, then click
    the option with `force`, then assert the trigger's text changed — `force`
    skips the hit test, so a missed click otherwise leaves the menu open and every
-   later click on the page inherits the instability. A hardened
-   `pickSearchableOption` lives in `e2e/quotes/invoice-organizations.spec.ts`;
-   the older `selectSearchableOption` in `e2e/helpers/auth.ts` does neither and
-   only works on fields high enough on the page to dodge the problem.
+   later click on the page inherits the instability. The hardened
+   `pickSearchableOption` now lives in `e2e/helpers/select.ts` (Batch 10
+   generalised it out of `e2e/quotes/invoice-organizations.spec.ts`, which keeps
+   its own copy); the older `selectSearchableOption` in `e2e/helpers/auth.ts`
+   does neither and only works on fields high enough on the page to dodge the
+   problem. The portalled menu carries `data-testid="searchable-select-menu"`
+   so the helper can address it and its search input structurally — several
+   call sites use a "Filter by …" placeholder rather than "Search …".
 3. **`SearchableSelect` also renders a `New <thing>: "<query>"` button** whenever
    the query is not an exact label match, and it is the *only* hit until the
    options query resolves. A loose name locator can settle on it and open the
@@ -356,6 +427,42 @@ debugging time in Batch 8, items 5–8 in Batch 9.
    membership and adding a duplicate membership both refuse client-side via
    `alert`, which Playwright dismisses silently — so a refused click and a broken
    click look identical. Capture the dialog and assert its message.
+9. **A stale dev server on :3000 makes a new `data-testid` invisible.** Worktrees
+   share one deployment *and* one port. If another checkout already owns :3000,
+   `pnpm dev` here quietly takes :3001, the suite still points at :3000, and the
+   failure is a testid "not found" on an element the screenshot plainly shows —
+   which reads as a bad selector. Check with `lsof -ti:3000` and free the port
+   rather than pointing `E2E_BASE_URL` somewhere else; the deployment those two
+   servers share means the second one is not a safe target anyway.
+10. **The catalog delete buttons swallow their own refusals.** `deleteType`,
+    `removeItem` and `removeLocation` are all called as
+    `onClick={() => void mutation({ id })}` with no catch, so a server refusal
+    ("Cannot delete type with linked inventory items") produces an unhandled
+    rejection and *no* UI change at all. There is nothing to assert on, so
+    Batch 10 asserts the non-event instead: settle, then confirm the row is
+    still there and the document still exists. If these ever grow an error
+    path, tighten the assertion to the message.
+11. **Two save affordances can carry the same label.** The types form renders an
+    in-form `type="submit"` reading "Create" *and* a `FormSaveBar` whose
+    `saveLabel` is also "Create", so `getByRole("button", { name: "Create" })`
+    matches twice. Scope to `page.locator("form")` or to the bar
+    (`role="status"`). Editing has no in-form submit at all — only the bar —
+    and `persistType` does not reset after an edit, so the bar stays on screen
+    after a *successful* save. Assert the save by polling Convex, never by
+    waiting for the bar to go away.
+12. **`hasText` is a substring, and the package editor has overlapping labels.**
+    `formField(editor, "Subsidized Package Price (USD)")` also matches the
+    "Non-Subsidized Package Price (USD)" item, and the ambiguity only surfaces
+    as a strict-mode violation at the point of use. `formField` / `formTextarea`
+    take a `RegExp` for exactly this (`/^Subsidized Package Price/`).
+13. **The Next dev overlay renders server errors too.** Asserting a refusal with
+    an unscoped `page.getByText("Asset ID already exists.")` is a strict-mode
+    violation in dev: the message appears once in the `FormSaveBar` and again
+    inside `#nextjs__container_errors_desc`, because the rejected mutation also
+    reaches the error overlay. It passes in isolation and fails in a full run,
+    depending on whether the overlay is already up. Scope refusal assertions to
+    the bar (`formSaveBar(page)`), which is the stronger claim anyway — the
+    operator has to see it in the form, not in a dev-only overlay.
 
 
 ## How to update this doc

@@ -206,6 +206,7 @@ export function ItemsManager() {
                 {sortedItems.map((item) => (
                   <tr
                     key={item._id}
+                    data-testid={`item-row-${item._id}`}
                     className="border-t align-top transition-colors"
                     ref={(element) => {
                       if (!element) {
