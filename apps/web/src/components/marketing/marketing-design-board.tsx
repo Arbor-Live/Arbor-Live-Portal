@@ -5,6 +5,7 @@ import { useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
 import { MarketingPostHeroUploadField } from "@/components/files/file-upload-field";
 import { UserSelect, type UserSelectOption } from "@/components/users/user-select";
+import { buildUserSelectDescription } from "@/lib/user-select-description";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -56,7 +57,7 @@ export function MarketingDesignBoard() {
       (managerList ?? []).map((entry) => ({
         value: entry.id,
         label: entry.name,
-        description: [entry.role, entry.email].filter(Boolean).join(" • "),
+        description: buildUserSelectDescription(entry),
         role: entry.role,
         email: entry.email,
       })),

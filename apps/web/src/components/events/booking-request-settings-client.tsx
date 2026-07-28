@@ -7,6 +7,7 @@ import { api } from "@/lib/convex-api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { UserSelect, type UserSelectOption } from "@/components/users/user-select";
+import { buildUserSelectDescription } from "@/lib/user-select-description";
 
 export function BookingRequestSettingsClient() {
   const settings = useQuery(api.eventRequests.getBookingRequestSettings, {});
@@ -29,7 +30,7 @@ export function BookingRequestSettingsClient() {
       (managers ?? []).map((row) => ({
         value: row.id,
         label: row.name?.trim() || row.email || row.id,
-        description: row.email,
+        description: buildUserSelectDescription(row),
       })),
     [managers],
   );

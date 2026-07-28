@@ -401,15 +401,23 @@ export const listManagers = query({
           ),
         )
       : null;
+    const profiles = await ctx.db.query("userAdminProfiles").withIndex("by_active").take(2000);
+    const profileByUserId = new Map(profiles.map((profile) => [profile.userId, profile]));
     return users
-      .map((user) => ({
-        id: user.id ?? user._id ?? "",
-        name: user.name ?? user.email ?? "Unknown user",
-        email: user.email,
-        role: user.role ?? undefined,
-        image: user.image ?? undefined,
-        hourlyRateUsd: rateByUserId?.get(user.id ?? user._id ?? "") ?? undefined,
-      }))
+      .map((user) => {
+        const userId = user.id ?? user._id ?? "";
+        const profile = profileByUserId.get(userId);
+        return {
+          id: userId,
+          name: user.name ?? user.email ?? "Unknown user",
+          email: user.email,
+          role: user.role ?? undefined,
+          image: user.image ?? undefined,
+          hourlyRateUsd: rateByUserId?.get(userId) ?? undefined,
+          pronouns: profile?.pronouns ?? undefined,
+          gradYear: profile?.gradYear ?? undefined,
+        };
+      })
       .filter((u) => Boolean(u.id))
       .sort((a, b) => a.name.localeCompare(b.name));
   },

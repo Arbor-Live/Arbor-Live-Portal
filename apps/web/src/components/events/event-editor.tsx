@@ -39,6 +39,7 @@ import { EventPullList, mapPullListRow, type PullListItemDraft } from "@/compone
 import { EventTimelineScheduler, type TimelineBlockDraft } from "@/components/events/event-timeline-scheduler";
 import { EventScheduleCrewAssignPanel } from "@/components/events/event-availability-summary";
 import { UserSelect, type UserSelectOption } from "@/components/users/user-select";
+import { buildUserSelectDescription } from "@/lib/user-select-description";
 import { authClient } from "@/lib/auth-client";
 import {
   EVENT_STATUS_EDITOR_OPTIONS,
@@ -557,7 +558,7 @@ export function EventEditor({
     const base = (managerList ?? []).map((entry) => ({
       value: entry.id,
       label: entry.name,
-      description: [entry.role, entry.email].filter(Boolean).join(" • "),
+      description: buildUserSelectDescription(entry),
       avatarUrl: entry.image,
       keywords: `${entry.role ?? ""} ${entry.email ?? ""}`,
     }));

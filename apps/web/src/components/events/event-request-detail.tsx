@@ -11,6 +11,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { useSessionViewer } from "@/components/session-shell-provider";
 import { UserSelect, type UserSelectOption } from "@/components/users/user-select";
+import { buildUserSelectDescription } from "@/lib/user-select-description";
 import { formatDate, formatDateTime } from "@/lib/format";
 
 function DetailRow({ label, value }: { label: string; value?: string | number | null }) {
@@ -53,7 +54,7 @@ export function EventRequestDetailClient({ requestId }: { requestId: Id<"eventRe
       (managers ?? []).map((row) => ({
         value: row.id,
         label: row.name?.trim() || row.email || row.id,
-        description: row.email,
+        description: buildUserSelectDescription(row),
       })),
     [managers],
   );

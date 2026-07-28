@@ -7,7 +7,8 @@ test.describe("insights dashboard", () => {
     test.setTimeout(120_000);
 
     await page.goto("/dashboard/financial-hub/insights");
-    await expect(page.getByTestId("insights-page")).toBeVisible({ timeout: 30_000 });
+    const insights = page.getByTestId("insights-page");
+    await expect(insights).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText("Insights").first()).toBeVisible();
 
     // Default Finances tab
@@ -16,7 +17,7 @@ test.describe("insights dashboard", () => {
     await expect(page.getByText("Booked ahead (90d)").first()).toBeVisible();
     await expect(page.getByText("AR snapshot").first()).toBeVisible();
 
-    await page.getByRole("button", { name: "Demand", exact: true }).click();
+    await insights.getByRole("button", { name: "Demand", exact: true }).click();
     await expect(page.getByTestId("insights-demand-panel")).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText("Upcoming (30d)").first()).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText("Booking funnel").first()).toBeVisible({ timeout: 30_000 });
@@ -25,7 +26,7 @@ test.describe("insights dashboard", () => {
     await expect(page.getByText("Delivery quality").first()).toBeVisible();
     await expect(page.getByText("Calendar load").first()).toBeVisible();
 
-    await page.getByRole("button", { name: "Events", exact: true }).click();
+    await insights.getByRole("button", { name: "Events", exact: true }).click();
     await expect(page.getByTestId("insights-events-panel")).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText("Next 7 days").first()).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText("Next 30 days").first()).toBeVisible();
@@ -34,12 +35,12 @@ test.describe("insights dashboard", () => {
     await expect(page.getByText("Ops readiness").first()).toBeVisible();
     await expect(page.getByText("Upcoming by status").first()).toBeVisible();
 
-    await page.getByRole("button", { name: "Crew", exact: true }).click();
+    await insights.getByRole("button", { name: "Crew", exact: true }).click();
     await expect(page.getByTestId("insights-crew-panel")).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText("Fill rate").first()).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText("OT / DT risk").first()).toBeVisible();
 
-    await page.getByRole("button", { name: "Ops", exact: true }).click();
+    await insights.getByRole("button", { name: "Ops", exact: true }).click();
     await expect(page.getByTestId("insights-ops-panel")).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText("Band payouts").first()).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText("Open damage").first()).toBeVisible();
