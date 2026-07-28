@@ -13,6 +13,7 @@ import type * as adminDeletes from "../adminDeletes.js";
 import type * as analytics from "../analytics.js";
 import type * as analyticsCrew from "../analyticsCrew.js";
 import type * as analyticsDemand from "../analyticsDemand.js";
+import type * as analyticsEvents from "../analyticsEvents.js";
 import type * as analyticsInstrumentation from "../analyticsInstrumentation.js";
 import type * as analyticsOps from "../analyticsOps.js";
 import type * as auth from "../auth.js";
@@ -174,6 +175,7 @@ declare const fullApi: ApiFromModules<{
   analytics: typeof analytics;
   analyticsCrew: typeof analyticsCrew;
   analyticsDemand: typeof analyticsDemand;
+  analyticsEvents: typeof analyticsEvents;
   analyticsInstrumentation: typeof analyticsInstrumentation;
   analyticsOps: typeof analyticsOps;
   auth: typeof auth;

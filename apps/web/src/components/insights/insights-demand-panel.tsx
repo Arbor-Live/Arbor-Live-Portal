@@ -48,6 +48,7 @@ export function InsightsDemandPanel({ startMs, endMs }: InsightsDemandPanelProps
   const pipelineDwell = useQuery(api.analyticsInstrumentation.getEventPipelineDwell, rangeArgs);
   const quoteEngagement = useQuery(api.analyticsInstrumentation.getQuoteEngagement, rangeArgs);
   const deliveryQuality = useQuery(api.analyticsInstrumentation.getDeliveryQuality, rangeArgs);
+  const upcoming = useQuery(api.analyticsEvents.getUpcomingEventsInsights, {});
 
   const anyTruncated =
     funnel?.truncated ||
@@ -57,7 +58,8 @@ export function InsightsDemandPanel({ startMs, endMs }: InsightsDemandPanelProps
     declineReasons?.truncated ||
     pipelineDwell?.truncated ||
     quoteEngagement?.truncated ||
-    deliveryQuality?.truncated;
+    deliveryQuality?.truncated ||
+    upcoming?.truncated;
 
   return (
     <div className="space-y-4">
@@ -67,7 +69,7 @@ export function InsightsDemandPanel({ startMs, endMs }: InsightsDemandPanelProps
         </p>
       ) : null}
 
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         <Card>
           <CardHeader>
             <CardTitle>Requests</CardTitle>
@@ -106,6 +108,21 @@ export function InsightsDemandPanel({ startMs, endMs }: InsightsDemandPanelProps
               <p className="text-sm text-muted-foreground">Loading…</p>
             ) : (
               <p className="text-2xl font-semibold tabular-nums">{volume.total}</p>
+            )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Upcoming (30d)</CardTitle>
+            <CardDescription>Starts in the next 30 days</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {upcoming === undefined ? (
+              <p className="text-sm text-muted-foreground">Loading…</p>
+            ) : (
+              <p className="text-2xl font-semibold tabular-nums">
+                {upcoming.horizons.d30.eventCount}
+              </p>
             )}
           </CardContent>
         </Card>
