@@ -43,6 +43,9 @@ test.describe("user invite lifecycle", () => {
     const usersCard = page
       .locator("[data-slot='card']")
       .filter({ has: page.getByText("Users", { exact: true }) });
+    const invitationsCard = page
+      .locator("[data-slot='card']")
+      .filter({ has: page.getByText("Invitations", { exact: true }) });
 
     // The invite is scoped to the shared organization filter above Users.
     // Arbor Live is the default (arbor_internal), which unlocks Member/Admin
@@ -133,10 +136,14 @@ test.describe("user invite lifecycle", () => {
     // cancelled invite redeemable.
     expect(cancelled.hasPendingToken).toBe(false);
 
-    // A cancelled invite loses its actions; only pending rows are actionable.
-    await expect(inviteRow).toContainText("cancelled", { timeout: 30_000 });
-    await expect(inviteRow.getByRole("button", { name: "Resend" })).toHaveCount(0);
-    await expect(inviteRow.getByRole("button", { name: "Edit" })).toHaveCount(0);
+    // Default status filter is Pending, so cancelled rows drop out of the table
+    // until the operator switches the filter.
+    await pickSelectOption(page, selectByLabel(invitationsCard, "Status Filter"), "Cancelled");
+
+    const cancelledInviteRow = page.getByTestId(`invite-row-${invited.invitationId}`);
+    await expect(cancelledInviteRow).toContainText("cancelled", { timeout: 30_000 });
+    await expect(cancelledInviteRow.getByRole("button", { name: "Resend" })).toHaveCount(0);
+    await expect(cancelledInviteRow.getByRole("button", { name: "Edit" })).toHaveCount(0);
   });
 
   test("dismissing the cancel confirm leaves the invite pending", async ({ page }) => {
