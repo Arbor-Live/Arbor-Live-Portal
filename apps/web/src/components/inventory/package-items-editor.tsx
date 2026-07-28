@@ -256,6 +256,7 @@ export function PackageItemsEditor({
                       return (
                         <div
                           key={entry.row.typeId}
+                          data-testid={`package-content-row-${entry.row.typeId}`}
                           className="rounded-md border bg-card p-3"
                         >
                           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -412,6 +413,7 @@ export function PackageItemsEditor({
                       return (
                         <div
                           key={type._id}
+                          data-testid={`package-catalog-row-${type._id}`}
                           className="flex flex-col gap-3 rounded-md border p-3 sm:flex-row sm:items-center"
                         >
                           <div className="flex min-w-0 flex-1 items-center gap-3">

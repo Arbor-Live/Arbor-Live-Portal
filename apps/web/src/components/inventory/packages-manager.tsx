@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useFormState } from "react-hook-form";
 import { useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
 import { Form } from "@/components/ui/form";
@@ -100,6 +101,17 @@ export function PackagesManager() {
     defaultValues: defaultPackageValues,
     mode: "onTouched",
   });
+
+  /**
+   * Subscribed rather than read off `packageForm.formState`.
+   *
+   * `useConvexForm` memoises what it returns on `[form, isDirty, saveStatus,
+   * …]`, so the `formState` snapshot it hands back does not change when a
+   * validation error appears — and this component's only other re-render
+   * trigger is `watch()`, which submit-time validation does not fire. Reading
+   * the snapshot directly would leave the error below permanently invisible.
+   */
+  const { errors: packageErrors } = useFormState({ control: packageForm.control });
 
   useEffect(() => {
     const parsedItems = itemRows
@@ -311,6 +323,7 @@ export function PackagesManager() {
     return (
       <Card
         key={pkg._id}
+        data-testid={`package-card-${pkg._id}`}
         className={cn(
           "overflow-hidden py-0 transition-shadow hover:shadow-md",
           isSelected && "ring-2 ring-primary/40",
@@ -637,6 +650,18 @@ export function PackagesManager() {
                               </option>
                             ))}
                           </select>
+                          {/*
+                            The section picker is a plain select rather than a
+                            FormField, so nothing else renders its error. The
+                            schema refuses `publicListing` without a bucket, and
+                            without this the operator just sees Create do
+                            nothing.
+                          */}
+                          {packageErrors.publicBucket ? (
+                            <p className="text-sm text-destructive">
+                              {packageErrors.publicBucket.message}
+                            </p>
+                          ) : null}
                         </div>
                       ) : null}
                       <FileUploadField
