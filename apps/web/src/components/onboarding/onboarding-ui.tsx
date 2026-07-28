@@ -1,7 +1,11 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { ArrowSquareOutIcon, CheckIcon, XIcon } from "@phosphor-icons/react";
+import { ArrowSquareOutIcon, CheckIcon, FingerprintIcon, XIcon } from "@phosphor-icons/react";
+import { authClient } from "@/lib/auth-client";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 /** Persistent exit control shown on every onboarding wizard step. */
@@ -153,5 +157,86 @@ export function OnboardingTextarea(
         props.className,
       )}
     />
+  );
+}
+
+type OnboardingPasskeyRow = { id: string; name?: string | null };
+
+/**
+ * Optional passkey enrollment step shared by the crew and band onboarding
+ * wizards. Reuses the same `authClient.passkey.addPasskey` flow as account
+ * settings. Never blocks progress — the wizard's own Next/Continue button
+ * always advances regardless of whether a passkey was added.
+ */
+export function OnboardingPasskeyStep({ onAdded }: { onAdded?: () => void }) {
+  const passkeysQuery = authClient.useListPasskeys();
+  const passkeys = (passkeysQuery.data ?? []) as OnboardingPasskeyRow[];
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (passkeys.length > 0) onAdded?.();
+    // Only fire when the passkey count changes, not on every onAdded identity change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [passkeys.length]);
+
+  async function onAddPasskey() {
+    setBusy(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const result = await authClient.passkey.addPasskey({ authenticatorAttachment: "platform" });
+      if (result?.error) {
+        throw new Error(
+          typeof result.error.message === "string" ? result.error.message : "Unable to add passkey.",
+        );
+      }
+      setMessage("Passkey added.");
+      onAdded?.();
+    } catch (addError) {
+      setError(addError instanceof Error ? addError.message : "Unable to add passkey.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-foreground/70">
+        Add a passkey for faster, more secure sign-in with Face ID, Touch ID, or a device security
+        key. You can skip this and add one later from account settings.
+      </p>
+
+      {passkeys.length > 0 ? (
+        <div className="space-y-2">
+          {passkeys.map((passkey) => (
+            <div
+              key={passkey.id}
+              className="flex items-center gap-2 border border-primary/40 bg-primary/5 px-3 py-2 text-sm"
+            >
+              <FingerprintIcon className="size-4 text-primary" weight="fill" />
+              <span>{passkey.name || "Passkey"} added</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      <Button type="button" variant="outline" onClick={() => void onAddPasskey()} disabled={busy}>
+        <FingerprintIcon className="size-4" />
+        {busy ? "Adding…" : passkeys.length > 0 ? "Add another passkey" : "Add a passkey"}
+      </Button>
+
+      {message ? (
+        <Alert>
+          <AlertDescription>{message}</AlertDescription>
+        </Alert>
+      ) : null}
+      {error ? (
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      ) : null}
+    </div>
   );
 }

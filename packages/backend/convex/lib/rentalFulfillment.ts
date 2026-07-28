@@ -212,11 +212,13 @@ export async function expandPullListNeeds(
       continue;
     }
     if (!line.packageId) continue;
+    const excludedTypeIds = new Set(line.excludedTypeIds ?? []);
     const packageItems = await ctx.db
       .query("inventoryPackageItems")
       .withIndex("by_packageId", (q) => q.eq("packageId", line.packageId!))
       .take(500);
     for (const pkgItem of packageItems) {
+      if (excludedTypeIds.has(pkgItem.typeId)) continue;
       const type = await ctx.db.get(pkgItem.typeId);
       needs.push({
         pullListItemId: line._id,

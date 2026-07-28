@@ -31,3 +31,7 @@ Arbor Live Portal is **always** Pacific Time. Do not use the browser/OS timezone
 ## Picker nuance
 
 `DateTimePicker` keeps **naive wall-clock digits** in the UI string (`YYYY-MM-DDTHH:mm`). Those digits mean Pacific; convert only at the ms boundary with the helpers above.
+
+## Web UI copy
+
+Do **not** label times as “Pacific”, “PT”, “PST”, “PDT”, or “America/Los_Angeles” in user-facing web UI. The whole app is Pacific by convention — redundant timezone chrome confuses users and keeps getting re-added. Keep timezone names in code, docs for engineers, and emails only when an external recipient might need the zone.

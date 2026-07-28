@@ -182,6 +182,7 @@ export async function ensureUserProfileDefaults(
     publicCrewDescription,
     payrollMethod,
     defaultOrganizationId,
+    gradYear,
   }: {
     title?: string;
     phone?: string;
@@ -192,6 +193,7 @@ export async function ensureUserProfileDefaults(
     publicCrewDescription?: string;
     payrollMethod?: PayrollMethod;
     defaultOrganizationId?: string;
+    gradYear?: number;
   },
 ) {
   const now = Date.now();
@@ -213,6 +215,7 @@ export async function ensureUserProfileDefaults(
         publicCrewDescription !== undefined ? normalizedDescription : existing.publicCrewDescription,
       payrollMethod: payrollMethod ?? existing.payrollMethod,
       defaultOrganizationId: defaultOrganizationId ?? existing.defaultOrganizationId,
+      gradYear: gradYear ?? existing.gradYear,
       updatedAt: now,
     });
     return existing._id;
@@ -228,6 +231,7 @@ export async function ensureUserProfileDefaults(
     publicCrewDescription: normalizedDescription,
     payrollMethod,
     defaultOrganizationId,
+    gradYear,
     createdAt: now,
     updatedAt: now,
   });
@@ -368,15 +372,16 @@ export const listOrganizationsAdmin = query({
         name: org.name ?? "Unnamed organization",
         slug: org.slug ?? "",
         organizationType: resolveOrganizationType(org, profileByOrgId.get(getRecordId(org))),
+        archived: profileByOrgId.get(getRecordId(org))?.status === "archived",
       }))
-      .filter((org) => Boolean(org.id))
+      .filter((org) => Boolean(org.id) && !org.archived)
       .sort((a, b) => a.name.localeCompare(b.name));
   },
 });
 
 export const listBandOrganizationsAdmin = query({
-  args: {},
-  handler: async (ctx) => {
+  args: { includeArchived: v.optional(v.boolean()) },
+  handler: async (ctx, args) => {
     await requireAdmin(ctx);
     const organizations = await getAllOrganizations(ctx);
     const profiles = await ctx.db.query("organizationProfiles").withIndex("by_organizationType").take(1000);
@@ -393,6 +398,7 @@ export const listBandOrganizationsAdmin = query({
           organizationType: inferredType,
           displayName: profile?.displayName ?? organization.name ?? "",
           bio: profile?.bio ?? "",
+          status: profile?.status === "archived" ? "archived" : "active",
           performerHourlyRateUsd: profile?.performerHourlyRateUsd ?? 0,
           designatedPayeeUserId: profile?.designatedPayeeUserId ?? "",
           designatedPayeeName: profile?.designatedPayeeName ?? "",
@@ -412,6 +418,7 @@ export const listBandOrganizationsAdmin = query({
         };
       })
       .filter((organization) => organization.organizationType === "band" || organization.organizationType === "dj")
+      .filter((organization) => args.includeArchived || organization.status !== "archived")
       .sort((a, b) => a.name.localeCompare(b.name));
   },
 });
@@ -525,6 +532,214 @@ export const updateBandOrganizationProfileAdmin = mutation({
       organizationId: args.organizationId,
     });
     return profileId;
+  },
+});
+
+/**
+ * Deactivates every membership on `organizationId`, then deactivates (bans)
+ * any affected user who is left with zero remaining active memberships
+ * anywhere. Platform admins are never auto-banned by this path. Returns the
+ * user ids that were deactivated.
+ */
+async function deactivateOrgMembers(
+  ctx: MutationCtx,
+  organizationId: string,
+  now: number,
+): Promise<string[]> {
+  const memberships = await ctx.db
+    .query("userOrganizationMemberships")
+    .withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId))
+    .take(1000);
+  const affectedUserIds = new Set<string>();
+  for (const membership of memberships) {
+    if (membership.active) {
+      await ctx.db.patch(membership._id, { active: false, updatedAt: now });
+    }
+    affectedUserIds.add(membership.userId);
+  }
+  if (affectedUserIds.size === 0) return [];
+
+  const users = await getAllAuthUsers(ctx);
+  const userByAuthId = new Map(users.map((user) => [getUserId(user), user]));
+  const deactivatedUserIds: string[] = [];
+
+  for (const userId of affectedUserIds) {
+    const remainingActive = await ctx.db
+      .query("userOrganizationMemberships")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .filter((q) => q.eq(q.field("active"), true))
+      .first();
+    if (remainingActive) continue;
+
+    const target = userByAuthId.get(userId);
+    if (target?.email && !target.banned && !isAdmin(target)) {
+      await setAuthUserBanState(ctx, target.email, true, now);
+    }
+
+    const existingProfile = await ctx.db
+      .query("userAdminProfiles")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .unique();
+    if (existingProfile?.active !== false) {
+      const existingMembership = existingProfile
+        ? resolveProfileMembership(existingProfile)
+        : { verticals: [], disciplines: [] };
+      await ensureUserProfileDefaults(ctx, userId, {
+        title: existingProfile?.title,
+        phone: existingProfile?.phone,
+        active: false,
+        verticals: existingMembership.verticals,
+        disciplines: existingMembership.disciplines,
+        showOnPublicCrewPage: existingProfile?.showOnPublicCrewPage,
+        publicCrewDescription: existingProfile?.publicCrewDescription,
+        defaultOrganizationId: existingProfile?.defaultOrganizationId,
+      });
+    }
+    deactivatedUserIds.push(userId);
+  }
+  return deactivatedUserIds;
+}
+
+async function clearActiveOrgSelections(ctx: MutationCtx, organizationId: string) {
+  const activeSelections = await ctx.db
+    .query("userActiveOrganizations")
+    .withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId))
+    .take(1000);
+  for (const selection of activeSelections) {
+    await ctx.db.delete(selection._id);
+  }
+}
+
+export const archiveBandOrganizationAdmin = mutation({
+  args: { organizationId: v.string() },
+  returns: v.object({ ok: v.boolean(), deactivatedUserIds: v.array(v.string()) }),
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    const now = Date.now();
+    const organizations = await getAllOrganizations(ctx);
+    const organization = organizations.find((entry) => getRecordId(entry) === args.organizationId);
+    if (!organization) throw new Error("Organization not found.");
+    if (isArborOrganization(organization)) {
+      throw new Error("The Arbor Live organization cannot be archived.");
+    }
+    const profile = await ctx.db
+      .query("organizationProfiles")
+      .withIndex("by_organizationId", (q) => q.eq("organizationId", args.organizationId))
+      .unique();
+    if (!profile || (profile.organizationType !== "band" && profile.organizationType !== "dj")) {
+      throw new Error("Only band/DJ organizations can be archived.");
+    }
+    if (profile.status === "archived") {
+      return { ok: true, deactivatedUserIds: [] };
+    }
+
+    await ctx.db.patch(profile._id, {
+      status: "archived",
+      publicListing: false,
+      publicSlug: undefined,
+      updatedAt: now,
+    });
+
+    const deactivatedUserIds = await deactivateOrgMembers(ctx, args.organizationId, now);
+    await clearActiveOrgSelections(ctx, args.organizationId);
+
+    return { ok: true, deactivatedUserIds };
+  },
+});
+
+export const unarchiveBandOrganizationAdmin = mutation({
+  args: { organizationId: v.string() },
+  returns: v.object({ ok: v.boolean() }),
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    const profile = await ctx.db
+      .query("organizationProfiles")
+      .withIndex("by_organizationId", (q) => q.eq("organizationId", args.organizationId))
+      .unique();
+    if (!profile) throw new Error("Organization profile not found.");
+    await ctx.db.patch(profile._id, { status: "active", updatedAt: Date.now() });
+    return { ok: true };
+  },
+});
+
+export const deleteArchivedBandOrganizationAdmin = mutation({
+  args: { organizationId: v.string() },
+  returns: v.object({ ok: v.boolean() }),
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    const now = Date.now();
+    const profile = await ctx.db
+      .query("organizationProfiles")
+      .withIndex("by_organizationId", (q) => q.eq("organizationId", args.organizationId))
+      .unique();
+    if (!profile) throw new Error("Organization profile not found.");
+    if (profile.status !== "archived") {
+      throw new Error("Only archived organizations can be deleted. Archive it first.");
+    }
+
+    // Safety net in case memberships were added back after archiving.
+    await deactivateOrgMembers(ctx, args.organizationId, now);
+
+    const memberships = await ctx.db
+      .query("userOrganizationMemberships")
+      .withIndex("by_organizationId", (q) => q.eq("organizationId", args.organizationId))
+      .take(1000);
+    for (const membership of memberships) {
+      await ctx.db.delete(membership._id);
+    }
+
+    const onboardingRows = await ctx.db
+      .query("organizationOnboarding")
+      .withIndex("by_organizationId", (q) => q.eq("organizationId", args.organizationId))
+      .take(10);
+    for (const row of onboardingRows) {
+      await ctx.db.delete(row._id);
+    }
+
+    const participations = await ctx.db
+      .query("eventBandParticipations")
+      .withIndex("by_organizationId", (q) => q.eq("organizationId", args.organizationId))
+      .take(1000);
+    for (const row of participations) {
+      await ctx.db.delete(row._id);
+    }
+
+    await clearActiveOrgSelections(ctx, args.organizationId);
+    await ctx.db.delete(profile._id);
+
+    // Best-effort Better Auth cascade — never block the Convex-side delete on it.
+    try {
+      await ctx.runMutation(components.betterAuth.adapter.deleteMany as any, {
+        input: {
+          model: "member",
+          where: [{ field: "organizationId", value: args.organizationId }],
+        },
+      });
+    } catch {
+      // ignore
+    }
+    try {
+      await ctx.runMutation(components.betterAuth.adapter.deleteMany as any, {
+        input: {
+          model: "invitation",
+          where: [{ field: "organizationId", value: args.organizationId }],
+        },
+      });
+    } catch {
+      // ignore
+    }
+    try {
+      await ctx.runMutation(components.betterAuth.adapter.deleteOne, {
+        input: {
+          model: "organization",
+          where: [{ field: "_id", value: args.organizationId }],
+        },
+      });
+    } catch {
+      // ignore
+    }
+
+    return { ok: true };
   },
 });
 

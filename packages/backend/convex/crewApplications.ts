@@ -570,6 +570,7 @@ export const convertToMember = mutation({
         disciplines,
         defaultOrganizationId: arborOrg.id,
         payrollMethod: args.payrollMethod,
+        gradYear: application.gradYear,
       });
       await upsertOrgMembership(ctx, {
         userId: existingUserId,
@@ -602,6 +603,7 @@ export const convertToMember = mutation({
       rateMode: args.rateMode,
       customHourlyRateUsd: args.customHourlyRateUsd,
       payrollMethod: args.payrollMethod,
+      gradYear: application.gradYear,
       isExistingUser: Boolean(existingUserId),
     });
 

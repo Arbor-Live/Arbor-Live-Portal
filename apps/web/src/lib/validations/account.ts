@@ -4,6 +4,17 @@ export const profileSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(120, "Name is too long"),
   phone: z.string().trim().max(40, "Phone is too long").optional(),
   title: z.string().trim().max(120, "Title is too long").optional(),
+  pronouns: z.string().trim().max(80, "Pronouns are too long").optional(),
+  gradYear: z
+    .string()
+    .trim()
+    .optional()
+    .refine(
+      (value) =>
+        !value ||
+        (/^\d{4}$/.test(value) && Number(value) >= 1950 && Number(value) <= 2100),
+      { message: "Enter a 4-digit graduation year" },
+    ),
   publicCrewDescription: z
     .string()
     .trim()

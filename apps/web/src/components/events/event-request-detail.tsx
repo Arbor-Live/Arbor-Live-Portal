@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { BOOKING_DECLINE_REASON_CODES, bookingDeclineReasonLabel } from "@arbor/format";
 import { api, type Id } from "@/lib/convex-api";
@@ -10,6 +10,7 @@ import { AdminCascadeDeleteDialog } from "@/components/admin/admin-cascade-delet
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { useSessionViewer } from "@/components/session-shell-provider";
+import { UserSelect, type UserSelectOption } from "@/components/users/user-select";
 import { formatDate, formatDateTime } from "@/lib/format";
 
 function DetailRow({ label, value }: { label: string; value?: string | number | null }) {
@@ -32,6 +33,8 @@ export function EventRequestDetailClient({ requestId }: { requestId: Id<"eventRe
   );
   const convertToEvent = useMutation(api.eventRequests.convertToEvent);
   const updateStatus = useMutation(api.eventRequests.updateStatus);
+  const setAssignee = useMutation(api.eventRequests.setAssignee);
+  const managers = useQuery(api.invoices.listManagers, {});
   const deleteRequestAdmin = useMutation(api.adminDeletes.deleteRequestAdmin);
   const [staffNotes, setStaffNotes] = useState("");
   const [declineReasonCode, setDeclineReasonCode] = useState("");
@@ -44,6 +47,16 @@ export function EventRequestDetailClient({ requestId }: { requestId: Id<"eventRe
     deleteOpen ? { id: requestId } : "skip",
   );
   const isAdmin = viewer?.isAdmin ?? false;
+
+  const assigneeOptions: UserSelectOption[] = useMemo(
+    () =>
+      (managers ?? []).map((row) => ({
+        value: row.id,
+        label: row.name?.trim() || row.email || row.id,
+        description: row.email,
+      })),
+    [managers],
+  );
 
   if (request === undefined) {
     return <p className="text-sm text-muted-foreground">Loading request...</p>;
@@ -175,6 +188,27 @@ export function EventRequestDetailClient({ requestId }: { requestId: Id<"eventRe
         <DetailRow label="Name" value={`${request.firstName} ${request.lastName}`} />
         <DetailRow label="Email" value={request.email} />
         <DetailRow label="Phone" value={request.phone} />
+        <div className="grid gap-1 border-b py-3 sm:grid-cols-[180px_1fr]">
+          <p className="text-sm font-medium text-muted-foreground">Assignee</p>
+          <div className="max-w-md">
+            <UserSelect
+              value={request.assigneeUserId ?? ""}
+              onChange={(value) => {
+                void setAssignee({
+                  id: requestId,
+                  assigneeUserId: value || undefined,
+                }).catch((assignError) => {
+                  setError(
+                    assignError instanceof Error ? assignError.message : "Failed to update assignee.",
+                  );
+                });
+              }}
+              options={[{ value: "", label: "Unassigned" }, ...assigneeOptions]}
+              placeholder="Unassigned"
+              emptyLabel="Unassigned"
+            />
+          </div>
+        </div>
         <DetailRow label="Organization" value={request.organization} />
         <DetailRow label="Sponsor type" value={request.sponsorType} />
         <DetailRow label="Venue" value={request.venueName} />

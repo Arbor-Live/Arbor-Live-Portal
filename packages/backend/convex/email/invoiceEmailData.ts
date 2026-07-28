@@ -31,6 +31,7 @@ const invoiceDocumentValidator = v.object({
       section: v.string(),
       provider: v.optional(v.string()),
       label: v.string(),
+      detailNote: v.optional(v.string()),
       quantity: v.number(),
       quantityDetail: v.optional(v.string()),
       rateUsd: v.number(),

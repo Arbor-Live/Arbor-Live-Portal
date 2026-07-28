@@ -41,7 +41,13 @@ export type InventoryPackageOption = {
   items: Array<{
     typeId: Id<"inventoryTypes">;
     quantity: number;
-    type: { name: string; model: string } | null;
+    type: {
+      name: string;
+      model: string;
+      subsidizedRentalPriceUsd?: number;
+      nonSubsidizedRentalPriceUsd?: number;
+      rentalPriceUsd?: number;
+    } | null;
   }>;
 };
 

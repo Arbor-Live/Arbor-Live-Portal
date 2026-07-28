@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import { pollConvex, runConvex } from "../helpers/convex";
 
 test.describe("booking staff convert", () => {
-  test("admin converts a submitted request into quote + tentative event", async ({ page }) => {
+  test("admin converts a submitted request into quote + tentative crewed event", async ({ page }) => {
     const eventName = `E2E Convert ${Date.now()}`;
     const seeded = runConvex("e2eHelpers:seedSubmittedBookingRequest", {
       eventName,
@@ -31,6 +31,11 @@ test.describe("booking staff convert", () => {
       convertedEventId: string | null;
       linkedInvoiceId: string | null;
       convertedAt: number | null;
+      eventType: string | null;
+      startAt: number | null;
+      endAt: number | null;
+      requestStartAt: number | null;
+      requestEndAt: number | null;
     }>(
       "e2eHelpers:getBookingRequestState",
       { requestId: seeded.requestId },
@@ -44,5 +49,8 @@ test.describe("booking staff convert", () => {
     expect(state.convertedEventId).toBeTruthy();
     expect(state.linkedInvoiceId).toBeTruthy();
     expect(state.convertedAt).toBeTruthy();
+    expect(state.eventType).toBe("Crewed Event");
+    expect(state.startAt).toBe(state.requestStartAt);
+    expect(state.endAt).toBe(state.requestEndAt);
   });
 });

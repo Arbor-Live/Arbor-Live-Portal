@@ -147,12 +147,34 @@ export function shiftHours(shift: Pick<EventShiftDraft, "startsAt" | "endsAt">) 
   return hoursBetweenLocal(shift.startsAt, shift.endsAt);
 }
 
-export function shiftBelongsToBlock(shift: EventShiftDraft, block: TimelineBlockDraft) {
+type ShiftBlockLink = {
+  scheduleBlockId?: Id<"eventScheduleBlocks">;
+  scheduleBlockRef?: string;
+};
+
+export function shiftBelongsToBlock(shift: ShiftBlockLink, block: TimelineBlockDraft) {
   const blockRef = getBlockRef(block);
   if (blockRef && shift.scheduleBlockRef === blockRef) return true;
   if (block.id && shift.scheduleBlockId === block.id) return true;
   if (block.id && shift.scheduleBlockRef === block.id) return true;
   return false;
+}
+
+/**
+ * Crew shift times mirror their schedule block's window (the backend
+ * force-syncs this on every `upsertBlocks` save). Call this whenever draft
+ * block times change so the UI already reflects what a save will persist.
+ */
+export function syncShiftsToBlockTimes<T extends ShiftBlockLink & { startsAt: string; endsAt: string }>(
+  shifts: T[],
+  blocks: TimelineBlockDraft[],
+): T[] {
+  return shifts.map((shift) => {
+    const block = blocks.find((candidate) => shiftBelongsToBlock(shift, candidate));
+    if (!block) return shift;
+    if (shift.startsAt === block.startsAt && shift.endsAt === block.endsAt) return shift;
+    return { ...shift, startsAt: block.startsAt, endsAt: block.endsAt };
+  });
 }
 
 export function timelineBlocksFromSaved(

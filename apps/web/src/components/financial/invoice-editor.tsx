@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useConvex, useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
 import { AdminCascadeDeleteDialog } from "@/components/admin/admin-cascade-delete-dialog";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
@@ -41,12 +41,23 @@ import type { SeriesShiftTemplateDraft } from "@/lib/event-series-shifts";
 import { CaretDownIcon } from "@phosphor-icons/react";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { FormSaveBar } from "@/components/forms";
-import { computeInvoiceDraftTotals } from "@/lib/compute-invoice-draft-totals";
+import {
+  computeInvoiceDraftTotals,
+  computePackageExclusionSuggestedDiscount,
+} from "@/lib/compute-invoice-draft-totals";
 import { equipmentDivisionWarnings } from "@/lib/equipment-division-warnings";
 import { InvoicePdfDownloadButton } from "@/components/financial/invoice-pdf-download-button";
 import { SendQuoteToClientSheet } from "@/components/financial/send-quote-to-client-sheet";
 
-type EquipmentRow = { refId: string; quantity: string; basis?: "total" | "per_occurrence" };
+type EquipmentRow = {
+  refId: string;
+  quantity: string;
+  basis?: "total" | "per_occurrence";
+  /** Package rows only: BOM type ids excluded from this line (ala-carte discount). */
+  excludedTypeIds?: string[];
+  /** Package rows only: editable discount amount; undefined means "use suggested". */
+  discountUsd?: string;
+};
 type ExternalRentalRow = { provider: string; label: string; quantity: string; rateUsd: string };
 type ArtistRow = { label: string; quantity: string; rateUsd: string };
 type CrewRow = InvoiceCrewRow;
@@ -81,6 +92,7 @@ export function InvoiceEditor({
     ...(groupId ? { groupId: groupId as Id<"invoiceGroups"> } : {}),
   });
 
+  const convex = useConvex();
   const createDraft = useMutation(api.invoices.createDraft);
   const duplicateInvoice = useMutation(api.invoices.duplicate);
   const updateDraft = useMutation(api.invoices.updateDraft);
@@ -89,6 +101,7 @@ export function InvoiceEditor({
   const withdrawFromClientReview = useMutation(api.invoices.withdrawFromClientReview);
   const regeneratePublicApprovalToken = useMutation(api.invoices.regeneratePublicApprovalToken);
   const resetApprovalToPending = useMutation(api.invoices.resetApprovalToPending);
+  const scaffoldPullListFromInvoice = useMutation(api.eventPullLists.scaffoldFromInvoice);
   const createGroup = useMutation(api.invoiceGroups.create);
   const createContact = useMutation(api.invoiceContacts.create);
   const deleteInvoiceAdmin = useMutation(api.adminDeletes.deleteInvoiceAdmin);
@@ -138,6 +151,10 @@ export function InvoiceEditor({
   );
   const linkedSeries = invoiceData?.series ?? linkedEvent?.series ?? null;
   const billableOccurrenceCount = linkedSeries?.activeOccurrenceCount ?? 0;
+  const pullListSyncStatus = useQuery(
+    api.eventPullLists.getInvoiceSyncStatus,
+    linkedEvent && !linkedSeries ? { eventId: linkedEvent._id } : "skip",
+  );
   const seriesCostData = useQuery(
     api.eventSeries.get,
     linkedSeries?.seriesId ? { id: linkedSeries.seriesId } : "skip",
@@ -357,6 +374,11 @@ export function InvoiceEditor({
           refId: row.packageId ?? "",
           quantity: row.quantity.toString(),
           basis: row.equipmentQuantityBasis ?? "total",
+          excludedTypeIds: row.excludedTypeIds ?? [],
+          discountUsd:
+            row.packageExclusionDiscountUsd != null
+              ? row.packageExclusionDiscountUsd.toString()
+              : undefined,
         })) || [{ refId: "", quantity: "1", basis: "total" }],
     );
     setEquipmentTypes(
@@ -532,10 +554,13 @@ export function InvoiceEditor({
       typeId?: Id<"inventoryTypes">;
       feeDefinitionId?: Id<"invoiceFeeDefinitions">;
       equipmentQuantityBasis?: "total" | "per_occurrence";
+      excludedTypeIds?: Id<"inventoryTypes">[];
+      packageExclusionDiscountUsd?: number;
     }> = [];
     for (const row of equipmentPackages) {
       if (!row.refId || Number(row.quantity) <= 0) continue;
       const pkg = packageById.get(row.refId);
+      const excludedTypeIds = (row.excludedTypeIds ?? []).filter(Boolean);
       rows.push({
         section: "equipment_package",
         order: order++,
@@ -544,6 +569,13 @@ export function InvoiceEditor({
         rateUsd: 0,
         packageId: row.refId as Id<"inventoryPackages">,
         equipmentQuantityBasis: row.basis ?? "total",
+        excludedTypeIds: excludedTypeIds.length
+          ? (excludedTypeIds as Id<"inventoryTypes">[])
+          : undefined,
+        packageExclusionDiscountUsd:
+          row.discountUsd !== undefined && row.discountUsd !== ""
+            ? Number(row.discountUsd)
+            : undefined,
       });
     }
     for (const row of equipmentTypes) {
@@ -647,7 +679,7 @@ export function InvoiceEditor({
     };
   }
 
-  async function persistDraft() {
+  async function persistDraft(promptForPullListSync = false) {
     const payload = buildPayload();
     if (!payload) {
       setAutoSaveState("error");
@@ -691,6 +723,22 @@ export function InvoiceEditor({
       if (requestId === saveRequestIdRef.current) {
         setSaveMessage("Invoice saved.");
         setAutoSaveState("saved");
+      }
+      if (promptForPullListSync && activeInvoiceId && linkedEvent && !linkedSeries) {
+        const status = await convex.query(api.eventPullLists.getInvoiceSyncStatus, {
+          eventId: linkedEvent._id,
+        });
+        if (status.hasInvoice && !status.inSync) {
+          const shouldResync = window.confirm(
+            "This invoice's equipment lines no longer match the event's pull list. Update the pull list to match?",
+          );
+          if (shouldResync) {
+            await scaffoldPullListFromInvoice({ eventId: linkedEvent._id });
+            if (requestId === saveRequestIdRef.current) {
+              setSaveMessage("Invoice saved and pull list resynced.");
+            }
+          }
+        }
       }
       return true;
     } catch (error) {
@@ -833,6 +881,13 @@ export function InvoiceEditor({
   ]);
 
   const linkedEvents = linkedEvent?.linkedEvents ?? [];
+  const eventCostUsd =
+    linkedSeries && seriesCostData?.costSummary
+      ? seriesCostData.costSummary.projectedGrandTotalUsd
+      : (linkedEvent?.crewCostUsd ?? 0) +
+        (linkedEvent?.bandsCostUsd ?? 0) +
+        (linkedEvent?.externalRentalsCostUsd ?? 0) +
+        (linkedEvent?.otherCostUsd ?? 0);
 
   const handleSeriesShiftDraftsChange = useCallback(
     (drafts: SeriesShiftTemplateDraft[]) => {
@@ -865,6 +920,8 @@ export function InvoiceEditor({
         equipmentQuantityBasis: row.equipmentQuantityBasis,
         packageId: row.packageId,
         typeId: row.typeId,
+        excludedTypeIds: row.excludedTypeIds,
+        packageExclusionDiscountUsd: row.packageExclusionDiscountUsd,
       })),
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps -- buildLineItems is recreated each render; deps are its closed-over fields
@@ -1160,6 +1217,31 @@ export function InvoiceEditor({
             ))}
           </nav>
 
+          {pullListSyncStatus?.hasInvoice && !pullListSyncStatus.inSync ? (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-800">
+              <span>Equipment lines are out of sync with the event&apos;s pull list.</span>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  void (async () => {
+                    if (!linkedEvent) return;
+                    if (
+                      !window.confirm(
+                        "Update the pull list to match this invoice's equipment lines?",
+                      )
+                    )
+                      return;
+                    await scaffoldPullListFromInvoice({ eventId: linkedEvent._id });
+                    setSaveMessage("Pull list resynced from invoice.");
+                  })().catch((error) => setAutoSaveError(getConvexErrorMessage(error)))
+                }
+              >
+                Sync pull list
+              </Button>
+            </div>
+          ) : null}
           <div id="section-equipment-packages">
           <SectionEquipmentPackages
             rows={equipmentPackages}
@@ -1419,30 +1501,26 @@ export function InvoiceEditor({
             </CardContent>
           </Card>
 
-          {linkedSeries && seriesCostData?.costSummary ? (
+          {linkedEvent ? (
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-base">Series margin (projected)</CardTitle>
+                <CardTitle className="text-base">Net profit (projected)</CardTitle>
               </CardHeader>
               <CardContent className="text-sm">
                 <p>
                   Billed: <span className="font-medium">{formatUsd(draftTotals.totalUsd)}</span>
                 </p>
                 <p>
-                  Series cost:{" "}
-                  <span className="font-medium">
-                    {formatUsd(seriesCostData.costSummary.projectedGrandTotalUsd)}
-                  </span>
+                  Event cost: <span className="font-medium">{formatUsd(eventCostUsd)}</span>
                 </p>
                 <p
                   className={
-                    draftTotals.totalUsd - seriesCostData.costSummary.projectedGrandTotalUsd >= 0
+                    draftTotals.totalUsd - eventCostUsd >= 0
                       ? "font-medium text-emerald-700"
                       : "font-medium text-rose-700"
                   }
                 >
-                  Margin:{" "}
-                  {formatUsd(draftTotals.totalUsd - seriesCostData.costSummary.projectedGrandTotalUsd)}
+                  Net profit: {formatUsd(draftTotals.totalUsd - eventCostUsd)}
                 </p>
               </CardContent>
             </Card>
@@ -1711,8 +1789,8 @@ export function InvoiceEditor({
         isDirty={isDraftDirty}
         isSubmitting={saving || autoSaveState === "saving"}
         saveLabel="Save"
-        onSave={() => void persistDraft()}
-        onRetry={() => void persistDraft()}
+        onSave={() => void persistDraft(true)}
+        onRetry={() => void persistDraft(true)}
         summary={
           <div>
             <p className="text-xs text-muted-foreground">{isDraftDirty ? "Draft total" : "Total"}</p>
@@ -1743,7 +1821,17 @@ function SectionEquipmentPackages({
       subsidizedPackagePriceUsd?: number;
       nonSubsidizedPackagePriceUsd?: number;
       packagePriceCents: number;
-      items?: Array<{ quantity: number; type?: { name?: string; model?: string } | null }>;
+      items?: Array<{
+        typeId: string;
+        quantity: number;
+        type?: {
+          name?: string;
+          model?: string;
+          subsidizedRentalPriceUsd?: number;
+          nonSubsidizedRentalPriceUsd?: number;
+          rentalPriceUsd?: number;
+        } | null;
+      }>;
     }
   >;
   equipmentPricingMode: "subsidized" | "nonSubsidized";
@@ -1755,12 +1843,24 @@ function SectionEquipmentPackages({
       <CardContent className="space-y-2">
         {rows.map((row, idx) => {
           const pkg = packageById.get(row.refId);
-          const rate =
+          const originalRate =
             equipmentPricingMode === "subsidized"
               ? (pkg?.subsidizedPackagePriceUsd ??
                 pkg?.nonSubsidizedPackagePriceUsd ??
                 (pkg?.packagePriceCents ?? 0) / 100)
               : (pkg?.nonSubsidizedPackagePriceUsd ?? (pkg?.packagePriceCents ?? 0) / 100);
+          const excluded = new Set(row.excludedTypeIds ?? []);
+          const suggestedDiscount = computePackageExclusionSuggestedDiscount(
+            pkg?.items,
+            row.excludedTypeIds,
+            equipmentPricingMode,
+          );
+          const discountOverride = row.discountUsd?.trim();
+          const discount =
+            discountOverride !== undefined && discountOverride !== ""
+              ? Number(discountOverride)
+              : suggestedDiscount;
+          const rate = Math.max(0, originalRate - (Number.isFinite(discount) ? discount : 0));
           const qty = Number(row.quantity || "0");
           const basis = row.basis ?? "total";
           const billedQty =
@@ -1768,13 +1868,25 @@ function SectionEquipmentPackages({
               ? qty * billableOccurrenceCount
               : qty;
           const lineTotal = billedQty * rate;
+          const removedLabels = (pkg?.items ?? [])
+            .filter((item) => excluded.has(item.typeId))
+            .map(
+              (item) =>
+                `${item.quantity}× ${item.type?.name ?? "item"}${item.type?.model ? ` · ${item.type.model}` : ""}`,
+            );
           return (
             <div key={`pkg-${idx}`} className="space-y-1">
             <div className="grid gap-2 md:grid-cols-[1fr_120px_120px_100px_auto]">
               <InventoryPackageSearchSelect
                 value={row.refId}
                 onChange={(v) =>
-                  setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, refId: v } : r)))
+                  setRows((prev) =>
+                    prev.map((r, i) =>
+                      i === idx
+                        ? { ...r, refId: v, excludedTypeIds: [], discountUsd: "" }
+                        : r,
+                    ),
+                  )
                 }
               />
               <select
@@ -1803,7 +1915,7 @@ function SectionEquipmentPackages({
               <Button type="button" variant="outline" onClick={() => setRows((prev) => prev.filter((_, i) => i !== idx))}>Remove</Button>
             </div>
             {pkg?.items?.length ? (
-              <Collapsible defaultOpen={false}>
+              <Collapsible defaultOpen={excluded.size > 0}>
                 <CollapsibleTrigger asChild>
                   <button
                     type="button"
@@ -1814,20 +1926,92 @@ function SectionEquipmentPackages({
                   </button>
                 </CollapsibleTrigger>
                 <CollapsibleContent>
-                  <p className="pt-1 text-xs text-muted-foreground">
-                    {pkg.items
-                      .map((item) =>
-                        `${item.quantity}× ${item.type?.name ?? "item"}${item.type?.model ? ` · ${item.type.model}` : ""}`,
-                      )
-                      .join(", ")}
-                  </p>
+                  <div className="space-y-2 pt-2">
+                    <p className="text-xs text-muted-foreground">
+                      Original package {formatUsd(originalRate)}
+                      {removedLabels.length
+                        ? ` · Removed: ${removedLabels.join(", ")}`
+                        : ""}
+                      {discount > 0 ? ` · Discount ${formatUsd(discount)}` : ""}
+                      {discount > 0 ? ` · Billed rate ${formatUsd(rate)}` : ""}
+                    </p>
+                    <div className="space-y-1">
+                      {pkg.items.map((item) => {
+                        const checked = !excluded.has(item.typeId);
+                        return (
+                          <label
+                            key={item.typeId}
+                            className="flex items-center gap-2 text-xs text-muted-foreground"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(e) => {
+                                setRows((prev) =>
+                                  prev.map((r, i) => {
+                                    if (i !== idx) return r;
+                                    const next = new Set(r.excludedTypeIds ?? []);
+                                    if (e.target.checked) next.delete(item.typeId);
+                                    else next.add(item.typeId);
+                                    return {
+                                      ...r,
+                                      excludedTypeIds: Array.from(next),
+                                      discountUsd: "",
+                                    };
+                                  }),
+                                );
+                              }}
+                            />
+                            <span>
+                              {item.quantity}× {item.type?.name ?? "item"}
+                              {item.type?.model ? ` · ${item.type.model}` : ""}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                    {excluded.size > 0 ? (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Label className="text-xs">Exclusion discount</Label>
+                        <Input
+                          className="h-8 w-28"
+                          value={
+                            row.discountUsd !== undefined && row.discountUsd !== ""
+                              ? row.discountUsd
+                              : suggestedDiscount.toFixed(2)
+                          }
+                          onChange={(e) =>
+                            setRows((prev) =>
+                              prev.map((r, i) =>
+                                i === idx ? { ...r, discountUsd: e.target.value } : r,
+                              ),
+                            )
+                          }
+                        />
+                        <span className="text-xs text-muted-foreground">
+                          Suggested {formatUsd(suggestedDiscount)}
+                        </span>
+                      </div>
+                    ) : null}
+                  </div>
                 </CollapsibleContent>
               </Collapsible>
             ) : null}
             </div>
           );
         })}
-        <Button type="button" variant="outline" onClick={() => setRows((prev) => [...prev, { refId: "", quantity: "1", basis: defaultBasis }])}>Add package</Button>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() =>
+            setRows((prev) => [
+              ...prev,
+              { refId: "", quantity: "1", basis: defaultBasis, excludedTypeIds: [] },
+            ])
+          }
+        >
+          Add package
+        </Button>
       </CardContent>
     </Card>
   );

@@ -15,6 +15,7 @@ import { UserAvatarUploadPreview } from "@/components/account/user-avatar";
 import {
   OnboardingAckCheckbox,
   OnboardingLinkCard,
+  OnboardingPasskeyStep,
   OnboardingSkipButton,
   OnboardingTextarea,
   OnboardingYesNoChoice,
@@ -61,12 +62,15 @@ type CrewOnboardingData = {
     calendarInviteEmail?: string;
     showOnPublicCrewPage: boolean;
     publicCrewDescription?: string;
+    pronouns?: string;
+    gradYear?: number;
   };
 };
 
 type StepId =
   | "welcome"
   | "profile"
+  | "passkey"
   | "whatsapp"
   | "instagram"
   | "fws"
@@ -80,6 +84,7 @@ type StepId =
 const STANFORD_STEP_ORDER: StepId[] = [
   "welcome",
   "profile",
+  "passkey",
   "whatsapp",
   "instagram",
   "fws",
@@ -93,6 +98,7 @@ const STANFORD_STEP_ORDER: StepId[] = [
 const EXTERNAL_STEP_ORDER: StepId[] = [
   "welcome",
   "profile",
+  "passkey",
   "whatsapp",
   "instagram",
   "training",
@@ -108,6 +114,7 @@ function stepOrderForPayroll(payrollMethod: "stanford" | "external" | undefined)
 const STEP_HEADLINES: Record<StepId, string> = {
   welcome: "Welcome to Arbor Live",
   profile: "Tell us about yourself",
+  passkey: "Secure your account",
   whatsapp: "Join the crew chat",
   instagram: "Follow us on Instagram",
   fws: "Federal Work Study",
@@ -127,6 +134,8 @@ type FormState = {
   calendarInviteEmail: string;
   showOnPublicCrewPage: boolean;
   publicCrewDescription: string;
+  pronouns: string;
+  gradYear: string;
   whatsappAcknowledged: boolean;
   instagramAcknowledged: boolean;
   hasFederalWorkStudy: boolean | null;
@@ -152,6 +161,8 @@ const EMPTY_FORM: FormState = {
   calendarInviteEmail: "",
   showOnPublicCrewPage: false,
   publicCrewDescription: "",
+  pronouns: "",
+  gradYear: "",
   whatsappAcknowledged: false,
   instagramAcknowledged: false,
   hasFederalWorkStudy: null,
@@ -192,6 +203,7 @@ export function CrewOnboardingWizard() {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [avatarBusy, setAvatarBusy] = useState(false);
+  const [hasAddedPasskey, setHasAddedPasskey] = useState(false);
   // Local blob preview from an in-progress upload; server avatarUrl (which may
   // arrive slightly after the onboarding row is created) is used otherwise.
   const [avatarPreviewOverride, setAvatarPreviewOverride] = useState<string | null>(null);
@@ -214,6 +226,8 @@ export function CrewOnboardingWizard() {
       calendarInviteEmail: onboarding.profile.calendarInviteEmail ?? "",
       showOnPublicCrewPage: onboarding.profile.showOnPublicCrewPage ?? false,
       publicCrewDescription: onboarding.profile.publicCrewDescription ?? "",
+      pronouns: onboarding.profile.pronouns ?? "",
+      gradYear: onboarding.profile.gradYear != null ? String(onboarding.profile.gradYear) : "",
       whatsappAcknowledged: Boolean(onboarding.whatsappAcknowledgedAt),
       instagramAcknowledged: Boolean(onboarding.instagramAcknowledgedAt),
       hasFederalWorkStudy: onboarding.hasFederalWorkStudy ?? null,
@@ -312,6 +326,11 @@ export function CrewOnboardingWizard() {
           setFieldError("Enter your phone number.");
           return;
         }
+        const trimmedGradYear = form.gradYear.trim();
+        if (trimmedGradYear && !/^\d{4}$/.test(trimmedGradYear)) {
+          setFieldError("Enter a 4-digit graduation year.");
+          return;
+        }
         if (previewOnly) {
           advance();
           return;
@@ -323,6 +342,8 @@ export function CrewOnboardingWizard() {
           calendarInviteEmail: form.calendarInviteEmail.trim() || undefined,
           showOnPublicCrewPage: form.showOnPublicCrewPage,
           publicCrewDescription: form.publicCrewDescription.trim() || undefined,
+          pronouns: form.pronouns.trim() || undefined,
+          gradYear: trimmedGradYear ? Number(trimmedGradYear) : undefined,
         });
         advance();
         return;
@@ -561,7 +582,15 @@ export function CrewOnboardingWizard() {
             <RequestWizardNav
               showBack={stepIndex > 0}
               showNext
-              nextLabel={currentStep === "signature" ? "Sign & submit" : "Next"}
+              nextLabel={
+                currentStep === "signature"
+                  ? "Sign & submit"
+                  : currentStep === "passkey"
+                    ? hasAddedPasskey
+                      ? "Continue"
+                      : "Add later"
+                    : "Next"
+              }
               isSubmitting={isSubmitting}
               onBack={goBack}
               onNext={() => void goNext()}
@@ -606,6 +635,7 @@ export function CrewOnboardingWizard() {
                 avatarSeedEmail={avatarSeedEmail}
                 onAvatarSelected={onAvatarSelected}
                 onGoToDashboard={goToDashboard}
+                onPasskeyAdded={() => setHasAddedPasskey(true)}
               />
             </motion.div>
           </AnimatePresence>
@@ -625,6 +655,7 @@ function StepBody({
   avatarSeedEmail,
   onAvatarSelected,
   onGoToDashboard,
+  onPasskeyAdded,
 }: {
   stepId: StepId;
   form: FormState;
@@ -635,6 +666,7 @@ function StepBody({
   avatarSeedEmail: string;
   onAvatarSelected: (file: File) => void;
   onGoToDashboard: () => void;
+  onPasskeyAdded: () => void;
 }) {
   const patch = (next: Partial<FormState>) => setForm((prev) => ({ ...prev, ...next }));
 
@@ -708,6 +740,28 @@ function StepBody({
             />
           </div>
 
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="crew-pronouns">Pronouns (optional)</Label>
+              <Input
+                id="crew-pronouns"
+                value={form.pronouns}
+                onChange={(event) => patch({ pronouns: event.target.value })}
+                placeholder="she/her"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="crew-grad-year">Graduation year (optional)</Label>
+              <Input
+                id="crew-grad-year"
+                inputMode="numeric"
+                value={form.gradYear}
+                onChange={(event) => patch({ gradYear: event.target.value })}
+                placeholder="2027"
+              />
+            </div>
+          </div>
+
           <div className="space-y-2">
             <Label htmlFor="crew-calendar-email">Calendar invite email (optional)</Label>
             <Input
@@ -736,6 +790,9 @@ function StepBody({
           {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
         </div>
       );
+
+    case "passkey":
+      return <OnboardingPasskeyStep onAdded={onPasskeyAdded} />;
 
     case "whatsapp":
       return (

@@ -27,6 +27,7 @@ const templateItemInput = v.object({
   source: v.optional(pullListSourceValue),
   sourcePackageId: v.optional(v.id("inventoryPackages")),
   sourceInvoiceLineKey: v.optional(v.string()),
+  excludedTypeIds: v.optional(v.array(v.id("inventoryTypes"))),
   sortOrder: v.number(),
   notes: v.optional(v.string()),
 });
@@ -105,6 +106,7 @@ export const scaffoldFromInvoice = mutation({
       source: "invoice_package" | "invoice_type";
       sourcePackageId?: Id<"inventoryPackages">;
       sourceInvoiceLineKey: string;
+      excludedTypeIds?: Id<"inventoryTypes">[];
     }>();
 
     for (const line of equipmentLines) {
@@ -125,6 +127,15 @@ export const scaffoldFromInvoice = mutation({
         const existingRow = merged.get(key);
         if (existingRow) {
           existingRow.quantityRequired += qty;
+          // Multiple invoice lines for the same package: only exclude types every
+          // contributing line agrees to exclude, so a need isn't dropped entirely.
+          if (line.excludedTypeIds?.length) {
+            const existingExcluded = new Set(existingRow.excludedTypeIds ?? []);
+            const lineExcluded = new Set(line.excludedTypeIds);
+            existingRow.excludedTypeIds = [...existingExcluded].filter((id) => lineExcluded.has(id));
+          } else {
+            existingRow.excludedTypeIds = [];
+          }
         } else {
           merged.set(key, {
             lineKind: "package",
@@ -134,6 +145,7 @@ export const scaffoldFromInvoice = mutation({
             source: "invoice_package",
             sourcePackageId: line.packageId,
             sourceInvoiceLineKey: `pkg:${line._id}`,
+            excludedTypeIds: line.excludedTypeIds?.length ? [...line.excludedTypeIds] : undefined,
           });
         }
       } else if (line.section === "equipment_type" && line.typeId) {
@@ -167,6 +179,7 @@ export const scaffoldFromInvoice = mutation({
           source: row.source,
           sourcePackageId: row.sourcePackageId,
           sourceInvoiceLineKey: row.sourceInvoiceLineKey,
+          excludedTypeIds: row.excludedTypeIds?.length ? row.excludedTypeIds : undefined,
           sortOrder,
           createdAt: now,
           updatedAt: now,
@@ -253,6 +266,7 @@ async function regenerateFuturePullLists(
           source: template.source,
           sourcePackageId: template.sourcePackageId,
           sourceInvoiceLineKey: template.sourceInvoiceLineKey,
+          excludedTypeIds: template.excludedTypeIds,
           sortOrder,
           notes: template.notes,
           createdAt: args.now,
@@ -344,6 +358,7 @@ export const pullListTemplatesFromOccurrence = mutation({
         source: item.source,
         sourcePackageId: item.sourcePackageId,
         sourceInvoiceLineKey: item.sourceInvoiceLineKey,
+        excludedTypeIds: item.excludedTypeIds,
         sortOrder,
         notes: item.notes,
         createdAt: now,
@@ -384,6 +399,7 @@ export const upsertTemplateItems = mutation({
         source,
         sourcePackageId: item.sourcePackageId,
         sourceInvoiceLineKey: item.sourceInvoiceLineKey,
+        excludedTypeIds: item.lineKind === "package" ? item.excludedTypeIds : undefined,
         sortOrder: item.sortOrder,
         notes: item.notes?.trim() || undefined,
         updatedAt: now,

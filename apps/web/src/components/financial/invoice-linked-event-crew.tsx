@@ -21,6 +21,7 @@ import {
   resolveShiftScheduleBlockId,
   shiftBelongsToBlock,
   shiftHours,
+  syncShiftsToBlockTimes,
   timelineBlocksFromSaved,
   toLocalDateTimeInput,
   withStableBlockRefs,
@@ -465,7 +466,11 @@ export function InvoiceLinkedEventCrewSection({
         <EventTimelineScheduler
           dayCount={dayCount}
           blocks={blocks}
-          onChange={(next) => setBlocks(stableBlocks(next))}
+          onChange={(next) => {
+            const nextBlocks = stableBlocks(next);
+            setBlocks(nextBlocks);
+            setShifts((prev) => syncShiftsToBlockTimes(prev, nextBlocks));
+          }}
           quickAddLabel={quickAddLabel}
           quickAddDisabled={quickAddDisabled}
           quickAddDisabledReason={quickAddDisabledReason}

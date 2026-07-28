@@ -344,6 +344,8 @@ const crewOnboardingReturn = v.object({
     calendarInviteEmail: v.optional(v.string()),
     showOnPublicCrewPage: v.boolean(),
     publicCrewDescription: v.optional(v.string()),
+    pronouns: v.optional(v.string()),
+    gradYear: v.optional(v.number()),
   }),
 });
 
@@ -357,6 +359,8 @@ function serializeCrewOnboarding(
     calendarInviteEmail?: string;
     showOnPublicCrewPage: boolean;
     publicCrewDescription?: string;
+    pronouns?: string;
+    gradYear?: number;
   },
   payrollMethod: PayrollMethod,
 ) {
@@ -461,6 +465,8 @@ export const getMyCrewOnboarding = query({
       calendarInviteEmail: profile?.calendarInviteEmail,
       showOnPublicCrewPage: profile?.showOnPublicCrewPage ?? false,
       publicCrewDescription: profile?.publicCrewDescription,
+      pronouns: profile?.pronouns,
+      gradYear: profile?.gradYear,
     };
 
     const payrollMethod = normalizePayrollMethod(profile?.payrollMethod);
@@ -510,6 +516,8 @@ export const saveCrewProfileStep = mutation({
     calendarInviteEmail: v.optional(v.string()),
     showOnPublicCrewPage: v.boolean(),
     publicCrewDescription: v.optional(v.string()),
+    pronouns: v.optional(v.string()),
+    gradYear: v.optional(v.number()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -524,6 +532,14 @@ export const saveCrewProfileStep = mutation({
     const calendarInviteEmail = args.calendarInviteEmail?.trim().toLowerCase() || undefined;
     if (calendarInviteEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(calendarInviteEmail)) {
       throw new Error("Enter a valid calendar invite email.");
+    }
+    const pronouns = args.pronouns?.trim() || undefined;
+    const gradYear =
+      args.gradYear !== undefined && Number.isFinite(args.gradYear)
+        ? Math.floor(args.gradYear)
+        : undefined;
+    if (gradYear !== undefined && (gradYear < 1950 || gradYear > 2100)) {
+      throw new Error("Enter a valid graduation year.");
     }
 
     if (user.email) {
@@ -546,6 +562,8 @@ export const saveCrewProfileStep = mutation({
         calendarInviteEmail,
         showOnPublicCrewPage: args.showOnPublicCrewPage,
         publicCrewDescription: args.publicCrewDescription?.trim() || undefined,
+        pronouns: pronouns ?? profile.pronouns,
+        gradYear: gradYear ?? profile.gradYear,
         updatedAt: now,
       });
     } else {
@@ -558,6 +576,8 @@ export const saveCrewProfileStep = mutation({
         calendarInviteEmail,
         showOnPublicCrewPage: args.showOnPublicCrewPage,
         publicCrewDescription: args.publicCrewDescription?.trim() || undefined,
+        pronouns,
+        gradYear,
         createdAt: now,
         updatedAt: now,
       });

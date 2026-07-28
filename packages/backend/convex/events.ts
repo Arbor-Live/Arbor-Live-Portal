@@ -426,6 +426,13 @@ export const getByInvoiceId = query({
         endAt: row.endAt,
       })),
       series: await resolveSeriesMetadataForInvoice(ctx, args.invoiceId),
+      // Summed across all linked occurrences — used for the net-profit surface
+      // on non-series invoices (series invoices use eventSeries.get's
+      // projected costSummary instead, which accounts for recurring costs).
+      crewCostUsd: linkedEvents.reduce((sum, row) => sum + (row.crewCostUsd ?? 0), 0),
+      bandsCostUsd: linkedEvents.reduce((sum, row) => sum + (row.bandsCostUsd ?? 0), 0),
+      externalRentalsCostUsd: linkedEvents.reduce((sum, row) => sum + (row.externalRentalsCostUsd ?? 0), 0),
+      otherCostUsd: linkedEvents.reduce((sum, row) => sum + (row.otherCostUsd ?? 0), 0),
     };
   },
 });
@@ -879,6 +886,7 @@ export const duplicate = mutation({
         source: item.source,
         sourcePackageId: item.sourcePackageId,
         sourceInvoiceLineKey: item.sourceInvoiceLineKey,
+        excludedTypeIds: item.excludedTypeIds,
         sortOrder: item.sortOrder,
         notes: item.notes,
         createdAt: now,

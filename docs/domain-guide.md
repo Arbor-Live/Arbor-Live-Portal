@@ -93,7 +93,13 @@ Event types (drive which editor tabs and quick-add blocks appear):
   `PORTAL_TIMEZONE` in `@arbor/format`). Display, input hydration/save, day
   keys, and FullCalendar grids must go through that package (or
   `@/lib/format` / `@/lib/crew-availability` wrappers) — never browser local
-  time. See `.cursor/rules/portal-timezone.mdc`.
+  time. See `.cursor/rules/portal-timezone.mdc`. **Do not** put “Pacific” /
+  “PT” / “PST” labels in the web UI — timezone is assumed app-wide; reserve
+  zone names for engineer docs and external emails when needed.
+- **Booking requests** can have an `assigneeUserId` (round-robin pool in
+  `bookingRequestSettings`, or manual swap on the request detail). Inbox
+  defaults to open requests (`submitted`/`in_review`), oldest-first, with a
+  days-since-submitted counter.
 - **Schedule blocks** (`eventScheduleBlocks`) are the planning unit: typed
   (`setup`/`show`/`strike`/`custom`), snapped to 15-minute increments, may
   overlap (the timeline renders overlaps on separate lanes) and may cross

@@ -271,3 +271,22 @@ export type RentalReturnProcessedEmailProps = {
   }>;
   eventUrl: string;
 };
+
+export type PostEventAlbumEmailProps = {
+  recipientName?: string;
+  eventTitle: string;
+  venueName?: string;
+  dateRangeLabel: string;
+  /** Immich shared-album link. Omitted when no album could be resolved yet. */
+  albumShareUrl?: string;
+};
+
+export type EventCommentMentionEmailProps = {
+  recipientName?: string;
+  authorName: string;
+  eventTitle: string;
+  venueName?: string;
+  dateRangeLabel: string;
+  commentSnippet: string;
+  eventUrl: string;
+};

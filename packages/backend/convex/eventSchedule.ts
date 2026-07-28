@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { requireArborInternalContext, requireAuth } from "./lib/auth";
 import { requireEventEditAccess } from "./lib/eventAccess";
 import {
@@ -143,6 +144,27 @@ export const upsertBlocks = mutation({
       const fingerprint = scheduleBlocksContentFingerprint(savedBlocks);
       await scheduleSchedulePublishedEmails(ctx, args.eventId, fingerprint);
     }
+
+    // Keep linked crew shifts aligned with their schedule blocks.
+    for (const block of savedBlocks) {
+      const linkedShifts = await ctx.db
+        .query("eventCrewShifts")
+        .withIndex("by_scheduleBlockId", (q) =>
+          q.eq("scheduleBlockId", block.id as Id<"eventScheduleBlocks">),
+        )
+        .take(200);
+      for (const shift of linkedShifts) {
+        if (shift.eventId !== args.eventId) continue;
+        const hours = Number(((block.endsAt - block.startsAt) / 3_600_000).toFixed(2));
+        await ctx.db.patch(shift._id, {
+          startsAt: block.startsAt,
+          endsAt: block.endsAt,
+          hours,
+          updatedAt: now,
+        });
+      }
+    }
+
     return savedBlocks;
   },
 });

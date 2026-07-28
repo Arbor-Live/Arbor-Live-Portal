@@ -21,6 +21,8 @@ export const getMyAccount = query({
     title: v.optional(v.string()),
     calendarInviteEmail: v.optional(v.string()),
     publicCrewDescription: v.optional(v.string()),
+    pronouns: v.optional(v.string()),
+    gradYear: v.optional(v.number()),
   }),
   handler: async (ctx) => {
     const user = await requireAuth(ctx);
@@ -46,6 +48,8 @@ export const getMyAccount = query({
       title: profile?.title,
       calendarInviteEmail: profile?.calendarInviteEmail ?? "",
       publicCrewDescription: profile?.publicCrewDescription,
+      pronouns: profile?.pronouns,
+      gradYear: profile?.gradYear,
     };
   },
 });
@@ -134,6 +138,8 @@ export const updateMyProfileDetails = mutation({
     title: v.optional(v.string()),
     calendarInviteEmail: v.optional(v.string()),
     publicCrewDescription: v.optional(v.string()),
+    pronouns: v.optional(v.string()),
+    gradYear: v.optional(v.number()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -144,8 +150,16 @@ export const updateMyProfileDetails = mutation({
     const title = args.title?.trim() || undefined;
     const calendarInviteEmail = args.calendarInviteEmail?.trim().toLowerCase() || undefined;
     const publicCrewDescription = args.publicCrewDescription?.trim() || undefined;
+    const pronouns = args.pronouns?.trim() || undefined;
+    const gradYear =
+      args.gradYear !== undefined && Number.isFinite(args.gradYear)
+        ? Math.floor(args.gradYear)
+        : undefined;
     if (calendarInviteEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(calendarInviteEmail)) {
       throw new Error("Enter a valid calendar invite email address.");
+    }
+    if (gradYear !== undefined && (gradYear < 1950 || gradYear > 2100)) {
+      throw new Error("Enter a valid graduation year.");
     }
 
     const existing = await ctx.db
@@ -159,6 +173,8 @@ export const updateMyProfileDetails = mutation({
         title,
         calendarInviteEmail,
         publicCrewDescription,
+        pronouns,
+        gradYear,
         updatedAt: now,
       });
       return null;
@@ -170,6 +186,8 @@ export const updateMyProfileDetails = mutation({
       title,
       calendarInviteEmail,
       publicCrewDescription,
+      pronouns,
+      gradYear,
       active: true,
       verticals: [],
       disciplines: [],

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useConvex, useMutation, useQuery } from "convex/react";
 import { PackageIcon } from "@phosphor-icons/react";
 import { api, type Id } from "@/lib/convex-api";
 import { FormSaveBar } from "@/components/forms";
@@ -39,6 +39,8 @@ export type PullListItemDraft = {
   source: "manual" | "invoice_package" | "invoice_type";
   sourcePackageId?: Id<"inventoryPackages">;
   sourceInvoiceLineKey?: string;
+  /** Package lines only: BOM types excluded by the source invoice's ala-carte discount. */
+  excludedTypeIds?: Id<"inventoryTypes">[];
   sortOrder: number;
   notes: string;
 };
@@ -65,6 +67,7 @@ export function mapPullListRow(
     source: row.source,
     sourcePackageId: row.sourcePackageId,
     sourceInvoiceLineKey: row.sourceInvoiceLineKey,
+    excludedTypeIds: row.excludedTypeIds,
     sortOrder: row.sortOrder,
     notes: row.notes ?? "",
   };
@@ -156,15 +159,21 @@ export function EventPullList({
   const [damageOpen, setDamageOpen] = useState(false);
 
   // Search-on-demand pickers — do not preload inventoryTypes/packages catalogs here.
+  const convex = useConvex();
   const upsertItems = useMutation(api.eventPullLists.upsertItems);
   const scaffoldFromInvoice = useMutation(api.eventPullLists.scaffoldFromInvoice);
   const removeItem = useMutation(api.eventPullLists.removeItem);
+  const resyncInvoiceFromPullList = useMutation(api.invoices.resyncEquipmentFromPullList);
 
   const fulfillmentSummary = useQuery(
     api.eventRentalFulfillment.getFulfillmentSummary,
     eventId && isRentalEventType(eventType) ? { eventId } : "skip",
   );
   const showRentalFulfillment = Boolean(eventId && isRentalEventType(eventType));
+  const syncStatus = useQuery(
+    api.eventPullLists.getInvoiceSyncStatus,
+    eventId && !seriesLinked ? { eventId } : "skip",
+  );
 
   const form = useConvexForm<PullListFormValues>({
     schema: pullListFormSchema,
@@ -233,6 +242,7 @@ export function EventPullList({
           source: item.source,
           sourcePackageId: item.sourcePackageId,
           sourceInvoiceLineKey: item.sourceInvoiceLineKey,
+          excludedTypeIds: item.excludedTypeIds,
           sortOrder: index,
           notes: item.notes || undefined,
         })),
@@ -250,8 +260,20 @@ export function EventPullList({
     async (values: PullListFormValues) => {
       const nextItems = mergeFormQuantities(items, values);
       await persistItems(nextItems, "Pull list updated");
+      if (eventId && invoiceId && !seriesLinked) {
+        const status = await convex.query(api.eventPullLists.getInvoiceSyncStatus, { eventId });
+        if (status.hasInvoice && !status.inSync) {
+          const shouldResync = window.confirm(
+            "This pull list no longer matches the linked invoice's equipment lines. Update the invoice to match?",
+          );
+          if (shouldResync) {
+            await resyncInvoiceFromPullList({ id: invoiceId, eventId });
+            onSaved?.("Pull list updated and invoice equipment lines resynced.");
+          }
+        }
+      }
     },
-    [items, persistItems],
+    [items, persistItems, eventId, invoiceId, seriesLinked, convex, resyncInvoiceFromPullList, onSaved],
   );
 
   async function handleScaffold() {
@@ -360,6 +382,11 @@ export function EventPullList({
             <p className="mt-1 text-xs text-muted-foreground">
               This event is part of a billed series. Invoice lines define billing totals; use the series pull
               list template for per-show quantities. Load from invoice uses per-occurrence qty when series-linked.
+            </p>
+          ) : null}
+          {syncStatus?.hasInvoice && !syncStatus.inSync ? (
+            <p className="mt-1 inline-flex items-center rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs text-amber-800">
+              Out of sync with the linked invoice&apos;s equipment lines.
             </p>
           ) : null}
         </div>

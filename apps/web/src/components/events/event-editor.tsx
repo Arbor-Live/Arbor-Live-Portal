@@ -34,6 +34,7 @@ import { VenueDetailsButton } from "@/components/venues/venue-details-sheet";
 import { useSessionViewer } from "@/components/session-shell-provider";
 import { EventBandPaymentSection } from "@/components/events/event-band-payment-section";
 import { EventMediaSection } from "@/components/events/event-media-section";
+import { EventCommentsSection } from "@/components/events/event-comments-section";
 import { EventPullList, mapPullListRow, type PullListItemDraft } from "@/components/events/event-pull-list";
 import { EventTimelineScheduler, type TimelineBlockDraft } from "@/components/events/event-timeline-scheduler";
 import { EventScheduleCrewAssignPanel } from "@/components/events/event-availability-summary";
@@ -287,6 +288,20 @@ export function EventEditor({
 
   function getBlockRef(block: TimelineBlockDraft) {
     return block.id ?? block.clientId;
+  }
+
+  /**
+   * Crew shift times mirror their schedule block's window (the backend
+   * force-syncs this on every schedule save). Sync draft shift times whenever
+   * blocks change so the UI already reflects what a save will persist.
+   */
+  function syncShiftsToBlockTimes(nextShifts: ShiftDraft[], nextBlocks: TimelineBlockDraft[]): ShiftDraft[] {
+    return nextShifts.map((shift) => {
+      const block = nextBlocks.find((candidate) => getBlockRef(candidate) === shift.scheduleBlockRef);
+      if (!block) return shift;
+      if (shift.startsAt === block.startsAt && shift.endsAt === block.endsAt) return shift;
+      return { ...shift, startsAt: block.startsAt, endsAt: block.endsAt };
+    });
   }
 
   function mapPersistedBlockIdByRef(inputBlocks: TimelineBlockDraft[]) {
@@ -1421,6 +1436,11 @@ export function EventEditor({
               <Label>Notes</Label>
               <textarea className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm" value={notes} onChange={(e) => setNotes(e.target.value)} />
             </div>
+            {currentEventId ? (
+              <div className="md:col-span-3">
+                <EventCommentsSection eventId={currentEventId} />
+              </div>
+            ) : null}
             {isCreate ? (
               <div className="space-y-3 md:col-span-3 rounded-md border p-3">
                 <label className="flex items-center gap-2 text-sm font-medium">
@@ -1581,7 +1601,11 @@ export function EventEditor({
             <EventTimelineScheduler
               dayCount={dayCount}
               blocks={blocks}
-              onChange={(next) => setBlocks(withStableBlockRefs(next))}
+              onChange={(next) => {
+                const nextBlocks = withStableBlockRefs(next);
+                setBlocks(nextBlocks);
+                setShifts((prev) => syncShiftsToBlockTimes(prev, nextBlocks));
+              }}
               readOnly={readOnly}
               quickAddLabel={quickAddLabel}
               quickAddDisabled={quickAddDisabled}
@@ -2086,7 +2110,7 @@ export function EventEditor({
                         : "border-rose-500/40 bg-rose-500/10 text-rose-800"
                     }`}
                   >
-                    <p className="text-xs">Profit / Loss</p>
+                    <p className="text-xs">Net profit</p>
                     <p className="font-semibold">{formatUsd(profitLossUsd ?? 0)}</p>
                   </div>
                 </div>

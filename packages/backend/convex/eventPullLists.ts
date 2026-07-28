@@ -27,6 +27,7 @@ const pullListItemInput = v.object({
   source: v.optional(pullListSourceValue),
   sourcePackageId: v.optional(v.id("inventoryPackages")),
   sourceInvoiceLineKey: v.optional(v.string()),
+  excludedTypeIds: v.optional(v.array(v.id("inventoryTypes"))),
   sortOrder: v.number(),
   notes: v.optional(v.string()),
 });
@@ -54,20 +55,27 @@ function summarizePullList(items: Doc<"eventPullListItems">[]) {
   return { totalLines, totalPieces };
 }
 
-async function loadPackageContents(ctx: QueryCtx | MutationCtx, packageId: Id<"inventoryPackages">) {
+async function loadPackageContents(
+  ctx: QueryCtx | MutationCtx,
+  packageId: Id<"inventoryPackages">,
+  excludedTypeIds?: Id<"inventoryTypes">[],
+) {
   const rows = await ctx.db
     .query("inventoryPackageItems")
     .withIndex("by_packageId", (q) => q.eq("packageId", packageId))
     .take(500);
+  const excludedSet = new Set(excludedTypeIds ?? []);
   const contents = await Promise.all(
-    rows.map(async (row) => {
-      const type = await ctx.db.get(row.typeId);
-      return {
-        typeId: row.typeId,
-        typeName: type?.name ?? "Unknown type",
-        quantity: row.quantity,
-      };
-    }),
+    rows
+      .filter((row) => !excludedSet.has(row.typeId))
+      .map(async (row) => {
+        const type = await ctx.db.get(row.typeId);
+        return {
+          typeId: row.typeId,
+          typeName: type?.name ?? "Unknown type",
+          quantity: row.quantity,
+        };
+      }),
   );
   return contents.sort((a, b) => a.typeName.localeCompare(b.typeName));
 }
@@ -78,7 +86,7 @@ export async function enrichPullListItems(ctx: QueryCtx | MutationCtx, items: Do
       const lineKind = resolveLineKind(item);
       if (lineKind === "package" && item.packageId) {
         const pkg = await ctx.db.get(item.packageId);
-        const packageContents = await loadPackageContents(ctx, item.packageId);
+        const packageContents = await loadPackageContents(ctx, item.packageId, item.excludedTypeIds);
         return {
           ...item,
           lineKind: "package" as const,
@@ -107,6 +115,7 @@ type ScaffoldRow =
       source: "invoice_package";
       sourcePackageId: Id<"inventoryPackages">;
       sourceInvoiceLineKey: string;
+      excludedTypeIds?: Id<"inventoryTypes">[];
     }
   | {
       lineKind: "type";
@@ -118,7 +127,7 @@ type ScaffoldRow =
     };
 
 async function buildScaffoldRowsFromInvoice(
-  ctx: MutationCtx,
+  ctx: QueryCtx | MutationCtx,
   invoiceId: Id<"invoices">,
   billableOccurrenceCount: number,
 ): Promise<ScaffoldRow[]> {
@@ -149,6 +158,15 @@ async function buildScaffoldRowsFromInvoice(
       const existing = merged.get(key);
       if (existing && existing.lineKind === "package") {
         existing.quantityRequired += quantityRequired;
+        // Multiple invoice lines for the same package: only exclude types every
+        // contributing line agrees to exclude, so a need isn't dropped entirely.
+        if (line.excludedTypeIds?.length) {
+          const existingExcluded = new Set(existing.excludedTypeIds ?? []);
+          const lineExcluded = new Set(line.excludedTypeIds);
+          existing.excludedTypeIds = [...existingExcluded].filter((id) => lineExcluded.has(id));
+        } else {
+          existing.excludedTypeIds = [];
+        }
       } else {
         merged.set(key, {
           lineKind: "package",
@@ -158,6 +176,7 @@ async function buildScaffoldRowsFromInvoice(
           source: "invoice_package",
           sourcePackageId: line.packageId,
           sourceInvoiceLineKey: `pkg:${line._id}`,
+          excludedTypeIds: line.excludedTypeIds?.length ? [...line.excludedTypeIds] : undefined,
         });
       }
     } else if (line.section === "equipment_type" && line.typeId) {
@@ -218,6 +237,70 @@ async function validatePullListItemInput(
   };
 }
 
+/**
+ * Compares invoice equipment lines vs this event's non-manual pull-list rows
+ * (rows scaffolded from the invoice). Manual rows are staff extras and are
+ * intentionally excluded from the comparison. Used to surface an out-of-sync
+ * indicator and to gate the "update the other side to match?" confirm flow.
+ */
+export const getInvoiceSyncStatus = query({
+  args: { eventId: v.id("events") },
+  returns: v.object({
+    hasInvoice: v.boolean(),
+    invoiceId: v.optional(v.id("invoices")),
+    inSync: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    const event = await ctx.db.get(args.eventId);
+    if (!event || !event.invoiceId) {
+      return { hasInvoice: false, inSync: true };
+    }
+
+    const series = event.seriesId ? await ctx.db.get(event.seriesId) : null;
+    const useSeriesQty = Boolean(series?.invoiceId && series.invoiceId === event.invoiceId);
+    const billableOccurrenceCount = useSeriesQty
+      ? await resolveBillableOccurrenceCount(ctx, event.invoiceId)
+      : 1;
+
+    let expectedRows: ScaffoldRow[];
+    try {
+      expectedRows = await buildScaffoldRowsFromInvoice(ctx, event.invoiceId, billableOccurrenceCount);
+    } catch {
+      expectedRows = [];
+    }
+    const expectedByKey = new Map<string, number>();
+    for (const row of expectedRows) {
+      const key = row.lineKind === "package" ? `package:${row.packageId}` : `type:${row.typeId}`;
+      expectedByKey.set(key, (expectedByKey.get(key) ?? 0) + row.quantityRequired);
+    }
+
+    const pullItems = await ctx.db
+      .query("eventPullListItems")
+      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+      .take(500);
+    const actualByKey = new Map<string, number>();
+    for (const item of pullItems) {
+      if ((item.source ?? "manual") === "manual") continue;
+      const lineKind = resolveLineKind(item);
+      const key = lineKind === "package" ? `package:${item.packageId}` : `type:${item.typeId}`;
+      actualByKey.set(key, (actualByKey.get(key) ?? 0) + item.quantityRequired);
+    }
+
+    const keys = new Set([...expectedByKey.keys(), ...actualByKey.keys()]);
+    let inSync = true;
+    for (const key of keys) {
+      if ((expectedByKey.get(key) ?? 0) !== (actualByKey.get(key) ?? 0)) {
+        inSync = false;
+        break;
+      }
+    }
+
+    return { hasInvoice: true, invoiceId: event.invoiceId, inSync };
+  },
+});
+
 export const listByEvent = query({
   args: { eventId: v.id("events") },
   handler: async (ctx, args) => {
@@ -273,6 +356,10 @@ export const upsertItems = mutation({
         source,
         sourcePackageId: item.sourcePackageId,
         sourceInvoiceLineKey: item.sourceInvoiceLineKey,
+        excludedTypeIds:
+          validated.lineKind === "package" && item.excludedTypeIds?.length
+            ? item.excludedTypeIds
+            : undefined,
         sortOrder: item.sortOrder,
         notes: item.notes?.trim() || undefined,
         updatedAt: now,
@@ -480,6 +567,7 @@ export const scaffoldFromInvoice = mutation({
           source: row.source,
           sourcePackageId: row.sourcePackageId,
           sourceInvoiceLineKey: row.sourceInvoiceLineKey,
+          excludedTypeIds: row.excludedTypeIds?.length ? row.excludedTypeIds : undefined,
           sortOrder,
           createdAt: now,
           updatedAt: now,

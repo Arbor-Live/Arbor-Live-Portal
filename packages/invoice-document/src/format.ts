@@ -28,6 +28,7 @@ export function buildInvoiceDocumentData(args: {
       section: line.section,
       provider: line.provider,
       label: line.label,
+      detailNote: line.detailNote,
       quantity: line.quantity,
       quantityDetail: line.quantityDetail,
       rateUsd: line.rateUsd,
