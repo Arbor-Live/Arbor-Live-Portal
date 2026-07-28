@@ -102,7 +102,7 @@ Update this file whenever specs or helpers land (or when a batch ships).
 | Venue create + pick on event | Covered | `events/venue-create-pick.spec.ts` (Batch 3) |
 | Event series create/generate | Covered | `events/event-series-smoke.spec.ts` (Batch 5) |
 | Crew scheduling board | Covered | `crew/crew-scheduling-board.spec.ts` (Batch 5) |
-| Open Mic public + runner | None | Deferred |
+| Open Mic public + runner | None | Deferred on product priority, not on difficulty — 575 lines and three routes, the largest untested module left. See the batch candidates |
 | FullCalendar drag/resize | Deferred | Flaky; keep unit/manual |
 
 ### Inventory and rentals
@@ -227,30 +227,56 @@ Update this file whenever specs or helpers land (or when a batch ships).
 
 ## Remaining gaps
 
-Batches 1–10 cover the shipped happy paths. What is still out of the suite, and why:
+Batches 1–10 cover the shipped happy paths. What is still out of the suite splits
+into two piles, and they are worth keeping apart — one is a scheduling question,
+the other is not.
 
 | Surface | Why it is out |
 |---------|---------------|
+**Blocked on something external** — these need a dependency the suite does not
+have, so effort alone will not move them:
+
+| Surface | Blocker |
+|---------|---------|
 | Marketing design board / Instagram publish | Immich + Instagram external deps |
-| Immich media albums | External service |
-| R2 upload happy path | Needs R2 credentials in CI |
-| Open Mic public + runner | Low product priority |
+| Immich media albums (`/dashboard/media`, event media tab) | External service |
+| R2 upload happy path, inventory image/manual uploads, band org hero | `FileUploadField` needs R2 credentials in CI |
 | Short-link Worker redirect | Lives in the Cloudflare Worker, not the Next app |
 | FullCalendar drag/resize | Flaky; covered by unit/manual testing |
 | Global invoice settings (crew rates) | Shared-deployment hazard — see the Quotes and invoices table |
-| Invoice PDF download / void | Not yet batched |
-| Password reset from the Users row, onboarding waive | `sendPasswordResetAdmin` hands off to Better Auth's reset flow, and waive only makes sense against a half-finished onboarding — both are cheap follow-ons rather than Batch 9 scope |
-| Band org profile editor (`/users/organizations`) | The row is covered by nothing yet; its hero upload needs R2 |
-| Inventory CSV import (`/inventory/import`) | Batch 10 covered the editors, not the 483-line `csv-importer`. It writes types *and* items in bulk, so it needs the cleanup helper to take a whole import rather than a name list |
-| Inventory image/manual uploads | `FileUploadField` on types and packages goes through R2 |
+
+**Just not batched yet** — sized below by the backend module behind each, since
+that is the better risk proxy than the page count:
+
+| Surface | Backend | What exists today |
+|---------|---------|-------------------|
+| Event series editors (`/events/series/[seriesId]`) | `eventSeries.ts` 880 + `eventSeriesPullLists.ts` 411 | one create-and-open smoke |
+| Booking request lifecycle (`/events/requests`, `/[id]`) | `eventRequests.ts` 1012 | submit → convert → track-approve only |
+| Open Mic (`/events/open-mic`, `/[id]`, public page) | `openMic.ts` 575 | nothing but the Batch 7 route guard |
+| Crew availability beyond one Yes (`/events/my-availability`) | `eventCrewAvailability.ts` 832 | one yes → assign path |
+| Band org profile (`/users/organizations`) | part of `users.ts` 2118 | nothing |
+| Inventory CSV import (`/inventory/import`) | 483-line `csv-importer` | nothing |
+| Invoice managers / fee definitions / terms | `invoiceFeeDefinitions.ts` 90, `invoiceTerms.ts` 67 | nothing; they feed the totals Batch 8 asserts |
+| Invoice PDF download / void | `invoicePdf.ts` | nothing |
+| Account page, event expenses, event artifacts, marketing settings | 217 / 73 / 107 / 56 | nothing |
+| Password reset from the Users row, onboarding waive | — | nothing; `sendPasswordResetAdmin` hands off to Better Auth's flow, and waive only makes sense against a half-finished onboarding |
 
 ### Candidates for the next batches
 
-| Batch | Surface | Why |
-|-------|---------|-----|
-| **11** | Band org profile + organizations page | The other half of `users-management-client.tsx` (`updateBandOrganizationProfileAdmin`, `createOrganizationAdmin`, the CSV importer). Left out of Batch 9 because creating orgs leaves rows the shared deployment cannot prune, so it needs a cleanup helper first — `deleteInventoryCatalogFixtures` is the shape to copy |
-| **12** | Inventory CSV import | The last uncovered inventory surface, and the one that can do the most damage: it creates types and items in bulk from a file. Batch 10's catalog assertions (`getInventoryTypeByName` / `getInventoryItemByAssetId`) are already the right oracles for it |
-| **13** | Event series editors | `eventSeries.ts` is 880 lines behind a single create-and-open smoke, and [#75](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/75) just fixed the `applyScope` reset in both series editors with no test holding it. An `applyScope` regression turns an edit meant for one occurrence into an edit of every one |
+Ordered by blast radius rather than by size — what breaks silently and costs the
+most to discover late.
+
+| Batch | Surface | Why it is next |
+|-------|---------|----------------|
+| **11** | Event series editors | The destructive one. An `applyScope` regression turns an edit meant for a single occurrence into an edit of every occurrence in the series, with no prompt and no undo. [#75](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/75) fixed exactly that reset a day before Batch 10 shipped and nothing holds it, on top of 1.3k lines sitting behind one create-and-open smoke. Start by pinning #75: pick "this occurrence", save, and assert the *siblings* did not move |
+| **12** | Band org profile + inventory CSV import | The two Batch 10 was expected to unblock, and it did. Both were held back by "creating rows the shared deployment cannot prune"; `deleteInventoryCatalogFixtures` is the shape to copy, and Batch 10's `getInventoryTypeByName` / `getInventoryItemByAssetId` are already the right oracles for the importer. The importer is the higher risk of the pair — it writes types *and* items in bulk from a file — so its cleanup helper should take a whole import, not a name list |
+| **13** | Booking request lifecycle | 1012 lines with only the happy path covered. Decline, reschedule and staff edits are all client-facing and all untested, and a request is the first thing a client ever touches |
+| **14** | Money long tail: invoice managers, fee definitions, terms | Small modules (90 + 67 lines) that feed the totals Batch 8 asserts heavily. Cheap insurance on arithmetic that is already covered downstream but not at its source |
+| **15?** | Open Mic | The largest wholly-untested module left (575 lines, three routes, a public page). Listed as low product priority since Batch 1 — worth confirming that is still true before spending a batch, because on size alone it would rank far higher |
+
+Not worth a batch on their own: the account page, event expenses, event
+artifacts and marketing settings are 450 lines between them. Fold them into
+whichever batch is already touching that area rather than scheduling them.
 
 ### Keeping the shared deployment usable
 
