@@ -1,9 +1,9 @@
 import { pacificDateKey, recentPayPeriods } from "@arbor/format";
 import { v } from "convex/values";
-import { components } from "./_generated/api";
 import { mutation, query, type QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import {
+  findAuthUsersByIds,
   getUserId,
   requireAdmin,
   requireArborInternalContext,
@@ -323,33 +323,6 @@ const crewMediaStatusRowValue = v.object({
   resolvedAt: v.optional(v.number()),
 });
 
-type AuthUserRecord = {
-  id?: string;
-  _id?: string;
-  name?: string;
-  email?: string;
-  image?: string | null;
-};
-
-function authUserKey(user: AuthUserRecord) {
-  return user.id ?? user._id ?? "";
-}
-
-async function fetchAuthUsersByIds(ctx: QueryCtx, userIds: string[]) {
-  const byKey = new Map<string, AuthUserRecord>();
-  if (userIds.length === 0) return byKey;
-  const result = await ctx.runQuery(components.betterAuth.adapter.findMany, {
-    model: "user",
-    where: [{ field: "_id", operator: "in", value: userIds }],
-    paginationOpts: { cursor: null, numItems: userIds.length },
-  });
-  for (const user of (result?.page ?? []) as AuthUserRecord[]) {
-    const key = authUserKey(user);
-    if (key) byKey.set(key, user);
-  }
-  return byKey;
-}
-
 const crewMediaStatusSortOrder: Record<"pending" | "uploaded" | "no_media", number> = {
   pending: 0,
   no_media: 1,
@@ -384,7 +357,7 @@ export const listCrewMediaStatusForEvent = query({
         .query("eventCrewMediaStatus")
         .withIndex("by_eventId_and_userId", (q) => q.eq("eventId", args.eventId))
         .take(500),
-      fetchAuthUsersByIds(ctx, userIds),
+      findAuthUsersByIds(ctx, userIds),
     ]);
     const statusByUserId = new Map(statusRows.map((row) => [row.userId, row]));
 

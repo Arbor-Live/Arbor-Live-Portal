@@ -1,11 +1,12 @@
 import { v } from "convex/values";
 import { mutation, query, type QueryCtx } from "./_generated/server";
-import { components } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
+  findAuthUsersByIds,
   getUserId,
   requireArborInternalContext,
   requireAuth,
+  type AuthUser,
 } from "./lib/auth";
 import { listCrewedEventsInRange } from "./lib/crewedEvents";
 import {
@@ -62,54 +63,10 @@ const scheduleBlockSummaryValue = v.object({
   notes: v.optional(v.string()),
 });
 
-type AuthUserRecord = {
-  id?: string;
-  _id?: string;
-  name?: string;
-  email?: string;
-  image?: string | null;
-};
+type AuthUserRecord = AuthUser;
 
 function weeksToMs(weeks: number) {
   return weeks * 7 * 24 * 60 * 60 * 1000;
-}
-
-function getUserKey(user: AuthUserRecord) {
-  return user.id ?? user._id ?? "";
-}
-
-async function fetchUsersByIds(ctx: QueryCtx, userIds: string[]) {
-  const userByKey = new Map<string, AuthUserRecord>();
-  if (userIds.length === 0) return userByKey;
-
-  const usersResult = await ctx.runQuery(components.betterAuth.adapter.findMany, {
-    model: "user",
-    where: [{ field: "_id", operator: "in", value: userIds }],
-    paginationOpts: { cursor: null, numItems: userIds.length },
-  });
-  for (const user of (usersResult?.page ?? []) as AuthUserRecord[]) {
-    const key = getUserKey(user);
-    if (key) userByKey.set(key, user);
-    if (user.id) userByKey.set(user.id, user);
-    if (user._id) userByKey.set(user._id, user);
-  }
-
-  const missing = userIds.filter((userId) => !userByKey.has(userId));
-  if (missing.length > 0) {
-    const byIdResult = await ctx.runQuery(components.betterAuth.adapter.findMany, {
-      model: "user",
-      where: [{ field: "id", operator: "in", value: missing }],
-      paginationOpts: { cursor: null, numItems: missing.length },
-    });
-    for (const user of (byIdResult?.page ?? []) as AuthUserRecord[]) {
-      const key = getUserKey(user);
-      if (key) userByKey.set(key, user);
-      if (user.id) userByKey.set(user.id, user);
-      if (user._id) userByKey.set(user._id, user);
-    }
-  }
-
-  return userByKey;
 }
 
 function toUserSummary(userId: string, userByKey: Map<string, AuthUserRecord>) {
@@ -321,7 +278,7 @@ export const listForAdminOverview = query({
           .filter((userId): userId is string => Boolean(userId)),
       ),
     );
-    const userByKey = await fetchUsersByIds(ctx, allUserIds);
+    const userByKey = await findAuthUsersByIds(ctx, allUserIds);
 
     const rows = bundles.map(({ event, shifts, responses }) => {
       const shiftStats = computeShiftStats(shifts);
@@ -448,7 +405,7 @@ export const listForCrewMember = query({
           .filter((id): id is string => Boolean(id)),
       ),
     );
-    const userByKey = await fetchUsersByIds(ctx, allUserIds);
+    const userByKey = await findAuthUsersByIds(ctx, allUserIds);
 
     return bundles.map(({ event, blocks, shifts, responses }) => {
       const myResponseRow = responses.find((response) => response.userId === userId) ?? null;
@@ -600,7 +557,7 @@ export const getEventForCrewResponse = query({
         ...bundle.responses.map((response) => response.userId),
       ].filter((id): id is string => Boolean(id))),
     );
-    const userByKey = await fetchUsersByIds(ctx, allUserIds);
+    const userByKey = await findAuthUsersByIds(ctx, allUserIds);
 
     const myResponseRow = bundle.responses.find((response) => response.userId === userId) ?? null;
     const responseCounts = aggregateResponses(bundle.responses);
@@ -717,7 +674,7 @@ export const getSummaryForEvent = query({
       (response) => response.responseStatus !== "no",
     );
     const assignableUserIds = assignableResponseRows.map((response) => response.userId);
-    const userByKey = await fetchUsersByIds(ctx, assignableUserIds);
+    const userByKey = await findAuthUsersByIds(ctx, assignableUserIds);
 
     const assignableResponders = assignableResponseRows
       .map((response) => ({

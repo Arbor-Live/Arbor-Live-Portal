@@ -1,13 +1,6 @@
-import { components } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
-
-type AuthUserRecord = {
-  id?: string;
-  _id?: string;
-  name?: string;
-  email?: string;
-};
+import { findAuthUsersByIds } from "../lib/auth";
 
 export type EmailRecipient = {
   email: string;
@@ -15,29 +8,8 @@ export type EmailRecipient = {
   userId?: string;
 };
 
-function getUserKey(user: AuthUserRecord) {
-  return user.id ?? user._id ?? "";
-}
-
 function isValidEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
-
-async function fetchUsersByIds(ctx: QueryCtx | MutationCtx, userIds: string[]) {
-  const userByKey = new Map<string, AuthUserRecord>();
-  if (userIds.length === 0) return userByKey;
-
-  const usersResult = await ctx.runQuery(components.betterAuth.adapter.findMany, {
-    model: "user",
-    where: [{ field: "_id", operator: "in", value: userIds }],
-    paginationOpts: { cursor: null, numItems: userIds.length },
-  });
-
-  for (const user of (usersResult?.page ?? []) as AuthUserRecord[]) {
-    const key = getUserKey(user);
-    if (key) userByKey.set(key, user);
-  }
-  return userByKey;
 }
 
 function addRecipient(
@@ -90,7 +62,7 @@ export async function getEventStakeholderEmails(
     .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
     .take(200);
 
-  const userByKey = await fetchUsersByIds(ctx, [...new Set(userIds)]);
+  const userByKey = await findAuthUsersByIds(ctx, [...new Set(userIds)]);
   const recipients = new Map<string, EmailRecipient>();
 
   for (const userId of userIds) {
@@ -109,7 +81,7 @@ export async function getUserEmailRecipient(
   ctx: QueryCtx | MutationCtx,
   userId: string,
 ) {
-  const userByKey = await fetchUsersByIds(ctx, [userId]);
+  const userByKey = await findAuthUsersByIds(ctx, [userId]);
   const user = userByKey.get(userId);
   if (!user?.email) return null;
   return {
@@ -123,7 +95,7 @@ export async function getUserScheduledEmailRecipient(
   ctx: QueryCtx | MutationCtx,
   userId: string,
 ) {
-  const userByKey = await fetchUsersByIds(ctx, [userId]);
+  const userByKey = await findAuthUsersByIds(ctx, [userId]);
   const user = userByKey.get(userId);
   if (!user?.email) return null;
   const accountEmail = user.email.trim().toLowerCase();
@@ -145,7 +117,7 @@ export async function getEventLeadRecipients(
   const userIds = [event.dayOfLeadUserId, event.eventManagerUserId].filter(
     (value): value is string => Boolean(value?.trim()),
   );
-  const userByKey = await fetchUsersByIds(ctx, userIds);
+  const userByKey = await findAuthUsersByIds(ctx, userIds);
   const recipients = new Map<string, EmailRecipient>();
 
   for (const userId of userIds) {

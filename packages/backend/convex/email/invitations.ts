@@ -1,5 +1,6 @@
 import { components } from "../_generated/api";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
+import { findAuthOrganizationById, findAuthUserById } from "../lib/auth";
 import {
   formatInviteExpiry,
   inviteAcceptUrl,
@@ -19,19 +20,6 @@ type InvitationRow = {
   inviterId?: string;
 };
 
-type OrganizationRow = {
-  id?: string;
-  _id?: string;
-  name?: string;
-};
-
-type AuthUserRecord = {
-  id?: string;
-  _id?: string;
-  name?: string;
-  email?: string;
-};
-
 function getRecordId(row: { id?: string; _id?: string } | null | undefined) {
   return row?.id ?? row?._id ?? "";
 }
@@ -41,18 +29,12 @@ function createInviteToken() {
 }
 
 export async function getOrganizationName(ctx: QueryCtx | MutationCtx, organizationId: string) {
-  const organization = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
-    model: "organization",
-    where: [{ field: "_id", value: organizationId }],
-  })) as OrganizationRow | null;
+  const organization = await findAuthOrganizationById(ctx, organizationId);
   return organization?.name ?? "Arbor Live";
 }
 
 async function getInviterName(ctx: QueryCtx | MutationCtx, inviterId: string) {
-  const inviter = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
-    model: "user",
-    where: [{ field: "_id", value: inviterId }],
-  })) as AuthUserRecord | null;
+  const inviter = await findAuthUserById(ctx, inviterId);
   return inviter?.name ?? inviter?.email ?? "A team member";
 }
 
@@ -60,7 +42,7 @@ async function userExistsWithEmail(ctx: QueryCtx | MutationCtx, email: string) {
   const user = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
     model: "user",
     where: [{ field: "email", value: email }],
-  })) as AuthUserRecord | null;
+  })) as { id?: string; _id?: string; name?: string; email?: string } | null;
   return Boolean(user);
 }
 

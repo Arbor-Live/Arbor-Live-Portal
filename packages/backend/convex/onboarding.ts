@@ -11,6 +11,7 @@ import {
 import { SITE_URL, subjectForTemplate } from "./email/constants";
 import { enqueueEmail } from "./email/enqueue";
 import {
+  findAuthOrganizationById,
   getActiveOrganizationContextOrNull,
   getUserId,
   requireAdmin,
@@ -242,10 +243,7 @@ async function resolveOrgType(
     .withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId))
     .unique();
   if (profile?.organizationType) return profile.organizationType;
-  const org = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
-    model: "organization",
-    where: [{ field: "_id", value: organizationId }],
-  })) as { slug?: string; name?: string } | null;
+  const org = await findAuthOrganizationById(ctx, organizationId);
   const slug = (org?.slug ?? "").toLowerCase();
   const name = (org?.name ?? "").toLowerCase();
   if (slug === "arbor-live" || name === "arbor live") return "arbor_internal";

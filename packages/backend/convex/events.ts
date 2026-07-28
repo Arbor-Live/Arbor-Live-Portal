@@ -2,8 +2,13 @@ import { pacificDateKey } from "@arbor/format";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
-import { components } from "./_generated/api";
-import { requireAdmin, requireArborInternalContext, requireAuth, getUserId } from "./lib/auth";
+import {
+  findAuthUsersByIds,
+  getUserId,
+  requireAdmin,
+  requireArborInternalContext,
+  requireAuth,
+} from "./lib/auth";
 import { canEditEventForUser, requireEventEditAccess } from "./lib/eventAccess";
 import {
   eventStatusValue,
@@ -67,14 +72,6 @@ function resolveRentalFulfillmentMode(
   if (rentalFulfillmentMode === "pickup") return "delivery";
   return rentalFulfillmentMode;
 }
-
-type AuthUserRecord = {
-  id?: string;
-  _id?: string;
-  name?: string;
-  email?: string;
-  image?: string | null;
-};
 
 export const list = query({
   args: {
@@ -209,21 +206,9 @@ export const listForDashboard = query({
       ),
     );
 
-    // Fetch every referenced crew member in a single batched call. Better-auth's
-    // adapter has a fast _id+in path that resolves each id with ctx.db.get(),
-    // avoiding the unindexed scan triggered by `field: "id"`.
-    const userByKey = new Map<string, AuthUserRecord>();
-    if (allUserIds.length > 0) {
-      const usersResult = await ctx.runQuery(components.betterAuth.adapter.findMany, {
-        model: "user",
-        where: [{ field: "_id", operator: "in", value: allUserIds }],
-        paginationOpts: { cursor: null, numItems: allUserIds.length },
-      });
-      for (const user of (usersResult?.page ?? []) as AuthUserRecord[]) {
-        const key = user.id ?? user._id;
-        if (key) userByKey.set(key, user);
-      }
-    }
+    // Fetch every referenced crew member in a single batched call via the
+    // shared _id-first helper (avoids unindexed `field: "id"` scans).
+    const userByKey = await findAuthUsersByIds(ctx, allUserIds);
 
     return sortedRows.map((row, index) => {
       const blocks = perEventBlocks[index] ?? [];

@@ -1,8 +1,7 @@
 import { payPeriodStatus, recentPayPeriods } from "@arbor/format";
 import { v } from "convex/values";
-import { components } from "./_generated/api";
 import { query } from "./_generated/server";
-import { getUserId, requireAdmin, requireArborInternalContext, requireAuth } from "./lib/auth";
+import { findAuthUsersByIds, getUserId, requireAdmin, requireArborInternalContext, requireAuth } from "./lib/auth";
 import { isStaffMember, resolveProfileMembership } from "./lib/userVerticals";
 import { buildTimecardPeriodSummaryForUser, buildUserTimecards } from "./lib/userTimecards";
 
@@ -50,33 +49,6 @@ const timecardOverviewValue = v.object({
   rows: v.array(timecardOverviewRowValue),
 });
 
-type AuthUserRecord = {
-  id?: string;
-  _id?: string;
-  name?: string;
-  email?: string;
-};
-
-function getUserKey(user: AuthUserRecord) {
-  return user.id ?? user._id ?? "";
-}
-
-async function fetchUsersByIds(ctx: Parameters<typeof buildUserTimecards>[0], userIds: string[]) {
-  const userByKey = new Map<string, AuthUserRecord>();
-  if (userIds.length === 0) return userByKey;
-
-  const usersResult = await ctx.runQuery(components.betterAuth.adapter.findMany, {
-    model: "user",
-    where: [{ field: "_id", operator: "in", value: userIds }],
-    paginationOpts: { cursor: null, numItems: userIds.length },
-  });
-  for (const user of (usersResult?.page ?? []) as AuthUserRecord[]) {
-    const key = getUserKey(user);
-    if (key) userByKey.set(key, user);
-  }
-  return userByKey;
-}
-
 export const getMyTimecards = query({
   args: {
     now: v.number(),
@@ -119,7 +91,7 @@ export const listCrewTimecardOverview = query({
     );
 
     const userIds = crewProfiles.map((profile) => profile.userId);
-    const userByKey = await fetchUsersByIds(ctx, userIds);
+    const userByKey = await findAuthUsersByIds(ctx, userIds);
 
     const rows = summaries
       .map(({ profile, summary }) => {
@@ -163,7 +135,7 @@ export const getTimecardsForUser = query({
     await requireAdmin(ctx);
     await requireArborInternalContext(ctx);
 
-    const userByKey = await fetchUsersByIds(ctx, [args.userId]);
+    const userByKey = await findAuthUsersByIds(ctx, [args.userId]);
     const user = userByKey.get(args.userId);
     const periods = await buildUserTimecards(ctx, args.userId, args.now, 3);
 

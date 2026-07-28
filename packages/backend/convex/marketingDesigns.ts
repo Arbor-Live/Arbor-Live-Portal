@@ -1,9 +1,9 @@
 import { v } from "convex/values";
-import { components, internal } from "./_generated/api";
+import { internal } from "./_generated/api";
 import { internalMutation, mutation, query } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { getUserId, requireAnyVerticalOrAdmin, requireVerticalOrAdmin } from "./lib/auth";
+import { getUserId, requireAnyVerticalOrAdmin, requireVerticalOrAdmin, findAuthUsersByIds } from "./lib/auth";
 import { SITE_URL } from "./email/constants";
 import { normalizeEventStatus } from "./lib/eventStatus";
 import { normalizeEventVisibility } from "./lib/eventVisibility";
@@ -44,10 +44,6 @@ type AuthUserRecord = {
   image?: string | null;
 };
 
-function getUserKey(user: AuthUserRecord): string {
-  return user.id ?? user._id ?? "";
-}
-
 function normalizeLinks(links: Array<{ label: string; url: string }> | undefined) {
   return (links ?? [])
     .map((link) => ({
@@ -61,23 +57,6 @@ function isMarketingPosterEligible(event: Doc<"events">, now: number): boolean {
   if (!isMarketingPosterWorkVisibility(event.visibility)) return false;
   if (normalizeEventStatus(event.status) === "cancelled") return false;
   return isWithinDays(event.startAt, now, MARKETING_POSTER_WINDOW_DAYS);
-}
-
-async function fetchUsersByIds(ctx: QueryCtx, userIds: string[]) {
-  const userByKey = new Map<string, AuthUserRecord>();
-  const uniqueIds = [...new Set(userIds.filter(Boolean))];
-  if (uniqueIds.length === 0) return userByKey;
-
-  const usersResult = await ctx.runQuery(components.betterAuth.adapter.findMany, {
-    model: "user",
-    where: [{ field: "_id", operator: "in", value: uniqueIds }],
-    paginationOpts: { cursor: null, numItems: uniqueIds.length },
-  });
-  for (const user of (usersResult?.page ?? []) as AuthUserRecord[]) {
-    const key = getUserKey(user);
-    if (key) userByKey.set(key, user);
-  }
-  return userByKey;
 }
 
 function userDisplayName(userByKey: Map<string, AuthUserRecord>, userId: string | undefined) {
@@ -227,7 +206,7 @@ export const listUpcomingPosterWork = query({
     const assigneeIds = filtered
       .map((event) => designByEventId.get(event._id)?.assigneeUserId)
       .filter((id): id is string => Boolean(id));
-    const userByKey = await fetchUsersByIds(ctx, assigneeIds);
+    const userByKey = await findAuthUsersByIds(ctx, assigneeIds);
 
     return Promise.all(
       filtered.map(async (event) => {
@@ -279,7 +258,7 @@ export const getPosterAssignmentForEvent = query({
         hasPosterImage: false,
       };
     }
-    const userByKey = await fetchUsersByIds(
+    const userByKey = await findAuthUsersByIds(
       ctx,
       design.assigneeUserId ? [design.assigneeUserId] : [],
     );
