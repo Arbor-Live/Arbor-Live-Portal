@@ -2842,6 +2842,108 @@ export const getLatestDamageReportByAssetId = query({
 });
 
 /**
+ * Test-only: read a band organization profile by org display name.
+ */
+export const getBandOrganizationProfileByDisplayName = query({
+  args: { displayName: v.string() },
+  returns: v.union(
+    v.null(),
+    v.object({
+      organizationId: v.string(),
+      displayName: v.optional(v.string()),
+      bio: v.optional(v.string()),
+      performerHourlyRateUsd: v.optional(v.number()),
+      publicListing: v.optional(v.boolean()),
+      publicSlug: v.optional(v.string()),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const org = await ctx.db
+      .query("organizationProfiles")
+      .withIndex("by_displayName", (q) => q.eq("displayName", args.displayName))
+      .first();
+    if (!org) return null;
+    return {
+      organizationId: org.organizationId,
+      displayName: org.displayName,
+      bio: org.bio,
+      performerHourlyRateUsd: org.performerHourlyRateUsd,
+      publicListing: org.publicListing,
+      publicSlug: org.publicSlug,
+    };
+  },
+});
+
+/**
+ * Test-only: read a band organization profile by org id.
+ */
+export const getBandOrganizationProfileByOrgId = query({
+  args: { organizationId: v.string() },
+  returns: v.union(
+    v.null(),
+    v.object({
+      organizationId: v.string(),
+      displayName: v.optional(v.string()),
+      bio: v.optional(v.string()),
+      performerHourlyRateUsd: v.optional(v.number()),
+      publicListing: v.optional(v.boolean()),
+      publicSlug: v.optional(v.string()),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const org = await ctx.db
+      .query("organizationProfiles")
+      .withIndex("by_organizationId", (q) => q.eq("organizationId", args.organizationId))
+      .unique();
+    if (!org) return null;
+    return {
+      organizationId: org.organizationId,
+      displayName: org.displayName,
+      bio: org.bio,
+      performerHourlyRateUsd: org.performerHourlyRateUsd,
+      publicListing: org.publicListing,
+      publicSlug: org.publicSlug,
+    };
+  },
+});
+
+/**
+ * Test-only: count of schedule blocks for a given event.
+ */
+export const getEventScheduleBlockCount = query({
+  args: { eventId: v.id("events") },
+  returns: v.number(),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const blocks = await ctx.db
+      .query("eventScheduleBlocks")
+      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+      .collect();
+    return blocks.length;
+  },
+});
+
+/**
+ * Test-only: schedule block info (type + label per block) for a given event.
+ */
+export const getOccurrenceScheduleBlocks = query({
+  args: { eventId: v.id("events") },
+  returns: v.array(
+    v.object({ blockType: v.string(), label: v.string() }),
+  ),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const blocks = await ctx.db
+      .query("eventScheduleBlocks")
+      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+      .collect();
+    return blocks.map((b) => ({ blockType: b.blockType, label: b.label }));
+  },
+});
+
+/**
  * Test-only: series shape behind an occurrence event (recurring create).
  */
 export const getEventSeriesStateByEventId = query({
@@ -2854,6 +2956,7 @@ export const getEventSeriesStateByEventId = query({
       intervalWeeks: v.number(),
       occurrenceCount: v.number(),
       occurrenceTitles: v.array(v.string()),
+      occurrenceIds: v.array(v.id("events")),
       seriesPath: v.string(),
     }),
   ),
@@ -2873,6 +2976,7 @@ export const getEventSeriesStateByEventId = query({
       intervalWeeks: series.intervalWeeks,
       occurrenceCount: occurrences.length,
       occurrenceTitles: occurrences.map((row) => row.title),
+      occurrenceIds: occurrences.map((row) => row._id),
       seriesPath: `/dashboard/events/series/${series._id}`,
     };
   },

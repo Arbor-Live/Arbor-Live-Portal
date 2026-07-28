@@ -8,7 +8,7 @@ Update this file whenever specs or helpers land (or when a batch ships).
 - Runner: `pnpm test:e2e` ([`scripts/e2e-run.mjs`](../scripts/e2e-run.mjs))
 - CI: [`.github/workflows/e2e.yml`](../.github/workflows/e2e.yml)
 
-**Last updated:** 2026-07-28 (Batches 1–9 on `main`; Batch 10 on branch)
+**Last updated:** 2026-07-28 (Batches 1–12 on `main`)
 
 ## Batch history
 
@@ -25,6 +25,8 @@ Update this file whenever specs or helpers land (or when a batch ships).
 | **8** | [#71](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/71) | Money paths: invoice line items + totals, discounts, send-for-review round trip, approval-token rotation, approval reset + duplicate, host orgs/contacts, payment-proof invalidate + receipt |
 | **9** | [#76](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/76) | Users, access, and rates: invite lifecycle, direct create, the role grant that flips a Batch 7 refusal, remove/reactivate access, org memberships, per-user crew rates. Found two shipped bugs: the Edit Invitation role picker could not be changed at all, and three Users sub-routes had no `AdminOnlyGuard` so they refused by crashing |
 | **10** | on branch | Inventory catalog: model type CRUD + derived rates, categories/capabilities, public listing vs full profile, package build/edit/delete, package publishing, items + storage locations with containment and location cascade. Found two shipped bugs: the types manager's search filtered only the page already loaded, and a package could not be listed publicly without a section yet Create silently did nothing |
+| **11** | — | Event series editors: "this occurrence only" scope does not affect sibling occurrences — pins the applyScope reset guard [#75](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/75) |
+| **12** | — | Band org profile admin birdseye edit; inventory CSV import (types + assets from fixture files) |
 
 ## Status legend
 
@@ -101,6 +103,7 @@ Update this file whenever specs or helpers land (or when a batch ships).
 | Crew availability Yes + admin assign | Covered | `crew/crew-availability-assign.spec.ts` |
 | Venue create + pick on event | Covered | `events/venue-create-pick.spec.ts` (Batch 3) |
 | Event series create/generate | Covered | `events/event-series-smoke.spec.ts` (Batch 5) |
+| Event series editors ("this occurrence" scope) | Covered | `events/event-series-edit-scope.spec.ts` (Batch 11 — pins the applyScope reset guard) |
 | Crew scheduling board | Covered | `crew/crew-scheduling-board.spec.ts` (Batch 5) |
 | Open Mic public + runner | None | Deferred on product priority, not on difficulty — 575 lines and three routes, the largest untested module left. See the batch candidates |
 | FullCalendar drag/resize | Deferred | Flaky; keep unit/manual |
@@ -123,7 +126,7 @@ Update this file whenever specs or helpers land (or when a batch ships).
 | Inventory item create / containment | Covered | `inventory/item-storage-crud.spec.ts` (Batch 10) — duplicate asset ID refused, container location inheritance |
 | Storage locations | Covered | `inventory/item-storage-crud.spec.ts` (Batch 10) — nested path composition and both delete guards |
 | Lost-and-found `/e/[assetId]` | Covered | `inventory/lost-found-public.spec.ts` (Batch 6) |
-| Inventory CSV import | None | — |
+| Inventory CSV import | Covered | `inventory/csv-import.spec.ts` (Batch 12) — uploads types + assets from fixture files, asserts via `getInventoryTypeByName` / `getInventoryItemByAssetId` |
 | Type icon / promo / manual uploads | Deferred | Needs R2 in CI |
 
 ### Crew hiring
@@ -141,6 +144,7 @@ Update this file whenever specs or helpers land (or when a batch ships).
 | Public `/artists/apply` → admin approve | Covered | `bands/band-application.spec.ts` (Batch 3) |
 | Band payouts admin queue UI | Covered | `bands/band-payouts-queue.spec.ts` — send signature request + mark paid |
 | Band portal beyond e-sign | Partial | Onboarding covered (Batch 4); settings/payouts still deferred |
+| Band org profile admin birdseye (`/users/organizations`) | Covered | `users/band-org-profile.spec.ts` (Batch 12) — admin edits the display name, asserts via `getBandOrganizationProfileByDisplayName` |
 
 ### Marketing and public site
 
@@ -191,6 +195,7 @@ Update this file whenever specs or helpers land (or when a batch ships).
 | `inventory/damage-create.spec.ts` | Damage report create from queue (Batch 5) |
 | `crew/crew-scheduling-board.spec.ts` | Scheduling board range/filter + assign link (Batch 5) |
 | `events/event-series-smoke.spec.ts` | Recurring series create + overview (Batch 5) |
+| `events/event-series-edit-scope.spec.ts` | Series scope isolation: "this occurrence" edit doesn't modify siblings (Batch 11) |
 | `timecards/timecard-view.spec.ts` | Crew + admin timecard read path (Batch 6) |
 | `marketing/short-link-crud.spec.ts` | Short link create → delete (Batch 6) |
 | `inventory/lost-found-public.spec.ts` | Public `/e/{assetId}` found + not-found (Batch 6) |
@@ -224,6 +229,8 @@ Update this file whenever specs or helpers land (or when a batch ships).
 | `inventory/package-public-listing.spec.ts` | Section required, bucket mapping, archive (Batch 10) |
 | `inventory/item-storage-crud.spec.ts` | Items, containment cascade, storage-location paths (Batch 10) |
 | `email/email-queue.spec.ts` | Mocked email pipeline |
+| `inventory/csv-import.spec.ts` | CSV import: types + assets from fixture files (Batch 12) |
+| `users/band-org-profile.spec.ts` | Band org profile admin edit + pollConvex assert (Batch 12) |
 
 ## Remaining gaps
 
@@ -250,12 +257,9 @@ that is the better risk proxy than the page count:
 
 | Surface | Backend | What exists today |
 |---------|---------|-------------------|
-| Event series editors (`/events/series/[seriesId]`) | `eventSeries.ts` 880 + `eventSeriesPullLists.ts` 411 | one create-and-open smoke |
 | Booking request lifecycle (`/events/requests`, `/[id]`) | `eventRequests.ts` 1012 | submit → convert → track-approve only |
 | Open Mic (`/events/open-mic`, `/[id]`, public page) | `openMic.ts` 575 | nothing but the Batch 7 route guard |
 | Crew availability beyond one Yes (`/events/my-availability`) | `eventCrewAvailability.ts` 832 | one yes → assign path |
-| Band org profile (`/users/organizations`) | part of `users.ts` 2118 | nothing |
-| Inventory CSV import (`/inventory/import`) | 483-line `csv-importer` | nothing |
 | Invoice managers / fee definitions / terms | `invoiceFeeDefinitions.ts` 90, `invoiceTerms.ts` 67 | nothing; they feed the totals Batch 8 asserts |
 | Invoice PDF download / void | `invoicePdf.ts` | nothing |
 | Account page, event expenses, event artifacts, marketing settings | 217 / 73 / 107 / 56 | nothing |
@@ -268,8 +272,6 @@ most to discover late.
 
 | Batch | Surface | Why it is next |
 |-------|---------|----------------|
-| **11** | Event series editors | The destructive one. An `applyScope` regression turns an edit meant for a single occurrence into an edit of every occurrence in the series, with no prompt and no undo. [#75](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/75) fixed exactly that reset a day before Batch 10 shipped and nothing holds it, on top of 1.3k lines sitting behind one create-and-open smoke. Start by pinning #75: pick "this occurrence", save, and assert the *siblings* did not move |
-| **12** | Band org profile + inventory CSV import | The two Batch 10 was expected to unblock, and it did. Both were held back by "creating rows the shared deployment cannot prune"; `deleteInventoryCatalogFixtures` is the shape to copy, and Batch 10's `getInventoryTypeByName` / `getInventoryItemByAssetId` are already the right oracles for the importer. The importer is the higher risk of the pair — it writes types *and* items in bulk from a file — so its cleanup helper should take a whole import, not a name list |
 | **13** | Booking request lifecycle | 1012 lines with only the happy path covered. Decline, reschedule and staff edits are all client-facing and all untested, and a request is the first thing a client ever touches |
 | **14** | Money long tail: invoice managers, fee definitions, terms | Small modules (90 + 67 lines) that feed the totals Batch 8 asserts heavily. Cheap insurance on arithmetic that is already covered downstream but not at its source |
 | **15?** | Open Mic | The largest wholly-untested module left (575 lines, three routes, a public page). Listed as low product priority since Batch 1 — worth confirming that is still true before spending a batch, because on size alone it would rank far higher |
@@ -359,14 +361,22 @@ matches (unfiltered still paginates).
 inventory type still lists the capability key (same idea as
 `inventoryCategories.remove`).
 
-**Fixed since, still untested:** the same unguarded reset effect in
+**Still unfixed, found by Batch 11:**
+
+*(none.)*
+
+**Still unfixed, found by Batch 12:**
+
+*(none.)*
+
+**Fixed since, now tested:** the same unguarded reset effect in
 `events/event-series-schedule-editor.tsx` and
 `events/event-series-shift-editor.tsx` — which Batch 9 predicted would leave
 their `applyScope` pickers stuck on "all" — was fixed by
 [#75](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/75), which added the
-`if (form.formState.isDirty) return;` guard to both. Nothing covers it: a
-regression there silently re-points an edit meant for one occurrence at the
-whole series, so a batch covering event series should start by pinning #75 down.
+`if (form.formState.isDirty) return;` guard to both. Batch 11 pins the fix:
+`events/event-series-edit-scope.spec.ts` saves with "this occurrence only" and
+asserts sibling occurrences were not modified.
 
 ### Known local flakes
 
