@@ -30,16 +30,19 @@ test.describe("booking staff convert", () => {
       status: string;
       convertedEventId: string | null;
       linkedInvoiceId: string | null;
+      convertedAt: number | null;
     }>(
       "e2eHelpers:getBookingRequestState",
       { requestId: seeded.requestId },
       (row) =>
         row?.status === "converted" &&
         Boolean(row.convertedEventId) &&
-        Boolean(row.linkedInvoiceId),
+        Boolean(row.linkedInvoiceId) &&
+        row.convertedAt != null,
     );
     expect(state.status).toBe("converted");
     expect(state.convertedEventId).toBeTruthy();
     expect(state.linkedInvoiceId).toBeTruthy();
+    expect(state.convertedAt).toBeTruthy();
   });
 });

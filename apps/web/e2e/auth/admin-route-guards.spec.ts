@@ -13,6 +13,7 @@ const adminRoutes = [
   { path: "/dashboard/users/crew-applications", label: "crew applications" },
   { path: "/dashboard/users/band-applications", label: "band applications" },
   { path: "/dashboard/financial-hub", label: "financial hub" },
+  { path: "/dashboard/financial-hub/insights", label: "insights" },
   { path: "/dashboard/events/crew-scheduling", label: "crew scheduling" },
   { path: "/dashboard/events/venues", label: "venues" },
   { path: "/dashboard/events/open-mic", label: "open mic" },
