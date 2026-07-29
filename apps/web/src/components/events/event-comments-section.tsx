@@ -179,7 +179,7 @@ function EventCommentsPanel({ eventId }: { eventId: Id<"events"> }) {
   }
 
   return (
-    <div className="space-y-3 rounded-md border p-4">
+      <div className="space-y-3 rounded-md border p-4" data-testid="event-comments">
       <div>
         <h3 className="font-medium">Comments</h3>
         <p className="text-sm text-muted-foreground">
@@ -195,12 +195,12 @@ function EventCommentsPanel({ eventId }: { eventId: Id<"events"> }) {
 
       <div className="space-y-2">
         {(comments ?? []).map((comment) => (
-          <div key={comment._id} className="rounded-md border p-3">
+          <div key={comment._id} className="rounded-md border p-3" data-testid="event-comment-row">
             <div className="flex flex-wrap items-baseline gap-2 text-xs text-muted-foreground">
               <span className="font-medium text-foreground">{comment.authorName}</span>
               <span>{formatDateTime(comment.createdAt)}</span>
             </div>
-            <p className="mt-1 whitespace-pre-wrap text-sm">
+            <p className="mt-1 whitespace-pre-wrap text-sm" data-testid="event-comment-body">
               {renderBodyWithMentions(
                 comment.body,
                 comment.mentionedUsers.map((user) => user.name),
@@ -216,6 +216,7 @@ function EventCommentsPanel({ eventId }: { eventId: Id<"events"> }) {
       <div className="relative space-y-2">
         <textarea
           ref={textareaRef}
+          data-testid="event-comment-input"
           className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm"
           placeholder="Write a comment… use @ to mention someone"
           value={body}
@@ -235,6 +236,7 @@ function EventCommentsPanel({ eventId }: { eventId: Id<"events"> }) {
             className="absolute left-0 right-0 z-20 max-h-56 overflow-auto rounded-md border bg-popover p-1 shadow-md"
             style={{ top: "100%", marginTop: 4 }}
             role="listbox"
+            data-testid="event-comment-mention-menu"
           >
             {filteredMentions.map((candidate, index) => {
               const description = [
@@ -269,7 +271,12 @@ function EventCommentsPanel({ eventId }: { eventId: Id<"events"> }) {
         ) : null}
       </div>
 
-      <Button type="button" disabled={saving || !body.trim()} onClick={() => void handleSubmit()}>
+      <Button
+        type="button"
+        data-testid="event-comment-post"
+        disabled={saving || !body.trim()}
+        onClick={() => void handleSubmit()}
+      >
         {saving ? "Posting…" : "Post comment"}
       </Button>
     </div>

@@ -2106,7 +2106,7 @@ export function EventEditor({
               </div>
             </div>
             {linkedInvoice ? (
-              <div className="rounded-md border p-3">
+              <div className="rounded-md border p-3" data-testid="event-linked-invoice-margin">
                 <p className="text-sm font-medium">Linked Invoice Margin</p>
                 <div className="mt-2 grid gap-2 md:grid-cols-3">
                   <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
@@ -2132,11 +2132,11 @@ export function EventEditor({
                 </div>
               </div>
             ) : invoiceId ? (
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-muted-foreground" data-testid="event-linked-invoice-loading">
                 Linked invoice not loaded yet. Margin will appear once invoice data is available.
               </p>
             ) : (
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-muted-foreground" data-testid="event-linked-invoice-missing">
                 Link an invoice in Overview to view billed total vs event cost margin.
               </p>
             )}

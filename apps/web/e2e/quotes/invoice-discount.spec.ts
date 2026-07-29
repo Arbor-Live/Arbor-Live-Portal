@@ -73,4 +73,43 @@ test.describe("invoice discounts", () => {
     expect(clamped.subtotalUsd).toBe(200);
     expect(clamped.totalUsd).toBe(0);
   });
+
+  test("amount discount input normalizes to two decimal places", async ({ page }) => {
+    const stamp = Date.now();
+    const invoiceId = await createDraftInvoiceWithArtistLine(page, {
+      label: `E2E Discount Decimals ${stamp}`,
+      quantity: "1",
+      rate: "200",
+    });
+
+    await page.getByTestId("invoice-discount-type").selectOption("amount");
+    const discountInput = page.getByTestId("invoice-discount-value");
+    await discountInput.fill("0.2");
+    await discountInput.blur();
+    await expect(discountInput).toHaveValue("0.20");
+
+    await expect.poll(() => readTotal(page, "invoice-total-grand"), { timeout: 15_000 }).toBe(199.8);
+    expect(await readTotal(page, "invoice-total-discount")).toBe(0.2);
+
+    await saveInvoiceEditor(page);
+
+    const saved = await pollConvex<TotalsState>(
+      "e2eHelpers:getInvoiceTotalsState",
+      { invoiceId },
+      (row) =>
+        row?.discountType === "amount" &&
+        Math.abs((row?.discountValue ?? -1) - 0.2) < 0.001 &&
+        Math.abs((row?.totalUsd ?? -1) - 199.8) < 0.001,
+    );
+    expect(saved.discountAmountUsd).toBeCloseTo(0.2, 2);
+    expect(saved.totalUsd).toBeCloseTo(199.8, 2);
+
+    await page.reload();
+    await expect(page.getByRole("heading", { name: "Edit Invoice" })).toBeVisible({
+      timeout: 60_000,
+    });
+    await expect(page.getByTestId("invoice-discount-value")).toHaveValue("0.20", {
+      timeout: 30_000,
+    });
+  });
 });
