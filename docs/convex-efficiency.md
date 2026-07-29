@@ -19,7 +19,8 @@ Prefer these patterns over stacking eager list subscriptions.
 
 ## Nav badges
 
-- Use `navBadges.getNavBadges` from the sidebar (gated off heavy event-editor routes).
+- Use `navBadges.getNavBadges` from the sidebar on every dashboard route (including
+  event editor and financial-hub). Pending counts should stay visible while editing.
 - Do not reintroduce per-badge `useQuery` stacks on every page for pending counts.
 - Counters currently include: pending availability, unconfirmed crew, open booking
   requests (`submitted` + `in_review`), band/crew applications, damage reports,

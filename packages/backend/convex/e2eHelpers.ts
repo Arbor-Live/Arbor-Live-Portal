@@ -3060,6 +3060,35 @@ export const getInvoiceTotalsState = query({
 });
 
 /**
+ * Test-only: event comments for mention/notification regressions.
+ */
+export const getEventCommentsState = query({
+  args: { eventId: v.id("events") },
+  returns: v.array(
+    v.object({
+      body: v.string(),
+      authorUserId: v.string(),
+      mentionedUserIds: v.array(v.string()),
+      createdAt: v.number(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const rows = await ctx.db
+      .query("eventComments")
+      .withIndex("by_eventId_and_createdAt", (q) => q.eq("eventId", args.eventId))
+      .order("asc")
+      .take(100);
+    return rows.map((row) => ({
+      body: row.body,
+      authorUserId: row.authorUserId,
+      mentionedUserIds: row.mentionedUserIds,
+      createdAt: row.createdAt,
+    }));
+  },
+});
+
+/**
  * Test-only: review/approval state for the two mutually exclusive editor cards.
  *
  * `invoice-editor.tsx` renders "Request portal" when `sourceEventRequestId` is

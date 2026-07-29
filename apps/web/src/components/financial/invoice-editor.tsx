@@ -71,6 +71,17 @@ import {
 import { formatContactFullName, splitContactName } from "@/lib/contact-name";
 import { formatDateTime, formatDateTimeRange, formatUsd } from "@/lib/format";
 
+function formatInvoiceDiscountInputValue(value: number, type: "amount" | "percent") {
+  if (type === "amount") return Number.isFinite(value) ? value.toFixed(2) : "0.00";
+  return Number.isFinite(value) ? value.toString() : "0";
+}
+
+function normalizeInvoiceDiscountInput(raw: string, type: "amount" | "percent") {
+  if (type !== "amount") return raw;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed.toFixed(2) : raw;
+}
+
 export function InvoiceEditor({
   invoiceId,
   initialIssueDate,
@@ -356,7 +367,7 @@ export function InvoiceEditor({
     setEquipmentPricingMode(invoice.equipmentPricingMode);
     setCrewRateMode(invoice.crewRateMode === "ot" ? "lead" : invoice.crewRateMode);
     setDiscountType(invoice.discountType);
-    setDiscountValue(invoice.discountValue.toString());
+    setDiscountValue(formatInvoiceDiscountInputValue(invoice.discountValue, invoice.discountType));
     setNotes(invoice.notes ?? "");
     setTermsIds(
       invoice.termsIds?.length
@@ -1485,14 +1496,25 @@ export function InvoiceEditor({
             <CardContent className="grid gap-3">
               <div className="space-y-2">
                 <Label>Discount type</Label>
-                <select data-testid="invoice-discount-type" className="h-9 w-full rounded-md border bg-background px-3 text-sm" value={discountType} onChange={(e) => setDiscountType(e.target.value as "amount" | "percent")}>
+                <select data-testid="invoice-discount-type" className="h-9 w-full rounded-md border bg-background px-3 text-sm" value={discountType} onChange={(e) => {
+                  const next = e.target.value as "amount" | "percent";
+                  setDiscountType(next);
+                  setDiscountValue((current) => normalizeInvoiceDiscountInput(current, next));
+                }}>
                   <option value="amount">Amount</option>
                   <option value="percent">Percent</option>
                 </select>
               </div>
               <div className="space-y-2">
                 <Label>Discount value</Label>
-                <Input data-testid="invoice-discount-value" value={discountValue} onChange={(e) => setDiscountValue(e.target.value)} />
+                <Input
+                  data-testid="invoice-discount-value"
+                  value={discountValue}
+                  onChange={(e) => setDiscountValue(e.target.value)}
+                  onBlur={() =>
+                    setDiscountValue((current) => normalizeInvoiceDiscountInput(current, discountType))
+                  }
+                />
               </div>
               <div className="space-y-2">
                 <Label>Notes</Label>

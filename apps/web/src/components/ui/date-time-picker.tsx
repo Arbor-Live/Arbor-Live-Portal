@@ -65,7 +65,7 @@ export function DateTimePicker({
       onChange={(date: Date | null) => onChange(date ? toNaiveDateTimeInput(date) : "")}
       showTimeSelect
       timeIntervals={15}
-      dateFormat="yyyy-MM-dd HH:mm"
+      dateFormat="h:mm aa · yyyy-MM-dd"
       placeholderText={placeholder}
       customInput={<DateTimeInput className={className} />}
       wrapperClassName="app-date-time-wrapper"

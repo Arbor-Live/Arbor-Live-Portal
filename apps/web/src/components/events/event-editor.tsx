@@ -239,6 +239,20 @@ export function EventEditor({
       ? { name: newHostName.trim() }
       : "skip",
   );
+  // Expenses (and overview approval hints) need the linked invoice even when the
+  // overview list query is skipped — or when the invoice falls outside the recent list.
+  const linkedInvoiceIdForLookup = (invoiceId || eventData?.event.invoiceId) as
+    | Id<"invoices">
+    | undefined;
+  const loadLinkedInvoice =
+    Boolean(linkedInvoiceIdForLookup) &&
+    (isCreate || activeTab === "overview" || activeTab === "expenses");
+  const linkedInvoiceDetail = useQuery(
+    api.invoices.get,
+    loadLinkedInvoice && linkedInvoiceIdForLookup
+      ? { id: linkedInvoiceIdForLookup }
+      : "skip",
+  );
   const [managerUserId, setManagerUserId] = useState("");
   const [dayOfLeadUserId, setDayOfLeadUserId] = useState("");
   const [crewCostUsd, setCrewCostUsd] = useState("0");
@@ -1054,10 +1068,11 @@ export function EventEditor({
     }
     return map;
   }, [availabilitySummary]);
-  const linkedInvoice = useMemo(
-    () => (invoiceId ? (invoices ?? []).find((row) => row._id === invoiceId) ?? null : null),
-    [invoiceId, invoices],
-  );
+  const linkedInvoice = useMemo(() => {
+    if (linkedInvoiceDetail?.invoice) return linkedInvoiceDetail.invoice;
+    if (!invoiceId) return null;
+    return (invoices ?? []).find((row) => row._id === invoiceId) ?? null;
+  }, [linkedInvoiceDetail, invoiceId, invoices]);
   const crewCostTotal = computedCrewCost?.totalCostUsd ?? Number(crewCostUsd || "0");
   const bandsCostTotal = Number(bandsCostUsd || "0");
   const externalRentalsCostTotal = Number(externalRentalsCostUsd || "0");
@@ -2091,7 +2106,7 @@ export function EventEditor({
               </div>
             </div>
             {linkedInvoice ? (
-              <div className="rounded-md border p-3">
+              <div className="rounded-md border p-3" data-testid="event-linked-invoice-margin">
                 <p className="text-sm font-medium">Linked Invoice Margin</p>
                 <div className="mt-2 grid gap-2 md:grid-cols-3">
                   <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
@@ -2117,11 +2132,11 @@ export function EventEditor({
                 </div>
               </div>
             ) : invoiceId ? (
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-muted-foreground" data-testid="event-linked-invoice-loading">
                 Linked invoice not loaded yet. Margin will appear once invoice data is available.
               </p>
             ) : (
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-muted-foreground" data-testid="event-linked-invoice-missing">
                 Link an invoice in Overview to view billed total vs event cost margin.
               </p>
             )}

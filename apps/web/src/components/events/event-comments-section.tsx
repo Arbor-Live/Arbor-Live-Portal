@@ -1,13 +1,75 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { UserSelect, type UserSelectOption } from "@/components/users/user-select";
 import { ArborOnlyGuard } from "@/components/org-context-guard";
 import { formatDateTime } from "@/lib/format";
+import { fuzzyScoreHaystack } from "@/lib/fuzzy-match";
+
+type MentionCandidate = {
+  userId: string;
+  name: string;
+  email: string;
+  pronouns?: string;
+  gradYear?: number;
+};
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function extractMentionedUserIds(body: string, candidates: MentionCandidate[]): string[] {
+  const sorted = [...candidates].sort((a, b) => b.name.length - a.name.length);
+  const ids: string[] = [];
+  for (const candidate of sorted) {
+    const pattern = new RegExp(
+      `(^|[\\s])@${escapeRegExp(candidate.name)}(?=$|[\\s,.!?;:])`,
+      "g",
+    );
+    if (pattern.test(body)) ids.push(candidate.userId);
+  }
+  return ids;
+}
+
+/** Active `@query` at the caret, if any. */
+function getActiveMention(
+  text: string,
+  cursor: number,
+): { start: number; query: string } | null {
+  const before = text.slice(0, cursor);
+  const atIndex = before.lastIndexOf("@");
+  if (atIndex < 0) return null;
+  if (atIndex > 0 && !/\s/.test(before[atIndex - 1]!)) return null;
+  const query = before.slice(atIndex + 1);
+  if (/\s/.test(query)) return null;
+  return { start: atIndex, query };
+}
+
+function renderBodyWithMentions(body: string, mentionedNames: string[]): ReactNode {
+  if (!mentionedNames.length) return body;
+  const sorted = [...mentionedNames].sort((a, b) => b.length - a.length);
+  const pattern = new RegExp(
+    `@(?:${sorted.map(escapeRegExp).join("|")})(?=$|[\\s,.!?;:])`,
+    "g",
+  );
+  const nodes: ReactNode[] = [];
+  let lastIndex = 0;
+  for (const match of body.matchAll(pattern)) {
+    const start = match.index ?? 0;
+    if (start > lastIndex) nodes.push(body.slice(lastIndex, start));
+    nodes.push(
+      <span key={`${start}-${match[0]}`} className="font-medium text-sky-700 dark:text-sky-300">
+        {match[0]}
+      </span>,
+    );
+    lastIndex = start + match[0].length;
+  }
+  if (lastIndex < body.length) nodes.push(body.slice(lastIndex));
+  return nodes.length ? nodes : body;
+}
 
 export function EventCommentsSection({ eventId }: { eventId: Id<"events"> }) {
   return (
@@ -21,26 +83,49 @@ function EventCommentsPanel({ eventId }: { eventId: Id<"events"> }) {
   const comments = useQuery(api.eventComments.listByEvent, { eventId });
   const mentionCandidates = useQuery(api.eventComments.listMentionCandidates, {});
   const createComment = useMutation(api.eventComments.createComment);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [body, setBody] = useState("");
-  const [mentionedUserIds, setMentionedUserIds] = useState<string[]>([]);
-  const [mentionPicker, setMentionPicker] = useState("");
+  const [cursor, setCursor] = useState(0);
+  const [highlightIndex, setHighlightIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const options: UserSelectOption[] = useMemo(
-    () =>
-      (mentionCandidates ?? []).map((row) => ({
-        value: row.userId,
-        label: row.name,
-        email: row.email,
-        description: [row.pronouns, row.gradYear ? `’${String(row.gradYear).slice(-2)}` : null]
-          .filter(Boolean)
-          .join(" · "),
-      })),
-    [mentionCandidates],
-  );
+  const candidates = useMemo(() => mentionCandidates ?? [], [mentionCandidates]);
+  const activeMention = getActiveMention(body, cursor);
+  const filteredMentions = useMemo(() => {
+    if (!activeMention) return [];
+    const query = activeMention.query.trim().toLowerCase();
+    const scored = candidates
+      .map((row) => {
+        const score = query
+          ? fuzzyScoreHaystack(query, [row.name, row.email, row.pronouns])
+          : 1;
+        return { row, score };
+      })
+      .filter((entry) => entry.score > 0)
+      .sort((a, b) => b.score - a.score || a.row.name.localeCompare(b.row.name));
+    return scored.slice(0, 8).map((entry) => entry.row);
+  }, [activeMention, candidates]);
 
-  const mentionedOptions = options.filter((option) => mentionedUserIds.includes(option.value));
+  const showMentionMenu = Boolean(activeMention) && filteredMentions.length > 0;
+
+  function insertMention(candidate: MentionCandidate) {
+    if (!activeMention) return;
+    const before = body.slice(0, activeMention.start);
+    const after = body.slice(cursor);
+    const insertion = `@${candidate.name} `;
+    const nextBody = `${before}${insertion}${after}`;
+    const nextCursor = before.length + insertion.length;
+    setBody(nextBody);
+    setCursor(nextCursor);
+    setHighlightIndex(0);
+    requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(nextCursor, nextCursor);
+    });
+  }
 
   async function handleSubmit() {
     setSaving(true);
@@ -49,11 +134,11 @@ function EventCommentsPanel({ eventId }: { eventId: Id<"events"> }) {
       await createComment({
         eventId,
         body,
-        mentionedUserIds,
+        mentionedUserIds: extractMentionedUserIds(body, candidates),
       });
       setBody("");
-      setMentionedUserIds([]);
-      setMentionPicker("");
+      setCursor(0);
+      setHighlightIndex(0);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Failed to post comment.");
     } finally {
@@ -61,12 +146,50 @@ function EventCommentsPanel({ eventId }: { eventId: Id<"events"> }) {
     }
   }
 
+  function onTextareaKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (!showMentionMenu) return;
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setHighlightIndex((index) => (index + 1) % filteredMentions.length);
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setHighlightIndex(
+        (index) => (index - 1 + filteredMentions.length) % filteredMentions.length,
+      );
+      return;
+    }
+    if (event.key === "Enter" || event.key === "Tab") {
+      const selected = filteredMentions[highlightIndex];
+      if (!selected) return;
+      event.preventDefault();
+      insertMention(selected);
+      return;
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      // Move cursor past the @ so the menu closes without deleting text.
+      const el = textareaRef.current;
+      if (!el) return;
+      const next = Math.min(body.length, cursor + 1);
+      el.setSelectionRange(next, next);
+      setCursor(next);
+    }
+  }
+
   return (
-    <div className="space-y-3 rounded-md border p-4">
+    <div
+      className="space-y-3 rounded-md border p-4"
+      data-testid="event-comments"
+      data-mention-candidates={
+        mentionCandidates === undefined ? "loading" : String(mentionCandidates.length)
+      }
+    >
       <div>
         <h3 className="font-medium">Comments</h3>
         <p className="text-sm text-muted-foreground">
-          Mentions notify Arbor Live teammates by email.
+          Type <span className="font-medium">@</span> to mention a teammate — they get an email.
         </p>
       </div>
 
@@ -78,17 +201,17 @@ function EventCommentsPanel({ eventId }: { eventId: Id<"events"> }) {
 
       <div className="space-y-2">
         {(comments ?? []).map((comment) => (
-          <div key={comment._id} className="rounded-md border p-3">
+          <div key={comment._id} className="rounded-md border p-3" data-testid="event-comment-row">
             <div className="flex flex-wrap items-baseline gap-2 text-xs text-muted-foreground">
               <span className="font-medium text-foreground">{comment.authorName}</span>
               <span>{formatDateTime(comment.createdAt)}</span>
-              {comment.mentionedUsers.length ? (
-                <span>
-                  Mentioned {comment.mentionedUsers.map((user) => user.name).join(", ")}
-                </span>
-              ) : null}
             </div>
-            <p className="mt-1 whitespace-pre-wrap text-sm">{comment.body}</p>
+            <p className="mt-1 whitespace-pre-wrap text-sm" data-testid="event-comment-body">
+              {renderBodyWithMentions(
+                comment.body,
+                comment.mentionedUsers.map((user) => user.name),
+              )}
+            </p>
           </div>
         ))}
         {comments && comments.length === 0 ? (
@@ -96,55 +219,70 @@ function EventCommentsPanel({ eventId }: { eventId: Id<"events"> }) {
         ) : null}
       </div>
 
-      <textarea
-        className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm"
-        placeholder="Write a comment…"
-        value={body}
-        onChange={(e) => setBody(e.target.value)}
-      />
-
-      <div className="flex flex-wrap items-end gap-2">
-        <div className="min-w-[220px] flex-1">
-          <UserSelect
-            value={mentionPicker}
-            onChange={setMentionPicker}
-            options={options.filter((option) => !mentionedUserIds.includes(option.value))}
-            placeholder="Mention teammate…"
-            emptyLabel="No teammates"
-          />
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={!mentionPicker}
-          onClick={() => {
-            if (!mentionPicker) return;
-            setMentionedUserIds((ids) => [...ids, mentionPicker]);
-            setMentionPicker("");
+      <div className="relative space-y-2">
+        <textarea
+          ref={textareaRef}
+          data-testid="event-comment-input"
+          className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm"
+          placeholder="Write a comment… use @ to mention someone"
+          value={body}
+          onChange={(e) => {
+            setBody(e.target.value);
+            setCursor(e.target.selectionStart);
+            setHighlightIndex(0);
           }}
-        >
-          Add mention
-        </Button>
+          onClick={(e) => setCursor(e.currentTarget.selectionStart)}
+          onKeyUp={(e) => setCursor(e.currentTarget.selectionStart)}
+          onSelect={(e) => setCursor(e.currentTarget.selectionStart)}
+          onKeyDown={onTextareaKeyDown}
+        />
+
+        {showMentionMenu ? (
+          <div
+            className="absolute left-0 right-0 z-20 max-h-56 overflow-auto rounded-md border bg-popover p-1 shadow-md"
+            style={{ top: "100%", marginTop: 4 }}
+            role="listbox"
+            data-testid="event-comment-mention-menu"
+          >
+            {filteredMentions.map((candidate, index) => {
+              const description = [
+                candidate.pronouns,
+                candidate.gradYear ? `’${String(candidate.gradYear).slice(-2)}` : null,
+              ]
+                .filter(Boolean)
+                .join(" · ");
+              return (
+                <button
+                  key={candidate.userId}
+                  type="button"
+                  role="option"
+                  aria-selected={index === highlightIndex}
+                  className={`flex w-full flex-col rounded px-2 py-1.5 text-left text-sm ${
+                    index === highlightIndex ? "bg-accent" : "hover:bg-muted/60"
+                  }`}
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    insertMention(candidate);
+                  }}
+                  onMouseEnter={() => setHighlightIndex(index)}
+                >
+                  <span className="font-medium">{candidate.name}</span>
+                  <span className="truncate text-xs text-muted-foreground">
+                    {[candidate.email, description].filter(Boolean).join(" · ")}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
       </div>
 
-      {mentionedOptions.length ? (
-        <div className="flex flex-wrap gap-2">
-          {mentionedOptions.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              className="rounded-full border px-2 py-0.5 text-xs"
-              onClick={() =>
-                setMentionedUserIds((ids) => ids.filter((id) => id !== option.value))
-              }
-            >
-              @{option.label} ×
-            </button>
-          ))}
-        </div>
-      ) : null}
-
-      <Button type="button" disabled={saving || !body.trim()} onClick={() => void handleSubmit()}>
+      <Button
+        type="button"
+        data-testid="event-comment-post"
+        disabled={saving || !body.trim()}
+        onClick={() => void handleSubmit()}
+      >
         {saving ? "Posting…" : "Post comment"}
       </Button>
     </div>
