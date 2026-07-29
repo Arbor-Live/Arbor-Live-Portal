@@ -450,7 +450,7 @@ export function InvoiceLinkedEventCrewSection({
         <p className="text-sm text-muted-foreground">
           Edit schedule blocks and crew slots for{" "}
           <span className="font-medium">{eventData.event.title}</span>. Click Save to persist schedule and crew
-          changes to the linked event. Open slots bill at the invoice&apos;s default crew rate ($
+          changes to the linked event. Open slots bill at the invoice&apos;s default crew rate (
           {formatUsd(defaultCrewHourlyRateUsd)}/hr).
         </p>
       </CardHeader>
