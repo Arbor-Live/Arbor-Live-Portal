@@ -76,5 +76,20 @@ test.describe("event comments and mentions", () => {
     expect(posted).toBeTruthy();
     expect(posted!.body).toContain(`@${e2eEnv.crewName}`);
     expect(posted!.mentionedUserIds).toContain(crew.userId);
+
+    // The author can delete their own comment; deletion is confirmed via window.confirm,
+    // which Playwright auto-dismisses unless the dialog is accepted explicitly.
+    const postedRow = page
+      .getByTestId("event-comment-row")
+      .filter({ hasText: String(stamp) });
+    page.once("dialog", (dialog) => void dialog.accept());
+    await postedRow.getByTestId("event-comment-delete").click();
+    await expect(postedRow).toHaveCount(0, { timeout: 20_000 });
+
+    await pollConvex<CommentState[]>(
+      "e2eHelpers:getEventCommentsState",
+      { eventId: seeded.eventId },
+      (rows) => Array.isArray(rows) && !rows.some((row) => row.body.includes(String(stamp))),
+    );
   });
 });

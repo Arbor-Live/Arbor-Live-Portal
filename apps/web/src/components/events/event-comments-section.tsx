@@ -1,6 +1,14 @@
 "use client";
 
-import { useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
+import { createPortal } from "react-dom";
 import { useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -83,12 +91,15 @@ function EventCommentsPanel({ eventId }: { eventId: Id<"events"> }) {
   const comments = useQuery(api.eventComments.listByEvent, { eventId });
   const mentionCandidates = useQuery(api.eventComments.listMentionCandidates, {});
   const createComment = useMutation(api.eventComments.createComment);
+  const deleteComment = useMutation(api.eventComments.deleteComment);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [body, setBody] = useState("");
   const [cursor, setCursor] = useState(0);
   const [highlightIndex, setHighlightIndex] = useState(0);
+  const [focused, setFocused] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<Id<"eventComments"> | null>(null);
 
   const candidates = useMemo(() => mentionCandidates ?? [], [mentionCandidates]);
   const activeMention = getActiveMention(body, cursor);
@@ -107,7 +118,45 @@ function EventCommentsPanel({ eventId }: { eventId: Id<"events"> }) {
     return scored.slice(0, 8).map((entry) => entry.row);
   }, [activeMention, candidates]);
 
-  const showMentionMenu = Boolean(activeMention) && filteredMentions.length > 0;
+  // The menu is portaled out of the card, so it must not outlive textarea focus.
+  const showMentionMenu = focused && Boolean(activeMention) && filteredMentions.length > 0;
+
+  // The surrounding Card clips overflow, so the menu is portaled to the body and
+  // anchored to the textarea with fixed coordinates instead of absolute ones.
+  const [menuPosition, setMenuPosition] = useState<{
+    top: number;
+    left: number;
+    width: number;
+    maxHeight: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!showMentionMenu) return;
+
+    function updatePosition() {
+      const el = textareaRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom - 12;
+      const spaceAbove = rect.top - 12;
+      const openUp = spaceBelow < 160 && spaceAbove > spaceBelow;
+      const maxHeight = Math.max(96, Math.min(224, openUp ? spaceAbove : spaceBelow));
+      setMenuPosition({
+        top: openUp ? rect.top - 4 - maxHeight : rect.bottom + 4,
+        left: rect.left,
+        width: rect.width,
+        maxHeight,
+      });
+    }
+
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [showMentionMenu, filteredMentions.length]);
 
   function insertMention(candidate: MentionCandidate) {
     if (!activeMention) return;
@@ -143,6 +192,19 @@ function EventCommentsPanel({ eventId }: { eventId: Id<"events"> }) {
       setError(submitError instanceof Error ? submitError.message : "Failed to post comment.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleDelete(commentId: Id<"eventComments">) {
+    if (!window.confirm("Delete this comment? This cannot be undone.")) return;
+    setDeletingId(commentId);
+    setError(null);
+    try {
+      await deleteComment({ commentId });
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "Failed to delete comment.");
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -205,8 +267,22 @@ function EventCommentsPanel({ eventId }: { eventId: Id<"events"> }) {
             <div className="flex flex-wrap items-baseline gap-2 text-xs text-muted-foreground">
               <span className="font-medium text-foreground">{comment.authorName}</span>
               <span>{formatDateTime(comment.createdAt)}</span>
+              {comment.canDelete ? (
+                <button
+                  type="button"
+                  data-testid="event-comment-delete"
+                  className="ml-auto text-xs text-muted-foreground underline-offset-2 hover:text-destructive hover:underline disabled:opacity-50"
+                  disabled={deletingId === comment._id}
+                  onClick={() => void handleDelete(comment._id)}
+                >
+                  {deletingId === comment._id ? "Deleting…" : "Delete"}
+                </button>
+              ) : null}
             </div>
-            <p className="mt-1 whitespace-pre-wrap text-sm" data-testid="event-comment-body">
+            <p
+              className="mt-1 text-sm break-words whitespace-pre-wrap"
+              data-testid="event-comment-body"
+            >
               {renderBodyWithMentions(
                 comment.body,
                 comment.mentionedUsers.map((user) => user.name),
@@ -231,50 +307,61 @@ function EventCommentsPanel({ eventId }: { eventId: Id<"events"> }) {
             setCursor(e.target.selectionStart);
             setHighlightIndex(0);
           }}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
           onClick={(e) => setCursor(e.currentTarget.selectionStart)}
           onKeyUp={(e) => setCursor(e.currentTarget.selectionStart)}
           onSelect={(e) => setCursor(e.currentTarget.selectionStart)}
           onKeyDown={onTextareaKeyDown}
         />
 
-        {showMentionMenu ? (
-          <div
-            className="absolute left-0 right-0 z-20 max-h-56 overflow-auto rounded-md border bg-popover p-1 shadow-md"
-            style={{ top: "100%", marginTop: 4 }}
-            role="listbox"
-            data-testid="event-comment-mention-menu"
-          >
-            {filteredMentions.map((candidate, index) => {
-              const description = [
-                candidate.pronouns,
-                candidate.gradYear ? `’${String(candidate.gradYear).slice(-2)}` : null,
-              ]
-                .filter(Boolean)
-                .join(" · ");
-              return (
-                <button
-                  key={candidate.userId}
-                  type="button"
-                  role="option"
-                  aria-selected={index === highlightIndex}
-                  className={`flex w-full flex-col rounded px-2 py-1.5 text-left text-sm ${
-                    index === highlightIndex ? "bg-accent" : "hover:bg-muted/60"
-                  }`}
-                  onMouseDown={(event) => {
-                    event.preventDefault();
-                    insertMention(candidate);
-                  }}
-                  onMouseEnter={() => setHighlightIndex(index)}
-                >
-                  <span className="font-medium">{candidate.name}</span>
-                  <span className="truncate text-xs text-muted-foreground">
-                    {[candidate.email, description].filter(Boolean).join(" · ")}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        ) : null}
+        {showMentionMenu && menuPosition
+          ? createPortal(
+              <div
+                className="z-[100] overflow-auto rounded-md border bg-popover p-1 shadow-md"
+                style={{
+                  position: "fixed",
+                  top: menuPosition.top,
+                  left: menuPosition.left,
+                  width: menuPosition.width,
+                  maxHeight: menuPosition.maxHeight,
+                }}
+                role="listbox"
+                data-testid="event-comment-mention-menu"
+              >
+                {filteredMentions.map((candidate, index) => {
+                  const description = [
+                    candidate.pronouns,
+                    candidate.gradYear ? `’${String(candidate.gradYear).slice(-2)}` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ");
+                  return (
+                    <button
+                      key={candidate.userId}
+                      type="button"
+                      role="option"
+                      aria-selected={index === highlightIndex}
+                      className={`flex w-full min-w-0 flex-col rounded px-2 py-1.5 text-left text-sm ${
+                        index === highlightIndex ? "bg-accent" : "hover:bg-muted/60"
+                      }`}
+                      onMouseDown={(event) => {
+                        event.preventDefault();
+                        insertMention(candidate);
+                      }}
+                      onMouseEnter={() => setHighlightIndex(index)}
+                    >
+                      <span className="truncate font-medium">{candidate.name}</span>
+                      <span className="truncate text-xs text-muted-foreground">
+                        {[candidate.email, description].filter(Boolean).join(" · ")}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>,
+              document.body,
+            )
+          : null}
       </div>
 
       <Button
