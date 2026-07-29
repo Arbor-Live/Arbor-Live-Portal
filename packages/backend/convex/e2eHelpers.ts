@@ -1862,6 +1862,219 @@ export const ensureBandPayeeUser = mutation({
 });
 
 /**
+ * Test-only: technical rider for a band org (admin or band self-service fixtures).
+ */
+export const seedBandRider = mutation({
+  args: {
+    organizationId: v.string(),
+    name: v.optional(v.string()),
+    status: v.optional(v.union(v.literal("draft"), v.literal("published"))),
+    isDefault: v.optional(v.boolean()),
+  },
+  returns: v.object({
+    riderId: v.id("bandRiders"),
+    name: v.string(),
+    status: v.string(),
+    isDefault: v.boolean(),
+    organizationId: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const now = Date.now();
+    const name = args.name?.trim() || `E2E Rider ${now}`;
+    const status = args.status ?? "published";
+    const isDefault = args.isDefault ?? true;
+
+    if (isDefault) {
+      const existingDefaults = await ctx.db
+        .query("bandRiders")
+        .withIndex("by_organizationId_and_isDefault", (q) =>
+          q.eq("organizationId", args.organizationId).eq("isDefault", true),
+        )
+        .take(50);
+      for (const rider of existingDefaults) {
+        await ctx.db.patch(rider._id, { isDefault: false });
+      }
+    }
+
+    const riderId = await ctx.db.insert("bandRiders", {
+      organizationId: args.organizationId,
+      name,
+      status,
+      isDefault,
+      stage: { widthFt: 24, depthFt: 12 },
+      items: [
+        {
+          id: `e2e-item-${now}`,
+          symbol: "vocal_mic",
+          label: "Lead Vocal",
+          xFt: 12,
+          yFt: 8,
+          rotation: 0,
+          scale: 1,
+        },
+      ],
+      inputs: [
+        {
+          id: `e2e-in-${now}`,
+          channel: 1,
+          source: "Lead Vocal",
+          inputType: "mic",
+          stand: "tall_boom",
+          phantom: false,
+          providedBy: "arbor",
+          stageItemId: `e2e-item-${now}`,
+        },
+      ],
+      monitorMixes: [
+        {
+          id: `e2e-mix-${now}`,
+          mixNumber: 1,
+          label: "Vocals",
+          type: "wedge",
+          sends: 1,
+        },
+      ],
+      backline: [],
+      performerCount: 1,
+      setLengthMinutes: 45,
+      createdByUserId: "e2e-helpers",
+      updatedByUserId: "e2e-helpers",
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    return {
+      riderId,
+      name,
+      status,
+      isDefault,
+      organizationId: args.organizationId,
+    };
+  },
+});
+
+/**
+ * Test-only: event with a linked band and that band's default rider.
+ */
+export const seedEventWithBandRider = mutation({
+  args: {
+    organizationId: v.string(),
+    eventTitle: v.optional(v.string()),
+    riderName: v.optional(v.string()),
+  },
+  returns: v.object({
+    eventId: v.id("events"),
+    riderId: v.id("bandRiders"),
+    eventTitle: v.string(),
+    riderName: v.string(),
+    organizationId: v.string(),
+    eventPath: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const now = Date.now();
+    const eventTitle = args.eventTitle?.trim() || `E2E Rider Event ${now}`;
+    const endAt = now + 4 * 60 * 60 * 1000;
+    const startAt = now + 60 * 60 * 1000;
+
+    const eventId = await ctx.db.insert("events", {
+      title: eventTitle,
+      status: "ready",
+      visibility: "internal",
+      publicToken: makeToken(),
+      startAt,
+      endAt,
+      timezone: "America/Los_Angeles",
+      spansMultipleDays: false,
+      setupOnly: false,
+      strikeOnly: false,
+      requiresShowWindow: true,
+      eventType: "Crewed Event",
+      teamsInterested: [],
+      venueName: "E2E Stage",
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    await ctx.db.insert("eventBandParticipations", {
+      eventId,
+      organizationId: args.organizationId,
+      role: "headliner",
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const riderName = args.riderName?.trim() || `E2E Rider ${now}`;
+    const existingDefaults = await ctx.db
+      .query("bandRiders")
+      .withIndex("by_organizationId_and_isDefault", (q) =>
+        q.eq("organizationId", args.organizationId).eq("isDefault", true),
+      )
+      .take(50);
+    for (const rider of existingDefaults) {
+      await ctx.db.patch(rider._id, { isDefault: false });
+    }
+
+    const riderId = await ctx.db.insert("bandRiders", {
+      organizationId: args.organizationId,
+      name: riderName,
+      status: "published",
+      isDefault: true,
+      stage: { widthFt: 24, depthFt: 12 },
+      items: [
+        {
+          id: `e2e-item-${now}`,
+          symbol: "vocal_mic",
+          label: "Lead Vocal",
+          xFt: 12,
+          yFt: 8,
+          rotation: 0,
+          scale: 1,
+        },
+      ],
+      inputs: [
+        {
+          id: `e2e-in-${now}`,
+          channel: 1,
+          source: "Lead Vocal",
+          inputType: "mic",
+          stand: "tall_boom",
+          phantom: false,
+          providedBy: "arbor",
+          stageItemId: `e2e-item-${now}`,
+        },
+      ],
+      monitorMixes: [
+        {
+          id: `e2e-mix-${now}`,
+          mixNumber: 1,
+          label: "Vocals",
+          type: "wedge",
+          sends: 1,
+        },
+      ],
+      backline: [],
+      performerCount: 1,
+      setLengthMinutes: 45,
+      createdByUserId: "e2e-helpers",
+      updatedByUserId: "e2e-helpers",
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    return {
+      eventId,
+      riderId,
+      eventTitle,
+      riderName,
+      organizationId: args.organizationId,
+      eventPath: `/dashboard/events/${eventId}`,
+    };
+  },
+});
+
+/**
  * Test-only: ended event + band payment ready for signature-request / e-sign.
  */
 export const seedBandPaymentForEsign = mutation({

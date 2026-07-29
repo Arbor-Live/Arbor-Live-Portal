@@ -33,6 +33,7 @@ import { VenuePicker } from "@/components/venues/venue-picker";
 import { VenueDetailsButton } from "@/components/venues/venue-details-sheet";
 import { useSessionViewer } from "@/components/session-shell-provider";
 import { EventBandPaymentSection } from "@/components/events/event-band-payment-section";
+import { EventBandRidersSection } from "@/components/events/event-band-riders-section";
 import { EventMediaSection } from "@/components/events/event-media-section";
 import { EventCommentsSection } from "@/components/events/event-comments-section";
 import { EventPullList, mapPullListRow, type PullListItemDraft } from "@/components/events/event-pull-list";
@@ -1544,6 +1545,7 @@ export function EventEditor({
         </fieldset>
       ) : null}
 
+      {resolvedActiveTab === "overview" && eventId ? <EventBandRidersSection eventId={eventId} /> : null}
       {resolvedActiveTab === "overview" && eventId ? <EventBandPaymentSection eventId={eventId} /> : null}
 
       {resolvedActiveTab === "overview" && isAdmin && eventId ? (

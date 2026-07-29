@@ -20,6 +20,7 @@
     "@arbor/email": "workspace:*",
     "@arbor/format": "workspace:*",
     "@arbor/invoice-document": "workspace:*",
+    "@arbor/rider-document": "workspace:*",
     "@better-auth/passkey": "^1.6.23",
     "@convex-dev/better-auth": "^0.12.3",
     "@convex-dev/migrations": "^0.3.5",

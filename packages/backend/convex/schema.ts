@@ -1,5 +1,6 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { riderContentFields, riderStatusValue } from "./lib/riderSchema";
 
 const publicBucketValue = v.union(
   v.literal("lighting"),
@@ -971,6 +972,25 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_organizationId", ["organizationId"]).index("by_status", ["status"]),
+
+  /**
+   * Band-authored technical riders: stage plot, input list, monitor mixes and
+   * backline. One band can keep several (e.g. "Full band" vs "Acoustic duo");
+   * `isDefault` marks the one show-file generation should assume.
+   */
+  bandRiders: defineTable({
+    organizationId: v.string(),
+    name: v.string(),
+    status: riderStatusValue,
+    isDefault: v.boolean(),
+    ...riderContentFields,
+    createdByUserId: v.string(),
+    updatedByUserId: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_organizationId", ["organizationId"])
+    .index("by_organizationId_and_isDefault", ["organizationId", "isDefault"]),
 
   dashboardPreferences: defineTable({
     userId: v.string(),

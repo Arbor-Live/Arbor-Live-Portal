@@ -133,6 +133,7 @@ const marketingSubItems: NavSubItem[] = [
 
 const bandsSubItems: NavSubItem[] = [
   { title: "Profile", url: "/dashboard/bands-and-performers" },
+  { title: "Technical rider", url: "/dashboard/bands-and-performers/riders" },
   { title: "Payments", url: "/dashboard/bands-and-performers/payments" },
 ]
 
@@ -168,6 +169,9 @@ function canAccessNavItem(
 ) {
   if (access.isBandContext) {
     if (item.bandOnly) return true
+    // Band orgs keep profile / riders / payments even though the section is
+    // admin-facing for Arbor Live.
+    if (item.url === "/dashboard/bands-and-performers") return true
     return (
       item.url !== "/dashboard/events" &&
       item.url !== "/dashboard/financial-hub" &&
@@ -179,6 +183,8 @@ function canAccessNavItem(
   }
   if (item.bandOnly) return false
   if (item.url === "/dashboard" && !access.isCrewContext && !access.isAdminHomeContext) return false
+  // Portal admins only on the Arbor side; band orgs already returned above.
+  if (item.url === "/dashboard/bands-and-performers") return access.isAdmin
   if (access.isAdmin) return true
   if (item.adminOnly && !access.hasOperationsAccess) return false
   if (item.marketingOnly && !access.hasMarketingAccess) return false
@@ -340,6 +346,11 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
                   isAdmin &&
                   item.url === "/dashboard/events" &&
                   subItem.url === "/dashboard/timecards/mine"
+                ) &&
+                !(
+                  !isBandContext &&
+                  item.url === "/dashboard/bands-and-performers" &&
+                  subItem.url === "/dashboard/bands-and-performers/payments"
                 ),
             )
             const hasCollapsibleSubItems = Boolean(subItems && subItems.length > 1)
