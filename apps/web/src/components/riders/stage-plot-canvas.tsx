@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   clampToStage,
   computePlotLayout,
@@ -81,21 +81,29 @@ export function StagePlotCanvas({
   const grid = gridLineOffsets(layout);
   const stage = layout.stage;
 
-  const pointerToFt = useCallback(
-    (clientX: number, clientY: number) => {
-      const box = svgRef.current?.getBoundingClientRect();
-      if (!box) return { xFt: 0, yFt: 0 };
-      const ratio = box.width ? layout.width / box.width : 1;
-      return pxToFt(layout, (clientX - box.left) * ratio, (clientY - box.top) * ratio);
-    },
-    [layout],
-  );
+  function pointerToFt(clientX: number, clientY: number) {
+    const box = svgRef.current?.getBoundingClientRect();
+    if (!box) return { xFt: 0, yFt: 0 };
+    const ratio = box.width ? layout.width / box.width : 1;
+    return pxToFt(layout, (clientX - box.left) * ratio, (clientY - box.top) * ratio);
+  }
 
   const dragRef = useRef<
     | { mode: "move"; itemId: string; offsetXFt: number; offsetYFt: number }
     | { mode: "rotate"; itemId: string }
     | null
   >(null);
+  const pointerToFtRef = useRef(pointerToFt);
+  const contentRef = useRef(content);
+  const onMoveItemRef = useRef(onMoveItem);
+  const onRotateItemRef = useRef(onRotateItem);
+
+  useEffect(() => {
+    pointerToFtRef.current = pointerToFt;
+    contentRef.current = content;
+    onMoveItemRef.current = onMoveItem;
+    onRotateItemRef.current = onRotateItem;
+  });
 
   useEffect(() => {
     if (readOnly) return;
@@ -104,24 +112,25 @@ export function StagePlotCanvas({
       const drag = dragRef.current;
       if (!drag) return;
       event.preventDefault();
-      const pointer = pointerToFt(event.clientX, event.clientY);
+      const pointer = pointerToFtRef.current(event.clientX, event.clientY);
+      const current = contentRef.current;
 
       if (drag.mode === "move") {
         const next = clampToStage(
           { xFt: pointer.xFt + drag.offsetXFt, yFt: pointer.yFt + drag.offsetYFt },
-          content.stage,
+          current.stage,
         );
-        onMoveItem?.(drag.itemId, round(next.xFt), round(next.yFt));
+        onMoveItemRef.current?.(drag.itemId, round(next.xFt), round(next.yFt));
         return;
       }
 
-      const item = content.items.find((candidate) => candidate.id === drag.itemId);
+      const item = current.items.find((candidate) => candidate.id === drag.itemId);
       if (!item) return;
       const degrees =
         (Math.atan2(pointer.yFt - item.yFt, pointer.xFt - item.xFt) * 180) / Math.PI + 90;
       const snapped =
         Math.round(degrees / ROTATE_SNAP_DEG) * ROTATE_SNAP_DEG;
-      onRotateItem?.(drag.itemId, ((snapped % 360) + 360) % 360);
+      onRotateItemRef.current?.(drag.itemId, ((snapped % 360) + 360) % 360);
     }
 
     function handleUp() {
@@ -136,7 +145,7 @@ export function StagePlotCanvas({
       window.removeEventListener("pointerup", handleUp);
       window.removeEventListener("pointercancel", handleUp);
     };
-  }, [content.items, content.stage, onMoveItem, onRotateItem, pointerToFt, readOnly]);
+  }, [readOnly]);
 
   function beginMove(event: React.PointerEvent, item: RiderStageItem) {
     if (readOnly) return;

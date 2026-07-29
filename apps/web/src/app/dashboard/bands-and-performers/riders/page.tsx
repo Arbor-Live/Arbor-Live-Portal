@@ -5,22 +5,22 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { BandOnlyGuard } from "@/components/org-context-guard";
-import { BandSelfServiceClient } from "@/components/bands/band-self-service-client";
+import { RiderListClient } from "@/components/riders/rider-list-client";
 
-export default function BandsAndPerformersPage() {
+export default function BandRidersPage() {
   return (
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle>Bands and Performers</CardTitle>
+          <CardTitle>Technical rider</CardTitle>
           <CardDescription>
-            Band organizations can manage their public profile and team access. Technical
-            riders and payments live under their own subtabs.
+            Build a stage plot, input list, and monitor mixes. Export a PDF to share
+            with production — or keep it as your default for show files.
           </CardDescription>
         </CardHeader>
       </Card>
       <BandOnlyGuard>
-        <BandSelfServiceClient />
+        <RiderListClient />
       </BandOnlyGuard>
     </div>
   );

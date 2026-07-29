@@ -62,6 +62,7 @@ export type { RiderTemplate } from "./templates";
 export {
   INPUT_TYPE_LABELS,
   MONITOR_TYPE_LABELS,
+  PROVIDED_BY_EDITOR_LABELS,
   PROVIDED_BY_LABELS,
   STAND_LABELS,
 } from "./types";

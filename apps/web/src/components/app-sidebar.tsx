@@ -133,6 +133,7 @@ const marketingSubItems: NavSubItem[] = [
 
 const bandsSubItems: NavSubItem[] = [
   { title: "Profile", url: "/dashboard/bands-and-performers" },
+  { title: "Technical rider", url: "/dashboard/bands-and-performers/riders" },
   { title: "Payments", url: "/dashboard/bands-and-performers/payments" },
 ]
 
