@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useMutation, useQuery } from "convex/react";
 import { CheckIcon, CircleNotchIcon, WarningCircleIcon } from "@phosphor-icons/react";
+import { z } from "zod";
 import { api } from "@/lib/convex-api";
 import { FormSaveBar } from "@/components/forms";
 import { TextFormField } from "@/components/forms/text-form-field";
@@ -13,30 +15,19 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { UserRatesAdminClient } from "@/components/users/user-rates-admin-client";
-import { BandHeroUploadField } from "@/components/files/file-upload-field";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import { getConvexErrorMessage } from "@/lib/convex-error";
-import {
-  BAND_PAYEE_1099_NOTICE,
-  BAND_PAYEE_MAILING_ADDRESS_HINT,
-  BAND_PAYEE_MAILING_ADDRESS_PLACEHOLDER,
-  DEFAULT_BAND_PAYEE_PAYOUT_METHOD,
-  type BandPayeePayoutMethod,
-} from "@/lib/band-payout-copy";
-import { BandPayeePayoutMethodField } from "@/components/bands/band-payee-payout-method-field";
 import {
   CREW_RATE_MODE_OPTIONS,
   PAYROLL_METHOD_OPTIONS,
   USER_DISCIPLINE_OPTIONS,
   USER_VERTICAL_OPTIONS,
-  bandOrgProfileSchema,
   createUserAdminSchema,
   editInviteSchema,
   inviteUserSchema,
   userAdminRowSchema,
   type UserDisciplineOption,
   type UserVerticalOption,
-  type BandOrgProfileFormValues,
   type CreateUserAdminFormValues,
   type EditInviteFormValues,
   type InviteUserFormValues,
@@ -156,25 +147,10 @@ function userValuesFromRow(user: AdminUser, resolvedOrgId: string): UserAdminRow
   };
 }
 
-function bandOrgValuesFromRow(org: BandOrgRow): BandOrgProfileFormValues {
+function bandOrgValuesFromRow(org: BandOrgRow) {
   return {
     displayName: org.displayName ?? "",
-    bio: org.bio ?? "",
     performerHourlyRateUsd: String(org.performerHourlyRateUsd ?? 0),
-    designatedPayeeUserId: org.designatedPayeeUserId ?? "",
-    designatedPayeeName: org.designatedPayeeName ?? "",
-    designatedPayeeEmail: org.designatedPayeeEmail ?? "",
-    designatedPayeeMailingAddress: org.designatedPayeeMailingAddress ?? "",
-    designatedPayeePayoutMethod:
-      org.designatedPayeePayoutMethod === "pickup" || org.designatedPayeePayoutMethod === "delivery"
-        ? org.designatedPayeePayoutMethod
-        : DEFAULT_BAND_PAYEE_PAYOUT_METHOD,
-    publicWebsiteUrl: org.publicWebsiteUrl ?? "",
-    publicInstagramUrl: org.publicInstagramUrl ?? "",
-    publicYoutubeUrl: org.publicYoutubeUrl ?? "",
-    publicListing: org.publicListing ?? false,
-    publicSlug: org.publicSlug ?? "",
-    publicHeroImageUrl: org.publicHeroImageUrl ?? "",
   };
 }
 
@@ -234,7 +210,6 @@ export function UsersManagementClient({
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [expandedUserIds, setExpandedUserIds] = useState<Record<string, boolean>>({});
-  const [expandedBandOrgIds, setExpandedBandOrgIds] = useState<Record<string, boolean>>({});
   const [onboardingFilter, setOnboardingFilter] = useState<"all" | "incomplete">("all");
   const [accessFilter, setAccessFilter] = useState<"active" | "removed" | "all">("active");
   const showOrganizations = view === "all" || view === "organizations";
@@ -387,8 +362,17 @@ export function UsersManagementClient({
 
       {showOrganizations ? (
         <Card>
-          <CardHeader className="flex-row items-center justify-between gap-2">
-            <CardTitle>Band Organizations (Admin Birds-Eye View)</CardTitle>
+          <CardHeader className="flex-row flex-wrap items-center justify-between gap-2">
+            <div className="space-y-1">
+              <CardTitle>Band Organizations</CardTitle>
+              <p className="text-sm font-normal text-muted-foreground">
+                Quick rate and archive controls. Full profile, payee, and riders live under{" "}
+                <Link href="/dashboard/bands-and-performers" className="underline">
+                  Bands and Performers
+                </Link>
+                .
+              </p>
+            </div>
             <label className="flex items-center gap-2 text-xs font-normal text-muted-foreground">
               <input
                 type="checkbox"
@@ -414,13 +398,6 @@ export function UsersManagementClient({
                     <BandOrgAdminRow
                       key={org.organizationId}
                       org={org}
-                      expanded={Boolean(expandedBandOrgIds[org.organizationId])}
-                      onToggleExpanded={() =>
-                        setExpandedBandOrgIds((prev) => ({
-                          ...prev,
-                          [org.organizationId]: !prev[org.organizationId],
-                        }))
-                      }
                       onArchive={() => void onArchiveBandOrganization(org)}
                       onUnarchive={() => void onUnarchiveBandOrganization(org)}
                       onDeleteArchived={() => void onDeleteArchivedBandOrganization(org)}
@@ -1203,15 +1180,11 @@ function UserAdminRow({
 
 function BandOrgAdminRow({
   org,
-  expanded,
-  onToggleExpanded,
   onArchive,
   onUnarchive,
   onDeleteArchived,
 }: {
   org: BandOrgRow;
-  expanded: boolean;
-  onToggleExpanded: () => void;
   onArchive: () => void;
   onUnarchive: () => void;
   onDeleteArchived: () => void;
@@ -1219,8 +1192,11 @@ function BandOrgAdminRow({
   const isArchived = org.status === "archived";
   const updateBandOrganizationProfileAdmin = useMutation(api.users.updateBandOrganizationProfileAdmin);
 
-  const form = useConvexForm<BandOrgProfileFormValues>({
-    schema: bandOrgProfileSchema,
+  const form = useConvexForm({
+    schema: z.object({
+      displayName: z.string(),
+      performerHourlyRateUsd: z.string(),
+    }),
     defaultValues: bandOrgValuesFromRow(org),
     mode: "onChange",
   });
@@ -1230,34 +1206,13 @@ function BandOrgAdminRow({
     form.reset(bandOrgValuesFromRow(org));
   }, [org, form]);
 
-  const persist = async (values: BandOrgProfileFormValues) => {
-    const payoutMethod =
-      values.designatedPayeePayoutMethod === "pickup" ||
-      values.designatedPayeePayoutMethod === "delivery"
-        ? values.designatedPayeePayoutMethod
-        : DEFAULT_BAND_PAYEE_PAYOUT_METHOD;
-    await updateBandOrganizationProfileAdmin({
-      organizationId: org.organizationId,
-      displayName: values.displayName || undefined,
-      bio: values.bio || undefined,
-      performerHourlyRateUsd: Number(values.performerHourlyRateUsd || "0"),
-      designatedPayeeUserId: values.designatedPayeeUserId || undefined,
-      designatedPayeeName: values.designatedPayeeName || undefined,
-      designatedPayeeEmail: values.designatedPayeeEmail || undefined,
-      designatedPayeeMailingAddress: values.designatedPayeeMailingAddress || undefined,
-      designatedPayeePayoutMethod: payoutMethod,
-      publicWebsiteUrl: values.publicWebsiteUrl || undefined,
-      publicInstagramUrl: values.publicInstagramUrl || undefined,
-      publicYoutubeUrl: values.publicYoutubeUrl || undefined,
-      publicListing: values.publicListing,
-      publicSlug: values.publicSlug || undefined,
-      publicHeroImageUrl: values.publicHeroImageUrl || undefined,
-    });
-  };
-
   const onSave = form.submitMutation(
     async (values) => {
-      await persist(values);
+      await updateBandOrganizationProfileAdmin({
+        organizationId: org.organizationId,
+        displayName: values.displayName || undefined,
+        performerHourlyRateUsd: Number(values.performerHourlyRateUsd || "0"),
+      });
       return values;
     },
     {
@@ -1267,180 +1222,67 @@ function BandOrgAdminRow({
     },
   );
 
-  const payoutMethod =
-    form.watch("designatedPayeePayoutMethod") === "delivery"
-      ? "delivery"
-      : form.watch("designatedPayeePayoutMethod") === "pickup"
-        ? "pickup"
-        : DEFAULT_BAND_PAYEE_PAYOUT_METHOD;
-
   return (
-    <>
-      <tr className="border-b align-top">
-        <td className="px-3 py-2">
-          <p className="font-medium">
-            {org.name}
-            {isArchived ? (
-              <span className="ml-2 rounded-full border border-amber-500/30 bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-700">
-                Archived
-              </span>
-            ) : null}
-          </p>
-          <p className="text-xs text-muted-foreground">/{org.slug}</p>
-        </td>
-        <td className="px-3 py-2">
-          <Input
-            value={form.watch("displayName")}
-            onChange={(e) => form.setValue("displayName", e.target.value, { shouldDirty: true })}
-          />
-        </td>
-        <td className="px-3 py-2">
-          <Input
-            inputMode="decimal"
-            value={form.watch("performerHourlyRateUsd")}
-            onChange={(e) =>
-              form.setValue("performerHourlyRateUsd", e.target.value, { shouldDirty: true })
-            }
-          />
-        </td>
-        <td className="px-3 py-2">
-          <div className="flex flex-wrap items-center gap-2">
-            {form.formState.isDirty ? (
-              <Button
-                type="button"
-                size="sm"
-                disabled={form.saveStatus === "saving" || isArchived}
-                onClick={() => void form.handleSubmit(onSave)()}
-              >
-                Save
-              </Button>
-            ) : null}
-            <Select
-              value=""
-              onValueChange={(action) => {
-                if (action === "toggle_details") onToggleExpanded();
-              }}
+    <tr className="border-b align-top">
+      <td className="px-3 py-2">
+        <p className="font-medium">
+          {org.name}
+          {isArchived ? (
+            <span className="ml-2 rounded-full border border-amber-500/30 bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-700">
+              Archived
+            </span>
+          ) : null}
+        </p>
+        <p className="text-xs text-muted-foreground">/{org.slug}</p>
+      </td>
+      <td className="px-3 py-2">
+        <Input
+          value={form.watch("displayName")}
+          onChange={(e) => form.setValue("displayName", e.target.value, { shouldDirty: true })}
+        />
+      </td>
+      <td className="px-3 py-2">
+        <Input
+          inputMode="decimal"
+          value={form.watch("performerHourlyRateUsd")}
+          onChange={(e) =>
+            form.setValue("performerHourlyRateUsd", e.target.value, { shouldDirty: true })
+          }
+        />
+      </td>
+      <td className="px-3 py-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {form.formState.isDirty ? (
+            <Button
+              type="button"
+              size="sm"
+              disabled={form.saveStatus === "saving" || isArchived}
+              onClick={() => void form.handleSubmit(onSave)()}
             >
-              <SelectTrigger className="min-w-[140px]">
-                <SelectValue placeholder="Select..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="toggle_details">{expanded ? "Hide details" : "Show details"}</SelectItem>
-              </SelectContent>
-            </Select>
-            {isArchived ? (
-              <>
-                <Button type="button" size="sm" variant="outline" onClick={onUnarchive}>
-                  Restore
-                </Button>
-                <Button type="button" size="sm" variant="destructive" onClick={onDeleteArchived}>
-                  Delete permanently
-                </Button>
-              </>
-            ) : (
-              <Button type="button" size="sm" variant="outline" onClick={onArchive}>
-                Archive
+              Save
+            </Button>
+          ) : null}
+          <Button type="button" size="sm" variant="outline" asChild>
+            <Link href="/dashboard/bands-and-performers">Edit profile</Link>
+          </Button>
+          {isArchived ? (
+            <>
+              <Button type="button" size="sm" variant="outline" onClick={onUnarchive}>
+                Restore
               </Button>
-            )}
-            <SaveStatusIcon saveStatus={form.saveStatus} saveError={form.saveError} />
-          </div>
-        </td>
-      </tr>
-      {expanded ? (
-        <tr className="border-b bg-muted/20">
-          <td className="px-3 py-2 text-xs text-muted-foreground">Advanced fields</td>
-          <td className="px-3 py-2" colSpan={3}>
-            <div className="grid gap-2 md:grid-cols-3">
-              <Input
-                placeholder="Website URL"
-                value={form.watch("publicWebsiteUrl")}
-                onChange={(e) => form.setValue("publicWebsiteUrl", e.target.value, { shouldDirty: true })}
-              />
-              <Input
-                placeholder="Instagram URL"
-                value={form.watch("publicInstagramUrl")}
-                onChange={(e) => form.setValue("publicInstagramUrl", e.target.value, { shouldDirty: true })}
-              />
-              <Input
-                placeholder="YouTube URL"
-                value={form.watch("publicYoutubeUrl")}
-                onChange={(e) => form.setValue("publicYoutubeUrl", e.target.value, { shouldDirty: true })}
-              />
-            </div>
-            <textarea
-              className="mt-2 min-h-20 w-full rounded-md border bg-background px-3 py-2 text-sm"
-              value={form.watch("bio")}
-              onChange={(e) => form.setValue("bio", e.target.value, { shouldDirty: true })}
-            />
-            <div className="mt-3 space-y-2">
-              <p className="text-xs font-medium text-muted-foreground">Payment payee</p>
-              <div className="grid gap-2 md:grid-cols-2">
-                <Input
-                  placeholder="Payee name"
-                  value={form.watch("designatedPayeeName")}
-                  onChange={(e) =>
-                    form.setValue("designatedPayeeName", e.target.value, { shouldDirty: true })
-                  }
-                />
-                <Input
-                  placeholder="Payee email"
-                  value={form.watch("designatedPayeeEmail")}
-                  onChange={(e) =>
-                    form.setValue("designatedPayeeEmail", e.target.value, { shouldDirty: true })
-                  }
-                />
-              </div>
-              <BandPayeePayoutMethodField
-                value={payoutMethod}
-                onChange={(method: BandPayeePayoutMethod) => {
-                  form.setValue("designatedPayeePayoutMethod", method, { shouldDirty: true });
-                }}
-                idPrefix={`admin-band-${org.organizationId}`}
-              />
-              <textarea
-                className="min-h-20 w-full rounded-md border bg-background px-3 py-2 text-sm"
-                placeholder={BAND_PAYEE_MAILING_ADDRESS_PLACEHOLDER}
-                value={form.watch("designatedPayeeMailingAddress")}
-                onChange={(e) =>
-                  form.setValue("designatedPayeeMailingAddress", e.target.value, {
-                    shouldDirty: true,
-                  })
-                }
-              />
-              <p className="text-xs text-muted-foreground">{BAND_PAYEE_MAILING_ADDRESS_HINT}</p>
-              <p className="text-xs text-muted-foreground">{BAND_PAYEE_1099_NOTICE}</p>
-            </div>
-            <div className="mt-3 grid gap-2 md:grid-cols-2">
-              <label className="flex items-center gap-2 text-xs">
-                <input
-                  type="checkbox"
-                  checked={form.watch("publicListing")}
-                  onChange={(e) =>
-                    form.setValue("publicListing", e.target.checked, { shouldDirty: true })
-                  }
-                />
-                List on public artists page
-              </label>
-              <Input
-                placeholder="Public slug (e.g. my-band)"
-                value={form.watch("publicSlug")}
-                onChange={(e) => form.setValue("publicSlug", e.target.value, { shouldDirty: true })}
-              />
-              <div className="md:col-span-2">
-                <BandHeroUploadField
-                  organizationId={org.organizationId}
-                  currentUrl={form.watch("publicHeroImageUrl")}
-                  urlValue={form.watch("publicHeroImageUrl")}
-                  onUploaded={(url) => form.setValue("publicHeroImageUrl", url, { shouldDirty: true })}
-                  onUrlChange={(url) => form.setValue("publicHeroImageUrl", url, { shouldDirty: true })}
-                  onClear={() => form.setValue("publicHeroImageUrl", "", { shouldDirty: true })}
-                />
-              </div>
-            </div>
-          </td>
-        </tr>
-      ) : null}
-    </>
+              <Button type="button" size="sm" variant="destructive" onClick={onDeleteArchived}>
+                Delete permanently
+              </Button>
+            </>
+          ) : (
+            <Button type="button" size="sm" variant="outline" onClick={onArchive}>
+              Archive
+            </Button>
+          )}
+          <SaveStatusIcon saveStatus={form.saveStatus} saveError={form.saveError} />
+        </div>
+      </td>
+    </tr>
   );
 }
 

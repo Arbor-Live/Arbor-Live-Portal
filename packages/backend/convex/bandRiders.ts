@@ -10,6 +10,7 @@ import {
 import {
   getActiveOrganizationContextOrNull,
   getUserId,
+  isAdmin,
   requireArborInternalContext,
   requireAuth,
   requireBandContext,
@@ -87,15 +88,19 @@ function summarize(rider: RiderDoc) {
 
 /**
  * Riders are readable by the owning band and by Arbor crew (they need the plot
- * to build a show file); only band members can edit them.
+ * to build a show file). Band members and portal admins can edit.
  */
 async function loadRiderForViewer(
   ctx: QueryCtx | MutationCtx,
   riderId: Id<"bandRiders">,
 ): Promise<{ rider: RiderDoc; canEdit: boolean }> {
-  await requireAuth(ctx);
+  const user = await requireAuth(ctx);
   const rider = await ctx.db.get(riderId);
   if (!rider) throw new Error("Rider not found.");
+
+  if (isAdmin(user)) {
+    return { rider, canEdit: true };
+  }
 
   const context = await getActiveOrganizationContextOrNull(ctx);
   if (!context) throw new Error("You do not have access to this rider.");
@@ -110,13 +115,38 @@ async function loadRiderForViewer(
 }
 
 async function requireEditableRider(ctx: MutationCtx, riderId: Id<"bandRiders">) {
-  const context = await requireBandContext(ctx);
+  const user = await requireAuth(ctx);
   const rider = await ctx.db.get(riderId);
   if (!rider) throw new Error("Rider not found.");
+
+  if (isAdmin(user)) {
+    return { rider, organizationId: rider.organizationId };
+  }
+
+  const context = await requireBandContext(ctx);
   if (rider.organizationId !== context.organizationId) {
     throw new Error("You do not have access to this rider.");
   }
-  return { rider, context };
+  return { rider, organizationId: context.organizationId };
+}
+
+/** Active band org, or an explicit org id when a portal admin is managing a band. */
+async function resolveRiderOrganizationId(
+  ctx: QueryCtx | MutationCtx,
+  organizationId: string | undefined,
+): Promise<string> {
+  const user = await requireAuth(ctx);
+  if (organizationId) {
+    if (!isAdmin(user)) {
+      const context = await requireBandContext(ctx);
+      if (context.organizationId !== organizationId) {
+        throw new Error("You do not have access to this band.");
+      }
+    }
+    return organizationId;
+  }
+  const context = await requireBandContext(ctx);
+  return context.organizationId;
 }
 
 function trimmedName(name: string): string {
@@ -178,15 +208,13 @@ async function clearDefaultFlag(
 }
 
 export const listForActiveBand = query({
-  args: {},
+  args: { organizationId: v.optional(v.string()) },
   returns: v.array(riderSummaryValidator),
-  handler: async (ctx) => {
-    const context = await requireBandContext(ctx);
+  handler: async (ctx, args) => {
+    const organizationId = await resolveRiderOrganizationId(ctx, args.organizationId);
     const riders = await ctx.db
       .query("bandRiders")
-      .withIndex("by_organizationId", (q) =>
-        q.eq("organizationId", context.organizationId),
-      )
+      .withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId))
       .take(50);
     return riders
       .sort((a, b) => {
@@ -220,30 +248,29 @@ export const create = mutation({
   args: {
     name: v.string(),
     content: riderContentValue,
+    organizationId: v.optional(v.string()),
   },
   returns: v.id("bandRiders"),
   handler: async (ctx, args) => {
-    const context = await requireBandContext(ctx);
+    const organizationId = await resolveRiderOrganizationId(ctx, args.organizationId);
     const user = await requireAuth(ctx);
     const userId = getUserId(user);
     validateContent(args.content);
 
     const existing = await ctx.db
       .query("bandRiders")
-      .withIndex("by_organizationId", (q) =>
-        q.eq("organizationId", context.organizationId),
-      )
+      .withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId))
       .take(50);
     if (existing.length >= 25) {
       throw new Error("You already have 25 riders. Delete one before adding another.");
     }
 
     const isFirst = existing.length === 0;
-    if (isFirst) await clearDefaultFlag(ctx, context.organizationId);
+    if (isFirst) await clearDefaultFlag(ctx, organizationId);
 
     const now = Date.now();
     return await ctx.db.insert("bandRiders", {
-      organizationId: context.organizationId,
+      organizationId,
       name: trimmedName(args.name),
       status: "draft",
       isDefault: isFirst,
@@ -284,8 +311,8 @@ export const setDefault = mutation({
   args: { riderId: v.id("bandRiders") },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const { rider, context } = await requireEditableRider(ctx, args.riderId);
-    await clearDefaultFlag(ctx, context.organizationId, rider._id);
+    const { rider, organizationId } = await requireEditableRider(ctx, args.riderId);
+    await clearDefaultFlag(ctx, organizationId, rider._id);
     await ctx.db.patch(rider._id, { isDefault: true, updatedAt: Date.now() });
     return null;
   },
@@ -295,13 +322,13 @@ export const duplicate = mutation({
   args: { riderId: v.id("bandRiders"), name: v.optional(v.string()) },
   returns: v.id("bandRiders"),
   handler: async (ctx, args) => {
-    const { rider, context } = await requireEditableRider(ctx, args.riderId);
+    const { rider, organizationId } = await requireEditableRider(ctx, args.riderId);
     const user = await requireAuth(ctx);
     const userId = getUserId(user);
     const now = Date.now();
 
     return await ctx.db.insert("bandRiders", {
-      organizationId: context.organizationId,
+      organizationId,
       name: trimmedName(args.name ?? `${rider.name} (copy)`),
       status: "draft",
       isDefault: false,
@@ -318,16 +345,14 @@ export const remove = mutation({
   args: { riderId: v.id("bandRiders") },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const { rider, context } = await requireEditableRider(ctx, args.riderId);
+    const { rider, organizationId } = await requireEditableRider(ctx, args.riderId);
     await ctx.db.delete(rider._id);
 
     // Keep exactly one default so show-file generation always has a rider.
     if (rider.isDefault) {
       const remaining = await ctx.db
         .query("bandRiders")
-        .withIndex("by_organizationId", (q) =>
-          q.eq("organizationId", context.organizationId),
-        )
+        .withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId))
         .take(50);
       const next = remaining.sort((a, b) => b.updatedAt - a.updatedAt)[0];
       if (next) await ctx.db.patch(next._id, { isDefault: true });

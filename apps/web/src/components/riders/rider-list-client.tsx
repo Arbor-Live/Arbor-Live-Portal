@@ -11,9 +11,18 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { RiderPdfDownloadButton } from "@/components/riders/rider-pdf-download-button";
 import { RiderTemplatePicker } from "@/components/riders/rider-template-picker";
+import { useAdminBandSelection } from "@/components/bands/admin-band-selection";
 
 export function RiderListClient() {
-  const riders = useQuery(api.bandRiders.listForActiveBand, {});
+  const { organizationId, isAdminManaging } = useAdminBandSelection();
+  const riders = useQuery(
+    api.bandRiders.listForActiveBand,
+    isAdminManaging
+      ? organizationId
+        ? { organizationId }
+        : "skip"
+      : {},
+  );
   const setDefault = useMutation(api.bandRiders.setDefault);
   const duplicate = useMutation(api.bandRiders.duplicate);
   const remove = useMutation(api.bandRiders.remove);
@@ -34,6 +43,16 @@ export function RiderListClient() {
     } finally {
       setBusyId(null);
     }
+  }
+
+  if (isAdminManaging && !organizationId) {
+    return (
+      <Card>
+        <CardContent className="py-8 text-sm text-muted-foreground">
+          Select a band above to manage its riders.
+        </CardContent>
+      </Card>
+    );
   }
 
   if (riders === undefined) {
@@ -174,7 +193,11 @@ export function RiderListClient() {
         </ul>
       )}
 
-      <RiderTemplatePicker open={pickerOpen} onOpenChange={setPickerOpen} />
+      <RiderTemplatePicker
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
+        organizationId={organizationId ?? undefined}
+      />
     </div>
   );
 }

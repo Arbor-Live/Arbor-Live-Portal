@@ -85,7 +85,7 @@ export function BandOnlyGuard({ children }: { children: React.ReactNode }) {
       </Card>
     );
   }
-  if (activeOrg.organizationType !== "band") {
+  if (activeOrg.organizationType !== "band" && activeOrg.organizationType !== "dj") {
     return (
       <Card>
         <CardHeader>
@@ -98,4 +98,44 @@ export function BandOnlyGuard({ children }: { children: React.ReactNode }) {
     );
   }
   return <>{children}</>;
+}
+
+/**
+ * Band self-service plus portal admins managing any band without membership.
+ */
+export function BandOrAdminGuard({ children }: { children: React.ReactNode }) {
+  const shell = useSessionShell();
+  const viewer = useSessionViewer();
+  const activeOrg = shell === undefined ? undefined : (shell?.activeOrganization ?? null);
+
+  if (shell === undefined) return null;
+  if (viewer?.isAdmin) return <>{children}</>;
+
+  if (activeOrg === undefined) return null;
+  if (!activeOrg) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>No Active Organization</CardTitle>
+        </CardHeader>
+        <CardContent className="text-sm text-muted-foreground">
+          Select an active organization from the sidebar to continue.
+        </CardContent>
+      </Card>
+    );
+  }
+  if (activeOrg.organizationType === "band" || activeOrg.organizationType === "dj") {
+    return <>{children}</>;
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Admin access required</CardTitle>
+      </CardHeader>
+      <CardContent className="text-sm text-muted-foreground">
+        This section is limited to band organizations and Arbor Live admins.
+      </CardContent>
+    </Card>
+  );
 }

@@ -22,9 +22,15 @@ import { cn } from "@/lib/utils";
 type RiderTemplatePickerProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** When a portal admin is editing another band's riders. */
+  organizationId?: string;
 };
 
-export function RiderTemplatePicker({ open, onOpenChange }: RiderTemplatePickerProps) {
+export function RiderTemplatePicker({
+  open,
+  onOpenChange,
+  organizationId,
+}: RiderTemplatePickerProps) {
   const router = useRouter();
   const createRider = useMutation(api.bandRiders.create);
   const [selectedKey, setSelectedKey] = useState("full_band");
@@ -41,6 +47,7 @@ export function RiderTemplatePicker({ open, onOpenChange }: RiderTemplatePickerP
       const riderId = await createRider({
         name: name.trim() || template.name,
         content: template.build(),
+        ...(organizationId ? { organizationId } : {}),
       });
       onOpenChange(false);
       router.push(`/dashboard/bands-and-performers/riders/${riderId}`);
