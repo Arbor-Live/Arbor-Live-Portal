@@ -70,6 +70,8 @@ const lineItemInput = v.object({
   typeId: v.optional(v.id("inventoryTypes")),
   feeDefinitionId: v.optional(v.id("invoiceFeeDefinitions")),
   equipmentQuantityBasis: v.optional(v.union(v.literal("total"), v.literal("per_occurrence"))),
+  excludedTypeIds: v.optional(v.array(v.id("inventoryTypes"))),
+  packageExclusionDiscountUsd: v.optional(v.number()),
 });
 
 type LineInput = {
@@ -84,6 +86,10 @@ type LineInput = {
   typeId?: Id<"inventoryTypes">;
   feeDefinitionId?: Id<"invoiceFeeDefinitions">;
   equipmentQuantityBasis?: EquipmentQuantityBasis;
+  /** Package lines only: BOM types excluded from this instance (ala-carte discount). */
+  excludedTypeIds?: Id<"inventoryTypes">[];
+  /** Package lines only: staff override for the exclusion discount; falls back to a suggested amount. */
+  packageExclusionDiscountUsd?: number;
 };
 
 function trimOptional(raw: string | undefined) {
@@ -136,6 +142,38 @@ function publicApprovalTokenExpiry(now: number): number {
   return expiresAt.getTime();
 }
 
+function typeRentalRate(
+  type: Doc<"inventoryTypes">,
+  equipmentPricingMode: "subsidized" | "nonSubsidized",
+) {
+  return equipmentPricingMode === "subsidized"
+    ? (type.subsidizedRentalPriceUsd ?? type.nonSubsidizedRentalPriceUsd ?? type.rentalPriceUsd ?? 0)
+    : (type.nonSubsidizedRentalPriceUsd ?? type.rentalPriceUsd ?? 0);
+}
+
+/** Sum of (excluded BOM type qty × current type rental rate) for a package's ala-carte discount suggestion. */
+async function suggestPackageExclusionDiscount(
+  ctx: MutationCtx,
+  packageId: Id<"inventoryPackages">,
+  excludedTypeIds: Id<"inventoryTypes">[],
+  equipmentPricingMode: "subsidized" | "nonSubsidized",
+) {
+  if (!excludedTypeIds.length) return 0;
+  const excludedSet = new Set(excludedTypeIds);
+  const packageItems = await ctx.db
+    .query("inventoryPackageItems")
+    .withIndex("by_packageId", (q) => q.eq("packageId", packageId))
+    .take(500);
+  let total = 0;
+  for (const item of packageItems) {
+    if (!excludedSet.has(item.typeId)) continue;
+    const type = await ctx.db.get(item.typeId);
+    if (!type) continue;
+    total += item.quantity * typeRentalRate(type, equipmentPricingMode);
+  }
+  return Number(total.toFixed(2));
+}
+
 async function computeLineAmount(
   ctx: MutationCtx,
   line: LineInput,
@@ -146,23 +184,36 @@ async function computeLineAmount(
 ) {
   if (line.quantity < 0) throw new Error("Line quantity cannot be negative.");
   let rate = line.rateUsd;
+  let packageOriginalRateUsd: number | undefined;
+  let packageExclusionDiscountUsd: number | undefined;
 
   if (line.section === "equipment_package" && line.packageId) {
     const pkg = await ctx.db.get(line.packageId);
     if (!pkg) throw new Error("Package line references a missing package.");
-    rate =
+    const originalRate =
       equipmentPricingMode === "subsidized"
         ? (pkg.subsidizedPackagePriceUsd ?? pkg.nonSubsidizedPackagePriceUsd ?? pkg.packagePriceCents / 100)
         : (pkg.nonSubsidizedPackagePriceUsd ?? pkg.packagePriceCents / 100);
+    packageOriginalRateUsd = originalRate;
+
+    const excludedTypeIds = line.excludedTypeIds ?? [];
+    const suggestedDiscount = await suggestPackageExclusionDiscount(
+      ctx,
+      line.packageId,
+      excludedTypeIds,
+      equipmentPricingMode,
+    );
+    packageExclusionDiscountUsd = Math.max(
+      0,
+      line.packageExclusionDiscountUsd ?? suggestedDiscount,
+    );
+    rate = Math.max(0, originalRate - packageExclusionDiscountUsd);
   }
 
   if (line.section === "equipment_type" && line.typeId) {
     const type = await ctx.db.get(line.typeId);
     if (!type) throw new Error("Type line references a missing type.");
-    rate =
-      equipmentPricingMode === "subsidized"
-        ? (type.subsidizedRentalPriceUsd ?? type.nonSubsidizedRentalPriceUsd ?? type.rentalPriceUsd ?? 0)
-        : (type.nonSubsidizedRentalPriceUsd ?? type.rentalPriceUsd ?? 0);
+    rate = typeRentalRate(type, equipmentPricingMode);
   }
 
   if (line.section === "crew") {
@@ -184,7 +235,7 @@ async function computeLineAmount(
     : Math.max(0, line.quantity);
 
   const amount = Number((billingQuantity * Math.max(0, rate)).toFixed(2));
-  return { rate, amount };
+  return { rate, amount, packageOriginalRateUsd, packageExclusionDiscountUsd };
 }
 
 async function computeTotals(
@@ -213,17 +264,31 @@ async function computeTotals(
   let crewSubtotalUsd = 0;
   let feesSubtotalUsd = 0;
 
-  const normalized: Array<LineInput & { rateUsd: number; amountUsd: number }> = [];
+  const normalized: Array<
+    LineInput & {
+      rateUsd: number;
+      amountUsd: number;
+      packageOriginalRateUsd?: number;
+      packageExclusionDiscountUsd?: number;
+    }
+  > = [];
   for (const line of lineItems) {
-    const { rate, amount } = await computeLineAmount(
-      ctx,
-      line,
-      equipmentPricingMode,
-      crewRateMode,
-      crewRates,
-      billableOccurrenceCount,
-    );
-    normalized.push({ ...line, rateUsd: rate, amountUsd: amount });
+    const { rate, amount, packageOriginalRateUsd, packageExclusionDiscountUsd } =
+      await computeLineAmount(
+        ctx,
+        line,
+        equipmentPricingMode,
+        crewRateMode,
+        crewRates,
+        billableOccurrenceCount,
+      );
+    normalized.push({
+      ...line,
+      rateUsd: rate,
+      amountUsd: amount,
+      packageOriginalRateUsd,
+      packageExclusionDiscountUsd,
+    });
     if (line.section === "equipment_package" || line.section === "equipment_type") equipmentSubtotalUsd += amount;
     else if (line.section === "external_rental") externalRentalsSubtotalUsd += amount;
     else if (line.section === "artist") artistsSubtotalUsd += amount;
@@ -269,7 +334,14 @@ async function resolveBillableCountAtSave(ctx: MutationCtx, invoiceId: Id<"invoi
 async function replaceLineItems(
   ctx: MutationCtx,
   invoiceId: Id<"invoices">,
-  rows: Array<LineInput & { rateUsd: number; amountUsd: number }>,
+  rows: Array<
+    LineInput & {
+      rateUsd: number;
+      amountUsd: number;
+      packageOriginalRateUsd?: number;
+      packageExclusionDiscountUsd?: number;
+    }
+  >,
 ) {
   const existing = await ctx.db
     .query("invoiceLineItems")
@@ -292,6 +364,9 @@ async function replaceLineItems(
       amountUsd: row.amountUsd,
       packageId: row.packageId,
       typeId: row.typeId,
+      excludedTypeIds: row.excludedTypeIds?.length ? row.excludedTypeIds : undefined,
+      packageOriginalRateUsd: row.packageOriginalRateUsd,
+      packageExclusionDiscountUsd: row.packageExclusionDiscountUsd,
       feeDefinitionId: row.feeDefinitionId,
       equipmentQuantityBasis: row.equipmentQuantityBasis,
       createdAt: now,
@@ -326,15 +401,23 @@ export const listManagers = query({
           ),
         )
       : null;
+    const profiles = await ctx.db.query("userAdminProfiles").withIndex("by_active").take(2000);
+    const profileByUserId = new Map(profiles.map((profile) => [profile.userId, profile]));
     return users
-      .map((user) => ({
-        id: user.id ?? user._id ?? "",
-        name: user.name ?? user.email ?? "Unknown user",
-        email: user.email,
-        role: user.role ?? undefined,
-        image: user.image ?? undefined,
-        hourlyRateUsd: rateByUserId?.get(user.id ?? user._id ?? "") ?? undefined,
-      }))
+      .map((user) => {
+        const userId = user.id ?? user._id ?? "";
+        const profile = profileByUserId.get(userId);
+        return {
+          id: userId,
+          name: user.name ?? user.email ?? "Unknown user",
+          email: user.email,
+          role: user.role ?? undefined,
+          image: user.image ?? undefined,
+          hourlyRateUsd: rateByUserId?.get(userId) ?? undefined,
+          pronouns: profile?.pronouns ?? undefined,
+          gradYear: profile?.gradYear ?? undefined,
+        };
+      })
       .filter((u) => Boolean(u.id))
       .sort((a, b) => a.name.localeCompare(b.name));
   },
@@ -427,8 +510,19 @@ async function recentInvoices(
 async function resolveInvoiceListLabels(ctx: QueryCtx, invoiceId: Id<"invoices">) {
   const series = await findSeriesByInvoiceId(ctx, invoiceId);
   const linkedEvents = await listEventsByInvoiceId(ctx, invoiceId);
+  const primaryEvent = linkedEvents[0];
+  const eventCostsUsd = primaryEvent
+    ? (primaryEvent.crewCostUsd ?? 0) +
+      (primaryEvent.bandsCostUsd ?? 0) +
+      (primaryEvent.externalRentalsCostUsd ?? 0) +
+      (primaryEvent.otherCostUsd ?? 0)
+    : null;
   if (series) {
-    return { seriesTitle: series.title, linkedEventTitle: linkedEvents[0]?.title };
+    return {
+      seriesTitle: series.title,
+      linkedEventTitle: linkedEvents[0]?.title,
+      eventCostsUsd,
+    };
   }
   const seriesIds = [
     ...new Set(
@@ -436,7 +530,11 @@ async function resolveInvoiceListLabels(ctx: QueryCtx, invoiceId: Id<"invoices">
     ),
   ];
   const seriesDoc = seriesIds.length === 1 ? await ctx.db.get(seriesIds[0]!) : null;
-  return { seriesTitle: seriesDoc?.title, linkedEventTitle: linkedEvents[0]?.title };
+  return {
+    seriesTitle: seriesDoc?.title,
+    linkedEventTitle: linkedEvents[0]?.title,
+    eventCostsUsd,
+  };
 }
 
 export const list = query({
@@ -460,7 +558,10 @@ export const listEnriched = query({
     const rows = await recentInvoices(ctx, args.status);
     return await Promise.all(
       rows.map(async (invoice) => {
-        const { seriesTitle, linkedEventTitle } = await resolveInvoiceListLabels(ctx, invoice._id);
+        const { seriesTitle, linkedEventTitle, eventCostsUsd } = await resolveInvoiceListLabels(
+          ctx,
+          invoice._id,
+        );
         return {
           _id: invoice._id,
           invoiceNumber: invoice.invoiceNumber,
@@ -469,6 +570,7 @@ export const listEnriched = query({
           managerName: invoice.managerName,
           issueDate: invoice.issueDate,
           totalUsd: invoice.totalUsd,
+          netProfitUsd: eventCostsUsd == null ? null : invoice.totalUsd - eventCostsUsd,
           publicApprovalToken: invoice.publicApprovalToken,
           clientGroupName: invoice.clientGroupName,
           clientContactName: invoice.clientContactName,
@@ -943,6 +1045,8 @@ export const recalculateTotals = mutation({
         typeId: line.typeId,
         feeDefinitionId: line.feeDefinitionId,
         equipmentQuantityBasis: line.equipmentQuantityBasis,
+        excludedTypeIds: line.excludedTypeIds,
+        packageExclusionDiscountUsd: line.packageExclusionDiscountUsd,
       })),
       invoice.equipmentPricingMode,
       invoice.crewRateMode,
@@ -1006,6 +1110,8 @@ export const recalculateSeriesEquipmentLines = mutation({
         typeId: line.typeId,
         feeDefinitionId: line.feeDefinitionId,
         equipmentQuantityBasis: line.equipmentQuantityBasis,
+        excludedTypeIds: line.excludedTypeIds,
+        packageExclusionDiscountUsd: line.packageExclusionDiscountUsd,
       })),
       invoice.equipmentPricingMode,
       invoice.crewRateMode,
@@ -1028,6 +1134,141 @@ export const recalculateSeriesEquipmentLines = mutation({
     });
     await replaceLineItems(ctx, args.id, totals.normalized);
     return { warning: totals.discountWarning };
+  },
+});
+
+/**
+ * Reverse of eventPullLists.scaffoldFromInvoice: rewrites this invoice's
+ * equipment lines to match the linked event's current non-manual pull-list
+ * rows (manual/extra rows are staff additions and are left off the invoice).
+ * Non-equipment lines (crew, artists, external rentals, fees) are untouched.
+ */
+export const resyncEquipmentFromPullList = mutation({
+  args: { id: v.id("invoices"), eventId: v.id("events") },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    const invoice = await ctx.db.get(args.id);
+    if (!invoice) throw new Error("Invoice not found.");
+    const event = await ctx.db.get(args.eventId);
+    if (!event) throw new Error("Event not found.");
+    if (event.invoiceId !== args.id) throw new Error("Event is not linked to this invoice.");
+
+    const series = event.seriesId ? await ctx.db.get(event.seriesId) : null;
+    const useSeriesQty = Boolean(series?.invoiceId && series.invoiceId === args.id);
+    const billableOccurrenceCount = useSeriesQty
+      ? Math.max(1, await resolveBillableOccurrenceCount(ctx, args.id))
+      : 1;
+
+    const pullItems = await ctx.db
+      .query("eventPullListItems")
+      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+      .take(500);
+    const nonManualItems = pullItems.filter((item) => (item.source ?? "manual") !== "manual");
+
+    const lineItems = await ctx.db
+      .query("invoiceLineItems")
+      .withIndex("by_invoiceId", (q) => q.eq("invoiceId", args.id))
+      .take(500);
+    const existingPackageLines = new Map(
+      lineItems
+        .filter((line) => line.section === "equipment_package" && line.packageId)
+        .map((line) => [line.packageId as Id<"inventoryPackages">, line]),
+    );
+    const existingTypeLines = new Map(
+      lineItems
+        .filter((line) => line.section === "equipment_type" && line.typeId)
+        .map((line) => [line.typeId as Id<"inventoryTypes">, line]),
+    );
+
+    function sameExclusions(a: Id<"inventoryTypes">[] | undefined, b: Id<"inventoryTypes">[] | undefined) {
+      const setA = [...(a ?? [])].sort();
+      const setB = [...(b ?? [])].sort();
+      return setA.length === setB.length && setA.every((value, idx) => value === setB[idx]);
+    }
+
+    const equipmentLines: LineInput[] = [];
+    let order = 0;
+    for (const item of nonManualItems) {
+      const lineKind: "type" | "package" = item.lineKind ?? (item.packageId ? "package" : "type");
+      if (lineKind === "package" && item.packageId) {
+        const existing = existingPackageLines.get(item.packageId);
+        const basis: EquipmentQuantityBasis = existing?.equipmentQuantityBasis ?? "total";
+        const quantity =
+          basis === "per_occurrence" ? item.quantityRequired : item.quantityRequired * billableOccurrenceCount;
+        const excludedTypeIds = item.excludedTypeIds?.length ? item.excludedTypeIds : undefined;
+        equipmentLines.push({
+          section: "equipment_package",
+          order: order++,
+          label: item.label,
+          quantity,
+          rateUsd: 0,
+          packageId: item.packageId,
+          equipmentQuantityBasis: basis,
+          excludedTypeIds,
+          packageExclusionDiscountUsd: sameExclusions(existing?.excludedTypeIds, excludedTypeIds)
+            ? existing?.packageExclusionDiscountUsd
+            : undefined,
+        });
+      } else if (item.typeId) {
+        const existing = existingTypeLines.get(item.typeId);
+        const basis: EquipmentQuantityBasis = existing?.equipmentQuantityBasis ?? "total";
+        const quantity =
+          basis === "per_occurrence" ? item.quantityRequired : item.quantityRequired * billableOccurrenceCount;
+        equipmentLines.push({
+          section: "equipment_type",
+          order: order++,
+          label: item.label,
+          quantity,
+          rateUsd: 0,
+          typeId: item.typeId,
+          equipmentQuantityBasis: basis,
+        });
+      }
+    }
+
+    const otherLines: LineInput[] = lineItems
+      .filter((line) => line.section !== "equipment_package" && line.section !== "equipment_type")
+      .map((line) => ({
+        section: line.section,
+        order: order++,
+        provider: line.provider,
+        label: line.label,
+        notes: line.notes,
+        quantity: line.quantity,
+        rateUsd: line.rateUsd,
+        packageId: line.packageId,
+        typeId: line.typeId,
+        feeDefinitionId: line.feeDefinitionId,
+        equipmentQuantityBasis: line.equipmentQuantityBasis,
+        excludedTypeIds: line.excludedTypeIds,
+        packageExclusionDiscountUsd: line.packageExclusionDiscountUsd,
+      }));
+
+    const totals = await computeTotals(
+      ctx,
+      [...equipmentLines, ...otherLines],
+      invoice.equipmentPricingMode,
+      invoice.crewRateMode,
+      invoice.discountType,
+      invoice.discountValue,
+      args.id,
+    );
+    await ctx.db.patch(args.id, {
+      discountAmountUsd: totals.discountAmountUsd,
+      discountWarning: totals.discountWarning,
+      equipmentSubtotalUsd: totals.equipmentSubtotalUsd,
+      externalRentalsSubtotalUsd: totals.externalRentalsSubtotalUsd,
+      artistsSubtotalUsd: totals.artistsSubtotalUsd,
+      crewSubtotalUsd: totals.crewSubtotalUsd,
+      feesSubtotalUsd: totals.feesSubtotalUsd,
+      subtotalUsd: totals.subtotalUsd,
+      totalUsd: totals.totalUsd,
+      updatedAt: Date.now(),
+      billableOccurrenceCountAtSave: await resolveBillableCountAtSave(ctx, args.id),
+    });
+    await replaceLineItems(ctx, args.id, totals.normalized);
+    return { updatedLineCount: equipmentLines.length };
   },
 });
 
@@ -1119,6 +1360,9 @@ export const duplicate = mutation({
         amountUsd: line.amountUsd,
         packageId: line.packageId,
         typeId: line.typeId,
+        excludedTypeIds: line.excludedTypeIds,
+        packageOriginalRateUsd: line.packageOriginalRateUsd,
+        packageExclusionDiscountUsd: line.packageExclusionDiscountUsd,
         feeDefinitionId: line.feeDefinitionId,
         equipmentQuantityBasis: line.equipmentQuantityBasis,
         createdAt: now,

@@ -11,6 +11,7 @@ import type { MutationCtx, QueryCtx } from "../_generated/server";
 export function toDocumentLineItem(
   row: Doc<"invoiceLineItems">,
   billableOccurrenceCount: number,
+  packageExclusionLabels?: string[],
 ) {
   const basis = row.equipmentQuantityBasis;
   const isEquipment = isEquipmentSection(row.section);
@@ -33,11 +34,32 @@ export function toDocumentLineItem(
         : `~${qty} per occurrence`;
   }
 
+  let detailNote: string | undefined;
+  if (
+    row.section === "equipment_package" &&
+    (row.packageOriginalRateUsd != null ||
+      row.packageExclusionDiscountUsd != null ||
+      (packageExclusionLabels && packageExclusionLabels.length > 0))
+  ) {
+    const parts: string[] = [];
+    if (row.packageOriginalRateUsd != null) {
+      parts.push(`Package price $${row.packageOriginalRateUsd.toFixed(2)}`);
+    }
+    if (packageExclusionLabels?.length) {
+      parts.push(`Removed: ${packageExclusionLabels.join(", ")}`);
+    }
+    if (row.packageExclusionDiscountUsd != null && row.packageExclusionDiscountUsd > 0) {
+      parts.push(`Exclusion discount −$${row.packageExclusionDiscountUsd.toFixed(2)}`);
+    }
+    detailNote = parts.join(" · ");
+  }
+
   return {
     id: row._id,
     section: row.section,
     provider: row.provider,
     label: row.label,
+    detailNote,
     quantity: billingQuantity,
     quantityDetail,
     rateUsd: row.rateUsd,
@@ -52,6 +74,20 @@ export async function buildInvoiceDocumentData(
   digitalQuoteUrl?: string,
 ): Promise<InvoiceDocumentData> {
   const billableOccurrenceCount = await resolveBillableOccurrenceCount(ctx, invoice._id);
+  const excludedTypeIds = Array.from(
+    new Set(lineItems.flatMap((row) => row.excludedTypeIds ?? [])),
+  );
+  const excludedTypes = await Promise.all(excludedTypeIds.map((id) => ctx.db.get(id)));
+  const excludedLabelById = new Map(
+    excludedTypeIds.map((id, index) => {
+      const type = excludedTypes[index];
+      const label = type
+        ? `${type.name}${type.model ? ` · ${type.model}` : ""}`
+        : String(id);
+      return [id, label] as const;
+    }),
+  );
+
   return {
     invoice: {
       invoiceNumber: invoice.invoiceNumber,
@@ -75,6 +111,12 @@ export async function buildInvoiceDocumentData(
       totalUsd: invoice.totalUsd,
       notes: invoice.notes,
     },
-    lineItems: lineItems.map((row) => toDocumentLineItem(row, billableOccurrenceCount)),
+    lineItems: lineItems.map((row) =>
+      toDocumentLineItem(
+        row,
+        billableOccurrenceCount,
+        row.excludedTypeIds?.map((id) => excludedLabelById.get(id) ?? String(id)),
+      ),
+    ),
   };
 }

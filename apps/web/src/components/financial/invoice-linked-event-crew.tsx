@@ -7,6 +7,7 @@ import { api, type Id } from "@/lib/convex-api";
 import { EventScheduleCrewAssignPanel } from "@/components/events/event-availability-summary";
 import { EventTimelineScheduler, type TimelineBlockDraft } from "@/components/events/event-timeline-scheduler";
 import { UserSelect, type UserSelectOption } from "@/components/users/user-select";
+import { buildUserSelectDescription } from "@/lib/user-select-description";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DateTimePicker } from "@/components/ui/date-time-picker";
@@ -21,6 +22,7 @@ import {
   resolveShiftScheduleBlockId,
   shiftBelongsToBlock,
   shiftHours,
+  syncShiftsToBlockTimes,
   timelineBlocksFromSaved,
   toLocalDateTimeInput,
   withStableBlockRefs,
@@ -123,7 +125,7 @@ export function InvoiceLinkedEventCrewSection({
     const base = (managerList ?? []).map((entry) => ({
       value: entry.id,
       label: entry.name,
-      description: [entry.role, entry.email].filter(Boolean).join(" • "),
+      description: buildUserSelectDescription(entry),
       avatarUrl: entry.image,
       keywords: `${entry.role ?? ""} ${entry.email ?? ""}`,
     }));
@@ -465,7 +467,11 @@ export function InvoiceLinkedEventCrewSection({
         <EventTimelineScheduler
           dayCount={dayCount}
           blocks={blocks}
-          onChange={(next) => setBlocks(stableBlocks(next))}
+          onChange={(next) => {
+            const nextBlocks = stableBlocks(next);
+            setBlocks(nextBlocks);
+            setShifts((prev) => syncShiftsToBlockTimes(prev, nextBlocks));
+          }}
           quickAddLabel={quickAddLabel}
           quickAddDisabled={quickAddDisabled}
           quickAddDisabledReason={quickAddDisabledReason}

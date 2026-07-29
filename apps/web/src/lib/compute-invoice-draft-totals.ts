@@ -19,6 +19,18 @@ export type DraftLineItem = {
   equipmentQuantityBasis?: EquipmentQuantityBasis;
   packageId?: string;
   typeId?: string;
+  excludedTypeIds?: string[];
+  packageExclusionDiscountUsd?: number;
+};
+
+export type DraftPackageItem = {
+  typeId: string;
+  quantity: number;
+  type?: {
+    subsidizedRentalPriceUsd?: number;
+    nonSubsidizedRentalPriceUsd?: number;
+    rentalPriceUsd?: number;
+  } | null;
 };
 
 export type ComputeInvoiceDraftTotalsInput = {
@@ -31,6 +43,7 @@ export type ComputeInvoiceDraftTotalsInput = {
     subsidizedPackagePriceUsd?: number;
     nonSubsidizedPackagePriceUsd?: number;
     packagePriceCents: number;
+    items?: DraftPackageItem[];
   }>;
   types: Array<{
     _id: string;
@@ -72,6 +85,33 @@ function typeRate(
   return type.nonSubsidizedRentalPriceUsd ?? type.rentalPriceUsd ?? 0;
 }
 
+function itemTypeRate(
+  type: DraftPackageItem["type"],
+  mode: "subsidized" | "nonSubsidized",
+) {
+  if (!type) return 0;
+  if (mode === "subsidized") {
+    return type.subsidizedRentalPriceUsd ?? type.nonSubsidizedRentalPriceUsd ?? type.rentalPriceUsd ?? 0;
+  }
+  return type.nonSubsidizedRentalPriceUsd ?? type.rentalPriceUsd ?? 0;
+}
+
+/** Sum of (excluded BOM type qty × current type rental rate); mirrors the backend suggestion. */
+export function computePackageExclusionSuggestedDiscount(
+  items: DraftPackageItem[] | undefined,
+  excludedTypeIds: string[] | undefined,
+  mode: "subsidized" | "nonSubsidized",
+): number {
+  if (!items?.length || !excludedTypeIds?.length) return 0;
+  const excluded = new Set(excludedTypeIds);
+  let total = 0;
+  for (const item of items) {
+    if (!excluded.has(item.typeId)) continue;
+    total += item.quantity * itemTypeRate(item.type, mode);
+  }
+  return Number(total.toFixed(2));
+}
+
 function billingQuantity(
   quantity: number,
   section: DraftLineItem["section"],
@@ -99,7 +139,16 @@ export function computeInvoiceDraftTotals(input: ComputeInvoiceDraftTotalsInput)
     let rate = line.rateUsd;
     if (line.section === "equipment_package") {
       const pkg = input.packages.find((row) => row._id === line.packageId);
-      if (pkg) rate = packageRate(pkg, input.equipmentPricingMode);
+      if (pkg) {
+        const originalRate = packageRate(pkg, input.equipmentPricingMode);
+        const suggestedDiscount = computePackageExclusionSuggestedDiscount(
+          pkg.items,
+          line.excludedTypeIds,
+          input.equipmentPricingMode,
+        );
+        const discount = line.packageExclusionDiscountUsd ?? suggestedDiscount;
+        rate = Math.max(0, originalRate - Math.max(0, discount));
+      }
     }
     if (line.section === "equipment_type") {
       const type = input.types.find((row) => row._id === line.typeId);

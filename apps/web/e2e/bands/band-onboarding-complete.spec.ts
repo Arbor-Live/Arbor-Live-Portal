@@ -48,6 +48,10 @@ test.describe("band onboarding wizard", () => {
     await page.getByLabel("Bio").fill("Seeded by the Playwright band onboarding spec.");
     await next(page);
 
+    // Passkey is optional — skip enrollment in CI.
+    await expect(page.getByText("Secure your account").first()).toBeVisible({ timeout: 20_000 });
+    await page.getByRole("button", { name: "Add later", exact: true }).click();
+
     // Hero photo is optional — skip the upload (no R2 in CI).
     await expect(page.getByText("Add a hero photo").first()).toBeVisible({ timeout: 20_000 });
     await next(page);

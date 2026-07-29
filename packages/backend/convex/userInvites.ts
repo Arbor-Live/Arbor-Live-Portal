@@ -43,6 +43,7 @@ async function ensureUserProfileDefaults(
     disciplines?: UserDiscipline[];
     defaultOrganizationId?: string;
     payrollMethod?: PayrollMethod;
+    gradYear?: number;
   },
 ) {
   const now = Date.now();
@@ -57,6 +58,7 @@ async function ensureUserProfileDefaults(
       disciplines: args.disciplines ?? existing.disciplines ?? [],
       defaultOrganizationId: args.defaultOrganizationId ?? existing.defaultOrganizationId,
       payrollMethod: args.payrollMethod ?? existing.payrollMethod,
+      gradYear: args.gradYear ?? existing.gradYear,
       updatedAt: now,
     });
     return;
@@ -68,6 +70,7 @@ async function ensureUserProfileDefaults(
     disciplines: args.disciplines ?? [],
     defaultOrganizationId: args.defaultOrganizationId,
     payrollMethod: args.payrollMethod,
+    gradYear: args.gradYear,
     createdAt: now,
     updatedAt: now,
   });
@@ -241,6 +244,7 @@ export const acceptInviteWithPassword = mutation({
       disciplines: membership.disciplines,
       defaultOrganizationId: pending.organizationId,
       payrollMethod: pending.payrollMethod,
+      gradYear: pending.gradYear,
     });
     await upsertOrgMembership(ctx, {
       userId,

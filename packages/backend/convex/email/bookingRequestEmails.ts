@@ -116,11 +116,18 @@ export async function scheduleBookingQuoteReadyEmail(
   const subjectContext = eventName ?? requestNumber;
   const managerEmail = invoice.managerEmail?.trim();
   const replyTo = buildQuoteReadyReplyTo(managerEmail);
+  const cc = Array.from(
+    new Set(
+      [managerEmail, ARBOR_CONTACT_EMAIL]
+        .map((email) => email?.trim().toLowerCase())
+        .filter((email): email is string => Boolean(email)),
+    ),
+  );
 
   await enqueueEmail(ctx, {
     template: "booking_quote_ready",
     to: request.email,
-    cc: managerEmail ? [managerEmail] : undefined,
+    cc: cc.length > 0 ? cc : undefined,
     replyTo,
     subject: subjectForTemplate("booking_quote_ready", subjectContext),
     idempotencyKey: `booking_quote_ready:${invoice._id}:${readyAt}`,

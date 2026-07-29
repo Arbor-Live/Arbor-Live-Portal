@@ -154,6 +154,8 @@ export const listPublicCrew = query({
         membership.disciplines,
         primaryVertical,
       );
+      if (profile.gradYear) secondaryTags.push(`Class of ${profile.gradYear}`);
+      if (profile.pronouns?.trim()) secondaryTags.push(profile.pronouns.trim());
       const member = {
         id: profile.userId,
         name,
@@ -225,7 +227,10 @@ export const listPublicArtists = query({
     const orgNameById = new Map(organizations.map((org) => [getRecordId(org), org.name ?? ""]));
 
     const listed = profiles.filter(
-      (profile) => profile.publicListing === true && profile.publicSlug?.trim(),
+      (profile) =>
+        profile.publicListing === true &&
+        profile.publicSlug?.trim() &&
+        profile.status !== "archived",
     );
     const rows = await Promise.all(
       listed.map(async (profile) => ({
@@ -253,7 +258,12 @@ export const getPublicArtistBySlug = query({
       .query("organizationProfiles")
       .withIndex("by_publicSlug", (q) => q.eq("publicSlug", slug))
       .unique();
-    if (!profile || profile.organizationType !== "band" || profile.publicListing !== true) {
+    if (
+      !profile ||
+      profile.organizationType !== "band" ||
+      profile.publicListing !== true ||
+      profile.status === "archived"
+    ) {
       return null;
     }
 

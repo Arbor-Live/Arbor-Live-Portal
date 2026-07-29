@@ -47,6 +47,10 @@ test.describe("crew onboarding wizard", () => {
     await page.getByLabel("Phone number").fill("6505550144");
     await next(page);
 
+    // Passkey is optional — skip enrollment in CI.
+    await expect(page.getByText("Secure your account").first()).toBeVisible({ timeout: 20_000 });
+    await page.getByRole("button", { name: "Add later", exact: true }).click();
+
     // WhatsApp
     await acknowledge(page, /joined the Arbor WhatsApp group/i);
     await next(page);

@@ -22,6 +22,12 @@ crons.cron(
 );
 
 crons.daily(
+  "post event album reminders",
+  { hourUTC: 17, minuteUTC: 0 },
+  internal.email.postEventAlbumReminders.run,
+);
+
+crons.daily(
   "promote ended band payments",
   { hourUTC: 18, minuteUTC: 0 },
   internal.bandPayments.promoteEndedPayments,

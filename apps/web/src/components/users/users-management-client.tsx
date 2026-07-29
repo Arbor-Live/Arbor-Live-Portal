@@ -184,7 +184,10 @@ export function UsersManagementClient({
   view?: "all" | "access" | "organizations";
 }) {
   const organizations = useQuery(api.users.listOrganizationsAdmin, {});
-  const bandOrganizations = useQuery(api.users.listBandOrganizationsAdmin, {});
+  const [showArchivedBands, setShowArchivedBands] = useState(false);
+  const bandOrganizations = useQuery(api.users.listBandOrganizationsAdmin, {
+    includeArchived: showArchivedBands,
+  });
   const [selectedOrganizationId, setSelectedOrganizationId] = useState("");
   const [inviteStatus, setInviteStatus] = useState<"all" | "pending" | "accepted" | "expired" | "cancelled">(
     "pending",
@@ -221,6 +224,9 @@ export function UsersManagementClient({
   const sendPasswordReset = useMutation(api.users.sendPasswordResetAdmin);
   const setUserAccess = useMutation(api.users.setUserAccessAdmin);
   const backfillDefaults = useMutation(api.users.backfillUserAdminDefaults);
+  const archiveBandOrganization = useMutation(api.users.archiveBandOrganizationAdmin);
+  const unarchiveBandOrganization = useMutation(api.users.unarchiveBandOrganizationAdmin);
+  const deleteArchivedBandOrganization = useMutation(api.users.deleteArchivedBandOrganizationAdmin);
 
   const [organizationName, setOrganizationName] = useState("");
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
@@ -320,6 +326,51 @@ export function UsersManagementClient({
     }
   }
 
+  async function onArchiveBandOrganization(org: BandOrgRow) {
+    if (
+      !window.confirm(
+        `Archive ${org.displayName || org.name}? Members with no other active organization will lose access.`,
+      )
+    ) {
+      return;
+    }
+    try {
+      const result = await archiveBandOrganization({ organizationId: org.organizationId });
+      setMessage(
+        result.deactivatedUserIds.length > 0
+          ? `Archived ${org.displayName || org.name}. Deactivated ${result.deactivatedUserIds.length} user(s) with no remaining access.`
+          : `Archived ${org.displayName || org.name}.`,
+      );
+    } catch (error) {
+      setMessage(getConvexErrorMessage(error));
+    }
+  }
+
+  async function onUnarchiveBandOrganization(org: BandOrgRow) {
+    try {
+      await unarchiveBandOrganization({ organizationId: org.organizationId });
+      setMessage(`Restored ${org.displayName || org.name} from archive.`);
+    } catch (error) {
+      setMessage(getConvexErrorMessage(error));
+    }
+  }
+
+  async function onDeleteArchivedBandOrganization(org: BandOrgRow) {
+    if (
+      !window.confirm(
+        `Permanently delete ${org.displayName || org.name}? This removes memberships, onboarding, and event participation records. This cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+    try {
+      await deleteArchivedBandOrganization({ organizationId: org.organizationId });
+      setMessage(`Deleted ${org.displayName || org.name}.`);
+    } catch (error) {
+      setMessage(getConvexErrorMessage(error));
+    }
+  }
+
   const onBackfillDefaults = async () => {
     try {
       await backfillDefaults({});
@@ -336,8 +387,16 @@ export function UsersManagementClient({
 
       {showOrganizations ? (
         <Card>
-          <CardHeader>
+          <CardHeader className="flex-row items-center justify-between gap-2">
             <CardTitle>Band Organizations (Admin Birds-Eye View)</CardTitle>
+            <label className="flex items-center gap-2 text-xs font-normal text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={showArchivedBands}
+                onChange={(e) => setShowArchivedBands(e.target.checked)}
+              />
+              Show archived
+            </label>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="overflow-x-auto rounded-md border">
@@ -362,6 +421,9 @@ export function UsersManagementClient({
                           [org.organizationId]: !prev[org.organizationId],
                         }))
                       }
+                      onArchive={() => void onArchiveBandOrganization(org)}
+                      onUnarchive={() => void onUnarchiveBandOrganization(org)}
+                      onDeleteArchived={() => void onDeleteArchivedBandOrganization(org)}
                     />
                   ))}
                 </tbody>
@@ -1143,11 +1205,18 @@ function BandOrgAdminRow({
   org,
   expanded,
   onToggleExpanded,
+  onArchive,
+  onUnarchive,
+  onDeleteArchived,
 }: {
   org: BandOrgRow;
   expanded: boolean;
   onToggleExpanded: () => void;
+  onArchive: () => void;
+  onUnarchive: () => void;
+  onDeleteArchived: () => void;
 }) {
+  const isArchived = org.status === "archived";
   const updateBandOrganizationProfileAdmin = useMutation(api.users.updateBandOrganizationProfileAdmin);
 
   const form = useConvexForm<BandOrgProfileFormValues>({
@@ -1209,7 +1278,14 @@ function BandOrgAdminRow({
     <>
       <tr className="border-b align-top">
         <td className="px-3 py-2">
-          <p className="font-medium">{org.name}</p>
+          <p className="font-medium">
+            {org.name}
+            {isArchived ? (
+              <span className="ml-2 rounded-full border border-amber-500/30 bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-700">
+                Archived
+              </span>
+            ) : null}
+          </p>
           <p className="text-xs text-muted-foreground">/{org.slug}</p>
         </td>
         <td className="px-3 py-2">
@@ -1233,7 +1309,7 @@ function BandOrgAdminRow({
               <Button
                 type="button"
                 size="sm"
-                disabled={form.saveStatus === "saving"}
+                disabled={form.saveStatus === "saving" || isArchived}
                 onClick={() => void form.handleSubmit(onSave)()}
               >
                 Save
@@ -1252,6 +1328,20 @@ function BandOrgAdminRow({
                 <SelectItem value="toggle_details">{expanded ? "Hide details" : "Show details"}</SelectItem>
               </SelectContent>
             </Select>
+            {isArchived ? (
+              <>
+                <Button type="button" size="sm" variant="outline" onClick={onUnarchive}>
+                  Restore
+                </Button>
+                <Button type="button" size="sm" variant="destructive" onClick={onDeleteArchived}>
+                  Delete permanently
+                </Button>
+              </>
+            ) : (
+              <Button type="button" size="sm" variant="outline" onClick={onArchive}>
+                Archive
+              </Button>
+            )}
             <SaveStatusIcon saveStatus={form.saveStatus} saveError={form.saveError} />
           </div>
         </td>

@@ -163,7 +163,12 @@ function SectionTable({
               style={index < rows.length - 1 ? tableRowStyle : tableLastRowStyle}
             >
               {showProvider ? <td style={tdStyle}>{row.provider || "—"}</td> : null}
-              <td style={tdStyle}>{row.label}</td>
+              <td style={tdStyle}>
+                {row.label}
+                {row.detailNote ? (
+                  <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: 2 }}>{row.detailNote}</div>
+                ) : null}
+              </td>
               <td style={tdRightStyle}>
                 {row.quantity}
                 {row.quantityDetail ? (

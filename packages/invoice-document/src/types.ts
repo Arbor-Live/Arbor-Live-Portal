@@ -12,6 +12,8 @@ export type InvoiceLineItem = {
   section: InvoiceLineItemSection;
   provider?: string;
   label: string;
+  /** Extra detail under the label (e.g. package exclusions). */
+  detailNote?: string;
   quantity: number;
   quantityDetail?: string;
   rateUsd: number;

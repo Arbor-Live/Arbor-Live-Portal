@@ -29,6 +29,8 @@ import {
   renderCrewTraineeIntroEmail,
   renderRentalOutboundPackedEmail,
   renderRentalReturnProcessedEmail,
+  renderPostEventAlbumEmail,
+  renderEventCommentMentionEmail,
 } from "@arbor/email/render";
 import type {
   BookingQuoteReadyEmailProps,
@@ -60,6 +62,8 @@ import type {
   CrewTraineeIntroEmailProps,
   RentalOutboundPackedEmailProps,
   RentalReturnProcessedEmailProps,
+  PostEventAlbumEmailProps,
+  EventCommentMentionEmailProps,
 } from "@arbor/email/types";
 import type { EmailTemplate } from "./constants";
 
@@ -129,5 +133,9 @@ export async function renderEmailHtml(template: EmailTemplate, payload: unknown)
       return renderRentalOutboundPackedEmail(payload as RentalOutboundPackedEmailProps);
     case "rental_return_processed":
       return renderRentalReturnProcessedEmail(payload as RentalReturnProcessedEmailProps);
+    case "post_event_album":
+      return renderPostEventAlbumEmail(payload as PostEventAlbumEmailProps);
+    case "event_comment_mention":
+      return renderEventCommentMentionEmail(payload as EventCommentMentionEmailProps);
   }
 }

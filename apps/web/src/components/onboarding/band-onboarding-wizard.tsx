@@ -17,6 +17,7 @@ import { UserSelect } from "@/components/users/user-select";
 import { BandPayeePayoutMethodField } from "@/components/bands/band-payee-payout-method-field";
 import {
   OnboardingAckCheckbox,
+  OnboardingPasskeyStep,
   OnboardingSkipButton,
   OnboardingTextarea,
 } from "@/components/onboarding/onboarding-ui";
@@ -35,6 +36,7 @@ const spring = { type: "spring" as const, stiffness: 380, damping: 36 };
 type StepId =
   | "welcome"
   | "identity"
+  | "passkey"
   | "hero"
   | "socials"
   | "members"
@@ -45,6 +47,7 @@ type StepId =
 const STEP_ORDER: StepId[] = [
   "welcome",
   "identity",
+  "passkey",
   "hero",
   "socials",
   "members",
@@ -60,6 +63,7 @@ const PROGRESS_STEPS: StepId[] = STEP_ORDER.filter(
 const STEP_HEADLINES: Record<StepId, string> = {
   welcome: "Welcome to Arbor Live",
   identity: "Tell us about your band",
+  passkey: "Secure your account",
   hero: "Add a hero photo",
   socials: "Where can people find you?",
   members: "Who's in the band?",
@@ -150,6 +154,8 @@ function firstIncompleteStepIndex(onboarding: {
       return i;
     }
     if (id === "thankYou") return i;
+    // No persisted completion flag — never force a returning user back to it.
+    if (id === "passkey") continue;
     if (id === "identity" && done.identity) continue;
     if (id === "hero" && done.hero) continue;
     if (id === "socials" && done.socials) continue;
@@ -182,6 +188,7 @@ export function BandOnboardingWizard() {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [inviteConfirmation, setInviteConfirmation] = useState<string | null>(null);
+  const [hasAddedPasskey, setHasAddedPasskey] = useState(false);
   /** Emails invited this session (beyond server pending invites). */
   const [sessionSentEmails, setSessionSentEmails] = useState<string[]>([]);
   const hydratedRef = useRef(false);
@@ -595,7 +602,15 @@ export function BandOnboardingWizard() {
             <RequestWizardNav
               showBack={stepIndex > 0}
               showNext
-              nextLabel={currentStep === "payment" ? "Finish setup" : "Next"}
+              nextLabel={
+                currentStep === "payment"
+                  ? "Finish setup"
+                  : currentStep === "passkey"
+                    ? hasAddedPasskey
+                      ? "Continue"
+                      : "Add later"
+                    : "Next"
+              }
               isSubmitting={isSubmitting}
               onBack={goBack}
               onNext={() => void goNext()}
@@ -666,6 +681,10 @@ export function BandOnboardingWizard() {
                   </div>
                   {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
                 </div>
+              ) : null}
+
+              {currentStep === "passkey" ? (
+                <OnboardingPasskeyStep onAdded={() => setHasAddedPasskey(true)} />
               ) : null}
 
               {currentStep === "hero" ? (

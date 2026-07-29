@@ -60,6 +60,7 @@ export async function upsertPendingInviteToken(
     rateMode?: "normal" | "lead" | "custom";
     customHourlyRateUsd?: number;
     payrollMethod?: "stanford" | "external";
+    gradYear?: number;
     expiresAt: number;
   },
 ) {
@@ -83,6 +84,7 @@ export async function upsertPendingInviteToken(
     rateMode: args.rateMode,
     customHourlyRateUsd: args.customHourlyRateUsd,
     payrollMethod: args.payrollMethod,
+    gradYear: args.gradYear,
     expiresAt: args.expiresAt,
     createdAt: now,
   };
@@ -112,6 +114,7 @@ export async function scheduleUserInviteEmail(
     rateMode?: "normal" | "lead" | "custom";
     customHourlyRateUsd?: number;
     payrollMethod?: "stanford" | "external";
+    gradYear?: number;
     isExistingUser: boolean;
     resendKey?: string;
   },
@@ -143,6 +146,7 @@ export async function scheduleUserInviteEmail(
       rateMode: args.rateMode,
       customHourlyRateUsd: args.customHourlyRateUsd,
       payrollMethod: args.payrollMethod,
+      gradYear: args.gradYear,
       expiresAt: args.expiresAt,
     });
     inviteUrl = inviteAcceptUrl(token);

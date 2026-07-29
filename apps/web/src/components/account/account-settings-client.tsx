@@ -76,6 +76,8 @@ export function AccountSettingsClient() {
       name: "",
       phone: "",
       title: "",
+      pronouns: "",
+      gradYear: "",
       publicCrewDescription: "",
       calendarInviteEmail: "",
     },
@@ -112,6 +114,8 @@ export function AccountSettingsClient() {
       name: account.name,
       phone: account.phone ?? "",
       title: account.title ?? "",
+      pronouns: account.pronouns ?? "",
+      gradYear: account.gradYear != null ? String(account.gradYear) : "",
       publicCrewDescription: account.publicCrewDescription ?? "",
       calendarInviteEmail: account.calendarInviteEmail ?? "",
     });
@@ -134,6 +138,8 @@ export function AccountSettingsClient() {
     await updateMyProfileDetails({
       phone: values.phone?.trim() || undefined,
       title: values.title?.trim() || undefined,
+      pronouns: values.pronouns?.trim() || undefined,
+      gradYear: values.gradYear ? Number(values.gradYear) : undefined,
       publicCrewDescription: values.publicCrewDescription?.trim() || undefined,
       calendarInviteEmail: values.calendarInviteEmail?.trim() || undefined,
     });
@@ -331,6 +337,13 @@ export function AccountSettingsClient() {
               <TextFormField name="name" label="Display name" />
               <TextFormField name="title" label="Job title" />
               <TextFormField name="phone" label="Phone" type="tel" />
+              <TextFormField name="pronouns" label="Pronouns" placeholder="she/her" />
+              <TextFormField
+                name="gradYear"
+                label="Graduation year"
+                placeholder="2027"
+                description="Shown on the public crew page when listed."
+              />
               <TextareaFormField
                 name="publicCrewDescription"
                 label="Public crew description"

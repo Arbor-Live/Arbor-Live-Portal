@@ -1,8 +1,9 @@
 import { v } from "convex/values";
+import { pacificDateAndTimeToMs } from "@arbor/format";
 import { mutation, query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
-import { getUserId, requireArborInternalContext, requireAuth } from "./lib/auth";
+import { getUserId, requireArborInternalContext, requireAuth, findAuthUsersByIds } from "./lib/auth";
 import { normalizeEventStatus } from "./lib/eventStatus";
 import { createDraftInvoiceFromBookingRequest, mapGroupTypeToSponsor, mapSponsorTypeToGroupType, provisionBillingProfileFromRequest } from "./lib/bookingRequestQuote";
 import { searchHostOrganizations } from "./lib/hostOrgIdentity";
@@ -33,6 +34,47 @@ import {
   bookingDeclineReasonCodeValue,
   recordEventRequestStatusTransition,
 } from "./lib/statusTransitions";
+
+const BOOKING_REQUEST_SETTINGS_KEY = "default";
+
+function authUserDisplayName(
+  userByKey: Map<string, { name?: string | null; email?: string | null }>,
+  userId: string | undefined,
+) {
+  if (!userId) return null;
+  const user = userByKey.get(userId);
+  if (!user) return null;
+  return user.name?.trim() || user.email?.trim() || null;
+}
+
+async function getOrCreateBookingRequestSettings(ctx: MutationCtx) {
+  const existing = await ctx.db
+    .query("bookingRequestSettings")
+    .withIndex("by_key", (q) => q.eq("key", BOOKING_REQUEST_SETTINGS_KEY))
+    .unique();
+  if (existing) return existing;
+  const now = Date.now();
+  const id = await ctx.db.insert("bookingRequestSettings", {
+    key: BOOKING_REQUEST_SETTINGS_KEY,
+    roundRobinUserIds: [],
+    roundRobinCursorIndex: 0,
+    updatedAt: now,
+  });
+  return (await ctx.db.get(id))!;
+}
+
+async function assignNextRoundRobinUser(ctx: MutationCtx): Promise<string | undefined> {
+  const settings = await getOrCreateBookingRequestSettings(ctx);
+  const pool = settings.roundRobinUserIds.filter(Boolean);
+  if (pool.length === 0) return undefined;
+  const index = ((settings.roundRobinCursorIndex % pool.length) + pool.length) % pool.length;
+  const assigneeUserId = pool[index]!;
+  await ctx.db.patch(settings._id, {
+    roundRobinCursorIndex: (index + 1) % pool.length,
+    updatedAt: Date.now(),
+  });
+  return assigneeUserId;
+}
 
 const eventRequestStatusValue = v.union(
   v.literal("submitted"),
@@ -185,20 +227,19 @@ function mapServicesToTeams(
 }
 
 function inferEventType(crewOrRental: string | undefined, servicesNeeded: string[]) {
+  const normalized = (crewOrRental ?? "").trim().toLowerCase();
+  const isCrewed = normalized === "crewed" || normalized.startsWith("crewed ");
+  if (isCrewed) return "Crewed Event";
   const hasSoundOrLighting = servicesNeeded.some((s) => s === "Sound" || s === "Lighting");
-  if (crewOrRental === "Crewed" && hasSoundOrLighting) return "Rental with Crew";
-  if (crewOrRental === "Crewed") return "Crewed Event";
   if (hasSoundOrLighting) return "Dry Rental";
   return "Services Only";
 }
 
 function defaultPlaceholderTimes() {
-  const start = new Date();
-  start.setDate(start.getDate() + 30);
-  start.setHours(18, 0, 0, 0);
-  const end = new Date(start);
-  end.setHours(22, 0, 0, 0);
-  return { startAt: start.getTime(), endAt: end.getTime() };
+  const dateKey = toPacificDateKey(Date.now() + 30 * 24 * 60 * 60 * 1000);
+  const startAt = pacificDateAndTimeToMs(dateKey, "18:00") ?? Date.now() + 30 * 24 * 60 * 60 * 1000;
+  const endAt = pacificDateAndTimeToMs(dateKey, "22:00") ?? startAt + 4 * 60 * 60 * 1000;
+  return { startAt, endAt };
 }
 
 function buildDayEventPlans(
@@ -220,6 +261,94 @@ function buildDayEventPlans(
 function titleForDayEvent(baseTitle: string, dateKey: string, multiDay: boolean) {
   if (!multiDay) return baseTitle;
   return `${baseTitle} — ${formatPacificShortDate(dateKey)}`;
+}
+
+async function seedScheduleBlocksForConvertedEvent(
+  ctx: MutationCtx,
+  args: {
+    eventId: Id<"events">;
+    eventType: string;
+    dayPlan: DayEventPlan;
+    setupAtMs?: number;
+    now: number;
+  },
+) {
+  const { eventId, eventType, dayPlan, setupAtMs, now } = args;
+  const showStart = dayPlan.startAt;
+  const showEnd = dayPlan.endAt;
+  const blocks: Array<{
+    blockType: "setup" | "show" | "strike" | "custom";
+    label: string;
+    dayIndex: number;
+    startsAt: number;
+    endsAt: number;
+  }> = [];
+
+  if (eventType === "Crewed Event") {
+    const setupStart = setupAtMs && setupAtMs < showStart ? setupAtMs : showStart - 2 * 60 * 60 * 1000;
+    blocks.push({
+      blockType: "setup",
+      label: "Setup",
+      dayIndex: 0,
+      startsAt: setupStart,
+      endsAt: showStart,
+    });
+    blocks.push({
+      blockType: "show",
+      label: "Show",
+      dayIndex: 0,
+      startsAt: showStart,
+      endsAt: showEnd,
+    });
+    const strikeEnd = showEnd + 60 * 60 * 1000;
+    blocks.push({
+      blockType: "strike",
+      label: "Strike",
+      dayIndex: toPacificDateKey(showEnd) === toPacificDateKey(showStart) ? 0 : 1,
+      startsAt: showEnd,
+      endsAt: strikeEnd,
+    });
+  } else if (eventType === "Dry Rental" || eventType === "Rental with Crew") {
+    const deliveryStart = setupAtMs && setupAtMs < showStart ? setupAtMs : showStart - 60 * 60 * 1000;
+    blocks.push({
+      blockType: eventType === "Dry Rental" ? "custom" : "setup",
+      label: eventType === "Dry Rental" ? "Delivery" : "Setup",
+      dayIndex: 0,
+      startsAt: deliveryStart,
+      endsAt: showStart,
+    });
+    if (eventType === "Rental with Crew") {
+      blocks.push({
+        blockType: "strike",
+        label: "Strike",
+        dayIndex: 0,
+        startsAt: showEnd,
+        endsAt: showEnd + 60 * 60 * 1000,
+      });
+    } else {
+      blocks.push({
+        blockType: "custom",
+        label: "Return",
+        dayIndex: 0,
+        startsAt: showEnd,
+        endsAt: showEnd + 60 * 60 * 1000,
+      });
+    }
+  }
+
+  for (const block of blocks) {
+    if (block.endsAt <= block.startsAt) continue;
+    await ctx.db.insert("eventScheduleBlocks", {
+      eventId,
+      blockType: block.blockType,
+      label: block.label,
+      dayIndex: block.dayIndex,
+      startsAt: block.startsAt,
+      endsAt: block.endsAt,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
 }
 
 // Public (unauthenticated) lookup used by the booking wizard. Deliberately
@@ -652,6 +781,7 @@ export const submitPublic = mutation({
       existingEquipment: trimOptional(args.existingEquipment),
       lightingPreference: trimOptional(args.lightingPreference),
       additionalNotes: trimOptional(args.additionalNotes),
+      assigneeUserId: await assignNextRoundRobinUser(ctx),
       submittedAt: now,
       createdAt: now,
       updatedAt: now,
@@ -669,6 +799,7 @@ export const submitPublic = mutation({
 export const list = query({
   args: {
     status: v.optional(eventRequestStatusValue),
+    includeTerminal: v.optional(v.boolean()),
   },
   returns: v.array(
     v.object({
@@ -688,6 +819,8 @@ export const list = query({
       expectedTurnout: v.number(),
       eventCategory: v.string(),
       submittedAt: v.number(),
+      assigneeUserId: v.optional(v.string()),
+      assigneeName: v.union(v.string(), v.null()),
       convertedEventId: v.optional(v.id("events")),
       convertedEventIds: v.optional(v.array(v.id("events"))),
     }),
@@ -695,13 +828,34 @@ export const list = query({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
-    const rows = args.status
-      ? await ctx.db
-          .query("eventRequests")
-          .withIndex("by_status_and_submittedAt", (q) => q.eq("status", args.status!))
-          .order("desc")
-          .take(100)
-      : await ctx.db.query("eventRequests").order("desc").take(100);
+    const includeTerminal = args.includeTerminal === true;
+    let rows;
+    if (args.status) {
+      rows = await ctx.db
+        .query("eventRequests")
+        .withIndex("by_status_and_submittedAt", (q) => q.eq("status", args.status!))
+        .order("asc")
+        .take(100);
+    } else if (!includeTerminal) {
+      const submitted = await ctx.db
+        .query("eventRequests")
+        .withIndex("by_status_and_submittedAt", (q) => q.eq("status", "submitted"))
+        .order("asc")
+        .take(100);
+      const inReview = await ctx.db
+        .query("eventRequests")
+        .withIndex("by_status_and_submittedAt", (q) => q.eq("status", "in_review"))
+        .order("asc")
+        .take(100);
+      rows = [...submitted, ...inReview]
+        .sort((a, b) => a.submittedAt - b.submittedAt)
+        .slice(0, 100);
+    } else {
+      rows = await ctx.db.query("eventRequests").order("asc").take(100);
+      rows = [...rows].sort((a, b) => a.submittedAt - b.submittedAt);
+    }
+    const assigneeIds = rows.map((row) => row.assigneeUserId).filter(Boolean) as string[];
+    const userByKey = await findAuthUsersByIds(ctx, assigneeIds);
     return rows.map((row) => ({
       _id: row._id,
       _creationTime: row._creationTime,
@@ -719,9 +873,78 @@ export const list = query({
       expectedTurnout: row.expectedTurnout,
       eventCategory: row.eventCategory,
       submittedAt: row.submittedAt,
+      assigneeUserId: row.assigneeUserId,
+      assigneeName: authUserDisplayName(userByKey, row.assigneeUserId),
       convertedEventId: row.convertedEventId,
       convertedEventIds: row.convertedEventIds,
     }));
+  },
+});
+
+export const getBookingRequestSettings = query({
+  args: {},
+  returns: v.object({
+    roundRobinUserIds: v.array(v.string()),
+    roundRobinCursorIndex: v.number(),
+  }),
+  handler: async (ctx) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    const row = await ctx.db
+      .query("bookingRequestSettings")
+      .withIndex("by_key", (q) => q.eq("key", BOOKING_REQUEST_SETTINGS_KEY))
+      .unique();
+    return {
+      roundRobinUserIds: row?.roundRobinUserIds ?? [],
+      roundRobinCursorIndex: row?.roundRobinCursorIndex ?? 0,
+    };
+  },
+});
+
+export const updateBookingRequestSettings = mutation({
+  args: {
+    roundRobinUserIds: v.array(v.string()),
+  },
+  returns: v.object({ ok: v.literal(true) }),
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    const settings = await getOrCreateBookingRequestSettings(ctx);
+    const uniqueIds = [...new Set(args.roundRobinUserIds.map((id) => id.trim()).filter(Boolean))];
+    const cursor =
+      uniqueIds.length === 0
+        ? 0
+        : Math.min(settings.roundRobinCursorIndex, uniqueIds.length - 1);
+    await ctx.db.patch(settings._id, {
+      roundRobinUserIds: uniqueIds,
+      roundRobinCursorIndex: cursor,
+      updatedAt: Date.now(),
+    });
+    return { ok: true as const };
+  },
+});
+
+export const setAssignee = mutation({
+  args: {
+    id: v.id("eventRequests"),
+    assigneeUserId: v.optional(v.string()),
+  },
+  returns: v.object({ ok: v.literal(true) }),
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    const request = await ctx.db.get(args.id);
+    if (!request) throw new Error("Request not found.");
+    const assigneeUserId = args.assigneeUserId?.trim() || undefined;
+    if (assigneeUserId) {
+      const users = await findAuthUsersByIds(ctx, [assigneeUserId]);
+      if (!users.has(assigneeUserId)) throw new Error("Assignee user not found.");
+    }
+    await ctx.db.patch(args.id, {
+      assigneeUserId,
+      updatedAt: Date.now(),
+    });
+    return { ok: true as const };
   },
 });
 
@@ -779,6 +1002,8 @@ export const get = query({
       declinedAt: v.optional(v.number()),
       declineReasonCode: v.optional(bookingDeclineReasonCodeValue),
       declineReasonNote: v.optional(v.string()),
+      assigneeUserId: v.optional(v.string()),
+      assigneeName: v.union(v.string(), v.null()),
       submittedAt: v.number(),
       createdAt: v.number(),
       updatedAt: v.number(),
@@ -795,11 +1020,16 @@ export const get = query({
       title: event.title,
       startAt: event.startAt,
     }));
+    const userByKey = await findAuthUsersByIds(
+      ctx,
+      row.assigneeUserId ? [row.assigneeUserId] : [],
+    );
     return {
       ...row,
       requestNumber: row.requestNumber ?? `LEGACY-${row._id}`,
       publicToken: row.publicToken ?? "",
       convertedEvents,
+      assigneeName: authUserDisplayName(userByKey, row.assigneeUserId),
     };
   },
 });
@@ -1049,6 +1279,13 @@ export const convertToEvent = mutation({
         updatedAt: now,
       });
       eventIds.push(eventId);
+      await seedScheduleBlocksForConvertedEvent(ctx, {
+        eventId,
+        eventType,
+        dayPlan,
+        setupAtMs: request.setupAtMs,
+        now,
+      });
     }
 
     await ctx.db.patch(args.id, {

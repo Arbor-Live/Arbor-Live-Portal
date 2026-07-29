@@ -633,6 +633,12 @@ export default defineSchema({
     amountUsd: v.number(),
     packageId: v.optional(v.id("inventoryPackages")),
     typeId: v.optional(v.id("inventoryTypes")),
+    /** Types excluded from a package line (ala-carte discount applied). */
+    excludedTypeIds: v.optional(v.array(v.id("inventoryTypes"))),
+    /** Catalog package rate before exclusion discount. */
+    packageOriginalRateUsd: v.optional(v.number()),
+    /** Staff-editable discount for excluded package contents. */
+    packageExclusionDiscountUsd: v.optional(v.number()),
     feeDefinitionId: v.optional(v.id("invoiceFeeDefinitions")),
     equipmentQuantityBasis: v.optional(v.union(v.literal("total"), v.literal("per_occurrence"))),
     createdAt: v.number(),
@@ -818,6 +824,10 @@ export default defineSchema({
     phone: v.optional(v.string()),
     avatarStorageId: v.optional(v.id("_storage")),
     active: v.boolean(),
+    /** Free-text pronouns (e.g. she/her). */
+    pronouns: v.optional(v.string()),
+    /** Graduation year (e.g. 2027). */
+    gradYear: v.optional(v.number()),
     /** @deprecated Use verticals + disciplines. Kept for migration reads. */
     teams: v.optional(v.array(userTeamValue)),
     verticals: v.optional(v.array(userVerticalValue)),
@@ -1189,6 +1199,8 @@ export default defineSchema({
     rateMode: v.optional(userCompensationRateModeValue),
     customHourlyRateUsd: v.optional(v.number()),
     payrollMethod: v.optional(payrollMethodValue),
+    /** Arbor Live crew invites converted from a crew application, when present. */
+    gradYear: v.optional(v.number()),
     expiresAt: v.number(),
     createdAt: v.number(),
   })
@@ -1227,6 +1239,8 @@ export default defineSchema({
       v.literal("crew_trainee_intro"),
       v.literal("rental_outbound_packed"),
       v.literal("rental_return_processed"),
+      v.literal("post_event_album"),
+      v.literal("event_comment_mention"),
     ),
     status: v.union(v.literal("queued"), v.literal("sent"), v.literal("failed")),
     to: v.string(),
@@ -1325,6 +1339,8 @@ export default defineSchema({
       ),
     ),
     declineReasonNote: v.optional(v.string()),
+    /** Staff assignee (round-robin or manual). */
+    assigneeUserId: v.optional(v.string()),
     submittedAt: v.number(),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -1335,7 +1351,28 @@ export default defineSchema({
     .index("by_requestNumber", ["requestNumber"])
     .index("by_linkedInvoiceId", ["linkedInvoiceId"])
     .index("by_venueId", ["venueId"])
-    .index("by_invoiceGroupId", ["invoiceGroupId"]),
+    .index("by_invoiceGroupId", ["invoiceGroupId"])
+    .index("by_assigneeUserId_and_submittedAt", ["assigneeUserId", "submittedAt"]),
+
+  bookingRequestSettings: defineTable({
+    key: v.string(),
+    /** Arbor Live user ids in the booking-request round-robin pool. */
+    roundRobinUserIds: v.array(v.string()),
+    /** Index into roundRobinUserIds for the next assignment. */
+    roundRobinCursorIndex: v.number(),
+    updatedAt: v.number(),
+  }).index("by_key", ["key"]),
+
+  eventComments: defineTable({
+    eventId: v.id("events"),
+    authorUserId: v.string(),
+    body: v.string(),
+    mentionedUserIds: v.array(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_eventId_and_createdAt", ["eventId", "createdAt"])
+    .index("by_eventId", ["eventId"]),
 
   statusTransitions: defineTable({
     entityType: v.union(v.literal("eventRequest"), v.literal("event"), v.literal("invoice")),
@@ -1434,6 +1471,8 @@ export default defineSchema({
     source: eventPullListSourceValue,
     sourcePackageId: v.optional(v.id("inventoryPackages")),
     sourceInvoiceLineKey: v.optional(v.string()),
+    /** Package lines only: BOM types excluded by the source invoice's ala-carte discount. */
+    excludedTypeIds: v.optional(v.array(v.id("inventoryTypes"))),
     sortOrder: v.number(),
     notes: v.optional(v.string()),
     createdAt: v.number(),
@@ -1453,6 +1492,8 @@ export default defineSchema({
     source: eventPullListSourceValue,
     sourcePackageId: v.optional(v.id("inventoryPackages")),
     sourceInvoiceLineKey: v.optional(v.string()),
+    /** Package lines only: BOM types excluded by the source invoice's ala-carte discount. */
+    excludedTypeIds: v.optional(v.array(v.id("inventoryTypes"))),
     sortOrder: v.number(),
     notes: v.optional(v.string()),
     createdAt: v.number(),

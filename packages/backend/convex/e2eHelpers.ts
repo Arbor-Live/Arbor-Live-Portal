@@ -1,4 +1,4 @@
-import { payPeriodForDate } from "@arbor/format";
+import { payPeriodForDate, addPacificCalendarDays, pacificDateAndTimeToMs, pacificDateKey } from "@arbor/format";
 import { v } from "convex/values";
 import { customAlphabet } from "nanoid";
 import { hashPassword } from "better-auth/crypto";
@@ -454,26 +454,22 @@ export const seedMinimalPublicQuote = mutation({
 });
 
 function futureEventWindow(daysAhead = 14) {
-  const start = new Date();
-  start.setDate(start.getDate() + daysAhead);
-  start.setHours(18, 0, 0, 0);
-  const end = new Date(start);
-  end.setHours(22, 0, 0, 0);
-  return { startAt: start.getTime(), endAt: end.getTime() };
+  const dateKey = pacificDateKey(addPacificCalendarDays(Date.now(), daysAhead));
+  const startAt = pacificDateAndTimeToMs(dateKey, "18:00")!;
+  const endAt = pacificDateAndTimeToMs(dateKey, "22:00")!;
+  return { startAt, endAt, dateKey };
 }
 
 async function insertSubmittedBookingRequest(ctx: MutationCtx, eventName?: string) {
   const now = Date.now();
-  const { startAt, endAt } = futureEventWindow(18);
+  const { startAt, endAt, dateKey } = futureEventWindow(18);
   const requestNumber = await allocateRequestNumber(ctx);
   const publicToken = makeToken();
   const resolvedEventName = eventName?.trim() || `E2E Booking ${now}`;
-  const start = new Date(startAt);
-  const end = new Date(endAt);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const eventDateText = `${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}`;
-  const eventStartTimeText = `${pad(start.getHours())}:${pad(start.getMinutes())}`;
-  const eventEndTimeText = `${pad(end.getHours())}:${pad(end.getMinutes())}`;
+  const eventDateText = dateKey;
+  const eventStartTimeText = "18:00";
+  const eventEndTimeText = "22:00";
+  const setupAtMs = startAt - 2 * 60 * 60 * 1000;
 
   const requestId = await ctx.db.insert("eventRequests", {
     status: "submitted",
@@ -492,11 +488,21 @@ async function insertSubmittedBookingRequest(ctx: MutationCtx, eventName?: strin
     earliestSetupText: "2 hours before",
     eventStartAtMs: startAt,
     eventEndAtMs: endAt,
-    setupAtMs: startAt - 2 * 60 * 60 * 1000,
+    setupAtMs,
     flexibleSetupTime: true,
+    showSlots: [
+      {
+        date: dateKey,
+        startTime: "18:00",
+        endTime: "22:00",
+        startAtMs: startAt,
+        endAtMs: endAt,
+        endsNextDay: false,
+      },
+    ],
     eventName: resolvedEventName,
     eventCategory: "Concert / Showcase",
-    crewOrRental: "Crewed event",
+    crewOrRental: "Crewed",
     servicesNeeded: ["Sound"],
     expectedTurnout: 80,
     submittedAt: now,
@@ -1399,12 +1405,18 @@ export const getBookingRequestState = query({
       declinedAt: v.union(v.number(), v.null()),
       convertedAt: v.union(v.number(), v.null()),
       reviewedAt: v.union(v.number(), v.null()),
+      eventType: v.union(v.string(), v.null()),
+      startAt: v.union(v.number(), v.null()),
+      endAt: v.union(v.number(), v.null()),
+      requestStartAt: v.union(v.number(), v.null()),
+      requestEndAt: v.union(v.number(), v.null()),
     }),
   ),
   handler: async (ctx, args) => {
     assertE2eHelpersEnabled();
     const request = await ctx.db.get(args.requestId);
     if (!request) return null;
+    const event = request.convertedEventId ? await ctx.db.get(request.convertedEventId) : null;
     return {
       status: request.status,
       convertedEventId: request.convertedEventId ?? null,
@@ -1414,6 +1426,11 @@ export const getBookingRequestState = query({
       declinedAt: request.declinedAt ?? null,
       convertedAt: request.convertedAt ?? null,
       reviewedAt: request.reviewedAt ?? null,
+      eventType: event?.eventType ?? null,
+      startAt: event?.startAt ?? null,
+      endAt: event?.endAt ?? null,
+      requestStartAt: request.eventStartAtMs ?? null,
+      requestEndAt: request.eventEndAtMs ?? null,
     };
   },
 });

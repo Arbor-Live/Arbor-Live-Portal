@@ -115,16 +115,22 @@ async function hydratePackageOptions(ctx: QueryCtx, packages: Doc<"inventoryPack
   const typeById = new Map(typeIds.map((id, index) => [id, types[index] ?? null]));
 
   return packages.map((pkg, index) => {
-    const items = (packageItemRows[index] ?? []).map((row) => ({
-      typeId: row.typeId,
-      quantity: row.quantity,
-      type: typeById.get(row.typeId)
-        ? {
-            name: typeById.get(row.typeId)!.name,
-            model: typeById.get(row.typeId)!.model,
-          }
-        : null,
-    }));
+    const items = (packageItemRows[index] ?? []).map((row) => {
+      const type = typeById.get(row.typeId);
+      return {
+        typeId: row.typeId,
+        quantity: row.quantity,
+        type: type
+          ? {
+              name: type.name,
+              model: type.model,
+              subsidizedRentalPriceUsd: type.subsidizedRentalPriceUsd,
+              nonSubsidizedRentalPriceUsd: type.nonSubsidizedRentalPriceUsd,
+              rentalPriceUsd: type.rentalPriceUsd,
+            }
+          : null,
+      };
+    });
     return {
       _id: pkg._id,
       name: pkg.name,

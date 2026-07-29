@@ -104,6 +104,8 @@ Human-readable docs live in `docs/` (`getting-started.md`, `architecture.md`, `d
 | Date + `HH:mm` | `pacificDateAndTimeToMs` |
 | FullCalendar grids | `timeZone={PORTAL_TIMEZONE}` (dashboard events calendar) |
 
+**UI copy:** Do not label times as Pacific/PT/PST in the web app — the portal timezone is assumed. Keep zone names in code, engineer docs, and external emails when needed.
+
 **Avoid:** bare `toLocaleString` / `toLocaleDateString`; `new Date(datetimeLocalString).getTime()` for saves; extracting wall clock from instants with `getHours()` / `getFullYear()`.
 
 `DateTimePicker` stores naive `YYYY-MM-DDTHH:mm` digits; those digits are Pacific wall clock and must cross the ms boundary only via the helpers above.

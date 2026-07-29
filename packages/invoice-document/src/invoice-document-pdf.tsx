@@ -303,7 +303,12 @@ function SectionTable({
           {showProvider ? (
             <Text style={[styles.td, { flex: providerFlex }]}>{row.provider || "—"}</Text>
           ) : null}
-          <Text style={[styles.td, { flex: itemFlex }]}>{row.label}</Text>
+          <View style={[styles.td, { flex: itemFlex }]}>
+            <Text>{row.label}</Text>
+            {row.detailNote ? (
+              <Text style={{ fontSize: 7, color: "#64748b", marginTop: 2 }}>{row.detailNote}</Text>
+            ) : null}
+          </View>
           <View style={[styles.td, { flex: qtyFlex, alignItems: "flex-end" }]}>
             <Text style={{ textAlign: "right" }}>{row.quantity}</Text>
             {row.quantityDetail ? (

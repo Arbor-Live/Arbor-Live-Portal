@@ -126,6 +126,7 @@ export function InvoicesListClient() {
             <th className="p-2 text-left">Manager</th>
             <th className="p-2 text-left">Issue Date</th>
             <th className="p-2 text-left">Total</th>
+            <th className="p-2 text-left">Net profit</th>
             <th className="p-2 text-left">Actions</th>
           </tr>
         </thead>
@@ -152,6 +153,9 @@ export function InvoicesListClient() {
               <td className="p-2">{invoice.managerName}</td>
               <td className="p-2">{invoice.issueDate}</td>
               <td className="p-2">{formatUsd(invoice.totalUsd)}</td>
+              <td className="p-2">
+                {invoice.netProfitUsd == null ? "—" : formatUsd(invoice.netProfitUsd)}
+              </td>
               <td className="p-2">
                 <div className="flex flex-wrap gap-2">
                   <Button asChild size="sm" variant="outline">
