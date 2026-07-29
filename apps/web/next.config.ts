@@ -111,7 +111,7 @@ const imageRemotePatterns = [
 ];
 
 const nextConfig: NextConfig = {
-  transpilePackages: ["backend", "@arbor/invoice-document"],
+  transpilePackages: ["backend", "@arbor/invoice-document", "@arbor/rider-document"],
   turbopack: {
     root: repoRoot,
   },

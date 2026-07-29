@@ -38,6 +38,10 @@ apps/web/test-results/
 apps/web/playwright-report/
 apps/web/e2e/.auth/
 
-# dev package instances
+# Accidental package.json from npm/pnpm init in the wrong folder.
+# Workspace manifests must stay tracked — negate those paths.
 package.json
+!/package.json
+!apps/*/package.json
+!packages/*/package.json
 apps/web/e2e-results.json
