@@ -15,6 +15,9 @@ type CommentState = {
  * Mentions are parsed from the body (`@Name`), so the typeahead must insert the
  * candidate's display name verbatim. Persistence is asserted via Convex so a
  * UI-only success that never reached `eventComments.createComment` still fails.
+ *
+ * The active-mention query rejects whitespace, so typeahead input must stay on a
+ * single token (e.g. `@Crew`, not `@E2E Cr`) until a candidate is chosen.
  */
 test.describe("event comments and mentions", () => {
   test("admin can @-mention a teammate and the mention persists", async ({ page }) => {
@@ -31,11 +34,24 @@ test.describe("event comments and mentions", () => {
 
     await page.goto(seeded.path);
     await expect(page.getByText("Edit Event").first()).toBeVisible({ timeout: 45_000 });
-    await expect(page.getByTestId("event-comments")).toBeVisible({ timeout: 30_000 });
+
+    const comments = page.getByTestId("event-comments");
+    await expect(comments).toBeVisible({ timeout: 30_000 });
+    // Wait until mention candidates have loaded; an empty [] while still loading
+    // would keep the typeahead menu closed.
+    await expect(comments).not.toHaveAttribute("data-mention-candidates", "loading", {
+      timeout: 30_000,
+    });
+    await expect
+      .poll(async () => Number(await comments.getAttribute("data-mention-candidates")), {
+        timeout: 30_000,
+      })
+      .toBeGreaterThan(0);
 
     const input = page.getByTestId("event-comment-input");
     await input.click();
-    await input.pressSequentially(`@${e2eEnv.crewName.slice(0, 6)}`, { delay: 40 });
+    // Space-free token so getActiveMention stays open; "Crew" matches "E2E Crew".
+    await input.pressSequentially("@Crew", { delay: 40 });
 
     const menu = page.getByTestId("event-comment-mention-menu");
     await expect(menu).toBeVisible({ timeout: 15_000 });
@@ -51,12 +67,12 @@ test.describe("event comments and mentions", () => {
     );
     await expect(page.getByTestId("event-comment-body").first()).toContainText(String(stamp));
 
-    const comments = await pollConvex<CommentState[]>(
+    const saved = await pollConvex<CommentState[]>(
       "e2eHelpers:getEventCommentsState",
       { eventId: seeded.eventId },
       (rows) => Array.isArray(rows) && rows.some((row) => row.body.includes(String(stamp))),
     );
-    const posted = comments.find((row) => row.body.includes(String(stamp)));
+    const posted = saved.find((row) => row.body.includes(String(stamp)));
     expect(posted).toBeTruthy();
     expect(posted!.body).toContain(`@${e2eEnv.crewName}`);
     expect(posted!.mentionedUserIds).toContain(crew.userId);

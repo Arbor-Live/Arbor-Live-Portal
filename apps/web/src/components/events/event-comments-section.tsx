@@ -179,7 +179,13 @@ function EventCommentsPanel({ eventId }: { eventId: Id<"events"> }) {
   }
 
   return (
-      <div className="space-y-3 rounded-md border p-4" data-testid="event-comments">
+    <div
+      className="space-y-3 rounded-md border p-4"
+      data-testid="event-comments"
+      data-mention-candidates={
+        mentionCandidates === undefined ? "loading" : String(mentionCandidates.length)
+      }
+    >
       <div>
         <h3 className="font-medium">Comments</h3>
         <p className="text-sm text-muted-foreground">
