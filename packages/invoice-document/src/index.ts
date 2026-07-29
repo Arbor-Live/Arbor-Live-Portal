@@ -1,4 +1,5 @@
 export { buildInvoiceDocumentData, currency, groupInvoiceSections } from "./format";
+export { ArborLogoPdf } from "./arbor-logo-pdf";
 export { InvoiceDocumentPdf } from "./invoice-document-pdf";
 export { InvoiceDocumentWeb } from "./invoice-document-web";
 export { BandPaymentAgreementPdf } from "./band-payment-agreement-pdf";

@@ -11,7 +11,6 @@ import {
 } from "./_generated/server";
 import { internal } from "./_generated/api";
 import {
-  findAuthOrganizationById,
   findAuthUserById,
   getUserId,
   getActiveOrganizationContextOrNull,
@@ -35,6 +34,7 @@ import {
   type BandPaymentPricingMode,
   type BandPaymentStatus,
 } from "./lib/bandPayments";
+import { resolveBandName } from "./lib/bandIdentity";
 import { allocateBandPaymentConfirmationToken } from "./lib/publicReferenceIds";
 import {
   scheduleBandPaymentCompletedEmails,
@@ -162,21 +162,6 @@ async function resolveAuthUserIdentity(
   if (!email) return null;
   const name = user?.name?.trim() || email;
   return { name, email };
-}
-
-async function resolveBandName(ctx: QueryCtx | MutationCtx, organizationId: string) {
-  const profile = await ctx.db
-    .query("organizationProfiles")
-    .withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId))
-    .unique();
-  const displayName = profile?.displayName?.trim();
-  if (displayName) return displayName;
-
-  const org = await findAuthOrganizationById(ctx, organizationId);
-  const orgName = org?.name?.trim();
-  if (orgName) return orgName;
-
-  return "Band";
 }
 
 async function getOrganizationProfilePayee(ctx: QueryCtx | MutationCtx, organizationId: string) {
