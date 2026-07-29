@@ -3,6 +3,7 @@ import {
   Document,
   G,
   Line,
+  Link,
   Page,
   Path,
   Polygon,
@@ -145,9 +146,12 @@ function Footer() {
   return (
     <View style={styles.footer} fixed>
       <View style={styles.footerBrand}>
-        <ArborLogoPdf width={38} />
+        <Link src="https://arborlive.stanford.edu">
+          <ArborLogoPdf width={38} />
+        </Link>
         <Text style={styles.footerText}>
-          Generated with Arbor — Stanford&apos;s student-run live event production company
+          Generated using Arbor Live&apos;s platform — Stanford&apos;s only
+          student-run live event production company
         </Text>
       </View>
       <Text
@@ -168,6 +172,8 @@ function PlotGlyph({ item, layout }: { item: RiderStageItem; layout: PlotLayout 
         palette: RIDER_CATEGORY_PALETTE[symbol.category],
         components: PDF_GLYPH_COMPONENTS,
         rect,
+        glyphViewBox: symbol.glyphViewBox,
+        preserveAspect: symbol.preserveAspect,
         rotationTransform: itemTransform(rect, item.rotation),
         keyPrefix: item.id,
       })}
@@ -287,6 +293,8 @@ function StagePlot({ data, width, height }: { data: RiderDocumentData; width: nu
                     palette,
                     components: PDF_GLYPH_COMPONENTS,
                     rect: { x: 0, y: 0, width: 12, height: 12 },
+                    glyphViewBox: symbol.glyphViewBox,
+                    preserveAspect: true,
                     keyPrefix: `legend-${key}`,
                   })}
                 </Svg>

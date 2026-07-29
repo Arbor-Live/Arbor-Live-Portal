@@ -14,8 +14,8 @@ export const DOM_GLYPH_COMPONENTS: GlyphComponents = {
 };
 
 /**
- * Standalone preview of a symbol, sized to its real footprint aspect ratio so
- * the palette hints at how much stage a thing actually takes up.
+ * Standalone preview of a symbol. Always drawn in a square so uniform glyph
+ * scaling stays sharp in the palette (stage footprints still use real size).
  */
 export function RiderSymbolGlyph({
   symbolKey,
@@ -27,15 +27,12 @@ export function RiderSymbolGlyph({
   className?: string;
 }) {
   const symbol = riderSymbol(symbolKey);
-  const aspect = symbol.widthFt / symbol.depthFt;
-  const width = aspect >= 1 ? size : size * aspect;
-  const height = aspect >= 1 ? size / aspect : size;
 
   return (
     <svg
-      width={width}
-      height={height}
-      viewBox={`0 0 ${width} ${height}`}
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
       className={className}
       aria-hidden="true"
       focusable="false"
@@ -44,7 +41,9 @@ export function RiderSymbolGlyph({
         shapes: symbol.shapes,
         palette: RIDER_CATEGORY_PALETTE[symbol.category],
         components: DOM_GLYPH_COMPONENTS,
-        rect: { x: 0, y: 0, width, height },
+        rect: { x: 0, y: 0, width: size, height: size },
+        glyphViewBox: symbol.glyphViewBox,
+        preserveAspect: true,
         keyPrefix: `preview-${symbolKey}`,
       })}
     </svg>

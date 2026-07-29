@@ -3,6 +3,7 @@ export {
   MAX_STAGE_FT,
   MIN_STAGE_FT,
   STAGE_PRESETS,
+  STAGE_SIZE_STEP,
   blankBacklineItem,
   blankInput,
   blankMix,
@@ -19,6 +20,8 @@ export {
   renumberMixes,
   riderWarnings,
   round,
+  snapStageFt,
+  stageSizeOptions,
   summarizeRider,
   updateItem,
 } from "./content";
@@ -51,6 +54,7 @@ export type {
   RiderCategoryPalette,
   RiderGlyphPaint,
   RiderGlyphShape,
+  RiderGlyphViewBox,
   RiderInputSeed,
   RiderSymbol,
   RiderSymbolCategory,
@@ -62,6 +66,7 @@ export type { RiderTemplate } from "./templates";
 export {
   INPUT_TYPE_LABELS,
   MONITOR_TYPE_LABELS,
+  MONITOR_TYPE_OPTIONS,
   PROVIDED_BY_EDITOR_LABELS,
   PROVIDED_BY_LABELS,
   STAND_LABELS,

@@ -2,6 +2,8 @@
  * Starter riders. Picking one gives a band a complete, realistic plot plus the
  * matching input list and monitor mixes, which they then edit — far faster than
  * building a rider from an empty stage.
+ *
+ * Layouts mirror the curated default looks (Main / Trio / SS / DJ).
  */
 
 import {
@@ -51,7 +53,8 @@ function build(
   return {
     ...content,
     ...extras,
-    inputs: renumberInputs(content.inputs),
+    inputs: renumberInputs(extras?.inputs ?? content.inputs),
+    monitorMixes: extras?.monitorMixes ?? content.monitorMixes,
   };
 }
 
@@ -66,33 +69,33 @@ export const RIDER_TEMPLATES: RiderTemplate[] = [
   {
     key: "full_band",
     name: "Full band (5 piece)",
-    description: "Drums, bass, guitar, keys and a front vocalist with four mixes.",
+    description:
+      "Drums, bass, guitar, keys and a front vocalist with three mixes (vocals, keys, drums).",
     build: () =>
       build(
-        { widthFt: 24, depthFt: 16 },
+        { widthFt: 24, depthFt: 12 },
         [
-          { symbol: "drum_kit", xFt: 12, yFt: 4 },
-          { symbol: "bass_rig", xFt: 4.5, yFt: 3.5 },
-          { symbol: "guitar_amp", xFt: 19.5, yFt: 3.5 },
-          { symbol: "keyboard_rig", xFt: 12, yFt: 9.4, label: "Keys" },
-          { symbol: "bassist", xFt: 5, yFt: 8.6, label: "Bass", positionOnly: true },
-          { symbol: "guitarist", xFt: 19, yFt: 8.6, label: "Guitar", positionOnly: true },
-          { symbol: "vocalist", xFt: 12, yFt: 11.9, label: "Lead vocal" },
-          { symbol: "vocal_mic", xFt: 5, yFt: 11.6, label: "BV 1" },
-          { symbol: "vocal_mic", xFt: 19, yFt: 11.6, label: "BV 2" },
-          { symbol: "wedge", xFt: 12, yFt: 14.4, label: "Lead vocal" },
-          { symbol: "wedge", xFt: 5, yFt: 13.8, label: "Bass / BV 1" },
-          { symbol: "wedge", xFt: 19, yFt: 13.8, label: "Guitar / BV 2" },
-          { symbol: "wedge", xFt: 16.8, yFt: 7, rotation: 210, label: "Drums" },
-          { symbol: "power_drop", xFt: 22.6, yFt: 2.2 },
+          { symbol: "drum_kit", xFt: 12, yFt: 3 },
+          { symbol: "bass_rig", xFt: 2.25, yFt: 4.75, positionOnly: true },
+          { symbol: "guitar_amp", xFt: 21.75, yFt: 6, label: "Electric Guitar" },
+          { symbol: "bassist", xFt: 4.25, yFt: 7.25, label: "Bass" },
+          { symbol: "guitarist", xFt: 18.5, yFt: 7.5, label: "Guitar", positionOnly: true },
+          { symbol: "vocalist", xFt: 12, yFt: 8, label: "Lead vocal" },
+          { symbol: "vocal_mic", xFt: 5.5, yFt: 8.5, label: "BV 1" },
+          { symbol: "vocal_mic", xFt: 19.75, yFt: 8.75, label: "BV 2" },
+          { symbol: "wedge", xFt: 12, yFt: 10.75, label: "Vocals" },
+          { symbol: "wedge", xFt: 8.75, yFt: 4.25, rotation: 30, label: "Keys" },
+          { symbol: "wedge", xFt: 16.5, yFt: 2.25, rotation: 45, label: "Drums" },
+          { symbol: "power_drop", xFt: 22.5, yFt: 1.5 },
+          { symbol: "keyboard_rig", xFt: 19.75, yFt: 3.25, rotation: 15, label: "Keys" },
         ],
         {
           performerCount: 5,
           backline: [
-            backline("Drum kit (shells + hardware, band brings cymbals/snare)", "arbor"),
-            backline("Bass amp", "arbor"),
+            backline("Drum kit", "arbor"),
+            backline("Bass amp", "band"),
             backline("Guitar amp", "band"),
-            backline("Keyboard stand", "band"),
+            backline("Keyboard", "arbor"),
           ],
           powerNotes: "Two edison drops upstage — one stage left, one stage right.",
         },
@@ -101,28 +104,34 @@ export const RIDER_TEMPLATES: RiderTemplate[] = [
   {
     key: "power_trio",
     name: "Power trio",
-    description: "Guitar, bass and drums, all three on vocals.",
+    description: "Guitar, bass and drums — wired drum/bass vocals plus a wireless for guitar.",
     build: () =>
       build(
-        { widthFt: 24, depthFt: 16 },
+        { widthFt: 16, depthFt: 12 },
         [
-          { symbol: "drum_kit", xFt: 12, yFt: 4 },
-          { symbol: "bass_rig", xFt: 5, yFt: 4 },
-          { symbol: "guitar_amp", xFt: 19, yFt: 4 },
-          { symbol: "vocal_mic", xFt: 12, yFt: 8.4, label: "Drum vocal" },
-          { symbol: "bassist", xFt: 6, yFt: 10.4, label: "Bass", positionOnly: true },
-          { symbol: "guitarist", xFt: 18, yFt: 10.4, label: "Guitar", positionOnly: true },
-          { symbol: "vocal_mic", xFt: 6, yFt: 12.6, label: "Bass vocal" },
-          { symbol: "vocal_mic", xFt: 18, yFt: 12.6, label: "Guitar vocal" },
-          { symbol: "wedge", xFt: 6, yFt: 14.4, label: "Bass vocal" },
-          { symbol: "wedge", xFt: 18, yFt: 14.4, label: "Guitar vocal" },
-          { symbol: "wedge", xFt: 15.8, yFt: 7, rotation: 210, label: "Drums" },
+          { symbol: "drum_kit", xFt: 9, yFt: 3 },
+          { symbol: "bass_rig", xFt: 1.5, yFt: 3.5, positionOnly: true },
+          { symbol: "guitar_amp", xFt: 14.75, yFt: 4, positionOnly: true },
+          { symbol: "vocal_mic", xFt: 8, yFt: 1.25, label: "Drum vocal" },
+          { symbol: "bassist", xFt: 4, yFt: 6, label: "Bass" },
+          { symbol: "guitarist", xFt: 12, yFt: 6, label: "Guitar" },
+          { symbol: "vocal_mic", xFt: 4, yFt: 9, label: "Bass vocal" },
+          { symbol: "wedge", xFt: 4, yFt: 11, label: "Bass vocal" },
+          { symbol: "wedge", xFt: 12, yFt: 11, label: "Guitar vocal" },
+          { symbol: "wedge", xFt: 6.25, yFt: 2.5, rotation: 30, label: "Drums" },
+          {
+            symbol: "wireless_mic",
+            xFt: 12.75,
+            yFt: 8.75,
+            rotation: 30,
+            label: "Wireless mic",
+          },
         ],
         {
           performerCount: 3,
           backline: [
             backline("Drum kit (shells + hardware)", "arbor"),
-            backline("Bass amp", "arbor"),
+            backline("Bass amp", "band"),
             backline("Guitar amp", "band"),
           ],
         },
@@ -131,7 +140,7 @@ export const RIDER_TEMPLATES: RiderTemplate[] = [
   {
     key: "singer_songwriter",
     name: "Singer-songwriter",
-    description: "One vocal, one acoustic DI, one mix. The classic small set.",
+    description: "Vocal, acoustic DI, instrument mic, and one mix.",
     build: () =>
       build(
         { widthFt: 16, depthFt: 12 },
@@ -142,10 +151,17 @@ export const RIDER_TEMPLATES: RiderTemplate[] = [
           { symbol: "music_stand", xFt: 6, yFt: 6.5 },
           { symbol: "wedge", xFt: 8, yFt: 9.5, label: "Vocal + guitar" },
           { symbol: "power_drop", xFt: 14.5, yFt: 1 },
+          {
+            symbol: "instrument_mic",
+            xFt: 9.25,
+            yFt: 5.5,
+            rotation: 15,
+            label: "Mic",
+          },
         ],
         {
           performerCount: 1,
-          backline: [backline("Guitar stand", "band")],
+          backline: [backline("Guitar", "band")],
         },
       ),
   },
@@ -157,17 +173,20 @@ export const RIDER_TEMPLATES: RiderTemplate[] = [
       build(
         { widthFt: 16, depthFt: 12 },
         [
-          { symbol: "dj_booth", xFt: 8, yFt: 4.2 },
-          { symbol: "dj", xFt: 8, yFt: 6.8, label: "DJ", positionOnly: true },
-          { symbol: "vocal_mic", xFt: 11.4, yFt: 5, label: "MC mic" },
-          { symbol: "wedge", xFt: 4.6, yFt: 8.8, label: "Booth left" },
-          { symbol: "wedge", xFt: 11.4, yFt: 8.8, label: "Booth right" },
-          { symbol: "table", xFt: 8, yFt: 1.4, label: "Booth table" },
-          { symbol: "power_drop", xFt: 14.6, yFt: 1.4 },
+          { symbol: "dj", xFt: 8, yFt: 4.25, label: "DJ", positionOnly: true },
+          { symbol: "wireless_mic", xFt: 10.5, yFt: 5.75, label: "MC mic" },
+          { symbol: "wedge", xFt: 4, yFt: 10, label: "Booth left" },
+          { symbol: "wedge", xFt: 12, yFt: 10, label: "Booth right" },
+          { symbol: "table", xFt: 8, yFt: 7, label: "Booth table" },
+          { symbol: "power_drop", xFt: 14, yFt: 6 },
+          { symbol: "dj_booth", xFt: 8, yFt: 7 },
         ],
         {
           performerCount: 1,
-          backline: [backline("Booth table (6 ft)", "arbor")],
+          backline: [
+            backline("Booth table (6 ft)", "arbor"),
+            backline("DJ Mixing Table", "band"),
+          ],
         },
       ),
   },

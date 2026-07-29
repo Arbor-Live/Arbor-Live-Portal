@@ -328,6 +328,8 @@ export function StagePlotCanvas({
                   palette: RIDER_CATEGORY_PALETTE[symbol.category],
                   components: DOM_GLYPH_COMPONENTS,
                   rect,
+                  glyphViewBox: symbol.glyphViewBox,
+                  preserveAspect: symbol.preserveAspect,
                   rotationTransform: rotation,
                   keyPrefix: item.id,
                 })}

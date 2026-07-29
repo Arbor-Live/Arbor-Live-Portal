@@ -15,9 +15,8 @@ import {
   blankInput,
   blankMix,
   INPUT_TYPE_LABELS,
-  MAX_STAGE_FT,
-  MIN_STAGE_FT,
   MONITOR_TYPE_LABELS,
+  MONITOR_TYPE_OPTIONS,
   moveInArray,
   placeSymbol,
   PROVIDED_BY_EDITOR_LABELS,
@@ -27,6 +26,8 @@ import {
   riderWarnings,
   STAGE_PRESETS,
   STAND_LABELS,
+  snapStageFt,
+  stageSizeOptions,
   updateItem,
   type RiderBacklineItem,
   type RiderContent,
@@ -103,7 +104,7 @@ function draftKey(draft: Draft): string {
 const INPUT_TYPES = Object.keys(INPUT_TYPE_LABELS) as RiderInputType[];
 const STAND_TYPES = Object.keys(STAND_LABELS) as RiderStandType[];
 const PROVIDED_BY = Object.keys(PROVIDED_BY_EDITOR_LABELS) as RiderProvidedBy[];
-const MONITOR_TYPES = Object.keys(MONITOR_TYPE_LABELS) as RiderMonitorType[];
+const MONITOR_TYPES = MONITOR_TYPE_OPTIONS;
 
 const fieldClass =
   "h-8 w-full min-w-0 rounded-none border border-input bg-transparent px-2 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50 disabled:opacity-50";
@@ -163,7 +164,22 @@ export function RiderEditorClient({ riderId }: { riderId: Id<"bandRiders"> }) {
 
   async function persist(overrides?: Partial<Draft>) {
     if (!draft || readOnly) return;
-    const next = { ...draft, ...overrides };
+    const next: Draft = {
+      ...draft,
+      ...overrides,
+      content: {
+        ...draft.content,
+        ...(overrides?.content ?? {}),
+        stage: {
+          widthFt: snapStageFt(
+            overrides?.content?.stage?.widthFt ?? draft.content.stage.widthFt,
+          ),
+          depthFt: snapStageFt(
+            overrides?.content?.stage?.depthFt ?? draft.content.stage.depthFt,
+          ),
+        },
+      },
+    };
     setSaveStatus("saving");
     setSaveError(null);
     try {
@@ -326,9 +342,18 @@ export function RiderEditorClient({ riderId }: { riderId: Id<"bandRiders"> }) {
                 Stage size
               </Label>
               <Select
-                value={`${draft.content.stage.widthFt}x${draft.content.stage.depthFt}`}
+                value={
+                  STAGE_PRESETS.some(
+                    (entry) =>
+                      entry.stage.widthFt === draft.content.stage.widthFt &&
+                      entry.stage.depthFt === draft.content.stage.depthFt,
+                  )
+                    ? `${draft.content.stage.widthFt}x${draft.content.stage.depthFt}`
+                    : "custom"
+                }
                 disabled={readOnly}
                 onValueChange={(value) => {
+                  if (value === "custom") return;
                   const preset = STAGE_PRESETS.find(
                     (entry) =>
                       `${entry.stage.widthFt}x${entry.stage.depthFt}` === value,
@@ -340,7 +365,7 @@ export function RiderEditorClient({ riderId }: { riderId: Id<"bandRiders"> }) {
                   }));
                 }}
               >
-                <SelectTrigger id="stage-preset" className="h-8 w-[180px]">
+                <SelectTrigger id="stage-preset" className="h-8 w-[200px]">
                   <SelectValue placeholder="Stage size" />
                 </SelectTrigger>
                 <SelectContent>
@@ -352,56 +377,61 @@ export function RiderEditorClient({ riderId }: { riderId: Id<"bandRiders"> }) {
                       {preset.label}
                     </SelectItem>
                   ))}
+                  <SelectItem value="custom">Custom (4 ft steps)</SelectItem>
                 </SelectContent>
               </Select>
               <div className="flex items-center gap-1">
-                <Input
-                  type="number"
-                  aria-label="Stage width in feet"
-                  className="h-8 w-16"
-                  min={MIN_STAGE_FT}
-                  max={MAX_STAGE_FT}
+                <Select
+                  value={String(snapStageFt(draft.content.stage.widthFt))}
                   disabled={readOnly}
-                  value={draft.content.stage.widthFt}
-                  onChange={(event) => {
-                    const widthFt = Number(event.target.value);
-                    if (!Number.isFinite(widthFt)) return;
+                  onValueChange={(value) => {
+                    const widthFt = snapStageFt(Number(value));
                     patchContent((content) => ({
                       ...content,
-                      stage: {
-                        ...content.stage,
-                        widthFt: Math.min(
-                          MAX_STAGE_FT,
-                          Math.max(MIN_STAGE_FT, widthFt),
-                        ),
-                      },
+                      stage: { ...content.stage, widthFt },
                     }));
                   }}
-                />
+                >
+                  <SelectTrigger
+                    aria-label="Stage width in feet"
+                    className="h-8 w-[72px]"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {stageSizeOptions().map((ft) => (
+                      <SelectItem key={`w-${ft}`} value={String(ft)}>
+                        {ft}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <span className="text-xs text-muted-foreground">×</span>
-                <Input
-                  type="number"
-                  aria-label="Stage depth in feet"
-                  className="h-8 w-16"
-                  min={MIN_STAGE_FT}
-                  max={MAX_STAGE_FT}
+                <Select
+                  value={String(snapStageFt(draft.content.stage.depthFt))}
                   disabled={readOnly}
-                  value={draft.content.stage.depthFt}
-                  onChange={(event) => {
-                    const depthFt = Number(event.target.value);
-                    if (!Number.isFinite(depthFt)) return;
+                  onValueChange={(value) => {
+                    const depthFt = snapStageFt(Number(value));
                     patchContent((content) => ({
                       ...content,
-                      stage: {
-                        ...content.stage,
-                        depthFt: Math.min(
-                          MAX_STAGE_FT,
-                          Math.max(MIN_STAGE_FT, depthFt),
-                        ),
-                      },
+                      stage: { ...content.stage, depthFt },
                     }));
                   }}
-                />
+                >
+                  <SelectTrigger
+                    aria-label="Stage depth in feet"
+                    className="h-8 w-[72px]"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {stageSizeOptions().map((ft) => (
+                      <SelectItem key={`d-${ft}`} value={String(ft)}>
+                        {ft}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <span className="text-xs text-muted-foreground">ft</span>
               </div>
             </div>

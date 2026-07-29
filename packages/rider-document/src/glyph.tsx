@@ -11,6 +11,7 @@ import type {
   RiderCategoryPalette,
   RiderGlyphPaint,
   RiderGlyphShape,
+  RiderGlyphViewBox,
 } from "./symbols";
 
 export type GlyphComponents = {
@@ -41,8 +42,19 @@ export function glyphElements(
   components: GlyphComponents,
   keyPrefix: string,
 ): ReactNode[] {
-  return shapes.map((shape, index) => {
+  return shapes.flatMap((shape, index) => {
     const key = `${keyPrefix}-${index}`;
+
+    if (shape.kind === "group") {
+      return [
+        createElement(
+          components.G,
+          { key, transform: shape.transform },
+          ...glyphElements(shape.shapes, palette, components, key),
+        ),
+      ];
+    }
+
     const common = {
       key,
       fill: paint(shape.fill, palette, "none"),
@@ -55,47 +67,78 @@ export function glyphElements(
 
     switch (shape.kind) {
       case "rect":
-        return createElement(components.Rect, {
-          ...common,
-          x: shape.x,
-          y: shape.y,
-          width: shape.w,
-          height: shape.h,
-          rx: shape.rx,
-        });
+        return [
+          createElement(components.Rect, {
+            ...common,
+            x: shape.x,
+            y: shape.y,
+            width: shape.w,
+            height: shape.h,
+            rx: shape.rx,
+          }),
+        ];
       case "circle":
-        return createElement(components.Circle, {
-          ...common,
-          cx: shape.cx,
-          cy: shape.cy,
-          r: shape.r,
-        });
+        return [
+          createElement(components.Circle, {
+            ...common,
+            cx: shape.cx,
+            cy: shape.cy,
+            r: shape.r,
+          }),
+        ];
       case "polygon":
-        return createElement(components.Polygon, { ...common, points: shape.points });
+        return [createElement(components.Polygon, { ...common, points: shape.points })];
       case "path":
-        return createElement(components.Path, { ...common, d: shape.d });
+        return [
+          createElement(components.Path, {
+            ...common,
+            d: shape.d,
+            fillRule: shape.fillRule,
+          }),
+        ];
       case "line":
-        return createElement(components.Line, {
-          ...common,
-          fill: "none",
-          x1: shape.x1,
-          y1: shape.y1,
-          x2: shape.x2,
-          y2: shape.y2,
-        });
+        return [
+          createElement(components.Line, {
+            ...common,
+            fill: "none",
+            x1: shape.x1,
+            y1: shape.y1,
+            x2: shape.x2,
+            y2: shape.y2,
+          }),
+        ];
     }
   });
 }
 
-/** Maps the 0–100 authoring box onto a laid-out rectangle. */
-export function glyphBoxTransform(rect: {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}): string {
-  const sx = rect.width / 100;
-  const sy = rect.height / 100;
+export type GlyphBoxTransformOptions = {
+  viewBox?: RiderGlyphViewBox;
+  /** Letterbox inside `rect` instead of stretching to fill it. */
+  preserveAspect?: boolean;
+};
+
+/** Maps the authoring box onto a laid-out rectangle. */
+export function glyphBoxTransform(
+  rect: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  },
+  options?: GlyphBoxTransformOptions,
+): string {
+  const viewW = options?.viewBox?.width ?? 100;
+  const viewH = options?.viewBox?.height ?? 100;
+
+  if (options?.preserveAspect) {
+    const scale = Math.min(rect.width / viewW, rect.height / viewH);
+    const tx = rect.x + (rect.width - viewW * scale) / 2;
+    const ty = rect.y + (rect.height - viewH * scale) / 2;
+    return `translate(${round(tx)}, ${round(ty)}) scale(${round(scale, 5)})`;
+  }
+
+  const sx = rect.width / viewW;
+  const sy = rect.height / viewH;
   return `translate(${round(rect.x)}, ${round(rect.y)}) scale(${round(sx, 5)}, ${round(sy, 5)})`;
 }
 
@@ -109,6 +152,8 @@ export type GlyphNodeProps = {
   palette: RiderCategoryPalette;
   components: GlyphComponents;
   rect: { x: number; y: number; width: number; height: number };
+  glyphViewBox?: RiderGlyphViewBox;
+  preserveAspect?: boolean;
   rotationTransform?: string;
   keyPrefix: string;
 };
@@ -119,12 +164,19 @@ export function glyphNode({
   palette,
   components,
   rect,
+  glyphViewBox,
+  preserveAspect,
   rotationTransform,
   keyPrefix,
 }: GlyphNodeProps): ReactNode {
   const boxed = createElement(
     components.G,
-    { transform: glyphBoxTransform(rect) },
+    {
+      transform: glyphBoxTransform(rect, {
+        viewBox: glyphViewBox,
+        preserveAspect,
+      }),
+    },
     ...glyphElements(shapes, palette, components, keyPrefix),
   );
   if (!rotationTransform) return boxed;

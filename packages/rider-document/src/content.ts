@@ -16,17 +16,32 @@ import type {
   RiderStageItem,
 } from "./types";
 
-export const DEFAULT_STAGE: RiderStage = { widthFt: 24, depthFt: 16 };
+export const DEFAULT_STAGE: RiderStage = { widthFt: 24, depthFt: 12 };
 
+/** Presets shown in the editor; custom sizes snap to STAGE_SIZE_STEP. */
 export const STAGE_PRESETS: Array<{ label: string; stage: RiderStage }> = [
+  { label: "Standard (24 × 12 ft)", stage: DEFAULT_STAGE },
   { label: "Small (16 × 12 ft)", stage: { widthFt: 16, depthFt: 12 } },
-  { label: "Standard (24 × 16 ft)", stage: DEFAULT_STAGE },
-  { label: "Large (32 × 20 ft)", stage: { widthFt: 32, depthFt: 20 } },
-  { label: "Wide (40 × 24 ft)", stage: { widthFt: 40, depthFt: 24 } },
 ];
 
+export const STAGE_SIZE_STEP = 4;
 export const MIN_STAGE_FT = 8;
 export const MAX_STAGE_FT = 80;
+
+/** Snap a stage dimension to the nearest allowed 4 ft increment. */
+export function snapStageFt(value: number): number {
+  if (!Number.isFinite(value)) return MIN_STAGE_FT;
+  const snapped = Math.round(value / STAGE_SIZE_STEP) * STAGE_SIZE_STEP;
+  return Math.min(MAX_STAGE_FT, Math.max(MIN_STAGE_FT, snapped));
+}
+
+export function stageSizeOptions(): number[] {
+  const sizes: number[] = [];
+  for (let ft = MIN_STAGE_FT; ft <= MAX_STAGE_FT; ft += STAGE_SIZE_STEP) {
+    sizes.push(ft);
+  }
+  return sizes;
+}
 
 let idCounter = 0;
 

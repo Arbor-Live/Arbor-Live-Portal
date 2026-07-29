@@ -137,5 +137,12 @@ export const PROVIDED_BY_EDITOR_LABELS: Record<RiderProvidedBy, string> = {
 export const MONITOR_TYPE_LABELS: Record<RiderMonitorType, string> = {
   wedge: "Wedge",
   iem: "In-ear",
+  // Kept for legacy mixes; no longer offered in the palette.
   side_fill: "Side fill",
 };
+
+/** Monitor types offered when creating/editing mixes (side fill removed). */
+export const MONITOR_TYPE_OPTIONS: Array<Exclude<RiderMonitorType, "side_fill">> = [
+  "wedge",
+  "iem",
+];

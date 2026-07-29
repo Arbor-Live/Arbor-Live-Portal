@@ -74,6 +74,7 @@ const navItems: NavItem[] = [
     title: "Bands and Performers",
     url: "/dashboard/bands-and-performers",
     icon: GuitarIcon,
+    bandOnly: true,
   },
   { title: "Media", url: "/dashboard/media", icon: ImagesIcon, bandOnly: true },
   { title: "Inventory", url: "/dashboard/inventory", icon: PackageIcon },
