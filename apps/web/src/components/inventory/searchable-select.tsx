@@ -133,19 +133,21 @@ export function SearchableSelect({
   const showEmpty = !searching && !showSearchHint && listOptions.length === 0;
 
   return (
-    <div className="relative" ref={rootRef}>
+    <div className="relative w-full min-w-0" ref={rootRef}>
       <button
         ref={triggerRef}
         type="button"
         data-testid="searchable-select-trigger"
-        className={cn(filterControlClassName, "flex items-center justify-between text-left")}
+        className={cn(filterControlClassName, "flex w-full min-w-0 items-center justify-between gap-2 text-left")}
         onClick={() => setOpen((prev) => !prev)}
       >
-        {renderSelected ? (
-          renderSelected(selected)
-        ) : (
-          <span className="block truncate">{selected?.label ?? emptyLabel ?? "Select option"}</span>
-        )}
+        <span className="min-w-0 flex-1 overflow-hidden">
+          {renderSelected ? (
+            renderSelected(selected)
+          ) : (
+            <span className="block truncate">{selected?.label ?? emptyLabel ?? "Select option"}</span>
+          )}
+        </span>
         <CaretDownIcon className="ml-2 size-4 shrink-0 opacity-50" aria-hidden />
       </button>
       {open && menuPosition

@@ -239,6 +239,20 @@ export function EventEditor({
       ? { name: newHostName.trim() }
       : "skip",
   );
+  // Expenses (and overview approval hints) need the linked invoice even when the
+  // overview list query is skipped — or when the invoice falls outside the recent list.
+  const linkedInvoiceIdForLookup = (invoiceId || eventData?.event.invoiceId) as
+    | Id<"invoices">
+    | undefined;
+  const loadLinkedInvoice =
+    Boolean(linkedInvoiceIdForLookup) &&
+    (isCreate || activeTab === "overview" || activeTab === "expenses");
+  const linkedInvoiceDetail = useQuery(
+    api.invoices.get,
+    loadLinkedInvoice && linkedInvoiceIdForLookup
+      ? { id: linkedInvoiceIdForLookup }
+      : "skip",
+  );
   const [managerUserId, setManagerUserId] = useState("");
   const [dayOfLeadUserId, setDayOfLeadUserId] = useState("");
   const [crewCostUsd, setCrewCostUsd] = useState("0");
@@ -1054,10 +1068,11 @@ export function EventEditor({
     }
     return map;
   }, [availabilitySummary]);
-  const linkedInvoice = useMemo(
-    () => (invoiceId ? (invoices ?? []).find((row) => row._id === invoiceId) ?? null : null),
-    [invoiceId, invoices],
-  );
+  const linkedInvoice = useMemo(() => {
+    if (linkedInvoiceDetail?.invoice) return linkedInvoiceDetail.invoice;
+    if (!invoiceId) return null;
+    return (invoices ?? []).find((row) => row._id === invoiceId) ?? null;
+  }, [linkedInvoiceDetail, invoiceId, invoices]);
   const crewCostTotal = computedCrewCost?.totalCostUsd ?? Number(crewCostUsd || "0");
   const bandsCostTotal = Number(bandsCostUsd || "0");
   const externalRentalsCostTotal = Number(externalRentalsCostUsd || "0");
