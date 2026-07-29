@@ -80,6 +80,7 @@ const commentRowValidator = v.object({
   body: v.string(),
   mentionedUserIds: v.array(v.string()),
   mentionedUsers: v.array(v.object({ userId: v.string(), name: v.string() })),
+  canDelete: v.boolean(),
   createdAt: v.number(),
   updatedAt: v.number(),
 });
@@ -88,8 +89,9 @@ export const listByEvent = query({
   args: { eventId: v.id("events") },
   returns: v.array(commentRowValidator),
   handler: async (ctx, args) => {
-    await requireAuth(ctx);
+    const viewer = await requireAuth(ctx);
     await requireArborInternalContext(ctx);
+    const viewerUserId = getUserId(viewer);
 
     const rows = await ctx.db
       .query("eventComments")
@@ -118,6 +120,7 @@ export const listByEvent = query({
         userId,
         name: nameFor(userId),
       })),
+      canDelete: row.authorUserId === viewerUserId,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     }));
@@ -145,16 +148,18 @@ export const createComment = mutation({
     const event = await ctx.db.get(args.eventId);
     if (!event) throw new Error("Event not found.");
 
-    const mentionedUserIds = [...new Set(args.mentionedUserIds ?? [])].filter(
-      (userId) => userId !== authorUserId,
-    );
+    // Self-mentions are kept so the comment still renders them as mentions; they
+    // are skipped when sending notification emails below.
+    const mentionedUserIds = [...new Set(args.mentionedUserIds ?? [])];
     if (mentionedUserIds.length > MAX_MENTIONS_PER_COMMENT) {
       throw new Error(`You can mention at most ${MAX_MENTIONS_PER_COMMENT} people per comment.`);
     }
 
     if (mentionedUserIds.length > 0) {
       const activeMemberIds = await listActiveArborInternalUserIds(ctx, context.organizationId);
-      const invalid = mentionedUserIds.filter((userId) => !activeMemberIds.has(userId));
+      const invalid = mentionedUserIds.filter(
+        (userId) => userId !== authorUserId && !activeMemberIds.has(userId),
+      );
       if (invalid.length > 0) {
         throw new Error("Mentions are limited to active Arbor Live team members.");
       }
@@ -170,14 +175,15 @@ export const createComment = mutation({
       updatedAt: now,
     });
 
-    if (mentionedUserIds.length > 0) {
+    const notifyUserIds = mentionedUserIds.filter((userId) => userId !== authorUserId);
+    if (notifyUserIds.length > 0) {
       const authorName = author.name ?? author.email ?? "A teammate";
-      const mentionedUsers = await findAuthUsersByIds(ctx, mentionedUserIds);
+      const mentionedUsers = await findAuthUsersByIds(ctx, notifyUserIds);
       const eventUrl = eventDashboardUrl(args.eventId);
       const dateRangeLabel = formatEventDateRange(event.startAt, event.endAt, EVENT_TIMEZONE);
       const commentSnippet = snippet(body);
 
-      for (const mentionedUserId of mentionedUserIds) {
+      for (const mentionedUserId of notifyUserIds) {
         const mentionedUser = mentionedUsers.get(mentionedUserId);
         const to = mentionedUser?.email?.trim().toLowerCase();
         if (!to) continue;
@@ -201,5 +207,24 @@ export const createComment = mutation({
     }
 
     return commentId;
+  },
+});
+
+export const deleteComment = mutation({
+  args: { commentId: v.id("eventComments") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const viewer = await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+
+    const comment = await ctx.db.get(args.commentId);
+    // Already gone: treat as success so a double submit does not surface an error.
+    if (!comment) return null;
+    if (comment.authorUserId !== getUserId(viewer)) {
+      throw new Error("You can only delete your own comments.");
+    }
+
+    await ctx.db.delete(args.commentId);
+    return null;
   },
 });
