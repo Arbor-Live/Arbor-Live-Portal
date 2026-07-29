@@ -34,7 +34,7 @@ function EventBandRidersPanel({ eventId }: { eventId: Id<"events"> }) {
   }
 
   return (
-    <Card>
+    <Card data-testid="event-band-riders">
       <CardHeader>
         <CardTitle>Technical riders</CardTitle>
         <CardDescription>

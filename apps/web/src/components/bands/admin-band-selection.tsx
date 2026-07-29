@@ -114,7 +114,7 @@ export function AdminBandPickerCard() {
           <p className="text-sm text-muted-foreground">No band organizations yet.</p>
         ) : (
           <Select value={organizationId ?? undefined} onValueChange={setOrganizationId}>
-            <SelectTrigger className="max-w-md">
+            <SelectTrigger className="max-w-md" data-testid="admin-band-picker">
               <SelectValue placeholder="Select a band" />
             </SelectTrigger>
             <SelectContent>

@@ -55,9 +55,25 @@ test.describe("admin route guards", () => {
     await page.goto("/dashboard");
     await expect(page.getByRole("heading").first()).toBeVisible({ timeout: 30_000 });
 
-    const nav = page.getByRole("navigation").first();
-    await expect(nav.getByRole("link", { name: "Users", exact: true })).toHaveCount(0);
-    await expect(nav.getByRole("link", { name: "Finances", exact: true })).toHaveCount(0);
+    const sidebar = page.locator('[data-slot="sidebar"]').first();
+    await expect(sidebar.getByRole("link", { name: "Users", exact: true })).toHaveCount(0);
+    await expect(sidebar.getByRole("button", { name: "Users", exact: true })).toHaveCount(0);
+    await expect(sidebar.getByRole("link", { name: "Finances", exact: true })).toHaveCount(0);
+    await expect(sidebar.getByRole("button", { name: "Finances", exact: true })).toHaveCount(0);
+    await expect(
+      sidebar.getByRole("button", { name: "Bands and Performers", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      sidebar.getByRole("link", { name: "Bands and Performers", exact: true }),
+    ).toHaveCount(0);
+  });
+
+  test("non-admin crew is refused on bands and performers", async ({ page }) => {
+    await page.goto("/dashboard/bands-and-performers");
+    await expect(page.getByText("Admin access required").first()).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(page.getByText("Something went wrong")).toHaveCount(0);
   });
 });
 
