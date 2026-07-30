@@ -76,10 +76,14 @@ test.describe("event series edit scope", () => {
     await page.getByRole("button", { name: "Remove" }).nth(2).click();
     await expect(page.getByRole("button", { name: "Remove" })).toHaveCount(2, { timeout: 10_000 });
 
+    const scheduleGrid = page
+      .locator('div.grid.gap-3.md\\:grid-cols-3')
+      .filter({ has: page.getByRole("button", { name: /Save template.*apply blocks/ }) });
+
     await pickSearchableOption(
       page,
-      page
-        .locator("div.space-y-1")
+      scheduleGrid
+        .locator('div.space-y-1')
         .filter({ has: page.getByText("Apply to", { exact: true }) })
         .getByTestId("searchable-select-trigger"),
       "This occurrence only",
@@ -88,7 +92,7 @@ test.describe("event series edit scope", () => {
 
     await pickSearchableOption(
       page,
-      page
+      scheduleGrid
         .locator("div.space-y-1")
         .filter({ has: page.getByText("From occurrence index", { exact: true }) })
         .getByTestId("searchable-select-trigger"),
