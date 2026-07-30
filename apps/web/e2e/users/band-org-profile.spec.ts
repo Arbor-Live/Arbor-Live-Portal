@@ -11,7 +11,7 @@ test.describe("band organization profile (admin birdseye)", () => {
     const originalName = e2eEnv.bandOrgName;
 
     await page.goto("/dashboard/users/organizations");
-    await expect(page.getByText("Band Organizations (Admin Birds-Eye View)")).toBeVisible({
+    await expect(page.getByRole("heading", { name: "Band Organizations" })).toBeVisible({
       timeout: 30_000,
     });
 
