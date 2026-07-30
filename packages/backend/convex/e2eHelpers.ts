@@ -2914,14 +2914,14 @@ export const getBandOrganizationProfileByOrgId = query({
  */
 export const getEventScheduleBlockCount = query({
   args: { eventId: v.id("events") },
-  returns: v.number(),
+  returns: v.object({ count: v.number() }),
   handler: async (ctx, args) => {
     assertE2eHelpersEnabled();
     const blocks = await ctx.db
       .query("eventScheduleBlocks")
       .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
       .collect();
-    return blocks.length;
+    return { count: blocks.length };
   },
 });
 

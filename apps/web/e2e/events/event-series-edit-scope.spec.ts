@@ -64,10 +64,10 @@ test.describe("event series edit scope", () => {
     await page.getByRole("button", { name: /Save template.*apply blocks/ }).first().click();
 
     for (const occId of series.occurrenceIds) {
-      await pollConvex<number>(
+      await pollConvex<{ count: number }>(
         "e2eHelpers:getEventScheduleBlockCount",
         { eventId: occId },
-        (count) => count === 3,
+        (state) => state?.count === 3,
       );
     }
 
@@ -99,21 +99,21 @@ test.describe("event series edit scope", () => {
     await page.getByRole("button", { name: /Save template.*apply blocks/ }).first().click();
 
     // --- Step 3: assert siblings not affected ---
-    await pollConvex<number>(
+    await pollConvex<{ count: number }>(
       "e2eHelpers:getEventScheduleBlockCount",
       { eventId: series.occurrenceIds[0] },
-      (count) => count === 3,
+      (state) => state?.count === 3,
     );
-    await pollConvex<number>(
+    await pollConvex<{ count: number }>(
       "e2eHelpers:getEventScheduleBlockCount",
       { eventId: series.occurrenceIds[2] },
-      (count) => count === 3,
+      (state) => state?.count === 3,
     );
 
-    await pollConvex<number>(
+    await pollConvex<{ count: number }>(
       "e2eHelpers:getEventScheduleBlockCount",
       { eventId: series.occurrenceIds[1] },
-      (count) => count === 2,
+      (state) => state?.count === 2,
     );
   });
 });
