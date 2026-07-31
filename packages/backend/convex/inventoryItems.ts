@@ -30,6 +30,12 @@ async function cascadeLocationToDescendants(
   }
 }
 
+/**
+ * List hydration: type + location + parent container only.
+ * Do not fan out a per-row `by_containedInAssetId` query — that was O(page)
+ * Database I/O on every inventory list subscription. Children are derived on
+ * the client from `listSummaries` (which includes `containedInAssetId`).
+ */
 async function hydrateInventoryItems(ctx: QueryCtx, items: Doc<"inventoryItems">[]) {
   const typeIds = Array.from(new Set(items.map((item) => item.typeId)));
   const locationIds = Array.from(
@@ -47,32 +53,24 @@ async function hydrateInventoryItems(ctx: QueryCtx, items: Doc<"inventoryItems">
     ),
   );
 
-  const [types, locations, containers, containedAssetsLists] = await Promise.all([
+  const [types, locations, containers] = await Promise.all([
     Promise.all(typeIds.map((id) => ctx.db.get(id))),
     Promise.all(locationIds.map((id) => ctx.db.get(id))),
     Promise.all(containerIds.map((id) => ctx.db.get(id))),
-    Promise.all(
-      items.map((item) =>
-        ctx.db
-          .query("inventoryItems")
-          .withIndex("by_containedInAssetId", (q) => q.eq("containedInAssetId", item._id))
-          .take(50),
-      ),
-    ),
   ]);
 
   const typeById = new Map(typeIds.map((id, index) => [id, types[index] ?? null]));
   const locationById = new Map(locationIds.map((id, index) => [id, locations[index] ?? null]));
   const containerById = new Map(containerIds.map((id, index) => [id, containers[index] ?? null]));
 
-  return items.map((item, index) => ({
+  return items.map((item) => ({
     ...item,
     type: typeById.get(item.typeId) ?? null,
     location: item.storageLocationId ? (locationById.get(item.storageLocationId) ?? null) : null,
     containedInAsset: item.containedInAssetId
       ? (containerById.get(item.containedInAssetId) ?? null)
       : null,
-    containedAssets: containedAssetsLists[index] ?? [],
+    containedAssets: [] as Doc<"inventoryItems">[],
   }));
 }
 
@@ -102,9 +100,8 @@ function matchesInventoryFilters(
  * Category/search cannot use an items-table index (category lives on the type;
  * search spans assetId, serial, and type fields). Filtering the paginated page
  * hid newer rows — same failure inventoryTypes.list had. Filtered reads scan a
- * bounded window, filter with light type lookups, then fully hydrate only the
- * matches so we do not pay location/container/children cost on the full scan.
- * Unfiltered reads still paginate.
+ * bounded window, filter with light type lookups, then hydrate only the matches
+ * (type/location/parent — not per-row children). Unfiltered reads still paginate.
  */
 export const list = query({
   args: {
@@ -166,6 +163,7 @@ export const listSummaries = query({
         _id: item._id,
         assetId: item.assetId,
         typeId: item.typeId,
+        containedInAssetId: item.containedInAssetId,
         type: typeById.get(item.typeId) ?? null,
       }))
       .sort((a, b) => a.assetId.localeCompare(b.assetId));

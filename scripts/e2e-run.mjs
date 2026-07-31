@@ -3,11 +3,16 @@
  * Boots Convex + Next (or reuses an existing stack), then runs Playwright e2e.
  *
  * Env:
- *   E2E_SKIP_BOOT=1        — assume services already running on :3000
- *   E2E_BASE_URL           — default http://localhost:3000
+ *   E2E_SKIP_BOOT=1           — assume services already running on :3000
+ *   E2E_BASE_URL              — default http://localhost:3000
  *   E2E_ADMIN_EMAIL / E2E_ADMIN_PASSWORD / E2E_ADMIN_NAME
- *   CONVEX_AGENT_MODE=anonymous — CI / no Convex login (default when CI=true)
- *   BETTER_AUTH_SECRET     — written to local .env and Convex deployment env
+ *   CONVEX_AGENT_MODE         — default `anonymous` (local + CI). Local anonymous
+ *                               uses packages/backend/.env.e2e.local so it does
+ *                               not overwrite the developer cloud `.env.local`.
+ *                               Set `CONVEX_AGENT_MODE=cloud` (or `E2E_USE_CLOUD_DEV=1`)
+ *                               to deliberately hit a shared cloud Dev deployment
+ *                               (counts against plan Database I/O).
+ *   BETTER_AUTH_SECRET        — written to local .env and Convex deployment env
  */
 import { spawn, execFileSync } from "child_process";
 import { setTimeout as delay } from "timers/promises";
@@ -22,8 +27,36 @@ const webDir = path.join(root, "apps/web");
 const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
 const skipBoot = process.env.E2E_SKIP_BOOT === "1";
 const isCi = process.env.CI === "true" || process.env.CI === "1";
-const agentMode =
-  process.env.CONVEX_AGENT_MODE ?? (isCi ? "anonymous" : undefined);
+
+/**
+ * Prefer anonymous local Convex when *booting* e2e so personal devices and CI
+ * do not burn shared cloud Dev Database I/O (purgeBulk, email polling, etc.).
+ *
+ * `E2E_SKIP_BOOT=1` reuses whatever stack is already running — default to that
+ * stack's `.env.local` unless the caller explicitly asks for anonymous
+ * (`.env.e2e.local`).
+ */
+function resolveAgentMode() {
+  if (process.env.E2E_USE_CLOUD_DEV === "1") return undefined;
+  const raw = process.env.CONVEX_AGENT_MODE?.trim().toLowerCase();
+  if (raw === "cloud" || raw === "off" || raw === "0") return undefined;
+  if (raw === "anonymous" || raw === "1" || raw === "true") return "anonymous";
+
+  if (skipBoot) {
+    // Opt-in only: do not attach --env-file .env.e2e.local to a cloud stack.
+    return undefined;
+  }
+
+  // Default when booting: anonymous for both local and CI.
+  return "anonymous";
+}
+
+const agentMode = resolveAgentMode();
+const useAnonymous = agentMode === "anonymous";
+/** Isolated from developer cloud `.env.local` when running anonymous e2e. */
+const e2eEnvFile = path.join(backendDir, ".env.e2e.local");
+const e2eEnvFileRel = path.relative(backendDir, e2eEnvFile);
+
 /**
  * "dev" runs `next dev`; "prod" builds and runs `next start`.
  *
@@ -160,30 +193,114 @@ function ensureLocalBackendEnvFile(secret) {
   }
 }
 
+function readEnvFileValue(filePath, keys) {
+  if (!fs.existsSync(filePath)) return null;
+  const lines = fs.readFileSync(filePath, "utf8").split("\n");
+  for (const key of keys) {
+    const match = lines
+      .map((line) => line.trim())
+      .find((line) => line.startsWith(`${key}=`));
+    if (!match) continue;
+    let value = match.slice(key.length + 1).trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    if (value) return value;
+  }
+  return null;
+}
+
+function convexCliArgs(extra = []) {
+  if (useAnonymous) {
+    return ["--env-file", e2eEnvFileRel, ...extra];
+  }
+  return extra;
+}
+
 function convexEnv(extra = {}) {
   return {
     ...process.env,
     ...(agentMode ? { CONVEX_AGENT_MODE: agentMode } : {}),
+    // Helpers / Playwright resolve the anonymous URL from this file.
+    ...(useAnonymous
+      ? {
+          E2E_CONVEX_ENV_FILE: e2eEnvFile,
+          CONVEX_AGENT_MODE: "anonymous",
+        }
+      : {}),
     ...extra,
   };
 }
 
 function setConvexEnv(key, value) {
-  execFileSync("pnpm", ["exec", "convex", "env", "set", key, value], {
-    cwd: backendDir,
-    encoding: "utf8",
-    env: convexEnv(),
-    stdio: ["ignore", "pipe", "pipe"],
-  });
+  execFileSync(
+    "pnpm",
+    ["exec", "convex", "env", "set", ...convexCliArgs([key, value])],
+    {
+      cwd: backendDir,
+      encoding: "utf8",
+      env: convexEnv(),
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+}
+
+function resolveConvexDeploymentUrl() {
+  const fromEnv =
+    process.env.NEXT_PUBLIC_CONVEX_URL?.trim() ||
+    process.env.CONVEX_URL?.trim() ||
+    process.env.CONVEX_CLOUD_URL?.trim();
+  if (fromEnv) return fromEnv;
+
+  const keys = ["CONVEX_URL", "CONVEX_CLOUD_URL", "NEXT_PUBLIC_CONVEX_URL"];
+  if (useAnonymous) {
+    const fromE2e = readEnvFileValue(e2eEnvFile, keys);
+    if (fromE2e) return fromE2e;
+  }
+  for (const file of [".env.local", ".env"]) {
+    const value = readEnvFileValue(path.join(backendDir, file), keys);
+    if (value) return value;
+  }
+  return null;
+}
+
+function isLikelyCloudConvexUrl(url) {
+  if (!url) return false;
+  try {
+    const host = new URL(url).hostname;
+    return host.endsWith(".convex.cloud") || host.endsWith(".convex.site");
+  } catch {
+    return /convex\.(cloud|site)/.test(url);
+  }
+}
+
+function warnIfSkipBootHitsCloud() {
+  const url = resolveConvexDeploymentUrl();
+  if (isLikelyCloudConvexUrl(url)) {
+    console.warn(
+      [
+        "",
+        "WARNING: E2E_SKIP_BOOT=1 is targeting a cloud Convex deployment:",
+        `  ${url}`,
+        "E2E helpers (purgeBulk, email polling, seed prune) count against plan Database I/O.",
+        "Prefer `pnpm test:e2e` (boots anonymous local Convex into .env.e2e.local),",
+        "or set CONVEX_AGENT_MODE=anonymous without SKIP_BOOT.",
+        "",
+      ].join("\n"),
+    );
+  }
 }
 
 async function waitForConvexReady(timeoutMs = 240_000) {
-  const envLocal = path.join(backendDir, ".env.local");
+  const envLocal = useAnonymous ? e2eEnvFile : path.join(backendDir, ".env.local");
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     if (fs.existsSync(envLocal)) {
       try {
-        execFileSync("pnpm", ["exec", "convex", "env", "list"], {
+        execFileSync("pnpm", ["exec", "convex", "env", "list", ...convexCliArgs()], {
           cwd: backendDir,
           env: convexEnv(),
           stdio: "pipe",
@@ -195,7 +312,11 @@ async function waitForConvexReady(timeoutMs = 240_000) {
     }
     await delay(2000);
   }
-  throw new Error("Timed out waiting for Convex deployment to become ready.");
+  throw new Error(
+    useAnonymous
+      ? `Timed out waiting for anonymous Convex (.env.e2e.local) to become ready.`
+      : "Timed out waiting for Convex deployment to become ready.",
+  );
 }
 
 async function ensureConvexDeploymentEnv(secret, { includeAuthSecret = true } = {}) {
@@ -223,7 +344,12 @@ async function waitForE2eHelpersReady(timeoutMs = 300_000) {
     try {
       execFileSync(
         "pnpm",
-        ["exec", "convex", "run", "e2eHelpers:getLatestEmailNotification", "{}"],
+        [
+          "exec",
+          "convex",
+          "run",
+          ...convexCliArgs(["e2eHelpers:getLatestEmailNotification", "{}"]),
+        ],
         {
           cwd: backendDir,
           env: convexEnv(),
@@ -273,8 +399,10 @@ async function pruneStaleSeedData() {
           "exec",
           "convex",
           "run",
-          "e2eHelpers:pruneE2eSeedData",
-          JSON.stringify({ olderThanHours: 2, limit: 50 }),
+          ...convexCliArgs([
+            "e2eHelpers:pruneE2eSeedData",
+            JSON.stringify({ olderThanHours: 2, limit: 50 }),
+          ]),
         ],
         { cwd: backendDir, encoding: "utf8", env: convexEnv(), stdio: ["ignore", "pipe", "pipe"] },
       );
@@ -315,8 +443,10 @@ async function pruneStaleE2eUsers() {
           "exec",
           "convex",
           "run",
-          "e2eHelpers:pruneStaleE2eUsers",
-          JSON.stringify({ olderThanHours: 2, limit: 25 }),
+          ...convexCliArgs([
+            "e2eHelpers:pruneStaleE2eUsers",
+            JSON.stringify({ olderThanHours: 2, limit: 25 }),
+          ]),
         ],
         { cwd: backendDir, encoding: "utf8", env: convexEnv(), stdio: ["ignore", "pipe", "pipe"] },
       );
@@ -335,9 +465,41 @@ async function pruneStaleE2eUsers() {
   console.log(deleted ? `Pruned ${deleted} stale e2e users` : "No stale e2e users to prune");
 }
 
+/** Publish anonymous deployment URLs into the child process env for Next + Playwright. */
+function anonymousPublicEnv() {
+  if (!useAnonymous) return {};
+  const url = resolveConvexDeploymentUrl();
+  if (!url) return { E2E_CONVEX_ENV_FILE: e2eEnvFile, CONVEX_AGENT_MODE: "anonymous" };
+  const siteUrl = url.endsWith(".convex.cloud")
+    ? url.replace(/\.convex\.cloud$/, ".convex.site")
+    : url.includes(":3210")
+      ? url.replace(":3210", ":3211")
+      : undefined;
+  return {
+    E2E_CONVEX_ENV_FILE: e2eEnvFile,
+    CONVEX_AGENT_MODE: "anonymous",
+    CONVEX_URL: url,
+    CONVEX_CLOUD_URL: url,
+    NEXT_PUBLIC_CONVEX_URL: url,
+    ...(siteUrl
+      ? { CONVEX_SITE_URL: siteUrl, NEXT_PUBLIC_CONVEX_SITE_URL: siteUrl }
+      : {}),
+  };
+}
+
 async function main() {
   const secret = resolveBetterAuthSecret();
   process.env.BETTER_AUTH_SECRET = secret;
+
+  if (useAnonymous) {
+    console.log(
+      `E2E Convex mode: anonymous local (env file ${path.relative(root, e2eEnvFile)})`,
+    );
+  } else {
+    console.log(
+      "E2E Convex mode: cloud Dev (.env.local) — Database I/O counts against the team plan",
+    );
+  }
 
   if (!skipBoot) {
     ensureLocalBackendEnvFile(secret);
@@ -345,11 +507,15 @@ async function main() {
     console.log(
       `Starting Convex…${agentMode ? ` (CONVEX_AGENT_MODE=${agentMode})` : ""}`,
     );
-    run("pnpm", ["exec", "convex", "dev", "--typecheck", "disable"], {
-      cwd: backendDir,
-      prefix: "convex",
-      env: convexEnv(),
-    });
+    run(
+      "pnpm",
+      ["exec", "convex", "dev", ...convexCliArgs(["--typecheck", "disable"])],
+      {
+        cwd: backendDir,
+        prefix: "convex",
+        env: convexEnv(),
+      },
+    );
 
     await waitForConvexReady();
     await ensureConvexDeploymentEnv(secret, { includeAuthSecret: true });
@@ -358,8 +524,10 @@ async function main() {
     await pruneStaleSeedData();
     await pruneStaleE2eUsers();
 
+    const publicEnv = anonymousPublicEnv();
     const webEnv = {
       ...process.env,
+      ...publicEnv,
       BETTER_AUTH_SECRET: secret,
       SITE_URL: "http://localhost:3000",
     };
@@ -381,6 +549,7 @@ async function main() {
     }
   } else {
     console.log("E2E_SKIP_BOOT=1 — reusing existing stack");
+    warnIfSkipBootHitsCloud();
     // Do not rotate BETTER_AUTH_SECRET on a shared cloud deployment — that
     // invalidates Better Auth JWKS and breaks /api/auth/convex/token.
     await ensureConvexDeploymentEnv(secret, { includeAuthSecret: false }).catch((error) => {
@@ -405,6 +574,7 @@ async function main() {
       stdio: "inherit",
       env: {
         ...process.env,
+        ...anonymousPublicEnv(),
         E2E_BASE_URL: baseURL,
         BETTER_AUTH_SECRET: secret,
       },

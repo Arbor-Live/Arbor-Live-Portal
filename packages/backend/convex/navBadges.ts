@@ -19,12 +19,23 @@ import {
   resolveProfileMembership,
 } from "./lib/userVerticals";
 
+/** Cap events scanned for the unconfirmed-crew badge (full board uses its own query). */
+const UNCONFIRMED_CREW_EVENT_CAP = 40;
+/** Cap shifts read per event when deciding confirmation for the badge. */
+const UNCONFIRMED_CREW_SHIFT_CAP = 50;
+/** Badge counters only need “N” or “N+”; avoid scanning hundreds of status rows. */
+const BADGE_STATUS_TAKE = 50;
+
 /**
  * Single subscription for sidebar nav badge counts.
  * Prefer this over stacking per-badge queries on every dashboard page.
  *
  * Logic is inlined (not ctx.runQuery(api.*)) to avoid circular TypeScript
  * inference through `_generated/api`.
+ *
+ * `includeUnconfirmedCrew` is off by default from the sidebar except on crew
+ * scheduling routes — counting it fans out events × shifts and dominated
+ * Database I/O when subscribed on every dashboard page.
  */
 export const getNavBadges = query({
   args: {
@@ -34,6 +45,7 @@ export const getNavBadges = query({
     includeArborInternal: v.boolean(),
     includeAdmin: v.boolean(),
     includeBand: v.boolean(),
+    includeUnconfirmedCrew: v.optional(v.boolean()),
   },
   returns: v.object({
     pendingAvailability: v.number(),
@@ -46,6 +58,15 @@ export const getNavBadges = query({
   }),
   handler: async (ctx, args) => {
     const user = await requireAuth(ctx);
+    const includeUnconfirmedCrew = Boolean(args.includeUnconfirmedCrew);
+
+    // Auth gates once up front — helpers below skip re-resolving org/admin.
+    if (args.includeArborInternal) {
+      await requireArborInternalContext(ctx);
+    }
+    if (args.includeAdmin) {
+      await requireAdmin(ctx);
+    }
 
     const [
       pendingAvailability,
@@ -59,7 +80,7 @@ export const getNavBadges = query({
       args.includeArborInternal
         ? countMyPendingAvailability(ctx, getUserId(user), args.now)
         : Promise.resolve(0),
-      args.includeArborInternal && args.includeAdmin
+      args.includeArborInternal && args.includeAdmin && includeUnconfirmedCrew
         ? countUnconfirmedCrew(ctx, args.rangeStart, args.rangeEnd)
         : Promise.resolve(0),
       args.includeArborInternal ? countOpenBookingRequests(ctx) : Promise.resolve(0),
@@ -85,11 +106,8 @@ function weeksToMs(weeks: number) {
   return weeks * 7 * 24 * 60 * 60 * 1000;
 }
 
-function computeShiftStats(shifts: Doc<"eventCrewShifts">[]) {
-  const totalShifts = shifts.length;
-  const filledShifts = shifts.filter((shift) => Boolean(shift.userId?.trim())).length;
-  const isCrewConfirmed = totalShifts > 0 && filledShifts === totalShifts;
-  return { totalShifts, filledShifts, unfilledShifts: totalShifts - filledShifts, isCrewConfirmed };
+function isShiftFilled(shift: Doc<"eventCrewShifts">) {
+  return Boolean(shift.userId?.trim());
 }
 
 async function getCurrentUserProfile(ctx: QueryCtx, userId: string) {
@@ -100,7 +118,6 @@ async function getCurrentUserProfile(ctx: QueryCtx, userId: string) {
 }
 
 async function countMyPendingAvailability(ctx: QueryCtx, userId: string, now: number) {
-  await requireArborInternalContext(ctx);
   const profile = await getCurrentUserProfile(ctx, userId);
   const userDisciplines = getDisciplinesForEventMatching(
     resolveProfileMembership(profile ?? {}).disciplines,
@@ -119,64 +136,67 @@ async function countMyPendingAvailability(ctx: QueryCtx, userId: string, now: nu
   return matchedEvents.filter((event) => !respondedEventIds.has(event._id)).length;
 }
 
+async function eventIsCrewUnconfirmed(ctx: QueryCtx, eventId: Doc<"events">["_id"]) {
+  const shifts = await ctx.db
+    .query("eventCrewShifts")
+    .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
+    .take(UNCONFIRMED_CREW_SHIFT_CAP);
+  // Match previous semantics: zero shifts ⇒ not confirmed.
+  if (shifts.length === 0) return true;
+  return shifts.some((shift) => !isShiftFilled(shift));
+}
+
 async function countUnconfirmedCrew(ctx: QueryCtx, rangeStart: number, rangeEnd: number) {
-  await requireArborInternalContext(ctx);
   if (rangeEnd < rangeStart) {
     throw new Error("Date range end must be on or after the start.");
   }
-  const upcomingCrewed = await listCrewedEventsInRange(ctx, rangeStart, rangeEnd);
-  const shiftPages = await Promise.all(
-    upcomingCrewed.map((event) =>
-      ctx.db
-        .query("eventCrewShifts")
-        .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
-        .take(100),
-    ),
+  const upcomingCrewed = (await listCrewedEventsInRange(ctx, rangeStart, rangeEnd)).slice(
+    0,
+    UNCONFIRMED_CREW_EVENT_CAP,
   );
-  return shiftPages.filter((shifts) => !computeShiftStats(shifts).isCrewConfirmed).length;
+  const flags = await Promise.all(
+    upcomingCrewed.map((event) => eventIsCrewUnconfirmed(ctx, event._id)),
+  );
+  return flags.filter(Boolean).length;
 }
 
 async function countOpenBookingRequests(ctx: QueryCtx) {
-  await requireArborInternalContext(ctx);
   const submitted = await ctx.db
     .query("eventRequests")
     .withIndex("by_status_and_submittedAt", (q) => q.eq("status", "submitted"))
-    .take(200);
+    .take(BADGE_STATUS_TAKE);
   const inReview = await ctx.db
     .query("eventRequests")
     .withIndex("by_status_and_submittedAt", (q) => q.eq("status", "in_review"))
-    .take(200);
+    .take(BADGE_STATUS_TAKE);
   return submitted.length + inReview.length;
 }
 
 async function countSubmittedBandApplications(ctx: QueryCtx) {
-  await requireAdmin(ctx);
   const rows = await ctx.db
     .query("bandApplications")
     .withIndex("by_status", (q) => q.eq("status", "submitted"))
-    .take(200);
+    .take(BADGE_STATUS_TAKE);
   return rows.length;
 }
 
 async function countSubmittedCrewApplications(ctx: QueryCtx) {
-  await requireAdmin(ctx);
   const rows = await ctx.db
     .query("crewApplications")
     .withIndex("by_status", (q) => q.eq("status", "submitted"))
-    .take(200);
+    .take(BADGE_STATUS_TAKE);
   return rows.length;
 }
 
 async function countPendingDamageReports(ctx: QueryCtx) {
-  await requireArborInternalContext(ctx);
   const open = await ctx.db
     .query("damageReports")
     .withIndex("by_status", (q) => q.eq("status", "open"))
-    .take(500);
+    .take(BADGE_STATUS_TAKE);
   const inProgress = await ctx.db
     .query("damageReports")
     .withIndex("by_status", (q) => q.eq("status", "in_progress"))
-    .take(500);
+    .take(BADGE_STATUS_TAKE);
   return open.length + inProgress.length;
 }
 
@@ -193,7 +213,7 @@ async function countPendingBandPaymentActions(ctx: QueryCtx) {
   const payments = await ctx.db
     .query("eventBandPayments")
     .withIndex("by_organizationId", (q) => q.eq("organizationId", bandContext.organizationId))
-    .take(200);
+    .take(100);
 
   let awaitingSignatureForMe = 0;
   let waitingOnPayeeSetup = 0;
