@@ -293,6 +293,48 @@ async function pruneStaleSeedData() {
   console.log(deleted ? `Pruned ${deleted} stale e2e events` : "No stale e2e events to prune");
 }
 
+/**
+ * Delete stale stamped E2E users (invite-created accounts). Without this, every
+ * run of `smoke/invite.spec.ts` leaves one more "E2E Crew"-named member on a
+ * shared deployment; they eventually break name-keyed pickers (the mention menu
+ * resolves `@Name` to every candidate with that name). Bounded like the seed
+ * pruner: each pass reads the Better Auth user table and cascades its rows.
+ */
+async function pruneStaleE2eUsers() {
+  if (process.env.E2E_SKIP_PRUNE === "1") {
+    console.log("E2E_SKIP_PRUNE=1 — leaving users in place");
+    return;
+  }
+  let deleted = 0;
+  for (let pass = 0; pass < 20; pass += 1) {
+    let result;
+    try {
+      const raw = execFileSync(
+        "pnpm",
+        [
+          "exec",
+          "convex",
+          "run",
+          "e2eHelpers:pruneStaleE2eUsers",
+          JSON.stringify({ olderThanHours: 2, limit: 25 }),
+        ],
+        { cwd: backendDir, encoding: "utf8", env: convexEnv(), stdio: ["ignore", "pipe", "pipe"] },
+      );
+      const match = raw.match(/\{[\s\S]*\}/);
+      result = match ? JSON.parse(match[0]) : null;
+    } catch (error) {
+      // Never block the suite on housekeeping.
+      console.warn(
+        `User prune unavailable (continuing): ${error instanceof Error ? error.message.split("\n")[0] : String(error)}`,
+      );
+      return;
+    }
+    if (!result?.deletedUsers) break;
+    deleted += result.deletedUsers;
+  }
+  console.log(deleted ? `Pruned ${deleted} stale e2e users` : "No stale e2e users to prune");
+}
+
 async function main() {
   const secret = resolveBetterAuthSecret();
   process.env.BETTER_AUTH_SECRET = secret;
@@ -314,6 +356,7 @@ async function main() {
     // Env changes force a re-push; wait until helpers exist before starting web/tests.
     await waitForE2eHelpersReady();
     await pruneStaleSeedData();
+    await pruneStaleE2eUsers();
 
     const webEnv = {
       ...process.env,
@@ -347,6 +390,7 @@ async function main() {
       console.warn(`e2eHelpers not ready (continuing): ${error.message}`);
     });
     await pruneStaleSeedData();
+    await pruneStaleE2eUsers();
   }
 
   console.log(`Waiting for ${baseURL}…`);

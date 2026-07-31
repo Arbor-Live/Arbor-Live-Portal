@@ -57,7 +57,7 @@ test.describe("admin band profile management", () => {
     await expect(page.getByTestId("admin-band-picker")).toContainText(e2eEnv.bandOrgName, {
       timeout: 30_000,
     });
-    await expect(formTextarea(page, "Bio")).toHaveValue(bio, { timeout: 20_000 });
+    await expect(formTextarea(page.locator("body"), "Bio")).toHaveValue(bio, { timeout: 20_000 });
   });
 });
 

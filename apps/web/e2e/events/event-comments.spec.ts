@@ -55,7 +55,11 @@ test.describe("event comments and mentions", () => {
 
     const menu = page.getByTestId("event-comment-mention-menu");
     await expect(menu).toBeVisible({ timeout: 15_000 });
-    await menu.getByRole("option", { name: new RegExp(e2eEnv.crewName, "i") }).click();
+    // Match on the stable crew email, not the name: `smoke/invite.spec.ts`
+    // creates a new "E2E Crew"-named member on every run, so a name-scoped
+    // locator strict-violates once more than one of those has accumulated on a
+    // shared deployment.
+    await menu.getByRole("option", { name: new RegExp(e2eEnv.crewEmail, "i") }).click();
 
     await expect(input).toHaveValue(new RegExp(`@${e2eEnv.crewName}`));
     await input.pressSequentially(` please check the pull list ${stamp}`, { delay: 20 });
