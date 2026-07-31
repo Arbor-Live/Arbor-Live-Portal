@@ -1,4 +1,11 @@
-import type { Locator } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
+
+/**
+ * Either root a field lookup can hang off. `Page` and `Locator` both expose
+ * `.locator()`, and callers scope to whichever is narrower at the call site —
+ * a card when one is in hand, the page when the field is unambiguous.
+ */
+type FieldScope = Locator | Page;
 
 /**
  * The `<input>` of a `TextFormField`, found by its visible label.
@@ -14,7 +21,7 @@ import type { Locator } from "@playwright/test";
  * caps actions at 45s so it fails legibly, but the locator still has to be
  * right — hence this helper.
  */
-export function formField(scope: Locator, label: string | RegExp) {
+export function formField(scope: FieldScope, label: string | RegExp) {
   return scope
     .locator("[data-slot='form-item']")
     .filter({ hasText: label })
@@ -29,7 +36,7 @@ export function formField(scope: Locator, label: string | RegExp) {
  * matches the "Non-Subsidized Package Price (USD)" item, and the ambiguity only
  * surfaces as a strict-mode violation at the point of use.
  */
-export function formTextarea(scope: Locator, label: string | RegExp) {
+export function formTextarea(scope: FieldScope, label: string | RegExp) {
   return scope
     .locator("[data-slot='form-item']")
     .filter({ hasText: label })

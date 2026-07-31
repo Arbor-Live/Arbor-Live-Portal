@@ -3,11 +3,12 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import FullCalendar from "@fullcalendar/react";
-import dayGridPlugin from "@fullcalendar/daygrid";
-import interactionPlugin from "@fullcalendar/interaction";
-import timeGridPlugin from "@fullcalendar/timegrid";
-import type { EventContentArg } from "@fullcalendar/core";
-import type { EventInput } from "@fullcalendar/core/index.js";
+import dayGridPlugin from "@fullcalendar/react/daygrid";
+import interactionPlugin from "@fullcalendar/react/interaction";
+import timeGridPlugin from "@fullcalendar/react/timegrid";
+// v7 moved theming into a plugin — without one the calendar renders unstyled.
+import classicThemePlugin from "@fullcalendar/react/themes/classic";
+import type { EventDisplayInfo, EventInput } from "@fullcalendar/react";
 import { Avatar, AvatarFallback, AvatarGroup, AvatarGroupCount, AvatarImage } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -159,7 +160,7 @@ export function EventsCalendarView({ events }: { events: DashboardEvent[] }) {
       <div className="rounded-md border bg-card p-2">
         <FullCalendar
           key={view}
-          plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
+          plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin, classicThemePlugin]}
           initialView={view}
           timeZone={PORTAL_TIMEZONE}
           allDaySlot={false}
@@ -172,12 +173,21 @@ export function EventsCalendarView({ events }: { events: DashboardEvent[] }) {
           expandRows
           dayHeaderFormat={{ weekday: "short", month: "numeric", day: "numeric" }}
           eventTimeFormat={{ hour: "numeric", minute: "2-digit", meridiem: "short" }}
-          slotLabelFormat={{ hour: "numeric", minute: "2-digit", meridiem: "short" }}
+          slotHeaderFormat={{ hour: "numeric", minute: "2-digit", meridiem: "short" }}
           headerToolbar={{
             left: "prev,next today",
             center: "title",
             right: "",
           }}
+          // v7's hashed class names can't be targeted from CSS, so the chrome
+          // the v6 stylesheet used to restyle is reapplied through these hooks.
+          tableClass="rounded-xl overflow-hidden"
+          toolbarTitleClass="text-base font-semibold"
+          buttonClass="rounded-lg shadow-none text-[0.8rem] font-semibold"
+          eventClass="rounded-lg border shadow-none"
+          eventInnerClass="whitespace-normal"
+          eventTitleClass="font-semibold"
+          slotHeaderClass="text-xs opacity-85"
           height="auto"
           events={calendarEvents}
           eventClick={(arg) =>
@@ -185,7 +195,7 @@ export function EventsCalendarView({ events }: { events: DashboardEvent[] }) {
               `/dashboard/events/${(arg.event.extendedProps.parentEventId as string | undefined) ?? arg.event.id}`,
             )
           }
-          eventContent={(arg: EventContentArg) => {
+          eventContent={(arg: EventDisplayInfo) => {
             const isBlockEvent = Boolean(arg.event.extendedProps.isBlockEvent);
             const crew = (arg.event.extendedProps.assignedCrew as Array<{
               userId: string;
