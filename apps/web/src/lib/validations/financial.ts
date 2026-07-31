@@ -1,12 +1,5 @@
 import { z } from "zod";
 
-export const managerProfileSchema = z.object({
-  title: z.string().optional(),
-  phone: z.string().optional(),
-});
-
-export type ManagerProfileFormValues = z.infer<typeof managerProfileSchema>;
-
 export const invoiceGroupTypeSchema = z.enum(["vso", "house", "department", "individual"]);
 
 export const equipmentPricingModeSchema = z.enum(["subsidized", "nonSubsidized"]);

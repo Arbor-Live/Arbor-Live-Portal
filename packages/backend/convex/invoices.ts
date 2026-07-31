@@ -423,54 +423,6 @@ export const listManagers = query({
   },
 });
 
-export const listInvoiceManagersForAdmin = query({
-  args: {},
-  returns: v.array(
-    v.object({
-      id: v.string(),
-      name: v.string(),
-      email: v.optional(v.string()),
-      role: v.optional(v.string()),
-      title: v.string(),
-      phone: v.string(),
-      active: v.boolean(),
-    }),
-  ),
-  handler: async (ctx) => {
-    await requireAdmin(ctx);
-    await requireArborInternalContext(ctx);
-    const result = await ctx.runQuery(components.betterAuth.adapter.findMany, {
-      model: "user",
-      paginationOpts: { cursor: null, numItems: 200 },
-    });
-    const users = (result?.page ?? []) as Array<{
-      _id?: string;
-      id?: string;
-      name?: string;
-      email?: string;
-      role?: string | null;
-    }>;
-    const profiles = await ctx.db.query("userAdminProfiles").withIndex("by_active").take(2000);
-    const profileByUserId = new Map(profiles.map((profile) => [profile.userId, profile]));
-    return users
-      .map((user) => {
-        const id = user.id ?? user._id ?? "";
-        const profile = profileByUserId.get(id);
-        return {
-          id,
-          name: user.name ?? user.email ?? "Unknown user",
-          email: user.email,
-          role: user.role ?? undefined,
-          title: profile?.title ?? "",
-          phone: profile?.phone ?? "",
-          active: profile?.active ?? true,
-        };
-      })
-      .filter((user) => Boolean(user.id))
-      .sort((a, b) => a.name.localeCompare(b.name));
-  },
-});
-
 const INVOICE_LIST_LIMIT = 200;
 
 const invoiceListStatusValue = v.union(

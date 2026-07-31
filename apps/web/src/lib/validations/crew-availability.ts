@@ -55,3 +55,10 @@ export const publicQuoteChangeRequestSchema = z.object({
 });
 
 export type PublicQuoteChangeRequestFormValues = z.infer<typeof publicQuoteChangeRequestSchema>;
+
+export const eventFeedbackSchema = z.object({
+  rating: z.number().int().min(1, "Please select a rating").max(5),
+  comments: z.string().trim().min(1, "Please share a few words about your experience"),
+});
+
+export type EventFeedbackFormValues = z.infer<typeof eventFeedbackSchema>;

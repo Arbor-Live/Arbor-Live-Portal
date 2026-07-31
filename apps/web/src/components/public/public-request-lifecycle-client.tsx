@@ -16,6 +16,7 @@ import { PublicPaymentContactsSection } from "@/components/public/public-payment
 import { PublicQuoteApprovalSection } from "@/components/public/public-quote-approval-section";
 import { PublicQuoteChangeRequestSection } from "@/components/public/public-quote-change-request-section";
 import { PublicInvoicePdfDownload } from "@/components/public/public-invoice-pdf-download";
+import { PublicPostEventSection } from "@/components/public/public-post-event-section";
 import { formatDateTime, formatUsd } from "@/lib/format";
 import type {
   PublicPaymentContactsFormValues,
@@ -345,6 +346,8 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
               submitMutation={submitPaymentProof}
             />
           ) : null}
+
+          <PublicPostEventSection portal="request" token={token} />
         </>
       ) : request.quote && !request.quote.readyForClientReview ? (
         <Card>

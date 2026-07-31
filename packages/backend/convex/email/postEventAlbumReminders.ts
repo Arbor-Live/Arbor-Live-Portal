@@ -1,7 +1,15 @@
 import { addPacificCalendarDays, pacificDateKey } from "@arbor/format";
 import { v } from "convex/values";
 import { internalMutation } from "../_generated/server";
-import { EVENT_TIMEZONE, formatEventDateRange, reminderDayKey, subjectForTemplate } from "./constants";
+import { resolvePortalTokenForInvoice } from "../lib/paymentProof";
+import {
+  EVENT_TIMEZONE,
+  formatEventDateRange,
+  publicQuoteUrl,
+  reminderDayKey,
+  requestTrackingUrl,
+  subjectForTemplate,
+} from "./constants";
 import { enqueueEmail } from "./enqueue";
 
 /** Days after an event ends before we send the "share your photos" reminder. */
@@ -66,6 +74,11 @@ export const run = internalMutation({
         )
         .unique();
 
+      const portal = await resolvePortalTokenForInvoice(ctx, invoice);
+      const feedbackFormUrl = portal
+        ? `${portal.portal === "request" ? requestTrackingUrl(portal.token) : publicQuoteUrl(portal.token)}#feedback`
+        : undefined;
+
       await enqueueEmail(ctx, {
         template: "post_event_album",
         to: clientEmail,
@@ -78,6 +91,7 @@ export const run = internalMutation({
           venueName: event.venueName,
           dateRangeLabel: formatEventDateRange(event.startAt, event.endAt, timezone),
           albumShareUrl: albumLink?.shareUrl,
+          feedbackFormUrl,
         },
       });
       enqueuedCount += 1;

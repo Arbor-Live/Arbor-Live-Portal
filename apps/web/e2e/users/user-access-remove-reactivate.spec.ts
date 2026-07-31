@@ -119,8 +119,9 @@ test.describe("user access removal", () => {
       await chooseRowAction(page, userRowActionMenu(row), "Remove access");
 
       // The mutation throws and the page surfaces the message instead of
-      // silently doing nothing.
-      await expect(page.getByText("You cannot remove your own access.")).toBeVisible({
+      // silently doing nothing. `.first()` guards against the dev-mode error
+      // overlay echoing the same text.
+      await expect(page.getByText("You cannot remove your own access.").first()).toBeVisible({
         timeout: 30_000,
       });
       // The invariant that matters: they are still signed in and still active.

@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { runConvex } from "../helpers/convex";
 
 test.describe("insights dashboard", () => {
   test("admin can open Insights and switch Finances / Demand / Events / Crew / Ops tabs", async ({
@@ -76,5 +77,32 @@ test.describe("insights dashboard", () => {
     await expect(page.getByText("Fill rate").first()).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText("Unfilled shifts").first()).toBeVisible();
     await expect(page.getByText("Unconfirmed events").first()).toBeVisible();
+  });
+
+  test("admin can open the Feedback tab and read full client feedback", async ({ page }) => {
+    test.setTimeout(120_000);
+
+    const seeded = runConvex("e2eHelpers:seedEventFeedbackForInsights", {}) as {
+      eventTitle: string;
+      invoiceNumber: string;
+      comments: string;
+    };
+
+    await page.goto("/dashboard/financial-hub/insights");
+    const insights = page.getByTestId("insights-page");
+    await expect(insights).toBeVisible({ timeout: 30_000 });
+
+    await insights.getByRole("button", { name: "Feedback", exact: true }).click();
+    await expect(page.getByTestId("insights-feedback-panel")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText("Responses").first()).toBeVisible({ timeout: 30_000 });
+
+    // Summary cards render for the seeded response.
+    await expect(page.getByText("Average rating").first()).toBeVisible();
+    await expect(page.getByText("Rating distribution").first()).toBeVisible();
+
+    // Full feedback is readable verbatim (unique per seed run).
+    await expect(page.getByText(seeded.eventTitle).first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(seeded.invoiceNumber).first()).toBeVisible();
+    await expect(page.getByText(seeded.comments, { exact: true })).toBeVisible();
   });
 });

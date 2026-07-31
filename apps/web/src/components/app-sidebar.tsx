@@ -45,7 +45,6 @@ import {
   GuitarIcon,
   PackageIcon,
   LifebuoyIcon,
-  PaperPlaneTiltIcon,
   MegaphoneIcon,
   ImagesIcon,
 } from "@phosphor-icons/react"
@@ -68,7 +67,7 @@ type NavItem = {
 const navItems: NavItem[] = [
   { title: "Home", url: "/dashboard", icon: HouseIcon },
   { title: "Events", url: "/dashboard/events", icon: CalendarDotsIcon },
-  { title: "Finances", url: "/dashboard/financial-hub", icon: CurrencyDollarIcon, adminOnly: true },
+  { title: "Ops Center", url: "/dashboard/financial-hub", icon: CurrencyDollarIcon, adminOnly: true },
   { title: "Users", url: "/dashboard/users", icon: UsersIcon, adminOnly: true },
   {
     title: "Bands and Performers",
@@ -100,7 +99,6 @@ const financialHubSubItems: NavSubItem[] = [
   { title: "Crew Timecards", url: "/dashboard/timecards" },
   { title: "My Timecards", url: "/dashboard/timecards/mine" },
   { title: "Host Organizations", url: "/dashboard/financial-hub/organizations" },
-  { title: "Managers", url: "/dashboard/financial-hub/managers" },
   { title: "Create Invoice", url: "/dashboard/financial-hub/invoices/new" },
 ]
 
@@ -118,8 +116,6 @@ const eventsSubItems: NavSubItem[] = [
 const usersSubItems: NavSubItem[] = [
   { title: "Overview", url: "/dashboard/users" },
   { title: "Access & Invites", url: "/dashboard/users/access" },
-  { title: "Organizations", url: "/dashboard/users/organizations" },
-  { title: "Band applications", url: "/dashboard/users/band-applications", adminOnly: true },
   { title: "Crew applications", url: "/dashboard/users/crew-applications", adminOnly: true },
   { title: "Crew Rates", url: "/dashboard/users/crew-rates" },
 ]
@@ -135,6 +131,8 @@ const bandsSubItems: NavSubItem[] = [
   { title: "Profile", url: "/dashboard/bands-and-performers" },
   { title: "Technical rider", url: "/dashboard/bands-and-performers/riders" },
   { title: "Payments", url: "/dashboard/bands-and-performers/payments" },
+  { title: "Organizations", url: "/dashboard/users/organizations", adminOnly: true },
+  { title: "Band applications", url: "/dashboard/users/band-applications", adminOnly: true },
 ]
 
 const sectionSubItems: Record<string, NavSubItem[]> = {
@@ -192,8 +190,7 @@ function canAccessNavItem(
 }
 
 const secondaryItems = [
-  { title: "Support", url: "#", icon: <LifebuoyIcon /> },
-  { title: "Feedback", url: "#", icon: <PaperPlaneTiltIcon /> },
+  { title: "Support", url: "mailto:arborlive@stanford.edu", icon: <LifebuoyIcon /> },
 ]
 
 export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
@@ -343,7 +340,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
             })?.filter(
               (subItem) =>
                 !(
-                  isAdmin &&
+                  (isAdmin || hasOperationsAccess) &&
                   item.url === "/dashboard/events" &&
                   subItem.url === "/dashboard/timecards/mine"
                 ) &&

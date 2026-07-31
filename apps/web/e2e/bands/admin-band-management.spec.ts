@@ -63,7 +63,8 @@ test.describe("admin band profile management", () => {
 
 test.describe("admin band rider management", () => {
   test("admin creates a rider for a selected band", async ({ page }) => {
-    await ensureBand();
+    const band = (await ensureBand()) as { organizationId: string };
+    runConvex("e2eHelpers:clearBandRiders", { organizationId: band.organizationId });
     const riderName = `E2E Admin Rider ${Date.now()}`;
 
     await page.goto("/dashboard/bands-and-performers/riders");
@@ -95,7 +96,8 @@ test.describe("band self-service riders", () => {
   test.use({ storageState: bandAuthFile });
 
   test("band member creates and opens a technical rider", async ({ page }) => {
-    await ensureBand();
+    const band = (await ensureBand()) as { organizationId: string };
+    runConvex("e2eHelpers:clearBandRiders", { organizationId: band.organizationId });
     const riderName = `E2E Band Rider ${Date.now()}`;
 
     await page.goto("/dashboard/bands-and-performers/riders");
@@ -144,8 +146,9 @@ test.describe("admin sidebar advertises Bands and Performers", () => {
     // Sidebar parents with subtabs are CollapsibleTriggers (buttons), not links,
     // and the sidebar is not a `navigation` landmark.
     const sidebar = page.locator('[data-slot="sidebar"]').first();
+    // Regex: the section trigger may carry a pending-count badge (e.g. band applications).
     await expect(
-      sidebar.getByRole("button", { name: "Bands and Performers", exact: true }),
+      sidebar.getByRole("button", { name: /^Bands and Performers/ }),
     ).toBeVisible();
 
     const crewContext = await browser.newContext({ storageState: crewAuthFile });

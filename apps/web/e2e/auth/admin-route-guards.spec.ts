@@ -58,8 +58,8 @@ test.describe("admin route guards", () => {
     const sidebar = page.locator('[data-slot="sidebar"]').first();
     await expect(sidebar.getByRole("link", { name: "Users", exact: true })).toHaveCount(0);
     await expect(sidebar.getByRole("button", { name: "Users", exact: true })).toHaveCount(0);
-    await expect(sidebar.getByRole("link", { name: "Finances", exact: true })).toHaveCount(0);
-    await expect(sidebar.getByRole("button", { name: "Finances", exact: true })).toHaveCount(0);
+    await expect(sidebar.getByRole("link", { name: "Ops Center", exact: true })).toHaveCount(0);
+    await expect(sidebar.getByRole("button", { name: "Ops Center", exact: true })).toHaveCount(0);
     await expect(
       sidebar.getByRole("button", { name: "Bands and Performers", exact: true }),
     ).toHaveCount(0);
