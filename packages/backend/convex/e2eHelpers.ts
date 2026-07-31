@@ -3656,6 +3656,7 @@ const e2eInvoiceLineValidator = v.object({
   quantity: v.number(),
   rateUsd: v.number(),
   amountUsd: v.number(),
+  feeDefinitionId: v.union(v.id("invoiceFeeDefinitions"), v.null()),
 });
 
 /**
@@ -3719,6 +3720,7 @@ export const getInvoiceTotalsState = query({
           quantity: line.quantity,
           rateUsd: line.rateUsd,
           amountUsd: line.amountUsd,
+          feeDefinitionId: line.feeDefinitionId ?? null,
         })),
     };
   },
@@ -5258,5 +5260,225 @@ export const getInventoryCatalogCounts = query({
       capabilities: capabilities.length,
       truncated: [types, items, packages, locations].some((rows) => rows.length === cap),
     };
+  },
+});
+
+/* -------------------------------------------------------------------------- */
+/* Batch 14: invoice managers, fee definitions, terms templates                */
+/* -------------------------------------------------------------------------- */
+
+function normalizeFeeDefinitionKey(raw: string) {
+  return raw
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+/**
+ * Test-only: a fee definition by its normalized key.
+ *
+ * `invoiceFeeDefinitions.create` normalizes the key before storing, so lookups
+ * normalize too — otherwise a spec that created "E2E Fee 1" via the UI could not
+ * find it by the same string it typed.
+ */
+export const getInvoiceFeeDefinitionByKey = query({
+  args: { key: v.string() },
+  returns: v.union(
+    v.null(),
+    v.object({
+      id: v.id("invoiceFeeDefinitions"),
+      key: v.string(),
+      label: v.string(),
+      description: v.union(v.string(), v.null()),
+      defaultAmountUsd: v.union(v.number(), v.null()),
+      active: v.boolean(),
+      sortOrder: v.union(v.number(), v.null()),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const row = await ctx.db
+      .query("invoiceFeeDefinitions")
+      .withIndex("by_key", (q) => q.eq("key", normalizeFeeDefinitionKey(args.key)))
+      .unique();
+    if (!row) return null;
+    return {
+      id: row._id,
+      key: row.key,
+      label: row.label,
+      description: row.description ?? null,
+      defaultAmountUsd: row.defaultAmountUsd ?? null,
+      active: row.active,
+      sortOrder: row.sortOrder ?? null,
+    };
+  },
+});
+
+/**
+ * Test-only: a terms template by its label.
+ */
+export const getInvoiceTermsTemplateByLabel = query({
+  args: { label: v.string() },
+  returns: v.union(
+    v.null(),
+    v.object({
+      id: v.id("invoiceTerms"),
+      label: v.string(),
+      version: v.string(),
+      markdown: v.string(),
+      active: v.boolean(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const row = await ctx.db
+      .query("invoiceTerms")
+      .withIndex("by_label", (q) => q.eq("label", args.label.trim()))
+      .first();
+    if (!row) return null;
+    return {
+      id: row._id,
+      label: row.label,
+      version: row.version,
+      markdown: row.markdown,
+      active: row.active,
+    };
+  },
+});
+
+/**
+ * Test-only: which terms templates an invoice references, plus its
+ * additional-terms free text. `termsIds` is the normalized view — the legacy
+ * single `termsId` column is folded in so a spec reads one shape.
+ */
+export const getInvoiceTermsState = query({
+  args: { invoiceId: v.id("invoices") },
+  returns: v.union(
+    v.null(),
+    v.object({
+      termsIds: v.array(v.id("invoiceTerms")),
+      additionalTermsMarkdown: v.union(v.string(), v.null()),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const invoice = await ctx.db.get(args.invoiceId);
+    if (!invoice) return null;
+    return {
+      termsIds: invoice.termsIds?.length
+        ? invoice.termsIds
+        : invoice.termsId
+          ? [invoice.termsId]
+          : [],
+      additionalTermsMarkdown: invoice.additionalTermsMarkdown ?? null,
+    };
+  },
+});
+
+/**
+ * Test-only: overwrite a user's invoice-manager profile fields (title/phone).
+ *
+ * The managers roster edits these through `users.updateUserAdmin`; the spec
+ * asserts the write with `getUserAdminStateByEmail`, then calls this to restore
+ * the shared admin row to its empty default — a failed run must not leave a
+ * fixture title on the account other worktrees sign in as.
+ */
+export const setUserAdminProfileFields = mutation({
+  args: {
+    email: v.string(),
+    title: v.optional(v.string()),
+    phone: v.optional(v.string()),
+  },
+  returns: v.object({ ok: v.literal(true) }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const email = args.email.trim().toLowerCase();
+    const user = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
+      model: "user",
+      where: [{ field: "email", value: email }],
+    })) as { id?: string; _id?: string } | null;
+    const userId = getId(user);
+    if (!userId) throw new Error("User not found.");
+    const now = Date.now();
+    const existing = await ctx.db
+      .query("userAdminProfiles")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .unique();
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        title: args.title?.trim() || undefined,
+        phone: args.phone?.trim() || undefined,
+        updatedAt: now,
+      });
+    } else {
+      await ctx.db.insert("userAdminProfiles", {
+        userId,
+        title: args.title?.trim() || undefined,
+        phone: args.phone?.trim() || undefined,
+        active: true,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+    return { ok: true as const };
+  },
+});
+
+/**
+ * Test-only: delete fee-definition and terms-template fixtures directly through
+ * `ctx.db` (not the product mutations), plus any draft invoices a spec created.
+ *
+ * Invoices first — a line item may carry `feeDefinitionId` and an invoice may
+ * carry `termsIds`, so the referencing rows go away before the definitions they
+ * point at, matching how the product's own delete guards would be exercised if
+ * the fixtures were still in a state the UI could reach.
+ */
+export const deleteInvoiceSettingsFixtures = mutation({
+  args: {
+    feeKeys: v.optional(v.array(v.string())),
+    termLabels: v.optional(v.array(v.string())),
+    invoiceIds: v.optional(v.array(v.id("invoices"))),
+  },
+  returns: v.object({
+    deletedInvoices: v.number(),
+    deletedFees: v.number(),
+    deletedTerms: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    let deletedInvoices = 0;
+    for (const invoiceId of args.invoiceIds ?? []) {
+      const invoice = await ctx.db.get(invoiceId);
+      if (!invoice) continue;
+      await deleteInvoiceRecord(ctx, invoiceId);
+      deletedInvoices += 1;
+    }
+    let deletedFees = 0;
+    for (const rawKey of args.feeKeys ?? []) {
+      const key = rawKey.trim();
+      if (!key) continue;
+      const row = await ctx.db
+        .query("invoiceFeeDefinitions")
+        .withIndex("by_key", (q) => q.eq("key", normalizeFeeDefinitionKey(key)))
+        .unique();
+      if (!row) continue;
+      await ctx.db.delete(row._id);
+      deletedFees += 1;
+    }
+    let deletedTerms = 0;
+    for (const rawLabel of args.termLabels ?? []) {
+      const label = rawLabel.trim();
+      if (!label) continue;
+      const rows = await ctx.db
+        .query("invoiceTerms")
+        .withIndex("by_label", (q) => q.eq("label", label))
+        .take(50);
+      for (const row of rows) {
+        await ctx.db.delete(row._id);
+        deletedTerms += 1;
+      }
+    }
+    return { deletedInvoices, deletedFees, deletedTerms };
   },
 });

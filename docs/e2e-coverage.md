@@ -8,7 +8,7 @@ Update this file whenever specs or helpers land (or when a batch ships).
 - Runner: `pnpm test:e2e` ([`scripts/e2e-run.mjs`](../scripts/e2e-run.mjs))
 - CI: [`.github/workflows/e2e.yml`](../.github/workflows/e2e.yml)
 
-**Last updated:** 2026-07-31 (Batches 1–12 on `main`, Batch 13 on `t3code/next-phase-e2e-testing`)
+**Last updated:** 2026-07-31 (Batches 1–12 on `main`, Batches 13–14 on `t3code/next-e2e-tests`)
 
 ## Batch history
 
@@ -28,6 +28,7 @@ Update this file whenever specs or helpers land (or when a batch ships).
 | **11** | — | Event series editors: "this occurrence only" scope does not affect sibling occurrences — pins the applyScope reset guard [#75](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/75) |
 | **12** | — | Band org profile admin birdseye edit; inventory CSV import (types + assets from fixture files) |
 | **13** | on branch | Booking request lifecycle: inbox status filters (open view hides completed), staff actions (assignee, staff notes, mark in review), decline guards (client + server) + the declined client portal, the converted-request lock (UI + backend `updateStatus` refusal), round-robin settings, admin cascade delete. Replaced `booking-decline-reason.spec.ts` with a superset spec. Also: `pruneE2eSeedData` now prunes stale converted/declined requests, and a new run-start `pruneStaleE2eUsers` removes invite-created accounts — see “Keeping the shared deployment usable” |
+| **14** | on branch | Money long tail: the invoice managers roster (`/dashboard/financial-hub/managers`), fee definitions, and terms templates — the two settings cards on `/dashboard/financial-hub` that feed the invoice editor and the public quote. The fee spec drives CRUD (add/edit default amount/disable/enable/delete) and then the editor: a definition pre-fills the fee-row rate from `defaultAmountUsd` and the persisted line carries `feeDefinitionId`. The terms spec drives CRUD and then attaches a template to a draft invoice, asserting `termsIds` persisted *and* the public quote page renders the combined markdown. The managers spec edits the shared admin's title/phone and restores it in `afterAll` |
 
 ## Status legend
 
@@ -95,8 +96,10 @@ Update this file whenever specs or helpers land (or when a batch ships).
 | Duplicate invoice | Covered | `quotes/invoice-reset-and-duplicate.spec.ts` (Batch 8) — new number + token, no inherited approval |
 | Staff invalidate payment proof / attach receipt | Covered | `quotes/payment-proof-manage.spec.ts` (Batch 8) |
 | Host orgs + client contacts | Covered | `quotes/invoice-organizations.spec.ts` (Batch 8) — create → bill an invoice → archive; merge duplicate hosts |
+| Invoice managers roster (`/financial-hub/managers`) | Covered | `quotes/invoice-managers.spec.ts` (Batch 14) — edit title/phone on a row persists via `updateUserAdmin`; restores the shared admin row in `afterAll` |
+| Fee definitions | Covered | `quotes/invoice-fee-definitions.spec.ts` (Batch 14) — add/edit default amount/disable/enable/delete on the settings card, plus the editor link: picking a definition pre-fills the fee-row rate and the persisted line carries `feeDefinitionId` |
+| Terms templates | Covered | `quotes/invoice-terms-templates.spec.ts` (Batch 14) — add/edit markdown/disable/enable/delete on the settings card, plus the editor link: a checked template lands on `termsIds` and renders on the public quote page |
 | PDF download / void | None | Deferred |
-| Invoice managers (`/financial-hub/managers`) | None | — |
 | Per-user crew rates (`/users/crew-rates`) | Covered | `users/user-rates-admin.spec.ts` (Batch 9) — custom rate, then a pinned mode resolving to the global rate; reads the globals, never writes them |
 | Invoice settings (global crew rates) | Deferred | `invoiceSettings.update` writes **global** crew rates. On the shared deployment that silently re-prices every other worktree's crew lines, so it is not safe to drive from a spec |
 
@@ -224,6 +227,9 @@ Update this file whenever specs or helpers land (or when a batch ships).
 | `quotes/invoice-list-recency.spec.ts` | Newest invoice is listed (#65) |
 | `marketing/work-posts-admin.spec.ts` | Work post admin editor (#65) |
 | `quotes/invoice-line-items.spec.ts` | Line items across sections + totals (Batch 8) |
+| `quotes/invoice-managers.spec.ts` | Invoice managers roster title/phone edit (Batch 14) |
+| `quotes/invoice-fee-definitions.spec.ts` | Fee definition CRUD + editor fee-picker link (Batch 14) |
+| `quotes/invoice-terms-templates.spec.ts` | Terms template CRUD + attach to invoice + public page (Batch 14) |
 | `quotes/invoice-discount.spec.ts` | Discount math, zero clamp, warning (Batch 8) |
 | `quotes/invoice-send-for-review.spec.ts` | Send sheet → withdraw → re-send + emails (Batch 8) |
 | `quotes/invoice-token-regeneration.spec.ts` | Approval token rotation revokes the old link (Batch 8) |
@@ -272,12 +278,11 @@ that is the better risk proxy than the page count:
 |---------|---------|-------------------|
 | Open Mic (`/events/open-mic`, `/[id]`, public page) | `openMic.ts` 575 | nothing but the Batch 7 route guard |
 | Crew availability beyond one Yes (`/events/my-availability`) | `eventCrewAvailability.ts` 832 | one yes → assign path |
-| Invoice managers / fee definitions / terms | `invoiceFeeDefinitions.ts` 90, `invoiceTerms.ts` 67 | nothing; they feed the totals Batch 8 asserts |
 | Invoice PDF download / void | `invoicePdf.ts` | nothing |
 | Account page, event expenses, event artifacts, marketing settings | 217 / 73 / 107 / 56 | nothing |
 | Password reset from the Users row, onboarding waive | — | nothing; `sendPasswordResetAdmin` hands off to Better Auth's flow, and waive only makes sense against a half-finished onboarding |
 
-(The booking request lifecycle row is gone — Batch 13 covered the inbox, staff actions, decline, the convert lock, round-robin settings, and cascade delete. "Reschedule" from the old batch description turned out not to be a shipped mutation; a client reschedules by requesting quote changes, which Batch 8 already covers.)
+(The booking request lifecycle row is gone — Batch 13 covered the inbox, staff actions, decline, the convert lock, round-robin settings, and cascade delete. "Reschedule" from the old batch description turned out not to be a shipped mutation; a client reschedules by requesting quote changes, which Batch 8 already covers. The money-long-tail row is gone too — Batch 14 covered invoice managers, fee definitions, and terms templates, including their links into the invoice editor and public quote page.)
 
 ### Candidates for the next batches
 
@@ -286,7 +291,6 @@ most to discover late.
 
 | Batch | Surface | Why it is next |
 |-------|---------|----------------|
-| **14** | Money long tail: invoice managers, fee definitions, terms | Small modules (90 + 67 lines) that feed the totals Batch 8 asserts heavily. Cheap insurance on arithmetic that is already covered downstream but not at its source |
 | **15?** | Open Mic | The largest wholly-untested module left (575 lines, three routes, a public page). Listed as low product priority since Batch 1 — worth confirming that is still true before spending a batch, because on size alone it would rank far higher |
 
 Not worth a batch on their own: the account page, event expenses, event
@@ -340,6 +344,15 @@ packages → types → deepest locations first → categories → capabilities).
 deletes through `ctx.db` rather than the product mutations on purpose — the
 product's own delete guards are what the specs assert, so cleanup must not
 depend on behaviour a failing run may have left half-applied.
+
+Batch 14 uses the same shape for the financial settings rows:
+`e2eHelpers:deleteInvoiceSettingsFixtures` takes the fee-definition keys and
+terms-template labels the specs created (plus any integration draft invoices)
+and deletes them through `ctx.db` in dependency order — invoices first, since a
+line item may carry `feeDefinitionId` and an invoice may carry `termsIds`. The
+managers spec instead restores the shared admin row's title/phone to empty in
+`afterAll` via `e2eHelpers:setUserAdminProfileFields`, so a failed run cannot
+leave a fixture title on the account every worktree signs in as.
 
 Run `convex run e2eHelpers:getInventoryCatalogCounts '{}'` to see where the
 catalog sits against the caps that matter:
@@ -413,6 +426,10 @@ inventory type still lists the capability key (same idea as
   duplicate display names silently turn one mention into many (up to the 20-cap
   refusal). Not a shipped bug today — pruning keeps the suite's data clean — but
   worth remembering when two teammates share a display name for real.
+
+**Still unfixed, found by Batch 14:**
+
+*(none.)*
 
 **Fixed since, now tested:** the same unguarded reset effect in
 `events/event-series-schedule-editor.tsx` and
