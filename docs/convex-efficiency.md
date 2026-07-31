@@ -25,6 +25,9 @@ Prefer these patterns over stacking eager list subscriptions.
 - Counters currently include: pending availability, unconfirmed crew, open booking
   requests (`submitted` + `in_review`), band/crew applications, damage reports,
   and band payment actions.
+- Pass `includeUnconfirmedCrew: true` only on routes where that badge matters
+  (dashboard home + crew scheduling). That counter fans out events × shifts and
+  dominated Database I/O when subscribed on every page.
 
 ## Search-on-demand pickers
 

@@ -3,11 +3,19 @@
  * Boots Convex + Next (or reuses an existing stack), then runs Playwright e2e.
  *
  * Env:
- *   E2E_SKIP_BOOT=1        — assume services already running on :3000
- *   E2E_BASE_URL           — default http://localhost:3000
+ *   E2E_SKIP_BOOT=1           — assume services already running on :3000
+ *   E2E_BASE_URL              — default http://localhost:3000
  *   E2E_ADMIN_EMAIL / E2E_ADMIN_PASSWORD / E2E_ADMIN_NAME
- *   CONVEX_AGENT_MODE=anonymous — CI / no Convex login (default when CI=true)
- *   BETTER_AUTH_SECRET     — written to local .env and Convex deployment env
+ *   CONVEX_AGENT_MODE         — default `anonymous` when booting (local + CI).
+ *                               Anonymous `convex dev` always writes `.env.local`
+ *                               (Convex `--env-file` cannot provision into an empty
+ *                               file). Locally we stash any pre-existing cloud
+ *                               `.env.local` → `.env.local.pre-e2e`, mirror the
+ *                               anonymous config to `.env.e2e.local`, and restore
+ *                               the stash on exit so day-to-day cloud Dev is intact.
+ *                               Set `CONVEX_AGENT_MODE=cloud` or `E2E_USE_CLOUD_DEV=1`
+ *                               to hit shared cloud Dev (counts against plan I/O).
+ *   BETTER_AUTH_SECRET        — written to local .env and Convex deployment env
  */
 import { spawn, execFileSync } from "child_process";
 import { setTimeout as delay } from "timers/promises";
@@ -22,8 +30,33 @@ const webDir = path.join(root, "apps/web");
 const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
 const skipBoot = process.env.E2E_SKIP_BOOT === "1";
 const isCi = process.env.CI === "true" || process.env.CI === "1";
-const agentMode =
-  process.env.CONVEX_AGENT_MODE ?? (isCi ? "anonymous" : undefined);
+
+/**
+ * Prefer anonymous local Convex when *booting* e2e so personal devices and CI
+ * do not burn shared cloud Dev Database I/O (purgeBulk, email polling, etc.).
+ *
+ * `E2E_SKIP_BOOT=1` reuses whatever stack is already running — do not force
+ * anonymous unless the caller sets CONVEX_AGENT_MODE=anonymous.
+ */
+function resolveAgentMode() {
+  if (process.env.E2E_USE_CLOUD_DEV === "1") return undefined;
+  const raw = process.env.CONVEX_AGENT_MODE?.trim().toLowerCase();
+  if (raw === "cloud" || raw === "off" || raw === "0") return undefined;
+  if (raw === "anonymous" || raw === "1" || raw === "true") return "anonymous";
+
+  if (skipBoot) return undefined;
+
+  // Default when booting: anonymous for both local and CI.
+  return "anonymous";
+}
+
+const agentMode = resolveAgentMode();
+const useAnonymous = agentMode === "anonymous";
+/** Mirror of anonymous `.env.local` for docs / optional skip-boot reuse. */
+const e2eEnvFile = path.join(backendDir, ".env.e2e.local");
+const envLocalFile = path.join(backendDir, ".env.local");
+const envLocalBackup = path.join(backendDir, ".env.local.pre-e2e");
+
 /**
  * "dev" runs `next dev`; "prod" builds and runs `next start`.
  *
@@ -36,6 +69,7 @@ const agentMode =
 const webMode = (process.env.E2E_WEB_MODE ?? (isCi ? "prod" : "dev")).toLowerCase();
 
 const children = [];
+let restoredEnvLocal = false;
 
 function run(command, args, options = {}) {
   const child = spawn(command, args, {
@@ -82,6 +116,47 @@ async function waitForUrl(url, timeoutMs = 180_000) {
   throw new Error(`Timed out waiting for ${url}`);
 }
 
+/**
+ * Stash cloud `.env.local` so anonymous `convex dev` can write the standard
+ * path without permanently overwriting the developer deployment config.
+ * Skipped on CI (no valuable pre-existing cloud config).
+ */
+function stashEnvLocalForAnonymous() {
+  if (!useAnonymous || skipBoot || isCi) return;
+  if (!fs.existsSync(envLocalFile)) return;
+  // Already stashed earlier in this process — do not nest.
+  if (fs.existsSync(envLocalBackup)) {
+    console.log(
+      `Keeping existing stash at ${path.relative(root, envLocalBackup)}`,
+    );
+    return;
+  }
+  fs.copyFileSync(envLocalFile, envLocalBackup);
+  console.log(
+    `Stashed ${path.relative(root, envLocalFile)} → ${path.relative(root, envLocalBackup)}`,
+  );
+}
+
+function mirrorAnonymousEnvLocal() {
+  if (!useAnonymous || !fs.existsSync(envLocalFile)) return;
+  fs.copyFileSync(envLocalFile, e2eEnvFile);
+}
+
+function restoreEnvLocalFromStash() {
+  if (restoredEnvLocal) return;
+  if (!fs.existsSync(envLocalBackup)) return;
+  try {
+    fs.copyFileSync(envLocalBackup, envLocalFile);
+    fs.unlinkSync(envLocalBackup);
+    restoredEnvLocal = true;
+    console.log(`Restored ${path.relative(root, envLocalFile)} from pre-e2e stash`);
+  } catch (error) {
+    console.warn(
+      `Could not restore .env.local from stash: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
 function cleanup() {
   for (const child of children) {
     try {
@@ -90,6 +165,7 @@ function cleanup() {
       // ignore
     }
   }
+  restoreEnvLocalFromStash();
 }
 
 process.on("exit", cleanup);
@@ -160,16 +236,65 @@ function ensureLocalBackendEnvFile(secret) {
   }
 }
 
+function readEnvFileValue(filePath, keys) {
+  if (!fs.existsSync(filePath)) return null;
+  const lines = fs.readFileSync(filePath, "utf8").split("\n");
+  for (const key of keys) {
+    const match = lines
+      .map((line) => line.trim())
+      .find((line) => line.startsWith(`${key}=`));
+    if (!match) continue;
+    let value = match.slice(key.length + 1).trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    if (value) return value;
+  }
+  return null;
+}
+
+function envFileHasDeployment(filePath) {
+  return Boolean(
+    readEnvFileValue(filePath, [
+      "CONVEX_DEPLOYMENT",
+      "CONVEX_DEPLOY_KEY",
+      "CONVEX_SELF_HOSTED_URL",
+    ]),
+  );
+}
+
+/**
+ * Only pass `--env-file` when the file already has deployment credentials.
+ * Convex refuses empty/placeholder env files (it cannot provision into them).
+ * During a normal anonymous boot we leave this empty and use `.env.local`.
+ */
+function convexCliArgs(extra = []) {
+  if (
+    useAnonymous &&
+    envFileHasDeployment(e2eEnvFile) &&
+    // Prefer .env.e2e.local only for skip-boot anonymous reuse; during a live
+    // boot `.env.local` is the active anonymous config.
+    skipBoot
+  ) {
+    return ["--env-file", path.relative(backendDir, e2eEnvFile), ...extra];
+  }
+  return extra;
+}
+
 function convexEnv(extra = {}) {
   return {
     ...process.env,
     ...(agentMode ? { CONVEX_AGENT_MODE: agentMode } : {}),
+    ...(useAnonymous ? { CONVEX_AGENT_MODE: "anonymous" } : {}),
     ...extra,
   };
 }
 
 function setConvexEnv(key, value) {
-  execFileSync("pnpm", ["exec", "convex", "env", "set", key, value], {
+  execFileSync("pnpm", ["exec", "convex", "env", "set", ...convexCliArgs([key, value])], {
     cwd: backendDir,
     encoding: "utf8",
     env: convexEnv(),
@@ -177,17 +302,59 @@ function setConvexEnv(key, value) {
   });
 }
 
+function resolveConvexDeploymentUrl() {
+  const fromEnv =
+    process.env.NEXT_PUBLIC_CONVEX_URL?.trim() ||
+    process.env.CONVEX_URL?.trim() ||
+    process.env.CONVEX_CLOUD_URL?.trim();
+  if (fromEnv) return fromEnv;
+
+  const keys = ["CONVEX_URL", "CONVEX_CLOUD_URL", "NEXT_PUBLIC_CONVEX_URL"];
+  // Active boot writes anonymous into .env.local; mirror may lag by a moment.
+  for (const file of [envLocalFile, e2eEnvFile, path.join(backendDir, ".env")]) {
+    const value = readEnvFileValue(file, keys);
+    if (value) return value;
+  }
+  return null;
+}
+
+function isLikelyCloudConvexUrl(url) {
+  if (!url) return false;
+  try {
+    const host = new URL(url).hostname;
+    return host.endsWith(".convex.cloud") || host.endsWith(".convex.site");
+  } catch {
+    return /convex\.(cloud|site)/.test(url);
+  }
+}
+
+function warnIfSkipBootHitsCloud() {
+  const url = resolveConvexDeploymentUrl();
+  if (isLikelyCloudConvexUrl(url)) {
+    console.warn(
+      [
+        "",
+        "WARNING: E2E_SKIP_BOOT=1 is targeting a cloud Convex deployment:",
+        `  ${url}`,
+        "E2E helpers (purgeBulk, email polling, seed prune) count against plan Database I/O.",
+        "Prefer `pnpm test:e2e` (boots anonymous local Convex; restores cloud .env.local on exit).",
+        "",
+      ].join("\n"),
+    );
+  }
+}
+
 async function waitForConvexReady(timeoutMs = 240_000) {
-  const envLocal = path.join(backendDir, ".env.local");
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    if (fs.existsSync(envLocal)) {
+    if (fs.existsSync(envLocalFile) && envFileHasDeployment(envLocalFile)) {
       try {
-        execFileSync("pnpm", ["exec", "convex", "env", "list"], {
+        execFileSync("pnpm", ["exec", "convex", "env", "list", ...convexCliArgs()], {
           cwd: backendDir,
           env: convexEnv(),
           stdio: "pipe",
         });
+        mirrorAnonymousEnvLocal();
         return;
       } catch {
         // deployment still provisioning / functions not pushed
@@ -195,7 +362,11 @@ async function waitForConvexReady(timeoutMs = 240_000) {
     }
     await delay(2000);
   }
-  throw new Error("Timed out waiting for Convex deployment to become ready.");
+  throw new Error(
+    useAnonymous
+      ? "Timed out waiting for anonymous Convex (.env.local) to become ready."
+      : "Timed out waiting for Convex deployment to become ready.",
+  );
 }
 
 async function ensureConvexDeploymentEnv(secret, { includeAuthSecret = true } = {}) {
@@ -223,7 +394,12 @@ async function waitForE2eHelpersReady(timeoutMs = 300_000) {
     try {
       execFileSync(
         "pnpm",
-        ["exec", "convex", "run", "e2eHelpers:getLatestEmailNotification", "{}"],
+        [
+          "exec",
+          "convex",
+          "run",
+          ...convexCliArgs(["e2eHelpers:getLatestEmailNotification", "{}"]),
+        ],
         {
           cwd: backendDir,
           env: convexEnv(),
@@ -231,6 +407,7 @@ async function waitForE2eHelpersReady(timeoutMs = 300_000) {
         },
       );
       console.log("e2eHelpers are deployed and callable");
+      mirrorAnonymousEnvLocal();
       return;
     } catch (error) {
       lastError = error instanceof Error ? error.message : String(error);
@@ -273,8 +450,10 @@ async function pruneStaleSeedData() {
           "exec",
           "convex",
           "run",
-          "e2eHelpers:pruneE2eSeedData",
-          JSON.stringify({ olderThanHours: 2, limit: 50 }),
+          ...convexCliArgs([
+            "e2eHelpers:pruneE2eSeedData",
+            JSON.stringify({ olderThanHours: 2, limit: 50 }),
+          ]),
         ],
         { cwd: backendDir, encoding: "utf8", env: convexEnv(), stdio: ["ignore", "pipe", "pipe"] },
       );
@@ -315,8 +494,10 @@ async function pruneStaleE2eUsers() {
           "exec",
           "convex",
           "run",
-          "e2eHelpers:pruneStaleE2eUsers",
-          JSON.stringify({ olderThanHours: 2, limit: 25 }),
+          ...convexCliArgs([
+            "e2eHelpers:pruneStaleE2eUsers",
+            JSON.stringify({ olderThanHours: 2, limit: 25 }),
+          ]),
         ],
         { cwd: backendDir, encoding: "utf8", env: convexEnv(), stdio: ["ignore", "pipe", "pipe"] },
       );
@@ -335,16 +516,51 @@ async function pruneStaleE2eUsers() {
   console.log(deleted ? `Pruned ${deleted} stale e2e users` : "No stale e2e users to prune");
 }
 
+/** Publish anonymous deployment URLs into the child process env for Next + Playwright. */
+function anonymousPublicEnv() {
+  if (!useAnonymous) return {};
+  const url = resolveConvexDeploymentUrl();
+  if (!url) return { CONVEX_AGENT_MODE: "anonymous" };
+  const siteUrl = url.endsWith(".convex.cloud")
+    ? url.replace(/\.convex\.cloud$/, ".convex.site")
+    : url.includes(":3210")
+      ? url.replace(":3210", ":3211")
+      : undefined;
+  return {
+    CONVEX_AGENT_MODE: "anonymous",
+    CONVEX_URL: url,
+    CONVEX_CLOUD_URL: url,
+    NEXT_PUBLIC_CONVEX_URL: url,
+    ...(siteUrl
+      ? { CONVEX_SITE_URL: siteUrl, NEXT_PUBLIC_CONVEX_SITE_URL: siteUrl }
+      : {}),
+  };
+}
+
 async function main() {
   const secret = resolveBetterAuthSecret();
   process.env.BETTER_AUTH_SECRET = secret;
 
+  if (useAnonymous) {
+    console.log(
+      "E2E Convex mode: anonymous local (writes .env.local; restores cloud stash on exit)",
+    );
+  } else {
+    console.log(
+      "E2E Convex mode: cloud Dev (.env.local) — Database I/O counts against the team plan",
+    );
+  }
+
   if (!skipBoot) {
     ensureLocalBackendEnvFile(secret);
+    stashEnvLocalForAnonymous();
 
     console.log(
       `Starting Convex…${agentMode ? ` (CONVEX_AGENT_MODE=${agentMode})` : ""}`,
     );
+    // Anonymous provisions into the default `.env.local` path — `--env-file`
+    // cannot be used to create a new deployment (Convex requires credentials
+    // already present in that file).
     run("pnpm", ["exec", "convex", "dev", "--typecheck", "disable"], {
       cwd: backendDir,
       prefix: "convex",
@@ -358,8 +574,10 @@ async function main() {
     await pruneStaleSeedData();
     await pruneStaleE2eUsers();
 
+    const publicEnv = anonymousPublicEnv();
     const webEnv = {
       ...process.env,
+      ...publicEnv,
       BETTER_AUTH_SECRET: secret,
       SITE_URL: "http://localhost:3000",
     };
@@ -381,6 +599,7 @@ async function main() {
     }
   } else {
     console.log("E2E_SKIP_BOOT=1 — reusing existing stack");
+    warnIfSkipBootHitsCloud();
     // Do not rotate BETTER_AUTH_SECRET on a shared cloud deployment — that
     // invalidates Better Auth JWKS and breaks /api/auth/convex/token.
     await ensureConvexDeploymentEnv(secret, { includeAuthSecret: false }).catch((error) => {
@@ -405,6 +624,7 @@ async function main() {
       stdio: "inherit",
       env: {
         ...process.env,
+        ...anonymousPublicEnv(),
         E2E_BASE_URL: baseURL,
         BETTER_AUTH_SECRET: secret,
       },

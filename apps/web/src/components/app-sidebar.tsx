@@ -214,6 +214,11 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
     viewerVerticals.includes("Crew") ||
     viewerVerticals.includes("Trivia") ||
     viewerVerticals.length === 0
+  // Unconfirmed-crew badge fans out events × shifts — only subscribe on routes
+  // where that count is actionable (scheduling board / home), not every page.
+  const includeUnconfirmedCrew =
+    isAdmin &&
+    (pathname === "/dashboard" || pathname.startsWith("/dashboard/events/crew-scheduling"))
   const navBadges = useQuery(
     api.navBadges.getNavBadges,
     shell
@@ -224,6 +229,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
           includeArborInternal: activeOrganization?.organizationType === "arbor_internal",
           includeAdmin: isAdmin,
           includeBand: activeOrganization?.organizationType === "band",
+          includeUnconfirmedCrew,
         }
       : "skip",
   )

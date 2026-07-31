@@ -24,6 +24,35 @@ function readEnvValue(file: string, keys: string[]): string | null {
   return null;
 }
 
+function envFileHasDeployment(file: string): boolean {
+  return Boolean(
+    readEnvValue(file, ["CONVEX_DEPLOYMENT", "CONVEX_DEPLOY_KEY", "CONVEX_SELF_HOSTED_URL"]),
+  );
+}
+
+/**
+ * Optional `--env-file` for skip-boot against a mirrored anonymous config.
+ * Only used when the file already contains deployment credentials — Convex
+ * rejects empty `--env-file` paths.
+ */
+function resolveOptionalEnvFile(): string | null {
+  const fromEnv = process.env.E2E_CONVEX_ENV_FILE?.trim();
+  if (fromEnv && envFileHasDeployment(fromEnv)) return fromEnv;
+  const e2eLocal = path.join(backendDir, ".env.e2e.local");
+  if (process.env.CONVEX_AGENT_MODE === "anonymous" && envFileHasDeployment(e2eLocal)) {
+    return e2eLocal;
+  }
+  return null;
+}
+
+function convexRunArgs(functionName: string, argsJson: string): string[] {
+  const envFile = resolveOptionalEnvFile();
+  if (envFile) {
+    return ["exec", "convex", "run", "--env-file", envFile, functionName, argsJson];
+  }
+  return ["exec", "convex", "run", functionName, argsJson];
+}
+
 /**
  * Deployment the app under test is actually talking to.
  *
@@ -44,7 +73,12 @@ export function resolveConvexUrl(): string {
   if (fromEnv) return fromEnv;
 
   const keys = ["CONVEX_URL", "CONVEX_CLOUD_URL", "NEXT_PUBLIC_CONVEX_URL"];
-  for (const file of [".env.local", ".env"]) {
+  const envFile = resolveOptionalEnvFile();
+  if (envFile) {
+    const value = readEnvValue(envFile, keys);
+    if (value) return value;
+  }
+  for (const file of [".env.local", ".env.e2e.local", ".env"]) {
     const value = readEnvValue(path.join(backendDir, file), keys);
     if (value) return value;
   }
@@ -56,15 +90,11 @@ export function resolveConvexUrl(): string {
 }
 
 export function runConvex(functionName: string, args: unknown = {}) {
-  const raw = execFileSync(
-    "pnpm",
-    ["exec", "convex", "run", functionName, JSON.stringify(args)],
-    {
-      cwd: backendDir,
-      encoding: "utf8",
-      env: process.env,
-    },
-  );
+  const raw = execFileSync("pnpm", convexRunArgs(functionName, JSON.stringify(args)), {
+    cwd: backendDir,
+    encoding: "utf8",
+    env: process.env,
+  });
   // `convex run` prints nothing at all for a null result (the CLI exits 0), so
   // an empty body is a successful null rather than a parse failure.
   if (!raw.trim()) return null;

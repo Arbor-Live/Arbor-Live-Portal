@@ -94,6 +94,20 @@ export function ItemsManager() {
     }
     return map;
   }, [itemSummaries, sortedItems]);
+  /** Children by parent — from summaries so list query skips per-row child scans. */
+  const childrenByParentId = useMemo(() => {
+    const map = new Map<string, Array<{ _id: string; assetId: string }>>();
+    for (const item of itemSummaries ?? []) {
+      if (!item.containedInAssetId) continue;
+      const list = map.get(item.containedInAssetId) ?? [];
+      list.push({ _id: item._id, assetId: item.assetId });
+      map.set(item.containedInAssetId, list);
+    }
+    for (const [, list] of map) {
+      list.sort((a, b) => a.assetId.localeCompare(b.assetId));
+    }
+    return map;
+  }, [itemSummaries]);
 
   async function bulkDeleteSelected() {
     try {
@@ -255,11 +269,11 @@ export function ItemsManager() {
                           : "-"}
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        Contains: {item.containedAssets?.length ?? 0}
+                        Contains: {(childrenByParentId.get(item._id) ?? []).length}
                       </div>
-                      {item.containedAssets?.length ? (
+                      {(childrenByParentId.get(item._id) ?? []).length ? (
                         <div className="mt-1 flex flex-wrap gap-1">
-                          {item.containedAssets.map((child) => (
+                          {(childrenByParentId.get(item._id) ?? []).map((child) => (
                             <span key={child._id}>
                               {renderItemChip(child._id, child.assetId)}
                             </span>

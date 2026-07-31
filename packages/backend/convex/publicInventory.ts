@@ -181,26 +181,31 @@ export const listPublicPackages = query({
       .query("inventoryPackages")
       .withIndex("by_publicListing", (q) => q.eq("publicListing", true))
       .take(500);
+    // Prefer stored publicBucket (required on create/update when listed). Fall
+    // back to line-item inference only for legacy rows missing the field —
+    // otherwise every browse hit paid N package-lines × type lookups.
     const categoryCache = new Map<string, Doc<"inventoryCategories"> | null>();
 
     const rows = [];
     for (const pkg of packages) {
       if (!pkg.active) continue;
 
-      const lineRows = await ctx.db
-        .query("inventoryPackageItems")
-        .withIndex("by_packageId", (q) => q.eq("packageId", pkg._id))
-        .take(200);
+      let displayBucket: PublicBucket | undefined = pkg.publicBucket;
+      if (!displayBucket) {
+        const lineRows = await ctx.db
+          .query("inventoryPackageItems")
+          .withIndex("by_packageId", (q) => q.eq("packageId", pkg._id))
+          .take(200);
 
-      const buckets = new Set<PublicBucket>();
-      for (const row of lineRows) {
-        const type = await ctx.db.get(row.typeId);
-        if (!type) continue;
-        buckets.add(await bucketForCategoryKey(ctx, type.category, categoryCache));
+        const buckets = new Set<PublicBucket>();
+        for (const row of lineRows) {
+          const type = await ctx.db.get(row.typeId);
+          if (!type) continue;
+          buckets.add(await bucketForCategoryKey(ctx, type.category, categoryCache));
+        }
+        displayBucket = pickDominantBucket(buckets);
       }
 
-      const dominantBucket = pickDominantBucket(buckets);
-      const displayBucket = pkg.publicBucket ?? dominantBucket;
       if (args.bucket && displayBucket !== args.bucket) continue;
 
       rows.push({

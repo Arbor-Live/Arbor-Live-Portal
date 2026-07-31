@@ -87,3 +87,6 @@ wizards”).
   keep `convex dev` running, which pushes automatically).
 - Dashboard query efficiency (session shell, search pickers, nav badges): see
   `docs/convex-efficiency.md`.
+- Local Playwright: `pnpm test:e2e` boots anonymous Convex (stashes any cloud
+  `.env.local` and restores it on exit). Use `E2E_USE_CLOUD_DEV=1` only when you
+  intentionally want shared Dev.
