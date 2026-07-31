@@ -38,7 +38,11 @@ test.describe("invite smoke", () => {
     await page.goto(invite.url.startsWith("http") ? invite.url : invite.url);
     await expect(page.getByText("Accept your invitation")).toBeVisible({ timeout: 20_000 });
 
-    await page.getByRole("textbox").first().fill("E2E Crew");
+    // Deliberately NOT "E2E Crew": the mention typeahead resolves `@Name` to every
+    // candidate with that name, so each run's invite-created user must not collide
+    // with the stable crew account the mention specs target. The stamped user is
+    // also pruned at the start of each run (e2eHelpers:pruneStaleE2eUsers).
+    await page.getByRole("textbox").first().fill(`E2E Invitee ${Date.now()}`);
     const passwords = page.locator('input[type="password"]');
     await passwords.nth(0).fill(e2eEnv.adminPassword);
     await passwords.nth(1).fill(e2eEnv.adminPassword);

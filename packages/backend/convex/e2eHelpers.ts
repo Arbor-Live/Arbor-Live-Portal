@@ -13,6 +13,9 @@ import {
 } from "./lib/crewCompensation";
 import { resolveProfileMembership } from "./lib/userVerticals";
 import { assertE2eHelpersEnabled } from "./lib/e2eGuard";
+import { findAuthUsersByIds } from "./lib/auth";
+import { deleteEventRecord, deleteInvoiceRecord } from "./lib/bookingChainDelete";
+import { listEventsLinkedToRequest } from "./lib/bookingDayLoad";
 import { inviteAcceptUrl } from "./email/constants";
 import { enqueueEmail } from "./email/enqueue";
 import { scheduleUserInviteEmail } from "./email/invitations";
@@ -926,6 +929,14 @@ export const seedApprovedQuoteWithLinkedEvent = mutation({
 export const seedSubmittedBookingRequest = mutation({
   args: {
     eventName: v.optional(v.string()),
+    status: v.optional(
+      v.union(
+        v.literal("submitted"),
+        v.literal("in_review"),
+        v.literal("converted"),
+        v.literal("declined"),
+      ),
+    ),
   },
   returns: v.object({
     requestId: v.id("eventRequests"),
@@ -937,6 +948,26 @@ export const seedSubmittedBookingRequest = mutation({
   handler: async (ctx, args) => {
     assertE2eHelpersEnabled();
     const seeded = await insertSubmittedBookingRequest(ctx, args.eventName);
+    if (args.status && args.status !== "submitted") {
+      const now = Date.now();
+      const patch: {
+        status: typeof args.status;
+        updatedAt: number;
+        declinedAt?: number;
+        declineReasonCode?: "capacity";
+        reviewedAt?: number;
+        reviewedByUserId?: string;
+      } = { status: args.status, updatedAt: now };
+      if (args.status === "declined") {
+        patch.declinedAt = now;
+        patch.declineReasonCode = "capacity";
+      }
+      if (args.status === "in_review") {
+        patch.reviewedAt = now;
+        patch.reviewedByUserId = "e2e-manager";
+      }
+      await ctx.db.patch(seeded.requestId, patch);
+    }
     return {
       requestId: seeded.requestId,
       requestNumber: seeded.requestNumber,
@@ -1405,6 +1436,10 @@ export const getBookingRequestState = query({
       declinedAt: v.union(v.number(), v.null()),
       convertedAt: v.union(v.number(), v.null()),
       reviewedAt: v.union(v.number(), v.null()),
+      reviewedByUserId: v.union(v.string(), v.null()),
+      staffNotes: v.union(v.string(), v.null()),
+      assigneeUserId: v.union(v.string(), v.null()),
+      assigneeName: v.union(v.string(), v.null()),
       eventType: v.union(v.string(), v.null()),
       startAt: v.union(v.number(), v.null()),
       endAt: v.union(v.number(), v.null()),
@@ -1417,6 +1452,10 @@ export const getBookingRequestState = query({
     const request = await ctx.db.get(args.requestId);
     if (!request) return null;
     const event = request.convertedEventId ? await ctx.db.get(request.convertedEventId) : null;
+    const userByKey = request.assigneeUserId
+      ? await findAuthUsersByIds(ctx, [request.assigneeUserId])
+      : new Map<string, { name?: string | null; email?: string | null }>();
+    const assignee = request.assigneeUserId ? userByKey.get(request.assigneeUserId) : undefined;
     return {
       status: request.status,
       convertedEventId: request.convertedEventId ?? null,
@@ -1426,12 +1465,156 @@ export const getBookingRequestState = query({
       declinedAt: request.declinedAt ?? null,
       convertedAt: request.convertedAt ?? null,
       reviewedAt: request.reviewedAt ?? null,
+      reviewedByUserId: request.reviewedByUserId ?? null,
+      staffNotes: request.staffNotes ?? null,
+      assigneeUserId: request.assigneeUserId ?? null,
+      assigneeName:
+        request.assigneeUserId && assignee
+          ? (assignee.name?.trim() || assignee.email?.trim() || null)
+          : null,
       eventType: event?.eventType ?? null,
       startAt: event?.startAt ?? null,
       endAt: event?.endAt ?? null,
       requestStartAt: request.eventStartAtMs ?? null,
       requestEndAt: request.eventEndAtMs ?? null,
     };
+  },
+});
+
+/**
+ * Test-only: delete a booking-request fixture and its children directly through
+ * `ctx.db` (not the product mutations). Used for afterAll cleanup — the product
+ * delete guards are what the specs assert, so cleanup must not depend on
+ * behaviour a failing run may have left half-applied.
+ */
+export const deleteBookingRequestFixture = mutation({
+  args: { requestId: v.id("eventRequests") },
+  returns: v.object({
+    deleted: v.boolean(),
+    deletedEvents: v.number(),
+    deletedInvoice: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const request = await ctx.db.get(args.requestId);
+    if (!request) return { deleted: false, deletedEvents: 0, deletedInvoice: false };
+    let deletedEvents = 0;
+    if (request.linkedInvoiceId) {
+      await deleteInvoiceRecord(ctx, request.linkedInvoiceId);
+    }
+    for (const event of await listEventsLinkedToRequest(ctx, request)) {
+      await deleteEventRecord(ctx, event._id);
+      deletedEvents += 1;
+    }
+    const transitions = await ctx.db
+      .query("statusTransitions")
+      .withIndex("by_entityType_and_entityId", (q) =>
+        q.eq("entityType", "eventRequest").eq("entityId", args.requestId),
+      )
+      .take(200);
+    for (const row of transitions) {
+      await ctx.db.delete(row._id);
+    }
+    await ctx.db.delete(args.requestId);
+    return { deleted: true, deletedEvents, deletedInvoice: Boolean(request.linkedInvoiceId) };
+  },
+});
+
+/**
+ * Test-only: round-robin settings row, read without auth.
+ */
+export const getBookingRequestSettingsState = query({
+  args: {},
+  returns: v.object({
+    roundRobinUserIds: v.array(v.string()),
+    roundRobinCursorIndex: v.number(),
+  }),
+  handler: async (ctx) => {
+    assertE2eHelpersEnabled();
+    const row = await ctx.db
+      .query("bookingRequestSettings")
+      .withIndex("by_key", (q) => q.eq("key", "default"))
+      .unique();
+    return {
+      roundRobinUserIds: row?.roundRobinUserIds ?? [],
+      roundRobinCursorIndex: row?.roundRobinCursorIndex ?? 0,
+    };
+  },
+});
+
+/**
+ * Test-only: overwrite the round-robin rotation. Used to restore the default
+ * (empty) rotation after the settings spec, so a failed run cannot leave the
+ * shared `default` row pointed at a fixture user.
+ */
+export const setBookingRequestRotationState = mutation({
+  args: { roundRobinUserIds: v.array(v.string()) },
+  returns: v.object({ ok: v.literal(true) }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const now = Date.now();
+    const existing = await ctx.db
+      .query("bookingRequestSettings")
+      .withIndex("by_key", (q) => q.eq("key", "default"))
+      .unique();
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        roundRobinUserIds: args.roundRobinUserIds,
+        roundRobinCursorIndex: 0,
+        updatedAt: now,
+      });
+    } else {
+      await ctx.db.insert("bookingRequestSettings", {
+        key: "default",
+        roundRobinUserIds: args.roundRobinUserIds,
+        roundRobinCursorIndex: 0,
+        updatedAt: now,
+      });
+    }
+    return { ok: true as const };
+  },
+});
+
+/**
+ * Test-only: existence of a request and its cascade-delete children.
+ */
+export const getBookingRequestDeleteState = query({
+  args: { requestId: v.id("eventRequests") },
+  returns: v.object({
+    requestExists: v.boolean(),
+    invoiceExists: v.boolean(),
+    eventExists: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const request = await ctx.db.get(args.requestId);
+    if (!request) {
+      return { requestExists: false, invoiceExists: false, eventExists: false };
+    }
+    const invoice = request.linkedInvoiceId ? await ctx.db.get(request.linkedInvoiceId) : null;
+    const events = await listEventsLinkedToRequest(ctx, request);
+    return {
+      requestExists: true,
+      invoiceExists: Boolean(invoice),
+      eventExists: events.length > 0,
+    };
+  },
+});
+
+/**
+ * Test-only: resolve a Better Auth user id by email.
+ */
+export const getUserIdByEmail = query({
+  args: { email: v.string() },
+  returns: v.object({ userId: v.union(v.string(), v.null()) }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const email = args.email.trim().toLowerCase();
+    const existingUser = await ctx.runQuery(components.betterAuth.adapter.findOne, {
+      model: "user",
+      where: [{ field: "email", value: email }],
+    });
+    return { userId: getId(existingUser) };
   },
 });
 
@@ -3155,6 +3338,7 @@ export const pruneE2eSeedData = mutation({
     scannedEvents: v.number(),
     matchedEvents: v.number(),
     deletedEvents: v.number(),
+    deletedRequests: v.number(),
     deletedChildren: v.number(),
     dryRun: v.boolean(),
   }),
@@ -3175,6 +3359,7 @@ export const pruneE2eSeedData = mutation({
         scannedEvents: candidates.length,
         matchedEvents: doomed.length,
         deletedEvents: 0,
+        deletedRequests: 0,
         deletedChildren: 0,
         dryRun: true,
       };
@@ -3286,11 +3471,174 @@ export const pruneE2eSeedData = mutation({
       await ctx.db.delete(event._id);
     }
 
+    // Prune stale E2E booking requests. The event pass above deletes the events
+    // a converted request spawned, but leaves the request and its draft invoice
+    // orphaned — and `eventRequests.list` pages with `.take(100)`, so orphaned
+    // requests eventually push freshly seeded ones out of the inbox the same way
+    // accumulated events broke `crew-availability-assign`. Bounded smaller than
+    // the event pass: each request cascades into an invoice + event, so a pass
+    // here is heavier per row.
+    const requestRows = await ctx.db.query("eventRequests").order("asc").take(2000);
+    const doomedRequests = requestRows
+      .filter(
+        (row) =>
+          row.createdAt < cutoff &&
+          (row.eventName?.startsWith("E2E ") ?? false) &&
+          (row.status === "converted" || row.status === "declined"),
+      )
+      .slice(0, Math.min(limit, 25));
+    let deletedRequests = 0;
+    let deletedEventCount = doomed.length;
+    for (const request of doomedRequests) {
+      if (request.linkedInvoiceId) {
+        const invoice = await ctx.db.get(request.linkedInvoiceId);
+        if (invoice && (invoice.clientGroupName?.startsWith("E2E ") ?? false)) {
+          await deleteInvoiceRecord(ctx, invoice._id);
+          deletedChildren += 1;
+        }
+      }
+      for (const event of await listEventsLinkedToRequest(ctx, request)) {
+        await deleteEventRecord(ctx, event._id);
+        deletedEventCount += 1;
+        deletedChildren += 1;
+      }
+      await ctx.db.delete(request._id);
+      deletedRequests += 1;
+    }
+
     return {
       scannedEvents: candidates.length,
       matchedEvents: doomed.length,
-      deletedEvents: doomed.length,
+      deletedEvents: deletedEventCount,
+      deletedRequests,
       deletedChildren,
+      dryRun: false,
+    };
+  },
+});
+
+/**
+ * Test-only: prune stale stamped E2E users (invite-created accounts like
+ * `e2e.crew.<ts>@arborlive.test`) so they never accumulate on a shared
+ * deployment. Unlike the stable per-purpose accounts, these carry a timestamp
+ * and were created by specs that must use a fresh identity (one-time invites);
+ * if they pile up they pollute every name-keyed picker — the mention menu's
+ * `extractMentionedUserIds` resolves a `@Name` token to *every* candidate with
+ * that name, so two dozen "E2E Crew" members turn one mention into a
+ * "You can mention at most 20 people" refusal.
+ *
+ * Stable accounts (`e2e-admin@`, `e2e-crew@`, `e2e-access-target@`, …) contain
+ * no timestamp and are never touched.
+ */
+export const pruneStaleE2eUsers = mutation({
+  args: {
+    olderThanHours: v.optional(v.number()),
+    limit: v.optional(v.number()),
+    /** Report what would be deleted without deleting it. */
+    dryRun: v.optional(v.boolean()),
+  },
+  returns: v.object({
+    scannedUsers: v.number(),
+    matchedUsers: v.number(),
+    deletedUsers: v.number(),
+    dryRun: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const olderThanHours = args.olderThanHours ?? 2;
+    const limit = Math.min(args.limit ?? 50, 200);
+    const dryRun = args.dryRun ?? false;
+    const cutoff = Date.now() - olderThanHours * 60 * 60 * 1000;
+
+    const result = await ctx.runQuery(components.betterAuth.adapter.findMany, {
+      model: "user",
+      paginationOpts: { cursor: null, numItems: 2000 },
+    });
+    const users = (result?.page ?? []) as Array<{
+      id?: string;
+      _id?: string;
+      email?: string;
+      name?: string | null;
+      createdAt?: number;
+    }>;
+
+    const stamped = users.filter((user) => {
+      const email = (user.email ?? "").toLowerCase();
+      if (!/^e2e\.[a-z0-9.]+\.\d{9,}@(?:arborlive\.test|stanford\.edu)$/.test(email)) return false;
+      return (user.createdAt ?? 0) < cutoff;
+    });
+
+    if (dryRun) {
+      return {
+        scannedUsers: users.length,
+        matchedUsers: stamped.length,
+        deletedUsers: 0,
+        dryRun: true,
+      };
+    }
+
+    // Unrolled rather than looped over a table-name array: Convex cannot infer
+    // a shared `by_userId` index across a union of table names.
+    const deleteByUserId = async (userId: string) => {
+      for (const row of await ctx.db.query("userCompensationRates").withIndex("by_userId", (q) => q.eq("userId", userId)).take(500)) {
+        await ctx.db.delete(row._id);
+      }
+      for (const row of await ctx.db.query("userAdminProfiles").withIndex("by_userId", (q) => q.eq("userId", userId)).take(500)) {
+        await ctx.db.delete(row._id);
+      }
+      for (const row of await ctx.db.query("userOrganizationMemberships").withIndex("by_userId", (q) => q.eq("userId", userId)).take(500)) {
+        await ctx.db.delete(row._id);
+      }
+      for (const row of await ctx.db.query("userActiveOrganizations").withIndex("by_userId", (q) => q.eq("userId", userId)).take(500)) {
+        await ctx.db.delete(row._id);
+      }
+      for (const row of await ctx.db.query("userOnboarding").withIndex("by_userId", (q) => q.eq("userId", userId)).take(500)) {
+        await ctx.db.delete(row._id);
+      }
+      for (const row of await ctx.db.query("dashboardPreferences").withIndex("by_userId", (q) => q.eq("userId", userId)).take(500)) {
+        await ctx.db.delete(row._id);
+      }
+      for (const row of await ctx.db.query("eventCrewShifts").withIndex("by_userId_and_startsAt", (q) => q.eq("userId", userId)).take(500)) {
+        await ctx.db.delete(row._id);
+      }
+      for (const row of await ctx.db.query("eventCrewMediaStatus").withIndex("by_userId", (q) => q.eq("userId", userId)).take(500)) {
+        await ctx.db.delete(row._id);
+      }
+      for (const row of await ctx.db.query("eventCrewAvailabilityResponses").withIndex("by_userId", (q) => q.eq("userId", userId)).take(500)) {
+        await ctx.db.delete(row._id);
+      }
+    };
+
+    let deletedUsers = 0;
+    for (const user of stamped.slice(0, limit)) {
+      const userId = getId(user);
+      if (!userId) continue;
+
+      await deleteByUserId(userId);
+
+      // Best-effort Better Auth cascade — never block the prune on it.
+      for (const [model, field] of [
+        ["account", "userId"],
+        ["session", "userId"],
+      ] as const) {
+        await ctx
+          .runMutation(components.betterAuth.adapter.deleteMany as any, {
+            input: { model, where: [{ field, value: userId }] },
+          })
+          .catch(() => undefined);
+      }
+      await ctx
+        .runMutation(components.betterAuth.adapter.deleteOne as any, {
+          input: { model: "user", where: [{ field: "_id", value: userId }] },
+        })
+        .catch(() => undefined);
+      deletedUsers += 1;
+    }
+
+    return {
+      scannedUsers: users.length,
+      matchedUsers: stamped.length,
+      deletedUsers,
       dryRun: false,
     };
   },

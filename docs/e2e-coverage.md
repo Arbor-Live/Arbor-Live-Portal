@@ -8,7 +8,7 @@ Update this file whenever specs or helpers land (or when a batch ships).
 - Runner: `pnpm test:e2e` ([`scripts/e2e-run.mjs`](../scripts/e2e-run.mjs))
 - CI: [`.github/workflows/e2e.yml`](../.github/workflows/e2e.yml)
 
-**Last updated:** 2026-07-28 (Batches 1–12 on `main`)
+**Last updated:** 2026-07-31 (Batches 1–12 on `main`, Batch 13 on `t3code/next-phase-e2e-testing`)
 
 ## Batch history
 
@@ -27,6 +27,7 @@ Update this file whenever specs or helpers land (or when a batch ships).
 | **10** | on branch | Inventory catalog: model type CRUD + derived rates, categories/capabilities, public listing vs full profile, package build/edit/delete, package publishing, items + storage locations with containment and location cascade. Found two shipped bugs: the types manager's search filtered only the page already loaded, and a package could not be listed publicly without a section yet Create silently did nothing |
 | **11** | — | Event series editors: "this occurrence only" scope does not affect sibling occurrences — pins the applyScope reset guard [#75](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/75) |
 | **12** | — | Band org profile admin birdseye edit; inventory CSV import (types + assets from fixture files) |
+| **13** | on branch | Booking request lifecycle: inbox status filters (open view hides completed), staff actions (assignee, staff notes, mark in review), decline guards (client + server) + the declined client portal, the converted-request lock (UI + backend `updateStatus` refusal), round-robin settings, admin cascade delete. Replaced `booking-decline-reason.spec.ts` with a superset spec. Also: `pruneE2eSeedData` now prunes stale converted/declined requests, and a new run-start `pruneStaleE2eUsers` removes invite-created accounts — see “Keeping the shared deployment usable” |
 
 ## Status legend
 
@@ -69,7 +70,13 @@ Update this file whenever specs or helpers land (or when a batch ships).
 | Public `/request` wizard submit | Covered | `booking/booking-submit.spec.ts` (Batch 3) |
 | Staff convert → quote + tentative event | Covered | `booking/booking-convert.spec.ts` |
 | Client track approve (`/request/track/[token]`) | Covered | `booking/booking-convert-approve.spec.ts` |
-| Request list / detail browse | Partial | Asserted after convert/submit; no dedicated list UX test |
+| Request inbox / status filters | Covered | `booking/request-inbox.spec.ts` (Batch 13) — default open view lists submitted + in-review and hides completed; "Declined" and "All statuses" filters |
+| Request detail browse | Covered | `booking/request-convert-lock.spec.ts` (Batch 13) — converted row renders the "Open tentative event" link |
+| Assignee, staff notes, mark in review | Covered | `booking/request-staff-actions.spec.ts` (Batch 13) — assignee recorded on the row; submitted → in_review persists notes + `reviewedAt`, and "Mark in review" leaves |
+| Decline reason + declined portal | Covered | `booking/request-decline-guard.spec.ts` (Batch 13) — the no-reason refusals (client-side form and server-side `updateStatus`), then a real decline; staff actions panel leaves; the client track link shows "Status: Declined" |
+| Converted-request lock | Covered | `booking/request-convert-lock.spec.ts` (Batch 13) — staff actions panel hidden; `eventRequests:updateStatus` refuses ("Converted requests cannot be updated") |
+| Round-robin assignee settings | Covered | `booking/round-robin-settings.spec.ts` (Batch 13) — add/remove a rotation member via the settings UI, asserted through the settings row; restores the empty default in `afterEach` |
+| Cascade delete of a request | Covered | `booking/request-cascade-delete.spec.ts` (Batch 13) — dialog previews the linked quote + event, "Delete all" removes them with the request |
 
 ### Quotes and invoices
 
@@ -185,6 +192,12 @@ Update this file whenever specs or helpers land (or when a batch ships).
 | `bands/band-payment-esign.spec.ts` | Band e-sign + helper mark paid |
 | `bands/band-application.spec.ts` | Band apply + admin approve (Batch 3) |
 | `booking/booking-submit.spec.ts` | Public `/request` wizard submit (Batch 3) |
+| `booking/request-inbox.spec.ts` | Inbox list UX: open view, status filter, all statuses (Batch 13) |
+| `booking/request-staff-actions.spec.ts` | Assignee + staff notes + mark in review (Batch 13) |
+| `booking/request-decline-guard.spec.ts` | Decline guards (client + server), terminal state, client portal mirror (Batch 13) |
+| `booking/request-convert-lock.spec.ts` | Converted request hides staff actions; backend refuses `updateStatus` (Batch 13) |
+| `booking/round-robin-settings.spec.ts` | Round-robin assignee rotation add/remove (Batch 13) |
+| `booking/request-cascade-delete.spec.ts` | Admin cascade delete preview + confirm (Batch 13) |
 | `quotes/invoice-finalize.spec.ts` | Staff invoice create → public link (Batch 3) |
 | `quotes/payment-proof-verify.spec.ts` | Staff mark payment received (Batch 3) |
 | `events/venue-create-pick.spec.ts` | Venue create + pick on event (Batch 3) |
@@ -234,7 +247,7 @@ Update this file whenever specs or helpers land (or when a batch ships).
 
 ## Remaining gaps
 
-Batches 1–10 cover the shipped happy paths. What is still out of the suite splits
+Batches 1–13 cover the shipped happy paths. What is still out of the suite splits
 into two piles, and they are worth keeping apart — one is a scheduling question,
 the other is not.
 
@@ -257,13 +270,14 @@ that is the better risk proxy than the page count:
 
 | Surface | Backend | What exists today |
 |---------|---------|-------------------|
-| Booking request lifecycle (`/events/requests`, `/[id]`) | `eventRequests.ts` 1012 | submit → convert → track-approve only |
 | Open Mic (`/events/open-mic`, `/[id]`, public page) | `openMic.ts` 575 | nothing but the Batch 7 route guard |
 | Crew availability beyond one Yes (`/events/my-availability`) | `eventCrewAvailability.ts` 832 | one yes → assign path |
 | Invoice managers / fee definitions / terms | `invoiceFeeDefinitions.ts` 90, `invoiceTerms.ts` 67 | nothing; they feed the totals Batch 8 asserts |
 | Invoice PDF download / void | `invoicePdf.ts` | nothing |
 | Account page, event expenses, event artifacts, marketing settings | 217 / 73 / 107 / 56 | nothing |
 | Password reset from the Users row, onboarding waive | — | nothing; `sendPasswordResetAdmin` hands off to Better Auth's flow, and waive only makes sense against a half-finished onboarding |
+
+(The booking request lifecycle row is gone — Batch 13 covered the inbox, staff actions, decline, the convert lock, round-robin settings, and cascade delete. "Reschedule" from the old batch description turned out not to be a shipped mutation; a client reschedules by requesting quote changes, which Batch 8 already covers.)
 
 ### Candidates for the next batches
 
@@ -272,7 +286,6 @@ most to discover late.
 
 | Batch | Surface | Why it is next |
 |-------|---------|----------------|
-| **13** | Booking request lifecycle | 1012 lines with only the happy path covered. Decline, reschedule and staff edits are all client-facing and all untested, and a request is the first thing a client ever touches |
 | **14** | Money long tail: invoice managers, fee definitions, terms | Small modules (90 + 67 lines) that feed the totals Batch 8 asserts heavily. Cheap insurance on arithmetic that is already covered downstream but not at its source |
 | **15?** | Open Mic | The largest wholly-untested module left (575 lines, three routes, a public page). Listed as low product priority since Batch 1 — worth confirming that is still true before spending a batch, because on size alone it would rank far higher |
 
@@ -289,9 +302,29 @@ under test — this broke `crew-availability-assign` outright at ~265 events.
 
 Run `convex run e2eHelpers:pruneE2eSeedData '{"dryRun":true}'` to check, then
 drop `dryRun` to clear `E2E `-prefixed events older than two hours along with
-their child rows. Batch with `limit` to stay inside mutation limits.
+their child rows. Batch with `limit` to stay inside mutation limits. Since Batch
+13 the same mutation also prunes stale **converted/declined** booking requests:
+the event pass leaves the request and its draft invoice orphaned, and
+`eventRequests.list` pages with `.take(100)`, so the inbox can overflow the same
+way the event caps do. Requests that are still open (submitted / in_review) are
+never pruned — a spec that seeds one must clean it up itself
+(`e2eHelpers:deleteBookingRequestFixture`, which Batch 13's specs all call in
+`afterAll`).
 
-The pruner only knows about events. Batch 9's fixtures are instead **stable
+The pruner also leaves **users** behind: every run of `smoke/invite.spec.ts`
+accepts a fresh one-time invite and creates a real Better Auth account, and
+those were never deleted. They don't page under any `.take()` cap, but they
+break name-keyed pickers: the comment mention typeahead resolves `@Name` to
+*every* candidate with that name (`extractMentionedUserIds`), so two dozen
+accumulated "E2E Crew" members turn one mention into a "You can mention at most
+20 people" refusal. `scripts/e2e-run.mjs` now runs
+`e2eHelpers:pruneStaleE2eUsers` at boot, deleting stamped accounts
+(`e2e.crew.<ts>@arborlive.test`, `e2e.crew.apply.<ts>@stanford.edu` — anything
+matching `e2e.<…>.<digits>@`) with their Better Auth rows and per-user app rows.
+The stable per-purpose accounts contain no timestamp and are never touched.
+Run it manually with `convex run e2eHelpers:pruneStaleE2eUsers '{"dryRun":true}'`.
+
+Batch 9's fixtures are instead **stable
 per-purpose accounts** (`e2e-access-target@`, `e2e-promote-target@`,
 `e2e-rates-target@`, `e2e-membership-target@`, `e2e-guard-admin@`) that each run
 re-seeds in place, so nothing accumulates — and where a stamped identity is
@@ -368,6 +401,18 @@ inventory type still lists the capability key (same idea as
 **Still unfixed, found by Batch 12:**
 
 *(none.)*
+
+**Still unfixed, found by Batch 13:**
+
+- After an admin cascade-deletes a request, the dialog's `previewRequestDeletion`
+  query re-subscribes once with the already-deleted id and logs an uncaught
+  "Request not found" on the deployment. Benign — the dialog closes and the
+  page navigates to the inbox — but the query has no `null` guard. If request
+  deletion ever surfaces its own error UI, tighten that query first.
+- The mention typeahead resolves `@Name` to every candidate with that name, so
+  duplicate display names silently turn one mention into many (up to the 20-cap
+  refusal). Not a shipped bug today — pruning keeps the suite's data clean — but
+  worth remembering when two teammates share a display name for real.
 
 **Fixed since, now tested:** the same unguarded reset effect in
 `events/event-series-schedule-editor.tsx` and
