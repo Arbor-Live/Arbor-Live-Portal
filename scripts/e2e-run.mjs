@@ -213,8 +213,28 @@ function readEnvFileValue(filePath, keys) {
   return null;
 }
 
+/**
+ * `--env-file` requires the path to exist already. Seed a placeholder so the
+ * first `convex dev` can write CONVEX_URL / CONVEX_DEPLOYMENT into it instead of
+ * failing with "\.env.e2e.local: not found" and without touching cloud `.env.local`.
+ */
+function ensureAnonymousEnvFile() {
+  if (!useAnonymous) return;
+  if (fs.existsSync(e2eEnvFile)) return;
+  fs.writeFileSync(
+    e2eEnvFile,
+    [
+      "# Anonymous Convex deployment for Playwright e2e (`pnpm test:e2e`).",
+      "# Managed by scripts/e2e-run.mjs — do not use for day-to-day `pnpm dev:backend`.",
+      "",
+    ].join("\n"),
+  );
+  console.log(`Created ${path.relative(root, e2eEnvFile)}`);
+}
+
 function convexCliArgs(extra = []) {
   if (useAnonymous) {
+    ensureAnonymousEnvFile();
     return ["--env-file", e2eEnvFileRel, ...extra];
   }
   return extra;
@@ -503,6 +523,7 @@ async function main() {
 
   if (!skipBoot) {
     ensureLocalBackendEnvFile(secret);
+    ensureAnonymousEnvFile();
 
     console.log(
       `Starting Convex…${agentMode ? ` (CONVEX_AGENT_MODE=${agentMode})` : ""}`,
