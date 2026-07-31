@@ -36,7 +36,7 @@
   },
   "devDependencies": {
     "@better-auth/cli": "^1.4.21",
-    "@types/node": "^25.9.5",
-    "typescript": "^5.9.3"
+    "@types/node": "^26.1.2",
+    "typescript": "^7.0.2"
   }
 }
