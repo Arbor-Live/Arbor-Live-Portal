@@ -9,10 +9,13 @@ Update this file whenever specs or helpers land (or when a batch ships).
 - CI: [`.github/workflows/e2e.yml`](../.github/workflows/e2e.yml)
 
 **Local vs cloud:** `pnpm test:e2e` boots **anonymous** Convex into
-`packages/backend/.env.e2e.local` (does not overwrite developer cloud
-`.env.local`). That keeps purge/seed/email-helper I/O off the team plan.
-Opt into shared cloud Dev with `E2E_USE_CLOUD_DEV=1` or `CONVEX_AGENT_MODE=cloud`.
-`E2E_SKIP_BOOT=1` reuses a running stack and warns if the URL looks like cloud.
+`packages/backend/.env.local` (Convex cannot provision via an empty
+`--env-file`). Locally it stashes any prior cloud `.env.local` as
+`.env.local.pre-e2e` and restores it on exit; it also mirrors the anonymous
+config to `.env.e2e.local`. That keeps purge/seed/email-helper I/O off the team
+plan. Opt into shared cloud Dev with `E2E_USE_CLOUD_DEV=1` or
+`CONVEX_AGENT_MODE=cloud`. `E2E_SKIP_BOOT=1` reuses a running stack and warns if
+the URL looks like cloud.
 
 **Last updated:** 2026-07-31 (Batches 1–12 on `main`, Batches 13–14 on `t3code/next-e2e-tests`)
 
@@ -387,9 +390,10 @@ Conventions for any new batch:
   only refresh early via an `/api/revalidate` call that needs
   `REVALIDATE_SECRET`, which the e2e stack does not set. The pages get a render
   smoke; the query is the contract
-- Local: `pnpm test:e2e` boots anonymous Convex (`.env.e2e.local`).
-  `E2E_SKIP_BOOT=1 pnpm test:e2e` reuses a running stack (prefer anonymous;
-  cloud Dev burns plan Database I/O). CI always uses anonymous Convex.
+- Local: `pnpm test:e2e` boots anonymous Convex (stashes/restores cloud
+  `.env.local`). `E2E_SKIP_BOOT=1 pnpm test:e2e` reuses a running stack
+  (prefer anonymous; cloud Dev burns plan Database I/O). CI always uses
+  anonymous Convex.
 
 ### Bugs the suite has caught
 

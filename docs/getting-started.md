@@ -110,9 +110,9 @@ Do not rely on this for production testing, and never ship a build with
 | `pnpm codegen:backend` | Regenerate Convex bindings after schema/API changes |
 | `pnpm lint` / `pnpm typecheck` | Lint / typecheck all workspace packages |
 | `pnpm --filter web build` | Full Next.js production build (best cross-file type check) |
-| `pnpm test:e2e` | Boot **anonymous** local Convex (writes `packages/backend/.env.e2e.local`, does not touch cloud `.env.local`) + Next, then run Playwright. Opt into shared cloud Dev with `E2E_USE_CLOUD_DEV=1` or `CONVEX_AGENT_MODE=cloud`. `E2E_SKIP_BOOT=1` reuses a running stack (warns if that stack is cloud). |
+| `pnpm test:e2e` | Boot **anonymous** local Convex + Next, then run Playwright. Writes anonymous config to `packages/backend/.env.local` (Convex requires that path); locally stashes any prior cloud `.env.local` and restores it on exit. Opt into shared cloud Dev with `E2E_USE_CLOUD_DEV=1` or `CONVEX_AGENT_MODE=cloud`. `E2E_SKIP_BOOT=1` reuses a running stack (warns if that stack is cloud). |
 
-CI runs the same suite on PRs and pushes to `main` (`.github/workflows/e2e.yml`) with `CONVEX_AGENT_MODE=anonymous` and `E2E_EMAIL_MOCK` so Resend is never called. Local `pnpm test:e2e` now defaults to the same anonymous mode (isolated `.env.e2e.local`) so personal devices do not burn team-plan Database I/O. Coverage by app section: [e2e-coverage.md](e2e-coverage.md).
+CI runs the same suite on PRs and pushes to `main` (`.github/workflows/e2e.yml`) with `CONVEX_AGENT_MODE=anonymous` and `E2E_EMAIL_MOCK` so Resend is never called. Local `pnpm test:e2e` defaults to the same anonymous mode (stashes/restores cloud `.env.local`) so personal devices do not burn team-plan Database I/O. Coverage by app section: [e2e-coverage.md](e2e-coverage.md).
 Note: root `pnpm dev` runs *every* package's `dev` script in parallel,
 including the email preview server. Use the targeted `dev:web` / `dev:backend`
 scripts if you only want the app.

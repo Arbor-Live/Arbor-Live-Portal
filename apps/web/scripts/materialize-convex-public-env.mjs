@@ -36,32 +36,6 @@ function loadEnvDir(dir, files) {
 // Match next.config.ts so local/worktree env files (including arbor-env symlinks) work.
 loadEnvDir(webRoot, [".env", ".env.local", ".env.development", ".env.development.local"]);
 loadEnvDir(backendRoot, [".env", ".env.local"]);
-// Anonymous e2e isolates Convex into .env.e2e.local. Force-load those keys so a
-// leftover cloud `.env.local` cannot shadow the anonymous deployment URL.
-const e2eEnv =
-  process.env.E2E_CONVEX_ENV_FILE?.trim() ||
-  (process.env.CONVEX_AGENT_MODE === "anonymous"
-    ? path.join(backendRoot, ".env.e2e.local")
-    : "");
-if (e2eEnv && fs.existsSync(e2eEnv)) {
-  const content = fs.readFileSync(e2eEnv, "utf8");
-  for (const line of content.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const separator = trimmed.indexOf("=");
-    if (separator === -1) continue;
-    const key = trimmed.slice(0, separator).trim();
-    if (!key.startsWith("CONVEX") && !key.startsWith("NEXT_PUBLIC_CONVEX")) continue;
-    let value = trimmed.slice(separator + 1).trim();
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1);
-    }
-    process.env[key] = value;
-  }
-}
 loadEnvFile(path.join(webRoot, ".env.production.local"));
 
 function readStatic(...keys) {
