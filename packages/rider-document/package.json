@@ -13,12 +13,12 @@
   },
   "dependencies": {
     "@arbor/invoice-document": "workspace:*",
-    "@react-pdf/renderer": "^4.3.0",
-    "react": "^19.2.5"
+    "@react-pdf/renderer": "^4.5.1",
+    "react": "^19.2.8"
   },
   "devDependencies": {
-    "@types/node": "^25.6.0",
-    "@types/react": "^19.2.14",
+    "@types/node": "^25.9.5",
+    "@types/react": "^19.2.18",
     "typescript": "^5.9.3"
   }
 }

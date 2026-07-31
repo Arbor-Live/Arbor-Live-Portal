@@ -16,15 +16,15 @@
   "dependencies": {
     "@arbor/format": "workspace:*",
     "@react-email/components": "^1.0.12",
-    "@react-email/render": "^2.0.9",
-    "react": "^19.2.5",
-    "react-dom": "^19.2.5"
+    "@react-email/render": "^2.1.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
   },
   "devDependencies": {
-    "@react-email/ui": "6.6.5",
-    "@types/react": "^19.2.14",
-    "@types/react-dom": "^19.2.3",
-    "react-email": "^6.6.5",
+    "@react-email/ui": "6.9.1",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "react-email": "^6.9.1",
     "typescript": "^5.9.3"
   }
 }

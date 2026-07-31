@@ -28,7 +28,7 @@
     "prepare": "git config core.hooksPath .githooks 2>/dev/null || true && node scripts/link-worktree-env.mjs 2>/dev/null || true"
   },
   "dependencies": {
-    "convex": "^1.42.1",
+    "convex": "^1.42.3",
     "papaparse": "^5.5.4"
   },
   "devDependencies": {
