@@ -22,7 +22,7 @@ export default function FinancialHubPage() {
         <AdminOnlyGuard>
           <Card>
             <CardHeader>
-              <CardTitle>Finances</CardTitle>
+              <CardTitle>Ops Center</CardTitle>
               <CardDescription>
                 Centralize invoices, settlements, and payments across operations.
               </CardDescription>
@@ -36,9 +36,6 @@ export default function FinancialHubPage() {
               </Button>
               <Button asChild variant="outline">
                 <Link href="/dashboard/financial-hub/organizations">Host Organizations</Link>
-              </Button>
-              <Button asChild variant="outline">
-                <Link href="/dashboard/financial-hub/managers">Managers</Link>
               </Button>
               <Button asChild variant="outline">
                 <Link href="/dashboard/financial-hub/invoices/new">Create Invoice</Link>

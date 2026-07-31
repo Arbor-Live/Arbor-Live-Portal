@@ -8,4 +8,14 @@ test.describe("auth smoke", () => {
       timeout: 20_000,
     });
   });
+
+  test("sidebar Support links to the Arbor email and has no Feedback item", async ({ page }) => {
+    await page.goto("/dashboard");
+    const sidebar = page.locator('[data-slot="sidebar"]').first();
+    await expect(sidebar).toBeVisible({ timeout: 20_000 });
+
+    const support = sidebar.getByRole("link", { name: "Support" });
+    await expect(support).toHaveAttribute("href", "mailto:arborlive@stanford.edu");
+    await expect(sidebar.getByText("Feedback", { exact: true })).toHaveCount(0);
+  });
 });

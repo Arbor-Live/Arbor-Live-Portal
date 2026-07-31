@@ -1394,6 +1394,21 @@ export default defineSchema({
     .index("by_eventId_and_createdAt", ["eventId", "createdAt"])
     .index("by_eventId", ["eventId"]),
 
+  eventFeedback: defineTable({
+    eventId: v.id("events"),
+    invoiceId: v.id("invoices"),
+    sourceToken: v.string(),
+    portal: v.union(v.literal("request"), v.literal("quote")),
+    rating: v.number(),
+    comments: v.string(),
+    submittedAt: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_invoiceId", ["invoiceId"])
+    .index("by_eventId", ["eventId"])
+    .index("by_sourceToken", ["sourceToken"])
+    .index("by_createdAt", ["createdAt"]),
+
   statusTransitions: defineTable({
     entityType: v.union(v.literal("eventRequest"), v.literal("event"), v.literal("invoice")),
     entityId: v.string(),

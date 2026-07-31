@@ -279,6 +279,8 @@ export type PostEventAlbumEmailProps = {
   dateRangeLabel: string;
   /** Immich shared-album link. Omitted when no album could be resolved yet. */
   albumShareUrl?: string;
+  /** Link to the feedback form on the client's booking request or event portal. */
+  feedbackFormUrl?: string;
 };
 
 export type EventCommentMentionEmailProps = {

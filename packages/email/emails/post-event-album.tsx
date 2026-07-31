@@ -14,6 +14,7 @@ export function PostEventAlbumEmail({
   venueName,
   dateRangeLabel,
   albumShareUrl,
+  feedbackFormUrl,
 }: PostEventAlbumEmailProps) {
   const greeting = recipientName ? `Hi ${recipientName},` : "Hi!";
 
@@ -44,6 +45,13 @@ export function PostEventAlbumEmail({
           We will follow up with the shared album link as soon as it is ready.
         </MutedCopy>
       )}
+      <BodyCopy>
+        We would also love your feedback on how things went. Your insights help us improve how we
+        run events for clients like you.
+      </BodyCopy>
+      {feedbackFormUrl ? (
+        <CtaButton href={feedbackFormUrl} label="Share your feedback" variant="secondary" />
+      ) : null}
       <MutedCopy>You are receiving this because Arbor Live produced an event for you.</MutedCopy>
       <EmailSignOff />
     </EmailLayout>
@@ -56,6 +64,7 @@ PostEventAlbumEmail.PreviewProps = {
   venueName: "Tresidder > Arbor Stage",
   dateRangeLabel: "Friday, Oct 10, 2026 • 5:00 PM – 11:00 PM",
   albumShareUrl: "https://photos.arbor.st/share/demo-album",
+  feedbackFormUrl: "https://arborlive.stanford.edu/event/demo-token#feedback",
 } satisfies PostEventAlbumEmailProps;
 
 export default PostEventAlbumEmail;

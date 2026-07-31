@@ -1081,6 +1081,258 @@ export const seedBookingReadyForTrackApprove = mutation({
   },
 });
 /**
+ * Test-only: a completed (ended) event linked to a finalized invoice, with a
+ * public photo album, for the post-event portal section (album link + feedback
+ * form). `portal` selects which public portal the invoice is reachable through.
+ */
+export const seedPastLinkedEventForFeedback = mutation({
+  args: {
+    portal: v.optional(v.union(v.literal("quote"), v.literal("request"))),
+  },
+  returns: v.object({
+    invoiceId: v.id("invoices"),
+    eventId: v.id("events"),
+    invoiceNumber: v.string(),
+    path: v.string(),
+    albumShareUrl: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const portal = args.portal ?? "quote";
+    const now = Date.now();
+    const { startAt, endAt } = futureEventWindow(-2);
+    const albumShareUrl = `https://photos.arbor.st/share/e2e-${makeInvoiceSuffix()}`;
+
+    const insertEventAndAlbum = async (invoiceId: Id<"invoices">) => {
+      const eventId = await ctx.db.insert("events", {
+        title: `E2E Past Event ${now}`,
+        status: "completed",
+        visibility: "public",
+        publicToken: makeToken(),
+        invoiceId,
+        startAt,
+        endAt,
+        timezone: "America/Los_Angeles",
+        spansMultipleDays: false,
+        setupOnly: false,
+        strikeOnly: false,
+        requiresShowWindow: true,
+        venueName: "E2E Past Venue",
+        eventType: "Crewed Event",
+        teamsInterested: ["Sound"],
+        createdAt: now,
+        updatedAt: now,
+      });
+      await ctx.db.insert("immichAlbumLinks", {
+        entityType: "event",
+        entityId: eventId,
+        immichAlbumId: `e2e-album-${eventId}`,
+        albumName: "E2E Past Event Album",
+        shareUrl: albumShareUrl,
+        createdAt: now,
+        updatedAt: now,
+      });
+      return eventId;
+    };
+
+    if (portal === "quote") {
+      const publicApprovalToken = makeToken();
+      const invoiceNumber = `ALINV-${makeInvoiceSuffix()}`;
+      const invoiceId = await ctx.db.insert("invoices", {
+        invoiceNumber,
+        status: "finalized",
+        issueDate: new Date(now).toISOString().slice(0, 10),
+        managerUserId: "e2e-manager",
+        managerName: "E2E Admin",
+        managerEmail: "e2e-admin@arborlive.test",
+        clientGroupName: "E2E Past Client",
+        clientContactName: "E2E Contact",
+        clientEmail: "e2e-client@example.com",
+        equipmentPricingMode: "nonSubsidized",
+        crewRateMode: "normal",
+        discountType: "amount",
+        discountValue: 0,
+        discountAmountUsd: 0,
+        equipmentSubtotalUsd: 100,
+        externalRentalsSubtotalUsd: 0,
+        artistsSubtotalUsd: 0,
+        crewSubtotalUsd: 0,
+        feesSubtotalUsd: 0,
+        subtotalUsd: 100,
+        totalUsd: 100,
+        clientApprovalStatus: "approved",
+        approvedAt: now - 60_000,
+        clientApprovalSignedName: "E2E Signer",
+        clientIsPaymentSubmitter: true,
+        publicApprovalToken,
+        publicApprovalTokenExpiresAt: now + 14 * 24 * 60 * 60 * 1000,
+        clientReviewReadyAt: now - 24 * 60 * 60 * 1000,
+        createdAt: now,
+        updatedAt: now,
+      });
+      const eventId = await insertEventAndAlbum(invoiceId);
+      return {
+        invoiceId,
+        eventId,
+        invoiceNumber,
+        path: `/event/${publicApprovalToken}`,
+        albumShareUrl,
+      };
+    }
+
+    const seeded = await insertSubmittedBookingRequest(ctx);
+    const invoiceNumber = `ALINV-${makeInvoiceSuffix()}`;
+    const invoiceId = await ctx.db.insert("invoices", {
+      invoiceNumber,
+      status: "finalized",
+      issueDate: new Date(now).toISOString().slice(0, 10),
+      managerUserId: "e2e-manager",
+      managerName: "E2E Admin",
+      managerEmail: "e2e-admin@arborlive.test",
+      clientGroupName: seeded.eventName,
+      clientContactName: "E2E Requester",
+      clientEmail: "e2e.requester@stanford.edu",
+      equipmentPricingMode: "nonSubsidized",
+      crewRateMode: "normal",
+      discountType: "amount",
+      discountValue: 0,
+      discountAmountUsd: 0,
+      equipmentSubtotalUsd: 100,
+      externalRentalsSubtotalUsd: 0,
+      artistsSubtotalUsd: 0,
+      crewSubtotalUsd: 0,
+      feesSubtotalUsd: 0,
+      subtotalUsd: 100,
+      totalUsd: 100,
+      clientApprovalStatus: "approved",
+      approvedAt: now - 60_000,
+      clientApprovalSignedName: "E2E Signer",
+      clientIsPaymentSubmitter: true,
+      sourceEventRequestId: seeded.requestId,
+      clientReviewReadyAt: now - 24 * 60 * 60 * 1000,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const eventId = await insertEventAndAlbum(invoiceId);
+    await ctx.db.patch(seeded.requestId, {
+      status: "converted",
+      convertedEventId: eventId,
+      convertedEventIds: [eventId],
+      linkedInvoiceId: invoiceId,
+      reviewedByUserId: "e2e-manager",
+      updatedAt: now,
+    });
+    return {
+      invoiceId,
+      eventId,
+      invoiceNumber,
+      path: `/request/track/${seeded.publicToken}`,
+      albumShareUrl,
+    };
+  },
+});
+
+/**
+ * Test-only: a completed event with a submitted feedback row in range, for the
+ * Insights Feedback tab. Returns the values the UI should surface verbatim.
+ */
+export const seedEventFeedbackForInsights = mutation({
+  args: {},
+  returns: v.object({
+    eventTitle: v.string(),
+    invoiceNumber: v.string(),
+    comments: v.string(),
+    rating: v.number(),
+  }),
+  handler: async (ctx) => {
+    assertE2eHelpersEnabled();
+    const now = Date.now();
+    const eventTitle = `E2E Feedback Event ${now}`;
+    const invoiceNumber = `ALINV-${makeInvoiceSuffix()}`;
+    const invoiceId = await ctx.db.insert("invoices", {
+      invoiceNumber,
+      status: "finalized",
+      issueDate: new Date(now).toISOString().slice(0, 10),
+      managerUserId: "e2e-manager",
+      managerName: "E2E Admin",
+      managerEmail: "e2e-admin@arborlive.test",
+      clientGroupName: "E2E Feedback Client",
+      clientContactName: "E2E Contact",
+      clientEmail: "e2e-client@example.com",
+      equipmentPricingMode: "nonSubsidized",
+      crewRateMode: "normal",
+      discountType: "amount",
+      discountValue: 0,
+      discountAmountUsd: 0,
+      equipmentSubtotalUsd: 100,
+      externalRentalsSubtotalUsd: 0,
+      artistsSubtotalUsd: 0,
+      crewSubtotalUsd: 0,
+      feesSubtotalUsd: 0,
+      subtotalUsd: 100,
+      totalUsd: 100,
+      clientApprovalStatus: "approved",
+      approvedAt: now - 60_000,
+      clientApprovalSignedName: "E2E Signer",
+      clientIsPaymentSubmitter: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const eventId = await ctx.db.insert("events", {
+      title: eventTitle,
+      status: "completed",
+      visibility: "public",
+      publicToken: makeToken(),
+      invoiceId,
+      startAt: now - 2 * 24 * 60 * 60 * 1000,
+      endAt: now - 2 * 24 * 60 * 60 * 1000 + 3 * 60 * 60 * 1000,
+      timezone: "America/Los_Angeles",
+      spansMultipleDays: false,
+      setupOnly: false,
+      strikeOnly: false,
+      requiresShowWindow: true,
+      venueName: "E2E Feedback Venue",
+      eventType: "Crewed Event",
+      teamsInterested: ["Sound"],
+      createdAt: now,
+      updatedAt: now,
+    });
+    const comments = `E2E full feedback ${now} — the crew was fantastic and the setup ran early. Would book again.`;
+    await ctx.db.insert("eventFeedback", {
+      eventId,
+      invoiceId,
+      sourceToken: makeToken(),
+      portal: "quote",
+      rating: 5,
+      comments,
+      submittedAt: now,
+      createdAt: now,
+    });
+    return { eventTitle, invoiceNumber, comments, rating: 5 };
+  },
+});
+
+/**
+ * Test-only: delete every rider for a band org so rider-creation tests are not
+ * blocked by the per-band rider cap left behind by previous runs.
+ */
+export const clearBandRiders = mutation({
+  args: { organizationId: v.string() },
+  returns: v.object({ deleted: v.number() }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const rows = await ctx.db
+      .query("bandRiders")
+      .withIndex("by_organizationId", (q) => q.eq("organizationId", args.organizationId))
+      .take(100);
+    for (const row of rows) {
+      await ctx.db.delete(row._id);
+    }
+    return { deleted: rows.length };
+  },
+});
+
+/**
  * Test-only: upsert a crew member with Sound discipline for availability flows.
  */
 export const ensureCrewUser = mutation({
