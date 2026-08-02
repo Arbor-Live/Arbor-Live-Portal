@@ -516,6 +516,30 @@ async function pruneStaleE2eUsers() {
   console.log(deleted ? `Pruned ${deleted} stale e2e users` : "No stale e2e users to prune");
 }
 
+/**
+ * Anonymous local Convex keeps its database between runs, so a JWKS encrypted
+ * with an earlier boot's secret can leave the deployment unable to issue a
+ * Convex token to a freshly signed-in Better Auth session ("Failed to decrypt
+ * private key"). Clearing the JWKS lets Better Auth re-issue one under the
+ * current secret. Only done for anonymous boots — on shared cloud Dev this
+ * would log every worktree out mid-flight.
+ */
+async function clearStaleAuthJwks() {
+  if (!useAnonymous) return;
+  try {
+    execFileSync(
+      "pnpm",
+      ["exec", "convex", "run", ...convexCliArgs(["e2eHelpers:clearAuthJwks", "{}"])],
+      { cwd: backendDir, encoding: "utf8", env: convexEnv(), stdio: ["ignore", "pipe", "pipe"] },
+    );
+    console.log("Cleared stale Better Auth JWKS");
+  } catch (error) {
+    console.warn(
+      `JWKS clear unavailable (continuing): ${error instanceof Error ? error.message.split("\n")[0] : String(error)}`,
+    );
+  }
+}
+
 /** Publish anonymous deployment URLs into the child process env for Next + Playwright. */
 function anonymousPublicEnv() {
   if (!useAnonymous) return {};
@@ -571,6 +595,7 @@ async function main() {
     await ensureConvexDeploymentEnv(secret, { includeAuthSecret: true });
     // Env changes force a re-push; wait until helpers exist before starting web/tests.
     await waitForE2eHelpersReady();
+    await clearStaleAuthJwks();
     await pruneStaleSeedData();
     await pruneStaleE2eUsers();
 
@@ -608,6 +633,7 @@ async function main() {
     await waitForE2eHelpersReady().catch((error) => {
       console.warn(`e2eHelpers not ready (continuing): ${error.message}`);
     });
+    await clearStaleAuthJwks();
     await pruneStaleSeedData();
     await pruneStaleE2eUsers();
   }

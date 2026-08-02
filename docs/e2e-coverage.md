@@ -17,7 +17,7 @@ plan. Opt into shared cloud Dev with `E2E_USE_CLOUD_DEV=1` or
 `CONVEX_AGENT_MODE=cloud`. `E2E_SKIP_BOOT=1` reuses a running stack and warns if
 the URL looks like cloud.
 
-**Last updated:** 2026-07-31 (Batches 1–12 on `main`, Batches 13–14 on `t3code/next-e2e-tests`)
+**Last updated:** 2026-08-01 (Batches 1–17 on `main`)
 
 ## Batch history
 
@@ -33,11 +33,14 @@ the URL looks like cloud.
 | — | [#65](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/65) | Not a batch: the ascending-`take` fix shipped five `*-list-recency` specs plus `marketing/work-posts-admin.spec.ts` |
 | **8** | [#71](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/71) | Money paths: invoice line items + totals, discounts, send-for-review round trip, approval-token rotation, approval reset + duplicate, host orgs/contacts, payment-proof invalidate + receipt |
 | **9** | [#76](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/76) | Users, access, and rates: invite lifecycle, direct create, the role grant that flips a Batch 7 refusal, remove/reactivate access, org memberships, per-user crew rates. Found two shipped bugs: the Edit Invitation role picker could not be changed at all, and three Users sub-routes had no `AdminOnlyGuard` so they refused by crashing |
-| **10** | on branch | Inventory catalog: model type CRUD + derived rates, categories/capabilities, public listing vs full profile, package build/edit/delete, package publishing, items + storage locations with containment and location cascade. Found two shipped bugs: the types manager's search filtered only the page already loaded, and a package could not be listed publicly without a section yet Create silently did nothing |
-| **11** | — | Event series editors: "this occurrence only" scope does not affect sibling occurrences — pins the applyScope reset guard [#75](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/75) |
-| **12** | — | Band org profile admin birdseye edit; inventory CSV import (types + assets from fixture files) |
-| **13** | on branch | Booking request lifecycle: inbox status filters (open view hides completed), staff actions (assignee, staff notes, mark in review), decline guards (client + server) + the declined client portal, the converted-request lock (UI + backend `updateStatus` refusal), round-robin settings, admin cascade delete. Replaced `booking-decline-reason.spec.ts` with a superset spec. Also: `pruneE2eSeedData` now prunes stale converted/declined requests, and a new run-start `pruneStaleE2eUsers` removes invite-created accounts — see “Keeping the shared deployment usable” |
-| **14** | on branch | Money long tail: fee definitions and terms templates — the two settings cards on `/dashboard/financial-hub` that feed the invoice editor and the public quote. The fee spec drives CRUD (add/edit default amount/disable/enable/delete) and then the editor: a definition pre-fills the fee-row rate from `defaultAmountUsd` and the persisted line carries `feeDefinitionId`. The terms spec drives CRUD and then attaches a template to a draft invoice, asserting `termsIds` persisted *and* the public quote page renders the combined markdown. (The invoice managers roster spec shipped with this batch was removed — the roster page it covered was deleted as part of the sidebar cleanup that also removed the Managers nav entry.) |
+| **10** | [#78](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/78) | Inventory catalog: model type CRUD + derived rates, categories/capabilities, public listing vs full profile, package build/edit/delete, package publishing, items + storage locations with containment and location cascade. Found two shipped bugs: the types manager's search filtered only the page already loaded, and a package could not be listed publicly without a section yet Create silently did nothing |
+| **11** | [#86](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/86) | Event series editors: "this occurrence only" scope does not affect sibling occurrences — pins the applyScope reset guard [#75](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/75) |
+| **12** | [#86](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/86) | Band org profile admin birdseye edit; inventory CSV import (types + assets from fixture files) |
+| **13** | [#97](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/97) | Booking request lifecycle: inbox status filters (open view hides completed), staff actions (assignee, staff notes, mark in review), decline guards (client + server) + the declined client portal, the converted-request lock (UI + backend `updateStatus` refusal), round-robin settings, admin cascade delete. Replaced `booking-decline-reason.spec.ts` with a superset spec. Also: `pruneE2eSeedData` now prunes stale converted/declined requests, and a new run-start `pruneStaleE2eUsers` removes invite-created accounts — see “Keeping the shared deployment usable” |
+| **14** | [#99](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/99) | Money long tail: fee definitions and terms templates — the two settings cards on `/dashboard/financial-hub` that feed the invoice editor and the public quote. The fee spec drives CRUD (add/edit default amount/disable/enable/delete) and then the editor: a definition pre-fills the fee-row rate from `defaultAmountUsd` and the persisted line carries `feeDefinitionId`. The terms spec drives CRUD and then attaches a template to a draft invoice, asserting `termsIds` persisted *and* the public quote page renders the combined markdown. (The invoice managers roster spec shipped with this batch was removed — the roster page it covered was deleted as part of the sidebar cleanup that also removed the Managers nav entry.) |
+| **15** | — | Open Mic, the last wholly-untested module: the public sign-up wizard (happy path with Background Music + link, the non-Stanford email refusal, and the missing-link refusal), the admin nights inbox (go live / mark completed / cancel / disable), and the runner (call up, advance to the leaderboard, the not-here strike ladder, remove behind confirm). Also wired the existing but orphaned `clearAuthJwks` into the e2e boot so a stale local anonymous JWKS no longer breaks `global.setup`, and fixed the helper to pass the `.env.e2e.local` path relatively (matching `e2e-run.mjs`), which unblocked crew/band setup locally |
+| **16** | — | Crew availability beyond the single Yes: the `/events/my-availability` inbox's No, Only-if-necessary, and Partial (schedule-block window + notes) responses, and updating a response in place — the No/backup statuses the admin board's "Unavailable / backup" counts are built from |
+| **17** | — | The "not worth a batch of their own" long tail, folded in: the account settings profile form (title/phone/pronouns → `account.updateMyProfileDetails`, restoring the shared admin row after) and the event editor's Artifacts tab (note create → `eventArtifacts`) |
 
 ## Status legend
 
@@ -105,7 +108,6 @@ the URL looks like cloud.
 | Duplicate invoice | Covered | `quotes/invoice-reset-and-duplicate.spec.ts` (Batch 8) — new number + token, no inherited approval |
 | Staff invalidate payment proof / attach receipt | Covered | `quotes/payment-proof-manage.spec.ts` (Batch 8) |
 | Host orgs + client contacts | Covered | `quotes/invoice-organizations.spec.ts` (Batch 8) — create → bill an invoice → archive; merge duplicate hosts |
-| Invoice managers roster (`/financial-hub/managers`) | Covered | `quotes/invoice-managers.spec.ts` (Batch 14) — edit title/phone on a row persists via `updateUserAdmin`; restores the shared admin row in `afterAll` |
 | Fee definitions | Covered | `quotes/invoice-fee-definitions.spec.ts` (Batch 14) — add/edit default amount/disable/enable/delete on the settings card, plus the editor link: picking a definition pre-fills the fee-row rate and the persisted line carries `feeDefinitionId` |
 | Terms templates | Covered | `quotes/invoice-terms-templates.spec.ts` (Batch 14) — add/edit markdown/disable/enable/delete on the settings card, plus the editor link: a checked template lands on `termsIds` and renders on the public quote page |
 | PDF download / void | None | Deferred |
@@ -120,11 +122,13 @@ the URL looks like cloud.
 | Dry Rental create + Delivery/Return quick-add | Covered | `events/event-edit-dry-hire.spec.ts` |
 | Event title edit persist | Covered | `events/event-edit-dry-hire.spec.ts` |
 | Crew availability Yes + admin assign | Covered | `crew/crew-availability-assign.spec.ts` |
+| Crew availability No / Only-if-necessary / Partial (window) | Covered | `crew/crew-availability-beyond-yes.spec.ts` (Batch 16) — the `/events/my-availability` inbox statuses the admin board's "Unavailable / backup" counts come from, plus in-place response updates |
 | Venue create + pick on event | Covered | `events/venue-create-pick.spec.ts` (Batch 3) |
 | Event series create/generate | Covered | `events/event-series-smoke.spec.ts` (Batch 5) |
 | Event series editors ("this occurrence" scope) | Covered | `events/event-series-edit-scope.spec.ts` (Batch 11 — pins the applyScope reset guard) |
 | Crew scheduling board | Covered | `crew/crew-scheduling-board.spec.ts` (Batch 5) |
-| Open Mic public + runner | None | Deferred on product priority, not on difficulty — 575 lines and three routes, the largest untested module left. See the batch candidates |
+| Open Mic public wizard + sign-ups | Covered | `events/open-mic-public.spec.ts` (Batch 15) — happy path with Background Music + link lands a queued sign-up; non-Stanford email and missing bg-music link are refused on their steps (the `.refine()` error message does not render inline — the wizard just stays put; see the bugs section) |
+| Open Mic admin inbox + runner | Covered | `events/open-mic-inbox.spec.ts` (Batch 15) — go live / mark completed / cancel / disable; call up, advance to the leaderboard, the not-here strike ladder, remove behind confirm |
 | FullCalendar drag/resize | Deferred | Flaky; keep unit/manual |
 
 ### Inventory and rentals
@@ -181,6 +185,8 @@ the URL looks like cloud.
 | Timecards | Covered | `timecards/timecard-view.spec.ts` (Batch 6) — read-only; app has no submit mutation |
 | Immich media albums | Deferred | External service |
 | R2 upload happy path | Deferred | Needs R2 in CI |
+| Account settings profile | Covered | `events/event-long-tail.spec.ts` (Batch 17) — title/phone/pronouns → `account.updateMyProfileDetails`; restores the shared admin row in `afterEach` |
+| Event artifacts | Covered | `events/event-long-tail.spec.ts` (Batch 17) — note create on a seeded event via the editor's Artifacts tab |
 
 ---
 
@@ -236,7 +242,6 @@ the URL looks like cloud.
 | `quotes/invoice-list-recency.spec.ts` | Newest invoice is listed (#65) |
 | `marketing/work-posts-admin.spec.ts` | Work post admin editor (#65) |
 | `quotes/invoice-line-items.spec.ts` | Line items across sections + totals (Batch 8) |
-| `quotes/invoice-managers.spec.ts` | Invoice managers roster title/phone edit (Batch 14) |
 | `quotes/invoice-fee-definitions.spec.ts` | Fee definition CRUD + editor fee-picker link (Batch 14) |
 | `quotes/invoice-terms-templates.spec.ts` | Terms template CRUD + attach to invoice + public page (Batch 14) |
 | `quotes/invoice-discount.spec.ts` | Discount math, zero clamp, warning (Batch 8) |
@@ -259,10 +264,14 @@ the URL looks like cloud.
 | `email/email-queue.spec.ts` | Mocked email pipeline |
 | `inventory/csv-import.spec.ts` | CSV import: types + assets from fixture files (Batch 12) |
 | `users/band-org-profile.spec.ts` | Band org profile admin edit + pollConvex assert (Batch 12) |
+| `events/open-mic-public.spec.ts` | Public Open Mic wizard: happy path + refusals (Batch 15) |
+| `events/open-mic-inbox.spec.ts` | Open Mic inbox + runner: statuses, call up, strikes, remove (Batch 15) |
+| `crew/crew-availability-beyond-yes.spec.ts` | No / Only-if-necessary / Partial availability responses (Batch 16) |
+| `events/event-long-tail.spec.ts` | Account profile edit + event artifacts (Batch 17) |
 
 ## Remaining gaps
 
-Batches 1–13 cover the shipped happy paths. What is still out of the suite splits
+Batches 1–17 cover the shipped happy paths. What is still out of the suite splits
 into two piles, and they are worth keeping apart — one is a scheduling question,
 the other is not.
 
@@ -285,13 +294,12 @@ that is the better risk proxy than the page count:
 
 | Surface | Backend | What exists today |
 |---------|---------|-------------------|
-| Open Mic (`/events/open-mic`, `/[id]`, public page) | `openMic.ts` 575 | nothing but the Batch 7 route guard |
-| Crew availability beyond one Yes (`/events/my-availability`) | `eventCrewAvailability.ts` 832 | one yes → assign path |
 | Invoice PDF download / void | `invoicePdf.ts` | nothing |
-| Account page, event expenses, event artifacts, marketing settings | 217 / 73 / 107 / 56 | nothing |
+| Account page (remaining fields), event expenses | part of `account.ts` 235 + `eventExpenses.ts` 73 | account profile + artifacts covered (Batch 17); expenses is a computed read-only breakdown on the editor, and the `/events/[id]/expenses` page renders null |
+| Marketing settings (open-mic marketing boost) | `marketingSettings.ts` 56 | a global singleton — toggling it changes the public Open Mic form for every worktree, the same shared-deployment hazard as invoice settings; the wizard spec handles either state |
 | Password reset from the Users row, onboarding waive | — | nothing; `sendPasswordResetAdmin` hands off to Better Auth's flow, and waive only makes sense against a half-finished onboarding |
 
-(The booking request lifecycle row is gone — Batch 13 covered the inbox, staff actions, decline, the convert lock, round-robin settings, and cascade delete. "Reschedule" from the old batch description turned out not to be a shipped mutation; a client reschedules by requesting quote changes, which Batch 8 already covers. The money-long-tail row is gone too — Batch 14 covered fee definitions and terms templates, including their links into the invoice editor and public quote page. Its invoice managers roster spec was removed when the roster page was deleted in the sidebar cleanup.)
+(The booking request lifecycle row is gone — Batch 13 covered the inbox, staff actions, decline, the convert lock, round-robin settings, and cascade delete. "Reschedule" from the old batch description turned out not to be a shipped mutation; a client reschedules by requesting quote changes, which Batch 8 already covers. The money-long-tail row is gone too — Batch 14 covered fee definitions and terms templates, including their links into the invoice editor and public quote page. Its invoice managers roster spec was removed when the roster page was deleted in the sidebar cleanup. The Open Mic and crew-availability rows are gone too — Batches 15 and 16 covered them.)
 
 ### Candidates for the next batches
 
@@ -300,11 +308,12 @@ most to discover late.
 
 | Batch | Surface | Why it is next |
 |-------|---------|----------------|
-| **15?** | Open Mic | The largest wholly-untested module left (575 lines, three routes, a public page). Listed as low product priority since Batch 1 — worth confirming that is still true before spending a batch, because on size alone it would rank far higher |
+| — | (none left) | Every "not batched yet" row has now shipped. What remains is either blocked on external deps (R2, Immich, Instagram, the Worker), a shared-deployment hazard (invoice settings, marketing boost), a computed read-only surface (event expenses), or too small to batch (the account page's remaining fields, password reset / waive). The suite has reached the point of diminishing returns — further e2e would need new CI dependencies or new product features |
 
-Not worth a batch on their own: the account page, event expenses, event
-artifacts and marketing settings are 450 lines between them. Fold them into
-whichever batch is already touching that area rather than scheduling them.
+Not worth a batch on their own: the account page's remaining fields, event
+expenses, marketing settings and password reset / waive are tiny or hazardous to
+drive; fold them into whichever batch is already touching that area rather than
+scheduling them.
 
 ### Keeping the shared deployment usable
 
@@ -358,10 +367,21 @@ Batch 14 uses the same shape for the financial settings rows:
 `e2eHelpers:deleteInvoiceSettingsFixtures` takes the fee-definition keys and
 terms-template labels the specs created (plus any integration draft invoices)
 and deletes them through `ctx.db` in dependency order — invoices first, since a
-line item may carry `feeDefinitionId` and an invoice may carry `termsIds`. The
-managers spec instead restores the shared admin row's title/phone to empty in
-`afterAll` via `e2eHelpers:setUserAdminProfileFields`, so a failed run cannot
-leave a fixture title on the account every worktree signs in as.
+line item may carry `feeDefinitionId` and an invoice may carry `termsIds`.
+(`setUserAdminProfileFields` was added to restore the shared admin row after
+Batch 14's invoice-managers spec, but that spec and its roster page were deleted
+in the sidebar cleanup, so the helper went unused — Batch 17's account-settings
+spec now calls it in `afterEach`, extended with `pronouns`.)
+
+Batch 15's Open Mic specs seed nights through `e2eHelpers:seedOpenMicNight` and
+remove them with `deleteOpenMicFixture` in `afterAll` (sign-ups first, then the
+event). The runner's leaderboard aggregates *all* performed sign-ups
+(`by_status_and_performedAt`, take 2000), so a leaked night is a real hazard —
+`pruneE2eSeedData` now deletes `openMicSignups` as children of pruned events,
+and `e2eHelpers:listOpenMicNights` lists leftovers for manual cleanup. The
+public wizard picks the *earliest* scheduled/live night, so a leaked night with
+an earlier `startAt` hijacks the form; the specs' `afterAll` must not be
+skippable. Run `convex run e2eHelpers:listOpenMicNights '{}'` to inspect.
 
 Run `convex run e2eHelpers:getInventoryCatalogCounts '{}'` to see where the
 catalog sits against the caps that matter:
@@ -442,6 +462,19 @@ inventory type still lists the capability key (same idea as
 **Still unfixed, found by Batch 14:**
 
 *(none.)*
+
+**Still unfixed, found by Batch 15:**
+
+- The public Open Mic wizard's non-Stanford email refusal **does not render its
+  field error** — the `.refine(isStanfordEmail, …)` message never appears, while
+  the `.email()` message ("Enter a valid email address") and the bg-music
+  superRefine message both do. The wizard still refuses correctly (it will not
+  advance past the email step), so this is a UX gap, not a guard gap: an
+  operator who mistypes a `@gmail.com` address gets a button that silently does
+  nothing, with no message and no `aria-invalid`. The spec pins the refusal, not
+  the message. Looks like the same `getFieldState` snapshot issue that trap 7
+  documents for row forms — the field only re-renders when something else
+  re-renders it.
 
 **Fixed since, now tested:** the same unguarded reset effect in
 `events/event-series-schedule-editor.tsx` and
@@ -569,7 +602,17 @@ debugging time in Batch 8, items 5–8 in Batch 9, items 9–13 in Batch 10.
     depending on whether the overlay is already up. Scope refusal assertions to
     the bar (`formSaveBar(page)`), which is the stronger claim anyway — the
     operator has to see it in the form, not in a dev-only overlay.
-
+14. **The Next.js dev-tools button matches `name: "Next"`.** In dev, the page
+    renders an `Open Next.js Dev Tools` button (substring "Next"), so
+    `getByRole("button", { name: "Next" })` in the public Open Mic wizard
+    resolves to two elements and dies on strict mode. Use
+    `{ name: "Next", exact: true }`. CI's production build has no such button,
+    which is why this only bit local dev-mode runs.
+15. **`convex run --env-file` wants a path relative to the project dir.**
+    `helpers/convex.ts` passed the absolute `.env.e2e.local` path; pnpm's exec
+    choked on the absolute form ("pnpm: <path>: not found") and every
+    `runConvex` in crew/band setup failed. `e2e-run.mjs` already used a relative
+    path (`path.relative(backendDir, e2eEnvFile)`); the helper now does the same.
 
 ## How to update this doc
 

@@ -48,7 +48,10 @@ function resolveOptionalEnvFile(): string | null {
 function convexRunArgs(functionName: string, argsJson: string): string[] {
   const envFile = resolveOptionalEnvFile();
   if (envFile) {
-    return ["exec", "convex", "run", "--env-file", envFile, functionName, argsJson];
+    // Pass the env file as a path relative to the backend dir — `convex run
+    // --env-file` resolves it against the project config and pnpm's exec
+    // chokes on the absolute form. Mirrors e2e-run.mjs's convexCliArgs.
+    return ["exec", "convex", "run", "--env-file", path.relative(backendDir, envFile), functionName, argsJson];
   }
   return ["exec", "convex", "run", functionName, argsJson];
 }

@@ -23,6 +23,7 @@ import {
   allocateBandPaymentConfirmationToken,
   allocateRequestNumber,
 } from "./lib/publicReferenceIds";
+import { runnerWindowOpenAt } from "./lib/openMicAddon";
 
 const makeToken = customAlphabet("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz", 24);
 const makeInvoiceSuffix = customAlphabet(
@@ -1655,8 +1656,7 @@ export const getEventCrewAssignmentState = query({
     shiftCount: v.number(),
     assignedUserIds: v.array(v.string()),
   }),
-  handler: async (ctx, args) => {
-    assertE2eHelpersEnabled();
+  handler: async (ctx, args) => {    assertE2eHelpersEnabled();
     const shifts = await ctx.db
       .query("eventCrewShifts")
       .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
@@ -1669,6 +1669,45 @@ export const getEventCrewAssignmentState = query({
       ),
     );
     return { shiftCount: shifts.length, assignedUserIds };
+  },
+});
+
+/** Test-only: read crew availability responses for an event, for assertions. */
+export const getEventCrewAvailabilityState = query({
+  args: { eventId: v.id("events") },
+  returns: v.object({
+    responses: v.array(
+      v.object({
+        userId: v.string(),
+        responseStatus: v.string(),
+        notes: v.optional(v.string()),
+        partialWindows: v.optional(
+          v.array(
+            v.object({
+              scheduleBlockId: v.optional(v.id("eventScheduleBlocks")),
+              startsAt: v.number(),
+              endsAt: v.number(),
+              notes: v.optional(v.string()),
+            }),
+          ),
+        ),
+      }),
+    ),
+  }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const responses = await ctx.db
+      .query("eventCrewAvailabilityResponses")
+      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+      .take(500);
+    return {
+      responses: responses.map((response) => ({
+        userId: response.userId,
+        responseStatus: response.responseStatus,
+        notes: response.notes,
+        partialWindows: response.partialWindows,
+      })),
+    };
   },
 });
 
@@ -3719,6 +3758,13 @@ export const pruneE2eSeedData = mutation({
         await ctx.db.delete(row._id);
         deletedChildren += 1;
       }
+      for (const row of await ctx.db
+        .query("openMicSignups")
+        .withIndex("by_eventId_and_position", (q) => q.eq("eventId", event._id))
+        .take(500)) {
+        await ctx.db.delete(row._id);
+        deletedChildren += 1;
+      }
 
       await ctx.db.delete(event._id);
     }
@@ -4476,6 +4522,7 @@ export const getUserAdminStateByEmail = query({
       active: v.boolean(),
       title: v.string(),
       phone: v.string(),
+      pronouns: v.string(),
       verticals: v.array(v.string()),
       disciplines: v.array(v.string()),
       defaultOrganizationId: v.string(),
@@ -4536,6 +4583,7 @@ export const getUserAdminStateByEmail = query({
       active: profile?.active ?? true,
       title: profile?.title ?? "",
       phone: profile?.phone ?? "",
+      pronouns: profile?.pronouns ?? "",
       verticals: membership.verticals as string[],
       disciplines: membership.disciplines as string[],
       defaultOrganizationId: profile?.defaultOrganizationId ?? "",
@@ -5641,6 +5689,7 @@ export const setUserAdminProfileFields = mutation({
     email: v.string(),
     title: v.optional(v.string()),
     phone: v.optional(v.string()),
+    pronouns: v.optional(v.string()),
   },
   returns: v.object({ ok: v.literal(true) }),
   handler: async (ctx, args) => {
@@ -5661,6 +5710,7 @@ export const setUserAdminProfileFields = mutation({
       await ctx.db.patch(existing._id, {
         title: args.title?.trim() || undefined,
         phone: args.phone?.trim() || undefined,
+        pronouns: args.pronouns?.trim() || undefined,
         updatedAt: now,
       });
     } else {
@@ -5668,6 +5718,7 @@ export const setUserAdminProfileFields = mutation({
         userId,
         title: args.title?.trim() || undefined,
         phone: args.phone?.trim() || undefined,
+        pronouns: args.pronouns?.trim() || undefined,
         active: true,
         createdAt: now,
         updatedAt: now,
@@ -5732,5 +5783,304 @@ export const deleteInvoiceSettingsFixtures = mutation({
       }
     }
     return { deletedInvoices, deletedFees, deletedTerms };
+  },
+});
+
+/* ------------------------------------------------------------------ */
+/* Open Mic (Batch 15)                                                */
+/* ------------------------------------------------------------------ */
+
+const openMicNightStatusValue = v.union(
+  v.literal("scheduled"),
+  v.literal("live"),
+  v.literal("completed"),
+  v.literal("cancelled"),
+);
+
+const openMicSignupStatusValue = v.union(
+  v.literal("queued"),
+  v.literal("current"),
+  v.literal("performed"),
+  v.literal("removed"),
+);
+
+/**
+ * Test-only: create an event with the Open Mic add-on enabled. Defaults to a
+ * night whose start is 30 minutes out, so the runner window is open (and the
+ * inbox's "Go live" renders) and the public form still accepts sign-ups.
+ * Pass explicit `startAt`/`endAt` to place the night differently.
+ */
+export const seedOpenMicNight = mutation({
+  args: {
+    title: v.optional(v.string()),
+    openMicStatus: v.optional(openMicNightStatusValue),
+    openMicNotes: v.optional(v.string()),
+    startAt: v.optional(v.number()),
+    endAt: v.optional(v.number()),
+  },
+  returns: v.object({
+    eventId: v.id("events"),
+    title: v.string(),
+    startAt: v.number(),
+    endAt: v.number(),
+    path: v.string(),
+    runnerPath: v.string(),
+    publicPath: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const now = Date.now();
+    const startAt = args.startAt ?? now + 30 * 60 * 1000;
+    const endAt = args.endAt ?? startAt + 2 * 60 * 60 * 1000;
+    const title = args.title?.trim() || `E2E Open Mic ${now}`;
+    const eventId = await ctx.db.insert("events", {
+      title,
+      status: "tentative",
+      visibility: "public",
+      publicToken: makeToken(),
+      startAt,
+      endAt,
+      timezone: "America/Los_Angeles",
+      spansMultipleDays: false,
+      setupOnly: false,
+      strikeOnly: false,
+      requiresShowWindow: true,
+      eventType: "Crewed Event",
+      openMicEnabled: true,
+      openMicStatus: args.openMicStatus ?? "scheduled",
+      openMicNotes: args.openMicNotes?.trim() || undefined,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return {
+      eventId,
+      title,
+      startAt,
+      endAt,
+      path: `/dashboard/events/${eventId}`,
+      runnerPath: `/dashboard/events/open-mic/${eventId}`,
+      publicPath: "/open-mic",
+    };
+  },
+});
+
+/** Test-only: insert a single Open Mic sign-up for a seeded night. */
+export const seedOpenMicSignup = mutation({
+  args: {
+    eventId: v.id("events"),
+    name: v.string(),
+    email: v.string(),
+    whatTheyreDoing: v.string(),
+    equipment: v.optional(v.array(v.string())),
+    bgMusicLink: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    status: v.optional(openMicSignupStatusValue),
+    skipsCount: v.optional(v.number()),
+    position: v.optional(v.number()),
+    performedAt: v.optional(v.number()),
+  },
+  returns: v.object({ signupId: v.id("openMicSignups") }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const now = Date.now();
+    const signupId = await ctx.db.insert("openMicSignups", {
+      eventId: args.eventId,
+      name: args.name.trim(),
+      email: args.email.trim().toLowerCase(),
+      whatTheyreDoing: args.whatTheyreDoing.trim(),
+      equipment: args.equipment ?? [],
+      bgMusicLink: args.bgMusicLink?.trim() || undefined,
+      notes: args.notes?.trim() || undefined,
+      status: args.status ?? "queued",
+      skipsCount: args.skipsCount ?? 0,
+      position: args.position ?? now,
+      performedAt: args.performedAt,
+      submittedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return { signupId };
+  },
+});
+
+/** Test-only: read a night's event state plus its sign-ups, for assertions. */
+export const getOpenMicNightState = query({
+  args: { eventId: v.id("events") },
+  returns: v.object({
+    eventExists: v.boolean(),
+    openMicEnabled: v.boolean(),
+    openMicStatus: v.optional(v.string()),
+    openMicNotes: v.optional(v.string()),
+    runnerWindowOpen: v.boolean(),
+    signups: v.array(
+      v.object({
+        _id: v.id("openMicSignups"),
+        name: v.string(),
+        email: v.string(),
+        whatTheyreDoing: v.string(),
+        status: v.string(),
+        skipsCount: v.number(),
+        position: v.number(),
+        equipment: v.array(v.string()),
+        bgMusicLink: v.optional(v.string()),
+        performedAt: v.optional(v.number()),
+      }),
+    ),
+  }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const event = await ctx.db.get(args.eventId);
+    if (!event) {
+      return {
+        eventExists: false,
+        openMicEnabled: false,
+        openMicStatus: undefined,
+        openMicNotes: undefined,
+        runnerWindowOpen: false,
+        signups: [],
+      };
+    }
+    const now = Date.now();
+    const signups = await ctx.db
+      .query("openMicSignups")
+      .withIndex("by_eventId_and_position", (q) => q.eq("eventId", args.eventId))
+      .order("asc")
+      .take(500);
+    return {
+      eventExists: true,
+      openMicEnabled: event.openMicEnabled === true,
+      openMicStatus: event.openMicStatus,
+      openMicNotes: event.openMicNotes,
+      runnerWindowOpen: runnerWindowOpenAt(event.startAt, event.endAt, now),
+      signups: signups.map((s) => ({
+        _id: s._id,
+        name: s.name,
+        email: s.email,
+        whatTheyreDoing: s.whatTheyreDoing,
+        status: s.status,
+        skipsCount: s.skipsCount,
+        position: s.position,
+        equipment: s.equipment,
+        bgMusicLink: s.bgMusicLink,
+        performedAt: s.performedAt,
+      })),
+    };
+  },
+});
+
+/** Test-only: find a sign-up by email (used to verify public-form submissions). */
+export const getOpenMicSignupByEmail = query({
+  args: { email: v.string() },
+  returns: v.union(
+    v.null(),
+    v.object({
+      signupId: v.id("openMicSignups"),
+      eventId: v.id("events"),
+      name: v.string(),
+      whatTheyreDoing: v.string(),
+      status: v.string(),
+      equipment: v.array(v.string()),
+      bgMusicLink: v.optional(v.string()),
+      nightTitle: v.optional(v.string()),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const signup = await ctx.db
+      .query("openMicSignups")
+      .withIndex("by_email", (q) => q.eq("email", args.email.trim().toLowerCase()))
+      .first();
+    if (!signup) return null;
+    const event = await ctx.db.get(signup.eventId);
+    return {
+      signupId: signup._id,
+      eventId: signup.eventId,
+      name: signup.name,
+      whatTheyreDoing: signup.whatTheyreDoing,
+      status: signup.status,
+      equipment: signup.equipment,
+      bgMusicLink: signup.bgMusicLink,
+      nightTitle: event?.title,
+    };
+  },
+});
+
+/** Test-only: delete an Open Mic night's sign-ups and the event itself. */
+export const deleteOpenMicFixture = mutation({
+  args: { eventId: v.id("events") },
+  returns: v.object({ deletedSignups: v.number(), deletedEvent: v.boolean() }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    let deletedSignups = 0;
+    for (const row of await ctx.db
+      .query("openMicSignups")
+      .withIndex("by_eventId_and_position", (q) => q.eq("eventId", args.eventId))
+      .take(500)) {
+      await ctx.db.delete(row._id);
+      deletedSignups += 1;
+    }
+    const event = await ctx.db.get(args.eventId);
+    if (event) {
+      await ctx.db.delete(event._id);
+      return { deletedSignups, deletedEvent: true };
+    }
+    return { deletedSignups, deletedEvent: false };
+  },
+});
+
+/** Test-only: read an event's artifacts for assertions. */
+export const getEventArtifactsState = query({
+  args: { eventId: v.id("events") },
+  returns: v.object({
+    artifacts: v.array(
+      v.object({
+        _id: v.id("eventArtifacts"),
+        artifactType: v.string(),
+        title: v.string(),
+        markdown: v.optional(v.string()),
+        linkUrl: v.optional(v.string()),
+      }),
+    ),
+  }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const artifacts = await ctx.db
+      .query("eventArtifacts")
+      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+      .take(500);
+    return {
+      artifacts: artifacts.map((row) => ({
+        _id: row._id,
+        artifactType: row.artifactType,
+        title: row.title,
+        markdown: row.markdown,
+        linkUrl: row.linkUrl,
+      })),
+    };
+  },
+});
+
+/** Test-only: list Open Mic nights for cleanup of leaked fixtures. */
+export const listOpenMicNights = query({
+  args: {},
+  returns: v.array(
+    v.object({
+      eventId: v.id("events"),
+      title: v.string(),
+      startAt: v.number(),
+    }),
+  ),
+  handler: async (ctx) => {
+    assertE2eHelpersEnabled();
+    const events = await ctx.db
+      .query("events")
+      .withIndex("by_openMicEnabled_and_startAt", (q) => q.eq("openMicEnabled", true))
+      .order("asc")
+      .take(500);
+    return events.map((event) => ({
+      eventId: event._id,
+      title: event.title,
+      startAt: event.startAt,
+    }));
   },
 });
