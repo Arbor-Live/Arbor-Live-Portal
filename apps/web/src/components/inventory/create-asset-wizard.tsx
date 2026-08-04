@@ -121,10 +121,10 @@ function CreateAssetWizardForm({ onClose }: { onClose: () => void }) {
     const options: ItemDetailsContainerOption[] = [];
     for (const tag of tags) {
       const id = tag.assetId.trim();
-      if (id) options.push({ value: id, assetId: id, label: "new in this batch" });
+      if (id) options.push({ value: id, assetId: id, label: id });
     }
     for (const item of itemSummaries ?? []) {
-      options.push({ value: item.assetId, assetId: item.assetId, label: "" });
+      options.push({ value: item.assetId, assetId: item.assetId, label: item.assetId });
     }
     return options;
   }, [itemSummaries, tags]);
@@ -446,7 +446,7 @@ function CreateAssetWizardForm({ onClose }: { onClose: () => void }) {
                     options={options.map((option) => ({
                       value: option.assetId,
                       assetId: option.assetId,
-                      label: option.label,
+                      label: "",
                     }))}
                     onScan={(raw) => onScanContains(tag.localId, raw)}
                     title={`Contains (${tag.contains.length})`}

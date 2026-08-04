@@ -282,7 +282,6 @@ export function ItemsManager() {
               <Button
                 type="button"
                 variant="outline"
-                aria-label="Scan a barcode to find an item"
                 onClick={() => setScanOpen((prev) => !prev)}
               >
                 <CameraIcon className="size-4" />
