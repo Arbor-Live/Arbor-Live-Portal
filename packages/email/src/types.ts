@@ -142,6 +142,16 @@ export type PayingPartyAddedEmailProps = {
   managerEmail?: string;
 };
 
+export type BandAssignedEmailProps = {
+  recipientName?: string;
+  bandName: string;
+  eventTitle: string;
+  venueName?: string;
+  dateRangeLabel: string;
+  roleLabel: string;
+  dashboardUrl: string;
+};
+
 export type BandPaymentConfirmationEmailProps = {
   recipientName?: string;
   eventTitle: string;

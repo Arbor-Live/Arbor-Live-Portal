@@ -6,6 +6,7 @@ import type {
   PaymentProofReminderEmailProps,
   PaymentProofSubmittedEmailProps,
   PayingPartyAddedEmailProps,
+  BandAssignedEmailProps,
   BandPaymentConfirmationEmailProps,
   BandPaymentCompletedEmailProps,
   BandPaymentPayeeRequiredEmailProps,
@@ -183,4 +184,14 @@ export const bandPaymentPayeeRequiredPreviewProps: BandPaymentPayeeRequiredEmail
   venueName: "Arbor Stage",
   eventDateLabel: "5/29/26",
   payeeSettingsUrl: "https://portal.arbor.st/dashboard/bands-and-performers#payment-payee",
+};
+
+export const bandAssignedPreviewProps: BandAssignedEmailProps = {
+  recipientName: "Jordan",
+  bandName: "The Stanford Band",
+  eventTitle: "Senior Night",
+  venueName: "Arbor Stage",
+  dateRangeLabel: eventDefaults.dateRangeLabel,
+  roleLabel: "Headliner",
+  dashboardUrl: `${ARBOR_WEBSITE_URL}/dashboard`,
 };

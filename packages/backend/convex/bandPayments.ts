@@ -511,6 +511,9 @@ export const upsertForEvent = mutation({
     designatedPayeeEmail: v.optional(v.string()),
     designatedPayeeUserId: v.optional(v.string()),
     photoAlbumUrl: v.optional(v.string()),
+    role: v.optional(
+      v.union(v.literal("headliner"), v.literal("support"), v.literal("other")),
+    ),
   },
   returns: v.id("eventBandPayments"),
   handler: async (ctx, args) => {
@@ -598,10 +601,16 @@ export const upsertForEvent = mutation({
       }
       await ctx.db.patch(existing._id, payload);
       await syncEventBandsCost(ctx, args.eventId);
+      const existingParticipation = await ctx.db
+        .query("eventBandParticipations")
+        .withIndex("by_eventId_and_organizationId", (q) =>
+          q.eq("eventId", args.eventId).eq("organizationId", args.organizationId),
+        )
+        .unique();
       await upsertEventBandParticipation(ctx, {
         eventId: args.eventId,
         organizationId: args.organizationId,
-        role: "headliner",
+        role: args.role ?? existingParticipation?.role ?? "headliner",
       });
       return existing._id;
     }
@@ -612,10 +621,16 @@ export const upsertForEvent = mutation({
       createdAt: now,
     });
     await syncEventBandsCost(ctx, args.eventId);
+    const existingParticipation = await ctx.db
+      .query("eventBandParticipations")
+      .withIndex("by_eventId_and_organizationId", (q) =>
+        q.eq("eventId", args.eventId).eq("organizationId", args.organizationId),
+      )
+      .unique();
     await upsertEventBandParticipation(ctx, {
       eventId: args.eventId,
       organizationId: args.organizationId,
-      role: "headliner",
+      role: args.role ?? existingParticipation?.role ?? "headliner",
     });
     return paymentId;
   },

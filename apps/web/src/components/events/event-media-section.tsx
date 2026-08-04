@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useAction, useMutation, useQuery } from "convex/react";
+import { useEffect, useState } from "react";
+import { useAction, useQuery } from "convex/react";
 import {
   CameraIcon,
   CheckCircleIcon,
@@ -10,9 +10,7 @@ import {
 } from "@phosphor-icons/react";
 import { api, type Id } from "@/lib/convex-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { SearchableSelect } from "@/components/inventory/searchable-select";
 import { MediaGallery } from "@/components/media/media-gallery";
 import { MediaAlbumLink } from "@/components/media/media-album-link";
 import { MediaUploadDropzone } from "@/components/media/media-upload-dropzone";
@@ -44,46 +42,13 @@ function StatusIcon({ status }: { status: CrewMediaStatus }) {
   return <MinusCircleIcon className={`size-4 ${statusIconClass(status)}`} />;
 }
 
-type ParticipationRole = "headliner" | "support" | "other";
-
-type ParticipationDraft = {
-  organizationId: string;
-  role: ParticipationRole;
-};
-
-const ROLE_OPTIONS = [
-  { value: "headliner", label: "Headliner" },
-  { value: "support", label: "Support" },
-  { value: "other", label: "Other" },
-];
-
 export function EventMediaSection({ eventId }: { eventId: Id<"events"> }) {
-  const bands = useQuery(api.users.listBandOrganizationsAdmin, {});
-  const participations = useQuery(api.eventBands.listByEvent, { eventId });
   const media = useQuery(api.immich.listEventMedia, { eventId });
   const ensureUploadAlbum = useAction(api.immichEnsure.ensureUploadAlbum);
-  const upsertParticipations = useMutation(api.eventBands.upsertParticipations);
 
-  const [draftsOverride, setDraftsOverride] = useState<ParticipationDraft[] | null>(null);
   const [ensuring, setEnsuring] = useState(false);
-  const [savingBands, setSavingBands] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [albumReady, setAlbumReady] = useState(false);
-
-  const participationDrafts = useMemo(
-    () =>
-      (participations ?? []).map((row) => ({
-        organizationId: row.organizationId,
-        role: row.role,
-      })),
-    [participations],
-  );
-  // Local edits (add/remove/change row) take precedence over the live query
-  // until the next successful save, so in-progress edits are never clobbered.
-  const drafts = draftsOverride ?? participationDrafts;
-  const setDrafts = (updater: (prev: ParticipationDraft[]) => ParticipationDraft[]) => {
-    setDraftsOverride(updater(drafts));
-  };
 
   useEffect(() => {
     let cancelled = false;
@@ -104,96 +69,8 @@ export function EventMediaSection({ eventId }: { eventId: Id<"events"> }) {
     };
   }, [ensureUploadAlbum, eventId]);
 
-  const bandOptions = useMemo(
-    () =>
-      (bands ?? []).map((band) => ({
-        value: band.organizationId,
-        label: band.displayName || band.name,
-      })),
-    [bands],
-  );
-
-  async function onSaveBands() {
-    setSavingBands(true);
-    setMessage(null);
-    try {
-      await upsertParticipations({
-        eventId,
-        participations: drafts.filter((row) => row.organizationId),
-      });
-      setDraftsOverride(null);
-      setMessage("Linked bands saved.");
-    } catch (error) {
-      setMessage(getConvexErrorMessage(error));
-    } finally {
-      setSavingBands(false);
-    }
-  }
-
-  function addBandRow() {
-    setDrafts((prev) => [...prev, { organizationId: "", role: "headliner" }]);
-  }
-
   return (
     <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>Linked Bands</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-sm text-muted-foreground">
-            Link band organizations to this event. Linked bands can view and upload to this event&apos;s media album.
-          </p>
-          {drafts.map((row, index) => (
-            <div key={`band-link-${index}`} className="grid gap-2 md:grid-cols-[1fr_180px_auto]">
-              <SearchableSelect
-                value={row.organizationId}
-                onChange={(value) =>
-                  setDrafts((prev) =>
-                    prev.map((entry, entryIndex) =>
-                      entryIndex === index ? { ...entry, organizationId: value } : entry,
-                    ),
-                  )
-                }
-                options={bandOptions}
-                placeholder="Select band…"
-                emptyLabel="Select band"
-              />
-              <SearchableSelect
-                value={row.role}
-                onChange={(value) =>
-                  setDrafts((prev) =>
-                    prev.map((entry, entryIndex) =>
-                      entryIndex === index
-                        ? { ...entry, role: value as ParticipationRole }
-                        : entry,
-                    ),
-                  )
-                }
-                options={ROLE_OPTIONS}
-                placeholder="Role"
-                emptyLabel="Role"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setDrafts((prev) => prev.filter((_, entryIndex) => entryIndex !== index))}
-              >
-                Remove
-              </Button>
-            </div>
-          ))}
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" onClick={addBandRow}>
-              Add band
-            </Button>
-            <Button type="button" onClick={() => void onSaveBands()} disabled={savingBands}>
-              {savingBands ? "Saving…" : "Save linked bands"}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
       <CrewMediaStatusCard eventId={eventId} />
 
       <Card>
@@ -201,6 +78,9 @@ export function EventMediaSection({ eventId }: { eventId: Id<"events"> }) {
           <CardTitle>Event Media</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Bands assigned on the event overview can view and upload to this album.
+          </p>
           {ensuring ? (
             <p className="text-sm text-muted-foreground">Preparing media album…</p>
           ) : (

@@ -7,6 +7,7 @@ import { PasswordResetEmail } from "../emails/password-reset";
 import { EmailVerificationEmail } from "../emails/email-verification";
 import { ChangeEmailConfirmationEmail } from "../emails/change-email-confirmation";
 import { PayingPartyAddedEmail } from "../emails/paying-party-added";
+import { BandAssignedEmail } from "../emails/band-assigned";
 import { BandPaymentConfirmationEmail } from "../emails/band-payment-confirmation";
 import { BandPaymentCompletedEmail } from "../emails/band-payment-completed";
 import { BandPaymentPayeeRequiredEmail } from "../emails/band-payment-payee-required";
@@ -42,6 +43,7 @@ import type {
   PaymentProofReminderEmailProps,
   PaymentProofSubmittedEmailProps,
   PayingPartyAddedEmailProps,
+  BandAssignedEmailProps,
   BandPaymentConfirmationEmailProps,
   BandPaymentCompletedEmailProps,
   BandPaymentPayeeRequiredEmailProps,
@@ -123,6 +125,10 @@ export async function renderPaymentProofSubmittedEmail(props: PaymentProofSubmit
 
 export async function renderPayingPartyAddedEmail(props: PayingPartyAddedEmailProps) {
   return render(PayingPartyAddedEmail(props));
+}
+
+export async function renderBandAssignedEmail(props: BandAssignedEmailProps) {
+  return render(BandAssignedEmail(props));
 }
 
 export async function renderBandPaymentConfirmationEmail(props: BandPaymentConfirmationEmailProps) {

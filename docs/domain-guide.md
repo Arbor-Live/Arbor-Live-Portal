@@ -117,7 +117,11 @@ Event types (drive which editor tabs and quick-add blocks appear):
 - **Event series** (`eventSeries.ts`) generate recurring occurrences and have
   their own budgeting and pull lists.
 - Band participation in events is tracked in `eventBandParticipations`
-  (headliner/support/other), which also drives band media album access.
+  (headliner/support/other). That row is the canonical **assignment**: staff
+  manage it from the event overview **Bands & Performers** section (not Media).
+  Assigning a band emails members (`band_assigned`), unlocks event media album
+  access, and surfaces the show on the band home dashboard. Optional
+  `eventBandPayments` attach payout details to the same assignment.
 
 ## Booking requests → events → quotes
 
@@ -158,15 +162,22 @@ Event types (drive which editor tabs and quick-add blocks appear):
 
 ## Band payments
 
-- Payouts to performing bands (`eventBandPayments` in `bandPayments.ts`).
-  Each band org has a designated payee (name/email/mailing address + linked
+- Payouts to performing bands (`eventBandPayments` in `bandPayments.ts`) are
+  optional children of `eventBandParticipations`. Staff assign the band first
+  (or create a payout which also upserts participation), then set pricing on the
+  same overview row.
+- Each band org has a designated payee (name/email/mailing address + linked
   user id on `organizationProfiles`).
 - Confirmation loop: admin sends a signature-request email from the payout
   queue; the designated payee e-signs under **Bands and Performers → Payments**
-  (typed legal name + amount checkbox). Admin then marks paid with a GrantEd
-  transfer / Service Payment number; all band members are notified that Stanford
-  is processing the payout. The Payments subtab shows a pending chip when the
-  payee needs to sign or payee setup is incomplete.
+  or from the band home show card (typed legal name + amount checkbox). Admin
+  then marks paid with a GrantEd transfer / Service Payment number; all band
+  members are notified that Stanford is processing the payout. The Payments
+  subtab shows a pending chip when the payee needs to sign or payee setup is
+  incomplete.
+- Band home (`/dashboard`) lists upcoming and recent assigned shows with payout
+  status chips (including draft payments and participation-only bookings). Full
+  payment history and payee settings remain under Payments.
 - Once signed, admins and band members can download an agreement PDF
   (`bandPaymentPdfDownload.ts` via `@arbor/invoice-document`) showing the
   Arbor sender and the payee signature.

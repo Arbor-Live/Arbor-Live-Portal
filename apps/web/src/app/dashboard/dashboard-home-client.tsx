@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { AdminDashboard } from "@/components/admin-dashboard/admin-dashboard";
+import { BandDashboard } from "@/components/bands/band-dashboard";
 import { CrewDashboard } from "@/components/crew-portal/crew-dashboard";
 import { useSessionShell } from "@/components/session-shell-provider";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -18,10 +19,11 @@ export function DashboardHomeClient() {
     if (viewer.isAdmin && activeOrganization?.organizationType === "arbor_internal") {
       return;
     }
+    if (activeOrganization?.organizationType === "band") {
+      return;
+    }
     if (!viewer.isCrewOnly) {
-      router.replace(
-        activeOrganization?.organizationType === "band" ? "/dashboard/media" : "/dashboard/events",
-      );
+      router.replace("/dashboard/events");
     }
   }, [viewer, activeOrganization, router]);
 
@@ -31,6 +33,10 @@ export function DashboardHomeClient() {
 
   if (viewer.isAdmin && activeOrganization?.organizationType === "arbor_internal") {
     return <AdminDashboard />;
+  }
+
+  if (activeOrganization?.organizationType === "band") {
+    return <BandDashboard />;
   }
 
   if (viewer.isAdmin) {
