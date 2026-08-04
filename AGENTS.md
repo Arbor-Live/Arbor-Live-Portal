@@ -1,3 +1,20 @@
+# Context
+
+This repo houses all the code for the Arbor Live Portal and Website. Arbor Live is
+Stanford's only student-run production company — nearly 300 events a year, supporting
+students throughout campus.
+
+This code helps us manage that workload. In many ways we are not a production company;
+we are a community of students and musicians helping bring music to every corner of
+campus. When building, keep this in mind.
+
+Who uses it:
+
+- **Admins / student managers** — bird's-eye view of the whole operation; dense
+  dashboards are fine if they stay scannable.
+- **Bands** — manage their own stuff; keep flows self-serve and low-ceremony.
+- **Crew** — often on a time crunch; important info must be obvious at a glance.
+
 <!-- convex-ai-start -->
 
 This project uses [Convex](https://convex.dev) as its backend.
@@ -11,6 +28,9 @@ Convex agent skills for common tasks can be installed by running
 `npx convex ai-files install`.
 
 <!-- convex-ai-end -->
+
+## Notes
+- UI Descriptions: Do not add subtitiles, helper text, or descriptive copy beneath headings, labels, cards, or setting by default. If you think it is necessary to prevent misunderstanding explicitly ask for it. For instance, do not label times as Pacific/PT/PST in the web app — the portal timezone is assumed. Keep zone names in code, engineer docs, and external emails when needed.
 
 ## Cursor Cloud specific instructions
 
@@ -90,3 +110,55 @@ wizards”).
 - Local Playwright: `pnpm test:e2e` boots anonymous Convex (stashes any cloud
   `.env.local` and restores it on exit). Use `E2E_USE_CLOUD_DEV=1` only when you
   intentionally want shared Dev.
+
+# A note from the devs
+
+I like ambitious ideas, simple systems, and software that feels obvious. Do not
+preserve complexity just because it already exists. Do not introduce machinery
+because it looks architecturally impressive. Understand the real constraint, then
+fight for the smallest model that makes the correct behavior unsurprising.
+
+Channel both "measure twice, cut once" and "yagni". Fight scope creep. Be
+ambitious about the product and UX; be conservative about new abstractions and
+"while we're here" surface area. Honor the developer's intent in a way that is
+both minimal and realistic.
+
+These are good defaults, not hard rules — developer preference wins when it
+conflicts.
+
+## How we judge good work
+
+"Obvious" is measured by the next reader — and for UI, by the next user under
+load (a crew lead mid-load-in, a manager scanning the week). Engineer elegance
+is not the reader.
+
+Simple means each step follows from the last and no step does two jobs.
+Obvious means nobody asks "why is this here?". They are not the same: sometimes
+the obvious path has more parts because the domain does. Prefer obvious once the
+problem is understood. Cleverness before understanding usually becomes expensive
+later. Refusing to solve problems that do not exist is a win.
+
+If you see a clearer approach than what was asked, say so once with a concrete
+alternative. If the developer still wants the original, do that.
+
+### Numbers and limits
+
+Magic numbers without evidence (a silent `take(100)`, an unmeasured timeout, a
+catch that swallows) tend to fail only after they are load-bearing. Before
+setting caps, page sizes, or "safe" collection limits, prefer measuring the real
+case — or pointing at prior art in `docs/convex-efficiency.md` — and set the
+limit past where normal traffic goes. Good paths should not feel the budget.
+Examples: search-on-demand pickers instead of loading full catalogs; session
+shell instead of stacked viewer queries.
+
+If you must ship a provisional limit, say so in a comment (why this number, how
+to revisit). If a normal user flow hits a budget, the budget is wrong — fix the
+measurement, do not quietly raise the ceiling.
+
+### Errors people and agents can fix
+
+A blank failure, swallowed catch, or vague toast is worse than a loud one.
+When something fails a limit or invariant, name what failed, the limit, and the
+actual value when you can (`max X, got Y`). Prefer failing early at validation /
+typecheck / Convex validators; if it must be runtime, fail loudly. A silent
+limit is worse than no limit.

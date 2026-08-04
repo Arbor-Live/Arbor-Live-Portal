@@ -1,12 +1,10 @@
 "use client";
 
-import { useEffect } from "react";
-import { useMutation } from "convex/react";
+import { useEffect, useState } from "react";
+import { useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
 import { FormSaveBar } from "@/components/forms";
 import { Form } from "@/components/ui/form";
-import { TextFormField } from "@/components/forms/text-form-field";
-import { TextareaFormField } from "@/components/forms/textarea-form-field";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useConvexForm } from "@/hooks/use-convex-form";
@@ -14,11 +12,17 @@ import {
   inventoryItemSchema,
   type InventoryItemFormValues,
 } from "@/lib/validations/inventory";
-import { SearchableSelect } from "./searchable-select";
+import { getConvexErrorMessage } from "@/lib/convex-error";
+import { ContainsEditor, type ContainsOption } from "./contains-editor";
+import { InventoryItemDetails } from "./inventory-item-details";
 
 type TypeOption = { _id: Id<"inventoryTypes">; name: string; model: string };
 type LocationOption = { _id: Id<"storageLocations">; path: string };
-type ItemOption = { _id: Id<"inventoryItems">; assetId: string; type?: { name: string; model: string; manufacturer?: string } | null };
+type ItemOption = {
+  _id: Id<"inventoryItems">;
+  assetId: string;
+  type?: { name: string; model: string; manufacturer?: string } | null;
+};
 
 function formatTypeDisplay(type: ItemOption["type"]) {
   if (!type) return "Unknown type";
@@ -49,6 +53,15 @@ export function InventoryItemEditor({
 }) {
   const createItem = useMutation(api.inventoryItems.create);
   const updateItem = useMutation(api.inventoryItems.update);
+  const replaceContainedAssets = useMutation(api.inventoryItems.replaceContainedAssets);
+  const children = useQuery(api.inventoryItems.getChildren, editingId ? { id: editingId } : "skip");
+  const [containsScanRaw, setContainsScanRaw] = useState("");
+  const [containsScanError, setContainsScanError] = useState<string | null>(null);
+  const [containsError, setContainsError] = useState<string | null>(null);
+  const containsScan = useQuery(
+    api.inventoryItems.resolveByScan,
+    containsScanRaw.trim() ? { raw: containsScanRaw } : "skip",
+  );
 
   const form = useConvexForm<InventoryItemFormValues>({
     schema: inventoryItemSchema,
@@ -84,6 +97,54 @@ export function InventoryItemEditor({
     if (!editingId) form.reset(initial);
   };
 
+  async function setChildren(childIds: string[]) {
+    if (!editingId) return;
+    setContainsError(null);
+    try {
+      await replaceContainedAssets({
+        containerId: editingId,
+        childIds: childIds as Id<"inventoryItems">[],
+      });
+    } catch (error) {
+      setContainsError(getConvexErrorMessage(error, "Could not update contained assets."));
+    }
+  }
+
+  useEffect(() => {
+    if (!containsScanRaw.trim()) return;
+    if (containsScan === null) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- consume the one-shot contains-scan resolution
+      setContainsScanError(`No item found for “${containsScanRaw.trim()}”.`);
+      setContainsScanRaw("");
+      return;
+    }
+    if (containsScan) {
+      const ids = (children ?? []).map((child) => child._id);
+      if (!ids.includes(containsScan._id)) void setChildren([...ids, containsScan._id]);
+      setContainsScanRaw("");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- react to the scan result only
+  }, [containsScan]);
+
+  const values = form.watch();
+  const onDetailsChange = (patch: Partial<InventoryItemFormValues>) => {
+    for (const [key, value] of Object.entries(patch)) {
+      form.setValue(key as never, value as never, { shouldDirty: true });
+    }
+  };
+
+  const otherItems = items.filter((item) => item._id !== editingId);
+  const containerOptions = otherItems.map((item) => ({
+    value: item._id,
+    assetId: item.assetId,
+    label: `${item.assetId} - ${formatTypeDisplay(item.type)}`,
+  }));
+  const containsOptions: ContainsOption[] = otherItems.map((item) => ({
+    value: item._id,
+    assetId: item.assetId,
+    label: formatTypeDisplay(item.type),
+  }));
+
   const tier = "C";
 
   return (
@@ -98,70 +159,34 @@ export function InventoryItemEditor({
               onSubmit={form.handleSubmit((values) => form.runMutation(() => persist(values)))}
               className="space-y-3"
             >
-              <TextFormField name="assetId" label="Asset ID" />
-              <TextFormField name="serialNumber" label="Serial Number" />
-              <div className="space-y-2" data-testid="item-type-field">
-                <label className="text-sm font-medium">Type</label>
-                <SearchableSelect
-                  value={form.watch("typeId")}
-                  onChange={(value) => form.setValue("typeId", value, { shouldDirty: true })}
-                  options={types.map((type) => ({
-                    value: type._id,
-                    label: `${type.name} - ${type.model}`,
-                  }))}
-                  placeholder="Search types..."
-                  emptyLabel="Select type"
-                />
-              </div>
-              <div className="space-y-2" data-testid="item-location-field">
-                <label className="text-sm font-medium">Storage Location</label>
-                <SearchableSelect
-                  value={form.watch("storageLocationId") ?? ""}
-                  onChange={(value) =>
-                    form.setValue("storageLocationId", value, { shouldDirty: true })
-                  }
-                  options={[
-                    { value: "", label: "Unassigned" },
-                    ...locations.map((location) => ({
-                      value: location._id,
-                      label: location.path,
-                    })),
-                  ]}
-                  placeholder="Search storage locations..."
-                  emptyLabel="Unassigned"
-                />
-              </div>
-              <div className="space-y-2" data-testid="item-container-field">
-                <label className="text-sm font-medium">Contained In Asset</label>
-                <SearchableSelect
-                  value={form.watch("containedInAssetId") ?? ""}
-                  onChange={(value) =>
-                    form.setValue("containedInAssetId", value, { shouldDirty: true })
-                  }
-                  options={[
-                    { value: "", label: "Not contained" },
-                    ...items
-                      .filter((item) => item._id !== editingId)
-                      .map((item) => ({
-                        value: item._id,
-                        label: `${item.assetId} - ${formatTypeDisplay(item.type)}`,
-                      })),
-                  ]}
-                  placeholder="Search container assets..."
-                  emptyLabel="Not contained"
-                />
-              </div>
-              <TextFormField name="status" label="Status" />
-              <TextareaFormField name="notes" label="Notes" />
-              <p className="text-xs text-muted-foreground">
-                Public finder URL:{" "}
-                <span className="font-mono">
-                  {siteBase || "(set NEXT_PUBLIC_SITE_URL)"}/e/{form.watch("assetId") || "ASSETID"}
-                </span>
-              </p>
+              <InventoryItemDetails
+                values={{
+                  assetId: values.assetId,
+                  serialNumber: values.serialNumber ?? "",
+                  typeId: values.typeId,
+                  storageLocationId: values.storageLocationId ?? "",
+                  containedInAssetId: values.containedInAssetId ?? "",
+                  status: values.status ?? "",
+                  notes: values.notes ?? "",
+                }}
+                onChange={onDetailsChange}
+                errors={
+                  form.formState.errors.assetId
+                    ? { assetId: form.formState.errors.assetId.message ?? "Asset ID is required" }
+                    : undefined
+                }
+                types={types.map((type) => ({ value: type._id, label: `${type.name} - ${type.model}` }))}
+                locations={locations.map((location) => ({
+                  value: location._id,
+                  label: location.path,
+                }))}
+                containerOptions={containerOptions}
+                testIdPrefix="item"
+                siteBase={siteBase}
+              />
               {tier === "C" ? (
                 <Button type="submit" disabled={form.saveStatus === "saving"}>
-                  Create
+                  {editingId ? "Save" : "Create"}
                 </Button>
               ) : null}
               {editingId ? (
@@ -171,6 +196,24 @@ export function InventoryItemEditor({
               ) : null}
             </form>
           </Form>
+          {editingId ? (
+            <div className="space-y-3 border-t pt-3">
+              <ContainsEditor
+                value={(children ?? []).map((child) => child._id)}
+                onChange={setChildren}
+                options={containsOptions}
+                onScan={(raw) => setContainsScanRaw(raw)}
+                title={`Contains (${children?.length ?? 0})`}
+                emptyLabel="Nothing inside yet — scan or add the contents"
+              />
+              {containsScanError ? (
+                <p className="text-sm text-destructive">{containsScanError}</p>
+              ) : null}
+              {containsError ? (
+                <p className="text-sm text-destructive">{containsError}</p>
+              ) : null}
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 

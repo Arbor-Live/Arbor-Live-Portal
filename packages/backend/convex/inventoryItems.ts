@@ -3,9 +3,12 @@ import { v } from "convex/values";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireAuth } from "./lib/auth";
+import { assetIdLookupCandidates } from "./lib/assetScan";
+import { resolveInventoryItemByScan } from "./lib/rentalFulfillment";
 
 const MAX_LIST_LIMIT = 2000;
 const MAX_ASSET_ID_LIMIT = 5000;
+const MAX_BATCH_ITEMS = 200;
 
 async function cascadeLocationToDescendants(
   ctx: MutationCtx,
@@ -234,6 +237,212 @@ export const create = mutation({
   },
 });
 
+/**
+ * Create multiple inventory items of one type in a single atomic mutation
+ * (create-asset wizard). Containment is referenced by assetId so sibling tags
+ * can nest inside each other before any of them exist in the DB.
+ *
+ * Each item may declare its container either directly (`containedInAssetId`) or
+ * via `contains` on another item; both express the same relationship and must
+ * agree. Containers/children may be items being created in this batch or
+ * existing items (resolved through the same scan candidates as the scanner).
+ * Cycles and "one container per child" conflicts are rejected up front.
+ */
+export const createMany = mutation({
+  args: {
+    typeId: v.id("inventoryTypes"),
+    items: v.array(
+      v.object({
+        assetId: v.string(),
+        serialNumber: v.optional(v.string()),
+        storageLocationId: v.optional(v.id("storageLocations")),
+        containedInAssetId: v.optional(v.string()),
+        status: v.optional(v.string()),
+        notes: v.optional(v.string()),
+        contains: v.optional(v.array(v.string())),
+      }),
+    ),
+  },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    if (args.items.length === 0) return { created: 0 };
+    if (args.items.length > MAX_BATCH_ITEMS) {
+      throw new Error(`Cannot create more than ${MAX_BATCH_ITEMS} items at once.`);
+    }
+    const type = await ctx.db.get(args.typeId);
+    if (!type) throw new Error("Inventory type not found.");
+
+    // 1. Validate fields, reject duplicate assetIds within the batch and in the DB.
+    const normalizedItems = args.items.map((item) => ({
+      ...item,
+      assetId: item.assetId.trim(),
+      serialNumber: item.serialNumber?.trim(),
+      status: item.status?.trim(),
+      notes: item.notes?.trim(),
+    }));
+    const seen = new Set<string>();
+    for (const item of normalizedItems) {
+      if (!item.assetId) throw new Error("Asset ID is required.");
+      const key = item.assetId.toLowerCase();
+      if (seen.has(key)) throw new Error(`Duplicate asset ID in batch: ${item.assetId}`);
+      seen.add(key);
+      if (item.storageLocationId) {
+        const location = await ctx.db.get(item.storageLocationId);
+        if (!location) throw new Error("Storage location not found.");
+      }
+      const existing = await ctx.db
+        .query("inventoryItems")
+        .withIndex("by_assetId", (q) => q.eq("assetId", item.assetId))
+        .unique();
+      if (existing) throw new Error(`Asset ID already exists: ${item.assetId}`);
+    }
+
+    // 2. Insert all items without containment, remembering in-batch ids.
+    const now = Date.now();
+    const idByAssetId = new Map<string, Id<"inventoryItems">>();
+    const inBatchIds = new Set<Id<"inventoryItems">>();
+    const ownLocationById = new Map<Id<"inventoryItems">, Id<"storageLocations"> | undefined>();
+    for (const item of normalizedItems) {
+      const id = await ctx.db.insert("inventoryItems", {
+        assetId: item.assetId,
+        serialNumber: item.serialNumber,
+        typeId: args.typeId,
+        storageLocationId: item.storageLocationId,
+        containedInAssetId: undefined,
+        status: item.status,
+        notes: item.notes,
+        createdAt: now,
+        updatedAt: now,
+      });
+      idByAssetId.set(item.assetId.toLowerCase(), id);
+      ownLocationById.set(id, item.storageLocationId);
+      inBatchIds.add(id);
+    }
+
+    // 3. Collapse containment declarations into a single child → container map.
+    const childKeyToContainerKey = new Map<string, string>();
+    const setEdge = (childRaw: string, containerRaw: string) => {
+      const child = childRaw.trim();
+      const container = containerRaw.trim();
+      if (!child || !container) return;
+      if (child.toLowerCase() === container.toLowerCase()) {
+        throw new Error("An asset cannot contain itself.");
+      }
+      const previous = childKeyToContainerKey.get(child.toLowerCase());
+      if (previous && previous !== container.toLowerCase()) {
+        throw new Error(`Asset "${child}" is assigned to two containers.`);
+      }
+      childKeyToContainerKey.set(child.toLowerCase(), container.toLowerCase());
+    };
+    for (const item of normalizedItems) {
+      if (item.containedInAssetId) setEdge(item.assetId, item.containedInAssetId);
+      for (const childRef of item.contains ?? []) setEdge(childRef, item.assetId);
+    }
+
+    // 4. Resolve every edge to an _id (in-batch first, then existing items).
+    const existingByKey = new Map<string, Doc<"inventoryItems"> | null>();
+    const findExisting = async (raw: string): Promise<Doc<"inventoryItems"> | null> => {
+      for (const candidate of assetIdLookupCandidates(raw)) {
+        const key = candidate.toLowerCase();
+        const cached = existingByKey.get(key);
+        if (cached !== undefined) {
+          if (cached) return cached;
+        } else {
+          const found = await ctx.db
+            .query("inventoryItems")
+            .withIndex("by_assetId", (q) => q.eq("assetId", candidate))
+            .unique();
+          existingByKey.set(key, found ?? null);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+    const resolvedEdges: { childId: Id<"inventoryItems">; containerId: Id<"inventoryItems"> }[] =
+      [];
+    for (const [childKey, containerKey] of childKeyToContainerKey) {
+      const childId = idByAssetId.get(childKey) ?? (await findExisting(childKey))?._id;
+      const containerId =
+        idByAssetId.get(containerKey) ?? (await findExisting(containerKey))?._id;
+      if (!childId) throw new Error(`Referenced asset not found: ${childKey}`);
+      if (!containerId) throw new Error(`Container asset not found: ${containerKey}`);
+      resolvedEdges.push({ childId, containerId });
+    }
+
+    // 5. Cycle check — following parent pointers upward from a container must
+    //    never reach the child being nested inside it.
+    const containerIdByChildId = new Map<Id<"inventoryItems">, Id<"inventoryItems">>();
+    for (const edge of resolvedEdges) containerIdByChildId.set(edge.childId, edge.containerId);
+    for (const edge of resolvedEdges) {
+      let pointer: Id<"inventoryItems"> | undefined = edge.containerId;
+      let hops = 0;
+      while (pointer) {
+        if (pointer === edge.childId) throw new Error("Cannot create cyclical asset containment.");
+        if (++hops > MAX_BATCH_ITEMS) throw new Error("Cannot create cyclical asset containment.");
+        const next: Id<"inventoryItems"> | undefined =
+          containerIdByChildId.get(pointer) ?? (await ctx.db.get(pointer))?.containedInAssetId;
+        pointer = next;
+      }
+    }
+
+    // 6. Effective storage location: a contained item inherits its container's
+    //    location (same semantics as create/update), following chains in-batch
+    //    and across existing items.
+    const finalLocationMemo = new Map<Id<"inventoryItems">, Id<"storageLocations"> | undefined>();
+    const finalLocation = async (
+      id: Id<"inventoryItems">,
+    ): Promise<Id<"storageLocations"> | undefined> => {
+      const cached = finalLocationMemo.get(id);
+      if (cached !== undefined) return cached;
+      finalLocationMemo.set(id, undefined);
+      const containerId = containerIdByChildId.get(id);
+      let location: Id<"storageLocations"> | undefined;
+      if (containerId) {
+        location = await finalLocation(containerId);
+      } else if (inBatchIds.has(id)) {
+        location = ownLocationById.get(id);
+      } else {
+        const doc = await ctx.db.get(id);
+        location = doc?.containedInAssetId
+          ? await finalLocation(doc.containedInAssetId)
+          : doc?.storageLocationId;
+      }
+      finalLocationMemo.set(id, location);
+      return location;
+    };
+
+    // 7. Apply containment + effective locations to every item touched.
+    for (const item of normalizedItems) {
+      const id = idByAssetId.get(item.assetId.toLowerCase())!;
+      await ctx.db.patch(id, {
+        containedInAssetId: containerIdByChildId.get(id),
+        storageLocationId: await finalLocation(id),
+        updatedAt: Date.now(),
+      });
+    }
+    for (const edge of resolvedEdges) {
+      if (inBatchIds.has(edge.childId)) continue;
+      await ctx.db.patch(edge.childId, {
+        containedInAssetId: edge.containerId,
+        storageLocationId: await finalLocation(edge.childId),
+        updatedAt: Date.now(),
+      });
+    }
+
+    // 8. Propagate locations to descendants of everything we re-parented.
+    const cascadeTargets = new Set<Id<"inventoryItems">>();
+    for (const edge of resolvedEdges) {
+      cascadeTargets.add(edge.childId);
+      cascadeTargets.add(edge.containerId);
+    }
+    for (const id of cascadeTargets) {
+      await cascadeLocationToDescendants(ctx, id, await finalLocation(id));
+    }
+
+    return { created: normalizedItems.length };
+  },
+});
+
 export const update = mutation({
   args: {
     id: v.id("inventoryItems"),
@@ -351,5 +560,104 @@ export const setContainer = mutation({
       args.id,
       inheritedContainerLocationId ?? existing.storageLocationId,
     );
+  },
+});
+
+/**
+ * Replace the full set of assets contained inside `containerId` (the "Contains"
+ * editor). Removed children are un-nested but keep their location; added
+ * children inherit the container's location. Cycle-safe like update/setContainer.
+ */
+export const replaceContainedAssets = mutation({
+  args: {
+    containerId: v.id("inventoryItems"),
+    childIds: v.array(v.id("inventoryItems")),
+  },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    const container = await ctx.db.get(args.containerId);
+    if (!container) throw new Error("Inventory item not found.");
+
+    const childIds = Array.from(new Set(args.childIds));
+    if (childIds.includes(args.containerId)) throw new Error("An asset cannot contain itself.");
+
+    for (const childId of childIds) {
+      const child = await ctx.db.get(childId);
+      if (!child) throw new Error("Inventory item not found.");
+    }
+
+    const currentChildren = await ctx.db
+      .query("inventoryItems")
+      .withIndex("by_containedInAssetId", (q) => q.eq("containedInAssetId", args.containerId))
+      .take(MAX_BATCH_ITEMS);
+    const currentIds = new Set(currentChildren.map((child) => child._id));
+
+    for (const child of currentChildren) {
+      if (childIds.includes(child._id)) continue;
+      await ctx.db.patch(child._id, {
+        containedInAssetId: undefined,
+        updatedAt: Date.now(),
+      });
+      await cascadeLocationToDescendants(ctx, child._id, child.storageLocationId);
+    }
+
+    for (const childId of childIds) {
+      if (currentIds.has(childId)) continue;
+      let pointer: Id<"inventoryItems"> | undefined = container.containedInAssetId;
+      let hops = 0;
+      while (pointer) {
+        if (pointer === childId) throw new Error("Cannot create cyclical asset containment.");
+        if (++hops > MAX_BATCH_ITEMS) throw new Error("Cannot create cyclical asset containment.");
+        const next = await ctx.db.get(pointer);
+        pointer = next?.containedInAssetId;
+      }
+      await ctx.db.patch(childId, {
+        containedInAssetId: args.containerId,
+        storageLocationId: container.storageLocationId,
+        updatedAt: Date.now(),
+      });
+      await cascadeLocationToDescendants(ctx, childId, container.storageLocationId);
+    }
+  },
+});
+
+/**
+ * Direct children of a container, hydrated with type/location (Contains editor).
+ * Bounded like listSummaries.
+ */
+export const getChildren = query({
+  args: { id: v.id("inventoryItems") },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    const children = await ctx.db
+      .query("inventoryItems")
+      .withIndex("by_containedInAssetId", (q) => q.eq("containedInAssetId", args.id))
+      .take(MAX_LIST_LIMIT);
+    return hydrateInventoryItems(ctx, children).then((rows) =>
+      rows.sort((a, b) => a.assetId.localeCompare(b.assetId)),
+    );
+  },
+});
+
+/**
+ * Resolve a scanned / typed asset tag to an existing inventory item so the
+ * items table can scroll to and select it. Reuses the full scan resolution
+ * (bare tags, arbor.st/e/…, short links).
+ */
+export const resolveByScan = query({
+  args: { raw: v.string() },
+  returns: v.union(
+    v.null(),
+    v.object({
+      _id: v.id("inventoryItems"),
+      assetId: v.string(),
+      serialNumber: v.optional(v.string()),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    const item = await resolveInventoryItemByScan(ctx, args.raw);
+    if (!item) return null;
+    return { _id: item._id, assetId: item.assetId, serialNumber: item.serialNumber };
   },
 });
