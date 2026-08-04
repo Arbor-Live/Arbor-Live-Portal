@@ -2603,6 +2603,71 @@ export const seedBandPaymentForEsign = mutation({
   },
 });
 
+/**
+ * Test-only: upcoming event with optional band participation (no assignment email —
+ * inserts participation directly). Use for band-home show list coverage.
+ */
+export const seedUpcomingBandShow = mutation({
+  args: {
+    organizationId: v.optional(v.string()),
+    eventTitle: v.optional(v.string()),
+    role: v.optional(
+      v.union(v.literal("headliner"), v.literal("support"), v.literal("other")),
+    ),
+  },
+  returns: v.object({
+    eventId: v.id("events"),
+    eventTitle: v.string(),
+    eventPath: v.string(),
+    organizationId: v.union(v.string(), v.null()),
+    linked: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const now = Date.now();
+    const eventTitle = args.eventTitle?.trim() || `E2E Upcoming Show ${now}`;
+    const startAt = now + 2 * 60 * 60 * 1000;
+    const endAt = startAt + 3 * 60 * 60 * 1000;
+    const eventId = await ctx.db.insert("events", {
+      title: eventTitle,
+      status: "ready",
+      visibility: "internal",
+      publicToken: makeToken(),
+      startAt,
+      endAt,
+      timezone: "America/Los_Angeles",
+      spansMultipleDays: false,
+      setupOnly: false,
+      strikeOnly: false,
+      requiresShowWindow: true,
+      eventType: "Crewed Event",
+      teamsInterested: [],
+      venueName: "E2E Stage",
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const organizationId = args.organizationId?.trim() || null;
+    if (organizationId) {
+      await ctx.db.insert("eventBandParticipations", {
+        eventId,
+        organizationId,
+        role: args.role ?? "headliner",
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    return {
+      eventId,
+      eventTitle,
+      eventPath: `/dashboard/events/${eventId}`,
+      organizationId,
+      linked: Boolean(organizationId),
+    };
+  },
+});
+
 export const getBandPaymentState = query({
   args: { paymentId: v.id("eventBandPayments") },
   returns: v.union(
