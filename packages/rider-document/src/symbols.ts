@@ -67,6 +67,10 @@ export type RiderInputSeed = {
   stand?: RiderStandType;
   phantom?: boolean;
   providedBy?: RiderProvidedBy;
+  /** Marks a stereo L/R source (one row, two adjacent inputs on the Wing). */
+  stereo?: boolean;
+  /** Default DCA group label when the input is created from this seed. */
+  group?: string;
 };
 
 export type RiderGlyphViewBox = {
@@ -734,13 +738,12 @@ const BACKLINE_SYMBOLS: RiderSymbol[] = [
       },
     ],
     defaultInputs: [
-      { source: "Kick", inputType: "mic", micPreference: "Beta 52 / D6", stand: "short_boom" },
-      { source: "Snare", inputType: "mic", micPreference: "SM57", stand: "short_boom" },
-      { source: "Hi-hat", inputType: "mic", micPreference: "Condenser", stand: "short_boom", phantom: true },
-      { source: "Overhead L", inputType: "mic", micPreference: "Condenser", stand: "tall_boom", phantom: true },
-      { source: "Overhead R", inputType: "mic", micPreference: "Condenser", stand: "tall_boom", phantom: true },
+      { source: "Kick", inputType: "mic", micPreference: "Beta 52 / D6", stand: "short_boom", group: "Drums" },
+      { source: "Snare", inputType: "mic", micPreference: "SM57", stand: "short_boom", group: "Drums" },
+      { source: "Hi-hat", inputType: "mic", micPreference: "Condenser", stand: "short_boom", phantom: true, group: "Drums" },
+      { source: "Overheads", inputType: "mic", micPreference: "Condenser", stand: "tall_boom", phantom: true, stereo: true, group: "Drums" },
     ],
-    hint: "Adds a five-channel drum sub-list.",
+    hint: "Adds a four-channel drum sub-list (overheads as one stereo pair).",
   },
   {
     key: "keyboard_rig",
@@ -752,8 +755,7 @@ const BACKLINE_SYMBOLS: RiderSymbol[] = [
     depthFt: Number(((4 * KEYBOARD_VIEWBOX.height) / KEYBOARD_VIEWBOX.width).toFixed(2)),
     shapes: keyboardGlyph(),
     defaultInputs: [
-      { source: "Keys L", inputType: "di", stand: "none", phantom: true },
-      { source: "Keys R", inputType: "di", stand: "none", phantom: true },
+      { source: "Keys", inputType: "di", stand: "none", phantom: true, stereo: true, group: "Keys" },
     ],
   },
   {
@@ -778,8 +780,7 @@ const BACKLINE_SYMBOLS: RiderSymbol[] = [
       { kind: "circle", cx: 50, cy: 62, r: 3, fill: "body" },
     ],
     defaultInputs: [
-      { source: "DJ L", inputType: "di", stand: "none", phantom: true },
-      { source: "DJ R", inputType: "di", stand: "none", phantom: true },
+      { source: "DJ", inputType: "di", stand: "none", phantom: true, stereo: true, group: "Playback" },
     ],
   },
   {
@@ -795,8 +796,7 @@ const BACKLINE_SYMBOLS: RiderSymbol[] = [
       { kind: "polygon", points: "12,78 88,78 78,62 22,62", fill: "accent" },
     ],
     defaultInputs: [
-      { source: "Playback L", inputType: "playback", stand: "none" },
-      { source: "Playback R", inputType: "playback", stand: "none" },
+      { source: "Playback", inputType: "playback", stand: "none", stereo: true, group: "Playback" },
     ],
   },
 ];
@@ -843,7 +843,7 @@ const INPUT_SYMBOLS: RiderSymbol[] = [
     depthFt: 1.6,
     shapes: wiredVocalMic(),
     defaultInputs: [
-      { source: "Vocal", inputType: "mic", micPreference: "SM58", stand: "tall_boom" },
+      { source: "Vocal", inputType: "mic", micPreference: "SM58", stand: "tall_boom", group: "Vox" },
     ],
   },
   {
@@ -860,6 +860,7 @@ const INPUT_SYMBOLS: RiderSymbol[] = [
         inputType: "wireless",
         micPreference: "Handheld wireless",
         stand: "none",
+        group: "Vox",
       },
     ],
   },

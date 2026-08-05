@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery } from "convex/react";
 import {
   ArrowLeftIcon,
   CaretDownIcon,
   CaretUpIcon,
+  DotsSixVerticalIcon,
   PlusIcon,
   TrashIcon,
 } from "@phosphor-icons/react";
@@ -14,12 +15,15 @@ import {
   blankBacklineItem,
   blankInput,
   blankMix,
+  channelSpan,
+  inputGroups,
   INPUT_TYPE_LABELS,
   MONITOR_TYPE_LABELS,
   MONITOR_TYPE_OPTIONS,
   moveInArray,
   placeSymbol,
   PROVIDED_BY_EDITOR_LABELS,
+  RIDER_GROUP_SUGGESTIONS,
   removeItem,
   renumberInputs,
   renumberMixes,
@@ -599,8 +603,10 @@ export function RiderEditorClient({ riderId }: { riderId: Id<"bandRiders"> }) {
           onRetry={() => void persist()}
           summary={
             <span className="text-xs text-muted-foreground">
-              {draft.content.inputs.length} channels · {draft.content.monitorMixes.length}{" "}
-              mixes · {draft.content.items.length} symbols
+              {draft.content.inputs.reduce((count, input) => count + channelSpan(input), 0)}{" "}
+              channels · {draft.content.monitorMixes.length} mixes ·{" "}
+              {draft.content.items.length} symbols ·{" "}
+              {inputGroups(draft.content.inputs).length} DCA groups
             </span>
           }
         />
@@ -622,20 +628,141 @@ function InputsSection({
     onChange(inputs.map((input) => (input.id === id ? { ...input, ...patch } : input)));
   }
 
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dropIndex, setDropIndex] = useState<number | null>(null);
+  const dragIndexRef = useRef<number>(-1);
+
+  function handleDragStart(id: string, index: number) {
+    dragIndexRef.current = index;
+    setDraggingId(id);
+  }
+
+  function handleDragEnd() {
+    dragIndexRef.current = -1;
+    setDraggingId(null);
+    setDropIndex(null);
+  }
+
+  /**
+   * Reorders `inputs` (renumbering afterwards) and adopts the drop target's DCA
+   * group — dropping onto a section header or another row moves the channel into
+   * that group (null = the "No DCA group" section ungroups it).
+   */
+  function handleDropOn(index: number, group: string | null) {
+    const from = dragIndexRef.current;
+    if (from === -1) {
+      handleDragEnd();
+      return;
+    }
+    const targetGroup = group ?? undefined;
+    let next = inputs;
+    if ((inputs[from].group?.trim() || undefined) !== targetGroup) {
+      next = inputs.map((input, i) =>
+        i === from ? { ...input, group: targetGroup } : input,
+      );
+    }
+    onChange(renumberInputs(moveInArray(next, from, index)));
+    handleDragEnd();
+  }
+
+  const groupOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const options: string[] = [];
+    for (const group of [...inputGroups(inputs), ...RIDER_GROUP_SUGGESTIONS]) {
+      if (!seen.has(group)) {
+        seen.add(group);
+        options.push(group);
+      }
+    }
+    return options;
+  }, [inputs]);
+
+  const sections = useMemo(() => {
+    const byGroup = new Map<string | null, Array<{ input: RiderInputChannel; index: number }>>();
+    inputs.forEach((input, index) => {
+      const group = input.group?.trim() || null;
+      const rows = byGroup.get(group) ?? [];
+      rows.push({ input, index });
+      byGroup.set(group, rows);
+    });
+    const result: Array<{
+      label: string | null;
+      rows: Array<{ input: RiderInputChannel; index: number }>;
+    }> = [];
+    for (const group of inputGroups(inputs)) {
+      const rows = byGroup.get(group);
+      if (rows) result.push({ label: group, rows });
+    }
+    const ungrouped = byGroup.get(null);
+    if (ungrouped) result.push({ label: null, rows: ungrouped });
+    return result;
+  }, [inputs]);
+
+  const columnCount = readOnly ? 9 : 10;
+
+  function toggleStereo(id: string, stereo: boolean) {
+    onChange(
+      renumberInputs(
+        inputs.map((input) => (input.id === id ? { ...input, stereo } : input)),
+      ),
+    );
+  }
+
+  function retitleGroup(from: string | null, to: string) {
+    const next = to.trim();
+    onChange(
+      renumberInputs(
+        inputs.map((input) =>
+          (input.group?.trim() || null) === from ? { ...input, group: next || undefined } : input,
+        ),
+      ),
+    );
+  }
+
+  function addDcaGroup() {
+    onChange(
+      renumberInputs([
+        ...inputs,
+        { ...blankInput(inputs), group: `DCA ${inputGroups(inputs).length + 1}` },
+      ]),
+    );
+  }
+
+  function ungroupGroup(group: string) {
+    onChange(
+      renumberInputs(
+        inputs.map((input) =>
+          (input.group?.trim() || null) === group ? { ...input, group: undefined } : input,
+        ),
+      ),
+    );
+  }
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
         <CardTitle className="text-sm">Input list</CardTitle>
         {!readOnly ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => onChange([...inputs, blankInput(inputs)])}
-          >
-            <PlusIcon className="size-3.5" />
-            Add channel
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={addDcaGroup}
+            >
+              <PlusIcon className="size-3.5" />
+              Add DCA
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => onChange([...inputs, blankInput(inputs)])}
+            >
+              <PlusIcon className="size-3.5" />
+              Add channel
+            </Button>
+          </div>
         ) : null}
       </CardHeader>
       <CardContent className="overflow-x-auto">
@@ -649,6 +776,7 @@ function InputsSection({
               <tr className="border-b text-left text-xs text-muted-foreground">
                 <th className="w-10 py-2 pr-2 font-medium">Ch</th>
                 <th className="py-2 pr-2 font-medium">Source</th>
+                <th className="w-12 py-2 pr-2 font-medium">L/R</th>
                 <th className="w-28 py-2 pr-2 font-medium">Type</th>
                 <th className="w-32 py-2 pr-2 font-medium">Mic / DI</th>
                 <th className="w-32 py-2 pr-2 font-medium">Stand</th>
@@ -659,148 +787,245 @@ function InputsSection({
               </tr>
             </thead>
             <tbody>
-              {inputs.map((input, index) => (
-                <tr key={input.id} className="border-b border-border/60 align-top">
-                  <td className="py-2 pr-2 pt-3 text-muted-foreground">{input.channel}</td>
-                  <td className="py-1.5 pr-2">
-                    <input
-                      className={fieldClass}
-                      disabled={readOnly}
-                      value={input.source}
-                      onChange={(event) => patch(input.id, { source: event.target.value })}
-                    />
-                  </td>
-                  <td className="py-1.5 pr-2">
-                    <select
-                      className={fieldClass}
-                      disabled={readOnly}
-                      value={input.inputType}
-                      onChange={(event) =>
-                        patch(input.id, {
-                          inputType: event.target.value as RiderInputType,
-                        })
+              {sections.map((section) => (
+                <Fragment key={section.label ?? "__ungrouped__"}>
+                  <tr
+                    className={cn(
+                      "border-b border-border/40 bg-muted/40",
+                      !readOnly && "cursor-pointer",
+                    )}
+                    draggable={false}
+                    onDragOver={(event) => {
+                      event.preventDefault();
+                      event.dataTransfer.dropEffect = "move";
+                      if (section.rows.length > 0) {
+                        setDropIndex(section.rows[0].index);
                       }
-                    >
-                      {INPUT_TYPES.map((type) => (
-                        <option key={type} value={type}>
-                          {INPUT_TYPE_LABELS[type]}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="py-1.5 pr-2">
-                    <input
-                      className={fieldClass}
-                      disabled={readOnly}
-                      value={input.micPreference ?? ""}
-                      onChange={(event) =>
-                        patch(input.id, {
-                          micPreference: event.target.value || undefined,
-                        })
+                    }}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      if (section.rows.length > 0) {
+                        handleDropOn(section.rows[0].index, section.label);
                       }
-                    />
-                  </td>
-                  <td className="py-1.5 pr-2">
-                    <select
-                      className={fieldClass}
-                      disabled={readOnly}
-                      value={input.stand}
-                      onChange={(event) =>
-                        patch(input.id, {
-                          stand: event.target.value as RiderStandType,
-                        })
-                      }
-                    >
-                      {STAND_TYPES.map((type) => (
-                        <option key={type} value={type}>
-                          {STAND_LABELS[type]}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="py-2 pr-2">
-                    <input
-                      type="checkbox"
-                      disabled={readOnly}
-                      checked={input.phantom}
-                      onChange={(event) =>
-                        patch(input.id, { phantom: event.target.checked })
-                      }
-                    />
-                  </td>
-                  <td className="py-1.5 pr-2">
-                    <select
-                      className={fieldClass}
-                      disabled={readOnly}
-                      value={input.providedBy}
-                      onChange={(event) =>
-                        patch(input.id, {
-                          providedBy: event.target.value as RiderProvidedBy,
-                        })
-                      }
-                    >
-                      {PROVIDED_BY.map((value) => (
-                        <option key={value} value={value}>
-                          {PROVIDED_BY_EDITOR_LABELS[value]}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="py-1.5 pr-2">
-                    <input
-                      className={fieldClass}
-                      disabled={readOnly}
-                      value={input.notes ?? ""}
-                      onChange={(event) =>
-                        patch(input.id, { notes: event.target.value || undefined })
-                      }
-                    />
-                  </td>
-                  {!readOnly ? (
-                    <td className="py-1.5">
-                      <div className="flex gap-0.5">
-                        <Button
-                          type="button"
-                          size="icon-xs"
-                          variant="ghost"
-                          disabled={index === 0}
-                          aria-label="Move channel up"
-                          onClick={() =>
-                            onChange(renumberInputs(moveInArray(inputs, index, index - 1)))
-                          }
-                        >
-                          <CaretUpIcon className="size-3.5" />
-                        </Button>
-                        <Button
-                          type="button"
-                          size="icon-xs"
-                          variant="ghost"
-                          disabled={index === inputs.length - 1}
-                          aria-label="Move channel down"
-                          onClick={() =>
-                            onChange(renumberInputs(moveInArray(inputs, index, index + 1)))
-                          }
-                        >
-                          <CaretDownIcon className="size-3.5" />
-                        </Button>
-                        <Button
-                          type="button"
-                          size="icon-xs"
-                          variant="ghost"
-                          className="text-destructive"
-                          aria-label="Remove channel"
-                          onClick={() =>
-                            onChange(
-                              renumberInputs(inputs.filter((row) => row.id !== input.id)),
-                            )
-                          }
-                        >
-                          <TrashIcon className="size-3.5" />
-                        </Button>
+                    }}
+                  >
+                    <td colSpan={columnCount} className="px-2 py-1">
+                      <div className="flex items-center gap-2">
+                        {readOnly ? (
+                          <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                            {section.label ? `${section.label} · DCA` : "No DCA group"}
+                          </span>
+                        ) : (
+                          <label className="flex items-center gap-2">
+                            <select
+                              className="h-7 w-40 rounded-none border border-input bg-transparent px-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground outline-none focus-visible:border-ring"
+                              value={section.label ?? ""}
+                              onChange={(event) =>
+                                retitleGroup(section.label, event.target.value)
+                              }
+                            >
+                              <option value="">No DCA group</option>
+                              {groupOptions.map((group) => (
+                                <option key={group} value={group}>
+                                  {group}
+                                </option>
+                              ))}
+                            </select>
+                            <span className="text-xs text-muted-foreground/70">
+                              {section.rows.length} ch
+                            </span>
+                          </label>
+                        )}
+                        {!readOnly && section.label ? (
+                          <Button
+                            type="button"
+                            size="icon-xs"
+                            variant="ghost"
+                            className="text-muted-foreground/60 hover:text-destructive"
+                            aria-label={`Remove ${section.label} DCA group`}
+                            onClick={() => {
+                              const group = section.label;
+                              if (group) ungroupGroup(group);
+                            }}
+                          >
+                            <TrashIcon className="size-3.5" />
+                          </Button>
+                        ) : null}
                       </div>
                     </td>
-                  ) : null}
-                </tr>
+                  </tr>
+                  {section.rows.map(({ input, index }) => (
+                    <tr
+                      key={input.id}
+                      className={cn(
+                        "border-b border-border/60 align-top",
+                        !readOnly && "cursor-grab active:cursor-grabbing",
+                        draggingId === input.id && "opacity-40",
+                        dropIndex === index &&
+                          !readOnly &&
+                          "shadow-[inset_0_2px_0_0_var(--ring)]",
+                      )}
+                      draggable={!readOnly}
+                      onDragStart={(event) => {
+                        handleDragStart(input.id, index);
+                        event.dataTransfer.effectAllowed = "move";
+                      }}
+                      onDragOver={(event) => {
+                        event.preventDefault();
+                        event.dataTransfer.dropEffect = "move";
+                        setDropIndex(index);
+                      }}
+                      onDrop={(event) => {
+                        event.preventDefault();
+                        handleDropOn(index, input.group?.trim() || null);
+                      }}
+                      onDragEnd={handleDragEnd}
+                    >
+                      <td className="py-1.5 pr-2 text-muted-foreground">
+                        <span className="flex h-8 items-center">
+                          {input.stereo
+                            ? `${input.channel}–${input.channel + 1}`
+                            : input.channel}
+                        </span>
+                      </td>
+                      <td className="py-1.5 pr-2">
+                        <input
+                          className={fieldClass}
+                          disabled={readOnly}
+                          value={input.source}
+                          onChange={(event) => patch(input.id, { source: event.target.value })}
+                        />
+                      </td>
+                      <td className="py-1.5 pr-2">
+                        <label className="flex h-8 items-center">
+                          <input
+                            type="checkbox"
+                            className="size-4 shrink-0 accent-primary"
+                            disabled={readOnly}
+                            checked={input.stereo ?? false}
+                            aria-label={`Stereo pair for ${input.source || `channel ${input.channel}`}`}
+                            onChange={(event) => toggleStereo(input.id, event.target.checked)}
+                          />
+                        </label>
+                      </td>
+                      <td className="py-1.5 pr-2">
+                        <select
+                          className={fieldClass}
+                          disabled={readOnly}
+                          value={input.inputType}
+                          onChange={(event) =>
+                            patch(input.id, {
+                              inputType: event.target.value as RiderInputType,
+                            })
+                          }
+                        >
+                          {INPUT_TYPES.map((type) => (
+                            <option key={type} value={type}>
+                              {INPUT_TYPE_LABELS[type]}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="py-1.5 pr-2">
+                        <input
+                          className={fieldClass}
+                          disabled={readOnly}
+                          value={input.micPreference ?? ""}
+                          onChange={(event) =>
+                            patch(input.id, {
+                              micPreference: event.target.value || undefined,
+                            })
+                          }
+                        />
+                      </td>
+                      <td className="py-1.5 pr-2">
+                        <select
+                          className={fieldClass}
+                          disabled={readOnly}
+                          value={input.stand}
+                          onChange={(event) =>
+                            patch(input.id, {
+                              stand: event.target.value as RiderStandType,
+                            })
+                          }
+                        >
+                          {STAND_TYPES.map((type) => (
+                            <option key={type} value={type}>
+                              {STAND_LABELS[type]}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="py-1.5 pr-2">
+                        <label className="flex h-8 items-center">
+                          <input
+                            type="checkbox"
+                            className="size-4 shrink-0 accent-primary"
+                            disabled={readOnly}
+                            checked={input.phantom}
+                            onChange={(event) =>
+                              patch(input.id, { phantom: event.target.checked })
+                            }
+                          />
+                        </label>
+                      </td>
+                      <td className="py-1.5 pr-2">
+                        <select
+                          className={fieldClass}
+                          disabled={readOnly}
+                          value={input.providedBy}
+                          onChange={(event) =>
+                            patch(input.id, {
+                              providedBy: event.target.value as RiderProvidedBy,
+                            })
+                          }
+                        >
+                          {PROVIDED_BY.map((value) => (
+                            <option key={value} value={value}>
+                              {PROVIDED_BY_EDITOR_LABELS[value]}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="py-1.5 pr-2">
+                        <input
+                          className={fieldClass}
+                          disabled={readOnly}
+                          value={input.notes ?? ""}
+                          onChange={(event) =>
+                            patch(input.id, { notes: event.target.value || undefined })
+                          }
+                        />
+                      </td>
+                      {!readOnly ? (
+                        <td className="py-1.5">
+                          <div className="flex items-center gap-0.5">
+                            <span
+                              className="flex h-8 cursor-grab items-center text-muted-foreground/50 active:cursor-grabbing"
+                              aria-hidden
+                            >
+                              <DotsSixVerticalIcon className="size-4" />
+                            </span>
+                            <Button
+                              type="button"
+                              size="icon-xs"
+                              variant="ghost"
+                              className="text-destructive"
+                              aria-label="Remove channel"
+                              onClick={() =>
+                                onChange(
+                                  renumberInputs(inputs.filter((row) => row.id !== input.id)),
+                                )
+                              }
+                            >
+                              <TrashIcon className="size-3.5" />
+                            </Button>
+                          </div>
+                        </td>
+                      ) : null}
+                    </tr>
+                  ))}
+                </Fragment>
               ))}
             </tbody>
           </table>

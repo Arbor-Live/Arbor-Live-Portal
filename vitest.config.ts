@@ -10,6 +10,7 @@ export default defineConfig({
     include: [
       "packages/format/**/*.test.ts",
       "packages/invoice-document/**/*.test.ts",
+      "packages/rider-document/**/*.test.ts",
       "packages/backend/convex/lib/**/*.test.ts",
     ],
   },

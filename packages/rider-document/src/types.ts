@@ -58,6 +58,13 @@ export type RiderInputChannel = {
   notes?: string;
   /** Links the channel back to the plot item that produces it. */
   stageItemId?: string;
+  /**
+   * Stereo L/R source. One strip fed by two adjacent physical inputs on the
+   * Wing (`mode:"ST"`), not two linked strips.
+   */
+  stereo?: boolean;
+  /** DCA group label, e.g. "Drums" or "Vox". Empty = no DCA for this input. */
+  group?: string;
 };
 
 export type RiderMonitorMix = {
@@ -146,3 +153,20 @@ export const MONITOR_TYPE_OPTIONS: Array<Exclude<RiderMonitorType, "side_fill">>
   "wedge",
   "iem",
 ];
+
+/**
+ * Suggested DCA group labels for the editor. Kept free-text on the input so
+ * bands can use any label; these just speed up entry.
+ */
+export const RIDER_GROUP_SUGGESTIONS = [
+  "Drums",
+  "Aux Perc",
+  "Melody",
+  "Vox",
+  "Keys",
+  "Guitars",
+  "Brass",
+  "Strings",
+  "Playback",
+  "FX",
+] as const;

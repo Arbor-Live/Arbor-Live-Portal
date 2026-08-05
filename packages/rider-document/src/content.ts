@@ -86,17 +86,70 @@ export function round(value: number, step = 0.25): number {
   return Math.round(value / step) * step;
 }
 
+/** Physical input slots a channel occupies (a stereo pair spans two). */
+export function channelSpan(input: Pick<RiderInputChannel, "stereo">): number {
+  return input.stereo ? 2 : 1;
+}
+
 export function nextChannelNumber(inputs: RiderInputChannel[]): number {
-  return inputs.reduce((max, input) => Math.max(max, input.channel), 0) + 1;
+  return (
+    inputs.reduce(
+      (max, input) => Math.max(max, input.channel + channelSpan(input) - 1),
+      0,
+    ) + 1
+  );
 }
 
 export function nextMixNumber(mixes: RiderMonitorMix[]): number {
   return mixes.reduce((max, mix) => Math.max(max, mix.mixNumber), 0) + 1;
 }
 
-/** Rewrites channel numbers to 1..n in list order (used after drag reorder). */
+/**
+ * Rewrites channel numbers so every slot 1..N is used (no gaps) and every
+ * stereo pair starts on an odd number (the Wing's physical inputs are paired
+ * 1+2, 3+4, …). When a stereo would start on an even slot, the next mono input
+ * is pulled into that even slot instead of leaving it empty; if no mono follows
+ * (stereo at the tail), the mono before the pair is bumped after it.
+ */
 export function renumberInputs(inputs: RiderInputChannel[]): RiderInputChannel[] {
-  return inputs.map((input, index) => ({ ...input, channel: index + 1 }));
+  const channels = new Array<number>(inputs.length).fill(0);
+  let next = 1;
+  for (let i = 0; i < inputs.length; i++) {
+    if (channels[i] !== 0) continue;
+    const input = inputs[i];
+    if (!input.stereo) {
+      channels[i] = next;
+      next += 1;
+      continue;
+    }
+    if (next % 2 === 1) {
+      channels[i] = next;
+      next += 2;
+      continue;
+    }
+    // next is even: pull the next mono forward into this slot.
+    const filler = inputs.findIndex(
+      (candidate, j) => j > i && !candidate.stereo && channels[j] === 0,
+    );
+    if (filler !== -1) {
+      channels[filler] = next;
+      next += 1;
+      channels[i] = next;
+      next += 2;
+      continue;
+    }
+    // No mono ahead — the pair takes this odd slot and the preceding mono
+    // (which held next - 1) is bumped after it.
+    channels[i] = next - 1;
+    for (let j = i - 1; j >= 0; j--) {
+      if (channels[j] === next - 1) {
+        channels[j] = next + 1;
+        break;
+      }
+    }
+    next += 2;
+  }
+  return inputs.map((input, i) => ({ ...input, channel: channels[i] }));
 }
 
 export function renumberMixes(mixes: RiderMonitorMix[]): RiderMonitorMix[] {
@@ -137,6 +190,8 @@ function inputsForSymbol(
     stand: seed.stand ?? "none",
     phantom: seed.phantom ?? false,
     providedBy: seed.providedBy ?? "arbor",
+    stereo: seed.stereo ?? false,
+    group: seed.group,
     stageItemId,
   }));
 }
@@ -277,6 +332,22 @@ export function blankMix(mixes: RiderMonitorMix[]): RiderMonitorMix {
   };
 }
 
+/**
+ * Distinct non-empty DCA groups in first-appearance order. Show-file generation
+ * assigns DCA slots in this order, so groups stay stable however the list is
+ * sorted later.
+ */
+export function inputGroups(inputs: RiderInputChannel[]): string[] {
+  const groups: string[] = [];
+  for (const input of inputs) {
+    const group = input.group?.trim();
+    if (group && !groups.includes(group)) {
+      groups.push(group);
+    }
+  }
+  return groups;
+}
+
 export function blankBacklineItem(): RiderBacklineItem {
   return {
     id: createRiderId("bl"),
@@ -300,7 +371,10 @@ export function summarizeRider(content: RiderContent): RiderSummary {
     performerCount: content.items.filter(
       (item) => riderSymbol(item.symbol).category === "performer",
     ).length,
-    channelCount: content.inputs.length,
+    channelCount: content.inputs.reduce(
+      (count, input) => count + channelSpan(input),
+      0,
+    ),
     mixCount: content.monitorMixes.length,
     phantomCount: content.inputs.filter((input) => input.phantom).length,
   };
