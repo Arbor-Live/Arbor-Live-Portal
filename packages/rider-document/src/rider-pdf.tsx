@@ -403,7 +403,7 @@ function NotesSection({ title, body }: { title: string; body?: string }) {
 
 export function RiderPdf({ data }: { data: RiderDocumentData }) {
   const inputRows = data.inputs.map((input) => [
-    String(input.channel),
+    input.stereo ? `${input.channel}–${input.channel + 1}` : String(input.channel),
     input.stereo ? `${input.source || "—"} (L/R)` : input.source || "—",
     INPUT_TYPE_LABELS[input.inputType],
     input.micPreference ?? "—",
