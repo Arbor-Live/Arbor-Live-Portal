@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "./searchable-select";
 import { useBarcodeCamera } from "./use-barcode-camera";
+import { CameraFlashButton } from "./camera-flash-button";
 
 export type ContainsOption = {
   value: string;
@@ -44,9 +45,10 @@ export function ContainsEditor({
     const selected = new Set(value);
     return options.filter((option) => !selected.has(option.value));
   }, [options, value]);
-  const { cameraOn, toggleCamera, cameraError, videoRef, supported } = useBarcodeCamera(
-    (raw) => void onScan?.(raw),
-  );
+  const { cameraOn, toggleCamera, cameraError, videoRef, supported, torchOn, torchSupported, toggleTorch } =
+    useBarcodeCamera(
+      (raw) => void onScan?.(raw),
+    );
 
   const selectedOptions = useMemo(() => {
     const byValue = new Map(options.map((option) => [option.value, option]));
@@ -109,6 +111,11 @@ export function ContainsEditor({
             <CameraIcon className="size-4" />
           </Button>
         ) : null}
+        <CameraFlashButton
+          torchOn={torchOn}
+          torchSupported={torchSupported}
+          onToggle={() => void toggleTorch()}
+        />
       </div>
       {cameraError ? <p className="text-xs text-destructive">{cameraError}</p> : null}
       {cameraOn ? (

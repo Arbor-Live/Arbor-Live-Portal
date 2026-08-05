@@ -266,7 +266,7 @@ export function ItemsManager() {
   return (
     <TooltipProvider delayDuration={0}>
       <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
+        <Card className={editingId ? "lg:col-span-2" : "lg:col-span-3"}>
           <CardHeader>
             <CardTitle>Inventory Items</CardTitle>
             <div className="flex flex-wrap items-center gap-2">

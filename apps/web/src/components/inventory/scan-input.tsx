@@ -4,6 +4,7 @@ import { CameraIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useBarcodeCamera } from "./use-barcode-camera";
+import { CameraFlashButton } from "./camera-flash-button";
 
 type ScanInputProps = {
   value: string;
@@ -34,9 +35,10 @@ export function ScanInput({
   className,
   showCameraButton = true,
 }: ScanInputProps) {
-  const { cameraOn, toggleCamera, cameraError, videoRef, supported } = useBarcodeCamera(
-    (raw) => void onScan?.(raw),
-  );
+  const { cameraOn, toggleCamera, cameraError, videoRef, supported, torchOn, torchSupported, toggleTorch } =
+    useBarcodeCamera(
+      (raw) => void onScan?.(raw),
+    );
 
   return (
     <div className="space-y-2">
@@ -64,6 +66,11 @@ export function ScanInput({
             <CameraIcon className="size-4" />
           </Button>
         ) : null}
+        <CameraFlashButton
+          torchOn={torchOn}
+          torchSupported={torchSupported}
+          onToggle={() => void toggleTorch()}
+        />
       </div>
       {cameraError ? <p className="text-xs text-destructive">{cameraError}</p> : null}
       {cameraOn ? (

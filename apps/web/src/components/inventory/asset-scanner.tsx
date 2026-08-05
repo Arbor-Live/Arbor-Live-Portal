@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useBarcodeCamera } from "./use-barcode-camera";
+import { CameraFlashButton } from "./camera-flash-button";
 
 type AssetScannerProps = {
   onSubmit: (raw: string) => void | Promise<void>;
@@ -22,7 +23,7 @@ export function AssetScanner({
 }: AssetScannerProps) {
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
-  const { cameraOn, toggleCamera, cameraError, videoRef, supported } =
+  const { cameraOn, toggleCamera, cameraError, videoRef, supported, torchOn, torchSupported, toggleTorch } =
     useBarcodeCamera(handleSubmit);
 
   async function handleSubmit(raw: string) {
@@ -67,6 +68,11 @@ export function AssetScanner({
           {cameraOn ? <KeyboardIcon className="size-4" /> : <CameraIcon className="size-4" />}
           {cameraOn ? "Hide camera" : supported ? "Use camera" : "Camera unavailable"}
         </Button>
+        <CameraFlashButton
+          torchOn={torchOn}
+          torchSupported={torchSupported}
+          onToggle={() => void toggleTorch()}
+        />
       </div>
       {cameraError ? <p className="text-sm text-destructive">{cameraError}</p> : null}
       {cameraOn ? (

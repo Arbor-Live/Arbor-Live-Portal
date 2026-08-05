@@ -43,8 +43,11 @@ function canUseCameraScanner() {
 export function useBarcodeCamera(onDetect: (raw: string) => void | Promise<void>) {
   const [cameraOn, setCameraOn] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [torchOn, setTorchOn] = useState(false);
+  const [torchSupported, setTorchSupported] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const torchTrackRef = useRef<MediaStreamTrack | null>(null);
   const lastScanRef = useRef<{ value: string; at: number }>({ value: "", at: 0 });
   const onDetectRef = useRef(onDetect);
 
@@ -54,10 +57,40 @@ export function useBarcodeCamera(onDetect: (raw: string) => void | Promise<void>
 
   const supported = canUseCameraScanner();
 
+  /** Remember the active video track and detect whether its flash is controllable. */
+  function setCameraStream(stream: MediaStream) {
+    streamRef.current = stream;
+    const track = stream.getVideoTracks()[0] ?? null;
+    torchTrackRef.current = track;
+    // `torch` is a live-spec member not yet in lib.dom for capabilities.
+    const torchCapable = Boolean(
+      (track?.getCapabilities?.() as { torch?: boolean } | undefined)?.torch,
+    );
+    setTorchSupported(torchCapable);
+    if (!torchCapable) setTorchOn(false);
+  }
+
+  async function toggleTorch() {
+    const track = torchTrackRef.current;
+    if (!track || !torchSupported) return;
+    const next = !torchOn;
+    try {
+      await track.applyConstraints({
+        advanced: [{ torch: next }] as unknown as MediaTrackConstraintSet[],
+      });
+      setTorchOn(next);
+    } catch {
+      // The camera/device refused the torch change — leave the state as-is.
+    }
+  }
+
   function toggleCamera() {
     if (cameraOn) {
       setCameraOn(false);
       setCameraError(null);
+      setTorchOn(false);
+      setTorchSupported(false);
+      torchTrackRef.current = null;
       return;
     }
     if (!canUseCameraScanner()) {
@@ -95,7 +128,7 @@ export function useBarcodeCamera(onDetect: (raw: string) => void | Promise<void>
         stream.getTracks().forEach((track) => track.stop());
         return;
       }
-      streamRef.current = stream;
+      setCameraStream(stream);
       const video = videoRef.current;
       if (video) {
         video.srcObject = stream;
@@ -143,6 +176,9 @@ export function useBarcodeCamera(onDetect: (raw: string) => void | Promise<void>
         started.stop();
         return null;
       }
+      if (video.srcObject instanceof MediaStream) {
+        setCameraStream(video.srcObject);
+      }
       return started;
     }
 
@@ -167,8 +203,11 @@ export function useBarcodeCamera(onDetect: (raw: string) => void | Promise<void>
       controls?.stop();
       streamRef.current?.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
+      torchTrackRef.current = null;
+      setTorchOn(false);
+      setTorchSupported(false);
     };
   }, [cameraOn]);
 
-  return { cameraOn, toggleCamera, cameraError, videoRef, supported };
+  return { cameraOn, toggleCamera, cameraError, videoRef, supported, torchOn, torchSupported, toggleTorch };
 }

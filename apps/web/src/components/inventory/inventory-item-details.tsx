@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { SearchableSelect } from "./searchable-select";
 import { ScanInput } from "./scan-input";
 import { useBarcodeCamera } from "./use-barcode-camera";
+import { CameraFlashButton } from "./camera-flash-button";
 
 export type ItemDetailsValues = {
   assetId: string;
@@ -71,9 +72,10 @@ export function InventoryItemDetails({
   siteBase,
   disabled,
 }: InventoryItemDetailsProps) {
-  const { cameraOn, toggleCamera, cameraError, videoRef, supported } = useBarcodeCamera(
-    (raw) => void onScanContainedIn?.(raw),
-  );
+  const { cameraOn, toggleCamera, cameraError, videoRef, supported, torchOn, torchSupported, toggleTorch } =
+    useBarcodeCamera(
+      (raw) => void onScanContainedIn?.(raw),
+    );
 
   return (
     <div className="space-y-3">
@@ -164,6 +166,11 @@ export function InventoryItemDetails({
               <CameraIcon className="size-4" />
             </Button>
           ) : null}
+          <CameraFlashButton
+            torchOn={torchOn}
+            torchSupported={torchSupported}
+            onToggle={() => void toggleTorch()}
+          />
         </div>
         {errors?.containedInAssetId ? (
           <p className="text-xs text-destructive">{errors.containedInAssetId}</p>
