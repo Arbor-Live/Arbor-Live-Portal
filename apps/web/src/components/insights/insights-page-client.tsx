@@ -14,6 +14,7 @@ import { InsightsEventsPanel } from "@/components/insights/insights-events-panel
 import { InsightsFeedbackPanel } from "@/components/insights/insights-feedback-panel";
 import { InsightsFinancesPanel } from "@/components/insights/insights-finances-panel";
 import { InsightsOpsPanel } from "@/components/insights/insights-ops-panel";
+import { InsightsPostMortemPanel } from "@/components/insights/insights-postmortem-panel";
 import { InsightsRangePicker } from "@/components/insights/insights-range-picker";
 import { InsightsTabNav, type InsightsTabId } from "@/components/insights/insights-tab-nav";
 import { getDefaultInsightsDateInputs, insightsRangeFromDateInputs } from "@/lib/insights-range";
@@ -75,7 +76,10 @@ export function InsightsPageClient() {
         <InsightsOpsPanel startMs={range.startMs} endMs={range.endMs} />
       ) : null}
       {range && tab === "feedback" ? (
-        <InsightsFeedbackPanel startMs={range.startMs} endMs={range.endMs} />
+        <div className="space-y-4">
+          <InsightsFeedbackPanel startMs={range.startMs} endMs={range.endMs} />
+          <InsightsPostMortemPanel startMs={range.startMs} endMs={range.endMs} />
+        </div>
       ) : null}
     </div>
   );

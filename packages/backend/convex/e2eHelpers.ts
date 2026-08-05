@@ -19,6 +19,7 @@ import { listEventsLinkedToRequest } from "./lib/bookingDayLoad";
 import { inviteAcceptUrl } from "./email/constants";
 import { enqueueEmail } from "./email/enqueue";
 import { scheduleUserInviteEmail } from "./email/invitations";
+import { ensurePostMortemFeedbackRow } from "./postMortemFeedback";
 import {
   allocateBandPaymentConfirmationToken,
   allocateRequestNumber,
@@ -1309,6 +1310,125 @@ export const seedEventFeedbackForInsights = mutation({
       createdAt: now,
     });
     return { eventTitle, invoiceNumber, comments, rating: 5 };
+  },
+});
+
+/**
+ * Test-only: a past event with a minted post-mortem form for a day-of lead, so
+ * the public post-mortem page can be exercised. Returns the public path.
+ */
+async function ensureE2eLeadUser(ctx: MutationCtx): Promise<{ userId: string; name: string }> {
+  const now = Date.now();
+  const email = "e2e-lead@arborlive.test";
+  const name = "E2E Lead";
+  const existingUser = await ctx.runQuery(components.betterAuth.adapter.findOne, {
+    model: "user",
+    where: [{ field: "email", value: email }],
+  });
+  let userId = getId(existingUser);
+  if (!existingUser) {
+    const createdUser = await ctx.runMutation(components.betterAuth.adapter.create, {
+      input: {
+        model: "user",
+        data: {
+          name,
+          email,
+          emailVerified: true,
+          createdAt: now,
+          updatedAt: now,
+          role: "user",
+        },
+      },
+    });
+    userId = getId(createdUser);
+  }
+  if (!userId) throw new Error("Unable to resolve e2e lead user id.");
+  return { userId, name };
+}
+
+export const seedPostMortemForm = mutation({
+  args: {},
+  returns: v.object({
+    eventId: v.id("events"),
+    path: v.string(),
+    eventTitle: v.string(),
+  }),
+  handler: async (ctx) => {
+    assertE2eHelpersEnabled();
+    const now = Date.now();
+    const eventTitle = `E2E Post-mortem Event ${now}`;
+    const { startAt, endAt } = futureEventWindow(-2);
+    const { userId } = await ensureE2eLeadUser(ctx);
+    const eventId = await ctx.db.insert("events", {
+      title: eventTitle,
+      status: "completed",
+      visibility: "internal",
+      startAt,
+      endAt,
+      timezone: "America/Los_Angeles",
+      spansMultipleDays: false,
+      setupOnly: false,
+      strikeOnly: false,
+      requiresShowWindow: true,
+      venueName: "E2E Post-mortem Venue",
+      eventType: "Crewed Event",
+      teamsInterested: ["Sound"],
+      dayOfLeadUserId: userId,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const row = await ensurePostMortemFeedbackRow(ctx, eventId, userId);
+    return { eventId, path: `/postmortem/${row.token}`, eventTitle };
+  },
+});
+
+/**
+ * Test-only: a completed event with a submitted post-mortem row in range, for
+ * the Insights Feedback tab. Returns the values the UI should surface verbatim.
+ */
+export const seedPostMortemForInsights = mutation({
+  args: {},
+  returns: v.object({
+    eventTitle: v.string(),
+    leadName: v.string(),
+    rating: v.number(),
+    whatWentWell: v.string(),
+    whatCouldImprove: v.string(),
+  }),
+  handler: async (ctx) => {
+    assertE2eHelpersEnabled();
+    const now = Date.now();
+    const eventTitle = `E2E Post-mortem Event ${now}`;
+    const { startAt, endAt } = futureEventWindow(-2);
+    const { userId, name } = await ensureE2eLeadUser(ctx);
+    const eventId = await ctx.db.insert("events", {
+      title: eventTitle,
+      status: "completed",
+      visibility: "internal",
+      startAt,
+      endAt,
+      timezone: "America/Los_Angeles",
+      spansMultipleDays: false,
+      setupOnly: false,
+      strikeOnly: false,
+      requiresShowWindow: true,
+      venueName: "E2E Post-mortem Venue",
+      eventType: "Crewed Event",
+      teamsInterested: ["Sound"],
+      dayOfLeadUserId: userId,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const whatWentWell = `E2E went well ${now} — clear call times and a sharp crew.`;
+    const whatCouldImprove = `E2E improvement ${now} — patch panels could use better labeling.`;
+    const row = await ensurePostMortemFeedbackRow(ctx, eventId, userId);
+    await ctx.db.patch(row._id, {
+      rating: 5,
+      whatWentWell,
+      whatCouldImprove,
+      submittedAt: now,
+    });
+    return { eventTitle, leadName: name, rating: 5, whatWentWell, whatCouldImprove };
   },
 });
 

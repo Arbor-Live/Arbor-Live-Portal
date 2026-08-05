@@ -1,6 +1,7 @@
 import { addPacificCalendarDays, pacificDateKey } from "@arbor/format";
 import { v } from "convex/values";
 import { internalMutation } from "../_generated/server";
+import { ensurePostMortemFeedbackRow, postMortemUrl } from "../postMortemFeedback";
 import { resolvePortalTokenForInvoice } from "../lib/paymentProof";
 import {
   EVENT_TIMEZONE,
@@ -11,6 +12,7 @@ import {
   subjectForTemplate,
 } from "./constants";
 import { enqueueEmail } from "./enqueue";
+import { getEventLeadRecipients } from "./recipients";
 
 /** Days after an event ends before we send the "share your photos" reminder. */
 const DAYS_AFTER_EVENT = 7;
@@ -24,7 +26,9 @@ function isValidEmail(email: string) {
 /**
  * Daily cron: for events whose Pacific end date was exactly `DAYS_AFTER_EVENT`
  * days ago, email the client asking them to add their own photos/videos to
- * the event's shared album (and telling them ours are on the way).
+ * the event's shared album (and telling them ours are on the way). Also sends
+ * the day-of lead and event manager their media email with a post-mortem
+ * feedback form link.
  */
 export const run = internalMutation({
   args: {},
@@ -95,6 +99,31 @@ export const run = internalMutation({
         },
       });
       enqueuedCount += 1;
+
+      // Internal post-mortem: the day-of lead (and event manager) get the same
+      // media email, plus a link to their post-event review form.
+      const leads = await getEventLeadRecipients(ctx, event._id);
+      for (const lead of leads) {
+        if (!lead.userId) continue;
+        const row = await ensurePostMortemFeedbackRow(ctx, event._id, lead.userId);
+        await enqueueEmail(ctx, {
+          template: "post_event_album",
+          to: lead.email,
+          subject: `Your event media: ${event.title}`,
+          eventId: event._id,
+          idempotencyKey: `post_event_album:lead:${event._id}:${lead.userId}:${todayKey}`,
+          payload: {
+            recipientName: lead.name,
+            eventTitle: event.title,
+            venueName: event.venueName,
+            dateRangeLabel: formatEventDateRange(event.startAt, event.endAt, timezone),
+            albumShareUrl: albumLink?.shareUrl,
+            audience: "lead",
+            postMortemUrl: postMortemUrl(row.token),
+          },
+        });
+        enqueuedCount += 1;
+      }
     }
 
     return { enqueuedCount };
