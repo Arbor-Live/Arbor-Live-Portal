@@ -69,10 +69,7 @@ export function ItemsManager() {
   const [scanRaw, setScanRaw] = useState("");
   const [scanError, setScanError] = useState<string | null>(null);
   const [pendingSelectId, setPendingSelectId] = useState<string | null>(null);
-  /** The currently-visible layout's element for each item. Desktop registers
-   * the table row; on small screens the mobile card overwrites it (last-write
-   * wins in JSX order), so scan-to-select scrolls whatever is on screen. */
-  const rowRefs = useRef(new Map<string, HTMLElement>());
+  const rowRefs = useRef(new Map<string, HTMLTableRowElement>());
 
   const categories = useQuery(api.inventoryCategories.list, { activeOnly: true });
   const {
@@ -266,136 +263,6 @@ export function ItemsManager() {
     );
   }
 
-  type ItemRow = (typeof sortedItems)[number];
-
-  function renderEditButton(item: ItemRow) {
-    return (
-      <Button
-        type="button"
-        size="icon-sm"
-        variant="outline"
-        aria-label="Edit"
-        onClick={() => beginEdit(item)}
-      >
-        <PencilSimpleIcon className="size-3.5" />
-      </Button>
-    );
-  }
-
-  function renderDamageButton(item: ItemRow) {
-    return (
-      <Button
-        type="button"
-        size="icon-sm"
-        variant="outline"
-        aria-label="Damage"
-        onClick={() => setDamageItemId(item._id)}
-      >
-        <WarningCircleIcon className="size-3.5" />
-      </Button>
-    );
-  }
-
-  function renderDeleteButton(item: ItemRow) {
-    return (
-      <Button
-        type="button"
-        size="icon-sm"
-        variant="destructive"
-        aria-label="Delete"
-        onClick={() => void removeItem({ id: item._id })}
-      >
-        <TrashIcon className="size-3.5" />
-      </Button>
-    );
-  }
-
-  /** Mobile list: one card per item, same data and actions as the table row. */
-  function renderMobileItemCard(item: ItemRow) {
-    const children = childrenByParentId.get(item._id) ?? [];
-    return (
-      <div
-        key={item._id}
-        ref={(element) => {
-          if (!window.matchMedia("(max-width: 767px)").matches) return;
-          if (!element) {
-            rowRefs.current.delete(item._id);
-            return;
-          }
-          rowRefs.current.set(item._id, element);
-        }}
-        className="space-y-2 rounded-md border p-3 transition-colors"
-      >
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex min-w-0 items-start gap-2">
-            <input
-              type="checkbox"
-              className="mt-1"
-              checked={selectedIds.includes(item._id)}
-              aria-label={`Select ${item.assetId}`}
-              onChange={(event) =>
-                setSelectedIds((prev) =>
-                  event.target.checked
-                    ? [...prev, item._id]
-                    : prev.filter((id) => id !== item._id),
-                )
-              }
-            />
-            <div className="min-w-0">
-              <div className="font-medium break-words">{item.assetId}</div>
-              <div className="text-xs text-muted-foreground">
-                Serial: {item.serialNumber || "-"}
-              </div>
-            </div>
-          </div>
-          <div className="flex shrink-0 items-center gap-1.5">
-            {renderEditButton(item)}
-            {renderDamageButton(item)}
-            {renderDeleteButton(item)}
-          </div>
-        </div>
-        <div className="text-xs">
-          <a
-            className="underline"
-            href={`${siteBase}/e/${encodeURIComponent(item.assetId)}`}
-            target="_blank"
-          >
-            Public /e link
-          </a>
-        </div>
-        <dl className="space-y-1 text-sm">
-          <div>
-            <span className="text-muted-foreground">Type:</span> {formatTypeDisplay(item.type)}
-            {item.type?.category ? (
-              <span className="ml-1 text-xs text-muted-foreground capitalize">
-                · {item.type.category}
-              </span>
-            ) : null}
-          </div>
-          <div>
-            <span className="text-muted-foreground">Location:</span> {item.location?.path || "-"}
-          </div>
-          <div>
-            <span className="text-muted-foreground">In:</span>{" "}
-            {item.containedInAsset
-              ? renderItemChip(item.containedInAsset._id, item.containedInAsset.assetId)
-              : "-"}
-          </div>
-          <div>
-            <span className="text-muted-foreground">Contains:</span> {children.length}
-          </div>
-        </dl>
-        {children.length ? (
-          <div className="flex flex-wrap gap-1">
-            {children.map((child) => (
-              <span key={child._id}>{renderItemChip(child._id, child.assetId)}</span>
-            ))}
-          </div>
-        ) : null}
-      </div>
-    );
-  }
-
   return (
     <TooltipProvider delayDuration={0}>
       <div className="grid gap-4 lg:grid-cols-3">
@@ -403,7 +270,7 @@ export function ItemsManager() {
           <CardHeader>
             <CardTitle>Inventory Items</CardTitle>
             <div className="flex flex-wrap items-center gap-2">
-              <div className="relative min-w-0 flex-1">
+              <div className="relative min-w-56 flex-1">
                 <MagnifyingGlassIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   className="pl-9"
@@ -479,7 +346,7 @@ export function ItemsManager() {
             ) : null}
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="hidden overflow-auto rounded-md border md:block">
+            <div className="overflow-auto rounded-md border">
               <table className="min-w-full text-sm">
                 <thead className="bg-muted/50">
                   <tr>
@@ -567,15 +434,45 @@ export function ItemsManager() {
                       <td className="p-2">
                         <div className="flex items-center gap-1.5">
                           <Tooltip>
-                            <TooltipTrigger asChild>{renderEditButton(item)}</TooltipTrigger>
+                            <TooltipTrigger asChild>
+                              <Button
+                                type="button"
+                                size="icon-sm"
+                                variant="outline"
+                                aria-label="Edit"
+                                onClick={() => beginEdit(item)}
+                              >
+                                <PencilSimpleIcon className="size-3.5" />
+                              </Button>
+                            </TooltipTrigger>
                             <TooltipContent>Edit</TooltipContent>
                           </Tooltip>
                           <Tooltip>
-                            <TooltipTrigger asChild>{renderDamageButton(item)}</TooltipTrigger>
+                            <TooltipTrigger asChild>
+                              <Button
+                                type="button"
+                                size="icon-sm"
+                                variant="outline"
+                                aria-label="Damage"
+                                onClick={() => setDamageItemId(item._id)}
+                              >
+                                <WarningCircleIcon className="size-3.5" />
+                              </Button>
+                            </TooltipTrigger>
                             <TooltipContent>Report damage</TooltipContent>
                           </Tooltip>
                           <Tooltip>
-                            <TooltipTrigger asChild>{renderDeleteButton(item)}</TooltipTrigger>
+                            <TooltipTrigger asChild>
+                              <Button
+                                type="button"
+                                size="icon-sm"
+                                variant="destructive"
+                                aria-label="Delete"
+                                onClick={() => void removeItem({ id: item._id })}
+                              >
+                                <TrashIcon className="size-3.5" />
+                              </Button>
+                            </TooltipTrigger>
                             <TooltipContent>Delete</TooltipContent>
                           </Tooltip>
                         </div>
@@ -584,9 +481,6 @@ export function ItemsManager() {
                   ))}
                 </tbody>
               </table>
-            </div>
-            <div className="space-y-2 md:hidden">
-              {sortedItems.map((item) => renderMobileItemCard(item))}
             </div>
             {itemsStatus === "CanLoadMore" || itemsStatus === "LoadingMore" ? (
               <Button
