@@ -21,6 +21,7 @@ import {
 import {
   CaretUpDownIcon,
   CheckCircleIcon,
+  EyeIcon,
   MoonIcon,
   SignOutIcon,
 } from "@phosphor-icons/react"
@@ -28,6 +29,7 @@ import {
 export function NavUser({
   user,
   onSignOut,
+  crewMode,
 }: {
   user: {
     name: string
@@ -36,6 +38,10 @@ export function NavUser({
     avatarUrl?: string | null
   }
   onSignOut: () => Promise<void> | void
+  crewMode?: {
+    isCrewMode: boolean
+    onToggle: () => void
+  }
 }) {
   const { isMobile } = useSidebar()
   const { theme, setTheme } = useTheme()
@@ -94,6 +100,17 @@ export function NavUser({
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
+              {crewMode ? (
+                <DropdownMenuItem
+                  onSelect={(event) => {
+                    event.preventDefault()
+                    crewMode.onToggle()
+                  }}
+                >
+                  <EyeIcon />
+                  {crewMode.isCrewMode ? "View as admin" : "View as crew"}
+                </DropdownMenuItem>
+              ) : null}
               <DropdownMenuItem asChild>
                 <Link href="/dashboard/account">
                   <CheckCircleIcon />
