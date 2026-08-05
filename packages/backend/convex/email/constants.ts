@@ -46,6 +46,7 @@ export type EmailTemplate =
   | "payment_proof_reminder"
   | "payment_proof_submitted"
   | "paying_party_added"
+  | "band_assigned"
   | "band_payment_confirmation"
   | "band_payment_completed"
   | "band_payment_payee_required"
@@ -117,6 +118,10 @@ export function formatInviteExpiry(expiresAt: number, timezone: string = EVENT_T
   return formatDateTime(expiresAt, "long", timezone);
 }
 
+export function bandDashboardUrl() {
+  return `${SITE_URL}/dashboard`;
+}
+
 export function bandPaymentHistoryUrl() {
   return `${SITE_URL}/dashboard/bands-and-performers/payments`;
 }
@@ -157,6 +162,8 @@ export function subjectForTemplate(template: EmailTemplate, context: string) {
       return `Payment proof received: ${context}`;
     case "paying_party_added":
       return `You've been added as the paying party: ${context}`;
+    case "band_assigned":
+      return `You're on the bill: ${context}`;
     case "band_payment_confirmation":
       return `Payment ready for your signature: ${context}`;
     case "band_payment_completed":

@@ -69,10 +69,11 @@ test.describe("band payouts queue", () => {
     // The signature request goes out through the mocked email queue.
     const email = await pollConvex<{ template: string; to: string }>(
       "e2eHelpers:getLatestEmailNotification",
-      { to: e2eEnv.bandEmail },
-      (row) => Boolean(row?.template),
+      { to: e2eEnv.bandEmail, template: "band_payment_confirmation" },
+      (row) => row?.template === "band_payment_confirmation",
     );
     expect(email.to.toLowerCase()).toBe(e2eEnv.bandEmail.toLowerCase());
+    expect(email.template).toBe("band_payment_confirmation");
   });
 
   test("admin can mark a signed payment paid from the queue", async ({ page }) => {

@@ -37,7 +37,11 @@ npx convex env set EMAIL_FROM "Arbor Notifications <noreply@arbor.st>"
 npx convex env set PAYMENTS_EMAIL_FROM "Arbor Live — Financial Manager <payments@arbor.st>"
 ```
 
-## Band payment emails
+## Band emails
+
+Assignment: when a band is first linked to an event (`eventBandParticipations`
+insert), members receive `band_assigned` with show details and a CTA to
+`/dashboard`.
 
 Band payouts use outbound-only emails:
 

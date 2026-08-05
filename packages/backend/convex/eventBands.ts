@@ -2,13 +2,30 @@ import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { components } from "./_generated/api";
-import { requireArborInternalContext, requireAuth, requireBandContext } from "./lib/auth";
+import { requireArborInternalContext, requireAuth, requireBandContext, getUserId } from "./lib/auth";
 import { listBandLinkedEvents } from "./lib/eventBandAccess";
+import {
+  bandPaymentHasAgreementPdf,
+  bandPaymentStatusLabel,
+  isBandPayeeComplete,
+  payeeFieldsFromProfile,
+} from "./lib/bandPayments";
+import { scheduleBandAssignedEmails } from "./email/bandAssignmentEmails";
 
 const participationRoleValue = v.union(
   v.literal("headliner"),
   v.literal("support"),
   v.literal("other"),
+);
+
+const paymentStatusValue = v.union(
+  v.literal("draft"),
+  v.literal("pending_payee"),
+  v.literal("pending_email"),
+  v.literal("awaiting_confirmation"),
+  v.literal("confirmed"),
+  v.literal("paid"),
+  v.literal("cancelled"),
 );
 
 const participationRowValidator = v.object({
@@ -40,6 +57,36 @@ async function getOrganizationName(ctx: QueryCtx | MutationCtx, organizationId: 
   return profile?.displayName ?? org?.name ?? "Band";
 }
 
+function paymentChipLabel(args: {
+  hasPayment: boolean;
+  status?:
+    | "draft"
+    | "pending_payee"
+    | "pending_email"
+    | "awaiting_confirmation"
+    | "confirmed"
+    | "paid"
+    | "cancelled";
+}): string {
+  if (!args.hasPayment || !args.status) return "No payout yet";
+  switch (args.status) {
+    case "draft":
+      return "Confirmed";
+    case "pending_payee":
+    case "pending_email":
+    case "confirmed":
+      return "Payment pending";
+    case "awaiting_confirmation":
+      return "Needs signature";
+    case "paid":
+      return "Paid";
+    case "cancelled":
+      return "No payout yet";
+    default:
+      return "Payment pending";
+  }
+}
+
 export async function upsertEventBandParticipation(
   ctx: MutationCtx,
   args: {
@@ -59,13 +106,19 @@ export async function upsertEventBandParticipation(
     await ctx.db.patch(existing._id, { role: args.role, updatedAt: now });
     return existing._id;
   }
-  return await ctx.db.insert("eventBandParticipations", {
+  const participationId = await ctx.db.insert("eventBandParticipations", {
     eventId: args.eventId,
     organizationId: args.organizationId,
     role: args.role,
     createdAt: now,
     updatedAt: now,
   });
+  await scheduleBandAssignedEmails(ctx, {
+    eventId: args.eventId,
+    organizationId: args.organizationId,
+    role: args.role,
+  });
+  return participationId;
 }
 
 export const listByEvent = query({
@@ -91,6 +144,105 @@ export const listByEvent = query({
       });
     }
     return result;
+  },
+});
+
+export const listPerformersForEvent = query({
+  args: { eventId: v.id("events") },
+  returns: v.array(
+    v.object({
+      participationId: v.id("eventBandParticipations"),
+      organizationId: v.string(),
+      bandName: v.string(),
+      role: participationRoleValue,
+      payment: v.union(
+        v.null(),
+        v.object({
+          _id: v.id("eventBandPayments"),
+          pricingMode: v.union(v.literal("per_member_hourly"), v.literal("fixed_total")),
+          ratePerMemberPerHourUsd: v.optional(v.number()),
+          performanceHours: v.optional(v.number()),
+          memberCount: v.optional(v.number()),
+          totalUsd: v.number(),
+          status: paymentStatusValue,
+          statusLabel: v.string(),
+          confirmationToken: v.string(),
+          designatedPayeeName: v.optional(v.string()),
+          designatedPayeeEmail: v.optional(v.string()),
+          designatedPayeeUserId: v.optional(v.string()),
+          designatedPayeeMailingAddress: v.optional(v.string()),
+          designatedPayeePayoutMethod: v.optional(
+            v.union(v.literal("pickup"), v.literal("delivery")),
+          ),
+          payeeComplete: v.boolean(),
+          photoAlbumUrl: v.optional(v.string()),
+          eventEnded: v.boolean(),
+        }),
+      ),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    await requireArborInternalContext(ctx);
+    const event = await ctx.db.get(args.eventId);
+    if (!event) return [];
+
+    const participations = await ctx.db
+      .query("eventBandParticipations")
+      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+      .take(50);
+
+    const payments = await ctx.db
+      .query("eventBandPayments")
+      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+      .take(50);
+    const paymentByOrg = new Map(
+      payments
+        .filter((row) => row.status !== "cancelled")
+        .map((row) => [row.organizationId, row] as const),
+    );
+
+    const nowMs = Date.now();
+    const result = [];
+    for (const row of participations) {
+      const payment = paymentByOrg.get(row.organizationId) ?? null;
+      const payeeComplete = payment
+        ? isBandPayeeComplete({
+            designatedPayeeName: payment.designatedPayeeName,
+            designatedPayeeEmail: payment.designatedPayeeEmail,
+            designatedPayeeMailingAddress: payment.designatedPayeeMailingAddress,
+            designatedPayeePayoutMethod: payment.designatedPayeePayoutMethod,
+          })
+        : false;
+      result.push({
+        participationId: row._id,
+        organizationId: row.organizationId,
+        bandName: await getOrganizationName(ctx, row.organizationId),
+        role: row.role,
+        payment: payment
+          ? {
+              _id: payment._id,
+              pricingMode: payment.pricingMode,
+              ratePerMemberPerHourUsd: payment.ratePerMemberPerHourUsd,
+              performanceHours: payment.performanceHours,
+              memberCount: payment.memberCount,
+              totalUsd: payment.totalUsd,
+              status: payment.status,
+              statusLabel: bandPaymentStatusLabel(payment.status),
+              confirmationToken: payment.confirmationToken,
+              designatedPayeeName: payment.designatedPayeeName,
+              designatedPayeeEmail: payment.designatedPayeeEmail,
+              designatedPayeeUserId: payment.designatedPayeeUserId,
+              designatedPayeeMailingAddress: payment.designatedPayeeMailingAddress,
+              designatedPayeePayoutMethod: payment.designatedPayeePayoutMethod,
+              payeeComplete,
+              photoAlbumUrl: payment.photoAlbumUrl,
+              eventEnded: event.endAt <= nowMs,
+            }
+          : null,
+      });
+    }
+
+    return result.sort((a, b) => a.bandName.localeCompare(b.bandName));
   },
 });
 
@@ -126,6 +278,97 @@ export const listLinkedEventsForActiveBand = query({
   },
 });
 
+export const listShowsForActiveBand = query({
+  args: {},
+  returns: v.array(
+    v.object({
+      eventId: v.id("events"),
+      title: v.string(),
+      startAt: v.number(),
+      endAt: v.number(),
+      venueName: v.optional(v.string()),
+      role: participationRoleValue,
+      paymentChipLabel: v.string(),
+      payment: v.union(
+        v.null(),
+        v.object({
+          _id: v.id("eventBandPayments"),
+          totalUsd: v.number(),
+          status: paymentStatusValue,
+          statusLabel: v.string(),
+          designatedPayeeName: v.optional(v.string()),
+          canSign: v.boolean(),
+          canDownloadAgreementPdf: v.boolean(),
+          needsPayeeSetup: v.boolean(),
+        }),
+      ),
+    }),
+  ),
+  handler: async (ctx) => {
+    const bandContext = await requireBandContext(ctx);
+    const user = await requireAuth(ctx);
+    const userId = getUserId(user);
+    const linkedEvents = await listBandLinkedEvents(ctx, bandContext.organizationId);
+
+    const profile = await ctx.db
+      .query("organizationProfiles")
+      .withIndex("by_organizationId", (q) => q.eq("organizationId", bandContext.organizationId))
+      .unique();
+    const payeeComplete = isBandPayeeComplete(payeeFieldsFromProfile(profile));
+
+    const payments = await ctx.db
+      .query("eventBandPayments")
+      .withIndex("by_organizationId", (q) => q.eq("organizationId", bandContext.organizationId))
+      .take(200);
+    const paymentByEvent = new Map(
+      payments
+        .filter((row) => row.status !== "cancelled")
+        .map((row) => [row.eventId, row] as const),
+    );
+
+    const result = [];
+    for (const row of linkedEvents.values()) {
+      const event = await ctx.db.get(row.eventId);
+      if (!event) continue;
+      const payment = paymentByEvent.get(row.eventId) ?? null;
+      const canSign =
+        Boolean(payment) &&
+        payment!.status === "awaiting_confirmation" &&
+        Boolean(payment!.designatedPayeeUserId) &&
+        payment!.designatedPayeeUserId === userId;
+      const needsPayeeSetup =
+        Boolean(payment) && payment!.status === "pending_payee" && !payeeComplete;
+
+      result.push({
+        eventId: row.eventId,
+        title: event.title,
+        startAt: event.startAt,
+        endAt: event.endAt,
+        venueName: event.venueName,
+        role: row.role,
+        paymentChipLabel: paymentChipLabel({
+          hasPayment: Boolean(payment),
+          status: payment?.status,
+        }),
+        payment: payment
+          ? {
+              _id: payment._id,
+              totalUsd: payment.totalUsd,
+              status: payment.status,
+              statusLabel: bandPaymentStatusLabel(payment.status),
+              designatedPayeeName: payment.designatedPayeeName,
+              canSign,
+              canDownloadAgreementPdf: bandPaymentHasAgreementPdf(payment),
+              needsPayeeSetup,
+            }
+          : null,
+      });
+    }
+
+    return result.sort((a, b) => a.startAt - b.startAt);
+  },
+});
+
 export const syncParticipationsFromPayments = mutation({
   args: {},
   returns: v.object({ synced: v.number() }),
@@ -143,6 +386,97 @@ export const syncParticipationsFromPayments = mutation({
       synced += 1;
     }
     return { synced };
+  },
+});
+
+export const addParticipation = mutation({
+  args: {
+    eventId: v.id("events"),
+    organizationId: v.string(),
+    role: participationRoleValue,
+  },
+  returns: v.id("eventBandParticipations"),
+  handler: async (ctx, args) => {
+    await requireArborInternalContext(ctx);
+    const event = await ctx.db.get(args.eventId);
+    if (!event) throw new Error("Event not found.");
+    return await upsertEventBandParticipation(ctx, {
+      eventId: args.eventId,
+      organizationId: args.organizationId,
+      role: args.role,
+    });
+  },
+});
+
+export const updateParticipationRole = mutation({
+  args: {
+    eventId: v.id("events"),
+    organizationId: v.string(),
+    role: participationRoleValue,
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requireArborInternalContext(ctx);
+    const existing = await ctx.db
+      .query("eventBandParticipations")
+      .withIndex("by_eventId_and_organizationId", (q) =>
+        q.eq("eventId", args.eventId).eq("organizationId", args.organizationId),
+      )
+      .unique();
+    if (!existing) throw new Error("Band is not linked to this event.");
+    await ctx.db.patch(existing._id, { role: args.role, updatedAt: Date.now() });
+    return null;
+  },
+});
+
+export const removeParticipation = mutation({
+  args: {
+    eventId: v.id("events"),
+    organizationId: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requireArborInternalContext(ctx);
+    const existing = await ctx.db
+      .query("eventBandParticipations")
+      .withIndex("by_eventId_and_organizationId", (q) =>
+        q.eq("eventId", args.eventId).eq("organizationId", args.organizationId),
+      )
+      .unique();
+    if (existing) {
+      await ctx.db.delete(existing._id);
+    }
+
+    const payment = await ctx.db
+      .query("eventBandPayments")
+      .withIndex("by_eventId_and_organizationId", (q) =>
+        q.eq("eventId", args.eventId).eq("organizationId", args.organizationId),
+      )
+      .unique();
+    if (payment && payment.status !== "cancelled") {
+      if (payment.status === "paid") {
+        throw new Error("Cannot remove a band with a paid payout.");
+      }
+      await ctx.db.patch(payment._id, {
+        status: "cancelled",
+        updatedAt: Date.now(),
+      });
+    }
+
+    const remaining = await ctx.db
+      .query("eventBandPayments")
+      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+      .take(50);
+    let total = 0;
+    for (const row of remaining) {
+      if (row.status === "cancelled") continue;
+      total += row.totalUsd;
+    }
+    const event = await ctx.db.get(args.eventId);
+    if (event) {
+      await ctx.db.patch(args.eventId, { bandsCostUsd: total });
+    }
+    return null;
   },
 });
 
@@ -170,6 +504,18 @@ export const upsertParticipations = mutation({
     for (const row of existing) {
       if (!keepOrgIds.has(row.organizationId)) {
         await ctx.db.delete(row._id);
+        const payment = await ctx.db
+          .query("eventBandPayments")
+          .withIndex("by_eventId_and_organizationId", (q) =>
+            q.eq("eventId", args.eventId).eq("organizationId", row.organizationId),
+          )
+          .unique();
+        if (payment && payment.status !== "cancelled" && payment.status !== "paid") {
+          await ctx.db.patch(payment._id, {
+            status: "cancelled",
+            updatedAt: Date.now(),
+          });
+        }
       }
     }
     for (const row of args.participations) {
@@ -179,6 +525,16 @@ export const upsertParticipations = mutation({
         role: row.role,
       });
     }
+    const remaining = await ctx.db
+      .query("eventBandPayments")
+      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+      .take(50);
+    let total = 0;
+    for (const payment of remaining) {
+      if (payment.status === "cancelled") continue;
+      total += payment.totalUsd;
+    }
+    await ctx.db.patch(args.eventId, { bandsCostUsd: total });
     return null;
   },
 });

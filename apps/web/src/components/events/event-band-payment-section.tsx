@@ -15,15 +15,28 @@ import { formatUsd } from "@/lib/format";
 import { formatBandPayeePayoutMethod } from "@/lib/band-payout-copy";
 
 type PricingMode = "per_member_hourly" | "fixed_total";
+type ParticipationRole = "headliner" | "support" | "other";
 
-type BandPaymentRow = NonNullable<
-  ReturnType<typeof useQuery<typeof api.bandPayments.listByEvent>>
+type PerformerRow = NonNullable<
+  ReturnType<typeof useQuery<typeof api.eventBands.listPerformersForEvent>>
 >[number];
+
+type PaymentFields = NonNullable<PerformerRow["payment"]>;
 
 const PRICING_OPTIONS = [
   { value: "per_member_hourly", label: "Per member per hour" },
   { value: "fixed_total", label: "Fixed total" },
 ];
+
+const ROLE_OPTIONS = [
+  { value: "headliner", label: "Headliner" },
+  { value: "support", label: "Support" },
+  { value: "other", label: "Other" },
+];
+
+function roleLabel(role: ParticipationRole) {
+  return ROLE_OPTIONS.find((row) => row.value === role)?.label ?? role;
+}
 
 function defaultRateForBand(
   bands: Array<{ organizationId: string; performerHourlyRateUsd: number }> | undefined,
@@ -39,36 +52,57 @@ function defaultRateForBand(
 export function EventBandPaymentSection({ eventId }: { eventId: Id<"events"> }) {
   return (
     <ArborOnlyGuard>
-      <EventBandPaymentsPanel eventId={eventId} />
+      <EventBandsPerformersPanel eventId={eventId} />
     </ArborOnlyGuard>
   );
 }
 
-function EventBandPaymentsPanel({ eventId }: { eventId: Id<"events"> }) {
-  const payments = useQuery(api.bandPayments.listByEvent, { eventId });
-  const cancelPayment = useMutation(api.bandPayments.cancelPayment);
-  const [editingId, setEditingId] = useState<Id<"eventBandPayments"> | "new" | null>(null);
-  const [busyPaymentId, setBusyPaymentId] = useState<Id<"eventBandPayments"> | null>(null);
+function EventBandsPerformersPanel({ eventId }: { eventId: Id<"events"> }) {
+  const performers = useQuery(api.eventBands.listPerformersForEvent, { eventId });
+  const removeParticipation = useMutation(api.eventBands.removeParticipation);
+  const updateRole = useMutation(api.eventBands.updateParticipationRole);
+  const [editingPaymentForOrg, setEditingPaymentForOrg] = useState<string | null>(null);
+  const [addingBand, setAddingBand] = useState(false);
+  const [busyOrgId, setBusyOrgId] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
 
   const totalBandsCost = useMemo(
-    () => (payments ?? []).reduce((sum, row) => sum + row.totalUsd, 0),
-    [payments],
+    () =>
+      (performers ?? []).reduce((sum, row) => sum + (row.payment?.totalUsd ?? 0), 0),
+    [performers],
   );
 
-  async function onRemove(paymentId: Id<"eventBandPayments">) {
-    setBusyPaymentId(paymentId);
+  async function onRemove(organizationId: string) {
+    setBusyOrgId(organizationId);
+    setMessage(null);
     try {
-      await cancelPayment({ paymentId });
-      if (editingId === paymentId) setEditingId(null);
+      await removeParticipation({ eventId, organizationId });
+      if (editingPaymentForOrg === organizationId) setEditingPaymentForOrg(null);
+    } catch (error) {
+      setMessage(getConvexErrorMessage(error));
     } finally {
-      setBusyPaymentId(null);
+      setBusyOrgId(null);
     }
   }
 
-  if (payments === undefined) {
+  async function onRoleChange(organizationId: string, role: ParticipationRole) {
+    setBusyOrgId(organizationId);
+    setMessage(null);
+    try {
+      await updateRole({ eventId, organizationId, role });
+    } catch (error) {
+      setMessage(getConvexErrorMessage(error));
+    } finally {
+      setBusyOrgId(null);
+    }
+  }
+
+  if (performers === undefined) {
     return (
       <Card>
-        <CardContent className="py-6 text-sm text-muted-foreground">Loading band payments…</CardContent>
+        <CardContent className="py-6 text-sm text-muted-foreground">
+          Loading bands &amp; performers…
+        </CardContent>
       </Card>
     );
   }
@@ -77,116 +111,235 @@ function EventBandPaymentsPanel({ eventId }: { eventId: Id<"events"> }) {
     <Card>
       <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-2">
         <div>
-          <CardTitle>Band &amp; Artist Payments</CardTitle>
+          <CardTitle>Bands &amp; Performers</CardTitle>
           <p className="mt-1 text-sm text-muted-foreground">
-            Link each performing band and set payout details. After the event, each payment enters the payout queue
-            separately.
+            Assign bands to this event (notifies them and unlocks media). Optionally set payout
+            details on the same row — removing a band also cancels any unpaid payout and media
+            access.
           </p>
         </div>
-        {payments.length > 0 ? (
+        {totalBandsCost > 0 ? (
           <p className="text-sm">
-            <span className="font-medium">Event total:</span> {formatUsd(totalBandsCost)}
+            <span className="font-medium">Payout total:</span> {formatUsd(totalBandsCost)}
           </p>
         ) : null}
       </CardHeader>
       <CardContent className="space-y-4">
-        {payments.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No performers linked yet.</p>
+        {performers.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No bands assigned yet.</p>
         ) : (
           <div className="space-y-2">
-            {payments.map((payment) => (
+            {performers.map((performer) => (
               <div
-                key={payment._id}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm"
+                key={performer.participationId}
+                className="space-y-2 rounded-md border px-3 py-2 text-sm"
               >
-                <div>
-                  <p className="font-medium">{payment.bandName}</p>
-                  <p className="text-muted-foreground">
-                    {formatUsd(payment.totalUsd)} · {payment.statusLabel}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Payment ID: {payment.confirmationToken}
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {payment.status !== "paid" ? (
-                    <>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant={editingId === payment._id ? "default" : "outline"}
-                        onClick={() =>
-                          setEditingId(editingId === payment._id ? null : payment._id)
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="min-w-0 space-y-1">
+                    <p className="font-medium">{performer.bandName}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <SearchableSelect
+                        value={performer.role}
+                        onChange={(value) =>
+                          void onRoleChange(performer.organizationId, value as ParticipationRole)
                         }
-                      >
-                        {editingId === payment._id ? "Close" : "Edit"}
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={busyPaymentId === payment._id}
-                        onClick={() => void onRemove(payment._id)}
-                      >
-                        Remove
-                      </Button>
-                    </>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">Paid</span>
-                  )}
+                        options={ROLE_OPTIONS}
+                        placeholder="Role"
+                        emptyLabel="Role"
+                      />
+                      {performer.payment ? (
+                        <p className="text-muted-foreground">
+                          {formatUsd(performer.payment.totalUsd)} · {performer.payment.statusLabel}
+                        </p>
+                      ) : (
+                        <p className="text-muted-foreground">No payout set</p>
+                      )}
+                    </div>
+                    {performer.payment ? (
+                      <p className="text-xs text-muted-foreground">
+                        Payment ID: {performer.payment.confirmationToken}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {performer.payment?.status !== "paid" ? (
+                      <>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={
+                            editingPaymentForOrg === performer.organizationId
+                              ? "default"
+                              : "outline"
+                          }
+                          onClick={() =>
+                            setEditingPaymentForOrg(
+                              editingPaymentForOrg === performer.organizationId
+                                ? null
+                                : performer.organizationId,
+                            )
+                          }
+                        >
+                          {editingPaymentForOrg === performer.organizationId
+                            ? "Close"
+                            : performer.payment
+                              ? "Edit payout"
+                              : "Add payout"}
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={busyOrgId === performer.organizationId}
+                          onClick={() => void onRemove(performer.organizationId)}
+                        >
+                          Remove
+                        </Button>
+                      </>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">
+                        {roleLabel(performer.role)} · Paid
+                      </span>
+                    )}
+                  </div>
                 </div>
+
+                {editingPaymentForOrg === performer.organizationId ? (
+                  <EventBandPaymentForm
+                    key={`${performer.organizationId}-payment`}
+                    eventId={eventId}
+                    organizationId={performer.organizationId}
+                    role={performer.role}
+                    payment={performer.payment}
+                    organizationLocked
+                    excludedOrganizationIds={[]}
+                    onSaved={() => setEditingPaymentForOrg(null)}
+                    onCancel={() => setEditingPaymentForOrg(null)}
+                  />
+                ) : null}
               </div>
             ))}
           </div>
         )}
 
-        {editingId === "new" || editingId === null ? (
-          <div className="flex gap-2">
-            {editingId !== "new" ? (
-              <Button type="button" size="sm" onClick={() => setEditingId("new")}>
-                Add performer
-              </Button>
-            ) : null}
-          </div>
-        ) : null}
-
-        {editingId === "new" ? (
-          <EventBandPaymentForm
-            key="new"
+        {addingBand ? (
+          <AddBandForm
             eventId={eventId}
-            payment={null}
-            excludedOrganizationIds={payments.map((row) => row.organizationId)}
-            onSaved={() => setEditingId(null)}
-            onCancel={() => setEditingId(null)}
+            excludedOrganizationIds={performers.map((row) => row.organizationId)}
+            onSaved={() => setAddingBand(false)}
+            onCancel={() => setAddingBand(false)}
           />
-        ) : null}
+        ) : (
+          <Button type="button" size="sm" onClick={() => setAddingBand(true)}>
+            Add band
+          </Button>
+        )}
 
-        {editingId && editingId !== "new" ? (
-          <EventBandPaymentForm
-            key={editingId}
-            eventId={eventId}
-            payment={payments.find((row) => row._id === editingId) ?? null}
-            excludedOrganizationIds={payments
-              .filter((row) => row._id !== editingId)
-              .map((row) => row.organizationId)}
-            onSaved={() => setEditingId(null)}
-            onCancel={() => setEditingId(null)}
-          />
-        ) : null}
+        {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
       </CardContent>
     </Card>
   );
 }
 
-function EventBandPaymentForm({
+function AddBandForm({
   eventId,
-  payment,
   excludedOrganizationIds,
   onSaved,
   onCancel,
 }: {
   eventId: Id<"events">;
-  payment: BandPaymentRow | null;
+  excludedOrganizationIds: string[];
+  onSaved: () => void;
+  onCancel: () => void;
+}) {
+  const bands = useQuery(api.users.listBandOrganizationsAdmin, {});
+  const addParticipation = useMutation(api.eventBands.addParticipation);
+  const [organizationId, setOrganizationId] = useState("");
+  const [role, setRole] = useState<ParticipationRole>("headliner");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  const bandOptions = useMemo(
+    () =>
+      (bands ?? [])
+        .filter((band) => !excludedOrganizationIds.includes(band.organizationId))
+        .map((band) => ({
+          value: band.organizationId,
+          label: band.displayName || band.name,
+        })),
+    [bands, excludedOrganizationIds],
+  );
+
+  async function onSave() {
+    if (!organizationId) {
+      setMessage("Select a band or artist.");
+      return;
+    }
+    setBusy(true);
+    setMessage(null);
+    try {
+      await addParticipation({ eventId, organizationId, role });
+      onSaved();
+    } catch (error) {
+      setMessage(getConvexErrorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="space-y-3 rounded-md border bg-muted/10 p-4">
+      <p className="text-sm font-medium">Add band</p>
+      <div className="grid gap-3 md:grid-cols-2">
+        <div className="space-y-1 md:col-span-2">
+          <Label>Band / artist</Label>
+          <SearchableSelect
+            value={organizationId}
+            onChange={setOrganizationId}
+            options={bandOptions}
+            placeholder="Search bands..."
+            emptyLabel="Select band"
+          />
+        </div>
+        <div className="space-y-1">
+          <Label>Role</Label>
+          <SearchableSelect
+            value={role}
+            onChange={(value) => setRole(value as ParticipationRole)}
+            options={ROLE_OPTIONS}
+            placeholder="Role"
+            emptyLabel="Role"
+          />
+        </div>
+      </div>
+      {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" onClick={() => void onSave()} disabled={busy}>
+          {busy ? "Adding…" : "Assign band"}
+        </Button>
+        <Button type="button" variant="outline" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function EventBandPaymentForm({
+  eventId,
+  organizationId: lockedOrganizationId,
+  role,
+  payment,
+  organizationLocked,
+  excludedOrganizationIds,
+  onSaved,
+  onCancel,
+}: {
+  eventId: Id<"events">;
+  organizationId?: string;
+  role: ParticipationRole;
+  payment: PaymentFields | null;
+  organizationLocked?: boolean;
   excludedOrganizationIds: string[];
   onSaved: () => void;
   onCancel: () => void;
@@ -194,19 +347,27 @@ function EventBandPaymentForm({
   const bands = useQuery(api.users.listBandOrganizationsAdmin, {});
   const upsert = useMutation(api.bandPayments.upsertForEvent);
 
-  const [organizationId, setOrganizationId] = useState(payment?.organizationId ?? "");
+  const [organizationId, setOrganizationId] = useState(lockedOrganizationId ?? "");
+  const resolvedOrgId = organizationLocked
+    ? (lockedOrganizationId ?? "")
+    : organizationId;
+
   const orgPayee = useQuery(
     api.bandPayments.getBandPayeeForOrganization,
-    organizationId ? { organizationId } : "skip",
+    resolvedOrgId ? { organizationId: resolvedOrgId } : "skip",
   );
 
-  const [pricingMode, setPricingMode] = useState<PricingMode>(payment?.pricingMode ?? "per_member_hourly");
+  const [pricingMode, setPricingMode] = useState<PricingMode>(
+    payment?.pricingMode ?? "per_member_hourly",
+  );
   const [ratePerMemberPerHourUsd, setRatePerMemberPerHourUsd] = useState(
     payment
       ? String(payment.ratePerMemberPerHourUsd ?? 0)
-      : defaultRateForBand(bands, organizationId),
+      : defaultRateForBand(bands, resolvedOrgId),
   );
-  const [performanceHours, setPerformanceHours] = useState(String(payment?.performanceHours ?? 1));
+  const [performanceHours, setPerformanceHours] = useState(
+    String(payment?.performanceHours ?? 1),
+  );
   const [memberCount, setMemberCount] = useState(String(payment?.memberCount ?? 4));
   const [fixedTotalUsd, setFixedTotalUsd] = useState(String(payment?.totalUsd ?? 0));
   const [photoAlbumUrl, setPhotoAlbumUrl] = useState(payment?.photoAlbumUrl ?? "");
@@ -236,7 +397,7 @@ function EventBandPaymentForm({
   const payeeComplete = orgPayee?.payeeComplete ?? payment?.payeeComplete ?? false;
 
   async function onSave() {
-    if (!organizationId) {
+    if (!resolvedOrgId) {
       setMessage("Select a band or artist.");
       return;
     }
@@ -246,12 +407,16 @@ function EventBandPaymentForm({
       await upsert({
         eventId,
         paymentId: payment?._id,
-        organizationId,
+        organizationId: resolvedOrgId,
+        role,
         pricingMode,
         ratePerMemberPerHourUsd:
-          pricingMode === "per_member_hourly" ? Number(ratePerMemberPerHourUsd || "0") : undefined,
+          pricingMode === "per_member_hourly"
+            ? Number(ratePerMemberPerHourUsd || "0")
+            : undefined,
         performanceHours: Number(performanceHours || "0"),
-        memberCount: pricingMode === "per_member_hourly" ? Number(memberCount || "0") : undefined,
+        memberCount:
+          pricingMode === "per_member_hourly" ? Number(memberCount || "0") : undefined,
         totalUsd: pricingMode === "fixed_total" ? Number(fixedTotalUsd || "0") : computedTotal,
         photoAlbumUrl: photoAlbumUrl.trim() || undefined,
       });
@@ -272,7 +437,7 @@ function EventBandPaymentForm({
 
   return (
     <div className="space-y-4 rounded-md border bg-muted/10 p-4">
-      <p className="text-sm font-medium">{payment ? "Edit performer payment" : "Add performer payment"}</p>
+      <p className="text-sm font-medium">{payment ? "Edit payout" : "Add payout"}</p>
 
       {payment ? (
         <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
@@ -280,38 +445,43 @@ function EventBandPaymentForm({
             <span className="font-medium">Status:</span> {payment.statusLabel}
           </p>
           {payment.eventEnded && payment.status === "draft" ? (
-            <p className="text-muted-foreground">This event has ended and will enter the payout queue on save.</p>
+            <p className="text-muted-foreground">
+              This event has ended and will enter the payout queue on save.
+            </p>
           ) : null}
           {payment.status === "pending_payee" && !payeeComplete ? (
             <p className="text-amber-700 dark:text-amber-300">
-              Waiting for the band to configure their designated payee before confirmation can be sent.
+              Waiting for the band to configure their designated payee before confirmation can be
+              sent.
             </p>
           ) : null}
           {payment.status === "pending_payee" && payeeComplete ? (
             <p className="text-muted-foreground">
-              Payee is on file for this band. The payout queue will update automatically, or save this
-              payment to refresh it now.
+              Payee is on file for this band. The payout queue will update automatically, or save
+              this payment to refresh it now.
             </p>
           ) : null}
         </div>
       ) : null}
 
       <div className="grid gap-3 md:grid-cols-2">
-        <div className="space-y-1 md:col-span-2">
-          <Label>Band / artist</Label>
-          <SearchableSelect
-            value={organizationId}
-            onChange={(value) => {
-              setOrganizationId(value);
-              if (!payment) {
-                setRatePerMemberPerHourUsd(defaultRateForBand(bands, value));
-              }
-            }}
-            options={bandOptions}
-            placeholder="Search bands..."
-            emptyLabel="Select band"
-          />
-        </div>
+        {!organizationLocked ? (
+          <div className="space-y-1 md:col-span-2">
+            <Label>Band / artist</Label>
+            <SearchableSelect
+              value={organizationId}
+              onChange={(value) => {
+                setOrganizationId(value);
+                if (!payment) {
+                  setRatePerMemberPerHourUsd(defaultRateForBand(bands, value));
+                }
+              }}
+              options={bandOptions}
+              placeholder="Search bands..."
+              emptyLabel="Select band"
+            />
+          </div>
+        ) : null}
 
         <div className="space-y-1">
           <Label>Pricing mode</Label>
@@ -381,18 +551,21 @@ function EventBandPaymentForm({
 
         <div className="space-y-2 md:col-span-2">
           <Label>Designated payee (from band org profile)</Label>
-          {organizationId ? (
+          {resolvedOrgId ? (
             payeeComplete ? (
               <div className="rounded-md border bg-muted/20 px-3 py-2 text-sm">
                 <p>
-                  <span className="font-medium">Payee:</span> {displayPayeeName} ({displayPayeeEmail})
+                  <span className="font-medium">Payee:</span> {displayPayeeName} (
+                  {displayPayeeEmail})
                 </p>
                 <p className="mt-1">
                   <span className="font-medium">Payout method:</span>{" "}
                   {formatBandPayeePayoutMethod(displayPayoutMethod)}
                 </p>
                 {displayPayeeAddress ? (
-                  <p className="mt-1 whitespace-pre-wrap text-muted-foreground">{displayPayeeAddress}</p>
+                  <p className="mt-1 whitespace-pre-wrap text-muted-foreground">
+                    {displayPayeeAddress}
+                  </p>
                 ) : null}
               </div>
             ) : (
@@ -429,7 +602,7 @@ function EventBandPaymentForm({
       <div className="flex flex-wrap gap-2">
         {payment?.status !== "paid" ? (
           <Button type="button" onClick={() => void onSave()} disabled={busy}>
-            {payment ? "Save changes" : "Add performer"}
+            {payment ? "Save payout" : "Save payout"}
           </Button>
         ) : null}
         <Button type="button" variant="outline" onClick={onCancel}>

@@ -160,9 +160,10 @@ the URL looks like cloud.
 | Surface | Status | Spec / notes |
 |---------|--------|--------------|
 | Payee e-sign → mark paid | Covered | `bands/band-payment-esign.spec.ts` (e-sign) + `bands/band-payouts-queue.spec.ts` (mark paid via queue UI) |
+| Band shows home + assignment | Covered | `bands/band-shows-home.spec.ts` — `/dashboard` Your shows, upcoming chip, e-sign from recent card, staff Assign band → `band_assigned` email |
 | Public `/artists/apply` → admin approve | Covered | `bands/band-application.spec.ts` (Batch 3) |
 | Band payouts admin queue UI | Covered | `bands/band-payouts-queue.spec.ts` — send signature request + mark paid |
-| Band portal beyond e-sign | Partial | Onboarding covered (Batch 4); settings/payouts still deferred |
+| Band portal beyond e-sign | Partial | Onboarding (Batch 4) + shows home; payee settings still light |
 | Band org profile admin birdseye (`/users/organizations`) | Covered | `users/band-org-profile.spec.ts` (Batch 12) — admin edits the display name, asserts via `getBandOrganizationProfileByDisplayName` |
 
 ### Marketing and public site
@@ -202,6 +203,7 @@ the URL looks like cloud.
 | `inventory/rental-fulfillment.spec.ts` | Delivery + return |
 | `inventory/damage-triage.spec.ts` | Damage triage |
 | `bands/band-payment-esign.spec.ts` | Band e-sign + helper mark paid |
+| `bands/band-shows-home.spec.ts` | Band Your shows home, assign → email, e-sign from card |
 | `bands/band-application.spec.ts` | Band apply + admin approve (Batch 3) |
 | `booking/booking-submit.spec.ts` | Public `/request` wizard submit (Batch 3) |
 | `booking/request-inbox.spec.ts` | Inbox list UX: open view, status filter, all statuses (Batch 13) |

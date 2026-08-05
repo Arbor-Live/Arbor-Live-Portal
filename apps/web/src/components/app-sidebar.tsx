@@ -167,8 +167,9 @@ function canAccessNavItem(
 ) {
   if (access.isBandContext) {
     if (item.bandOnly) return true
-    // Band orgs keep profile / riders / payments even though the section is
+    // Band orgs keep Home, profile / riders / payments even though the section is
     // admin-facing for Arbor Live.
+    if (item.url === "/dashboard") return true
     if (item.url === "/dashboard/bands-and-performers") return true
     return (
       item.url !== "/dashboard/events" &&
