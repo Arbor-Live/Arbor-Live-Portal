@@ -1,15 +1,38 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
+import {
+  ArrowsDownUpIcon,
+  ArrowDownIcon,
+  ArrowUpIcon,
+  CameraIcon,
+  CaretDownIcon,
+  CheckIcon,
+  MagnifyingGlassIcon,
+  PencilSimpleIcon,
+  PlusIcon,
+  TrashIcon,
+  WarningCircleIcon,
+} from "@phosphor-icons/react";
 import { api } from "@/lib/convex-api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { AssetScanner } from "./asset-scanner";
+import { CreateAssetWizard } from "./create-asset-wizard";
 import { DamageReportWizard } from "./damage-report-wizard";
 import { InventoryItemEditor } from "./inventory-item-editor";
 import { toCategoryOptions } from "./constants";
+import { cn } from "@/lib/utils";
 
 const defaultForm = {
   assetId: "",
@@ -29,16 +52,23 @@ function formatTypeDisplay(type: { manufacturer?: string; name: string; model: s
   return maker ? `${maker} ${core}` : core;
 }
 
+type SortKey = "assetId" | "category" | "location";
+
 export function ItemsManager() {
   const siteBase = (process.env.NEXT_PUBLIC_SITE_URL ?? "").replace(/\/$/, "");
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("");
-  const [sortBy, setSortBy] = useState<"assetId" | "category" | "location">("assetId");
+  const [sortBy, setSortBy] = useState<SortKey>("assetId");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editorInitial, setEditorInitial] = useState(defaultForm);
   const [damageItemId, setDamageItemId] = useState<string | null>(null);
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [scanOpen, setScanOpen] = useState(false);
+  const [scanRaw, setScanRaw] = useState("");
+  const [scanError, setScanError] = useState<string | null>(null);
+  const [pendingSelectId, setPendingSelectId] = useState<string | null>(null);
   const rowRefs = useRef(new Map<string, HTMLTableRowElement>());
 
   const categories = useQuery(api.inventoryCategories.list, { activeOnly: true });
@@ -58,6 +88,11 @@ export function ItemsManager() {
   const types = useQuery(api.inventoryTypes.listOptions, {});
   const locations = useQuery(api.storageLocations.list, {});
   const removeItem = useMutation(api.inventoryItems.remove);
+  const scanResolved = useQuery(
+    api.inventoryItems.resolveByScan,
+    scanRaw.trim() ? { raw: scanRaw } : "skip",
+  );
+
   const sortedItems = useMemo(() => {
     const rows = [...items];
     rows.sort((a, b) => {
@@ -109,6 +144,20 @@ export function ItemsManager() {
     return map;
   }, [itemSummaries]);
 
+  const categoryLabel = useMemo(() => {
+    if (!category) return "All Categories";
+    return toCategoryOptions(categories).find((entry) => entry.value === category)?.label ?? category;
+  }, [categories, category]);
+
+  function toggleSort(next: SortKey) {
+    if (sortBy === next) {
+      setSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(next);
+      setSortDir("asc");
+    }
+  }
+
   async function bulkDeleteSelected() {
     try {
       await Promise.all(selectedIds.map((id) => removeItem({ id: id as never })));
@@ -125,6 +174,50 @@ export function ItemsManager() {
     row.classList.add("bg-muted/70");
     window.setTimeout(() => row.classList.remove("bg-muted/70"), 1200);
   }
+
+  function beginEdit(item: (typeof sortedItems)[number]) {
+    setEditingId(item._id);
+    setEditorInitial({
+      assetId: item.assetId,
+      serialNumber: item.serialNumber ?? "",
+      typeId: item.typeId,
+      storageLocationId: item.storageLocationId ?? "",
+      containedInAssetId: item.containedInAssetId ?? "",
+      status: item.status ?? "",
+      notes: item.notes ?? "",
+    });
+  }
+
+  /** Scan-to-select: resolve, focus the row, add to the selection. */
+  useEffect(() => {
+    if (!scanRaw.trim()) return;
+    if (scanResolved === undefined) return;
+    if (scanResolved === null) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- consume the one-shot scan-to-select resolution
+      setScanError(`No item found for “${scanRaw.trim()}”.`);
+      setScanRaw("");
+      setScanOpen(false);
+      return;
+    }
+    setScanError(null);
+    setSearch(scanResolved.assetId);
+    setCategory("");
+    setPendingSelectId(scanResolved._id);
+    setScanRaw("");
+    setScanOpen(false);
+  }, [scanResolved, scanRaw]);
+
+  useEffect(() => {
+    if (!pendingSelectId) return;
+    const row = rowRefs.current.get(pendingSelectId);
+    if (row) {
+      scrollToItemRow(pendingSelectId);
+      setSelectedIds((prev) =>
+        prev.includes(pendingSelectId) ? prev : [...prev, pendingSelectId],
+      );
+      setPendingSelectId(null);
+    }
+  }, [items, pendingSelectId]);
 
   function renderItemChip(itemId: string, fallbackAssetId?: string) {
     const details = itemLookup.get(itemId);
@@ -145,219 +238,295 @@ export function ItemsManager() {
     );
   }
 
+  function renderSortableHeader(label: string, sortKey: SortKey) {
+    const active = sortBy === sortKey;
+    return (
+      <th className="p-2 text-left">
+        <button
+          type="button"
+          onClick={() => toggleSort(sortKey)}
+          className="inline-flex items-center gap-1 transition-colors hover:text-foreground"
+          aria-label={`Sort by ${label}`}
+        >
+          {label}
+          {active ? (
+            sortDir === "asc" ? (
+              <ArrowUpIcon className="size-3" />
+            ) : (
+              <ArrowDownIcon className="size-3" />
+            )
+          ) : (
+            <ArrowsDownUpIcon className="size-3 opacity-40" />
+          )}
+        </button>
+      </th>
+    );
+  }
+
   return (
-    <div className="grid gap-4 lg:grid-cols-3">
-      <Card className="lg:col-span-2">
-        <CardHeader>
-          <CardTitle>Inventory Items</CardTitle>
-          <div className="flex flex-wrap gap-2">
-            <Input
-              placeholder="Search by asset ID, serial, model"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-            />
-            <select
-              className="h-9 rounded-md border bg-background px-3 text-sm"
-              value={category}
-              onChange={(event) => setCategory(event.target.value)}
-            >
-              <option value="">All Categories</option>
-              {toCategoryOptions(categories).map((entry) => (
-                <option key={entry.value} value={entry.value}>
-                  {entry.label}
-                </option>
-              ))}
-            </select>
-            <select
-              className="h-9 rounded-md border bg-background px-3 text-sm"
-              value={sortBy}
-              onChange={(event) => setSortBy(event.target.value as typeof sortBy)}
-            >
-              <option value="assetId">Sort: Asset ID</option>
-              <option value="category">Sort: Category</option>
-              <option value="location">Sort: Location</option>
-            </select>
-            <select
-              className="h-9 rounded-md border bg-background px-3 text-sm"
-              value={sortDir}
-              onChange={(event) => setSortDir(event.target.value as typeof sortDir)}
-            >
-              <option value="asc">Asc</option>
-              <option value="desc">Desc</option>
-            </select>
-            <Button
-              type="button"
-              variant="destructive"
-              disabled={!selectedIds.length}
-              onClick={() => void bulkDeleteSelected()}
-            >
-              Delete Selected ({selectedIds.length})
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="overflow-auto rounded-md border">
-            <table className="min-w-full text-sm">
-              <thead className="bg-muted/50">
-                <tr>
-                  <th className="p-2 text-left">
-                    <input
-                      type="checkbox"
-                      checked={sortedItems.length > 0 && selectedIds.length === sortedItems.length}
-                      onChange={(event) =>
-                        setSelectedIds(event.target.checked ? sortedItems.map((item) => item._id) : [])
-                      }
-                    />
-                  </th>
-                  <th className="p-2 text-left">Asset</th>
-                  <th className="p-2 text-left">Type</th>
-                  <th className="p-2 text-left">Location</th>
-                  <th className="p-2 text-left">Container</th>
-                  <th className="p-2 text-left">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedItems.map((item) => (
-                  <tr
-                    key={item._id}
-                    data-testid={`item-row-${item._id}`}
-                    className="border-t align-top transition-colors"
-                    ref={(element) => {
-                      if (!element) {
-                        rowRefs.current.delete(item._id);
-                        return;
-                      }
-                      rowRefs.current.set(item._id, element);
-                    }}
+    <TooltipProvider delayDuration={0}>
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle>Inventory Items</CardTitle>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative min-w-0 flex-1">
+                <MagnifyingGlassIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  className="pl-9"
+                  placeholder="Search by asset ID, serial, model"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                />
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setScanOpen((prev) => !prev)}
+              >
+                <CameraIcon className="size-4" />
+                Scan
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button type="button" variant="outline" className="gap-1.5">
+                    {categoryLabel}
+                    <CaretDownIcon className="size-3 opacity-50" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="max-h-80">
+                  <DropdownMenuItem
+                    onClick={() => setCategory("")}
+                    className={cn(!category && "bg-accent")}
                   >
-                    <td className="p-2">
+                    {category === "" ? <CheckIcon className="size-3.5" /> : <span className="size-3.5" />}
+                    All Categories
+                  </DropdownMenuItem>
+                  {toCategoryOptions(categories).map((entry) => (
+                    <DropdownMenuItem
+                      key={entry.value}
+                      onClick={() => setCategory(entry.value)}
+                      className={cn(category === entry.value && "bg-accent")}
+                    >
+                      {category === entry.value ? (
+                        <CheckIcon className="size-3.5" />
+                      ) : (
+                        <span className="size-3.5" />
+                      )}
+                      {entry.label}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Button type="button" onClick={() => setWizardOpen(true)}>
+                <PlusIcon className="size-4" />
+                New Item
+              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    disabled={!selectedIds.length}
+                    aria-label="Delete selected items"
+                    onClick={() => void bulkDeleteSelected()}
+                  >
+                    <TrashIcon className="size-4" />
+                    {selectedIds.length ? ` (${selectedIds.length})` : ""}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Delete selected items</TooltipContent>
+              </Tooltip>
+            </div>
+            {scanOpen ? (
+              <div className="rounded-md border bg-muted/30 p-3">
+                <AssetScanner onSubmit={(raw) => setScanRaw(raw)} autoFocus />
+                {scanError ? <p className="text-sm text-destructive">{scanError}</p> : null}
+              </div>
+            ) : null}
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="overflow-auto rounded-md border">
+              <table className="min-w-full text-sm">
+                <thead className="bg-muted/50">
+                  <tr>
+                    <th className="p-2 text-left">
                       <input
                         type="checkbox"
-                        checked={selectedIds.includes(item._id)}
+                        checked={sortedItems.length > 0 && selectedIds.length === sortedItems.length}
                         onChange={(event) =>
-                          setSelectedIds((prev) =>
-                            event.target.checked
-                              ? [...prev, item._id]
-                              : prev.filter((id) => id !== item._id),
-                          )
+                          setSelectedIds(event.target.checked ? sortedItems.map((item) => item._id) : [])
                         }
                       />
-                    </td>
-                    <td className="p-2">
-                      <div className="font-medium">{item.assetId}</div>
-                      <div className="text-xs text-muted-foreground">Serial: {item.serialNumber || "-"}</div>
-                      <div className="mt-1 text-xs">
-                        <a
-                          className="underline"
-                          href={`${siteBase}/e/${encodeURIComponent(item.assetId)}`}
-                          target="_blank"
-                        >
-                          Public /e link
-                        </a>
-                      </div>
-                    </td>
-                    <td className="p-2">
-                      {formatTypeDisplay(item.type)}
-                      <div className="text-xs text-muted-foreground">{item.type?.category}</div>
-                    </td>
-                    <td className="p-2">{item.location?.path || "-"}</td>
-                    <td className="p-2">
-                      <div>
-                        In:{" "}
-                        {item.containedInAsset
-                          ? renderItemChip(item.containedInAsset._id, item.containedInAsset.assetId)
-                          : "-"}
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        Contains: {(childrenByParentId.get(item._id) ?? []).length}
-                      </div>
-                      {(childrenByParentId.get(item._id) ?? []).length ? (
-                        <div className="mt-1 flex flex-wrap gap-1">
-                          {(childrenByParentId.get(item._id) ?? []).map((child) => (
-                            <span key={child._id}>
-                              {renderItemChip(child._id, child.assetId)}
-                            </span>
-                          ))}
-                        </div>
-                      ) : null}
-                    </td>
-                    <td className="p-2">
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            setEditingId(item._id);
-                            setEditorInitial({
-                              assetId: item.assetId,
-                              serialNumber: item.serialNumber ?? "",
-                              typeId: item.typeId,
-                              storageLocationId: item.storageLocationId ?? "",
-                              containedInAssetId: item.containedInAssetId ?? "",
-                              status: item.status ?? "",
-                              notes: item.notes ?? "",
-                            });
-                          }}
-                        >
-                          Edit
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setDamageItemId(item._id)}
-                        >
-                          Damage
-                        </Button>
-                        <Button size="sm" variant="destructive" onClick={() => void removeItem({ id: item._id })}>
-                          Delete
-                        </Button>
-                      </div>
-                    </td>
+                    </th>
+                    {renderSortableHeader("Asset", "assetId")}
+                    {renderSortableHeader("Type", "category")}
+                    {renderSortableHeader("Location", "location")}
+                    <th className="p-2 text-left">Container</th>
+                    <th className="p-2 text-left">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {itemsStatus === "CanLoadMore" || itemsStatus === "LoadingMore" ? (
-            <Button
-              type="button"
-              variant="outline"
-              disabled={itemsStatus === "LoadingMore"}
-              onClick={() => loadMore(100)}
-            >
-              {itemsStatus === "LoadingMore" ? "Loading…" : "Load more"}
-            </Button>
-          ) : null}
-        </CardContent>
-      </Card>
+                </thead>
+                <tbody>
+                  {sortedItems.map((item) => (
+                    <tr
+                      key={item._id}
+                      data-testid={`item-row-${item._id}`}
+                      className="border-t align-top transition-colors"
+                      ref={(element) => {
+                        if (!element) {
+                          rowRefs.current.delete(item._id);
+                          return;
+                        }
+                        rowRefs.current.set(item._id, element);
+                      }}
+                    >
+                      <td className="p-2">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.includes(item._id)}
+                          onChange={(event) =>
+                            setSelectedIds((prev) =>
+                              event.target.checked
+                                ? [...prev, item._id]
+                                : prev.filter((id) => id !== item._id),
+                            )
+                          }
+                        />
+                      </td>
+                      <td className="p-2">
+                        <div className="font-medium">{item.assetId}</div>
+                        <div className="text-xs text-muted-foreground">Serial: {item.serialNumber || "-"}</div>
+                        <div className="mt-1 text-xs">
+                          <a
+                            className="underline"
+                            href={`${siteBase}/e/${encodeURIComponent(item.assetId)}`}
+                            target="_blank"
+                          >
+                            Public /e link
+                          </a>
+                        </div>
+                      </td>
+                      <td className="p-2">
+                        {formatTypeDisplay(item.type)}
+                        <div className="text-xs text-muted-foreground">{item.type?.category}</div>
+                      </td>
+                      <td className="p-2">{item.location?.path || "-"}</td>
+                      <td className="p-2">
+                        <div>
+                          In:{" "}
+                          {item.containedInAsset
+                            ? renderItemChip(item.containedInAsset._id, item.containedInAsset.assetId)
+                            : "-"}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          Contains: {(childrenByParentId.get(item._id) ?? []).length}
+                        </div>
+                        {(childrenByParentId.get(item._id) ?? []).length ? (
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {(childrenByParentId.get(item._id) ?? []).map((child) => (
+                              <span key={child._id}>
+                                {renderItemChip(child._id, child.assetId)}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
+                      </td>
+                      <td className="p-2">
+                        <div className="flex items-center gap-1.5">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                type="button"
+                                size="icon-sm"
+                                variant="outline"
+                                aria-label="Edit"
+                                onClick={() => beginEdit(item)}
+                              >
+                                <PencilSimpleIcon className="size-3.5" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Edit</TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                type="button"
+                                size="icon-sm"
+                                variant="outline"
+                                aria-label="Damage"
+                                onClick={() => setDamageItemId(item._id)}
+                              >
+                                <WarningCircleIcon className="size-3.5" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Report damage</TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                type="button"
+                                size="icon-sm"
+                                variant="destructive"
+                                aria-label="Delete"
+                                onClick={() => void removeItem({ id: item._id })}
+                              >
+                                <TrashIcon className="size-3.5" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Delete</TooltipContent>
+                          </Tooltip>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {itemsStatus === "CanLoadMore" || itemsStatus === "LoadingMore" ? (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={itemsStatus === "LoadingMore"}
+                onClick={() => loadMore(100)}
+              >
+                {itemsStatus === "LoadingMore" ? "Loading…" : "Load more"}
+              </Button>
+            ) : null}
+          </CardContent>
+        </Card>
 
-      <InventoryItemEditor
-        editingId={editingId as never}
-        initial={editorInitial}
-        types={types ?? []}
-        locations={locations ?? []}
-        items={(itemSummaries ?? []).map((item) => ({
-          _id: item._id,
-          assetId: item.assetId,
-          typeId: item.typeId,
-        }))}
-        siteBase={siteBase}
-        onCancel={() => {
-          setEditingId(null);
-          setEditorInitial(defaultForm);
-        }}
-        onSaved={() => {
-          if (!editingId) setEditorInitial(defaultForm);
-        }}
-      />
+        {editingId ? (
+          <InventoryItemEditor
+            editingId={editingId as never}
+            initial={editorInitial}
+            types={types ?? []}
+            locations={locations ?? []}
+            items={(itemSummaries ?? []).map((item) => ({
+              _id: item._id,
+              assetId: item.assetId,
+              type: item.type ?? undefined,
+            }))}
+            siteBase={siteBase}
+            onCancel={() => {
+              setEditingId(null);
+              setEditorInitial(defaultForm);
+            }}
+            onSaved={() => {
+              if (!editingId) setEditorInitial(defaultForm);
+            }}
+          />
+        ) : null}
 
-      <DamageReportWizard
-        open={Boolean(damageItemId)}
-        onOpenChange={(open) => {
-          if (!open) setDamageItemId(null);
-        }}
-        initialInventoryItemId={damageItemId as never}
-      />
-    </div>
+        <DamageReportWizard
+          open={Boolean(damageItemId)}
+          onOpenChange={(open) => {
+            if (!open) setDamageItemId(null);
+          }}
+          initialInventoryItemId={damageItemId as never}
+        />
+
+        <CreateAssetWizard open={wizardOpen} onOpenChange={setWizardOpen} />
+      </div>
+    </TooltipProvider>
   );
 }

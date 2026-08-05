@@ -1,4 +1,4 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Locator, type Page } from "@playwright/test";
 import { runConvex } from "../helpers/convex";
 import { formField } from "../helpers/form";
 import { pickSearchableOption } from "../helpers/select";
@@ -99,19 +99,12 @@ test.describe.serial("inventory items and storage locations", () => {
       timeout: 30_000,
     });
 
-    await createItem(page, { assetId: caseAssetId, submitOnly: true });
+    const sheet = await createItem(page, { assetId: caseAssetId, submitOnly: true });
 
-    // `inventoryItems.create` throws on a duplicate `assetId`, and the editor's
-    // save bar is where that lands — asset IDs are printed on physical labels,
-    // so a silent second row would be worse than a refusal.
-    //
-    // Scoped to the bar, not the page: in dev the Next.js error overlay renders
-    // the raw `[CONVEX M(inventoryItems:create)] … Asset ID already exists.`
-    // too, so an unscoped `getByText` is a strict-mode violation. Asserting the
-    // bar is the stronger claim anyway — the operator has to see it in the form.
-    await expect(formSaveBar(page).getByText("Asset ID already exists.")).toBeVisible({
-      timeout: 30_000,
-    });
+    // `inventoryItems.createMany` throws on a duplicate `assetId`, and the
+    // wizard's review step is where that lands — asset IDs are printed on
+    // physical labels, so a silent second row would be worse than a refusal.
+    await expect(sheet).toContainText("Asset ID already exists", { timeout: 30_000 });
   });
 
   test("containment makes the contained asset inherit the container's location", async ({
@@ -204,10 +197,15 @@ async function searchItems(page: Page, query: string) {
 }
 
 /**
- * Fill and submit the Create Item form.
+ * Create an item through the create-asset wizard (the only create flow the
+ * items page exposes now).
  *
- * `submitOnly` skips the assertions that a create landed, for the duplicate
- * case where it must not.
+ * Flow: open the wizard → pick the type (step 1) → fill the tag's fields
+ * (step 2) → review & create (step 3).
+ *
+ * `submitOnly` skips the "sheet closed" assertion, for the duplicate case
+ * where creation must not land and the review step keeps the error on screen.
+ * Returns the sheet locator so callers can assert on the review step.
  */
 async function createItem(
   page: Page,
@@ -217,28 +215,43 @@ async function createItem(
     locationPath?: string;
     submitOnly?: boolean;
   },
-) {
-  const form = page.locator("form");
-  await formField(form, "Asset ID").fill(options.assetId);
-  if (options.serialNumber) {
-    await formField(form, "Serial Number").fill(options.serialNumber);
-  }
+): Promise<Locator> {
+  await page.getByRole("button", { name: "New Item", exact: true }).click();
+  const sheet = page.getByRole("dialog");
+  await expect(sheet).toBeVisible({ timeout: 30_000 });
+
+  // Step 1 — Brand & model.
   await pickSearchableOption(
     page,
-    page.getByTestId("item-type-field").getByTestId("searchable-select-trigger"),
+    sheet.getByTestId("wizard-type-field").getByTestId("searchable-select-trigger"),
     typeName,
-    new RegExp(`^${typeName} - `),
+    new RegExp(`^${typeName}`),
   );
+  await sheet.getByRole("button", { name: "Continue", exact: true }).click();
+
+  // Step 2 — the first asset tag.
+  const card = sheet.getByTestId("wizard-tag-0");
+  await sheet.getByLabel("Asset ID").fill(options.assetId);
+  if (options.serialNumber) {
+    await sheet.getByLabel("Serial Number").fill(options.serialNumber);
+  }
   if (options.locationPath) {
     await pickSearchableOption(
       page,
-      page.getByTestId("item-location-field").getByTestId("searchable-select-trigger"),
+      card.getByTestId("wizard-location-field").getByTestId("searchable-select-trigger"),
       options.locationPath,
       options.locationPath,
     );
   }
-  await form.getByRole("button", { name: "Create", exact: true }).click();
+  await sheet.getByRole("button", { name: "Continue", exact: true }).click();
+
+  // Step 3 — Review & create.
+  await sheet
+    .getByRole("button", { name: /^Create \d+ items?/ })
+    .click();
+
   if (!options.submitOnly) {
-    await expect(formField(form, "Asset ID")).toHaveValue("", { timeout: 30_000 });
+    await expect(sheet).toHaveCount(0, { timeout: 30_000 });
   }
+  return sheet;
 }

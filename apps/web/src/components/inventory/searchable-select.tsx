@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { DismissableLayer } from "@radix-ui/react-dismissable-layer";
+import { FocusScope } from "@radix-ui/react-focus-scope";
 import { CaretDownIcon } from "@phosphor-icons/react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -59,19 +61,11 @@ export function SearchableSelect({
   } | null>(null);
   const serverBacked = Boolean(onQueryChange);
 
-  useEffect(() => {
-    function onDocumentPointerDown(event: MouseEvent) {
-      const target = event.target as Node;
-      if (!rootRef.current) return;
-      if (rootRef.current.contains(target)) return;
-      if (menuRef.current?.contains(target)) return;
-      setOpen(false);
-      setQuery("");
-      onQueryChange?.("");
-    }
-    document.addEventListener("mousedown", onDocumentPointerDown);
-    return () => document.removeEventListener("mousedown", onDocumentPointerDown);
-  }, [onQueryChange]);
+  function closeMenu() {
+    setOpen(false);
+    setQuery("");
+    onQueryChange?.("");
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -152,17 +146,26 @@ export function SearchableSelect({
       </button>
       {open && menuPosition
         ? createPortal(
-            <div
-              ref={menuRef}
-              data-testid="searchable-select-menu"
-              className="z-[100] rounded-none border border-input bg-background p-2 shadow-md"
-              style={{
-                position: "fixed",
-                top: menuPosition.top,
-                left: menuPosition.left,
-                width: Math.max(menuPosition.width, 320),
-              }}
-            >
+            <FocusScope asChild loop>
+              <DismissableLayer
+                ref={menuRef}
+                data-testid="searchable-select-menu"
+                className="z-[100] rounded-none border border-input bg-background p-2 shadow-md"
+                style={{
+                  position: "fixed",
+                  top: menuPosition.top,
+                  left: menuPosition.left,
+                  width: Math.max(menuPosition.width, 320),
+                }}
+                onPointerDownOutside={(event) => {
+                  const target = event.target as Node;
+                  if (rootRef.current?.contains(target)) {
+                    // Let the trigger's own onClick handle the toggle.
+                    event.preventDefault();
+                  }
+                }}
+                onDismiss={closeMenu}
+              >
               <Input
                 value={query}
                 onChange={(event) => updateQuery(event.target.value)}
@@ -220,7 +223,8 @@ export function SearchableSelect({
                   </button>
                 ) : null}
               </div>
-            </div>,
+              </DismissableLayer>
+            </FocusScope>,
             document.body,
           )
         : null}
