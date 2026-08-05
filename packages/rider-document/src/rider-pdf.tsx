@@ -351,7 +351,7 @@ function Header({ data }: { data: RiderDocumentData }) {
   );
 }
 
-const INPUT_COLUMNS = [24, 118, 44, 104, 62, 28, 62, 98];
+const INPUT_COLUMNS = [24, 118, 44, 104, 62, 28, 62, 70, 98];
 const MONITOR_COLUMNS = [34, 150, 66, 44, 246];
 const BACKLINE_COLUMNS = [200, 40, 100, 200];
 
@@ -404,12 +404,13 @@ function NotesSection({ title, body }: { title: string; body?: string }) {
 export function RiderPdf({ data }: { data: RiderDocumentData }) {
   const inputRows = data.inputs.map((input) => [
     String(input.channel),
-    input.source || "—",
+    input.stereo ? `${input.source || "—"} (L/R)` : input.source || "—",
     INPUT_TYPE_LABELS[input.inputType],
     input.micPreference ?? "—",
     STAND_LABELS[input.stand],
     input.phantom ? "Yes" : "—",
     PROVIDED_BY_LABELS[input.providedBy],
+    input.group ?? "—",
     input.notes ?? "",
   ]);
 
@@ -443,7 +444,7 @@ export function RiderPdf({ data }: { data: RiderDocumentData }) {
           <Text style={styles.sectionTitle}>Input list</Text>
           <Table
             columns={INPUT_COLUMNS}
-            headers={["Ch", "Source", "Type", "Mic / DI", "Stand", "48V", "Provided", "Notes"]}
+            headers={["Ch", "Source", "Type", "Mic / DI", "Stand", "48V", "Provided", "Group", "Notes"]}
             rows={inputRows}
             emptyMessage="No input channels listed."
           />

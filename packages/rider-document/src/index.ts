@@ -7,9 +7,11 @@ export {
   blankBacklineItem,
   blankInput,
   blankMix,
+  channelSpan,
   clampToStage,
   createRiderId,
   emptyRiderContent,
+  inputGroups,
   itemFootprint,
   moveInArray,
   nextChannelNumber,
@@ -69,6 +71,7 @@ export {
   MONITOR_TYPE_OPTIONS,
   PROVIDED_BY_EDITOR_LABELS,
   PROVIDED_BY_LABELS,
+  RIDER_GROUP_SUGGESTIONS,
   STAND_LABELS,
 } from "./types";
 export type {

@@ -65,6 +65,8 @@ export const riderInputChannelValue = v.object({
   providedBy: riderProvidedByValue,
   notes: v.optional(v.string()),
   stageItemId: v.optional(v.string()),
+  stereo: v.optional(v.boolean()),
+  group: v.optional(v.string()),
 });
 
 export const riderMonitorMixValue = v.object({
