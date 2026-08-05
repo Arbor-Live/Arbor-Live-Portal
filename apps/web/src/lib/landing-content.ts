@@ -209,5 +209,5 @@ export const landingFooterLinks: LandingLink[] = [
 export const landingPortalLinks: LandingLink[] = [
   { label: "Equipment packages", href: "/packages" },
   { label: "Model types", href: "/types" },
-  { label: "Staff sign-in", href: "/sign-in" },
+  { label: "Sign in", href: "/sign-in" },
 ];
