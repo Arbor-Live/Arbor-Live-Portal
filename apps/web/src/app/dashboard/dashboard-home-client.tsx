@@ -7,10 +7,12 @@ import { BandDashboard } from "@/components/bands/band-dashboard";
 import { CrewDashboard } from "@/components/crew-portal/crew-dashboard";
 import { useSessionShell } from "@/components/session-shell-provider";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useViewMode } from "@/components/view-mode-provider";
 
 export function DashboardHomeClient() {
   const router = useRouter();
   const shell = useSessionShell();
+  const { viewMode } = useViewMode();
   const viewer = shell?.viewer;
   const activeOrganization = shell === undefined ? undefined : (shell?.activeOrganization ?? null);
 
@@ -32,7 +34,7 @@ export function DashboardHomeClient() {
   }
 
   if (viewer.isAdmin && activeOrganization?.organizationType === "arbor_internal") {
-    return <AdminDashboard />;
+    return viewMode === "crew" ? <CrewDashboard /> : <AdminDashboard />;
   }
 
   if (activeOrganization?.organizationType === "band") {

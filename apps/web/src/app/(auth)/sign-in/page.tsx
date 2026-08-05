@@ -91,17 +91,10 @@ export default function SignInPage() {
           </div>
           <CardTitle>Welcome back</CardTitle>
           <CardDescription>
-            The Arbor portal is currently only available to certain people.
+            Sign in to manage your events and account.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="rounded-none border bg-muted/30 p-3">
-            <p className="font-medium">Invite-only access</p>
-            <p className="text-sm text-muted-foreground">
-              If you are new to Arbor Live operations, ask the ops team for an invite.
-            </p>
-          </div>
-
           <Form {...form}>
             <form
               method="post"

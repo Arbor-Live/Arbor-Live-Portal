@@ -2,12 +2,13 @@
 
 import Link from "next/link"
 import Image from "next/image"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { useState, type ComponentProps } from "react"
 import { authClient } from "@/lib/auth-client"
 import { useMutation, useQuery } from "convex/react"
 import { api } from "@/lib/convex-api"
 import { useSessionShell } from "@/components/session-shell-provider"
+import { useViewMode } from "@/components/view-mode-provider"
 import { getDefaultAdminSchedulingRange } from "@/lib/crew-availability"
 import {
   Select,
@@ -196,12 +197,14 @@ const secondaryItems = [
 
 export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
   const pathname = usePathname()
+  const router = useRouter()
   const { data } = authClient.useSession()
   const [now] = useState(() => Date.now())
   const [adminSchedulingRange] = useState(() => getDefaultAdminSchedulingRange())
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({})
   const shell = useSessionShell()
   const setActiveOrganization = useMutation(api.users.setActiveOrganization)
+  const { viewMode, setViewMode } = useViewMode()
   const viewer = shell?.viewer
   const account = shell?.account
   const activeOrganization = shell?.activeOrganization
@@ -215,10 +218,18 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
     viewerVerticals.includes("Crew") ||
     viewerVerticals.includes("Trivia") ||
     viewerVerticals.length === 0
+  // Crew mode hides ops/admin surfaces so an admin sees the portal the way crew does.
+  const inCrewMode =
+    viewMode === "crew" &&
+    isAdmin &&
+    activeOrganization?.organizationType === "arbor_internal"
+  const effectiveIsAdmin = isAdmin && !inCrewMode
+  const effectiveHasOperationsAccess = inCrewMode ? false : hasOperationsAccess
+  const effectiveHasMarketingAccess = inCrewMode ? false : hasMarketingAccess
   // Unconfirmed-crew badge fans out events × shifts — only subscribe on routes
   // where that count is actionable (scheduling board / home), not every page.
   const includeUnconfirmedCrew =
-    isAdmin &&
+    effectiveIsAdmin &&
     (pathname === "/dashboard" || pathname.startsWith("/dashboard/events/crew-scheduling"))
   const navBadges = useQuery(
     api.navBadges.getNavBadges,
@@ -228,7 +239,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
           rangeStart: adminSchedulingRange.rangeStart,
           rangeEnd: adminSchedulingRange.rangeEnd,
           includeArborInternal: activeOrganization?.organizationType === "arbor_internal",
-          includeAdmin: isAdmin,
+          includeAdmin: effectiveIsAdmin,
           includeBand: activeOrganization?.organizationType === "band",
           includeUnconfirmedCrew,
         }
@@ -249,15 +260,15 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
   const isCrewContext =
     activeOrganization?.organizationType === "arbor_internal" &&
     hasCrewAccess &&
-    !hasOperationsAccess &&
-    !isAdmin
+    !effectiveHasOperationsAccess &&
+    !effectiveIsAdmin
   const isAdminHomeContext =
     activeOrganization?.organizationType === "arbor_internal" &&
-    (isAdmin || hasOperationsAccess)
+    (effectiveIsAdmin || effectiveHasOperationsAccess)
   const navAccess = {
-    isAdmin,
-    hasOperationsAccess,
-    hasMarketingAccess,
+    isAdmin: effectiveIsAdmin,
+    hasOperationsAccess: effectiveHasOperationsAccess,
+    hasMarketingAccess: effectiveHasMarketingAccess,
     isBandContext,
     isCrewContext,
     isAdminHomeContext,
@@ -342,12 +353,12 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
           {scopedNavItems.map((item) => {
             const Icon = item.icon
             const subItems = visibleSubItems(sectionSubItems[item.url], {
-              isAdmin,
-              hasOperationsAccess,
+              isAdmin: effectiveIsAdmin,
+              hasOperationsAccess: effectiveHasOperationsAccess,
             })?.filter(
               (subItem) =>
                 !(
-                  (isAdmin || hasOperationsAccess) &&
+                  (effectiveIsAdmin || effectiveHasOperationsAccess) &&
                   item.url === "/dashboard/events" &&
                   subItem.url === "/dashboard/timecards/mine"
                 ) &&
@@ -451,6 +462,20 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
             await authClient.signOut()
             window.location.href = "/sign-in"
           }}
+          crewMode={
+            isAdmin && activeOrganization?.organizationType === "arbor_internal"
+              ? {
+                  isCrewMode: inCrewMode,
+                  onToggle: () => {
+                    const next = inCrewMode ? "default" : "crew"
+                    setViewMode(next)
+                    if (next === "crew" && pathname !== "/dashboard") {
+                      router.push("/dashboard")
+                    }
+                  },
+                }
+              : undefined
+          }
         />
       </SidebarFooter>
     </Sidebar>

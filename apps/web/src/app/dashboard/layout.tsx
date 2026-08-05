@@ -10,6 +10,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { isAuthenticated } from "@/lib/auth-server";
+import { ViewModeProvider } from "@/components/view-mode-provider";
 
 export default async function DashboardLayout({
   children,
@@ -23,22 +24,24 @@ export default async function DashboardLayout({
 
   return (
     <SessionShellProvider>
-      <SidebarProvider>
-        <AppSidebar />
-        <SidebarInset>
-          <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
-            <SidebarTrigger />
-            <Separator orientation="vertical" className="h-4" />
-            <p className="font-medium">Dashboard</p>
-          </header>
-          <OnboardingBanner />
-          {/* Stacks every FormSaveBar on the page so two forms on one tab
-              (e.g. event overview + pull list) don't cover each other. */}
-          <FormSaveBarStackProvider>
-            <main className="flex-1 p-6">{children}</main>
-          </FormSaveBarStackProvider>
-        </SidebarInset>
-      </SidebarProvider>
+      <ViewModeProvider>
+        <SidebarProvider>
+          <AppSidebar />
+          <SidebarInset>
+            <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
+              <SidebarTrigger />
+              <Separator orientation="vertical" className="h-4" />
+              <p className="font-medium">Dashboard</p>
+            </header>
+            <OnboardingBanner />
+            {/* Stacks every FormSaveBar on the page so two forms on one tab
+                (e.g. event overview + pull list) don't cover each other. */}
+            <FormSaveBarStackProvider>
+              <main className="flex-1 p-6">{children}</main>
+            </FormSaveBarStackProvider>
+          </SidebarInset>
+        </SidebarProvider>
+      </ViewModeProvider>
     </SessionShellProvider>
   );
 }
