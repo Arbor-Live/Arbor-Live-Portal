@@ -119,14 +119,14 @@ export function InsightsPostMortemPanel({ startMs, endMs }: InsightsPostMortemPa
                   </span>
                 </div>
                 <div className="space-y-2 text-muted-foreground">
-                  <p className="whitespace-pre-wrap">
-                    <span className="font-medium text-foreground">What went well:</span>{" "}
-                    {entry.whatWentWell}
-                  </p>
-                  <p className="whitespace-pre-wrap">
-                    <span className="font-medium text-foreground">What could improve:</span>{" "}
-                    {entry.whatCouldImprove}
-                  </p>
+                  <div className="space-y-0.5">
+                    <p className="text-xs font-medium text-foreground/70">What went well</p>
+                    <p className="whitespace-pre-wrap">{entry.whatWentWell}</p>
+                  </div>
+                  <div className="space-y-0.5">
+                    <p className="text-xs font-medium text-foreground/70">What could improve</p>
+                    <p className="whitespace-pre-wrap">{entry.whatCouldImprove}</p>
+                  </div>
                 </div>
               </div>
             ))
