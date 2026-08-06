@@ -4,6 +4,7 @@ import { CameraIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { normalizeAssetScanInput } from "@/lib/asset-scan";
 import { SearchableSelect } from "./searchable-select";
 import { ScanInput } from "./scan-input";
 import { useBarcodeCamera } from "./use-barcode-camera";
@@ -73,7 +74,31 @@ export function InventoryItemDetails({
 }: InventoryItemDetailsProps) {
   const { cameraOn, toggleCamera, cameraError, videoRef, supported } = useBarcodeCamera(
     (raw) => void onScanContainedIn?.(raw),
+    { closeOnDetect: true },
   );
+
+  function handleAssetIdScan(raw: string) {
+    if (onScanAssetId) {
+      onScanAssetId(raw);
+      return;
+    }
+    onChange({ assetId: normalizeAssetScanInput(raw) ?? "" });
+  }
+
+  function handleSerialScan(raw: string) {
+    if (onScanSerial) {
+      onScanSerial(raw);
+      return;
+    }
+    onChange({ serialNumber: raw.trim() });
+  }
+
+  function handleAssetIdBlur() {
+    const normalized = normalizeAssetScanInput(values.assetId);
+    if (normalized && normalized !== values.assetId) {
+      onChange({ assetId: normalized });
+    }
+  }
 
   return (
     <div className="space-y-3">
@@ -83,7 +108,8 @@ export function InventoryItemDetails({
           <ScanInput
             value={values.assetId}
             onChange={(assetId) => onChange({ assetId })}
-            onScan={onScanAssetId}
+            onScan={handleAssetIdScan}
+            onBlur={handleAssetIdBlur}
             placeholder="e.g. ALE-0041"
             disabled={disabled}
             ariaLabel="Asset ID"
@@ -97,7 +123,7 @@ export function InventoryItemDetails({
           <ScanInput
             value={values.serialNumber}
             onChange={(serialNumber) => onChange({ serialNumber })}
-            onScan={onScanSerial}
+            onScan={handleSerialScan}
             placeholder="Scan or type serial"
             disabled={disabled}
             ariaLabel="Serial Number"

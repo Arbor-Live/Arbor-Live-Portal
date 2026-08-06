@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { query, type QueryCtx } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import { resolveStoredInventoryAssetUrl } from "./inventoryR2";
+import { assetIdLookupCandidates } from "./lib/assetScan";
 
 const publicBucketValue = v.union(
   v.literal("lighting"),
@@ -105,10 +106,14 @@ export const equipmentByAssetId = query({
     const assetId = args.assetId.trim();
     if (!assetId) return null;
 
-    const item = await ctx.db
-      .query("inventoryItems")
-      .withIndex("by_assetId", (q) => q.eq("assetId", assetId))
-      .unique();
+    let item: Doc<"inventoryItems"> | null = null;
+    for (const candidate of assetIdLookupCandidates(assetId)) {
+      item = await ctx.db
+        .query("inventoryItems")
+        .withIndex("by_assetId", (q) => q.eq("assetId", candidate))
+        .unique();
+      if (item) break;
+    }
     if (!item) return null;
 
     const type = await ctx.db.get(item.typeId);

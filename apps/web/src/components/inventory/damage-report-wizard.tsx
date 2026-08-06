@@ -111,7 +111,7 @@ function DamageReportWizardForm({
   }
 
   return (
-    <div className="mt-4 space-y-4 px-1 pb-8">
+    <div className="mt-4 space-y-4 px-4 pb-8">
       {!initialInventoryItemId ? (
         <AssetScanner onSubmit={(raw) => setRawScan(raw)} autoFocus />
       ) : null}
