@@ -1410,6 +1410,27 @@ export default defineSchema({
     .index("by_sourceToken", ["sourceToken"])
     .index("by_createdAt", ["createdAt"]),
 
+  /**
+   * Internal post-mortem feedback from a day-of lead (or event manager) after
+   * an event. One row per (event, user); the row is minted with a random token
+   * when the post-event media email goes out, and the submission fields fill in
+   * when the lead completes the form via `/postmortem/[token]`.
+   */
+  postMortemFeedback: defineTable({
+    eventId: v.id("events"),
+    userId: v.string(),
+    token: v.string(),
+    rating: v.optional(v.number()),
+    whatWentWell: v.optional(v.string()),
+    whatCouldImprove: v.optional(v.string()),
+    submittedAt: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_token", ["token"])
+    .index("by_eventId", ["eventId"])
+    .index("by_eventId_and_userId", ["eventId", "userId"])
+    .index("by_submittedAt", ["submittedAt"]),
+
   statusTransitions: defineTable({
     entityType: v.union(v.literal("eventRequest"), v.literal("event"), v.literal("invoice")),
     entityId: v.string(),

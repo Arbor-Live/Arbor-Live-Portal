@@ -62,3 +62,11 @@ export const eventFeedbackSchema = z.object({
 });
 
 export type EventFeedbackFormValues = z.infer<typeof eventFeedbackSchema>;
+
+export const postMortemFeedbackSchema = z.object({
+  rating: z.number().int().min(1, "Please select a rating").max(5),
+  whatWentWell: z.string().trim().min(1, "Please share what went well"),
+  whatCouldImprove: z.string().trim().min(1, "Please share what could improve"),
+});
+
+export type PostMortemFeedbackFormValues = z.infer<typeof postMortemFeedbackSchema>;
