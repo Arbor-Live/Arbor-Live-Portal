@@ -46,6 +46,7 @@ export function ContainsEditor({
   }, [options, value]);
   const { cameraOn, toggleCamera, cameraError, videoRef, supported } = useBarcodeCamera(
     (raw) => void onScan?.(raw),
+    { closeOnDetect: true },
   );
 
   const selectedOptions = useMemo(() => {

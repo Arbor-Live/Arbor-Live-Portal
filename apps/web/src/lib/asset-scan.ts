@@ -2,6 +2,9 @@
  * Client-side twin of the backend `lib/assetScan.ts`. Normalizes a scanned QR /
  * barcode / typed asset tag into a bare assetId so the create-asset wizard can
  * match sibling tags and existing items without a server round-trip.
+ *
+ * Numeric ALE tags are stored without the prefix or zero-padding:
+ * ALE-0123 / 0123 → "123".
  */
 
 const EQUIPMENT_PATH_RE = /(?:^|\/)e\/([^/?#\s]+)/i;
@@ -11,6 +14,27 @@ function stripNoise(value: string): string {
     .replace(/^[\s"'`<({\[]+|[\s"'`>)}\]]+$/g, "")
     .replace(/[\u0000-\u001f\u007f]/g, "")
     .trim();
+}
+
+/**
+ * Canonical bare asset id for ALE / numeric tags.
+ * ALE-0123 / 0123 → "123". Non-numeric tags pass through.
+ */
+export function canonicalizeAssetIdTag(tag: string): string {
+  const trimmed = stripNoise(tag);
+  if (!trimmed) return trimmed;
+
+  const ale = trimmed.match(/^ALE[\s-]*0*(\d+)$/i);
+  if (ale?.[1] !== undefined) {
+    return ale[1] || "0";
+  }
+
+  if (/^\d+$/.test(trimmed)) {
+    const stripped = trimmed.replace(/^0+/, "");
+    return stripped || "0";
+  }
+
+  return trimmed;
 }
 
 function tryParseUrl(raw: string): URL | null {
@@ -39,9 +63,9 @@ export function normalizeAssetScanInput(raw: string): string | null {
     const fromPath = match?.[1];
     if (fromPath) {
       try {
-        return stripNoise(decodeURIComponent(fromPath)) || null;
+        return canonicalizeAssetIdTag(stripNoise(decodeURIComponent(fromPath))) || null;
       } catch {
-        return stripNoise(fromPath) || null;
+        return canonicalizeAssetIdTag(stripNoise(fromPath)) || null;
       }
     }
     return null;
@@ -49,20 +73,26 @@ export function normalizeAssetScanInput(raw: string): string | null {
 
   const pathOnly = trimmed.match(EQUIPMENT_PATH_RE);
   if (pathOnly?.[1]) {
-    return stripNoise(pathOnly[1]) || null;
+    return canonicalizeAssetIdTag(stripNoise(pathOnly[1])) || null;
   }
 
-  return stripNoise(trimmed);
+  return canonicalizeAssetIdTag(stripNoise(trimmed)) || null;
 }
 
-/** Candidate bare assetIds to try (case variants, hyphen/space collapsed). */
+/** Candidate bare assetIds to try (canonical form + case variants). */
 export function assetIdLookupCandidates(assetId: string): string[] {
   const base = stripNoise(assetId);
   if (!base) return [];
-  const candidates = [base, base.toUpperCase(), base.toLowerCase()];
+  const canonical = canonicalizeAssetIdTag(base);
+  const candidates = [canonical, canonical.toUpperCase(), canonical.toLowerCase()];
   const compact = base.replace(/\s*-\s*/g, "-").replace(/\s+/g, "");
   if (compact && compact !== base) {
-    candidates.push(compact, compact.toUpperCase(), compact.toLowerCase());
+    const compactCanonical = canonicalizeAssetIdTag(compact);
+    candidates.push(
+      compactCanonical,
+      compactCanonical.toUpperCase(),
+      compactCanonical.toLowerCase(),
+    );
   }
   return [...new Set(candidates.filter(Boolean))];
 }

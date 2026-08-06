@@ -23,7 +23,7 @@ export function AssetScanner({
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
   const { cameraOn, toggleCamera, cameraError, videoRef, supported } =
-    useBarcodeCamera(handleSubmit);
+    useBarcodeCamera(handleSubmit, { closeOnDetect: true });
 
   async function handleSubmit(raw: string) {
     const trimmed = raw.trim();

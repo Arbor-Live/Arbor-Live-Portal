@@ -3,7 +3,7 @@ import { v } from "convex/values";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { requireAuth } from "./lib/auth";
-import { assetIdLookupCandidates } from "./lib/assetScan";
+import { assetIdLookupCandidates, canonicalizeAssetIdTag } from "./lib/assetScan";
 import { resolveInventoryItemByScan } from "./lib/rentalFulfillment";
 
 const MAX_LIST_LIMIT = 2000;
@@ -201,9 +201,11 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     await requireAuth(ctx);
+    const assetId = canonicalizeAssetIdTag(args.assetId);
+    if (!assetId) throw new Error("Asset ID is required.");
     const existingAsset = await ctx.db
       .query("inventoryItems")
-      .withIndex("by_assetId", (q) => q.eq("assetId", args.assetId.trim()))
+      .withIndex("by_assetId", (q) => q.eq("assetId", assetId))
       .unique();
     if (existingAsset) throw new Error("Asset ID already exists.");
 
@@ -224,7 +226,7 @@ export const create = mutation({
 
     const now = Date.now();
     return await ctx.db.insert("inventoryItems", {
-      assetId: args.assetId.trim(),
+      assetId,
       serialNumber: args.serialNumber?.trim(),
       typeId: args.typeId,
       storageLocationId: effectiveStorageLocationId,
@@ -275,10 +277,14 @@ export const createMany = mutation({
     // 1. Validate fields, reject duplicate assetIds within the batch and in the DB.
     const normalizedItems = args.items.map((item) => ({
       ...item,
-      assetId: item.assetId.trim(),
+      assetId: canonicalizeAssetIdTag(item.assetId),
       serialNumber: item.serialNumber?.trim(),
       status: item.status?.trim(),
       notes: item.notes?.trim(),
+      containedInAssetId: item.containedInAssetId
+        ? canonicalizeAssetIdTag(item.containedInAssetId)
+        : undefined,
+      contains: item.contains?.map((entry) => canonicalizeAssetIdTag(entry)).filter(Boolean),
     }));
     const seen = new Set<string>();
     for (const item of normalizedItems) {
@@ -322,8 +328,8 @@ export const createMany = mutation({
     // 3. Collapse containment declarations into a single child → container map.
     const childKeyToContainerKey = new Map<string, string>();
     const setEdge = (childRaw: string, containerRaw: string) => {
-      const child = childRaw.trim();
-      const container = containerRaw.trim();
+      const child = canonicalizeAssetIdTag(childRaw);
+      const container = canonicalizeAssetIdTag(containerRaw);
       if (!child || !container) return;
       if (child.toLowerCase() === container.toLowerCase()) {
         throw new Error("An asset cannot contain itself.");
@@ -459,9 +465,12 @@ export const update = mutation({
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Inventory item not found.");
 
+    const assetId = canonicalizeAssetIdTag(args.assetId);
+    if (!assetId) throw new Error("Asset ID is required.");
+
     const duplicateAsset = await ctx.db
       .query("inventoryItems")
-      .withIndex("by_assetId", (q) => q.eq("assetId", args.assetId.trim()))
+      .withIndex("by_assetId", (q) => q.eq("assetId", assetId))
       .unique();
     if (duplicateAsset && duplicateAsset._id !== args.id) {
       throw new Error("Asset ID already exists.");
@@ -494,7 +503,7 @@ export const update = mutation({
     const effectiveStorageLocationId = inheritedContainerLocationId ?? args.storageLocationId;
 
     await ctx.db.patch(args.id, {
-      assetId: args.assetId.trim(),
+      assetId,
       serialNumber: args.serialNumber?.trim(),
       typeId: args.typeId,
       storageLocationId: effectiveStorageLocationId,
