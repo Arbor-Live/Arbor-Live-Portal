@@ -1,10 +1,15 @@
 "use client";
 
+import type { Ref } from "react";
 import { CameraIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import {
+  looksLikeAssetTag,
+  looksLikeSerialNumber,
+  normalizeAssetScanInput,
+} from "@/lib/asset-scan";
 import { cn } from "@/lib/utils";
-import { normalizeAssetScanInput } from "@/lib/asset-scan";
 import { SearchableSelect } from "./searchable-select";
 import { ScanInput } from "./scan-input";
 import { useBarcodeCamera } from "./use-barcode-camera";
@@ -43,6 +48,13 @@ type InventoryItemDetailsProps = {
   onScanAssetId?: (raw: string) => void;
   onScanSerial?: (raw: string) => void;
   onScanContainedIn?: (raw: string) => void;
+  /** Enter on Asset ID — wizard advances to serial. */
+  onEnterAssetId?: () => void;
+  /** Enter on Serial — wizard creates the next asset card. */
+  onEnterSerial?: () => void;
+  assetIdInputRef?: Ref<HTMLInputElement>;
+  serialInputRef?: Ref<HTMLInputElement>;
+  autoFocusAssetId?: boolean;
   /** When set, renders the testid-wrapped fields the item editor's e2e relies on. */
   testIdPrefix?: string;
   siteBase?: string;
@@ -68,6 +80,11 @@ export function InventoryItemDetails({
   onScanAssetId,
   onScanSerial,
   onScanContainedIn,
+  onEnterAssetId,
+  onEnterSerial,
+  assetIdInputRef,
+  serialInputRef,
+  autoFocusAssetId,
   testIdPrefix,
   siteBase,
   disabled,
@@ -76,6 +93,9 @@ export function InventoryItemDetails({
     (raw) => void onScanContainedIn?.(raw),
     { closeOnDetect: true },
   );
+
+  const assetLooksLikeSerial = looksLikeSerialNumber(values.assetId);
+  const serialLooksLikeAssetTag = looksLikeAssetTag(values.serialNumber);
 
   function handleAssetIdScan(raw: string) {
     if (onScanAssetId) {
@@ -110,12 +130,20 @@ export function InventoryItemDetails({
             onChange={(assetId) => onChange({ assetId })}
             onScan={handleAssetIdScan}
             onBlur={handleAssetIdBlur}
+            onEnter={onEnterAssetId}
+            inputRef={assetIdInputRef}
+            autoFocus={autoFocusAssetId}
             placeholder="e.g. ALE-0041"
             disabled={disabled}
             ariaLabel="Asset ID"
           />
           {errors?.assetId ? (
             <p className="text-xs text-destructive">{errors.assetId}</p>
+          ) : null}
+          {assetLooksLikeSerial ? (
+            <p className="text-xs text-amber-700">
+              This looks like a serial number — did you mean the Serial field?
+            </p>
           ) : null}
         </div>
         <div className="space-y-1.5">
@@ -124,10 +152,17 @@ export function InventoryItemDetails({
             value={values.serialNumber}
             onChange={(serialNumber) => onChange({ serialNumber })}
             onScan={handleSerialScan}
+            onEnter={onEnterSerial}
+            inputRef={serialInputRef}
             placeholder="Scan or type serial"
             disabled={disabled}
             ariaLabel="Serial Number"
           />
+          {serialLooksLikeAssetTag ? (
+            <p className="text-xs text-amber-700">
+              This looks like an asset tag — did you mean the Asset ID field?
+            </p>
+          ) : null}
         </div>
       </div>
 
