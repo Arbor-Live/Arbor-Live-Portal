@@ -42,6 +42,7 @@ async function pickSearchableOption(
   searchPlaceholder: string,
   query: string,
   optionName: RegExp,
+  selectedText: RegExp = optionName,
 ) {
   const field = page.getByTestId(fieldTestId);
   await field.evaluate((el) => el.scrollIntoView({ block: "center" }));
@@ -57,7 +58,8 @@ async function pickSearchableOption(
   // so a click that missed would otherwise leave the menu open — and an open
   // menu keeps its scroll listener installed, which makes every later click on
   // the page fail the "stable" actionability check.
-  await expect(trigger).toHaveText(optionName, { timeout: 25_000 });
+  // Trigger text can differ from the menu option (e.g. email only in description).
+  await expect(trigger).toHaveText(selectedText, { timeout: 25_000 });
   await expect(page.getByPlaceholder(searchPlaceholder)).toHaveCount(0, { timeout: 25_000 });
 }
 
@@ -139,7 +141,7 @@ test.describe("invoice host organizations and contacts", () => {
     await artistRow.getByPlaceholder("Qty").fill("1");
     await artistRow.getByPlaceholder("Rate").fill("90");
 
-    // The picker labels hosts as "{name} ({type})", so match on the name prefix.
+    // The picker labels hosts with name + type description, so match on the name prefix.
     await pickSearchableOption(
       page,
       "invoice-host-select",
@@ -147,17 +149,16 @@ test.describe("invoice host organizations and contacts", () => {
       hostName,
       new RegExp(`^${hostName}\\b`),
     );
-    // Match the contact on its email, not its first name. The picker also
-    // renders a `New Client: "<query>"` button when the query is not an exact
-    // label match, and that button is the only hit until the contacts query
-    // resolves — so a name-based locator can settle on it and open the create
-    // modal instead of selecting anyone.
+    // Match the contact on its email in the menu (avoids the "New Client" create
+    // button while contacts are still loading). The closed trigger shows name only.
+    const contactFullName = `${contactFirst} ${contactLast}`;
     await pickSearchableOption(
       page,
       "invoice-contact-select",
       "Search contacts...",
       contactFirst,
       new RegExp(contactEmail.replace(/[.+]/g, "\\$&")),
+      new RegExp(contactFullName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
     );
 
     await expect(page.getByText("Unsaved changes")).toBeVisible({ timeout: 30_000 });
