@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
 import { getConvexErrorMessage } from "@/lib/convex-error";
@@ -49,13 +49,13 @@ type TypeDraft = {
   msrpUsd: string;
 };
 
-function emptyTag(): WizardTag {
+function emptyTag(from?: Pick<WizardTag, "storageLocationId" | "containedInAssetId">): WizardTag {
   return {
     localId: crypto.randomUUID(),
     assetId: "",
     serialNumber: "",
-    storageLocationId: "",
-    containedInAssetId: "",
+    storageLocationId: from?.storageLocationId ?? "",
+    containedInAssetId: from?.containedInAssetId ?? "",
     status: "",
     notes: "",
     contains: [],
@@ -92,6 +92,9 @@ function CreateAssetWizardForm({ onClose }: { onClose: () => void }) {
   const [scanError, setScanError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const focusAssetLocalIdRef = useRef<string | null>(null);
+  const serialInputRefs = useRef(new Map<string, HTMLInputElement>());
+  const assetInputRefs = useRef(new Map<string, HTMLInputElement>());
 
   const categories = useQuery(api.inventoryCategories.list, { activeOnly: true });
   const types = useQuery(api.inventoryTypes.listOptions, {});
@@ -137,6 +140,29 @@ function CreateAssetWizardForm({ onClose }: { onClose: () => void }) {
   function updateTag(localId: string, patch: Partial<WizardTag>) {
     setTags((prev) => prev.map((tag) => (tag.localId === localId ? { ...tag, ...patch } : tag)));
   }
+
+  /** New card inherits storage location + contained-in from the previous one. */
+  function addAnotherAsset(fromLocalId?: string) {
+    const source =
+      (fromLocalId ? tags.find((tag) => tag.localId === fromLocalId) : undefined) ??
+      tags[tags.length - 1];
+    const next = emptyTag(source);
+    focusAssetLocalIdRef.current = next.localId;
+    setTags((prev) => [...prev, next]);
+  }
+
+  function focusSerial(localId: string) {
+    queueMicrotask(() => serialInputRefs.current.get(localId)?.focus());
+  }
+
+  useEffect(() => {
+    const localId = focusAssetLocalIdRef.current;
+    if (!localId) return;
+    const el = assetInputRefs.current.get(localId);
+    if (!el) return;
+    el.focus();
+    focusAssetLocalIdRef.current = null;
+  }, [tags]);
 
   function addContains(localId: string, assetId: string) {
     setTags((prev) =>
@@ -293,7 +319,7 @@ function CreateAssetWizardForm({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <>
+    <div className="flex h-full min-h-0 flex-1 flex-col">
       <SheetHeader>
         <SheetTitle>Create assets</SheetTitle>
         <SheetDescription>
@@ -302,7 +328,7 @@ function CreateAssetWizardForm({ onClose }: { onClose: () => void }) {
         </SheetDescription>
       </SheetHeader>
 
-      <div className="mt-4 flex-1 space-y-4 overflow-y-auto px-1 pb-8">
+      <div className="mt-4 min-h-0 flex-1 space-y-4 overflow-y-auto px-1 pb-8">
         {step === 1 ? (
           <div className="space-y-4">
             <div className="space-y-2">
@@ -438,6 +464,17 @@ function CreateAssetWizardForm({ onClose }: { onClose: () => void }) {
                     onScanAssetId={(raw) => onScanAssetId(tag.localId, raw)}
                     onScanSerial={(raw) => onScanSerial(tag.localId, raw)}
                     onScanContainedIn={(raw) => onScanContainedIn(tag.localId, raw)}
+                    onEnterAssetId={() => focusSerial(tag.localId)}
+                    onEnterSerial={() => addAnotherAsset(tag.localId)}
+                    assetIdInputRef={(el) => {
+                      if (el) assetInputRefs.current.set(tag.localId, el);
+                      else assetInputRefs.current.delete(tag.localId);
+                    }}
+                    serialInputRef={(el) => {
+                      if (el) serialInputRefs.current.set(tag.localId, el);
+                      else serialInputRefs.current.delete(tag.localId);
+                    }}
+                    autoFocusAssetId={index === 0}
                     testIdPrefix="wizard"
                   />
                   <ContainsEditor
@@ -455,7 +492,7 @@ function CreateAssetWizardForm({ onClose }: { onClose: () => void }) {
                 </div>
               );
             })}
-            <Button type="button" variant="outline" onClick={() => setTags((prev) => [...prev, emptyTag()])}>
+            <Button type="button" variant="outline" onClick={() => addAnotherAsset()}>
               Add another asset
             </Button>
           </div>
@@ -513,14 +550,14 @@ function CreateAssetWizardForm({ onClose }: { onClose: () => void }) {
           </div>
         </div>
       </SheetFooter>
-    </>
+    </div>
   );
 }
 
 export function CreateAssetWizard({ open, onOpenChange }: CreateAssetWizardProps) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-xl lg:max-w-2xl">
+      <SheetContent side="right" className="flex w-full flex-col overflow-hidden sm:max-w-xl lg:max-w-2xl">
         {open ? <CreateAssetWizardForm onClose={() => onOpenChange(false)} /> : null}
       </SheetContent>
     </Sheet>

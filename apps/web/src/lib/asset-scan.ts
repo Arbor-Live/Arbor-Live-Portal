@@ -66,3 +66,31 @@ export function assetIdLookupCandidates(assetId: string): string[] {
   }
   return [...new Set(candidates.filter(Boolean))];
 }
+
+/**
+ * High-confidence "this is an asset tag / QR target" — PREFIX-DIGITS (ALE-0041)
+ * or an /e/… URL. Used to warn when a tag is typed into the serial field.
+ */
+export function looksLikeAssetTag(raw: string): boolean {
+  const trimmed = stripNoise(raw);
+  if (!trimmed) return false;
+  if (tryParseUrl(trimmed) || EQUIPMENT_PATH_RE.test(trimmed)) return true;
+  // PREFIX-DIGITS e.g. ALE-0041, MIC-12
+  if (/^[A-Za-z]{2,8}-\d{2,}$/.test(trimmed)) return true;
+  return false;
+}
+
+/**
+ * High-confidence "this is a manufacturer serial" — long continuous alphanumerics
+ * without the hyphenated tag shape. Used to warn when a serial lands in Asset ID.
+ */
+export function looksLikeSerialNumber(raw: string): boolean {
+  const trimmed = stripNoise(raw);
+  if (!trimmed) return false;
+  if (looksLikeAssetTag(trimmed)) return false;
+  // Continuous alphanumerics, fairly long, no hyphens (typical laser-etched SNs)
+  if (/^[A-Za-z0-9]{10,}$/.test(trimmed)) return true;
+  // Digit-heavy serials
+  if (/^\d{8,}$/.test(trimmed)) return true;
+  return false;
+}

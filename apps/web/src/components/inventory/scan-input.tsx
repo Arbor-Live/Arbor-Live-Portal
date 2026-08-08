@@ -1,5 +1,6 @@
 "use client";
 
+import type { KeyboardEvent, Ref } from "react";
 import { CameraIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +11,9 @@ type ScanInputProps = {
   onChange: (value: string) => void;
   /** Called with the raw detected code when the camera reads a barcode/QR. */
   onScan?: (raw: string) => void | Promise<void>;
+  /** Enter (or keypad Enter) — used by the create-asset wizard scan flow. */
+  onEnter?: () => void;
+  inputRef?: Ref<HTMLInputElement>;
   placeholder?: string;
   disabled?: boolean;
   autoFocus?: boolean;
@@ -27,6 +31,8 @@ export function ScanInput({
   value,
   onChange,
   onScan,
+  onEnter,
+  inputRef,
   placeholder,
   disabled,
   autoFocus,
@@ -38,12 +44,21 @@ export function ScanInput({
     (raw) => void onScan?.(raw),
   );
 
+  function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key !== "Enter") return;
+    if (!onEnter) return;
+    event.preventDefault();
+    onEnter();
+  }
+
   return (
     <div className="space-y-2">
       <div className="flex gap-1.5">
         <Input
+          ref={inputRef}
           value={value}
           onChange={(event) => onChange(event.target.value)}
+          onKeyDown={handleKeyDown}
           placeholder={placeholder}
           disabled={disabled}
           autoFocus={autoFocus}

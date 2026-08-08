@@ -1097,7 +1097,7 @@ export function InvoiceEditor({
               <Link href={`/dashboard/events/requests/${sourceRequest._id}`}>Open request</Link>
             </Button>
           </CardHeader>
-          <CardContent className="grid gap-2 text-sm md:grid-cols-2">
+          <CardContent className="grid min-w-0 gap-2 break-words text-sm md:grid-cols-2">
             <p>
               <span className="font-medium">Contact:</span> {sourceRequest.firstName} {sourceRequest.lastName} ·{" "}
               {sourceRequest.email} · {sourceRequest.phone}
@@ -1120,7 +1120,7 @@ export function InvoiceEditor({
             <p>
               <span className="font-medium">Times:</span>{" "}
               {sourceRequest.eventScheduleText ? (
-                <span className="whitespace-pre-wrap">{sourceRequest.eventScheduleText}</span>
+                <span className="whitespace-pre-wrap break-words">{sourceRequest.eventScheduleText}</span>
               ) : (
                 <>
                   {sourceRequest.eventStartTimeText} – {sourceRequest.eventEndTimeText}
@@ -1144,12 +1144,12 @@ export function InvoiceEditor({
               {sourceRequest.productionTier ? ` · ${sourceRequest.productionTier}` : ""}
             </p>
             {sourceRequest.eventDescription ? (
-              <p className="md:col-span-2 whitespace-pre-wrap">
+              <p className="md:col-span-2 whitespace-pre-wrap break-words">
                 <span className="font-medium">Description:</span> {sourceRequest.eventDescription}
               </p>
             ) : null}
             {sourceRequest.existingEquipment ? (
-              <p className="md:col-span-2 whitespace-pre-wrap">
+              <p className="md:col-span-2 whitespace-pre-wrap break-words">
                 <span className="font-medium">Existing equipment:</span> {sourceRequest.existingEquipment}
               </p>
             ) : null}
@@ -1159,7 +1159,7 @@ export function InvoiceEditor({
               </p>
             ) : null}
             {sourceRequest.additionalNotes ? (
-              <p className="md:col-span-2 whitespace-pre-wrap">
+              <p className="md:col-span-2 whitespace-pre-wrap break-words">
                 <span className="font-medium">Client notes:</span> {sourceRequest.additionalNotes}
               </p>
             ) : null}
@@ -1207,8 +1207,8 @@ export function InvoiceEditor({
         </ul>
       ) : null}
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
-        <div className="space-y-4">
+      <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] lg:items-start">
+        <div className="min-w-0 space-y-4">
           <nav className="sticky top-4 z-10 flex flex-wrap gap-2 rounded-md border bg-background/95 p-2 text-sm shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80">
             {[
               { id: "section-equipment-packages", label: "Packages" },
@@ -1350,10 +1350,10 @@ export function InvoiceEditor({
           </div>
         </div>
 
-        <aside className="space-y-4 lg:sticky lg:top-4">
+        <aside className="min-w-0 space-y-4 overflow-x-hidden lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:overscroll-y-contain lg:pr-1">
           <Card>
             <CardHeader className="pb-2"><CardTitle className="text-base">General</CardTitle></CardHeader>
-            <CardContent className="grid gap-3">
+            <CardContent className="grid min-w-0 gap-3">
               <div className="space-y-2">
                 <Label>Issue date</Label>
                 <Input type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} />
@@ -1399,8 +1399,8 @@ export function InvoiceEditor({
 
           <Card>
             <CardHeader className="pb-2"><CardTitle className="text-base">Client</CardTitle></CardHeader>
-            <CardContent className="grid gap-3">
-              <div className="space-y-2" data-testid="invoice-host-select">
+            <CardContent className="grid min-w-0 gap-3">
+              <div className="min-w-0 space-y-2" data-testid="invoice-host-select">
                 <Label>Host</Label>
                 <SearchableSelect
                   value={groupId}
@@ -1412,7 +1412,7 @@ export function InvoiceEditor({
                   createLabel="New Host"
                 />
               </div>
-              <div className="space-y-2" data-testid="invoice-contact-select">
+              <div className="min-w-0 space-y-2" data-testid="invoice-contact-select">
                 <Label>Contact</Label>
                 <SearchableSelect
                   value={contactId}
@@ -1424,12 +1424,12 @@ export function InvoiceEditor({
                   createLabel="New Client"
                 />
               </div>
-              <Input placeholder="Email" value={clientEmail} onChange={(e) => setClientEmail(e.target.value)} />
-              <Input placeholder="Phone" value={clientPhone} onChange={(e) => setClientPhone(e.target.value)} />
-              <Input placeholder="Address line 1" value={clientAddressLine1} onChange={(e) => setClientAddressLine1(e.target.value)} />
-              <Input placeholder="City" value={clientCity} onChange={(e) => setClientCity(e.target.value)} />
-              <Input placeholder="State" value={clientState} onChange={(e) => setClientState(e.target.value)} />
-              <Input placeholder="Postal code" value={clientPostalCode} onChange={(e) => setClientPostalCode(e.target.value)} />
+              <Input className="min-w-0" placeholder="Email" value={clientEmail} onChange={(e) => setClientEmail(e.target.value)} />
+              <Input className="min-w-0" placeholder="Phone" value={clientPhone} onChange={(e) => setClientPhone(e.target.value)} />
+              <Input className="min-w-0" placeholder="Address line 1" value={clientAddressLine1} onChange={(e) => setClientAddressLine1(e.target.value)} />
+              <Input className="min-w-0" placeholder="City" value={clientCity} onChange={(e) => setClientCity(e.target.value)} />
+              <Input className="min-w-0" placeholder="State" value={clientState} onChange={(e) => setClientState(e.target.value)} />
+              <Input className="min-w-0" placeholder="Postal code" value={clientPostalCode} onChange={(e) => setClientPostalCode(e.target.value)} />
             </CardContent>
           </Card>
 
@@ -1516,9 +1516,9 @@ export function InvoiceEditor({
                   }
                 />
               </div>
-              <div className="space-y-2">
+              <div className="min-w-0 space-y-2">
                 <Label>Notes</Label>
-                <textarea className="min-h-20 w-full rounded-md border bg-background px-3 py-2 text-sm" value={notes} onChange={(e) => setNotes(e.target.value)} />
+                <textarea className="min-h-20 w-full min-w-0 break-words rounded-md border bg-background px-3 py-2 text-sm" value={notes} onChange={(e) => setNotes(e.target.value)} />
               </div>
             </CardContent>
           </Card>
@@ -1528,7 +1528,7 @@ export function InvoiceEditor({
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">Net profit (projected)</CardTitle>
               </CardHeader>
-              <CardContent className="text-sm">
+              <CardContent className="min-w-0 text-sm">
                 <p>
                   Billed: <span className="font-medium">{formatUsd(draftTotals.totalUsd)}</span>
                 </p>
@@ -1553,7 +1553,7 @@ export function InvoiceEditor({
             onMouseEnter={() => setTermsCatalogEnabled(true)}
           >
             <CardHeader className="pb-2"><CardTitle className="text-base">Terms</CardTitle></CardHeader>
-            <CardContent className="space-y-2 text-sm">
+            <CardContent className="min-w-0 space-y-2 text-sm">
               <div className="max-h-32 space-y-1 overflow-y-auto rounded-md border p-2">
                 {(termsDefinitions ?? []).map((row) => {
                   const checked = termsIds.includes(row._id);
@@ -1561,7 +1561,7 @@ export function InvoiceEditor({
                     <label key={row._id} className="flex cursor-pointer items-start gap-2">
                       <input
                         type="checkbox"
-                        className="mt-0.5"
+                        className="mt-0.5 shrink-0"
                         checked={checked}
                         onChange={() => {
                           setTermsIds((current) =>
@@ -1569,7 +1569,7 @@ export function InvoiceEditor({
                           );
                         }}
                       />
-                      <span>
+                      <span className="min-w-0 break-words">
                         {row.label} ({row.version})
                       </span>
                     </label>
@@ -1577,7 +1577,7 @@ export function InvoiceEditor({
                 })}
               </div>
               <textarea
-                className="min-h-16 w-full rounded-md border bg-background px-3 py-2 text-sm"
+                className="min-h-16 w-full min-w-0 break-words rounded-md border bg-background px-3 py-2 text-sm"
                 placeholder="Additional terms"
                 value={additionalTermsMarkdown}
                 onChange={(e) => setAdditionalTermsMarkdown(e.target.value)}
@@ -1588,8 +1588,8 @@ export function InvoiceEditor({
           {isRequestLinkedQuote ? (
             <Card data-testid="invoice-request-portal">
               <CardHeader className="pb-2"><CardTitle className="text-base">Request portal</CardTitle></CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                <Input data-testid="invoice-request-portal-link" readOnly value={requestPortalUrl || "Save to load portal link."} />
+              <CardContent className="min-w-0 space-y-2 text-sm">
+                <Input className="min-w-0" data-testid="invoice-request-portal-link" readOnly value={requestPortalUrl || "Save to load portal link."} />
                 {requestPortalReady ? (
                   <Button data-testid="invoice-withdraw-review" type="button" variant="outline" size="sm" onClick={() => void withdrawFromRequestPortal()}>
                     Withdraw
@@ -1613,8 +1613,9 @@ export function InvoiceEditor({
           ) : (
             <Card data-testid="invoice-quote-approval">
               <CardHeader className="pb-2"><CardTitle className="text-base">Quote approval</CardTitle></CardHeader>
-              <CardContent className="space-y-2 text-sm">
+              <CardContent className="min-w-0 space-y-2 text-sm">
                 <Input
+                  className="min-w-0"
                   data-testid="invoice-approval-link"
                   readOnly
                   value={
@@ -1646,14 +1647,14 @@ export function InvoiceEditor({
                     type="button"
                     className="flex w-full items-center justify-between px-6 py-4 text-left"
                   >
-                    <span className="text-base font-semibold">
+                    <span className="min-w-0 break-words text-base font-semibold">
                       PDF exports ({pdfExports?.length ?? 0})
                     </span>
                     <CaretDownIcon className="size-4 shrink-0 text-muted-foreground" />
                   </button>
                 </CollapsibleTrigger>
                 <CollapsibleContent>
-                  <CardContent className="space-y-1 border-t pt-4 text-xs text-muted-foreground">
+                  <CardContent className="space-y-1 break-words border-t pt-4 text-xs text-muted-foreground">
                     {(pdfExports ?? []).slice(0, 5).map((row) => (
                       <p key={row._id}>
                         {row.fileName} · {formatDateTime(row.createdAt)}
