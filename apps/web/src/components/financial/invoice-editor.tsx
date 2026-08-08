@@ -27,6 +27,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { authClient } from "@/lib/auth-client";
 import { InvoiceQuoteApprovalDetails } from "@/components/financial/invoice-quote-approval-details";
 import { InvoicePaymentStatusSection } from "@/components/financial/invoice-payment-status-section";
@@ -38,7 +44,7 @@ import {
   type InvoiceCrewRow,
 } from "@/lib/invoice-crew-from-event";
 import type { SeriesShiftTemplateDraft } from "@/lib/event-series-shifts";
-import { CaretDownIcon } from "@phosphor-icons/react";
+import { ArrowsClockwiseIcon, CaretDownIcon } from "@phosphor-icons/react";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { FormSaveBar } from "@/components/forms";
 import {
@@ -1391,7 +1397,39 @@ export function InvoiceEditor({
                 />
               </div>
               <div className="min-w-0 space-y-2">
-                <Label>Due date</Label>
+                <div className="flex min-w-0 items-center justify-between gap-2">
+                  <Label>Due date</Label>
+                  {linkedEvent?.endAt != null ? (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          {dueDateTouched ? (
+                            <button
+                              type="button"
+                              className="shrink-0 text-muted-foreground hover:text-foreground"
+                              aria-label="Sync due date to event"
+                              onClick={() => setDueDateTouched(false)}
+                            >
+                              <ArrowsClockwiseIcon className="size-3.5" aria-hidden />
+                            </button>
+                          ) : (
+                            <span
+                              className="shrink-0 text-muted-foreground"
+                              aria-label={`Due date auto-synced to event plus ${INVOICE_DUE_DAYS_AFTER_EVENT} days`}
+                            >
+                              <ArrowsClockwiseIcon className="size-3.5" aria-hidden />
+                            </span>
+                          )}
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          {dueDateTouched
+                            ? "Sync to event"
+                            : `Auto · event + ${INVOICE_DUE_DAYS_AFTER_EVENT}d`}
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  ) : null}
+                </div>
                 <Input
                   className="w-full min-w-0 max-w-full"
                   type="date"
