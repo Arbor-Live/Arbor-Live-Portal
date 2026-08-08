@@ -1,7 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { IScannerControls } from "@zxing/browser";
+import {
+  claimBarcodeCameraSession,
+  getActiveBarcodeCameraSession,
+  releaseBarcodeCameraSession,
+  subscribeBarcodeCameraSession,
+} from "./barcode-camera-session";
 
 type BarcodeDetectorLike = {
   detect: (source: ImageBitmapSource) => Promise<Array<{ rawValue?: string }>>;
@@ -37,27 +43,60 @@ function canUseCameraScanner() {
  * suppressed so a held-up label fires once. Shared by the scan inputs and the
  * asset scanner so camera handling lives in exactly one place.
  *
+ * Only one camera session is active app-wide: opening a new one closes others.
+ * Pass `closeOnDetect: true` for single-field scanners so the preview shuts
+ * after a successful read.
+ *
  * Uses the native `BarcodeDetector` where available and `@zxing/browser`
  * everywhere else (Safari / iOS), so the same component works on an iPhone.
  */
-export function useBarcodeCamera(onDetect: (raw: string) => void | Promise<void>) {
+export function useBarcodeCamera(
+  onDetect: (raw: string) => void | Promise<void>,
+  options?: { closeOnDetect?: boolean },
+) {
+  const sessionId = useId();
   const [cameraOn, setCameraOn] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const lastScanRef = useRef<{ value: string; at: number }>({ value: "", at: 0 });
   const onDetectRef = useRef(onDetect);
+  const closeOnDetectRef = useRef(Boolean(options?.closeOnDetect));
 
   useEffect(() => {
     onDetectRef.current = onDetect;
   });
 
+  useEffect(() => {
+    closeOnDetectRef.current = Boolean(options?.closeOnDetect);
+  }, [options?.closeOnDetect]);
+
   const supported = canUseCameraScanner();
+
+  useEffect(() => {
+    return subscribeBarcodeCameraSession(() => {
+      if (getActiveBarcodeCameraSession() !== sessionId) {
+        setCameraOn(false);
+        setCameraError(null);
+      }
+    });
+  }, [sessionId]);
+
+  useEffect(() => {
+    return () => {
+      releaseBarcodeCameraSession(sessionId);
+    };
+  }, [sessionId]);
+
+  function closeCamera() {
+    releaseBarcodeCameraSession(sessionId);
+    setCameraOn(false);
+    setCameraError(null);
+  }
 
   function toggleCamera() {
     if (cameraOn) {
-      setCameraOn(false);
-      setCameraError(null);
+      closeCamera();
       return;
     }
     if (!canUseCameraScanner()) {
@@ -65,6 +104,7 @@ export function useBarcodeCamera(onDetect: (raw: string) => void | Promise<void>
       return;
     }
     setCameraError(null);
+    claimBarcodeCameraSession(sessionId);
     setCameraOn(true);
   }
 
@@ -84,6 +124,11 @@ export function useBarcodeCamera(onDetect: (raw: string) => void | Promise<void>
       }
       lastScanRef.current = { value: raw, at: now };
       await onDetectRef.current(raw);
+      if (closeOnDetectRef.current && !cancelled) {
+        releaseBarcodeCameraSession(sessionId);
+        setCameraOn(false);
+        setCameraError(null);
+      }
     }
 
     async function startNative() {
@@ -156,6 +201,7 @@ export function useBarcodeCamera(onDetect: (raw: string) => void | Promise<void>
       } catch {
         if (!cancelled) {
           setCameraError("Could not access the camera. Use the text box instead.");
+          releaseBarcodeCameraSession(sessionId);
           setCameraOn(false);
         }
       }
@@ -168,7 +214,7 @@ export function useBarcodeCamera(onDetect: (raw: string) => void | Promise<void>
       streamRef.current?.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     };
-  }, [cameraOn]);
+  }, [cameraOn, sessionId]);
 
-  return { cameraOn, toggleCamera, cameraError, videoRef, supported };
+  return { cameraOn, toggleCamera, closeCamera, cameraError, videoRef, supported };
 }

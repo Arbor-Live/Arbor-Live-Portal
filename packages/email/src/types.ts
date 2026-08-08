@@ -291,6 +291,10 @@ export type PostEventAlbumEmailProps = {
   albumShareUrl?: string;
   /** Link to the feedback form on the client's booking request or event portal. */
   feedbackFormUrl?: string;
+  /** Link to the internal post-mortem form (day-of leads and event managers). */
+  postMortemUrl?: string;
+  /** Who the email is for: external client vs internal lead. */
+  audience?: "client" | "lead";
 };
 
 export type EventCommentMentionEmailProps = {

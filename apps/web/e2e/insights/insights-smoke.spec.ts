@@ -105,4 +105,31 @@ test.describe("insights dashboard", () => {
     await expect(page.getByText(seeded.invoiceNumber).first()).toBeVisible();
     await expect(page.getByText(seeded.comments, { exact: true })).toBeVisible();
   });
+
+  test("admin can read day-of lead post-mortems in the Feedback tab", async ({ page }) => {
+    test.setTimeout(120_000);
+
+    const seeded = runConvex("e2eHelpers:seedPostMortemForInsights", {}) as {
+      eventTitle: string;
+      leadName: string;
+      whatWentWell: string;
+      whatCouldImprove: string;
+    };
+
+    await page.goto("/dashboard/financial-hub/insights");
+    const insights = page.getByTestId("insights-page");
+    await expect(insights).toBeVisible({ timeout: 30_000 });
+
+    await insights.getByRole("button", { name: "Feedback", exact: true }).click();
+    await expect(page.getByTestId("insights-postmortem-panel")).toBeVisible({ timeout: 30_000 });
+
+    // Summary cards render for the seeded response.
+    await expect(page.getByText("Post-mortems").first()).toBeVisible({ timeout: 30_000 });
+
+    // Post-mortem answers are readable verbatim (unique per seed run).
+    await expect(page.getByText(seeded.eventTitle).first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(seeded.leadName).first()).toBeVisible();
+    await expect(page.getByText(seeded.whatWentWell, { exact: true })).toBeVisible();
+    await expect(page.getByText(seeded.whatCouldImprove, { exact: true })).toBeVisible();
+  });
 });

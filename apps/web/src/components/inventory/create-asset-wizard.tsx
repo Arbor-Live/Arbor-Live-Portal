@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
 import { getConvexErrorMessage } from "@/lib/convex-error";
-import { assetIdLookupCandidates, normalizeAssetScanInput } from "@/lib/asset-scan";
+import { normalizeAssetScanInput } from "@/lib/asset-scan";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -114,11 +114,6 @@ function CreateAssetWizardForm({ onClose }: { onClose: () => void }) {
 
   const categoryOptions = useMemo(() => toCategoryOptions(categories), [categories]);
 
-  const existingAssetIds = useMemo(
-    () => new Set((itemSummaries ?? []).map((item) => item.assetId.toLowerCase())),
-    [itemSummaries],
-  );
-
   /** Sibling tags + existing items, as containment options keyed by assetId. */
   const containmentOptions = useMemo(() => {
     const options: ItemDetailsContainerOption[] = [];
@@ -175,18 +170,28 @@ function CreateAssetWizardForm({ onClose }: { onClose: () => void }) {
   }
 
   function matchKnownAssetId(raw: string): string | null {
-    for (const candidate of assetIdLookupCandidates(raw)) {
-      const key = candidate.toLowerCase();
-      for (const tag of tags) {
-        if (tag.assetId.trim().toLowerCase() === key) return tag.assetId.trim();
-      }
-      if (existingAssetIds.has(key)) return candidate;
+    const normalized = normalizeAssetScanInput(raw);
+    if (!normalized) return null;
+    const key = normalized.toLowerCase();
+
+    for (const tag of tags) {
+      const id = normalizeAssetScanInput(tag.assetId) ?? tag.assetId.trim();
+      if (id && id.toLowerCase() === key) return id;
+    }
+    for (const item of itemSummaries ?? []) {
+      if (item.assetId.toLowerCase() === key) return item.assetId;
     }
     return null;
   }
 
   function onScanAssetId(localId: string, raw: string) {
-    updateTag(localId, { assetId: normalizeAssetScanInput(raw) ?? raw.trim() });
+    const normalized = normalizeAssetScanInput(raw);
+    if (!normalized) {
+      setScanError(`Couldn’t read an asset ID from that scan. Try a tag like ALE-0123.`);
+      return;
+    }
+    setScanError(null);
+    updateTag(localId, { assetId: normalized });
   }
 
   function onScanSerial(localId: string, raw: string) {
@@ -259,29 +264,34 @@ function CreateAssetWizardForm({ onClose }: { onClose: () => void }) {
 
   function validateForSubmit(): string | null {
     if (!typeId) return "Choose or create a type first.";
-    const ids = tags.map((tag) => tag.assetId.trim());
+    const ids = tags.map((tag) => normalizeAssetScanInput(tag.assetId) ?? tag.assetId.trim());
     if (ids.some((id) => !id)) return "Every asset needs an Asset ID.";
     const seen = new Set<string>();
     for (const id of ids) {
       const key = id.toLowerCase();
       if (seen.has(key)) return `Duplicate Asset ID in this batch: ${id}`;
       seen.add(key);
-      if (existingAssetIds.has(key)) return `Asset ID already exists: ${id}`;
+      if ((itemSummaries ?? []).some((item) => item.assetId.toLowerCase() === key)) {
+        return `Asset ID already exists: ${id}`;
+      }
     }
     const known = new Set(seen);
     for (const item of itemSummaries ?? []) known.add(item.assetId.toLowerCase());
     for (const tag of tags) {
-      const container = tag.containedInAssetId.trim();
+      const assetId = normalizeAssetScanInput(tag.assetId) ?? tag.assetId.trim();
+      const container =
+        normalizeAssetScanInput(tag.containedInAssetId) ?? tag.containedInAssetId.trim();
       if (container && !known.has(container.toLowerCase())) {
-        return `“${tag.assetId}” references a container (“${container}”) that isn't an asset in this batch or an existing item.`;
+        return `“${assetId}” references a container (“${container}”) that isn't an asset in this batch or an existing item.`;
       }
       for (const child of tag.contains) {
-        if (!known.has(child.toLowerCase())) {
-          return `“${tag.assetId}” contains “${child}”, which isn't an asset in this batch or an existing item.`;
+        const childId = normalizeAssetScanInput(child) ?? child.trim();
+        if (!known.has(childId.toLowerCase())) {
+          return `“${assetId}” contains “${childId}”, which isn't an asset in this batch or an existing item.`;
         }
       }
-      if (container && container.toLowerCase() === tag.assetId.trim().toLowerCase()) {
-        return `“${tag.assetId}” cannot be contained in itself.`;
+      if (container && container.toLowerCase() === assetId.toLowerCase()) {
+        return `“${assetId}” cannot be contained in itself.`;
       }
     }
     return null;
@@ -299,15 +309,21 @@ function CreateAssetWizardForm({ onClose }: { onClose: () => void }) {
       await createMany({
         typeId: typeId as Id<"inventoryTypes">,
         items: tags.map((tag) => ({
-          assetId: tag.assetId.trim(),
+          assetId: normalizeAssetScanInput(tag.assetId) ?? tag.assetId.trim(),
           serialNumber: tag.serialNumber.trim() || undefined,
           storageLocationId: tag.storageLocationId
             ? (tag.storageLocationId as Id<"storageLocations">)
             : undefined,
-          containedInAssetId: tag.containedInAssetId.trim() || undefined,
+          containedInAssetId:
+            (normalizeAssetScanInput(tag.containedInAssetId) ?? tag.containedInAssetId.trim()) ||
+            undefined,
           status: tag.status.trim() || undefined,
           notes: tag.notes.trim() || undefined,
-          contains: tag.contains.length ? tag.contains.map((entry) => entry.trim()) : undefined,
+          contains: tag.contains.length
+            ? tag.contains.map(
+                (entry) => normalizeAssetScanInput(entry) ?? entry.trim(),
+              )
+            : undefined,
         })),
       });
       onClose();
@@ -320,7 +336,7 @@ function CreateAssetWizardForm({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col">
-      <SheetHeader>
+      <SheetHeader className="shrink-0 border-b pr-12">
         <SheetTitle>Create assets</SheetTitle>
         <SheetDescription>
           Step {step} of 3 ·{" "}
@@ -328,7 +344,7 @@ function CreateAssetWizardForm({ onClose }: { onClose: () => void }) {
         </SheetDescription>
       </SheetHeader>
 
-      <div className="mt-4 min-h-0 flex-1 space-y-4 overflow-y-auto px-1 pb-8">
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
         {step === 1 ? (
           <div className="space-y-4">
             <div className="space-y-2">
@@ -527,7 +543,7 @@ function CreateAssetWizardForm({ onClose }: { onClose: () => void }) {
         ) : null}
       </div>
 
-      <SheetFooter>
+      <SheetFooter className="shrink-0 border-t">
         <div className="flex w-full items-center justify-between gap-2">
           <Button type="button" variant="ghost" onClick={onClose}>
             Close
@@ -557,7 +573,10 @@ function CreateAssetWizardForm({ onClose }: { onClose: () => void }) {
 export function CreateAssetWizard({ open, onOpenChange }: CreateAssetWizardProps) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="flex w-full flex-col overflow-hidden sm:max-w-xl lg:max-w-2xl">
+      <SheetContent
+        side="right"
+        className="flex h-full w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-xl lg:max-w-2xl"
+      >
         {open ? <CreateAssetWizardForm onClose={() => onOpenChange(false)} /> : null}
       </SheetContent>
     </Sheet>

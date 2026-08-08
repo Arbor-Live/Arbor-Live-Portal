@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { canonicalizeAssetIdTag } from "@/lib/asset-scan";
 
 type CsvRow = Record<string, string>;
 type Category = "sound" | "lighting" | "staging_rigging" | "misc";
@@ -338,7 +339,7 @@ export function CsvImporter() {
       let createdTypesFromAssets = 0;
 
       for (const row of assetRows) {
-        const assetId = (row["Name"] ?? "").trim();
+        const assetId = canonicalizeAssetIdTag(row["Name"] ?? "");
         const fungibleRaw = normalizeTypeName(row["Fungible Inventory"] ?? "");
         if (!assetId || !fungibleRaw) continue;
 

@@ -11,6 +11,7 @@ type ScanInputProps = {
   onChange: (value: string) => void;
   /** Called with the raw detected code when the camera reads a barcode/QR. */
   onScan?: (raw: string) => void | Promise<void>;
+  onBlur?: () => void;
   /** Enter (or keypad Enter) — used by the create-asset wizard scan flow. */
   onEnter?: () => void;
   inputRef?: Ref<HTMLInputElement>;
@@ -24,13 +25,15 @@ type ScanInputProps = {
 
 /**
  * A plain text input with an optional camera barcode/QR button. Typing works
- * like any input; `onScan` fires when the camera (or nothing else) reads a
- * code — the parent decides how to fold the raw value into `onChange`.
+ * like any input; `onScan` fires when the camera reads a code — the parent
+ * decides how to fold the raw value into `onChange`. When `onScan` is omitted,
+ * the trimmed raw value is written through `onChange`.
  */
 export function ScanInput({
   value,
   onChange,
   onScan,
+  onBlur,
   onEnter,
   inputRef,
   placeholder,
@@ -41,7 +44,14 @@ export function ScanInput({
   showCameraButton = true,
 }: ScanInputProps) {
   const { cameraOn, toggleCamera, cameraError, videoRef, supported } = useBarcodeCamera(
-    (raw) => void onScan?.(raw),
+    (raw) => {
+      if (onScan) {
+        void onScan(raw);
+        return;
+      }
+      onChange(raw.trim());
+    },
+    { closeOnDetect: true },
   );
 
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
@@ -58,6 +68,7 @@ export function ScanInput({
           ref={inputRef}
           value={value}
           onChange={(event) => onChange(event.target.value)}
+          onBlur={onBlur}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           disabled={disabled}
