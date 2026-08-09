@@ -3,6 +3,7 @@ import { query, type QueryCtx } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import { resolveStoredInventoryAssetUrl } from "./inventoryR2";
 import { assetIdLookupCandidates } from "./lib/assetScan";
+import { listFulfillmentPackageBom } from "./lib/packageBom";
 
 const publicBucketValue = v.union(
   v.literal("lighting"),
@@ -197,13 +198,9 @@ export const listPublicPackages = query({
 
       let displayBucket: PublicBucket | undefined = pkg.publicBucket;
       if (!displayBucket) {
-        const lineRows = await ctx.db
-          .query("inventoryPackageItems")
-          .withIndex("by_packageId", (q) => q.eq("packageId", pkg._id))
-          .take(200);
-
+        const bom = await listFulfillmentPackageBom(ctx, pkg._id);
         const buckets = new Set<PublicBucket>();
-        for (const row of lineRows) {
+        for (const row of bom) {
           const type = await ctx.db.get(row.typeId);
           if (!type) continue;
           buckets.add(await bucketForCategoryKey(ctx, type.category, categoryCache));
@@ -240,19 +237,92 @@ export const getPublicPackage = query({
     const lineRows = await ctx.db
       .query("inventoryPackageItems")
       .withIndex("by_packageId", (q) => q.eq("packageId", pkg._id))
-      .take(200);
+      .take(500);
+
+    const groups = await ctx.db
+      .query("inventoryPackageOptionGroups")
+      .withIndex("by_packageId", (q) => q.eq("packageId", pkg._id))
+      .take(40);
+    groups.sort((a, b) => a.sortOrder - b.sortOrder);
 
     const buckets = new Set<PublicBucket>();
-    const items = [];
-    for (const row of lineRows) {
+    const contents = [];
+
+    for (const group of groups) {
+      const optionsRaw = await ctx.db
+        .query("inventoryPackageOptions")
+        .withIndex("by_optionGroupId", (q) => q.eq("optionGroupId", group._id))
+        .take(40);
+      optionsRaw.sort((a, b) => a.sortOrder - b.sortOrder);
+
+      const options = [];
+      for (const option of optionsRaw) {
+        const optionItems = lineRows
+          .filter((row) => row.optionId === option._id)
+          .sort((a, b) => {
+            const roleA = a.role ?? "accessory";
+            const roleB = b.role ?? "accessory";
+            if (roleA !== roleB) return roleA === "primary" ? -1 : 1;
+            return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
+          });
+
+        const publicItems = [];
+        for (const row of optionItems) {
+          const type = await ctx.db.get(row.typeId);
+          if (!type) continue;
+          const bucket = await bucketForCategoryKey(ctx, type.category, categoryCache);
+          buckets.add(bucket);
+          publicItems.push({
+            quantity: row.quantity * group.quantity,
+            role: (row.role ?? "accessory") as "primary" | "accessory",
+            bucket,
+            type: await sanitizeTypeForPublic(
+              type,
+              Boolean(type.publicListing && type.publicProfile),
+            ),
+          });
+        }
+
+        const primary = publicItems.find((item) => item.role === "primary");
+        options.push({
+          name: option.name?.trim() || primary?.type.name || "Option",
+          items: publicItems,
+        });
+      }
+
+      if (!options.length) continue;
+      contents.push({
+        quantity: group.quantity,
+        exclusive: options.length > 1,
+        options,
+      });
+    }
+
+    // Legacy flat always-included rows.
+    for (const row of lineRows.filter((entry) => !entry.optionId)) {
       const type = await ctx.db.get(row.typeId);
       if (!type) continue;
       const bucket = await bucketForCategoryKey(ctx, type.category, categoryCache);
       buckets.add(bucket);
-      items.push({
+      contents.push({
         quantity: row.quantity,
-        bucket,
-        type: await sanitizeTypeForPublic(type, Boolean(type.publicListing && type.publicProfile)),
+        exclusive: false,
+        options: [
+          {
+            name: type.name,
+            items: [
+              {
+                quantity: row.quantity,
+                role: "primary" as const,
+                bucket,
+                type: await sanitizeTypeForPublic(
+                  type,
+                  Boolean(type.publicListing && type.publicProfile),
+                ),
+              },
+            ],
+          },
+        ],
       });
     }
 
@@ -268,7 +338,7 @@ export const getPublicPackage = query({
         publicHeroImageUrl: await resolvePublicAssetUrl(pkg.publicHeroImageUrl),
         publicSlug: pkg.publicSlug,
       },
-      items,
+      contents,
     };
   },
 });

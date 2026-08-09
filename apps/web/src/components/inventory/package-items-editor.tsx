@@ -15,8 +15,13 @@ import {
 } from "./package-section-utils";
 import { cn } from "@/lib/utils";
 import { StoredAssetImage } from "@/components/files/stored-asset-image";
+import {
+  PackageContentsUnitsEditor,
+  emptyContentUnit,
+  type ContentUnitDraft,
+} from "./package-contents-units-editor";
 
-export type PackageItemRow = { typeId: string; quantity: string };
+export type { ContentUnitDraft };
 
 type InventoryTypeRow = {
   _id: string;
@@ -49,20 +54,31 @@ function parseQuantity(value: string) {
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 1;
 }
 
-function quantityInPackage(itemRows: PackageItemRow[], typeId: string) {
-  const row = itemRows.find((entry) => entry.typeId === typeId);
-  return row ? parseQuantity(row.quantity) : 0;
+/** Fulfillment-equivalent lines: single-option units only (qty × per-unit). */
+export function fulfillmentLinesFromUnits(units: ContentUnitDraft[]) {
+  const merged = new Map<string, number>();
+  for (const unit of units) {
+    if (unit.options.length !== 1) continue;
+    const option = unit.options[0]!;
+    const scale = parseQuantity(unit.quantity);
+    for (const item of option.items) {
+      if (!item.typeId) continue;
+      const qty = parseQuantity(item.quantity) * scale;
+      merged.set(item.typeId, (merged.get(item.typeId) ?? 0) + qty);
+    }
+  }
+  return Array.from(merged.entries()).map(([typeId, quantity]) => ({ typeId, quantity }));
 }
 
 export function PackageItemsEditor({
-  itemRows,
-  onItemRowsChange,
+  units,
+  onUnitsChange,
   types,
   inventoryItems,
   categories,
 }: {
-  itemRows: PackageItemRow[];
-  onItemRowsChange: (rows: PackageItemRow[]) => void;
+  units: ContentUnitDraft[];
+  onUnitsChange: (units: ContentUnitDraft[]) => void;
   types: InventoryTypeRow[];
   inventoryItems: InventoryItemRow[];
   categories: CategoryRow[] | undefined;
@@ -75,31 +91,7 @@ export function PackageItemsEditor({
 
   const typeLookup = useMemo(() => new Map(types.map((type) => [type._id, type])), [types]);
 
-  const selectedItems = useMemo(() => {
-    return itemRows
-      .filter((row) => row.typeId && parseQuantity(row.quantity) > 0)
-      .map((row) => {
-        const type = typeLookup.get(row.typeId);
-        const section = type ? bucketForCategoryKey(type.category, categories) : "misc";
-        return {
-          row,
-          type,
-          section,
-          quantity: parseQuantity(row.quantity),
-        };
-      })
-      .filter((entry) => entry.type);
-  }, [categories, itemRows, typeLookup]);
-
-  const selectedSections = useMemo(
-    () => groupRowsBySection(selectedItems),
-    [selectedItems],
-  );
-
-  const totalUnits = useMemo(
-    () => selectedItems.reduce((sum, entry) => sum + entry.quantity, 0),
-    [selectedItems],
-  );
+  const fulfillmentLines = useMemo(() => fulfillmentLinesFromUnits(units), [units]);
 
   const typeFilterTypeIds = useMemo(() => {
     if (!itemFilterIds.length) return new Set<string>();
@@ -158,41 +150,47 @@ export function PackageItemsEditor({
   );
 
   const suggestedPricing = useMemo(() => {
-    return selectedItems.reduce(
-      (acc, entry) => {
-        const type = entry.type!;
-        acc.subsidized += (type.subsidizedRentalPriceUsd ?? 0) * entry.quantity;
+    return fulfillmentLines.reduce(
+      (acc, row) => {
+        const type = typeLookup.get(row.typeId);
+        if (!type) return acc;
+        acc.subsidized += (type.subsidizedRentalPriceUsd ?? 0) * row.quantity;
         acc.nonSubsidized +=
-          (type.nonSubsidizedRentalPriceUsd ?? type.rentalPriceUsd ?? 0) * entry.quantity;
+          (type.nonSubsidizedRentalPriceUsd ?? type.rentalPriceUsd ?? 0) * row.quantity;
         return acc;
       },
       { subsidized: 0, nonSubsidized: 0 },
     );
-  }, [selectedItems]);
+  }, [fulfillmentLines, typeLookup]);
 
-  function updateQuantity(typeId: string, nextQuantity: number) {
-    if (nextQuantity <= 0) {
-      removeType(typeId);
-      return;
-    }
-    onItemRowsChange(
-      itemRows.map((row) =>
-        row.typeId === typeId ? { ...row, quantity: String(nextQuantity) } : row,
-      ),
-    );
-  }
+  const totalUnits = useMemo(
+    () => fulfillmentLines.reduce((sum, row) => sum + row.quantity, 0),
+    [fulfillmentLines],
+  );
 
-  function removeType(typeId: string) {
-    onItemRowsChange(itemRows.filter((row) => row.typeId !== typeId));
+  function quantityInPackage(typeId: string) {
+    return fulfillmentLines.find((row) => row.typeId === typeId)?.quantity ?? 0;
   }
 
   function addType(typeId: string) {
-    const existing = itemRows.find((row) => row.typeId === typeId);
+    const existing = units.find(
+      (unit) =>
+        unit.options.length === 1 &&
+        unit.options[0]?.items.length === 1 &&
+        unit.options[0]?.items[0]?.typeId === typeId &&
+        unit.options[0]?.items[0]?.role === "primary",
+    );
     if (existing) {
-      updateQuantity(typeId, parseQuantity(existing.quantity) + 1);
-      return;
+      onUnitsChange(
+        units.map((unit) =>
+          unit.key === existing.key
+            ? { ...unit, quantity: String(parseQuantity(unit.quantity) + 1) }
+            : unit,
+        ),
+      );
+    } else {
+      onUnitsChange([...units, emptyContentUnit(typeId)]);
     }
-    onItemRowsChange([...itemRows.filter((row) => row.typeId), { typeId, quantity: "1" }]);
     setPanel("contents");
   }
 
@@ -200,9 +198,11 @@ export function PackageItemsEditor({
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-muted/20 px-3 py-2 text-sm">
         <span>
-          <span className="font-medium">{selectedItems.length}</span> type
-          {selectedItems.length === 1 ? "" : "s"} ·{" "}
-          <span className="font-medium">{totalUnits}</span> total unit{totalUnits === 1 ? "" : "s"}
+          <span className="font-medium">{units.length}</span> unit
+          {units.length === 1 ? "" : "s"} ·{" "}
+          <span className="font-medium">{fulfillmentLines.length}</span> included type
+          {fulfillmentLines.length === 1 ? "" : "s"} ·{" "}
+          <span className="font-medium">{totalUnits}</span> total
         </span>
         <span className="text-muted-foreground">
           Suggested {formatCurrency(Number(suggestedPricing.nonSubsidized.toFixed(2)))} non-subsidized
@@ -218,7 +218,7 @@ export function PackageItemsEditor({
           )}
           onClick={() => setPanel("contents")}
         >
-          In this package ({selectedItems.length})
+          In this package ({units.length})
         </button>
         <button
           type="button"
@@ -233,134 +233,28 @@ export function PackageItemsEditor({
       </div>
 
       {panel === "contents" ? (
-        <div className="space-y-4">
-          {!selectedItems.length ? (
-            <div className="rounded-md border border-dashed p-8 text-center">
-              <p className="text-sm font-medium">No equipment added yet</p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Switch to Add equipment to browse types and build the package.
-              </p>
-              <Button type="button" className="mt-4" variant="outline" onClick={() => setPanel("catalog")}>
-                Browse equipment
+        <div className="space-y-3">
+          <PackageContentsUnitsEditor units={units} onChange={onUnitsChange} types={types} />
+          {units.length ? (
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" onClick={() => setPanel("catalog")}>
+                Add more equipment
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                className="text-destructive hover:text-destructive"
+                onClick={() => onUnitsChange([])}
+              >
+                Clear all
               </Button>
             </div>
           ) : (
-            <>
-              {selectedSections.map((group) => (
-                <section key={group.section} className="space-y-2">
-                  <h4 className="text-sm font-semibold">{publicBucketLabels[group.section]}</h4>
-                  <div className="space-y-2">
-                    {group.rows.map((entry) => {
-                      const type = entry.type!;
-                      const imageUrl = type.iconImageUrl || type.promoImageUrl;
-                      return (
-                        <div
-                          key={entry.row.typeId}
-                          data-testid={`package-content-row-${entry.row.typeId}`}
-                          className="rounded-md border bg-card p-3"
-                        >
-                          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                            <div className="flex min-w-0 flex-1 items-center gap-3">
-                              {imageUrl ? (
-                                <StoredAssetImage
-                                  storedValue={imageUrl}
-                                  alt=""
-                                  className="h-14 w-14 shrink-0 rounded object-cover"
-                                  fallbackClassName="h-14 w-14 shrink-0 rounded"
-                                />
-                              ) : (
-                                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded bg-muted text-[10px] text-muted-foreground">
-                                  No image
-                                </div>
-                              )}
-                              <div className="min-w-0">
-                                <p className="font-medium leading-snug">{type.name}</p>
-                                <p className="truncate text-xs text-muted-foreground">
-                                  {formatTypeDisplay(type)}
-                                </p>
-                              </div>
-                            </div>
-
-                            <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
-                              <div className="flex items-center gap-1">
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-9 w-9 px-0"
-                                  aria-label="Decrease quantity"
-                                  onClick={() => updateQuantity(entry.row.typeId, entry.quantity - 1)}
-                                >
-                                  −
-                                </Button>
-                                <Input
-                                  className="h-9 w-16 px-2 text-center"
-                                  inputMode="numeric"
-                                  aria-label="Quantity"
-                                  value={entry.row.quantity}
-                                  onChange={(event) => {
-                                    const next = event.target.value.replace(/[^\d]/g, "");
-                                    if (!next) {
-                                      onItemRowsChange(
-                                        itemRows.map((row) =>
-                                          row.typeId === entry.row.typeId
-                                            ? { ...row, quantity: "" }
-                                            : row,
-                                        ),
-                                      );
-                                      return;
-                                    }
-                                    updateQuantity(entry.row.typeId, parseQuantity(next));
-                                  }}
-                                  onBlur={() => {
-                                    if (!entry.row.quantity.trim()) {
-                                      updateQuantity(entry.row.typeId, 1);
-                                    }
-                                  }}
-                                />
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-9 w-9 px-0"
-                                  aria-label="Increase quantity"
-                                  onClick={() => updateQuantity(entry.row.typeId, entry.quantity + 1)}
-                                >
-                                  +
-                                </Button>
-                              </div>
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                className="text-destructive hover:text-destructive"
-                                onClick={() => removeType(entry.row.typeId)}
-                              >
-                                Remove
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </section>
-              ))}
-
-              <div className="flex flex-wrap gap-2">
-                <Button type="button" variant="outline" onClick={() => setPanel("catalog")}>
-                  Add more equipment
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="text-destructive hover:text-destructive"
-                  onClick={() => onItemRowsChange([])}
-                >
-                  Clear all
-                </Button>
-              </div>
-            </>
+            <div className="text-center">
+              <Button type="button" variant="outline" onClick={() => setPanel("catalog")}>
+                Browse equipment
+              </Button>
+            </div>
           )}
         </div>
       ) : (
@@ -397,115 +291,93 @@ export function PackageItemsEditor({
             />
           </div>
 
-          {!catalogTypes.length ? (
-            <p className="text-sm text-muted-foreground">No equipment matches the current filters.</p>
-          ) : (
-            <div className="max-h-[24rem] space-y-4 overflow-y-auto pr-1">
-              {catalogSections.map((group) => (
-                <section key={group.section} className="space-y-2">
-                  <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    {publicBucketLabels[group.section]}
-                  </h4>
-                  <div className="space-y-2">
-                    {group.rows.map(({ type }) => {
-                      const inPackage = quantityInPackage(itemRows, type._id);
-                      const imageUrl = type.iconImageUrl || type.promoImageUrl;
-                      return (
-                        <div
-                          key={type._id}
-                          data-testid={`package-catalog-row-${type._id}`}
-                          className="flex flex-col gap-3 rounded-md border p-3 sm:flex-row sm:items-center"
-                        >
-                          <div className="flex min-w-0 flex-1 items-center gap-3">
-                            {imageUrl ? (
-                              <StoredAssetImage
-                                storedValue={imageUrl}
-                                alt=""
-                                className="h-12 w-12 shrink-0 rounded object-cover"
-                                fallbackClassName="h-12 w-12 shrink-0 rounded"
-                              />
-                            ) : (
-                              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded bg-muted text-[10px] text-muted-foreground">
-                                No img
-                              </div>
-                            )}
-                            <div className="min-w-0">
-                              <p className="text-sm font-medium leading-snug">{formatTypeDisplay(type)}</p>
-                              {inPackage ? (
-                                <p className="text-xs text-primary">{inPackage} already in package</p>
-                              ) : (
-                                <p className="text-xs text-muted-foreground">Not in package yet</p>
-                              )}
+          <div className="max-h-[28rem] space-y-4 overflow-y-auto rounded-md border p-3">
+            {catalogSections.map((group) => (
+              <section key={group.section} className="space-y-2">
+                <h4 className="text-sm font-semibold">{publicBucketLabels[group.section]}</h4>
+                <div className="space-y-2">
+                  {group.rows.map(({ type }) => {
+                    const inPackage = quantityInPackage(type._id);
+                    const imageUrl = type.iconImageUrl || type.promoImageUrl;
+                    return (
+                      <div
+                        key={type._id}
+                        data-testid={`package-catalog-row-${type._id}`}
+                        className="flex flex-col gap-2 rounded-md border p-3 sm:flex-row sm:items-center"
+                      >
+                        <div className="flex min-w-0 flex-1 items-center gap-3">
+                          {imageUrl ? (
+                            <StoredAssetImage
+                              storedValue={imageUrl}
+                              alt=""
+                              className="h-12 w-12 shrink-0 rounded object-cover"
+                              fallbackClassName="h-12 w-12 shrink-0 rounded"
+                            />
+                          ) : (
+                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded bg-muted text-[10px] text-muted-foreground">
+                              No image
                             </div>
+                          )}
+                          <div className="min-w-0">
+                            <p className="font-medium leading-snug">{type.name}</p>
+                            <p className="truncate text-xs text-muted-foreground">
+                              {formatTypeDisplay(type)}
+                            </p>
                           </div>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant={inPackage ? "outline" : "default"}
-                            className="shrink-0 self-start sm:self-center"
-                            onClick={() => addType(type._id)}
-                          >
-                            {inPackage ? "Add another" : "Add to package"}
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2">
+                          {inPackage > 0 ? (
+                            <span className="text-xs text-muted-foreground">{inPackage}× included</span>
+                          ) : null}
+                          <Button type="button" size="sm" onClick={() => addType(type._id)}>
+                            {inPackage > 0 ? "Add another" : "Add to package"}
                           </Button>
                         </div>
-                      );
-                    })}
-                  </div>
-                </section>
-              ))}
-            </div>
-          )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            ))}
+            {!catalogSections.length ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">No types match filters.</p>
+            ) : null}
+          </div>
+
+          <details className="rounded-md border bg-muted/10 p-3 text-sm">
+            <summary className="cursor-pointer font-medium">Suggested package pricing</summary>
+            <p className="mt-2">
+              Suggested Subsidized:{" "}
+              <span className="font-medium">{formatCurrency(Number(suggestedPricing.subsidized.toFixed(2)))}</span>
+            </p>
+            <p>
+              Suggested Non-Subsidized:{" "}
+              <span className="font-medium">
+                {formatCurrency(Number(suggestedPricing.nonSubsidized.toFixed(2)))}
+              </span>
+            </p>
+          </details>
         </div>
       )}
-
-      {selectedItems.length ? (
-        <details className="rounded-md border p-3 text-sm">
-          <summary className="cursor-pointer font-medium">Line-item pricing breakdown</summary>
-          <div className="mt-3 space-y-1 text-xs text-muted-foreground">
-            {selectedItems.map((entry) => {
-              const type = entry.type!;
-              const sub = (type.subsidizedRentalPriceUsd ?? 0) * entry.quantity;
-              const nonSub =
-                (type.nonSubsidizedRentalPriceUsd ?? type.rentalPriceUsd ?? 0) * entry.quantity;
-              return (
-                <p key={entry.row.typeId}>
-                  {entry.quantity}× {type.name}: Sub {formatCurrency(sub)} / Non {formatCurrency(nonSub)}
-                </p>
-              );
-            })}
-          </div>
-          <div className="my-2 border-t" />
-          <p>
-            Suggested Subsidized:{" "}
-            <span className="font-medium">{formatCurrency(Number(suggestedPricing.subsidized.toFixed(2)))}</span>
-          </p>
-          <p>
-            Suggested Non-Subsidized:{" "}
-            <span className="font-medium">{formatCurrency(Number(suggestedPricing.nonSubsidized.toFixed(2)))}</span>
-          </p>
-        </details>
-      ) : null}
     </div>
   );
 }
 
 export function useSuggestedPackagePricing(
-  itemRows: PackageItemRow[],
+  units: ContentUnitDraft[],
   typeLookup: Map<string, InventoryTypeRow>,
 ) {
   return useMemo(() => {
-    return itemRows.reduce(
+    return fulfillmentLinesFromUnits(units).reduce(
       (acc, row) => {
-        const qty = Number(row.quantity || "0");
-        if (!row.typeId || qty <= 0) return acc;
         const type = typeLookup.get(row.typeId);
         if (!type) return acc;
-        acc.subsidized += (type.subsidizedRentalPriceUsd ?? 0) * qty;
+        acc.subsidized += (type.subsidizedRentalPriceUsd ?? 0) * row.quantity;
         acc.nonSubsidized +=
-          (type.nonSubsidizedRentalPriceUsd ?? type.rentalPriceUsd ?? 0) * qty;
+          (type.nonSubsidizedRentalPriceUsd ?? type.rentalPriceUsd ?? 0) * row.quantity;
         return acc;
       },
       { subsidized: 0, nonSubsidized: 0 },
     );
-  }, [itemRows, typeLookup]);
+  }, [typeLookup, units]);
 }

@@ -35,9 +35,20 @@ export const publicPackageBucketSchema = z.enum([
   "misc",
 ]);
 
-export const inventoryPackageItemSchema = z.object({
+export const inventoryPackageOptionItemSchema = z.object({
   typeId: z.string().min(1, "Type is required"),
   quantity: z.coerce.number().min(1, "Quantity must be at least 1"),
+  role: z.enum(["primary", "accessory"]),
+});
+
+export const inventoryPackageOptionSchema = z.object({
+  name: z.string().optional(),
+  items: z.array(inventoryPackageOptionItemSchema).min(1, "Option needs at least one item"),
+});
+
+export const inventoryPackageContentUnitSchema = z.object({
+  quantity: z.coerce.number().min(1, "Quantity must be at least 1"),
+  options: z.array(inventoryPackageOptionSchema).min(1, "Each unit needs at least one option"),
 });
 
 export const inventoryPackageSchema = z
@@ -51,7 +62,9 @@ export const inventoryPackageSchema = z
     publicBucket: z.union([publicPackageBucketSchema, z.literal("")]),
     publicHeroImageUrl: z.string().optional(),
     publicSlug: z.string().optional(),
-    items: z.array(inventoryPackageItemSchema).min(1, "Package must include at least one item"),
+    contents: z
+      .array(inventoryPackageContentUnitSchema)
+      .min(1, "Package must include at least one content unit"),
   })
   .refine((data) => !data.publicListing || data.publicBucket !== "", {
     message: "Choose a public browse section when listing publicly",

@@ -6,6 +6,7 @@ import {
   perOccurrencePullQuantity,
   resolveBillableOccurrenceCount,
 } from "./lib/invoiceSeries";
+import { listFulfillmentPackageBom } from "./lib/packageBom";
 
 const pullListLineKindValue = v.union(v.literal("type"), v.literal("package"));
 
@@ -60,10 +61,7 @@ async function loadPackageContents(
   packageId: Id<"inventoryPackages">,
   excludedTypeIds?: Id<"inventoryTypes">[],
 ) {
-  const rows = await ctx.db
-    .query("inventoryPackageItems")
-    .withIndex("by_packageId", (q) => q.eq("packageId", packageId))
-    .take(500);
+  const rows = await listFulfillmentPackageBom(ctx, packageId);
   const excludedSet = new Set(excludedTypeIds ?? []);
   const contents = await Promise.all(
     rows

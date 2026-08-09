@@ -16,16 +16,14 @@ let secondType: SeededType;
 /**
  * Packages on `/dashboard/inventory/packages`.
  *
- * A package is a header row plus a set of `inventoryPackageItems` lines, and
- * `inventoryPackages.update` does not patch those lines — it deletes every line
- * for the package and re-inserts the submitted set. That makes the edit path
- * the interesting one: a quantity change and a removal are the same write, and
- * a spec that only counted lines would miss a re-insert that dropped one.
+ * A package is unnamed content units (1 option = included; 2+ = exclusive).
+ * Catalog adds bump unit qty when the same single-item unit already exists.
+ * `inventoryPackages.update` replaces option groups + BOM lines on save, so the
+ * edit path is still the interesting one: qty change and removal share a write.
  *
- * The editor is a hand-rolled modal, not a Radix dialog, and its contents are
- * built from a separate `itemRows` state that an effect mirrors back into the
- * form — so "add from the catalog" and "the form is dirty" are two different
- * things, and both have to hold for the save to carry the lines.
+ * The editor is a hand-rolled modal; contents live in draft state mirrored into
+ * the form on save — "add from the catalog" and "the form is dirty" are both
+ * required for the save to carry the lines.
  */
 test.describe.serial("inventory package CRUD", () => {
   test.setTimeout(180_000);
@@ -78,7 +76,9 @@ test.describe.serial("inventory package CRUD", () => {
     // 2 × $20 + 1 × $10 non-subsidized, 2 × $10 + 1 × $5 subsidized. The
     // suggestion is computed in the browser from the type rates; the point of
     // clicking it is that what the server stores agrees with what was shown.
-    await expect(page.getByText(/2 types · 3 total units/)).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText(/2 units · 2 included types · 3 total/)).toBeVisible({
+      timeout: 20_000,
+    });
     await page.getByRole("button", { name: "Use suggested prices" }).click();
     await expect(formField(editor, "Non-Subsidized Package Price (USD)")).toHaveValue("50");
     await expect(formField(editor, /^Subsidized Package Price/)).toHaveValue("25");
@@ -115,13 +115,17 @@ test.describe.serial("inventory package CRUD", () => {
       timeout: 20_000,
     });
 
-    const firstRow = page.getByTestId(`package-content-row-${firstType.typeId}`);
-    await expect(firstRow).toBeVisible({ timeout: 20_000 });
-    await firstRow.getByRole("button", { name: "Increase quantity" }).click();
+    const firstUnit = page.getByTestId("package-content-unit").filter({
+      has: page.getByTestId(`package-content-row-${firstType.typeId}`),
+    });
+    await expect(firstUnit).toBeVisible({ timeout: 20_000 });
+    await firstUnit.getByRole("button", { name: "Increase Unit quantity" }).click();
 
-    const secondRow = page.getByTestId(`package-content-row-${secondType.typeId}`);
-    await secondRow.getByRole("button", { name: "Remove", exact: true }).click();
-    await expect(secondRow).toHaveCount(0, { timeout: 20_000 });
+    const secondUnit = page.getByTestId("package-content-unit").filter({
+      has: page.getByTestId(`package-content-row-${secondType.typeId}`),
+    });
+    await secondUnit.getByRole("button", { name: "Remove unit" }).click();
+    await expect(secondUnit).toHaveCount(0, { timeout: 20_000 });
 
     await page.getByRole("button", { name: "Update", exact: true }).click();
 

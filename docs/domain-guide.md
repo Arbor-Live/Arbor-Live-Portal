@@ -188,6 +188,12 @@ Event types (drive which editor tabs and quick-add blocks appear):
 - `inventoryTypes` (catalog: model, pricing, capabilities, manuals) →
   `inventoryItems` (physical units with `assetId` and storage location) →
   `inventoryPackages` (bundles with per-mode pricing).
+- Packages are composed of unnamed **content units** on
+  `inventoryPackageOptionGroups` + `inventoryPackageOptions`, with BOM lines on
+  `inventoryPackageItems` (`optionId` + `role` primary/accessory). One option =
+  always included; two or more = exclusive pick (catalog display until booking
+  selection — GitHub #116). Quotes / pull lists / fulfillment use
+  `listFulfillmentPackageBom` (single-option units + legacy flat rows).
 - Public equipment pages are opt-in via `publicListing` / `publicProfile` /
   `publicSlug` flags; `/e/[assetId]` is the QR lost-and-found page
   (`publicInventory.equipmentByAssetId` + `lostFoundSettings`).

@@ -58,6 +58,8 @@ export const riderInputChannelValue = v.object({
   id: v.string(),
   channel: v.number(),
   source: v.string(),
+  /** Stable catalog key when the channel was generated from a stage symbol. */
+  sourceKey: v.optional(v.string()),
   inputType: riderInputTypeValue,
   micPreference: v.optional(v.string()),
   stand: riderStandValue,
