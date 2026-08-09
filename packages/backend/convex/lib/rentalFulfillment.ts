@@ -5,6 +5,7 @@ import {
   normalizeAssetScanInput,
   parseAssetScanInput,
 } from "./assetScan";
+import { listFulfillmentPackageBom } from "./packageBom";
 import { isShortLinkExpired } from "./shortLinks";
 import { normalizeShortLinkSlug } from "./shortLinkSlug";
 
@@ -213,10 +214,7 @@ export async function expandPullListNeeds(
     }
     if (!line.packageId) continue;
     const excludedTypeIds = new Set(line.excludedTypeIds ?? []);
-    const packageItems = await ctx.db
-      .query("inventoryPackageItems")
-      .withIndex("by_packageId", (q) => q.eq("packageId", line.packageId!))
-      .take(500);
+    const packageItems = await listFulfillmentPackageBom(ctx, line.packageId);
     for (const pkgItem of packageItems) {
       if (excludedTypeIds.has(pkgItem.typeId)) continue;
       const type = await ctx.db.get(pkgItem.typeId);

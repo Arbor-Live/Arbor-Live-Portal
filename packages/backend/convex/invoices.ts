@@ -21,6 +21,7 @@ import {
   requestInvoiceQuoteChanges,
   updateInvoicePaymentContacts,
 } from "./lib/publicQuoteView";
+import { listFulfillmentPackageBom } from "./lib/packageBom";
 import { allocateInvoiceNumber } from "./lib/publicReferenceIds";
 import { enforceRateLimit, HOUR_MS } from "./rateLimit";
 import { scheduleBookingQuoteReadyEmail } from "./email/bookingRequestEmails";
@@ -160,10 +161,7 @@ async function suggestPackageExclusionDiscount(
 ) {
   if (!excludedTypeIds.length) return 0;
   const excludedSet = new Set(excludedTypeIds);
-  const packageItems = await ctx.db
-    .query("inventoryPackageItems")
-    .withIndex("by_packageId", (q) => q.eq("packageId", packageId))
-    .take(500);
+  const packageItems = await listFulfillmentPackageBom(ctx, packageId);
   let total = 0;
   for (const item of packageItems) {
     if (!excludedSet.has(item.typeId)) continue;

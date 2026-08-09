@@ -14,6 +14,7 @@ import {
   isRequestReferenceId,
 } from "./lib/publicReferenceIds";
 import { legacyTeamsToMembership } from "./lib/userVerticals";
+import { consolidatePackageIntoOneIncludedUnit } from "./lib/packageContentMigration";
 
 /**
  * Official @convex-dev/migrations runner.
@@ -221,6 +222,30 @@ export const backfillEventRequestMilestoneTimestamps = migrations.define({
 });
 
 /**
+ * Convert legacy flat BOM + wrongly-split single-option units into one
+ * included content unit per package. Exclusive units (2+ options) stay.
+ */
+export const migratePackageLegacyItemsToContentUnits = migrations.define({
+  table: "inventoryPackages",
+  batchSize: 15,
+  migrateOne: async (ctx, pkg) => {
+    await consolidatePackageIntoOneIncludedUnit(ctx, pkg._id, Date.now());
+  },
+});
+
+/**
+ * Re-run consolidation after the first migration created one unit per line.
+ * Append-only series entry — safe if already consolidated (no-op when already one unit).
+ */
+export const consolidatePackageContentUnits = migrations.define({
+  table: "inventoryPackages",
+  batchSize: 15,
+  migrateOne: async (ctx, pkg) => {
+    await consolidatePackageIntoOneIncludedUnit(ctx, pkg._id, Date.now());
+  },
+});
+
+/**
  * never reorder or remove completed ones (reset requires an explicit reset:true).
  */
 const MIGRATION_SERIES = [
@@ -233,6 +258,8 @@ const MIGRATION_SERIES = [
   internal.migrations.migrateBandPaymentReferenceIds,
   internal.migrations.migrateConvertedEventLinks,
   internal.migrations.backfillEventRequestMilestoneTimestamps,
+  internal.migrations.migratePackageLegacyItemsToContentUnits,
+  internal.migrations.consolidatePackageContentUnits,
 ] as const;
 
 export const runAll = migrations.runner([...MIGRATION_SERIES]);
