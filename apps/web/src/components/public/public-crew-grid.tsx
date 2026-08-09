@@ -7,7 +7,18 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Reveal, Stagger, StaggerItem } from "@/components/landing/landing-motion";
 import { useResolvedAssetUrl } from "@/components/files/stored-asset-image";
 
-function CrewCard({ member }: { member: { id: string; name: string; imageUrl?: string; description?: string; secondaryTags: string[] } }) {
+function CrewCard({
+  member,
+}: {
+  member: {
+    id: string;
+    name: string;
+    imageUrl?: string;
+    pronouns?: string;
+    description?: string;
+    secondaryTags: string[];
+  };
+}) {
   const resolvedImageUrl = useResolvedAssetUrl(member.imageUrl);
 
   return (
@@ -23,7 +34,12 @@ function CrewCard({ member }: { member: { id: string; name: string; imageUrl?: s
         )}
       </div>
       <CardContent className="space-y-2 p-4">
-        <h3 className="font-semibold">{member.name}</h3>
+        <div>
+          <h3 className="font-semibold">{member.name}</h3>
+          {member.pronouns ? (
+            <p className="text-sm text-muted-foreground">{member.pronouns}</p>
+          ) : null}
+        </div>
         {member.secondaryTags.length > 0 ? (
           <div className="flex flex-wrap gap-1">
             {member.secondaryTags.map((tag) => (

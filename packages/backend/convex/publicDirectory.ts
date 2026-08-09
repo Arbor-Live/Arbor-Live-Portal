@@ -94,6 +94,7 @@ export const listPublicCrew = query({
             id: v.string(),
             name: v.string(),
             imageUrl: v.optional(v.string()),
+            pronouns: v.optional(v.string()),
             description: v.optional(v.string()),
             secondaryTags: v.array(v.string()),
           }),
@@ -133,6 +134,7 @@ export const listPublicCrew = query({
         id: string;
         name: string;
         imageUrl?: string;
+        pronouns?: string;
         description?: string;
         secondaryTags: string[];
       }>
@@ -147,6 +149,7 @@ export const listPublicCrew = query({
       const name = user?.name?.trim() || "Arbor Live crew";
       const imageUrl = await resolveCrewMemberImageUrl(ctx, profile, user);
       const description = profile.publicCrewDescription?.trim() || undefined;
+      const pronouns = profile.pronouns?.trim() || undefined;
       const membership = resolveProfileMembership(profile);
       const primaryVertical = getPrimaryVertical(membership.verticals);
       const secondaryTags = getSecondaryTags(
@@ -155,11 +158,11 @@ export const listPublicCrew = query({
         primaryVertical,
       );
       if (profile.gradYear) secondaryTags.push(`Class of ${profile.gradYear}`);
-      if (profile.pronouns?.trim()) secondaryTags.push(profile.pronouns.trim());
       const member = {
         id: profile.userId,
         name,
         imageUrl,
+        pronouns,
         description,
         secondaryTags,
       };
@@ -179,6 +182,7 @@ export const listPublicCrew = query({
         id: string;
         name: string;
         imageUrl?: string;
+        pronouns?: string;
         description?: string;
         secondaryTags: string[];
       }>;
