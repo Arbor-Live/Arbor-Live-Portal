@@ -139,6 +139,7 @@ function TypeLine({
         "flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3",
         indented && "ml-4 border-l border-border/60 pl-3 sm:ml-6",
       )}
+      data-testid={item.typeId ? `package-content-row-${item.typeId}` : undefined}
     >
       <div className="flex min-w-0 flex-1 items-center gap-3">
         {imageUrl ? (

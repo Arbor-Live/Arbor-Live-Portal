@@ -24,6 +24,7 @@ import {
   allocateBandPaymentConfirmationToken,
   allocateRequestNumber,
 } from "./lib/publicReferenceIds";
+import { listFulfillmentPackageBom } from "./lib/packageBom";
 
 const makeToken = customAlphabet("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz", 24);
 const makeInvoiceSuffix = customAlphabet(
@@ -5198,12 +5199,11 @@ export const getInventoryTypeByName = query({
 });
 
 /**
- * Test-only: a package and its line rows, read back by name.
+ * Test-only: a package and its fulfillment BOM, read back by name.
  *
- * `inventoryPackages.update` does not patch the line rows — it deletes every
- * `inventoryPackageItems` row for the package and re-inserts the submitted set.
- * A spec that only counted lines would miss a re-insert that dropped a
- * quantity, so the lines come back with their type names attached.
+ * Content units store per-option line qty separately from unit qty; callers
+ * assert the fulfillment-equivalent totals (single-option units × scale),
+ * matching quotes/pull lists. Exclusive units are omitted until #116.
  */
 export const getInventoryPackageByName = query({
   args: { name: v.string() },
@@ -5236,12 +5236,9 @@ export const getInventoryPackageByName = query({
       .withIndex("by_name", (q) => q.eq("name", args.name.trim()))
       .first();
     if (!pkg) return null;
-    const lines = await ctx.db
-      .query("inventoryPackageItems")
-      .withIndex("by_packageId", (q) => q.eq("packageId", pkg._id))
-      .take(200);
+    const bom = await listFulfillmentPackageBom(ctx, pkg._id);
     const items = [];
-    for (const line of lines) {
+    for (const line of bom) {
       const type = await ctx.db.get(line.typeId);
       items.push({
         typeId: line.typeId,
@@ -5570,6 +5567,19 @@ export const deleteInventoryCatalogFixtures = mutation({
         .take(200)) {
         await ctx.db.delete(line._id);
         deletedPackageLines += 1;
+      }
+      const groups = await ctx.db
+        .query("inventoryPackageOptionGroups")
+        .withIndex("by_packageId", (q) => q.eq("packageId", pkg._id))
+        .take(40);
+      for (const group of groups) {
+        for (const option of await ctx.db
+          .query("inventoryPackageOptions")
+          .withIndex("by_optionGroupId", (q) => q.eq("optionGroupId", group._id))
+          .take(40)) {
+          await ctx.db.delete(option._id);
+        }
+        await ctx.db.delete(group._id);
       }
       await ctx.db.delete(pkg._id);
       deletedPackages += 1;
