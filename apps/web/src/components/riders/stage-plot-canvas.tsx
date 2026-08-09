@@ -55,6 +55,7 @@ export function StagePlotCanvas({
   fixedWidth,
 }: StagePlotCanvasProps) {
   const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const canvasRef = useRef<HTMLDivElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [measuredWidth, setMeasuredWidth] = useState(fixedWidth ?? 720);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
@@ -147,9 +148,20 @@ export function StagePlotCanvas({
     };
   }, [readOnly]);
 
+  /**
+   * `preventDefault` on pointerdown (needed so dragging a symbol does not also
+   * select page text) suppresses the focus the canvas would otherwise get, and
+   * without focus `handleKeyDown` never fires — so nudge/rotate/delete keys do
+   * nothing after clicking a symbol. Focus it explicitly instead.
+   */
+  function focusCanvas() {
+    canvasRef.current?.focus({ preventScroll: true });
+  }
+
   function beginMove(event: React.PointerEvent, item: RiderStageItem) {
     if (readOnly) return;
     event.preventDefault();
+    focusCanvas();
     onSelect?.(item.id);
     const pointer = pointerToFt(event.clientX, event.clientY);
     dragRef.current = {
@@ -164,6 +176,7 @@ export function StagePlotCanvas({
     if (readOnly) return;
     event.preventDefault();
     event.stopPropagation();
+    focusCanvas();
     onSelect?.(item.id);
     dragRef.current = { mode: "rotate", itemId: item.id };
   }
@@ -237,6 +250,7 @@ export function StagePlotCanvas({
       onDrop={handleDrop}
     >
       <div
+        ref={canvasRef}
         role={readOnly ? undefined : "application"}
         aria-label={readOnly ? undefined : "Stage plot"}
         tabIndex={readOnly ? undefined : 0}

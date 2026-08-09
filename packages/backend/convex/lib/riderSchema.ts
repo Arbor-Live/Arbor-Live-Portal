@@ -58,7 +58,13 @@ export const riderInputChannelValue = v.object({
   id: v.string(),
   channel: v.number(),
   source: v.string(),
-  /** Stable catalog key when the channel was generated from a stage symbol. */
+  /**
+   * Canonical source key from `@arbor/rider-document`, set by the symbol seeds
+   * and by the source picker. Optional: unmapped channels are legitimate and get
+   * resolved at generation time. Deliberately not a union of literals — the
+   * vocabulary grows, and a new key must not make every existing rider fail
+   * validation.
+   */
   sourceKey: v.optional(v.string()),
   inputType: riderInputTypeValue,
   micPreference: v.optional(v.string()),
@@ -68,7 +74,6 @@ export const riderInputChannelValue = v.object({
   notes: v.optional(v.string()),
   stageItemId: v.optional(v.string()),
   stereo: v.optional(v.boolean()),
-  group: v.optional(v.string()),
 });
 
 export const riderMonitorMixValue = v.object({

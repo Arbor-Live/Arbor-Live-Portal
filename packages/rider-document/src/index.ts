@@ -4,6 +4,7 @@ export {
   MIN_STAGE_FT,
   STAGE_PRESETS,
   STAGE_SIZE_STEP,
+  backfillSourceKeys,
   blankBacklineItem,
   blankInput,
   blankMix,
@@ -11,7 +12,8 @@ export {
   clampToStage,
   createRiderId,
   emptyRiderContent,
-  inputGroups,
+  inputFamilyLabel,
+  insertByFamily,
   itemFootprint,
   moveInArray,
   nextChannelNumber,
@@ -24,7 +26,9 @@ export {
   round,
   snapStageFt,
   stageSizeOptions,
+  sourceOrdinals,
   summarizeRider,
+  unmappedInputs,
   updateItem,
 } from "./content";
 export type { PlaceSymbolOptions, PlaceSymbolResult, RiderSummary } from "./content";
@@ -62,6 +66,26 @@ export type {
   RiderSymbolCategory,
 } from "./symbols";
 
+export {
+  RIDER_SOURCES,
+  RIDER_SOURCE_FAMILY_LABELS,
+  RIDER_SOURCE_FAMILY_ORDER,
+  captureFor,
+  commonRiderSources,
+  defaultCapture,
+  hasCaptureChoice,
+  matchRiderSource,
+  riderSource,
+  riderSourcesByFamily,
+  searchRiderSources,
+} from "./sources";
+export type {
+  RiderCaptureOption,
+  RiderSourceDefinition,
+  RiderSourceFamily,
+  RiderSourceReuseClass,
+} from "./sources";
+
 export { RIDER_TEMPLATES, riderTemplate } from "./templates";
 export type { RiderTemplate } from "./templates";
 
@@ -71,7 +95,6 @@ export {
   MONITOR_TYPE_OPTIONS,
   PROVIDED_BY_EDITOR_LABELS,
   PROVIDED_BY_LABELS,
-  RIDER_GROUP_SUGGESTIONS,
   STAND_LABELS,
 } from "./types";
 export type {

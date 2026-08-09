@@ -12,25 +12,30 @@ import {
   TrashIcon,
 } from "@phosphor-icons/react";
 import {
+  backfillSourceKeys,
   blankBacklineItem,
   blankInput,
   blankMix,
+  captureFor,
   channelSpan,
-  inputGroups,
+  defaultCapture,
+  inputFamilyLabel,
+  insertByFamily,
   INPUT_TYPE_LABELS,
   MONITOR_TYPE_LABELS,
   MONITOR_TYPE_OPTIONS,
   moveInArray,
   placeSymbol,
   PROVIDED_BY_EDITOR_LABELS,
-  RIDER_GROUP_SUGGESTIONS,
   removeItem,
   renumberInputs,
   renumberMixes,
   riderWarnings,
   STAGE_PRESETS,
   STAND_LABELS,
+  riderSource,
   snapStageFt,
+  sourceOrdinals,
   stageSizeOptions,
   updateItem,
   type RiderBacklineItem,
@@ -59,6 +64,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { RiderPdfDownloadButton } from "@/components/riders/rider-pdf-download-button";
+import {
+  RiderSourcePicker,
+  type RiderSourceSelection,
+} from "@/components/riders/rider-source-picker";
 import { RiderSymbolPalette } from "@/components/riders/rider-symbol-palette";
 import { StagePlotCanvas } from "@/components/riders/stage-plot-canvas";
 import { cn } from "@/lib/utils";
@@ -84,7 +93,10 @@ function contentFromRider(rider: {
   contactEmail?: string;
   contactPhone?: string;
 }): RiderContent {
-  return {
+  // Riders written before the source vocabulary carry no `sourceKey`, so resolve
+  // what we can on the way in. Both the draft and its baseline are built from
+  // this, so a rider does not open dirty; the keys persist on the next save.
+  return backfillSourceKeys({
     stage: rider.stage,
     items: rider.items,
     inputs: rider.inputs,
@@ -98,7 +110,7 @@ function contentFromRider(rider: {
     contactName: rider.contactName,
     contactEmail: rider.contactEmail,
     contactPhone: rider.contactPhone,
-  };
+  });
 }
 
 function draftKey(draft: Draft): string {
@@ -605,14 +617,58 @@ export function RiderEditorClient({ riderId }: { riderId: Id<"bandRiders"> }) {
             <span className="text-xs text-muted-foreground">
               {draft.content.inputs.reduce((count, input) => count + channelSpan(input), 0)}{" "}
               channels · {draft.content.monitorMixes.length} mixes ·{" "}
-              {draft.content.items.length} symbols ·{" "}
-              {inputGroups(draft.content.inputs).length} DCA groups
+              {draft.content.items.length} symbols
             </span>
           }
         />
       ) : null}
     </div>
   );
+}
+
+/**
+ * Picking a role rewrites the row's capture defaults too, so the band gets the
+ * right Type, stand, phantom and width without touching four more cells. Keeping
+ * the typed text is deliberate: the label is theirs, the key is ours.
+ */
+function applySourceSelection(
+  selection: RiderSourceSelection,
+): Partial<RiderInputChannel> {
+  const { source, text } = selection;
+  if (!source) return { source: text, sourceKey: undefined };
+  const capture = defaultCapture(source);
+  return {
+    source: text,
+    sourceKey: source.key,
+    inputType: capture.inputType,
+    stand: capture.stand,
+    phantom: capture.phantom,
+    stereo: source.stereo ?? false,
+  };
+}
+
+/**
+ * A mapped role knows how it can be picked up — a guitar is amp-or-DI, a kick is
+ * always a mic — so the Type list narrows to those. Unmapped rows keep the full
+ * list, since we have nothing to narrow it with.
+ */
+function captureOptionsFor(input: RiderInputChannel): RiderInputType[] {
+  const source = input.sourceKey ? riderSource(input.sourceKey) : undefined;
+  if (!source) return INPUT_TYPES;
+  const options = source.captures.map((capture) => capture.inputType);
+  // Keep whatever is stored selectable, so an older value never vanishes.
+  return options.includes(input.inputType) ? options : [...options, input.inputType];
+}
+
+/** Changing capture carries its stand and phantom defaults with it. */
+function applyCaptureChange(
+  input: RiderInputChannel,
+  inputType: RiderInputType,
+): Partial<RiderInputChannel> {
+  const source = input.sourceKey ? riderSource(input.sourceKey) : undefined;
+  const capture = source ? captureFor(source, inputType) : undefined;
+  if (!capture) return { inputType };
+  return { inputType, stand: capture.stand, phantom: capture.phantom };
 }
 
 function InputsSection({
@@ -628,8 +684,45 @@ function InputsSection({
     onChange(inputs.map((input) => (input.id === id ? { ...input, ...patch } : input)));
   }
 
+  /**
+   * Applying a role can change the strip width, so this renumbers — and a row
+   * that had no role yet slides into its family group rather than staying at the
+   * bottom where "Add channel" put it. A row that already had a role stays put:
+   * the band may have positioned it deliberately.
+   */
+  function selectSource(input: RiderInputChannel, selection: RiderSourceSelection) {
+    const updated = { ...input, ...applySourceSelection(selection) };
+    const next = input.sourceKey
+      ? inputs.map((row) => (row.id === input.id ? updated : row))
+      : insertByFamily(
+          inputs.filter((row) => row.id !== input.id),
+          updated,
+        );
+    onChange(renumberInputs(next));
+    setAutoFocusId(null);
+  }
+
+  /** Row whose picker should open on mount — the one "Add channel" just made. */
+  const [autoFocusId, setAutoFocusId] = useState<string | null>(null);
+
+  function addChannel() {
+    const row = blankInput(inputs);
+    onChange([...inputs, row]);
+    setAutoFocusId(row.id);
+  }
+
+  const ordinals = useMemo(() => sourceOrdinals(inputs), [inputs]);
+
+  /**
+   * Rows are only `draggable` once a pointer goes down on their grip handle —
+   * a permanently draggable row makes the browser start a drag instead of a
+   * text selection when you click into any of the cell inputs.
+   */
+  const [dragArmedId, setDragArmedId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
-  const [dropIndex, setDropIndex] = useState<number | null>(null);
+  const [dropTarget, setDropTarget] = useState<
+    { index: number; edge: "top" | "bottom" } | null
+  >(null);
   const dragIndexRef = useRef<number>(-1);
 
   function handleDragStart(id: string, index: number) {
@@ -639,64 +732,47 @@ function InputsSection({
 
   function handleDragEnd() {
     dragIndexRef.current = -1;
+    setDragArmedId(null);
     setDraggingId(null);
-    setDropIndex(null);
+    setDropTarget(null);
+  }
+
+  /** Highlights the edge the row will actually land on (see `handleDropOn`). */
+  function hoverRow(index: number) {
+    const from = dragIndexRef.current;
+    if (from === -1 || from === index) return;
+    setDropTarget({ index, edge: from < index ? "bottom" : "top" });
   }
 
   /**
-   * Reorders `inputs` (renumbering afterwards) and adopts the drop target's DCA
-   * group — dropping onto a section header or another row moves the channel into
-   * that group (null = the "No DCA group" section ungroups it).
+   * Reorders `inputs` and renumbers. `moveInArray` lands the row *at* `index`,
+   * which for a downward move is just below the hovered row — `hoverRow` draws
+   * the indicator on that same edge.
    */
-  function handleDropOn(index: number, group: string | null) {
+  function handleDropOn(index: number) {
     const from = dragIndexRef.current;
-    if (from === -1) {
+    if (from === -1 || from >= inputs.length) {
       handleDragEnd();
       return;
     }
-    const targetGroup = group ?? undefined;
-    let next = inputs;
-    if ((inputs[from].group?.trim() || undefined) !== targetGroup) {
-      next = inputs.map((input, i) =>
-        i === from ? { ...input, group: targetGroup } : input,
-      );
-    }
-    onChange(renumberInputs(moveInArray(next, from, index)));
+    onChange(renumberInputs(moveInArray(inputs, from, index)));
     handleDragEnd();
   }
 
-  const groupOptions = useMemo(() => {
-    const seen = new Set<string>();
-    const options: string[] = [];
-    for (const group of [...inputGroups(inputs), ...RIDER_GROUP_SUGGESTIONS]) {
-      if (!seen.has(group)) {
-        seen.add(group);
-        options.push(group);
-      }
-    }
-    return options;
-  }, [inputs]);
-
-  const sections = useMemo(() => {
-    const byGroup = new Map<string | null, Array<{ input: RiderInputChannel; index: number }>>();
-    inputs.forEach((input, index) => {
-      const group = input.group?.trim() || null;
-      const rows = byGroup.get(group) ?? [];
-      rows.push({ input, index });
-      byGroup.set(group, rows);
-    });
-    const result: Array<{
-      label: string | null;
-      rows: Array<{ input: RiderInputChannel; index: number }>;
-    }> = [];
-    for (const group of inputGroups(inputs)) {
-      const rows = byGroup.get(group);
-      if (rows) result.push({ label: group, rows });
-    }
-    const ungrouped = byGroup.get(null);
-    if (ungrouped) result.push({ label: null, rows: ungrouped });
-    return result;
-  }, [inputs]);
+  /**
+   * Family headings are derived from each row's role, and only mark where a run
+   * changes — the array order is the patch order, so we label it rather than
+   * reshuffle rows into containers.
+   */
+  const rows = useMemo(
+    () =>
+      inputs.map((input, index) => {
+        const family = inputFamilyLabel(input);
+        const previous = index > 0 ? inputFamilyLabel(inputs[index - 1]) : null;
+        return { input, index, heading: family !== previous ? family : null };
+      }),
+    [inputs],
+  );
 
   const columnCount = readOnly ? 9 : 10;
 
@@ -708,61 +784,21 @@ function InputsSection({
     );
   }
 
-  function retitleGroup(from: string | null, to: string) {
-    const next = to.trim();
-    onChange(
-      renumberInputs(
-        inputs.map((input) =>
-          (input.group?.trim() || null) === from ? { ...input, group: next || undefined } : input,
-        ),
-      ),
-    );
-  }
-
-  function addDcaGroup() {
-    onChange(
-      renumberInputs([
-        ...inputs,
-        { ...blankInput(inputs), group: `DCA ${inputGroups(inputs).length + 1}` },
-      ]),
-    );
-  }
-
-  function ungroupGroup(group: string) {
-    onChange(
-      renumberInputs(
-        inputs.map((input) =>
-          (input.group?.trim() || null) === group ? { ...input, group: undefined } : input,
-        ),
-      ),
-    );
-  }
 
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
         <CardTitle className="text-sm">Input list</CardTitle>
         {!readOnly ? (
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={addDcaGroup}
-            >
-              <PlusIcon className="size-3.5" />
-              Add DCA
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => onChange([...inputs, blankInput(inputs)])}
-            >
-              <PlusIcon className="size-3.5" />
-              Add channel
-            </Button>
-          </div>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={addChannel}
+          >
+            <PlusIcon className="size-3.5" />
+            Add channel
+          </Button>
         ) : null}
       </CardHeader>
       <CardContent className="overflow-x-auto">
@@ -771,11 +807,13 @@ function InputsSection({
             No channels yet. Place mics, DIs, or amps on the plot — or add a row.
           </p>
         ) : (
-          <table className="w-full min-w-[860px] border-collapse text-sm">
+          // Every other column is a fixed width, so the free-text ones only get
+          // what is left over — 860px starved Source and Notes to ~75px each.
+          <table className="w-full min-w-[1120px] border-collapse text-sm">
             <thead>
               <tr className="border-b text-left text-xs text-muted-foreground">
                 <th className="w-10 py-2 pr-2 font-medium">Ch</th>
-                <th className="py-2 pr-2 font-medium">Source</th>
+                <th className="min-w-[220px] py-2 pr-2 font-medium">Source</th>
                 <th className="w-12 py-2 pr-2 font-medium">L/R</th>
                 <th className="w-28 py-2 pr-2 font-medium">Type</th>
                 <th className="w-32 py-2 pr-2 font-medium">Mic / DI</th>
@@ -787,85 +825,28 @@ function InputsSection({
               </tr>
             </thead>
             <tbody>
-              {sections.map((section) => (
-                <Fragment key={section.label ?? "__ungrouped__"}>
+              {rows.map(({ input, index, heading }) => (
+                <Fragment key={input.id}>
+                  {heading ? (
+                    <tr className="border-b border-border/40 bg-muted/40">
+                      <td colSpan={columnCount} className="px-2 py-1">
+                        <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                          {heading}
+                        </span>
+                      </td>
+                    </tr>
+                  ) : null}
                   <tr
-                    className={cn(
-                      "border-b border-border/40 bg-muted/40",
-                      !readOnly && "cursor-pointer",
-                    )}
-                    draggable={false}
-                    onDragOver={(event) => {
-                      event.preventDefault();
-                      event.dataTransfer.dropEffect = "move";
-                      if (section.rows.length > 0) {
-                        setDropIndex(section.rows[0].index);
-                      }
-                    }}
-                    onDrop={(event) => {
-                      event.preventDefault();
-                      if (section.rows.length > 0) {
-                        handleDropOn(section.rows[0].index, section.label);
-                      }
-                    }}
-                  >
-                    <td colSpan={columnCount} className="px-2 py-1">
-                      <div className="flex items-center gap-2">
-                        {readOnly ? (
-                          <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                            {section.label ? `${section.label} · DCA` : "No DCA group"}
-                          </span>
-                        ) : (
-                          <label className="flex items-center gap-2">
-                            <select
-                              className="h-7 w-40 rounded-none border border-input bg-transparent px-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground outline-none focus-visible:border-ring"
-                              value={section.label ?? ""}
-                              onChange={(event) =>
-                                retitleGroup(section.label, event.target.value)
-                              }
-                            >
-                              <option value="">No DCA group</option>
-                              {groupOptions.map((group) => (
-                                <option key={group} value={group}>
-                                  {group}
-                                </option>
-                              ))}
-                            </select>
-                            <span className="text-xs text-muted-foreground/70">
-                              {section.rows.length} ch
-                            </span>
-                          </label>
-                        )}
-                        {!readOnly && section.label ? (
-                          <Button
-                            type="button"
-                            size="icon-xs"
-                            variant="ghost"
-                            className="text-muted-foreground/60 hover:text-destructive"
-                            aria-label={`Remove ${section.label} DCA group`}
-                            onClick={() => {
-                              const group = section.label;
-                              if (group) ungroupGroup(group);
-                            }}
-                          >
-                            <TrashIcon className="size-3.5" />
-                          </Button>
-                        ) : null}
-                      </div>
-                    </td>
-                  </tr>
-                  {section.rows.map(({ input, index }) => (
-                    <tr
-                      key={input.id}
                       className={cn(
                         "border-b border-border/60 align-top",
-                        !readOnly && "cursor-grab active:cursor-grabbing",
                         draggingId === input.id && "opacity-40",
-                        dropIndex === index &&
+                        dropTarget?.index === index &&
                           !readOnly &&
-                          "shadow-[inset_0_2px_0_0_var(--ring)]",
+                          (dropTarget.edge === "top"
+                            ? "shadow-[inset_0_2px_0_0_var(--ring)]"
+                            : "shadow-[inset_0_-2px_0_0_var(--ring)]"),
                       )}
-                      draggable={!readOnly}
+                      draggable={!readOnly && dragArmedId === input.id}
                       onDragStart={(event) => {
                         handleDragStart(input.id, index);
                         event.dataTransfer.effectAllowed = "move";
@@ -873,11 +854,11 @@ function InputsSection({
                       onDragOver={(event) => {
                         event.preventDefault();
                         event.dataTransfer.dropEffect = "move";
-                        setDropIndex(index);
+                        hoverRow(index);
                       }}
                       onDrop={(event) => {
                         event.preventDefault();
-                        handleDropOn(index, input.group?.trim() || null);
+                        handleDropOn(index);
                       }}
                       onDragEnd={handleDragEnd}
                     >
@@ -889,11 +870,13 @@ function InputsSection({
                         </span>
                       </td>
                       <td className="py-1.5 pr-2">
-                        <input
-                          className={fieldClass}
+                        <RiderSourcePicker
                           disabled={readOnly}
+                          sourceKey={input.sourceKey}
                           value={input.source}
-                          onChange={(event) => patch(input.id, { source: event.target.value })}
+                          ordinal={ordinals.get(input.id)}
+                          autoFocus={autoFocusId === input.id}
+                          onChange={(selection) => selectSource(input, selection)}
                         />
                       </td>
                       <td className="py-1.5 pr-2">
@@ -914,12 +897,16 @@ function InputsSection({
                           disabled={readOnly}
                           value={input.inputType}
                           onChange={(event) =>
-                            patch(input.id, {
-                              inputType: event.target.value as RiderInputType,
-                            })
+                            patch(
+                              input.id,
+                              applyCaptureChange(
+                                input,
+                                event.target.value as RiderInputType,
+                              ),
+                            )
                           }
                         >
-                          {INPUT_TYPES.map((type) => (
+                          {captureOptionsFor(input).map((type) => (
                             <option key={type} value={type}>
                               {INPUT_TYPE_LABELS[type]}
                             </option>
@@ -1001,8 +988,11 @@ function InputsSection({
                         <td className="py-1.5">
                           <div className="flex items-center gap-0.5">
                             <span
-                              className="flex h-8 cursor-grab items-center text-muted-foreground/50 active:cursor-grabbing"
+                              className="flex h-8 cursor-grab touch-none select-none items-center text-muted-foreground/50 active:cursor-grabbing"
+                              title="Drag to reorder"
                               aria-hidden
+                              onPointerDown={() => setDragArmedId(input.id)}
+                              onPointerUp={() => setDragArmedId(null)}
                             >
                               <DotsSixVerticalIcon className="size-4" />
                             </span>
@@ -1024,7 +1014,6 @@ function InputsSection({
                         </td>
                       ) : null}
                     </tr>
-                  ))}
                 </Fragment>
               ))}
             </tbody>

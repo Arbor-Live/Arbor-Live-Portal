@@ -6,6 +6,11 @@
  * channels and monitor mixes.
  */
 
+import {
+  matchRiderSource,
+  riderSource,
+  RIDER_SOURCE_FAMILY_LABELS,
+} from "./sources";
 import { riderSymbol, type RiderSymbol } from "./symbols";
 import type {
   RiderBacklineItem,
@@ -177,6 +182,7 @@ function inputsForSymbol(
   return seeds.map((seed, index) => ({
     id: createRiderId("in"),
     channel: startChannel + index,
+    sourceKey: seed.sourceKey,
     // A one-channel symbol takes its name from the plot label ("Lead vocal"),
     // while multi-channel symbols keep their own naming ("Kick", "Snare", …).
     source:
@@ -191,7 +197,6 @@ function inputsForSymbol(
     phantom: seed.phantom ?? false,
     providedBy: seed.providedBy ?? "arbor",
     stereo: seed.stereo ?? false,
-    group: seed.group,
     stageItemId,
   }));
 }
@@ -333,19 +338,124 @@ export function blankMix(mixes: RiderMonitorMix[]): RiderMonitorMix {
 }
 
 /**
- * Distinct non-empty DCA groups in first-appearance order. Show-file generation
- * assigns DCA slots in this order, so groups stay stable however the list is
- * sorted later.
+ * Family heading for a channel, derived from its role — "Drums", "Vocals".
+ * Null when the channel is unmapped and we have nothing to derive from.
+ *
+ * This replaced a band-editable DCA group. Console DCA layout is a property of
+ * the rig, not the band: a shared night has 16 slots for every act, so seven
+ * riders each nominating their own layout produced work that had to be thrown
+ * away and reconciled. The list still reads grouped, with nothing to maintain.
  */
-export function inputGroups(inputs: RiderInputChannel[]): string[] {
-  const groups: string[] = [];
+export function inputFamilyLabel(input: RiderInputChannel): string | null {
+  const source = input.sourceKey ? riderSource(input.sourceKey) : undefined;
+  return source ? RIDER_SOURCE_FAMILY_LABELS[source.family] : null;
+}
+
+/**
+ * Places a channel after the last one sharing its family, so a row joins its
+ * group the moment it gets a role instead of sitting at the bottom. Appends when
+ * the family is not on the list yet, or when there is no role to group by.
+ *
+ * Deliberately not a global sort: array order is patch order, and a band that
+ * drags a channel somewhere means it.
+ */
+export function insertByFamily(
+  inputs: RiderInputChannel[],
+  input: RiderInputChannel,
+): RiderInputChannel[] {
+  const family = inputFamilyLabel(input);
+  if (!family) return [...inputs, input];
+  let lastIndex = -1;
+  inputs.forEach((candidate, index) => {
+    if (inputFamilyLabel(candidate) === family) lastIndex = index;
+  });
+  if (lastIndex === -1) return [...inputs, input];
+  const next = [...inputs];
+  next.splice(lastIndex + 1, 0, input);
+  return next;
+}
+
+/**
+ * Numbers the channels that share a role, so two `gtr` channels read as
+ * "Guitar 1" and "Guitar 2" without either the vocabulary or the stored rider
+ * carrying an instance. Keyed by input id; a role used once is absent.
+ */
+export function sourceOrdinals(inputs: RiderInputChannel[]): Map<string, number> {
+  const counts = new Map<string, number>();
   for (const input of inputs) {
-    const group = input.group?.trim();
-    if (group && !groups.includes(group)) {
-      groups.push(group);
-    }
+    if (!input.sourceKey) continue;
+    counts.set(input.sourceKey, (counts.get(input.sourceKey) ?? 0) + 1);
   }
-  return groups;
+  const seen = new Map<string, number>();
+  const ordinals = new Map<string, number>();
+  for (const input of inputs) {
+    const key = input.sourceKey;
+    if (!key || (counts.get(key) ?? 0) < 2) continue;
+    const next = (seen.get(key) ?? 0) + 1;
+    seen.set(key, next);
+    ordinals.set(input.id, next);
+  }
+  return ordinals;
+}
+
+/** Channels with no canonical source — crew resolves these at generation time. */
+export function unmappedInputs(content: RiderContent): RiderInputChannel[] {
+  return content.inputs.filter((input) => !input.sourceKey);
+}
+
+/**
+ * Fills `sourceKey` on channels written before the vocabulary existed.
+ *
+ * Provenance beats text: a channel created by placing a symbol is matched back
+ * to the seed that made it, so a renamed "Kick" → "Big Boy" still resolves.
+ * Only channels with no provenance fall back to matching their text, and that
+ * match is exact — anything else stays unmapped rather than guessing.
+ */
+export function backfillSourceKeys(content: RiderContent): RiderContent {
+  const seenPerItem = new Map<string, number>();
+  const inputs = content.inputs.map((input) => {
+    if (input.sourceKey) return input;
+
+    if (input.stageItemId) {
+      const index = seenPerItem.get(input.stageItemId) ?? 0;
+      seenPerItem.set(input.stageItemId, index + 1);
+      const item = content.items.find((entry) => entry.id === input.stageItemId);
+      const seeds = item ? (riderSymbol(item.symbol).defaultInputs ?? []) : [];
+      // Position is not trustworthy — channels can be reordered or deleted after
+      // the symbol created them — so only lean on it when the symbol has a
+      // single seed (unambiguous) or nothing else identifies the row.
+      const seed =
+        seeds.length === 1
+          ? seeds[0]
+          : (seeds.find((candidate) => matchesSeedText(input.source, candidate.source)) ??
+            seeds[index]);
+      if (seed?.sourceKey) return { ...input, sourceKey: seed.sourceKey };
+    }
+
+    const matched = matchRiderSource(input.source);
+    return matched ? { ...input, sourceKey: matched.key } : input;
+  });
+  return { ...content, inputs };
+}
+
+/**
+ * Whether a channel's text still looks like the seed that made it, allowing for
+ * the label prefix `placeSymbol` adds ("Sax Horn") and a trailing instance
+ * number the band may have typed ("Overhead 2").
+ */
+function matchesSeedText(source: string, seedSource: string): boolean {
+  const clean = (text: string) =>
+    text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  // A seeded "Overheads" becomes "Overhead L" / "Overhead R" on the row, so
+  // tolerate the plural and the side suffix. Bounded normalization, not fuzzy
+  // matching — anything looser starts inventing mappings.
+  const singular = (text: string) => text.replace(/s$/, "");
+  const seed = singular(clean(seedSource));
+  if (!seed) return false;
+  const trimmed = singular(
+    clean(source).replace(/ \d+$/, "").replace(/ [lr]$/, ""),
+  );
+  return trimmed === seed || trimmed.endsWith(` ${seed}`);
 }
 
 export function blankBacklineItem(): RiderBacklineItem {
@@ -397,6 +507,14 @@ export function riderWarnings(content: RiderContent): string[] {
   }
   if (content.monitorMixes.length === 0) {
     warnings.push("No monitor mixes — add a wedge or in-ear pack for each mix.");
+  }
+  const unmapped = unmappedInputs(content).length;
+  if (unmapped > 0) {
+    warnings.push(
+      unmapped === 1
+        ? "1 channel isn't matched to a source type — we'll confirm it at load-in."
+        : `${unmapped} channels aren't matched to a source type — we'll confirm them at load-in.`,
+    );
   }
   return warnings;
 }
