@@ -59,10 +59,11 @@ export const riderInputChannelValue = v.object({
   channel: v.number(),
   source: v.string(),
   /**
-   * Canonical source key from `@arbor/rider-document`. Optional: unmapped
-   * channels are legitimate and get resolved at generation time. Deliberately
-   * not a union of literals — the vocabulary grows, and a new key must not
-   * make every existing rider fail validation.
+   * Canonical source key from `@arbor/rider-document`, set by the symbol seeds
+   * and by the source picker. Optional: unmapped channels are legitimate and get
+   * resolved at generation time. Deliberately not a union of literals — the
+   * vocabulary grows, and a new key must not make every existing rider fail
+   * validation.
    */
   sourceKey: v.optional(v.string()),
   inputType: riderInputTypeValue,

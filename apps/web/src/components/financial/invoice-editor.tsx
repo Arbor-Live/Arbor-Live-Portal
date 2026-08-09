@@ -27,6 +27,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { authClient } from "@/lib/auth-client";
 import { InvoiceQuoteApprovalDetails } from "@/components/financial/invoice-quote-approval-details";
 import { InvoicePaymentStatusSection } from "@/components/financial/invoice-payment-status-section";
@@ -38,7 +44,7 @@ import {
   type InvoiceCrewRow,
 } from "@/lib/invoice-crew-from-event";
 import type { SeriesShiftTemplateDraft } from "@/lib/event-series-shifts";
-import { CaretDownIcon } from "@phosphor-icons/react";
+import { ArrowsClockwiseIcon, CaretDownIcon } from "@phosphor-icons/react";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { FormSaveBar } from "@/components/forms";
 import {
@@ -69,7 +75,15 @@ import {
   type EquipmentPricingMode,
 } from "@/lib/invoice-group-labels";
 import { formatContactFullName, splitContactName } from "@/lib/contact-name";
-import { formatDateTime, formatDateTimeRange, formatUsd } from "@/lib/format";
+import {
+  addPacificCalendarDays,
+  formatDateTime,
+  formatDateTimeRange,
+  formatUsd,
+  pacificDateKey,
+} from "@/lib/format";
+
+const INVOICE_DUE_DAYS_AFTER_EVENT = 30;
 
 function formatInvoiceDiscountInputValue(value: number, type: "amount" | "percent") {
   if (type === "amount") return Number.isFinite(value) ? value.toFixed(2) : "0.00";
@@ -119,6 +133,7 @@ export function InvoiceEditor({
 
   const [issueDate, setIssueDate] = useState(initialIssueDate ?? "");
   const [dueDate, setDueDate] = useState("");
+  const [dueDateTouched, setDueDateTouched] = useState(false);
   const [managerUserId, setManagerUserId] = useState("");
   const [managerName, setManagerName] = useState("");
   const [managerEmail, setManagerEmail] = useState("");
@@ -222,7 +237,9 @@ export function InvoiceEditor({
     () =>
       (managerList ?? []).map((entry) => ({
         value: entry.id,
-        label: entry.email ? `${entry.name} (${entry.email})` : entry.name,
+        label: entry.name,
+        description: entry.email || undefined,
+        keywords: entry.email || undefined,
       })),
     [managerList],
   );
@@ -264,7 +281,9 @@ export function InvoiceEditor({
     () =>
       (groups ?? []).map((g) => ({
         value: g._id,
-        label: `${g.name} (${INVOICE_GROUP_TYPE_LABELS[g.type] ?? g.type})`,
+        label: g.name,
+        description: INVOICE_GROUP_TYPE_LABELS[g.type] ?? g.type,
+        keywords: INVOICE_GROUP_TYPE_LABELS[g.type] ?? g.type,
       })),
     [groups],
   );
@@ -278,7 +297,9 @@ export function InvoiceEditor({
         const fullName = formatContactFullName(c.firstName, c.lastName);
         return {
           value: c._id,
-          label: c.email ? `${fullName} (${c.email})` : fullName,
+          label: fullName,
+          description: c.email || undefined,
+          keywords: c.email || undefined,
         };
       }),
     [contacts],
@@ -329,16 +350,27 @@ export function InvoiceEditor({
   }, [issueDate, invoiceId]);
 
   useEffect(() => {
+    if (dueDateTouched) return;
+    const eventEndAt = linkedEvent?.endAt;
+    if (eventEndAt == null) return;
+    const suggested = pacificDateKey(addPacificCalendarDays(eventEndAt, INVOICE_DUE_DAYS_AFTER_EVENT));
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setDueDate(suggested);
+  }, [dueDateTouched, linkedEvent?.endAt]);
+
+  useEffect(() => {
     hasHydratedFromServerRef.current = false;
     crewBootstrappedRef.current = false;
     linkedEventCrewInitializedRef.current = false;
     baselineSignaturePendingRef.current = false;
     savedCrewSnapshotRef.current = [];
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     // New invoices have no server hydrate step — treat empty defaults as hydrated so
     // FormSaveBar dirty tracking works on /invoices/new.
+    /* eslint-disable react-hooks/set-state-in-effect -- reset editor state when navigating between invoices */
     setInvoiceFieldsHydrated(!invoiceId);
     setEditorBaselineReady(!invoiceId);
+    setDueDateTouched(false);
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [invoiceId]);
 
   useEffect(() => {
@@ -352,6 +384,7 @@ export function InvoiceEditor({
     setApprovalToken(invoice.publicApprovalToken ?? "");
     setIssueDate(invoice.issueDate);
     setDueDate(invoice.dueDate ?? "");
+    setDueDateTouched(Boolean(invoice.dueDate?.trim()));
     setManagerUserId(invoice.managerUserId);
     setManagerName(invoice.managerName);
     setManagerEmail(invoice.managerEmail ?? "");
@@ -1353,16 +1386,61 @@ export function InvoiceEditor({
         <aside className="min-w-0 space-y-4 overflow-x-hidden lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:overscroll-y-contain lg:pr-1">
           <Card>
             <CardHeader className="pb-2"><CardTitle className="text-base">General</CardTitle></CardHeader>
-            <CardContent className="grid min-w-0 gap-3">
-              <div className="space-y-2">
+            <CardContent className="grid min-w-0 gap-3 overflow-x-clip">
+              <div className="min-w-0 space-y-2">
                 <Label>Issue date</Label>
-                <Input type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} />
+                <Input
+                  className="w-full min-w-0 max-w-full"
+                  type="date"
+                  value={issueDate}
+                  onChange={(e) => setIssueDate(e.target.value)}
+                />
               </div>
-              <div className="space-y-2">
-                <Label>Due date</Label>
-                <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+              <div className="min-w-0 space-y-2">
+                <div className="flex min-w-0 items-center justify-between gap-2">
+                  <Label>Due date</Label>
+                  {linkedEvent?.endAt != null ? (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          {dueDateTouched ? (
+                            <button
+                              type="button"
+                              className="shrink-0 text-muted-foreground hover:text-foreground"
+                              aria-label="Sync due date to event"
+                              onClick={() => setDueDateTouched(false)}
+                            >
+                              <ArrowsClockwiseIcon className="size-3.5" aria-hidden />
+                            </button>
+                          ) : (
+                            <span
+                              className="shrink-0 text-muted-foreground"
+                              aria-label={`Due date auto-synced to event plus ${INVOICE_DUE_DAYS_AFTER_EVENT} days`}
+                            >
+                              <ArrowsClockwiseIcon className="size-3.5" aria-hidden />
+                            </span>
+                          )}
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          {dueDateTouched
+                            ? "Sync to event"
+                            : `Auto · event + ${INVOICE_DUE_DAYS_AFTER_EVENT}d`}
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  ) : null}
+                </div>
+                <Input
+                  className="w-full min-w-0 max-w-full"
+                  type="date"
+                  value={dueDate}
+                  onChange={(e) => {
+                    setDueDate(e.target.value);
+                    setDueDateTouched(true);
+                  }}
+                />
               </div>
-              <div className="space-y-2">
+              <div className="min-w-0 space-y-2">
                 <Label>Manager</Label>
                 <SearchableSelect
                   value={managerUserId}
@@ -1372,9 +1450,13 @@ export function InvoiceEditor({
                   emptyLabel="Select manager"
                 />
               </div>
-              <div className="space-y-2">
+              <div className="min-w-0 space-y-2">
                 <Label>Equipment pricing</Label>
-                <select className="h-9 w-full rounded-md border bg-background px-3 text-sm" value={equipmentPricingMode} onChange={(e) => setEquipmentPricingMode(e.target.value as "subsidized" | "nonSubsidized")}>
+                <select
+                  className="h-9 w-full min-w-0 max-w-full rounded-md border bg-background px-3 text-sm"
+                  value={equipmentPricingMode}
+                  onChange={(e) => setEquipmentPricingMode(e.target.value as "subsidized" | "nonSubsidized")}
+                >
                   {EQUIPMENT_PRICING_MODE_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
@@ -1382,10 +1464,10 @@ export function InvoiceEditor({
                   ))}
                 </select>
               </div>
-              <div className="space-y-2">
+              <div className="min-w-0 space-y-2">
                 <Label>Crew rate mode</Label>
                 <select
-                  className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                  className="h-9 w-full min-w-0 max-w-full rounded-md border bg-background px-3 text-sm"
                   value={crewRateMode}
                   onChange={(e) => setCrewRateMode(e.target.value as "normal" | "lead" | "custom")}
                 >
@@ -1399,7 +1481,7 @@ export function InvoiceEditor({
 
           <Card>
             <CardHeader className="pb-2"><CardTitle className="text-base">Client</CardTitle></CardHeader>
-            <CardContent className="grid min-w-0 gap-3">
+            <CardContent className="grid min-w-0 gap-3 overflow-x-clip">
               <div className="min-w-0 space-y-2" data-testid="invoice-host-select">
                 <Label>Host</Label>
                 <SearchableSelect

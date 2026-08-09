@@ -23,7 +23,7 @@ import { FilterField, FilterNativeSelect } from "./filter-controls";
 import {
   PackageItemsEditor,
   useSuggestedPackagePricing,
-  type PackageItemRow,
+  type ContentUnitDraft,
 } from "./package-items-editor";
 import {
   bucketForCategoryKey,
@@ -47,19 +47,75 @@ const defaultPackageValues: InventoryPackageFormValues = {
   publicBucket: "",
   publicHeroImageUrl: "",
   publicSlug: "",
-  items: [{ typeId: "", quantity: 1 }],
+  contents: [],
 };
+
+function parsePositiveInt(value: string) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 1;
+}
+
+function contentsFromDraft(units: ContentUnitDraft[]): InventoryPackageFormValues["contents"] {
+  return units.map((unit) => ({
+    quantity: parsePositiveInt(unit.quantity),
+    options: unit.options.map((option) => ({
+      name: option.name.trim() || undefined,
+      items: option.items
+        .filter((item) => item.typeId)
+        .map((item) => ({
+          typeId: item.typeId,
+          quantity: parsePositiveInt(item.quantity),
+          role: item.role,
+        })),
+    })),
+  }));
+}
+
+function draftFromContents(
+  contents: Array<{
+    quantity: number;
+    options: Array<{
+      name?: string;
+      items: Array<{ typeId: string; quantity: number; role: "primary" | "accessory" }>;
+    }>;
+  }>,
+): ContentUnitDraft[] {
+  return contents.map((unit, unitIndex) => ({
+    key: `loaded-unit-${unitIndex}`,
+    quantity: String(unit.quantity),
+    options: unit.options.map((option, optionIndex) => ({
+      key: `loaded-option-${unitIndex}-${optionIndex}`,
+      name: option.name ?? "",
+      items: option.items.map((item) => ({
+        typeId: item.typeId,
+        quantity: String(item.quantity),
+        role: item.role,
+      })),
+    })),
+  }));
+}
 
 function packageSection(pkg: {
   publicListing?: boolean;
   publicBucket?: PublicPackageBucket;
   items: Array<{ typeId: string; type?: { category: string } | null }>;
+  contents?: Array<{
+    options: Array<{
+      items: Array<{ type?: { category: string } | null }>;
+    }>;
+  }>;
 }, categories: Array<{ key: string; publicBucket?: PublicPackageBucket | null }> | undefined): PublicPackageBucket {
   if (pkg.publicListing && pkg.publicBucket) return pkg.publicBucket;
   const counts = new Map<PublicPackageBucket, number>();
-  for (const item of pkg.items) {
-    if (!item.type?.category) continue;
-    const bucket = bucketForCategoryKey(item.type.category, categories);
+  const categorySources = [
+    ...pkg.items.map((item) => item.type?.category),
+    ...(pkg.contents ?? []).flatMap((unit) =>
+      unit.options.flatMap((option) => option.items.map((item) => item.type?.category)),
+    ),
+  ];
+  for (const category of categorySources) {
+    if (!category) continue;
+    const bucket = bucketForCategoryKey(category, categories);
     counts.set(bucket, (counts.get(bucket) ?? 0) + 1);
   }
   let dominant: PublicPackageBucket = "misc";
@@ -84,7 +140,7 @@ export function PackagesManager() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState<"section" | "name" | "price" | "value">("section");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-  const [itemRows, setItemRows] = useState<PackageItemRow[]>([]);
+  const [contentUnits, setContentUnits] = useState<ContentUnitDraft[]>([]);
 
   const packages = useQuery(api.inventoryPackages.list, {});
   const types = useQuery(api.inventoryTypes.listOptions, {});
@@ -114,15 +170,28 @@ export function PackagesManager() {
   const { errors: packageErrors } = useFormState({ control: packageForm.control });
 
   useEffect(() => {
-    const parsedItems = itemRows
-      .filter((row) => row.typeId && Number(row.quantity) > 0)
-      .map((row) => ({ typeId: row.typeId, quantity: Number(row.quantity) }));
-    packageForm.setValue("items", parsedItems.length ? parsedItems : [{ typeId: "", quantity: 1 }], {
+    packageForm.setValue("contents", contentsFromDraft(contentUnits), {
       shouldDirty: true,
     });
-  }, [itemRows, packageForm]);
+  }, [contentUnits, packageForm]);
 
   function buildPackagePayload(values: InventoryPackageFormValues) {
+    const contents = contentsFromDraft(contentUnits)
+      .map((unit) => ({
+        quantity: unit.quantity,
+        options: unit.options
+          .map((option) => ({
+            ...(option.name ? { name: option.name } : {}),
+            items: option.items.map((item) => ({
+              typeId: item.typeId as Id<"inventoryTypes">,
+              quantity: item.quantity,
+              role: item.role,
+            })),
+          }))
+          .filter((option) => option.items.length > 0),
+      }))
+      .filter((unit) => unit.options.length > 0);
+
     return {
       name: values.name,
       description: values.description || undefined,
@@ -137,9 +206,7 @@ export function PackagesManager() {
           : undefined,
       publicHeroImageUrl: values.publicHeroImageUrl?.trim() || undefined,
       publicSlug: values.publicSlug?.trim() || undefined,
-      items: values.items
-        .filter((row) => row.typeId && row.quantity > 0)
-        .map((row) => ({ typeId: row.typeId as Id<"inventoryTypes">, quantity: row.quantity })),
+      contents,
     };
   }
 
@@ -199,14 +266,18 @@ export function PackagesManager() {
       if (loweredSearch && !pkg.name.toLowerCase().includes(loweredSearch)) return false;
       const section = packageSection(pkg, categories);
       if (sectionFilterIds.length && !sectionFilterIds.includes(section)) return false;
+      const packageTypeIds = new Set([
+        ...pkg.items.map((row) => row.typeId),
+        ...(pkg.contents ?? []).flatMap((unit) =>
+          unit.options.flatMap((option) => option.items.map((item) => item.typeId)),
+        ),
+      ]);
       if (typeFilterIds.length) {
-        const packageTypeIds = new Set(pkg.items.map((row) => row.typeId));
         if (!typeFilterIds.some((typeId) => packageTypeIds.has(typeId as Id<"inventoryTypes">))) {
           return false;
         }
       }
       if (itemFilterTypeIds.size) {
-        const packageTypeIds = new Set(pkg.items.map((row) => row.typeId));
         if (![...itemFilterTypeIds].some((typeId) => packageTypeIds.has(typeId as Id<"inventoryTypes">))) {
           return false;
         }
@@ -251,7 +322,7 @@ export function PackagesManager() {
     return count;
   }, [itemFilterIds.length, search, sectionFilterIds.length, typeFilterIds.length]);
 
-  const suggestedPricing = useSuggestedPackagePricing(itemRows, typeLookup);
+  const suggestedPricing = useSuggestedPackagePricing(contentUnits, typeLookup);
   const packageValues = packageForm.watch();
 
   function closeEditor() {
@@ -259,7 +330,7 @@ export function PackagesManager() {
     setEditingId(null);
     packageForm.reset(defaultPackageValues);
     packageForm.resetSaveState();
-    setItemRows([]);
+    setContentUnits([]);
   }
 
   function requestCloseEditor() {
@@ -273,11 +344,12 @@ export function PackagesManager() {
     setEditingId(null);
     packageForm.reset(defaultPackageValues);
     packageForm.resetSaveState();
-    setItemRows([]);
+    setContentUnits([]);
     setEditorOpen(true);
   }
 
   function openEditEditor(pkg: NonNullable<typeof packages>[number]) {
+    const units = draftFromContents(pkg.contents ?? []);
     setEditingId(pkg._id);
     packageForm.reset({
       name: pkg.name,
@@ -290,18 +362,10 @@ export function PackagesManager() {
       publicBucket: (pkg.publicBucket ?? "") as InventoryPackageFormValues["publicBucket"],
       publicHeroImageUrl: pkg.publicHeroImageUrl ?? "",
       publicSlug: pkg.publicSlug ?? "",
-      items: pkg.items.map((row) => ({
-        typeId: row.typeId,
-        quantity: row.quantity,
-      })),
+      contents: contentsFromDraft(units),
     });
     packageForm.resetSaveState();
-    setItemRows(
-      pkg.items.map((row) => ({
-        typeId: row.typeId,
-        quantity: row.quantity.toString(),
-      })),
-    );
+    setContentUnits(units);
     setEditorOpen(true);
   }
 
@@ -392,11 +456,22 @@ export function PackagesManager() {
             </div>
           </div>
           <div className="rounded-md border bg-muted/20 p-2 text-xs">
-            <p className="mb-1 font-medium">{pkg.items.length} included type{pkg.items.length === 1 ? "" : "s"}</p>
+            <p className="mb-1 font-medium">
+              {(pkg.contents ?? []).length} content unit
+              {(pkg.contents ?? []).length === 1 ? "" : "s"}
+              {pkg.items.length
+                ? ` · ${pkg.items.length} included type${pkg.items.length === 1 ? "" : "s"}`
+                : ""}
+            </p>
             <p className="line-clamp-3 text-muted-foreground">
-              {pkg.items
-                .map((row) => `${row.quantity}× ${row.type?.name ?? "Unknown"}`)
-                .join(" · ")}
+              {(pkg.contents ?? [])
+                .map((unit) => {
+                  const labels = unit.options.map((option) => option.name).join(" / ");
+                  return unit.exclusive
+                    ? `${unit.quantity}× (${labels})`
+                    : `${unit.quantity}× ${labels}`;
+                })
+                .join(" · ") || "No contents yet"}
             </p>
           </div>
           <div className="flex gap-2">
@@ -693,12 +768,15 @@ export function PackagesManager() {
                   <div className="space-y-3 lg:sticky lg:top-0">
                     <h3 className="text-sm font-semibold">Package contents</h3>
                     <PackageItemsEditor
-                      itemRows={itemRows}
-                      onItemRowsChange={setItemRows}
+                      units={contentUnits}
+                      onUnitsChange={setContentUnits}
                       types={types ?? []}
                       inventoryItems={inventoryItems ?? []}
                       categories={categories}
                     />
+                    {packageErrors.contents ? (
+                      <p className="text-sm text-destructive">{packageErrors.contents.message}</p>
+                    ) : null}
                   </div>
                 </form>
               </Form>

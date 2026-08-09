@@ -126,6 +126,8 @@ import type * as lib_marketingContent from "../lib/marketingContent.js";
 import type * as lib_onboardingLinks from "../lib/onboardingLinks.js";
 import type * as lib_openMicAddon from "../lib/openMicAddon.js";
 import type * as lib_otForecast from "../lib/otForecast.js";
+import type * as lib_packageBom from "../lib/packageBom.js";
+import type * as lib_packageContentMigration from "../lib/packageContentMigration.js";
 import type * as lib_paymentProof from "../lib/paymentProof.js";
 import type * as lib_publicEvents from "../lib/publicEvents.js";
 import type * as lib_publicQuoteView from "../lib/publicQuoteView.js";
@@ -299,6 +301,8 @@ declare const fullApi: ApiFromModules<{
   "lib/onboardingLinks": typeof lib_onboardingLinks;
   "lib/openMicAddon": typeof lib_openMicAddon;
   "lib/otForecast": typeof lib_otForecast;
+  "lib/packageBom": typeof lib_packageBom;
+  "lib/packageContentMigration": typeof lib_packageContentMigration;
   "lib/paymentProof": typeof lib_paymentProof;
   "lib/publicEvents": typeof lib_publicEvents;
   "lib/publicQuoteView": typeof lib_publicQuoteView;

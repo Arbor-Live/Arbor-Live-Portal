@@ -432,12 +432,46 @@ export default defineSchema({
     packageId: v.id("inventoryPackages"),
     typeId: v.id("inventoryTypes"),
     quantity: v.number(),
+    /**
+     * When set, this line belongs to an exclusive package option (catalog display).
+     * Omit for always-included BOM lines used by quotes/pull lists/fulfillment today.
+     */
+    optionId: v.optional(v.id("inventoryPackageOptions")),
+    /** Package-BOM role within an option — not an inventory type attribute. */
+    role: v.optional(v.union(v.literal("primary"), v.literal("accessory"))),
+    sortOrder: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_packageId", ["packageId"])
     .index("by_typeId", ["typeId"])
-    .index("by_package_and_type", ["packageId", "typeId"]),
+    .index("by_package_and_type", ["packageId", "typeId"])
+    .index("by_optionId", ["optionId"]),
+
+  /**
+   * Unnamed content unit within a package.
+   * One option = always included; two or more = exclusive pick (catalog-only until #116).
+   * BOM lines live on `inventoryPackageItems` with `optionId` set.
+   */
+  inventoryPackageOptionGroups: defineTable({
+    packageId: v.id("inventoryPackages"),
+    /** @deprecated Unused — content units are unnamed. Kept optional for existing rows. */
+    name: v.optional(v.string()),
+    /** How many units of the chosen/included option this package includes. */
+    quantity: v.number(),
+    sortOrder: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_packageId", ["packageId"]),
+
+  inventoryPackageOptions: defineTable({
+    optionGroupId: v.id("inventoryPackageOptionGroups"),
+    /** Optional label; UI falls back to the primary type name. */
+    name: v.optional(v.string()),
+    sortOrder: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_optionGroupId", ["optionGroupId"]),
 
   invoiceGroups: defineTable({
     name: v.string(),
