@@ -69,6 +69,73 @@ export function isLegacyFixedPackageBomLine(item: {
   return item.optionId === undefined;
 }
 
+type EstimateRateType = {
+  subsidizedRentalPriceUsd?: number | null;
+  nonSubsidizedRentalPriceUsd?: number | null;
+  rentalPriceUsd?: number | null;
+} | null;
+
+type EstimateContentUnit = {
+  quantity: number;
+  options: Array<{
+    items: Array<{
+      quantity: number;
+      type: EstimateRateType;
+    }>;
+  }>;
+};
+
+function optionRentalTotals(
+  items: Array<{ quantity: number; type: EstimateRateType }>,
+  unitQuantity: number,
+) {
+  let subsidized = 0;
+  let nonSubsidized = 0;
+  for (const item of items) {
+    const qty = item.quantity * unitQuantity;
+    if (qty <= 0) continue;
+    subsidized += (item.type?.subsidizedRentalPriceUsd ?? 0) * qty;
+    nonSubsidized +=
+      (item.type?.nonSubsidizedRentalPriceUsd ?? item.type?.rentalPriceUsd ?? 0) * qty;
+  }
+  return { subsidized, nonSubsidized };
+}
+
+/**
+ * Package card / suggested-price estimate.
+ *
+ * Included units (1 option) contribute every BOM line × unit qty.
+ * Exclusive units (2+ options) contribute the **highest-cost** alternative
+ * (by non-subsidized total), so estimates stay useful before booking selection.
+ * Quotes / pull lists still use `listFulfillmentPackageBom` and omit exclusives.
+ */
+export function estimatePackageRentalValueFromContents(contents: EstimateContentUnit[]) {
+  let estimatedRentalValueUsd = 0;
+  let estimatedSubsidizedRentalValueUsd = 0;
+
+  for (const unit of contents) {
+    const scale = unit.quantity > 0 ? unit.quantity : 1;
+    if (unit.options.length === 0) continue;
+
+    if (unit.options.length === 1) {
+      const totals = optionRentalTotals(unit.options[0]!.items, scale);
+      estimatedRentalValueUsd += totals.nonSubsidized;
+      estimatedSubsidizedRentalValueUsd += totals.subsidized;
+      continue;
+    }
+
+    let best = optionRentalTotals(unit.options[0]!.items, scale);
+    for (let i = 1; i < unit.options.length; i += 1) {
+      const totals = optionRentalTotals(unit.options[i]!.items, scale);
+      if (totals.nonSubsidized > best.nonSubsidized) best = totals;
+    }
+    estimatedRentalValueUsd += best.nonSubsidized;
+    estimatedSubsidizedRentalValueUsd += best.subsidized;
+  }
+
+  return { estimatedRentalValueUsd, estimatedSubsidizedRentalValueUsd };
+}
+
 export type HydratedContentUnit = {
   _id: Id<"inventoryPackageOptionGroups">;
   quantity: number;

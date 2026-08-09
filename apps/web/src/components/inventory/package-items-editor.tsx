@@ -70,6 +70,55 @@ export function fulfillmentLinesFromUnits(units: ContentUnitDraft[]) {
   return Array.from(merged.entries()).map(([typeId, quantity]) => ({ typeId, quantity }));
 }
 
+function optionSuggestedTotals(
+  items: ContentUnitDraft["options"][number]["items"],
+  unitQuantity: number,
+  typeLookup: Map<string, InventoryTypeRow>,
+) {
+  let subsidized = 0;
+  let nonSubsidized = 0;
+  for (const item of items) {
+    if (!item.typeId) continue;
+    const type = typeLookup.get(item.typeId);
+    if (!type) continue;
+    const qty = parseQuantity(item.quantity) * unitQuantity;
+    subsidized += (type.subsidizedRentalPriceUsd ?? 0) * qty;
+    nonSubsidized +=
+      (type.nonSubsidizedRentalPriceUsd ?? type.rentalPriceUsd ?? 0) * qty;
+  }
+  return { subsidized, nonSubsidized };
+}
+
+/**
+ * Suggested package prices: included units in full; exclusive units use the
+ * highest-cost alternative (by non-subsidized), matching backend card estimates.
+ */
+export function suggestedPricingFromUnits(
+  units: ContentUnitDraft[],
+  typeLookup: Map<string, InventoryTypeRow>,
+) {
+  let subsidized = 0;
+  let nonSubsidized = 0;
+  for (const unit of units) {
+    const scale = parseQuantity(unit.quantity);
+    if (!unit.options.length) continue;
+    if (unit.options.length === 1) {
+      const totals = optionSuggestedTotals(unit.options[0]!.items, scale, typeLookup);
+      subsidized += totals.subsidized;
+      nonSubsidized += totals.nonSubsidized;
+      continue;
+    }
+    let best = optionSuggestedTotals(unit.options[0]!.items, scale, typeLookup);
+    for (let i = 1; i < unit.options.length; i += 1) {
+      const totals = optionSuggestedTotals(unit.options[i]!.items, scale, typeLookup);
+      if (totals.nonSubsidized > best.nonSubsidized) best = totals;
+    }
+    subsidized += best.subsidized;
+    nonSubsidized += best.nonSubsidized;
+  }
+  return { subsidized, nonSubsidized };
+}
+
 export function PackageItemsEditor({
   units,
   onUnitsChange,
@@ -149,19 +198,10 @@ export function PackageItemsEditor({
     [inventoryItems],
   );
 
-  const suggestedPricing = useMemo(() => {
-    return fulfillmentLines.reduce(
-      (acc, row) => {
-        const type = typeLookup.get(row.typeId);
-        if (!type) return acc;
-        acc.subsidized += (type.subsidizedRentalPriceUsd ?? 0) * row.quantity;
-        acc.nonSubsidized +=
-          (type.nonSubsidizedRentalPriceUsd ?? type.rentalPriceUsd ?? 0) * row.quantity;
-        return acc;
-      },
-      { subsidized: 0, nonSubsidized: 0 },
-    );
-  }, [fulfillmentLines, typeLookup]);
+  const suggestedPricing = useMemo(
+    () => suggestedPricingFromUnits(units, typeLookup),
+    [typeLookup, units],
+  );
 
   const totalUnits = useMemo(
     () => fulfillmentLines.reduce((sum, row) => sum + row.quantity, 0),
@@ -367,17 +407,5 @@ export function useSuggestedPackagePricing(
   units: ContentUnitDraft[],
   typeLookup: Map<string, InventoryTypeRow>,
 ) {
-  return useMemo(() => {
-    return fulfillmentLinesFromUnits(units).reduce(
-      (acc, row) => {
-        const type = typeLookup.get(row.typeId);
-        if (!type) return acc;
-        acc.subsidized += (type.subsidizedRentalPriceUsd ?? 0) * row.quantity;
-        acc.nonSubsidized +=
-          (type.nonSubsidizedRentalPriceUsd ?? type.rentalPriceUsd ?? 0) * row.quantity;
-        return acc;
-      },
-      { subsidized: 0, nonSubsidized: 0 },
-    );
-  }, [typeLookup, units]);
+  return useMemo(() => suggestedPricingFromUnits(units, typeLookup), [typeLookup, units]);
 }

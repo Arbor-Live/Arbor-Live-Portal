@@ -4,6 +4,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { requireAuth } from "./lib/auth";
 import { normalizeOptionalAssetReference } from "./lib/inventoryUpload";
 import {
+  estimatePackageRentalValueFromContents,
   listFulfillmentPackageBom,
   type HydratedContentUnit,
 } from "./lib/packageBom";
@@ -408,17 +409,8 @@ export const list = query({
         type: typeById.get(row.typeId) ?? null,
       }));
 
-      const estimatedRentalValueUsd = items.reduce((acc, row) => {
-        const normalRate =
-          row.type?.nonSubsidizedRentalPriceUsd ?? row.type?.rentalPriceUsd;
-        if (!normalRate) return acc;
-        return acc + row.quantity * normalRate;
-      }, 0);
-      const estimatedSubsidizedRentalValueUsd = items.reduce((acc, row) => {
-        const subsidizedRate = row.type?.subsidizedRentalPriceUsd;
-        if (!subsidizedRate) return acc;
-        return acc + row.quantity * subsidizedRate;
-      }, 0);
+      const { estimatedRentalValueUsd, estimatedSubsidizedRentalValueUsd } =
+        estimatePackageRentalValueFromContents(contents);
 
       return {
         ...pkg,
