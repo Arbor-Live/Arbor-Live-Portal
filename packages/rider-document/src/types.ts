@@ -48,7 +48,18 @@ export type RiderStageItem = {
 export type RiderInputChannel = {
   id: string;
   channel: number;
+  /**
+   * What the band calls it ("Sarah — lead"). Display only: it prints on the PDF
+   * and is never matched on. `sourceKey` carries the identity.
+   */
   source: string;
+  /**
+   * Canonical source from the `sources.ts` vocabulary. Absent = unmapped, which
+   * is a legitimate state — bands bring instruments no catalogue anticipates.
+   * Unmapped channels surface as a rider warning and are resolved by crew at
+   * load-in rather than blocking the band.
+   */
+  sourceKey?: string;
   inputType: RiderInputType;
   /** Free text, e.g. "SM58" or "any dynamic". */
   micPreference?: string;
@@ -63,8 +74,6 @@ export type RiderInputChannel = {
    * Wing (`mode:"ST"`), not two linked strips.
    */
   stereo?: boolean;
-  /** DCA group label, e.g. "Drums" or "Vox". Empty = no DCA for this input. */
-  group?: string;
 };
 
 export type RiderMonitorMix = {
@@ -154,19 +163,3 @@ export const MONITOR_TYPE_OPTIONS: Array<Exclude<RiderMonitorType, "side_fill">>
   "iem",
 ];
 
-/**
- * Suggested DCA group labels for the editor. Kept free-text on the input so
- * bands can use any label; these just speed up entry.
- */
-export const RIDER_GROUP_SUGGESTIONS = [
-  "Drums",
-  "Aux Perc",
-  "Melody",
-  "Vox",
-  "Keys",
-  "Guitars",
-  "Brass",
-  "Strings",
-  "Playback",
-  "FX",
-] as const;

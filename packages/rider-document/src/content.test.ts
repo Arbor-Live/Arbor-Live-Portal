@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { renumberInputs } from "./content";
+import { inputFamilyLabel, renumberInputs } from "./content";
 import type { RiderInputChannel } from "./types";
 
 function input(id: string, stereo = false): RiderInputChannel {
-  return { id, label: id, channel: 0, stereo, group: undefined } as RiderInputChannel;
+  return { id, label: id, channel: 0, stereo } as RiderInputChannel;
 }
+
 
 describe("renumberInputs", () => {
   it("keeps sequential numbers for all-mono inputs", () => {
@@ -29,5 +30,21 @@ describe("renumberInputs", () => {
     const out = renumberInputs([input("a"), input("b"), input("c"), input("d", true)]);
     const occupied = out.flatMap((i) => [i.channel, i.stereo ? i.channel + 1 : undefined]);
     expect([1, 2, 3, 4, 5].every((slot) => occupied.includes(slot))).toBe(true);
+  });
+});
+
+
+describe("inputFamilyLabel", () => {
+  const channel = (sourceKey?: string) =>
+    ({ id: "x", channel: 1, source: "x", sourceKey, inputType: "mic", stand: "none", phantom: false, providedBy: "band" }) as never;
+
+  it("derives the heading from the role", () => {
+    expect(inputFamilyLabel(channel("drum.kick"))).toBe("Drums");
+    expect(inputFamilyLabel(channel("vox.lead"))).toBe("Vocals");
+    expect(inputFamilyLabel(channel("wind.sax.tenor"))).toBe("Brass & winds");
+  });
+
+  it("has no heading for an unmapped channel", () => {
+    expect(inputFamilyLabel(channel())).toBeNull();
   });
 });

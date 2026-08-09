@@ -24,6 +24,7 @@ import {
   PLOT_COLORS,
   type PlotLayout,
 } from "./plot";
+import { inputFamilyLabel } from "./content";
 import { RIDER_CATEGORY_PALETTE, riderSymbol } from "./symbols";
 import {
   INPUT_TYPE_LABELS,
@@ -410,7 +411,7 @@ export function RiderPdf({ data }: { data: RiderDocumentData }) {
     STAND_LABELS[input.stand],
     input.phantom ? "Yes" : "—",
     PROVIDED_BY_LABELS[input.providedBy],
-    input.group ?? "—",
+    inputFamilyLabel(input) ?? "—",
     input.notes ?? "",
   ]);
 
@@ -444,7 +445,7 @@ export function RiderPdf({ data }: { data: RiderDocumentData }) {
           <Text style={styles.sectionTitle}>Input list</Text>
           <Table
             columns={INPUT_COLUMNS}
-            headers={["Ch", "Source", "Type", "Mic / DI", "Stand", "48V", "Provided", "Group", "Notes"]}
+            headers={["Ch", "Source", "Type", "Mic / DI", "Stand", "48V", "Provided", "Family", "Notes"]}
             rows={inputRows}
             emptyMessage="No input channels listed."
           />
