@@ -302,6 +302,7 @@ export function PackageItemsEditor({
                     return (
                       <div
                         key={type._id}
+                        data-testid={`package-catalog-row-${type._id}`}
                         className="flex flex-col gap-2 rounded-md border p-3 sm:flex-row sm:items-center"
                       >
                         <div className="flex min-w-0 flex-1 items-center gap-3">
@@ -329,7 +330,7 @@ export function PackageItemsEditor({
                             <span className="text-xs text-muted-foreground">{inPackage}× included</span>
                           ) : null}
                           <Button type="button" size="sm" onClick={() => addType(type._id)}>
-                            Add
+                            {inPackage > 0 ? "Add another" : "Add to package"}
                           </Button>
                         </div>
                       </div>
