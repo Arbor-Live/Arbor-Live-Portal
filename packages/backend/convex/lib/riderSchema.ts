@@ -74,6 +74,13 @@ export const riderInputChannelValue = v.object({
   notes: v.optional(v.string()),
   stageItemId: v.optional(v.string()),
   stereo: v.optional(v.boolean()),
+  /**
+   * Deprecated: legacy band-editable DCA label. Grouping is derived from
+   * `sourceKey` via `inputFamilyLabel`. `stripBandRiderInputGroups` removes
+   * stored values; keep optional so deploys validate until every deployment
+   * has run that migration.
+   */
+  group: v.optional(v.string()),
 });
 
 export const riderMonitorMixValue = v.object({

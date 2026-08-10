@@ -246,6 +246,27 @@ export const consolidatePackageContentUnits = migrations.define({
 });
 
 /**
+ * Drop legacy `inputs[].group` (band-editable DCA labels). Grouping is now
+ * derived from `sourceKey` via `inputFamilyLabel` in `@arbor/rider-document`.
+ */
+export const stripBandRiderInputGroups = migrations.define({
+  table: "bandRiders",
+  migrateOne: async (_ctx, rider) => {
+    type LegacyInput = (typeof rider.inputs)[number] & { group?: string };
+    const inputs = rider.inputs as LegacyInput[];
+    if (!inputs.some((input) => input.group !== undefined)) return;
+
+    return {
+      inputs: inputs.map((input) => {
+        const { group: _removed, ...rest } = input;
+        return rest;
+      }),
+      updatedAt: Date.now(),
+    };
+  },
+});
+
+/**
  * Copy event comment threads into the generic `comments` table.
  *
  * Idempotent: the runner can re-run, and the source rows are left in place
@@ -294,6 +315,7 @@ const MIGRATION_SERIES = [
   internal.migrations.backfillEventRequestMilestoneTimestamps,
   internal.migrations.migratePackageLegacyItemsToContentUnits,
   internal.migrations.consolidatePackageContentUnits,
+  internal.migrations.stripBandRiderInputGroups,
   internal.migrations.migrateEventCommentsToComments,
 ] as const;
 
