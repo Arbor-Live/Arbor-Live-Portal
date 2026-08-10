@@ -52,8 +52,9 @@ export function DamageReportsWidget() {
                   {report.typeName ? ` · ${report.typeName}` : ""}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Severity {report.severity}/5 · {report.operability.replace("_", " ")} ·{" "}
-                  {report.status.replace("_", " ")}
+                  Severity {report.severity}/5 ·{" "}
+                  <span className="capitalize">{report.operability.replace("_", " ")}</span> ·{" "}
+                  <span className="capitalize">{report.status.replace("_", " ")}</span>
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {report.eventTitle ?? "Event unknown"} · {formatDateTime(report.reportedAt)}

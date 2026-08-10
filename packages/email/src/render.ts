@@ -32,6 +32,7 @@ import { RentalOutboundPackedEmail } from "../emails/rental-outbound-packed";
 import { RentalReturnProcessedEmail } from "../emails/rental-return-processed";
 import { PostEventAlbumEmail } from "../emails/post-event-album";
 import { EventCommentMentionEmail } from "../emails/event-comment-mention";
+import { CommentMentionEmail } from "../emails/comment-mention";
 import type {
   BookingQuoteReadyEmailProps,
   BookingRequestAdminEmailProps,
@@ -65,6 +66,7 @@ import type {
   RentalReturnProcessedEmailProps,
   PostEventAlbumEmailProps,
   EventCommentMentionEmailProps,
+  CommentMentionEmailProps,
 } from "./types";
 
 export async function renderEventCancelledEmail(props: EventEmailProps) {
@@ -209,4 +211,8 @@ export async function renderPostEventAlbumEmail(props: PostEventAlbumEmailProps)
 
 export async function renderEventCommentMentionEmail(props: EventCommentMentionEmailProps) {
   return render(EventCommentMentionEmail(props));
+}
+
+export async function renderCommentMentionEmail(props: CommentMentionEmailProps) {
+  return render(CommentMentionEmail(props));
 }

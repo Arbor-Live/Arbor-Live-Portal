@@ -2129,6 +2129,8 @@ export const seedOpenDamageReport = mutation({
     inventoryItemId: v.id("inventoryItems"),
     assetId: v.string(),
     typeId: v.id("inventoryTypes"),
+    /** Comment-thread subject id for `comments` with `subjectType: "damage_batch"`. */
+    batchId: v.string(),
     queuePath: v.string(),
   }),
   handler: async (ctx, args) => {
@@ -2151,10 +2153,12 @@ export const seedOpenDamageReport = mutation({
       createdAt: now,
       updatedAt: now,
     });
+    const batchId = crypto.randomUUID();
     const reportId = await ctx.db.insert("damageReports", {
       inventoryItemId,
       assetId,
       typeId,
+      batchId,
       scope: "this_only",
       scopedItemIds: [inventoryItemId],
       operability: "needs_repair",
@@ -2170,6 +2174,7 @@ export const seedOpenDamageReport = mutation({
       inventoryItemId,
       assetId,
       typeId,
+      batchId,
       queuePath: "/dashboard/inventory/damage",
     };
   },
@@ -4165,10 +4170,18 @@ export const getInvoiceTotalsState = query({
 });
 
 /**
- * Test-only: event comments for mention/notification regressions.
+ * Test-only: comment threads for mention/notification regressions. Subject ids
+ * are plain strings, so damage threads pass the report's `batchId`.
  */
-export const getEventCommentsState = query({
-  args: { eventId: v.id("events") },
+export const getCommentsState = query({
+  args: {
+    subjectType: v.union(
+      v.literal("event"),
+      v.literal("damage_batch"),
+      v.literal("event_request"),
+    ),
+    subjectId: v.string(),
+  },
   returns: v.array(
     v.object({
       body: v.string(),
@@ -4180,8 +4193,10 @@ export const getEventCommentsState = query({
   handler: async (ctx, args) => {
     assertE2eHelpersEnabled();
     const rows = await ctx.db
-      .query("eventComments")
-      .withIndex("by_eventId_and_createdAt", (q) => q.eq("eventId", args.eventId))
+      .query("comments")
+      .withIndex("by_subject_and_createdAt", (q) =>
+        q.eq("subjectType", args.subjectType).eq("subjectId", args.subjectId),
+      )
       .order("asc")
       .take(100);
     return rows.map((row) => ({

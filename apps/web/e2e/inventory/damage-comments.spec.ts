@@ -10,17 +10,18 @@ type CommentState = {
 };
 
 /**
- * Event comments + inline @mentions.
+ * Damage report comments + inline @mentions.
  *
- * Mentions are parsed from the body (`@Name`), so the typeahead must insert the
- * candidate's display name verbatim. Persistence is asserted via Convex so a
+ * Threads key on the report's `batchId`, not its id, so the sibling rows one
+ * submission creates share one conversation — the assertion below reads the
+ * thread by `batchId` to lock that in. Persistence is asserted via Convex so a
  * UI-only success that never reached `comments.createComment` still fails.
  *
  * The active-mention query rejects whitespace, so typeahead input must stay on a
  * single token (e.g. `@Crew`, not `@E2E Cr`) until a candidate is chosen.
  */
-test.describe("event comments and mentions", () => {
-  test("admin can @-mention a teammate and the mention persists", async ({ page }) => {
+test.describe("damage report comments and mentions", () => {
+  test("admin can @-mention a teammate on a damage report", async ({ page }) => {
     const stamp = Date.now();
     const crew = runConvex("e2eHelpers:ensureCrewUser", {
       email: e2eEnv.crewEmail,
@@ -28,12 +29,19 @@ test.describe("event comments and mentions", () => {
       name: e2eEnv.crewName,
     }) as { userId: string };
 
-    const seeded = runConvex("e2eHelpers:seedCrewedEventWithSchedule", {
-      title: `E2E Comments ${stamp}`,
-    }) as { eventId: string; path: string };
+    const seeded = runConvex("e2eHelpers:seedOpenDamageReport", {}) as {
+      reportId: string;
+      assetId: string;
+      batchId: string;
+      queuePath: string;
+    };
 
-    await page.goto(seeded.path);
-    await expect(page.getByText("Edit Event").first()).toBeVisible({ timeout: 45_000 });
+    // The mention email deep-links straight into the sheet via `?report=`, so
+    // exercise that path rather than clicking through the queue.
+    await page.goto(`${seeded.queuePath}?report=${seeded.reportId}`);
+    const sheet = page.getByTestId("damage-report-sheet");
+    await expect(sheet).toBeVisible({ timeout: 30_000 });
+    await expect(sheet).toContainText(seeded.assetId, { timeout: 20_000 });
 
     const comments = page.getByTestId("comments");
     await expect(comments).toBeVisible({ timeout: 30_000 });
@@ -62,18 +70,17 @@ test.describe("event comments and mentions", () => {
     await menu.getByRole("option", { name: new RegExp(e2eEnv.crewEmail, "i") }).click();
 
     await expect(input).toHaveValue(new RegExp(`@${e2eEnv.crewName}`));
-    await input.pressSequentially(` please check the pull list ${stamp}`, { delay: 20 });
+    await input.pressSequentially(` can you pull a spare ${stamp}`, { delay: 20 });
     await page.getByTestId("comment-post").click();
 
-    await expect(page.getByTestId("comment-row").first()).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByTestId("comment-body").first()).toContainText(
-      `@${e2eEnv.crewName}`,
-    );
-    await expect(page.getByTestId("comment-body").first()).toContainText(String(stamp));
+    await expect(page.getByTestId("comment-body").first()).toContainText(String(stamp), {
+      timeout: 20_000,
+    });
 
+    // Keyed by batchId: a thread keyed on the report id would return nothing.
     const saved = await pollConvex<CommentState[]>(
       "e2eHelpers:getCommentsState",
-      { subjectType: "event", subjectId: seeded.eventId },
+      { subjectType: "damage_batch", subjectId: seeded.batchId },
       (rows) => Array.isArray(rows) && rows.some((row) => row.body.includes(String(stamp))),
     );
     const posted = saved.find((row) => row.body.includes(String(stamp)));
@@ -81,19 +88,15 @@ test.describe("event comments and mentions", () => {
     expect(posted!.body).toContain(`@${e2eEnv.crewName}`);
     expect(posted!.mentionedUserIds).toContain(crew.userId);
 
-    // The author can delete their own comment; deletion is confirmed via window.confirm,
-    // which Playwright auto-dismisses unless the dialog is accepted explicitly.
-    const postedRow = page
-      .getByTestId("comment-row")
-      .filter({ hasText: String(stamp) });
-    page.once("dialog", (dialog) => void dialog.accept());
-    await postedRow.getByTestId("comment-delete").click();
-    await expect(postedRow).toHaveCount(0, { timeout: 20_000 });
-
-    await pollConvex<CommentState[]>(
-      "e2eHelpers:getCommentsState",
-      { subjectType: "event", subjectId: seeded.eventId },
-      (rows) => Array.isArray(rows) && !rows.some((row) => row.body.includes(String(stamp))),
-    );
+    // The queue card surfaces the thread size once the sheet is dismissed.
+    await page.keyboard.press("Escape");
+    await expect(sheet).toBeHidden({ timeout: 15_000 });
+    const card = page
+      .locator('[data-slot="card"]')
+      .filter({ hasText: seeded.assetId })
+      .first();
+    await expect(card.getByTestId("damage-comment-count")).toContainText("1 comment", {
+      timeout: 20_000,
+    });
   });
 });

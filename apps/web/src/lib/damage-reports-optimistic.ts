@@ -76,6 +76,36 @@ function patchLoadedLists(
   return { previous: existing, updated };
 }
 
+/**
+ * The detail sheet reads `getById`, which the list patch above does not touch —
+ * without this, triaging from inside the sheet leaves it stale until the server
+ * round-trip lands.
+ */
+function patchLoadedDetail(
+  localStore: OptimisticLocalStore,
+  reportId: Id<"damageReports">,
+  nextStatus: DamageStatus,
+  resolvedAt?: number,
+) {
+  const now = Date.now();
+  const current = localStore.getQuery(api.damageReports.getById, { reportId });
+  if (!current) return;
+
+  localStore.setQuery(
+    api.damageReports.getById,
+    { reportId },
+    {
+      ...current,
+      report: {
+        ...current.report,
+        status: nextStatus,
+        updatedAt: now,
+        resolvedAt: nextStatus === "resolved" ? (resolvedAt ?? now) : undefined,
+      },
+    },
+  );
+}
+
 function adjustPendingCount(
   localStore: OptimisticLocalStore,
   previousStatus: DamageStatus,
@@ -96,6 +126,7 @@ export function optimisticUpdateDamageStatus(
   localStore: OptimisticLocalStore,
   args: { reportId: Id<"damageReports">; status: DamageStatus },
 ) {
+  patchLoadedDetail(localStore, args.reportId, args.status);
   const result = patchLoadedLists(localStore, args.reportId, args.status);
   if (!result) return;
   adjustPendingCount(localStore, result.previous.status, args.status);
@@ -105,6 +136,7 @@ export function optimisticDecommissionDamageReport(
   localStore: OptimisticLocalStore,
   args: { reportId: Id<"damageReports"> },
 ) {
+  patchLoadedDetail(localStore, args.reportId, "resolved");
   const result = patchLoadedLists(localStore, args.reportId, "resolved");
   if (!result) return;
   adjustPendingCount(localStore, result.previous.status, "resolved");

@@ -1,39 +1,55 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
+import { DamageReportSheet } from "@/components/inventory/damage-report-sheet";
 import { DamageReportWizard } from "@/components/inventory/damage-report-wizard";
-import { useSessionViewer } from "@/components/session-shell-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getConvexErrorMessage } from "@/lib/convex-error";
-import {
-  optimisticDecommissionDamageReport,
-  optimisticUpdateDamageStatus,
-} from "@/lib/damage-reports-optimistic";
+import { formatDateTime } from "@/lib/format";
 
 export function DamageQueueManager() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [statusFilter, setStatusFilter] = useState<"open" | "in_progress" | "resolved" | "all">(
     "open",
   );
   const [wizardOpen, setWizardOpen] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const updateStatus = useMutation(api.damageReports.updateStatus).withOptimisticUpdate(
-    optimisticUpdateDamageStatus,
-  );
-  const decommission = useMutation(api.damageReports.decommission).withOptimisticUpdate(
-    optimisticDecommissionDamageReport,
-  );  const reports = useQuery(api.damageReports.list, {
+  const reports = useQuery(api.damageReports.list, {
     status: statusFilter === "all" ? undefined : statusFilter,
   });
 
-  const viewer = useSessionViewer();
-  const canTriage = Boolean(
-    viewer?.isAdmin || viewer?.verticals?.includes("Operations"),
-  );
-
   const rows = useMemo(() => reports ?? [], [reports]);
+
+  // `?report=` is what the mention email links to, so the open report is derived
+  // from the URL rather than mirrored into state — a deep link and an in-page
+  // click then go through exactly the same path.
+  const selectedReportId = searchParams.get("report");
+
+  function openReport(reportId: string) {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("report", reportId);
+    router.replace(`?${params.toString()}`, { scroll: false });
+  }
+
+  function closeReport() {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("report");
+    const qs = params.toString();
+    router.replace(qs ? `?${qs}` : "/dashboard/inventory/damage", { scroll: false });
+  }
+
+  const threadIds = useMemo(() => rows.map((report) => report.threadId), [rows]);
+  const commentCounts = useQuery(
+    api.comments.countBySubjects,
+    threadIds.length ? { subjectType: "damage_batch" as const, subjectIds: threadIds } : "skip",
+  );
+  const commentCountByThread = useMemo(
+    () => new Map((commentCounts ?? []).map((row) => [row.subjectId, row.count])),
+    [commentCounts],
+  );
 
   return (
     <div className="space-y-4">
@@ -41,7 +57,7 @@ export function DamageQueueManager() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Damage & repair</h1>
           <p className="text-sm text-muted-foreground">
-            Crew can report damage. Operations/admin triage the queue.
+            Crew can report damage. Operations/admin triage the queue. Open a report to discuss it.
           </p>
         </div>
         <Button type="button" onClick={() => setWizardOpen(true)}>
@@ -58,105 +74,75 @@ export function DamageQueueManager() {
             variant={statusFilter === value ? "default" : "outline"}
             onClick={() => setStatusFilter(value)}
           >
-            {value === "all" ? "All" : value.replace("_", " ")}
+            <span className="capitalize">
+              {value === "all" ? "All" : value.replace("_", " ")}
+            </span>
           </Button>
         ))}
       </div>
 
-      {error ? <p className="text-sm text-destructive">{error}</p> : null}
-
       <div className="grid gap-3">
-        {rows.map((report) => (
-          <Card key={report._id}>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">
-                {report.assetId}
-                {report.typeName ? ` · ${report.typeName}` : ""}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm text-muted-foreground">
-              <p>
-                Severity {report.severity}/5 · {report.operability.replace("_", " ")} · {report.status}
-              </p>
-              <p>
-                Event:{" "}
-                {report.eventTitle ? (
-                  <a
-                    className="text-foreground underline"
-                    href={`/dashboard/events/${report.eventId}`}
-                  >
-                    {report.eventTitle}
-                  </a>
-                ) : (
-                  "Unknown / not linked"
-                )}
-              </p>
-              {report.notes ? <p>{report.notes}</p> : null}
-              {report.photoUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={report.photoUrl}
-                  alt={`Damage photo for ${report.assetId}`}
-                  className="max-h-40 rounded border object-cover"
-                />
-              ) : null}
-              {canTriage && report.status !== "resolved" ? (
-                <div className="flex flex-wrap gap-2 pt-1">
-                  {report.status === "open" ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() =>
-                        void updateStatus({
-                          reportId: report._id as Id<"damageReports">,
-                          status: "in_progress",
-                        }).catch((err) => setError(getConvexErrorMessage(err)))
-                      }
+        {rows.map((report) => {
+          const commentCount = commentCountByThread.get(report.threadId) ?? 0;
+          return (
+            <Card
+              key={report._id}
+              role="button"
+              tabIndex={0}
+              data-testid="damage-report-card"
+              className="cursor-pointer transition-colors hover:border-foreground/30"
+              onClick={() => openReport(report._id)}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter" && event.key !== " ") return;
+                event.preventDefault();
+                openReport(report._id);
+              }}
+            >
+              <CardHeader className="pb-2">
+                <CardTitle className="flex flex-wrap items-baseline gap-2 text-base">
+                  <span>
+                    {report.assetId}
+                    {report.typeName ? ` · ${report.typeName}` : ""}
+                  </span>
+                  {commentCount > 0 ? (
+                    <span
+                      className="rounded-full bg-muted px-2 py-0.5 text-xs font-normal text-muted-foreground"
+                      data-testid="damage-comment-count"
                     >
-                      Mark in progress
-                    </Button>
+                      {commentCount} comment{commentCount === 1 ? "" : "s"}
+                    </span>
                   ) : null}
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={() =>
-                      void updateStatus({
-                        reportId: report._id as Id<"damageReports">,
-                        status: "resolved",
-                      }).catch((err) => setError(getConvexErrorMessage(err)))
-                    }
-                  >
-                    Resolve (repaired)
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="destructive"
-                    onClick={() => {
-                      if (
-                        !window.confirm(
-                          `Decommission ${report.assetId}? It will be marked out of service and this report will close.`,
-                        )
-                      ) {
-                        return;
-                      }
-                      void decommission({
-                        reportId: report._id as Id<"damageReports">,
-                      }).catch((err) => setError(getConvexErrorMessage(err)));
-                    }}
-                  >
-                    Decommission
-                  </Button>
-                </div>
-              ) : null}
-            </CardContent>
-          </Card>
-        ))}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-1 text-sm text-muted-foreground">
+                <p>
+                  Severity {report.severity}/5 ·{" "}
+                  <span className="capitalize">{report.operability.replace("_", " ")}</span> ·{" "}
+                  <span className="capitalize">{report.status.replace("_", " ")}</span>
+                </p>
+                <p>
+                  Event: {report.eventTitle ?? "Unknown / not linked"}
+                </p>
+                <p>
+                  Reported by {report.reportedByName} · {formatDateTime(report.reportedAt)}
+                </p>
+                {report.notes ? <p className="line-clamp-2">{report.notes}</p> : null}
+              </CardContent>
+            </Card>
+          );
+        })}
         {!rows.length ? (
           <p className="text-sm text-muted-foreground">No damage reports in this filter.</p>
         ) : null}
       </div>
+
+      <DamageReportSheet
+        reportId={selectedReportId as Id<"damageReports"> | null}
+        open={Boolean(selectedReportId)}
+        onOpenChange={(next) => {
+          if (!next) closeReport();
+        }}
+      />
 
       <DamageReportWizard open={wizardOpen} onOpenChange={setWizardOpen} />
     </div>

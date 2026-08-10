@@ -306,3 +306,16 @@ export type EventCommentMentionEmailProps = {
   commentSnippet: string;
   eventUrl: string;
 };
+
+/** Mention notification for non-event comment threads (damage, booking requests). */
+export type CommentMentionEmailProps = {
+  recipientName?: string;
+  authorName: string;
+  /** Human label for the thread's subject, e.g. "Damage report". */
+  subjectKindLabel: string;
+  subjectTitle: string;
+  contextRows: { label: string; value: string }[];
+  commentSnippet: string;
+  url: string;
+  ctaLabel: string;
+};

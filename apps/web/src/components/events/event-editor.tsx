@@ -35,7 +35,7 @@ import { useSessionViewer } from "@/components/session-shell-provider";
 import { EventBandPaymentSection } from "@/components/events/event-band-payment-section";
 import { EventBandRidersSection } from "@/components/events/event-band-riders-section";
 import { EventMediaSection } from "@/components/events/event-media-section";
-import { EventCommentsSection } from "@/components/events/event-comments-section";
+import { CommentsSection } from "@/components/comments/comments-section";
 import { EventPullList, mapPullListRow, type PullListItemDraft } from "@/components/events/event-pull-list";
 import { EventTimelineScheduler, type TimelineBlockDraft } from "@/components/events/event-timeline-scheduler";
 import { EventScheduleCrewAssignPanel } from "@/components/events/event-availability-summary";
@@ -1455,7 +1455,7 @@ export function EventEditor({
             </div>
             {currentEventId ? (
               <div className="md:col-span-3">
-                <EventCommentsSection eventId={currentEventId} />
+                <CommentsSection subjectType="event" subjectId={currentEventId} />
               </div>
             ) : null}
             {isCreate ? (

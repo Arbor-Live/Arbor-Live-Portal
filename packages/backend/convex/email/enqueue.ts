@@ -41,6 +41,7 @@ const emailTemplateValue = v.union(
   v.literal("rental_return_processed"),
   v.literal("post_event_album"),
   v.literal("event_comment_mention"),
+  v.literal("comment_mention"),
 );
 
 const emailStatusValue = v.union(

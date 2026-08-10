@@ -231,6 +231,12 @@ const damageReportStatusValue = v.union(
   v.literal("resolved"),
 );
 
+const commentSubjectTypeValue = v.union(
+  v.literal("event"),
+  v.literal("damage_batch"),
+  v.literal("event_request"),
+);
+
 const immichAlbumEntityTypeValue = v.union(v.literal("band"), v.literal("event"));
 
 const immichAssetTypeValue = v.union(v.literal("IMAGE"), v.literal("VIDEO"));
@@ -1220,6 +1226,11 @@ export default defineSchema({
     assetId: v.string(),
     typeId: v.optional(v.id("inventoryTypes")),
     eventId: v.optional(v.id("events")),
+    /**
+     * Shared by every row one `damageReports.create` call inserts, so scoped
+     * sibling assets share one comment thread. Absent on rows predating it.
+     */
+    batchId: v.optional(v.string()),
     scope: damageReportScopeValue,
     scopedItemIds: v.array(v.id("inventoryItems")),
     operability: damageReportOperabilityValue,
@@ -1235,6 +1246,7 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_status_and_reportedAt", ["status", "reportedAt"])
     .index("by_eventId", ["eventId"])
+    .index("by_batchId", ["batchId"])
     .index("by_inventoryItemId", ["inventoryItemId"]),
 
   pendingUserInvites: defineTable({
@@ -1296,6 +1308,7 @@ export default defineSchema({
       v.literal("rental_return_processed"),
       v.literal("post_event_album"),
       v.literal("event_comment_mention"),
+      v.literal("comment_mention"),
     ),
     status: v.union(v.literal("queued"), v.literal("sent"), v.literal("failed")),
     to: v.string(),
@@ -1418,6 +1431,11 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_key", ["key"]),
 
+  /**
+   * @deprecated Superseded by `comments` with `subjectType: "event"`. Rows are
+   * copied over by `migrations:migrateEventCommentsToComments`; the table is
+   * dropped once that has run in production.
+   */
   eventComments: defineTable({
     eventId: v.id("events"),
     authorUserId: v.string(),
@@ -1428,6 +1446,25 @@ export default defineSchema({
   })
     .index("by_eventId_and_createdAt", ["eventId", "createdAt"])
     .index("by_eventId", ["eventId"]),
+
+  /**
+   * Internal discussion threads with @mentions, keyed by an arbitrary subject.
+   *
+   * `subjectId` is a plain string rather than a union of id types so a new
+   * surface only needs a `subjectType` literal plus a branch in
+   * `comments.resolveSubject`. Damage threads key on the report's `batchId`
+   * (falling back to the report id for pre-`batchId` rows) so the sibling rows
+   * one submission creates share a single conversation.
+   */
+  comments: defineTable({
+    subjectType: commentSubjectTypeValue,
+    subjectId: v.string(),
+    authorUserId: v.string(),
+    body: v.string(),
+    mentionedUserIds: v.array(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_subject_and_createdAt", ["subjectType", "subjectId", "createdAt"]),
 
   eventFeedback: defineTable({
     eventId: v.id("events"),

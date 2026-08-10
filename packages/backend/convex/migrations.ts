@@ -246,6 +246,40 @@ export const consolidatePackageContentUnits = migrations.define({
 });
 
 /**
+ * Copy event comment threads into the generic `comments` table.
+ *
+ * Idempotent: the runner can re-run, and the source rows are left in place
+ * until `eventComments` is dropped in a follow-up, so a re-run must not
+ * duplicate. (`createdAt` is minted per comment, so subject + author +
+ * createdAt identifies the copy.)
+ */
+export const migrateEventCommentsToComments = migrations.define({
+  table: "eventComments",
+  migrateOne: async (ctx, comment) => {
+    const existing = await ctx.db
+      .query("comments")
+      .withIndex("by_subject_and_createdAt", (q) =>
+        q
+          .eq("subjectType", "event")
+          .eq("subjectId", comment.eventId)
+          .eq("createdAt", comment.createdAt),
+      )
+      .take(20);
+    if (existing.some((row) => row.authorUserId === comment.authorUserId)) return;
+
+    await ctx.db.insert("comments", {
+      subjectType: "event",
+      subjectId: comment.eventId,
+      authorUserId: comment.authorUserId,
+      body: comment.body,
+      mentionedUserIds: comment.mentionedUserIds,
+      createdAt: comment.createdAt,
+      updatedAt: comment.updatedAt,
+    });
+  },
+});
+
+/**
  * never reorder or remove completed ones (reset requires an explicit reset:true).
  */
 const MIGRATION_SERIES = [
@@ -260,6 +294,7 @@ const MIGRATION_SERIES = [
   internal.migrations.backfillEventRequestMilestoneTimestamps,
   internal.migrations.migratePackageLegacyItemsToContentUnits,
   internal.migrations.consolidatePackageContentUnits,
+  internal.migrations.migrateEventCommentsToComments,
 ] as const;
 
 export const runAll = migrations.runner([...MIGRATION_SERIES]);

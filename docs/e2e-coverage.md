@@ -132,8 +132,9 @@ the URL looks like cloud.
 | Surface | Status | Spec / notes |
 |---------|--------|--------------|
 | Dry-hire Process delivery + return (typed scans) | Covered | `inventory/rental-fulfillment.spec.ts` |
-| Damage triage (open → in progress → resolved) | Covered | `inventory/damage-triage.spec.ts` |
+| Damage triage (open → in progress → resolved) | Covered | `inventory/damage-triage.spec.ts` — triage moved into the report detail sheet, so the spec opens a card first |
 | Damage report create | Covered | `inventory/damage-create.spec.ts` (Batch 5) |
+| Damage report comments + @mentions | Covered | `inventory/damage-comments.spec.ts` — enters via the `?report=` deep link the mention email sends, and asserts the thread is keyed by `batchId` so sibling assets share it |
 | Pull-list edit UI | Covered | `inventory/pull-list-edit.spec.ts` (Batch 5) |
 | Model type create / edit / delete | Covered | `inventory/type-crud.spec.ts` (Batch 10) — asserts the rates the server *derives* (5%/10% of MSRP) and the legacy `rentalPriceUsd` mirror, not just the field that was typed |
 | Type delete guards | Covered | `inventory/type-crud.spec.ts` (Batch 10) — refused while an item links the type |
@@ -201,7 +202,9 @@ the URL looks like cloud.
 | `crew/crew-availability-assign.spec.ts` | Availability + assign |
 | `crew/crew-application.spec.ts` | Crew apply + admin list |
 | `inventory/rental-fulfillment.spec.ts` | Delivery + return |
-| `inventory/damage-triage.spec.ts` | Damage triage |
+| `inventory/damage-triage.spec.ts` | Damage triage (via the report detail sheet) |
+| `inventory/damage-comments.spec.ts` | Damage report comments + @mentions, batch-keyed thread |
+| `events/event-comments.spec.ts` | Event comments + @mention typeahead |
 | `bands/band-payment-esign.spec.ts` | Band e-sign + helper mark paid |
 | `bands/band-shows-home.spec.ts` | Band Your shows home, assign → email, e-sign from card |
 | `bands/band-application.spec.ts` | Band apply + admin approve (Batch 3) |

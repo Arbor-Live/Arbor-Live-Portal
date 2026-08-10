@@ -63,10 +63,16 @@ export type EmailTemplate =
   | "rental_outbound_packed"
   | "rental_return_processed"
   | "post_event_album"
-  | "event_comment_mention";
+  | "event_comment_mention"
+  | "comment_mention";
 
 export function eventDashboardUrl(eventId: string) {
   return `${SITE_URL}/dashboard/events/${eventId}`;
+}
+
+/** Deep link that opens the damage queue with the report's detail sheet open. */
+export function damageReportUrl(reportId: string) {
+  return `${SITE_URL}/dashboard/inventory/damage?report=${encodeURIComponent(reportId)}`;
 }
 
 export function formatEventDateRange(
@@ -197,6 +203,7 @@ export function subjectForTemplate(template: EmailTemplate, context: string) {
     case "post_event_album":
       return `Share your event photos: ${context}`;
     case "event_comment_mention":
+    case "comment_mention":
       return `You were mentioned: ${context}`;
   }
 }

@@ -17,6 +17,9 @@ import { ArborOnlyGuard } from "@/components/org-context-guard";
 import { formatDateTime } from "@/lib/format";
 import { fuzzyScoreHaystack } from "@/lib/fuzzy-match";
 
+/** Threads are keyed by subject, so a new surface only adds a literal here. */
+export type CommentSubjectType = "event" | "damage_batch" | "event_request";
+
 type MentionCandidate = {
   userId: string;
   name: string;
@@ -79,19 +82,38 @@ function renderBodyWithMentions(body: string, mentionedNames: string[]): ReactNo
   return nodes.length ? nodes : body;
 }
 
-export function EventCommentsSection({ eventId }: { eventId: Id<"events"> }) {
+export type CommentsSectionProps = {
+  subjectType: CommentSubjectType;
+  subjectId: string;
+  title?: string;
+  description?: ReactNode;
+  /**
+   * Where to portal the mention typeahead. Defaults to `document.body`, which a
+   * modal Radix layer blocks from receiving pointer events — inside a dialog or
+   * sheet, pass that layer's element so the menu stays clickable.
+   */
+  menuContainer?: HTMLElement | null;
+};
+
+export function CommentsSection(props: CommentsSectionProps) {
   return (
     <ArborOnlyGuard>
-      <EventCommentsPanel eventId={eventId} />
+      <CommentsPanel {...props} />
     </ArborOnlyGuard>
   );
 }
 
-function EventCommentsPanel({ eventId }: { eventId: Id<"events"> }) {
-  const comments = useQuery(api.eventComments.listByEvent, { eventId });
-  const mentionCandidates = useQuery(api.eventComments.listMentionCandidates, {});
-  const createComment = useMutation(api.eventComments.createComment);
-  const deleteComment = useMutation(api.eventComments.deleteComment);
+function CommentsPanel({
+  subjectType,
+  subjectId,
+  title = "Comments",
+  description,
+  menuContainer,
+}: CommentsSectionProps) {
+  const comments = useQuery(api.comments.listBySubject, { subjectType, subjectId });
+  const mentionCandidates = useQuery(api.comments.listMentionCandidates, {});
+  const createComment = useMutation(api.comments.createComment);
+  const deleteComment = useMutation(api.comments.deleteComment);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [body, setBody] = useState("");
   const [cursor, setCursor] = useState(0);
@@ -99,7 +121,7 @@ function EventCommentsPanel({ eventId }: { eventId: Id<"events"> }) {
   const [focused, setFocused] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [deletingId, setDeletingId] = useState<Id<"eventComments"> | null>(null);
+  const [deletingId, setDeletingId] = useState<Id<"comments"> | null>(null);
 
   const candidates = useMemo(() => mentionCandidates ?? [], [mentionCandidates]);
   const activeMention = getActiveMention(body, cursor);
@@ -121,9 +143,13 @@ function EventCommentsPanel({ eventId }: { eventId: Id<"events"> }) {
   // The menu is portaled out of the card, so it must not outlive textarea focus.
   const showMentionMenu = focused && Boolean(activeMention) && filteredMentions.length > 0;
 
-  // The surrounding Card clips overflow, so the menu is portaled to the body and
-  // anchored to the textarea with fixed coordinates instead of absolute ones.
+  // The surrounding Card clips overflow, so the menu is portaled out and anchored
+  // to the textarea by coordinate. Portaled to the body it can stay `fixed`, but
+  // inside a container it must be `absolute` — a Radix sheet animates with a
+  // transform, which would make `fixed` resolve against the sheet, not the
+  // viewport.
   const [menuPosition, setMenuPosition] = useState<{
+    position: "fixed" | "absolute";
     top: number;
     left: number;
     width: number;
@@ -141,9 +167,18 @@ function EventCommentsPanel({ eventId }: { eventId: Id<"events"> }) {
       const spaceAbove = rect.top - 12;
       const openUp = spaceBelow < 160 && spaceAbove > spaceBelow;
       const maxHeight = Math.max(96, Math.min(224, openUp ? spaceAbove : spaceBelow));
+      const top = openUp ? rect.top - 4 - maxHeight : rect.bottom + 4;
+
+      if (!menuContainer) {
+        setMenuPosition({ position: "fixed", top, left: rect.left, width: rect.width, maxHeight });
+        return;
+      }
+
+      const containerRect = menuContainer.getBoundingClientRect();
       setMenuPosition({
-        top: openUp ? rect.top - 4 - maxHeight : rect.bottom + 4,
-        left: rect.left,
+        position: "absolute",
+        top: top - containerRect.top + menuContainer.scrollTop,
+        left: rect.left - containerRect.left + menuContainer.scrollLeft,
         width: rect.width,
         maxHeight,
       });
@@ -156,7 +191,7 @@ function EventCommentsPanel({ eventId }: { eventId: Id<"events"> }) {
       window.removeEventListener("resize", updatePosition);
       window.removeEventListener("scroll", updatePosition, true);
     };
-  }, [showMentionMenu, filteredMentions.length]);
+  }, [showMentionMenu, filteredMentions.length, menuContainer]);
 
   function insertMention(candidate: MentionCandidate) {
     if (!activeMention) return;
@@ -181,7 +216,8 @@ function EventCommentsPanel({ eventId }: { eventId: Id<"events"> }) {
     setError(null);
     try {
       await createComment({
-        eventId,
+        subjectType,
+        subjectId,
         body,
         mentionedUserIds: extractMentionedUserIds(body, candidates),
       });
@@ -195,7 +231,7 @@ function EventCommentsPanel({ eventId }: { eventId: Id<"events"> }) {
     }
   }
 
-  async function handleDelete(commentId: Id<"eventComments">) {
+  async function handleDelete(commentId: Id<"comments">) {
     if (!window.confirm("Delete this comment? This cannot be undone.")) return;
     setDeletingId(commentId);
     setError(null);
@@ -243,15 +279,21 @@ function EventCommentsPanel({ eventId }: { eventId: Id<"events"> }) {
   return (
     <div
       className="space-y-3 rounded-md border p-4"
-      data-testid="event-comments"
+      data-testid="comments"
+      data-comment-subject-type={subjectType}
       data-mention-candidates={
         mentionCandidates === undefined ? "loading" : String(mentionCandidates.length)
       }
     >
       <div>
-        <h3 className="font-medium">Comments</h3>
+        <h3 className="font-medium">{title}</h3>
         <p className="text-sm text-muted-foreground">
-          Type <span className="font-medium">@</span> to mention a teammate — they get an email.
+          {description ?? (
+            <>
+              Type <span className="font-medium">@</span> to mention a teammate — they get an
+              email.
+            </>
+          )}
         </p>
       </div>
 
@@ -263,14 +305,14 @@ function EventCommentsPanel({ eventId }: { eventId: Id<"events"> }) {
 
       <div className="space-y-2">
         {(comments ?? []).map((comment) => (
-          <div key={comment._id} className="rounded-md border p-3" data-testid="event-comment-row">
+          <div key={comment._id} className="rounded-md border p-3" data-testid="comment-row">
             <div className="flex flex-wrap items-baseline gap-2 text-xs text-muted-foreground">
               <span className="font-medium text-foreground">{comment.authorName}</span>
               <span>{formatDateTime(comment.createdAt)}</span>
               {comment.canDelete ? (
                 <button
                   type="button"
-                  data-testid="event-comment-delete"
+                  data-testid="comment-delete"
                   className="ml-auto text-xs text-muted-foreground underline-offset-2 hover:text-destructive hover:underline disabled:opacity-50"
                   disabled={deletingId === comment._id}
                   onClick={() => void handleDelete(comment._id)}
@@ -281,7 +323,7 @@ function EventCommentsPanel({ eventId }: { eventId: Id<"events"> }) {
             </div>
             <p
               className="mt-1 text-sm break-words whitespace-pre-wrap"
-              data-testid="event-comment-body"
+              data-testid="comment-body"
             >
               {renderBodyWithMentions(
                 comment.body,
@@ -298,7 +340,7 @@ function EventCommentsPanel({ eventId }: { eventId: Id<"events"> }) {
       <div className="relative space-y-2">
         <textarea
           ref={textareaRef}
-          data-testid="event-comment-input"
+          data-testid="comment-input"
           className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm"
           placeholder="Write a comment… use @ to mention someone"
           value={body}
@@ -320,17 +362,20 @@ function EventCommentsPanel({ eventId }: { eventId: Id<"events"> }) {
               <div
                 className="z-[100] overflow-auto rounded-md border bg-popover p-1 shadow-md"
                 style={{
-                  position: "fixed",
+                  position: menuPosition.position,
                   top: menuPosition.top,
                   left: menuPosition.left,
                   width: menuPosition.width,
                   maxHeight: menuPosition.maxHeight,
+                  // A modal Radix layer sets pointer-events:none on everything
+                  // outside its content; the menu must opt back in.
+                  pointerEvents: "auto",
                 }}
                 role="listbox"
-                data-testid="event-comment-mention-menu"
+                data-testid="comment-mention-menu"
               >
                 {filteredMentions.map((candidate, index) => {
-                  const description = [
+                  const candidateDescription = [
                     candidate.pronouns,
                     candidate.gradYear ? `’${String(candidate.gradYear).slice(-2)}` : null,
                   ]
@@ -353,20 +398,20 @@ function EventCommentsPanel({ eventId }: { eventId: Id<"events"> }) {
                     >
                       <span className="truncate font-medium">{candidate.name}</span>
                       <span className="truncate text-xs text-muted-foreground">
-                        {[candidate.email, description].filter(Boolean).join(" · ")}
+                        {[candidate.email, candidateDescription].filter(Boolean).join(" · ")}
                       </span>
                     </button>
                   );
                 })}
               </div>,
-              document.body,
+              menuContainer ?? document.body,
             )
           : null}
       </div>
 
       <Button
         type="button"
-        data-testid="event-comment-post"
+        data-testid="comment-post"
         disabled={saving || !body.trim()}
         onClick={() => void handleSubmit()}
       >

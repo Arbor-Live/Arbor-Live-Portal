@@ -32,6 +32,7 @@ import {
   renderRentalReturnProcessedEmail,
   renderPostEventAlbumEmail,
   renderEventCommentMentionEmail,
+  renderCommentMentionEmail,
 } from "@arbor/email/render";
 import type {
   BookingQuoteReadyEmailProps,
@@ -66,6 +67,7 @@ import type {
   RentalReturnProcessedEmailProps,
   PostEventAlbumEmailProps,
   EventCommentMentionEmailProps,
+  CommentMentionEmailProps,
 } from "@arbor/email/types";
 import type { EmailTemplate } from "./constants";
 
@@ -141,5 +143,7 @@ export async function renderEmailHtml(template: EmailTemplate, payload: unknown)
       return renderPostEventAlbumEmail(payload as PostEventAlbumEmailProps);
     case "event_comment_mention":
       return renderEventCommentMentionEmail(payload as EventCommentMentionEmailProps);
+    case "comment_mention":
+      return renderCommentMentionEmail(payload as CommentMentionEmailProps);
   }
 }

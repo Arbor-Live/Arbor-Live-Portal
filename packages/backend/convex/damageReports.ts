@@ -1,7 +1,8 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import {
+  findAuthUsersByIds,
   getUserId,
   requireAnyVerticalOrAdmin,
   requireArborInternalContext,
@@ -33,6 +34,11 @@ const reportValidator = v.object({
   typeName: v.optional(v.string()),
   eventId: v.optional(v.id("events")),
   eventTitle: v.optional(v.string()),
+  /**
+   * Comment-thread key. Sibling rows from one submission share a `batchId`;
+   * rows predating it fall back to their own id so every report has a thread.
+   */
+  threadId: v.string(),
   scope: scopeValue,
   scopedItemIds: v.array(v.id("inventoryItems")),
   operability: operabilityValue,
@@ -41,6 +47,7 @@ const reportValidator = v.object({
   photoUrl: v.optional(v.string()),
   status: statusValue,
   reportedByUserId: v.string(),
+  reportedByName: v.string(),
   reportedAt: v.number(),
   updatedAt: v.number(),
   resolvedAt: v.optional(v.number()),
@@ -110,6 +117,52 @@ export const getItemChildren = query({
   },
 });
 
+/** Resolve type/event/photo/reporter for a set of reports, newest first. */
+async function enrichReports(
+  ctx: Parameters<typeof requireAuth>[0],
+  rows: Doc<"damageReports">[],
+) {
+  const userById = await findAuthUsersByIds(
+    ctx,
+    rows.map((row) => row.reportedByUserId),
+  );
+
+  return await Promise.all(
+    [...rows]
+      .sort((a, b) => b.reportedAt - a.reportedAt)
+      .map(async (row) => {
+        const type = row.typeId ? await ctx.db.get(row.typeId) : null;
+        const event = row.eventId ? await ctx.db.get(row.eventId) : null;
+        const photoUrl = row.photoR2Key
+          ? await resolveStoredR2AssetUrl(formatStoredR2Asset(row.photoR2Key))
+          : undefined;
+        const reporter = userById.get(row.reportedByUserId);
+        return {
+          _id: row._id,
+          inventoryItemId: row.inventoryItemId,
+          assetId: row.assetId,
+          typeId: row.typeId,
+          typeName: type?.name,
+          eventId: row.eventId,
+          eventTitle: event?.title,
+          threadId: row.batchId ?? row._id,
+          scope: row.scope,
+          scopedItemIds: row.scopedItemIds,
+          operability: row.operability,
+          severity: row.severity,
+          notes: row.notes,
+          photoUrl,
+          status: row.status,
+          reportedByUserId: row.reportedByUserId,
+          reportedByName: reporter?.name ?? reporter?.email ?? "Arbor Live user",
+          reportedAt: row.reportedAt,
+          updatedAt: row.updatedAt,
+          resolvedAt: row.resolvedAt,
+        };
+      }),
+  );
+}
+
 export const list = query({
   args: {
     status: v.optional(statusValue),
@@ -138,37 +191,60 @@ export const list = query({
       ? rows.filter((row) => row.status === args.status)
       : rows;
 
-    return Promise.all(
-      filtered
-        .sort((a, b) => b.reportedAt - a.reportedAt)
-        .map(async (row) => {
-          const type = row.typeId ? await ctx.db.get(row.typeId) : null;
-          const event = row.eventId ? await ctx.db.get(row.eventId) : null;
-          const photoUrl = row.photoR2Key
-            ? await resolveStoredR2AssetUrl(formatStoredR2Asset(row.photoR2Key))
-            : undefined;
+    return await enrichReports(ctx, filtered);
+  },
+});
+
+/**
+ * Single report plus the sibling assets covered by the same submission, for the
+ * detail sheet. Siblings share the report's comment thread.
+ */
+export const getById = query({
+  args: { reportId: v.id("damageReports") },
+  returns: v.union(
+    v.null(),
+    v.object({
+      report: reportValidator,
+      siblings: v.array(
+        v.object({
+          _id: v.id("damageReports"),
+          assetId: v.string(),
+          typeName: v.optional(v.string()),
+          status: statusValue,
+        }),
+      ),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    await requireCrew(ctx);
+    const row = await ctx.db.get(args.reportId);
+    if (!row) return null;
+
+    const [report] = await enrichReports(ctx, [row]);
+    if (!report) return null;
+
+    const batchRows = row.batchId
+      ? await ctx.db
+          .query("damageReports")
+          .withIndex("by_batchId", (q) => q.eq("batchId", row.batchId))
+          .take(500)
+      : [];
+
+    const siblings = await Promise.all(
+      batchRows
+        .filter((sibling) => sibling._id !== row._id)
+        .map(async (sibling) => {
+          const type = sibling.typeId ? await ctx.db.get(sibling.typeId) : null;
           return {
-            _id: row._id,
-            inventoryItemId: row.inventoryItemId,
-            assetId: row.assetId,
-            typeId: row.typeId,
+            _id: sibling._id,
+            assetId: sibling.assetId,
             typeName: type?.name,
-            eventId: row.eventId,
-            eventTitle: event?.title,
-            scope: row.scope,
-            scopedItemIds: row.scopedItemIds,
-            operability: row.operability,
-            severity: row.severity,
-            notes: row.notes,
-            photoUrl,
-            status: row.status,
-            reportedByUserId: row.reportedByUserId,
-            reportedAt: row.reportedAt,
-            updatedAt: row.updatedAt,
-            resolvedAt: row.resolvedAt,
+            status: sibling.status,
           };
         }),
     );
+
+    return { report, siblings };
   },
 });
 
@@ -243,6 +319,8 @@ export const create = mutation({
     const now = Date.now();
     const photoKey = args.photoR2Key?.trim() || undefined;
     const reportIds: Id<"damageReports">[] = [];
+    // One id across every scoped asset so the rows share a single comment thread.
+    const batchId = crypto.randomUUID();
 
     for (const itemId of scopedIds) {
       const item = await ctx.db.get(itemId);
@@ -252,6 +330,7 @@ export const create = mutation({
         assetId: item.assetId,
         typeId: item.typeId,
         eventId,
+        batchId,
         scope: args.scope,
         scopedItemIds: scopedIds,
         operability: args.operability,

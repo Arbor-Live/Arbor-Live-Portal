@@ -7,6 +7,7 @@ import { useMutation, useQuery } from "convex/react";
 import { BOOKING_DECLINE_REASON_CODES, bookingDeclineReasonLabel } from "@arbor/format";
 import { api, type Id } from "@/lib/convex-api";
 import { AdminCascadeDeleteDialog } from "@/components/admin/admin-cascade-delete-dialog";
+import { CommentsSection } from "@/components/comments/comments-section";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { useSessionViewer } from "@/components/session-shell-provider";
@@ -174,13 +175,18 @@ export function EventRequestDetailClient({ requestId }: { requestId: Id<"eventRe
       <div className="rounded-md border p-4">
         <div className="mb-4 flex flex-wrap gap-2 text-xs">
           <span className="rounded bg-muted px-2 py-0.5">{request.requestNumber ?? request._id}</span>
-          <span className="rounded bg-muted px-2 py-0.5">{request.status}</span>
+          <span className="rounded bg-muted px-2 py-0.5 capitalize">
+            {request.status.replace("_", " ")}
+          </span>
           <span className="rounded bg-muted px-2 py-0.5">
             Submitted {formatDateTime(request.submittedAt)}
           </span>
           {linkedInvoice ? (
             <span className="rounded bg-muted px-2 py-0.5">
-              Quote {linkedInvoice.invoice.invoiceNumber} · {linkedInvoice.invoice.status}
+              Quote {linkedInvoice.invoice.invoiceNumber} ·{" "}
+              <span className="capitalize">
+                {linkedInvoice.invoice.status.replace("_", " ")}
+              </span>
               {linkedInvoice.invoice.clientReviewReadyAt ? " · On request portal" : ""}
             </span>
           ) : null}
@@ -250,6 +256,17 @@ export function EventRequestDetailClient({ requestId }: { requestId: Id<"eventRe
           />
         ) : null}
       </div>
+
+      <CommentsSection
+        subjectType="event_request"
+        subjectId={requestId}
+        description={
+          <>
+            Internal discussion on this request — the client never sees it. Type{" "}
+            <span className="font-medium">@</span> to mention a teammate.
+          </>
+        }
+      />
 
       {request.status !== "converted" && request.status !== "declined" ? (
         <div className="space-y-3 rounded-md border p-4">

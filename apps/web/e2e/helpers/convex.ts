@@ -45,12 +45,22 @@ function resolveOptionalEnvFile(): string | null {
   return null;
 }
 
+/**
+ * Invoke the local Convex binary directly rather than through `pnpm exec`.
+ *
+ * pnpm 10 added its own top-level `--env-file`, which it consumes before the
+ * subcommand — `pnpm exec convex run --env-file <path>` fails with
+ * "<path>: not found" no matter where the flag sits (a `--` separator does not
+ * help), taking every `runConvex` caller down with it.
+ */
+const convexBin = path.join(backendDir, "node_modules/.bin/convex");
+
 function convexRunArgs(functionName: string, argsJson: string): string[] {
   const envFile = resolveOptionalEnvFile();
   if (envFile) {
-    return ["exec", "convex", "run", "--env-file", envFile, functionName, argsJson];
+    return ["run", "--env-file", envFile, functionName, argsJson];
   }
-  return ["exec", "convex", "run", functionName, argsJson];
+  return ["run", functionName, argsJson];
 }
 
 /**
@@ -90,7 +100,7 @@ export function resolveConvexUrl(): string {
 }
 
 export function runConvex(functionName: string, args: unknown = {}) {
-  const raw = execFileSync("pnpm", convexRunArgs(functionName, JSON.stringify(args)), {
+  const raw = execFileSync(convexBin, convexRunArgs(functionName, JSON.stringify(args)), {
     cwd: backendDir,
     encoding: "utf8",
     env: process.env,

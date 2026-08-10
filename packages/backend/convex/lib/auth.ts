@@ -71,8 +71,21 @@ export async function findAuthUserById(
 }
 
 /**
+ * Convex document ids are 32 base32-ish characters. The adapter's `_id` lookup
+ * calls `db.get` per value and throws "Unable to decode ID" on anything else, so
+ * arbitrary author strings (legacy rows, fixtures) must skip that branch and
+ * fall through to the `id` alias query rather than failing the whole caller.
+ */
+function isConvexIdShaped(value: string) {
+  return /^[0-9a-z]{32}$/.test(value);
+}
+
+/**
  * Batch-lookup Better Auth users by id. Uses `_id`+`in` first, then `id`+`in`
  * only for ids still missing. Map is keyed by both `_id` and `id` when present.
+ *
+ * Total by design: unknown or malformed ids are simply absent from the map, so
+ * one bad stored id cannot take down a list that only wants display names.
  */
 export async function findAuthUsersByIds(
   ctx: AuthCtx,
@@ -89,13 +102,16 @@ export async function findAuthUsersByIds(
     if (user._id) userByKey.set(user._id, user);
   };
 
-  const byIdResult = await ctx.runQuery(components.betterAuth.adapter.findMany, {
-    model: "user",
-    where: [{ field: "_id", operator: "in", value: uniqueIds }],
-    paginationOpts: { cursor: null, numItems: uniqueIds.length },
-  });
-  for (const user of (byIdResult?.page ?? []) as AuthUser[]) {
-    indexUser(user);
+  const decodableIds = uniqueIds.filter(isConvexIdShaped);
+  if (decodableIds.length > 0) {
+    const byIdResult = await ctx.runQuery(components.betterAuth.adapter.findMany, {
+      model: "user",
+      where: [{ field: "_id", operator: "in", value: decodableIds }],
+      paginationOpts: { cursor: null, numItems: decodableIds.length },
+    });
+    for (const user of (byIdResult?.page ?? []) as AuthUser[]) {
+      indexUser(user);
+    }
   }
 
   const missing = uniqueIds.filter((id) => !userByKey.has(id));
