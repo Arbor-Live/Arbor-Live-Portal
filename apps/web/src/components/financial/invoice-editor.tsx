@@ -1028,15 +1028,6 @@ export function InvoiceEditor({
         (linkedEvent?.bandsCostUsd ?? 0) +
         (linkedEvent?.externalRentalsCostUsd ?? 0) +
         (linkedEvent?.otherCostUsd ?? 0);
-  const arborBilledUsd = arborEarnedRevenueUsd(
-    draftTotals.totalUsd,
-    draftTotals.artistsSubtotalUsd,
-  );
-  const projectedNetProfitUsd = netProfitFromInvoiceUsd(
-    draftTotals.totalUsd,
-    draftTotals.artistsSubtotalUsd,
-    eventCostUsd,
-  );
 
   const handleSeriesShiftDraftsChange = useCallback(
     (drafts: SeriesShiftTemplateDraft[]) => {
@@ -1090,6 +1081,16 @@ export function InvoiceEditor({
     crewRateMode,
     settings,
   ]);
+
+  const arborBilledUsd = arborEarnedRevenueUsd(
+    draftTotals.totalUsd,
+    draftTotals.artistsSubtotalUsd,
+  );
+  const projectedNetProfitUsd = netProfitFromInvoiceUsd(
+    draftTotals.totalUsd,
+    draftTotals.artistsSubtotalUsd,
+    eventCostUsd,
+  );
 
   const savedTotalUsd = invoiceData?.invoice?.totalUsd;
   const pricingUnsaved =
