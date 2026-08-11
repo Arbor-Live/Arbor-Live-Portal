@@ -33,6 +33,7 @@ import {
   loadInvoiceCrewRateSettings,
   resolveUserCompensationHourlyRateUsd,
 } from "./lib/crewCompensation";
+import { netProfitFromInvoiceUsd } from "./lib/invoiceProfit";
 
 const equipmentPricingModeValue = v.union(v.literal("subsidized"), v.literal("nonSubsidized"));
 const crewRateModeValue = v.union(
@@ -73,6 +74,7 @@ const lineItemInput = v.object({
   equipmentQuantityBasis: v.optional(v.union(v.literal("total"), v.literal("per_occurrence"))),
   excludedTypeIds: v.optional(v.array(v.id("inventoryTypes"))),
   packageExclusionDiscountUsd: v.optional(v.number()),
+  organizationId: v.optional(v.string()),
 });
 
 type LineInput = {
@@ -91,6 +93,8 @@ type LineInput = {
   excludedTypeIds?: Id<"inventoryTypes">[];
   /** Package lines only: staff override for the exclusion discount; falls back to a suggested amount. */
   packageExclusionDiscountUsd?: number;
+  /** Artist lines: linked band/DJ org id. */
+  organizationId?: string;
 };
 
 function trimOptional(raw: string | undefined) {
@@ -367,6 +371,7 @@ async function replaceLineItems(
       packageExclusionDiscountUsd: row.packageExclusionDiscountUsd,
       feeDefinitionId: row.feeDefinitionId,
       equipmentQuantityBasis: row.equipmentQuantityBasis,
+      organizationId: trimOptional(row.organizationId),
       createdAt: now,
       updatedAt: now,
     });
@@ -520,7 +525,14 @@ export const listEnriched = query({
           managerName: invoice.managerName,
           issueDate: invoice.issueDate,
           totalUsd: invoice.totalUsd,
-          netProfitUsd: eventCostsUsd == null ? null : invoice.totalUsd - eventCostsUsd,
+          netProfitUsd:
+            eventCostsUsd == null
+              ? null
+              : netProfitFromInvoiceUsd(
+                  invoice.totalUsd,
+                  invoice.artistsSubtotalUsd,
+                  eventCostsUsd,
+                ),
           publicApprovalToken: invoice.publicApprovalToken,
           clientGroupName: invoice.clientGroupName,
           clientContactName: invoice.clientContactName,
@@ -1315,6 +1327,7 @@ export const duplicate = mutation({
         packageExclusionDiscountUsd: line.packageExclusionDiscountUsd,
         feeDefinitionId: line.feeDefinitionId,
         equipmentQuantityBasis: line.equipmentQuantityBasis,
+        organizationId: line.organizationId,
         createdAt: now,
         updatedAt: now,
       });

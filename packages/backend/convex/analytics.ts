@@ -15,6 +15,7 @@ import {
   loadEventsInRange,
   requireAnalyticsAccess,
 } from "./lib/analyticsQuery";
+import { arborEarnedRevenueUsd } from "./lib/invoiceProfit";
 import { classifyPaymentQueue } from "./lib/invoicePaymentStatus";
 import { getActivePaymentProofSubmission } from "./lib/paymentProof";
 
@@ -112,12 +113,20 @@ export const getFinancialSummary = query({
       loadBandPayoutsInRange(ctx, args.startMs, args.endMs),
     ]);
 
-    const revenueRecognizedUsd = paid.invoices.reduce((sum, inv) => sum + inv.totalUsd, 0);
-    const revenueBookedUsd = approved.invoices.reduce((sum, inv) => sum + inv.totalUsd, 0);
+    const revenueRecognizedUsd = paid.invoices.reduce(
+      (sum, inv) => sum + arborEarnedRevenueUsd(inv.totalUsd, inv.artistsSubtotalUsd),
+      0,
+    );
+    const revenueBookedUsd = approved.invoices.reduce(
+      (sum, inv) => sum + arborEarnedRevenueUsd(inv.totalUsd, inv.artistsSubtotalUsd),
+      0,
+    );
 
+    // Event costs already include bandsCostUsd (synced from band payments). Do not
+    // add paid payouts again — that double-counts band expenses.
     const eventCostsUsd = events.events.reduce((sum, event) => sum + eventCostUsd(event), 0);
     const bandPayoutsUsd = payouts.payments.reduce((sum, row) => sum + row.totalUsd, 0);
-    const expensesUsd = eventCostsUsd + bandPayoutsUsd;
+    const expensesUsd = eventCostsUsd;
 
     const monthKeys = listPacificMonthKeys(args.startMs, args.endMs);
     const revenueByMonth = emptyMonthMap(monthKeys);
@@ -127,19 +136,17 @@ export const getFinancialSummary = query({
       if (invoice.paymentReceivedAt == null) continue;
       const key = pacificMonthKey(invoice.paymentReceivedAt);
       if (!revenueByMonth.has(key)) continue;
-      revenueByMonth.set(key, (revenueByMonth.get(key) ?? 0) + invoice.totalUsd);
+      revenueByMonth.set(
+        key,
+        (revenueByMonth.get(key) ?? 0) +
+          arborEarnedRevenueUsd(invoice.totalUsd, invoice.artistsSubtotalUsd),
+      );
     }
 
     for (const event of events.events) {
       const key = pacificMonthKey(event.startAt);
       if (!expensesByMonth.has(key)) continue;
       expensesByMonth.set(key, (expensesByMonth.get(key) ?? 0) + eventCostUsd(event));
-    }
-    for (const payment of payouts.payments) {
-      if (payment.paidAt == null) continue;
-      const key = pacificMonthKey(payment.paidAt);
-      if (!expensesByMonth.has(key)) continue;
-      expensesByMonth.set(key, (expensesByMonth.get(key) ?? 0) + payment.totalUsd);
     }
 
     const sparkline = monthKeys.map((monthKey) => ({
@@ -179,7 +186,11 @@ export const getRevenueByMonth = query({
       if (invoice.paymentReceivedAt == null) continue;
       const key = pacificMonthKey(invoice.paymentReceivedAt);
       if (!byMonth.has(key)) continue;
-      byMonth.set(key, (byMonth.get(key) ?? 0) + invoice.totalUsd);
+      byMonth.set(
+        key,
+        (byMonth.get(key) ?? 0) +
+          arborEarnedRevenueUsd(invoice.totalUsd, invoice.artistsSubtotalUsd),
+      );
     }
 
     return {
@@ -210,14 +221,12 @@ export const getRevenueMix = query({
 
     let equipmentUsd = 0;
     let crewUsd = 0;
-    let artistsUsd = 0;
     let feesUsd = 0;
     let externalRentalsUsd = 0;
 
     for (const invoice of invoices) {
       equipmentUsd += invoice.equipmentSubtotalUsd;
       crewUsd += invoice.crewSubtotalUsd;
-      artistsUsd += invoice.artistsSubtotalUsd;
       feesUsd += invoice.feesSubtotalUsd;
       externalRentalsUsd += invoice.externalRentalsSubtotalUsd;
     }
@@ -225,7 +234,8 @@ export const getRevenueMix = query({
     return {
       equipmentUsd,
       crewUsd,
-      artistsUsd,
+      // Artists / bands are expenses, not earned revenue — omit from mix.
+      artistsUsd: 0,
       feesUsd,
       externalRentalsUsd,
       truncated,
@@ -392,7 +402,10 @@ export const getTopClients = query({
       const key = invoice.groupId ?? `name:${invoice.clientGroupName ?? "Unknown"}`;
       const existing = byKey.get(key);
       if (existing) {
-        existing.totalUsd += invoice.totalUsd;
+        existing.totalUsd += arborEarnedRevenueUsd(
+          invoice.totalUsd,
+          invoice.artistsSubtotalUsd,
+        );
         existing.invoiceCount += 1;
         continue;
       }
@@ -405,7 +418,7 @@ export const getTopClients = query({
       byKey.set(key, {
         groupId,
         name,
-        totalUsd: invoice.totalUsd,
+        totalUsd: arborEarnedRevenueUsd(invoice.totalUsd, invoice.artistsSubtotalUsd),
         invoiceCount: 1,
       });
     }

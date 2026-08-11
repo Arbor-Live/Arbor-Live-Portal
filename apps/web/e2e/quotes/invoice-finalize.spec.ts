@@ -12,7 +12,7 @@ test.describe("staff invoice create", () => {
 
     await page.getByRole("button", { name: "Add artist row" }).click();
     await page.getByPlaceholder("Artist / role").fill(artistLabel);
-    await page.getByPlaceholder("Qty").fill("1");
+    await page.getByPlaceholder("People").fill("1");
     await page.getByPlaceholder("Rate").fill("50");
 
     await expect(page.getByText("Unsaved changes")).toBeVisible({ timeout: 30_000 });

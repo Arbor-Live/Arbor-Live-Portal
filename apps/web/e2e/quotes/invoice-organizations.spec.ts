@@ -138,7 +138,7 @@ test.describe("invoice host organizations and contacts", () => {
     await page.getByRole("button", { name: "Add artist row" }).click();
     const artistRow = page.getByTestId("invoice-row-artist-0");
     await artistRow.getByPlaceholder("Artist / role").fill(`E2E Host Artist ${stamp}`);
-    await artistRow.getByPlaceholder("Qty").fill("1");
+    await artistRow.getByPlaceholder("People").fill("1");
     await artistRow.getByPlaceholder("Rate").fill("90");
 
     // The picker labels hosts with name + type description, so match on the name prefix.

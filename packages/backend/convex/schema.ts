@@ -682,6 +682,8 @@ export default defineSchema({
     packageExclusionDiscountUsd: v.optional(v.number()),
     feeDefinitionId: v.optional(v.id("invoiceFeeDefinitions")),
     equipmentQuantityBasis: v.optional(v.union(v.literal("total"), v.literal("per_occurrence"))),
+    /** Band/DJ org for artist lines — omitted for TBD / undetermined rows. */
+    organizationId: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
