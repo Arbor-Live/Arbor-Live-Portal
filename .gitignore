@@ -32,6 +32,9 @@ yarn-error.log*
 .idea/
 .vscode/
 
+# Local Cursor agent session id (do not commit)
+session-token.txt
+
 # build artifacts
 dist/
 coverage/

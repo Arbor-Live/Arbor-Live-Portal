@@ -1,3 +1,4 @@
+import { unzipSync, strFromU8 } from "fflate";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
@@ -210,6 +211,125 @@ describe("allocateEventPatch layout", () => {
     expect(changeovers[0]!.title).toBe("Openers → Headliners");
     expect(changeovers[0]!.lines[0]).toContain(`A.${flex!.port}`);
     expect(changeovers[0]!.lines[0]).toContain("→");
+  });
+});
+
+describe("identical band setups", () => {
+  /** Three bands with the same rock-trio patch (different singer names). */
+  function identicalTrioNight(): ShowBandInput[] {
+    const setup = (prefix: string, names: [string, string, string, string]) => [
+      input({ id: `${prefix}-v1`, channel: 1, source: names[0], sourceKey: "vox.lead" }),
+      input({ id: `${prefix}-v2`, channel: 2, source: names[1], sourceKey: "vox.bgv" }),
+      input({ id: `${prefix}-g`, channel: 3, source: names[2], sourceKey: "gtr", inputType: "di" }),
+      input({ id: `${prefix}-b`, channel: 4, source: names[3], sourceKey: "bass", inputType: "di" }),
+      input({ id: `${prefix}-k`, channel: 5, source: "Kick", sourceKey: "drum.kick" }),
+      input({ id: `${prefix}-s`, channel: 6, source: "Snare", sourceKey: "drum.snare" }),
+      input({
+        id: `${prefix}-oh`,
+        channel: 7,
+        source: "OH",
+        sourceKey: "drum.oh",
+        stereo: true,
+        phantom: true,
+      }),
+    ];
+
+    return [
+      band("Openers", "support", setup("a", ["Sam", "Alex", "Gtr", "Bass"])),
+      band("Middle", "other", setup("b", ["Kim", "Jo", "Gtr", "Bass"])),
+      band("Headliners", "headliner", setup("c", ["Lee", "Pat", "Gtr", "Bass"])),
+    ];
+  }
+
+  it("keeps the night patch labels identical for every band all night", () => {
+    const bands = identicalTrioNight();
+    const { ports, bandOrder } = allocateEventPatch(bands);
+    expect(bandOrder.map((b) => b.bandName)).toEqual([
+      "Openers",
+      "Middle",
+      "Headliners",
+    ]);
+
+    const livePorts = ports.filter((p) => Object.keys(p.bandLabels).length > 0);
+    expect(livePorts.length).toBeGreaterThan(0);
+
+    for (const port of livePorts) {
+      // Every band that uses the night snake uses the same stable strip name.
+      expect(port.bandLabels["Openers"]).toBe(port.label);
+      expect(port.bandLabels["Middle"]).toBe(port.label);
+      expect(port.bandLabels["Headliners"]).toBe(port.label);
+      // Singer names never become channel names.
+      expect(port.label).not.toMatch(/Sam|Alex|Kim|Jo|Lee|Pat/);
+    }
+
+    // Fixed homes for this setup.
+    expect(ports.find((p) => p.port === 1)?.label).toBe("Vox 1");
+    expect(ports.find((p) => p.port === 5)?.label).toBe("Guitar");
+    expect(ports.find((p) => p.port === 6)?.label).toBe("Bass");
+    expect(ports.find((p) => p.port === 15)?.label).toMatch(/OH|Overhead/i);
+    expect(ports.find((p) => p.port === 15)?.phantom).toBe(true);
+  });
+
+  it("marks every between-band faceplate port as same (no mute or yellow swaps)", () => {
+    const bands = identicalTrioNight();
+    const plan = buildPatchDiffPlan(allocateEventPatch(bands));
+    expect(plan.steps).toHaveLength(3);
+
+    // After load-in, later sets should be pixel-identical to the previous set.
+    for (const step of plan.steps.slice(1)) {
+      for (const port of step.ports) {
+        expect(
+          port.change === "same" || port.change === undefined,
+          `A.${port.port} on ${step.bandName} vs ${step.comparedTo}: ${port.change}`,
+        ).toBe(true);
+      }
+      expect(step.ports.some((p) => p.change === "mute")).toBe(false);
+      expect(step.ports.some((p) => p.change === "physical")).toBe(false);
+    }
+
+    expect(
+      listPhysicalChangeovers(plan).filter((b) => b.lines.length > 0),
+    ).toHaveLength(0);
+  });
+
+  it("still builds a separate .snap for every band plus Default", () => {
+    const bands = identicalTrioNight();
+    const result = buildShowPackage({
+      eventName: "Same Setup Night",
+      bands,
+    });
+
+    expect(result.sceneNames).toEqual([
+      "Default",
+      "Openers",
+      "Middle",
+      "Headliners",
+    ]);
+    expect(result.diffs.steps).toHaveLength(3);
+
+    const unzipped = unzipSync(result.zipBytes);
+    const names = Object.keys(unzipped).sort();
+    expect(names).toContain("Default.snap");
+    expect(names).toContain("Openers.snap");
+    expect(names).toContain("Middle.snap");
+    expect(names).toContain("Headliners.snap");
+    expect(names.some((n) => n.endsWith(".show"))).toBe(true);
+
+    // Snaps stay distinct files even when patch/mute state matches.
+    const openers = JSON.parse(strFromU8(unzipped["Openers.snap"]!));
+    const middle = JSON.parse(strFromU8(unzipped["Middle.snap"]!));
+    const head = JSON.parse(strFromU8(unzipped["Headliners.snap"]!));
+    expect(openers.type).toBe("snapshot.11");
+    expect(middle.type).toBe("snapshot.11");
+    expect(head.type).toBe("snapshot.11");
+
+    // Live channels unmuted on every band snap; reserved empties stay mute.
+    for (const snap of [openers, middle, head]) {
+      expect(snap.ae_data.ch["1"]?.mute).toBe(false); // Vox 1
+      expect(snap.ae_data.ch["5"]?.mute).toBe(false); // Guitar strip — check strip map
+      expect(snap.ae_data.io.in.A["1"]?.name).toBe("Vox 1");
+      expect(snap.ae_data.io.in.A["5"]?.name).toBe("Guitar");
+    }
   });
 });
 
