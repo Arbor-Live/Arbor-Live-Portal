@@ -19,6 +19,7 @@ import {
   normalizeEventStatus,
   type EventPipelineStatus,
 } from "./lib/eventStatus";
+import { arborEarnedRevenueUsd } from "./lib/invoiceProfit";
 
 const countBucketValidator = v.object({
   key: v.string(),
@@ -190,7 +191,7 @@ export const getUpcomingEventsInsights = query({
         const invoice = await ctx.db.get(event.invoiceId);
         if (isBookedInvoice(invoice)) {
           isBookedRevenue = true;
-          bookedUsd = invoice!.totalUsd;
+          bookedUsd = arborEarnedRevenueUsd(invoice!.totalUsd, invoice!.artistsSubtotalUsd);
         }
       }
 

@@ -10,6 +10,7 @@ import {
   getUserId,
   isAdmin,
   requireAdmin,
+  requireArborInternalContext,
   requireAuth,
   requireBandContext,
   type AuthUser,
@@ -419,6 +420,57 @@ export const listBandOrganizationsAdmin = query({
       })
       .filter((organization) => organization.organizationType === "band" || organization.organizationType === "dj")
       .filter((organization) => args.includeArchived || organization.status !== "archived")
+      .sort((a, b) => a.name.localeCompare(b.name));
+  },
+});
+
+/** Slim band/DJ catalog for invoice artist lines (Arbor staff, not admin-only). */
+export const listBandsForInvoiceLines = query({
+  args: {},
+  returns: v.array(
+    v.object({
+      organizationId: v.string(),
+      name: v.string(),
+      performerHourlyRateUsd: v.number(),
+      memberCount: v.number(),
+    }),
+  ),
+  handler: async (ctx) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    const organizations = await getAllOrganizations(ctx);
+    const profiles = await ctx.db
+      .query("organizationProfiles")
+      .withIndex("by_organizationType")
+      .take(1000);
+    const profileByOrgId = new Map(profiles.map((profile) => [profile.organizationId, profile]));
+    return organizations
+      .map((organization) => {
+        const organizationId = getRecordId(organization);
+        const profile = profileByOrgId.get(organizationId);
+        const inferredType = resolveOrganizationType(organization, profile);
+        const status = profile?.status === "archived" ? "archived" : "active";
+        const memberCount = profile?.bandMembers?.length ?? 0;
+        return {
+          organizationId,
+          name: (profile?.displayName ?? organization.name ?? "Band").trim() || "Band",
+          organizationType: inferredType,
+          status,
+          performerHourlyRateUsd: profile?.performerHourlyRateUsd ?? 0,
+          memberCount,
+        };
+      })
+      .filter(
+        (organization) =>
+          (organization.organizationType === "band" || organization.organizationType === "dj") &&
+          organization.status !== "archived",
+      )
+      .map(({ organizationId, name, performerHourlyRateUsd, memberCount }) => ({
+        organizationId,
+        name,
+        performerHourlyRateUsd,
+        memberCount,
+      }))
       .sort((a, b) => a.name.localeCompare(b.name));
   },
 });

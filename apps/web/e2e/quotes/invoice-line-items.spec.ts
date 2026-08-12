@@ -45,7 +45,7 @@ test.describe("invoice line items and totals", () => {
     await page.getByRole("button", { name: "Add artist row" }).click();
     const artistRow = page.getByTestId("invoice-row-artist-0");
     await artistRow.getByPlaceholder("Artist / role").fill(artistLabel);
-    await artistRow.getByPlaceholder("Qty").fill("2");
+    await artistRow.getByPlaceholder("People").fill("2");
     await artistRow.getByPlaceholder("Rate").fill("75");
 
     // 1 x $40 = $40
@@ -95,7 +95,7 @@ test.describe("invoice line items and totals", () => {
     expect(artistLine!.amountUsd).toBe(150);
 
     // Edit an existing line: 2 -> 4 artists doubles that section to $300.
-    await page.getByTestId("invoice-row-artist-0").getByPlaceholder("Qty").fill("4");
+    await page.getByTestId("invoice-row-artist-0").getByPlaceholder("People").fill("4");
     await expect
       .poll(() => readTotal(page, "invoice-total-artists"), { timeout: 15_000 })
       .toBe(300);

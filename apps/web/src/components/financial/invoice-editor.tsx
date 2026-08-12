@@ -51,6 +51,7 @@ import {
   computeInvoiceDraftTotals,
   computePackageExclusionSuggestedDiscount,
 } from "@/lib/compute-invoice-draft-totals";
+import { arborEarnedRevenueUsd, netProfitFromInvoiceUsd } from "@/lib/invoice-profit";
 import { equipmentDivisionWarnings } from "@/lib/equipment-division-warnings";
 import { InvoicePdfDownloadButton } from "@/components/financial/invoice-pdf-download-button";
 import { SendQuoteToClientSheet } from "@/components/financial/send-quote-to-client-sheet";
@@ -65,9 +66,27 @@ type EquipmentRow = {
   discountUsd?: string;
 };
 type ExternalRentalRow = { provider: string; label: string; quantity: string; rateUsd: string };
-type ArtistRow = { label: string; quantity: string; rateUsd: string };
+/** `organizationId` empty / TBD sentinel ⇒ band not chosen yet. */
+type ArtistRow = {
+  organizationId: string;
+  label: string;
+  quantity: string;
+  rateUsd: string;
+};
 type CrewRow = InvoiceCrewRow;
 type FeeRow = { feeDefinitionId: string; label: string; quantity: string; rateUsd: string };
+
+const ARTIST_TBD_VALUE = "__tbd__";
+const ARTIST_TBD_LABEL = "Band TBD";
+
+function emptyArtistRow(): ArtistRow {
+  return {
+    organizationId: ARTIST_TBD_VALUE,
+    label: ARTIST_TBD_LABEL,
+    quantity: "1",
+    rateUsd: "0",
+  };
+}
 
 import {
   INVOICE_GROUP_TYPE_LABELS,
@@ -185,6 +204,11 @@ export function InvoiceEditor({
     api.eventSeries.get,
     linkedSeries?.seriesId ? { id: linkedSeries.seriesId } : "skip",
   );
+  const bandsForArtists = useQuery(api.users.listBandsForInvoiceLines, {});
+  const eventPerformers = useQuery(
+    api.eventBands.listPerformersForEvent,
+    linkedEvent && !linkedSeries ? { eventId: linkedEvent._id } : "skip",
+  );
   const sourceRequest = useQuery(
     api.eventRequests.getByLinkedInvoiceId,
     activeInvoiceId ?? invoiceId ? { invoiceId: (activeInvoiceId ?? invoiceId)! } : "skip",
@@ -227,6 +251,8 @@ export function InvoiceEditor({
   const hasHydratedFromServerRef = useRef(false);
   const crewBootstrappedRef = useRef(false);
   const linkedEventCrewInitializedRef = useRef(false);
+  const artistsBootstrappedFromEventRef = useRef(false);
+  const artistsHydratedFromInvoiceRef = useRef(false);
   const baselineSignaturePendingRef = useRef(false);
   const savedCrewSnapshotRef = useRef<CrewRow[]>([]);
   const [invoiceFieldsHydrated, setInvoiceFieldsHydrated] = useState(() => !invoiceId);
@@ -447,8 +473,15 @@ export function InvoiceEditor({
     setArtists(
       lineItems
         .filter((row) => row.section === "artist")
-        .map((row) => ({ label: row.label, quantity: row.quantity.toString(), rateUsd: row.rateUsd.toString() })),
+        .map((row) => ({
+          organizationId: row.organizationId?.trim() || ARTIST_TBD_VALUE,
+          label: row.label,
+          quantity: row.quantity.toString(),
+          rateUsd: row.rateUsd.toString(),
+        })),
     );
+    artistsHydratedFromInvoiceRef.current = lineItems.some((row) => row.section === "artist");
+    artistsBootstrappedFromEventRef.current = false;
     const savedCrewRows = lineItems.filter((row) => row.section === "crew");
     savedCrewSnapshotRef.current = savedCrewRows.map((row) => ({
       label: row.label,
@@ -493,6 +526,62 @@ export function InvoiceEditor({
       setCrewRows(savedCrewSnapshotRef.current);
     }
   }, [invoiceId, invoiceFieldsHydrated, linkedEvent, linkedSeries, seriesCostData, activeInvoiceId]);
+
+  useEffect(() => {
+    if (!invoiceFieldsHydrated) return;
+    if (artistsHydratedFromInvoiceRef.current) return;
+    if (artistsBootstrappedFromEventRef.current) return;
+    if (!linkedEvent || linkedSeries) return;
+    if (eventPerformers === undefined || bandsForArtists === undefined) return;
+
+    artistsBootstrappedFromEventRef.current = true;
+    if (eventPerformers.length === 0) return;
+
+    const rateByOrg = new Map(
+      bandsForArtists.map((band) => [band.organizationId, band.performerHourlyRateUsd]),
+    );
+    const membersByOrg = new Map(
+      bandsForArtists.map((band) => [band.organizationId, band.memberCount]),
+    );
+    setArtists(
+      eventPerformers.map((performer) => {
+        const payment = performer.payment;
+        if (payment && payment.totalUsd > 0) {
+          if (payment.pricingMode === "fixed_total") {
+            return {
+              organizationId: performer.organizationId,
+              label: performer.bandName,
+              quantity: "1",
+              rateUsd: payment.totalUsd.toString(),
+            };
+          }
+          const hours = payment.performanceHours && payment.performanceHours > 0 ? payment.performanceHours : 1;
+          const members = payment.memberCount && payment.memberCount > 0 ? payment.memberCount : 1;
+          const rate = payment.ratePerMemberPerHourUsd ?? rateByOrg.get(performer.organizationId) ?? 0;
+          return {
+            organizationId: performer.organizationId,
+            label: performer.bandName,
+            quantity: (hours * members).toString(),
+            rateUsd: rate.toString(),
+          };
+        }
+        const profileRate = rateByOrg.get(performer.organizationId) ?? 0;
+        const profileMembers = membersByOrg.get(performer.organizationId) ?? 0;
+        return {
+          organizationId: performer.organizationId,
+          label: performer.bandName,
+          quantity: profileMembers > 0 ? profileMembers.toString() : "1",
+          rateUsd: profileRate > 0 ? profileRate.toString() : "0",
+        };
+      }),
+    );
+  }, [
+    invoiceFieldsHydrated,
+    linkedEvent,
+    linkedSeries,
+    eventPerformers,
+    bandsForArtists,
+  ]);
 
   function onManagerChange(userId: string) {
     setManagerUserId(userId);
@@ -600,6 +689,7 @@ export function InvoiceEditor({
       equipmentQuantityBasis?: "total" | "per_occurrence";
       excludedTypeIds?: Id<"inventoryTypes">[];
       packageExclusionDiscountUsd?: number;
+      organizationId?: string;
     }> = [];
     for (const row of equipmentPackages) {
       if (!row.refId || Number(row.quantity) <= 0) continue;
@@ -647,13 +737,19 @@ export function InvoiceEditor({
       });
     }
     for (const row of artists) {
-      if (!row.label.trim() || Number(row.quantity) <= 0) continue;
+      const label = row.label.trim();
+      if (!label || Number(row.quantity) <= 0) continue;
+      const organizationId =
+        row.organizationId && row.organizationId !== ARTIST_TBD_VALUE
+          ? row.organizationId
+          : undefined;
       rows.push({
         section: "artist",
         order: order++,
-        label: row.label.trim(),
+        label,
         quantity: Number(row.quantity),
         rateUsd: Number(row.rateUsd || "0"),
+        organizationId,
       });
     }
     for (const row of crewRows) {
@@ -986,6 +1082,16 @@ export function InvoiceEditor({
     settings,
   ]);
 
+  const arborBilledUsd = arborEarnedRevenueUsd(
+    draftTotals.totalUsd,
+    draftTotals.artistsSubtotalUsd,
+  );
+  const projectedNetProfitUsd = netProfitFromInvoiceUsd(
+    draftTotals.totalUsd,
+    draftTotals.artistsSubtotalUsd,
+    eventCostUsd,
+  );
+
   const savedTotalUsd = invoiceData?.invoice?.totalUsd;
   const pricingUnsaved =
     savedTotalUsd !== undefined && Math.abs(draftTotals.totalUsd - savedTotalUsd) > 0.009;
@@ -1310,7 +1416,11 @@ export function InvoiceEditor({
           <SectionExternalRentals rows={externalRentals} setRows={setExternalRentals} />
           </div>
           <div id="section-artists">
-          <SectionArtists rows={artists} setRows={setArtists} />
+          <SectionArtists
+            rows={artists}
+            setRows={setArtists}
+            bands={bandsForArtists}
+          />
           </div>
           <div id="section-crew">
           {linkedSeries ? (
@@ -1612,19 +1722,19 @@ export function InvoiceEditor({
               </CardHeader>
               <CardContent className="min-w-0 text-sm">
                 <p>
-                  Billed: <span className="font-medium">{formatUsd(draftTotals.totalUsd)}</span>
+                  Billed: <span className="font-medium">{formatUsd(arborBilledUsd)}</span>
                 </p>
                 <p>
                   Event cost: <span className="font-medium">{formatUsd(eventCostUsd)}</span>
                 </p>
                 <p
                   className={
-                    draftTotals.totalUsd - eventCostUsd >= 0
+                    projectedNetProfitUsd >= 0
                       ? "font-medium text-emerald-700"
                       : "font-medium text-rose-700"
                   }
                 >
-                  Net profit: {formatUsd(draftTotals.totalUsd - eventCostUsd)}
+                  Net profit: {formatUsd(projectedNetProfitUsd)}
                 </p>
               </CardContent>
             </Card>
@@ -2235,23 +2345,145 @@ function SectionExternalRentals({
 function SectionArtists({
   rows,
   setRows,
+  bands,
 }: {
   rows: ArtistRow[];
   setRows: Dispatch<SetStateAction<ArtistRow[]>>;
+  bands:
+    | Array<{
+        organizationId: string;
+        name: string;
+        performerHourlyRateUsd: number;
+        memberCount: number;
+      }>
+    | undefined;
 }) {
+  const bandOptions = useMemo(() => {
+    const options = [
+      {
+        value: ARTIST_TBD_VALUE,
+        label: "Band TBD",
+        description: "Need to determine",
+      },
+      ...(bands ?? []).map((band) => {
+        const parts: string[] = [];
+        if (band.memberCount > 0) parts.push(`${band.memberCount} people`);
+        if (band.performerHourlyRateUsd > 0) {
+          parts.push(`${formatUsd(band.performerHourlyRateUsd)}/hr`);
+        }
+        return {
+          value: band.organizationId,
+          label: band.name,
+          description: parts.length ? parts.join(" · ") : "No rate on file",
+          keywords: band.name,
+        };
+      }),
+    ];
+    return options;
+  }, [bands]);
+
+  function onBandChange(idx: number, organizationId: string) {
+    setRows((prev) =>
+      prev.map((row, i) => {
+        if (i !== idx) return row;
+        if (!organizationId || organizationId === ARTIST_TBD_VALUE) {
+          return {
+            ...row,
+            organizationId: ARTIST_TBD_VALUE,
+            label: ARTIST_TBD_LABEL,
+            quantity: "1",
+            rateUsd: "0",
+          };
+        }
+        const band = bands?.find((entry) => entry.organizationId === organizationId);
+        return {
+          ...row,
+          organizationId,
+          label: band?.name ?? row.label,
+          quantity:
+            band && band.memberCount > 0 ? band.memberCount.toString() : row.quantity,
+          rateUsd:
+            band && band.performerHourlyRateUsd > 0
+              ? band.performerHourlyRateUsd.toString()
+              : row.rateUsd,
+        };
+      }),
+    );
+  }
+
   return (
     <Card>
-      <CardHeader><CardTitle>Artists (placeholder)</CardTitle></CardHeader>
+      <CardHeader>
+        <CardTitle>Artists</CardTitle>
+      </CardHeader>
       <CardContent className="space-y-2">
-        {rows.map((row, idx) => (
-          <div key={`artist-${idx}`} className="grid gap-2 md:grid-cols-4" data-testid={`invoice-row-artist-${idx}`}>
-            <Input placeholder="Artist / role" value={row.label} onChange={(e) => setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, label: e.target.value } : r)))} />
-            <Input placeholder="Qty" value={row.quantity} onChange={(e) => setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, quantity: e.target.value } : r)))} />
-            <Input placeholder="Rate" value={row.rateUsd} onChange={(e) => setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, rateUsd: e.target.value } : r)))} />
-            <Button type="button" variant="outline" onClick={() => setRows((prev) => prev.filter((_, i) => i !== idx))}>Remove</Button>
-          </div>
-        ))}
-        <Button type="button" variant="outline" onClick={() => setRows((prev) => [...prev, { label: "", quantity: "1", rateUsd: "0" }])}>Add artist row</Button>
+        {rows.map((row, idx) => {
+          const isTbd = !row.organizationId || row.organizationId === ARTIST_TBD_VALUE;
+          return (
+            <div
+              key={`artist-${idx}`}
+              className="grid gap-2 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_5rem_6rem_auto]"
+              data-testid={`invoice-row-artist-${idx}`}
+            >
+              <SearchableSelect
+                value={isTbd ? ARTIST_TBD_VALUE : row.organizationId}
+                onChange={(value) => onBandChange(idx, value)}
+                options={bandOptions}
+                placeholder={bands === undefined ? "Loading bands…" : "Select band"}
+                emptyLabel="No bands found"
+              />
+              {isTbd ? (
+                <Input
+                  placeholder="Artist / role"
+                  value={row.label === ARTIST_TBD_LABEL ? "" : row.label}
+                  onChange={(e) =>
+                    setRows((prev) =>
+                      prev.map((r, i) =>
+                        i === idx
+                          ? { ...r, label: e.target.value || ARTIST_TBD_LABEL }
+                          : r,
+                      ),
+                    )
+                  }
+                />
+              ) : (
+                <Input value={row.label} readOnly className="bg-muted/40" />
+              )}
+              <Input
+                placeholder="People"
+                value={row.quantity}
+                onChange={(e) =>
+                  setRows((prev) =>
+                    prev.map((r, i) => (i === idx ? { ...r, quantity: e.target.value } : r)),
+                  )
+                }
+              />
+              <Input
+                placeholder="Rate"
+                value={row.rateUsd}
+                onChange={(e) =>
+                  setRows((prev) =>
+                    prev.map((r, i) => (i === idx ? { ...r, rateUsd: e.target.value } : r)),
+                  )
+                }
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setRows((prev) => prev.filter((_, i) => i !== idx))}
+              >
+                Remove
+              </Button>
+            </div>
+          );
+        })}
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => setRows((prev) => [...prev, emptyArtistRow()])}
+        >
+          Add artist row
+        </Button>
       </CardContent>
     </Card>
   );

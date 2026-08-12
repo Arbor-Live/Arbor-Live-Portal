@@ -47,6 +47,31 @@ export function effectiveCrewUsd(event: Doc<"events">, series: Doc<"eventSeries"
   return series.occurrenceBudgetCrewCostUsd ?? 0;
 }
 
+/** Prefer recorded occurrence cost; fall back to series per-occurrence template. */
+function effectiveTemplateCostUsd(
+  actual: number | undefined,
+  template: number | undefined,
+) {
+  const recorded = actual ?? 0;
+  if (recorded > 0) return recorded;
+  return template ?? 0;
+}
+
+export function effectiveBandsUsd(event: Doc<"events">, series: Doc<"eventSeries">) {
+  return effectiveTemplateCostUsd(event.bandsCostUsd, series.occurrenceBandsCostUsd);
+}
+
+export function effectiveExternalRentalsUsd(event: Doc<"events">, series: Doc<"eventSeries">) {
+  return effectiveTemplateCostUsd(
+    event.externalRentalsCostUsd,
+    series.occurrenceExternalRentalsCostUsd,
+  );
+}
+
+export function effectiveOtherUsd(event: Doc<"events">, series: Doc<"eventSeries">) {
+  return effectiveTemplateCostUsd(event.otherCostUsd, series.occurrenceOtherCostUsd);
+}
+
 export function computeSeriesCostSummary(
   series: Doc<"eventSeries">,
   occurrences: Doc<"events">[],
@@ -68,8 +93,13 @@ export function computeSeriesCostSummary(
   const templatePerOccurrence = templateBudgetCrew + templateBands + templateExternal + templateOther;
 
   const projectedCrew = sumOptional(activeOccurrences.map((row) => effectiveCrewUsd(row, series)));
+  const projectedBands = sumOptional(activeOccurrences.map((row) => effectiveBandsUsd(row, series)));
+  const projectedExternal = sumOptional(
+    activeOccurrences.map((row) => effectiveExternalRentalsUsd(row, series)),
+  );
+  const projectedOther = sumOptional(activeOccurrences.map((row) => effectiveOtherUsd(row, series)));
   const projectedPerOccurrenceTotal =
-    projectedCrew + perOccurrenceBands + perOccurrenceExternal + perOccurrenceOther;
+    projectedCrew + projectedBands + projectedExternal + projectedOther;
 
   const seriesRecurringBands = series.seriesBandsCostUsd ?? 0;
   const seriesRecurringExternal = series.seriesExternalRentalsCostUsd ?? 0;

@@ -79,8 +79,11 @@ Human-readable docs live in `docs/` (`getting-started.md`, `architecture.md`, `d
 ### Event Costs (No Generated Expense Reports)
 - Event costs are direct fields on `events`:
   - `crewCostUsd`
-  - `bandsCostUsd` (placeholder)
+  - `bandsCostUsd` (band payouts / expenses — not revenue)
   - `externalRentalsCostUsd` (placeholder)
+- Invoice artist lines pick a band (or TBD) and pull `performerHourlyRateUsd`;
+  net profit / analytics still treat them as non-revenue. Bands are expenses;
+  Arbor does not earn margin on them.
 - In UI, costs are edited as part of event record, not via report creation workflows.
 
 ## Invoice and Public Quote Context

@@ -102,7 +102,7 @@ export function InsightsFinancesPanel({ startMs, endMs }: InsightsFinancesPanelP
         <Card>
           <CardHeader>
             <CardTitle>Expenses</CardTitle>
-            <CardDescription>Event costs + band payouts</CardDescription>
+            <CardDescription>Event costs (includes bands)</CardDescription>
           </CardHeader>
           <CardContent>
             {summary === undefined ? (
@@ -113,7 +113,7 @@ export function InsightsFinancesPanel({ startMs, endMs }: InsightsFinancesPanelP
                   {formatUsd(summary.expensesUsd)}
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Events {formatUsd(summary.eventCostsUsd)} · Payouts{" "}
+                  Events {formatUsd(summary.eventCostsUsd)} · Paid band payouts{" "}
                   {formatUsd(summary.bandPayoutsUsd)}
                 </p>
               </>
