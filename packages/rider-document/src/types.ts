@@ -116,6 +116,14 @@ export type RiderDocumentData = RiderContent & {
   bandName: string;
   riderName: string;
   updatedAtLabel: string;
+  /**
+   * Optional changeover blocks (night rider): physical swaps between sets.
+   * Each block is one transition (e.g. Openers → Headliners).
+   */
+  changeovers?: Array<{
+    title: string;
+    lines: string[];
+  }>;
 };
 
 export const INPUT_TYPE_LABELS: Record<RiderInputType, string> = {

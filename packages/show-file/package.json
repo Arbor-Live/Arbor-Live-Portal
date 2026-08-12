@@ -1,0 +1,22 @@
+{
+  "name": "@arbor/show-file",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./node": "./src/node.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "embed-template": "node ./scripts/embed-default-snap.mjs"
+  },
+  "dependencies": {
+    "@arbor/rider-document": "workspace:*",
+    "fflate": "^0.8.2"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.2",
+    "typescript": "^6.0.3"
+  }
+}

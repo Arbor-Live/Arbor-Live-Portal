@@ -21,6 +21,7 @@
     "@arbor/format": "workspace:*",
     "@arbor/invoice-document": "workspace:*",
     "@arbor/rider-document": "workspace:*",
+    "@arbor/show-file": "workspace:*",
     "@better-auth/passkey": "^1.6.25",
     "@convex-dev/better-auth": "0.12.3",
     "@convex-dev/migrations": "^0.3.6",
