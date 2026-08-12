@@ -36,6 +36,28 @@ index acc33fdec11fe7b20d02d5422c51a61a271ceddd..33bb161baa02a4e1cde64ada419d1b81
      headers.set("x-forwarded-proto", requestUrl.protocol.replace(/:$/, ""));
      headers.set("x-better-auth-forwarded-host", requestUrl.host);
      headers.set("x-better-auth-forwarded-proto", requestUrl.protocol.replace(/:$/, ""));
+diff --git a/dist/utils/index.js b/dist/utils/index.js
+index c1377d51e0ca71066f8434c0ab61064fd05b3233..0ee91cb75347e2089924a59fe2046d118c0b80a5 100644
+--- a/dist/utils/index.js
++++ b/dist/utils/index.js
+@@ -40,6 +40,17 @@ export const requireRunMutationCtx = (ctx) => {
+ };
+ export const getToken = async (siteUrl, headers, opts) => {
+     headers.set("host", new URL(siteUrl).host);
++    // Vercel sets x-forwarded-host on the inbound request; Convex's edge routes
++    // on it, so forwarding the app domain 404s. Preserve the public origin for
++    // Better Auth, then drop the edge-routing header.
++    // https://github.com/get-convex/better-auth/issues/424
++    const forwardedHost = headers.get("x-forwarded-host");
++    if (forwardedHost) {
++        if (!headers.get("x-better-auth-forwarded-host")) {
++            headers.set("x-better-auth-forwarded-host", forwardedHost);
++        }
++        headers.delete("x-forwarded-host");
++    }
+     const fetchToken = async () => {
+         const basePath = opts?.basePath
+             ? (opts.basePath.startsWith("/") ? opts.basePath : `/${opts.basePath}`)
 diff --git a/src/nextjs/index.test.ts b/src/nextjs/index.test.ts
 index 325617029d91d0646973114e413b3d1ce8559bfd..3b12517001ef3aef78f9e71d36bd87cf62a16ded 100644
 --- a/src/nextjs/index.test.ts
@@ -100,3 +122,25 @@ index 5652e545502c23b155cadb3351ac8ea311abd6c4..38f2ff8383c5dda58bcceec4fac62191
    headers.set("x-forwarded-proto", requestUrl.protocol.replace(/:$/, ""));
    headers.set("x-better-auth-forwarded-host", requestUrl.host);
    headers.set("x-better-auth-forwarded-proto", requestUrl.protocol.replace(/:$/, ""));
+diff --git a/src/utils/index.ts b/src/utils/index.ts
+index 8f9eddbd40255e2e8cc2f4f2cc1257737112147b..6e5dc85c85a1bb914d3a07ae0487f524ac4ae191 100644
+--- a/src/utils/index.ts
++++ b/src/utils/index.ts
+@@ -138,6 +138,17 @@ export const getToken = async (
+   opts?: GetTokenOptions
+ ) => {
+   headers.set("host", new URL(siteUrl).host)
++  // Vercel sets x-forwarded-host on the inbound request; Convex's edge routes
++  // on it, so forwarding the app domain 404s. Preserve the public origin for
++  // Better Auth, then drop the edge-routing header.
++  // https://github.com/get-convex/better-auth/issues/424
++  const forwardedHost = headers.get("x-forwarded-host");
++  if (forwardedHost) {
++    if (!headers.get("x-better-auth-forwarded-host")) {
++      headers.set("x-better-auth-forwarded-host", forwardedHost);
++    }
++    headers.delete("x-forwarded-host");
++  }
+   const fetchToken = async () => {
+     const basePath = opts?.basePath
+       ? (opts.basePath.startsWith("/") ? opts.basePath : `/${opts.basePath}`)
