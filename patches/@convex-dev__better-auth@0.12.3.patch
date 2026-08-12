@@ -1,0 +1,102 @@
+diff --git a/dist/nextjs/index.js b/dist/nextjs/index.js
+index e9d357fac1f073aa61c0cdeac36fd4ebb00fe583..f8f38de384aeb20de07381e49a2d76daea173bc6 100644
+--- a/dist/nextjs/index.js
++++ b/dist/nextjs/index.js
+@@ -31,9 +31,13 @@ const handler = async (request, siteUrl) => {
+     headers.delete("transfer-encoding");
+     headers.delete("content-length");
+     headers.delete("connection");
++    // Convex's edge resolves the deployment from `x-forwarded-host`, so an app
++    // domain here routes to nothing; the component restores it from
++    // `x-better-auth-forwarded-host` instead.
++    // https://github.com/get-convex/better-auth/pull/423
++    headers.delete("x-forwarded-host");
+     headers.set("accept-encoding", "application/json");
+     headers.set("host", new URL(siteUrl).host);
+-    headers.set("x-forwarded-host", requestUrl.host);
+     headers.set("x-forwarded-proto", requestUrl.protocol.replace(/:$/, ""));
+     headers.set("x-better-auth-forwarded-host", requestUrl.host);
+     headers.set("x-better-auth-forwarded-proto", requestUrl.protocol.replace(/:$/, ""));
+diff --git a/dist/react-start/index.js b/dist/react-start/index.js
+index acc33fdec11fe7b20d02d5422c51a61a271ceddd..33bb161baa02a4e1cde64ada419d1b81679f9f50 100644
+--- a/dist/react-start/index.js
++++ b/dist/react-start/index.js
+@@ -41,9 +41,13 @@ const handler = (request, opts) => {
+     headers.delete("transfer-encoding");
+     headers.delete("content-length");
+     headers.delete("connection");
++    // Convex's edge resolves the deployment from `x-forwarded-host`, so an app
++    // domain here routes to nothing; the component restores it from
++    // `x-better-auth-forwarded-host` instead.
++    // https://github.com/get-convex/better-auth/pull/423
++    headers.delete("x-forwarded-host");
+     headers.set("accept-encoding", "application/json");
+     headers.set("host", new URL(opts.convexSiteUrl).host);
+-    headers.set("x-forwarded-host", requestUrl.host);
+     headers.set("x-forwarded-proto", requestUrl.protocol.replace(/:$/, ""));
+     headers.set("x-better-auth-forwarded-host", requestUrl.host);
+     headers.set("x-better-auth-forwarded-proto", requestUrl.protocol.replace(/:$/, ""));
+diff --git a/src/nextjs/index.test.ts b/src/nextjs/index.test.ts
+index 325617029d91d0646973114e413b3d1ce8559bfd..3b12517001ef3aef78f9e71d36bd87cf62a16ded 100644
+--- a/src/nextjs/index.test.ts
++++ b/src/nextjs/index.test.ts
+@@ -69,7 +69,7 @@ describe("convexBetterAuthNextJs handler", () => {
+     await handler.POST(request);
+     const headers = headersOf(fetchSpy);
+     expect(headers.get("host")).toBe(new URL(SITE_URL).host);
+-    expect(headers.get("x-forwarded-host")).toBe("app.example.com");
++    expect(headers.get("x-forwarded-host")).toBeNull();
+     expect(headers.get("x-forwarded-proto")).toBe("https");
+     expect(headers.get("x-better-auth-forwarded-host")).toBe("app.example.com");
+     expect(headers.get("x-better-auth-forwarded-proto")).toBe("https");
+diff --git a/src/nextjs/index.ts b/src/nextjs/index.ts
+index 1eef064afd063e134be1dabc362979c88f297f45..dc77a2ceb3046eddeef619aebbafe4eb1b91460f 100644
+--- a/src/nextjs/index.ts
++++ b/src/nextjs/index.ts
+@@ -49,9 +49,13 @@ const handler = async (request: Request, siteUrl: string) => {
+   headers.delete("transfer-encoding");
+   headers.delete("content-length");
+   headers.delete("connection");
++  // Convex's edge resolves the deployment from `x-forwarded-host`, so an app
++  // domain here routes to nothing; the component restores it from
++  // `x-better-auth-forwarded-host` instead.
++  // https://github.com/get-convex/better-auth/pull/423
++  headers.delete("x-forwarded-host");
+   headers.set("accept-encoding", "application/json");
+   headers.set("host", new URL(siteUrl).host);
+-  headers.set("x-forwarded-host", requestUrl.host);
+   headers.set("x-forwarded-proto", requestUrl.protocol.replace(/:$/, ""));
+   headers.set("x-better-auth-forwarded-host", requestUrl.host);
+   headers.set("x-better-auth-forwarded-proto", requestUrl.protocol.replace(/:$/, ""));
+diff --git a/src/react-start/index.test.ts b/src/react-start/index.test.ts
+index 709ff146e82c43e9ad8eae8ee28520dbc0f0d60e..d1fce772aa509182e8d3a7694d75690d150a1925 100644
+--- a/src/react-start/index.test.ts
++++ b/src/react-start/index.test.ts
+@@ -71,7 +71,7 @@ describe("convexBetterAuthReactStart handler", () => {
+     await handler(request);
+     const headers = headersOf(fetchSpy);
+     expect(headers.get("host")).toBe(new URL(SITE_URL).host);
+-    expect(headers.get("x-forwarded-host")).toBe("app.example.com");
++    expect(headers.get("x-forwarded-host")).toBeNull();
+     expect(headers.get("x-forwarded-proto")).toBe("https");
+     expect(headers.get("x-better-auth-forwarded-host")).toBe("app.example.com");
+     expect(headers.get("x-better-auth-forwarded-proto")).toBe("https");
+diff --git a/src/react-start/index.ts b/src/react-start/index.ts
+index 5652e545502c23b155cadb3351ac8ea311abd6c4..38f2ff8383c5dda58bcceec4fac6219103fbaa87 100644
+--- a/src/react-start/index.ts
++++ b/src/react-start/index.ts
+@@ -68,9 +68,13 @@ const handler = (request: Request, opts: { convexSiteUrl: string }) => {
+   headers.delete("transfer-encoding");
+   headers.delete("content-length");
+   headers.delete("connection");
++  // Convex's edge resolves the deployment from `x-forwarded-host`, so an app
++  // domain here routes to nothing; the component restores it from
++  // `x-better-auth-forwarded-host` instead.
++  // https://github.com/get-convex/better-auth/pull/423
++  headers.delete("x-forwarded-host");
+   headers.set("accept-encoding", "application/json");
+   headers.set("host", new URL(opts.convexSiteUrl).host);
+-  headers.set("x-forwarded-host", requestUrl.host);
+   headers.set("x-forwarded-proto", requestUrl.protocol.replace(/:$/, ""));
+   headers.set("x-better-auth-forwarded-host", requestUrl.host);
+   headers.set("x-better-auth-forwarded-proto", requestUrl.protocol.replace(/:$/, ""));
