@@ -86,6 +86,7 @@ import {
   pacificEndOfDayMs,
   pacificScheduleDayCount,
 } from "@/lib/format";
+import { arborEarnedRevenueUsd, netProfitFromInvoiceUsd } from "@/lib/invoice-profit";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { WarningCircleIcon } from "@phosphor-icons/react";
 
@@ -1088,8 +1089,18 @@ export function EventEditor({
     seriesMeta && seriesProjectedCostUsd !== undefined
       ? seriesProjectedCostUsd
       : totalEventCostUsd + seriesRecurringTotalUsd;
-  const billedTotalUsd = linkedInvoice?.totalUsd ?? null;
-  const profitLossUsd = billedTotalUsd !== null ? billedTotalUsd - marginCostUsd : null;
+  const billedTotalUsd =
+    linkedInvoice != null
+      ? arborEarnedRevenueUsd(linkedInvoice.totalUsd, linkedInvoice.artistsSubtotalUsd ?? 0)
+      : null;
+  const profitLossUsd =
+    linkedInvoice != null
+      ? netProfitFromInvoiceUsd(
+          linkedInvoice.totalUsd,
+          linkedInvoice.artistsSubtotalUsd ?? 0,
+          marginCostUsd,
+        )
+      : null;
   const quickAddDisabled = !startAt || !endAt;
   const quickAddDisabledReason = quickAddDisabled ? "Set event start and end first." : undefined;
   const quickAddLabel =

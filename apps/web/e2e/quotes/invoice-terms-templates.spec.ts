@@ -152,7 +152,7 @@ test.describe("invoice terms templates", () => {
     await page.getByRole("button", { name: "Add artist row" }).click();
     const artistRow = page.getByTestId("invoice-row-artist-0");
     await artistRow.getByPlaceholder("Artist / role").fill(`E2E Terms Artist ${Date.now()}`);
-    await artistRow.getByPlaceholder("Qty").fill("1");
+    await artistRow.getByPlaceholder("People").fill("1");
     await artistRow.getByPlaceholder("Rate").fill("100");
 
     await saveInvoiceEditor(page);

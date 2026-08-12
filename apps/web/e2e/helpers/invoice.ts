@@ -38,7 +38,7 @@ export async function createDraftInvoiceWithArtistLine(
   await page.getByRole("button", { name: "Add artist row" }).click();
   const row = page.getByTestId("invoice-row-artist-0");
   await row.getByPlaceholder("Artist / role").fill(options.label);
-  await row.getByPlaceholder("Qty").fill(options.quantity ?? "1");
+  await row.getByPlaceholder("People").fill(options.quantity ?? "1");
   await row.getByPlaceholder("Rate").fill(options.rate ?? "50");
 
   await expect(page.getByText("Unsaved changes")).toBeVisible({ timeout: 30_000 });
