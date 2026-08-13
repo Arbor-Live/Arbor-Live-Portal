@@ -45,6 +45,28 @@ export function resolveUserCompensationHourlyRateUsd(
   return resolveHourlyRateUsdFromMode(rate.rateMode, rate.hourlyRateUsd, settings);
 }
 
+/** Average of Normal + Lead global rates — used for open-slot cost estimates. */
+export function averageCrewHourlyRateUsd(settings: InvoiceCrewRateSettings): number | undefined {
+  const normal = settings?.crewNormalRateUsd;
+  const lead = settings?.crewLeadRateUsd ?? settings?.crewOtRateUsd;
+  const rates = [normal, lead].filter(
+    (rate): rate is number => rate !== undefined && Number.isFinite(rate) && rate > 0,
+  );
+  if (rates.length === 0) return undefined;
+  return Math.round((rates.reduce((sum, rate) => sum + rate, 0) / rates.length) * 100) / 100;
+}
+
+/** Open-slot estimate: explicit shift rate, else average of global Normal/Lead. */
+export function resolveOpenSlotHourlyRateUsd(
+  estimatedHourlyRateUsd: number | undefined,
+  settings: InvoiceCrewRateSettings,
+): number {
+  if (estimatedHourlyRateUsd !== undefined && estimatedHourlyRateUsd > 0) {
+    return estimatedHourlyRateUsd;
+  }
+  return averageCrewHourlyRateUsd(settings) ?? 0;
+}
+
 export async function loadInvoiceCrewRateSettings(ctx: QueryCtx | MutationCtx) {
   return await ctx.db
     .query("invoiceSettings")

@@ -75,7 +75,7 @@ export function InvoiceDocumentWeb({ data, logoSrc = "/logo.svg" }: InvoiceDocum
       {sections.external.length ? (
         <SectionTable title="External Rentals" rows={sections.external} showProvider />
       ) : null}
-      {sections.artists.length ? <SectionTable title="Artists" rows={sections.artists} /> : null}
+      {sections.artists.length ? <ArtistsSectionTable rows={sections.artists} /> : null}
       {sections.crew.length ? <SectionTable title="Crew" rows={sections.crew} /> : null}
       {sections.fees.length ? <SectionTable title="Fees" rows={sections.fees} /> : null}
 
@@ -131,6 +131,56 @@ function DetailLine({ label, value }: { label: string; value: string }) {
     <p style={detailLineStyle}>
       <span style={detailLabelStyle}>{label}:</span> {value}
     </p>
+  );
+}
+
+function ArtistsSectionTable({ rows }: { rows: InvoiceLineItem[] }) {
+  const hasBreakdown = rows.some(
+    (row) =>
+      row.memberCount !== undefined &&
+      row.memberCount > 0 &&
+      row.performanceHours !== undefined &&
+      row.performanceHours > 0,
+  );
+  if (!hasBreakdown) {
+    return <SectionTable title="Artists" rows={rows} />;
+  }
+
+  return (
+    <section style={cardStyle}>
+      <h2 style={tableTitleStyle}>Artists</h2>
+      <table style={tableStyle}>
+        <thead>
+          <tr style={tableHeadRowStyle}>
+            <th style={thStyle}>Band / DJ</th>
+            <th style={thRightStyle}>Hours</th>
+            <th style={thRightStyle}>People</th>
+            <th style={thRightStyle}>Rate / person / hr</th>
+            <th style={thRightStyle}>Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, index) => (
+            <tr
+              key={row.id}
+              style={index < rows.length - 1 ? tableRowStyle : tableLastRowStyle}
+            >
+              <td style={tdStyle}>{row.label}</td>
+              <td style={tdRightStyle}>
+                {row.performanceHours !== undefined && row.performanceHours > 0
+                  ? row.performanceHours
+                  : row.quantity}
+              </td>
+              <td style={tdRightStyle}>
+                {row.memberCount !== undefined && row.memberCount > 0 ? row.memberCount : "—"}
+              </td>
+              <td style={tdRightStyle}>{currency(row.rateUsd)}</td>
+              <td style={tdAmountStyle}>{currency(row.amountUsd)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
   );
 }
 

@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { components } from "./_generated/api";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
-import { isAdmin, requireAdmin, requireArborInternalContext, requireAuth } from "./lib/auth";
+import { requireArborInternalContext, requireAuth } from "./lib/auth";
 import { syncEventStatusForLinkedInvoice, syncLinkedEventStatusFromInvoice } from "./lib/eventStatus";
 import { listEventsByInvoiceId } from "./lib/invoiceEvents";
 import {
@@ -31,6 +31,7 @@ import {
 } from "./email/payingPartyEmails";
 import {
   loadInvoiceCrewRateSettings,
+  normalizeCompensationRateMode,
   resolveUserCompensationHourlyRateUsd,
 } from "./lib/crewCompensation";
 import { netProfitFromInvoiceUsd } from "./lib/invoiceProfit";
@@ -75,6 +76,8 @@ const lineItemInput = v.object({
   excludedTypeIds: v.optional(v.array(v.id("inventoryTypes"))),
   packageExclusionDiscountUsd: v.optional(v.number()),
   organizationId: v.optional(v.string()),
+  memberCount: v.optional(v.number()),
+  performanceHours: v.optional(v.number()),
 });
 
 type LineInput = {
@@ -95,6 +98,10 @@ type LineInput = {
   packageExclusionDiscountUsd?: number;
   /** Artist lines: linked band/DJ org id. */
   organizationId?: string;
+  /** Artist lines: number of people performing. */
+  memberCount?: number;
+  /** Artist lines: hours performing. */
+  performanceHours?: number;
 };
 
 function trimOptional(raw: string | undefined) {
@@ -219,7 +226,11 @@ async function computeLineAmount(
   }
 
   if (line.section === "crew") {
-    if (crewRateMode === "custom") {
+    // Prefer the stamped line rate (per-assignee Lead/Normal/Custom, or open-slot
+    // default). Fall back to invoice crewRateMode for legacy lines with rate 0.
+    if (line.rateUsd > 0) {
+      rate = line.rateUsd;
+    } else if (crewRateMode === "custom") {
       rate = line.rateUsd;
     } else if (crewRateMode === "lead" || crewRateMode === "ot") {
       rate = crewRates.lead;
@@ -326,6 +337,27 @@ async function computeTotals(
   };
 }
 
+function lineDocToInput(line: Doc<"invoiceLineItems">): LineInput {
+  return {
+    section: line.section,
+    order: line.order,
+    provider: line.provider,
+    label: line.label,
+    notes: line.notes,
+    quantity: line.quantity,
+    rateUsd: line.rateUsd,
+    packageId: line.packageId,
+    typeId: line.typeId,
+    feeDefinitionId: line.feeDefinitionId,
+    equipmentQuantityBasis: line.equipmentQuantityBasis,
+    excludedTypeIds: line.excludedTypeIds,
+    packageExclusionDiscountUsd: line.packageExclusionDiscountUsd,
+    organizationId: line.organizationId,
+    memberCount: line.memberCount,
+    performanceHours: line.performanceHours,
+  };
+}
+
 async function resolveBillableCountAtSave(ctx: MutationCtx, invoiceId: Id<"invoices">) {
   const series = await findSeriesByInvoiceId(ctx, invoiceId);
   if (!series) return undefined;
@@ -372,6 +404,16 @@ async function replaceLineItems(
       feeDefinitionId: row.feeDefinitionId,
       equipmentQuantityBasis: row.equipmentQuantityBasis,
       organizationId: trimOptional(row.organizationId),
+      memberCount:
+        row.section === "artist" && row.memberCount !== undefined && row.memberCount > 0
+          ? row.memberCount
+          : undefined,
+      performanceHours:
+        row.section === "artist" &&
+        row.performanceHours !== undefined &&
+        row.performanceHours > 0
+          ? row.performanceHours
+          : undefined,
       createdAt: now,
       updatedAt: now,
     });
@@ -381,7 +423,7 @@ async function replaceLineItems(
 export const listManagers = query({
   args: {},
   handler: async (ctx) => {
-    const currentUser = await requireAuth(ctx);
+    await requireAuth(ctx);
     await requireArborInternalContext(ctx);
     const result = await ctx.runQuery(components.betterAuth.adapter.findMany, {
       model: "user",
@@ -395,28 +437,34 @@ export const listManagers = query({
       role?: string | null;
       image?: string | null;
     }>;
-    const showRates = isAdmin(currentUser);
-    const settings = showRates ? await loadInvoiceCrewRateSettings(ctx) : null;
-    const rateByUserId = showRates
-      ? new Map(
-          (await ctx.db.query("userCompensationRates").withIndex("by_updatedAt").take(1000)).map(
-            (rate) => [rate.userId, resolveUserCompensationHourlyRateUsd(rate, settings)],
-          ),
-        )
-      : null;
+    // Arbor staff quoting events need per-person Normal/Lead/Custom rates so
+    // assigned leads bill at lead rate on the invoice (not only global Normal).
+    const settings = await loadInvoiceCrewRateSettings(ctx);
+    const rateRows = await ctx.db.query("userCompensationRates").withIndex("by_updatedAt").take(1000);
+    const rateByUserId = new Map(
+      rateRows.map((rate) => [
+        rate.userId,
+        {
+          rateMode: normalizeCompensationRateMode(rate.rateMode),
+          hourlyRateUsd: resolveUserCompensationHourlyRateUsd(rate, settings),
+        },
+      ]),
+    );
     const profiles = await ctx.db.query("userAdminProfiles").withIndex("by_active").take(2000);
     const profileByUserId = new Map(profiles.map((profile) => [profile.userId, profile]));
     return users
       .map((user) => {
         const userId = user.id ?? user._id ?? "";
         const profile = profileByUserId.get(userId);
+        const compensation = rateByUserId.get(userId);
         return {
           id: userId,
           name: user.name ?? user.email ?? "Unknown user",
           email: user.email,
           role: user.role ?? undefined,
           image: user.image ?? undefined,
-          hourlyRateUsd: rateByUserId?.get(userId) ?? undefined,
+          hourlyRateUsd: compensation?.hourlyRateUsd,
+          rateMode: compensation?.rateMode,
           pronouns: profile?.pronouns ?? undefined,
           gradYear: profile?.gradYear ?? undefined,
         };
@@ -995,21 +1043,7 @@ export const recalculateTotals = mutation({
     const lineItems = await ctx.db.query("invoiceLineItems").withIndex("by_invoiceId", (q) => q.eq("invoiceId", args.id)).take(500);
     const totals = await computeTotals(
       ctx,
-      lineItems.map((line) => ({
-        section: line.section,
-        order: line.order,
-        provider: line.provider,
-        label: line.label,
-        notes: line.notes,
-        quantity: line.quantity,
-        rateUsd: line.rateUsd,
-        packageId: line.packageId,
-        typeId: line.typeId,
-        feeDefinitionId: line.feeDefinitionId,
-        equipmentQuantityBasis: line.equipmentQuantityBasis,
-        excludedTypeIds: line.excludedTypeIds,
-        packageExclusionDiscountUsd: line.packageExclusionDiscountUsd,
-      })),
+      lineItems.map(lineDocToInput),
       invoice.equipmentPricingMode,
       invoice.crewRateMode,
       invoice.discountType,
@@ -1060,21 +1094,7 @@ export const recalculateSeriesEquipmentLines = mutation({
       .take(500);
     const totals = await computeTotals(
       ctx,
-      lineItems.map((line) => ({
-        section: line.section,
-        order: line.order,
-        provider: line.provider,
-        label: line.label,
-        notes: line.notes,
-        quantity: line.quantity,
-        rateUsd: line.rateUsd,
-        packageId: line.packageId,
-        typeId: line.typeId,
-        feeDefinitionId: line.feeDefinitionId,
-        equipmentQuantityBasis: line.equipmentQuantityBasis,
-        excludedTypeIds: line.excludedTypeIds,
-        packageExclusionDiscountUsd: line.packageExclusionDiscountUsd,
-      })),
+      lineItems.map(lineDocToInput),
       invoice.equipmentPricingMode,
       invoice.crewRateMode,
       invoice.discountType,
@@ -1192,19 +1212,8 @@ export const resyncEquipmentFromPullList = mutation({
     const otherLines: LineInput[] = lineItems
       .filter((line) => line.section !== "equipment_package" && line.section !== "equipment_type")
       .map((line) => ({
-        section: line.section,
+        ...lineDocToInput(line),
         order: order++,
-        provider: line.provider,
-        label: line.label,
-        notes: line.notes,
-        quantity: line.quantity,
-        rateUsd: line.rateUsd,
-        packageId: line.packageId,
-        typeId: line.typeId,
-        feeDefinitionId: line.feeDefinitionId,
-        equipmentQuantityBasis: line.equipmentQuantityBasis,
-        excludedTypeIds: line.excludedTypeIds,
-        packageExclusionDiscountUsd: line.packageExclusionDiscountUsd,
       }));
 
     const totals = await computeTotals(
@@ -1328,6 +1337,8 @@ export const duplicate = mutation({
         feeDefinitionId: line.feeDefinitionId,
         equipmentQuantityBasis: line.equipmentQuantityBasis,
         organizationId: line.organizationId,
+        memberCount: line.memberCount,
+        performanceHours: line.performanceHours,
         createdAt: now,
         updatedAt: now,
       });

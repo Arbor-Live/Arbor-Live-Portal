@@ -37,6 +37,7 @@ import { EventBandRidersSection } from "@/components/events/event-band-riders-se
 import { EventMediaSection } from "@/components/events/event-media-section";
 import { CommentsSection } from "@/components/comments/comments-section";
 import { EventPullList, mapPullListRow, type PullListItemDraft } from "@/components/events/event-pull-list";
+import { LinkedEventDaySwitcher } from "@/components/events/linked-event-day-switcher";
 import { EventTimelineScheduler, type TimelineBlockDraft } from "@/components/events/event-timeline-scheduler";
 import { EventScheduleCrewAssignPanel } from "@/components/events/event-availability-summary";
 import { UserSelect, type UserSelectOption } from "@/components/users/user-select";
@@ -214,6 +215,13 @@ export function EventEditor({
   const deleteUnassignedShifts = useMutation(api.eventCrew.deleteUnassignedShifts);
   const createArtifact = useMutation(api.eventArtifacts.create);
   const assignPosterDesigner = useMutation(api.marketingDesigns.assignPosterDesigner);
+  const copyDaySetup = useMutation(api.events.copyDaySetup);
+
+  const siblingDays = useQuery(
+    api.events.listSiblingDays,
+    eventId ? { eventId } : "skip",
+  );
+  const [copyingDaySetup, setCopyingDaySetup] = useState(false);
 
   const [title, setTitle] = useState("");
   const [status, setStatus] = useState<EventStatus>("tentative");
@@ -1198,6 +1206,48 @@ export function EventEditor({
       <Card>
         <CardHeader>
           <CardTitle>{isCreate ? "Create Event" : "Edit Event"}</CardTitle>
+          {!isCreate && siblingDays && siblingDays.length > 1 ? (
+            <div className="space-y-2 pt-1">
+              <LinkedEventDaySwitcher
+                days={siblingDays}
+                selectedEventId={eventId}
+                onSelect={(nextId) => {
+                  if (!eventId || nextId === eventId) return;
+                  router.push(getEventEditorTabPath(nextId, resolvedActiveTab));
+                }}
+              />
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={readOnly || copyingDaySetup || !eventId}
+                  onClick={() => {
+                    if (!eventId) return;
+                    const confirmed = window.confirm(
+                      "Copy this day's crew hours (open slots only, not assigned people) and equipment pull/checkout quantities onto the other linked days? Existing schedule slots and pull-list rows on those days will be replaced.",
+                    );
+                    if (!confirmed) return;
+                    setCopyingDaySetup(true);
+                    void copyDaySetup({ sourceEventId: eventId })
+                      .then((result) => {
+                        setMessageTone("success");
+                        setMessage(
+                          `Copied setup to ${result.copiedToEventIds.length} other day${result.copiedToEventIds.length === 1 ? "" : "s"}.`,
+                        );
+                      })
+                      .catch((error) => {
+                        setMessageTone("error");
+                        setMessage(getConvexErrorMessage(error));
+                      })
+                      .finally(() => setCopyingDaySetup(false));
+                  }}
+                >
+                  {copyingDaySetup ? "Copying…" : "Copy setup to other days"}
+                </Button>
+              </div>
+            </div>
+          ) : null}
           {seriesMeta ? (
             <div className="space-y-2">
               <p className="text-sm text-muted-foreground">
@@ -2153,10 +2203,21 @@ export function EventEditor({
                 Link an invoice in Overview to view billed total vs event cost margin.
               </p>
             )}
-            {computedCrewCost?.missingRateUsers?.length ? (
+            {computedCrewCost?.missingRateUsers?.length || computedCrewCost?.missingRateOpenSlotCount ? (
               <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-xs text-amber-800">
-                Missing hourly rates for: {computedCrewCost.missingRateUsers.join(", ")}. These rows are included at
-                $0.00 until a base rate is added.{" "}
+                {computedCrewCost.missingRateUsers?.length ? (
+                  <>
+                    Missing hourly rates for: {computedCrewCost.missingRateUsers.join(", ")}. These rows are included at
+                    $0.00 until a base rate is added.{" "}
+                  </>
+                ) : null}
+                {computedCrewCost.missingRateOpenSlotCount ? (
+                  <>
+                    {computedCrewCost.missingRateOpenSlotCount} open slot
+                    {computedCrewCost.missingRateOpenSlotCount === 1 ? " is" : "s are"} estimated at $0.00 because
+                    global Normal/Lead crew rates are unset.{" "}
+                  </>
+                ) : null}
                 <Link href="/dashboard/users/crew-rates" className="underline underline-offset-2">
                   Manage crew rates
                 </Link>

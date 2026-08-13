@@ -37,14 +37,17 @@ import { authClient } from "@/lib/auth-client";
 import { InvoiceQuoteApprovalDetails } from "@/components/financial/invoice-quote-approval-details";
 import { InvoicePaymentStatusSection } from "@/components/financial/invoice-payment-status-section";
 import { InvoiceLinkedEventCrewSection } from "@/components/financial/invoice-linked-event-crew";
+import { LinkedEventDaySwitcher } from "@/components/events/linked-event-day-switcher";
 import { EventSeriesShiftEditor } from "@/components/events/event-series-shift-editor";
 import {
+  buildCrewRowsFromLinkedEvent,
   buildInvoiceCrewRowsFromShiftTemplateDrafts,
   mergeEventCrewWithManualRows,
+  type CrewAssigneeRate,
   type InvoiceCrewRow,
 } from "@/lib/invoice-crew-from-event";
 import type { SeriesShiftTemplateDraft } from "@/lib/event-series-shifts";
-import { ArrowsClockwiseIcon, CaretDownIcon } from "@phosphor-icons/react";
+import { ArrowsClockwiseIcon, CaretDownIcon, CopyIcon } from "@phosphor-icons/react";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { FormSaveBar } from "@/components/forms";
 import {
@@ -70,7 +73,11 @@ type ExternalRentalRow = { provider: string; label: string; quantity: string; ra
 type ArtistRow = {
   organizationId: string;
   label: string;
-  quantity: string;
+  /** Hours the group is performing. */
+  hours: string;
+  /** Number of people in the band / DJ act. */
+  people: string;
+  /** Hourly rate per person. */
   rateUsd: string;
 };
 type CrewRow = InvoiceCrewRow;
@@ -83,8 +90,38 @@ function emptyArtistRow(): ArtistRow {
   return {
     organizationId: ARTIST_TBD_VALUE,
     label: ARTIST_TBD_LABEL,
-    quantity: "1",
+    hours: "1",
+    people: "1",
     rateUsd: "0",
+  };
+}
+
+function artistPersonHours(row: Pick<ArtistRow, "hours" | "people">) {
+  const hours = Math.max(0, Number(row.hours || "0"));
+  const people = Math.max(0, Number(row.people || "0"));
+  return hours * people;
+}
+
+function artistRowFromLineItem(row: {
+  organizationId?: string | null;
+  label: string;
+  quantity: number;
+  rateUsd: number;
+  memberCount?: number | null;
+  performanceHours?: number | null;
+}): ArtistRow {
+  const hasBreakdown =
+    row.memberCount != null &&
+    row.memberCount > 0 &&
+    row.performanceHours != null &&
+    row.performanceHours > 0;
+  return {
+    organizationId: row.organizationId?.trim() || ARTIST_TBD_VALUE,
+    label: row.label,
+    hours: hasBreakdown ? String(row.performanceHours) : "1",
+    // Legacy lines stored people in quantity with no hours breakdown.
+    people: hasBreakdown ? String(row.memberCount) : String(row.quantity || 1),
+    rateUsd: row.rateUsd.toString(),
   };
 }
 
@@ -146,6 +183,7 @@ export function InvoiceEditor({
   const regeneratePublicApprovalToken = useMutation(api.invoices.regeneratePublicApprovalToken);
   const resetApprovalToPending = useMutation(api.invoices.resetApprovalToPending);
   const scaffoldPullListFromInvoice = useMutation(api.eventPullLists.scaffoldFromInvoice);
+  const copyDaySetup = useMutation(api.events.copyDaySetup);
   const createGroup = useMutation(api.invoiceGroups.create);
   const createContact = useMutation(api.invoiceContacts.create);
   const deleteInvoiceAdmin = useMutation(api.adminDeletes.deleteInvoiceAdmin);
@@ -195,6 +233,27 @@ export function InvoiceEditor({
     activeInvoiceId ? { invoiceId: activeInvoiceId } : "skip",
   );
   const linkedSeries = invoiceData?.series ?? linkedEvent?.series ?? null;
+  const linkedDayEvents = useMemo(
+    () => linkedEvent?.linkedEvents ?? [],
+    [linkedEvent?.linkedEvents],
+  );
+  const [selectedDayEventIdOverride, setSelectedDayEventIdOverride] = useState<
+    Id<"events"> | undefined
+  >(undefined);
+  const selectedDayEventId = useMemo(() => {
+    if (!linkedEvent || linkedSeries) return undefined;
+    if (
+      selectedDayEventIdOverride &&
+      (linkedDayEvents.some((day) => day._id === selectedDayEventIdOverride) ||
+        linkedDayEvents.length === 0)
+    ) {
+      return selectedDayEventIdOverride;
+    }
+    return linkedDayEvents[0]?._id ?? linkedEvent._id;
+  }, [linkedDayEvents, linkedEvent, linkedSeries, selectedDayEventIdOverride]);
+  const [copyingDaySetup, setCopyingDaySetup] = useState(false);
+  const crewRowsByEventRef = useRef<Map<string, InvoiceCrewRow[]>>(new Map());
+  const crewBucketsHydratedInvoiceRef = useRef<string | null>(null);
   const billableOccurrenceCount = linkedSeries?.activeOccurrenceCount ?? 0;
   const pullListSyncStatus = useQuery(
     api.eventPullLists.getInvoiceSyncStatus,
@@ -341,11 +400,145 @@ export function InvoiceEditor({
     return settings?.crewNormalRateUsd ?? 0;
   }, [crewRateMode, settings]);
 
-  const handleEventCrewRowsChange = useCallback((eventRows: InvoiceCrewRow[]) => {
-    if (!crewBootstrappedRef.current) return;
+  const crewRatesByUserId = useMemo(() => {
+    const map = new Map<string, CrewAssigneeRate>();
+    for (const entry of managerList ?? []) {
+      if (!entry.id) continue;
+      if (entry.hourlyRateUsd === undefined || entry.hourlyRateUsd <= 0) continue;
+      const rateMode =
+        entry.rateMode === "lead" || entry.rateMode === "normal" || entry.rateMode === "custom"
+          ? entry.rateMode
+          : "custom";
+      map.set(entry.id, { hourlyRateUsd: entry.hourlyRateUsd, rateMode });
+    }
+    return map;
+  }, [managerList]);
+
+  async function scaffoldPullListsForLinkedDays() {
+    const dayIds =
+      linkedDayEvents.length > 0
+        ? linkedDayEvents.map((day) => day._id)
+        : linkedEvent
+          ? [linkedEvent._id]
+          : [];
+    for (const eventId of dayIds) {
+      await scaffoldPullListFromInvoice({ eventId });
+    }
+  }
+
+  async function handleCopyDaySetupToOtherDays() {
+    if (!selectedDayEventId || linkedDayEvents.length < 2) return;
+    const confirmed = window.confirm(
+      "Copy this day's crew hours (open slots only, not assigned people) and equipment pull/checkout quantities onto the other linked days? Existing schedule slots and pull-list rows on those days will be replaced.",
+    );
+    if (!confirmed) return;
+    setCopyingDaySetup(true);
+    try {
+      const result = await copyDaySetup({ sourceEventId: selectedDayEventId });
+      crewBucketsHydratedInvoiceRef.current = null;
+      setSaveMessage(
+        `Copied setup to ${result.copiedToEventIds.length} other day${result.copiedToEventIds.length === 1 ? "" : "s"}.`,
+      );
+    } catch (error) {
+      setSaveMessage(getConvexErrorMessage(error));
+    } finally {
+      setCopyingDaySetup(false);
+    }
+  }
+
+    const flattenCrewBuckets = useCallback(
+    (dayEvents: Array<{ _id: Id<"events">; title: string }>) => {
+      const multiDay = dayEvents.length > 1;
+      const rows: InvoiceCrewRow[] = [];
+      for (let index = 0; index < dayEvents.length; index += 1) {
+        const day = dayEvents[index]!;
+        const dayRows = crewRowsByEventRef.current.get(day._id) ?? [];
+        const dayPrefix = multiDay ? `Day ${index + 1} — ` : "";
+        for (const row of dayRows) {
+          rows.push({
+            ...row,
+            label: row.label.startsWith(dayPrefix) ? row.label : `${dayPrefix}${row.label}`,
+          });
+        }
+      }
+      return rows;
+    },
+    [],
+  );
+
+  const handleEventCrewRowsChange = useCallback(
+    (eventRows: InvoiceCrewRow[]) => {
+      if (!crewBootstrappedRef.current) return;
+      if (!selectedDayEventId) return;
+      linkedEventCrewInitializedRef.current = true;
+      crewRowsByEventRef.current.set(selectedDayEventId, eventRows);
+      const days = linkedDayEvents.length > 0 ? linkedDayEvents : [{ _id: selectedDayEventId, title: "" }];
+      setCrewRows((current) => mergeEventCrewWithManualRows(flattenCrewBuckets(days), current));
+    },
+    [flattenCrewBuckets, linkedDayEvents, selectedDayEventId],
+  );
+
+  useEffect(() => {
+    if (!activeInvoiceId || !linkedEvent || linkedSeries) return;
+    const hydrateKey = `${activeInvoiceId}:${crewRatesByUserId.size}:${defaultCrewHourlyRateUsd}`;
+    if (crewBucketsHydratedInvoiceRef.current === hydrateKey) return;
+
+    const days = linkedEvent.linkedEvents ?? [];
+    const dayIds = days.length > 0 ? days.map((day) => day._id) : [linkedEvent._id];
+    const blocksByEvent = new Map<string, typeof linkedEvent.blocks>();
+    const shiftsByEvent = new Map<string, typeof linkedEvent.shifts>();
+    for (const block of linkedEvent.blocks) {
+      const list = blocksByEvent.get(block.eventId) ?? [];
+      list.push(block);
+      blocksByEvent.set(block.eventId, list);
+    }
+    for (const shift of linkedEvent.shifts) {
+      const list = shiftsByEvent.get(shift.eventId) ?? [];
+      list.push(shift);
+      shiftsByEvent.set(shift.eventId, list);
+    }
+
+    crewRowsByEventRef.current = new Map();
+    for (const eventId of dayIds) {
+      const blocks = blocksByEvent.get(eventId) ?? [];
+      const shifts = (shiftsByEvent.get(eventId) ?? []).map((shift) => ({
+        _id: shift._id,
+        scheduleBlockId: shift.scheduleBlockId,
+        role: shift.role,
+        personName: shift.personName,
+        userId: shift.userId,
+        hours: shift.hours,
+      }));
+      crewRowsByEventRef.current.set(
+        eventId,
+        buildCrewRowsFromLinkedEvent(
+          {
+            blocks: blocks.map((block) => ({
+              _id: block._id,
+              label: block.label,
+              blockType: block.blockType,
+            })),
+            shifts,
+          },
+          {
+            ratesByUserId: crewRatesByUserId,
+            openSlotRateUsd: defaultCrewHourlyRateUsd,
+          },
+        ),
+      );
+    }
+    crewBucketsHydratedInvoiceRef.current = hydrateKey;
     linkedEventCrewInitializedRef.current = true;
-    setCrewRows((current) => mergeEventCrewWithManualRows(eventRows, current));
-  }, []);
+    const dayMeta = days.length > 0 ? days : [{ _id: linkedEvent._id, title: linkedEvent.title }];
+    setCrewRows((current) => mergeEventCrewWithManualRows(flattenCrewBuckets(dayMeta), current));
+  }, [
+    activeInvoiceId,
+    crewRatesByUserId,
+    defaultCrewHourlyRateUsd,
+    flattenCrewBuckets,
+    linkedEvent,
+    linkedSeries,
+  ]);
 
   const setManualCrewRows = useCallback((updater: SetStateAction<CrewRow[]>) => {
     setCrewRows((current) => {
@@ -388,11 +581,14 @@ export function InvoiceEditor({
     hasHydratedFromServerRef.current = false;
     crewBootstrappedRef.current = false;
     linkedEventCrewInitializedRef.current = false;
+    crewBucketsHydratedInvoiceRef.current = null;
+    crewRowsByEventRef.current = new Map();
     baselineSignaturePendingRef.current = false;
     savedCrewSnapshotRef.current = [];
     // New invoices have no server hydrate step — treat empty defaults as hydrated so
     // FormSaveBar dirty tracking works on /invoices/new.
     /* eslint-disable react-hooks/set-state-in-effect -- reset editor state when navigating between invoices */
+    setSelectedDayEventIdOverride(undefined);
     setInvoiceFieldsHydrated(!invoiceId);
     setEditorBaselineReady(!invoiceId);
     setDueDateTouched(false);
@@ -473,12 +669,7 @@ export function InvoiceEditor({
     setArtists(
       lineItems
         .filter((row) => row.section === "artist")
-        .map((row) => ({
-          organizationId: row.organizationId?.trim() || ARTIST_TBD_VALUE,
-          label: row.label,
-          quantity: row.quantity.toString(),
-          rateUsd: row.rateUsd.toString(),
-        })),
+        .map((row) => artistRowFromLineItem(row)),
     );
     artistsHydratedFromInvoiceRef.current = lineItems.some((row) => row.section === "artist");
     artistsBootstrappedFromEventRef.current = false;
@@ -543,6 +734,7 @@ export function InvoiceEditor({
     const membersByOrg = new Map(
       bandsForArtists.map((band) => [band.organizationId, band.memberCount]),
     );
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time bootstrap from event performers
     setArtists(
       eventPerformers.map((performer) => {
         const payment = performer.payment;
@@ -551,7 +743,8 @@ export function InvoiceEditor({
             return {
               organizationId: performer.organizationId,
               label: performer.bandName,
-              quantity: "1",
+              hours: "1",
+              people: "1",
               rateUsd: payment.totalUsd.toString(),
             };
           }
@@ -561,7 +754,8 @@ export function InvoiceEditor({
           return {
             organizationId: performer.organizationId,
             label: performer.bandName,
-            quantity: (hours * members).toString(),
+            hours: String(hours),
+            people: String(members),
             rateUsd: rate.toString(),
           };
         }
@@ -570,7 +764,8 @@ export function InvoiceEditor({
         return {
           organizationId: performer.organizationId,
           label: performer.bandName,
-          quantity: profileMembers > 0 ? profileMembers.toString() : "1",
+          hours: "1",
+          people: profileMembers > 0 ? profileMembers.toString() : "1",
           rateUsd: profileRate > 0 ? profileRate.toString() : "0",
         };
       }),
@@ -690,6 +885,8 @@ export function InvoiceEditor({
       excludedTypeIds?: Id<"inventoryTypes">[];
       packageExclusionDiscountUsd?: number;
       organizationId?: string;
+      memberCount?: number;
+      performanceHours?: number;
     }> = [];
     for (const row of equipmentPackages) {
       if (!row.refId || Number(row.quantity) <= 0) continue;
@@ -738,28 +935,40 @@ export function InvoiceEditor({
     }
     for (const row of artists) {
       const label = row.label.trim();
-      if (!label || Number(row.quantity) <= 0) continue;
+      const personHours = artistPersonHours(row);
+      if (!label || personHours <= 0) continue;
       const organizationId =
         row.organizationId && row.organizationId !== ARTIST_TBD_VALUE
           ? row.organizationId
           : undefined;
+      const people = Math.max(0, Number(row.people || "0"));
+      const hours = Math.max(0, Number(row.hours || "0"));
       rows.push({
         section: "artist",
         order: order++,
         label,
-        quantity: Number(row.quantity),
+        quantity: personHours,
         rateUsd: Number(row.rateUsd || "0"),
         organizationId,
+        memberCount: people > 0 ? people : undefined,
+        performanceHours: hours > 0 ? hours : undefined,
       });
     }
     for (const row of crewRows) {
       if (!row.label.trim() || Number(row.quantity) <= 0) continue;
+      const modeDefaultRate =
+        crewRateMode === "lead"
+          ? (settings?.crewLeadRateUsd ?? settings?.crewOtRateUsd ?? settings?.crewNormalRateUsd ?? 0)
+          : (settings?.crewNormalRateUsd ?? 0);
+      // Assigned people: use their compensation rate (Lead $22, Normal $20, Custom).
+      // Open slots / unrated rows: invoice crewRateMode default (or custom row rate).
+      const stamped = Number(row.rateUsd || "0");
       const derivedCrewRate =
-        crewRateMode === "custom"
-          ? Number(row.rateUsd || "0")
-          : crewRateMode === "lead"
-            ? (settings?.crewLeadRateUsd ?? settings?.crewOtRateUsd ?? settings?.crewNormalRateUsd ?? 0)
-            : (settings?.crewNormalRateUsd ?? 0);
+        stamped > 0
+          ? stamped
+          : crewRateMode === "custom"
+            ? stamped
+            : modeDefaultRate;
       rows.push({
         section: "crew",
         order: order++,
@@ -873,7 +1082,7 @@ export function InvoiceEditor({
             "This invoice's equipment lines no longer match the event's pull list. Update the pull list to match?",
           );
           if (shouldResync) {
-            await scaffoldPullListFromInvoice({ eventId: linkedEvent._id });
+            await scaffoldPullListsForLinkedDays();
             if (requestId === saveRequestIdRef.current) {
               setSaveMessage("Invoice saved and pull list resynced.");
             }
@@ -1020,7 +1229,6 @@ export function InvoiceEditor({
     invoiceData,
   ]);
 
-  const linkedEvents = linkedEvent?.linkedEvents ?? [];
   const eventCostUsd =
     linkedSeries && seriesCostData?.costSummary
       ? seriesCostData.costSummary.projectedGrandTotalUsd
@@ -1038,10 +1246,11 @@ export function InvoiceEditor({
         drafts,
         blockTemplates: seriesCostData.series.blockTemplates,
         billableOccurrenceCount,
+        openSlotRateUsd: defaultCrewHourlyRateUsd,
       });
       setCrewRows((current) => mergeEventCrewWithManualRows(eventRows, current));
     },
-    [seriesCostData, billableOccurrenceCount],
+    [billableOccurrenceCount, defaultCrewHourlyRateUsd, seriesCostData],
   );
 
   const draftTotals = useMemo(() => {
@@ -1162,20 +1371,20 @@ export function InvoiceEditor({
           <p className="text-sm text-muted-foreground">Build invoice sections and download a PDF when ready.</p>
         </div>
         <div className="flex gap-2">
-          {linkedEvents.length === 1 ? (
+          {linkedDayEvents.length === 1 ? (
             <Button type="button" variant="outline" asChild>
-              <Link href={`/dashboard/events/${linkedEvents[0]._id}`}>Open Linked Event</Link>
+              <Link href={`/dashboard/events/${linkedDayEvents[0]._id}`}>Open Linked Event</Link>
             </Button>
-          ) : linkedEvents.length > 1 ? (
+          ) : linkedDayEvents.length > 1 ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button type="button" variant="outline">
-                  Linked Events ({linkedEvents.length})
+                  Linked Events ({linkedDayEvents.length})
                   <CaretDownIcon className="size-4" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-72">
-                {linkedEvents.map((event) => (
+                {linkedDayEvents.map((event) => (
                   <DropdownMenuItem key={event._id} asChild>
                     <Link href={`/dashboard/events/${event._id}`} className="flex flex-col items-start gap-0.5">
                       <span className="font-medium">{event.title}</span>
@@ -1383,7 +1592,7 @@ export function InvoiceEditor({
                       )
                     )
                       return;
-                    await scaffoldPullListFromInvoice({ eventId: linkedEvent._id });
+                    await scaffoldPullListsForLinkedDays();
                     setSaveMessage("Pull list resynced from invoice.");
                   })().catch((error) => setAutoSaveError(getConvexErrorMessage(error)))
                 }
@@ -1468,12 +1677,49 @@ export function InvoiceEditor({
             )
           ) : linkedEvent ? (
             <>
-              <InvoiceLinkedEventCrewSection
-                eventId={linkedEvent._id}
-                defaultCrewHourlyRateUsd={defaultCrewHourlyRateUsd}
-                onEventCrewRowsChange={handleEventCrewRowsChange}
-                onMessage={setSaveMessage}
-              />
+              {linkedDayEvents.length > 1 ? (
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base">Linked days</CardTitle>
+                  </CardHeader>
+                  <CardContent className="flex flex-wrap items-center gap-3">
+                    <LinkedEventDaySwitcher
+                      days={linkedDayEvents.map((day, index) => ({
+                        ...day,
+                        dayNumber: index + 1,
+                      }))}
+                      selectedEventId={selectedDayEventId}
+                      onSelect={setSelectedDayEventIdOverride}
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={!selectedDayEventId || copyingDaySetup}
+                      onClick={() => void handleCopyDaySetupToOtherDays()}
+                    >
+                      <CopyIcon className="size-4" />
+                      {copyingDaySetup ? "Copying…" : "Copy setup to other days"}
+                    </Button>
+                    {selectedDayEventId ? (
+                      <Button type="button" size="sm" variant="outline" asChild>
+                        <Link href={`/dashboard/events/${selectedDayEventId}`}>
+                          Open selected day
+                        </Link>
+                      </Button>
+                    ) : null}
+                  </CardContent>
+                </Card>
+              ) : null}
+              {selectedDayEventId ? (
+                <InvoiceLinkedEventCrewSection
+                  key={selectedDayEventId}
+                  eventId={selectedDayEventId}
+                  defaultCrewHourlyRateUsd={defaultCrewHourlyRateUsd}
+                  onEventCrewRowsChange={handleEventCrewRowsChange}
+                  onMessage={setSaveMessage}
+                />
+              ) : null}
               <SectionAdditionalCrewHours
                 rows={crewRows.filter((row) => row.source === "manual")}
                 setRows={setManualCrewRows}
@@ -1667,6 +1913,16 @@ export function InvoiceEditor({
               <p data-testid="invoice-total-external">External: {formatUsd(draftTotals.externalRentalsSubtotalUsd)}</p>
               <p data-testid="invoice-total-artists">Artists: {formatUsd(draftTotals.artistsSubtotalUsd)}</p>
               <p data-testid="invoice-total-crew">Crew: {formatUsd(draftTotals.crewSubtotalUsd)}</p>
+              {defaultCrewHourlyRateUsd <= 0 &&
+              crewRows.some((row) => Number(row.quantity) > 0) ? (
+                <p className="text-xs text-amber-700" data-testid="invoice-crew-rate-warning">
+                  Crew hours are on the quote but the global crew rate is $0. Set Normal/Lead rates under{" "}
+                  <Link href="/dashboard/users/crew-rates" className="underline underline-offset-2">
+                    Users → Crew rates
+                  </Link>
+                  .
+                </p>
+              ) : null}
               <p data-testid="invoice-total-fees">Fees: {formatUsd(draftTotals.feesSubtotalUsd)}</p>
               <p data-testid="invoice-total-subtotal">Subtotal: {formatUsd(draftTotals.subtotalUsd)}</p>
               <p data-testid="invoice-total-discount">Discount: -{formatUsd(draftTotals.discountAmountUsd)}</p>
@@ -2391,7 +2647,8 @@ function SectionArtists({
             ...row,
             organizationId: ARTIST_TBD_VALUE,
             label: ARTIST_TBD_LABEL,
-            quantity: "1",
+            hours: "1",
+            people: "1",
             rateUsd: "0",
           };
         }
@@ -2400,8 +2657,9 @@ function SectionArtists({
           ...row,
           organizationId,
           label: band?.name ?? row.label,
-          quantity:
-            band && band.memberCount > 0 ? band.memberCount.toString() : row.quantity,
+          people:
+            band && band.memberCount > 0 ? band.memberCount.toString() : row.people,
+          hours: row.hours || "1",
           rateUsd:
             band && band.performerHourlyRateUsd > 0
               ? band.performerHourlyRateUsd.toString()
@@ -2417,12 +2675,20 @@ function SectionArtists({
         <CardTitle>Artists</CardTitle>
       </CardHeader>
       <CardContent className="space-y-2">
+        <div className="hidden gap-2 text-xs font-medium text-muted-foreground md:grid md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_5rem_5rem_6rem_auto]">
+          <span>Band</span>
+          <span>Label</span>
+          <span>Hours</span>
+          <span>People</span>
+          <span>Rate / person / hr</span>
+          <span />
+        </div>
         {rows.map((row, idx) => {
           const isTbd = !row.organizationId || row.organizationId === ARTIST_TBD_VALUE;
           return (
             <div
               key={`artist-${idx}`}
-              className="grid gap-2 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_5rem_6rem_auto]"
+              className="grid gap-2 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_5rem_5rem_6rem_auto]"
               data-testid={`invoice-row-artist-${idx}`}
             >
               <SearchableSelect
@@ -2450,16 +2716,25 @@ function SectionArtists({
                 <Input value={row.label} readOnly className="bg-muted/40" />
               )}
               <Input
-                placeholder="People"
-                value={row.quantity}
+                placeholder="Hours"
+                value={row.hours}
                 onChange={(e) =>
                   setRows((prev) =>
-                    prev.map((r, i) => (i === idx ? { ...r, quantity: e.target.value } : r)),
+                    prev.map((r, i) => (i === idx ? { ...r, hours: e.target.value } : r)),
                   )
                 }
               />
               <Input
-                placeholder="Rate"
+                placeholder="People"
+                value={row.people}
+                onChange={(e) =>
+                  setRows((prev) =>
+                    prev.map((r, i) => (i === idx ? { ...r, people: e.target.value } : r)),
+                  )
+                }
+              />
+              <Input
+                placeholder="Rate / hr"
                 value={row.rateUsd}
                 onChange={(e) =>
                   setRows((prev) =>
@@ -2488,7 +2763,6 @@ function SectionArtists({
     </Card>
   );
 }
-
 function SectionCrew({
   rows,
   setRows,
@@ -2503,18 +2777,39 @@ function SectionCrew({
       <CardHeader>
         <CardTitle>
           Crew (
-          {rateMode === "custom" ? "Custom rate per row" : rateMode === "lead" ? "Lead rate from settings" : "Normal rate from settings"}
+          {rateMode === "custom"
+            ? "Custom rate per row"
+            : rateMode === "lead"
+              ? "Lead default for open slots"
+              : "Normal default for open slots"}
           )
         </CardTitle>
         <p className="text-sm text-muted-foreground">
-          Link an event to this invoice to edit crew schedule blocks and slots inline.
+          Assigned crew bill at their own Normal/Lead/Custom rate. Leads are tagged (Lead) in the line label. Open slots
+          use the invoice default above.
         </p>
       </CardHeader>
       <CardContent className="space-y-2">
         {rows.map((row, idx) => (
-          <div key={`crew-${idx}`} className={`grid gap-2 ${rateMode === "custom" ? "md:grid-cols-4" : "md:grid-cols-3"}`} data-testid={`invoice-row-crew-${idx}`}>
-            <Input placeholder="Crew role" value={row.label} onChange={(e) => setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, label: e.target.value } : r)))} />
-            <Input placeholder="Qty/hours" value={row.quantity} onChange={(e) => setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, quantity: e.target.value } : r)))} />
+          <div
+            key={`crew-${idx}`}
+            className="grid gap-2 md:grid-cols-[minmax(0,1.5fr)_5.5rem_5.5rem_auto]"
+            data-testid={`invoice-row-crew-${idx}`}
+          >
+            <Input
+              placeholder="Crew role"
+              value={row.label}
+              onChange={(e) =>
+                setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, label: e.target.value } : r)))
+              }
+            />
+            <Input
+              placeholder="Qty/hours"
+              value={row.quantity}
+              onChange={(e) =>
+                setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, quantity: e.target.value } : r)))
+              }
+            />
             {rateMode === "custom" ? (
               <Input
                 placeholder="Rate (USD)"
@@ -2523,8 +2818,23 @@ function SectionCrew({
                   setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, rateUsd: e.target.value } : r)))
                 }
               />
-            ) : null}
-            <Button type="button" variant="outline" onClick={() => setRows((prev) => prev.filter((_, i) => i !== idx))}>Remove</Button>
+            ) : (
+              <Input
+                readOnly
+                className="bg-muted/40"
+                value={row.rateUsd && Number(row.rateUsd) > 0 ? row.rateUsd : "—"}
+                title={
+                  row.rateMode === "lead"
+                    ? "Lead rate for this assignee"
+                    : row.userId
+                      ? "Assignee compensation rate"
+                      : "Open-slot / invoice default rate"
+                }
+              />
+            )}
+            <Button type="button" variant="outline" onClick={() => setRows((prev) => prev.filter((_, i) => i !== idx))}>
+              Remove
+            </Button>
           </div>
         ))}
         <Button
@@ -2558,7 +2868,8 @@ function SectionAdditionalCrewHours({
       <CardHeader>
         <CardTitle>Additional billable hours</CardTitle>
         <p className="text-sm text-muted-foreground">
-          Add extra crew hours on top of the linked event schedule. Open event slots use the invoice default crew rate.
+          Add extra crew hours on top of the linked event schedule. Assigned schedule rows use each person&apos;s rate
+          (Lead tagged in the label). Open slots use the invoice default crew rate.
         </p>
       </CardHeader>
       <CardContent className="space-y-2">

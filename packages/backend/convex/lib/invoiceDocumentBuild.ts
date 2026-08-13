@@ -32,6 +32,17 @@ export function toDocumentLineItem(
       remainder > 0
         ? `~${qty} per occurrence (${remainder} remainder)`
         : `~${qty} per occurrence`;
+  } else if (
+    row.section === "artist" &&
+    row.memberCount !== undefined &&
+    row.memberCount > 0 &&
+    row.performanceHours !== undefined &&
+    row.performanceHours > 0
+  ) {
+    const peopleLabel = row.memberCount === 1 ? "1 person" : `${row.memberCount} people`;
+    const hoursLabel =
+      row.performanceHours === 1 ? "1 hr" : `${row.performanceHours} hrs`;
+    quantityDetail = `${peopleLabel} × ${hoursLabel}`;
   }
 
   let detailNote: string | undefined;
@@ -64,6 +75,16 @@ export function toDocumentLineItem(
     quantityDetail,
     rateUsd: row.rateUsd,
     amountUsd: row.amountUsd,
+    memberCount:
+      row.section === "artist" && row.memberCount !== undefined && row.memberCount > 0
+        ? row.memberCount
+        : undefined,
+    performanceHours:
+      row.section === "artist" &&
+      row.performanceHours !== undefined &&
+      row.performanceHours > 0
+        ? row.performanceHours
+        : undefined,
   };
 }
 

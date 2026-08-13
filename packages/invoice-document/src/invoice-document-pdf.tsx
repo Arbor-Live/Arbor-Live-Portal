@@ -211,7 +211,7 @@ export function InvoiceDocumentPdf({ data, logoSrc }: InvoiceDocumentPdfProps) {
           {sections.external.length ? (
             <SectionTable title="External Rentals" rows={sections.external} showProvider />
           ) : null}
-          {sections.artists.length ? <SectionTable title="Artists" rows={sections.artists} /> : null}
+          {sections.artists.length ? <ArtistsSectionTable rows={sections.artists} /> : null}
           {sections.crew.length ? <SectionTable title="Crew" rows={sections.crew} /> : null}
           {sections.fees.length ? <SectionTable title="Fees" rows={sections.fees} /> : null}
 
@@ -261,6 +261,64 @@ function DetailLine({ label, value }: { label: string; value: string }) {
       <Text style={styles.detailLabel}>{label}: </Text>
       {value}
     </Text>
+  );
+}
+
+function ArtistsSectionTable({ rows }: { rows: InvoiceLineItem[] }) {
+  const hasBreakdown = rows.some(
+    (row) =>
+      row.memberCount !== undefined &&
+      row.memberCount > 0 &&
+      row.performanceHours !== undefined &&
+      row.performanceHours > 0,
+  );
+  if (!hasBreakdown) {
+    return <SectionTable title="Artists" rows={rows} />;
+  }
+
+  const itemFlex = 2.4;
+  const hoursFlex = 0.7;
+  const peopleFlex = 0.7;
+  const rateFlex = 1.2;
+  const amountFlex = 1;
+
+  return (
+    <View style={styles.card}>
+      <Text style={styles.cardTitle}>Artists</Text>
+      <View style={styles.tableHeader}>
+        <Text style={[styles.th, { flex: itemFlex }]}>Band / DJ</Text>
+        <Text style={[styles.th, { flex: hoursFlex, textAlign: "right" }]}>Hours</Text>
+        <Text style={[styles.th, { flex: peopleFlex, textAlign: "right" }]}>People</Text>
+        <Text style={[styles.th, { flex: rateFlex, textAlign: "right" }]}>Rate / person / hr</Text>
+        <Text style={[styles.th, { flex: amountFlex, textAlign: "right" }]}>Amount</Text>
+      </View>
+      {rows.map((row, index) => (
+        <View
+          key={row.id}
+          style={
+            index === rows.length - 1
+              ? [styles.tableRow, styles.tableLastRow]
+              : styles.tableRow
+          }
+        >
+          <Text style={[styles.td, { flex: itemFlex }]}>{row.label}</Text>
+          <Text style={[styles.td, { flex: hoursFlex, textAlign: "right" }]}>
+            {row.performanceHours !== undefined && row.performanceHours > 0
+              ? row.performanceHours
+              : row.quantity}
+          </Text>
+          <Text style={[styles.td, { flex: peopleFlex, textAlign: "right" }]}>
+            {row.memberCount !== undefined && row.memberCount > 0 ? row.memberCount : "—"}
+          </Text>
+          <Text style={[styles.td, { flex: rateFlex, textAlign: "right" }]}>
+            {currency(row.rateUsd)}
+          </Text>
+          <Text style={[styles.td, { flex: amountFlex, textAlign: "right", fontWeight: 700 }]}>
+            {currency(row.amountUsd)}
+          </Text>
+        </View>
+      ))}
+    </View>
   );
 }
 
