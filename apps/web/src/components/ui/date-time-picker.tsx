@@ -51,17 +51,25 @@ export function DateTimePicker({
   onChange,
   placeholder,
   className,
+  openToDate,
 }: {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
   className?: string;
+  /** Naive `YYYY-MM-DDTHH:mm` used when `value` is empty so the calendar opens on the event day. */
+  openToDate?: string;
 }) {
   const selected = useMemo(() => parseNaiveDateTimeInput(value), [value]);
+  const calendarOpenTo = useMemo(
+    () => selected ?? parseNaiveDateTimeInput(openToDate ?? ""),
+    [openToDate, selected],
+  );
 
   return (
     <DatePicker
       selected={selected}
+      openToDate={calendarOpenTo ?? undefined}
       onChange={(date: Date | null) => onChange(date ? toNaiveDateTimeInput(date) : "")}
       showTimeSelect
       timeIntervals={15}
