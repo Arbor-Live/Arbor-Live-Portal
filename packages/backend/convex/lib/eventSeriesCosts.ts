@@ -30,6 +30,8 @@ export type SeriesCostSummary = {
   };
   grandTotalUsd: number;
   projectedGrandTotalUsd: number;
+  /** Bands + external rentals in the projected grand total (pass-through costs). */
+  projectedPassThroughUsd: number;
   budgetUsd?: number;
   budgetRemainingUsd?: number;
   projectedBudgetRemainingUsd?: number;
@@ -109,6 +111,8 @@ export function computeSeriesCostSummary(
 
   const grandTotalUsd = perOccurrenceTotal + seriesRecurringTotal;
   const projectedGrandTotalUsd = projectedPerOccurrenceTotal + seriesRecurringTotal;
+  const projectedPassThroughUsd =
+    projectedBands + projectedExternal + seriesRecurringBands + seriesRecurringExternal;
   const budgetUsd = series.budgetUsd;
   const budgetRemainingUsd =
     budgetUsd !== undefined ? budgetUsd - grandTotalUsd : undefined;
@@ -144,6 +148,7 @@ export function computeSeriesCostSummary(
     },
     grandTotalUsd,
     projectedGrandTotalUsd,
+    projectedPassThroughUsd,
     budgetUsd,
     budgetRemainingUsd,
     projectedBudgetRemainingUsd,

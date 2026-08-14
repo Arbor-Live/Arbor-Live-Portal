@@ -65,7 +65,7 @@ export function FinancialHubExpensesCard() {
         {formatUsd(summary.expensesUsd)}
       </p>
       <p className="text-sm text-muted-foreground">
-        Recorded event costs (includes band payouts)
+        Recorded event costs (includes band payouts & external rentals)
       </p>
       <Sparkline
         data={summary.sparkline.map((point) => ({

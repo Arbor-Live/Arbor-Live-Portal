@@ -38,6 +38,7 @@ import {
   type SeriesShiftEditorFormValues,
 } from "@/lib/validations/event";
 import { formatOccurrencePreview } from "@/lib/event-series";
+import { toLocalDateTimeInput } from "@/lib/crew-availability";
 import { averageCrewHourlyRateUsd } from "@/lib/crew-rates";
 import { formatUsd } from "@/lib/format";
 
@@ -357,6 +358,7 @@ export function EventSeriesShiftEditor({
               <EventTimelineScheduler
                 dayCount={dayCount}
                 blocks={timelineBlocks}
+                anchorStartsAt={toLocalDateTimeInput(anchorStartAt)}
                 onChange={() => {}}
                 onQuickAdd={() => {}}
                 quickAddLabel=""

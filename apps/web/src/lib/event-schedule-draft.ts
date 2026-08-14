@@ -6,6 +6,15 @@ import {
   toLocalDateTimeInput,
 } from "@/lib/crew-availability";
 import { pacificDayIndexFromAnchor, pacificScheduleDayCount } from "@/lib/format";
+import { sortScheduleBlocksByTime } from "@/lib/event-schedule-blocks";
+
+export {
+  applyScheduleBlockEndChange,
+  applyScheduleBlockStartChange,
+  createScheduleBlockDraft,
+  DEFAULT_SCHEDULE_BLOCK_DURATION_MS,
+  sortScheduleBlocksByTime,
+} from "@/lib/event-schedule-blocks";
 
 export type EventShiftDraft = {
   id?: Id<"eventCrewShifts">;
@@ -90,7 +99,7 @@ export function buildQuickAddScheduleBlocks(args: {
   if (eventType === "Dry Hire") {
     const outboundLabel = rentalFulfillmentMode === "will_call" ? "Check-out Window" : "Drop-off Window";
     const returnLabel = rentalFulfillmentMode === "will_call" ? "Return Window" : "Pickup Window";
-    return withStableRefs([
+    return withStableRefs(sortScheduleBlocksByTime([
       {
         blockType: "setup",
         label: outboundLabel,
@@ -107,7 +116,7 @@ export function buildQuickAddScheduleBlocks(args: {
         endsAt: toLocalDateTimeInput(returnEndMs),
         notes: "",
       },
-    ]);
+    ]));
   }
 
   const baseBlocks: TimelineBlockDraft[] = [
@@ -140,7 +149,7 @@ export function buildQuickAddScheduleBlocks(args: {
     });
   }
 
-  return withStableRefs(baseBlocks);
+  return withStableRefs(sortScheduleBlocksByTime(baseBlocks));
 }
 
 export function shiftHours(shift: Pick<EventShiftDraft, "startsAt" | "endsAt">) {
@@ -189,16 +198,18 @@ export function timelineBlocksFromSaved(
     notes?: string;
   }>,
 ): TimelineBlockDraft[] {
-  return savedBlocks.map((row) => ({
-    id: row.id,
-    clientId: row.clientId ?? row.id,
-    blockType: row.blockType,
-    label: row.label,
-    dayIndex: row.dayIndex,
-    startsAt: toLocalDateTimeInput(row.startsAt),
-    endsAt: toLocalDateTimeInput(row.endsAt),
-    notes: row.notes ?? "",
-  }));
+  return sortScheduleBlocksByTime(
+    savedBlocks.map((row) => ({
+      id: row.id,
+      clientId: row.clientId ?? row.id,
+      blockType: row.blockType,
+      label: row.label,
+      dayIndex: row.dayIndex,
+      startsAt: toLocalDateTimeInput(row.startsAt),
+      endsAt: toLocalDateTimeInput(row.endsAt),
+      notes: row.notes ?? "",
+    })),
+  );
 }
 
 export function attachShiftsToPersistedBlocks(
