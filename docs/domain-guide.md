@@ -114,8 +114,10 @@ Event types (drive which editor tabs and quick-add blocks appear):
   email).
 - Event costs are direct fields on `events` (`crewCostUsd`, `bandsCostUsd`,
   `externalRentalsCostUsd`) — there is no generated expense-report workflow.
-  Band / artist money is an expense: invoice artist lines do not count as Arbor
-  earned revenue for net profit or Insights revenue metrics.
+  Bands are expenses (`bandsCostUsd` / payouts). Invoice artist lines may bill the
+  host for pass-through transparency, but Insights *earned revenue* excludes them.
+  Net profit is invoice total − event costs (do not also strip artists — that
+  double-counts band money already in costs).
 - **Event series** (`eventSeries.ts`) generate recurring occurrences and have
   their own budgeting and pull lists.
 - Band participation in events is tracked in `eventBandParticipations`
@@ -158,8 +160,8 @@ Event types (drive which editor tabs and quick-add blocks appear):
   `performerHourlyRateUsd` and member count (`bandMembers.length`) from the org
   profile when a band is selected. Linked events auto-fill artist rows from
   assigned performers / payout totals when the invoice has no artist lines yet.
-  Artist amounts are expenses (not Arbor earned revenue) for net profit and
-  Insights.
+  Artist amounts are excluded from Insights earned revenue. Net profit still uses
+  full invoice total minus event costs (bands already sit in `bandsCostUsd`).
 - Every invoice carries a `publicApprovalToken` for the client-facing quote
   page (`/public/quote/[token]`): view, approve, request changes, set payment
   contacts, download PDF — all token-gated, no login.

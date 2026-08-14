@@ -51,7 +51,7 @@ import {
   computeInvoiceDraftTotals,
   computePackageExclusionSuggestedDiscount,
 } from "@/lib/compute-invoice-draft-totals";
-import { arborEarnedRevenueUsd, netProfitFromInvoiceUsd } from "@/lib/invoice-profit";
+import { netProfitFromInvoiceUsd } from "@/lib/invoice-profit";
 import { equipmentDivisionWarnings } from "@/lib/equipment-division-warnings";
 import { InvoicePdfDownloadButton } from "@/components/financial/invoice-pdf-download-button";
 import { SendQuoteToClientSheet } from "@/components/financial/send-quote-to-client-sheet";
@@ -1082,15 +1082,7 @@ export function InvoiceEditor({
     settings,
   ]);
 
-  const arborBilledUsd = arborEarnedRevenueUsd(
-    draftTotals.totalUsd,
-    draftTotals.artistsSubtotalUsd,
-  );
-  const projectedNetProfitUsd = netProfitFromInvoiceUsd(
-    draftTotals.totalUsd,
-    draftTotals.artistsSubtotalUsd,
-    eventCostUsd,
-  );
+  const projectedNetProfitUsd = netProfitFromInvoiceUsd(draftTotals.totalUsd, eventCostUsd);
 
   const savedTotalUsd = invoiceData?.invoice?.totalUsd;
   const pricingUnsaved =
@@ -1722,7 +1714,7 @@ export function InvoiceEditor({
               </CardHeader>
               <CardContent className="min-w-0 text-sm">
                 <p>
-                  Billed: <span className="font-medium">{formatUsd(arborBilledUsd)}</span>
+                  Billed: <span className="font-medium">{formatUsd(draftTotals.totalUsd)}</span>
                 </p>
                 <p>
                   Event cost: <span className="font-medium">{formatUsd(eventCostUsd)}</span>

@@ -528,11 +528,7 @@ export const listEnriched = query({
           netProfitUsd:
             eventCostsUsd == null
               ? null
-              : netProfitFromInvoiceUsd(
-                  invoice.totalUsd,
-                  invoice.artistsSubtotalUsd,
-                  eventCostsUsd,
-                ),
+              : netProfitFromInvoiceUsd(invoice.totalUsd, eventCostsUsd),
           publicApprovalToken: invoice.publicApprovalToken,
           clientGroupName: invoice.clientGroupName,
           clientContactName: invoice.clientContactName,

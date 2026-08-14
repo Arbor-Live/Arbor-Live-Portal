@@ -81,9 +81,12 @@ Human-readable docs live in `docs/` (`getting-started.md`, `architecture.md`, `d
   - `crewCostUsd`
   - `bandsCostUsd` (band payouts / expenses — not revenue)
   - `externalRentalsCostUsd` (placeholder)
-- Invoice artist lines pick a band (or TBD) and pull `performerHourlyRateUsd`;
-  net profit / analytics still treat them as non-revenue. Bands are expenses;
-  Arbor does not earn margin on them.
+- Invoice artist lines pick a band (or TBD) and pull `performerHourlyRateUsd`.
+  Insights earned revenue excludes artist subtotals (`arborEarnedRevenueUsd`).
+  Net profit is invoice total − event costs (`netProfitFromInvoiceUsd`) — do not
+  also strip artists from the total, or bands are double-counted against
+  `bandsCostUsd`. Bands are expenses; Arbor does not earn margin on them except
+  when billed artists ≠ payout.
 - In UI, costs are edited as part of event record, not via report creation workflows.
 
 ## Invoice and Public Quote Context
