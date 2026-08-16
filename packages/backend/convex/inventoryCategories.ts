@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { mutation, query, type MutationCtx } from "./_generated/server";
 import { requireAdmin, requireAuth } from "./lib/auth";
 
 const publicBucketValue = v.union(
@@ -49,6 +49,38 @@ function normalizeKey(key: string) {
     .replace(/^_+|_+$/g, "");
 }
 
+/**
+ * Idempotent seed of built-in inventory categories. Safe to call from any
+ * mutation that needs a known key to exist (e.g. type create on a fresh DB).
+ */
+export async function ensureDefaultCategories(
+  ctx: { db: MutationCtx["db"] },
+  now = Date.now(),
+) {
+  for (const category of DEFAULT_CATEGORIES) {
+    const existing = await ctx.db
+      .query("inventoryCategories")
+      .withIndex("by_key", (q) => q.eq("key", category.key))
+      .unique();
+    if (!existing) {
+      await ctx.db.insert("inventoryCategories", {
+        ...category,
+        active: true,
+        createdAt: now,
+        updatedAt: now,
+      });
+      continue;
+    }
+
+    if (existing.publicBucket !== category.publicBucket) {
+      await ctx.db.patch(existing._id, {
+        publicBucket: category.publicBucket,
+        updatedAt: now,
+      });
+    }
+  }
+}
+
 export const list = query({
   args: { activeOnly: v.optional(v.boolean()) },
   handler: async (ctx, args) => {
@@ -73,29 +105,7 @@ export const ensureDefaults = mutation({
   args: {},
   handler: async (ctx) => {
     await requireAdmin(ctx);
-    const now = Date.now();
-    for (const category of DEFAULT_CATEGORIES) {
-      const existing = await ctx.db
-        .query("inventoryCategories")
-        .withIndex("by_key", (q) => q.eq("key", category.key))
-        .unique();
-      if (!existing) {
-        await ctx.db.insert("inventoryCategories", {
-          ...category,
-          active: true,
-          createdAt: now,
-          updatedAt: now,
-        });
-        continue;
-      }
-
-      if (existing.publicBucket !== category.publicBucket) {
-        await ctx.db.patch(existing._id, {
-          publicBucket: category.publicBucket,
-          updatedAt: now,
-        });
-      }
-    }
+    await ensureDefaultCategories(ctx);
   },
 });
 

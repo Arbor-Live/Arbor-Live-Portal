@@ -8,6 +8,7 @@ import {
   normalizeResourceLinksForUpload,
 } from "./lib/inventoryUpload";
 import { scheduleInventoryTypeSiteRevalidation } from "./lib/scheduleSiteRevalidation";
+import { ensureDefaultCategories } from "./inventoryCategories";
 
 type InventoryCategoryMetadata = Doc<"inventoryTypes">["categoryMetadata"];
 
@@ -84,10 +85,19 @@ async function validateCapabilities(
 
 async function validateCategory(ctx: MutationCtx, category: string) {
   const key = category.trim().toLowerCase();
-  const existing = await ctx.db
+  let existing = await ctx.db
     .query("inventoryCategories")
     .withIndex("by_key", (q) => q.eq("key", key))
     .unique();
+  // Fresh local / anonymous deploys often have an empty taxonomy. Seed defaults
+  // once so creating a type with a built-in key (e.g. "sound") works.
+  if (!existing) {
+    await ensureDefaultCategories(ctx);
+    existing = await ctx.db
+      .query("inventoryCategories")
+      .withIndex("by_key", (q) => q.eq("key", key))
+      .unique();
+  }
   if (!existing || !existing.active) {
     throw new Error(`Unknown or inactive category key: ${category}`);
   }

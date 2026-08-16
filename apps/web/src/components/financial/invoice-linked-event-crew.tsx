@@ -18,6 +18,7 @@ import {
   attachShiftsToPersistedBlocks,
   buildQuickAddScheduleBlocks,
   eventDayCount,
+  eventTypeHasCrewAssignment,
   getBlockRef,
   resolveShiftScheduleBlockId,
   shiftBelongsToBlock,
@@ -120,15 +121,21 @@ export function InvoiceLinkedEventCrewSection({
   const startAt = eventData?.event.startAt ? toLocalDateTimeInput(eventData.event.startAt) : "";
   const endAt = eventData?.event.endAt ? toLocalDateTimeInput(eventData.event.endAt) : "";
   const dayCount = eventDayCount(startAt, endAt);
-  const showCrewTools = eventType === "Crewed Event" || eventType === "Rental with Crew";
+  const showCrewTools = eventTypeHasCrewAssignment(eventType);
 
   const userOptions = useMemo(() => {
     const base = (managerList ?? []).map((entry) => ({
       value: entry.id,
       label: entry.name,
-      description: buildUserSelectDescription(entry),
+      description: buildUserSelectDescription({
+        ...entry,
+        rateMode: entry.rateMode,
+        hourlyRateUsd: entry.hourlyRateUsd,
+      }),
       avatarUrl: entry.image,
-      keywords: `${entry.role ?? ""} ${entry.email ?? ""}`,
+      keywords: `${entry.role ?? ""} ${entry.email ?? ""} ${entry.rateMode ?? ""}`,
+      rateMode: entry.rateMode as "normal" | "lead" | "custom" | undefined,
+      hourlyRateUsd: entry.hourlyRateUsd,
     }));
     const currentUserId = session.data?.user?.id;
     if (currentUserId && !base.some((entry) => entry.value === currentUserId)) {
@@ -138,10 +145,26 @@ export function InvoiceLinkedEventCrewSection({
         description: session.data?.user?.email ?? "",
         avatarUrl: session.data?.user?.image ?? undefined,
         keywords: session.data?.user?.email ?? "",
+        rateMode: undefined,
+        hourlyRateUsd: undefined,
       });
     }
     return base.sort((a, b) => a.label.localeCompare(b.label));
   }, [managerList, session.data?.user]);
+
+  const ratesByUserId = useMemo(() => {
+    const map = new Map<string, { hourlyRateUsd: number; rateMode: "normal" | "lead" | "custom" }>();
+    for (const entry of managerList ?? []) {
+      if (!entry.id) continue;
+      if (entry.hourlyRateUsd === undefined || entry.hourlyRateUsd <= 0) continue;
+      const rateMode =
+        entry.rateMode === "lead" || entry.rateMode === "normal" || entry.rateMode === "custom"
+          ? entry.rateMode
+          : "custom";
+      map.set(entry.id, { hourlyRateUsd: entry.hourlyRateUsd, rateMode });
+    }
+    return map;
+  }, [managerList]);
 
   const userSelectOptions: UserSelectOption[] = useMemo(
     () =>
@@ -205,8 +228,13 @@ export function InvoiceLinkedEventCrewSection({
 
   useEffect(() => {
     if (!scheduleHydratedRef.current) return;
-    onEventCrewRowsChange(buildCrewRowsFromShifts(blocks, shifts));
-  }, [blocks, shifts, onEventCrewRowsChange]);
+    onEventCrewRowsChange(
+      buildCrewRowsFromShifts(blocks, shifts, {
+        ratesByUserId,
+        openSlotRateUsd: defaultCrewHourlyRateUsd,
+      }),
+    );
+  }, [blocks, shifts, onEventCrewRowsChange, ratesByUserId, defaultCrewHourlyRateUsd]);
 
   const persistScheduleDraft = useCallback(
     async (draftBlocks: TimelineBlockDraft[], draftShifts: EventShiftDraft[]) => {

@@ -18,6 +18,10 @@ export type InvoiceLineItem = {
   quantityDetail?: string;
   rateUsd: number;
   amountUsd: number;
+  /** Artist lines: people performing (when known). */
+  memberCount?: number;
+  /** Artist lines: hours performing (when known). */
+  performanceHours?: number;
 };
 
 export type InvoiceDocumentInvoice = {
