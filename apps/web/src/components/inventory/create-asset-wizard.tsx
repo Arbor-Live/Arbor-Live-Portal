@@ -106,6 +106,23 @@ function CreateAssetWizardForm({ onClose }: { onClose: () => void }) {
   );
   const createType = useMutation(api.inventoryTypes.create);
   const createMany = useMutation(api.inventoryItems.createMany);
+  const ensureDefaultCategories = useMutation(api.inventoryCategories.ensureDefaults);
+
+  useEffect(() => {
+    // Seed built-in categories on first open so fake/test types can be created
+    // without a manual "Ensure defaults" click on a fresh deployment.
+    void ensureDefaultCategories({}).catch(() => {
+      // Non-admin sessions skip seed; type create still auto-seeds server-side.
+    });
+  }, [ensureDefaultCategories]);
+
+  useEffect(() => {
+    if (!categories?.length) return;
+    setTypeDraft((prev) => {
+      if (categories.some((row) => row.key === prev.category)) return prev;
+      return { ...prev, category: categories[0]!.key };
+    });
+  }, [categories]);
 
   const typeLabel = useMemo(() => {
     const type = types?.find((entry) => entry._id === typeId);

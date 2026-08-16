@@ -33,6 +33,8 @@ export function buildInvoiceDocumentData(args: {
       quantityDetail: line.quantityDetail,
       rateUsd: line.rateUsd,
       amountUsd: line.amountUsd,
+      memberCount: line.memberCount,
+      performanceHours: line.performanceHours,
     })),
   };
 }

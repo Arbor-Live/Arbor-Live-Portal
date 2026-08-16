@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
 import { FormSaveBar } from "@/components/forms";
@@ -227,6 +227,14 @@ export function TypesManager() {
   const bulkUpdateVisibility = useMutation(api.inventoryTypes.bulkUpdateVisibility);
   const createCapability = useMutation(api.capabilityDefinitions.create);
   const deleteCapability = useMutation(api.capabilityDefinitions.remove);
+
+  useEffect(() => {
+    if (categories === undefined) return;
+    if (categories.length > 0) return;
+    void ensureDefaults({}).catch(() => {
+      // Admin-only seed; type create also seeds server-side when needed.
+    });
+  }, [categories, ensureDefaults]);
 
   const rows = useMemo(() => {
     const base = types;

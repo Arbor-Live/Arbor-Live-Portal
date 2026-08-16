@@ -1,8 +1,16 @@
+import { addPacificCalendarDays, pacificDateKey } from "@arbor/format";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { findGroupByNameOrAlias, normalizeHostOrgName } from "./hostOrgIdentity";
 import { upsertInvoicePerson } from "./invoicePeople";
 import { allocateInvoiceNumber } from "./publicReferenceIds";
+
+/** Quote due date is first event day + this many Pacific calendar days. */
+export const INVOICE_DUE_DAYS_AFTER_FIRST_DAY = 30;
+
+export function invoiceDueDateFromFirstDay(firstDayMs: number) {
+  return pacificDateKey(addPacificCalendarDays(firstDayMs, INVOICE_DUE_DAYS_AFTER_FIRST_DAY));
+}
 
 type GroupType = "vso" | "house" | "department" | "individual";
 
@@ -260,6 +268,13 @@ export async function provisionBillingProfileFromRequest(
   return { invoiceGroupId, invoiceContactId };
 }
 
+function firstDayMsFromRequest(request: Doc<"eventRequests">) {
+  if (request.showSlots && request.showSlots.length > 0) {
+    return Math.min(...request.showSlots.map((slot) => slot.startAtMs));
+  }
+  return request.eventStartAtMs;
+}
+
 function pacificIssueDate(now = Date.now()) {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Los_Angeles",
@@ -276,6 +291,7 @@ export async function createDraftInvoiceFromBookingRequest(
     managerUserId: string;
     managerName: string;
     managerEmail?: string;
+    firstDayMs?: number;
   },
 ): Promise<{ invoiceId: Id<"invoices"> }> {
   const { request } = args;
@@ -283,12 +299,13 @@ export async function createDraftInvoiceFromBookingRequest(
   const clientGroupName = await resolveClientGroupName(ctx, request);
   const equipmentPricingMode = await resolveEquipmentPricingMode(ctx, request);
   const now = Date.now();
+  const firstDayMs = args.firstDayMs ?? firstDayMsFromRequest(request);
 
   const invoiceId = await ctx.db.insert("invoices", {
     invoiceNumber: await allocateInvoiceNumber(ctx),
     status: "draft",
     issueDate: pacificIssueDate(now),
-    dueDate: undefined,
+    dueDate: firstDayMs != null ? invoiceDueDateFromFirstDay(firstDayMs) : undefined,
     managerUserId: args.managerUserId,
     managerName: args.managerName.trim(),
     managerEmail: trimOptional(args.managerEmail),

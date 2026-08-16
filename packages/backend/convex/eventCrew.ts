@@ -3,6 +3,10 @@ import { mutation, query } from "./_generated/server";
 import { requireArborInternalContext, requireAuth } from "./lib/auth";
 import { requireEventEditAccess } from "./lib/eventAccess";
 import { calculateCrewCost, syncEventCrewCostUsd } from "./lib/crewCost";
+import {
+  loadInvoiceCrewRateSettings,
+  resolveOpenSlotHourlyRateUsd,
+} from "./lib/crewCompensation";
 import { getUserOtForecast } from "./lib/otForecast";
 import { scheduleCrewScheduledEmails } from "./email/triggers";
 
@@ -97,20 +101,31 @@ export const upsertShifts = mutation({
     }
 
     const now = Date.now();
+    const crewRateSettings = await loadInvoiceCrewRateSettings(ctx);
     for (const shift of args.shifts) {
       const hours = hoursBetween(shift.startsAt, shift.endsAt);
       const postedToExpense = shift.postedToExpense && !!shift.expenseReportId;
-      const estimatedHourlyRateUsd =
-        shift.estimatedHourlyRateUsd !== undefined && shift.estimatedHourlyRateUsd > 0
+      const userId = shift.userId?.trim() || undefined;
+      // Open slots: stamp an estimate from global Normal/Lead when the client
+      // didn't send one (common when rates were 0 at edit time, or omitted).
+      const estimatedHourlyRateUsd = userId
+        ? shift.estimatedHourlyRateUsd !== undefined && shift.estimatedHourlyRateUsd > 0
           ? shift.estimatedHourlyRateUsd
-          : undefined;
+          : undefined
+        : (() => {
+            const rate = resolveOpenSlotHourlyRateUsd(
+              shift.estimatedHourlyRateUsd,
+              crewRateSettings,
+            );
+            return rate > 0 ? rate : undefined;
+          })();
       if (shift.id) {
         await ctx.db.patch(shift.id, {
           scheduleBlockId: shift.scheduleBlockId,
           expenseReportId: shift.expenseReportId,
           role: shift.role.trim(),
           personName: shift.personName?.trim() || undefined,
-          userId: shift.userId?.trim() || undefined,
+          userId,
           crewApplicationId: shift.crewApplicationId,
           callTime: shift.callTime,
           startsAt: shift.startsAt,
@@ -128,7 +143,7 @@ export const upsertShifts = mutation({
           expenseReportId: shift.expenseReportId,
           role: shift.role.trim(),
           personName: shift.personName?.trim() || undefined,
-          userId: shift.userId?.trim() || undefined,
+          userId,
           crewApplicationId: shift.crewApplicationId,
           callTime: shift.callTime,
           startsAt: shift.startsAt,

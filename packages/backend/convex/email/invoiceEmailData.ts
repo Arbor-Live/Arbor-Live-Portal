@@ -36,6 +36,8 @@ const invoiceDocumentValidator = v.object({
       quantityDetail: v.optional(v.string()),
       rateUsd: v.number(),
       amountUsd: v.number(),
+      memberCount: v.optional(v.number()),
+      performanceHours: v.optional(v.number()),
     }),
   ),
 });

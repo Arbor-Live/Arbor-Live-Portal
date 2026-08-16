@@ -8,7 +8,23 @@ export function buildUserSelectDescription(row: {
   email?: string | null;
   pronouns?: string | null;
   gradYear?: number | null;
+  rateMode?: "normal" | "lead" | "custom" | string | null;
+  hourlyRateUsd?: number | null;
 }): string {
-  const parts = [row.role, row.email, row.pronouns, row.gradYear ? `'${String(row.gradYear).slice(-2)}` : undefined];
+  const rateLabel =
+    row.rateMode === "lead"
+      ? row.hourlyRateUsd && row.hourlyRateUsd > 0
+        ? `Lead · $${row.hourlyRateUsd}/hr`
+        : "Lead"
+      : row.hourlyRateUsd && row.hourlyRateUsd > 0
+        ? `$${row.hourlyRateUsd}/hr`
+        : undefined;
+  const parts = [
+    row.role,
+    row.email,
+    rateLabel,
+    row.pronouns,
+    row.gradYear ? `'${String(row.gradYear).slice(-2)}` : undefined,
+  ];
   return parts.filter((part): part is string => Boolean(part && String(part).trim())).join(" • ");
 }

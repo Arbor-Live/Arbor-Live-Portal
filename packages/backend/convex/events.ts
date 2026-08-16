@@ -17,6 +17,7 @@ import {
 } from "./lib/eventStatus";
 import { computeSeriesCostSummary } from "./lib/eventSeriesCosts";
 import { listEventsByInvoiceId } from "./lib/invoiceEvents";
+import { copyDaySetupToTargets, listSiblingDayEvents } from "./lib/copyDaySetup";
 import { RENTAL_EVENT_TYPES, enrichPullListItems, summarizePullList } from "./eventPullLists";
 import { deleteEventRecord } from "./lib/bookingChainDelete";
 import { propagateOverviewToSeriesOccurrences, propagateInvoiceIdToSeriesOccurrences, type SeriesEditScope, type SeriesOverviewAffectedOccurrence, type SeriesOverviewOverride } from "./lib/eventSeriesGeneration";
@@ -434,6 +435,65 @@ export const getByInvoiceId = query({
       externalRentalsCostUsd: linkedEvents.reduce((sum, row) => sum + (row.externalRentalsCostUsd ?? 0), 0),
       otherCostUsd: linkedEvents.reduce((sum, row) => sum + (row.otherCostUsd ?? 0), 0),
     };
+  },
+});
+
+/** Sibling day-events for multi-day booking quotes (same invoice / request). */
+export const listSiblingDays = query({
+  args: { eventId: v.id("events") },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    const event = await ctx.db.get(args.eventId);
+    if (!event) return [];
+    const siblings = await listSiblingDayEvents(ctx, event);
+    return siblings.map((row, index) => ({
+      _id: row._id,
+      title: row.title,
+      status: row.status,
+      startAt: row.startAt,
+      endAt: row.endAt,
+      dayNumber: index + 1,
+    }));
+  },
+});
+
+/**
+ * Copy crew slot hours (not people) and pull-list / checkout quantities from
+ * one multi-day sibling onto other linked days.
+ */
+export const copyDaySetup = mutation({
+  args: {
+    sourceEventId: v.id("events"),
+    targetEventIds: v.optional(v.array(v.id("events"))),
+    copySchedule: v.optional(v.boolean()),
+    copyPullList: v.optional(v.boolean()),
+  },
+  returns: v.object({
+    copiedToEventIds: v.array(v.id("events")),
+  }),
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    await requireEventEditAccess(ctx, args.sourceEventId);
+    const source = await ctx.db.get(args.sourceEventId);
+    if (!source) throw new Error("Source event not found.");
+
+    const siblings = await listSiblingDayEvents(ctx, source);
+    const targetEventIds =
+      args.targetEventIds ??
+      siblings.filter((row) => row._id !== args.sourceEventId).map((row) => row._id);
+
+    for (const targetId of targetEventIds) {
+      await requireEventEditAccess(ctx, targetId);
+    }
+
+    return await copyDaySetupToTargets(ctx, {
+      sourceEventId: args.sourceEventId,
+      targetEventIds,
+      copySchedule: args.copySchedule !== false,
+      copyPullList: args.copyPullList !== false,
+    });
   },
 });
 

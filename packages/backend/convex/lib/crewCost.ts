@@ -1,7 +1,10 @@
 import { components } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
-import { resolveUserCompensationHourlyRateUsd } from "./crewCompensation";
+import {
+  resolveOpenSlotHourlyRateUsd,
+  resolveUserCompensationHourlyRateUsd,
+} from "./crewCompensation";
 
 function roundCurrency(value: number) {
   return Math.round(value * 100) / 100;
@@ -114,7 +117,8 @@ export async function calculateCrewCost(ctx: QueryCtx | MutationCtx, eventId: Id
       };
 
     const assignedRate = shift.userId ? (rateByUserId.get(shift.userId) ?? 0) : 0;
-    const estimatedRate = shift.estimatedHourlyRateUsd ?? 0;
+    // Open slots: prefer the stamp on the shift, else average of global Normal/Lead.
+    const estimatedRate = resolveOpenSlotHourlyRateUsd(shift.estimatedHourlyRateUsd, settings);
     const rate = shift.userId ? assignedRate : estimatedRate;
     const userName = shift.userId
       ? (userRecords.get(shift.userId)?.name ?? userRecords.get(shift.userId)?.email ?? shift.userId)
@@ -193,6 +197,10 @@ export async function calculateCrewCost(ctx: QueryCtx | MutationCtx, eventId: Id
         .flatMap((block) => block.rows.filter((row) => row.missingRate && row.userId).map((row) => row.name)),
     ),
   ).sort((a, b) => a.localeCompare(b));
+  const missingRateOpenSlotCount = byScheduleBlock.reduce(
+    (sum, block) => sum + block.rows.filter((row) => row.missingRate && !row.userId).length,
+    0,
+  );
   const totalRegularHours = roundCurrency(byScheduleBlock.reduce((sum, row) => sum + row.regularHours, 0));
   const totalOvertimeHours = roundCurrency(byScheduleBlock.reduce((sum, row) => sum + row.overtimeHours, 0));
   return {
@@ -206,6 +214,7 @@ export async function calculateCrewCost(ctx: QueryCtx | MutationCtx, eventId: Id
     byUser,
     byScheduleBlock,
     missingRateUsers,
+    missingRateOpenSlotCount,
   };
 }
 
