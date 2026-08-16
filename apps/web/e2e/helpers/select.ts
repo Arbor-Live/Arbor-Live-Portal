@@ -37,7 +37,10 @@ export async function pickSearchableOption(
 
   const option = menu.getByRole("option", { name: optionName }).first();
   await expect(option).toBeVisible({ timeout: 25_000 });
-  await option.click();
+  await option.scrollIntoViewIfNeeded();
+  // Combobox options inside a sheet can be visible but not hittable (overlay /
+  // stacking). autoHighlight + Enter matches how the control is meant to be used.
+  await menu.locator("input").first().press("Enter");
 
   await expect(trigger).toHaveText(optionName, { timeout: 25_000 });
   await expect(menu).toHaveCount(0, { timeout: 25_000 });

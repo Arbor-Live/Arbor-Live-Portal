@@ -82,10 +82,11 @@ export async function selectSearchableOption(
   await expect(menu).toBeVisible({ timeout: 20_000 });
   await menu.locator("input").first().fill(optionLabel);
   const option = menu.getByRole("option", {
-    name: new RegExp(optionLabel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+    name: new RegExp(`^${optionLabel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`),
   }).first();
   await expect(option).toBeVisible({ timeout: 20_000 });
-  await option.click();
+  await option.scrollIntoViewIfNeeded();
+  await menu.locator("input").first().press("Enter");
 }
 
 function toTimeInputValue(label: string) {
@@ -100,9 +101,10 @@ function toTimeInputValue(label: string) {
 }
 
 async function pickCalendarDay(popover: Locator, dayLabel: string) {
-  await popover
-    .locator("[data-slot='calendar']")
-    .getByRole("button", { name: new RegExp(`\\b${dayLabel}(st|nd|rd|th)?,`) })
+  const calendar = popover.locator("[data-slot='calendar']");
+  await calendar
+    .locator("button:not([data-outside])")
+    .filter({ hasText: new RegExp(`^${dayLabel}$`) })
     .click();
 }
 
@@ -157,6 +159,6 @@ export async function acceptAppDialog(page: Page, confirmName?: string | RegExp)
 export async function dismissAppDialog(page: Page) {
   const dialog = page.getByTestId("app-dialog");
   await expect(dialog).toBeVisible({ timeout: 15_000 });
-  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(dialog).toHaveCount(0);
 }

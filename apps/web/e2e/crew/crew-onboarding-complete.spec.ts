@@ -11,13 +11,21 @@ const onboardingCrewEmail = "e2e-onboarding-crew@arborlive.test";
 const onboardingCrewName = "E2E Onboarding Crew";
 
 async function next(page: Page) {
-  await page.getByRole("button", { name: "Next", exact: true }).click();
+  const nextBtn = page.getByRole("button", { name: "Next", exact: true });
+  await expect(nextBtn).toBeEnabled();
+  await nextBtn.click();
 }
 
 async function acknowledge(page: Page, label: RegExp) {
-  const ack = page.getByRole("button", { name: label });
+  const ack = page
+    .locator("[data-slot=questionnaire-item][data-active]")
+    .getByRole("button", { name: label });
   await expect(ack).toBeVisible({ timeout: 20_000 });
   await ack.click();
+}
+
+function activeStep(page: Page) {
+  return page.locator("[data-slot=questionnaire-item][data-active]");
 }
 
 test.describe("crew onboarding wizard", () => {
@@ -36,7 +44,7 @@ test.describe("crew onboarding wizard", () => {
     await signInWithCredentials(page, onboardingCrewEmail, e2eEnv.crewPassword);
 
     await page.goto("/onboarding");
-    await expect(page.getByText("Welcome to Arbor Live").first()).toBeVisible({
+    await expect(activeStep(page).getByText("Welcome to Arbor Live")).toBeVisible({
       timeout: 30_000,
     });
     await next(page);
@@ -48,7 +56,7 @@ test.describe("crew onboarding wizard", () => {
     await next(page);
 
     // Passkey is optional — skip enrollment in CI.
-    await expect(page.getByText("Secure your account").first()).toBeVisible({ timeout: 20_000 });
+    await expect(activeStep(page).getByText("Secure your account")).toBeVisible({ timeout: 20_000 });
     await page.getByRole("button", { name: "Add later", exact: true }).click();
 
     // WhatsApp
@@ -60,8 +68,8 @@ test.describe("crew onboarding wizard", () => {
     await next(page);
 
     // Federal Work Study — answer No, then acknowledge the standard pay path.
-    await expect(page.getByText("Federal Work Study").first()).toBeVisible({ timeout: 20_000 });
-    await page.getByRole("button", { name: "No", exact: true }).click();
+    await expect(activeStep(page).getByText("Federal Work Study")).toBeVisible({ timeout: 20_000 });
+    await activeStep(page).getByRole("button", { name: "No", exact: true }).click();
     await acknowledge(page, /don.t have Federal Work Study/i);
     await next(page);
 
@@ -71,7 +79,7 @@ test.describe("crew onboarding wizard", () => {
     await acknowledge(page, /read the emergency SOPs/i);
     await acknowledge(page, /read the crew expectations/i);
     await acknowledge(page, /completed the lifting training/i);
-    await page.getByRole("button", { name: "No", exact: true }).click();
+    await activeStep(page).getByRole("button", { name: "No", exact: true }).click();
     await next(page);
 
     // Getting paid
