@@ -3,15 +3,28 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { PlusIcon, XIcon } from "@phosphor-icons/react";
+import type { QuestionnaireItemDefinition } from "@shadcn/react/questionnaire";
 import { api } from "@/lib/convex-api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { RequestWizardNav } from "@/components/request/request-wizard-nav";
 import { RequestWizardShell } from "@/components/request/request-wizard-shell";
+import {
+  Questionnaire,
+  QuestionnaireError,
+  QuestionnaireItem,
+  QuestionnaireTitle,
+} from "@/components/ui/questionnaire";
+import {
+  QUESTIONNAIRE_ITEM_CLASSNAME,
+  QUESTIONNAIRE_TITLE_CLASSNAME,
+  handleQuestionnaireEnter,
+  MarkStepAnswered,
+  QuestionnaireWizardFooter,
+  QuestionnaireWizardProgress,
+} from "@/components/ui/questionnaire-wizard";
 import { BandHeroUploadField } from "@/components/files/file-upload-field";
 import { UserSelect } from "@/components/users/user-select";
 import { BandPayeePayoutMethodField } from "@/components/bands/band-payee-payout-method-field";
@@ -31,8 +44,6 @@ import {
 } from "@/lib/band-payout-copy";
 import { useDevPreviewReady } from "@/hooks/use-dev-preview";
 
-const spring = { type: "spring" as const, stiffness: 380, damping: 36 };
-
 type StepId =
   | "welcome"
   | "identity"
@@ -44,7 +55,7 @@ type StepId =
   | "payment"
   | "thankYou";
 
-const STEP_ORDER: StepId[] = [
+const QUESTION_STEPS: StepId[] = [
   "welcome",
   "identity",
   "passkey",
@@ -53,12 +64,9 @@ const STEP_ORDER: StepId[] = [
   "members",
   "rates",
   "payment",
-  "thankYou",
 ];
 
-const PROGRESS_STEPS: StepId[] = STEP_ORDER.filter(
-  (id) => id !== "welcome" && id !== "thankYou",
-);
+const STEP_ORDER: StepId[] = [...QUESTION_STEPS, "thankYou"];
 
 const STEP_HEADLINES: Record<StepId, string> = {
   welcome: "Welcome to Arbor Live",
@@ -170,7 +178,6 @@ function firstIncompleteStepIndex(onboarding: {
 
 export function BandOnboardingWizard() {
   const router = useRouter();
-  const prefersReducedMotion = useReducedMotion();
   const { ready: previewReady, devPreview } = useDevPreviewReady();
   const onboarding = useQuery(api.onboarding.getMyBandOnboarding, {});
   const profile = useQuery(api.users.getActiveBandProfile, {});
@@ -181,8 +188,8 @@ export function BandOnboardingWizard() {
   const saveBandOnboardingStep = useMutation(api.onboarding.saveBandOnboardingStep);
   const completeBandOnboarding = useMutation(api.onboarding.completeBandOnboarding);
 
-  const [stepIndex, setStepIndex] = useState(0);
-  const [direction, setDirection] = useState(1);
+  const [item, setItem] = useState<StepId>("welcome");
+  const [done, setDone] = useState(false);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -258,7 +265,9 @@ export function BandOnboardingWizard() {
   useEffect(() => {
     if (!onboarding || stepHydratedRef.current) return;
     stepHydratedRef.current = true;
-    setStepIndex(firstIncompleteStepIndex(onboarding));
+    const next = STEP_ORDER[firstIncompleteStepIndex(onboarding)] ?? "welcome";
+    if (next === "thankYou") setDone(true);
+    else setItem(next);
   }, [onboarding]);
 
   useEffect(() => {
@@ -272,24 +281,10 @@ export function BandOnboardingWizard() {
     }
   }, [onboarding, router, previewReady, devPreview]);
 
-  const currentStep = STEP_ORDER[stepIndex] ?? "welcome";
-  const progressIndex = Math.max(0, PROGRESS_STEPS.indexOf(currentStep));
-  const progressPercent =
-    currentStep === "welcome"
-      ? 0
-      : currentStep === "thankYou"
-        ? 100
-        : ((progressIndex + 1) / PROGRESS_STEPS.length) * 100;
-
-  const slideVariants = useMemo(
-    () => ({
-      enter: (dir: number) =>
-        prefersReducedMotion ? { opacity: 0 } : { opacity: 0, x: dir > 0 ? 40 : -40, scale: 0.98 },
-      center: prefersReducedMotion ? { opacity: 1 } : { opacity: 1, x: 0, scale: 1 },
-      exit: (dir: number) =>
-        prefersReducedMotion ? { opacity: 0 } : { opacity: 0, x: dir > 0 ? -40 : 40, scale: 0.98 },
-    }),
-    [prefersReducedMotion],
+  const currentStep = item;
+  const items = useMemo<QuestionnaireItemDefinition[]>(
+    () => QUESTION_STEPS.map((name) => ({ name, required: true })),
+    [],
   );
 
   const goToDashboard = useCallback(() => router.push("/dashboard"), [router]);
@@ -297,69 +292,46 @@ export function BandOnboardingWizard() {
   // Walk the UI without writing when previewing without a band onboarding row.
   const previewOnly = Boolean(devPreview && onboarding === null);
 
-  const advance = useCallback(() => {
-    setDirection(1);
-    setStepIndex((index) => Math.min(index + 1, STEP_ORDER.length - 1));
-  }, []);
-
-  const goBack = useCallback(() => {
-    setDirection(-1);
-    setFieldError(null);
-    setStepIndex((index) => Math.max(index - 1, 0));
-  }, []);
-
-  const goNext = useCallback(async () => {
+  const tryAdvance = useCallback(async (): Promise<boolean> => {
     setFieldError(null);
     setError(null);
 
     try {
       if (currentStep === "welcome") {
-        advance();
-        return;
+        return true;
       }
 
       if (currentStep === "identity") {
         if (!form.displayName.trim()) {
           setFieldError("Enter your band's display name.");
-          return;
+          return false;
         }
-        if (previewOnly) {
-          advance();
-          return;
-        }
+        if (previewOnly) return true;
         setIsSubmitting(true);
         await updateActiveBandProfile({
           displayName: form.displayName.trim(),
           bio: form.bio.trim() || undefined,
         });
         await saveBandOnboardingStep({ identityCompleted: true });
-        advance();
-        return;
+        return true;
       }
 
       if (currentStep === "hero") {
-        if (previewOnly) {
-          advance();
-          return;
-        }
+        if (previewOnly) return true;
         setIsSubmitting(true);
         if (form.publicHeroImageUrl) {
           await updateActiveBandProfile({ publicHeroImageUrl: form.publicHeroImageUrl });
         }
         await saveBandOnboardingStep({ heroCompleted: true });
-        advance();
-        return;
+        return true;
       }
 
       if (currentStep === "socials") {
         if (form.publicListing && !form.publicSlug.trim()) {
           setFieldError("Add a public URL slug to enable the public listing.");
-          return;
+          return false;
         }
-        if (previewOnly) {
-          advance();
-          return;
-        }
+        if (previewOnly) return true;
         setIsSubmitting(true);
         await updateActiveBandProfile({
           publicWebsiteUrl: form.publicWebsiteUrl.trim() || undefined,
@@ -370,8 +342,7 @@ export function BandOnboardingWizard() {
           publicSlug: form.publicSlug.trim() || undefined,
         });
         await saveBandOnboardingStep({ socialsCompleted: true });
-        advance();
-        return;
+        return true;
       }
 
       if (currentStep === "members") {
@@ -392,12 +363,9 @@ export function BandOnboardingWizard() {
         const hasPendingOrSent = queued.length > 0 || sentSet.size > 0;
         if (!form.isSolo && !hasPendingOrSent) {
           setFieldError("Add at least one bandmate email, or confirm you're performing solo.");
-          return;
+          return false;
         }
-        if (previewOnly) {
-          advance();
-          return;
-        }
+        if (previewOnly) return true;
         setIsSubmitting(true);
         if (form.isSolo) {
           await saveBandOnboardingStep({ soloAcknowledged: true });
@@ -424,27 +392,23 @@ export function BandOnboardingWizard() {
           }
           await saveBandOnboardingStep({ membersCompleted: true });
         }
-        advance();
-        return;
+        return true;
       }
 
       if (currentStep === "rates") {
         if (form.performerHourlyRateUsd < 0) {
           setFieldError("Hourly rate must be 0 or greater.");
-          return;
+          return false;
         }
         if (!form.designatedPayeeName.trim() || !form.designatedPayeeEmail.trim()) {
           setFieldError("Choose or enter a designated payee name and email.");
-          return;
+          return false;
         }
         if (!form.designatedPayeeMailingAddress.trim()) {
           setFieldError("Enter a mailing address (required for Stanford / GrantEd).");
-          return;
+          return false;
         }
-        if (previewOnly) {
-          advance();
-          return;
-        }
+        if (previewOnly) return true;
         setIsSubmitting(true);
         await updateActiveBandProfile({
           performerHourlyRateUsd: form.performerHourlyRateUsd,
@@ -455,34 +419,29 @@ export function BandOnboardingWizard() {
           designatedPayeePayoutMethod: form.designatedPayeePayoutMethod,
         });
         await saveBandOnboardingStep({ ratesPayeeCompleted: true });
-        advance();
-        return;
+        return true;
       }
 
       if (currentStep === "payment") {
         if (!form.paymentExplainedAck) {
           setFieldError("Check the box to confirm you understand how payouts work.");
-          return;
+          return false;
         }
-        if (previewOnly) {
-          advance();
-          return;
-        }
+        if (previewOnly) return true;
         setIsSubmitting(true);
         await saveBandOnboardingStep({ paymentExplained: true });
         await completeBandOnboarding({});
-        advance();
-        return;
+        return true;
       }
 
-      advance();
+      return true;
     } catch (submitError) {
       setError(getConvexErrorMessage(submitError));
+      return false;
     } finally {
       setIsSubmitting(false);
     }
   }, [
-    advance,
     completeBandOnboarding,
     currentStep,
     form,
@@ -494,19 +453,28 @@ export function BandOnboardingWizard() {
     updateActiveBandProfile,
   ]);
 
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key !== "Enter" || event.shiftKey) return;
-      const target = event.target as HTMLElement | null;
-      if (target?.tagName === "TEXTAREA") return;
-      if (target?.id === "band-invite-email") return;
-      if (currentStep === "thankYou") return;
+  const handleItemChange = useCallback(
+    async (next: string) => {
+      const currentIndex = QUESTION_STEPS.indexOf(item);
+      const requestedIndex = QUESTION_STEPS.indexOf(next as StepId);
+      const goingBack = requestedIndex !== -1 && requestedIndex < currentIndex;
+      if (goingBack) {
+        setFieldError(null);
+        setItem(next as StepId);
+        return;
+      }
+      if (await tryAdvance()) setItem(next as StepId);
+    },
+    [item, tryAdvance],
+  );
+
+  const handleSubmit = useCallback(
+    async (event: React.FormEvent<HTMLFormElement>) => {
       event.preventDefault();
-      void goNext();
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [currentStep, goNext]);
+      if (await tryAdvance()) setDone(true);
+    },
+    [tryAdvance],
+  );
 
   const payeeOptions = useMemo(() => {
     const memberOptions = (members ?? []).map((user) => ({
@@ -592,60 +560,75 @@ export function BandOnboardingWizard() {
 
   return (
     <>
-      {currentStep !== "thankYou" ? <OnboardingSkipButton onSkip={goToDashboard} /> : null}
-      <RequestWizardShell
-        eyebrow={devPreview ? "Dev preview · Band onboarding" : "Band onboarding"}
-        meta="Arbor Live"
-        progressPercent={progressPercent}
-        footer={
-          currentStep !== "thankYou" ? (
-            <RequestWizardNav
-              showBack={stepIndex > 0}
-              showNext
-              nextLabel={
-                currentStep === "payment"
-                  ? "Finish setup"
-                  : currentStep === "passkey"
+      {done ? null : <OnboardingSkipButton onSkip={goToDashboard} />}
+      <Questionnaire
+        className="flex min-h-0 w-full flex-1 flex-col gap-0"
+        items={items}
+        item={item}
+        shortcuts="letters"
+        onItemChange={(next) => void handleItemChange(next)}
+        onSubmit={(event) => void handleSubmit(event)}
+        onKeyDown={(event) => {
+          const target = event.target;
+          if (
+            target instanceof HTMLElement &&
+            (target.id === "band-invite-email" || target.id === "band-invite-role")
+          ) {
+            return;
+          }
+          handleQuestionnaireEnter(event);
+        }}
+      >
+        <RequestWizardShell
+          eyebrow={devPreview ? "Dev preview · Band onboarding" : "Band onboarding"}
+          meta="Arbor Live"
+          progress={
+            <QuestionnaireWizardProgress complete={done} label="Band onboarding progress" />
+          }
+          footer={
+            done ? null : (
+              <QuestionnaireWizardFooter
+                disabled={isSubmitting}
+                isSubmitting={isSubmitting}
+                nextLabel={
+                  currentStep === "passkey"
                     ? hasAddedPasskey
                       ? "Continue"
                       : "Add later"
                     : "Next"
-              }
-              isSubmitting={isSubmitting}
-              onBack={goBack}
-              onNext={() => void goNext()}
-            />
-          ) : null
-        }
-      >
-        <div className="flex-1 overflow-y-auto px-4 py-8 sm:px-6">
-          {error ? (
-            <Alert variant="destructive" className="mb-4">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          ) : null}
+                }
+                submitLabel="Finish setup"
+              />
+            )
+          }
+        >
+          <div className="flex-1 overflow-y-auto px-4 py-8 sm:px-6">
+            {error ? (
+              <Alert variant="destructive" className="mb-4">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            ) : null}
 
-          <AnimatePresence mode="wait" custom={direction}>
-            <motion.div
-              key={currentStep}
-              custom={direction}
-              variants={slideVariants}
-              initial="enter"
-              animate="center"
-              exit="exit"
-              transition={spring}
-              className="space-y-6 border border-border/50 bg-background/70 p-5 shadow-[0_8px_24px_rgba(0,0,0,0.06)] backdrop-blur-xl sm:p-6"
-            >
-              <motion.h1
-                className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl"
-                initial={prefersReducedMotion ? false : { opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.05, ...spring }}
+            {done ? (
+              <div className={QUESTIONNAIRE_ITEM_CLASSNAME}>
+                <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
+                  {STEP_HEADLINES.thankYou}
+                </h1>
+                <div className="space-y-4 text-sm text-foreground/70">
+                  <p>Your band profile is ready. We&apos;ll be in touch about booking!</p>
+                  <Button onClick={goToDashboard}>Go to dashboard</Button>
+                </div>
+              </div>
+            ) : (
+              <>
+              <QuestionnaireItem
+                name="welcome"
+                required
+                className={QUESTIONNAIRE_ITEM_CLASSNAME}
               >
-                {STEP_HEADLINES[currentStep]}
-              </motion.h1>
-
-              {currentStep === "welcome" ? (
+                <QuestionnaireTitle className={QUESTIONNAIRE_TITLE_CLASSNAME}>
+                  {STEP_HEADLINES.welcome}
+                </QuestionnaireTitle>
                 <div className="space-y-3 text-sm text-foreground/70">
                   <p>
                     Welcome! Before you get booked, let&apos;s set up your band&apos;s profile:
@@ -656,9 +639,18 @@ export function BandOnboardingWizard() {
                     middleman needed.
                   </p>
                 </div>
-              ) : null}
+                <MarkStepAnswered />
+              </QuestionnaireItem>
 
-              {currentStep === "identity" ? (
+              <QuestionnaireItem
+                name="identity"
+                required
+                invalid={item === "identity" && Boolean(fieldError)}
+                className={QUESTIONNAIRE_ITEM_CLASSNAME}
+              >
+                <QuestionnaireTitle className={QUESTIONNAIRE_TITLE_CLASSNAME}>
+                  {STEP_HEADLINES.identity}
+                </QuestionnaireTitle>
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="band-display-name">Band name</Label>
@@ -681,13 +673,33 @@ export function BandOnboardingWizard() {
                   </div>
                   {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
                 </div>
-              ) : null}
+                <MarkStepAnswered />
+                <QuestionnaireError className="text-sm">
+                  {item === "identity" ? fieldError : null}
+                </QuestionnaireError>
+              </QuestionnaireItem>
 
-              {currentStep === "passkey" ? (
+              <QuestionnaireItem
+                name="passkey"
+                required
+                className={QUESTIONNAIRE_ITEM_CLASSNAME}
+              >
+                <QuestionnaireTitle className={QUESTIONNAIRE_TITLE_CLASSNAME}>
+                  {STEP_HEADLINES.passkey}
+                </QuestionnaireTitle>
                 <OnboardingPasskeyStep onAdded={() => setHasAddedPasskey(true)} />
-              ) : null}
+                <MarkStepAnswered />
+              </QuestionnaireItem>
 
-              {currentStep === "hero" ? (
+              <QuestionnaireItem
+                name="hero"
+                required
+                invalid={item === "hero" && Boolean(fieldError)}
+                className={QUESTIONNAIRE_ITEM_CLASSNAME}
+              >
+                <QuestionnaireTitle className={QUESTIONNAIRE_TITLE_CLASSNAME}>
+                  {STEP_HEADLINES.hero}
+                </QuestionnaireTitle>
                 <div className="space-y-4">
                   <p className="text-sm text-foreground/70">
                     Add a hero photo for your public artist page. You can skip this and add one
@@ -720,9 +732,21 @@ export function BandOnboardingWizard() {
                   ) : null}
                   {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
                 </div>
-              ) : null}
+                <MarkStepAnswered />
+                <QuestionnaireError className="text-sm">
+                  {item === "hero" ? fieldError : null}
+                </QuestionnaireError>
+              </QuestionnaireItem>
 
-              {currentStep === "socials" ? (
+              <QuestionnaireItem
+                name="socials"
+                required
+                invalid={item === "socials" && Boolean(fieldError)}
+                className={QUESTIONNAIRE_ITEM_CLASSNAME}
+              >
+                <QuestionnaireTitle className={QUESTIONNAIRE_TITLE_CLASSNAME}>
+                  {STEP_HEADLINES.socials}
+                </QuestionnaireTitle>
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="band-website">Website</Label>
@@ -780,9 +804,21 @@ export function BandOnboardingWizard() {
                   ) : null}
                   {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
                 </div>
-              ) : null}
+                <MarkStepAnswered />
+                <QuestionnaireError className="text-sm">
+                  {item === "socials" ? fieldError : null}
+                </QuestionnaireError>
+              </QuestionnaireItem>
 
-              {currentStep === "members" ? (
+              <QuestionnaireItem
+                name="members"
+                required
+                invalid={item === "members" && Boolean(fieldError)}
+                className={QUESTIONNAIRE_ITEM_CLASSNAME}
+              >
+                <QuestionnaireTitle className={QUESTIONNAIRE_TITLE_CLASSNAME}>
+                  {STEP_HEADLINES.members}
+                </QuestionnaireTitle>
                 <div className="space-y-4">
                   <p className="text-sm text-foreground/70">
                     Invite bandmates now so you can designate one of them as the payee on the next
@@ -901,9 +937,21 @@ export function BandOnboardingWizard() {
                   ) : null}
                   {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
                 </div>
-              ) : null}
+                <MarkStepAnswered />
+                <QuestionnaireError className="text-sm">
+                  {item === "members" ? fieldError : null}
+                </QuestionnaireError>
+              </QuestionnaireItem>
 
-              {currentStep === "rates" ? (
+              <QuestionnaireItem
+                name="rates"
+                required
+                invalid={item === "rates" && Boolean(fieldError)}
+                className={QUESTIONNAIRE_ITEM_CLASSNAME}
+              >
+                <QuestionnaireTitle className={QUESTIONNAIRE_TITLE_CLASSNAME}>
+                  {STEP_HEADLINES.rates}
+                </QuestionnaireTitle>
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="band-rate">Performer hourly rate (USD)</Label>
@@ -986,9 +1034,21 @@ export function BandOnboardingWizard() {
                   </div>
                   {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
                 </div>
-              ) : null}
+                <MarkStepAnswered />
+                <QuestionnaireError className="text-sm">
+                  {item === "rates" ? fieldError : null}
+                </QuestionnaireError>
+              </QuestionnaireItem>
 
-              {currentStep === "payment" ? (
+              <QuestionnaireItem
+                name="payment"
+                required
+                invalid={item === "payment" && Boolean(fieldError)}
+                className={QUESTIONNAIRE_ITEM_CLASSNAME}
+              >
+                <QuestionnaireTitle className={QUESTIONNAIRE_TITLE_CLASSNAME}>
+                  {STEP_HEADLINES.payment}
+                </QuestionnaireTitle>
                 <div className="space-y-4">
                   <div className="space-y-3 text-sm text-foreground/70">
                     <p>
@@ -1008,18 +1068,16 @@ export function BandOnboardingWizard() {
                   />
                   {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
                 </div>
-              ) : null}
-
-              {currentStep === "thankYou" ? (
-                <div className="space-y-4 text-sm text-foreground/70">
-                  <p>Your band profile is ready. We&apos;ll be in touch about booking!</p>
-                  <Button onClick={goToDashboard}>Go to dashboard</Button>
-                </div>
-              ) : null}
-            </motion.div>
-          </AnimatePresence>
-        </div>
-      </RequestWizardShell>
+                <MarkStepAnswered />
+                <QuestionnaireError className="text-sm">
+                  {item === "payment" ? fieldError : null}
+                </QuestionnaireError>
+              </QuestionnaireItem>
+              </>
+            )}
+          </div>
+        </RequestWizardShell>
+      </Questionnaire>
     </>
   );
 }

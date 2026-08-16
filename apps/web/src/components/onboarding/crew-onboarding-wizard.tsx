@@ -3,14 +3,27 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import type { QuestionnaireItemDefinition } from "@shadcn/react/questionnaire";
 import { api, type Id } from "@/lib/convex-api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { RequestWizardNav } from "@/components/request/request-wizard-nav";
 import { RequestWizardShell } from "@/components/request/request-wizard-shell";
+import {
+  Questionnaire,
+  QuestionnaireError,
+  QuestionnaireItem,
+  QuestionnaireTitle,
+} from "@/components/ui/questionnaire";
+import {
+  QUESTIONNAIRE_ITEM_CLASSNAME,
+  QUESTIONNAIRE_TITLE_CLASSNAME,
+  handleQuestionnaireEnter,
+  MarkStepAnswered,
+  QuestionnaireWizardFooter,
+  QuestionnaireWizardProgress,
+} from "@/components/ui/questionnaire-wizard";
 import { UserAvatarUploadPreview } from "@/components/account/user-avatar";
 import {
   OnboardingAckCheckbox,
@@ -24,14 +37,33 @@ import { CONTRACTOR_PAY_INFO, FWS_JOB_INFO, ONBOARDING_LINKS } from "@/lib/onboa
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { useDevPreviewReady } from "@/hooks/use-dev-preview";
 
-const spring = { type: "spring" as const, stiffness: 380, damping: 36 };
+type StepId =
+  | "welcome"
+  | "profile"
+  | "passkey"
+  | "whatsapp"
+  | "instagram"
+  | "fws"
+  | "training"
+  | "gettingPaid"
+  | "hours"
+  | "contractorPay"
+  | "signature"
+  | "thankYou";
 
-/**
- * getMyCrewOnboarding's inferred return type is a narrow union across its two
- * code paths (existing row vs. synthetic not-started fallback), so TS won't
- * let us read optional fields directly. This mirrors the declared Convex
- * validator shape where every progress field is genuinely optional.
- */
+const QUESTION_STEPS: StepId[] = [
+  "welcome",
+  "profile",
+  "passkey",
+  "whatsapp",
+  "instagram",
+  "fws",
+  "training",
+  "gettingPaid",
+  "hours",
+  "contractorPay",
+  "signature",
+];
 type CrewOnboardingData = {
   status: "not_started" | "in_progress" | "completed" | "waived";
   incompleteStepCount: number;
@@ -66,20 +98,6 @@ type CrewOnboardingData = {
     gradYear?: number;
   };
 };
-
-type StepId =
-  | "welcome"
-  | "profile"
-  | "passkey"
-  | "whatsapp"
-  | "instagram"
-  | "fws"
-  | "training"
-  | "gettingPaid"
-  | "hours"
-  | "contractorPay"
-  | "signature"
-  | "thankYou";
 
 const STANFORD_STEP_ORDER: StepId[] = [
   "welcome",
@@ -183,7 +201,6 @@ const EMPTY_FORM: FormState = {
 
 export function CrewOnboardingWizard() {
   const router = useRouter();
-  const prefersReducedMotion = useReducedMotion();
   const { ready: previewReady, devPreview } = useDevPreviewReady();
   const onboarding = useQuery(api.onboarding.getMyCrewOnboarding, {}) as
     | CrewOnboardingData
@@ -196,8 +213,8 @@ export function CrewOnboardingWizard() {
   const generateAvatarUploadUrl = useMutation(api.account.generateAvatarUploadUrl);
   const setMyAvatar = useMutation(api.account.setMyAvatar);
 
-  const [stepIndex, setStepIndex] = useState(0);
-  const [direction, setDirection] = useState(1);
+  const [item, setItem] = useState<StepId>("welcome");
+  const [done, setDone] = useState(false);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -267,28 +284,16 @@ export function CrewOnboardingWizard() {
 
   const payrollMethod = onboarding?.payrollMethod ?? "stanford";
   const stepOrder = stepOrderForPayroll(payrollMethod);
-  const progressSteps = stepOrder.filter((id) => id !== "welcome" && id !== "thankYou");
-  const currentStep = stepOrder[stepIndex] ?? "welcome";
-  const progressIndex = Math.max(
-    0,
-    progressSteps.findIndex((id) => id === currentStep),
-  );
-  const progressPercent =
-    currentStep === "welcome"
-      ? 0
-      : currentStep === "thankYou"
-        ? 100
-        : ((progressIndex + 1) / progressSteps.length) * 100;
+  const currentStep = item;
 
-  const slideVariants = useMemo(
-    () => ({
-      enter: (dir: number) =>
-        prefersReducedMotion ? { opacity: 0 } : { opacity: 0, x: dir > 0 ? 40 : -40, scale: 0.98 },
-      center: prefersReducedMotion ? { opacity: 1 } : { opacity: 1, x: 0, scale: 1 },
-      exit: (dir: number) =>
-        prefersReducedMotion ? { opacity: 0 } : { opacity: 0, x: dir > 0 ? -40 : 40, scale: 0.98 },
-    }),
-    [prefersReducedMotion],
+  const items = useMemo<QuestionnaireItemDefinition[]>(
+    () =>
+      QUESTION_STEPS.map((name) => ({
+        name,
+        required: true,
+        disabled: !stepOrder.includes(name),
+      })),
+    [stepOrder],
   );
 
   const goToDashboard = useCallback(() => router.push("/dashboard"), [router]);
@@ -296,45 +301,30 @@ export function CrewOnboardingWizard() {
   // Walk the UI without writing when previewing without an onboarding row.
   const previewOnly = Boolean(devPreview && onboarding === null);
 
-  const advance = useCallback(() => {
-    setDirection(1);
-    setStepIndex((index) => Math.min(index + 1, stepOrder.length - 1));
-  }, [stepOrder.length]);
-
-  const goBack = useCallback(() => {
-    setDirection(-1);
-    setFieldError(null);
-    setStepIndex((index) => Math.max(index - 1, 0));
-  }, []);
-
-  const goNext = useCallback(async () => {
+  const tryAdvance = useCallback(async (): Promise<boolean> => {
     setFieldError(null);
     setError(null);
 
     try {
       if (currentStep === "welcome") {
-        advance();
-        return;
+        return true;
       }
 
       if (currentStep === "profile") {
         if (!form.name.trim()) {
           setFieldError("Enter your name.");
-          return;
+          return false;
         }
         if (!form.phone.trim()) {
           setFieldError("Enter your phone number.");
-          return;
+          return false;
         }
         const trimmedGradYear = form.gradYear.trim();
         if (trimmedGradYear && !/^\d{4}$/.test(trimmedGradYear)) {
           setFieldError("Enter a 4-digit graduation year.");
-          return;
+          return false;
         }
-        if (previewOnly) {
-          advance();
-          return;
-        }
+        if (previewOnly) return true;
         setIsSubmitting(true);
         await saveProfileStep({
           name: form.name.trim(),
@@ -345,60 +335,47 @@ export function CrewOnboardingWizard() {
           pronouns: form.pronouns.trim() || undefined,
           gradYear: trimmedGradYear ? Number(trimmedGradYear) : undefined,
         });
-        advance();
-        return;
+        return true;
       }
 
       if (currentStep === "whatsapp") {
         if (!form.whatsappAcknowledged) {
           setFieldError("Confirm you've joined the WhatsApp group to continue.");
-          return;
+          return false;
         }
-        if (previewOnly) {
-          advance();
-          return;
-        }
+        if (previewOnly) return true;
         setIsSubmitting(true);
         await saveOnboardingStep({ whatsappAcknowledged: true });
-        advance();
-        return;
+        return true;
       }
 
       if (currentStep === "instagram") {
         if (!form.instagramAcknowledged) {
           setFieldError("Confirm you've followed both accounts to continue.");
-          return;
+          return false;
         }
-        if (previewOnly) {
-          advance();
-          return;
-        }
+        if (previewOnly) return true;
         setIsSubmitting(true);
         await saveOnboardingStep({ instagramAcknowledged: true });
-        advance();
-        return;
+        return true;
       }
 
       if (currentStep === "fws") {
         if (form.hasFederalWorkStudy === null) {
           setFieldError("Select whether you have Federal Work Study.");
-          return;
+          return false;
         }
         if (!form.fwsAcknowledged) {
           setFieldError("Check the acknowledgement box to continue.");
-          return;
+          return false;
         }
-        if (previewOnly) {
-          advance();
-          return;
-        }
+        if (previewOnly) return true;
         setIsSubmitting(true);
         await saveOnboardingStep({
           hasFederalWorkStudy: form.hasFederalWorkStudy,
           fwsAcknowledged: true,
         });
-        advance();
-        return;
+        return true;
       }
 
       if (currentStep === "training") {
@@ -411,12 +388,9 @@ export function CrewOnboardingWizard() {
           (form.hasValidDriversLicense && !form.cartTrainingCompleted);
         if (incomplete) {
           setFieldError("Complete every training item above to continue.");
-          return;
+          return false;
         }
-        if (previewOnly) {
-          advance();
-          return;
-        }
+        if (previewOnly) return true;
         setIsSubmitting(true);
         await saveOnboardingStep({
           narcanCompleted: true,
@@ -427,85 +401,68 @@ export function CrewOnboardingWizard() {
           hasValidDriversLicense: form.hasValidDriversLicense,
           cartTrainingCompleted: form.hasValidDriversLicense ? true : undefined,
         });
-        advance();
-        return;
+        return true;
       }
 
       if (currentStep === "gettingPaid") {
         if (!form.oseHiringFormCompleted) {
           setFieldError("Confirm you've submitted the OSE hiring form to continue.");
-          return;
+          return false;
         }
-        if (previewOnly) {
-          advance();
-          return;
-        }
+        if (previewOnly) return true;
         setIsSubmitting(true);
         await saveOnboardingStep({ oseHiringFormCompleted: true });
-        advance();
-        return;
+        return true;
       }
 
       if (currentStep === "hours") {
         if (!form.timecardAcknowledged) {
           setFieldError("Confirm you understand the timecard process to continue.");
-          return;
+          return false;
         }
-        if (previewOnly) {
-          advance();
-          return;
-        }
+        if (previewOnly) return true;
         setIsSubmitting(true);
         await saveOnboardingStep({ timecardAcknowledged: true });
-        advance();
-        return;
+        return true;
       }
 
       if (currentStep === "contractorPay") {
         if (!form.contractorPayAcknowledged) {
           setFieldError("Confirm you understand the W9 and invoice process to continue.");
-          return;
+          return false;
         }
-        if (previewOnly) {
-          advance();
-          return;
-        }
+        if (previewOnly) return true;
         setIsSubmitting(true);
         await saveOnboardingStep({ contractorPayAcknowledged: true });
-        advance();
-        return;
+        return true;
       }
 
       if (currentStep === "signature") {
         if (form.signatureLegalName.trim().length < 2) {
           setFieldError("Type your full legal name to sign.");
-          return;
+          return false;
         }
         if (!form.agreedToDoc) {
           setFieldError("Check the box to agree before signing.");
-          return;
+          return false;
         }
-        if (previewOnly) {
-          advance();
-          return;
-        }
+        if (previewOnly) return true;
         setIsSubmitting(true);
         await completeOnboarding({
           signatureLegalName: form.signatureLegalName.trim(),
           signatureUserAgent: typeof navigator !== "undefined" ? navigator.userAgent : undefined,
         });
-        advance();
-        return;
+        return true;
       }
 
-      advance();
+      return true;
     } catch (submitError) {
       setError(getConvexErrorMessage(submitError));
+      return false;
     } finally {
       setIsSubmitting(false);
     }
   }, [
-    advance,
     completeOnboarding,
     currentStep,
     form,
@@ -514,18 +471,29 @@ export function CrewOnboardingWizard() {
     saveProfileStep,
   ]);
 
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key !== "Enter" || event.shiftKey) return;
-      const target = event.target as HTMLElement | null;
-      if (target?.tagName === "TEXTAREA") return;
-      if (currentStep === "thankYou") return;
+  const handleItemChange = useCallback(
+    async (next: string) => {
+      const enabled = QUESTION_STEPS.filter((name) => stepOrder.includes(name));
+      const currentIndex = enabled.indexOf(item);
+      const requestedIndex = enabled.indexOf(next as StepId);
+      const goingBack = requestedIndex !== -1 && requestedIndex < currentIndex;
+      if (goingBack) {
+        setFieldError(null);
+        setItem(next as StepId);
+        return;
+      }
+      if (await tryAdvance()) setItem(next as StepId);
+    },
+    [item, stepOrder, tryAdvance],
+  );
+
+  const handleSubmit = useCallback(
+    async (event: React.FormEvent<HTMLFormElement>) => {
       event.preventDefault();
-      void goNext();
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [currentStep, goNext]);
+      if (await tryAdvance()) setDone(true);
+    },
+    [tryAdvance],
+  );
 
   async function onAvatarSelected(file: File) {
     if (previewOnly) {
@@ -572,75 +540,99 @@ export function CrewOnboardingWizard() {
 
   return (
     <>
-      {currentStep !== "thankYou" ? <OnboardingSkipButton onSkip={goToDashboard} /> : null}
-      <RequestWizardShell
-        eyebrow={devPreview ? "Dev preview · Crew onboarding" : "Crew onboarding"}
-        meta="Arbor Live"
-        progressPercent={progressPercent}
-        footer={
-          currentStep !== "thankYou" ? (
-            <RequestWizardNav
-              showBack={stepIndex > 0}
-              showNext
-              nextLabel={
-                currentStep === "signature"
-                  ? "Sign & submit"
-                  : currentStep === "passkey"
+      {done ? null : <OnboardingSkipButton onSkip={goToDashboard} />}
+      <Questionnaire
+        className="flex min-h-0 w-full flex-1 flex-col gap-0"
+        items={items}
+        item={item}
+        shortcuts="letters"
+        onItemChange={(next) => void handleItemChange(next)}
+        onSubmit={(event) => void handleSubmit(event)}
+        onKeyDown={handleQuestionnaireEnter}
+      >
+        <RequestWizardShell
+          eyebrow={devPreview ? "Dev preview · Crew onboarding" : "Crew onboarding"}
+          meta="Arbor Live"
+          progress={
+            <QuestionnaireWizardProgress complete={done} label="Crew onboarding progress" />
+          }
+          footer={
+            done ? null : (
+              <QuestionnaireWizardFooter
+                disabled={isSubmitting}
+                isSubmitting={isSubmitting}
+                nextLabel={
+                  currentStep === "passkey"
                     ? hasAddedPasskey
                       ? "Continue"
                       : "Add later"
                     : "Next"
-              }
-              isSubmitting={isSubmitting}
-              onBack={goBack}
-              onNext={() => void goNext()}
-            />
-          ) : null
-        }
-      >
-        <div className="flex-1 overflow-y-auto px-4 py-8 sm:px-6">
-          {error ? (
-            <Alert variant="destructive" className="mb-4">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          ) : null}
-
-          <AnimatePresence mode="wait" custom={direction}>
-            <motion.div
-              key={currentStep}
-              custom={direction}
-              variants={slideVariants}
-              initial="enter"
-              animate="center"
-              exit="exit"
-              transition={spring}
-              className="space-y-6 border border-border/50 bg-background/70 p-5 shadow-[0_8px_24px_rgba(0,0,0,0.06)] backdrop-blur-xl sm:p-6"
-            >
-              <motion.h1
-                className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl"
-                initial={prefersReducedMotion ? false : { opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.05, ...spring }}
-              >
-                {STEP_HEADLINES[currentStep]}
-              </motion.h1>
-
-              <StepBody
-                stepId={currentStep}
-                form={form}
-                setForm={setForm}
-                fieldError={fieldError}
-                avatarBusy={avatarBusy}
-                avatarUrl={avatarUrl}
-                avatarSeedEmail={avatarSeedEmail}
-                onAvatarSelected={onAvatarSelected}
-                onGoToDashboard={goToDashboard}
-                onPasskeyAdded={() => setHasAddedPasskey(true)}
+                }
+                submitLabel="Sign & submit"
               />
-            </motion.div>
-          </AnimatePresence>
-        </div>
-      </RequestWizardShell>
+            )
+          }
+        >
+          <div className="flex-1 overflow-y-auto px-4 py-8 sm:px-6">
+            {error ? (
+              <Alert variant="destructive" className="mb-4">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            ) : null}
+
+            {done ? (
+              <div className={QUESTIONNAIRE_ITEM_CLASSNAME}>
+                <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
+                  {STEP_HEADLINES.thankYou}
+                </h1>
+                <StepBody
+                  stepId="thankYou"
+                  form={form}
+                  setForm={setForm}
+                  fieldError={null}
+                  avatarBusy={avatarBusy}
+                  avatarUrl={avatarUrl}
+                  avatarSeedEmail={avatarSeedEmail}
+                  onAvatarSelected={onAvatarSelected}
+                  onGoToDashboard={goToDashboard}
+                  onPasskeyAdded={() => setHasAddedPasskey(true)}
+                />
+              </div>
+            ) : (
+              QUESTION_STEPS.map((stepId) => (
+                <QuestionnaireItem
+                  key={stepId}
+                  name={stepId}
+                  required
+                  disabled={!stepOrder.includes(stepId)}
+                  invalid={stepId === item && Boolean(fieldError)}
+                  className={QUESTIONNAIRE_ITEM_CLASSNAME}
+                >
+                  <QuestionnaireTitle className={QUESTIONNAIRE_TITLE_CLASSNAME}>
+                    {STEP_HEADLINES[stepId]}
+                  </QuestionnaireTitle>
+                  <StepBody
+                    stepId={stepId}
+                    form={form}
+                    setForm={setForm}
+                    fieldError={stepId === item ? fieldError : null}
+                    avatarBusy={avatarBusy}
+                    avatarUrl={avatarUrl}
+                    avatarSeedEmail={avatarSeedEmail}
+                    onAvatarSelected={onAvatarSelected}
+                    onGoToDashboard={goToDashboard}
+                    onPasskeyAdded={() => setHasAddedPasskey(true)}
+                  />
+                  <MarkStepAnswered />
+                  <QuestionnaireError className="text-sm">
+                    {stepId === item ? fieldError : null}
+                  </QuestionnaireError>
+                </QuestionnaireItem>
+              ))
+            )}
+          </div>
+        </RequestWizardShell>
+      </Questionnaire>
     </>
   );
 }
