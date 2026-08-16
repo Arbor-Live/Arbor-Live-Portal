@@ -5,6 +5,7 @@ import { useConvex, useMutation, useQuery } from "convex/react";
 import { PackageIcon } from "@phosphor-icons/react";
 import { api, type Id } from "@/lib/convex-api";
 import { FormSaveBar } from "@/components/forms";
+import { useAppDialog } from "@/components/ui/app-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -144,6 +145,7 @@ export function EventPullList({
   onSaved,
   onError,
 }: EventPullListProps) {
+  const { confirm } = useAppDialog();
   const [items, setItems] = useState<PullListItemDraft[]>(initialItems);
   const [addKind, setAddKind] = useState<"type" | "package">("type");
   const [newTypeId, setNewTypeId] = useState("");
@@ -263,9 +265,12 @@ export function EventPullList({
       if (eventId && invoiceId && !seriesLinked) {
         const status = await convex.query(api.eventPullLists.getInvoiceSyncStatus, { eventId });
         if (status.hasInvoice && !status.inSync) {
-          const shouldResync = window.confirm(
-            "This pull list no longer matches the linked invoice's equipment lines. Update the invoice to match?",
-          );
+          const shouldResync = await confirm({
+            title: "Update the invoice to match?",
+            description:
+              "This pull list no longer matches the linked invoice's equipment lines.",
+            confirmLabel: "Update invoice",
+          });
           if (shouldResync) {
             await resyncInvoiceFromPullList({ id: invoiceId, eventId });
             onSaved?.("Pull list updated and invoice equipment lines resynced.");
@@ -273,7 +278,7 @@ export function EventPullList({
         }
       }
     },
-    [items, persistItems, eventId, invoiceId, seriesLinked, convex, resyncInvoiceFromPullList, onSaved],
+    [items, persistItems, eventId, invoiceId, seriesLinked, convex, resyncInvoiceFromPullList, onSaved, confirm],
   );
 
   async function handleScaffold() {

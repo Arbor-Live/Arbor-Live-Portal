@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { acceptAppDialog } from "../helpers/auth";
 import { e2eEnv } from "../helpers/env";
 import { pollConvex, runConvex } from "../helpers/convex";
 
@@ -81,13 +82,11 @@ test.describe("event comments and mentions", () => {
     expect(posted!.body).toContain(`@${e2eEnv.crewName}`);
     expect(posted!.mentionedUserIds).toContain(crew.userId);
 
-    // The author can delete their own comment; deletion is confirmed via window.confirm,
-    // which Playwright auto-dismisses unless the dialog is accepted explicitly.
     const postedRow = page
       .getByTestId("comment-row")
       .filter({ hasText: String(stamp) });
-    page.once("dialog", (dialog) => void dialog.accept());
     await postedRow.getByTestId("comment-delete").click();
+    await acceptAppDialog(page, "Delete");
     await expect(postedRow).toHaveCount(0, { timeout: 20_000 });
 
     await pollConvex<CommentState[]>(

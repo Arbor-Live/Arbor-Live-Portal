@@ -1,12 +1,11 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
-import DatePicker from "react-datepicker";
+import { useCallback, useId, useMemo, useState } from "react";
 import { useFormContext } from "react-hook-form";
 import { useQuery } from "convex/react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { TimeInput } from "@/components/ui/date-time-picker";
 import { api } from "@/lib/convex-api";
 import {
   formatSelectedDateLabel,
@@ -33,39 +32,12 @@ function TimePicker({
   label: string;
   disabled?: boolean;
 }) {
-  const selected = useMemo(() => {
-    if (!value) return null;
-    const date = new Date(`1970-01-01T${value}:00`);
-    return Number.isNaN(date.getTime()) ? null : date;
-  }, [value]);
+  const id = useId();
 
   return (
     <div className="space-y-2">
-      <Label>{label}</Label>
-      <DatePicker
-        selected={selected}
-        onChange={(date: Date | null) => {
-          if (!date) {
-            onChange("");
-            return;
-          }
-          const hh = String(date.getHours()).padStart(2, "0");
-          const mm = String(date.getMinutes()).padStart(2, "0");
-          onChange(`${hh}:${mm}`);
-        }}
-        showTimeSelect
-        showTimeSelectOnly
-        timeIntervals={15}
-        timeCaption="Time"
-        dateFormat="h:mm aa"
-        disabled={disabled}
-        customInput={<Input disabled={disabled} />}
-        wrapperClassName="app-date-time-wrapper"
-        popperClassName="app-date-time-popper"
-        calendarClassName="app-date-time-calendar"
-        showPopperArrow={false}
-        autoComplete="off"
-      />
+      <Label htmlFor={id}>{label}</Label>
+      <TimeInput id={id} value={value} onChange={onChange} disabled={disabled} />
     </div>
   );
 }

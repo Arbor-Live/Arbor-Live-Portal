@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import type { Id } from "@/lib/convex-api";
-import { DateTimePicker } from "@/components/ui/date-time-picker";
+import { DateTimeRangePicker } from "@/components/ui/date-time-picker";
 import { Input } from "@/components/ui/input";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
 import { toLocalDateTimeInput } from "@/lib/crew-availability";
@@ -18,7 +18,7 @@ export type ScheduleBlockOption = {
 
 /**
  * Schedule-block + start/end window picker used by crew availability (partial)
- * and trainee assignment. Uses SearchableSelect + DateTimePicker — do not replace
+ * and trainee assignment. Uses SearchableSelect + DateTimeRangePicker — do not replace
  * with native `<select>` / `datetime-local`.
  */
 export function ScheduleBlockWindowFields({
@@ -88,34 +88,17 @@ export function ScheduleBlockWindowFields({
           No schedule blocks on this event — set custom start and end times below.
         </p>
       )}
-      <div className="grid gap-2 md:grid-cols-2">
-        <div className="space-y-1">
-          <p className="text-xs text-muted-foreground">Start</p>
-          <DateTimePicker
-            value={startsAtInput}
-            onChange={(value) =>
-              onChange({
-                scheduleBlockId,
-                startsAtInput: value,
-                endsAtInput,
-              })
-            }
-          />
-        </div>
-        <div className="space-y-1">
-          <p className="text-xs text-muted-foreground">End</p>
-          <DateTimePicker
-            value={endsAtInput}
-            onChange={(value) =>
-              onChange({
-                scheduleBlockId,
-                startsAtInput,
-                endsAtInput: value,
-              })
-            }
-          />
-        </div>
-      </div>
+      <DateTimeRangePicker
+        startValue={startsAtInput}
+        endValue={endsAtInput}
+        onChange={({ start, end }) =>
+          onChange({
+            scheduleBlockId,
+            startsAtInput: start,
+            endsAtInput: end,
+          })
+        }
+      />
       {onNotesChange ? (
         <Input
           placeholder="Notes for this window (optional)"

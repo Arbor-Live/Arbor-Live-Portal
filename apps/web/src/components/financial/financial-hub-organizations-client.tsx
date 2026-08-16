@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import type { Id } from "@/lib/convex-api";
 import { api } from "@/lib/convex-api";
+import { useAppDialog } from "@/components/ui/app-dialog";
 import {
   INVOICE_GROUP_TYPE_LABELS,
   INVOICE_GROUP_TYPE_OPTIONS,
@@ -35,6 +36,7 @@ const emptyContactDefaults: InvoiceContactFormValues = {
 };
 
 export function FinancialHubOrganizationsClient() {
+  const { confirm, alert } = useAppDialog();
   const [includeInactive, setIncludeInactive] = useState(false);
   const [selectedGroupId, setSelectedGroupId] = useState<Id<"invoiceGroups"> | "">("");
   const [mergeOpen, setMergeOpen] = useState(false);
@@ -129,7 +131,11 @@ export function FinancialHubOrganizationsClient() {
 
   async function handleArchiveGroup() {
     if (!selectedGroupId) return;
-    if (!window.confirm("Archive this host organization? It will no longer appear in invoice dropdowns.")) {
+    if (!(await confirm({
+      title: "Archive this host organization?",
+      description: "It will no longer appear in invoice dropdowns.",
+      confirmLabel: "Archive",
+    }))) {
       return;
     }
     await archiveGroup({ id: selectedGroupId });
@@ -137,7 +143,7 @@ export function FinancialHubOrganizationsClient() {
   }
 
   async function handleArchiveContact(contactId: Id<"invoiceContacts">) {
-    if (!window.confirm("Archive this client contact?")) return;
+    if (!(await confirm({ title: "Archive this client contact?", confirmLabel: "Archive" }))) return;
     await archiveContact({ id: contactId });
   }
 
@@ -147,7 +153,7 @@ export function FinancialHubOrganizationsClient() {
       await addAlias({ groupId: selectedGroupId, alias: aliasDraft.trim() });
       setAliasDraft("");
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : "Could not add alias.");
+      await alert(error instanceof Error ? error.message : "Could not add alias.");
     }
   }
 
@@ -158,9 +164,11 @@ export function FinancialHubOrganizationsClient() {
       .filter(Boolean)
       .join(", ");
     if (
-      !window.confirm(
-        `Merge ${names} into "${selectedGroup?.name}"? Those hosts will be archived and their names kept as aliases.`,
-      )
+      !(await confirm({
+        title: `Merge ${names} into "${selectedGroup?.name}"?`,
+        description: "Those hosts will be archived and their names kept as aliases.",
+        confirmLabel: "Merge",
+      }))
     ) {
       return;
     }
@@ -170,7 +178,7 @@ export function FinancialHubOrganizationsClient() {
       setMergeOpen(false);
       setMergeVictimIds([]);
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : "Merge failed.");
+      await alert(error instanceof Error ? error.message : "Merge failed.");
     } finally {
       setMergeBusy(false);
     }

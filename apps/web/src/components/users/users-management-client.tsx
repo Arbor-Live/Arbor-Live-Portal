@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { UserRatesAdminClient } from "@/components/users/user-rates-admin-client";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { useAppDialog } from "@/components/ui/app-dialog";
 import { notify } from "@/lib/notify";
 import {
   CREW_RATE_MODE_OPTIONS,
@@ -160,6 +161,7 @@ export function UsersManagementClient({
 }: {
   view?: "all" | "access" | "organizations";
 }) {
+  const { confirm } = useAppDialog();
   const organizations = useQuery(api.users.listOrganizationsAdmin, {});
   const [showArchivedBands, setShowArchivedBands] = useState(false);
   const bandOrganizations = useQuery(api.users.listBandOrganizationsAdmin, {
@@ -263,7 +265,7 @@ export function UsersManagementClient({
   }
 
   async function onCancelInvite(invite: NonNullable<typeof invitations>[number]) {
-    if (!window.confirm(`Cancel the invitation for ${invite.email}?`)) return;
+    if (!(await confirm({ title: `Cancel the invitation for ${invite.email}?`, confirmLabel: "Cancel invitation" }))) return;
     try {
       await cancelInvite({ invitationId: invite.id });
       notify.success(`Invitation cancelled for ${invite.email}.`);
@@ -292,7 +294,15 @@ export function UsersManagementClient({
 
   async function onSetUserAccess(user: AdminUser, removed: boolean) {
     const action = removed ? "Remove access for" : "Reactivate";
-    if (!window.confirm(`${action} ${user.name}?`)) return;
+    if (
+      !(await confirm({
+        title: `${action} ${user.name}?`,
+        confirmLabel: removed ? "Remove access" : "Reactivate",
+        destructive: removed,
+      }))
+    ) {
+      return;
+    }
     try {
       await setUserAccess({ userId: user.id, removed });
       notify.success(removed ? `Removed access for ${user.name}.` : `Reactivated ${user.name}.`);
@@ -303,9 +313,11 @@ export function UsersManagementClient({
 
   async function onArchiveBandOrganization(org: BandOrgRow) {
     if (
-      !window.confirm(
-        `Archive ${org.displayName || org.name}? Members with no other active organization will lose access.`,
-      )
+      !(await confirm({
+        title: `Archive ${org.displayName || org.name}?`,
+        description: "Members with no other active organization will lose access.",
+        confirmLabel: "Archive",
+      }))
     ) {
       return;
     }
@@ -332,9 +344,11 @@ export function UsersManagementClient({
 
   async function onDeleteArchivedBandOrganization(org: BandOrgRow) {
     if (
-      !window.confirm(
-        `Permanently delete ${org.displayName || org.name}? This removes memberships, onboarding, and event participation records. This cannot be undone.`,
-      )
+      !(await confirm({
+        title: `Permanently delete ${org.displayName || org.name}?`,
+        description: "This removes memberships, onboarding, and event participation records. This cannot be undone.",
+        destructive: true,
+      }))
     ) {
       return;
     }
@@ -750,6 +764,7 @@ function UserAdminRow({
   onWaiveOnboarding: () => Promise<void>;
   onMessage: (message: string) => void;
 }) {
+  const { alert } = useAppDialog();
   const updateUser = useMutation(api.users.updateUserAdmin);
   const addMembership = useMutation(api.users.addUserOrganizationMembershipAdmin);
   const removeMembership = useMutation(api.users.removeUserOrganizationMembershipAdmin);
@@ -811,14 +826,14 @@ function UserAdminRow({
 
   async function onAddMembership() {
     if (!membershipDraft.organizationId) {
-      window.alert("Select an organization to add.");
+      await alert("Select an organization to add.");
       return;
     }
     const alreadyExists = user.organizationMemberships.some(
       (membership) => membership.organizationId === membershipDraft.organizationId,
     );
     if (alreadyExists) {
-      window.alert("User already has membership in this organization.");
+      await alert("User already has membership in this organization.");
       return;
     }
     try {
@@ -838,7 +853,7 @@ function UserAdminRow({
   async function onRemoveMembership(organizationId: string) {
     const defaultOrg = form.getValues("defaultOrganizationId");
     if (defaultOrg === organizationId) {
-      window.alert("Change default organization before removing this membership.");
+      await alert("Change default organization before removing this membership.");
       return;
     }
     try {

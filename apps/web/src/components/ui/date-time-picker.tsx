@@ -1,50 +1,125 @@
 "use client";
 
-import { forwardRef, useMemo, type ComponentProps } from "react";
-import DatePicker from "react-datepicker";
+import { useId, useMemo, useState } from "react";
+import { CalendarBlankIcon, ClockIcon } from "@phosphor-icons/react";
+import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import type { DateRange } from "react-day-picker";
+import {
+  PORTAL_TIMEZONE,
+  pacificDateKey,
+  pacificDateTimeInputToMs,
+  toPacificDateTimeInput,
+} from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-/** Format picker Date → wall-clock string (digits only; timezone applied on save). */
-function toNaiveDateTimeInput(date: Date) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  const hh = String(date.getHours()).padStart(2, "0");
-  const mm = String(date.getMinutes()).padStart(2, "0");
-  return `${y}-${m}-${d}T${hh}:${mm}`;
+const TIME_STEP_SECONDS = 15 * 60;
+const DEFAULT_RANGE_DURATION_MS = 60 * 60 * 1000;
+
+function splitNaiveDateTime(value: string) {
+  const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/.exec(value.trim());
+  if (!match) return { date: "", time: "" };
+  return { date: match[1], time: match[2] };
 }
 
-/** Parse wall-clock string into a Date whose local components match (picker UI). */
-function parseNaiveDateTimeInput(value: string) {
-  if (!value) return null;
-  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(value.trim());
-  if (!match) return null;
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  const hour = Number(match[4]);
-  const minute = Number(match[5]);
-  const date = new Date(year, month - 1, day, hour, minute, 0, 0);
-  return Number.isNaN(date.getTime()) ? null : date;
+function instantFromNaive(value: string) {
+  const ms = pacificDateTimeInputToMs(value);
+  return ms == null ? undefined : new Date(ms);
 }
 
-const DateTimeInput = forwardRef<HTMLInputElement, ComponentProps<typeof Input>>(function DateTimeInput(
-  props,
-  ref,
-) {
+function formatInstantLabel(ms: number, timeOnly = false) {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: PORTAL_TIMEZONE,
+    ...(timeOnly
+      ? { hour: "numeric", minute: "2-digit" }
+      : {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+        }),
+  }).format(new Date(ms));
+}
+
+function formatDateTimeLabel(value: string) {
+  const ms = pacificDateTimeInputToMs(value);
+  return ms == null ? "" : formatInstantLabel(ms);
+}
+
+function formatRangeTriggerLabel(startValue: string, endValue: string) {
+  const startMs = pacificDateTimeInputToMs(startValue);
+  const endMs = pacificDateTimeInputToMs(endValue);
+  if (startMs == null) return "";
+  const startLabel = formatInstantLabel(startMs);
+  if (endMs == null) return startLabel;
+  if (pacificDateKey(startMs) === pacificDateKey(endMs)) {
+    return `${startLabel} – ${formatInstantLabel(endMs, true)}`;
+  }
+  return `${startLabel} – ${formatInstantLabel(endMs)}`;
+}
+
+function durationOrDefault(startValue: string, endValue: string) {
+  const startMs = pacificDateTimeInputToMs(startValue);
+  const endMs = pacificDateTimeInputToMs(endValue);
+  if (startMs != null && endMs != null && endMs > startMs) return endMs - startMs;
+  return DEFAULT_RANGE_DURATION_MS;
+}
+
+function endPreservingDuration(startValue: string, endValue: string, nextStart: string) {
+  const nextStartMs = pacificDateTimeInputToMs(nextStart);
+  if (nextStartMs == null) return endValue;
+  return toPacificDateTimeInput(nextStartMs + durationOrDefault(startValue, endValue));
+}
+
+function snapTimeToQuarterHour(value: string) {
+  const match = /^(\d{2}):(\d{2})/.exec(value.trim());
+  if (!match) return value;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return value;
+  const snapped = Math.min(45, Math.round(minute / 15) * 15);
+  return `${String(hour).padStart(2, "0")}:${String(snapped).padStart(2, "0")}`;
+}
+
+export function TimeInput({
+  id,
+  value,
+  onChange,
+  disabled,
+  className,
+}: {
+  id?: string;
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+  className?: string;
+}) {
   return (
-    <Input
-      ref={ref}
-      {...props}
-      data-testid="date-time-picker"
-      className={cn(
-        "focus-visible:ring-0 focus-visible:border-input",
-        props.className,
-      )}
-    />
+    <div className="relative flex min-w-0 w-full items-center">
+      <ClockIcon className="pointer-events-none absolute left-2.5 size-4 text-muted-foreground" />
+      <Input
+        id={id}
+        type="time"
+        step={TIME_STEP_SECONDS}
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(snapTimeToQuarterHour(event.target.value))}
+        className={cn(
+          "appearance-none bg-background pl-8 [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:appearance-none",
+          className,
+        )}
+      />
+    </div>
   );
-});
+}
 
 export function DateTimePicker({
   value,
@@ -60,30 +135,214 @@ export function DateTimePicker({
   /** Naive `YYYY-MM-DDTHH:mm` used when `value` is empty so the calendar opens on the event day. */
   openToDate?: string;
 }) {
-  const selected = useMemo(() => parseNaiveDateTimeInput(value), [value]);
-  const calendarOpenTo = useMemo(
-    () => selected ?? parseNaiveDateTimeInput(openToDate ?? ""),
+  const timeFieldId = useId();
+  const [open, setOpen] = useState(false);
+  const selected = useMemo(() => instantFromNaive(value), [value]);
+  const defaultMonth = useMemo(
+    () => selected ?? instantFromNaive(openToDate ?? ""),
     [openToDate, selected],
   );
+  const { date: dateKey, time } = splitNaiveDateTime(value);
+  const fallbackTime = splitNaiveDateTime(openToDate ?? "").time || "12:00";
+
+  function commit(nextDate: string, nextTime: string) {
+    if (!nextDate) {
+      onChange("");
+      return;
+    }
+    onChange(`${nextDate}T${nextTime || fallbackTime}`);
+  }
 
   return (
-    <DatePicker
-      selected={selected}
-      openToDate={calendarOpenTo ?? undefined}
-      onChange={(date: Date | null) => onChange(date ? toNaiveDateTimeInput(date) : "")}
-      showTimeSelect
-      timeIntervals={15}
-      dateFormat="h:mm aa · yyyy-MM-dd"
-      placeholderText={placeholder}
-      customInput={<DateTimeInput className={className} />}
-      wrapperClassName="app-date-time-wrapper"
-      popperClassName="app-date-time-popper"
-      popperPlacement="bottom-start"
-      portalId="arbor-date-picker-portal"
-      calendarClassName="app-date-time-calendar"
-      showPopperArrow={false}
-      timeCaption="Time"
-      autoComplete="off"
-    />
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          data-empty={!value}
+          data-testid="date-time-picker"
+          data-value={value}
+          className={cn(
+            "min-w-0 w-full shrink justify-start overflow-hidden font-normal data-[empty=true]:text-muted-foreground",
+            className,
+          )}
+        >
+          <CalendarBlankIcon />
+          <span className="min-w-0 truncate">
+            {value ? formatDateTimeLabel(value) : (placeholder ?? "Select date")}
+          </span>
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="z-[80] w-auto p-0" align="start">
+        <Calendar
+          mode="single"
+          timeZone={PORTAL_TIMEZONE}
+          noonSafe
+          selected={selected}
+          defaultMonth={defaultMonth}
+          onSelect={(date) => {
+            if (!date) {
+              onChange("");
+              return;
+            }
+            commit(pacificDateKey(date.getTime()), time || fallbackTime);
+          }}
+        />
+        <div className="flex flex-col gap-2 border-t p-3">
+          <Label htmlFor={timeFieldId}>Time</Label>
+          <TimeInput
+            id={timeFieldId}
+            value={time || fallbackTime}
+            onChange={(nextTime) => commit(dateKey || pacificDateKey(Date.now()), nextTime)}
+          />
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function defaultEndFromStart(start: string) {
+  const startMs = pacificDateTimeInputToMs(start);
+  if (startMs == null) return "";
+  return toPacificDateTimeInput(startMs + DEFAULT_RANGE_DURATION_MS);
+}
+
+export function DateTimeRangePicker({
+  startValue,
+  endValue,
+  onChange,
+  placeholder,
+  className,
+  openToDate,
+}: {
+  startValue: string;
+  endValue: string;
+  onChange: (next: { start: string; end: string }) => void;
+  placeholder?: string;
+  className?: string;
+  /** Naive `YYYY-MM-DDTHH:mm` used when `startValue` is empty so the calendar opens on the event day. */
+  openToDate?: string;
+}) {
+  const startTimeId = useId();
+  const endTimeId = useId();
+  const [open, setOpen] = useState(false);
+  const startSelected = useMemo(() => instantFromNaive(startValue), [startValue]);
+  const endSelected = useMemo(() => instantFromNaive(endValue), [endValue]);
+  const defaultMonth = useMemo(
+    () => startSelected ?? instantFromNaive(openToDate ?? ""),
+    [openToDate, startSelected],
+  );
+  const startParts = splitNaiveDateTime(startValue);
+  const endParts = splitNaiveDateTime(endValue);
+  const fallbackStartTime = splitNaiveDateTime(openToDate ?? "").time || "12:00";
+  const startTime = startParts.time || fallbackStartTime;
+  const fallbackEndTime = startParts.date
+    ? splitNaiveDateTime(defaultEndFromStart(`${startParts.date}T${startTime}`)).time || "13:00"
+    : "13:00";
+  const endTime = endParts.time || fallbackEndTime;
+
+  const selected: DateRange | undefined = startSelected
+    ? { from: startSelected, to: endSelected ?? startSelected }
+    : undefined;
+
+  const label = formatRangeTriggerLabel(startValue, endValue);
+
+  function commitStartTime(nextStartTime: string) {
+    const startDate = startParts.date || pacificDateKey(Date.now());
+    const nextStart = `${startDate}T${nextStartTime}`;
+    onChange({
+      start: nextStart,
+      end: endPreservingDuration(startValue, endValue, nextStart),
+    });
+  }
+
+  function commitEndTime(nextEndTime: string) {
+    const startDate = startParts.date || pacificDateKey(Date.now());
+    const endDate = endParts.date || startDate;
+    const nextEnd = `${endDate}T${nextEndTime}`;
+    const startMs = pacificDateTimeInputToMs(startValue || `${startDate}T${startTime}`);
+    const nextEndMs = pacificDateTimeInputToMs(nextEnd);
+    if (startMs != null && nextEndMs != null && nextEndMs <= startMs) {
+      onChange({
+        start: toPacificDateTimeInput(nextEndMs - DEFAULT_RANGE_DURATION_MS),
+        end: nextEnd,
+      });
+      return;
+    }
+    onChange({
+      start: startValue || `${startDate}T${startTime}`,
+      end: nextEnd,
+    });
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          data-empty={!startValue}
+          data-testid="date-time-range-picker"
+          data-start-value={startValue}
+          data-end-value={endValue}
+          className={cn(
+            "min-w-0 w-full shrink justify-start overflow-hidden font-normal data-[empty=true]:text-muted-foreground",
+            className,
+          )}
+        >
+          <CalendarBlankIcon />
+          <span className="min-w-0 truncate">
+            {label || placeholder || "Select start and end"}
+          </span>
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="z-[80] w-auto overflow-hidden p-0" align="start">
+        <Calendar
+          mode="range"
+          timeZone={PORTAL_TIMEZONE}
+          noonSafe
+          selected={selected}
+          defaultMonth={defaultMonth}
+          onSelect={(range) => {
+            if (!range?.from) {
+              onChange({ start: "", end: "" });
+              return;
+            }
+            const fromDate = pacificDateKey(range.from.getTime());
+            const nextStart = `${fromDate}T${startTime}`;
+            if (!range.to) {
+              onChange({
+                start: nextStart,
+                end: endPreservingDuration(startValue, endValue, nextStart),
+              });
+              return;
+            }
+            const toDate = pacificDateKey(range.to.getTime());
+            onChange({
+              start: nextStart,
+              end: `${toDate}T${endTime}`,
+            });
+          }}
+        />
+        <div className="grid grid-cols-2 gap-3 border-t p-3">
+          <div className="min-w-0 space-y-2">
+            <Label htmlFor={startTimeId}>Start</Label>
+            <TimeInput
+              id={startTimeId}
+              value={startTime}
+              onChange={commitStartTime}
+            />
+          </div>
+          <div className="min-w-0 space-y-2">
+            <Label htmlFor={endTimeId}>End</Label>
+            <TimeInput
+              id={endTimeId}
+              value={endTime}
+              onChange={commitEndTime}
+            />
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }

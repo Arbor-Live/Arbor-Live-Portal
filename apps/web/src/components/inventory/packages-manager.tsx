@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useFormState } from "react-hook-form";
 import { useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
+import { useAppDialog } from "@/components/ui/app-dialog";
 import { Form } from "@/components/ui/form";
 import { TextFormField } from "@/components/forms/text-form-field";
 import { TextareaFormField } from "@/components/forms/textarea-form-field";
@@ -131,6 +132,7 @@ function packageSection(pkg: {
 }
 
 export function PackagesManager() {
+  const { confirm } = useAppDialog();
   const [search, setSearch] = useState("");
   const [sectionFilterIds, setSectionFilterIds] = useState<PublicPackageBucket[]>([]);
   const [typeFilterIds, setTypeFilterIds] = useState<string[]>([]);
@@ -333,9 +335,9 @@ export function PackagesManager() {
     setContentUnits([]);
   }
 
-  function requestCloseEditor() {
+  async function requestCloseEditor() {
     if (packageForm.formState.isDirty) {
-      if (!window.confirm("Discard unsaved changes?")) return;
+      if (!(await confirm({ title: "Discard unsaved changes?" }))) return;
     }
     closeEditor();
   }
@@ -604,7 +606,7 @@ export function PackagesManager() {
       {editorOpen ? (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4"
-          onClick={() => requestCloseEditor()}
+          onClick={() => void requestCloseEditor()}
         >
           <div
             className="relative flex max-h-[92vh] w-full max-w-6xl flex-col rounded-lg border bg-background shadow-xl"
@@ -623,7 +625,7 @@ export function PackagesManager() {
                 size="sm"
                 className="shrink-0"
                 aria-label="Close"
-                onClick={() => requestCloseEditor()}
+                onClick={() => void requestCloseEditor()}
               >
                 Close
               </Button>
@@ -792,7 +794,7 @@ export function PackagesManager() {
                 ) : null}
               </div>
               <div className="flex shrink-0 gap-2">
-                <Button type="button" variant="outline" onClick={() => requestCloseEditor()}>
+                <Button type="button" variant="outline" onClick={() => void requestCloseEditor()}>
                   Cancel
                 </Button>
                 <Button

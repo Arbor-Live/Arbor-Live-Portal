@@ -83,12 +83,10 @@ test.describe("pull list editor", () => {
 
     // Server-side search keeps the picker off the full inventory catalog.
     await page.getByTestId("searchable-select-trigger").first().click();
-    const menu = page
-      .locator("body > div")
-      .filter({ has: page.getByPlaceholder(/Search/i) })
-      .last();
-    await menu.getByPlaceholder(/Search/i).fill(seeded.typeName);
-    await page.getByRole("button", { name: seeded.typeName }).first().click();
+    const menu = page.getByTestId("searchable-select-menu");
+    await expect(menu).toBeVisible({ timeout: 20_000 });
+    await menu.locator("input").first().fill(seeded.typeName);
+    await menu.getByRole("option", { name: seeded.typeName }).first().click();
 
     await page
       .locator("div.space-y-1")

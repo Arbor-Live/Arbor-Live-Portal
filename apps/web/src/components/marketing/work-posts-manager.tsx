@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/select";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { useAppDialog } from "@/components/ui/app-dialog";
 import { notify } from "@/lib/notify";
 import {
   featuredStatPresets,
@@ -72,6 +73,7 @@ function StatusBadge({ published, featured }: { published: boolean; featured: bo
 }
 
 export function WorkPostsManager() {
+  const { confirm } = useAppDialog();
   const posts = useQuery(api.marketingPosts.listAdmin, {});
   const createPost = useMutation(api.marketingPosts.create);
   const updatePost = useMutation(api.marketingPosts.update);
@@ -189,7 +191,7 @@ export function WorkPostsManager() {
 
   async function onDelete() {
     if (!selectedId) return;
-    if (!window.confirm("Delete this post? This cannot be undone.")) return;
+    if (!(await confirm({ title: "Delete this post?", description: "This cannot be undone.", destructive: true }))) return;
     try {
       await removePost({ id: selectedId as Id<"marketingPosts"> });
       startNewPost();

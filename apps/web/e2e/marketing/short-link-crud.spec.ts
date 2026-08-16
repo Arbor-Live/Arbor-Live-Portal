@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { acceptAppDialog } from "../helpers/auth";
 import { pollConvex, runConvex } from "../helpers/convex";
 
 type ShortLinkState = {
@@ -18,9 +19,6 @@ test.describe("short links", () => {
     // The form slugifies the label; keep the expectation in sync with it.
     const slug = `e2e-link-${stamp}`;
     const destinationUrl = `https://arborlive.stanford.edu/work/e2e-${stamp}`;
-
-    // Delete confirms through window.confirm.
-    page.on("dialog", (dialog) => void dialog.accept());
 
     await page.goto("/dashboard/marketing/links");
     await expect(page.getByText("Short links").first()).toBeVisible({ timeout: 30_000 });
@@ -52,6 +50,7 @@ test.describe("short links", () => {
     await expect(page.getByText(label).first()).toBeVisible({ timeout: 20_000 });
 
     await page.getByRole("button", { name: "Delete" }).click();
+    await acceptAppDialog(page, "Delete");
     await expect(page.getByText("Short link deleted.")).toBeVisible({ timeout: 25_000 });
 
     await pollConvex(

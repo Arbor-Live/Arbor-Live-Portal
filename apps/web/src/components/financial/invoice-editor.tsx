@@ -49,6 +49,7 @@ import {
 import type { SeriesShiftTemplateDraft } from "@/lib/event-series-shifts";
 import { ArrowsClockwiseIcon, CaretDownIcon, CopyIcon } from "@phosphor-icons/react";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { useAppDialog } from "@/components/ui/app-dialog";
 import { notify } from "@/lib/notify";
 import { FormSaveBar } from "@/components/forms";
 import {
@@ -171,6 +172,7 @@ export function InvoiceEditor({
   initialIssueDate?: string;
 }) {
   const router = useRouter();
+  const { confirm, alert } = useAppDialog();
   const viewer = useSessionViewer();
   const [groupId, setGroupId] = useState("");
   const [contactId, setContactId] = useState("");
@@ -440,19 +442,22 @@ export function InvoiceEditor({
 
   async function handleCopyDaySetupToOtherDays() {
     if (!selectedDayEventId || linkedDayEvents.length < 2) return;
-    const confirmed = window.confirm(
-      "Copy this day's crew hours (open slots only, not assigned people) and equipment pull/checkout quantities onto the other linked days? Existing schedule slots and pull-list rows on those days will be replaced.",
-    );
+    const confirmed = await confirm({
+      title: "Copy this day's setup to the other linked days?",
+      description:
+        "Copies crew hours (open slots only, not assigned people) and equipment pull/checkout quantities. Existing schedule slots and pull-list rows on those days will be replaced.",
+      confirmLabel: "Copy setup",
+    });
     if (!confirmed) return;
     setCopyingDaySetup(true);
     try {
       const result = await copyDaySetup({ sourceEventId: selectedDayEventId });
       crewBucketsHydratedInvoiceRef.current = null;
-      setSaveMessage(
+      notify.success(
         `Copied setup to ${result.copiedToEventIds.length} other day${result.copiedToEventIds.length === 1 ? "" : "s"}.`,
       );
     } catch (error) {
-      setSaveMessage(getConvexErrorMessage(error));
+      notify.error(getConvexErrorMessage(error));
     } finally {
       setCopyingDaySetup(false);
     }
@@ -857,13 +862,13 @@ export function InvoiceEditor({
       onGroupChange(id);
       setNewGroupName("");
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : "Failed to create host.");
+      await alert(error instanceof Error ? error.message : "Failed to create host.");
     }
   }
 
-  function openCreateContact(prefill: string) {
+  async function openCreateContact(prefill: string) {
     if (!groupId) {
-      window.alert("Select a host first so the client/contact can be linked.");
+      await alert("Select a host first so the client/contact can be linked.");
       return;
     }
     const { firstName, lastName } = splitContactName(prefill);
@@ -874,7 +879,7 @@ export function InvoiceEditor({
 
   async function submitCreateContact() {
     if (!groupId) {
-      window.alert("Select a host first.");
+      await alert("Select a host first.");
       return;
     }
     if (!newContactFirstName.trim() || !newContactLastName.trim()) return;
@@ -1068,9 +1073,10 @@ export function InvoiceEditor({
       signature !== lastSavedSignature;
 
     if (approvedQuoteEdited && reapprovalDecisionRef.current === null) {
-      reapprovalDecisionRef.current = window.confirm(
-        "This quote was already approved and has changed. Require client approval again?",
-      );
+      reapprovalDecisionRef.current = await confirm({
+        title: "Require client approval again?",
+        description: "This quote was already approved and has changed.",
+      });
     }
 
     const requestId = ++saveRequestIdRef.current;
@@ -1101,9 +1107,10 @@ export function InvoiceEditor({
           eventId: linkedEvent._id,
         });
         if (status.hasInvoice && !status.inSync) {
-          const shouldResync = window.confirm(
-            "This invoice's equipment lines no longer match the event's pull list. Update the pull list to match?",
-          );
+          const shouldResync = await confirm({
+            title: "Update the pull list?",
+            description: "This invoice's equipment lines no longer match the event's pull list. Update the pull list to match?",
+          });
           if (shouldResync) {
             await scaffoldPullListsForLinkedDays();
             if (requestId === saveRequestIdRef.current) {
@@ -1127,7 +1134,7 @@ export function InvoiceEditor({
 
   async function regenerateToken() {
     if (!activeInvoiceId) return;
-    if (!window.confirm("Regenerate the public quote token? Old links will stop working.")) return;
+    if (!(await confirm({ title: "Regenerate the public quote token?", description: "Old links will stop working." }))) return;
     const result = await regeneratePublicApprovalToken({ id: activeInvoiceId });
     setApprovalToken(result.token);
     notify.success("Public quote link regenerated.");
@@ -1629,13 +1636,14 @@ export function InvoiceEditor({
               void (async () => {
                 if (!linkedEvent) return;
                 if (
-                  !window.confirm(
-                    "Update the pull list to match this invoice's equipment lines?",
-                  )
+                  !(await confirm({
+                    title: "Update the pull list?",
+                    description: "Update the pull list to match this invoice's equipment lines?",
+                  }))
                 )
                   return;
                 await scaffoldPullListsForLinkedDays();
-                setSaveMessage("Pull list resynced from invoice.");
+                notify.success("Pull list resynced from invoice.");
               })().catch((error) => setAutoSaveError(getConvexErrorMessage(error)))
             }
           />
@@ -1747,7 +1755,7 @@ export function InvoiceEditor({
                   eventId={selectedDayEventId}
                   defaultCrewHourlyRateUsd={defaultCrewHourlyRateUsd}
                   onEventCrewRowsChange={handleEventCrewRowsChange}
-                  onMessage={setSaveMessage}
+                  onMessage={notify.success}
                 />
               ) : null}
               <SectionAdditionalCrewHours

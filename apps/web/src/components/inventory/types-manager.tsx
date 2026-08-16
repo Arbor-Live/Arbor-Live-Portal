@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
+import { useAppDialog } from "@/components/ui/app-dialog";
 import { FormSaveBar } from "@/components/forms";
 import { Form } from "@/components/ui/form";
 import { TextFormField } from "@/components/forms/text-form-field";
@@ -173,6 +174,7 @@ function visibilityBadgeClass(row: { publicListing?: boolean; publicProfile?: bo
 }
 
 export function TypesManager() {
+  const { alert } = useAppDialog();
   const [search, setSearch] = useState("");
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
   const [publicVisibility, setPublicVisibility] = useState<PublicVisibilityFilter>("all");
@@ -346,7 +348,7 @@ export function TypesManager() {
       await Promise.all(selectedIds.map((id) => deleteType({ id: id as never })));
       setSelectedIds([]);
     } catch (error) {
-      window.alert(getConvexErrorMessage(error, "Could not delete selected types."));
+      await alert(getConvexErrorMessage(error, "Could not delete selected types."));
     }
   }
 
@@ -363,7 +365,7 @@ export function TypesManager() {
       });
       setSelectedIds([]);
     } catch (error) {
-      window.alert(getConvexErrorMessage(error, "Could not update visibility for selected types."));
+      await alert(getConvexErrorMessage(error, "Could not update visibility for selected types."));
     } finally {
       setBulkActionPending(false);
     }

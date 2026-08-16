@@ -24,7 +24,7 @@ import {
   type EquipmentPricingMode,
 } from "@/lib/invoice-group-labels";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { DateTimePicker } from "@/components/ui/date-time-picker";
+import { DateTimePicker, DateTimeRangePicker } from "@/components/ui/date-time-picker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -79,6 +79,7 @@ import {
   type SeriesEditScope,
 } from "@/lib/event-series";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { useAppDialog } from "@/components/ui/app-dialog";
 import { notify } from "@/lib/notify";
 import { FormSaveBar } from "@/components/forms";
 import { StoredAssetImage, StoredAssetLink } from "@/components/files/stored-asset-image";
@@ -191,6 +192,7 @@ export function EventEditor({
   activeTab?: EventEditorTabId;
 }) {
   const router = useRouter();
+  const { confirm, alert } = useAppDialog();
   const session = authClient.useSession();
   const isCreate = !eventId;
   const loadOverviewLookups = isCreate || activeTab === "overview";
@@ -238,7 +240,6 @@ export function EventEditor({
   const [invoiceId, setInvoiceId] = useState("");
   const [startAt, setStartAt] = useState("");
   const [endAt, setEndAt] = useState("");
-  const [endAtTouched, setEndAtTouched] = useState(false);
   const [venueId, setVenueId] = useState("");
   const [eventType, setEventType] = useState<EventType>("Crewed Event");
   const [rentalFulfillmentMode, setRentalFulfillmentMode] = useState<RentalFulfillmentMode>("delivery");
@@ -385,7 +386,6 @@ export function EventEditor({
     setInvoiceId(eventData.event.invoiceId ?? "");
     setStartAt(toLocalDateTimeInput(eventData.event.startAt));
     setEndAt(toLocalDateTimeInput(eventData.event.endAt));
-    setEndAtTouched(true);
     setVenueId(eventData.event.venueId ?? "");
     setEventType(normalizeEventType(eventData.event.eventType as StoredEventType | undefined));
     setRentalFulfillmentMode(
@@ -703,7 +703,7 @@ export function EventEditor({
       setHostGroupModalOpen(false);
       setNewHostName("");
     } catch (error) {
-      window.alert(getConvexErrorMessage(error, "Failed to create host."));
+      await alert(getConvexErrorMessage(error, "Failed to create host."));
     } finally {
       setCreatingHost(false);
     }
@@ -912,7 +912,6 @@ export function EventEditor({
           shifts: nextShifts,
         }),
       );
-      flash("success", "Schedule saved.");
     } catch (error) {
       flash("error", `Schedule error: ${getConvexErrorMessage(error)}`);
       throw error;
@@ -946,7 +945,6 @@ export function EventEditor({
         })),
       });
       setLastSavedScheduleSignature(JSON.stringify({ blocks, shifts }));
-      flash("success", "Schedule personnel saved.");
     } catch (error) {
       flash("error", `Schedule personnel error: ${getConvexErrorMessage(error)}`);
       throw error;
@@ -986,9 +984,11 @@ export function EventEditor({
 
   async function deleteEventPermanently() {
     if (!eventId) return;
-    const shouldDelete = window.confirm(
-      "Permanently delete this cancelled event and all of its schedule, crew, and pull-list data? This cannot be undone.",
-    );
+    const shouldDelete = await confirm({
+      title: "Permanently delete this cancelled event?",
+      description: "This removes all of its schedule, crew, and pull-list data. This cannot be undone.",
+      destructive: true,
+    });
     if (!shouldDelete) return;
     try {
       await deleteEventAdmin({ id: eventId });
@@ -1000,9 +1000,11 @@ export function EventEditor({
 
   async function cancelAndDeleteEvent() {
     if (!eventId) return;
-    const shouldDelete = window.confirm(
-      "Cancel this event and permanently delete it, including all schedule, crew, and pull-list data? This cannot be undone.",
-    );
+    const shouldDelete = await confirm({
+      title: "Cancel and delete this event?",
+      description: "This permanently deletes the event, including all schedule, crew, and pull-list data. This cannot be undone.",
+      destructive: true,
+    });
     if (!shouldDelete) return;
     try {
       if (normalizeEventStatus(eventData?.event.status) !== "cancelled") {
@@ -1017,9 +1019,11 @@ export function EventEditor({
 
   async function removeLegacyUnassignedShifts() {
     if (!eventId) return;
-    const shouldDelete = window.confirm(
-      "Delete all legacy shifts that are not assigned to any schedule block?",
-    );
+    const shouldDelete = await confirm({
+      title: "Delete unassigned legacy shifts?",
+      description: "Delete all legacy shifts that are not assigned to any schedule block?",
+      destructive: true,
+    });
     if (!shouldDelete) return;
     try {
       const result = await deleteUnassignedShifts({ eventId });
@@ -1032,9 +1036,11 @@ export function EventEditor({
 
   async function resetToSeries() {
     if (!eventId || readOnly) return;
-    const shouldReset = window.confirm(
-      "Reset this occurrence to the series template? This restores overview fields, times, schedule blocks, and unassigned crew shifts, and clears the detached state. Assigned crew shifts are kept.",
-    );
+    const shouldReset = await confirm({
+      title: "Reset this occurrence to the series template?",
+      description: "This restores overview fields, times, schedule blocks, and unassigned crew shifts, and clears the detached state. Assigned crew shifts are kept.",
+      confirmLabel: "Reset",
+    });
     if (!shouldReset) return;
     try {
       await reattachOccurrence({ eventId });
@@ -1246,23 +1252,28 @@ export function EventEditor({
                   disabled={readOnly || copyingDaySetup || !eventId}
                   onClick={() => {
                     if (!eventId) return;
-                    const confirmed = window.confirm(
-                      "Copy this day's crew hours (open slots only, not assigned people) and equipment pull/checkout quantities onto the other linked days? Existing schedule slots and pull-list rows on those days will be replaced.",
-                    );
-                    if (!confirmed) return;
-                    setCopyingDaySetup(true);
-                    void copyDaySetup({ sourceEventId: eventId })
-                      .then((result) => {
+                    void (async () => {
+                      const confirmed = await confirm({
+                        title: "Copy this day's setup to the other linked days?",
+                        description:
+                          "Copies crew hours (open slots only, not assigned people) and equipment pull/checkout quantities. Existing schedule slots and pull-list rows on those days will be replaced.",
+                        confirmLabel: "Copy setup",
+                      });
+                      if (!confirmed) return;
+                      setCopyingDaySetup(true);
+                      try {
+                        const result = await copyDaySetup({ sourceEventId: eventId });
                         setMessageTone("success");
                         setMessage(
                           `Copied setup to ${result.copiedToEventIds.length} other day${result.copiedToEventIds.length === 1 ? "" : "s"}.`,
                         );
-                      })
-                      .catch((error) => {
+                      } catch (error) {
                         setMessageTone("error");
                         setMessage(getConvexErrorMessage(error));
-                      })
-                      .finally(() => setCopyingDaySetup(false));
+                      } finally {
+                        setCopyingDaySetup(false);
+                      }
+                    })();
                   }}
                 >
                   {copyingDaySetup ? "Copying…" : "Copy setup to other days"}
@@ -1378,24 +1389,14 @@ export function EventEditor({
             </div>
             <div className="space-y-1">
               <Label>Start</Label>
-              <DateTimePicker
-                value={startAt}
-                onChange={(value) => {
-                  setStartAt(value);
-                  if (!endAtTouched) setEndAt(value);
+              <DateTimeRangePicker
+                startValue={startAt}
+                endValue={endAt}
+                onChange={({ start, end }) => {
+                  setStartAt(start);
+                  setEndAt(end);
                 }}
-                placeholder="Select start date/time"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>End</Label>
-              <DateTimePicker
-                value={endAt}
-                onChange={(value) => {
-                  setEndAt(value);
-                  setEndAtTouched(value.length > 0);
-                }}
-                placeholder="Select end date/time"
+                placeholder="Select start and end"
               />
             </div>
             <div className="space-y-1">

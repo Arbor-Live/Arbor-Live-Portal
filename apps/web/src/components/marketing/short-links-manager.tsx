@@ -30,6 +30,7 @@ import {
 import { useConvexForm } from "@/hooks/use-convex-form";
 import { pacificDateKey } from "@/lib/format";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { useAppDialog } from "@/components/ui/app-dialog";
 import { notify } from "@/lib/notify";
 import {
   formatExpiresAt,
@@ -77,6 +78,7 @@ function StatusBadge({ status }: { status: "active" | "disabled" | "expired" }) 
 }
 
 export function ShortLinksManager() {
+  const { confirm } = useAppDialog();
   const links = useQuery(api.shortLinks.list, {});
   const createLink = useMutation(api.shortLinks.create);
   const updateLink = useMutation(api.shortLinks.update);
@@ -177,7 +179,7 @@ export function ShortLinksManager() {
 
   async function onDelete() {
     if (!selectedId) return;
-    if (!window.confirm("Delete this short link? This cannot be undone.")) return;
+    if (!(await confirm({ title: "Delete this short link?", description: "This cannot be undone.", destructive: true }))) return;
     try {
       await removeLink({ id: selectedId as Id<"shortLinks"> });
       startNewLink();

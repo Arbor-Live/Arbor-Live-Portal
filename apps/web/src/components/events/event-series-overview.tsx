@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { useAppDialog } from "@/components/ui/app-dialog";
 import { notify } from "@/lib/notify";
 import { formatEventStatusLabel, normalizeEventStatus } from "@/lib/event-status";
 import { formatOccurrencePreview } from "@/lib/event-series";
@@ -77,6 +78,7 @@ function costsFromSeries(series: SeriesDoc): EventSeriesCostsFormValues {
 
 export function EventSeriesOverview({ seriesId }: { seriesId: Id<"eventSeries"> }) {
   const router = useRouter();
+  const { confirm } = useAppDialog();
   const session = authClient.useSession();
   const data = useQuery(api.eventSeries.get, { id: seriesId });
   const invoices = useQuery(api.invoices.list, { status: "draft" });
@@ -197,9 +199,12 @@ export function EventSeriesOverview({ seriesId }: { seriesId: Id<"eventSeries"> 
       notify.error("Enter a valid occurrence index.");
       return;
     }
-    const shouldCancel = window.confirm(
-      `Cancel all occurrences from index ${fromIndex} onward?`,
-    );
+    const shouldCancel = await confirm({
+      title: "Cancel future occurrences?",
+      description: `Cancel all occurrences from index ${fromIndex} onward?`,
+      confirmLabel: "Cancel occurrences",
+      destructive: true,
+    });
     if (!shouldCancel) return;
     try {
       const result = await cancelFuture({ id: seriesId, fromOccurrenceIndex: fromIndex });
@@ -210,7 +215,10 @@ export function EventSeriesOverview({ seriesId }: { seriesId: Id<"eventSeries"> 
   }
 
   async function handleEndSeries() {
-    const shouldEnd = window.confirm("Mark this series as ended?");
+    const shouldEnd = await confirm({
+      title: "Mark this series as ended?",
+      confirmLabel: "End series",
+    });
     if (!shouldEnd) return;
     try {
       await endSeries({ id: seriesId });

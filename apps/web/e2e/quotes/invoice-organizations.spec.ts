@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { acceptAppDialog } from "../helpers/auth";
 import { pollConvex } from "../helpers/convex";
 import { invoiceIdFromUrl, saveInvoiceEditor, waitForInvoiceEditorUrl } from "../helpers/invoice";
 
@@ -22,19 +23,6 @@ type ClientState = {
 
 /**
  * Open a SearchableSelect, search it, and pick the first matching option.
- *
- * Both halves of this are load-bearing, for the same underlying reason:
- * `SearchableSelect` portals its menu to `document.body` and pins it with
- * `position: fixed` at `trigger.bottom + 4`, with no flip-up behaviour, then
- * recomputes that on every scroll event.
- *
- * 1. Center the trigger first. `scrollIntoViewIfNeeded` is not enough — it stops
- *    as soon as the trigger is barely visible, typically at the bottom edge,
- *    which lays the menu out past the fold. Because the menu is `fixed`, nothing
- *    can scroll it back into view and the click fails "outside of the viewport".
- * 2. Click with `force`, because Playwright's own scroll-into-view fires the
- *    reposition listener, which moves the element, so the "stable" actionability
- *    check never settles and an ordinary click spins until the test times out.
  */
 async function pickSearchableOption(
   page: Page,
@@ -48,19 +36,16 @@ async function pickSearchableOption(
   await field.evaluate((el) => el.scrollIntoView({ block: "center" }));
   const trigger = field.getByTestId("searchable-select-trigger");
   await trigger.click();
-  await page.getByPlaceholder(searchPlaceholder).fill(query);
+  const menu = page.getByTestId("searchable-select-menu");
+  await expect(menu).toBeVisible({ timeout: 25_000 });
+  await menu.getByPlaceholder(searchPlaceholder).fill(query);
 
-  const option = page.getByRole("button", { name: optionName }).first();
+  const option = menu.getByRole("option", { name: optionName }).first();
   await expect(option).toBeVisible({ timeout: 25_000 });
-  await option.click({ force: true });
+  await option.click();
 
-  // Confirm the pick landed. `force` skips the "receives pointer events" check,
-  // so a click that missed would otherwise leave the menu open — and an open
-  // menu keeps its scroll listener installed, which makes every later click on
-  // the page fail the "stable" actionability check.
-  // Trigger text can differ from the menu option (e.g. email only in description).
   await expect(trigger).toHaveText(selectedText, { timeout: 25_000 });
-  await expect(page.getByPlaceholder(searchPlaceholder)).toHaveCount(0, { timeout: 25_000 });
+  await expect(menu).toHaveCount(0, { timeout: 25_000 });
 }
 
 /**
@@ -190,9 +175,8 @@ test.describe("invoice host organizations and contacts", () => {
       .getByRole("button", { name: "Archive", exact: true })
       .first();
 
-    // Archiving is behind a `window.confirm`, which Playwright dismisses by default.
-    page.once("dialog", (dialog) => void dialog.accept());
     await archiveHost.click();
+    await acceptAppDialog(page, "Archive");
 
     const archived = await pollConvex<GroupState>(
       "e2eHelpers:getInvoiceGroupByName",
@@ -243,8 +227,8 @@ test.describe("invoice host organizations and contacts", () => {
     await page.getByRole("button", { name: "Merge into this host…" }).click();
     await expect(page.getByTestId("host-merge-panel")).toBeVisible();
     await page.getByRole("checkbox", { name: victimName }).check();
-    page.once("dialog", (dialog) => void dialog.accept());
     await page.getByTestId("host-merge-confirm").click();
+    await acceptAppDialog(page, "Merge");
 
     const survivor = await pollConvex<GroupState>(
       "e2eHelpers:getInvoiceGroupByName",

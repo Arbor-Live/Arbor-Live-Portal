@@ -11,10 +11,22 @@ import {
 import { createPortal } from "react-dom";
 import { useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { TrashIcon } from "@phosphor-icons/react";
+import { UserAvatar } from "@/components/account/user-avatar";
+import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Button } from "@/components/ui/button";
+import { useAppDialog } from "@/components/ui/app-dialog";
+import {
+  Message,
+  MessageAvatar,
+  MessageContent,
+  MessageFooter,
+  MessageGroup,
+  MessageHeader,
+} from "@/components/ui/message";
 import { ArborOnlyGuard } from "@/components/org-context-guard";
-import { formatDateTime } from "@/lib/format";
+import { notify } from "@/lib/notify";
+import { PORTAL_TIMEZONE } from "@/lib/format";
 import { fuzzyScoreHaystack } from "@/lib/fuzzy-match";
 
 /** Threads are keyed by subject, so a new surface only adds a literal here. */
@@ -58,6 +70,19 @@ function getActiveMention(
   if (/\s/.test(query)) return null;
   return { start: atIndex, query };
 }
+
+function formatCommentTime(ms: number) {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: PORTAL_TIMEZONE,
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(ms));
+}
+
+const COMMENT_TIME_COLLAPSE_MS = 2 * 60 * 1000;
 
 function renderBodyWithMentions(body: string, mentionedNames: string[]): ReactNode {
   if (!mentionedNames.length) return body;
@@ -114,14 +139,28 @@ function CommentsPanel({
   const mentionCandidates = useQuery(api.comments.listMentionCandidates, {});
   const createComment = useMutation(api.comments.createComment);
   const deleteComment = useMutation(api.comments.deleteComment);
+  const { confirm } = useAppDialog();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [body, setBody] = useState("");
   const [cursor, setCursor] = useState(0);
   const [highlightIndex, setHighlightIndex] = useState(0);
   const [focused, setFocused] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<Id<"comments"> | null>(null);
+
+  const commentGroups = useMemo(() => {
+    const groups: NonNullable<typeof comments>[] = [];
+    for (const comment of comments ?? []) {
+      const lastGroup = groups[groups.length - 1];
+      const lastComment = lastGroup?.[lastGroup.length - 1];
+      if (lastComment && lastComment.authorEmail === comment.authorEmail) {
+        lastGroup.push(comment);
+      } else {
+        groups.push([comment]);
+      }
+    }
+    return groups;
+  }, [comments]);
 
   const candidates = useMemo(() => mentionCandidates ?? [], [mentionCandidates]);
   const activeMention = getActiveMention(body, cursor);
@@ -213,7 +252,6 @@ function CommentsPanel({
 
   async function handleSubmit() {
     setSaving(true);
-    setError(null);
     try {
       await createComment({
         subjectType,
@@ -225,20 +263,24 @@ function CommentsPanel({
       setCursor(0);
       setHighlightIndex(0);
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Failed to post comment.");
+      notify.error(submitError instanceof Error ? submitError.message : "Failed to post comment.");
     } finally {
       setSaving(false);
     }
   }
 
   async function handleDelete(commentId: Id<"comments">) {
-    if (!window.confirm("Delete this comment? This cannot be undone.")) return;
+    const shouldDelete = await confirm({
+      title: "Delete this comment?",
+      description: "This cannot be undone.",
+      destructive: true,
+    });
+    if (!shouldDelete) return;
     setDeletingId(commentId);
-    setError(null);
     try {
       await deleteComment({ commentId });
     } catch (deleteError) {
-      setError(deleteError instanceof Error ? deleteError.message : "Failed to delete comment.");
+      notify.error(deleteError instanceof Error ? deleteError.message : "Failed to delete comment.");
     } finally {
       setDeletingId(null);
     }
@@ -297,40 +339,68 @@ function CommentsPanel({
         </p>
       </div>
 
-      {error ? (
-        <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      ) : null}
-
-      <div className="space-y-2">
-        {(comments ?? []).map((comment) => (
-          <div key={comment._id} className="rounded-md border p-3" data-testid="comment-row">
-            <div className="flex flex-wrap items-baseline gap-2 text-xs text-muted-foreground">
-              <span className="font-medium text-foreground">{comment.authorName}</span>
-              <span>{formatDateTime(comment.createdAt)}</span>
-              {comment.canDelete ? (
-                <button
-                  type="button"
-                  data-testid="comment-delete"
-                  className="ml-auto text-xs text-muted-foreground underline-offset-2 hover:text-destructive hover:underline disabled:opacity-50"
-                  disabled={deletingId === comment._id}
-                  onClick={() => void handleDelete(comment._id)}
+      <div className="space-y-3">
+        {commentGroups.map((group) => (
+          <MessageGroup key={group[0]?._id}>
+            {group.map((comment, index) => {
+              const lastInGroup = index === group.length - 1;
+              const nextComment = group[index + 1];
+              const showTime =
+                !nextComment ||
+                nextComment.createdAt - comment.createdAt > COMMENT_TIME_COLLAPSE_MS;
+              const isOwn = comment.canDelete;
+              return (
+                <Message
+                  key={comment._id}
+                  align={isOwn ? "end" : "start"}
+                  data-testid="comment-row"
                 >
-                  {deletingId === comment._id ? "Deleting…" : "Delete"}
-                </button>
-              ) : null}
-            </div>
-            <p
-              className="mt-1 text-sm break-words whitespace-pre-wrap"
-              data-testid="comment-body"
-            >
-              {renderBodyWithMentions(
-                comment.body,
-                comment.mentionedUsers.map((user) => user.name),
-              )}
-            </p>
-          </div>
+                  <MessageAvatar>
+                    {lastInGroup ? (
+                      <UserAvatar
+                        name={comment.authorName}
+                        email={comment.authorEmail}
+                        size="sm"
+                      />
+                    ) : null}
+                  </MessageAvatar>
+                  <MessageContent>
+                    {!isOwn && index === 0 ? (
+                      <MessageHeader>{comment.authorName}</MessageHeader>
+                    ) : null}
+                    <Bubble variant={isOwn ? "default" : "muted"}>
+                      <BubbleContent
+                        className="text-sm break-words whitespace-pre-wrap"
+                        data-testid="comment-body"
+                      >
+                        {renderBodyWithMentions(
+                          comment.body,
+                          comment.mentionedUsers.map((user) => user.name),
+                        )}
+                      </BubbleContent>
+                    </Bubble>
+                    {showTime || isOwn ? (
+                      <MessageFooter className="gap-1">
+                        {showTime ? <span>{formatCommentTime(comment.createdAt)}</span> : null}
+                        {isOwn ? (
+                          <button
+                            type="button"
+                            data-testid="comment-delete"
+                            aria-label="Delete"
+                            className="rounded-sm p-0.5 text-muted-foreground opacity-0 transition-opacity group-hover/message:opacity-100 hover:text-destructive focus-visible:opacity-100 disabled:opacity-50"
+                            disabled={deletingId === comment._id}
+                            onClick={() => void handleDelete(comment._id)}
+                          >
+                            <TrashIcon className="size-3.5" />
+                          </button>
+                        ) : null}
+                      </MessageFooter>
+                    ) : null}
+                  </MessageContent>
+                </Message>
+              );
+            })}
+          </MessageGroup>
         ))}
         {comments && comments.length === 0 ? (
           <p className="text-sm text-muted-foreground">No comments yet.</p>

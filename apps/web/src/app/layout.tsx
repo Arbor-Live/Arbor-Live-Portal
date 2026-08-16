@@ -4,6 +4,7 @@ import { Inter, JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import { ConvexClientProvider } from "@/components/convex-client-provider";
 import { DevUtilityMenu } from "@/components/dev/dev-utility-menu";
 import { ThemeProvider } from "@/components/theme-provider";
+import { AppDialogProvider } from "@/components/ui/app-dialog";
 import { Toaster } from "@/components/ui/sonner";
 import { getToken } from "@/lib/auth-server";
 import "./globals.css";
@@ -55,9 +56,11 @@ export default async function RootLayout({
         />
         <ThemeProvider>
           <ConvexClientProvider initialToken={initialToken}>
-            {children}
-            <Toaster />
-            <DevUtilityMenu />
+            <AppDialogProvider>
+              {children}
+              <Toaster />
+              <DevUtilityMenu />
+            </AppDialogProvider>
           </ConvexClientProvider>
         </ThemeProvider>
       </body>

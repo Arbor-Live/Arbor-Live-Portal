@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { fillDateTimeNearLabel } from "../helpers/auth";
+import { fillDateTimeRangeNearLabel } from "../helpers/auth";
 import { pollConvex } from "../helpers/convex";
 
 type SeriesState = {
@@ -31,8 +31,11 @@ test.describe("event series", () => {
       .getByRole("textbox")
       .fill(title);
 
-    await fillDateTimeNearLabel(page, "Start", { dayLabel, timeLabel: "6:00 PM" });
-    await fillDateTimeNearLabel(page, "End", { dayLabel, timeLabel: "10:00 PM" });
+    await fillDateTimeRangeNearLabel(page, "Start", {
+      dayLabel,
+      startTime: "6:00 PM",
+      endTime: "10:00 PM",
+    });
 
     await page.getByText("Recurring event series").click();
     // "Repeat every" already defaults to Weekly and "Ends" to occurrence count.

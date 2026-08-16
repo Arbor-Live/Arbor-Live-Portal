@@ -1,11 +1,15 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useConvex } from "convex/react";
+import { motion } from "framer-motion";
 import { FormProvider, useForm, useFormContext, type Resolver } from "react-hook-form";
-import type { QuestionnaireItemDefinition } from "@shadcn/react/questionnaire";
+import type {
+  QuestionnaireChoiceDefinition,
+  QuestionnaireItemDefinition,
+} from "@shadcn/react/questionnaire";
 import { api } from "@/lib/convex-api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -22,6 +26,7 @@ import {
   QuestionnaireItem,
   QuestionnaireNext,
   QuestionnairePrevious,
+  QuestionnaireProgress,
   QuestionnaireSkip,
   QuestionnaireSubmit,
   QuestionnaireTitle,
@@ -91,12 +96,62 @@ function contactDetailsComplete(lookup: Extract<ContactLookup, { found: true }>)
 const choiceClassName =
   "gap-3 rounded-md p-3 text-sm hover:bg-muted/40 data-checked:border-primary data-checked:bg-primary/5";
 
+const itemClassName =
+  "space-y-6 border border-border/50 bg-background/70 p-5 shadow-[0_8px_24px_rgba(0,0,0,0.06)] backdrop-blur-xl data-active:animate-in data-active:fade-in-0 data-active:slide-in-from-bottom-2 data-active:duration-300 motion-reduce:animate-none sm:p-6";
+
+const progressSpring = { type: "spring" as const, stiffness: 380, damping: 36 };
+
+function isTextEntryTarget(target: EventTarget | null) {
+  if (target instanceof HTMLTextAreaElement) return true;
+  if (target instanceof HTMLElement && target.isContentEditable) return true;
+  if (target instanceof HTMLInputElement) {
+    return !["button", "checkbox", "radio", "reset", "submit"].includes(target.type);
+  }
+  return false;
+}
+
+function clickVisibleQuestionnaireAction(form: HTMLFormElement) {
+  const next = form.querySelector<HTMLButtonElement>(
+    "[data-slot=questionnaire-next]:not([hidden])",
+  );
+  const submit = form.querySelector<HTMLButtonElement>(
+    "[data-slot=questionnaire-submit]:not([hidden])",
+  );
+  const action = next ?? submit;
+  if (!action || action.disabled) return;
+  action.click();
+}
+
+function itemChoices(
+  name: BookingRequestStepId,
+  contactLookup: ContactLookup | null,
+  requestContext: BookingRequestFormValues["requestContext"],
+): QuestionnaireChoiceDefinition[] | undefined {
+  switch (name) {
+    case "eventCategory":
+      return EVENT_CATEGORY_OPTIONS.map((value) => ({ value }));
+    case "productionTier":
+      return PRODUCTION_TIER_OPTIONS.map((value) => ({ value }));
+    case "lighting":
+      return LIGHTING_TIER_OPTIONS.map((value) => ({ value }));
+    case "sponsorType":
+      return sponsorTypeOptionsForContext(requestContext).map((value) => ({ value }));
+    case "returningUser":
+      if (contactLookup?.found !== true) return undefined;
+      return [
+        ...contactLookup.groups.map((group) => ({ value: `group:${group.groupId}` })),
+        { value: "personal" },
+        { value: "new_group" },
+      ];
+    default:
+      return undefined;
+  }
+}
+
 function MarkStepAnswered() {
   return (
     <QuestionnaireChoices className="sr-only">
-      <QuestionnaireChoice value="answered" defaultChecked>
-        Answered
-      </QuestionnaireChoice>
+      <QuestionnaireInput aria-label="Continue" readOnly tabIndex={-1} value="answered" />
     </QuestionnaireChoices>
   );
 }
@@ -147,22 +202,24 @@ export function BookingRequestWizard() {
             name === "additionalNotes" ||
             Boolean(step && !step.skippable && name !== "welcome" && name !== "venue"),
           disabled: !step,
+          choices: itemChoices(name, contactLookup, requestContext),
         };
       }),
-    [activeSteps],
+    [activeSteps, contactLookup, requestContext],
   );
 
   const currentStep = activeSteps.find((step) => step.id === item) ?? activeSteps[0]!;
-  const progressSteps = activeSteps.filter((step) => step.id !== "welcome");
-  const progressIndex = Math.max(
-    0,
-    progressSteps.findIndex((step) => step.id === currentStep.id),
-  );
-  const progressPercent = trackingInfo
-    ? 100
-    : currentStep.id === "welcome"
-      ? 0
-      : ((progressIndex + 1) / progressSteps.length) * 100;
+  const didFocusActiveItem = useRef(false);
+
+  useEffect(() => {
+    if (didFocusActiveItem.current) return;
+    const active = document.querySelector<HTMLElement>(
+      "[data-slot=questionnaire-item][data-active]",
+    );
+    if (!active) return;
+    active.focus();
+    didFocusActiveItem.current = true;
+  }, [item]);
 
   const applyGroup = useCallback(
     (group: ReturningGroup) => {
@@ -299,12 +356,61 @@ export function BookingRequestWizard() {
           className="flex min-h-0 w-full flex-1 flex-col gap-0"
           items={items}
           item={item}
+          shortcuts="letters"
           onItemChange={(next) => void handleItemChange(next)}
           onSubmit={(event) => void handleSubmit(event)}
+          onKeyDown={(event) => {
+            if (event.defaultPrevented || event.repeat || event.key !== "Enter") return;
+            if (event.metaKey || event.ctrlKey || event.altKey) return;
+            if (event.target instanceof HTMLTextAreaElement) return;
+            if (
+              event.target instanceof HTMLElement &&
+              event.target.closest("[data-slot=questionnaire-input]")
+            ) {
+              return;
+            }
+            if (
+              event.target instanceof HTMLInputElement &&
+              (event.target.type === "radio" || event.target.type === "checkbox")
+            ) {
+              return;
+            }
+            if (isTextEntryTarget(event.target) || event.target instanceof HTMLElement) {
+              event.preventDefault();
+              clickVisibleQuestionnaireAction(event.currentTarget);
+            }
+          }}
         >
           <RequestWizardShell
             eyebrow="Booking request"
-            progressPercent={progressPercent}
+            progress={
+              trackingInfo ? (
+                <div className="mt-2 h-0.5 overflow-hidden bg-foreground/10">
+                  <div className="h-full w-full bg-primary" />
+                </div>
+              ) : (
+                <div className="mt-2 h-0.5 overflow-hidden bg-foreground/10">
+                  <QuestionnaireProgress
+                    aria-label="Booking request progress"
+                    className="block h-full min-h-0 w-full min-w-0 p-0 text-[0px] leading-none"
+                    render={(props, state) => {
+                      const { children: _children, ...rest } = props;
+                      return (
+                        <motion.div
+                          {...rest}
+                          className="h-full bg-primary"
+                          initial={false}
+                          animate={{
+                            width: `${state.first ? 0 : (state.current / state.total) * 100}%`,
+                          }}
+                          transition={progressSpring}
+                        />
+                      );
+                    }}
+                  />
+                </div>
+              )
+            }
             footer={
               trackingInfo ? null : (
                 <QuestionnaireActions className="grid-cols-[1fr_auto_1fr] gap-3">
@@ -315,10 +421,16 @@ export function BookingRequestWizard() {
                     disabled={isSubmitting || isAdvancing}
                     variant="link"
                     className="justify-self-center text-sm text-muted-foreground"
+                    render={(props, state) =>
+                      state.visible ? (
+                        <button {...props} />
+                      ) : (
+                        <p className="col-start-2 row-start-1 hidden justify-self-center text-xs text-muted-foreground sm:block">
+                          Press Enter ↵
+                        </p>
+                      )
+                    }
                   />
-                  <p className="col-start-2 row-start-1 hidden justify-self-center text-xs text-muted-foreground [[data-slot=questionnaire-actions]:has([data-slot=questionnaire-skip]:not([data-hidden]))]:hidden sm:block">
-                    Press Enter ↵
-                  </p>
                   <QuestionnaireNext disabled={isSubmitting || isAdvancing} />
                   <QuestionnaireSubmit disabled={isSubmitting || isAdvancing}>
                     {isSubmitting ? "Submitting..." : "Submit"}
@@ -367,7 +479,7 @@ export function BookingRequestWizard() {
                       required={required}
                       disabled={disabled}
                       invalid={Boolean(fieldError)}
-                      className="space-y-6 border border-border/50 bg-background/70 p-5 shadow-[0_8px_24px_rgba(0,0,0,0.06)] backdrop-blur-xl data-active:animate-in data-active:fade-in-0 data-active:slide-in-from-bottom-2 data-active:duration-300 motion-reduce:animate-none sm:p-6"
+                      className={itemClassName}
                     >
                       <div className="space-y-3">
                         <QuestionnaireTitle className="text-2xl font-semibold tracking-tight sm:text-3xl">
