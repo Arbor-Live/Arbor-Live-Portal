@@ -56,6 +56,7 @@ import {
 } from "@/lib/event-visibility";
 import {
   buildQuickAddScheduleBlocks,
+  eventTypeHasCrewAssignment,
 } from "@/lib/event-schedule-draft";
 import {
   getAvailabilityNotesForDisplay,
@@ -1064,7 +1065,7 @@ export function EventEditor({
     api.eventCrewAvailability.getSummaryForEvent,
     currentEventId &&
       activeTab === "schedule" &&
-      (eventType === "Crewed Event" || eventType === "Rental with Crew")
+      eventTypeHasCrewAssignment(eventType)
       ? { eventId: currentEventId }
       : "skip",
   );
@@ -1668,7 +1669,7 @@ export function EventEditor({
                 Crew is scheduled separately for each occurrence in this series.
               </p>
             ) : null}
-            {eventId && (eventType === "Crewed Event" || eventType === "Rental with Crew") ? (
+            {eventId && eventTypeHasCrewAssignment(eventType) ? (
               <EventScheduleCrewAssignPanel
                 eventId={eventId}
                 blocks={blocks}

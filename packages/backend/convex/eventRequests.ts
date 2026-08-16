@@ -308,32 +308,27 @@ async function seedScheduleBlocksForConvertedEvent(
       startsAt: showEnd,
       endsAt: strikeEnd,
     });
-  } else if (eventType === "Dry Rental" || eventType === "Rental with Crew") {
+  } else if (
+    eventType === "Dry Rental" ||
+    eventType === "Dry Hire" ||
+    eventType === "Rental with Crew"
+  ) {
+    const isDryHire = eventType === "Dry Rental" || eventType === "Dry Hire";
     const deliveryStart = setupAtMs && setupAtMs < showStart ? setupAtMs : showStart - 60 * 60 * 1000;
     blocks.push({
-      blockType: eventType === "Dry Rental" ? "custom" : "setup",
-      label: eventType === "Dry Rental" ? "Delivery" : "Setup",
+      blockType: "setup",
+      label: isDryHire ? "Drop-off Window" : "Setup",
       dayIndex: 0,
       startsAt: deliveryStart,
       endsAt: showStart,
     });
-    if (eventType === "Rental with Crew") {
-      blocks.push({
-        blockType: "strike",
-        label: "Strike",
-        dayIndex: 0,
-        startsAt: showEnd,
-        endsAt: showEnd + 60 * 60 * 1000,
-      });
-    } else {
-      blocks.push({
-        blockType: "custom",
-        label: "Return",
-        dayIndex: 0,
-        startsAt: showEnd,
-        endsAt: showEnd + 60 * 60 * 1000,
-      });
-    }
+    blocks.push({
+      blockType: "strike",
+      label: isDryHire ? "Pickup Window" : "Strike",
+      dayIndex: 0,
+      startsAt: showEnd,
+      endsAt: showEnd + 60 * 60 * 1000,
+    });
   }
 
   for (const block of blocks) {
@@ -1194,13 +1189,6 @@ export const convertToEvent = mutation({
 
     const managerUserId = getUserId(user);
     const managerName = user.name?.trim() || user.email || "Arbor Live";
-    const { invoiceId } = await createDraftInvoiceFromBookingRequest(ctx, {
-      request,
-      managerUserId,
-      managerName,
-      managerEmail: user.email,
-    });
-
     const dayPlans = buildDayEventPlans(request);
     if (dayPlans.length === 0) {
       const placeholder = defaultPlaceholderTimes();
@@ -1208,6 +1196,13 @@ export const convertToEvent = mutation({
       const endAt = request.eventEndAtMs ?? placeholder.endAt;
       dayPlans.push({ date: toPacificDateKey(startAt), startAt, endAt });
     }
+    const { invoiceId } = await createDraftInvoiceFromBookingRequest(ctx, {
+      request,
+      managerUserId,
+      managerName,
+      managerEmail: user.email,
+      firstDayMs: dayPlans[0]?.startAt,
+    });
     const teamsInterested = mapServicesToTeams(request.crewOrRental, request.servicesNeeded);
     const eventType = inferEventType(request.crewOrRental, request.servicesNeeded);
     const baseTitle =
@@ -1268,6 +1263,10 @@ export const convertToEvent = mutation({
           | "Dry Rental"
           | "Services Only"
           | undefined,
+        rentalFulfillmentMode:
+          eventType === "Dry Rental" || eventType === "Dry Hire" || eventType === "Rental with Crew"
+            ? "delivery"
+            : undefined,
         teamsInterested: teamsInterested.length > 0 ? teamsInterested : undefined,
         category: request.eventCategory,
         hostGroupId: hostLink.hostGroupId,

@@ -18,6 +18,7 @@ import {
   attachShiftsToPersistedBlocks,
   buildQuickAddScheduleBlocks,
   eventDayCount,
+  eventTypeHasCrewAssignment,
   getBlockRef,
   resolveShiftScheduleBlockId,
   shiftBelongsToBlock,
@@ -119,7 +120,7 @@ export function InvoiceLinkedEventCrewSection({
   const startAt = eventData?.event.startAt ? toLocalDateTimeInput(eventData.event.startAt) : "";
   const endAt = eventData?.event.endAt ? toLocalDateTimeInput(eventData.event.endAt) : "";
   const dayCount = eventDayCount(startAt, endAt);
-  const showCrewTools = eventType === "Crewed Event" || eventType === "Rental with Crew";
+  const showCrewTools = eventTypeHasCrewAssignment(eventType);
 
   const userOptions = useMemo(() => {
     const base = (managerList ?? []).map((entry) => ({

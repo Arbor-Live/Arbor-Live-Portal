@@ -65,6 +65,10 @@ export function eventDayCount(startAt: string, endAt: string) {
 type EventType = "Crewed Event" | "Rental with Crew" | "Dry Hire" | "Services Only";
 type RentalFulfillmentMode = "delivery" | "will_call";
 
+export function eventTypeHasCrewAssignment(eventType: EventType | undefined) {
+  return eventType === "Crewed Event" || eventType === "Rental with Crew" || eventType === "Dry Hire";
+}
+
 export function buildQuickAddScheduleBlocks(args: {
   eventType: EventType;
   startAt: string;

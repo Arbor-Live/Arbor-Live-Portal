@@ -139,7 +139,13 @@ import {
   pacificDateKey,
 } from "@/lib/format";
 
-const INVOICE_DUE_DAYS_AFTER_EVENT = 30;
+const INVOICE_DUE_DAYS_AFTER_FIRST_DAY = 30;
+const ARTIST_ROW_GRID =
+  "min-w-0 gap-2 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_5.5rem_5.5rem_7.5rem_5.5rem]";
+
+function invoiceDueDateFromFirstDay(firstDayMs: number) {
+  return pacificDateKey(addPacificCalendarDays(firstDayMs, INVOICE_DUE_DAYS_AFTER_FIRST_DAY));
+}
 
 function formatInvoiceDiscountInputValue(value: number, type: "amount" | "percent") {
   if (type === "amount") return Number.isFinite(value) ? value.toFixed(2) : "0.00";
@@ -568,14 +574,21 @@ export function InvoiceEditor({
     setIssueDate(new Date().toISOString().slice(0, 10));
   }, [issueDate, invoiceId]);
 
+  const suggestedDueDate = useMemo(() => {
+    const firstDayAt = linkedEvent?.startAt;
+    if (firstDayAt == null) return "";
+    return invoiceDueDateFromFirstDay(firstDayAt);
+  }, [linkedEvent?.startAt]);
+
   useEffect(() => {
     if (dueDateTouched) return;
-    const eventEndAt = linkedEvent?.endAt;
-    if (eventEndAt == null) return;
-    const suggested = pacificDateKey(addPacificCalendarDays(eventEndAt, INVOICE_DUE_DAYS_AFTER_EVENT));
+    if (!suggestedDueDate) return;
+    // Wait until server fields land so hydration cannot wipe a just-filled date.
+    if (invoiceId && !invoiceFieldsHydrated) return;
+    if (dueDate === suggestedDueDate) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setDueDate(suggested);
-  }, [dueDateTouched, linkedEvent?.endAt]);
+    setDueDate(suggestedDueDate);
+  }, [dueDate, dueDateTouched, invoiceId, invoiceFieldsHydrated, suggestedDueDate]);
 
   useEffect(() => {
     hasHydratedFromServerRef.current = false;
@@ -1576,31 +1589,6 @@ export function InvoiceEditor({
             ))}
           </nav>
 
-          {pullListSyncStatus?.hasInvoice && !pullListSyncStatus.inSync ? (
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-800">
-              <span>Equipment lines are out of sync with the event&apos;s pull list.</span>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() =>
-                  void (async () => {
-                    if (!linkedEvent) return;
-                    if (
-                      !window.confirm(
-                        "Update the pull list to match this invoice's equipment lines?",
-                      )
-                    )
-                      return;
-                    await scaffoldPullListsForLinkedDays();
-                    setSaveMessage("Pull list resynced from invoice.");
-                  })().catch((error) => setAutoSaveError(getConvexErrorMessage(error)))
-                }
-              >
-                Sync pull list
-              </Button>
-            </div>
-          ) : null}
           <div id="section-equipment-packages">
           <SectionEquipmentPackages
             rows={equipmentPackages}
@@ -1609,6 +1597,20 @@ export function InvoiceEditor({
             packageById={packageById}
             equipmentPricingMode={equipmentPricingMode}
             defaultBasis={defaultEquipmentBasis}
+            pullListOutOfSync={Boolean(pullListSyncStatus?.hasInvoice && !pullListSyncStatus.inSync)}
+            onSyncPullList={() =>
+              void (async () => {
+                if (!linkedEvent) return;
+                if (
+                  !window.confirm(
+                    "Update the pull list to match this invoice's equipment lines?",
+                  )
+                )
+                  return;
+                await scaffoldPullListsForLinkedDays();
+                setSaveMessage("Pull list resynced from invoice.");
+              })().catch((error) => setAutoSaveError(getConvexErrorMessage(error)))
+            }
           />
           </div>
           <div id="section-equipment-types">
@@ -1739,7 +1741,7 @@ export function InvoiceEditor({
           </div>
         </div>
 
-        <aside className="min-w-0 space-y-4 overflow-x-hidden lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:overscroll-y-contain lg:pr-1">
+        <aside className="min-w-0 space-y-4 overflow-x-hidden">
           <Card>
             <CardHeader className="pb-2"><CardTitle className="text-base">General</CardTitle></CardHeader>
             <CardContent className="grid min-w-0 gap-3 overflow-x-clip">
@@ -1755,7 +1757,7 @@ export function InvoiceEditor({
               <div className="min-w-0 space-y-2">
                 <div className="flex min-w-0 items-center justify-between gap-2">
                   <Label>Due date</Label>
-                  {linkedEvent?.endAt != null ? (
+                  {linkedEvent?.startAt != null ? (
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -1771,7 +1773,7 @@ export function InvoiceEditor({
                           ) : (
                             <span
                               className="shrink-0 text-muted-foreground"
-                              aria-label={`Due date auto-synced to event plus ${INVOICE_DUE_DAYS_AFTER_EVENT} days`}
+                              aria-label={`Due date auto-synced to first day plus ${INVOICE_DUE_DAYS_AFTER_FIRST_DAY} days`}
                             >
                               <ArrowsClockwiseIcon className="size-3.5" aria-hidden />
                             </span>
@@ -1780,7 +1782,7 @@ export function InvoiceEditor({
                         <TooltipContent>
                           {dueDateTouched
                             ? "Sync to event"
-                            : `Auto · event + ${INVOICE_DUE_DAYS_AFTER_EVENT}d`}
+                            : `Auto · first day + ${INVOICE_DUE_DAYS_AFTER_FIRST_DAY}d`}
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
@@ -2280,10 +2282,14 @@ function SectionEquipmentPackages({
   packageById,
   equipmentPricingMode,
   defaultBasis = "total",
+  pullListOutOfSync = false,
+  onSyncPullList,
 }: {
   rows: EquipmentRow[];
   setRows: Dispatch<SetStateAction<EquipmentRow[]>>;
   billableOccurrenceCount: number;
+  pullListOutOfSync?: boolean;
+  onSyncPullList?: () => void;
   packageById: Map<
     string,
     {
@@ -2309,8 +2315,17 @@ function SectionEquipmentPackages({
   defaultBasis?: EquipmentRow["basis"];
 }) {
   return (
-    <Card>
-      <CardHeader><CardTitle>Equipment — Packages</CardTitle></CardHeader>
+    <Card className="relative">
+      {pullListOutOfSync && onSyncPullList ? (
+        <div className="absolute top-3.5 right-4 z-10">
+          <Button type="button" size="sm" variant="outline" onClick={onSyncPullList}>
+            Sync pull list
+          </Button>
+        </div>
+      ) : null}
+      <CardHeader>
+        <CardTitle>Equipment — Packages</CardTitle>
+      </CardHeader>
       <CardContent className="space-y-2">
         {rows.map((row, idx) => {
           const pkg = packageById.get(row.refId);
@@ -2675,7 +2690,7 @@ function SectionArtists({
         <CardTitle>Artists</CardTitle>
       </CardHeader>
       <CardContent className="space-y-2">
-        <div className="hidden gap-2 text-xs font-medium text-muted-foreground md:grid md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_5rem_5rem_6rem_auto]">
+        <div className={`hidden text-xs font-medium text-muted-foreground md:grid md:items-end ${ARTIST_ROW_GRID}`}>
           <span>Band</span>
           <span>Label</span>
           <span>Hours</span>
@@ -2688,7 +2703,7 @@ function SectionArtists({
           return (
             <div
               key={`artist-${idx}`}
-              className="grid gap-2 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_5rem_5rem_6rem_auto]"
+              className={`grid ${ARTIST_ROW_GRID}`}
               data-testid={`invoice-row-artist-${idx}`}
             >
               <SearchableSelect
@@ -2745,6 +2760,7 @@ function SectionArtists({
               <Button
                 type="button"
                 variant="outline"
+                className="w-full"
                 onClick={() => setRows((prev) => prev.filter((_, i) => i !== idx))}
               >
                 Remove
