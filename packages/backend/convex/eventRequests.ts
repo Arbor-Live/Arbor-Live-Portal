@@ -1263,10 +1263,7 @@ export const convertToEvent = mutation({
           | "Dry Rental"
           | "Services Only"
           | undefined,
-        rentalFulfillmentMode:
-          eventType === "Dry Rental" || eventType === "Dry Hire" || eventType === "Rental with Crew"
-            ? "delivery"
-            : undefined,
+        rentalFulfillmentMode: eventType === "Dry Rental" ? "delivery" : undefined,
         teamsInterested: teamsInterested.length > 0 ? teamsInterested : undefined,
         category: request.eventCategory,
         hostGroupId: hostLink.hostGroupId,
