@@ -90,8 +90,8 @@ export function QuestionnaireWizardProgress({
         <QuestionnaireProgress
           aria-label={label}
           className="block h-full min-h-0 w-full min-w-0 p-0 text-[0px] leading-none"
-          render={(props, state) => {
-            const { children: _children, ...rest } = props;
+          render={({ children, ...rest }, state) => {
+            void children;
             return (
               <motion.div
                 {...rest}

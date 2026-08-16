@@ -615,7 +615,7 @@ export function CrewOnboardingWizard() {
                     stepId={stepId}
                     form={form}
                     setForm={setForm}
-                    fieldError={stepId === item ? fieldError : null}
+                    fieldError={null}
                     avatarBusy={avatarBusy}
                     avatarUrl={avatarUrl}
                     avatarSeedEmail={avatarSeedEmail}

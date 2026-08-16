@@ -188,7 +188,7 @@ export function BandOnboardingWizard() {
   const saveBandOnboardingStep = useMutation(api.onboarding.saveBandOnboardingStep);
   const completeBandOnboarding = useMutation(api.onboarding.completeBandOnboarding);
 
-  const [item, setItem] = useState<StepId>("welcome");
+  const [item, setItem] = useState<StepId | null>(null);
   const [done, setDone] = useState(false);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [fieldError, setFieldError] = useState<string | null>(null);
@@ -199,7 +199,6 @@ export function BandOnboardingWizard() {
   /** Emails invited this session (beyond server pending invites). */
   const [sessionSentEmails, setSessionSentEmails] = useState<string[]>([]);
   const hydratedRef = useRef(false);
-  const stepHydratedRef = useRef(false);
 
   useEffect(() => {
     if (!profile || hydratedRef.current) return;
@@ -263,14 +262,6 @@ export function BandOnboardingWizard() {
   );
 
   useEffect(() => {
-    if (!onboarding || stepHydratedRef.current) return;
-    stepHydratedRef.current = true;
-    const next = STEP_ORDER[firstIncompleteStepIndex(onboarding)] ?? "welcome";
-    if (next === "thankYou") setDone(true);
-    else setItem(next);
-  }, [onboarding]);
-
-  useEffect(() => {
     if (!previewReady || devPreview) return;
     if (onboarding === null) {
       router.replace("/dashboard");
@@ -281,7 +272,12 @@ export function BandOnboardingWizard() {
     }
   }, [onboarding, router, previewReady, devPreview]);
 
-  const currentStep = item;
+  const resumeStep: StepId = onboarding
+    ? (STEP_ORDER[firstIncompleteStepIndex(onboarding)] ?? "welcome")
+    : "welcome";
+  const currentStep: StepId =
+    item ?? (resumeStep === "thankYou" ? "payment" : resumeStep);
+  const finished = done || (item === null && resumeStep === "thankYou");
   const items = useMemo<QuestionnaireItemDefinition[]>(
     () => QUESTION_STEPS.map((name) => ({ name, required: true })),
     [],
@@ -455,7 +451,7 @@ export function BandOnboardingWizard() {
 
   const handleItemChange = useCallback(
     async (next: string) => {
-      const currentIndex = QUESTION_STEPS.indexOf(item);
+      const currentIndex = QUESTION_STEPS.indexOf(currentStep);
       const requestedIndex = QUESTION_STEPS.indexOf(next as StepId);
       const goingBack = requestedIndex !== -1 && requestedIndex < currentIndex;
       if (goingBack) {
@@ -465,7 +461,7 @@ export function BandOnboardingWizard() {
       }
       if (await tryAdvance()) setItem(next as StepId);
     },
-    [item, tryAdvance],
+    [currentStep, tryAdvance],
   );
 
   const handleSubmit = useCallback(
@@ -560,11 +556,11 @@ export function BandOnboardingWizard() {
 
   return (
     <>
-      {done ? null : <OnboardingSkipButton onSkip={goToDashboard} />}
+      {finished ? null : <OnboardingSkipButton onSkip={goToDashboard} />}
       <Questionnaire
         className="flex min-h-0 w-full flex-1 flex-col gap-0"
         items={items}
-        item={item}
+        item={currentStep}
         shortcuts="letters"
         onItemChange={(next) => void handleItemChange(next)}
         onSubmit={(event) => void handleSubmit(event)}
@@ -583,10 +579,10 @@ export function BandOnboardingWizard() {
           eyebrow={devPreview ? "Dev preview · Band onboarding" : "Band onboarding"}
           meta="Arbor Live"
           progress={
-            <QuestionnaireWizardProgress complete={done} label="Band onboarding progress" />
+            <QuestionnaireWizardProgress complete={finished} label="Band onboarding progress" />
           }
           footer={
-            done ? null : (
+            finished ? null : (
               <QuestionnaireWizardFooter
                 disabled={isSubmitting}
                 isSubmitting={isSubmitting}
@@ -609,7 +605,7 @@ export function BandOnboardingWizard() {
               </Alert>
             ) : null}
 
-            {done ? (
+            {finished ? (
               <div className={QUESTIONNAIRE_ITEM_CLASSNAME}>
                 <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
                   {STEP_HEADLINES.thankYou}
@@ -645,7 +641,7 @@ export function BandOnboardingWizard() {
               <QuestionnaireItem
                 name="identity"
                 required
-                invalid={item === "identity" && Boolean(fieldError)}
+                invalid={currentStep === "identity" && Boolean(fieldError)}
                 className={QUESTIONNAIRE_ITEM_CLASSNAME}
               >
                 <QuestionnaireTitle className={QUESTIONNAIRE_TITLE_CLASSNAME}>
@@ -671,11 +667,10 @@ export function BandOnboardingWizard() {
                       placeholder="A short description of your sound and style…"
                     />
                   </div>
-                  {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
                 </div>
                 <MarkStepAnswered />
                 <QuestionnaireError className="text-sm">
-                  {item === "identity" ? fieldError : null}
+                  {currentStep === "identity" ? fieldError : null}
                 </QuestionnaireError>
               </QuestionnaireItem>
 
@@ -694,7 +689,7 @@ export function BandOnboardingWizard() {
               <QuestionnaireItem
                 name="hero"
                 required
-                invalid={item === "hero" && Boolean(fieldError)}
+                invalid={currentStep === "hero" && Boolean(fieldError)}
                 className={QUESTIONNAIRE_ITEM_CLASSNAME}
               >
                 <QuestionnaireTitle className={QUESTIONNAIRE_TITLE_CLASSNAME}>
@@ -730,18 +725,17 @@ export function BandOnboardingWizard() {
                       />
                     </div>
                   ) : null}
-                  {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
                 </div>
                 <MarkStepAnswered />
                 <QuestionnaireError className="text-sm">
-                  {item === "hero" ? fieldError : null}
+                  {currentStep === "hero" ? fieldError : null}
                 </QuestionnaireError>
               </QuestionnaireItem>
 
               <QuestionnaireItem
                 name="socials"
                 required
-                invalid={item === "socials" && Boolean(fieldError)}
+                invalid={currentStep === "socials" && Boolean(fieldError)}
                 className={QUESTIONNAIRE_ITEM_CLASSNAME}
               >
                 <QuestionnaireTitle className={QUESTIONNAIRE_TITLE_CLASSNAME}>
@@ -802,18 +796,17 @@ export function BandOnboardingWizard() {
                       />
                     </div>
                   ) : null}
-                  {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
                 </div>
                 <MarkStepAnswered />
                 <QuestionnaireError className="text-sm">
-                  {item === "socials" ? fieldError : null}
+                  {currentStep === "socials" ? fieldError : null}
                 </QuestionnaireError>
               </QuestionnaireItem>
 
               <QuestionnaireItem
                 name="members"
                 required
-                invalid={item === "members" && Boolean(fieldError)}
+                invalid={currentStep === "members" && Boolean(fieldError)}
                 className={QUESTIONNAIRE_ITEM_CLASSNAME}
               >
                 <QuestionnaireTitle className={QUESTIONNAIRE_TITLE_CLASSNAME}>
@@ -935,18 +928,17 @@ export function BandOnboardingWizard() {
                       <AlertDescription>{inviteConfirmation}</AlertDescription>
                     </Alert>
                   ) : null}
-                  {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
                 </div>
                 <MarkStepAnswered />
                 <QuestionnaireError className="text-sm">
-                  {item === "members" ? fieldError : null}
+                  {currentStep === "members" ? fieldError : null}
                 </QuestionnaireError>
               </QuestionnaireItem>
 
               <QuestionnaireItem
                 name="rates"
                 required
-                invalid={item === "rates" && Boolean(fieldError)}
+                invalid={currentStep === "rates" && Boolean(fieldError)}
                 className={QUESTIONNAIRE_ITEM_CLASSNAME}
               >
                 <QuestionnaireTitle className={QUESTIONNAIRE_TITLE_CLASSNAME}>
@@ -1032,18 +1024,17 @@ export function BandOnboardingWizard() {
                       </p>
                     </div>
                   </div>
-                  {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
                 </div>
                 <MarkStepAnswered />
                 <QuestionnaireError className="text-sm">
-                  {item === "rates" ? fieldError : null}
+                  {currentStep === "rates" ? fieldError : null}
                 </QuestionnaireError>
               </QuestionnaireItem>
 
               <QuestionnaireItem
                 name="payment"
                 required
-                invalid={item === "payment" && Boolean(fieldError)}
+                invalid={currentStep === "payment" && Boolean(fieldError)}
                 className={QUESTIONNAIRE_ITEM_CLASSNAME}
               >
                 <QuestionnaireTitle className={QUESTIONNAIRE_TITLE_CLASSNAME}>
@@ -1066,11 +1057,10 @@ export function BandOnboardingWizard() {
                     onChange={(next) => patch({ paymentExplainedAck: next })}
                     label="I understand how payouts work for this band."
                   />
-                  {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
                 </div>
                 <MarkStepAnswered />
                 <QuestionnaireError className="text-sm">
-                  {item === "payment" ? fieldError : null}
+                  {currentStep === "payment" ? fieldError : null}
                 </QuestionnaireError>
               </QuestionnaireItem>
               </>

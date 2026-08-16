@@ -75,7 +75,8 @@ export function OpenMicWizard() {
     mode: "onTouched",
   });
 
-  const [item, setItem] = useState<QuestionStepId>(showIntro ? "intro" : "welcome");
+  const [item, setItem] = useState<QuestionStepId | null>(null);
+  const resolvedItem: QuestionStepId = item ?? (showIntro ? "intro" : "welcome");
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAdvancing, setIsAdvancing] = useState(false);
@@ -120,7 +121,7 @@ export function OpenMicWizard() {
     if (!active) return;
     active.focus();
     didFocusActiveItem.current = true;
-  }, [item]);
+  }, [resolvedItem]);
 
   const handleItemChange = useCallback(
     async (next: string) => {
@@ -129,7 +130,7 @@ export function OpenMicWizard() {
         if (name === "intro") return showIntro;
         return Boolean(activeSteps.find((step) => step.id === name));
       });
-      const currentIndex = enabled.indexOf(item);
+      const currentIndex = enabled.indexOf(resolvedItem);
       const requestedIndex = enabled.indexOf(next as QuestionStepId);
       const goingBack = requestedIndex !== -1 && requestedIndex < currentIndex;
 
@@ -138,15 +139,15 @@ export function OpenMicWizard() {
         return;
       }
 
-      const step = activeSteps.find((entry) => entry.id === item);
-      if (item !== "intro" && step?.fields.length && !step.skippable) {
+      const step = activeSteps.find((entry) => entry.id === resolvedItem);
+      if (resolvedItem !== "intro" && step?.fields.length && !step.skippable) {
         const valid = await form.trigger(step.fields);
         if (!valid) return;
       }
 
       setItem(next as QuestionStepId);
     },
-    [activeSteps, form, item, showIntro],
+    [activeSteps, form, resolvedItem, showIntro],
   );
 
   const handleSubmit = useCallback(
@@ -181,8 +182,7 @@ export function OpenMicWizard() {
     [activeNight, activeSteps, form],
   );
 
-  const currentStep = activeSteps.find((step) => step.id === item);
-  const hideFooter = Boolean(confirmation) || item === "intro";
+  const hideFooter = Boolean(confirmation) || resolvedItem === "intro";
 
   if (activeNight === undefined) {
     return (
@@ -231,7 +231,7 @@ export function OpenMicWizard() {
         <Questionnaire
           className="flex min-h-0 w-full flex-1 flex-col gap-0"
           items={items}
-          item={item}
+          item={resolvedItem}
           shortcuts="letters"
           onItemChange={(next) => {
             setIsAdvancing(true);
@@ -320,7 +320,7 @@ export function OpenMicWizard() {
                         <>
                           <div className="space-y-3">
                             <QuestionnaireTitle className={QUESTIONNAIRE_TITLE_CLASSNAME}>
-                              {step?.headline ?? currentStep?.headline ?? ""}
+                              {step && "headline" in step ? step.headline : ""}
                             </QuestionnaireTitle>
                             {step && "subheader" in step && step.subheader ? (
                               <StepSubheader text={step.subheader} />
