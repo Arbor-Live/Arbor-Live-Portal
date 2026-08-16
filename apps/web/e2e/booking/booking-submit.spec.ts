@@ -39,7 +39,7 @@ test.describe("public booking submit", () => {
     await page.getByLabel("Phone").fill("6505550188");
     await clickNext(page);
 
-    await page.getByRole("button", { name: "Individual Stanford Affiliate" }).click();
+    await page.getByRole("radio", { name: "Individual Stanford Affiliate" }).click();
     await clickNext(page);
 
     // Venue is optional — skip by advancing with empty fields.
@@ -52,7 +52,7 @@ test.describe("public booking submit", () => {
     await page.getByLabel("What is the name for your event?").fill(eventName);
     await clickNext(page);
 
-    await page.getByRole("button", { name: "Speaker Event" }).click();
+    await page.getByRole("radio", { name: "Speaker Event" }).click();
     await clickNext(page);
 
     await page.getByRole("button", { name: "Crewed", exact: true }).click();

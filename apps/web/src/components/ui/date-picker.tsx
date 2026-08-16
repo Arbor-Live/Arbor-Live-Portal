@@ -56,6 +56,7 @@ export function DatePickerField({
       wrapperClassName="app-date-time-wrapper"
       popperClassName="app-date-time-popper"
       popperPlacement="bottom-start"
+      portalId="arbor-date-picker-portal"
       calendarClassName="app-date-time-calendar"
       showPopperArrow={false}
       autoComplete="off"

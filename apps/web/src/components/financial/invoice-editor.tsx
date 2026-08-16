@@ -46,6 +46,7 @@ import {
 import type { SeriesShiftTemplateDraft } from "@/lib/event-series-shifts";
 import { ArrowsClockwiseIcon, CaretDownIcon } from "@phosphor-icons/react";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { notify } from "@/lib/notify";
 import { FormSaveBar } from "@/components/forms";
 import {
   computeInvoiceDraftTotals,
@@ -184,8 +185,6 @@ export function InvoiceEditor({
   const [fees, setFees] = useState<FeeRow[]>([]);
   const [feesCatalogEnabled, setFeesCatalogEnabled] = useState(false);
   const [termsCatalogEnabled, setTermsCatalogEnabled] = useState(false);
-  const [saveWarning, setSaveWarning] = useState<string | null>(null);
-  const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [autoSaveState, setAutoSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [autoSaveError, setAutoSaveError] = useState<string | null>(null);
@@ -857,18 +856,16 @@ export function InvoiceEditor({
 
     const requestId = ++saveRequestIdRef.current;
     setSaving(true);
-    setSaveMessage(null);
     setAutoSaveState("saving");
     setAutoSaveError(null);
-    setSaveWarning(null);
 
     try {
       if (activeInvoiceId) {
         const result = await updateDraft({ id: activeInvoiceId, ...payload });
-        setSaveWarning(result.warning ?? null);
+        if (result.warning) notify.warning(result.warning);
         if (approvedQuoteEdited && reapprovalDecisionRef.current) {
           await resetApprovalToPending({ id: activeInvoiceId });
-          setSaveMessage("Quote updated and reset to pending approval.");
+          notify.success("Quote updated and reset to pending approval.");
         }
       } else {
         const result = await createDraft(payload);
@@ -878,7 +875,6 @@ export function InvoiceEditor({
       }
       setLastSavedSignature(signature);
       if (requestId === saveRequestIdRef.current) {
-        setSaveMessage("Invoice saved.");
         setAutoSaveState("saved");
       }
       if (promptForPullListSync && activeInvoiceId && linkedEvent && !linkedSeries) {
@@ -892,7 +888,7 @@ export function InvoiceEditor({
           if (shouldResync) {
             await scaffoldPullListFromInvoice({ eventId: linkedEvent._id });
             if (requestId === saveRequestIdRef.current) {
-              setSaveMessage("Invoice saved and pull list resynced.");
+              notify.success("Invoice saved and pull list resynced.");
             }
           }
         }
@@ -915,7 +911,7 @@ export function InvoiceEditor({
     if (!window.confirm("Regenerate the public quote token? Old links will stop working.")) return;
     const result = await regeneratePublicApprovalToken({ id: activeInvoiceId });
     setApprovalToken(result.token);
-    setSaveMessage("Public quote link regenerated.");
+    notify.success("Public quote link regenerated.");
   }
 
   async function sendQuoteToClient(clientMessage: string) {
@@ -923,7 +919,7 @@ export function InvoiceEditor({
     setSendingQuote(true);
     try {
       await markReadyForClientReview({ id: activeInvoiceId, clientMessage });
-      setSaveMessage("Quote emailed to the client and marked ready on the request portal.");
+      notify.success("Quote emailed to the client and marked ready on the request portal.");
     } catch (error) {
       throw new Error(getConvexErrorMessage(error) ?? "Failed to send quote email.");
     } finally {
@@ -934,7 +930,7 @@ export function InvoiceEditor({
   async function withdrawFromRequestPortal() {
     if (!activeInvoiceId) return;
     await withdrawFromClientReview({ id: activeInvoiceId });
-    setSaveMessage("Quote withdrawn from the request portal for editing.");
+    notify.success("Quote withdrawn from the request portal for editing.");
   }
 
   const draftSignature = useMemo(() => {
@@ -1343,9 +1339,6 @@ export function InvoiceEditor({
         </Card>
       ) : null}
 
-      {saveMessage ? <p className="text-sm text-primary">{saveMessage}</p> : null}
-      {saveWarning ? <p className="text-sm text-amber-600">{saveWarning}</p> : null}
-
       {invoiceData?.invoice?.clientApprovalStatus === "approved" && isDraftDirty ? (
         <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
           This quote is approved. Saving changes may require client re-approval.
@@ -1365,7 +1358,7 @@ export function InvoiceEditor({
               className="ml-2"
               onClick={() =>
                 void recalculateSeriesEquipmentLines({ id: activeInvoiceId }).then(() =>
-                  setSaveMessage("Recalculated billed equipment totals."),
+                  notify.success("Recalculated billed equipment totals."),
                 )
               }
             >
@@ -1421,7 +1414,7 @@ export function InvoiceEditor({
                     )
                       return;
                     await scaffoldPullListFromInvoice({ eventId: linkedEvent._id });
-                    setSaveMessage("Pull list resynced from invoice.");
+                    notify.success("Pull list resynced from invoice.");
                   })().catch((error) => setAutoSaveError(getConvexErrorMessage(error)))
                 }
               >
@@ -1484,7 +1477,7 @@ export function InvoiceEditor({
                 billableOccurrenceCount={billableOccurrenceCount}
                 title="Crew Schedule"
                 description={`Define crew shift templates for the series. Invoice crew hours bill as template duration × ${billableOccurrenceCount} billable occurrence${billableOccurrenceCount === 1 ? "" : "s"}. Saving applies empty shifts to each selected occurrence.`}
-                onMessage={setSaveMessage}
+                onMessage={notify.success}
                 onShiftDraftsChange={handleSeriesShiftDraftsChange}
               />
               <SectionAdditionalCrewHours
@@ -1510,7 +1503,7 @@ export function InvoiceEditor({
                 eventId={linkedEvent._id}
                 defaultCrewHourlyRateUsd={defaultCrewHourlyRateUsd}
                 onEventCrewRowsChange={handleEventCrewRowsChange}
-                onMessage={setSaveMessage}
+                onMessage={notify.success}
               />
               <SectionAdditionalCrewHours
                 rows={crewRows.filter((row) => row.source === "manual")}
@@ -1708,7 +1701,7 @@ export function InvoiceEditor({
                     className="w-full"
                     onClick={() =>
                       void recalculateSeriesEquipmentLines({ id: activeInvoiceId }).then(() =>
-                        setSaveMessage("Recalculated billed equipment totals."),
+                        notify.success("Recalculated billed equipment totals."),
                       )
                     }
                   >

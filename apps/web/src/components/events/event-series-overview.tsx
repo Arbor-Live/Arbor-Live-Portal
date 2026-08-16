@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { notify } from "@/lib/notify";
 import { formatEventStatusLabel, normalizeEventStatus } from "@/lib/event-status";
 import { formatOccurrencePreview } from "@/lib/event-series";
 import { formatUsd } from "@/lib/format";
@@ -98,7 +99,6 @@ export function EventSeriesOverview({ seriesId }: { seriesId: Id<"eventSeries"> 
 
   const [additionalCount, setAdditionalCount] = useState("5");
   const [cancelFromIndex, setCancelFromIndex] = useState("0");
-  const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!data?.series) return;
@@ -162,7 +162,7 @@ export function EventSeriesOverview({ seriesId }: { seriesId: Id<"eventSeries"> 
       seriesOtherCostUsd: values.seriesOtherCostUsd.trim() ? Number(values.seriesOtherCostUsd) : undefined,
       propagateOccurrenceCosts: values.propagateOccurrenceCosts,
     });
-    setMessage("Series costs saved.");
+    notify.success("Series costs saved.");
   });
 
   if (data === undefined) {
@@ -181,20 +181,20 @@ export function EventSeriesOverview({ seriesId }: { seriesId: Id<"eventSeries"> 
     try {
       const count = Number(additionalCount);
       if (!Number.isFinite(count) || count < 1) {
-        setMessage("Enter a valid occurrence count.");
+        notify.error("Enter a valid occurrence count.");
         return;
       }
       await addOccurrences({ id: seriesId, additionalCount: count });
-      setMessage(`Added ${count} occurrence${count === 1 ? "" : "s"}.`);
+      notify.success(`Added ${count} occurrence${count === 1 ? "" : "s"}.`);
     } catch (error) {
-      setMessage(getConvexErrorMessage(error, "Failed to add occurrences."));
+      notify.error(getConvexErrorMessage(error, "Failed to add occurrences."));
     }
   }
 
   async function handleCancelFuture() {
     const fromIndex = Number(cancelFromIndex);
     if (!Number.isFinite(fromIndex) || fromIndex < 0) {
-      setMessage("Enter a valid occurrence index.");
+      notify.error("Enter a valid occurrence index.");
       return;
     }
     const shouldCancel = window.confirm(
@@ -203,9 +203,9 @@ export function EventSeriesOverview({ seriesId }: { seriesId: Id<"eventSeries"> 
     if (!shouldCancel) return;
     try {
       const result = await cancelFuture({ id: seriesId, fromOccurrenceIndex: fromIndex });
-      setMessage(`Cancelled ${result.cancelledCount} occurrence${result.cancelledCount === 1 ? "" : "s"}.`);
+      notify.success(`Cancelled ${result.cancelledCount} occurrence${result.cancelledCount === 1 ? "" : "s"}.`);
     } catch (error) {
-      setMessage(getConvexErrorMessage(error, "Failed to cancel occurrences."));
+      notify.error(getConvexErrorMessage(error, "Failed to cancel occurrences."));
     }
   }
 
@@ -214,9 +214,9 @@ export function EventSeriesOverview({ seriesId }: { seriesId: Id<"eventSeries"> 
     if (!shouldEnd) return;
     try {
       await endSeries({ id: seriesId });
-      setMessage("Series marked as ended.");
+      notify.success("Series marked as ended.");
     } catch (error) {
-      setMessage(getConvexErrorMessage(error, "Failed to end series."));
+      notify.error(getConvexErrorMessage(error, "Failed to end series."));
     }
   }
 
@@ -238,9 +238,6 @@ export function EventSeriesOverview({ seriesId }: { seriesId: Id<"eventSeries"> 
         </CardContent>
       </Card>
 
-      {message ? (
-        <p className="rounded-md border px-3 py-2 text-sm">{message}</p>
-      ) : null}
 
       <Card>
         <CardHeader>
@@ -270,10 +267,10 @@ export function EventSeriesOverview({ seriesId }: { seriesId: Id<"eventSeries"> 
                 onClick={() =>
                   void scaffoldPullList({ seriesId })
                     .then((result) =>
-                      setMessage(`Built pull list template from invoice (${result.templateCount} lines).`),
+                      notify.success(`Built pull list template from invoice (${result.templateCount} lines).`),
                     )
                     .catch((error) =>
-                      setMessage(getConvexErrorMessage(error, "Failed to scaffold pull list.")),
+                      notify.error(getConvexErrorMessage(error, "Failed to scaffold pull list.")),
                     )
                 }
               >
@@ -287,10 +284,10 @@ export function EventSeriesOverview({ seriesId }: { seriesId: Id<"eventSeries"> 
                   void unlinkInvoice({ id: seriesId })
                     .then(() => {
                       setInvoiceLinkOverride(null);
-                      setMessage("Invoice unlinked from series.");
+                      notify.success("Invoice unlinked from series.");
                     })
                     .catch((error) =>
-                      setMessage(getConvexErrorMessage(error, "Failed to unlink invoice.")),
+                      notify.error(getConvexErrorMessage(error, "Failed to unlink invoice.")),
                     )
                 }
               >
@@ -315,7 +312,7 @@ export function EventSeriesOverview({ seriesId }: { seriesId: Id<"eventSeries"> 
                       router.push(`/dashboard/financial-hub/invoices/${result.id}`);
                     })
                     .catch((error) =>
-                      setMessage(getConvexErrorMessage(error, "Failed to create invoice.")),
+                      notify.error(getConvexErrorMessage(error, "Failed to create invoice.")),
                     );
                 }}
               >
@@ -338,10 +335,10 @@ export function EventSeriesOverview({ seriesId }: { seriesId: Id<"eventSeries"> 
                   void linkInvoice({ id: seriesId, invoiceId: invoiceLinkId as Id<"invoices"> })
                     .then(() => {
                       setInvoiceLinkOverride(null);
-                      setMessage("Invoice linked to series and all active occurrences.");
+                      notify.success("Invoice linked to series and all active occurrences.");
                     })
                     .catch((error) =>
-                      setMessage(getConvexErrorMessage(error, "Failed to link invoice.")),
+                      notify.error(getConvexErrorMessage(error, "Failed to link invoice.")),
                     )
                 }
               >
@@ -486,7 +483,7 @@ export function EventSeriesOverview({ seriesId }: { seriesId: Id<"eventSeries"> 
         rentalFulfillmentMode={series.rentalFulfillmentMode}
         blockTemplates={series.blockTemplates}
         occurrences={occurrences}
-        onMessage={setMessage}
+        onMessage={notify.success}
       />
 
       <EventSeriesShiftEditor
@@ -498,7 +495,7 @@ export function EventSeriesOverview({ seriesId }: { seriesId: Id<"eventSeries"> 
         blockTemplates={series.blockTemplates}
         shiftTemplates={series.shiftTemplates}
         occurrences={occurrences}
-        onMessage={setMessage}
+        onMessage={notify.success}
       />
 
       <Card>

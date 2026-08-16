@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/select";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { notify } from "@/lib/notify";
 import {
   featuredStatPresets,
   formatPublishedAtInput,
@@ -77,7 +78,6 @@ export function WorkPostsManager() {
   const removePost = useMutation(api.marketingPosts.remove);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
   const [slugTouched, setSlugTouched] = useState(false);
 
   // `listAdmin` no longer ships every post body, so the editor loads the
@@ -182,7 +182,7 @@ export function WorkPostsManager() {
     {
       onSuccess: (values) => {
         form.reset(values);
-        setMessage(selectedId ? "Post updated." : "Post created.");
+        notify.success(selectedId ? "Post updated." : "Post created.");
       },
     },
   );
@@ -193,9 +193,9 @@ export function WorkPostsManager() {
     try {
       await removePost({ id: selectedId as Id<"marketingPosts"> });
       startNewPost();
-      setMessage("Post deleted.");
+      notify.success("Post deleted.");
     } catch (error) {
-      setMessage(getConvexErrorMessage(error));
+      notify.error(getConvexErrorMessage(error));
     }
   }
 
@@ -245,9 +245,9 @@ export function WorkPostsManager() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {message || form.saveError ? (
+          {form.saveError ? (
             <Alert className="mb-4">
-              <AlertDescription>{message ?? form.saveError}</AlertDescription>
+              <AlertDescription>{form.saveError}</AlertDescription>
             </Alert>
           ) : null}
 

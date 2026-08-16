@@ -30,6 +30,7 @@ import {
 import { useConvexForm } from "@/hooks/use-convex-form";
 import { pacificDateKey } from "@/lib/format";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { notify } from "@/lib/notify";
 import {
   formatExpiresAt,
   formatRelativeTime,
@@ -82,7 +83,6 @@ export function ShortLinksManager() {
   const removeLink = useMutation(api.shortLinks.remove);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
   const [slugTouched, setSlugTouched] = useState(false);
   const [search, setSearch] = useState("");
 
@@ -170,7 +170,7 @@ export function ShortLinksManager() {
     {
       onSuccess: (values) => {
         form.reset(values);
-        setMessage(selectedId ? "Short link updated." : "Short link created.");
+        notify.success(selectedId ? "Short link updated." : "Short link created.");
       },
     },
   );
@@ -181,9 +181,9 @@ export function ShortLinksManager() {
     try {
       await removeLink({ id: selectedId as Id<"shortLinks"> });
       startNewLink();
-      setMessage("Short link deleted.");
+      notify.success("Short link deleted.");
     } catch (error) {
-      setMessage(getConvexErrorMessage(error));
+      notify.error(getConvexErrorMessage(error));
     }
   }
 
@@ -192,9 +192,9 @@ export function ShortLinksManager() {
     if (!slug.trim()) return;
     try {
       await navigator.clipboard.writeText(formatShortLinkUrl(slug, SHORT_LINK_BASE_URL));
-      setMessage("Short link copied to clipboard.");
+      notify.success("Short link copied to clipboard.");
     } catch {
-      setMessage("Could not copy link.");
+      notify.error("Could not copy link.");
     }
   }
 
@@ -254,9 +254,9 @@ export function ShortLinksManager() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {message || form.saveError ? (
+          {form.saveError ? (
             <Alert className="mb-4">
-              <AlertDescription>{message ?? form.saveError}</AlertDescription>
+              <AlertDescription>{form.saveError}</AlertDescription>
             </Alert>
           ) : null}
 

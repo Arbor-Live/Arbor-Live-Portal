@@ -77,6 +77,7 @@ import {
   type SeriesEditScope,
 } from "@/lib/event-series";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { notify } from "@/lib/notify";
 import { FormSaveBar } from "@/components/forms";
 import { StoredAssetImage, StoredAssetLink } from "@/components/files/stored-asset-image";
 import { isImageAssetReference } from "@/lib/r2-assets";
@@ -282,6 +283,13 @@ export function EventEditor({
   const [artifactLinkUrl, setArtifactLinkUrl] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [messageTone, setMessageTone] = useState<"success" | "error">("success");
+
+  function flash(tone: "success" | "error", text: string) {
+    setMessageTone(tone);
+    setMessage(text);
+    if (tone === "success") notify.success(text);
+    else notify.error(text);
+  }
   const [isRecurring, setIsRecurring] = useState(false);
   const [intervalWeeks, setIntervalWeeks] = useState("1");
   const [recurrenceEndMode, setRecurrenceEndMode] = useState<RecurrenceEndMode>("count");
@@ -783,25 +791,21 @@ export function EventEditor({
       editScope: seriesMeta && editScope ? editScope : undefined,
     });
     setLastSavedOverviewSignature(JSON.stringify(payload));
-    setMessageTone("success");
-    setMessage("Overview saved.");
+    flash("success", "Overview saved.");
   }
 
   async function saveCore() {
     if (!title.trim() || !startAt || !endAt) {
-      setMessageTone("error");
-      setMessage("Title, start, and end are required.");
+      flash("error", "Title, start, and end are required.");
       return;
     }
     if (isCreate && isRecurring) {
       if (recurrencePreview.error) {
-        setMessageTone("error");
-        setMessage(recurrencePreview.error);
+        flash("error", recurrencePreview.error);
         return;
       }
       if (recurrencePreview.starts.length === 0) {
-        setMessageTone("error");
-        setMessage("Add valid recurrence settings to preview at least one occurrence.");
+        flash("error", "Add valid recurrence settings to preview at least one occurrence.");
         return;
       }
     }
@@ -812,8 +816,7 @@ export function EventEditor({
       }
       await persistOverview("this");
     } catch (error) {
-      setMessageTone("error");
-      setMessage(`Overview error: ${getConvexErrorMessage(error)}`);
+      flash("error", `Overview error: ${getConvexErrorMessage(error)}`);
     }
   }
 
@@ -822,8 +825,7 @@ export function EventEditor({
     try {
       await persistOverview(scope);
     } catch (error) {
-      setMessageTone("error");
-      setMessage(`Overview error: ${getConvexErrorMessage(error)}`);
+      flash("error", `Overview error: ${getConvexErrorMessage(error)}`);
     }
   }
 
@@ -901,11 +903,9 @@ export function EventEditor({
           shifts: nextShifts,
         }),
       );
-      setMessageTone("success");
-      setMessage("Schedule saved.");
+      flash("success", "Schedule saved.");
     } catch (error) {
-      setMessageTone("error");
-      setMessage(`Schedule error: ${getConvexErrorMessage(error)}`);
+      flash("error", `Schedule error: ${getConvexErrorMessage(error)}`);
       throw error;
     }
   }
@@ -937,11 +937,9 @@ export function EventEditor({
         })),
       });
       setLastSavedScheduleSignature(JSON.stringify({ blocks, shifts }));
-      setMessageTone("success");
-      setMessage("Schedule personnel saved.");
+      flash("success", "Schedule personnel saved.");
     } catch (error) {
-      setMessageTone("error");
-      setMessage(`Schedule personnel error: ${getConvexErrorMessage(error)}`);
+      flash("error", `Schedule personnel error: ${getConvexErrorMessage(error)}`);
       throw error;
     }
   }
@@ -971,8 +969,7 @@ export function EventEditor({
       await saveSchedule();
       if (!eventId) return;
       await saveShifts();
-      setMessageTone("success");
-      setMessage("Schedule and assigned personnel saved.");
+      flash("success", "Schedule and assigned personnel saved.");
     } catch {
       // Individual save handlers already set section-specific messages.
     }
@@ -988,8 +985,7 @@ export function EventEditor({
       await deleteEventAdmin({ id: eventId });
       router.push("/dashboard/events");
     } catch (error) {
-      setMessageTone("error");
-      setMessage(getConvexErrorMessage(error));
+      flash("error", getConvexErrorMessage(error));
     }
   }
 
@@ -1006,8 +1002,7 @@ export function EventEditor({
       await deleteEventAdmin({ id: eventId });
       router.push("/dashboard/events");
     } catch (error) {
-      setMessageTone("error");
-      setMessage(getConvexErrorMessage(error));
+      flash("error", getConvexErrorMessage(error));
     }
   }
 
@@ -1020,11 +1015,9 @@ export function EventEditor({
     try {
       const result = await deleteUnassignedShifts({ eventId });
       setShifts((prev) => prev.filter((shift) => shift.scheduleBlockRef));
-      setMessageTone("success");
-      setMessage(`Deleted ${result.deletedCount} legacy unassigned shift${result.deletedCount === 1 ? "" : "s"}.`);
+      flash("success", `Deleted ${result.deletedCount} legacy unassigned shift${result.deletedCount === 1 ? "" : "s"}.`);
     } catch (error) {
-      setMessageTone("error");
-      setMessage(getConvexErrorMessage(error));
+      flash("error", getConvexErrorMessage(error));
     }
   }
 
@@ -1038,11 +1031,9 @@ export function EventEditor({
       await reattachOccurrence({ eventId });
       // Allow the load effect to re-hydrate local form state from the restored occurrence.
       hydratedEventIdRef.current = null;
-      setMessageTone("success");
-      setMessage("Occurrence reset to series template.");
+      flash("success", "Occurrence reset to series template.");
     } catch (error) {
-      setMessageTone("error");
-      setMessage(getConvexErrorMessage(error, "Failed to reset occurrence."));
+      flash("error", getConvexErrorMessage(error, "Failed to reset occurrence."));
     }
   }
 
@@ -1476,12 +1467,10 @@ export function EventEditor({
                       assigneeUserId: value || undefined,
                     })
                       .then(() => {
-                        setMessage("Marketing poster designer updated.");
-                        setMessageTone("success");
+                        flash("success", "Marketing poster designer updated.");
                       })
                       .catch((error) => {
-                        setMessage(error instanceof Error ? error.message : "Could not update poster designer.");
-                        setMessageTone("error");
+                        flash("error", error instanceof Error ? error.message : "Could not update poster designer.");
                       });
                   }}
                   options={userSelectOptions}
@@ -1951,12 +1940,10 @@ export function EventEditor({
                 seriesLinked={Boolean(seriesMeta && !seriesMeta.seriesDetached)}
                 initialItems={pullListInitialItems}
                 onSaved={(text) => {
-                  setMessageTone("success");
-                  setMessage(text);
+                  flash("success", text);
                 }}
                 onError={(text) => {
-                  setMessageTone("error");
-                  setMessage(text);
+                  flash("error", text);
                 }}
               />
             )}
@@ -2010,7 +1997,7 @@ export function EventEditor({
                     setArtifactTitle("");
                     setArtifactMarkdown("");
                     setArtifactLinkUrl("");
-                    setMessage("Artifact added.");
+                    flash("success", "Artifact added.");
                   }}
                 >
                   Add Artifact

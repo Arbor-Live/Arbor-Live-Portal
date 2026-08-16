@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { UserRatesAdminClient } from "@/components/users/user-rates-admin-client";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { notify } from "@/lib/notify";
 import {
   CREW_RATE_MODE_OPTIONS,
   PAYROLL_METHOD_OPTIONS,
@@ -208,7 +209,6 @@ export function UsersManagementClient({
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
   const [editingInvite, setEditingInvite] = useState<EditingInvite | null>(null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
   const [expandedUserIds, setExpandedUserIds] = useState<Record<string, boolean>>({});
   const [onboardingFilter, setOnboardingFilter] = useState<"all" | "incomplete">("all");
   const [accessFilter, setAccessFilter] = useState<"active" | "removed" | "all">("active");
@@ -245,9 +245,9 @@ export function UsersManagementClient({
       const created = await createOrganization({ name: organizationName.trim() });
       setOrganizationName("");
       setSelectedOrganizationId(created.id);
-      setMessage(`Created organization ${created.name}.`);
+      notify.success(`Created organization ${created.name}.`);
     } catch (error) {
-      setMessage(getConvexErrorMessage(error));
+      notify.error(getConvexErrorMessage(error));
     }
   }
 
@@ -266,27 +266,27 @@ export function UsersManagementClient({
     if (!window.confirm(`Cancel the invitation for ${invite.email}?`)) return;
     try {
       await cancelInvite({ invitationId: invite.id });
-      setMessage(`Invitation cancelled for ${invite.email}.`);
+      notify.success(`Invitation cancelled for ${invite.email}.`);
     } catch (error) {
-      setMessage(getConvexErrorMessage(error));
+      notify.error(getConvexErrorMessage(error));
     }
   }
 
   async function onResendInvite(invitationId: string) {
     try {
       await resendInvite({ invitationId });
-      setMessage("Invite resent.");
+      notify.success("Invite resent.");
     } catch (error) {
-      setMessage(getConvexErrorMessage(error));
+      notify.error(getConvexErrorMessage(error));
     }
   }
 
   async function onUserPasswordReset(user: AdminUser) {
     try {
       await sendPasswordReset({ userId: user.id });
-      setMessage(`Password reset sent for ${user.name}.`);
+      notify.success(`Password reset sent for ${user.name}.`);
     } catch (error) {
-      setMessage(getConvexErrorMessage(error));
+      notify.error(getConvexErrorMessage(error));
     }
   }
 
@@ -295,9 +295,9 @@ export function UsersManagementClient({
     if (!window.confirm(`${action} ${user.name}?`)) return;
     try {
       await setUserAccess({ userId: user.id, removed });
-      setMessage(removed ? `Removed access for ${user.name}.` : `Reactivated ${user.name}.`);
+      notify.success(removed ? `Removed access for ${user.name}.` : `Reactivated ${user.name}.`);
     } catch (error) {
-      setMessage(getConvexErrorMessage(error));
+      notify.error(getConvexErrorMessage(error));
     }
   }
 
@@ -311,22 +311,22 @@ export function UsersManagementClient({
     }
     try {
       const result = await archiveBandOrganization({ organizationId: org.organizationId });
-      setMessage(
+      notify.success(
         result.deactivatedUserIds.length > 0
           ? `Archived ${org.displayName || org.name}. Deactivated ${result.deactivatedUserIds.length} user(s) with no remaining access.`
           : `Archived ${org.displayName || org.name}.`,
       );
     } catch (error) {
-      setMessage(getConvexErrorMessage(error));
+      notify.error(getConvexErrorMessage(error));
     }
   }
 
   async function onUnarchiveBandOrganization(org: BandOrgRow) {
     try {
       await unarchiveBandOrganization({ organizationId: org.organizationId });
-      setMessage(`Restored ${org.displayName || org.name} from archive.`);
+      notify.success(`Restored ${org.displayName || org.name} from archive.`);
     } catch (error) {
-      setMessage(getConvexErrorMessage(error));
+      notify.error(getConvexErrorMessage(error));
     }
   }
 
@@ -340,25 +340,24 @@ export function UsersManagementClient({
     }
     try {
       await deleteArchivedBandOrganization({ organizationId: org.organizationId });
-      setMessage(`Deleted ${org.displayName || org.name}.`);
+      notify.success(`Deleted ${org.displayName || org.name}.`);
     } catch (error) {
-      setMessage(getConvexErrorMessage(error));
+      notify.error(getConvexErrorMessage(error));
     }
   }
 
   const onBackfillDefaults = async () => {
     try {
       await backfillDefaults({});
-      setMessage("Backfill started for existing users.");
+      notify.success("Backfill started for existing users.");
     } catch (error) {
-      setMessage(getConvexErrorMessage(error));
+      notify.error(getConvexErrorMessage(error));
     }
   }
 
 
   return (
     <div className="space-y-4 pb-24">
-      {message ? <p className="text-sm text-primary">{message}</p> : null}
 
       {showOrganizations ? (
         <Card>
@@ -550,12 +549,12 @@ export function UsersManagementClient({
                       onWaiveOnboarding={async () => {
                         try {
                           await waiveOnboarding({ userId: user.id });
-                          setMessage(`Waived onboarding for ${user.name}.`);
+                          notify.success(`Waived onboarding for ${user.name}.`);
                         } catch (error) {
-                          setMessage(getConvexErrorMessage(error));
+                          notify.error(getConvexErrorMessage(error));
                         }
                       }}
-                      onMessage={setMessage}
+                      onMessage={notify.success}
                     />
                   ))}
                 </tbody>
@@ -670,7 +669,7 @@ export function UsersManagementClient({
           onClose={() => setInviteModalOpen(false)}
           onInvited={() => {
             setInviteModalOpen(false);
-            setMessage("Invite sent.");
+            notify.success("Invite sent.");
           }}
           inviteUser={inviteUser}
         />
@@ -683,7 +682,7 @@ export function UsersManagementClient({
           onClose={() => setEditingInvite(null)}
           onSaved={() => {
             setEditingInvite(null);
-            setMessage("Invitation updated.");
+            notify.success("Invitation updated.");
           }}
           updateInvite={updateInvite}
         />
@@ -696,7 +695,7 @@ export function UsersManagementClient({
           onClose={() => setCreateModalOpen(false)}
           onCreated={() => {
             setCreateModalOpen(false);
-            setMessage("User created.");
+            notify.success("User created.");
           }}
           createUser={createUser}
         />
@@ -832,7 +831,7 @@ function UserAdminRow({
       setMembershipDraft({ organizationId: "", role: "org_member" });
       onMessage(`Added membership for ${user.name}.`);
     } catch (error) {
-      onMessage(getConvexErrorMessage(error));
+      notify.error(getConvexErrorMessage(error));
     }
   }
 
@@ -846,7 +845,7 @@ function UserAdminRow({
       await removeMembership({ userId: user.id, organizationId });
       onMessage(`Removed membership for ${user.name}.`);
     } catch (error) {
-      onMessage(getConvexErrorMessage(error));
+      notify.error(getConvexErrorMessage(error));
     }
   }
 

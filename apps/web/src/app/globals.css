@@ -203,7 +203,12 @@
   }
 
   .app-date-time-popper {
-    z-index: 60;
+    z-index: 80;
+  }
+
+  #arbor-date-picker-portal {
+    position: relative;
+    z-index: 80;
   }
 
   .app-date-time-wrapper {
