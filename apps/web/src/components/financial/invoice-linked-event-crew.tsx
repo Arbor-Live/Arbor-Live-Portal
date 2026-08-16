@@ -495,6 +495,7 @@ export function InvoiceLinkedEventCrewSection({
         <EventTimelineScheduler
           dayCount={dayCount}
           blocks={blocks}
+          anchorStartsAt={startAt}
           onChange={(next) => {
             const nextBlocks = stableBlocks(next);
             setBlocks(nextBlocks);

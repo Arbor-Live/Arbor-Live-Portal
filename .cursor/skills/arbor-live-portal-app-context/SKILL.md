@@ -61,6 +61,10 @@ Human-readable docs live in `docs/` (`getting-started.md`, `architecture.md`, `d
   - snapping (15-minute increments)
   - overlap lane stacking (overlapping blocks render on separate rows)
   - cross-midnight rendering across day rows
+  - double-click empty timetable to add a 1-hour block at that time
+- New blocks default to the event **Day 1** date (not today) and a 1-hour window.
+  Picking start fills end (+1h, or keeps a custom duration); picking end with no
+  start fills start (−1h). The block list is ordered by start time.
 - `dayIndex` is anchored to the event **start** day. Strike may run past midnight
   after an ~11pm show end without moving `events.endAt` / `spansMultipleDays`.
 - Quick Add intent by event type:
@@ -80,10 +84,12 @@ Human-readable docs live in `docs/` (`getting-started.md`, `architecture.md`, `d
 - Event costs are direct fields on `events`:
   - `crewCostUsd`
   - `bandsCostUsd` (band payouts / expenses — not revenue)
-  - `externalRentalsCostUsd` (placeholder)
-- Invoice artist lines pick a band (or TBD) and pull `performerHourlyRateUsd`;
-  net profit / analytics still treat them as non-revenue. Bands are expenses;
-  Arbor does not earn margin on them.
+  - `externalRentalsCostUsd` (pass-through expense — not revenue)
+- Invoice artist and external-rental lines may bill the host for transparency.
+  Insights earned revenue and net profit treat them as pass-through
+  (`invoicePassThroughUsd` / `arborEarnedRevenueUsd` / `netProfitFromInvoiceUsd`).
+  Matching event pass-through costs are not double-counted; overruns still hit
+  profit. Arbor margin is effectively equipment / crew / fees.
 - In UI, costs are edited as part of event record, not via report creation workflows.
 
 ## Invoice and Public Quote Context
@@ -92,6 +98,8 @@ Human-readable docs live in `docs/` (`getting-started.md`, `architecture.md`, `d
 - Band payment IDs use `ALBPAY-` with the same suffix format.
 - Public quote link token workflow exists on invoices (`publicApprovalToken`).
 - Quote approval status is unified for table display.
+- Default invoice due date is the **first** linked event’s start calendar day + 30
+  days (not the last day of a multi-day event or the last series occurrence).
 
 ## Timezone (Pacific)
 

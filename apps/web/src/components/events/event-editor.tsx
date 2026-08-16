@@ -57,6 +57,7 @@ import {
 import {
   buildQuickAddScheduleBlocks,
   eventTypeHasCrewAssignment,
+  sortScheduleBlocksByTime,
 } from "@/lib/event-schedule-draft";
 import {
   getAvailabilityNotesForDisplay,
@@ -88,7 +89,13 @@ import {
   pacificEndOfDayMs,
   pacificScheduleDayCount,
 } from "@/lib/format";
-import { arborEarnedRevenueUsd, netProfitFromInvoiceUsd } from "@/lib/invoice-profit";
+import {
+  arborEarnedRevenueUsd,
+  eventPassThroughCostUsd,
+  invoicePassThroughUsd,
+  netProfitCostUsd,
+  netProfitFromInvoiceUsd,
+} from "@/lib/invoice-profit";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { WarningCircleIcon } from "@phosphor-icons/react";
 
@@ -404,16 +411,18 @@ export function EventEditor({
     setOpenMicEnabled(eventData.event.openMicEnabled === true);
     setOpenMicNotes(eventData.event.openMicNotes ?? "");
     setBlocks(
-      eventData.blocks.map((row) => ({
-        id: row._id,
-        clientId: row._id,
-        blockType: row.blockType,
-        label: row.label,
-        dayIndex: row.dayIndex,
-        startsAt: toLocalDateTimeInput(row.startsAt),
-        endsAt: toLocalDateTimeInput(row.endsAt),
-        notes: row.notes ?? "",
-      })),
+      sortScheduleBlocksByTime(
+        eventData.blocks.map((row) => ({
+          id: row._id,
+          clientId: row._id,
+          blockType: row.blockType,
+          label: row.label,
+          dayIndex: row.dayIndex,
+          startsAt: toLocalDateTimeInput(row.startsAt),
+          endsAt: toLocalDateTimeInput(row.endsAt),
+          notes: row.notes ?? "",
+        })),
+      ),
     );
     setShifts(
       eventData.shifts.map((row) => ({
@@ -850,16 +859,18 @@ export function EventEditor({
         })),
       });
       setBlocks(
-        savedBlocks.map((row) => ({
-          id: row.id,
-          clientId: row.clientId ?? row.id,
-          blockType: row.blockType,
-          label: row.label,
-          dayIndex: row.dayIndex,
-          startsAt: toLocalDateTimeInput(row.startsAt),
-          endsAt: toLocalDateTimeInput(row.endsAt),
-          notes: row.notes ?? "",
-        })),
+        sortScheduleBlocksByTime(
+          savedBlocks.map((row) => ({
+            id: row.id,
+            clientId: row.clientId ?? row.id,
+            blockType: row.blockType,
+            label: row.label,
+            dayIndex: row.dayIndex,
+            startsAt: toLocalDateTimeInput(row.startsAt),
+            endsAt: toLocalDateTimeInput(row.endsAt),
+            notes: row.notes ?? "",
+          })),
+        ),
       );
       const persistedBlockIdByRef = mapPersistedBlockIdByRef(
         savedBlocks.map((row) => ({
@@ -1094,20 +1105,39 @@ export function EventEditor({
     (seriesMeta?.seriesOtherCostUsd ?? 0);
   const totalEventCostUsd = crewCostTotal + bandsCostTotal + externalRentalsCostTotal + otherCostTotal;
   const seriesProjectedCostUsd = seriesMeta?.costSummary?.projectedGrandTotalUsd;
-  const marginCostUsd =
+  const marginEventCostUsd =
     seriesMeta && seriesProjectedCostUsd !== undefined
       ? seriesProjectedCostUsd
       : totalEventCostUsd + seriesRecurringTotalUsd;
+  const eventPassThroughCostsUsd =
+    seriesMeta?.costSummary?.projectedPassThroughUsd !== undefined
+      ? seriesMeta.costSummary.projectedPassThroughUsd
+      : eventPassThroughCostUsd(bandsCostTotal, externalRentalsCostTotal) +
+        (seriesMeta?.seriesBandsCostUsd ?? 0) +
+        (seriesMeta?.seriesExternalRentalsCostUsd ?? 0);
+  const invoicePassThroughSubtotalUsd = invoicePassThroughUsd(
+    linkedInvoice?.artistsSubtotalUsd ?? 0,
+    linkedInvoice?.externalRentalsSubtotalUsd ?? 0,
+  );
   const billedTotalUsd =
     linkedInvoice != null
-      ? arborEarnedRevenueUsd(linkedInvoice.totalUsd, linkedInvoice.artistsSubtotalUsd ?? 0)
+      ? arborEarnedRevenueUsd(linkedInvoice.totalUsd, invoicePassThroughSubtotalUsd)
       : null;
+  const marginCostUsd =
+    linkedInvoice != null
+      ? netProfitCostUsd(
+          marginEventCostUsd,
+          invoicePassThroughSubtotalUsd,
+          eventPassThroughCostsUsd,
+        )
+      : marginEventCostUsd;
   const profitLossUsd =
     linkedInvoice != null
       ? netProfitFromInvoiceUsd(
           linkedInvoice.totalUsd,
-          linkedInvoice.artistsSubtotalUsd ?? 0,
-          marginCostUsd,
+          invoicePassThroughSubtotalUsd,
+          marginEventCostUsd,
+          eventPassThroughCostsUsd,
         )
       : null;
   const quickAddDisabled = !startAt || !endAt;
@@ -1681,6 +1711,7 @@ export function EventEditor({
             <EventTimelineScheduler
               dayCount={dayCount}
               blocks={blocks}
+              anchorStartsAt={startAt}
               onChange={(next) => {
                 const nextBlocks = withStableBlockRefs(next);
                 setBlocks(nextBlocks);

@@ -15,7 +15,7 @@ import {
   loadEventsInRange,
   requireAnalyticsAccess,
 } from "./lib/analyticsQuery";
-import { arborEarnedRevenueUsd } from "./lib/invoiceProfit";
+import { arborEarnedRevenueUsd, invoicePassThroughUsd } from "./lib/invoiceProfit";
 import { classifyPaymentQueue } from "./lib/invoicePaymentStatus";
 import { getActivePaymentProofSubmission } from "./lib/paymentProof";
 
@@ -114,11 +114,21 @@ export const getFinancialSummary = query({
     ]);
 
     const revenueRecognizedUsd = paid.invoices.reduce(
-      (sum, inv) => sum + arborEarnedRevenueUsd(inv.totalUsd, inv.artistsSubtotalUsd),
+      (sum, inv) =>
+        sum +
+        arborEarnedRevenueUsd(
+          inv.totalUsd,
+          invoicePassThroughUsd(inv.artistsSubtotalUsd, inv.externalRentalsSubtotalUsd),
+        ),
       0,
     );
     const revenueBookedUsd = approved.invoices.reduce(
-      (sum, inv) => sum + arborEarnedRevenueUsd(inv.totalUsd, inv.artistsSubtotalUsd),
+      (sum, inv) =>
+        sum +
+        arborEarnedRevenueUsd(
+          inv.totalUsd,
+          invoicePassThroughUsd(inv.artistsSubtotalUsd, inv.externalRentalsSubtotalUsd),
+        ),
       0,
     );
 
@@ -139,7 +149,13 @@ export const getFinancialSummary = query({
       revenueByMonth.set(
         key,
         (revenueByMonth.get(key) ?? 0) +
-          arborEarnedRevenueUsd(invoice.totalUsd, invoice.artistsSubtotalUsd),
+          arborEarnedRevenueUsd(
+            invoice.totalUsd,
+            invoicePassThroughUsd(
+              invoice.artistsSubtotalUsd,
+              invoice.externalRentalsSubtotalUsd,
+            ),
+          ),
       );
     }
 
@@ -189,7 +205,13 @@ export const getRevenueByMonth = query({
       byMonth.set(
         key,
         (byMonth.get(key) ?? 0) +
-          arborEarnedRevenueUsd(invoice.totalUsd, invoice.artistsSubtotalUsd),
+          arborEarnedRevenueUsd(
+            invoice.totalUsd,
+            invoicePassThroughUsd(
+              invoice.artistsSubtotalUsd,
+              invoice.externalRentalsSubtotalUsd,
+            ),
+          ),
       );
     }
 
@@ -222,22 +244,20 @@ export const getRevenueMix = query({
     let equipmentUsd = 0;
     let crewUsd = 0;
     let feesUsd = 0;
-    let externalRentalsUsd = 0;
 
     for (const invoice of invoices) {
       equipmentUsd += invoice.equipmentSubtotalUsd;
       crewUsd += invoice.crewSubtotalUsd;
       feesUsd += invoice.feesSubtotalUsd;
-      externalRentalsUsd += invoice.externalRentalsSubtotalUsd;
     }
 
     return {
       equipmentUsd,
       crewUsd,
-      // Artists / bands are expenses, not earned revenue — omit from mix.
+      // Artists / bands and external rentals are expenses, not earned revenue.
       artistsUsd: 0,
       feesUsd,
-      externalRentalsUsd,
+      externalRentalsUsd: 0,
       truncated,
     };
   },
@@ -404,7 +424,10 @@ export const getTopClients = query({
       if (existing) {
         existing.totalUsd += arborEarnedRevenueUsd(
           invoice.totalUsd,
-          invoice.artistsSubtotalUsd,
+          invoicePassThroughUsd(
+            invoice.artistsSubtotalUsd,
+            invoice.externalRentalsSubtotalUsd,
+          ),
         );
         existing.invoiceCount += 1;
         continue;
@@ -418,7 +441,13 @@ export const getTopClients = query({
       byKey.set(key, {
         groupId,
         name,
-        totalUsd: arborEarnedRevenueUsd(invoice.totalUsd, invoice.artistsSubtotalUsd),
+        totalUsd: arborEarnedRevenueUsd(
+          invoice.totalUsd,
+          invoicePassThroughUsd(
+            invoice.artistsSubtotalUsd,
+            invoice.externalRentalsSubtotalUsd,
+          ),
+        ),
         invoiceCount: 1,
       });
     }

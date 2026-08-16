@@ -25,6 +25,7 @@ import {
   timelineDraftsToTemplates,
   type SeriesBlockTemplate,
 } from "@/lib/event-series-schedule";
+import { toLocalDateTimeInput } from "@/lib/crew-availability";
 import { formatOccurrencePreview } from "@/lib/event-series";
 import {
   seriesScheduleEditorSchema,
@@ -264,6 +265,7 @@ export function EventSeriesScheduleEditor({
           <EventTimelineScheduler
             dayCount={dayCount}
             blocks={blocks}
+            anchorStartsAt={toLocalDateTimeInput(anchorStartAt)}
             onChange={(next) => {
               setBlocksOverride(withStableBlockRefs(next));
               setBlocksDirty(true);

@@ -54,7 +54,13 @@ import {
   computeInvoiceDraftTotals,
   computePackageExclusionSuggestedDiscount,
 } from "@/lib/compute-invoice-draft-totals";
-import { arborEarnedRevenueUsd, netProfitFromInvoiceUsd } from "@/lib/invoice-profit";
+import {
+  arborEarnedRevenueUsd,
+  eventPassThroughCostUsd,
+  invoicePassThroughUsd,
+  netProfitCostUsd,
+  netProfitFromInvoiceUsd,
+} from "@/lib/invoice-profit";
 import { equipmentDivisionWarnings } from "@/lib/equipment-division-warnings";
 import { InvoicePdfDownloadButton } from "@/components/financial/invoice-pdf-download-button";
 import { SendQuoteToClientSheet } from "@/components/financial/send-quote-to-client-sheet";
@@ -132,20 +138,18 @@ import {
 } from "@/lib/invoice-group-labels";
 import { formatContactFullName, splitContactName } from "@/lib/contact-name";
 import {
-  addPacificCalendarDays,
   formatDateTime,
   formatDateTimeRange,
   formatUsd,
-  pacificDateKey,
 } from "@/lib/format";
+import {
+  firstLinkedEventStartAtMs,
+  INVOICE_DUE_DAYS_AFTER_EVENT,
+  invoiceDueDateFromFirstEvent,
+} from "@/lib/invoice-due-date";
 
-const INVOICE_DUE_DAYS_AFTER_FIRST_DAY = 30;
 const ARTIST_ROW_GRID =
   "min-w-0 gap-2 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_5.5rem_5.5rem_7.5rem_5.5rem]";
-
-function invoiceDueDateFromFirstDay(firstDayMs: number) {
-  return pacificDateKey(addPacificCalendarDays(firstDayMs, INVOICE_DUE_DAYS_AFTER_FIRST_DAY));
-}
 
 function formatInvoiceDiscountInputValue(value: number, type: "amount" | "percent") {
   if (type === "amount") return Number.isFinite(value) ? value.toFixed(2) : "0.00";
@@ -209,6 +213,7 @@ export function InvoiceEditor({
   const [clientPostalCode, setClientPostalCode] = useState("");
   const [equipmentPricingMode, setEquipmentPricingMode] = useState<"subsidized" | "nonSubsidized">("nonSubsidized");
   const [crewRateMode, setCrewRateMode] = useState<"normal" | "lead" | "custom">("normal");
+  const [customCrewRateUsd, setCustomCrewRateUsd] = useState("");
   const [discountType, setDiscountType] = useState<"amount" | "percent">("amount");
   const [discountValue, setDiscountValue] = useState("0");
   const [notes, setNotes] = useState("");
@@ -401,10 +406,12 @@ export function InvoiceEditor({
       return settings?.crewLeadRateUsd ?? settings?.crewOtRateUsd ?? settings?.crewNormalRateUsd ?? 0;
     }
     if (crewRateMode === "custom") {
+      const custom = Number(customCrewRateUsd);
+      if (Number.isFinite(custom) && customCrewRateUsd.trim() !== "") return custom;
       return settings?.crewNormalRateUsd ?? 0;
     }
     return settings?.crewNormalRateUsd ?? 0;
-  }, [crewRateMode, settings]);
+  }, [crewRateMode, customCrewRateUsd, settings]);
 
   const crewRatesByUserId = useMemo(() => {
     const map = new Map<string, CrewAssigneeRate>();
@@ -575,10 +582,10 @@ export function InvoiceEditor({
   }, [issueDate, invoiceId]);
 
   const suggestedDueDate = useMemo(() => {
-    const firstDayAt = linkedEvent?.startAt;
+    const firstDayAt = firstLinkedEventStartAtMs(linkedEvent?.linkedEvents) ?? linkedEvent?.startAt;
     if (firstDayAt == null) return "";
-    return invoiceDueDateFromFirstDay(firstDayAt);
-  }, [linkedEvent?.startAt]);
+    return invoiceDueDateFromFirstEvent(firstDayAt);
+  }, [linkedEvent?.linkedEvents, linkedEvent?.startAt]);
 
   useEffect(() => {
     if (dueDateTouched) return;
@@ -605,6 +612,7 @@ export function InvoiceEditor({
     setInvoiceFieldsHydrated(!invoiceId);
     setEditorBaselineReady(!invoiceId);
     setDueDateTouched(false);
+    setCustomCrewRateUsd("");
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [invoiceId]);
 
@@ -692,6 +700,12 @@ export function InvoiceEditor({
       quantity: row.quantity.toString(),
       rateUsd: row.rateUsd.toString(),
     }));
+    if (invoice.crewRateMode === "custom") {
+      const savedRate = savedCrewRows.find((row) => row.rateUsd > 0)?.rateUsd ?? savedCrewRows[0]?.rateUsd;
+      setCustomCrewRateUsd(savedRate != null ? String(savedRate) : "");
+    } else {
+      setCustomCrewRateUsd("");
+    }
     setFees(
       lineItems
         .filter((row) => row.section === "fee")
@@ -980,7 +994,7 @@ export function InvoiceEditor({
         stamped > 0
           ? stamped
           : crewRateMode === "custom"
-            ? stamped
+            ? Number(customCrewRateUsd || "0")
             : modeDefaultRate;
       rows.push({
         section: "crew",
@@ -1163,6 +1177,7 @@ export function InvoiceEditor({
     clientPostalCode,
     equipmentPricingMode,
     crewRateMode,
+    customCrewRateUsd,
     discountType,
     discountValue,
     notes,
@@ -1229,6 +1244,7 @@ export function InvoiceEditor({
     clientPostalCode,
     equipmentPricingMode,
     crewRateMode,
+    customCrewRateUsd,
     discountType,
     discountValue,
     notes,
@@ -1249,6 +1265,13 @@ export function InvoiceEditor({
         (linkedEvent?.bandsCostUsd ?? 0) +
         (linkedEvent?.externalRentalsCostUsd ?? 0) +
         (linkedEvent?.otherCostUsd ?? 0);
+  const eventPassThroughCostsUsd =
+    linkedSeries && seriesCostData?.costSummary
+      ? seriesCostData.costSummary.projectedPassThroughUsd
+      : eventPassThroughCostUsd(
+          linkedEvent?.bandsCostUsd ?? 0,
+          linkedEvent?.externalRentalsCostUsd ?? 0,
+        );
 
   const handleSeriesShiftDraftsChange = useCallback(
     (drafts: SeriesShiftTemplateDraft[]) => {
@@ -1301,17 +1324,28 @@ export function InvoiceEditor({
     crewRows,
     fees,
     crewRateMode,
+    customCrewRateUsd,
     settings,
   ]);
 
+  const invoicePassThroughSubtotalUsd = invoicePassThroughUsd(
+    draftTotals.artistsSubtotalUsd,
+    draftTotals.externalRentalsSubtotalUsd,
+  );
   const arborBilledUsd = arborEarnedRevenueUsd(
     draftTotals.totalUsd,
-    draftTotals.artistsSubtotalUsd,
+    invoicePassThroughSubtotalUsd,
+  );
+  const marginCostUsd = netProfitCostUsd(
+    eventCostUsd,
+    invoicePassThroughSubtotalUsd,
+    eventPassThroughCostsUsd,
   );
   const projectedNetProfitUsd = netProfitFromInvoiceUsd(
     draftTotals.totalUsd,
-    draftTotals.artistsSubtotalUsd,
+    invoicePassThroughSubtotalUsd,
     eventCostUsd,
+    eventPassThroughCostsUsd,
   );
 
   const savedTotalUsd = invoiceData?.invoice?.totalUsd;
@@ -1665,6 +1699,7 @@ export function InvoiceEditor({
                 rows={crewRows.filter((row) => row.source === "manual")}
                 setRows={setManualCrewRows}
                 rateMode={crewRateMode}
+                defaultRateUsd={customCrewRateUsd}
               />
             </>
             ) : (
@@ -1726,10 +1761,16 @@ export function InvoiceEditor({
                 rows={crewRows.filter((row) => row.source === "manual")}
                 setRows={setManualCrewRows}
                 rateMode={crewRateMode}
+                defaultRateUsd={customCrewRateUsd}
               />
             </>
           ) : (
-            <SectionCrew rows={crewRows} setRows={setCrewRows} rateMode={crewRateMode} />
+            <SectionCrew
+              rows={crewRows}
+              setRows={setCrewRows}
+              rateMode={crewRateMode}
+              defaultRateUsd={customCrewRateUsd}
+            />
           )}
           </div>
           <div
@@ -1757,7 +1798,7 @@ export function InvoiceEditor({
               <div className="min-w-0 space-y-2">
                 <div className="flex min-w-0 items-center justify-between gap-2">
                   <Label>Due date</Label>
-                  {linkedEvent?.startAt != null ? (
+                  {linkedEvent?.startAt != null || (linkedEvent?.linkedEvents?.length ?? 0) > 0 ? (
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -1765,7 +1806,7 @@ export function InvoiceEditor({
                             <button
                               type="button"
                               className="shrink-0 text-muted-foreground hover:text-foreground"
-                              aria-label="Sync due date to event"
+                              aria-label="Sync due date to first event"
                               onClick={() => setDueDateTouched(false)}
                             >
                               <ArrowsClockwiseIcon className="size-3.5" aria-hidden />
@@ -1773,7 +1814,7 @@ export function InvoiceEditor({
                           ) : (
                             <span
                               className="shrink-0 text-muted-foreground"
-                              aria-label={`Due date auto-synced to first day plus ${INVOICE_DUE_DAYS_AFTER_FIRST_DAY} days`}
+                              aria-label={`Due date auto-synced to first event plus ${INVOICE_DUE_DAYS_AFTER_EVENT} days`}
                             >
                               <ArrowsClockwiseIcon className="size-3.5" aria-hidden />
                             </span>
@@ -1781,8 +1822,8 @@ export function InvoiceEditor({
                         </TooltipTrigger>
                         <TooltipContent>
                           {dueDateTouched
-                            ? "Sync to event"
-                            : `Auto · first day + ${INVOICE_DUE_DAYS_AFTER_FIRST_DAY}d`}
+                            ? "Sync to first event"
+                            : `Auto · first event + ${INVOICE_DUE_DAYS_AFTER_EVENT}d`}
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
@@ -1827,13 +1868,30 @@ export function InvoiceEditor({
                 <select
                   className="h-9 w-full min-w-0 max-w-full rounded-md border bg-background px-3 text-sm"
                   value={crewRateMode}
-                  onChange={(e) => setCrewRateMode(e.target.value as "normal" | "lead" | "custom")}
+                  onChange={(e) => {
+                    const next = e.target.value as "normal" | "lead" | "custom";
+                    setCrewRateMode(next);
+                    if (next === "custom" && !customCrewRateUsd.trim()) {
+                      setCustomCrewRateUsd(String(settings?.crewNormalRateUsd ?? 0));
+                    }
+                  }}
                 >
                   <option value="normal">Normal</option>
                   <option value="lead">Lead</option>
                   <option value="custom">Custom</option>
                 </select>
               </div>
+              {crewRateMode === "custom" ? (
+                <div className="min-w-0 space-y-2">
+                  <Label>Hourly rate</Label>
+                  <Input
+                    className="w-full min-w-0 max-w-full"
+                    value={customCrewRateUsd}
+                    onChange={(e) => setCustomCrewRateUsd(e.target.value)}
+                    placeholder="0"
+                  />
+                </div>
+              ) : null}
             </CardContent>
           </Card>
 
@@ -1983,7 +2041,7 @@ export function InvoiceEditor({
                   Billed: <span className="font-medium">{formatUsd(arborBilledUsd)}</span>
                 </p>
                 <p>
-                  Event cost: <span className="font-medium">{formatUsd(eventCostUsd)}</span>
+                  Event cost: <span className="font-medium">{formatUsd(marginCostUsd)}</span>
                 </p>
                 <p
                   className={
@@ -2783,10 +2841,12 @@ function SectionCrew({
   rows,
   setRows,
   rateMode,
+  defaultRateUsd,
 }: {
   rows: CrewRow[];
   setRows: Dispatch<SetStateAction<CrewRow[]>>;
   rateMode: "normal" | "lead" | "custom";
+  defaultRateUsd: string;
 }) {
   return (
     <Card>
@@ -2859,7 +2919,7 @@ function SectionCrew({
           onClick={() =>
             setRows((prev) => [
               ...prev,
-              { label: "", quantity: "1", rateUsd: rateMode === "custom" ? "0" : undefined },
+              { label: "", quantity: "1", rateUsd: rateMode === "custom" ? defaultRateUsd || "0" : undefined },
             ])
           }
         >
@@ -2874,10 +2934,12 @@ function SectionAdditionalCrewHours({
   rows,
   setRows,
   rateMode,
+  defaultRateUsd,
 }: {
   rows: CrewRow[];
   setRows: Dispatch<SetStateAction<CrewRow[]>>;
   rateMode: "normal" | "lead" | "custom";
+  defaultRateUsd: string;
 }) {
   return (
     <Card>
@@ -2911,7 +2973,7 @@ function SectionAdditionalCrewHours({
           onClick={() =>
             setRows((prev) => [
               ...prev,
-              { label: "", quantity: "1", rateUsd: rateMode === "custom" ? "0" : undefined, source: "manual" },
+              { label: "", quantity: "1", rateUsd: rateMode === "custom" ? defaultRateUsd || "0" : undefined, source: "manual" },
             ])
           }
         >

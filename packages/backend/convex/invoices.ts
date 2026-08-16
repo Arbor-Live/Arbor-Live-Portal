@@ -34,7 +34,11 @@ import {
   normalizeCompensationRateMode,
   resolveUserCompensationHourlyRateUsd,
 } from "./lib/crewCompensation";
-import { netProfitFromInvoiceUsd } from "./lib/invoiceProfit";
+import {
+  eventPassThroughCostUsd,
+  invoicePassThroughUsd,
+  netProfitFromInvoiceUsd,
+} from "./lib/invoiceProfit";
 
 const equipmentPricingModeValue = v.union(v.literal("subsidized"), v.literal("nonSubsidized"));
 const crewRateModeValue = v.union(
@@ -520,11 +524,18 @@ async function resolveInvoiceListLabels(ctx: QueryCtx, invoiceId: Id<"invoices">
       (primaryEvent.externalRentalsCostUsd ?? 0) +
       (primaryEvent.otherCostUsd ?? 0)
     : null;
+  const eventPassThroughCostsUsd = primaryEvent
+    ? eventPassThroughCostUsd(
+        primaryEvent.bandsCostUsd ?? 0,
+        primaryEvent.externalRentalsCostUsd ?? 0,
+      )
+    : null;
   if (series) {
     return {
       seriesTitle: series.title,
       linkedEventTitle: linkedEvents[0]?.title,
       eventCostsUsd,
+      eventPassThroughCostsUsd,
     };
   }
   const seriesIds = [
@@ -537,6 +548,7 @@ async function resolveInvoiceListLabels(ctx: QueryCtx, invoiceId: Id<"invoices">
     seriesTitle: seriesDoc?.title,
     linkedEventTitle: linkedEvents[0]?.title,
     eventCostsUsd,
+    eventPassThroughCostsUsd,
   };
 }
 
@@ -561,10 +573,8 @@ export const listEnriched = query({
     const rows = await recentInvoices(ctx, args.status);
     return await Promise.all(
       rows.map(async (invoice) => {
-        const { seriesTitle, linkedEventTitle, eventCostsUsd } = await resolveInvoiceListLabels(
-          ctx,
-          invoice._id,
-        );
+        const { seriesTitle, linkedEventTitle, eventCostsUsd, eventPassThroughCostsUsd } =
+          await resolveInvoiceListLabels(ctx, invoice._id);
         return {
           _id: invoice._id,
           invoiceNumber: invoice.invoiceNumber,
@@ -574,12 +584,16 @@ export const listEnriched = query({
           issueDate: invoice.issueDate,
           totalUsd: invoice.totalUsd,
           netProfitUsd:
-            eventCostsUsd == null
+            eventCostsUsd == null || eventPassThroughCostsUsd == null
               ? null
               : netProfitFromInvoiceUsd(
                   invoice.totalUsd,
-                  invoice.artistsSubtotalUsd,
+                  invoicePassThroughUsd(
+                    invoice.artistsSubtotalUsd,
+                    invoice.externalRentalsSubtotalUsd,
+                  ),
                   eventCostsUsd,
+                  eventPassThroughCostsUsd,
                 ),
           publicApprovalToken: invoice.publicApprovalToken,
           clientGroupName: invoice.clientGroupName,
