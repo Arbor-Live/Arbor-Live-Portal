@@ -5,7 +5,7 @@
  * flex / keys. Stereo pairs: Keys 9–10 (breakable), OH 15–16 (always ST).
  */
 
-import type { SlotFamily } from "./types";
+import type { SlotFamily, SnakeGroup, SnakeId } from "./types";
 
 export type TemplateSlot = {
   port: number;
@@ -44,3 +44,66 @@ export const PORT_BY_NUMBER = new Map(TEMPLATE_SLOTS.map((slot) => [slot.port, s
 
 /** Mono mid overflow order when flex is full (never steal vox/drums first). */
 export const MID_OVERFLOW_PORTS = [7, 8, 5, 6, 9, 10] as const;
+
+/** Both stage boxes run the same Default.snap layout, one AES50 group each. */
+export const SNAKE_IDS: SnakeId[] = ["A", "B"];
+
+export const SNAKE_LABEL: Record<SnakeId, string> = {
+  A: "Snake A · AES50 A",
+  B: "Snake B · AES50 B",
+};
+
+export const SNAKE_SHORT_LABEL: Record<SnakeId, string> = {
+  A: "Snake A",
+  B: "Snake B",
+};
+
+/**
+ * Console strips each box lands on. A keeps Default.snap's 1–14 (a stereo pair
+ * shares one strip); `spare` is the extra strip used when a stereo pair breaks
+ * and its right-hand socket becomes a mono of its own.
+ */
+export const SNAKE_STRIPS: Record<SnakeId, { offset: number; spare: number }> = {
+  A: { offset: 0, spare: 15 },
+  B: { offset: 16, spare: 31 },
+};
+
+export function stripFor(snake: SnakeId, slot: TemplateSlot): number | null {
+  return slot.strip === null ? null : slot.strip + SNAKE_STRIPS[snake].offset;
+}
+
+export function aes50Label(snake: SnakeId, port: number): string {
+  return `${snake}.${port}`;
+}
+
+/** Drums move between boxes as one block — nobody splits a kit across snakes. */
+export function snakeGroupForFamily(family: SlotFamily): SnakeGroup {
+  switch (family) {
+    case "vox":
+    case "guitar":
+    case "bass":
+    case "flex":
+    case "keys":
+      return family;
+    default:
+      return "drums";
+  }
+}
+
+export const SNAKE_GROUPS: SnakeGroup[] = [
+  "vox",
+  "guitar",
+  "bass",
+  "flex",
+  "keys",
+  "drums",
+];
+
+export const SNAKE_GROUP_LABEL: Record<SnakeGroup, string> = {
+  vox: "Vox",
+  guitar: "Guitar",
+  bass: "Bass",
+  flex: "Flex / horns / perc",
+  keys: "Keys",
+  drums: "Drums",
+};

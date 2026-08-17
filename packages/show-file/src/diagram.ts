@@ -1,4 +1,4 @@
-import { TEMPLATE_SLOTS } from "./slots";
+import { SNAKE_LABEL, TEMPLATE_SLOTS, aes50Label } from "./slots";
 import type {
   EventPatchAllocation,
   PatchDiffPlan,
@@ -8,19 +8,56 @@ import type {
   StageBoxPort,
 } from "./types";
 
-/** Night-wide SD16 / XR18 faceplate (Default.snap layout). */
+/** Stable identity for a port across the night (two boxes share port numbers). */
+function portKey(port: { snake: string; port: number }): string {
+  return `${port.snake}.${port.port}`;
+}
+
+/**
+ * Night-wide faceplate (Default.snap layout). Ports nobody plugs into tonight
+ * are dropped from the diagram and listed as spares instead, so an empty Flex
+ * never reads as "something goes here".
+ */
 export function buildStageBoxDiagramModel(
   allocation: EventPatchAllocation,
   eventName?: string,
 ): StageBoxDiagramModel {
+  const used = allocation.ports.filter((port) => port.used);
+  const boxes = allocation.snakes.map((id) => SNAKE_LABEL[id]).join(" + ");
   return {
     title: "Night patch",
-    subtitle: eventName
-      ? `${eventName} · SD16 / XR18 → AES50 A`
-      : "SD16 / XR18 → AES50 A · Default.snap layout",
-    ports: allocation.ports.map((port) => toStagePort(port)),
+    subtitle: eventName ? `${eventName} · ${boxes}` : `${boxes} · Default.snap layout`,
+    ports: used.map((port) => toStagePort(port)),
+    spare: spareLabels(allocation),
+    snakes: allocation.snakes,
     warnings: allocation.warnings,
   };
+}
+
+/**
+ * AES50 ports left unpatched tonight, collapsed into runs ("A.5–8") so a mostly
+ * empty second snake reads as one line. Right halves of stereo pairs excluded.
+ */
+function spareLabels(allocation: EventPatchAllocation): string[] {
+  const labels: string[] = [];
+  for (const snake of allocation.snakes) {
+    const ports = allocation.ports
+      .filter((port) => port.snake === snake && !port.used && port.strip !== null)
+      .map((port) => port.port)
+      .sort((a, b) => a - b);
+
+    for (let i = 0; i < ports.length; ) {
+      let end = i;
+      while (end + 1 < ports.length && ports[end + 1] === ports[end]! + 1) end += 1;
+      labels.push(
+        end > i
+          ? `${aes50Label(snake, ports[i]!)}–${ports[end]}`
+          : aes50Label(snake, ports[i]!),
+      );
+      i = end + 1;
+    }
+  }
+  return labels;
 }
 
 /**
@@ -34,15 +71,17 @@ export function buildPatchDiffPlan(
 ): PatchDiffPlan {
   const night = buildStageBoxDiagramModel(allocation, eventName);
   const steps: PatchDiffStep[] = [];
+  const livePorts = allocation.ports.filter((port) => port.used);
 
   let previous = nightPortState(allocation);
 
   for (const band of allocation.bandOrder) {
     const current = bandPortState(allocation, band.fileStem);
     const vsNight = steps.length === 0;
-    const ports = allocation.ports.map((port) => {
-      const live = current.get(port.port)!;
-      const base = previous.get(port.port)!;
+    const ports = livePorts.map((port) => {
+      const key = portKey(port);
+      const live = current.get(key)!;
+      const base = previous.get(key)!;
       // First set vs night snake: mute unused snake ports, never yellow
       // (yellow is only for real between-band stage swaps).
       const change = vsNight ? firstSetVsNight(base, live) : diffKind(base, live);
@@ -86,12 +125,12 @@ type PortLive = {
   inputType: string | null;
 };
 
-function nightPortState(allocation: EventPatchAllocation): Map<number, PortLive> {
-  const map = new Map<number, PortLive>();
+function nightPortState(allocation: EventPatchAllocation): Map<string, PortLive> {
+  const map = new Map<string, PortLive>();
   for (const port of allocation.ports) {
     const instruments = Object.values(port.bandInstruments);
     const used = instruments.length > 0;
-    map.set(port.port, {
+    map.set(portKey(port), {
       live: used,
       instrument: used ? nightInstrument(port) : null,
       detailLabel: used ? port.label : null,
@@ -104,11 +143,11 @@ function nightPortState(allocation: EventPatchAllocation): Map<number, PortLive>
 function bandPortState(
   allocation: EventPatchAllocation,
   fileStem: string,
-): Map<number, PortLive> {
-  const map = new Map<number, PortLive>();
+): Map<string, PortLive> {
+  const map = new Map<string, PortLive>();
   for (const port of allocation.ports) {
     const instrument = port.bandInstruments[fileStem] ?? null;
-    map.set(port.port, {
+    map.set(portKey(port), {
       live: instrument !== null,
       instrument,
       detailLabel: port.bandDetailLabels[fileStem] ?? null,
@@ -157,8 +196,10 @@ function toStagePort(
   overrides?: Partial<StageBoxPort>,
 ): StageBoxPort {
   return {
+    snake: port.snake,
     port: port.port,
-    aes50: `A.${port.port}`,
+    strip: port.strip,
+    aes50: aes50Label(port.snake, port.port),
     label: port.label,
     templateLabel: port.templateLabel,
     family: port.family,

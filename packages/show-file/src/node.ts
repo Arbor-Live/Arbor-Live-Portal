@@ -3,7 +3,8 @@
  */
 
 export * from "./index";
-export { buildBandSnap } from "./snap";
+export { buildBandSnap, buildNightSnap } from "./snap";
+export type { BandSnapOptions } from "./snap";
 export { loadDefaultTemplate, resolveTemplatePath } from "./template";
 export { buildShowPackage, serializeSnap } from "./package";
 export type { BuildShowPackageResult } from "./package";

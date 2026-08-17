@@ -49,6 +49,8 @@ export function StageBoxPatchDiffViews({ plan }: { plan: PatchDiffPlan }) {
             title: activeStep.bandName,
             subtitle: `vs ${activeStep.comparedTo}`,
             ports: activeStep.ports,
+            spare: plan.night.spare,
+            snakes: plan.night.snakes,
             warnings: plan.night.warnings,
           }}
           colored

@@ -1,7 +1,7 @@
 "use client";
 
-import type { StageBoxDiagramModel, StageBoxPort } from "@arbor/show-file";
-import { regionForPort } from "@arbor/show-file";
+import type { SnakeId, StageBoxDiagramModel, StageBoxPort } from "@arbor/show-file";
+import { SNAKE_LABEL, regionForPort } from "@arbor/show-file";
 
 const INK = "#0f172a";
 const MUTED = "#64748b";
@@ -11,11 +11,17 @@ const SAME_BG = "#ecfdf5";
 const PHYSICAL_BG = "#fffbeb";
 const MUTE_BG = "#f8fafc";
 
-const REGION_LABEL: Record<"vox" | "mid" | "drums", string> = {
-  vox: "Vox · A.1–4",
-  mid: "Mid · A.5–10",
-  drums: "Drums · A.11–16",
+const REGION_RANGE: Record<"vox" | "mid" | "drums", [string, string]> = {
+  vox: ["Vox", "1–4"],
+  mid: ["Mid", "5–10"],
+  drums: ["Drums", "11–16"],
 };
+
+/** "Vox · A.1–4" — the snake letter keeps both boxes readable side by side. */
+function regionLabel(region: "vox" | "mid" | "drums", snake: SnakeId): string {
+  const [name, range] = REGION_RANGE[region];
+  return `${name} · ${snake}.${range}`;
+}
 
 /**
  * SD16 / XR18 faceplate in Default.snap order (vox → mid → drums).
@@ -80,28 +86,61 @@ export function StageBoxPatchDiagram({
         </div>
       ) : null}
 
-      {regions.map((region) => {
-        const regionPorts = model.ports.filter((p) => regionForPort(p.port) === region);
-        if (regionPorts.length === 0) return null;
+      {model.snakes.map((snake) => {
+        const boxPorts = model.ports.filter((p) => p.snake === snake);
+        if (boxPorts.length === 0) return null;
         return (
-          <div key={region}>
-            <div
-              className="border-b px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide"
-              style={{ borderColor: HAIRLINE, background: HEADER, color: MUTED }}
-            >
-              {REGION_LABEL[region]}
-            </div>
-            <div
-              className="grid grid-cols-2 gap-px sm:grid-cols-4"
-              style={{ background: HAIRLINE }}
-            >
-              {regionPorts.map((port) => (
-                <PortCell key={port.port} port={port} colored={colored} />
-              ))}
-            </div>
+          <div key={snake}>
+            {model.snakes.length > 1 ? (
+              <div
+                className="border-b px-3 py-1.5 text-[11px] font-semibold"
+                style={{ borderColor: HAIRLINE, background: "#fff", color: INK }}
+              >
+                {SNAKE_LABEL[snake]}
+              </div>
+            ) : null}
+            {regions.map((region) => {
+              const regionPorts = boxPorts.filter(
+                (p) => regionForPort(p.port) === region,
+              );
+              if (regionPorts.length === 0) return null;
+              return (
+                <div key={region}>
+                  <div
+                    className="border-b px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide"
+                    style={{ borderColor: HAIRLINE, background: HEADER, color: MUTED }}
+                  >
+                    {regionLabel(region, snake)}
+                  </div>
+                  <div
+                    className="grid grid-cols-2 gap-px sm:grid-cols-4"
+                    style={{ background: HAIRLINE }}
+                  >
+                    {regionPorts.map((port) => (
+                      <PortCell
+                        key={`${port.snake}.${port.port}`}
+                        port={port}
+                        colored={colored}
+                      />
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         );
       })}
+
+      {model.spare.length > 0 ? (
+        <p
+          className="border-t px-3 py-2 text-[11px]"
+          style={{ borderColor: HAIRLINE, color: MUTED }}
+        >
+          <span className="font-semibold uppercase tracking-wide">Leave empty</span>
+          {" · "}
+          {model.spare.join(" · ")}
+        </p>
+      ) : null}
 
       {model.warnings.length > 0 ? (
         <ul
@@ -140,10 +179,10 @@ function PortCell({ port, colored }: { port: StageBoxPort; colored: boolean }) {
           className="font-mono text-[11px] font-semibold tabular-nums"
           style={{ color: muted ? "#64748b" : INK }}
         >
-          {port.port}
+          {port.aes50}
         </span>
         <span className="font-mono text-[10px]" style={{ color: MUTED }}>
-          {port.aes50}
+          {port.strip === null ? "—" : `Ch ${port.strip}`}
         </span>
       </div>
 
@@ -155,7 +194,7 @@ function PortCell({ port, colored }: { port: StageBoxPort; colored: boolean }) {
             {port.label}
           </p>
           <p className="text-[10px]" style={{ color: MUTED }}>
-            {port.templateLabel} · A.{port.port}
+            {port.templateLabel} · {port.aes50}
           </p>
         </>
       ) : (

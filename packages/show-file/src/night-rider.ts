@@ -7,7 +7,7 @@ import {
   type RiderInputChannel,
   type RiderInputType,
 } from "@arbor/rider-document";
-import { TEMPLATE_SLOTS } from "./slots";
+import { SNAKE_LABEL, aes50Label } from "./slots";
 import { sortBandsForShow } from "./allocate";
 import type {
   EventPatchAllocation,
@@ -31,7 +31,7 @@ export function listPhysicalChangeovers(plan: PatchDiffPlan): PhysicalChangeover
       .map((port) => {
         const from = port.previousLabel ?? "—";
         const to = port.label;
-        return `A.${port.port} ${port.templateLabel}: ${from} → ${to}`;
+        return `${port.aes50} ${port.templateLabel}: ${from} → ${to}`;
       }),
   }));
 }
@@ -90,12 +90,9 @@ function nightInputsFromAllocation(
 ): RiderInputChannel[] {
   const inputs: RiderInputChannel[] = [];
 
-  for (const slot of TEMPLATE_SLOTS) {
-    if (slot.strip === null) continue;
-    const port = allocation.ports.find((p) => p.port === slot.port);
-    if (!port) continue;
-    const used = Object.keys(port.bandLabels).length > 0;
-    if (!used) continue;
+  for (const port of allocation.ports) {
+    // Skip spares and the right half of a stereo pair (one rider line per pair).
+    if (!port.used || port.strip === null) continue;
 
     const types = Object.values(port.bandInputTypes);
     const diVotes = types.filter((t) => t === "di").length;
@@ -108,7 +105,7 @@ function nightInputsFromAllocation(
 
     inputs.push({
       id: createRiderId("in"),
-      channel: slot.port,
+      channel: port.strip,
       source: port.label,
       sourceKey,
       inputType,
@@ -116,7 +113,7 @@ function nightInputsFromAllocation(
       phantom: port.phantom,
       providedBy: "arbor",
       stereo: port.stereo,
-      notes: `A.${port.port} · SD16/XR18`,
+      notes: `${aes50Label(port.snake, port.port)} · ${SNAKE_LABEL[port.snake]}`,
     });
   }
 

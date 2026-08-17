@@ -35,8 +35,33 @@ export type SlotFamily =
   | "tom"
   | "oh";
 
+/** Physical stage box. A = AES50 A (always used), B = the second snake. */
+export type SnakeId = "A" | "B";
+
+/** What an engineer picks a snake for. Drums always move as one block. */
+export type SnakeGroup = "vox" | "guitar" | "bass" | "flex" | "keys" | "drums";
+
+/** Per-event choice of how the two snakes are used. */
+export type PatchPlan = {
+  /** Second stage box patched tonight. */
+  secondSnake: boolean;
+  /** Group → snake. Anything unset stays on A. */
+  sides: Partial<Record<SnakeGroup, SnakeId>>;
+  /**
+   * Scope band scenes down to what changes (default). Off makes every scene a
+   * full recall — the escape hatch if a desk ignores the scope block.
+   */
+  scopeScenes?: boolean;
+};
+
 export type PortAssignment = {
+  snake: SnakeId;
   port: number;
+  /**
+   * Console channel strip patched to this port, or null when the port has no
+   * strip of its own (right half of a stereo pair, which rides the left one).
+   */
+  strip: number | null;
   /** Event-wide snake label (stable all night — e.g. "Vox 1", not singer names). */
   label: string;
   /** Default.snap role name for this port (always set). */
@@ -61,6 +86,8 @@ export type PortAssignment = {
   bandDetailLabels: Record<string, string>;
   /** Band fileStem → capture type for DI/mic tags. */
   bandInputTypes: Record<string, string>;
+  /** False when no band on the bill plugs anything in here — left unpatched. */
+  used: boolean;
 };
 
 export type EventPatchAllocation = {
@@ -68,10 +95,16 @@ export type EventPatchAllocation = {
   warnings: string[];
   /** Bands in show order (support → other → headliner). */
   bandOrder: Array<{ bandName: string; fileStem: string }>;
+  /** Stage boxes patched tonight, in order. */
+  snakes: SnakeId[];
+  /** Effective group → snake map after any overflow moves. */
+  sides: Record<SnakeGroup, SnakeId>;
 };
 
 export type StageBoxPort = {
+  snake: SnakeId;
   port: number;
+  strip: number | null;
   aes50: string;
   label: string;
   templateLabel: string;
@@ -93,7 +126,11 @@ export type StageBoxPort = {
 export type StageBoxDiagramModel = {
   title: string;
   subtitle: string;
+  /** Only ports something plugs into tonight — spares are listed separately. */
   ports: StageBoxPort[];
+  /** AES50 labels ("A.8") left unpatched tonight. */
+  spare: string[];
+  snakes: SnakeId[];
   warnings: string[];
 };
 
@@ -115,26 +152,47 @@ export type PatchDiffPlan = {
   steps: PatchDiffStep[];
 };
 
+export type WingSocket = {
+  mode?: string;
+  name?: string;
+  icon?: number;
+  col?: number;
+  tags?: string;
+  g?: number;
+  vph?: boolean;
+  mute?: boolean;
+  [key: string]: unknown;
+};
+
+/**
+ * Recall scope (see the WING snapfile `scopes` section): every group listed
+ * here is a flag saying whether recalling this snapshot touches it. Anything
+ * `false` keeps whatever the console already has — that is how soundcheck
+ * gains and EQ survive a scene change.
+ */
+export type WingScopes = {
+  ch: Record<string, boolean>;
+  aux: Record<string, boolean>;
+  bus: Record<string, boolean>;
+  main: Record<string, boolean>;
+  mtx: Record<string, boolean>;
+  fx: Record<string, boolean>;
+  routin: Record<string, boolean>;
+  routout: Record<string, boolean>;
+  cfg: { groups: boolean; audio: boolean; surface: boolean };
+  area: { L: boolean; C: boolean; R: boolean };
+  data: Record<string, boolean>;
+};
+
 /** Minimal Wing snap shape we read/write. Full template is opaque JSON. */
 export type WingSnap = {
   type: string;
+  scopes?: WingScopes;
   ae_data: {
     io: {
       in: {
-        A: Record<
-          string,
-          {
-            mode?: string;
-            name?: string;
-            icon?: number;
-            col?: number;
-            tags?: string;
-            g?: number;
-            vph?: boolean;
-            mute?: boolean;
-            [key: string]: unknown;
-          }
-        >;
+        A: Record<string, WingSocket>;
+        B?: Record<string, WingSocket>;
         [key: string]: unknown;
       };
       [key: string]: unknown;
