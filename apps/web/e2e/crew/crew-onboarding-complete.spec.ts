@@ -68,7 +68,9 @@ test.describe("crew onboarding wizard", () => {
     await next(page);
 
     // Federal Work Study — answer No, then acknowledge the standard pay path.
-    await expect(activeStep(page).getByText("Federal Work Study")).toBeVisible({ timeout: 20_000 });
+    await expect(
+      activeStep(page).getByText("Federal Work Study", { exact: true }),
+    ).toBeVisible({ timeout: 20_000 });
     await activeStep(page).getByRole("button", { name: "No", exact: true }).click();
     await acknowledge(page, /don.t have Federal Work Study/i);
     await next(page);
