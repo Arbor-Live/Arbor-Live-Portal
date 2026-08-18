@@ -554,6 +554,9 @@ describe("snapshot scoping", () => {
     ];
   }
 
+  /** `scopes` strings are one char per item: "+" in scope, " " out. */
+  const inScope = (scope: string, oneBased: number) => scope[oneBased - 1] === "+";
+
   it("leaves unchanged channels and all preamps out of a band scene's scope", () => {
     const bands = trio();
     const allocation = allocateEventPatch(bands);
@@ -561,16 +564,21 @@ describe("snapshot scoping", () => {
     const headliners = buildBandSnap(template, allocation, bands[1]!, {
       previous: bands[0]!,
     });
+    const scopes = headliners.scopes!;
 
+    expect(scopes.ch).toHaveLength(40);
     // Kick (A.11 → strip 10) and snare (A.12 → strip 11) are identical to the
     // opener's scene, so recalling this scene must not re-gain them.
-    expect(headliners.scopes?.ch["10"]).toBe(false);
-    expect(headliners.scopes?.ch["11"]).toBe(false);
+    expect(inScope(scopes.ch, 10)).toBe(false);
+    expect(inScope(scopes.ch, 11)).toBe(false);
     // The guitar only the headliners use does change.
-    expect(headliners.scopes?.ch["5"]).toBe(true);
+    expect(inScope(scopes.ch, 5)).toBe(true);
     // Preamps are the engineer's from load-in onwards.
-    expect(Object.values(headliners.scopes!.routin).every((v) => v === false)).toBe(true);
-    expect(Object.values(headliners.scopes!.bus).every((v) => v === false)).toBe(true);
+    expect(scopes.source.A).toBe(" ".repeat(48));
+    expect(scopes.bus).toBe(" ".repeat(16));
+    // An in-scope channel recalls its whole strip; gain is protected by the
+    // source scope above, not by narrowing contents.
+    expect(scopes.contents).toBe("+".repeat(15));
   });
 
   it("scopes in everything the first band lights up, and recalls the night baseline in full", () => {
@@ -579,12 +587,13 @@ describe("snapshot scoping", () => {
     const template = loadDefaultTemplate();
 
     const openers = buildBandSnap(template, allocation, bands[0]!, { previous: null });
-    expect(openers.scopes?.ch["1"]).toBe(true); // vox unmutes vs the muted baseline
-    expect(openers.scopes?.ch["10"]).toBe(true); // kick unmutes too
-    expect(openers.scopes?.ch["5"]).toBe(false); // guitar is muted in both
+    expect(inScope(openers.scopes!.ch, 1)).toBe(true); // vox unmutes vs the baseline
+    expect(inScope(openers.scopes!.ch, 10)).toBe(true); // kick unmutes too
+    expect(inScope(openers.scopes!.ch, 5)).toBe(false); // guitar is muted in both
 
     const night = buildNightSnap(template, allocation);
-    expect(Object.values(night.scopes!.ch).every((v) => v === true)).toBe(true);
+    expect(night.scopes!.ch).toBe("+".repeat(40));
+    expect(night.scopes!.source.A).toBe("+".repeat(48));
     expect(night.ae_data.ch["1"]?.mute).toBe(true);
     expect(night.ae_data.ch["1"]?.name).toBe("Vox 1");
   });
@@ -597,6 +606,61 @@ describe("snapshot scoping", () => {
       scope: false,
     });
     expect(snap.scopes).toBeUndefined();
+  });
+
+  it("writes the same scope shape a desk-saved snapshot.11 uses", () => {
+    const reference = JSON.parse(
+      readFileSync(new URL("../templates/scopes-reference.json", import.meta.url), "utf8"),
+    ).samples.mixed as Record<string, unknown>;
+
+    const bands = trio();
+    const scopes = buildNightSnap(
+      loadDefaultTemplate(),
+      allocateEventPatch(bands),
+    ).scopes as unknown as Record<string, unknown>;
+
+    const shape = (value: Record<string, unknown>) =>
+      Object.fromEntries(
+        Object.entries(value).map(([key, entry]) =>
+          typeof entry === "string"
+            ? [key, entry.length]
+            : [
+                key,
+                Object.fromEntries(
+                  Object.entries(entry as Record<string, string>).map(([k, v]) => [
+                    k,
+                    v.length,
+                  ]),
+                ),
+              ],
+        ),
+      );
+
+    expect(shape(scopes)).toEqual(shape(reference));
+    // Only "+" and " " are legal; a full-scope scene is all "+".
+    expect(JSON.stringify(scopes)).not.toMatch(/[^\s"+:{},a-zA-Z]/);
+  });
+
+  it("encodes deselected channels the way the console does", () => {
+    const console = JSON.parse(
+      readFileSync(new URL("../templates/scopes-reference.json", import.meta.url), "utf8"),
+    ).samples.channelsDeselected as { ch: string; contents: string };
+
+    // Saved from the desk with CH 10-13 dropped from the object grid.
+    expect(console.ch).toHaveLength(40);
+    expect([...console.ch].flatMap((c, i) => (c === " " ? [i + 1] : []))).toEqual([
+      10, 11, 12, 13,
+    ]);
+    expect(console.contents).toBe("+".repeat(15));
+
+    // Ours is the same string shape: "+" for a channel this scene touches.
+    const bands = trio();
+    const scene = buildBandSnap(loadDefaultTemplate(), allocateEventPatch(bands), bands[1]!, {
+      previous: bands[0]!,
+    });
+    expect(scene.scopes!.ch).toHaveLength(console.ch.length);
+    expect(scene.scopes!.ch).toMatch(/^[+ ]+$/);
+    expect(scene.scopes!.contents).toBe(console.contents);
   });
 
   it("honours the event's full-recall escape hatch", () => {
@@ -617,8 +681,8 @@ describe("snapshot scoping", () => {
     const headliners = JSON.parse(strFromU8(unzipped["Headliners.snap"]!));
     const base = JSON.parse(strFromU8(unzipped["Default.snap"]!));
 
-    expect(headliners.scopes.ch["10"]).toBe(false);
-    expect(base.scopes.ch["10"]).toBe(true);
+    expect(headliners.scopes.ch[9]).toBe(" "); // strip 10 unchanged
+    expect(base.scopes.ch).toBe("+".repeat(40));
     expect(base.ae_data.io.in.A["11"].name).toBe("Kick");
   });
 });

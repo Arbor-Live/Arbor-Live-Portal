@@ -165,23 +165,32 @@ export type WingSocket = {
 };
 
 /**
- * Recall scope (see the WING snapfile `scopes` section): every group listed
- * here is a flag saying whether recalling this snapshot touches it. Anything
- * `false` keeps whatever the console already has — that is how soundcheck
- * gains and EQ survive a scene change.
+ * Recall scope, as a `snapshot.11` desk writes it: one character per item,
+ * `+` in scope and a space out of scope. Anything out of scope keeps whatever
+ * the console already has — that is how soundcheck gain and EQ survive a scene
+ * change. Same string encoding as `ce_data.safes`.
  */
 export type WingScopes = {
-  ch: Record<string, boolean>;
-  aux: Record<string, boolean>;
-  bus: Record<string, boolean>;
-  main: Record<string, boolean>;
-  mtx: Record<string, boolean>;
-  fx: Record<string, boolean>;
-  routin: Record<string, boolean>;
-  routout: Record<string, boolean>;
-  cfg: { groups: boolean; audio: boolean; surface: boolean };
-  area: { L: boolean; C: boolean; R: boolean };
-  data: Record<string, boolean>;
+  /** 40 console channels. */
+  ch: string;
+  aux: string;
+  bus: string;
+  main: string;
+  mtx: string;
+  dca: string;
+  /** Mute groups. */
+  mute: string;
+  fx: string;
+  /** Input sockets per group — `A` is the 48 AES50 A preamps. */
+  source: Record<string, string>;
+  output: Record<string, string>;
+  area: Record<string, string>;
+  custom: string;
+  setup: string;
+  /** Which parameter groups of an in-scope channel recall (Conn, EQ, Fader…). */
+  contents: string;
+  mainsend: string;
+  bussend: string;
 };
 
 /** Minimal Wing snap shape we read/write. Full template is opaque JSON. */

@@ -47,7 +47,7 @@ export function buildBandSnap(
     ? stripStates(allocation, options.previous.fileStem)
     : nightStripStates(allocation);
 
-  snap.scopes = changedChannelScope(snap, current, previous);
+  snap.scopes = changedChannelScope(current, previous);
   return snap;
 }
 
@@ -61,7 +61,7 @@ export function buildNightSnap(
   allocation: EventPatchAllocation,
 ): WingSnap {
   const snap = applyAllocation(template, allocation, null);
-  snap.scopes = fullScope(snap);
+  snap.scopes = fullScope();
   return snap;
 }
 
@@ -172,51 +172,112 @@ function sameStrip(a: StripState | undefined, b: StripState | undefined): boolea
  * Scope a band scene down to the channels that actually change.
  *
  * Everything else stays as the console has it, which is the point: the kit gets
- * gained and EQ'd once at soundcheck and no later scene walks over it. Preamps
- * (`routin`) are never in scope — the night patch already named and configured
- * every socket, so gains belong to the engineer from load-in onwards.
+ * gained and EQ'd once at soundcheck and no later scene walks over it.
+ *
+ * Gain is safe even on a channel that *does* change — a flex port swapping sax
+ * for clarinet, a vocal unmuting — because the head amp lives on the input
+ * source (`io.in.A[n].g`) and `source` is never in scope. Nothing in a band
+ * scene moves a gain knob.
+ *
+ * `contents` stays fully on: for a channel that is in scope we want the whole
+ * strip, patch and all. See CONTENTS_IN_HA for the one refinement still open.
  */
 function changedChannelScope(
-  snap: WingSnap,
   current: Map<number, StripState>,
   previous: Map<number, StripState>,
 ): WingScopes {
-  const scopes = emptyScope(snap);
+  const changed = new Set<number>();
   for (const [strip, state] of current) {
-    scopes.ch[String(strip)] = !sameStrip(state, previous.get(strip));
+    if (!sameStrip(state, previous.get(strip))) changed.add(strip);
   }
+
+  const scopes = scopeShape(SCOPE_OFF);
+  scopes.ch = flags(SCOPE_SHAPE.ch, (index) => changed.has(index + 1));
+  scopes.contents = SCOPE_ON.repeat(SCOPE_SHAPE.contents);
   return scopes;
 }
 
-function keyedFlags(keys: string[], value: boolean): Record<string, boolean> {
-  return Object.fromEntries(keys.map((key) => [key, value]));
+/** In scope / out of scope, as the desk encodes them. */
+const SCOPE_ON = "+";
+const SCOPE_OFF = " ";
+
+/**
+ * Item counts per scope field, read off `snapshot.11` files saved from the
+ * console. Our Default.snap template ships without a `scopes` section at all,
+ * so `templates/scopes-reference.json` is the only record of the shape.
+ *
+ * `mainsend` / `bussend` are the scope page's own Main and Sends entries, not
+ * part of `contents` — they clear together with it.
+ */
+const SCOPE_SHAPE = {
+  ch: 40,
+  aux: 8,
+  bus: 16,
+  main: 4,
+  mtx: 8,
+  dca: 16,
+  mute: 8,
+  fx: 16,
+  source: { LCL: 24, AUX: 8, A: 48, B: 48, C: 48, SC: 32, USB: 48, CRD: 64, MOD: 64, PLAY: 4, AES: 2, USR: 48, OSC: 2 },
+  output: { LCL: 8, AUX: 8, A: 48, B: 48, C: 48, SC: 32, USB: 48, CRD: 64, MOD: 64, REC: 4, AES: 2 },
+  area: { LEFT: 7, CENTER: 6, RIGHT: 7, COMPACT: 9, RACK: 5, EXTERN: 8, VIRTUAL: 8 },
+  custom: 31,
+  setup: 3,
+  contents: 15,
+  mainsend: 4,
+  bussend: 24,
+} as const;
+
+/**
+ * The scope page's CONTENTS panel has 15 entries (its 17 tiles minus MAIN and
+ * SEND, which are the separate `mainsend` / `bussend` fields):
+ *
+ *   CUST TAGS CONN IN/HA FILTER DELAY GATE DYN INS1 INS2 EQ PAN FDR MUTE CONFIG
+ *
+ * Dropping IN/HA would belt-and-brace the head amp on channels that do change.
+ * Not done: a console save with only IN/HA ticked wrote `" +             "`
+ * (slot 2), while that panel order puts IN/HA at slot 4, so the mapping between
+ * tile order and string order is unresolved. Guessing wrong would silently
+ * disable something else, and it buys nothing today — `source` being out of
+ * scope already protects every gain.
+ */
+
+function flags(count: number, on: (index: number) => boolean): string {
+  let out = "";
+  for (let index = 0; index < count; index++) out += on(index) ? SCOPE_ON : SCOPE_OFF;
+  return out;
 }
 
-function countedKeys(count: number): string[] {
-  return Array.from({ length: count }, (_, index) => String(index + 1));
+function group(
+  shape: Record<string, number>,
+  fill: string,
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(shape).map(([key, count]) => [key, fill.repeat(count)]),
+  );
 }
 
-function scopeShape(snap: WingSnap, value: boolean): WingScopes {
-  const channelKeys = Object.keys(snap.ae_data.ch);
+function scopeShape(fill: string): WingScopes {
   return {
-    ch: keyedFlags(channelKeys.length ? channelKeys : countedKeys(40), value),
-    aux: keyedFlags(countedKeys(8), value),
-    bus: keyedFlags(countedKeys(16), value),
-    main: keyedFlags(countedKeys(4), value),
-    mtx: keyedFlags(countedKeys(8), value),
-    fx: keyedFlags(countedKeys(16), value),
-    routin: keyedFlags(countedKeys(13), value),
-    routout: keyedFlags(countedKeys(11), value),
-    cfg: { groups: value, audio: value, surface: value },
-    area: { L: value, C: value, R: value },
-    data: keyedFlags(countedKeys(9), value),
+    ch: fill.repeat(SCOPE_SHAPE.ch),
+    aux: fill.repeat(SCOPE_SHAPE.aux),
+    bus: fill.repeat(SCOPE_SHAPE.bus),
+    main: fill.repeat(SCOPE_SHAPE.main),
+    mtx: fill.repeat(SCOPE_SHAPE.mtx),
+    dca: fill.repeat(SCOPE_SHAPE.dca),
+    mute: fill.repeat(SCOPE_SHAPE.mute),
+    fx: fill.repeat(SCOPE_SHAPE.fx),
+    source: group(SCOPE_SHAPE.source, fill),
+    output: group(SCOPE_SHAPE.output, fill),
+    area: group(SCOPE_SHAPE.area, fill),
+    custom: fill.repeat(SCOPE_SHAPE.custom),
+    setup: fill.repeat(SCOPE_SHAPE.setup),
+    contents: fill.repeat(SCOPE_SHAPE.contents),
+    mainsend: fill.repeat(SCOPE_SHAPE.mainsend),
+    bussend: fill.repeat(SCOPE_SHAPE.bussend),
   };
 }
 
-function emptyScope(snap: WingSnap): WingScopes {
-  return scopeShape(snap, false);
-}
-
-function fullScope(snap: WingSnap): WingScopes {
-  return scopeShape(snap, true);
+function fullScope(): WingScopes {
+  return scopeShape(SCOPE_ON);
 }
