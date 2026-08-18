@@ -45,13 +45,15 @@ describe("StageBoxPatchDiagram", () => {
     const plan = buildPatchDiffPlan(allocateEventPatch(bands), "Test Night");
     const rendered = text(renderToStaticMarkup(<StageBoxPatchDiagram model={plan.night} />));
 
-    expect(rendered).toContain("A.1");
-    expect(rendered).toContain("A.9");
+    // One box, so ports read as printed on it: no socket brackets.
+    expect(rendered).toContain("Vox · 1–4");
+    expect(rendered).toContain("Mid · 5–10");
+    expect(rendered).toContain("Drums · 11–16");
     // Both halves of the stereo keys pair carry the same DI tag.
-    expect(rendered).toContain("A.10");
     expect(rendered.match(/DI/g)).toHaveLength(2);
-    // Spare mid ports are not drawn as empty cells.
-    expect(rendered).not.toContain("A.6 ");
+    // Sax takes Flex1; Flex2 is spare, so it is not drawn as an empty cell.
+    expect(rendered).toContain("Flex1");
+    expect(rendered).not.toContain("Flex2");
     expect(rendered).toContain("Leave empty");
   });
 
@@ -80,8 +82,11 @@ describe("StageBoxPatchDiagram", () => {
 
     expect(rendered).toContain("Snake A");
     expect(rendered).toContain("Snake B");
-    expect(rendered).toContain("A.11"); // kick stays on A
-    expect(rendered).toContain("B.9"); // keys moved to B
+    // Box A carries only vox here, box B the keys and flex.
+    expect(rendered).toContain("Vox · 1–4");
+    expect(rendered).toContain("Mid · 5–10 (21–26)"); // box B, sockets alongside
+    expect(rendered).toContain("9 (25)"); // keys: port 9 on box B = socket A.25
     expect(rendered).toContain("Ch 25"); // …on its own console strip
+    expect(rendered).not.toContain("B.9"); // never AES50 B
   });
 });

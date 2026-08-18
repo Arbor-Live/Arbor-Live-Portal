@@ -1,7 +1,7 @@
 "use client";
 
 import type { SnakeId, StageBoxDiagramModel, StageBoxPort } from "@arbor/show-file";
-import { SNAKE_LABEL, regionForPort } from "@arbor/show-file";
+import { SNAKE_LABEL, aes50PortFor, regionForPort } from "@arbor/show-file";
 
 const INK = "#0f172a";
 const MUTED = "#64748b";
@@ -11,16 +11,23 @@ const SAME_BG = "#ecfdf5";
 const PHYSICAL_BG = "#fffbeb";
 const MUTE_BG = "#f8fafc";
 
-const REGION_RANGE: Record<"vox" | "mid" | "drums", [string, string]> = {
-  vox: ["Vox", "1–4"],
-  mid: ["Mid", "5–10"],
-  drums: ["Drums", "11–16"],
+const REGION_PORTS: Record<"vox" | "mid" | "drums", [string, number, number]> = {
+  vox: ["Vox", 1, 4],
+  mid: ["Mid", 5, 10],
+  drums: ["Drums", 11, 16],
 };
 
-/** "Vox · A.1–4" — the snake letter keeps both boxes readable side by side. */
+/**
+ * Numbers as printed on the stage box, with the desk's sockets alongside when
+ * the box sits down the daisy chain: "Vox · 1–4" on the first, "Vox · 1–4
+ * (17–20)" on the second.
+ */
 function regionLabel(region: "vox" | "mid" | "drums", snake: SnakeId): string {
-  const [name, range] = REGION_RANGE[region];
-  return `${name} · ${snake}.${range}`;
+  const [name, first, last] = REGION_PORTS[region];
+  const from = aes50PortFor(snake, first);
+  const to = aes50PortFor(snake, last);
+  const sockets = from === first ? "" : ` (${from}–${to})`;
+  return `${name} · ${first}–${last}${sockets}`;
 }
 
 /**
@@ -179,7 +186,7 @@ function PortCell({ port, colored }: { port: StageBoxPort; colored: boolean }) {
           className="font-mono text-[11px] font-semibold tabular-nums"
           style={{ color: muted ? "#64748b" : INK }}
         >
-          {port.aes50}
+          {port.portLabel}
         </span>
         <span className="font-mono text-[10px]" style={{ color: MUTED }}>
           {port.strip === null ? "—" : `Ch ${port.strip}`}

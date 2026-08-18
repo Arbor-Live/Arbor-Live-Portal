@@ -23,6 +23,9 @@ band scene only touches what actually changed since the previous set.
 Both stage boxes run the same Default.snap layout, so "Flex1 is port 7" holds
 whichever box you are standing at:
 
+Ports below are box-relative; on the second, daisy-chained box add 16 to get the
+socket number.
+
 | Ports | Region | Homes |
 |---|---|---|
 | 1–4 | Vox | Vox 1–4 |
@@ -44,17 +47,39 @@ Rules worth knowing:
   `Leave empty · A.2–9 · A.11–15`, and the snaps unpatch and blank those strips
   (`grp: "OFF"`, no name, muted) so nothing stale is left sitting on the desk.
 
-### Console strips
+### Two snakes, one link
 
-| Box | AES50 | Channel strips | Spare strip |
+The boxes are **daisy-chained**, so both hang off AES50 A — there is no AES50 B
+in this rig. Box B simply starts 16 sockets further along:
+
+| Box | AES50 sockets | Console strips | Spare strip |
 |---|---|---|---|
-| Snake A | A | 1–14 | 15 |
-| Snake B | B | 17–30 | 31 |
+| Snake A | A.1–16 | 1–14 | 15 |
+| Snake B | A.17–32 | 17–30 | 31 |
 
-A is Default.snap's own mapping, kept as-is so the template's layer, DCA and
-mute-group tags stay with the right instruments.
+Ports are box-relative (1–16) everywhere in the allocator, so the layout table
+above holds for both; `aes50PortFor()` adds the offset when writing a snap.
+Box B's Flex1 is box port 7 → socket **A.23** → console strip 23. Channel strips
+are independent of the link: A keeps Default.snap's own 1–14 mapping so the
+template's layer, DCA and mute-group tags stay with the right instruments.
 
-### Two snakes
+The faceplate is numbered for whoever is patching, not for the desk: cells show
+the number printed on the SD16, with the socket in brackets only when the box
+sits down the chain. Region headers and the leave-empty list follow the same
+rule (`portLabel()`).
+
+```
+Snake A · A.1–16              Snake B · A.17–32 (daisy-chained)
+  Vox · 1–4                     Mid · 5–10 (21–26)
+    1     Ch 1   Vox 1            7 (23)  Ch 23  Flex1
+  Mid · 5–10                      9 (25)  Ch 25  Keys   ST DI
+    5     Ch 5   Guitar  DI       10 (26) —      Keys   ST DI
+  Drums · 11–16
+    11    Ch 10  Kick
+    15    Ch 14  OH 48V  ST 48V
+
+Leave empty · 2–4 · 6–9 · 12–14 · 1–6 (17–22) · 8 (24) · 11–15 (27–31)
+```
 
 Off by default. The **Snakes** control on the Night rider card turns on the
 second box and assigns a side per group (Vox, Guitar, Bass, Flex, Keys, Drums).
@@ -106,7 +131,7 @@ as `ce_data.safes`.
 | `ch` | 40 | Console channels |
 | `aux` / `bus` / `main` / `mtx` | 8 / 16 / 4 / 8 | Buses |
 | `dca` / `mute` / `fx` | 16 / 8 / 16 | DCAs, mute groups, FX slots |
-| `source` | per group (`A`/`B` = 48) | Input sockets — **preamp gain lives here** |
+| `source` | per group (`A` = 48) | Input sockets — **preamp gain lives here**, both boxes on `A` |
 | `output` | per group | Output patches |
 | `area` | LEFT 7, CENTER 6, RIGHT 7, COMPACT 9, RACK 5, EXTERN 8, VIRTUAL 8 | Surface areas |
 | `custom` / `setup` | 31 / 3 | Custom controls, setup |

@@ -105,7 +105,10 @@ export type StageBoxPort = {
   snake: SnakeId;
   port: number;
   strip: number | null;
+  /** Absolute socket, e.g. "A.23" — unique across both boxes. */
   aes50: string;
+  /** Stage-box reading, e.g. "7 (23)". See `portLabel()`. */
+  portLabel: string;
   label: string;
   templateLabel: string;
   family: SlotFamily;

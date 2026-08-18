@@ -1,3 +1,4 @@
+import { AES50_GROUP, aes50PortFor } from "./slots";
 import type {
   EventPatchAllocation,
   PortAssignment,
@@ -104,8 +105,8 @@ function applyAllocation(
 
     strip.in = strip.in ?? {};
     strip.in.conn = {
-      grp: port.snake,
-      in: port.port,
+      grp: AES50_GROUP,
+      in: aes50PortFor(port.snake, port.port),
       altgrp: "OFF",
       altin: 1,
     };
@@ -116,13 +117,11 @@ function applyAllocation(
   return snap;
 }
 
+/** Both boxes are daisy-chained on AES50 A, so box B lands on A.17–32. */
 function socketFor(snap: WingSnap, port: PortAssignment) {
-  const group = snap.ae_data.io.in[port.snake] as
-    | Record<string, Record<string, unknown>>
-    | undefined;
-  return group?.[String(port.port)] as
-    | { name?: string; mode?: string; vph?: boolean }
-    | undefined;
+  return snap.ae_data.io.in[AES50_GROUP]?.[
+    String(aes50PortFor(port.snake, port.port))
+  ];
 }
 
 function stripStates(
@@ -135,7 +134,9 @@ function stripStates(
     states.set(port.strip, {
       name: port.used ? port.label : "",
       mute: port.used ? !port.bandLabels[fileStem] : true,
-      conn: port.used ? { grp: port.snake, in: port.port } : null,
+      conn: port.used
+        ? { grp: AES50_GROUP, in: aes50PortFor(port.snake, port.port) }
+        : null,
       instrument: port.bandInstruments[fileStem] ?? null,
     });
   }
@@ -150,7 +151,9 @@ function nightStripStates(allocation: EventPatchAllocation): Map<number, StripSt
     states.set(port.strip, {
       name: port.used ? port.label : "",
       mute: true,
-      conn: port.used ? { grp: port.snake, in: port.port } : null,
+      conn: port.used
+        ? { grp: AES50_GROUP, in: aes50PortFor(port.snake, port.port) }
+        : null,
       instrument: null,
     });
   }
@@ -208,6 +211,8 @@ const SCOPE_OFF = " ";
  *
  * `mainsend` / `bussend` are the scope page's own Main and Sends entries, not
  * part of `contents` — they clear together with it.
+ *
+ * Background and evidence: `docs/wing-show-files.md`.
  */
 const SCOPE_SHAPE = {
   ch: 40,

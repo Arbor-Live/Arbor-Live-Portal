@@ -6,6 +6,8 @@ import {
   buildPatchDiffPlan,
   buildShowFile,
   buildStageBoxDiagramModel,
+  aes50Label,
+  aes50PortFor,
   fileStem,
   listPhysicalChangeovers,
   type PatchPlan,
@@ -427,8 +429,24 @@ describe("unused channels", () => {
     const model = buildStageBoxDiagramModel(allocation, "Quiet Night");
 
     expect(model.ports.map((p) => p.aes50)).toEqual(["A.1"]);
-    // Runs are collapsed; A.10 / A.16 are stereo right halves, not spare lines.
-    expect(model.spare).toEqual(["A.2–9", "A.11–15"]);
+    // Runs are collapsed; ports 10 / 16 are stereo right halves, not spare lines.
+    expect(model.spare).toEqual(["2–9", "11–15"]);
+  });
+
+  it("numbers spare runs on the daisy-chained box with real socket numbers", () => {
+    const allocation = allocateEventPatch(soloVox, {
+      secondSnake: true,
+      sides: { keys: "B" },
+    });
+    const model = buildStageBoxDiagramModel(allocation);
+    // Box B ports read as printed on the box, with sockets alongside. Runs
+    // break at port 10 / 16, the stereo right halves.
+    expect(model.spare).toEqual([
+      "2–9",
+      "11–15",
+      "1–9 (17–25)",
+      "11–15 (27–31)",
+    ]);
   });
 
   it("unpatches and blanks spare strips in the snaps", () => {
@@ -480,20 +498,26 @@ describe("two snakes", () => {
     // Same layout on both boxes, separate console strips.
     expect(at("A", 1).strip).toBe(1);
     expect(at("B", 7).strip).toBe(23);
+    // Box B sits at A.17–32 on the daisy chain.
+    expect(aes50Label("B", 7)).toBe("A.23");
+    expect(aes50PortFor("B", 16)).toBe(32);
   });
 
-  it("writes the second box to AES50 B in the snap", () => {
+  it("daisy-chains the second box onto AES50 A at 17–32", () => {
     const bands = bigBill();
     const allocation = allocateEventPatch(bands, twoSnakePlan);
     const snap = buildBandSnap(loadDefaultTemplate(), allocation, bands[0]!);
 
-    expect(snap.ae_data.io.in.B?.["9"]?.name).toBe("Keys");
-    expect(snap.ae_data.io.in.B?.["9"]?.mode).toBe("ST");
-    expect(snap.ae_data.ch["25"]?.in?.conn).toMatchObject({ grp: "B", in: 9 });
+    // Box B port 9 is socket A.25 on the shared link — not AES50 B.
+    expect(snap.ae_data.io.in.A["25"]?.name).toBe("Keys");
+    expect(snap.ae_data.io.in.A["25"]?.mode).toBe("ST");
+    expect(snap.ae_data.ch["25"]?.in?.conn).toMatchObject({ grp: "A", in: 25 });
     expect(snap.ae_data.ch["25"]?.mute).toBe(false);
-    // A.9 is empty tonight — unpatched, not left sitting there named "Keys".
+    // A.9 (box A's keys home) is empty tonight — unpatched, not named "Keys".
     expect(snap.ae_data.io.in.A["9"]?.name).toBe("");
     expect(snap.ae_data.ch["9"]?.in?.conn).toMatchObject({ grp: "OFF" });
+    // Nothing lands on AES50 B at all.
+    expect(snap.ae_data.io.in.B?.["9"]?.name).toBe("");
   });
 
   it("keeps everything on A when the second snake is off", () => {

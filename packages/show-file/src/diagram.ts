@@ -1,4 +1,10 @@
-import { SNAKE_LABEL, TEMPLATE_SLOTS, aes50Label } from "./slots";
+import {
+  SNAKE_LABEL,
+  TEMPLATE_SLOTS,
+  aes50Label,
+  aes50PortFor,
+  portLabel,
+} from "./slots";
 import type {
   EventPatchAllocation,
   PatchDiffPlan,
@@ -35,8 +41,10 @@ export function buildStageBoxDiagramModel(
 }
 
 /**
- * AES50 ports left unpatched tonight, collapsed into runs ("A.5–8") so a mostly
- * empty second snake reads as one line. Right halves of stereo pairs excluded.
+ * Ports left unpatched tonight, collapsed into runs so a mostly empty second
+ * snake reads as one line. Numbered the way the cells are — as printed on the
+ * box, with the desk's sockets in brackets on a daisy-chained box ("1–6
+ * (17–22)"). Right halves of stereo pairs excluded.
  */
 function spareLabels(allocation: EventPatchAllocation): string[] {
   const labels: string[] = [];
@@ -49,15 +57,19 @@ function spareLabels(allocation: EventPatchAllocation): string[] {
     for (let i = 0; i < ports.length; ) {
       let end = i;
       while (end + 1 < ports.length && ports[end + 1] === ports[end]! + 1) end += 1;
-      labels.push(
-        end > i
-          ? `${aes50Label(snake, ports[i]!)}–${ports[end]}`
-          : aes50Label(snake, ports[i]!),
-      );
+      const from = ports[i]!;
+      const to = ports[end]!;
+      labels.push(end > i ? runLabel(snake, from, to) : portLabel(snake, from));
       i = end + 1;
     }
   }
   return labels;
+}
+
+function runLabel(snake: EventPatchAllocation["snakes"][number], from: number, to: number): string {
+  const first = aes50PortFor(snake, from);
+  const last = aes50PortFor(snake, to);
+  return first === from ? `${from}–${to}` : `${from}–${to} (${first}–${last})`;
 }
 
 /**
@@ -200,6 +212,7 @@ function toStagePort(
     port: port.port,
     strip: port.strip,
     aes50: aes50Label(port.snake, port.port),
+    portLabel: portLabel(port.snake, port.port),
     label: port.label,
     templateLabel: port.templateLabel,
     family: port.family,

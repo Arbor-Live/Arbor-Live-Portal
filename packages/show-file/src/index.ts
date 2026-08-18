@@ -34,6 +34,8 @@ export {
   SNAKE_LABEL,
   SNAKE_SHORT_LABEL,
   aes50Label,
+  aes50PortFor,
+  portLabel,
   snakeGroupForFamily,
 } from "./slots";
 export { buildShowFile, fileStem, showFileName } from "./show";
