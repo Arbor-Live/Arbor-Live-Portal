@@ -42,7 +42,8 @@ async function pickSearchableOption(
 
   const option = menu.getByRole("option", { name: optionName }).first();
   await expect(option).toBeVisible({ timeout: 25_000 });
-  await option.click();
+  await option.dispatchEvent("pointerdown");
+  await option.dispatchEvent("click");
 
   await expect(trigger).toHaveText(selectedText, { timeout: 25_000 });
   await expect(menu).toHaveCount(0, { timeout: 25_000 });

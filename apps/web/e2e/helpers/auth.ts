@@ -85,7 +85,8 @@ export async function selectSearchableOption(
     name: new RegExp(`^${optionLabel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`),
   }).first();
   await expect(option).toBeVisible({ timeout: 20_000 });
-  await option.click();
+  await option.dispatchEvent("pointerdown");
+  await option.dispatchEvent("click");
 }
 
 function toTimeInputValue(label: string) {

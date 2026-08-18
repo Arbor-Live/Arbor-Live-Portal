@@ -37,7 +37,10 @@ export async function pickSearchableOption(
 
   const option = menu.getByRole("option", { name: optionName }).first();
   await expect(option).toBeVisible({ timeout: 25_000 });
-  await option.click();
+  // Popup zoom + live option remounts keep Playwright's hit-tested click from
+  // seeing a stable node. Activate the item directly instead.
+  await option.dispatchEvent("pointerdown");
+  await option.dispatchEvent("click");
 
   await expect(trigger).toHaveText(optionName, { timeout: 25_000 });
   await expect(menu).toHaveCount(0, { timeout: 25_000 });
