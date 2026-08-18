@@ -19,6 +19,19 @@ export async function pickSelectOption(page: Page, trigger: Locator, optionName:
 }
 
 /**
+ * Type into the open SearchableSelect filter. The combobox input is portaled;
+ * without focusing it first, Playwright `fill()` can append into whatever field
+ * still has focus (e.g. Asset ID in the create-asset wizard).
+ */
+export async function fillSearchableSelectQuery(menu: Locator, query: string) {
+  const input = menu.locator("input").first();
+  await expect(input).toBeVisible({ timeout: 25_000 });
+  await input.click({ force: true });
+  await expect(input).toBeFocused({ timeout: 5_000 });
+  await input.fill(query);
+}
+
+/**
  * Open a `SearchableSelect` (`@/components/inventory/searchable-select`),
  * search it, and pick a matching option from the combobox list.
  */
@@ -33,7 +46,7 @@ export async function pickSearchableOption(
 
   const menu = page.getByTestId("searchable-select-menu");
   await expect(menu).toBeVisible({ timeout: 25_000 });
-  await menu.locator("input").first().fill(query);
+  await fillSearchableSelectQuery(menu, query);
 
   const option = menu.getByRole("option", { name: optionName }).first();
   await expect(option).toBeVisible({ timeout: 25_000 });

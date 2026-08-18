@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import { expect, type Locator, type Page } from "@playwright/test";
 import { e2eEnv } from "./env";
+import { fillSearchableSelectQuery } from "./select";
 
 export const adminAuthFile = path.join(__dirname, "../.auth/admin.json");
 export const crewAuthFile = path.join(__dirname, "../.auth/crew.json");
@@ -80,7 +81,7 @@ export async function selectSearchableOption(
   await field.getByTestId("searchable-select-trigger").click();
   const menu = page.getByTestId("searchable-select-menu");
   await expect(menu).toBeVisible({ timeout: 20_000 });
-  await menu.locator("input").first().fill(optionLabel);
+  await fillSearchableSelectQuery(menu, optionLabel);
   const option = menu.getByRole("option", {
     name: new RegExp(`^${optionLabel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`),
   }).first();

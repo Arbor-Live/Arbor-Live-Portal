@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { pollConvex, runConvex } from "../helpers/convex";
+import { fillSearchableSelectQuery } from "../helpers/select";
 
 type PullListState = {
   lineCount: number;
@@ -85,7 +86,7 @@ test.describe("pull list editor", () => {
     await page.getByTestId("searchable-select-trigger").first().click();
     const menu = page.getByTestId("searchable-select-menu");
     await expect(menu).toBeVisible({ timeout: 20_000 });
-    await menu.locator("input").first().fill(seeded.typeName);
+    await fillSearchableSelectQuery(menu, seeded.typeName);
     await menu.getByRole("option", { name: seeded.typeName }).first().click();
 
     await page

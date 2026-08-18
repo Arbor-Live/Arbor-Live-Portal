@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { fillDateTimeRangeNearLabel } from "../helpers/auth";
 import { pollConvex } from "../helpers/convex";
+import { fillSearchableSelectQuery } from "../helpers/select";
 
 test.describe("venue create and pick", () => {
   test("admin creates a venue via picker on a new event", async ({ page }) => {
@@ -34,7 +35,7 @@ test.describe("venue create and pick", () => {
     await venueField.getByTestId("searchable-select-trigger").click();
     const menu = page.getByTestId("searchable-select-menu");
     await expect(menu).toBeVisible({ timeout: 20_000 });
-    await menu.locator("input").first().fill(venueName);
+    await fillSearchableSelectQuery(menu, venueName);
     await menu.getByRole("button", { name: /Create venue/i }).click();
     await expect(page.getByText("Create venue").first()).toBeVisible({ timeout: 10_000 });
     // Dialog name field should already be filled from the query.

@@ -1,5 +1,6 @@
 import { test, expect, type Locator, type Page } from "@playwright/test";
 import { pollConvex, runConvex } from "../helpers/convex";
+import { fillSearchableSelectQuery } from "../helpers/select";
 
 type SeededApplication = {
   applicationId: string;
@@ -92,7 +93,7 @@ test.describe("crew application triage", () => {
     await card.getByTestId("searchable-select-trigger").first().click();
     const menu = page.getByTestId("searchable-select-menu");
     await expect(menu).toBeVisible({ timeout: 20_000 });
-    await menu.locator("input").first().fill(seededEvent.title);
+    await fillSearchableSelectQuery(menu, seededEvent.title);
     await menu.getByRole("option", { name: seededEvent.title }).first().click();
 
     await expect(card.getByText("Presence")).toBeVisible({ timeout: 20_000 });

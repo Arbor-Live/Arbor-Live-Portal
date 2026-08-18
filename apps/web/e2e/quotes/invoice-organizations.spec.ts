@@ -2,6 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { acceptAppDialog } from "../helpers/auth";
 import { pollConvex } from "../helpers/convex";
 import { invoiceIdFromUrl, saveInvoiceEditor, waitForInvoiceEditorUrl } from "../helpers/invoice";
+import { fillSearchableSelectQuery } from "../helpers/select";
 
 type GroupState = {
   groupId: string;
@@ -27,7 +28,7 @@ type ClientState = {
 async function pickSearchableOption(
   page: Page,
   fieldTestId: string,
-  searchPlaceholder: string,
+  _searchPlaceholder: string,
   query: string,
   optionName: RegExp,
   selectedText: RegExp = optionName,
@@ -38,7 +39,7 @@ async function pickSearchableOption(
   await trigger.click();
   const menu = page.getByTestId("searchable-select-menu");
   await expect(menu).toBeVisible({ timeout: 25_000 });
-  await menu.getByPlaceholder(searchPlaceholder).fill(query);
+  await fillSearchableSelectQuery(menu, query);
 
   const option = menu.getByRole("option", { name: optionName }).first();
   await expect(option).toBeVisible({ timeout: 25_000 });
