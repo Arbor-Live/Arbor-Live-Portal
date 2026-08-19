@@ -5,11 +5,20 @@ import {
   allocateEventPatch,
   buildPatchDiffPlan,
   buildShowFile,
+  buildStageBoxDiagramModel,
+  aes50Label,
+  aes50PortFor,
   fileStem,
   listPhysicalChangeovers,
+  type PatchPlan,
   type ShowBandInput,
 } from "./index";
-import { buildBandSnap, buildShowPackage, loadDefaultTemplate } from "./node";
+import {
+  buildBandSnap,
+  buildNightSnap,
+  buildShowPackage,
+  loadDefaultTemplate,
+} from "./node";
 import type { RiderInputChannel } from "@arbor/rider-document";
 
 function input(
@@ -330,6 +339,375 @@ describe("identical band setups", () => {
       expect(snap.ae_data.io.in.A["1"]?.name).toBe("Vox 1");
       expect(snap.ae_data.io.in.A["5"]?.name).toBe("Guitar");
     }
+  });
+});
+
+describe("stereo pairs", () => {
+  function stereoKeysNight(): ShowBandInput[] {
+    return [
+      band("Openers", "support", [
+        input({ id: "v", channel: 1, source: "Lead", sourceKey: "vox.lead" }),
+        input({
+          id: "k",
+          channel: 2,
+          source: "Nord",
+          sourceKey: "keys",
+          stereo: true,
+          inputType: "di",
+        }),
+      ]),
+      band("Headliners", "headliner", [
+        input({ id: "v2", channel: 1, source: "Lead", sourceKey: "vox.lead" }),
+        input({
+          id: "k2",
+          channel: 2,
+          source: "Rhodes",
+          sourceKey: "keys",
+          stereo: true,
+          inputType: "di",
+        }),
+      ]),
+    ];
+  }
+
+  it("tags DI on both halves of a stereo pair in the night patch and band views", () => {
+    const allocation = allocateEventPatch(stereoKeysNight());
+    const left = allocation.ports.find((p) => p.port === 9)!;
+    const right = allocation.ports.find((p) => p.port === 10)!;
+    expect(left.di).toBe(true);
+    // Used to be false here while the band views said true.
+    expect(right.di).toBe(true);
+    expect(right.stereo).toBe(true);
+
+    const plan = buildPatchDiffPlan(allocation);
+    const nightRight = plan.night.ports.find((p) => p.port === 10)!;
+    const bandRight = plan.steps[0]!.ports.find((p) => p.port === 10)!;
+    expect(nightRight.di).toBe(bandRight.di);
+    expect(bandRight.di).toBe(true);
+  });
+
+  it("gives a broken keys pair its own strip so the extra input is not dropped", () => {
+    const bands = [
+      band("Crowded", "support", [
+        input({ id: "k", channel: 1, source: "Keys", sourceKey: "keys", inputType: "di", stereo: true }),
+        input({ id: "g1", channel: 2, source: "G1", sourceKey: "gtr", inputType: "di" }),
+        input({ id: "g2", channel: 3, source: "G2", sourceKey: "gtr", inputType: "di" }),
+        input({ id: "g3", channel: 4, source: "G3", sourceKey: "gtr", inputType: "di" }),
+        input({ id: "b", channel: 5, source: "Bass", sourceKey: "bass", inputType: "di" }),
+        input({ id: "f1", channel: 6, source: "Sax", sourceKey: "wind.sax.tenor" }),
+        input({ id: "f2", channel: 7, source: "Trumpet", sourceKey: "wind.trumpet" }),
+        input({ id: "f3", channel: 8, source: "Perc", sourceKey: "perc.aux" }),
+      ]),
+    ];
+    const allocation = allocateEventPatch(bands);
+    expect(allocation.warnings.some((w) => w.includes("no port left"))).toBe(false);
+
+    // Every input reaches a port, and every live port reaches a console strip.
+    const live = allocation.ports.filter((p) => p.used);
+    expect(live).toHaveLength(8);
+    for (const port of live) expect(port.strip).not.toBeNull();
+
+    const port10 = allocation.ports.find((p) => p.port === 10)!;
+    expect(port10.used).toBe(true);
+    expect(port10.strip).toBe(15);
+
+    const snap = buildBandSnap(loadDefaultTemplate(), allocation, bands[0]!);
+    expect(snap.ae_data.ch["15"]?.in?.conn).toMatchObject({ grp: "A", in: 10 });
+    expect(snap.ae_data.ch["15"]?.mute).toBe(false);
+  });
+});
+
+describe("unused channels", () => {
+  const soloVox = [
+    band("Solo", "support", [
+      input({ id: "v", channel: 1, source: "Lead", sourceKey: "vox.lead" }),
+    ]),
+  ];
+
+  it("drops spare ports from the diagram and lists them as leave-empty", () => {
+    const allocation = allocateEventPatch(soloVox);
+    const model = buildStageBoxDiagramModel(allocation, "Quiet Night");
+
+    expect(model.ports.map((p) => p.aes50)).toEqual(["A.1"]);
+    // Runs are collapsed; ports 10 / 16 are stereo right halves, not spare lines.
+    expect(model.spare).toEqual(["2–9", "11–15"]);
+  });
+
+  it("numbers spare runs on the daisy-chained box with real socket numbers", () => {
+    const allocation = allocateEventPatch(soloVox, {
+      secondSnake: true,
+      sides: { keys: "B" },
+    });
+    const model = buildStageBoxDiagramModel(allocation);
+    // Box B ports read as printed on the box, with sockets alongside. Runs
+    // break at port 10 / 16, the stereo right halves.
+    expect(model.spare).toEqual([
+      "2–9",
+      "11–15",
+      "1–9 (17–25)",
+      "11–15 (27–31)",
+    ]);
+  });
+
+  it("unpatches and blanks spare strips in the snaps", () => {
+    const allocation = allocateEventPatch(soloVox);
+    const snap = buildBandSnap(loadDefaultTemplate(), allocation, soloVox[0]!);
+
+    expect(snap.ae_data.ch["1"]?.name).toBe("Vox 1");
+    expect(snap.ae_data.ch["7"]?.name).toBe("");
+    expect(snap.ae_data.ch["7"]?.mute).toBe(true);
+    expect(snap.ae_data.ch["7"]?.in?.conn).toMatchObject({ grp: "OFF" });
+    expect(snap.ae_data.io.in.A["7"]?.name).toBe("");
+  });
+});
+
+describe("two snakes", () => {
+  const twoSnakePlan: PatchPlan = {
+    secondSnake: true,
+    sides: { drums: "A", keys: "B", flex: "B" },
+  };
+
+  function bigBill(): ShowBandInput[] {
+    return [
+      band("Big Band", "headliner", [
+        input({ id: "v1", channel: 1, source: "Lead", sourceKey: "vox.lead" }),
+        input({ id: "g", channel: 2, source: "Gtr", sourceKey: "gtr", inputType: "di" }),
+        input({ id: "b", channel: 3, source: "Bass", sourceKey: "bass", inputType: "di" }),
+        input({ id: "k", channel: 4, source: "Keys", sourceKey: "keys", stereo: true, inputType: "di" }),
+        input({ id: "sax", channel: 5, source: "Sax", sourceKey: "wind.sax.tenor" }),
+        input({ id: "kick", channel: 6, source: "Kick", sourceKey: "drum.kick" }),
+        input({ id: "sn", channel: 7, source: "Snare", sourceKey: "drum.snare" }),
+        input({ id: "oh", channel: 8, source: "OH", sourceKey: "drum.oh", stereo: true }),
+      ]),
+    ];
+  }
+
+  it("puts each group on the snake it was assigned", () => {
+    const allocation = allocateEventPatch(bigBill(), twoSnakePlan);
+    expect(allocation.snakes).toEqual(["A", "B"]);
+
+    const at = (snake: string, port: number) =>
+      allocation.ports.find((p) => p.snake === snake && p.port === port)!;
+
+    expect(at("A", 1).used).toBe(true); // vox stays on A
+    expect(at("A", 11).used).toBe(true); // kick stays on A
+    expect(at("B", 9).used).toBe(true); // keys moved to B
+    expect(at("B", 9).label).toBe("Keys");
+    expect(at("B", 7).used).toBe(true); // sax on B flex
+    expect(at("A", 7).used).toBe(false);
+    // Same layout on both boxes, separate console strips.
+    expect(at("A", 1).strip).toBe(1);
+    expect(at("B", 7).strip).toBe(23);
+    // Box B sits at A.17–32 on the daisy chain.
+    expect(aes50Label("B", 7)).toBe("A.23");
+    expect(aes50PortFor("B", 16)).toBe(32);
+  });
+
+  it("daisy-chains the second box onto AES50 A at 17–32", () => {
+    const bands = bigBill();
+    const allocation = allocateEventPatch(bands, twoSnakePlan);
+    const snap = buildBandSnap(loadDefaultTemplate(), allocation, bands[0]!);
+
+    // Box B port 9 is socket A.25 on the shared link — not AES50 B.
+    expect(snap.ae_data.io.in.A["25"]?.name).toBe("Keys");
+    expect(snap.ae_data.io.in.A["25"]?.mode).toBe("ST");
+    expect(snap.ae_data.ch["25"]?.in?.conn).toMatchObject({ grp: "A", in: 25 });
+    expect(snap.ae_data.ch["25"]?.mute).toBe(false);
+    // A.9 (box A's keys home) is empty tonight — unpatched, not named "Keys".
+    expect(snap.ae_data.io.in.A["9"]?.name).toBe("");
+    expect(snap.ae_data.ch["9"]?.in?.conn).toMatchObject({ grp: "OFF" });
+    // Nothing lands on AES50 B at all.
+    expect(snap.ae_data.io.in.B?.["9"]?.name).toBe("");
+  });
+
+  it("keeps everything on A when the second snake is off", () => {
+    const allocation = allocateEventPatch(bigBill(), {
+      secondSnake: false,
+      sides: { keys: "B" },
+    });
+    expect(allocation.snakes).toEqual(["A"]);
+    expect(allocation.ports.every((p) => p.snake === "A")).toBe(true);
+    expect(allocation.ports.find((p) => p.port === 9)?.used).toBe(true);
+  });
+
+  it("moves a group to the other snake when a box overflows", () => {
+    const crowd = [
+      band("Sixteen Plus", "headliner", [
+        ...Array.from({ length: 4 }, (_, i) =>
+          input({ id: `v${i}`, channel: i + 1, source: `V${i}`, sourceKey: "vox.lead" }),
+        ),
+        ...Array.from({ length: 6 }, (_, i) =>
+          input({
+            id: `f${i}`,
+            channel: 5 + i,
+            source: `Horn ${i}`,
+            sourceKey: "wind.trumpet",
+          }),
+        ),
+        input({ id: "k", channel: 11, source: "Keys", sourceKey: "keys", stereo: true, inputType: "di" }),
+        input({ id: "kick", channel: 12, source: "Kick", sourceKey: "drum.kick" }),
+        input({ id: "sn", channel: 13, source: "Snare", sourceKey: "drum.snare" }),
+        input({ id: "t1", channel: 14, source: "Rack", sourceKey: "drum.tom.rack" }),
+        input({ id: "t2", channel: 15, source: "Floor", sourceKey: "drum.tom.floor" }),
+        input({ id: "oh", channel: 16, source: "OH", sourceKey: "drum.oh", stereo: true }),
+      ]),
+    ];
+
+    const allocation = allocateEventPatch(crowd, { secondSnake: true, sides: {} });
+    expect(allocation.warnings.some((w) => w.includes("moved"))).toBe(true);
+    expect(allocation.ports.some((p) => p.snake === "B" && p.used)).toBe(true);
+    // Drums never get shoved across on their own.
+    expect(allocation.sides.drums).toBe("A");
+    expect(allocation.ports.filter((p) => p.used && p.strip !== null)).toHaveLength(16);
+  });
+});
+
+describe("snapshot scoping", () => {
+  function trio(): ShowBandInput[] {
+    const setup = (prefix: string) => [
+      input({ id: `${prefix}-v`, channel: 1, source: "Lead", sourceKey: "vox.lead" }),
+      input({ id: `${prefix}-k`, channel: 2, source: "Kick", sourceKey: "drum.kick" }),
+      input({ id: `${prefix}-s`, channel: 3, source: "Snare", sourceKey: "drum.snare" }),
+    ];
+    return [
+      band("Openers", "support", setup("a")),
+      band("Headliners", "headliner", [
+        ...setup("b"),
+        input({ id: "b-g", channel: 4, source: "Gtr", sourceKey: "gtr", inputType: "di" }),
+      ]),
+    ];
+  }
+
+  /** `scopes` strings are one char per item: "+" in scope, " " out. */
+  const inScope = (scope: string, oneBased: number) => scope[oneBased - 1] === "+";
+
+  it("leaves unchanged channels and all preamps out of a band scene's scope", () => {
+    const bands = trio();
+    const allocation = allocateEventPatch(bands);
+    const template = loadDefaultTemplate();
+    const headliners = buildBandSnap(template, allocation, bands[1]!, {
+      previous: bands[0]!,
+    });
+    const scopes = headliners.scopes!;
+
+    expect(scopes.ch).toHaveLength(40);
+    // Kick (A.11 → strip 10) and snare (A.12 → strip 11) are identical to the
+    // opener's scene, so recalling this scene must not re-gain them.
+    expect(inScope(scopes.ch, 10)).toBe(false);
+    expect(inScope(scopes.ch, 11)).toBe(false);
+    // The guitar only the headliners use does change.
+    expect(inScope(scopes.ch, 5)).toBe(true);
+    // Preamps are the engineer's from load-in onwards.
+    expect(scopes.source.A).toBe(" ".repeat(48));
+    expect(scopes.bus).toBe(" ".repeat(16));
+    // An in-scope channel recalls its whole strip; gain is protected by the
+    // source scope above, not by narrowing contents.
+    expect(scopes.contents).toBe("+".repeat(15));
+  });
+
+  it("scopes in everything the first band lights up, and recalls the night baseline in full", () => {
+    const bands = trio();
+    const allocation = allocateEventPatch(bands);
+    const template = loadDefaultTemplate();
+
+    const openers = buildBandSnap(template, allocation, bands[0]!, { previous: null });
+    expect(inScope(openers.scopes!.ch, 1)).toBe(true); // vox unmutes vs the baseline
+    expect(inScope(openers.scopes!.ch, 10)).toBe(true); // kick unmutes too
+    expect(inScope(openers.scopes!.ch, 5)).toBe(false); // guitar is muted in both
+
+    const night = buildNightSnap(template, allocation);
+    expect(night.scopes!.ch).toBe("+".repeat(40));
+    expect(night.scopes!.source.A).toBe("+".repeat(48));
+    expect(night.ae_data.ch["1"]?.mute).toBe(true);
+    expect(night.ae_data.ch["1"]?.name).toBe("Vox 1");
+  });
+
+  it("can be turned off for a full recall", () => {
+    const bands = trio();
+    const allocation = allocateEventPatch(bands);
+    const snap = buildBandSnap(loadDefaultTemplate(), allocation, bands[1]!, {
+      previous: bands[0]!,
+      scope: false,
+    });
+    expect(snap.scopes).toBeUndefined();
+  });
+
+  it("writes the same scope shape a desk-saved snapshot.11 uses", () => {
+    const reference = JSON.parse(
+      readFileSync(new URL("../templates/scopes-reference.json", import.meta.url), "utf8"),
+    ).samples.mixed as Record<string, unknown>;
+
+    const bands = trio();
+    const scopes = buildNightSnap(
+      loadDefaultTemplate(),
+      allocateEventPatch(bands),
+    ).scopes as unknown as Record<string, unknown>;
+
+    const shape = (value: Record<string, unknown>) =>
+      Object.fromEntries(
+        Object.entries(value).map(([key, entry]) =>
+          typeof entry === "string"
+            ? [key, entry.length]
+            : [
+                key,
+                Object.fromEntries(
+                  Object.entries(entry as Record<string, string>).map(([k, v]) => [
+                    k,
+                    v.length,
+                  ]),
+                ),
+              ],
+        ),
+      );
+
+    expect(shape(scopes)).toEqual(shape(reference));
+    // Only "+" and " " are legal; a full-scope scene is all "+".
+    expect(JSON.stringify(scopes)).not.toMatch(/[^\s"+:{},a-zA-Z]/);
+  });
+
+  it("encodes deselected channels the way the console does", () => {
+    const console = JSON.parse(
+      readFileSync(new URL("../templates/scopes-reference.json", import.meta.url), "utf8"),
+    ).samples.channelsDeselected as { ch: string; contents: string };
+
+    // Saved from the desk with CH 10-13 dropped from the object grid.
+    expect(console.ch).toHaveLength(40);
+    expect([...console.ch].flatMap((c, i) => (c === " " ? [i + 1] : []))).toEqual([
+      10, 11, 12, 13,
+    ]);
+    expect(console.contents).toBe("+".repeat(15));
+
+    // Ours is the same string shape: "+" for a channel this scene touches.
+    const bands = trio();
+    const scene = buildBandSnap(loadDefaultTemplate(), allocateEventPatch(bands), bands[1]!, {
+      previous: bands[0]!,
+    });
+    expect(scene.scopes!.ch).toHaveLength(console.ch.length);
+    expect(scene.scopes!.ch).toMatch(/^[+ ]+$/);
+    expect(scene.scopes!.contents).toBe(console.contents);
+  });
+
+  it("honours the event's full-recall escape hatch", () => {
+    const result = buildShowPackage({
+      eventName: "Full Recall Night",
+      bands: trio(),
+      plan: { secondSnake: false, sides: {}, scopeScenes: false },
+    });
+    const headliners = JSON.parse(
+      strFromU8(unzipSync(result.zipBytes)["Headliners.snap"]!),
+    );
+    expect(headliners.scopes).toBeUndefined();
+  });
+
+  it("scopes each band scene against the band before it in the package", () => {
+    const result = buildShowPackage({ eventName: "Scoped Night", bands: trio() });
+    const unzipped = unzipSync(result.zipBytes);
+    const headliners = JSON.parse(strFromU8(unzipped["Headliners.snap"]!));
+    const base = JSON.parse(strFromU8(unzipped["Default.snap"]!));
+
+    expect(headliners.scopes.ch[9]).toBe(" "); // strip 10 unchanged
+    expect(base.scopes.ch).toBe("+".repeat(40));
+    expect(base.ae_data.io.in.A["11"].name).toBe("Kick");
   });
 });
 

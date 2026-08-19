@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useQuery } from "convex/react";
 import {
+  DEFAULT_PATCH_PLAN,
   allocateEventPatch,
   buildPatchDiffPlan,
   fileStem,
@@ -17,6 +18,7 @@ import { RiderPdfDownloadButton } from "@/components/riders/rider-pdf-download-b
 import { EventShowFileDownloadButton } from "@/components/events/event-show-file-download-button";
 import { EventNightRiderDownloadButton } from "@/components/events/event-night-rider-download-button";
 import { StageBoxPatchDiffViews } from "@/components/events/stage-box-patch-diff-views";
+import { SnakePlanControls } from "@/components/events/snake-plan-controls";
 import { NightRiderChangeoverList } from "@/components/events/night-rider-changeover-list";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,6 +33,8 @@ export function EventBandRidersSection({ eventId }: { eventId: Id<"events"> }) {
 
 function EventBandRidersPanel({ eventId }: { eventId: Id<"events"> }) {
   const rows = useQuery(api.bandRiders.listForEvent, { eventId });
+  const savedPlan = useQuery(api.eventPatchPlan.get, { eventId });
+  const plan = savedPlan ?? DEFAULT_PATCH_PLAN;
 
   if (rows === undefined) {
     return (
@@ -57,7 +61,7 @@ function EventBandRidersPanel({ eventId }: { eventId: Id<"events"> }) {
       backline: row.rider!.backline,
     }));
 
-  const allocation = showBands.length > 0 ? allocateEventPatch(showBands) : null;
+  const allocation = showBands.length > 0 ? allocateEventPatch(showBands, plan) : null;
   const patchPlan = allocation ? buildPatchDiffPlan(allocation) : null;
   const changeovers = patchPlan ? listPhysicalChangeovers(patchPlan) : [];
 
@@ -78,6 +82,7 @@ function EventBandRidersPanel({ eventId }: { eventId: Id<"events"> }) {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
+          <SnakePlanControls eventId={eventId} plan={plan} />
           {patchPlan ? <StageBoxPatchDiffViews plan={patchPlan} /> : null}
           <NightRiderChangeoverList changeovers={changeovers} />
         </CardContent>

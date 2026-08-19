@@ -7,6 +7,7 @@ import {
   allocateEventPatch,
   buildNightRiderDocument,
   fileStem,
+  type PatchPlan,
   type ShowBandInput,
 } from "@arbor/show-file/node";
 import { api } from "./_generated/api";
@@ -63,7 +64,11 @@ export const downloadNightRiderByEventId = action({
       );
     }
 
-    const allocation = allocateEventPatch(bands);
+    const plan: PatchPlan | null = await ctx.runQuery(api.eventPatchPlan.get, {
+      eventId: args.eventId,
+    });
+
+    const allocation = allocateEventPatch(bands, plan ?? undefined);
     const document = buildNightRiderDocument({
       eventName: detail.event.title,
       allocation,

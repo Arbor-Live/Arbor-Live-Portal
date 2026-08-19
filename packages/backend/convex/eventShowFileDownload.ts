@@ -5,6 +5,7 @@ import type { FunctionReturnType } from "convex/server";
 import {
   buildShowPackage,
   fileStem,
+  type PatchPlan,
   type ShowBandInput,
 } from "@arbor/show-file/node";
 import { api } from "./_generated/api";
@@ -43,9 +44,14 @@ export const downloadByEventId = action({
       });
     }
 
+    const plan: PatchPlan | null = await ctx.runQuery(api.eventPatchPlan.get, {
+      eventId: args.eventId,
+    });
+
     const result = buildShowPackage({
       eventName: detail.event.title,
       bands,
+      plan: plan ?? undefined,
     });
 
     const bytes = new ArrayBuffer(result.zipBytes.byteLength);

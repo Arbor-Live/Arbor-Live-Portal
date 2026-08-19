@@ -5,7 +5,7 @@
  * flex / keys. Stereo pairs: Keys 9–10 (breakable), OH 15–16 (always ST).
  */
 
-import type { SlotFamily } from "./types";
+import type { SlotFamily, SnakeGroup, SnakeId } from "./types";
 
 export type TemplateSlot = {
   port: number;
@@ -44,3 +44,91 @@ export const PORT_BY_NUMBER = new Map(TEMPLATE_SLOTS.map((slot) => [slot.port, s
 
 /** Mono mid overflow order when flex is full (never steal vox/drums first). */
 export const MID_OVERFLOW_PORTS = [7, 8, 5, 6, 9, 10] as const;
+
+/**
+ * Both stage boxes run the same Default.snap layout. They are **daisy-chained**,
+ * so both live on AES50 A: box A is A.1–16, box B is A.17–32. `SnakeId` names
+ * the physical box, never an AES50 group.
+ */
+export const SNAKE_IDS: SnakeId[] = ["A", "B"];
+
+/** The one AES50 link both boxes hang off. */
+export const AES50_GROUP = "A";
+
+/** Where each box starts on the shared link. */
+export const SNAKE_PORT_OFFSET: Record<SnakeId, number> = { A: 0, B: 16 };
+
+export const SNAKE_LABEL: Record<SnakeId, string> = {
+  A: "Snake A · A.1–16",
+  B: "Snake B · A.17–32 (daisy-chained)",
+};
+
+export const SNAKE_SHORT_LABEL: Record<SnakeId, string> = {
+  A: "Snake A",
+  B: "Snake B",
+};
+
+/**
+ * Console strips each box lands on. A keeps Default.snap's 1–14 (a stereo pair
+ * shares one strip); `spare` is the extra strip used when a stereo pair breaks
+ * and its right-hand socket becomes a mono of its own.
+ */
+export const SNAKE_STRIPS: Record<SnakeId, { offset: number; spare: number }> = {
+  A: { offset: 0, spare: 15 },
+  B: { offset: 16, spare: 31 },
+};
+
+export function stripFor(snake: SnakeId, slot: TemplateSlot): number | null {
+  return slot.strip === null ? null : slot.strip + SNAKE_STRIPS[snake].offset;
+}
+
+/** Box-relative port (1–16) → socket number on the shared AES50 A link. */
+export function aes50PortFor(snake: SnakeId, port: number): number {
+  return port + SNAKE_PORT_OFFSET[snake];
+}
+
+export function aes50Label(snake: SnakeId, port: number): string {
+  return `${AES50_GROUP}.${aes50PortFor(snake, port)}`;
+}
+
+/**
+ * How a port reads at the stage box: the number printed on the SD16, with the
+ * socket the desk sees in brackets when the box is offset down the chain —
+ * "7 (23)" is port 7 on the second snake, A.23 at the console.
+ */
+export function portLabel(snake: SnakeId, port: number): string {
+  const socket = aes50PortFor(snake, port);
+  return socket === port ? String(port) : `${port} (${socket})`;
+}
+
+/** Drums move between boxes as one block — nobody splits a kit across snakes. */
+export function snakeGroupForFamily(family: SlotFamily): SnakeGroup {
+  switch (family) {
+    case "vox":
+    case "guitar":
+    case "bass":
+    case "flex":
+    case "keys":
+      return family;
+    default:
+      return "drums";
+  }
+}
+
+export const SNAKE_GROUPS: SnakeGroup[] = [
+  "vox",
+  "guitar",
+  "bass",
+  "flex",
+  "keys",
+  "drums",
+];
+
+export const SNAKE_GROUP_LABEL: Record<SnakeGroup, string> = {
+  vox: "Vox",
+  guitar: "Guitar",
+  bass: "Bass",
+  flex: "Flex / horns / perc",
+  keys: "Keys",
+  drums: "Drums",
+};

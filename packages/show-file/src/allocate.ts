@@ -1,11 +1,22 @@
 import type { RiderInputChannel } from "@arbor/rider-document";
 import { displayLabel, familyForInput, inputSortKey } from "./family";
-import { MID_OVERFLOW_PORTS, TEMPLATE_SLOTS } from "./slots";
+import {
+  MID_OVERFLOW_PORTS,
+  SNAKE_GROUPS,
+  SNAKE_SHORT_LABEL,
+  SNAKE_STRIPS,
+  TEMPLATE_SLOTS,
+  snakeGroupForFamily,
+  stripFor,
+} from "./slots";
 import type {
   EventPatchAllocation,
+  PatchPlan,
   PortAssignment,
   ShowBandInput,
   SlotFamily,
+  SnakeGroup,
+  SnakeId,
 } from "./types";
 
 type Classified = {
@@ -13,19 +24,34 @@ type Classified = {
   family: SlotFamily;
 };
 
+type BandInputs = Map<string, Classified[]>;
+
+/** Ports on one stage box. */
+const BOX_CAPACITY = 16;
+
+/** Groups we are willing to shove onto the other snake, least disruptive first. */
+const MOVABLE_ORDER: SnakeGroup[] = ["keys", "flex", "guitar", "bass", "vox"];
+
+export const DEFAULT_PATCH_PLAN: PatchPlan = { secondSnake: false, sides: {} };
+
 /**
- * Night-stable AES50 A.1–A.16 snake locked to Default.snap organization:
+ * Night-stable snake locked to Default.snap organization:
  * Vox 1–4 · mid (gtr/bass/flex/keys) · drums 11–16.
  *
  * - Overheads always ST on 15–16; only OH gets 48V.
  * - Keys prefer ST on 9–10; break to mono on 9 if a mid overflow needs the slot.
  * - Physical patch is the union across bands; snaps only rename / mute.
+ * - With two snakes each box runs the same layout, one group per box, so
+ *   "Flex1 is port 7" stays true whichever side you are standing on.
  */
-export function allocateEventPatch(bands: ShowBandInput[]): EventPatchAllocation {
+export function allocateEventPatch(
+  bands: ShowBandInput[],
+  plan: PatchPlan = DEFAULT_PATCH_PLAN,
+): EventPatchAllocation {
   const warnings: string[] = [];
   const orderedBands = sortBandsForShow(bands);
 
-  const byBand = new Map<string, Classified[]>();
+  const byBand: BandInputs = new Map();
   for (const band of orderedBands) {
     const classified: Classified[] = [];
     for (const input of band.inputs) {
@@ -40,13 +66,127 @@ export function allocateEventPatch(bands: ShowBandInput[]): EventPatchAllocation
     byBand.set(band.fileStem, classified);
   }
 
-  const maxOf = (family: SlotFamily) =>
-    Math.max(
+  const demand = familyDemand(orderedBands, byBand);
+  const snakes: SnakeId[] = plan.secondSnake ? ["A", "B"] : ["A"];
+  const sides = resolveSides(demand, plan, snakes, warnings);
+
+  const ports: PortAssignment[] = [];
+  for (const snake of snakes) {
+    ports.push(...allocateBox(snake, orderedBands, byBand, sides, warnings));
+  }
+
+  return {
+    ports,
+    warnings,
+    bandOrder: orderedBands.map((b) => ({ bandName: b.bandName, fileStem: b.fileStem })),
+    snakes,
+    sides,
+  };
+}
+
+/** Highest simultaneous count of each family across the bill. */
+function familyDemand(
+  bands: ShowBandInput[],
+  byBand: BandInputs,
+): Map<SlotFamily, number> {
+  const demand = new Map<SlotFamily, number>();
+  for (const band of bands) {
+    const counts = new Map<SlotFamily, number>();
+    for (const item of byBand.get(band.fileStem) ?? []) {
+      counts.set(item.family, (counts.get(item.family) ?? 0) + 1);
+    }
+    for (const [family, count] of counts) {
+      demand.set(family, Math.max(demand.get(family) ?? 0, count));
+    }
+  }
+  return demand;
+}
+
+/** Ports a family eats on its box (keys/OH claim a stereo pair up front). */
+function portCost(family: SlotFamily, count: number): number {
+  if (count <= 0) return 0;
+  if (family === "oh") return 2;
+  if (family === "keys") return count + 1;
+  return count;
+}
+
+function groupCost(
+  group: SnakeGroup,
+  demand: Map<SlotFamily, number>,
+): number {
+  let total = 0;
+  for (const [family, count] of demand) {
+    if (snakeGroupForFamily(family) === group) total += portCost(family, count);
+  }
+  return total;
+}
+
+/**
+ * Resolve the engineer's per-group snake picks, then shove groups across when a
+ * box overflows. Drums never move automatically — the kit is the one thing that
+ * should stay put all night.
+ */
+function resolveSides(
+  demand: Map<SlotFamily, number>,
+  plan: PatchPlan,
+  snakes: SnakeId[],
+  warnings: string[],
+): Record<SnakeGroup, SnakeId> {
+  const sides = {} as Record<SnakeGroup, SnakeId>;
+  for (const group of SNAKE_GROUPS) {
+    const picked = plan.sides[group];
+    sides[group] = snakes.includes(picked ?? "A") ? (picked ?? "A") : "A";
+  }
+  if (snakes.length < 2) return sides;
+
+  const load = (snake: SnakeId) =>
+    SNAKE_GROUPS.filter((g) => sides[g] === snake).reduce(
+      (sum, g) => sum + groupCost(g, demand),
       0,
-      ...orderedBands.map(
-        (band) => (byBand.get(band.fileStem) ?? []).filter((c) => c.family === family).length,
-      ),
     );
+
+  for (const from of snakes) {
+    const to: SnakeId = from === "A" ? "B" : "A";
+    while (load(from) > BOX_CAPACITY) {
+      const candidate = MOVABLE_ORDER.find(
+        (group) =>
+          sides[group] === from &&
+          groupCost(group, demand) > 0 &&
+          load(to) + groupCost(group, demand) <= BOX_CAPACITY,
+      );
+      if (!candidate) break;
+      sides[candidate] = to;
+      warnings.push(
+        `${SNAKE_SHORT_LABEL[from]} is full — moved ${candidate} to ${SNAKE_SHORT_LABEL[to]}.`,
+      );
+    }
+  }
+
+  return sides;
+}
+
+/** One 16-port stage box: reserve ports, then flag which band lights each up. */
+function allocateBox(
+  snake: SnakeId,
+  orderedBands: ShowBandInput[],
+  byBand: BandInputs,
+  sides: Record<SnakeGroup, SnakeId>,
+  warnings: string[],
+): PortAssignment[] {
+  const onThisBox = (family: SlotFamily) =>
+    sides[snakeGroupForFamily(family)] === snake;
+
+  const maxOf = (family: SlotFamily) =>
+    onThisBox(family)
+      ? Math.max(
+          0,
+          ...orderedBands.map(
+            (band) =>
+              (byBand.get(band.fileStem) ?? []).filter((c) => c.family === family)
+                .length,
+          ),
+        )
+      : 0;
 
   const maxVox = Math.min(4, maxOf("vox"));
   const maxKick = Math.min(1, maxOf("kick"));
@@ -115,7 +255,9 @@ export function allocateEventPatch(bands: ShowBandInput[]): EventPatchAllocation
     ).length;
     if (midOverflowNeeded > freeIfStereo) {
       keysStereo = false;
-      warnings.push("Keys set to mono on A.9 so A.10 can cover an extra mid input.");
+      warnings.push(
+        `Keys set to mono on ${snake}.9 so ${snake}.10 can cover an extra mid input.`,
+      );
     }
     if (keysStereo) {
       if (claim("keys", 9, true)) keysPorts = [9];
@@ -150,7 +292,7 @@ export function allocateEventPatch(bands: ShowBandInput[]): EventPatchAllocation
         );
         if (!fallback) {
           warnings.push(
-            `Stage box full: could not place remaining "${spill.family}" input(s).`,
+            `${SNAKE_SHORT_LABEL[snake]} full: could not place remaining "${spill.family}" input(s).`,
           );
           spill.remaining = 0;
           break;
@@ -164,12 +306,14 @@ export function allocateEventPatch(bands: ShowBandInput[]): EventPatchAllocation
     }
   }
 
-  // Build port state from template skeleton
+  // Build port state from template skeleton. Right halves of stereo pairs get
+  // an entry too — a broken pair (mono keys on 9) leaves 10 usable on its own.
   const portState = new Map<number, PortAssignment>();
   for (const slot of TEMPLATE_SLOTS) {
-    if (slot.strip === null) continue;
     portState.set(slot.port, {
+      snake,
       port: slot.port,
+      strip: stripFor(snake, slot),
       label: slot.defaultLabel,
       templateLabel: slot.defaultLabel,
       family: slot.family,
@@ -180,6 +324,7 @@ export function allocateEventPatch(bands: ShowBandInput[]): EventPatchAllocation
       bandInstruments: {},
       bandDetailLabels: {},
       bandInputTypes: {},
+      used: false,
     });
   }
 
@@ -226,6 +371,7 @@ export function allocateEventPatch(bands: ShowBandInput[]): EventPatchAllocation
   for (const band of orderedBands) {
     const familyCursor = new Map<SlotFamily, number>();
     for (const item of byBand.get(band.fileStem) ?? []) {
+      if (!onThisBox(item.family)) continue;
       const cursor = familyCursor.get(item.family) ?? 0;
       familyCursor.set(item.family, cursor + 1);
       const ports = reserved.get(item.family) ?? [];
@@ -251,54 +397,37 @@ export function allocateEventPatch(bands: ShowBandInput[]): EventPatchAllocation
 
   const ports: PortAssignment[] = [];
   for (const slot of TEMPLATE_SLOTS) {
-    if (slot.strip === null) {
-      const left = portState.get(slot.port - 1)!;
-      ports.push({
-        port: slot.port,
-        label: left.label,
-        templateLabel: slot.defaultLabel,
-        family: left.family,
-        stereo: left.stereo,
-        phantom: left.phantom,
-        di: left.di,
-        bandLabels: left.bandLabels,
-        bandInstruments: left.bandInstruments,
-        bandDetailLabels: left.bandDetailLabels,
-        bandInputTypes: left.bandInputTypes,
-      });
+    const assignment = portState.get(slot.port)!;
+    const left = slot.strip === null ? ports.find((p) => p.port === slot.port - 1) : undefined;
+
+    if (left?.stereo) {
+      // Right half of a live stereo pair: it *is* the left socket, so it shows
+      // the same finished tags (DI / 48V) and rides the left channel strip.
+      // Reading the raw skeleton here is what used to drop the DI tag off A.10
+      // while the band views kept it.
+      ports.push({ ...left, port: slot.port, strip: null, templateLabel: slot.defaultLabel });
       continue;
     }
-    const assignment = portState.get(slot.port)!;
+
     const hasUse = Object.keys(assignment.bandLabels).length > 0;
     const inputTypes = Object.values(assignment.bandInputTypes);
     const diCount = inputTypes.filter((t) => t === "di").length;
+    const spareStrip = slot.strip === null ? SNAKE_STRIPS[snake].spare : null;
     ports.push({
       ...assignment,
+      // A broken pair's right socket needs a strip of its own to be audible.
+      strip: hasUse ? (assignment.strip ?? spareStrip) : assignment.strip,
+      stereo: assignment.stereo && slot.strip !== null,
       label: assignment.label || slot.defaultLabel,
       templateLabel: slot.defaultLabel,
       phantom: assignment.family === "oh" && (hasUse || Boolean(reserved.get("oh")?.length)),
       // DI tag when a majority of bands that use the port are on DI
       di: hasUse && diCount >= Math.ceil(inputTypes.length / 2),
+      used: hasUse,
     });
   }
 
-  // If keys broken, port 10 is a spare mid — not ST Keys
-  const port10 = ports.find((p) => p.port === 10);
-  const port9 = ports.find((p) => p.port === 9);
-  if (port9 && port10 && !port9.stereo) {
-    port10.stereo = false;
-    if (port10.family === "keys" && Object.keys(port10.bandLabels).length === 0) {
-      port10.family = "flex";
-      port10.label = "Flex2";
-      port10.templateLabel = "Flex2";
-    }
-  }
-
-  return {
-    ports,
-    warnings,
-    bandOrder: orderedBands.map((b) => ({ bandName: b.bandName, fileStem: b.fileStem })),
-  };
+  return ports;
 }
 
 export function sortBandsForShow(bands: ShowBandInput[]): ShowBandInput[] {

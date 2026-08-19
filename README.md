@@ -14,6 +14,7 @@ Monorepo bootstrap for:
 - [docs/r2-storage.md](docs/r2-storage.md) — Cloudflare R2 file storage setup
 - [docs/immich.md](docs/immich.md) — Immich media albums & share links for event/band galleries
 - [docs/resend-email.md](docs/resend-email.md) — Resend transactional sends & inbound confirmation webhook
+- [docs/wing-show-files.md](docs/wing-show-files.md) — Wing show file generation: night patch, two snakes, snapshot scoping
 
 ## Setup
 

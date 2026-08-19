@@ -62,6 +62,7 @@ import type * as eventCrewAvailability from "../eventCrewAvailability.js";
 import type * as eventExpenses from "../eventExpenses.js";
 import type * as eventFeedback from "../eventFeedback.js";
 import type * as eventNightRiderDownload from "../eventNightRiderDownload.js";
+import type * as eventPatchPlan from "../eventPatchPlan.js";
 import type * as eventPullLists from "../eventPullLists.js";
 import type * as eventRentalFulfillment from "../eventRentalFulfillment.js";
 import type * as eventRequests from "../eventRequests.js";
@@ -240,6 +241,7 @@ declare const fullApi: ApiFromModules<{
   eventExpenses: typeof eventExpenses;
   eventFeedback: typeof eventFeedback;
   eventNightRiderDownload: typeof eventNightRiderDownload;
+  eventPatchPlan: typeof eventPatchPlan;
   eventPullLists: typeof eventPullLists;
   eventRentalFulfillment: typeof eventRentalFulfillment;
   eventRequests: typeof eventRequests;

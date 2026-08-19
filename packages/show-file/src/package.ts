@@ -1,12 +1,13 @@
 import { zipSync, strToU8 } from "fflate";
-import { allocateEventPatch, sortBandsForShow } from "./allocate";
+import { DEFAULT_PATCH_PLAN, allocateEventPatch, sortBandsForShow } from "./allocate";
 import { buildShowFile, fileStem, showFileName } from "./show";
-import { buildBandSnap } from "./snap";
+import { buildBandSnap, buildNightSnap } from "./snap";
 import { buildPatchDiffPlan, buildStageBoxDiagramModel } from "./diagram";
 import { loadDefaultTemplate } from "./template";
 import type {
   EventPatchAllocation,
   PatchDiffPlan,
+  PatchPlan,
   ShowBandInput,
   StageBoxDiagramModel,
   WingSnap,
@@ -30,6 +31,10 @@ export function buildShowPackage(args: {
   eventName: string;
   bands: ShowBandInput[];
   template?: WingSnap;
+  /** Snake choices for the night (second stage box, per-group sides). */
+  plan?: PatchPlan;
+  /** Set false to make every scene a full recall (no snapshot scoping). */
+  scope?: boolean;
 }): BuildShowPackageResult {
   const bandsWithInputs = sortBandsForShow(
     args.bands.filter((band) => band.inputs.length > 0),
@@ -45,7 +50,8 @@ export function buildShowPackage(args: {
   }
 
   const template = args.template ?? loadDefaultTemplate();
-  const allocation = allocateEventPatch(bandsWithInputs);
+  const plan = args.plan ?? DEFAULT_PATCH_PLAN;
+  const allocation = allocateEventPatch(bandsWithInputs, plan);
   const show = buildShowFile({
     eventName: args.eventName,
     bands: bandsWithInputs,
@@ -53,13 +59,18 @@ export function buildShowPackage(args: {
 
   const files: Record<string, Uint8Array> = {
     [showFileName(args.eventName)]: strToU8(`${JSON.stringify(show)}\n`),
-    "Default.snap": strToU8(serializeSnap(template)),
+    // Scene 1 is tonight's baseline: the full patch, named and muted.
+    "Default.snap": strToU8(serializeSnap(buildNightSnap(template, allocation))),
   };
 
-  for (const band of bandsWithInputs) {
-    const snap = buildBandSnap(template, allocation, band);
+  const scope = args.scope ?? plan.scopeScenes ?? true;
+  bandsWithInputs.forEach((band, index) => {
+    const snap = buildBandSnap(template, allocation, band, {
+      previous: bandsWithInputs[index - 1] ?? null,
+      scope,
+    });
     files[`${band.fileStem}.snap`] = strToU8(serializeSnap(snap));
-  }
+  });
 
   const zipBytes = zipSync(files, { level: 6 });
   const diagram = buildStageBoxDiagramModel(allocation, args.eventName);
