@@ -18,6 +18,9 @@ export function toDocumentLineItem(
   const billingQuantity = isEquipment
     ? billingQuantityForEquipmentLine(row.quantity, basis, billableOccurrenceCount)
     : row.quantity;
+  const amountUsd = isEquipment
+    ? Number((billingQuantity * Math.max(0, row.rateUsd)).toFixed(2))
+    : row.amountUsd;
 
   let quantityDetail: string | undefined;
   if (isEquipment && basis === "per_occurrence" && billableOccurrenceCount > 1) {
@@ -74,7 +77,7 @@ export function toDocumentLineItem(
     quantity: billingQuantity,
     quantityDetail,
     rateUsd: row.rateUsd,
-    amountUsd: row.amountUsd,
+    amountUsd,
     memberCount:
       row.section === "artist" && row.memberCount !== undefined && row.memberCount > 0
         ? row.memberCount
@@ -85,6 +88,54 @@ export function toDocumentLineItem(
       row.performanceHours > 0
         ? row.performanceHours
         : undefined,
+  };
+}
+
+function roundUsd(value: number) {
+  return Number(value.toFixed(2));
+}
+
+function sumLineAmountUsd(
+  lineItems: ReturnType<typeof toDocumentLineItem>[],
+  matches: (section: Doc<"invoiceLineItems">["section"]) => boolean,
+) {
+  return roundUsd(lineItems.filter((line) => matches(line.section)).reduce((sum, line) => sum + line.amountUsd, 0));
+}
+
+/** Recompute section + invoice totals from display line items (billing qty × rate). */
+export function recomputeInvoiceTotalsFromDocumentLines(
+  lineItems: ReturnType<typeof toDocumentLineItem>[],
+  discount: { discountType: "amount" | "percent"; discountValue: number },
+) {
+  const equipmentSubtotalUsd = sumLineAmountUsd(lineItems, (section) => isEquipmentSection(section));
+  const externalRentalsSubtotalUsd = sumLineAmountUsd(
+    lineItems,
+    (section) => section === "external_rental",
+  );
+  const artistsSubtotalUsd = sumLineAmountUsd(lineItems, (section) => section === "artist");
+  const crewSubtotalUsd = sumLineAmountUsd(lineItems, (section) => section === "crew");
+  const feesSubtotalUsd = sumLineAmountUsd(lineItems, (section) => section === "fee");
+  const subtotalUsd = roundUsd(
+    equipmentSubtotalUsd +
+      externalRentalsSubtotalUsd +
+      artistsSubtotalUsd +
+      crewSubtotalUsd +
+      feesSubtotalUsd,
+  );
+  const discountAmountUsd =
+    discount.discountType === "percent"
+      ? roundUsd((subtotalUsd * Math.max(0, discount.discountValue)) / 100)
+      : roundUsd(Math.max(0, discount.discountValue));
+  const totalUsd = roundUsd(Math.max(0, subtotalUsd - discountAmountUsd));
+  return {
+    equipmentSubtotalUsd,
+    externalRentalsSubtotalUsd,
+    artistsSubtotalUsd,
+    crewSubtotalUsd,
+    feesSubtotalUsd,
+    subtotalUsd,
+    discountAmountUsd,
+    totalUsd,
   };
 }
 
@@ -109,6 +160,18 @@ export async function buildInvoiceDocumentData(
     }),
   );
 
+  const documentLineItems = lineItems.map((row) =>
+    toDocumentLineItem(
+      row,
+      billableOccurrenceCount,
+      row.excludedTypeIds?.map((id) => excludedLabelById.get(id) ?? String(id)),
+    ),
+  );
+  const totals = recomputeInvoiceTotalsFromDocumentLines(documentLineItems, {
+    discountType: invoice.discountType,
+    discountValue: invoice.discountValue,
+  });
+
   return {
     invoice: {
       invoiceNumber: invoice.invoiceNumber,
@@ -122,22 +185,9 @@ export async function buildInvoiceDocumentData(
       clientPhone: invoice.clientPhone,
       clientApprovalStatus: invoice.clientApprovalStatus,
       digitalQuoteUrl,
-      equipmentSubtotalUsd: invoice.equipmentSubtotalUsd,
-      externalRentalsSubtotalUsd: invoice.externalRentalsSubtotalUsd,
-      artistsSubtotalUsd: invoice.artistsSubtotalUsd,
-      crewSubtotalUsd: invoice.crewSubtotalUsd,
-      feesSubtotalUsd: invoice.feesSubtotalUsd,
-      subtotalUsd: invoice.subtotalUsd,
-      discountAmountUsd: invoice.discountAmountUsd,
-      totalUsd: invoice.totalUsd,
+      ...totals,
       notes: invoice.notes,
     },
-    lineItems: lineItems.map((row) =>
-      toDocumentLineItem(
-        row,
-        billableOccurrenceCount,
-        row.excludedTypeIds?.map((id) => excludedLabelById.get(id) ?? String(id)),
-      ),
-    ),
+    lineItems: documentLineItems,
   };
 }
