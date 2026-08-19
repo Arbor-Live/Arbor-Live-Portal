@@ -19,16 +19,15 @@ export async function pickSelectOption(page: Page, trigger: Locator, optionName:
 }
 
 /**
- * Type into the open SearchableSelect filter. The combobox input is portaled;
- * without focusing it first, Playwright `fill()` can append into whatever field
- * still has focus (e.g. Asset ID in the create-asset wizard).
+ * Type into the open SearchableSelect filter. Pickers inside modal sheets are
+ * portaled into the sheet (so focus stays in the trap); the popup can still
+ * extend below the viewport, so fill with force instead of clicking the input.
  */
 export async function fillSearchableSelectQuery(menu: Locator, query: string) {
   const input = menu.locator("input").first();
   await expect(input).toBeVisible({ timeout: 25_000 });
-  await input.click({ force: true });
-  await expect(input).toBeFocused({ timeout: 5_000 });
-  await input.fill(query);
+  await menu.evaluate((element) => element.scrollIntoView({ block: "nearest" }));
+  await input.fill(query, { force: true });
 }
 
 /**
