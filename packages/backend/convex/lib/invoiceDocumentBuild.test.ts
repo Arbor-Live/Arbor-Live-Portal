@@ -15,6 +15,8 @@ function equipmentLine(
     section: "equipment_type",
     order: 0,
     label: "Speaker",
+    createdAt: 0,
+    updatedAt: 0,
     amountUsd: overrides.amountUsd ?? overrides.quantity * overrides.rateUsd,
     ...overrides,
   };

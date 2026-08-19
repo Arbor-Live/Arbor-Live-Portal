@@ -265,11 +265,10 @@ export function InvoiceEditor({
   const [copyingDaySetup, setCopyingDaySetup] = useState(false);
   const crewRowsByEventRef = useRef<Map<string, InvoiceCrewRow[]>>(new Map());
   const crewBucketsHydratedInvoiceRef = useRef<string | null>(null);
-  const billableOccurrenceCount = useMemo(() => {
-    if (linkedSeries?.activeOccurrenceCount) return linkedSeries.activeOccurrenceCount;
-    const billableDays = linkedDayEvents.filter((day) => day.status !== "cancelled").length;
-    return billableDays > 0 ? billableDays : 0;
-  }, [linkedDayEvents, linkedSeries?.activeOccurrenceCount]);
+  const billableOccurrenceCount =
+    linkedSeries?.activeOccurrenceCount ||
+    linkedDayEvents.filter((day) => day.status !== "cancelled").length ||
+    0;
   const pullListSyncStatus = useQuery(
     api.eventPullLists.getInvoiceSyncStatus,
     linkedEvent && !linkedSeries ? { eventId: linkedEvent._id } : "skip",
