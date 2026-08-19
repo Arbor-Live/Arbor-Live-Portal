@@ -161,7 +161,8 @@ export function computeInvoiceDraftTotals(input: ComputeInvoiceDraftTotalsInput)
       line.equipmentQuantityBasis,
       input.billableOccurrenceCount,
     );
-    const amount = qty * Math.max(0, rate);
+    const amount =
+      line.section === "external_rental" ? qty * rate : qty * Math.max(0, rate);
 
     if (line.section === "equipment_package" || line.section === "equipment_type") {
       equipmentSubtotalUsd += amount;

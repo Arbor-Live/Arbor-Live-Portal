@@ -265,7 +265,10 @@ export function InvoiceEditor({
   const [copyingDaySetup, setCopyingDaySetup] = useState(false);
   const crewRowsByEventRef = useRef<Map<string, InvoiceCrewRow[]>>(new Map());
   const crewBucketsHydratedInvoiceRef = useRef<string | null>(null);
-  const billableOccurrenceCount = linkedSeries?.activeOccurrenceCount ?? 0;
+  const billableOccurrenceCount =
+    linkedSeries?.activeOccurrenceCount ||
+    linkedDayEvents.filter((day) => day.status !== "cancelled").length ||
+    0;
   const pullListSyncStatus = useQuery(
     api.eventPullLists.getInvoiceSyncStatus,
     linkedEvent && !linkedSeries ? { eventId: linkedEvent._id } : "skip",
@@ -950,13 +953,15 @@ export function InvoiceEditor({
       });
     }
     for (const row of externalRentals) {
-      if (!row.label.trim() || Number(row.quantity) <= 0) continue;
+      if (!row.label.trim()) continue;
+      const quantity = Number(row.quantity);
+      if (!Number.isFinite(quantity) || quantity === 0) continue;
       rows.push({
         section: "external_rental",
         order: order++,
         provider: row.provider.trim() || undefined,
         label: row.label.trim(),
-        quantity: Number(row.quantity),
+        quantity,
         rateUsd: Number(row.rateUsd || "0"),
       });
     }
@@ -2656,15 +2661,22 @@ function SectionExternalRentals({
     <Card>
       <CardHeader><CardTitle>External Rentals</CardTitle></CardHeader>
       <CardContent className="space-y-2">
-        {rows.map((row, idx) => (
-          <div key={`ext-${idx}`} className="grid gap-2 md:grid-cols-5" data-testid={`invoice-row-external-rental-${idx}`}>
+        {rows.map((row, idx) => {
+          const quantity = Number(row.quantity);
+          const rateUsd = Number(row.rateUsd || "0");
+          const lineTotal =
+            Number.isFinite(quantity) && Number.isFinite(rateUsd) ? quantity * rateUsd : 0;
+          return (
+          <div key={`ext-${idx}`} className="grid gap-2 md:grid-cols-[1fr_1fr_80px_100px_100px_auto]" data-testid={`invoice-row-external-rental-${idx}`}>
             <Input placeholder="Provider" value={row.provider} onChange={(e) => setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, provider: e.target.value } : r)))} />
             <Input placeholder="Line item" value={row.label} onChange={(e) => setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, label: e.target.value } : r)))} />
             <Input placeholder="Qty" value={row.quantity} onChange={(e) => setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, quantity: e.target.value } : r)))} />
             <Input placeholder="Rate" value={row.rateUsd} onChange={(e) => setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, rateUsd: e.target.value } : r)))} />
+            <p className="self-center text-xs text-muted-foreground tabular-nums">{formatUsd(lineTotal)}</p>
             <Button type="button" variant="outline" onClick={() => setRows((prev) => prev.filter((_, i) => i !== idx))}>Remove</Button>
           </div>
-        ))}
+          );
+        })}
         <Button type="button" variant="outline" onClick={() => setRows((prev) => [...prev, { provider: "", label: "", quantity: "1", rateUsd: "0" }])}>Add external rental</Button>
       </CardContent>
     </Card>

@@ -195,7 +195,9 @@ async function computeLineAmount(
   crewRates: { normal: number; lead: number; ot: number },
   billableOccurrenceCount: number,
 ) {
-  if (line.quantity < 0) throw new Error("Line quantity cannot be negative.");
+  if (line.section !== "external_rental" && line.quantity < 0) {
+    throw new Error("Line quantity cannot be negative.");
+  }
   let rate = line.rateUsd;
   let packageOriginalRateUsd: number | undefined;
   let packageExclusionDiscountUsd: number | undefined;
@@ -249,9 +251,12 @@ async function computeLineAmount(
         line.equipmentQuantityBasis,
         billableOccurrenceCount,
       )
-    : Math.max(0, line.quantity);
+    : line.section === "external_rental"
+      ? line.quantity
+      : Math.max(0, line.quantity);
 
-  const amount = Number((billingQuantity * Math.max(0, rate)).toFixed(2));
+  const effectiveRate = line.section === "external_rental" ? rate : Math.max(0, rate);
+  const amount = Number((billingQuantity * effectiveRate).toFixed(2));
   return { rate, amount, packageOriginalRateUsd, packageExclusionDiscountUsd };
 }
 
