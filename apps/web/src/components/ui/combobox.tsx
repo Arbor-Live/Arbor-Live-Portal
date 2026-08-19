@@ -5,6 +5,7 @@ import { Combobox as ComboboxPrimitive } from "@base-ui/react"
 import { CaretDownIcon, CheckIcon, XIcon } from "@phosphor-icons/react"
 
 import { cn } from "@/lib/utils"
+import { usePickerPortalContainer } from "@/components/ui/portaled-picker"
 import {
   InputGroup,
   InputGroupAddon,
@@ -101,8 +102,9 @@ function ComboboxContent({
     ComboboxPrimitive.Positioner.Props,
     "side" | "align" | "sideOffset" | "alignOffset" | "anchor"
   >) {
+  const container = usePickerPortalContainer()
   return (
-    <ComboboxPrimitive.Portal>
+    <ComboboxPrimitive.Portal container={container}>
       <ComboboxPrimitive.Positioner
         side={side}
         sideOffset={sideOffset}

@@ -5,7 +5,11 @@ import { Dialog as DialogPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { preventDismissForPortaledPicker } from "@/components/ui/portaled-picker"
+import {
+  assignNodeRef,
+  PickerPortalContainerContext,
+  preventDismissForPortaledPicker,
+} from "@/components/ui/portaled-picker"
 import { XIcon } from "@phosphor-icons/react"
 
 function Dialog({
@@ -55,15 +59,21 @@ function DialogContent({
   onPointerDownOutside,
   onFocusOutside,
   onInteractOutside,
+  ref,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
 }) {
+  const [portalContainer, setPortalContainer] = React.useState<HTMLElement | null>(null)
   return (
     <DialogPortal>
       <DialogOverlay />
       <DialogPrimitive.Content
         data-slot="dialog-content"
+        ref={(node) => {
+          setPortalContainer(node)
+          assignNodeRef(node, ref)
+        }}
         onPointerDownOutside={(event) => {
           preventDismissForPortaledPicker(event)
           onPointerDownOutside?.(event)
@@ -82,20 +92,22 @@ function DialogContent({
         )}
         {...props}
       >
-        {children}
-        {showCloseButton && (
-          <DialogPrimitive.Close data-slot="dialog-close" asChild>
-            <Button
-              variant="ghost"
-              className="absolute top-2 right-2"
-              size="icon-sm"
-            >
-              <XIcon
-              />
-              <span className="sr-only">Close</span>
-            </Button>
-          </DialogPrimitive.Close>
-        )}
+        <PickerPortalContainerContext.Provider value={portalContainer}>
+          {children}
+          {showCloseButton && (
+            <DialogPrimitive.Close data-slot="dialog-close" asChild>
+              <Button
+                variant="ghost"
+                className="absolute top-2 right-2"
+                size="icon-sm"
+              >
+                <XIcon
+                />
+                <span className="sr-only">Close</span>
+              </Button>
+            </DialogPrimitive.Close>
+          )}
+        </PickerPortalContainerContext.Provider>
       </DialogPrimitive.Content>
     </DialogPortal>
   )

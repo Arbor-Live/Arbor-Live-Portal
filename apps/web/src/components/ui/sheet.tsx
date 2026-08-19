@@ -5,7 +5,11 @@ import { Dialog as SheetPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { preventDismissForPortaledPicker } from "@/components/ui/portaled-picker"
+import {
+  assignNodeRef,
+  PickerPortalContainerContext,
+  preventDismissForPortaledPicker,
+} from "@/components/ui/portaled-picker"
 import { XIcon } from "@phosphor-icons/react"
 
 function Sheet({ ...props }: React.ComponentProps<typeof SheetPrimitive.Root>) {
@@ -54,17 +58,23 @@ function SheetContent({
   onPointerDownOutside,
   onFocusOutside,
   onInteractOutside,
+  ref,
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Content> & {
   side?: "top" | "right" | "bottom" | "left"
   showCloseButton?: boolean
 }) {
+  const [portalContainer, setPortalContainer] = React.useState<HTMLElement | null>(null)
   return (
     <SheetPortal>
       <SheetOverlay />
       <SheetPrimitive.Content
         data-slot="sheet-content"
         data-side={side}
+        ref={(node) => {
+          setPortalContainer(node)
+          assignNodeRef(node, ref)
+        }}
         onPointerDownOutside={(event) => {
           preventDismissForPortaledPicker(event)
           onPointerDownOutside?.(event)
@@ -83,20 +93,22 @@ function SheetContent({
         )}
         {...props}
       >
-        {children}
-        {showCloseButton && (
-          <SheetPrimitive.Close data-slot="sheet-close" asChild>
-            <Button
-              variant="ghost"
-              className="absolute top-3 right-3"
-              size="icon-sm"
-            >
-              <XIcon
-              />
-              <span className="sr-only">Close</span>
-            </Button>
-          </SheetPrimitive.Close>
-        )}
+        <PickerPortalContainerContext.Provider value={portalContainer}>
+          {children}
+          {showCloseButton && (
+            <SheetPrimitive.Close data-slot="sheet-close" asChild>
+              <Button
+                variant="ghost"
+                className="absolute top-3 right-3"
+                size="icon-sm"
+              >
+                <XIcon
+                />
+                <span className="sr-only">Close</span>
+              </Button>
+            </SheetPrimitive.Close>
+          )}
+        </PickerPortalContainerContext.Provider>
       </SheetPrimitive.Content>
     </SheetPortal>
   )

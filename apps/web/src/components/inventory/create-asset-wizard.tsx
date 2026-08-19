@@ -352,7 +352,7 @@ function CreateAssetWizardForm({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col">
+    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
       <SheetHeader className="shrink-0 border-b pr-12">
         <SheetTitle>Create assets</SheetTitle>
         <SheetDescription>
@@ -592,7 +592,7 @@ export function CreateAssetWizard({ open, onOpenChange }: CreateAssetWizardProps
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="flex h-full w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-xl lg:max-w-2xl"
+        className="flex h-full w-full flex-col gap-0 overflow-visible p-0 sm:max-w-xl lg:max-w-2xl"
       >
         {open ? <CreateAssetWizardForm onClose={() => onOpenChange(false)} /> : null}
       </SheetContent>

@@ -5,6 +5,7 @@ import { Select as SelectPrimitive } from "radix-ui"
 import { CaretDownIcon, CaretUpIcon, CheckIcon } from "@phosphor-icons/react"
 
 import { cn } from "@/lib/utils"
+import { usePickerPortalContainer } from "@/components/ui/portaled-picker"
 
 function Select({
   ...props
@@ -46,8 +47,9 @@ function SelectContent({
   position = "popper",
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Content>) {
+  const container = usePickerPortalContainer()
   return (
-    <SelectPrimitive.Portal>
+    <SelectPrimitive.Portal container={container ?? undefined}>
       <SelectPrimitive.Content
         data-slot="select-content"
         className={cn(
