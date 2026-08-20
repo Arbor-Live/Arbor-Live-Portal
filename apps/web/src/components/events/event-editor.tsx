@@ -1797,7 +1797,7 @@ export function EventEditor({
                             key={row.id ?? `${blockRef ?? blockIndex}-shift-${rowIndex}`}
                             className="space-y-1"
                           >
-                          <div className="grid gap-2 md:grid-cols-6">
+                          <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(14rem,2fr)_auto]">
                             <Input
                               placeholder="Role"
                               value={row.role}
@@ -1834,23 +1834,17 @@ export function EventEditor({
                                 emptyLabel="Select crew user"
                               />
                             )}
-                            <DateTimePicker
-                              value={row.startsAt}
-                              onChange={(value) =>
+                            <DateTimeRangePicker
+                              startValue={row.startsAt}
+                              endValue={row.endsAt}
+                              onChange={({ start, end }) =>
                                 setShifts((prev) =>
-                                  prev.map((shift, i) => (i === shiftIndex ? { ...shift, startsAt: value } : shift)),
+                                  prev.map((shift, i) =>
+                                    i === shiftIndex ? { ...shift, startsAt: start, endsAt: end } : shift,
+                                  ),
                                 )
                               }
-                              placeholder="Shift start"
-                            />
-                            <DateTimePicker
-                              value={row.endsAt}
-                              onChange={(value) =>
-                                setShifts((prev) =>
-                                  prev.map((shift, i) => (i === shiftIndex ? { ...shift, endsAt: value } : shift)),
-                                )
-                              }
-                              placeholder="Shift end"
+                              placeholder="Shift start and end"
                             />
                             <Button
                               type="button"
@@ -1899,7 +1893,7 @@ export function EventEditor({
                     .map(({ shift, shiftIndex }) => (
                       <div
                         key={shift.id ?? `unassigned-${shiftIndex}`}
-                        className="grid gap-2 rounded-md border border-amber-500/20 bg-background/80 p-2 md:grid-cols-5"
+                        className="grid gap-2 rounded-md border border-amber-500/20 bg-background/80 p-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(14rem,2fr)_auto]"
                       >
                         <Input
                           placeholder="Role"
@@ -1936,23 +1930,17 @@ export function EventEditor({
                             emptyLabel="Select crew user"
                           />
                         )}
-                        <DateTimePicker
-                          value={shift.startsAt}
-                          onChange={(value) =>
+                        <DateTimeRangePicker
+                          startValue={shift.startsAt}
+                          endValue={shift.endsAt}
+                          onChange={({ start, end }) =>
                             setShifts((prev) =>
-                              prev.map((row, i) => (i === shiftIndex ? { ...row, startsAt: value } : row)),
+                              prev.map((row, i) =>
+                                i === shiftIndex ? { ...row, startsAt: start, endsAt: end } : row,
+                              ),
                             )
                           }
-                          placeholder="Shift start"
-                        />
-                        <DateTimePicker
-                          value={shift.endsAt}
-                          onChange={(value) =>
-                            setShifts((prev) =>
-                              prev.map((row, i) => (i === shiftIndex ? { ...row, endsAt: value } : row)),
-                            )
-                          }
-                          placeholder="Shift end"
+                          placeholder="Shift start and end"
                         />
                         <Button
                           type="button"

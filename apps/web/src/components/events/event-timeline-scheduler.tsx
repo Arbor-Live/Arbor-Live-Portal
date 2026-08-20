@@ -400,7 +400,7 @@ export function EventTimelineScheduler({
         {blocks.map((block, index) => (
           <div
             key={getBlockRef(block) ?? `block-${index}`}
-            className="grid items-center gap-2 md:grid-cols-[7rem_minmax(0,8rem)_5.5rem_minmax(0,1fr)_minmax(0,8rem)_auto]"
+            className="grid items-center gap-2 md:grid-cols-[7rem_minmax(0,8rem)_5.5rem_minmax(12rem,1.4fr)_minmax(0,1fr)_auto]"
           >
             <SearchableSelect
               value={block.blockType}
@@ -457,7 +457,7 @@ export function EventTimelineScheduler({
               emptyLabel="Select day"
             />
             <DateTimeRangePicker
-              className="min-w-0"
+              className="min-w-[13rem]"
               startValue={block.startsAt}
               endValue={block.endsAt}
               openToDate={anchorStartsAt}
