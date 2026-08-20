@@ -10,7 +10,7 @@ import { UserSelect, type UserSelectOption } from "@/components/users/user-selec
 import { buildUserSelectDescription } from "@/lib/user-select-description";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { DateTimePicker } from "@/components/ui/date-time-picker";
+import { DateTimeRangePicker } from "@/components/ui/date-time-picker";
 import { Input } from "@/components/ui/input";
 import { authClient } from "@/lib/auth-client";
 import { getAvailabilityNotesForDisplay } from "@/lib/crew-availability";
@@ -376,7 +376,7 @@ export function InvoiceLinkedEventCrewSection({
 
     return (
       <div key={row.id ?? `${blockRef ?? blockIndex}-shift-${rowIndex}`} className="space-y-1">
-        <div className="grid gap-2 md:grid-cols-6">
+        <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(14rem,2fr)_5rem_auto]">
           <Input
             placeholder="Role"
             value={row.role}
@@ -405,19 +405,17 @@ export function InvoiceLinkedEventCrewSection({
             options={userSelectOptions}
             emptyLabel="Open slot"
           />
-          <DateTimePicker
-            value={row.startsAt}
-            onChange={(value) =>
-              setShifts((prev) => prev.map((shift, i) => (i === shiftIndex ? { ...shift, startsAt: value } : shift)))
+          <DateTimeRangePicker
+            startValue={row.startsAt}
+            endValue={row.endsAt}
+            onChange={({ start, end }) =>
+              setShifts((prev) =>
+                prev.map((shift, i) =>
+                  i === shiftIndex ? { ...shift, startsAt: start, endsAt: end } : shift,
+                ),
+              )
             }
-            placeholder="Shift start"
-          />
-          <DateTimePicker
-            value={row.endsAt}
-            onChange={(value) =>
-              setShifts((prev) => prev.map((shift, i) => (i === shiftIndex ? { ...shift, endsAt: value } : shift)))
-            }
-            placeholder="Shift end"
+            placeholder="Shift start and end"
           />
           <Input readOnly value={`${shiftHours(row).toFixed(2)}h`} aria-label="Shift hours" />
           <Button type="button" variant="outline" onClick={() => setShifts((prev) => prev.filter((_, i) => i !== shiftIndex))}>

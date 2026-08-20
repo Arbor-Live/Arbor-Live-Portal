@@ -49,21 +49,34 @@ function formatInstantLabel(ms: number, timeOnly = false) {
   }).format(new Date(ms));
 }
 
+function formatDateOnly(ms: number) {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: PORTAL_TIMEZONE,
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date(ms));
+}
+
+function formatTimeOnly(ms: number) {
+  return formatInstantLabel(ms, true);
+}
+
 function formatDateTimeLabel(value: string) {
   const ms = pacificDateTimeInputToMs(value);
-  return ms == null ? "" : formatInstantLabel(ms);
+  if (ms == null) return "";
+  return `${formatTimeOnly(ms)} · ${formatDateOnly(ms)}`;
 }
 
 function formatRangeTriggerLabel(startValue: string, endValue: string) {
   const startMs = pacificDateTimeInputToMs(startValue);
   const endMs = pacificDateTimeInputToMs(endValue);
   if (startMs == null) return "";
-  const startLabel = formatInstantLabel(startMs);
-  if (endMs == null) return startLabel;
+  if (endMs == null) return formatDateTimeLabel(startValue);
   if (pacificDateKey(startMs) === pacificDateKey(endMs)) {
-    return `${startLabel} – ${formatInstantLabel(endMs, true)}`;
+    return `${formatTimeOnly(startMs)} – ${formatTimeOnly(endMs)} · ${formatDateOnly(startMs)}`;
   }
-  return `${startLabel} – ${formatInstantLabel(endMs)}`;
+  return `${formatTimeOnly(startMs)} ${formatDateOnly(startMs)} – ${formatTimeOnly(endMs)} ${formatDateOnly(endMs)}`;
 }
 
 function durationOrDefault(startValue: string, endValue: string) {
@@ -163,7 +176,7 @@ export function DateTimePicker({
           data-testid="date-time-picker"
           data-value={value}
           className={cn(
-            "min-w-0 w-full shrink justify-start overflow-hidden font-normal data-[empty=true]:text-muted-foreground",
+            "min-w-[13rem] w-full shrink justify-start overflow-hidden font-normal data-[empty=true]:text-muted-foreground",
             className,
           )}
         >
@@ -174,6 +187,14 @@ export function DateTimePicker({
         </Button>
       </PopoverTrigger>
       <PopoverContent className="z-[80] w-auto p-0" align="start">
+        <div className="flex flex-col gap-2 border-b p-3">
+          <Label htmlFor={timeFieldId}>Time</Label>
+          <TimeInput
+            id={timeFieldId}
+            value={time || fallbackTime}
+            onChange={(nextTime) => commit(dateKey || pacificDateKey(Date.now()), nextTime)}
+          />
+        </div>
         <Calendar
           mode="single"
           timeZone={PORTAL_TIMEZONE}
@@ -188,14 +209,6 @@ export function DateTimePicker({
             commit(pacificDateKey(date.getTime()), time || fallbackTime);
           }}
         />
-        <div className="flex flex-col gap-2 border-t p-3">
-          <Label htmlFor={timeFieldId}>Time</Label>
-          <TimeInput
-            id={timeFieldId}
-            value={time || fallbackTime}
-            onChange={(nextTime) => commit(dateKey || pacificDateKey(Date.now()), nextTime)}
-          />
-        </div>
       </PopoverContent>
     </Popover>
   );
@@ -286,7 +299,7 @@ export function DateTimeRangePicker({
           data-start-value={startValue}
           data-end-value={endValue}
           className={cn(
-            "min-w-0 w-full shrink justify-start overflow-hidden font-normal data-[empty=true]:text-muted-foreground",
+            "min-w-[13rem] w-full shrink justify-start overflow-hidden font-normal data-[empty=true]:text-muted-foreground",
             className,
           )}
         >
@@ -296,7 +309,23 @@ export function DateTimeRangePicker({
           </span>
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="z-[80] w-auto overflow-hidden p-0" align="start">
+      <PopoverContent className="z-[80] w-auto p-0" align="start">
+        <div className="space-y-2 border-b p-3">
+          <Label>Time</Label>
+          <div className="flex min-w-[16rem] items-center gap-2">
+            <TimeInput
+              id={startTimeId}
+              value={startTime}
+              onChange={commitStartTime}
+            />
+            <span className="shrink-0 text-sm text-muted-foreground">–</span>
+            <TimeInput
+              id={endTimeId}
+              value={endTime}
+              onChange={commitEndTime}
+            />
+          </div>
+        </div>
         <Calendar
           mode="range"
           timeZone={PORTAL_TIMEZONE}
@@ -324,24 +353,6 @@ export function DateTimeRangePicker({
             });
           }}
         />
-        <div className="grid grid-cols-2 gap-3 border-t p-3">
-          <div className="min-w-0 space-y-2">
-            <Label htmlFor={startTimeId}>Start</Label>
-            <TimeInput
-              id={startTimeId}
-              value={startTime}
-              onChange={commitStartTime}
-            />
-          </div>
-          <div className="min-w-0 space-y-2">
-            <Label htmlFor={endTimeId}>End</Label>
-            <TimeInput
-              id={endTimeId}
-              value={endTime}
-              onChange={commitEndTime}
-            />
-          </div>
-        </div>
       </PopoverContent>
     </Popover>
   );
