@@ -1,5 +1,6 @@
 import { test, expect, type Locator, type Page } from "@playwright/test";
 import { pollConvex, runConvex } from "../helpers/convex";
+import { fillSearchableSelectQuery } from "../helpers/select";
 
 type SeededApplication = {
   applicationId: string;
@@ -90,17 +91,15 @@ test.describe("crew application triage", () => {
     const card = await openSubmittedCard(page, seeded);
 
     await card.getByTestId("searchable-select-trigger").first().click();
-    const menu = page
-      .locator("body > div")
-      .filter({ has: page.getByPlaceholder(/Search/i) })
-      .last();
-    await menu.getByPlaceholder(/Search/i).fill(seededEvent.title);
-    await page.getByRole("button", { name: seededEvent.title }).first().click();
+    const menu = page.getByTestId("searchable-select-menu");
+    await expect(menu).toBeVisible({ timeout: 20_000 });
+    await fillSearchableSelectQuery(menu, seededEvent.title);
+    await menu.getByRole("option", { name: seededEvent.title }).first().click();
 
     await expect(card.getByText("Presence")).toBeVisible({ timeout: 20_000 });
     // Call time stays blank until `events.get` resolves; assigning before that
     // fails with "Enter a call time."
-    await expect(card.getByTestId("date-time-picker")).not.toHaveValue("", {
+    await expect(card.getByTestId("date-time-picker")).not.toHaveAttribute("data-value", "", {
       timeout: 30_000,
     });
 

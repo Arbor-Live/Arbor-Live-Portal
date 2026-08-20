@@ -17,6 +17,7 @@ import {
   type TermsDefinitionFormValues,
 } from "@/lib/validations/financial";
 import { CheckIcon, CircleNotchIcon, WarningCircleIcon } from "@phosphor-icons/react";
+import { notify } from "@/lib/notify";
 import type { Id } from "@/lib/convex-api";
 
 export function FinancialHubSettings() {
@@ -25,7 +26,6 @@ export function FinancialHubSettings() {
   const invoiceSettings = useQuery(api.invoiceSettings.get, {});
   const updateInvoiceSettings = useMutation(api.invoiceSettings.update);
   const [crewBufferOverride, setCrewBufferOverride] = useState<string | null>(null);
-  const [bufferMessage, setBufferMessage] = useState<string | null>(null);
   const crewBufferPercent =
     crewBufferOverride ??
     (invoiceSettings?.crewCostBufferPercent !== undefined
@@ -144,16 +144,19 @@ export function FinancialHubSettings() {
               onChange={(e) => setCrewBufferOverride(e.target.value)}
             />
           </div>
-          {bufferMessage ? <p className="text-xs text-emerald-700">{bufferMessage}</p> : null}
           <Button
             type="button"
             size="sm"
             onClick={async () => {
-              await updateInvoiceSettings({
-                crewCostBufferPercent: Number(crewBufferPercent || "0"),
-              });
-              setCrewBufferOverride(null);
-              setBufferMessage("Crew cost buffer saved.");
+              try {
+                await updateInvoiceSettings({
+                  crewCostBufferPercent: Number(crewBufferPercent || "0"),
+                });
+                setCrewBufferOverride(null);
+                notify.success("Crew cost buffer saved.");
+              } catch (error) {
+                notify.error(error instanceof Error ? error.message : "Failed to save crew cost buffer.");
+              }
             }}
           >
             Save crew buffer

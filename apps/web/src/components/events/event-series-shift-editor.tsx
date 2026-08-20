@@ -41,6 +41,7 @@ import { formatOccurrencePreview } from "@/lib/event-series";
 import { toLocalDateTimeInput } from "@/lib/crew-availability";
 import { averageCrewHourlyRateUsd } from "@/lib/crew-rates";
 import { formatUsd } from "@/lib/format";
+import { notify } from "@/lib/notify";
 
 type EventSeriesShiftEditorProps = {
   seriesId: Id<"eventSeries">;
@@ -235,7 +236,7 @@ export function EventSeriesShiftEditor({
   async function handleImportFromOccurrence() {
     const importOccurrenceId = form.getValues("importOccurrenceId");
     if (!importOccurrenceId) {
-      onMessage("Select an occurrence to import from.");
+      notify.error("Select an occurrence to import from.");
       return;
     }
     await form.runMutation(async () => {

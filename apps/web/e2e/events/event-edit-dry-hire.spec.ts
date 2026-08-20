@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { fillDateTimeNearLabel, selectSearchableOption } from "../helpers/auth";
+import { fillDateTimeRangeNearLabel, selectSearchableOption } from "../helpers/auth";
 import { runConvex } from "../helpers/convex";
 
 test.describe("event edit and dry hire", () => {
@@ -45,8 +45,11 @@ test.describe("event edit and dry hire", () => {
       .fill(title);
 
     await selectSearchableOption(page, "Event Type", "Dry Hire");
-    await fillDateTimeNearLabel(page, "Start", { dayLabel, timeLabel: "10:00 AM" });
-    await fillDateTimeNearLabel(page, "End", { dayLabel, timeLabel: "6:00 PM" });
+    await fillDateTimeRangeNearLabel(page, "Start", {
+      dayLabel,
+      startTime: "10:00 AM",
+      endTime: "6:00 PM",
+    });
 
     await page.getByRole("button", { name: "Create Event" }).first().click();
     await page.waitForURL(/\/dashboard\/events\/(?!new(?:\/|$))[^/?#]+/, { timeout: 45_000 });

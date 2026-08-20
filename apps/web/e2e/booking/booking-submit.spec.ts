@@ -8,13 +8,10 @@ async function clickNext(page: Page) {
 
 async function pickFutureCalendarDay(page: Page) {
   // Prefer mid-month in the next calendar month (always ≥7 days out from "today").
-  const calendar = page.locator(".react-datepicker").first();
+  const calendar = page.locator("[data-slot='calendar']").first();
   await expect(calendar).toBeVisible({ timeout: 20_000 });
-  await page.locator(".react-datepicker__navigation--next").click();
-  await calendar
-    .locator(".react-datepicker__day--015:not(.react-datepicker__day--outside-month)")
-    .first()
-    .click();
+  await calendar.getByRole("button", { name: "Go to the Next Month" }).click();
+  await calendar.getByRole("button", { name: /\b15(st|nd|rd|th)?,/ }).click();
 }
 
 test.describe("public booking submit", () => {
@@ -39,7 +36,7 @@ test.describe("public booking submit", () => {
     await page.getByLabel("Phone").fill("6505550188");
     await clickNext(page);
 
-    await page.getByRole("button", { name: "Individual Stanford Affiliate" }).click();
+    await page.getByRole("radio", { name: "Individual Stanford Affiliate" }).click();
     await clickNext(page);
 
     // Venue is optional — skip by advancing with empty fields.
@@ -52,7 +49,7 @@ test.describe("public booking submit", () => {
     await page.getByLabel("What is the name for your event?").fill(eventName);
     await clickNext(page);
 
-    await page.getByRole("button", { name: "Speaker Event" }).click();
+    await page.getByRole("radio", { name: "Speaker Event" }).click();
     await clickNext(page);
 
     await page.getByRole("button", { name: "Crewed", exact: true }).click();

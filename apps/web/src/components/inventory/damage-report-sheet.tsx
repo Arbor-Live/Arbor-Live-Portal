@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { ComponentRef } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
+import { useAppDialog } from "@/components/ui/app-dialog";
 import { CommentsSection } from "@/components/comments/comments-section";
 import { useSessionViewer } from "@/components/session-shell-provider";
 import { Button } from "@/components/ui/button";
@@ -39,6 +40,7 @@ export function DamageReportSheet({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const { confirm } = useAppDialog();
   const [error, setError] = useState<string | null>(null);
   // The sheet is a modal Radix layer, so the mention typeahead has to be
   // portaled inside it or its clicks are swallowed by the pointer-event trap.
@@ -197,16 +199,21 @@ export function DamageReportSheet({
                   size="sm"
                   variant="destructive"
                   onClick={() => {
-                    if (
-                      !window.confirm(
-                        `Decommission ${report.assetId}? It will be marked out of service and this report will close.`,
-                      )
-                    ) {
-                      return;
-                    }
-                    void decommission({ reportId: report._id }).catch((err) =>
-                      setError(getConvexErrorMessage(err)),
-                    );
+                    void (async () => {
+                      if (
+                        !(await confirm({
+                          title: `Decommission ${report.assetId}?`,
+                          description: "It will be marked out of service and this report will close.",
+                          confirmLabel: "Decommission",
+                          destructive: true,
+                        }))
+                      ) {
+                        return;
+                      }
+                      await decommission({ reportId: report._id }).catch((err) =>
+                        setError(getConvexErrorMessage(err)),
+                      );
+                    })();
                   }}
                 >
                   Decommission

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
+import { useAppDialog } from "@/components/ui/app-dialog";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,6 +13,7 @@ import { StorageLocationEditor } from "./storage-location-editor";
 const defaultForm = { name: "", parentId: "" };
 
 export function StorageLocationsManager() {
+  const { alert } = useAppDialog();
   const [search, setSearch] = useState("");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -36,7 +38,7 @@ export function StorageLocationsManager() {
       await Promise.all(selectedIds.map((id) => removeLocation({ id: id as Id<"storageLocations"> })));
       setSelectedIds([]);
     } catch (error) {
-      window.alert(getConvexErrorMessage(error, "Could not delete selected locations."));
+      await alert(getConvexErrorMessage(error, "Could not delete selected locations."));
     }
   }
 

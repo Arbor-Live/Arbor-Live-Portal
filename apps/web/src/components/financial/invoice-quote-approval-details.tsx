@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { notify } from "@/lib/notify";
 import { formatDateTime } from "@/lib/format";
 
 type InvoiceApprovalRecord = {
@@ -59,7 +60,6 @@ export function InvoiceQuoteApprovalDetails({
   const [paymentSubmitterEmail, setPaymentSubmitterEmail] = useState(invoice.paymentSubmitterEmail ?? "");
   const [saving, setSaving] = useState(false);
   const [resending, setResending] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const approved = (invoice.clientApprovalStatus ?? "pending") === "approved";
@@ -67,7 +67,6 @@ export function InvoiceQuoteApprovalDetails({
   async function handleSaveSubmitter() {
     setSaving(true);
     setError(null);
-    setMessage(null);
     try {
       await updatePaymentSubmitter({
         id: invoiceId,
@@ -75,7 +74,7 @@ export function InvoiceQuoteApprovalDetails({
         paymentSubmitterName: clientIsPaymentSubmitter ? undefined : paymentSubmitterName.trim(),
         paymentSubmitterEmail: clientIsPaymentSubmitter ? undefined : paymentSubmitterEmail.trim(),
       });
-      setMessage("Payment submitter updated.");
+      notify.success("Payment submitter updated.");
     } catch (saveError) {
       setError(getConvexErrorMessage(saveError, "Unable to update payment submitter."));
     } finally {
@@ -86,10 +85,9 @@ export function InvoiceQuoteApprovalDetails({
   async function handleResendNotification() {
     setResending(true);
     setError(null);
-    setMessage(null);
     try {
       await resendPayingPartyNotification({ id: invoiceId });
-      setMessage("Paying party notification sent.");
+      notify.success("Paying party notification sent.");
     } catch (resendError) {
       setError(getConvexErrorMessage(resendError, "Unable to send paying party notification."));
     } finally {
@@ -211,7 +209,6 @@ export function InvoiceQuoteApprovalDetails({
           </p>
         )}
 
-        {message ? <p className="text-primary">{message}</p> : null}
         {error ? <p className="text-destructive">{error}</p> : null}
       </CardContent>
     </Card>

@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { acceptAppDialog, dismissAppDialog } from "../helpers/auth";
 import { runConvex } from "../helpers/convex";
 import { getLatestEmailNotification } from "../helpers/email";
 import { checkboxByLabel, formField, selectByLabel } from "../helpers/form";
@@ -118,11 +119,8 @@ test.describe("user invite lifecycle", () => {
     );
     expect(resent.status).toBe("pending");
 
-    // Cancel sits behind a `window.confirm`, which Playwright dismisses by
-    // default — without this the mutation never runs and the poll below times
-    // out waiting for a change nobody requested.
-    page.once("dialog", (dialog) => void dialog.accept());
     await inviteRow.getByRole("button", { name: "Cancel" }).click();
+    await acceptAppDialog(page, "Cancel invitation");
 
     await expect(page.getByText(`Invitation cancelled for ${inviteEmail}.`)).toBeVisible({
       timeout: 30_000,
@@ -154,11 +152,8 @@ test.describe("user invite lifecycle", () => {
     const inviteRow = page.getByTestId(`invite-row-${seeded.invitationId}`);
     await expect(inviteRow).toContainText(declineEmail, { timeout: 30_000 });
 
-    // Declining the confirm is the operator changing their mind, and it has to
-    // be a no-op. This is also what proves the `accept()` above is load-bearing
-    // rather than decorative.
-    page.once("dialog", (dialog) => void dialog.dismiss());
     await inviteRow.getByRole("button", { name: "Cancel" }).click();
+    await dismissAppDialog(page);
 
     await expect(inviteRow).toContainText("pending");
     const after = await waitForInvitationState(declineEmail, (state) => Boolean(state));

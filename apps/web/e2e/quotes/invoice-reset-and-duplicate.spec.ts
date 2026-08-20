@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { acceptAppDialog } from "../helpers/auth";
 import { pollConvex } from "../helpers/convex";
 import { e2eEnv } from "../helpers/env";
 import {
@@ -28,15 +29,14 @@ test.describe("invoice approval reset and duplicate", () => {
   /**
    * Editing an already-approved quote must not silently keep the approval.
    *
-   * `persistDraft` puts this behind a native `window.confirm` ("Require client
+   * `persistDraft` puts this behind an in-app confirm ("Require client
    * approval again?"), and accepting it calls `resetApprovalToPending`, which
    * clears the signature, the approval timestamp, the payment submitter, and the
    * accepted terms version. Without that, a quote could be re-priced after the
    * client signed while still showing as approved at the new number.
    *
-   * The dialog handler is registered before the first edit on purpose: the
-   * editor also autosaves on a 2.5s debounce, so the confirm can fire from a
-   * save this spec never clicked.
+   * Autosave (2.5s debounce) can open the dialog before the explicit Save
+   * click, so the spec waits for either path.
    */
   test("editing an approved quote resets it to pending approval", async ({ page, browser }) => {
     const stamp = Date.now();
@@ -81,13 +81,18 @@ test.describe("invoice approval reset and duplicate", () => {
       timeout: 25_000,
     });
 
-    // Accept the re-approval prompt however it is triggered — explicit save or
-    // the autosave debounce.
-    page.on("dialog", (dialog) => void dialog.accept());
-
     await page.getByTestId("invoice-row-artist-0").getByPlaceholder("Rate").fill("400");
     await expect(page.getByText("Unsaved changes")).toBeVisible({ timeout: 30_000 });
-    await saveInvoiceEditor(page);
+
+    const dialog = page.getByTestId("app-dialog");
+    const dialogFromAutosave = await dialog
+      .waitFor({ state: "visible", timeout: 4_000 })
+      .then(() => true)
+      .catch(() => false);
+    if (!dialogFromAutosave) {
+      await saveInvoiceEditor(page);
+    }
+    await acceptAppDialog(page);
 
     const reset = await pollConvex<EditorState>(
       "e2eHelpers:getInvoiceEditorState",

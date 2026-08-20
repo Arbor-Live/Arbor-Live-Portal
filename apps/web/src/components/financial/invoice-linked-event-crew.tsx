@@ -34,6 +34,8 @@ import { getEventEditorTabPath } from "@/lib/event-editor-tabs";
 import { buildCrewRowsFromShifts, type InvoiceCrewRow } from "@/lib/invoice-crew-from-event";
 import { FormSaveBar } from "@/components/forms";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { useAppDialog } from "@/components/ui/app-dialog";
+import { notify } from "@/lib/notify";
 import { formatUsd } from "@/lib/format";
 import type { SaveStatus } from "@/hooks/use-convex-form";
 
@@ -95,6 +97,7 @@ export function InvoiceLinkedEventCrewSection({
   onEventCrewRowsChange: (rows: InvoiceCrewRow[]) => void;
   onMessage?: (message: string) => void;
 }) {
+  const { confirm } = useAppDialog();
   const session = authClient.useSession();
   const eventData = useQuery(api.events.get, { id: eventId });
   const managerList = useQuery(api.invoices.listManagers, {});
@@ -289,7 +292,7 @@ export function InvoiceLinkedEventCrewSection({
         return true;
       } catch (error) {
         const message = getConvexErrorMessage(error);
-        onMessage?.(message);
+        notify.error(message);
         setAutoSaveState("error");
         setAutoSaveError(message);
         return false;
@@ -343,16 +346,18 @@ export function InvoiceLinkedEventCrewSection({
   }
 
   async function removeLegacyUnassignedShifts() {
-    const shouldDelete = window.confirm(
-      "Delete crew shifts that are not linked to any schedule block on this event?",
-    );
+    const shouldDelete = await confirm({
+      title: "Delete unlinked crew shifts?",
+      description: "Delete crew shifts that are not linked to any schedule block on this event?",
+      destructive: true,
+    });
     if (!shouldDelete) return;
     try {
       const result = await deleteUnassignedShifts({ eventId });
       setShifts((prev) => prev.filter((shift) => shift.scheduleBlockId || shift.scheduleBlockRef));
       onMessage?.(`Deleted ${result.deletedCount} unlinked shift${result.deletedCount === 1 ? "" : "s"}.`);
     } catch (error) {
-      onMessage?.(getConvexErrorMessage(error));
+      notify.error(getConvexErrorMessage(error));
     }
   }
 

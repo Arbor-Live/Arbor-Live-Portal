@@ -5,7 +5,6 @@ import { useFormContext } from "react-hook-form";
 import { useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import type { BookingRequestFormValues } from "@/lib/validations/booking-request";
 
 type HostMatch = {
@@ -50,11 +49,6 @@ export function OrganizationSearchField() {
     setQuery(match.name);
   }
 
-  function useAsNew() {
-    setValue("invoiceGroupId", "", { shouldDirty: true, shouldValidate: true });
-    setValue("organization", query.trim(), { shouldDirty: true, shouldValidate: true });
-  }
-
   function onQueryChange(next: string) {
     setQuery(next);
     if (invoiceGroupId) {
@@ -81,14 +75,6 @@ export function OrganizationSearchField() {
           Matched existing host: <span className="font-medium">{selectedMatch.name}</span>
         </p>
       ) : null}
-      {!invoiceGroupId && query.trim() ? (
-        <div className="flex flex-wrap items-center gap-2">
-          <p className="text-xs text-muted-foreground">No existing host selected.</p>
-          <Button type="button" size="sm" variant="outline" onClick={useAsNew}>
-            Use “{query.trim()}” as new organization
-          </Button>
-        </div>
-      ) : null}
       {matches.length > 0 && !invoiceGroupId ? (
         <ul className="max-h-48 space-y-1 overflow-y-auto rounded-md border p-1">
           {matches.map((match) => (
@@ -106,10 +92,6 @@ export function OrganizationSearchField() {
         </ul>
       ) : null}
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
-      <p className="text-xs text-muted-foreground">
-        Search for an existing host when you can; otherwise we&apos;ll create a billing profile from the
-        name you enter.
-      </p>
     </div>
   );
 }

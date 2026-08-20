@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
+import { useAppDialog } from "@/components/ui/app-dialog";
 import { Button } from "@/components/ui/button";
 import { formatDateTime } from "@/lib/format";
 import { getConvexErrorMessage } from "@/lib/convex-error";
@@ -25,6 +26,7 @@ function statusLabel(status: string) {
 }
 
 export function OpenMicEventsInbox() {
+  const { confirm, alert } = useAppDialog();
   const events = useQuery(api.openMic.listEvents, {});
   const setOpenMicStatus = useMutation(api.openMic.setOpenMicStatus).withOptimisticUpdate(
     optimisticSetOpenMicStatus,
@@ -100,7 +102,7 @@ export function OpenMicEventsInbox() {
                       onClick={() =>
                         void setOpenMicStatus({ eventId: event._id, status: "live" }).catch(
                           (err) => {
-                            window.alert(getConvexErrorMessage(err));
+                            void alert(getConvexErrorMessage(err));
                           },
                         )
                       }
@@ -138,15 +140,20 @@ export function OpenMicEventsInbox() {
                     size="sm"
                     className="text-destructive"
                     onClick={() => {
-                      if (
-                        window.confirm(
-                          "Disable Open Mic on this event? Queues stay archived in the runner.",
-                        )
-                      ) {
-                        void updateEvent({ id: event._id, openMicEnabled: false }).catch((err) => {
-                          window.alert(getConvexErrorMessage(err));
+                      void (async () => {
+                        if (
+                          !(await confirm({
+                            title: "Disable Open Mic on this event?",
+                            description: "Queues stay archived in the runner.",
+                            confirmLabel: "Disable",
+                          }))
+                        ) {
+                          return;
+                        }
+                        await updateEvent({ id: event._id, openMicEnabled: false }).catch((err) => {
+                          void alert(getConvexErrorMessage(err));
                         });
-                      }
+                      })();
                     }}
                   >
                     Disable

@@ -16,7 +16,8 @@ const GRID_STYLE: React.CSSProperties = {
 type RequestWizardShellProps = {
   eyebrow: string;
   meta?: string;
-  progressPercent: number;
+  progressPercent?: number;
+  progress?: React.ReactNode;
   children: React.ReactNode;
   footer?: React.ReactNode;
   className?: string;
@@ -25,7 +26,8 @@ type RequestWizardShellProps = {
 export function RequestWizardShell({
   eyebrow,
   meta,
-  progressPercent,
+  progressPercent = 0,
+  progress,
   children,
   footer,
   className,
@@ -56,14 +58,16 @@ export function RequestWizardShell({
             {meta ? (
               <p className="mt-0.5 text-center text-[11px] text-foreground/50">{meta}</p>
             ) : null}
-            <div className="mt-2 h-0.5 overflow-hidden bg-foreground/10">
-              <motion.div
-                className="h-full bg-primary"
-                initial={false}
-                animate={{ width: `${progressPercent}%` }}
-                transition={spring}
-              />
-            </div>
+            {progress ?? (
+              <div className="mt-2 h-0.5 overflow-hidden bg-foreground/10">
+                <motion.div
+                  className="h-full bg-primary"
+                  initial={false}
+                  animate={{ width: `${progressPercent}%` }}
+                  transition={spring}
+                />
+              </div>
+            )}
           </div>
         </div>
 

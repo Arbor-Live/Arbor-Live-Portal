@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { notify } from "@/lib/notify";
 import { ArborOnlyGuard } from "@/components/org-context-guard";
 import { formatUsd } from "@/lib/format";
 import { formatBandPayeePayoutMethod } from "@/lib/band-payout-copy";
@@ -64,7 +65,6 @@ function EventBandsPerformersPanel({ eventId }: { eventId: Id<"events"> }) {
   const [editingPaymentForOrg, setEditingPaymentForOrg] = useState<string | null>(null);
   const [addingBand, setAddingBand] = useState(false);
   const [busyOrgId, setBusyOrgId] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
 
   const totalBandsCost = useMemo(
     () =>
@@ -74,12 +74,11 @@ function EventBandsPerformersPanel({ eventId }: { eventId: Id<"events"> }) {
 
   async function onRemove(organizationId: string) {
     setBusyOrgId(organizationId);
-    setMessage(null);
     try {
       await removeParticipation({ eventId, organizationId });
       if (editingPaymentForOrg === organizationId) setEditingPaymentForOrg(null);
     } catch (error) {
-      setMessage(getConvexErrorMessage(error));
+      notify.error(getConvexErrorMessage(error));
     } finally {
       setBusyOrgId(null);
     }
@@ -87,11 +86,10 @@ function EventBandsPerformersPanel({ eventId }: { eventId: Id<"events"> }) {
 
   async function onRoleChange(organizationId: string, role: ParticipationRole) {
     setBusyOrgId(organizationId);
-    setMessage(null);
     try {
       await updateRole({ eventId, organizationId, role });
     } catch (error) {
-      setMessage(getConvexErrorMessage(error));
+      notify.error(getConvexErrorMessage(error));
     } finally {
       setBusyOrgId(null);
     }
@@ -235,7 +233,6 @@ function EventBandsPerformersPanel({ eventId }: { eventId: Id<"events"> }) {
           </Button>
         )}
 
-        {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
       </CardContent>
     </Card>
   );
@@ -257,7 +254,6 @@ function AddBandForm({
   const [organizationId, setOrganizationId] = useState("");
   const [role, setRole] = useState<ParticipationRole>("headliner");
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
 
   const bandOptions = useMemo(
     () =>
@@ -272,16 +268,15 @@ function AddBandForm({
 
   async function onSave() {
     if (!organizationId) {
-      setMessage("Select a band or artist.");
+      notify.error("Select a band or artist.");
       return;
     }
     setBusy(true);
-    setMessage(null);
     try {
       await addParticipation({ eventId, organizationId, role });
       onSaved();
     } catch (error) {
-      setMessage(getConvexErrorMessage(error));
+      notify.error(getConvexErrorMessage(error));
     } finally {
       setBusy(false);
     }
@@ -312,7 +307,6 @@ function AddBandForm({
           />
         </div>
       </div>
-      {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
       <div className="flex flex-wrap gap-2">
         <Button type="button" onClick={() => void onSave()} disabled={busy}>
           {busy ? "Adding…" : "Assign band"}
@@ -372,7 +366,6 @@ function EventBandPaymentForm({
   const [fixedTotalUsd, setFixedTotalUsd] = useState(String(payment?.totalUsd ?? 0));
   const [photoAlbumUrl, setPhotoAlbumUrl] = useState(payment?.photoAlbumUrl ?? "");
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
 
   const bandOptions = useMemo(
     () =>
@@ -398,11 +391,10 @@ function EventBandPaymentForm({
 
   async function onSave() {
     if (!resolvedOrgId) {
-      setMessage("Select a band or artist.");
+      notify.error("Select a band or artist.");
       return;
     }
     setBusy(true);
-    setMessage(null);
     try {
       await upsert({
         eventId,
@@ -422,7 +414,7 @@ function EventBandPaymentForm({
       });
       onSaved();
     } catch (error) {
-      setMessage(getConvexErrorMessage(error));
+      notify.error(getConvexErrorMessage(error));
     } finally {
       setBusy(false);
     }
@@ -597,7 +589,6 @@ function EventBandPaymentForm({
         </div>
       </div>
 
-      {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
 
       <div className="flex flex-wrap gap-2">
         {payment?.status !== "paid" ? (

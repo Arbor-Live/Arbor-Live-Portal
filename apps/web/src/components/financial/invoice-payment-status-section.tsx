@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { notify } from "@/lib/notify";
 import {
   PAYMENT_PROOF_METHOD_OPTIONS,
   paymentProofReferenceLabel,
@@ -39,7 +40,6 @@ export function InvoicePaymentStatusSection({ invoiceId }: { invoiceId: Id<"invo
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
   const [showInvalidate, setShowInvalidate] = useState(false);
   const [invalidateNote, setInvalidateNote] = useState("");
   const [showManualProof, setShowManualProof] = useState(false);
@@ -72,10 +72,9 @@ export function InvoicePaymentStatusSection({ invoiceId }: { invoiceId: Id<"invo
   async function onMarkReceived() {
     setBusy(true);
     setError(null);
-    setMessage(null);
     try {
       await markReceived({ invoiceId });
-      setMessage("Payment marked as received.");
+      notify.success("Payment marked as received.");
     } catch (err) {
       setError(getConvexErrorMessage(err));
     } finally {
@@ -87,7 +86,6 @@ export function InvoicePaymentStatusSection({ invoiceId }: { invoiceId: Id<"invo
     if (!details?.submission) return;
     setBusy(true);
     setError(null);
-    setMessage(null);
     try {
       await invalidateSubmission({
         submissionId: details.submission.id,
@@ -95,7 +93,7 @@ export function InvoicePaymentStatusSection({ invoiceId }: { invoiceId: Id<"invo
       });
       setShowInvalidate(false);
       setInvalidateNote("");
-      setMessage("Payment proof invalidated. The client can submit again from their portal.");
+      notify.success("Payment proof invalidated. The client can submit again from their portal.");
     } catch (err) {
       setError(getConvexErrorMessage(err));
     } finally {
@@ -106,7 +104,6 @@ export function InvoicePaymentStatusSection({ invoiceId }: { invoiceId: Id<"invo
   async function onReceiptSelected(file: File) {
     setBusy(true);
     setError(null);
-    setMessage(null);
     try {
       const uploadUrl = await generateUploadUrl({});
       const response = await fetch(uploadUrl, {
@@ -117,7 +114,7 @@ export function InvoicePaymentStatusSection({ invoiceId }: { invoiceId: Id<"invo
       if (!response.ok) throw new Error("Upload failed");
       const { storageId } = (await response.json()) as { storageId: Id<"_storage"> };
       await attachReceipt({ invoiceId, storageFileId: storageId });
-      setMessage("Receipt attached.");
+      notify.success("Receipt attached.");
     } catch (err) {
       setError(getConvexErrorMessage(err));
     } finally {
@@ -128,7 +125,6 @@ export function InvoicePaymentStatusSection({ invoiceId }: { invoiceId: Id<"invo
   async function onSubmitManualProof() {
     setBusy(true);
     setError(null);
-    setMessage(null);
     try {
       await submitByInvoiceId({
         invoiceId,
@@ -139,7 +135,7 @@ export function InvoicePaymentStatusSection({ invoiceId }: { invoiceId: Id<"invo
       setShowManualProof(false);
       setPaymentReference("");
       setSendNotificationEmails(false);
-      setMessage("Payment proof recorded.");
+      notify.success("Payment proof recorded.");
     } catch (err) {
       setError(getConvexErrorMessage(err));
     } finally {
@@ -163,11 +159,7 @@ export function InvoicePaymentStatusSection({ invoiceId }: { invoiceId: Id<"invo
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         ) : null}
-        {message ? (
-          <Alert>
-            <AlertDescription>{message}</AlertDescription>
-          </Alert>
-        ) : null}
+
 
         <div className="flex flex-wrap items-center gap-2">
           {statusLabel ? (

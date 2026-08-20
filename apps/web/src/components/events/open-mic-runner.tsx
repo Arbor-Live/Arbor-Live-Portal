@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
+import { useAppDialog } from "@/components/ui/app-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDateTime } from "@/lib/format";
@@ -45,6 +46,7 @@ function EquipmentChips({ equipment }: { equipment: string[] }) {
 }
 
 export function OpenMicRunner({ eventId }: { eventId: Id<"events"> }) {
+  const { confirm, alert } = useAppDialog();
   const state = useQuery(api.openMic.getRunnerState, { eventId });
   const leaderboard = useQuery(api.openMic.getLeaderboard, {});
   const advance = useMutation(api.openMic.advanceCurrent).withOptimisticUpdate(
@@ -138,7 +140,7 @@ export function OpenMicRunner({ eventId }: { eventId: Id<"events"> }) {
                     disabled={windowClosed || (!eventIsLive && event.status !== "scheduled")}
                     onClick={() =>
                       void advance({ eventId }).catch((err) => {
-                        window.alert(getConvexErrorMessage(err));
+                        void alert(getConvexErrorMessage(err));
                       })
                     }
                   >
@@ -149,7 +151,7 @@ export function OpenMicRunner({ eventId }: { eventId: Id<"events"> }) {
                     variant="outline"
                     onClick={() =>
                       void markNotHere({ signupId: current._id }).catch((err) => {
-                        window.alert(getConvexErrorMessage(err));
+                        void alert(getConvexErrorMessage(err));
                       })
                     }
                   >
@@ -160,9 +162,11 @@ export function OpenMicRunner({ eventId }: { eventId: Id<"events"> }) {
                     variant="ghost"
                     className="text-destructive"
                     onClick={() => {
-                      if (window.confirm(`Remove ${current.name} from the queue?`)) {
-                        void remove({ signupId: current._id });
-                      }
+                      void (async () => {
+                        if (await confirm({ title: `Remove ${current.name} from the queue?`, destructive: true })) {
+                          await remove({ signupId: current._id });
+                        }
+                      })();
                     }}
                   >
                     Delete
@@ -183,7 +187,7 @@ export function OpenMicRunner({ eventId }: { eventId: Id<"events"> }) {
                   }
                   onClick={() =>
                     void advance({ eventId }).catch((err) => {
-                      window.alert(getConvexErrorMessage(err));
+                      void alert(getConvexErrorMessage(err));
                     })
                   }
                 >
@@ -230,9 +234,11 @@ export function OpenMicRunner({ eventId }: { eventId: Id<"events"> }) {
                       size="sm"
                       className="text-destructive"
                       onClick={() => {
-                        if (window.confirm(`Remove ${signup.name} from the queue?`)) {
-                          void remove({ signupId: signup._id });
-                        }
+                        void (async () => {
+                          if (await confirm({ title: `Remove ${signup.name} from the queue?`, destructive: true })) {
+                            await remove({ signupId: signup._id });
+                          }
+                        })();
                       }}
                     >
                       Delete

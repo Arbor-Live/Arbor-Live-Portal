@@ -4,36 +4,76 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useConvex } from "convex/react";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { FormProvider, useForm, type Resolver } from "react-hook-form";
+import { FormProvider, useForm, useFormContext, type Resolver } from "react-hook-form";
+import type {
+  QuestionnaireChoiceDefinition,
+  QuestionnaireItemDefinition,
+} from "@shadcn/react/questionnaire";
 import { api } from "@/lib/convex-api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import {
+  Questionnaire,
+  QuestionnaireChoice,
+  QuestionnaireChoiceDescription,
+  QuestionnaireChoices,
+  QuestionnaireDescription,
+  QuestionnaireError,
+  QuestionnaireInput,
+  QuestionnaireItem,
+  QuestionnaireTitle,
+} from "@/components/ui/questionnaire";
+import {
+  QUESTIONNAIRE_CHOICE_CLASSNAME,
+  QUESTIONNAIRE_ITEM_CLASSNAME,
+  QUESTIONNAIRE_TITLE_CLASSNAME,
+  handleQuestionnaireEnter,
+  MarkStepAnswered,
+  QuestionnaireWizardFooter,
+  QuestionnaireWizardProgress,
+} from "@/components/ui/questionnaire-wizard";
 import { PublicMarketingLayout } from "@/components/public/public-marketing-layout";
 import { submitBookingRequest } from "@/app/(site)/request/actions";
-import { RequestWizardNav } from "@/components/request/request-wizard-nav";
 import { RequestWizardShell } from "@/components/request/request-wizard-shell";
 import { EventScheduleField } from "@/components/request/fields/event-schedule-field";
-import { ReturningUserField } from "@/components/request/fields/returning-user-field";
+import { OrganizationSearchField } from "@/components/request/fields/organization-search-field";
 import { ServicesField } from "@/components/request/fields/services-field";
-import { SponsorTypeField } from "@/components/request/fields/sponsor-type-field";
-import { SingleChoiceField } from "@/components/request/fields/single-choice-field";
 import { TextField } from "@/components/request/fields/text-field";
 import { TextareaField } from "@/components/request/fields/textarea-field";
 import { TurnoutField } from "@/components/request/fields/turnout-field";
 import {
   EVENT_CATEGORY_OPTIONS,
+  INDIVIDUAL_SPONSOR_TYPE,
   LIGHTING_TIER_OPTIONS,
   PRODUCTION_TIER_OPTIONS,
-  INDIVIDUAL_SPONSOR_TYPE,
   bookingRequestDefaultValues,
   bookingRequestSchema,
   getActiveSteps,
+  requiresOrganizationName,
+  sponsorTypeOptionsForContext,
   type BookingRequestFormValues,
   type BookingRequestStepId,
 } from "@/lib/validations/booking-request";
 
-const spring = { type: "spring" as const, stiffness: 380, damping: 36 };
+const QUESTION_STEPS = [
+  "welcome",
+  "email",
+  "returningUser",
+  "contact",
+  "sponsorType",
+  "venue",
+  "eventSchedule",
+  "eventName",
+  "eventCategory",
+  "services",
+  "productionTier",
+  "lighting",
+  "eventDescription",
+  "expectedTurnout",
+  "existingEquipment",
+  "additionalNotes",
+] as const satisfies readonly BookingRequestStepId[];
 
 type ReturningGroup = {
   groupId: string;
@@ -55,29 +95,44 @@ function contactDetailsComplete(lookup: Extract<ContactLookup, { found: true }>)
   return Boolean(lookup.firstName.trim() && lookup.lastName.trim() && lookup.phone.trim());
 }
 
-function StepSubheader({ text }: { text: string }) {
-  const paragraphs = text.split("\n\n");
-  return (
-    <div className="space-y-3 text-sm text-foreground/70">
-      {paragraphs.map((paragraph, index) => (
-        <p key={index}>{paragraph}</p>
-      ))}
-    </div>
-  );
+const choiceClassName = QUESTIONNAIRE_CHOICE_CLASSNAME;
+
+function itemChoices(
+  name: BookingRequestStepId,
+  contactLookup: ContactLookup | null,
+  requestContext: BookingRequestFormValues["requestContext"],
+): QuestionnaireChoiceDefinition[] | undefined {
+  switch (name) {
+    case "eventCategory":
+      return EVENT_CATEGORY_OPTIONS.map((value) => ({ value }));
+    case "productionTier":
+      return PRODUCTION_TIER_OPTIONS.map((value) => ({ value }));
+    case "lighting":
+      return LIGHTING_TIER_OPTIONS.map((value) => ({ value }));
+    case "sponsorType":
+      return sponsorTypeOptionsForContext(requestContext).map((value) => ({ value }));
+    case "returningUser":
+      if (contactLookup?.found !== true) return undefined;
+      return [
+        ...contactLookup.groups.map((group) => ({ value: `group:${group.groupId}` })),
+        { value: "personal" },
+        { value: "new_group" },
+      ];
+    default:
+      return undefined;
+  }
 }
 
 export function BookingRequestWizard() {
-  const prefersReducedMotion = useReducedMotion();
   const convex = useConvex();
-  const [stepIndex, setStepIndex] = useState(0);
-  const [direction, setDirection] = useState(1);
+  const [item, setItem] = useState<BookingRequestStepId>("welcome");
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isAdvancing, setIsAdvancing] = useState(false);
   const [contactLookup, setContactLookup] = useState<ContactLookup | null>(null);
   const [trackingInfo, setTrackingInfo] = useState<{ publicToken: string; requestNumber: string } | null>(
     null,
   );
-  const directionRef = useRef(1);
 
   const form = useForm<BookingRequestFormValues>({
     resolver: zodResolver(bookingRequestSchema as never) as Resolver<BookingRequestFormValues>,
@@ -90,8 +145,7 @@ export function BookingRequestWizard() {
   const servicesNeeded = form.watch("servicesNeeded");
   const skipSponsor = requestContext === "group" || requestContext === "personal";
   const showReturningUser = contactLookup?.found === true;
-  const skipContact =
-    contactLookup?.found === true && contactDetailsComplete(contactLookup);
+  const skipContact = contactLookup?.found === true && contactDetailsComplete(contactLookup);
   const includeLighting = servicesNeeded.includes("Lighting");
 
   const activeSteps = useMemo(
@@ -101,37 +155,38 @@ export function BookingRequestWizard() {
         skipContact,
         skipSponsor,
         includeLighting,
-      }),
+      }).filter((step) => step.id !== "thankYou"),
     [showReturningUser, skipContact, skipSponsor, includeLighting],
   );
 
-  const currentStep = activeSteps[stepIndex] ?? activeSteps[0]!;
-  const progressSteps = activeSteps.filter((step) => step.id !== "welcome" && step.id !== "thankYou");
-  const progressIndex = Math.max(
-    0,
-    progressSteps.findIndex((step) => step.id === currentStep.id),
+  const items = useMemo<QuestionnaireItemDefinition[]>(
+    () =>
+      QUESTION_STEPS.map((name) => {
+        const step = activeSteps.find((entry) => entry.id === name);
+        return {
+          name,
+          required:
+            name === "additionalNotes" ||
+            Boolean(step && !step.skippable && name !== "welcome" && name !== "venue"),
+          disabled: !step,
+          choices: itemChoices(name, contactLookup, requestContext),
+        };
+      }),
+    [activeSteps, contactLookup, requestContext],
   );
-  const progressPercent =
-    currentStep.id === "welcome"
-      ? 0
-      : currentStep.id === "thankYou"
-        ? 100
-        : ((progressIndex + 1) / progressSteps.length) * 100;
 
-  const slideVariants = useMemo(
-    () => ({
-      enter: (dir: number) =>
-        prefersReducedMotion
-          ? { opacity: 0 }
-          : { opacity: 0, x: dir > 0 ? 40 : -40, scale: 0.98 },
-      center: prefersReducedMotion ? { opacity: 1 } : { opacity: 1, x: 0, scale: 1 },
-      exit: (dir: number) =>
-        prefersReducedMotion
-          ? { opacity: 0 }
-          : { opacity: 0, x: dir > 0 ? -40 : 40, scale: 0.98 },
-    }),
-    [prefersReducedMotion],
-  );
+  const currentStep = activeSteps.find((step) => step.id === item) ?? activeSteps[0]!;
+  const didFocusActiveItem = useRef(false);
+
+  useEffect(() => {
+    if (didFocusActiveItem.current) return;
+    const active = document.querySelector<HTMLElement>(
+      "[data-slot=questionnaire-item][data-active]",
+    );
+    if (!active) return;
+    active.focus();
+    didFocusActiveItem.current = true;
+  }, [item]);
 
   const applyGroup = useCallback(
     (group: ReturningGroup) => {
@@ -161,67 +216,86 @@ export function BookingRequestWizard() {
     form.setValue("sponsorType", "Stanford Department", { shouldDirty: true });
   }, [form]);
 
-  const advance = useCallback(() => {
-    directionRef.current = 1;
-    setDirection(1);
-    setStepIndex((index) => Math.min(index + 1, activeSteps.length - 1));
-  }, [activeSteps.length]);
-
-  const goNext = useCallback(async () => {
-    setSubmitError(null);
-    const step = activeSteps[stepIndex]!;
-
-    if (step.id === "welcome") {
-      advance();
-      return;
+  const lookupEmail = useCallback(async () => {
+    const email = form.getValues("email").trim().toLowerCase();
+    let lookup: ContactLookup = { found: false };
+    try {
+      lookup = await convex.query(api.eventRequests.lookupContactByEmail, { email });
+    } catch {
+      lookup = { found: false };
     }
-
-    if (step.id === "email") {
-      const valid = await form.trigger(["email"]);
-      if (!valid) return;
-      const email = form.getValues("email").trim().toLowerCase();
-      let lookup: ContactLookup = { found: false };
-      try {
-        lookup = await convex.query(api.eventRequests.lookupContactByEmail, { email });
-      } catch {
-        // Public lookup should never require auth; treat failures as new contact.
-        lookup = { found: false };
-      }
-      setContactLookup(lookup);
-      if (lookup.found) {
-        form.setValue("firstName", lookup.firstName, { shouldDirty: true });
-        form.setValue("lastName", lookup.lastName, { shouldDirty: true });
-        form.setValue("phone", lookup.phone, { shouldDirty: true });
-      } else if (contactLookup?.found) {
-        // Drop autofilled details when switching from a known contact to a new email.
-        form.setValue("firstName", "", { shouldDirty: true });
-        form.setValue("lastName", "", { shouldDirty: true });
-        form.setValue("phone", "", { shouldDirty: true });
-      }
-      advance();
-      return;
+    setContactLookup(lookup);
+    if (lookup.found) {
+      form.setValue("firstName", lookup.firstName, { shouldDirty: true });
+      form.setValue("lastName", lookup.lastName, { shouldDirty: true });
+      form.setValue("phone", lookup.phone, { shouldDirty: true });
+    } else if (contactLookup?.found) {
+      form.setValue("firstName", "", { shouldDirty: true });
+      form.setValue("lastName", "", { shouldDirty: true });
+      form.setValue("phone", "", { shouldDirty: true });
     }
+    return lookup;
+  }, [contactLookup, convex, form]);
 
-    if (step.id === "returningUser") {
-      const context = form.getValues("requestContext");
-      if (!context) {
-        form.setError("requestContext", { message: "Select who this request is for" });
+  const handleItemChange = useCallback(
+    async (next: string) => {
+      setSubmitError(null);
+      const currentIndex = activeSteps.findIndex((step) => step.id === item);
+      const requestedIndex = activeSteps.findIndex((step) => step.id === next);
+      const goingBack = requestedIndex !== -1 && requestedIndex < currentIndex;
+
+      if (goingBack) {
+        setItem(next as BookingRequestStepId);
         return;
       }
-      if (context === "group" && !form.getValues("invoiceGroupId")) {
-        form.setError("requestContext", { message: "Select one of your groups" });
+
+      const step = activeSteps[currentIndex];
+      if (!step) return;
+
+      if (step.id === "email") {
+        const valid = await form.trigger(["email"]);
+        if (!valid) return;
+        setIsAdvancing(true);
+        try {
+          const lookup = await lookupEmail();
+          const nextSteps = getActiveSteps({
+            showReturningUser: lookup.found,
+            skipContact: lookup.found && contactDetailsComplete(lookup),
+            skipSponsor,
+            includeLighting,
+          }).filter((entry) => entry.id !== "thankYou");
+          const following = nextSteps[nextSteps.findIndex((entry) => entry.id === "email") + 1];
+          if (following) setItem(following.id);
+        } finally {
+          setIsAdvancing(false);
+        }
         return;
       }
-      advance();
-      return;
-    }
 
-    if (step.fields.length > 0 && !step.skippable) {
-      const valid = await form.trigger(step.fields);
-      if (!valid) return;
-    }
+      if (step.id === "returningUser") {
+        const context = form.getValues("requestContext");
+        if (!context) {
+          form.setError("requestContext", { message: "Select who this request is for" });
+          return;
+        }
+        if (context === "group" && !form.getValues("invoiceGroupId")) {
+          form.setError("requestContext", { message: "Select one of your groups" });
+          return;
+        }
+      } else if (step.fields.length > 0 && !step.skippable) {
+        const valid = await form.trigger(step.fields);
+        if (!valid) return;
+      }
 
-    if (step.id === "additionalNotes") {
+      setItem(next as BookingRequestStepId);
+    },
+    [activeSteps, form, includeLighting, item, lookupEmail, skipSponsor],
+  );
+
+  const handleSubmit = useCallback(
+    async (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      setSubmitError(null);
       setIsSubmitting(true);
       const result = await submitBookingRequest(form.getValues());
       setIsSubmitting(false);
@@ -235,69 +309,41 @@ export function BookingRequestWizard() {
         return;
       }
       setTrackingInfo({ publicToken: result.publicToken, requestNumber: result.requestNumber });
-    }
+    },
+    [form],
+  );
 
-    advance();
-  }, [activeSteps, advance, contactLookup, convex, form, stepIndex]);
-
-  const goBack = useCallback(() => {
-    if (stepIndex === 0 || currentStep.id === "thankYou") return;
-    directionRef.current = -1;
-    setDirection(-1);
-    setStepIndex((index) => Math.max(index - 1, 0));
-  }, [currentStep.id, stepIndex]);
-
-  const skipStep = useCallback(() => {
-    directionRef.current = 1;
-    setDirection(1);
-    setStepIndex((index) => Math.min(index + 1, activeSteps.length - 1));
-  }, [activeSteps.length]);
-
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key !== "Enter" || event.shiftKey) return;
-      const target = event.target as HTMLElement | null;
-      if (target?.tagName === "TEXTAREA") return;
-      if (currentStep.id === "thankYou") return;
-      event.preventDefault();
-      void goNext();
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [currentStep.id, goNext]);
-
-  const headline =
-    currentStep.id === "returningUser" && contactLookup?.found
-      ? `Welcome back, ${contactLookup.firstName}!`
-      : currentStep.headline;
+  const returningHeadline =
+    contactLookup?.found === true ? `Welcome back, ${contactLookup.firstName}!` : currentStep.headline;
 
   return (
     <PublicMarketingLayout hideFooter>
-      <RequestWizardShell
-        eyebrow="Booking request"
-        progressPercent={progressPercent}
-        footer={
-          currentStep.id !== "thankYou" ? (
-            <RequestWizardNav
-              showBack={stepIndex > 0}
-              showNext
-              nextLabel={currentStep.id === "additionalNotes" ? "Submit" : "Next"}
-              isSubmitting={isSubmitting}
-              skippable={currentStep.skippable}
-              onBack={goBack}
-              onNext={() => void goNext()}
-              onSkip={skipStep}
-            />
-          ) : null
-        }
-      >
-        <FormProvider {...form}>
-          <form
-            className="flex min-h-0 w-full flex-1 flex-col"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void goNext();
-            }}
+      <FormProvider {...form}>
+        <Questionnaire
+          className="flex min-h-0 w-full flex-1 flex-col gap-0"
+          items={items}
+          item={item}
+          shortcuts="letters"
+          onItemChange={(next) => void handleItemChange(next)}
+          onSubmit={(event) => void handleSubmit(event)}
+          onKeyDown={handleQuestionnaireEnter}
+        >
+          <RequestWizardShell
+            eyebrow="Booking request"
+            progress={
+              <QuestionnaireWizardProgress
+                complete={Boolean(trackingInfo)}
+                label="Booking request progress"
+              />
+            }
+            footer={
+              trackingInfo ? null : (
+                <QuestionnaireWizardFooter
+                  disabled={isSubmitting || isAdvancing}
+                  isSubmitting={isSubmitting}
+                />
+              )
+            }
           >
             <input type="text" tabIndex={-1} autoComplete="off" className="hidden" {...form.register("website")} />
 
@@ -308,166 +354,435 @@ export function BookingRequestWizard() {
                 </Alert>
               ) : null}
 
-              <AnimatePresence mode="wait" custom={direction}>
-                <motion.div
-                  key={currentStep.id}
-                  custom={direction}
-                  variants={slideVariants}
-                  initial="enter"
-                  animate="center"
-                  exit="exit"
-                  transition={spring}
-                  className="space-y-6 border border-border/50 bg-background/70 p-5 shadow-[0_8px_24px_rgba(0,0,0,0.06)] backdrop-blur-xl sm:p-6"
-                >
-                  <div className="space-y-3">
-                    <motion.h1
-                      className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl"
-                      initial={prefersReducedMotion ? false : { opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.05, ...spring }}
-                    >
-                      {headline}
-                    </motion.h1>
-                    {currentStep.subheader ? <StepSubheader text={currentStep.subheader} /> : null}
+              {trackingInfo ? (
+                <div className="space-y-6 border border-border/50 bg-background/70 p-5 shadow-[0_8px_24px_rgba(0,0,0,0.06)] backdrop-blur-xl sm:p-6">
+                  <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">Thank you!</h1>
+                  <div className="space-y-4 text-sm text-foreground/70">
+                    <p>We will get back to you soon!</p>
+                    <div className="border border-border/50 bg-background/50 p-4 text-foreground">
+                      <p className="font-medium">Request {trackingInfo.requestNumber}</p>
+                      <p className="mt-1">Save this link to track your request status:</p>
+                      <Button asChild className="mt-3" variant="outline">
+                        <Link href={`/request/track/${trackingInfo.publicToken}`}>Open request tracker</Link>
+                      </Button>
+                    </div>
                   </div>
+                </div>
+              ) : (
+                QUESTION_STEPS.map((name) => {
+                  const step = activeSteps.find((entry) => entry.id === name);
+                  const disabled = !step;
+                  const required =
+                    name === "additionalNotes" ||
+                    Boolean(step && !step.skippable && name !== "welcome" && name !== "venue");
+                  const headline = name === "returningUser" ? returningHeadline : (step?.headline ?? "");
+                  const fieldError = stepFieldError(form, name);
 
-                  <StepBody
-                    stepId={currentStep.id}
-                    contactLookup={contactLookup}
-                    trackingInfo={trackingInfo}
-                    onApplyGroup={applyGroup}
-                    onApplyPersonal={applyPersonal}
-                    onApplyNewGroup={applyNewGroup}
-                  />
-                </motion.div>
-              </AnimatePresence>
+                  return (
+                    <QuestionnaireItem
+                      key={name}
+                      name={name}
+                      required={required}
+                      disabled={disabled}
+                      invalid={Boolean(fieldError)}
+                      className={QUESTIONNAIRE_ITEM_CLASSNAME}
+                    >
+                      <div className="space-y-3">
+                        <QuestionnaireTitle className={QUESTIONNAIRE_TITLE_CLASSNAME}>
+                          {headline}
+                        </QuestionnaireTitle>
+                        {step?.subheader ? (
+                          <QuestionnaireDescription className="text-sm/relaxed text-foreground/70 whitespace-pre-line">
+                            {step.subheader}
+                          </QuestionnaireDescription>
+                        ) : null}
+                      </div>
+                      <StepFields
+                        stepId={name}
+                        contactLookup={contactLookup}
+                        onApplyGroup={applyGroup}
+                        onApplyPersonal={applyPersonal}
+                        onApplyNewGroup={applyNewGroup}
+                      />
+                      <QuestionnaireError className="text-sm">{fieldError}</QuestionnaireError>
+                    </QuestionnaireItem>
+                  );
+                })
+              )}
             </div>
-          </form>
-        </FormProvider>
-      </RequestWizardShell>
+          </RequestWizardShell>
+        </Questionnaire>
+      </FormProvider>
     </PublicMarketingLayout>
   );
 }
 
-function StepBody({
+function stepFieldError(
+  form: ReturnType<typeof useForm<BookingRequestFormValues>>,
+  stepId: BookingRequestStepId,
+) {
+  const errors = form.formState.errors;
+  switch (stepId) {
+    case "email":
+      return errors.email?.message;
+    case "returningUser":
+      return errors.requestContext?.message;
+    case "contact":
+      return errors.firstName?.message ?? errors.lastName?.message ?? errors.phone?.message;
+    case "sponsorType":
+      return errors.sponsorType?.message ?? errors.sponsorTypeOther?.message ?? errors.organization?.message;
+    case "venue":
+      return errors.venueName?.message ?? errors.venueAddress?.message;
+    case "eventSchedule":
+      return errors.showSlots?.message ?? errors.setupTime?.message;
+    case "eventName":
+      return errors.eventName?.message;
+    case "eventCategory":
+      return errors.eventCategory?.message ?? errors.eventCategoryOther?.message;
+    case "services":
+      return errors.crewOrRental?.message ?? errors.servicesNeeded?.message;
+    case "productionTier":
+      return errors.productionTier?.message;
+    case "lighting":
+      return errors.lightingPreference?.message;
+    case "eventDescription":
+      return errors.eventDescription?.message;
+    case "expectedTurnout":
+      return errors.expectedTurnout?.message;
+    case "existingEquipment":
+      return errors.existingEquipment?.message;
+    case "additionalNotes":
+      return errors.additionalNotes?.message;
+    default:
+      return undefined;
+  }
+}
+
+function StepFields({
   stepId,
   contactLookup,
-  trackingInfo,
   onApplyGroup,
   onApplyPersonal,
   onApplyNewGroup,
 }: {
   stepId: BookingRequestStepId;
   contactLookup: ContactLookup | null;
-  trackingInfo: { publicToken: string; requestNumber: string } | null;
   onApplyGroup: (group: ReturningGroup) => void;
   onApplyPersonal: () => void;
   onApplyNewGroup: () => void;
 }) {
+  const form = useFormContext<BookingRequestFormValues>();
+  const values = form.watch();
+
   switch (stepId) {
+    case "welcome":
+      return <MarkStepAnswered />;
     case "email":
-      return <TextField name="email" label="Stanford email" placeholder="you@stanford.edu" type="email" autoFocus />;
+      return (
+        <div className="space-y-2">
+          <Label htmlFor="email">Stanford email</Label>
+          <QuestionnaireInput
+            id="email"
+            type="email"
+            autoFocus
+            className="h-9 text-sm"
+            placeholder="you@stanford.edu"
+            value={values.email}
+            onChange={(event) =>
+              form.setValue("email", event.currentTarget.value, { shouldDirty: true, shouldValidate: true })
+            }
+          />
+        </div>
+      );
     case "returningUser":
       return contactLookup?.found ? (
-        <ReturningUserField
-          firstName={contactLookup.firstName}
+        <ReturningUserChoices
           groups={contactLookup.groups}
+          requestContext={values.requestContext}
+          selectedGroupId={values.invoiceGroupId}
           onApplyGroup={onApplyGroup}
           onApplyPersonal={onApplyPersonal}
           onApplyNewGroup={onApplyNewGroup}
         />
-      ) : null;
+      ) : (
+        <MarkStepAnswered />
+      );
     case "contact":
       return (
-        <div className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <TextField name="firstName" label="First Name" placeholder="First Name" autoFocus />
-            <TextField name="lastName" label="Last Name" placeholder="Last Name" />
+        <>
+          <MarkStepAnswered />
+          <div className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <TextField name="firstName" label="First Name" placeholder="First Name" autoFocus />
+              <TextField name="lastName" label="Last Name" placeholder="Last Name" />
+            </div>
+            <TextField name="phone" label="Phone" placeholder="Phone" type="tel" />
           </div>
-          <TextField name="phone" label="Phone" placeholder="Phone" type="tel" />
-        </div>
+        </>
       );
     case "sponsorType":
-      return <SponsorTypeField />;
+      return <SponsorTypeChoices form={form} />;
     case "venue":
       return (
-        <div className="space-y-4">
-          <TextField name="venueName" label="Venue Name" placeholder="Venue Name" autoFocus />
-          <TextField name="venueAddress" label="Venue Address" placeholder="Venue Address" />
-        </div>
+        <>
+          <MarkStepAnswered />
+          <div className="space-y-4">
+            <TextField name="venueName" label="Venue Name" placeholder="Venue Name" autoFocus />
+            <TextField name="venueAddress" label="Venue Address" placeholder="Venue Address" />
+          </div>
+        </>
       );
     case "eventSchedule":
-      return <EventScheduleField />;
+      return (
+        <>
+          <MarkStepAnswered />
+          <EventScheduleField />
+        </>
+      );
     case "eventName":
       return (
-        <TextField
-          name="eventName"
-          label="What is the name for your event?"
-          placeholder="Spring Concert 2026"
-          autoFocus
-        />
+        <div className="space-y-2">
+          <Label htmlFor="eventName">What is the name for your event?</Label>
+          <QuestionnaireInput
+            id="eventName"
+            autoFocus
+            className="h-9 text-sm"
+            placeholder="Spring Concert 2026"
+            value={values.eventName}
+            onChange={(event) =>
+              form.setValue("eventName", event.currentTarget.value, { shouldDirty: true, shouldValidate: true })
+            }
+          />
+        </div>
       );
     case "eventCategory":
       return (
-        <SingleChoiceField
-          name="eventCategory"
-          options={EVENT_CATEGORY_OPTIONS}
-          otherFieldName="eventCategoryOther"
-          otherTriggerValue="Other"
-          otherPlaceholder="What type of event are you running?"
-        />
+        <QuestionnaireChoices>
+          {EVENT_CATEGORY_OPTIONS.map((option) => (
+            <QuestionnaireChoice
+              key={option}
+              value={option}
+              className={choiceClassName}
+              checked={values.eventCategory === option}
+              onChange={() =>
+                form.setValue("eventCategory", option, { shouldDirty: true, shouldValidate: true })
+              }
+            >
+              {option}
+            </QuestionnaireChoice>
+          ))}
+          {values.eventCategory === "Other" ? (
+            <input
+              type="text"
+              placeholder="What type of event are you running?"
+              aria-label="Other event type"
+              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              value={values.eventCategoryOther ?? ""}
+              onChange={(event) =>
+                form.setValue("eventCategoryOther", event.currentTarget.value, {
+                  shouldDirty: true,
+                  shouldValidate: true,
+                })
+              }
+            />
+          ) : null}
+        </QuestionnaireChoices>
       );
     case "services":
-      return <ServicesField />;
+      return (
+        <>
+          <MarkStepAnswered />
+          <ServicesField />
+        </>
+      );
     case "productionTier":
-      return <SingleChoiceField name="productionTier" options={PRODUCTION_TIER_OPTIONS} />;
+      return (
+        <QuestionnaireChoices>
+          {PRODUCTION_TIER_OPTIONS.map((option) => (
+            <QuestionnaireChoice
+              key={option}
+              value={option}
+              className={choiceClassName}
+              checked={values.productionTier === option}
+              onChange={() =>
+                form.setValue("productionTier", option, { shouldDirty: true, shouldValidate: true })
+              }
+            >
+              {option}
+            </QuestionnaireChoice>
+          ))}
+        </QuestionnaireChoices>
+      );
     case "lighting":
-      return <SingleChoiceField name="lightingPreference" options={LIGHTING_TIER_OPTIONS} />;
+      return (
+        <QuestionnaireChoices>
+          {LIGHTING_TIER_OPTIONS.map((option) => (
+            <QuestionnaireChoice
+              key={option}
+              value={option}
+              className={choiceClassName}
+              checked={values.lightingPreference === option}
+              onChange={() =>
+                form.setValue("lightingPreference", option, { shouldDirty: true, shouldValidate: true })
+              }
+            >
+              {option}
+            </QuestionnaireChoice>
+          ))}
+        </QuestionnaireChoices>
+      );
     case "eventDescription":
       return (
-        <TextareaField
-          name="eventDescription"
-          label="Your answer"
-          placeholder="I am running a small party with three bands..."
-          autoFocus
-        />
+        <>
+          <MarkStepAnswered />
+          <TextareaField
+            name="eventDescription"
+            label="Your answer"
+            placeholder="I am running a small party with three bands..."
+            autoFocus
+          />
+        </>
       );
     case "expectedTurnout":
-      return <TurnoutField />;
+      return (
+        <>
+          <MarkStepAnswered />
+          <TurnoutField />
+        </>
+      );
     case "existingEquipment":
       return (
-        <TextareaField
-          name="existingEquipment"
-          label="Your answer"
-          placeholder="Type your answer here…"
-          autoFocus
-        />
+        <>
+          <MarkStepAnswered />
+          <TextareaField
+            name="existingEquipment"
+            label="Your answer"
+            placeholder="Type your answer here…"
+            autoFocus
+          />
+        </>
       );
     case "additionalNotes":
       return (
-        <TextareaField
-          name="additionalNotes"
-          label="Your answer"
-          placeholder="Type your answer here..."
-          autoFocus
-        />
-      );
-    case "thankYou":
-      return (
-        <div className="space-y-4 text-sm text-foreground/70">
-          <p>We will get back to you soon!</p>
-          {trackingInfo ? (
-            <div className="border border-border/50 bg-background/50 p-4 text-foreground">
-              <p className="font-medium">Request {trackingInfo.requestNumber}</p>
-              <p className="mt-1">Save this link to track your request status:</p>
-              <Button asChild className="mt-3" variant="outline">
-                <Link href={`/request/track/${trackingInfo.publicToken}`}>Open request tracker</Link>
-              </Button>
-            </div>
-          ) : null}
-        </div>
+        <>
+          <MarkStepAnswered />
+          <TextareaField
+            name="additionalNotes"
+            label="Your answer"
+            placeholder="Type your answer here..."
+            autoFocus
+          />
+        </>
       );
     default:
       return null;
   }
+}
+
+function ReturningUserChoices({
+  groups,
+  requestContext,
+  selectedGroupId,
+  onApplyGroup,
+  onApplyPersonal,
+  onApplyNewGroup,
+}: {
+  groups: ReturningGroup[];
+  requestContext: BookingRequestFormValues["requestContext"];
+  selectedGroupId?: string;
+  onApplyGroup: (group: ReturningGroup) => void;
+  onApplyPersonal: () => void;
+  onApplyNewGroup: () => void;
+}) {
+  return (
+    <QuestionnaireChoices>
+      {groups.map((group) => (
+        <QuestionnaireChoice
+          key={group.groupId}
+          value={`group:${group.groupId}`}
+          className={choiceClassName}
+          checked={requestContext === "group" && selectedGroupId === group.groupId}
+          onChange={() => onApplyGroup(group)}
+        >
+          <span className="font-medium">{group.groupName}</span>
+          <QuestionnaireChoiceDescription>Group request</QuestionnaireChoiceDescription>
+        </QuestionnaireChoice>
+      ))}
+      <QuestionnaireChoice
+        value="personal"
+        className={choiceClassName}
+        checked={requestContext === "personal"}
+        onChange={onApplyPersonal}
+      >
+        <span className="font-medium">Personal / individual request</span>
+      </QuestionnaireChoice>
+      <QuestionnaireChoice
+        value="new_group"
+        className={choiceClassName}
+        checked={requestContext === "new_group"}
+        onChange={onApplyNewGroup}
+      >
+        <span className="font-medium">New organization / group</span>
+      </QuestionnaireChoice>
+    </QuestionnaireChoices>
+  );
+}
+
+function SponsorTypeChoices({
+  form,
+}: {
+  form: ReturnType<typeof useForm<BookingRequestFormValues>>;
+}) {
+  const requestContext = form.watch("requestContext");
+  const sponsorType = form.watch("sponsorType");
+  const invoiceGroupId = form.watch("invoiceGroupId");
+  const sponsorTypeOther = form.watch("sponsorTypeOther");
+  const sponsorOptions = sponsorTypeOptionsForContext(requestContext);
+  const showOrganization = requiresOrganizationName(sponsorType, invoiceGroupId);
+
+  return (
+    <div className="space-y-4">
+      <QuestionnaireChoices>
+        {sponsorOptions.map((option) => (
+          <QuestionnaireChoice
+            key={option}
+            value={option}
+            className={choiceClassName}
+            checked={sponsorType === option}
+            onChange={() => {
+              form.setValue("sponsorType", option, { shouldDirty: true, shouldValidate: true });
+              if (option !== "Other") {
+                form.setValue("sponsorTypeOther", "", { shouldDirty: true });
+              }
+              if (!requiresOrganizationName(option, invoiceGroupId)) {
+                form.setValue("organization", "", { shouldDirty: true, shouldValidate: true });
+                form.setValue("invoiceGroupId", "", { shouldDirty: true });
+              }
+            }}
+          >
+            {option}
+          </QuestionnaireChoice>
+        ))}
+        {sponsorType === "Other" ? (
+          <input
+            type="text"
+            placeholder="Who is sponsoring this event?"
+            aria-label="Other sponsor type"
+            className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            value={sponsorTypeOther ?? ""}
+            onChange={(event) =>
+              form.setValue("sponsorTypeOther", event.currentTarget.value, {
+                shouldDirty: true,
+                shouldValidate: true,
+              })
+            }
+          />
+        ) : null}
+      </QuestionnaireChoices>
+      {showOrganization ? <OrganizationSearchField /> : null}
+      {sponsorType === INDIVIDUAL_SPONSOR_TYPE ? (
+        <p className="text-xs text-muted-foreground">Personal requests do not need an organization name.</p>
+      ) : null}
+    </div>
+  );
 }

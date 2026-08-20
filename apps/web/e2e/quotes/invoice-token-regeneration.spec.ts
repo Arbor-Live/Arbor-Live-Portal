@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { acceptAppDialog, dismissAppDialog } from "../helpers/auth";
 import { pollConvex } from "../helpers/convex";
 import { e2eEnv } from "../helpers/env";
 import { createDraftInvoiceWithArtistLine } from "../helpers/invoice";
@@ -51,11 +52,8 @@ test.describe("invoice approval token regeneration", () => {
         timeout: 25_000,
       });
 
-      // Regeneration sits behind a `window.confirm`. Dismissing it must leave the
-      // existing link alone — a rotation the operator declined would otherwise
-      // silently break a link already sent to a client.
-      page.once("dialog", (dialog) => void dialog.dismiss());
       await page.getByTestId("invoice-regenerate-token").click();
+      await dismissAppDialog(page);
       await expect(page.getByTestId("invoice-approval-link")).toHaveValue(
         new RegExp(`${before.publicApprovalToken}$`),
       );
@@ -64,9 +62,8 @@ test.describe("invoice approval token regeneration", () => {
         timeout: 25_000,
       });
 
-      // Accepting it rotates.
-      page.once("dialog", (dialog) => void dialog.accept());
       await page.getByTestId("invoice-regenerate-token").click();
+      await acceptAppDialog(page);
 
       const after = await pollConvex<EditorState>(
         "e2eHelpers:getInvoiceEditorState",

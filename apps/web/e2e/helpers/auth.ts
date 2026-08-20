@@ -1,7 +1,8 @@
 import fs from "fs";
 import path from "path";
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 import { e2eEnv } from "./env";
+import { fillSearchableSelectQuery } from "./select";
 
 export const adminAuthFile = path.join(__dirname, "../.auth/admin.json");
 export const crewAuthFile = path.join(__dirname, "../.auth/crew.json");
@@ -78,34 +79,86 @@ export async function selectSearchableOption(
 ) {
   const field = page.locator("div.space-y-1").filter({ has: page.getByText(label, { exact: true }) });
   await field.getByTestId("searchable-select-trigger").click();
-  const menu = page.locator("body > div").filter({ has: page.getByPlaceholder(/Search/i) }).last();
-  await menu.getByPlaceholder(/Search/i).fill(optionLabel);
-  const option = page.getByRole("button", { name: new RegExp(optionLabel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")) }).first();
+  const menu = page.getByTestId("searchable-select-menu");
+  await expect(menu).toBeVisible({ timeout: 20_000 });
+  await fillSearchableSelectQuery(menu, optionLabel);
+  const option = menu.getByRole("option", {
+    name: new RegExp(`^${optionLabel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`),
+  }).first();
   await expect(option).toBeVisible({ timeout: 20_000 });
-  await option.click();
+  await option.click({ force: true });
 }
 
-/** Set a DateTimePicker near a label via the react-datepicker calendar UI. */
+function toTimeInputValue(label: string) {
+  const match = /^(\d{1,2}):(\d{2})\s*(AM|PM)$/i.exec(label.trim());
+  if (!match) return label;
+  let hour = Number(match[1]);
+  const minute = match[2];
+  const pm = match[3].toUpperCase() === "PM";
+  if (pm && hour < 12) hour += 12;
+  if (!pm && hour === 12) hour = 0;
+  return `${String(hour).padStart(2, "0")}:${minute}`;
+}
+
+async function pickCalendarDay(popover: Locator, dayLabel: string) {
+  const calendar = popover.locator("[data-slot='calendar']");
+  await calendar
+    .locator("button:not([data-outside])")
+    .filter({ hasText: new RegExp(`^${dayLabel}$`) })
+    .click();
+}
+
+/** Set a DateTimePicker near a label via the shadcn calendar + time input. */
 export async function fillDateTimeNearLabel(
   page: Page,
   label: string,
   options: { dayLabel: string; timeLabel: string },
 ) {
   const field = page.locator("div.space-y-1").filter({ has: page.getByText(label, { exact: true }) });
-  const input = field.getByTestId("date-time-picker");
-  await input.click();
-  const popper = page.locator(".app-date-time-popper, .react-datepicker-popper").last();
-  await expect(popper).toBeVisible({ timeout: 5_000 });
-  await popper
-    .locator(
-      `.react-datepicker__day:not(.react-datepicker__day--outside-month):text-is("${options.dayLabel}")`,
-    )
-    .first()
-    .click();
-  await popper
-    .locator(".react-datepicker__time-list-item")
-    .filter({ hasText: new RegExp(`^\\s*${options.timeLabel}\\s*$`) })
-    .first()
-    .click({ force: true });
+  await field.getByTestId("date-time-picker").click();
+  const popover = page.locator("[data-slot='popover-content']").last();
+  await expect(popover).toBeVisible({ timeout: 5_000 });
+  await pickCalendarDay(popover, options.dayLabel);
+  await popover.locator("input[type='time']").fill(toTimeInputValue(options.timeLabel));
   await page.keyboard.press("Escape");
+}
+
+/** Set a DateTimeRangePicker near a label (event start/end). */
+export async function fillDateTimeRangeNearLabel(
+  page: Page,
+  label: string,
+  options: { dayLabel: string; startTime: string; endTime: string; endDayLabel?: string },
+) {
+  const field = page.locator("div.space-y-1").filter({ has: page.getByText(label, { exact: true }) });
+  await field.getByTestId("date-time-range-picker").click();
+  const popover = page.locator("[data-slot='popover-content']").last();
+  await expect(popover).toBeVisible({ timeout: 5_000 });
+  await pickCalendarDay(popover, options.dayLabel);
+  if (options.endDayLabel && options.endDayLabel !== options.dayLabel) {
+    await pickCalendarDay(popover, options.endDayLabel);
+  }
+  const times = popover.locator("input[type='time']");
+  await times.nth(0).fill(toTimeInputValue(options.startTime));
+  await times.nth(1).fill(toTimeInputValue(options.endTime));
+  await page.keyboard.press("Escape");
+}
+
+/** Accept the in-app confirm/alert (`AppDialogProvider`), not a native `window.confirm`. */
+export async function acceptAppDialog(page: Page, confirmName?: string | RegExp) {
+  const dialog = page.getByTestId("app-dialog");
+  await expect(dialog).toBeVisible({ timeout: 15_000 });
+  await dialog
+    .getByRole("button", {
+      name: confirmName ?? /^(Continue|Delete|OK)$/,
+    })
+    .click();
+  await expect(dialog).toHaveCount(0);
+}
+
+/** Dismiss the in-app confirm. */
+export async function dismissAppDialog(page: Page) {
+  const dialog = page.getByTestId("app-dialog");
+  await expect(dialog).toBeVisible({ timeout: 15_000 });
+  await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
 }

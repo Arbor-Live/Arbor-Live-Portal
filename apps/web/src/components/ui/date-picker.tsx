@@ -1,37 +1,26 @@
 "use client";
 
-import { forwardRef, useMemo, type ComponentProps } from "react";
-import DatePicker from "react-datepicker";
-import { Input } from "@/components/ui/input";
+import { useMemo, useState } from "react";
+import { CalendarBlankIcon } from "@phosphor-icons/react";
+import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  PORTAL_TIMEZONE,
+  formatDate,
+  pacificDateAndTimeToMs,
+  pacificDateKey,
+} from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-function toLocalDateInput(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+function instantFromDateKey(value: string) {
+  const ms = pacificDateAndTimeToMs(value, "12:00");
+  return ms == null ? undefined : new Date(ms);
 }
-
-function parseLocalDateInput(value: string) {
-  if (!value) return null;
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
-  if (!match) return null;
-  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12, 0, 0, 0);
-  return Number.isNaN(date.getTime()) ? null : date;
-}
-
-const DateInput = forwardRef<HTMLInputElement, ComponentProps<typeof Input>>(function DateInput(
-  props,
-  ref,
-) {
-  return (
-    <Input
-      ref={ref}
-      {...props}
-      className={cn("focus-visible:ring-0 focus-visible:border-input", props.className)}
-    />
-  );
-});
 
 export function DatePickerField({
   value,
@@ -44,21 +33,42 @@ export function DatePickerField({
   placeholder?: string;
   className?: string;
 }) {
-  const selected = useMemo(() => parseLocalDateInput(value), [value]);
+  const [open, setOpen] = useState(false);
+  const selected = useMemo(() => instantFromDateKey(value), [value]);
+  const label = selected ? formatDate(selected.getTime()) : "";
 
   return (
-    <DatePicker
-      selected={selected}
-      onChange={(date: Date | null) => onChange(date ? toLocalDateInput(date) : "")}
-      dateFormat="MMM d, yyyy"
-      placeholderText={placeholder}
-      customInput={<DateInput className={className} />}
-      wrapperClassName="app-date-time-wrapper"
-      popperClassName="app-date-time-popper"
-      popperPlacement="bottom-start"
-      calendarClassName="app-date-time-calendar"
-      showPopperArrow={false}
-      autoComplete="off"
-    />
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          data-empty={!value}
+          data-testid="date-picker"
+          data-value={value}
+          className={cn(
+            "w-full justify-start font-normal data-[empty=true]:text-muted-foreground",
+            className,
+          )}
+        >
+          <CalendarBlankIcon />
+          {label || placeholder || "Pick a date"}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="z-[80] w-auto overflow-hidden p-0" align="start">
+        <Calendar
+          mode="single"
+          timeZone={PORTAL_TIMEZONE}
+          noonSafe
+          captionLayout="dropdown"
+          selected={selected}
+          defaultMonth={selected}
+          onSelect={(date) => {
+            onChange(date ? pacificDateKey(date.getTime()) : "");
+            setOpen(false);
+          }}
+        />
+      </PopoverContent>
+    </Popover>
   );
 }

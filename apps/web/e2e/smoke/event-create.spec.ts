@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { fillDateTimeNearLabel } from "../helpers/auth";
+import { fillDateTimeRangeNearLabel } from "../helpers/auth";
 
 test.describe("event create smoke", () => {
   test("admin can create a crewed event and quick-add schedule", async ({ page }) => {
@@ -17,8 +17,11 @@ test.describe("event create smoke", () => {
       .getByRole("textbox")
       .fill(title);
 
-    await fillDateTimeNearLabel(page, "Start", { dayLabel, timeLabel: "6:00 PM" });
-    await fillDateTimeNearLabel(page, "End", { dayLabel, timeLabel: "10:00 PM" });
+    await fillDateTimeRangeNearLabel(page, "Start", {
+      dayLabel,
+      startTime: "6:00 PM",
+      endTime: "10:00 PM",
+    });
 
     await page.getByRole("button", { name: "Create Event" }).first().click();
     await page.waitForURL(/\/dashboard\/events\/(?!new(?:\/|$))[^/?#]+/, { timeout: 45_000 });

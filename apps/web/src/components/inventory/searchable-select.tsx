@@ -1,14 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { DismissableLayer } from "@radix-ui/react-dismissable-layer";
-import { FocusScope } from "@radix-ui/react-focus-scope";
-import { CaretDownIcon } from "@phosphor-icons/react";
-import { Input } from "@/components/ui/input";
+import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { fuzzyScoreHaystack } from "@/lib/fuzzy-match";
 import { filterControlClassName } from "./filter-controls";
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+  ComboboxTrigger,
+  ComboboxValue,
+} from "@/components/ui/combobox";
 
 export type SearchableSelectOption = {
   value: string;
@@ -18,6 +23,14 @@ export type SearchableSelectOption = {
   icon?: string;
   avatarUrl?: string;
 };
+
+function optionKey(option: SearchableSelectOption) {
+  return option.value === "" ? "__empty__" : option.value;
+}
+
+function matchesQuery(option: SearchableSelectOption, query: string) {
+  return fuzzyScoreHaystack(query, [option.label, option.description, option.keywords]) > 0;
+}
 
 export function SearchableSelect({
   value,
@@ -43,73 +56,27 @@ export function SearchableSelect({
   createLabel?: string;
   renderOption?: (option: SearchableSelectOption) => React.ReactNode;
   renderSelected?: (option: SearchableSelectOption | undefined) => React.ReactNode;
-  /** When set, parent owns search (server-backed). Local fuzzy filter is skipped. */
+  /** When set, parent owns search (server-backed). Local filter is skipped. */
   onQueryChange?: (query: string) => void;
   minQueryLength?: number;
   searchHint?: string;
   searching?: boolean;
 }) {
-  const rootRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [menuPosition, setMenuPosition] = useState<{
-    top: number;
-    left: number;
-    width: number;
-  } | null>(null);
+  const [open, setOpen] = useState(false);
   const serverBacked = Boolean(onQueryChange);
-
-  function closeMenu() {
-    setOpen(false);
-    setQuery("");
-    onQueryChange?.("");
-  }
-
-  useEffect(() => {
-    if (!open) return;
-
-    function updatePosition() {
-      if (!triggerRef.current) return;
-      const rect = triggerRef.current.getBoundingClientRect();
-      setMenuPosition({
-        top: rect.bottom + 4,
-        left: rect.left,
-        width: rect.width,
-      });
-    }
-
-    updatePosition();
-    window.addEventListener("resize", updatePosition);
-    window.addEventListener("scroll", updatePosition, true);
-    return () => {
-      window.removeEventListener("resize", updatePosition);
-      window.removeEventListener("scroll", updatePosition, true);
-    };
-  }, [open]);
 
   const selected = useMemo(
     () => options.find((option) => option.value === value),
     [options, value],
   );
+
   const listOptions = useMemo(() => {
-    if (serverBacked) {
-      if (query.trim().length < minQueryLength) {
-        return selected ? [selected] : [];
-      }
-      return options;
+    if (!serverBacked) return options;
+    if (query.trim().length < minQueryLength) {
+      return selected ? [selected] : [];
     }
-    const lowered = query.trim();
-    if (!lowered) return options;
-    return options
-      .map((option) => ({
-        option,
-        score: fuzzyScoreHaystack(lowered, [option.label, option.description, option.keywords]),
-      }))
-      .filter((row) => row.score > 0)
-      .sort((a, b) => b.score - a.score || a.option.label.localeCompare(b.option.label))
-      .map((row) => row.option);
+    return options;
   }, [minQueryLength, options, query, selected, serverBacked]);
 
   const normalizedQuery = query.trim().toLowerCase();
@@ -118,116 +85,105 @@ export function SearchableSelect({
     normalizedQuery.length > 0 &&
     !options.some((option) => option.label.trim().toLowerCase() === normalizedQuery);
 
+  const showSearchHint = serverBacked && query.trim().length < minQueryLength && !searching;
+  const emptyMessage = searching
+    ? "Searching…"
+    : showSearchHint
+      ? (searchHint ?? `Type at least ${minQueryLength} characters to search`)
+      : "No matches.";
+
   function updateQuery(next: string) {
     setQuery(next);
     onQueryChange?.(next);
   }
 
-  const showSearchHint = serverBacked && query.trim().length < minQueryLength && !searching;
-  const showEmpty = !searching && !showSearchHint && listOptions.length === 0;
+  function closeAndReset() {
+    setOpen(false);
+    setQuery("");
+    onQueryChange?.("");
+  }
 
   return (
-    <div className="relative w-full min-w-0" ref={rootRef}>
-      <button
-        ref={triggerRef}
-        type="button"
+    <Combobox
+      autoHighlight
+      items={listOptions}
+      value={selected ?? null}
+      onValueChange={(next) => {
+        if (next == null) return;
+        onChange(next.value);
+      }}
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (nextOpen) return;
+        setQuery("");
+        onQueryChange?.("");
+      }}
+      inputValue={query}
+      onInputValueChange={updateQuery}
+      isItemEqualToValue={(a, b) => a.value === b.value}
+      itemToStringLabel={(item) => item.label}
+      filter={serverBacked ? null : matchesQuery}
+    >
+      <ComboboxTrigger
+        aria-label={emptyLabel ?? placeholder}
         data-testid="searchable-select-trigger"
-        className={cn(filterControlClassName, "flex w-full min-w-0 items-center justify-between gap-2 text-left")}
-        onClick={() => setOpen((prev) => !prev)}
+        className={cn(
+          filterControlClassName,
+          "flex w-full min-w-0 items-center justify-between gap-2 text-left",
+        )}
       >
-        <span className="min-w-0 flex-1 overflow-hidden">
-          {renderSelected ? (
-            renderSelected(selected)
-          ) : (
-            <span className="block truncate">{selected?.label ?? emptyLabel ?? "Select option"}</span>
+        <ComboboxValue>
+          {(selectedValue: SearchableSelectOption | null) => {
+            const option = selectedValue ?? undefined;
+            if (renderSelected) return renderSelected(option);
+            return (
+              <span className="block min-w-0 flex-1 truncate">
+                {option?.label ?? emptyLabel ?? "Select option"}
+              </span>
+            );
+          }}
+        </ComboboxValue>
+      </ComboboxTrigger>
+      <ComboboxContent
+        data-testid="searchable-select-menu"
+        className="min-w-[min(100%,20rem)]"
+      >
+        <ComboboxInput showTrigger={false} placeholder={placeholder} />
+        {searching ? (
+          <p className="px-2 py-1 text-xs text-muted-foreground">Searching…</p>
+        ) : null}
+        <ComboboxEmpty>{emptyMessage}</ComboboxEmpty>
+        <ComboboxList>
+          {(item: SearchableSelectOption) => (
+            <ComboboxItem key={optionKey(item)} value={item}>
+              {renderOption ? (
+                renderOption(item)
+              ) : (
+                <div className="min-w-0">
+                  <p className="truncate">{item.label}</p>
+                  {item.description ? (
+                    <p className="truncate text-xs text-muted-foreground">{item.description}</p>
+                  ) : null}
+                </div>
+              )}
+            </ComboboxItem>
           )}
-        </span>
-        <CaretDownIcon className="ml-2 size-4 shrink-0 opacity-50" aria-hidden />
-      </button>
-      {open && menuPosition
-        ? createPortal(
-            <FocusScope asChild loop>
-              <DismissableLayer
-                ref={menuRef}
-                data-testid="searchable-select-menu"
-                className="z-[100] rounded-none border border-input bg-background p-2 shadow-md"
-                style={{
-                  position: "fixed",
-                  top: menuPosition.top,
-                  left: menuPosition.left,
-                  width: Math.max(menuPosition.width, 320),
-                }}
-                onPointerDownOutside={(event) => {
-                  const target = event.target as Node;
-                  if (rootRef.current?.contains(target)) {
-                    // Let the trigger's own onClick handle the toggle.
-                    event.preventDefault();
-                  }
-                }}
-                onDismiss={closeMenu}
-              >
-              <Input
-                value={query}
-                onChange={(event) => updateQuery(event.target.value)}
-                placeholder={placeholder}
-                autoFocus
-              />
-              <div className="mt-2 max-h-52 overflow-auto">
-                {searching ? (
-                  <p className="px-2 py-1 text-xs text-muted-foreground">Searching…</p>
-                ) : null}
-                {showSearchHint ? (
-                  <p className="px-2 py-1 text-xs text-muted-foreground">
-                    {searchHint ?? `Type at least ${minQueryLength} characters to search`}
-                  </p>
-                ) : null}
-                {!searching && listOptions.length ? (
-                  listOptions.map((option) => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      className="block w-full rounded-none px-2 py-1 text-left text-sm break-words hover:bg-muted"
-                      onClick={() => {
-                        onChange(option.value);
-                        setOpen(false);
-                        updateQuery("");
-                      }}
-                    >
-                      {renderOption ? (
-                        renderOption(option)
-                      ) : (
-                        <div className="min-w-0">
-                          <p className="truncate">{option.label}</p>
-                          {option.description ? (
-                            <p className="truncate text-xs text-muted-foreground">{option.description}</p>
-                          ) : null}
-                        </div>
-                      )}
-                    </button>
-                  ))
-                ) : null}
-                {showEmpty ? (
-                  <p className="px-2 py-1 text-xs text-muted-foreground">No matches.</p>
-                ) : null}
-                {canCreate ? (
-                  <button
-                    type="button"
-                    className="mt-1 block w-full rounded-none border border-input px-2 py-1 text-left text-sm hover:bg-muted"
-                    onClick={() => {
-                      onCreate?.(query.trim());
-                      setOpen(false);
-                      updateQuery("");
-                    }}
-                  >
-                    {createLabel ?? "New"}: &quot;{query.trim()}&quot;
-                  </button>
-                ) : null}
-              </div>
-              </DismissableLayer>
-            </FocusScope>,
-            document.body,
-          )
-        : null}
-    </div>
+        </ComboboxList>
+        {canCreate ? (
+          <button
+            type="button"
+            className="m-1 mt-0 block w-[calc(100%-0.5rem)] rounded-none border border-input px-2 py-1 text-left text-sm hover:bg-muted"
+            onClick={() => {
+              const name = query.trim();
+              closeAndReset();
+              onCreate?.(name);
+            }}
+          >
+            {createLabel ?? "New"}: &quot;{query.trim()}&quot;
+          </button>
+        ) : null}
+      </ComboboxContent>
+    </Combobox>
   );
 }

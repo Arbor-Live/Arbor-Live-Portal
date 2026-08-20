@@ -3,46 +3,68 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery } from "convex/react";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { FormProvider, useForm, type Resolver } from "react-hook-form";
+import { FormProvider, useForm, useFormContext, type Resolver } from "react-hook-form";
+import type { QuestionnaireItemDefinition } from "@shadcn/react/questionnaire";
 import { api } from "@/lib/convex-api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { PublicMarketingLayout } from "@/components/public/public-marketing-layout";
 import { submitOpenMicSignup } from "@/app/(site)/open-mic/actions";
-import { RequestWizardNav } from "@/components/request/request-wizard-nav";
 import { RequestWizardShell } from "@/components/request/request-wizard-shell";
-import { MultiChoiceField } from "@/components/request/fields/multi-choice-field";
 import { TextField } from "@/components/request/fields/text-field";
 import { TextareaField } from "@/components/request/fields/textarea-field";
 import { OpenMicIntroSlide } from "@/components/request/open-mic-intro-slide";
+import {
+  Questionnaire,
+  QuestionnaireChoice,
+  QuestionnaireChoices,
+  QuestionnaireDescription,
+  QuestionnaireError,
+  QuestionnaireItem,
+  QuestionnaireTitle,
+} from "@/components/ui/questionnaire";
+import {
+  QUESTIONNAIRE_CHOICE_CLASSNAME,
+  QUESTIONNAIRE_ITEM_CLASSNAME,
+  QUESTIONNAIRE_TITLE_CLASSNAME,
+  handleQuestionnaireEnter,
+  MarkStepAnswered,
+  QuestionnaireWizardFooter,
+  QuestionnaireWizardProgress,
+} from "@/components/ui/questionnaire-wizard";
 import { formatDateTime } from "@/lib/format";
 import {
   OPEN_MIC_EQUIPMENT_OPTIONS,
-  OPEN_MIC_INTRO_STEP,
   openMicSignupDefaultValues,
   openMicSignupSchema,
   getActiveSteps,
   type OpenMicSignupFormValues,
-  type OpenMicStepConfig,
   type OpenMicStepId,
 } from "@/lib/validations/open-mic";
 
-const spring = { type: "spring" as const, stiffness: 380, damping: 36 };
+const QUESTION_STEPS = [
+  "intro",
+  "welcome",
+  "name",
+  "email",
+  "whatYoureDoing",
+  "equipment",
+  "bgMusicLink",
+  "notes",
+] as const satisfies readonly OpenMicStepId[];
+
+type QuestionStepId = (typeof QUESTION_STEPS)[number];
 
 function StepSubheader({ text }: { text: string }) {
   const paragraphs = text.split("\n\n");
   return (
-    <div className="space-y-3 text-sm text-foreground/70">
-      {paragraphs.map((paragraph, index) => (
-        <p key={index}>{paragraph}</p>
-      ))}
-    </div>
+    <QuestionnaireDescription className="text-sm/relaxed text-foreground/70 whitespace-pre-line">
+      {paragraphs.join("\n\n")}
+    </QuestionnaireDescription>
   );
 }
 
 export function OpenMicWizard() {
-  const prefersReducedMotion = useReducedMotion();
   const marketingSettings = useQuery(api.marketingSettings.get, {});
   const activeNight = useQuery(api.openMic.getActiveNight, {});
   const showIntro = marketingSettings?.openMicMarketingBoost === true;
@@ -53,77 +75,94 @@ export function OpenMicWizard() {
     mode: "onTouched",
   });
 
-  const [stepIndex, setStepIndex] = useState(0);
-  const [direction, setDirection] = useState(1);
+  const [item, setItem] = useState<QuestionStepId | null>(null);
+  const resolvedItem: QuestionStepId = item ?? (showIntro ? "intro" : "welcome");
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [confirmation, setConfirmation] = useState<{ nightTitle: string; nightStartAt: number } | null>(null);
-  const directionRef = useRef(1);
+  const [isAdvancing, setIsAdvancing] = useState(false);
+  const [confirmation, setConfirmation] = useState<{
+    nightTitle: string;
+    nightStartAt: number;
+  } | null>(null);
+  const didFocusActiveItem = useRef(false);
 
   // eslint-disable-next-line react-hooks/incompatible-library -- React Hook Form watch() is intentionally used for step routing
   const equipment = form.watch("equipment");
   const showBgMusicLink = equipment.includes("Background Music");
 
-  const baseSteps = useMemo(
+  const activeSteps = useMemo(
     () => getActiveSteps({ showBgMusicLink }),
     [showBgMusicLink],
   );
 
-  const activeSteps = useMemo<OpenMicStepConfig[]>(
-    () => (showIntro ? [OPEN_MIC_INTRO_STEP, ...baseSteps] : baseSteps),
-    [showIntro, baseSteps],
+  const items = useMemo<QuestionnaireItemDefinition[]>(
+    () =>
+      QUESTION_STEPS.map((name) => {
+        const step = activeSteps.find((entry) => entry.id === name);
+        const introDisabled = name === "intro" && !showIntro;
+        return {
+          name,
+          required: name !== "equipment" && Boolean(step || name === "intro"),
+          disabled: introDisabled || (name !== "intro" && !step),
+          choices:
+            name === "equipment"
+              ? OPEN_MIC_EQUIPMENT_OPTIONS.map((value) => ({ value }))
+              : undefined,
+        };
+      }),
+    [activeSteps, showIntro],
   );
 
-  const currentStep = activeSteps[stepIndex] ?? activeSteps[0]!;
+  useEffect(() => {
+    if (didFocusActiveItem.current) return;
+    const active = document.querySelector<HTMLElement>(
+      "[data-slot=questionnaire-item][data-active]",
+    );
+    if (!active) return;
+    active.focus();
+    didFocusActiveItem.current = true;
+  }, [resolvedItem]);
 
-  const progressSteps = activeSteps.filter(
-    (step) => step.id !== "intro" && step.id !== "welcome" && step.id !== "thankYou",
+  const handleItemChange = useCallback(
+    async (next: string) => {
+      setSubmitError(null);
+      const enabled = QUESTION_STEPS.filter((name) => {
+        if (name === "intro") return showIntro;
+        return Boolean(activeSteps.find((step) => step.id === name));
+      });
+      const currentIndex = enabled.indexOf(resolvedItem);
+      const requestedIndex = enabled.indexOf(next as QuestionStepId);
+      const goingBack = requestedIndex !== -1 && requestedIndex < currentIndex;
+
+      if (goingBack) {
+        setItem(next as QuestionStepId);
+        return;
+      }
+
+      const step = activeSteps.find((entry) => entry.id === resolvedItem);
+      if (resolvedItem !== "intro" && step?.fields.length && !step.skippable) {
+        const valid = await form.trigger(step.fields);
+        if (!valid) return;
+      }
+
+      setItem(next as QuestionStepId);
+    },
+    [activeSteps, form, resolvedItem, showIntro],
   );
-  const progressIndex = Math.max(
-    0,
-    progressSteps.findIndex((step) => step.id === currentStep.id),
-  );
-  const progressPercent =
-    currentStep.id === "intro" || currentStep.id === "welcome"
-      ? 0
-      : currentStep.id === "thankYou"
-        ? 100
-        : ((progressIndex + 1) / progressSteps.length) * 100;
 
-  const slideVariants = useMemo(
-    () => ({
-      enter: (dir: number) =>
-        prefersReducedMotion ? { opacity: 0 } : { opacity: 0, x: dir > 0 ? 40 : -40, scale: 0.98 },
-      center: prefersReducedMotion ? { opacity: 1 } : { opacity: 1, x: 0, scale: 1 },
-      exit: (dir: number) =>
-        prefersReducedMotion ? { opacity: 0 } : { opacity: 0, x: dir > 0 ? -40 : 40, scale: 0.98 },
-    }),
-    [prefersReducedMotion],
-  );
-
-  const advance = useCallback(() => {
-    directionRef.current = 1;
-    setDirection(1);
-    setStepIndex((index) => Math.min(index + 1, activeSteps.length - 1));
-  }, [activeSteps.length]);
-
-  const goNext = useCallback(async () => {
-    setSubmitError(null);
-    const step = activeSteps[stepIndex]!;
-
-    if (step.id === "intro" || step.id === "welcome") {
-      advance();
-      return;
-    }
-
-    if (step.fields.length > 0 && !step.skippable) {
-      const valid = await form.trigger(step.fields);
-      if (!valid) return;
-    }
-
-    if (step.id === "notes") {
+  const handleSubmit = useCallback(
+    async (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      setSubmitError(null);
+      const notesStep = activeSteps.find((step) => step.id === "notes");
+      if (notesStep?.fields.length) {
+        const valid = await form.trigger(notesStep.fields);
+        if (!valid) return;
+      }
       if (!activeNight) {
-        setSubmitError("No upcoming open mic night is open for sign-ups right now. Check back soon!");
+        setSubmitError(
+          "No upcoming open mic night is open for sign-ups right now. Check back soon!",
+        );
         return;
       }
       setIsSubmitting(true);
@@ -139,30 +178,11 @@ export function OpenMicWizard() {
         return;
       }
       setConfirmation({ nightTitle: result.nightTitle, nightStartAt: result.nightStartAt });
-    }
+    },
+    [activeNight, activeSteps, form],
+  );
 
-    advance();
-  }, [activeSteps, activeNight, advance, form, stepIndex]);
-
-  const goBack = useCallback(() => {
-    if (stepIndex === 0 || currentStep.id === "thankYou") return;
-    directionRef.current = -1;
-    setDirection(-1);
-    setStepIndex((index) => Math.max(index - 1, 0));
-  }, [currentStep.id, stepIndex]);
-
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key !== "Enter" || event.shiftKey) return;
-      const target = event.target as HTMLElement | null;
-      if (target?.tagName === "TEXTAREA") return;
-      if (currentStep.id === "thankYou") return;
-      event.preventDefault();
-      void goNext();
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [currentStep.id, goNext]);
+  const hideFooter = Boolean(confirmation) || resolvedItem === "intro";
 
   if (activeNight === undefined) {
     return (
@@ -207,38 +227,45 @@ export function OpenMicWizard() {
 
   return (
     <PublicMarketingLayout hideFooter>
-      <RequestWizardShell
-        eyebrow={`Open Mic sign-up · ${activeNight.title}`}
-        meta={formatDateTime(activeNight.startAt)}
-        progressPercent={progressPercent}
-        footer={
-          currentStep.id !== "thankYou" && currentStep.id !== "intro" ? (
-            <RequestWizardNav
-              showBack={stepIndex > 0}
-              showNext
-              nextLabel={currentStep.id === "notes" ? "Sign me up" : "Next"}
-              isSubmitting={isSubmitting}
-              skippable={currentStep.skippable}
-              onBack={goBack}
-              onNext={() => void goNext()}
-              onSkip={() => {
-                directionRef.current = 1;
-                setDirection(1);
-                setStepIndex((index) => Math.min(index + 1, activeSteps.length - 1));
-              }}
-            />
-          ) : null
-        }
-      >
-        <FormProvider {...form}>
-          <form
-            className="flex min-h-0 w-full flex-1 flex-col"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void goNext();
-            }}
+      <FormProvider {...form}>
+        <Questionnaire
+          className="flex min-h-0 w-full flex-1 flex-col gap-0"
+          items={items}
+          item={resolvedItem}
+          shortcuts="letters"
+          onItemChange={(next) => {
+            setIsAdvancing(true);
+            void handleItemChange(next).finally(() => setIsAdvancing(false));
+          }}
+          onSubmit={(event) => void handleSubmit(event)}
+          onKeyDown={handleQuestionnaireEnter}
+        >
+          <RequestWizardShell
+            eyebrow={`Open Mic sign-up · ${activeNight.title}`}
+            meta={formatDateTime(activeNight.startAt)}
+            progress={
+              <QuestionnaireWizardProgress
+                complete={Boolean(confirmation)}
+                label="Open Mic sign-up progress"
+              />
+            }
+            footer={
+              hideFooter ? null : (
+                <QuestionnaireWizardFooter
+                  disabled={isSubmitting || isAdvancing}
+                  isSubmitting={isSubmitting}
+                  submitLabel="Sign me up"
+                />
+              )
+            }
           >
-            <input type="text" tabIndex={-1} autoComplete="off" className="hidden" {...form.register("website")} />
+            <input
+              type="text"
+              tabIndex={-1}
+              autoComplete="off"
+              className="hidden"
+              {...form.register("website")}
+            />
 
             <div className="flex-1 overflow-y-auto px-4 py-8 sm:px-6">
               {submitError ? (
@@ -247,61 +274,116 @@ export function OpenMicWizard() {
                 </Alert>
               ) : null}
 
-              <AnimatePresence mode="wait" custom={direction}>
-                <motion.div
-                  key={currentStep.id}
-                  custom={direction}
-                  variants={slideVariants}
-                  initial="enter"
-                  animate="center"
-                  exit="exit"
-                  transition={spring}
-                  className="space-y-6 border border-border/50 bg-background/70 p-5 shadow-[0_8px_24px_rgba(0,0,0,0.06)] backdrop-blur-xl sm:p-6"
-                >
-                  {currentStep.id === "intro" ? (
-                    <OpenMicIntroSlide onContinue={() => void goNext()} />
-                  ) : (
-                    <div className="space-y-6">
-                      <div className="space-y-3">
-                        <motion.h1
-                          className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl"
-                          initial={prefersReducedMotion ? false : { opacity: 0, y: 8 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: 0.05, ...spring }}
-                        >
-                          {currentStep.headline}
-                        </motion.h1>
-                        {currentStep.subheader ? <StepSubheader text={currentStep.subheader} /> : null}
-                      </div>
-
-                      <StepBody
-                        stepId={currentStep.id}
-                        confirmation={confirmation}
-                      />
+              {confirmation ? (
+                <div className={QUESTIONNAIRE_ITEM_CLASSNAME}>
+                  <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
+                    You&apos;re on the list!
+                  </h1>
+                  <div className="space-y-4 text-sm text-foreground/70">
+                    <p>You&apos;re on the list — we&apos;ll call you up when it&apos;s your turn.</p>
+                    <div className="border border-border/50 bg-background/50 p-4 text-foreground">
+                      <p className="font-medium">{confirmation.nightTitle}</p>
+                      <p className="mt-1 text-foreground/70">
+                        {formatDateTime(confirmation.nightStartAt)}
+                      </p>
                     </div>
-                  )}
-                </motion.div>
-              </AnimatePresence>
+                    <p>
+                      Bring friends, show up on time, and check in with the crew when you arrive so we
+                      know you&apos;re here.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                QUESTION_STEPS.map((name) => {
+                  const step =
+                    name === "intro"
+                      ? { id: "intro" as const, headline: "", subheader: undefined }
+                      : activeSteps.find((entry) => entry.id === name);
+                  const introDisabled = name === "intro" && !showIntro;
+                  const disabled = introDisabled || (name !== "intro" && !step);
+                  const required = name !== "equipment" && !disabled;
+                  const fieldError = stepFieldError(form, name);
+
+                  return (
+                    <QuestionnaireItem
+                      key={name}
+                      name={name}
+                      required={required}
+                      disabled={disabled}
+                      multiple={name === "equipment"}
+                      invalid={Boolean(fieldError)}
+                      className={QUESTIONNAIRE_ITEM_CLASSNAME}
+                    >
+                      {name === "intro" ? (
+                        <OpenMicIntroSlide onContinue={() => setItem("welcome")} />
+                      ) : (
+                        <>
+                          <div className="space-y-3">
+                            <QuestionnaireTitle className={QUESTIONNAIRE_TITLE_CLASSNAME}>
+                              {step && "headline" in step ? step.headline : ""}
+                            </QuestionnaireTitle>
+                            {step && "subheader" in step && step.subheader ? (
+                              <StepSubheader text={step.subheader} />
+                            ) : null}
+                          </div>
+                          <StepBody stepId={name} />
+                          {name !== "equipment" ? <MarkStepAnswered /> : null}
+                          <QuestionnaireError className="text-sm">{fieldError}</QuestionnaireError>
+                        </>
+                      )}
+                      {name === "intro" ? <MarkStepAnswered /> : null}
+                    </QuestionnaireItem>
+                  );
+                })
+              )}
             </div>
-          </form>
-        </FormProvider>
-      </RequestWizardShell>
+          </RequestWizardShell>
+        </Questionnaire>
+      </FormProvider>
     </PublicMarketingLayout>
   );
 }
 
-function StepBody({
-  stepId,
-  confirmation,
-}: {
-  stepId: OpenMicStepId;
-  confirmation: { nightTitle: string; nightStartAt: number } | null;
-}) {
+function stepFieldError(
+  form: ReturnType<typeof useForm<OpenMicSignupFormValues>>,
+  stepId: OpenMicStepId,
+) {
+  const errors = form.formState.errors;
+  switch (stepId) {
+    case "name":
+      return errors.name?.message;
+    case "email":
+      return errors.email?.message;
+    case "whatYoureDoing":
+      return errors.whatTheyreDoing?.message;
+    case "equipment":
+      return errors.equipment?.message;
+    case "bgMusicLink":
+      return errors.bgMusicLink?.message;
+    case "notes":
+      return errors.notes?.message;
+    default:
+      return undefined;
+  }
+}
+
+function StepBody({ stepId }: { stepId: OpenMicStepId }) {
+  const form = useFormContext<OpenMicSignupFormValues>();
+  const values = form.watch();
+
   switch (stepId) {
     case "name":
       return <TextField name="name" label="Your name" placeholder="First and last name" autoFocus />;
     case "email":
-      return <TextField name="email" label="Stanford email" placeholder="you@stanford.edu" type="email" autoFocus />;
+      return (
+        <TextField
+          name="email"
+          label="Stanford email"
+          placeholder="you@stanford.edu"
+          type="email"
+          autoFocus
+        />
+      );
     case "whatYoureDoing":
       return (
         <TextareaField
@@ -312,7 +394,27 @@ function StepBody({
         />
       );
     case "equipment":
-      return <MultiChoiceField name="equipment" options={OPEN_MIC_EQUIPMENT_OPTIONS} />;
+      return (
+        <QuestionnaireChoices>
+          {OPEN_MIC_EQUIPMENT_OPTIONS.map((option) => (
+            <QuestionnaireChoice
+              key={option}
+              value={option}
+              className={QUESTIONNAIRE_CHOICE_CLASSNAME}
+              checked={values.equipment.includes(option)}
+              onChange={(event) => {
+                const selected = event.currentTarget.checked;
+                const next = selected
+                  ? Array.from(new Set([...values.equipment, option]))
+                  : values.equipment.filter((item) => item !== option);
+                form.setValue("equipment", next, { shouldDirty: true, shouldValidate: true });
+              }}
+            >
+              {option}
+            </QuestionnaireChoice>
+          ))}
+        </QuestionnaireChoices>
+      );
     case "bgMusicLink":
       return (
         <TextField
@@ -331,22 +433,6 @@ function StepBody({
           placeholder="Pronouns, set length, anything we should know..."
           autoFocus
         />
-      );
-    case "thankYou":
-      return (
-        <div className="space-y-4 text-sm text-foreground/70">
-          <p>You&apos;re on the list — we&apos;ll call you up when it&apos;s your turn.</p>
-          {confirmation ? (
-            <div className="border border-border/50 bg-background/50 p-4 text-foreground">
-              <p className="font-medium">{confirmation.nightTitle}</p>
-              <p className="mt-1 text-foreground/70">{formatDateTime(confirmation.nightStartAt)}</p>
-            </div>
-          ) : null}
-          <p>
-            Bring friends, show up on time, and check in with the crew when you arrive so we know
-            you&apos;re here.
-          </p>
-        </div>
       );
     default:
       return null;

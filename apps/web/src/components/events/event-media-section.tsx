@@ -15,6 +15,7 @@ import { MediaGallery } from "@/components/media/media-gallery";
 import { MediaAlbumLink } from "@/components/media/media-album-link";
 import { MediaUploadDropzone } from "@/components/media/media-upload-dropzone";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { notify } from "@/lib/notify";
 
 type CrewMediaStatus = "pending" | "uploaded" | "no_media";
 
@@ -47,7 +48,6 @@ export function EventMediaSection({ eventId }: { eventId: Id<"events"> }) {
   const ensureUploadAlbum = useAction(api.immichEnsure.ensureUploadAlbum);
 
   const [ensuring, setEnsuring] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
   const [albumReady, setAlbumReady] = useState(false);
 
   useEffect(() => {
@@ -58,7 +58,7 @@ export function EventMediaSection({ eventId }: { eventId: Id<"events"> }) {
         await ensureUploadAlbum({ targetType: "event", targetId: eventId });
         if (!cancelled) setAlbumReady(true);
       } catch (error) {
-        if (!cancelled) setMessage(getConvexErrorMessage(error));
+        if (!cancelled) notify.error(getConvexErrorMessage(error));
       } finally {
         if (!cancelled) setEnsuring(false);
       }
@@ -93,13 +93,12 @@ export function EventMediaSection({ eventId }: { eventId: Id<"events"> }) {
                 targetId={eventId}
                 disabled={!albumReady}
                 onUploaded={() => {
-                  setMessage("Upload complete.");
+                  notify.success("Upload complete.");
                 }}
               />
               <MediaGallery assets={media?.assets ?? []} />
             </>
           )}
-          {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
         </CardContent>
       </Card>
     </div>

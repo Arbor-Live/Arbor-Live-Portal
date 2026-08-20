@@ -217,7 +217,7 @@ async function createItem(
   },
 ): Promise<Locator> {
   await page.getByRole("button", { name: "New Item", exact: true }).click();
-  const sheet = page.getByRole("dialog");
+  const sheet = page.getByRole("dialog", { name: "Create assets" });
   await expect(sheet).toBeVisible({ timeout: 30_000 });
 
   // Step 1 — Brand & model.

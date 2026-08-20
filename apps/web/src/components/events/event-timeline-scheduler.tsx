@@ -3,11 +3,9 @@
 import { useRef } from "react";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
 import { Button } from "@/components/ui/button";
-import { DateTimePicker } from "@/components/ui/date-time-picker";
+import { DateTimeRangePicker } from "@/components/ui/date-time-picker";
 import { Input } from "@/components/ui/input";
 import {
-  applyScheduleBlockEndChange,
-  applyScheduleBlockStartChange,
   createScheduleBlockDraft,
   getBlockRef,
   sortScheduleBlocksByTime,
@@ -400,7 +398,10 @@ export function EventTimelineScheduler({
       {!readOnly ? (
       <div className="space-y-2">
         {blocks.map((block, index) => (
-          <div key={getBlockRef(block) ?? `block-${index}`} className="grid gap-2 md:grid-cols-7">
+          <div
+            key={getBlockRef(block) ?? `block-${index}`}
+            className="grid items-center gap-2 md:grid-cols-[7rem_minmax(0,8rem)_5.5rem_minmax(0,1fr)_minmax(0,8rem)_auto]"
+          >
             <SearchableSelect
               value={block.blockType}
               onChange={(value) =>
@@ -455,21 +456,15 @@ export function EventTimelineScheduler({
               placeholder="Search day..."
               emptyLabel="Select day"
             />
-            <DateTimePicker
-              value={block.startsAt}
+            <DateTimeRangePicker
+              className="min-w-0"
+              startValue={block.startsAt}
+              endValue={block.endsAt}
               openToDate={anchorStartsAt}
-              onChange={(value) =>
-                emit(blocks.map((row, i) => (i === index ? applyScheduleBlockStartChange(row, value) : row)))
+              onChange={({ start, end }) =>
+                emit(blocks.map((row, i) => (i === index ? { ...row, startsAt: start, endsAt: end } : row)))
               }
-              placeholder="Block start"
-            />
-            <DateTimePicker
-              value={block.endsAt}
-              openToDate={anchorStartsAt}
-              onChange={(value) =>
-                emit(blocks.map((row, i) => (i === index ? applyScheduleBlockEndChange(row, value) : row)))
-              }
-              placeholder="Block end"
+              placeholder="Block start and end"
             />
             <Input
               placeholder="Notes"

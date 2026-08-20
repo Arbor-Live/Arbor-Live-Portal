@@ -7,6 +7,7 @@ import { EventStateBadges } from "@/components/events/event-state-badges";
 import { CrewAvailabilityResponseForm } from "@/components/events/crew-availability-response-form";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { notify } from "@/lib/notify";
 import {
   DEFAULT_AVAILABILITY_WEEKS,
   EXTENDED_AVAILABILITY_WEEKS,
@@ -25,7 +26,6 @@ function initials(name: string) {
 
 export function CrewAvailabilityInbox() {
   const [showExtended, setShowExtended] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
   const [now] = useState(() => Date.now());
 
   const events = useQuery(api.eventCrewAvailability.listForCrewMember, {
@@ -55,8 +55,6 @@ export function CrewAvailabilityInbox() {
           </span>
         ) : null}
       </div>
-
-      {message ? <p className="text-sm text-emerald-700">{message}</p> : null}
 
       {!events ? <p className="text-sm text-muted-foreground">Loading availability events...</p> : null}
 
@@ -179,7 +177,7 @@ export function CrewAvailabilityInbox() {
             eventId={event._id}
             scheduleBlocks={event.scheduleBlocks}
             existingResponse={event.myResponse}
-            onSaved={(savedMessage) => setMessage(savedMessage)}
+            onSaved={(savedMessage) => notify.success(savedMessage)}
           />
         </div>
       ))}
