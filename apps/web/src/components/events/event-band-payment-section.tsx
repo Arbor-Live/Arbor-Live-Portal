@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
+import { addPacificCalendarDays, pacificDateKey } from "@arbor/format";
 import { api, type Id } from "@/lib/convex-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -12,7 +13,7 @@ import { SearchableSelect } from "@/components/inventory/searchable-select";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { notify } from "@/lib/notify";
 import { ArborOnlyGuard } from "@/components/org-context-guard";
-import { formatUsd } from "@/lib/format";
+import { formatUsd, formatDate } from "@/lib/format";
 import { formatBandPayeePayoutMethod } from "@/lib/band-payout-copy";
 
 type PricingMode = "per_member_hourly" | "fixed_total";
@@ -39,6 +40,73 @@ function roleLabel(role: ParticipationRole) {
   return ROLE_OPTIONS.find((row) => row.value === role)?.label ?? role;
 }
 
+/** Number of calendar days (in the portal timezone) the event spans. */
+function getEventDayCount(startAt: number | undefined, endAt: number | undefined) {
+  if (!startAt || !endAt || endAt <= startAt) return 1;
+  const endKey = pacificDateKey(endAt);
+  let cursor = startAt;
+  let count = 1;
+  while (pacificDateKey(cursor) !== endKey && count < 14) {
+    cursor = addPacificCalendarDays(cursor, 1);
+    count += 1;
+  }
+  return count;
+}
+
+/**
+ * Day picker for multi-day events. An empty selection means "all days", but
+ * the last chip can't be deselected so the row never silently widens.
+ */
+function EventDayPicker({
+  eventStartAt,
+  dayCount,
+  selected,
+  onChange,
+  disabled,
+}: {
+  eventStartAt: number;
+  dayCount: number;
+  selected: number[];
+  onChange: (dayIndexes: number[]) => void;
+  disabled?: boolean;
+}) {
+  function toggle(dayIndex: number) {
+    if (selected.includes(dayIndex)) {
+      if (selected.length === 1) {
+        notify.error("A band has to play at least one day.");
+        return;
+      }
+      onChange(selected.filter((day) => day !== dayIndex));
+    } else {
+      onChange([...selected, dayIndex].sort((a, b) => a - b));
+    }
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {Array.from({ length: dayCount }, (_, dayIndex) => {
+        const isSelected = selected.includes(dayIndex);
+        return (
+          <Button
+            key={dayIndex}
+            type="button"
+            size="sm"
+            variant={isSelected ? "default" : "outline"}
+            aria-pressed={isSelected}
+            disabled={disabled}
+            onClick={() => toggle(dayIndex)}
+          >
+            Day {dayIndex + 1}
+            <span className="ml-1.5 font-normal opacity-80">
+              {formatDate(addPacificCalendarDays(eventStartAt, dayIndex))}
+            </span>
+          </Button>
+        );
+      })}
+    </div>
+  );
+}
+
 function defaultRateForBand(
   bands: Array<{ organizationId: string; performerHourlyRateUsd: number }> | undefined,
   organizationId: string,
@@ -50,27 +118,64 @@ function defaultRateForBand(
   return "150";
 }
 
-export function EventBandPaymentSection({ eventId }: { eventId: Id<"events"> }) {
+export function EventBandPaymentSection({
+  eventId,
+  eventStartAt,
+  eventEndAt,
+}: {
+  eventId: Id<"events">;
+  eventStartAt?: number;
+  eventEndAt?: number;
+}) {
   return (
     <ArborOnlyGuard>
-      <EventBandsPerformersPanel eventId={eventId} />
+      <EventBandsPerformersPanel
+        eventId={eventId}
+        eventStartAt={eventStartAt}
+        eventEndAt={eventEndAt}
+      />
     </ArborOnlyGuard>
   );
 }
 
-function EventBandsPerformersPanel({ eventId }: { eventId: Id<"events"> }) {
+function EventBandsPerformersPanel({
+  eventId,
+  eventStartAt,
+  eventEndAt,
+}: {
+  eventId: Id<"events">;
+  eventStartAt?: number;
+  eventEndAt?: number;
+}) {
   const performers = useQuery(api.eventBands.listPerformersForEvent, { eventId });
   const removeParticipation = useMutation(api.eventBands.removeParticipation);
   const updateRole = useMutation(api.eventBands.updateParticipationRole);
+  const setParticipationDays = useMutation(api.eventBands.setParticipationDays);
   const [editingPaymentForOrg, setEditingPaymentForOrg] = useState<string | null>(null);
   const [addingBand, setAddingBand] = useState(false);
   const [busyOrgId, setBusyOrgId] = useState<string | null>(null);
+  const dayCount = getEventDayCount(eventStartAt, eventEndAt);
 
   const totalBandsCost = useMemo(
     () =>
       (performers ?? []).reduce((sum, row) => sum + (row.payment?.totalUsd ?? 0), 0),
     [performers],
   );
+
+  async function onDaysChange(
+    participationId: Id<"eventBandParticipations">,
+    organizationId: string,
+    dayIndexes: number[],
+  ) {
+    setBusyOrgId(organizationId);
+    try {
+      await setParticipationDays({ participationId, dayIndexes });
+    } catch (error) {
+      notify.error(getConvexErrorMessage(error));
+    } finally {
+      setBusyOrgId(null);
+    }
+  }
 
   async function onRemove(organizationId: string) {
     setBusyOrgId(organizationId);
@@ -202,6 +307,24 @@ function EventBandsPerformersPanel({ eventId }: { eventId: Id<"events"> }) {
                   </div>
                 </div>
 
+                {dayCount > 1 && eventStartAt ? (
+                  <div className="space-y-1 border-t pt-2">
+                    <Label className="text-xs text-muted-foreground">Plays</Label>
+                    <EventDayPicker
+                      eventStartAt={eventStartAt}
+                      dayCount={dayCount}
+                      selected={
+                        performer.dayIndexes ??
+                        Array.from({ length: dayCount }, (_, dayIndex) => dayIndex)
+                      }
+                      onChange={(days) =>
+                        void onDaysChange(performer.participationId, performer.organizationId, days)
+                      }
+                      disabled={busyOrgId === performer.organizationId}
+                    />
+                  </div>
+                ) : null}
+
                 {editingPaymentForOrg === performer.organizationId ? (
                   <EventBandPaymentForm
                     key={`${performer.organizationId}-payment`}
@@ -223,6 +346,8 @@ function EventBandsPerformersPanel({ eventId }: { eventId: Id<"events"> }) {
         {addingBand ? (
           <AddBandForm
             eventId={eventId}
+            eventStartAt={eventStartAt}
+            dayCount={dayCount}
             excludedOrganizationIds={performers.map((row) => row.organizationId)}
             onSaved={() => setAddingBand(false)}
             onCancel={() => setAddingBand(false)}
@@ -240,11 +365,15 @@ function EventBandsPerformersPanel({ eventId }: { eventId: Id<"events"> }) {
 
 function AddBandForm({
   eventId,
+  eventStartAt,
+  dayCount,
   excludedOrganizationIds,
   onSaved,
   onCancel,
 }: {
   eventId: Id<"events">;
+  eventStartAt?: number;
+  dayCount: number;
   excludedOrganizationIds: string[];
   onSaved: () => void;
   onCancel: () => void;
@@ -254,6 +383,9 @@ function AddBandForm({
   const [organizationId, setOrganizationId] = useState("");
   const [role, setRole] = useState<ParticipationRole>("headliner");
   const [busy, setBusy] = useState(false);
+  const [selectedDays, setSelectedDays] = useState<number[]>(() =>
+    Array.from({ length: Math.max(1, dayCount) }, (_, dayIndex) => dayIndex),
+  );
 
   const bandOptions = useMemo(
     () =>
@@ -273,7 +405,12 @@ function AddBandForm({
     }
     setBusy(true);
     try {
-      await addParticipation({ eventId, organizationId, role });
+      await addParticipation({
+        eventId,
+        organizationId,
+        role,
+        dayIndexes: selectedDays.length === Math.max(1, dayCount) ? undefined : selectedDays,
+      });
       onSaved();
     } catch (error) {
       notify.error(getConvexErrorMessage(error));
@@ -306,6 +443,18 @@ function AddBandForm({
             emptyLabel="Role"
           />
         </div>
+        {dayCount > 1 && eventStartAt ? (
+          <div className="space-y-1 md:col-span-2">
+            <Label>Plays</Label>
+            <EventDayPicker
+              eventStartAt={eventStartAt}
+              dayCount={dayCount}
+              selected={selectedDays}
+              onChange={setSelectedDays}
+              disabled={busy}
+            />
+          </div>
+        ) : null}
       </div>
       <div className="flex flex-wrap gap-2">
         <Button type="button" onClick={() => void onSave()} disabled={busy}>

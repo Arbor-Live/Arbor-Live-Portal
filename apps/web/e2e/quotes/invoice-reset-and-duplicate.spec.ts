@@ -151,6 +151,7 @@ test.describe("invoice approval reset and duplicate", () => {
     );
     expect(originalTotals.lineItems).toHaveLength(1);
 
+    await page.getByRole("button", { name: "More actions" }).click();
     await page.getByTestId("invoice-duplicate").click();
     // `router.push`, so poll the URL rather than waiting on a load event.
     await expect

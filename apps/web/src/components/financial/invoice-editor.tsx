@@ -47,7 +47,7 @@ import {
   type InvoiceCrewRow,
 } from "@/lib/invoice-crew-from-event";
 import type { SeriesShiftTemplateDraft } from "@/lib/event-series-shifts";
-import { ArrowsClockwiseIcon, CaretDownIcon, CopyIcon } from "@phosphor-icons/react";
+import { ArrowsClockwiseIcon, CaretDownIcon, ArrowSquareOutIcon, CopyIcon, DotsThreeIcon, ProhibitIcon, TrashIcon } from "@phosphor-icons/react";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { useAppDialog } from "@/components/ui/app-dialog";
 import { notify } from "@/lib/notify";
@@ -189,6 +189,7 @@ export function InvoiceEditor({
   const convex = useConvex();
   const createDraft = useMutation(api.invoices.createDraft);
   const duplicateInvoice = useMutation(api.invoices.duplicate);
+  const voidInvoiceMutation = useMutation(api.invoices.voidInvoice);
   const updateDraft = useMutation(api.invoices.updateDraft);
   const recalculateSeriesEquipmentLines = useMutation(api.invoices.recalculateSeriesEquipmentLines);
   const markReadyForClientReview = useMutation(api.invoices.markReadyForClientReview);
@@ -1402,6 +1403,22 @@ export function InvoiceEditor({
   }, [draftSignature, activeInvoiceId, invoiceFieldsHydrated, editorBaselineReady, isDraftDirty, saving, autoSaveState]);
 
   const isRequestLinkedQuote = Boolean(invoiceData?.invoice?.sourceEventRequestId);
+  const isVoided = invoiceData?.invoice?.status === "void";
+
+  async function onVoidInvoice() {
+    if (!activeInvoiceId) return;
+    const confirmed = window.confirm(
+      "Void this quote? Linked events will be cancelled and removed from lists. This cannot be undone.",
+    );
+    if (!confirmed) return;
+    try {
+      await voidInvoiceMutation({ id: activeInvoiceId });
+      router.push("/dashboard/financial-hub/invoices");
+    } catch (error) {
+      notify.error(getConvexErrorMessage(error));
+    }
+  }
+
   const requestPortalReady = Boolean(invoiceData?.invoice?.clientReviewReadyAt);
   const quoteReadySubjectPreview = (() => {
     const eventName = sourceRequest?.eventName?.trim();
@@ -1420,21 +1437,40 @@ export function InvoiceEditor({
 
   return (
     <div className="mx-auto max-w-7xl space-y-4 pb-20">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{activeInvoiceId ? "Edit Invoice" : "Create Invoice"}</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-semibold tracking-tight">{activeInvoiceId ? "Edit Invoice" : "Create Invoice"}</h1>
+            {isVoided ? (
+              <span
+                data-testid="invoice-void-badge"
+                className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground"
+              >
+                Void
+              </span>
+            ) : null}
+          </div>
           <p className="text-sm text-muted-foreground">Build invoice sections and download a PDF when ready.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2">
           {linkedDayEvents.length === 1 ? (
-            <Button type="button" variant="outline" asChild>
-              <Link href={`/dashboard/events/${linkedDayEvents[0]._id}`}>Open Linked Event</Link>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-sm"
+              asChild
+              aria-label="Open linked event"
+              title="Open linked event"
+            >
+              <Link href={`/dashboard/events/${linkedDayEvents[0]._id}`}>
+                <ArrowSquareOutIcon />
+              </Link>
             </Button>
           ) : linkedDayEvents.length > 1 ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button type="button" variant="outline">
-                  Linked Events ({linkedDayEvents.length})
+                <Button type="button" variant="outline" size="sm">
+                  Events ({linkedDayEvents.length})
                   <CaretDownIcon className="size-4" />
                 </Button>
               </DropdownMenuTrigger>
@@ -1457,26 +1493,52 @@ export function InvoiceEditor({
               invoiceId={activeInvoiceId}
               invoiceNumber={invoiceData?.invoice?.invoiceNumber}
               variant="outline"
+              size="icon-sm"
+              iconOnly
             />
           ) : null}
-          {activeInvoiceId ? (
-            <Button
-              data-testid="invoice-duplicate"
-              type="button"
-              variant="outline"
-              onClick={() =>
-                void duplicateInvoice({ id: activeInvoiceId }).then((result) => {
-                  router.push(`/dashboard/financial-hub/invoices/${result.id}`);
-                })
-              }
-            >
-              Duplicate
-            </Button>
-          ) : null}
-          {activeInvoiceId && isAdmin ? (
-            <Button type="button" variant="destructive" onClick={() => setDeleteOpen(true)}>
-              Delete quote
-            </Button>
+          {activeInvoiceId && !isVoided ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon-sm"
+                  aria-label="More actions"
+                  title="More actions"
+                >
+                  <DotsThreeIcon />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  data-testid="invoice-duplicate"
+                  onClick={() =>
+                    void duplicateInvoice({ id: activeInvoiceId }).then((result) => {
+                      router.push(`/dashboard/financial-hub/invoices/${result.id}`);
+                    })
+                  }
+                >
+                  <CopyIcon /> Duplicate
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  data-testid="invoice-void"
+                  className="text-destructive focus:text-destructive"
+                  onClick={() => void onVoidInvoice()}
+                >
+                  <ProhibitIcon /> Void quote
+                </DropdownMenuItem>
+                {isAdmin ? (
+                  <DropdownMenuItem
+                    data-testid="invoice-delete"
+                    className="text-destructive focus:text-destructive"
+                    onClick={() => setDeleteOpen(true)}
+                  >
+                    <TrashIcon /> Delete permanently
+                  </DropdownMenuItem>
+                ) : null}
+              </DropdownMenuContent>
+            </DropdownMenu>
           ) : null}
         </div>
       </div>

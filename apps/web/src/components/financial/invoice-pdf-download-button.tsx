@@ -2,6 +2,7 @@
 
 import { useAction } from "convex/react";
 import { useState } from "react";
+import { FilePdfIcon } from "@phosphor-icons/react";
 import { api, type Id } from "@/lib/convex-api";
 import { downloadBytes } from "@/lib/download-bytes";
 import { Button } from "@/components/ui/button";
@@ -15,14 +16,16 @@ export function InvoicePdfDownloadButton({
   className,
   label = "Download PDF",
   loadingLabel = "Preparing PDF…",
+  iconOnly = false,
 }: {
   invoiceId: Id<"invoices">;
   invoiceNumber?: string;
   variant?: "default" | "outline" | "ghost" | "secondary" | "destructive" | "link";
-  size?: "default" | "sm" | "lg" | "icon";
+  size?: "default" | "sm" | "lg" | "icon" | "icon-sm";
   className?: string;
   label?: string;
   loadingLabel?: string;
+  iconOnly?: boolean;
 }) {
   const downloadPdf = useAction(api.invoicePdfDownload.downloadByInvoiceId);
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
@@ -39,6 +42,23 @@ export function InvoicePdfDownloadButton({
     } catch {
       setStatus("error");
     }
+  }
+
+  if (iconOnly) {
+    return (
+      <Button
+        type="button"
+        variant={variant}
+        size={size}
+        className={className}
+        aria-label={label}
+        title={status === "error" ? "Unable to download PDF. Please try again." : label}
+        disabled={status === "loading"}
+        onClick={() => void onDownload()}
+      >
+        <FilePdfIcon />
+      </Button>
+    );
   }
 
   return (

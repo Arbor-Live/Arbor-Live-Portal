@@ -33,6 +33,7 @@ const participationRowValidator = v.object({
   eventId: v.id("events"),
   organizationId: v.string(),
   role: participationRoleValue,
+  dayIndexes: v.optional(v.array(v.number())),
   bandName: v.string(),
   createdAt: v.number(),
   updatedAt: v.number(),
@@ -42,6 +43,14 @@ type AuthOrganization = { id?: string; _id?: string; name?: string };
 
 function getRecordId(row: { id?: string; _id?: string } | null | undefined) {
   return row?.id ?? row?._id ?? "";
+}
+
+/** Empty / missing day lists mean "all days" and are stored as absent. */
+function normalizeDayIndexes(dayIndexes: number[] | undefined) {
+  const cleaned = [...new Set(dayIndexes ?? [])]
+    .filter((day) => Number.isInteger(day) && day >= 0)
+    .sort((a, b) => a - b);
+  return cleaned.length > 0 ? cleaned : undefined;
 }
 
 async function getOrganizationName(ctx: QueryCtx | MutationCtx, organizationId: string) {
@@ -93,9 +102,11 @@ export async function upsertEventBandParticipation(
     eventId: Id<"events">;
     organizationId: string;
     role: "headliner" | "support" | "other";
+    dayIndexes?: number[];
   },
 ) {
   const now = Date.now();
+  const dayIndexes = normalizeDayIndexes(args.dayIndexes);
   const existing = await ctx.db
     .query("eventBandParticipations")
     .withIndex("by_eventId_and_organizationId", (q) =>
@@ -103,13 +114,14 @@ export async function upsertEventBandParticipation(
     )
     .unique();
   if (existing) {
-    await ctx.db.patch(existing._id, { role: args.role, updatedAt: now });
+    await ctx.db.patch(existing._id, { role: args.role, dayIndexes, updatedAt: now });
     return existing._id;
   }
   const participationId = await ctx.db.insert("eventBandParticipations", {
     eventId: args.eventId,
     organizationId: args.organizationId,
     role: args.role,
+    dayIndexes,
     createdAt: now,
     updatedAt: now,
   });
@@ -138,6 +150,7 @@ export const listByEvent = query({
         eventId: row.eventId,
         organizationId: row.organizationId,
         role: row.role,
+        dayIndexes: row.dayIndexes,
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
         bandName: await getOrganizationName(ctx, row.organizationId),
@@ -155,6 +168,7 @@ export const listPerformersForEvent = query({
       organizationId: v.string(),
       bandName: v.string(),
       role: participationRoleValue,
+      dayIndexes: v.optional(v.array(v.number())),
       payment: v.union(
         v.null(),
         v.object({
@@ -218,6 +232,7 @@ export const listPerformersForEvent = query({
         organizationId: row.organizationId,
         bandName: await getOrganizationName(ctx, row.organizationId),
         role: row.role,
+        dayIndexes: row.dayIndexes,
         payment: payment
           ? {
               _id: payment._id,
@@ -394,6 +409,7 @@ export const addParticipation = mutation({
     eventId: v.id("events"),
     organizationId: v.string(),
     role: participationRoleValue,
+    dayIndexes: v.optional(v.array(v.number())),
   },
   returns: v.id("eventBandParticipations"),
   handler: async (ctx, args) => {
@@ -404,7 +420,26 @@ export const addParticipation = mutation({
       eventId: args.eventId,
       organizationId: args.organizationId,
       role: args.role,
+      dayIndexes: args.dayIndexes,
     });
+  },
+});
+
+export const setParticipationDays = mutation({
+  args: {
+    participationId: v.id("eventBandParticipations"),
+    dayIndexes: v.array(v.number()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requireArborInternalContext(ctx);
+    const existing = await ctx.db.get(args.participationId);
+    if (!existing) throw new Error("Band participation not found.");
+    await ctx.db.patch(args.participationId, {
+      dayIndexes: normalizeDayIndexes(args.dayIndexes),
+      updatedAt: Date.now(),
+    });
+    return null;
   },
 });
 

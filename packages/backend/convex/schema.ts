@@ -1193,6 +1193,8 @@ export default defineSchema({
     eventId: v.id("events"),
     organizationId: v.string(),
     role: eventBandParticipationRoleValue,
+    /** 0-based day indexes (relative to event start) for multi-day events; absent = all days. */
+    dayIndexes: v.optional(v.array(v.number())),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

@@ -1628,7 +1628,13 @@ export function EventEditor({
       ) : null}
 
       {resolvedActiveTab === "overview" && eventId ? <EventBandRidersSection eventId={eventId} /> : null}
-      {resolvedActiveTab === "overview" && eventId ? <EventBandPaymentSection eventId={eventId} /> : null}
+      {resolvedActiveTab === "overview" && eventId ? (
+        <EventBandPaymentSection
+          eventId={eventId}
+          eventStartAt={eventData?.event.startAt}
+          eventEndAt={eventData?.event.endAt}
+        />
+      ) : null}
 
       {resolvedActiveTab === "overview" && isAdmin && eventId ? (
         <Card>

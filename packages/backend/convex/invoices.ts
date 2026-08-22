@@ -2,8 +2,14 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { components } from "./_generated/api";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
-import { requireArborInternalContext, requireAuth } from "./lib/auth";
-import { syncEventStatusForLinkedInvoice, syncLinkedEventStatusFromInvoice } from "./lib/eventStatus";
+import { requireArborInternalContext, requireAuth, getUserId } from "./lib/auth";
+import {
+  normalizeEventStatus,
+  syncEventStatusForLinkedInvoice,
+  syncLinkedEventStatusFromInvoice,
+} from "./lib/eventStatus";
+import { recordEventStatusTransition, recordInvoiceStatusTransition } from "./lib/statusTransitions";
+import { scheduleEventCancelledEmails } from "./email/triggers";
 import { listEventsByInvoiceId } from "./lib/invoiceEvents";
 import {
   billingQuantityForEquipmentLine,
@@ -507,11 +513,22 @@ async function recentInvoices(
       .order("desc")
       .take(INVOICE_LIST_LIMIT);
   }
-  return await ctx.db
-    .query("invoices")
-    .withIndex("by_createdAt")
-    .order("desc")
-    .take(INVOICE_LIST_LIMIT);
+  // Default view hides voided invoices; the explicit Void filter surfaces them.
+  const [draftRows, finalizedRows] = await Promise.all([
+    ctx.db
+      .query("invoices")
+      .withIndex("by_status_and_createdAt", (q) => q.eq("status", "draft"))
+      .order("desc")
+      .take(INVOICE_LIST_LIMIT),
+    ctx.db
+      .query("invoices")
+      .withIndex("by_status_and_createdAt", (q) => q.eq("status", "finalized"))
+      .order("desc")
+      .take(INVOICE_LIST_LIMIT),
+  ]);
+  return [...draftRows, ...finalizedRows]
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .slice(0, INVOICE_LIST_LIMIT);
 }
 
 /**
@@ -1093,6 +1110,61 @@ export const finalize = mutation({
     const invoice = await ctx.db.get(args.id);
     if (!invoice) throw new Error("Invoice not found.");
     await ctx.db.patch(args.id, { status: "finalized", updatedAt: Date.now() });
+  },
+});
+
+/**
+ * Void an invoice: hidden from the default list (still visible under the
+ * explicit Void filter) and every linked event that isn't already cancelled is
+ * cancelled with the usual cancellation emails. Blocked when payment proofs are
+ * on record — voiding a paid invoice would hide money that changed hands.
+ */
+export const voidInvoice = mutation({
+  args: { id: v.id("invoices") },
+  handler: async (ctx, args) => {
+    const user = await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    const invoice = await ctx.db.get(args.id);
+    if (!invoice) throw new Error("Invoice not found.");
+    if (invoice.status === "void") return;
+
+    const proofSubmissions = await ctx.db
+      .query("eventPaymentProofSubmissions")
+      .withIndex("by_invoiceId", (q) => q.eq("invoiceId", args.id))
+      .take(100);
+    if (proofSubmissions.some((row) => (row.status ?? "active") === "active")) {
+      throw new Error(
+        "This invoice has recorded payments. Invalidate the payment proof before voiding.",
+      );
+    }
+
+    const now = Date.now();
+    await ctx.db.patch(args.id, { status: "void", updatedAt: now });
+    await recordInvoiceStatusTransition(ctx, args.id, invoice.status, "void", {
+      actorUserId: getUserId(user),
+      at: now,
+      reasonCode: "other",
+      reasonNote: "Invoice voided",
+    });
+
+    const linkedEvents = await listEventsByInvoiceId(ctx, args.id);
+    for (const event of linkedEvents) {
+      const prevStatus = normalizeEventStatus(event.status);
+      if (prevStatus === "cancelled") continue;
+      await ctx.db.patch(event._id, {
+        status: "cancelled",
+        updatedAt: now,
+        cancelReasonCode: "other",
+        cancelReasonNote: `Invoice ${invoice.invoiceNumber} voided`,
+      });
+      await recordEventStatusTransition(ctx, event._id, prevStatus, "cancelled", {
+        actorUserId: getUserId(user),
+        at: now,
+        reasonCode: "other",
+        reasonNote: `Invoice ${invoice.invoiceNumber} voided`,
+      });
+      await scheduleEventCancelledEmails(ctx, event._id, now);
+    }
   },
 });
 
