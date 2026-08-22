@@ -80,7 +80,9 @@ export function DamageReportSheet({
       >
         <SheetHeader>
           <SheetTitle>
-            {report ? `${report.assetId}${report.typeName ? ` · ${report.typeName}` : ""}` : "Damage report"}
+            {report
+              ? [report.assetId, report.typeName].filter(Boolean).join(" · ") || "Damage report"
+              : "Damage report"}
           </SheetTitle>
           <SheetDescription>
             {report
@@ -141,7 +143,7 @@ export function DamageReportSheet({
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={report.photoUrl}
-                alt={`Damage photo for ${report.assetId}`}
+                alt={`Damage photo for ${report.assetId ?? report.typeName ?? "asset"}`}
                 className="max-h-64 w-full rounded border object-contain"
               />
             ) : null}
@@ -158,7 +160,7 @@ export function DamageReportSheet({
                 <ul className="pt-1 text-sm text-muted-foreground">
                   {siblings.map((sibling) => (
                     <li key={sibling._id}>
-                      {sibling.assetId}
+                      {sibling.assetId ?? "No ID"}
                       {sibling.typeName ? ` · ${sibling.typeName}` : ""} —{" "}
                       <span className="capitalize">{sibling.status.replace("_", " ")}</span>
                     </li>
@@ -202,7 +204,7 @@ export function DamageReportSheet({
                     void (async () => {
                       if (
                         !(await confirm({
-                          title: `Decommission ${report.assetId}?`,
+                          title: `Decommission ${report.assetId ?? report.typeName ?? "this asset"}?`,
                           description: "It will be marked out of service and this report will close.",
                           confirmLabel: "Decommission",
                           destructive: true,

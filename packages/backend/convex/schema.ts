@@ -398,7 +398,8 @@ export default defineSchema({
   }),
 
   inventoryItems: defineTable({
-    assetId: v.string(),
+    /** Tag / identifier. Optional: an asset may be tracked by serial alone. */
+    assetId: v.optional(v.string()),
     serialNumber: v.optional(v.string()),
     typeId: v.id("inventoryTypes"),
     storageLocationId: v.optional(v.id("storageLocations")),
@@ -1232,7 +1233,8 @@ export default defineSchema({
 
   damageReports: defineTable({
     inventoryItemId: v.id("inventoryItems"),
-    assetId: v.string(),
+    /** Snapshot of the item's tag at report time; absent for serial-only assets. */
+    assetId: v.optional(v.string()),
     typeId: v.optional(v.id("inventoryTypes")),
     eventId: v.optional(v.id("events")),
     /**

@@ -101,7 +101,7 @@ export function DamageQueueManager() {
               <CardHeader className="pb-2">
                 <CardTitle className="flex flex-wrap items-baseline gap-2 text-base">
                   <span>
-                    {report.assetId}
+                    {report.assetId ?? "No ID"}
                     {report.typeName ? ` · ${report.typeName}` : ""}
                   </span>
                   {commentCount > 0 ? (

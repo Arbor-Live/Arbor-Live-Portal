@@ -169,7 +169,8 @@ function DamageReportWizardForm({
                         );
                       }}
                     />
-                    {child.assetId} — {child.typeName}
+                    {child.assetId ? `${child.assetId} — ` : ""}
+                    {child.typeName}
                   </label>
                 );
               })}

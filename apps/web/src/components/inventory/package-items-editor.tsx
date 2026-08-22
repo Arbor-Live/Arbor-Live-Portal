@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { MultiSelectFilter } from "./multi-select-filter";
-import { formatCurrency } from "./constants";
+import { formatCurrency, inventoryItemLabel } from "./constants";
 import {
   bucketForCategoryKey,
   formatTypeDisplay,
@@ -39,7 +39,8 @@ type InventoryTypeRow = {
 
 type InventoryItemRow = {
   _id: string;
-  assetId: string;
+  assetId?: string;
+  serialNumber?: string;
   typeId: string;
   type?: { name: string; model: string; manufacturer?: string; category: string } | null;
 };
@@ -191,7 +192,7 @@ export function PackageItemsEditor({
     () =>
       inventoryItems.map((item) => ({
         value: item._id,
-        label: item.assetId,
+        label: inventoryItemLabel(item),
         description: item.type ? formatTypeDisplay(item.type) : "Unknown type",
         keywords: item.type?.category,
       })),

@@ -13,6 +13,7 @@ import {
   type InventoryItemFormValues,
 } from "@/lib/validations/inventory";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { inventoryItemLabel } from "./constants";
 import { ContainsEditor, type ContainsOption } from "./contains-editor";
 import { InventoryItemDetails } from "./inventory-item-details";
 
@@ -20,7 +21,8 @@ type TypeOption = { _id: Id<"inventoryTypes">; name: string; model: string };
 type LocationOption = { _id: Id<"storageLocations">; path: string };
 type ItemOption = {
   _id: Id<"inventoryItems">;
-  assetId: string;
+  assetId?: string;
+  serialNumber?: string;
   type?: { name: string; model: string; manufacturer?: string } | null;
 };
 
@@ -76,8 +78,8 @@ export function InventoryItemEditor({
 
   const persist = async (values: InventoryItemFormValues) => {
     const payload = {
-      assetId: values.assetId,
-      serialNumber: values.serialNumber || undefined,
+      assetId: values.assetId?.trim() || undefined,
+      serialNumber: values.serialNumber?.trim() || undefined,
       typeId: values.typeId as Id<"inventoryTypes">,
       storageLocationId: values.storageLocationId
         ? (values.storageLocationId as Id<"storageLocations">)
@@ -136,12 +138,12 @@ export function InventoryItemEditor({
   const otherItems = items.filter((item) => item._id !== editingId);
   const containerOptions = otherItems.map((item) => ({
     value: item._id,
-    assetId: item.assetId,
-    label: `${item.assetId} - ${formatTypeDisplay(item.type)}`,
+    assetId: item.assetId ?? "",
+    label: `${inventoryItemLabel(item)} - ${formatTypeDisplay(item.type)}`,
   }));
   const containsOptions: ContainsOption[] = otherItems.map((item) => ({
     value: item._id,
-    assetId: item.assetId,
+    assetId: item.assetId ?? "",
     label: formatTypeDisplay(item.type),
   }));
 
@@ -161,7 +163,7 @@ export function InventoryItemEditor({
             >
               <InventoryItemDetails
                 values={{
-                  assetId: values.assetId,
+                  assetId: values.assetId ?? "",
                   serialNumber: values.serialNumber ?? "",
                   typeId: values.typeId,
                   storageLocationId: values.storageLocationId ?? "",
@@ -172,7 +174,11 @@ export function InventoryItemEditor({
                 onChange={onDetailsChange}
                 errors={
                   form.formState.errors.assetId
-                    ? { assetId: form.formState.errors.assetId.message ?? "Asset ID is required" }
+                    ? {
+                        assetId:
+                          form.formState.errors.assetId.message ??
+                          "Add an Asset ID or Serial Number",
+                      }
                     : undefined
                 }
                 types={types.map((type) => ({ value: type._id, label: `${type.name} - ${type.model}` }))}

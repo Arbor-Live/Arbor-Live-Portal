@@ -115,7 +115,7 @@ export const equipmentByAssetId = query({
         .unique();
       if (item) break;
     }
-    if (!item) return null;
+    if (!item?.assetId) return null;
 
     const type = await ctx.db.get(item.typeId);
     if (!type) return null;

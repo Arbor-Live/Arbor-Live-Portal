@@ -524,7 +524,7 @@ export const scanOutboundAsset = mutation({
           (unit) => unit.outboundStatus === "pending" && unit.typeId === item.typeId,
         );
 
-      const label = await typeLabel(ctx, item.typeId, item.assetId);
+      const label = await typeLabel(ctx, item.typeId, item.assetId ?? "(no tag)");
 
       if (pendingMatch) {
         await ctx.db.patch(pendingMatch._id, {

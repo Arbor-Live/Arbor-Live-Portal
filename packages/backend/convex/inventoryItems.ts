@@ -10,6 +10,11 @@ const MAX_LIST_LIMIT = 2000;
 const MAX_ASSET_ID_LIMIT = 5000;
 const MAX_BATCH_ITEMS = 200;
 
+/** Items without a tag sort/display by serial. */
+function itemSortKey(item: { assetId?: string; serialNumber?: string }): string {
+  return item.assetId ?? item.serialNumber ?? "";
+}
+
 async function cascadeLocationToDescendants(
   ctx: MutationCtx,
   rootItemId: Id<"inventoryItems">,
@@ -79,7 +84,7 @@ async function hydrateInventoryItems(ctx: QueryCtx, items: Doc<"inventoryItems">
 
 function matchesInventoryFilters(
   item: {
-    assetId: string;
+    assetId?: string;
     serialNumber?: string;
     type: { category: string; model: string; name: string } | null;
   },
@@ -90,7 +95,7 @@ function matchesInventoryFilters(
   const loweredSearch = args.search?.trim().toLowerCase();
   if (!loweredSearch) return true;
   return (
-    item.assetId.toLowerCase().includes(loweredSearch) ||
+    (item.assetId ?? "").toLowerCase().includes(loweredSearch) ||
     (item.serialNumber ?? "").toLowerCase().includes(loweredSearch) ||
     item.type.model.toLowerCase().includes(loweredSearch) ||
     item.type.name.toLowerCase().includes(loweredSearch)
@@ -131,7 +136,7 @@ export const list = query({
             args,
           ),
         )
-        .sort((a, b) => a.assetId.localeCompare(b.assetId));
+        .sort((a, b) => itemSortKey(a).localeCompare(itemSortKey(b)));
 
       const page = await hydrateInventoryItems(ctx, matched);
       return { page, isDone: true, continueCursor: "" };
@@ -141,7 +146,7 @@ export const list = query({
     const hydrated = await hydrateInventoryItems(ctx, result.page);
     const page = hydrated
       .filter((item) => matchesInventoryFilters(item, args))
-      .sort((a, b) => a.assetId.localeCompare(b.assetId));
+      .sort((a, b) => itemSortKey(a).localeCompare(itemSortKey(b)));
     return { ...result, page };
   },
 });
@@ -165,11 +170,12 @@ export const listSummaries = query({
       .map((item) => ({
         _id: item._id,
         assetId: item.assetId,
+        serialNumber: item.serialNumber,
         typeId: item.typeId,
         containedInAssetId: item.containedInAssetId,
         type: typeById.get(item.typeId) ?? null,
       }))
-      .sort((a, b) => a.assetId.localeCompare(b.assetId));
+      .sort((a, b) => itemSortKey(a).localeCompare(itemSortKey(b)));
   },
 });
 
@@ -191,7 +197,7 @@ export const listAssetIds = query({
 
 export const create = mutation({
   args: {
-    assetId: v.string(),
+    assetId: v.optional(v.string()),
     serialNumber: v.optional(v.string()),
     typeId: v.id("inventoryTypes"),
     storageLocationId: v.optional(v.id("storageLocations")),
@@ -201,13 +207,17 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     await requireAuth(ctx);
-    const assetId = canonicalizeAssetIdTag(args.assetId);
-    if (!assetId) throw new Error("Asset ID is required.");
-    const existingAsset = await ctx.db
-      .query("inventoryItems")
-      .withIndex("by_assetId", (q) => q.eq("assetId", assetId))
-      .unique();
-    if (existingAsset) throw new Error("Asset ID already exists.");
+    const assetId = args.assetId ? canonicalizeAssetIdTag(args.assetId) : "";
+    if (!assetId && !args.serialNumber?.trim()) {
+      throw new Error("Add an Asset ID or Serial Number.");
+    }
+    if (assetId) {
+      const existingAsset = await ctx.db
+        .query("inventoryItems")
+        .withIndex("by_assetId", (q) => q.eq("assetId", assetId))
+        .unique();
+      if (existingAsset) throw new Error("Asset ID already exists.");
+    }
 
     const type = await ctx.db.get(args.typeId);
     if (!type) throw new Error("Inventory type not found.");
@@ -226,7 +236,7 @@ export const create = mutation({
 
     const now = Date.now();
     return await ctx.db.insert("inventoryItems", {
-      assetId,
+      assetId: assetId || undefined,
       serialNumber: args.serialNumber?.trim(),
       typeId: args.typeId,
       storageLocationId: effectiveStorageLocationId,
@@ -242,7 +252,9 @@ export const create = mutation({
 /**
  * Create multiple inventory items of one type in a single atomic mutation
  * (create-asset wizard). Containment is referenced by assetId so sibling tags
- * can nest inside each other before any of them exist in the DB.
+ * can nest inside each other before any of them exist in the DB. Items may omit
+ * an Asset ID (serial-only), but then cannot declare or be referenced by
+ * containment, since edges are keyed by tag.
  *
  * Each item may declare its container either directly (`containedInAssetId`) or
  * via `contains` on another item; both express the same relationship and must
@@ -255,7 +267,7 @@ export const createMany = mutation({
     typeId: v.id("inventoryTypes"),
     items: v.array(
       v.object({
-        assetId: v.string(),
+        assetId: v.optional(v.string()),
         serialNumber: v.optional(v.string()),
         storageLocationId: v.optional(v.id("storageLocations")),
         containedInAssetId: v.optional(v.string()),
@@ -277,7 +289,7 @@ export const createMany = mutation({
     // 1. Validate fields, reject duplicate assetIds within the batch and in the DB.
     const normalizedItems = args.items.map((item) => ({
       ...item,
-      assetId: canonicalizeAssetIdTag(item.assetId),
+      assetId: item.assetId ? canonicalizeAssetIdTag(item.assetId) : undefined,
       serialNumber: item.serialNumber?.trim(),
       status: item.status?.trim(),
       notes: item.notes?.trim(),
@@ -288,14 +300,17 @@ export const createMany = mutation({
     }));
     const seen = new Set<string>();
     for (const item of normalizedItems) {
-      if (!item.assetId) throw new Error("Asset ID is required.");
-      const key = item.assetId.toLowerCase();
-      if (seen.has(key)) throw new Error(`Duplicate asset ID in batch: ${item.assetId}`);
-      seen.add(key);
       if (item.storageLocationId) {
         const location = await ctx.db.get(item.storageLocationId);
         if (!location) throw new Error("Storage location not found.");
       }
+      if (!item.assetId && !item.serialNumber) {
+        throw new Error("Every asset needs an Asset ID or Serial Number.");
+      }
+      if (!item.assetId) continue;
+      const key = item.assetId.toLowerCase();
+      if (seen.has(key)) throw new Error(`Duplicate asset ID in batch: ${item.assetId}`);
+      seen.add(key);
       const existing = await ctx.db
         .query("inventoryItems")
         .withIndex("by_assetId", (q) => q.eq("assetId", item.assetId))
@@ -305,6 +320,7 @@ export const createMany = mutation({
 
     // 2. Insert all items without containment, remembering in-batch ids.
     const now = Date.now();
+    const insertedIds: Id<"inventoryItems">[] = [];
     const idByAssetId = new Map<string, Id<"inventoryItems">>();
     const inBatchIds = new Set<Id<"inventoryItems">>();
     const ownLocationById = new Map<Id<"inventoryItems">, Id<"storageLocations"> | undefined>();
@@ -320,7 +336,8 @@ export const createMany = mutation({
         createdAt: now,
         updatedAt: now,
       });
-      idByAssetId.set(item.assetId.toLowerCase(), id);
+      insertedIds.push(id);
+      if (item.assetId) idByAssetId.set(item.assetId.toLowerCase(), id);
       ownLocationById.set(id, item.storageLocationId);
       inBatchIds.add(id);
     }
@@ -341,8 +358,16 @@ export const createMany = mutation({
       childKeyToContainerKey.set(child.toLowerCase(), container.toLowerCase());
     };
     for (const item of normalizedItems) {
-      if (item.containedInAssetId) setEdge(item.assetId, item.containedInAssetId);
-      for (const childRef of item.contains ?? []) setEdge(childRef, item.assetId);
+      // Containment is referenced by tag, so both sides of an edge need an ID.
+      const label = item.assetId ?? item.serialNumber ?? "asset";
+      if (item.containedInAssetId && !item.assetId) {
+        throw new Error(`“${label}” needs an Asset ID before it can be placed inside another asset.`);
+      }
+      if ((item.contains?.length ?? 0) > 0 && !item.assetId) {
+        throw new Error(`“${label}” needs an Asset ID before it can contain other assets.`);
+      }
+      if (item.containedInAssetId) setEdge(item.assetId!, item.containedInAssetId);
+      for (const childRef of item.contains ?? []) setEdge(childRef, item.assetId!);
     }
 
     // 4. Resolve every edge to an _id (in-batch first, then existing items).
@@ -418,8 +443,8 @@ export const createMany = mutation({
     };
 
     // 7. Apply containment + effective locations to every item touched.
-    for (const item of normalizedItems) {
-      const id = idByAssetId.get(item.assetId.toLowerCase())!;
+    for (const [index, item] of normalizedItems.entries()) {
+      const id = insertedIds[index]!;
       await ctx.db.patch(id, {
         containedInAssetId: containerIdByChildId.get(id),
         storageLocationId: await finalLocation(id),
@@ -452,7 +477,7 @@ export const createMany = mutation({
 export const update = mutation({
   args: {
     id: v.id("inventoryItems"),
-    assetId: v.string(),
+    assetId: v.optional(v.string()),
     serialNumber: v.optional(v.string()),
     typeId: v.id("inventoryTypes"),
     storageLocationId: v.optional(v.id("storageLocations")),
@@ -465,15 +490,18 @@ export const update = mutation({
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Inventory item not found.");
 
-    const assetId = canonicalizeAssetIdTag(args.assetId);
-    if (!assetId) throw new Error("Asset ID is required.");
-
-    const duplicateAsset = await ctx.db
-      .query("inventoryItems")
-      .withIndex("by_assetId", (q) => q.eq("assetId", assetId))
-      .unique();
-    if (duplicateAsset && duplicateAsset._id !== args.id) {
-      throw new Error("Asset ID already exists.");
+    const assetId = args.assetId ? canonicalizeAssetIdTag(args.assetId) : "";
+    if (!assetId && !args.serialNumber?.trim()) {
+      throw new Error("Add an Asset ID or Serial Number.");
+    }
+    if (assetId) {
+      const duplicateAsset = await ctx.db
+        .query("inventoryItems")
+        .withIndex("by_assetId", (q) => q.eq("assetId", assetId))
+        .unique();
+      if (duplicateAsset && duplicateAsset._id !== args.id) {
+        throw new Error("Asset ID already exists.");
+      }
     }
 
     const type = await ctx.db.get(args.typeId);
@@ -503,7 +531,7 @@ export const update = mutation({
     const effectiveStorageLocationId = inheritedContainerLocationId ?? args.storageLocationId;
 
     await ctx.db.patch(args.id, {
-      assetId,
+      assetId: assetId || undefined,
       serialNumber: args.serialNumber?.trim(),
       typeId: args.typeId,
       storageLocationId: effectiveStorageLocationId,
@@ -643,7 +671,7 @@ export const getChildren = query({
       .withIndex("by_containedInAssetId", (q) => q.eq("containedInAssetId", args.id))
       .take(MAX_LIST_LIMIT);
     return hydrateInventoryItems(ctx, children).then((rows) =>
-      rows.sort((a, b) => a.assetId.localeCompare(b.assetId)),
+      rows.sort((a, b) => itemSortKey(a).localeCompare(itemSortKey(b))),
     );
   },
 });

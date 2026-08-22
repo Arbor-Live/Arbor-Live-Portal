@@ -15,15 +15,20 @@ export const storageLocationSchema = z.object({
 
 export type StorageLocationFormValues = z.infer<typeof storageLocationSchema>;
 
-export const inventoryItemSchema = z.object({
-  assetId: z.string().min(1, "Asset ID is required"),
-  serialNumber: z.string().optional(),
-  typeId: z.string().min(1, "Type is required"),
-  storageLocationId: z.string().optional(),
-  containedInAssetId: z.string().optional(),
-  status: z.string().optional(),
-  notes: z.string().optional(),
-});
+export const inventoryItemSchema = z
+  .object({
+    assetId: z.string().optional(),
+    serialNumber: z.string().optional(),
+    typeId: z.string().min(1, "Type is required"),
+    storageLocationId: z.string().optional(),
+    containedInAssetId: z.string().optional(),
+    status: z.string().optional(),
+    notes: z.string().optional(),
+  })
+  .refine((data) => Boolean(data.assetId?.trim() || data.serialNumber?.trim()), {
+    message: "Add an Asset ID or Serial Number",
+    path: ["assetId"],
+  });
 
 export type InventoryItemFormValues = z.infer<typeof inventoryItemSchema>;
 
