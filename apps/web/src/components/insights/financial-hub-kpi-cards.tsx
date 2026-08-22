@@ -31,6 +31,9 @@ export function FinancialHubRevenueCard() {
       </p>
       <p className="text-sm text-muted-foreground">
         Recognized (paid) · Booked {formatUsd(summary.revenueBookedUsd)}
+        {Number.isFinite(summary.netProfitUsd)
+          ? <> · Profit {formatUsd(summary.netProfitUsd)}</>
+          : null}
       </p>
       <Sparkline
         data={summary.sparkline.map((point) => ({

@@ -48,6 +48,7 @@ import {
 } from "@/lib/invoice-crew-from-event";
 import type { SeriesShiftTemplateDraft } from "@/lib/event-series-shifts";
 import { ArrowsClockwiseIcon, CaretDownIcon, ArrowSquareOutIcon, CopyIcon, DotsThreeIcon, ProhibitIcon, TrashIcon } from "@phosphor-icons/react";
+import { addPacificCalendarDays, pacificDateKey } from "@arbor/format";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { useAppDialog } from "@/components/ui/app-dialog";
 import { notify } from "@/lib/notify";
@@ -769,6 +770,29 @@ export function InvoiceEditor({
     const membersByOrg = new Map(
       bandsForArtists.map((band) => [band.organizationId, band.memberCount]),
     );
+
+    // Multi-day events: label which days each band plays so artist lines stay
+    // self-explanatory on the invoice (and PDF).
+    const dayCount = (() => {
+      if (!linkedEvent.startAt || !linkedEvent.endAt || linkedEvent.endAt <= linkedEvent.startAt) {
+        return 1;
+      }
+      const endKey = pacificDateKey(linkedEvent.endAt);
+      let cursor = linkedEvent.startAt;
+      let count = 1;
+      while (pacificDateKey(cursor) !== endKey && count < 14) {
+        cursor = addPacificCalendarDays(cursor, 1);
+        count += 1;
+      }
+      return count;
+    })();
+    function bandLabel(performer: NonNullable<typeof eventPerformers>[number]) {
+      if (dayCount < 2 || !performer.dayIndexes?.length) return performer.bandName;
+      if (performer.dayIndexes.length === dayCount) return performer.bandName;
+      const days = [...performer.dayIndexes].sort((a, b) => a - b).map((day) => day + 1);
+      return `${performer.bandName} · Day${days.length > 1 ? "s" : ""} ${days.join(", ")}`;
+    }
+
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time bootstrap from event performers
     setArtists(
       eventPerformers.map((performer) => {
@@ -777,7 +801,7 @@ export function InvoiceEditor({
           if (payment.pricingMode === "fixed_total") {
             return {
               organizationId: performer.organizationId,
-              label: performer.bandName,
+              label: bandLabel(performer),
               hours: "1",
               people: "1",
               rateUsd: payment.totalUsd.toString(),
@@ -788,7 +812,7 @@ export function InvoiceEditor({
           const rate = payment.ratePerMemberPerHourUsd ?? rateByOrg.get(performer.organizationId) ?? 0;
           return {
             organizationId: performer.organizationId,
-            label: performer.bandName,
+            label: bandLabel(performer),
             hours: String(hours),
             people: String(members),
             rateUsd: rate.toString(),
@@ -798,7 +822,7 @@ export function InvoiceEditor({
         const profileMembers = membersByOrg.get(performer.organizationId) ?? 0;
         return {
           organizationId: performer.organizationId,
-          label: performer.bandName,
+          label: bandLabel(performer),
           hours: "1",
           people: profileMembers > 0 ? profileMembers.toString() : "1",
           rateUsd: profileRate > 0 ? profileRate.toString() : "0",
@@ -1407,9 +1431,13 @@ export function InvoiceEditor({
 
   async function onVoidInvoice() {
     if (!activeInvoiceId) return;
-    const confirmed = window.confirm(
-      "Void this quote? Linked events will be cancelled and removed from lists. This cannot be undone.",
-    );
+    const confirmed = await confirm({
+      title: "Void this quote?",
+      description:
+        "Linked events will be cancelled and removed from lists. This cannot be undone.",
+      confirmLabel: "Void quote",
+      destructive: true,
+    });
     if (!confirmed) return;
     try {
       await voidInvoiceMutation({ id: activeInvoiceId });

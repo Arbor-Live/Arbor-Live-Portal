@@ -15,8 +15,9 @@ import {
   loadEventsInRange,
   requireAnalyticsAccess,
 } from "./lib/analyticsQuery";
-import { arborEarnedRevenueUsd, invoicePassThroughUsd } from "./lib/invoiceProfit";
+import { arborEarnedRevenueUsd, invoicePassThroughUsd, netProfitFromInvoiceUsd } from "./lib/invoiceProfit";
 import { classifyPaymentQueue } from "./lib/invoicePaymentStatus";
+import { listEventsByInvoiceId } from "./lib/invoiceEvents";
 import { getActivePaymentProofSubmission } from "./lib/paymentProof";
 
 /** Bounded scan caps — intentional; return `truncated` when hit. */
@@ -27,11 +28,6 @@ const AR_EVENT_SCAN_LIMIT = 500;
 const TOP_CLIENTS_DEFAULT = 10;
 
 const rangeArgs = analyticsRangeArgs;
-
-const monthBucketValidator = v.object({
-  monthKey: v.string(),
-  amountUsd: v.number(),
-});
 
 const sparklinePointValidator = v.object({
   monthKey: v.string(),
@@ -45,6 +41,28 @@ function eventCostUsd(event: Doc<"events">): number {
     (event.bandsCostUsd ?? 0) +
     (event.externalRentalsCostUsd ?? 0) +
     (event.otherCostUsd ?? 0)
+  );
+}
+
+/**
+ * Net profit a paid invoice contributed: Arbor earned revenue minus the primary
+ * linked event's costs (same math as the invoice list's net-profit column).
+ * Invoices without a linked event have nothing to charge costs against.
+ */
+export async function invoiceNetProfitUsd(ctx: QueryCtx, invoice: Doc<"invoices">): Promise<number> {
+  const passThrough = invoicePassThroughUsd(
+    invoice.artistsSubtotalUsd,
+    invoice.externalRentalsSubtotalUsd,
+  );
+  const earned = arborEarnedRevenueUsd(invoice.totalUsd, passThrough);
+  const linkedEvents = await listEventsByInvoiceId(ctx, invoice._id);
+  const event = linkedEvents[0];
+  if (!event) return earned;
+  return netProfitFromInvoiceUsd(
+    invoice.totalUsd,
+    passThrough,
+    eventCostUsd(event),
+    (event.bandsCostUsd ?? 0) + (event.externalRentalsCostUsd ?? 0),
   );
 }
 
@@ -96,6 +114,7 @@ export const getFinancialSummary = query({
   returns: v.object({
     revenueRecognizedUsd: v.number(),
     revenueBookedUsd: v.number(),
+    netProfitUsd: v.number(),
     expensesUsd: v.number(),
     eventCostsUsd: v.number(),
     bandPayoutsUsd: v.number(),
@@ -138,6 +157,11 @@ export const getFinancialSummary = query({
     const bandPayoutsUsd = payouts.payments.reduce((sum, row) => sum + row.totalUsd, 0);
     const expensesUsd = eventCostsUsd;
 
+    let netProfitUsd = 0;
+    for (const invoice of paid.invoices) {
+      netProfitUsd += await invoiceNetProfitUsd(ctx, invoice);
+    }
+
     const monthKeys = listPacificMonthKeys(args.startMs, args.endMs);
     const revenueByMonth = emptyMonthMap(monthKeys);
     const expensesByMonth = emptyMonthMap(monthKeys);
@@ -174,6 +198,7 @@ export const getFinancialSummary = query({
     return {
       revenueRecognizedUsd,
       revenueBookedUsd,
+      netProfitUsd,
       expensesUsd,
       eventCostsUsd,
       bandPayoutsUsd,
@@ -187,7 +212,13 @@ export const getFinancialSummary = query({
 export const getRevenueByMonth = query({
   args: rangeArgs,
   returns: v.object({
-    months: v.array(monthBucketValidator),
+    months: v.array(
+      v.object({
+        monthKey: v.string(),
+        amountUsd: v.number(),
+        profitUsd: v.number(),
+      }),
+    ),
     truncated: v.boolean(),
   }),
   handler: async (ctx, args) => {
@@ -197,28 +228,26 @@ export const getRevenueByMonth = query({
     const { invoices, truncated } = await loadPaidInvoicesInRange(ctx, args.startMs, args.endMs);
     const monthKeys = listPacificMonthKeys(args.startMs, args.endMs);
     const byMonth = emptyMonthMap(monthKeys);
+    const profitByMonth = emptyMonthMap(monthKeys);
 
     for (const invoice of invoices) {
       if (invoice.paymentReceivedAt == null) continue;
       const key = pacificMonthKey(invoice.paymentReceivedAt);
       if (!byMonth.has(key)) continue;
-      byMonth.set(
-        key,
-        (byMonth.get(key) ?? 0) +
-          arborEarnedRevenueUsd(
-            invoice.totalUsd,
-            invoicePassThroughUsd(
-              invoice.artistsSubtotalUsd,
-              invoice.externalRentalsSubtotalUsd,
-            ),
-          ),
+      const passThrough = invoicePassThroughUsd(
+        invoice.artistsSubtotalUsd,
+        invoice.externalRentalsSubtotalUsd,
       );
+      byMonth.set(key, (byMonth.get(key) ?? 0) + arborEarnedRevenueUsd(invoice.totalUsd, passThrough));
+      // Profit lands in the same month bucket as the payment that earned it.
+      profitByMonth.set(key, (profitByMonth.get(key) ?? 0) + await invoiceNetProfitUsd(ctx, invoice));
     }
 
     return {
       months: monthKeys.map((monthKey) => ({
         monthKey,
         amountUsd: byMonth.get(monthKey) ?? 0,
+        profitUsd: profitByMonth.get(monthKey) ?? 0,
       })),
       truncated,
     };

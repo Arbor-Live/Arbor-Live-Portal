@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
+import { ArrowSquareOutIcon, LinkIcon, TrashIcon } from "@phosphor-icons/react";
 import { api, type Id } from "@/lib/convex-api";
 import { AdminCascadeDeleteDialog } from "@/components/admin/admin-cascade-delete-dialog";
 import { InvoicePdfDownloadButton } from "@/components/financial/invoice-pdf-download-button";
@@ -159,31 +160,48 @@ export function InvoicesListClient() {
                   {invoice.netProfitUsd == null ? "—" : formatUsd(invoice.netProfitUsd)}
                 </td>
                 <td className="p-2">
-                  <div className="flex min-w-[12rem] flex-wrap gap-2">
-                    <Button asChild size="sm" variant="outline">
-                      <Link href={`/dashboard/financial-hub/invoices/${invoice._id}`}>Open</Link>
+                  <div className="flex items-center gap-1.5">
+                    <Button
+                      asChild
+                      size="icon-sm"
+                      variant="outline"
+                      aria-label={`Open ${invoice.invoiceNumber}`}
+                      title="Open"
+                    >
+                      <Link href={`/dashboard/financial-hub/invoices/${invoice._id}`}>
+                        <ArrowSquareOutIcon />
+                      </Link>
                     </Button>
                     <InvoicePdfDownloadButton
                       invoiceId={invoice._id}
                       invoiceNumber={invoice.invoiceNumber}
-                      size="sm"
-                      label="PDF"
+                      size="icon-sm"
+                      iconOnly
                     />
                     {invoice.publicApprovalToken ? (
-                      <Button asChild size="sm" variant="outline">
+                      <Button
+                        asChild
+                        size="icon-sm"
+                        variant="outline"
+                        aria-label={`Open public quote link for ${invoice.invoiceNumber}`}
+                        title="Quote link"
+                      >
                         <Link href={`/event/${invoice.publicApprovalToken}`} target="_blank" rel="noreferrer">
-                          Quote Link
+                          <LinkIcon />
                         </Link>
                       </Button>
                     ) : null}
                     {isAdmin ? (
                       <Button
                         type="button"
-                        size="sm"
-                        variant="destructive"
+                        size="icon-sm"
+                        variant="outline"
+                        className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        aria-label={`Delete ${invoice.invoiceNumber}`}
+                        title="Delete"
                         onClick={() => setDeleteInvoiceId(invoice._id)}
                       >
-                        Delete
+                        <TrashIcon />
                       </Button>
                     ) : null}
                   </div>

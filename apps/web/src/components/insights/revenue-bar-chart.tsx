@@ -11,10 +11,13 @@ import {
 } from "recharts";
 import { formatUsd } from "@/lib/format";
 
+export type RevenueMetric = "revenue" | "profit";
+
 type RevenueBarChartProps = {
-  months: Array<{ monthKey: string; amountUsd: number }>;
+  months: Array<{ monthKey: string; amountUsd: number; profitUsd?: number }>;
   emptyLabel?: string;
   valueLabel?: string;
+  metric?: RevenueMetric;
 };
 
 function shortMonthLabel(monthKey: string) {
@@ -29,13 +32,15 @@ export function RevenueBarChart({
   months,
   emptyLabel = "No recognized revenue in this range.",
   valueLabel = "Revenue",
+  metric = "revenue",
 }: RevenueBarChartProps) {
+  const dataKey = metric === "profit" ? "profitUsd" : "amountUsd";
   const data = months.map((row) => ({
     ...row,
     label: shortMonthLabel(row.monthKey),
   }));
 
-  if (data.every((row) => row.amountUsd === 0)) {
+  if (data.every((row) => (row[dataKey] ?? 0) === 0)) {
     return <p className="text-sm text-muted-foreground">{emptyLabel}</p>;
   }
 
@@ -58,7 +63,7 @@ export function RevenueBarChart({
             formatter={(value) => formatUsd(Number(value ?? 0))}
             labelFormatter={(label) => String(label)}
           />
-          <Bar dataKey="amountUsd" name={valueLabel} fill="var(--primary)" radius={[2, 2, 0, 0]} />
+          <Bar dataKey={dataKey} name={valueLabel} fill="var(--primary)" radius={[2, 2, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </div>

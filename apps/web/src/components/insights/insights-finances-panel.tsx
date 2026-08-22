@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "convex/react";
+import { useState } from "react";
 import { api } from "@/lib/convex-api";
 import {
   Card,
@@ -10,9 +11,10 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { ArAgingChart } from "@/components/insights/ar-aging-chart";
-import { RevenueBarChart } from "@/components/insights/revenue-bar-chart";
+import { RevenueBarChart, type RevenueMetric } from "@/components/insights/revenue-bar-chart";
 import { RevenueMixChart } from "@/components/insights/revenue-mix-chart";
 import { TopClientsTable } from "@/components/insights/top-clients-table";
+import { Button } from "@/components/ui/button";
 import { formatUsd } from "@/lib/format";
 
 type InsightsFinancesPanelProps = {
@@ -27,6 +29,7 @@ function formatDays(value: number | null) {
 
 export function InsightsFinancesPanel({ startMs, endMs }: InsightsFinancesPanelProps) {
   const rangeArgs = { startMs, endMs };
+  const [revenueMetric, setRevenueMetric] = useState<RevenueMetric>("revenue");
 
   const summary = useQuery(api.analytics.getFinancialSummary, rangeArgs);
   const revenueByMonth = useQuery(api.analytics.getRevenueByMonth, rangeArgs);
@@ -63,9 +66,16 @@ export function InsightsFinancesPanel({ startMs, endMs }: InsightsFinancesPanelP
             {summary === undefined ? (
               <p className="text-sm text-muted-foreground">Loading…</p>
             ) : (
-              <p className="text-2xl font-semibold tabular-nums">
-                {formatUsd(summary.revenueRecognizedUsd)}
-              </p>
+              <>
+                <p className="text-2xl font-semibold tabular-nums">
+                  {formatUsd(summary.revenueRecognizedUsd)}
+                </p>
+                {Number.isFinite(summary.netProfitUsd) ? (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Net profit {formatUsd(summary.netProfitUsd)}
+                  </p>
+                ) : null}
+              </>
             )}
           </CardContent>
         </Card>
@@ -124,15 +134,42 @@ export function InsightsFinancesPanel({ startMs, endMs }: InsightsFinancesPanelP
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
-          <CardHeader>
-            <CardTitle>Revenue by month</CardTitle>
-            <CardDescription>Recognized (payment received)</CardDescription>
+          <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
+            <div>
+              <CardTitle>Revenue by month</CardTitle>
+              <CardDescription>
+                {revenueMetric === "profit" ? "Net profit on payments received" : "Recognized (payment received)"}
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-1.5">
+              {(["revenue", "profit"] as const).map((metric) => (
+                <Button
+                  key={metric}
+                  type="button"
+                  size="sm"
+                  variant={revenueMetric === metric ? "default" : "outline"}
+                  aria-pressed={revenueMetric === metric}
+                  data-testid={`revenue-metric-${metric}`}
+                  onClick={() => setRevenueMetric(metric)}
+                >
+                  {metric === "revenue" ? "Revenue" : "Profit"}
+                </Button>
+              ))}
+            </div>
           </CardHeader>
           <CardContent>
             {revenueByMonth === undefined ? (
               <p className="text-sm text-muted-foreground">Loading…</p>
             ) : (
-              <RevenueBarChart months={revenueByMonth.months} />
+              <RevenueBarChart
+                months={revenueByMonth.months}
+                metric={revenueMetric}
+                emptyLabel={
+                  revenueMetric === "profit"
+                    ? "No profit recorded in this range."
+                    : "No recognized revenue in this range."
+                }
+              />
             )}
           </CardContent>
         </Card>
