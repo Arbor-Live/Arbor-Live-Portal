@@ -283,7 +283,10 @@ export function CsvImporter() {
       }
       const existingItems = existingItemsQuery ?? [];
       const assetRecordIdMap = new Map<string, string>();
-      for (const item of existingItems) assetRecordIdMap.set(item.assetId.toLowerCase(), item._id);
+      for (const item of existingItems) {
+        if (!item.assetId) continue;
+        assetRecordIdMap.set(item.assetId.toLowerCase(), item._id);
+      }
 
       const [typesCsv, assetsCsv] = await Promise.all([typesFile.text(), assetsFile.text()]);
       const typeRows = parseCsvContent(typesCsv);
@@ -341,15 +344,16 @@ export function CsvImporter() {
       for (const row of assetRows) {
         const assetId = canonicalizeAssetIdTag(row["Name"] ?? "");
         const fungibleRaw = normalizeTypeName(row["Fungible Inventory"] ?? "");
-        if (!assetId || !fungibleRaw) continue;
+        const serial = row["Serial"] || "";
+        if ((!assetId && !serial) || !fungibleRaw) continue;
 
+        const rowLabel = assetId || serial;
         try {
           const { manufacturer, normalizedName } = stripLeadingBrand(fungibleRaw);
           const fungible = normalizedName;
           if (!fungible) continue;
 
-          const assetKey = assetId.toLowerCase();
-          const existingRecordId = assetRecordIdMap.get(assetKey);
+          const existingRecordId = assetId ? assetRecordIdMap.get(assetId.toLowerCase()) : undefined;
 
           let typeId = typeCache.get(fungible.toLowerCase());
           if (!typeId) {
@@ -379,8 +383,8 @@ export function CsvImporter() {
 
           const storageLocationId = await ensureLocation(row["Storage Loc"] ?? "", locationCache);
           const itemPayload = {
-            assetId,
-            serialNumber: row["Serial"] || undefined,
+            assetId: assetId || undefined,
+            serialNumber: serial || undefined,
             typeId: typeId as never,
             storageLocationId: storageLocationId as never,
             status: row["Condition"] || undefined,
@@ -394,11 +398,11 @@ export function CsvImporter() {
           }
 
           const createdItemId = await createItem(itemPayload);
-          assetRecordIdMap.set(assetKey, createdItemId);
+          if (assetId) assetRecordIdMap.set(assetId.toLowerCase(), createdItemId);
           importedItems += 1;
         } catch (error) {
           errorCount += 1;
-          addLog(`Skipped asset "${assetId}": ${getConvexErrorMessage(error)}`);
+          addLog(`Skipped asset "${rowLabel}": ${getConvexErrorMessage(error)}`);
         }
       }
 

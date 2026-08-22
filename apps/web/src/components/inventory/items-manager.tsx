@@ -32,7 +32,7 @@ import { AssetScanner } from "./asset-scanner";
 import { CreateAssetWizard } from "./create-asset-wizard";
 import { DamageReportWizard } from "./damage-report-wizard";
 import { InventoryItemEditor } from "./inventory-item-editor";
-import { toCategoryOptions } from "./constants";
+import { inventoryItemLabel, toCategoryOptions } from "./constants";
 import { cn } from "@/lib/utils";
 
 const defaultForm = {
@@ -105,7 +105,7 @@ export function ItemsManager() {
       if (sortBy === "location") {
         return (a.location?.path ?? "").localeCompare(b.location?.path ?? "") * direction;
       }
-      return a.assetId.localeCompare(b.assetId) * direction;
+      return (a.assetId ?? a.serialNumber ?? "").localeCompare(b.assetId ?? b.serialNumber ?? "") * direction;
     });
     return rows;
   }, [items, sortBy, sortDir]);
@@ -116,7 +116,7 @@ export function ItemsManager() {
     >();
     for (const item of sortedItems) {
       map.set(item._id, {
-        assetId: item.assetId,
+        assetId: inventoryItemLabel(item),
         name: `${item.type?.name ?? "Unknown"} ${item.type?.model ?? ""}`.trim(),
         category: item.type?.category ?? "unknown",
       });
@@ -124,7 +124,7 @@ export function ItemsManager() {
     for (const item of itemSummaries ?? []) {
       if (map.has(item._id)) continue;
       map.set(item._id, {
-        assetId: item.assetId,
+        assetId: inventoryItemLabel(item),
         name: `${item.type?.name ?? "Unknown"} ${item.type?.model ?? ""}`.trim(),
         category: item.type?.category ?? "unknown",
       });
@@ -133,15 +133,17 @@ export function ItemsManager() {
   }, [itemSummaries, sortedItems]);
   /** Children by parent — from summaries so list query skips per-row child scans. */
   const childrenByParentId = useMemo(() => {
-    const map = new Map<string, Array<{ _id: string; assetId: string }>>();
+    const map = new Map<string, Array<{ _id: string; assetId?: string; serialNumber?: string }>>();
     for (const item of itemSummaries ?? []) {
       if (!item.containedInAssetId) continue;
       const list = map.get(item.containedInAssetId) ?? [];
-      list.push({ _id: item._id, assetId: item.assetId });
+      list.push({ _id: item._id, assetId: item.assetId, serialNumber: item.serialNumber });
       map.set(item.containedInAssetId, list);
     }
     for (const [, list] of map) {
-      list.sort((a, b) => a.assetId.localeCompare(b.assetId));
+      list.sort((a, b) =>
+        (a.assetId ?? a.serialNumber ?? "").localeCompare(b.assetId ?? b.serialNumber ?? ""),
+      );
     }
     return map;
   }, [itemSummaries]);
@@ -180,7 +182,7 @@ export function ItemsManager() {
   function beginEdit(item: (typeof sortedItems)[number]) {
     setEditingId(item._id);
     setEditorInitial({
-      assetId: item.assetId,
+      assetId: item.assetId ?? "",
       serialNumber: item.serialNumber ?? "",
       typeId: item.typeId,
       storageLocationId: item.storageLocationId ?? "",
@@ -223,7 +225,7 @@ export function ItemsManager() {
 
   function renderItemChip(itemId: string, fallbackAssetId?: string) {
     const details = itemLookup.get(itemId);
-    const assetLabel = details?.assetId ?? fallbackAssetId ?? "Unknown";
+    const assetLabel = details?.assetId ?? fallbackAssetId ?? "No ID";
     return (
       <button
         type="button"
@@ -396,17 +398,19 @@ export function ItemsManager() {
                         />
                       </td>
                       <td className="p-2">
-                        <div className="font-medium">{item.assetId}</div>
+                        <div className="font-medium">{item.assetId ?? "No ID"}</div>
                         <div className="text-xs text-muted-foreground">Serial: {item.serialNumber || "-"}</div>
-                        <div className="mt-1 text-xs">
-                          <a
-                            className="underline"
-                            href={`${siteBase}/e/${encodeURIComponent(item.assetId)}`}
-                            target="_blank"
-                          >
-                            Public /e link
-                          </a>
-                        </div>
+                        {item.assetId ? (
+                          <div className="mt-1 text-xs">
+                            <a
+                              className="underline"
+                              href={`${siteBase}/e/${encodeURIComponent(item.assetId)}`}
+                              target="_blank"
+                            >
+                              Public /e link
+                            </a>
+                          </div>
+                        ) : null}
                       </td>
                       <td className="p-2">
                         {formatTypeDisplay(item.type)}
@@ -506,6 +510,7 @@ export function ItemsManager() {
             items={(itemSummaries ?? []).map((item) => ({
               _id: item._id,
               assetId: item.assetId,
+              serialNumber: item.serialNumber,
               type: item.type ?? undefined,
             }))}
             siteBase={siteBase}

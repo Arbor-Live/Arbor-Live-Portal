@@ -45,3 +45,11 @@ export function formatCurrencyFromCents(cents?: number) {
   if (cents === undefined || cents === null) return "-";
   return formatCurrency(cents / 100);
 }
+
+/** Tag if present, else serial — untagged items still need a name in lists/pickers. */
+export function inventoryItemLabel(item: {
+  assetId?: string | null;
+  serialNumber?: string | null;
+}): string {
+  return item.assetId || item.serialNumber || "No ID";
+}

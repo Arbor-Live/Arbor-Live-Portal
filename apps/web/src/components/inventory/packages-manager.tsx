@@ -17,7 +17,7 @@ import {
   inventoryPackageSchema,
   type InventoryPackageFormValues,
 } from "@/lib/validations/inventory";
-import { formatCurrency } from "./constants";
+import { formatCurrency, inventoryItemLabel } from "./constants";
 import { FileUploadField } from "@/components/files/file-upload-field";
 import { MultiSelectFilter } from "./multi-select-filter";
 import { FilterField, FilterNativeSelect } from "./filter-controls";
@@ -255,7 +255,7 @@ export function PackagesManager() {
     () =>
       (inventoryItems ?? []).map((item) => ({
         value: item._id,
-        label: item.assetId,
+        label: inventoryItemLabel(item),
         description: item.type ? formatTypeDisplay(item.type) : "Unknown type",
         keywords: item.type?.category,
       })),

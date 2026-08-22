@@ -139,6 +139,7 @@ function CreateAssetWizardForm({ onClose }: { onClose: () => void }) {
       if (id) options.push({ value: id, assetId: id, label: id });
     }
     for (const item of itemSummaries ?? []) {
+      if (!item.assetId) continue;
       options.push({ value: item.assetId, assetId: item.assetId, label: item.assetId });
     }
     return options;
@@ -196,7 +197,7 @@ function CreateAssetWizardForm({ onClose }: { onClose: () => void }) {
       if (id && id.toLowerCase() === key) return id;
     }
     for (const item of itemSummaries ?? []) {
-      if (item.assetId.toLowerCase() === key) return item.assetId;
+      if ((item.assetId ?? "").toLowerCase() === key) return item.assetId ?? null;
     }
     return null;
   }
@@ -279,25 +280,42 @@ function CreateAssetWizardForm({ onClose }: { onClose: () => void }) {
     }
   }
 
+  function tagAssetId(tag: WizardTag): string {
+    return normalizeAssetScanInput(tag.assetId) ?? tag.assetId.trim();
+  }
+
   function validateForSubmit(): string | null {
     if (!typeId) return "Choose or create a type first.";
-    const ids = tags.map((tag) => normalizeAssetScanInput(tag.assetId) ?? tag.assetId.trim());
-    if (ids.some((id) => !id)) return "Every asset needs an Asset ID.";
+    for (const tag of tags) {
+      if (!tagAssetId(tag) && !tag.serialNumber.trim()) {
+        return "Every asset needs an Asset ID or Serial Number.";
+      }
+    }
     const seen = new Set<string>();
-    for (const id of ids) {
+    for (const tag of tags) {
+      const id = tagAssetId(tag);
+      if (!id) continue;
       const key = id.toLowerCase();
       if (seen.has(key)) return `Duplicate Asset ID in this batch: ${id}`;
       seen.add(key);
-      if ((itemSummaries ?? []).some((item) => item.assetId.toLowerCase() === key)) {
+      if ((itemSummaries ?? []).some((item) => (item.assetId ?? "").toLowerCase() === key)) {
         return `Asset ID already exists: ${id}`;
       }
     }
     const known = new Set(seen);
-    for (const item of itemSummaries ?? []) known.add(item.assetId.toLowerCase());
-    for (const tag of tags) {
-      const assetId = normalizeAssetScanInput(tag.assetId) ?? tag.assetId.trim();
+    for (const item of itemSummaries ?? []) known.add((item.assetId ?? "").toLowerCase());
+    for (const [index, tag] of tags.entries()) {
+      const assetId = tagAssetId(tag);
+      const label = assetId || tag.serialNumber.trim() || `Asset ${index + 1}`;
       const container =
         normalizeAssetScanInput(tag.containedInAssetId) ?? tag.containedInAssetId.trim();
+      // Containment edges are keyed by tag, so untagged cards can't use them.
+      if (!assetId && container) {
+        return `“${label}” needs an Asset ID before it can be placed inside “${container}”.`;
+      }
+      if (!assetId && tag.contains.length > 0) {
+        return `“${label}” needs an Asset ID before it can contain other assets.`;
+      }
       if (container && !known.has(container.toLowerCase())) {
         return `“${assetId}” references a container (“${container}”) that isn't an asset in this batch or an existing item.`;
       }
@@ -326,7 +344,7 @@ function CreateAssetWizardForm({ onClose }: { onClose: () => void }) {
       await createMany({
         typeId: typeId as Id<"inventoryTypes">,
         items: tags.map((tag) => ({
-          assetId: normalizeAssetScanInput(tag.assetId) ?? tag.assetId.trim(),
+          assetId: tagAssetId(tag) || undefined,
           serialNumber: tag.serialNumber.trim() || undefined,
           storageLocationId: tag.storageLocationId
             ? (tag.storageLocationId as Id<"storageLocations">)
@@ -542,7 +560,12 @@ function CreateAssetWizardForm({ onClose }: { onClose: () => void }) {
             <ul className="space-y-2">
               {tags.map((tag, index) => (
                 <li key={tag.localId} className="rounded-none border p-3 text-sm" data-testid={`wizard-review-tag-${index}`}>
-                  <p className="font-medium">{tag.assetId || `Asset ${index + 1} (no ID)`}</p>
+                  <p className="font-medium">
+                    {tagAssetId(tag) ||
+                      (tag.serialNumber.trim()
+                        ? `Serial ${tag.serialNumber.trim()}`
+                        : `Asset ${index + 1} (no ID)`)}
+                  </p>
                   <p className="text-xs text-muted-foreground">
                     {[
                       tag.serialNumber ? `Serial ${tag.serialNumber}` : null,

@@ -48,7 +48,7 @@ export function DamageReportsWidget() {
                 className="block rounded-md border px-3 py-2 text-sm hover:bg-muted/50"
               >
                 <p className="font-medium">
-                  {report.assetId}
+                  {report.assetId ?? "No ID"}
                   {report.typeName ? ` · ${report.typeName}` : ""}
                 </p>
                 <p className="text-xs text-muted-foreground">

@@ -29,7 +29,7 @@ const statusValue = v.union(
 const reportValidator = v.object({
   _id: v.id("damageReports"),
   inventoryItemId: v.id("inventoryItems"),
-  assetId: v.string(),
+  assetId: v.optional(v.string()),
   typeId: v.optional(v.id("inventoryTypes")),
   typeName: v.optional(v.string()),
   eventId: v.optional(v.id("events")),
@@ -97,7 +97,8 @@ export const getItemChildren = query({
   returns: v.array(
     v.object({
       inventoryItemId: v.id("inventoryItems"),
-      assetId: v.string(),
+      assetId: v.optional(v.string()),
+      serialNumber: v.optional(v.string()),
       typeName: v.string(),
     }),
   ),
@@ -110,7 +111,8 @@ export const getItemChildren = query({
         return {
           inventoryItemId: child._id,
           assetId: child.assetId,
-          typeName: type?.name ?? child.assetId,
+          serialNumber: child.serialNumber,
+          typeName: type?.name ?? child.assetId ?? child.serialNumber ?? "Item",
         };
       }),
     );
@@ -208,7 +210,7 @@ export const getById = query({
       siblings: v.array(
         v.object({
           _id: v.id("damageReports"),
-          assetId: v.string(),
+          assetId: v.optional(v.string()),
           typeName: v.optional(v.string()),
           status: statusValue,
         }),

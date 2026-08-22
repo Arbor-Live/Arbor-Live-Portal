@@ -18,16 +18,24 @@ export async function requireEvent(ctx: QueryCtx | MutationCtx, eventId: Id<"eve
   return event;
 }
 
+/**
+ * Anything resolvable by scan was looked up through `by_assetId`, so resolved
+ * items are guaranteed to carry a tag.
+ */
+type ScanResolvedItem = Doc<"inventoryItems"> & { assetId: string };
+
 async function findItemByAssetIdCandidates(
   ctx: QueryCtx | MutationCtx,
   assetId: string,
-): Promise<Doc<"inventoryItems"> | null> {
+): Promise<ScanResolvedItem | null> {
   for (const candidate of assetIdLookupCandidates(assetId)) {
     const item = await ctx.db
       .query("inventoryItems")
       .withIndex("by_assetId", (q) => q.eq("assetId", candidate))
       .unique();
-    if (item) return item;
+    if (!item) continue;
+    // Index match ⇒ doc.assetId === candidate exactly.
+    return { ...item, assetId: candidate };
   }
   return null;
 }
@@ -35,7 +43,7 @@ async function findItemByAssetIdCandidates(
 async function resolveViaShortLinkSlug(
   ctx: QueryCtx | MutationCtx,
   slug: string,
-): Promise<Doc<"inventoryItems"> | null> {
+): Promise<ScanResolvedItem | null> {
   let normalizedSlug: string;
   try {
     normalizedSlug = normalizeShortLinkSlug(slug);
@@ -55,7 +63,7 @@ async function resolveViaShortLinkSlug(
 export async function resolveInventoryItemByScan(
   ctx: QueryCtx | MutationCtx,
   raw: string,
-): Promise<Doc<"inventoryItems"> | null> {
+): Promise<ScanResolvedItem | null> {
   const parsed = parseAssetScanInput(raw);
 
   if (parsed.assetId) {
@@ -166,7 +174,7 @@ export async function typeLabel(
 /** Human-readable scan target, e.g. "QuikPunch (127)". */
 export async function formatScannedAssetLabel(
   ctx: QueryCtx | MutationCtx,
-  item: Doc<"inventoryItems">,
+  item: ScanResolvedItem,
 ) {
   const name = await typeLabel(ctx, item.typeId, item.assetId);
   if (name === item.assetId) return item.assetId;

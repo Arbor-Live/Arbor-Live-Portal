@@ -2186,7 +2186,7 @@ export const getDamageReportState = query({
     v.null(),
     v.object({
       status: v.string(),
-      assetId: v.string(),
+      assetId: v.optional(v.string()),
       severity: v.number(),
     }),
   ),
@@ -5301,7 +5301,7 @@ export const getInventoryItemByAssetId = query({
       containedInAssetId: v.union(v.string(), v.null()),
       contains: v.array(
         v.object({
-          assetId: v.string(),
+          assetId: v.optional(v.string()),
           storageLocationPath: v.union(v.string(), v.null()),
         }),
       ),
@@ -5313,7 +5313,7 @@ export const getInventoryItemByAssetId = query({
       .query("inventoryItems")
       .withIndex("by_assetId", (q) => q.eq("assetId", args.assetId.trim()))
       .first();
-    if (!item) return null;
+    if (!item?.assetId) return null;
     const type = await ctx.db.get(item.typeId);
     const location = item.storageLocationId ? await ctx.db.get(item.storageLocationId) : null;
     const container = item.containedInAssetId ? await ctx.db.get(item.containedInAssetId) : null;
@@ -5331,7 +5331,9 @@ export const getInventoryItemByAssetId = query({
         storageLocationPath: childLocation?.path ?? null,
       });
     }
-    contains.sort((a, b) => a.assetId.localeCompare(b.assetId));
+    contains.sort((a, b) =>
+      (a.assetId ?? "").localeCompare(b.assetId ?? ""),
+    );
     return {
       itemId: item._id,
       assetId: item.assetId,
