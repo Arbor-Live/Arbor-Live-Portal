@@ -23,6 +23,8 @@ import {
 } from "@/components/ui/select";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { useAppDialog } from "@/components/ui/app-dialog";
+import { notify } from "@/lib/notify";
 import {
   featuredStatPresets,
   formatPublishedAtInput,
@@ -71,13 +73,13 @@ function StatusBadge({ published, featured }: { published: boolean; featured: bo
 }
 
 export function WorkPostsManager() {
+  const { confirm } = useAppDialog();
   const posts = useQuery(api.marketingPosts.listAdmin, {});
   const createPost = useMutation(api.marketingPosts.create);
   const updatePost = useMutation(api.marketingPosts.update);
   const removePost = useMutation(api.marketingPosts.remove);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
   const [slugTouched, setSlugTouched] = useState(false);
 
   // `listAdmin` no longer ships every post body, so the editor loads the
@@ -182,20 +184,20 @@ export function WorkPostsManager() {
     {
       onSuccess: (values) => {
         form.reset(values);
-        setMessage(selectedId ? "Post updated." : "Post created.");
+        notify.success(selectedId ? "Post updated." : "Post created.");
       },
     },
   );
 
   async function onDelete() {
     if (!selectedId) return;
-    if (!window.confirm("Delete this post? This cannot be undone.")) return;
+    if (!(await confirm({ title: "Delete this post?", description: "This cannot be undone.", destructive: true }))) return;
     try {
       await removePost({ id: selectedId as Id<"marketingPosts"> });
       startNewPost();
-      setMessage("Post deleted.");
+      notify.success("Post deleted.");
     } catch (error) {
-      setMessage(getConvexErrorMessage(error));
+      notify.error(getConvexErrorMessage(error));
     }
   }
 
@@ -245,9 +247,9 @@ export function WorkPostsManager() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {message || form.saveError ? (
+          {form.saveError ? (
             <Alert className="mb-4">
-              <AlertDescription>{message ?? form.saveError}</AlertDescription>
+              <AlertDescription>{form.saveError}</AlertDescription>
             </Alert>
           ) : null}
 

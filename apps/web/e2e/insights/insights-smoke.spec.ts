@@ -63,7 +63,7 @@ test.describe("insights dashboard", () => {
 
     const expensesCard = page.locator("[data-slot='card']").filter({ hasText: "Expenses" }).first();
     await expect(
-      expensesCard.getByText("Recorded event costs (includes band payouts)", { exact: false }),
+      expensesCard.getByText("Recorded event costs (includes band payouts", { exact: false }),
     ).toBeVisible({ timeout: 30_000 });
 
     await page.getByRole("link", { name: "Insights", exact: true }).first().click();

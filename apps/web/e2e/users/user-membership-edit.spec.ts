@@ -1,4 +1,5 @@
 import { test, expect, type Locator } from "@playwright/test";
+import { acceptAppDialog } from "../helpers/auth";
 import { runConvex } from "../helpers/convex";
 import { e2eEnv } from "../helpers/env";
 import { chooseRowAction, pickSelectOption } from "../helpers/select";
@@ -99,10 +100,9 @@ test.describe.serial("user organization memberships", () => {
 
   test("removing the default org membership is refused", async ({ page }) => {
     // Otherwise the user keeps a default org they are not a member of, which is
-    // how a session ends up with no active organization at all. The refusal is a
-    // `window.alert`, so the assertion has to catch the dialog — Playwright
-    // dismisses it silently, and a refused click and a broken click look
-    // identical from the outside.
+    // how a session ends up with no active organization at all. The refusal is
+    // an in-app alert — a refused click and a broken click look identical
+    // without asserting the dialog.
     const before = await waitForUserAdminState(targetEmail, (state) => Boolean(state?.userId));
     const defaultOrg = before.memberships.find(
       (membership) => membership.organizationId === before.defaultOrganizationId,
@@ -114,15 +114,11 @@ test.describe.serial("user organization memberships", () => {
     const panel = page.getByTestId(`user-memberships-${before.userId}`);
     await expect(panel).toBeVisible({ timeout: 30_000 });
 
-    const alerts: string[] = [];
-    page.once("dialog", (dialog) => {
-      alerts.push(dialog.message());
-      void dialog.accept();
-    });
     await removeMembership(panel, "Arbor Live");
-
-    await expect.poll(() => alerts.length, { timeout: 20_000 }).toBeGreaterThan(0);
-    expect(alerts[0]).toContain("Change default organization before removing this membership.");
+    const dialog = page.getByTestId("app-dialog");
+    await expect(dialog).toBeVisible({ timeout: 20_000 });
+    await expect(dialog).toContainText("Change default organization before removing this membership.");
+    await acceptAppDialog(page, "OK");
 
     const after = runConvex("e2eHelpers:getUserAdminStateByEmail", {
       email: targetEmail,

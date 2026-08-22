@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { ArrowSquareOutIcon, CheckIcon, FingerprintIcon, XIcon } from "@phosphor-icons/react";
 import { authClient } from "@/lib/auth-client";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 
 /** Persistent exit control shown on every onboarding wizard step. */
@@ -172,8 +172,6 @@ export function OnboardingPasskeyStep({ onAdded }: { onAdded?: () => void }) {
   const passkeysQuery = authClient.useListPasskeys();
   const passkeys = (passkeysQuery.data ?? []) as OnboardingPasskeyRow[];
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (passkeys.length > 0) onAdded?.();
@@ -183,8 +181,6 @@ export function OnboardingPasskeyStep({ onAdded }: { onAdded?: () => void }) {
 
   async function onAddPasskey() {
     setBusy(true);
-    setMessage(null);
-    setError(null);
     try {
       const result = await authClient.passkey.addPasskey({ authenticatorAttachment: "platform" });
       if (result?.error) {
@@ -192,10 +188,10 @@ export function OnboardingPasskeyStep({ onAdded }: { onAdded?: () => void }) {
           typeof result.error.message === "string" ? result.error.message : "Unable to add passkey.",
         );
       }
-      setMessage("Passkey added.");
+      notify.success("Passkey added.");
       onAdded?.();
     } catch (addError) {
-      setError(addError instanceof Error ? addError.message : "Unable to add passkey.");
+      notify.error(addError instanceof Error ? addError.message : "Unable to add passkey.");
     } finally {
       setBusy(false);
     }
@@ -226,17 +222,6 @@ export function OnboardingPasskeyStep({ onAdded }: { onAdded?: () => void }) {
         <FingerprintIcon className="size-4" />
         {busy ? "Adding…" : passkeys.length > 0 ? "Add another passkey" : "Add a passkey"}
       </Button>
-
-      {message ? (
-        <Alert>
-          <AlertDescription>{message}</AlertDescription>
-        </Alert>
-      ) : null}
-      {error ? (
-        <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      ) : null}
     </div>
   );
 }

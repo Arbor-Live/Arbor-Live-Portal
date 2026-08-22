@@ -6,12 +6,12 @@ import { api, type Id } from "@/lib/convex-api";
 import { MarketingPostHeroUploadField } from "@/components/files/file-upload-field";
 import { UserSelect, type UserSelectOption } from "@/components/users/user-select";
 import { buildUserSelectDescription } from "@/lib/user-select-description";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { notify } from "@/lib/notify";
 import { formatDateTime } from "@/lib/format";
 import {
   formatEventVisibilityLabel,
@@ -40,7 +40,6 @@ function formatEventMeta(startAt: number, venueName?: string) {
 export function MarketingDesignBoard() {
   const [now] = useState(() => Date.now());
   const [view, setView] = useState<PosterWorkView>("mine");
-  const [message, setMessage] = useState<string | null>(null);
   const [selectedEventId, setSelectedEventId] = useState<Id<"events"> | null>(null);
   const [imageUrl, setImageUrl] = useState("");
   const [caption, setCaption] = useState("");
@@ -89,15 +88,15 @@ export function MarketingDesignBoard() {
         eventId: selectedEventId,
         assigneeUserId: assigneeUserId || undefined,
       });
-      setMessage(assigneeUserId ? "Poster designer assigned." : "Poster designer unassigned.");
+      notify.success(assigneeUserId ? "Poster designer assigned." : "Poster designer unassigned.");
     } catch (error) {
-      setMessage(getConvexErrorMessage(error));
+      notify.error(getConvexErrorMessage(error));
     }
   }
 
   async function handleSaveDraft() {
     if (!selectedEventId || !imageUrl.trim()) {
-      setMessage("Choose an event and upload a poster image.");
+      notify.error("Choose an event and upload a poster image.");
       return;
     }
     try {
@@ -108,9 +107,9 @@ export function MarketingDesignBoard() {
         caption: caption.trim() || undefined,
         additionalLinks: additionalLinks.filter((link) => link.label.trim() && link.url.trim()),
       });
-      setMessage("Draft saved.");
+      notify.success("Draft saved.");
     } catch (error) {
-      setMessage(getConvexErrorMessage(error));
+      notify.error(getConvexErrorMessage(error));
     }
   }
 
@@ -118,7 +117,7 @@ export function MarketingDesignBoard() {
     if (!selectedEventId) return;
     try {
       if (!imageUrl.trim()) {
-        setMessage("Upload a poster image before publishing.");
+        notify.error("Upload a poster image before publishing.");
         return;
       }
       const designId = await createDesign({
@@ -129,9 +128,9 @@ export function MarketingDesignBoard() {
         additionalLinks: additionalLinks.filter((link) => link.label.trim() && link.url.trim()),
       });
       await markReady({ id: designId });
-      setMessage("Published to Instagram and the public site.");
+      notify.success("Published to Instagram and the public site.");
     } catch (error) {
-      setMessage(getConvexErrorMessage(error));
+      notify.error(getConvexErrorMessage(error));
     }
   }
 
@@ -295,11 +294,7 @@ export function MarketingDesignBoard() {
               </div>
             </>
           )}
-          {message ? (
-            <Alert>
-              <AlertDescription>{message}</AlertDescription>
-            </Alert>
-          ) : null}
+
         </CardContent>
       </Card>
     </div>

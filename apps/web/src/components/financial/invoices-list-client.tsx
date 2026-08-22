@@ -80,10 +80,9 @@ export function InvoicesListClient() {
   return (
     <>
       <div className="mb-4 flex flex-wrap items-end gap-3">
-        <div className="space-y-1">
+        <div className="min-w-56 flex-1 space-y-1">
           <label className="text-xs text-muted-foreground">Search</label>
           <Input
-            className="w-56"
             placeholder="Invoice, client, series…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -117,79 +116,83 @@ export function InvoicesListClient() {
         </div>
       </div>
 
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b">
-            <th className="p-2 text-left">Invoice #</th>
-            <th className="p-2 text-left">Status</th>
-            <th className="p-2 text-left">Series / Event</th>
-            <th className="p-2 text-left">Manager</th>
-            <th className="p-2 text-left">Issue Date</th>
-            <th className="p-2 text-left">Total</th>
-            <th className="p-2 text-left">Net profit</th>
-            <th className="p-2 text-left">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {filteredRows.map((invoice) => (
-            <tr key={invoice._id} className="border-b">
-              <td className="p-2">{invoice.invoiceNumber}</td>
-              <td className="p-2">
-                <span
-                  className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${statusBadgeClass(invoice)}`}
-                >
-                  {displayStatus(invoice)}
-                </span>
-              </td>
-              <td className="p-2 text-muted-foreground">
-                {invoice.seriesTitle ? (
-                  <span>{invoice.seriesTitle}</span>
-                ) : invoice.linkedEventTitle ? (
-                  <span>{invoice.linkedEventTitle}</span>
-                ) : (
-                  "—"
-                )}
-              </td>
-              <td className="p-2">{invoice.managerName}</td>
-              <td className="p-2">{invoice.issueDate}</td>
-              <td className="p-2">{formatUsd(invoice.totalUsd)}</td>
-              <td className="p-2">
-                {invoice.netProfitUsd == null ? "—" : formatUsd(invoice.netProfitUsd)}
-              </td>
-              <td className="p-2">
-                <div className="flex flex-wrap gap-2">
-                  <Button asChild size="sm" variant="outline">
-                    <Link href={`/dashboard/financial-hub/invoices/${invoice._id}`}>Open</Link>
-                  </Button>
-                  <InvoicePdfDownloadButton
-                    invoiceId={invoice._id}
-                    invoiceNumber={invoice.invoiceNumber}
-                    size="sm"
-                    label="PDF"
-                  />
-                  {invoice.publicApprovalToken ? (
-                    <Button asChild size="sm" variant="outline">
-                      <Link href={`/event/${invoice.publicApprovalToken}`} target="_blank" rel="noreferrer">
-                        Quote Link
-                      </Link>
-                    </Button>
-                  ) : null}
-                  {isAdmin ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="destructive"
-                      onClick={() => setDeleteInvoiceId(invoice._id)}
-                    >
-                      Delete
-                    </Button>
-                  ) : null}
-                </div>
-              </td>
+      <div className="overflow-auto rounded-md border">
+        <table className="min-w-full text-sm">
+          <thead className="bg-muted/50">
+            <tr className="border-b">
+              <th className="p-2 text-left">Invoice #</th>
+              <th className="p-2 text-left">Status</th>
+              <th className="p-2 text-left">Series / Event</th>
+              <th className="p-2 text-left">Manager</th>
+              <th className="p-2 text-left">Issue Date</th>
+              <th className="p-2 text-left">Total</th>
+              <th className="p-2 text-left">Net profit</th>
+              <th className="p-2 text-left">Actions</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {filteredRows.map((invoice) => (
+              <tr key={invoice._id} className="border-t align-top">
+                <td className="p-2">
+                  <div className="font-medium">{invoice.invoiceNumber}</div>
+                </td>
+                <td className="p-2">
+                  <span
+                    className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${statusBadgeClass(invoice)}`}
+                  >
+                    {displayStatus(invoice)}
+                  </span>
+                </td>
+                <td className="p-2 text-muted-foreground">
+                  {invoice.seriesTitle ? (
+                    <span>{invoice.seriesTitle}</span>
+                  ) : invoice.linkedEventTitle ? (
+                    <span>{invoice.linkedEventTitle}</span>
+                  ) : (
+                    "—"
+                  )}
+                </td>
+                <td className="p-2">{invoice.managerName}</td>
+                <td className="p-2 whitespace-nowrap">{invoice.issueDate}</td>
+                <td className="p-2 whitespace-nowrap">{formatUsd(invoice.totalUsd)}</td>
+                <td className="p-2 whitespace-nowrap">
+                  {invoice.netProfitUsd == null ? "—" : formatUsd(invoice.netProfitUsd)}
+                </td>
+                <td className="p-2">
+                  <div className="flex min-w-[12rem] flex-wrap gap-2">
+                    <Button asChild size="sm" variant="outline">
+                      <Link href={`/dashboard/financial-hub/invoices/${invoice._id}`}>Open</Link>
+                    </Button>
+                    <InvoicePdfDownloadButton
+                      invoiceId={invoice._id}
+                      invoiceNumber={invoice.invoiceNumber}
+                      size="sm"
+                      label="PDF"
+                    />
+                    {invoice.publicApprovalToken ? (
+                      <Button asChild size="sm" variant="outline">
+                        <Link href={`/event/${invoice.publicApprovalToken}`} target="_blank" rel="noreferrer">
+                          Quote Link
+                        </Link>
+                      </Button>
+                    ) : null}
+                    {isAdmin ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => setDeleteInvoiceId(invoice._id)}
+                      >
+                        Delete
+                      </Button>
+                    ) : null}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       {!filteredRows.length ? <p className="p-2 text-muted-foreground">No invoices match your filters.</p> : null}
 
       <AdminCascadeDeleteDialog

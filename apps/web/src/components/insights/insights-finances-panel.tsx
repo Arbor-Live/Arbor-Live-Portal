@@ -102,7 +102,7 @@ export function InsightsFinancesPanel({ startMs, endMs }: InsightsFinancesPanelP
         <Card>
           <CardHeader>
             <CardTitle>Expenses</CardTitle>
-            <CardDescription>Event costs (includes bands)</CardDescription>
+            <CardDescription>Event costs (includes bands &amp; external rentals)</CardDescription>
           </CardHeader>
           <CardContent>
             {summary === undefined ? (

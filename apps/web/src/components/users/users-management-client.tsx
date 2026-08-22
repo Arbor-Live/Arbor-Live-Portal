@@ -17,6 +17,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { UserRatesAdminClient } from "@/components/users/user-rates-admin-client";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { useAppDialog } from "@/components/ui/app-dialog";
+import { notify } from "@/lib/notify";
 import {
   CREW_RATE_MODE_OPTIONS,
   PAYROLL_METHOD_OPTIONS,
@@ -159,6 +161,7 @@ export function UsersManagementClient({
 }: {
   view?: "all" | "access" | "organizations";
 }) {
+  const { confirm } = useAppDialog();
   const organizations = useQuery(api.users.listOrganizationsAdmin, {});
   const [showArchivedBands, setShowArchivedBands] = useState(false);
   const bandOrganizations = useQuery(api.users.listBandOrganizationsAdmin, {
@@ -208,7 +211,6 @@ export function UsersManagementClient({
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
   const [editingInvite, setEditingInvite] = useState<EditingInvite | null>(null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
   const [expandedUserIds, setExpandedUserIds] = useState<Record<string, boolean>>({});
   const [onboardingFilter, setOnboardingFilter] = useState<"all" | "incomplete">("all");
   const [accessFilter, setAccessFilter] = useState<"active" | "removed" | "all">("active");
@@ -245,9 +247,9 @@ export function UsersManagementClient({
       const created = await createOrganization({ name: organizationName.trim() });
       setOrganizationName("");
       setSelectedOrganizationId(created.id);
-      setMessage(`Created organization ${created.name}.`);
+      notify.success(`Created organization ${created.name}.`);
     } catch (error) {
-      setMessage(getConvexErrorMessage(error));
+      notify.error(getConvexErrorMessage(error));
     }
   }
 
@@ -263,102 +265,113 @@ export function UsersManagementClient({
   }
 
   async function onCancelInvite(invite: NonNullable<typeof invitations>[number]) {
-    if (!window.confirm(`Cancel the invitation for ${invite.email}?`)) return;
+    if (!(await confirm({ title: `Cancel the invitation for ${invite.email}?`, confirmLabel: "Cancel invitation" }))) return;
     try {
       await cancelInvite({ invitationId: invite.id });
-      setMessage(`Invitation cancelled for ${invite.email}.`);
+      notify.success(`Invitation cancelled for ${invite.email}.`);
     } catch (error) {
-      setMessage(getConvexErrorMessage(error));
+      notify.error(getConvexErrorMessage(error));
     }
   }
 
   async function onResendInvite(invitationId: string) {
     try {
       await resendInvite({ invitationId });
-      setMessage("Invite resent.");
+      notify.success("Invite resent.");
     } catch (error) {
-      setMessage(getConvexErrorMessage(error));
+      notify.error(getConvexErrorMessage(error));
     }
   }
 
   async function onUserPasswordReset(user: AdminUser) {
     try {
       await sendPasswordReset({ userId: user.id });
-      setMessage(`Password reset sent for ${user.name}.`);
+      notify.success(`Password reset sent for ${user.name}.`);
     } catch (error) {
-      setMessage(getConvexErrorMessage(error));
+      notify.error(getConvexErrorMessage(error));
     }
   }
 
   async function onSetUserAccess(user: AdminUser, removed: boolean) {
     const action = removed ? "Remove access for" : "Reactivate";
-    if (!window.confirm(`${action} ${user.name}?`)) return;
+    if (
+      !(await confirm({
+        title: `${action} ${user.name}?`,
+        confirmLabel: removed ? "Remove access" : "Reactivate",
+        destructive: removed,
+      }))
+    ) {
+      return;
+    }
     try {
       await setUserAccess({ userId: user.id, removed });
-      setMessage(removed ? `Removed access for ${user.name}.` : `Reactivated ${user.name}.`);
+      notify.success(removed ? `Removed access for ${user.name}.` : `Reactivated ${user.name}.`);
     } catch (error) {
-      setMessage(getConvexErrorMessage(error));
+      notify.error(getConvexErrorMessage(error));
     }
   }
 
   async function onArchiveBandOrganization(org: BandOrgRow) {
     if (
-      !window.confirm(
-        `Archive ${org.displayName || org.name}? Members with no other active organization will lose access.`,
-      )
+      !(await confirm({
+        title: `Archive ${org.displayName || org.name}?`,
+        description: "Members with no other active organization will lose access.",
+        confirmLabel: "Archive",
+      }))
     ) {
       return;
     }
     try {
       const result = await archiveBandOrganization({ organizationId: org.organizationId });
-      setMessage(
+      notify.success(
         result.deactivatedUserIds.length > 0
           ? `Archived ${org.displayName || org.name}. Deactivated ${result.deactivatedUserIds.length} user(s) with no remaining access.`
           : `Archived ${org.displayName || org.name}.`,
       );
     } catch (error) {
-      setMessage(getConvexErrorMessage(error));
+      notify.error(getConvexErrorMessage(error));
     }
   }
 
   async function onUnarchiveBandOrganization(org: BandOrgRow) {
     try {
       await unarchiveBandOrganization({ organizationId: org.organizationId });
-      setMessage(`Restored ${org.displayName || org.name} from archive.`);
+      notify.success(`Restored ${org.displayName || org.name} from archive.`);
     } catch (error) {
-      setMessage(getConvexErrorMessage(error));
+      notify.error(getConvexErrorMessage(error));
     }
   }
 
   async function onDeleteArchivedBandOrganization(org: BandOrgRow) {
     if (
-      !window.confirm(
-        `Permanently delete ${org.displayName || org.name}? This removes memberships, onboarding, and event participation records. This cannot be undone.`,
-      )
+      !(await confirm({
+        title: `Permanently delete ${org.displayName || org.name}?`,
+        description: "This removes memberships, onboarding, and event participation records. This cannot be undone.",
+        destructive: true,
+      }))
     ) {
       return;
     }
     try {
       await deleteArchivedBandOrganization({ organizationId: org.organizationId });
-      setMessage(`Deleted ${org.displayName || org.name}.`);
+      notify.success(`Deleted ${org.displayName || org.name}.`);
     } catch (error) {
-      setMessage(getConvexErrorMessage(error));
+      notify.error(getConvexErrorMessage(error));
     }
   }
 
   const onBackfillDefaults = async () => {
     try {
       await backfillDefaults({});
-      setMessage("Backfill started for existing users.");
+      notify.success("Backfill started for existing users.");
     } catch (error) {
-      setMessage(getConvexErrorMessage(error));
+      notify.error(getConvexErrorMessage(error));
     }
   }
 
 
   return (
     <div className="space-y-4 pb-24">
-      {message ? <p className="text-sm text-primary">{message}</p> : null}
 
       {showOrganizations ? (
         <Card>
@@ -550,12 +563,12 @@ export function UsersManagementClient({
                       onWaiveOnboarding={async () => {
                         try {
                           await waiveOnboarding({ userId: user.id });
-                          setMessage(`Waived onboarding for ${user.name}.`);
+                          notify.success(`Waived onboarding for ${user.name}.`);
                         } catch (error) {
-                          setMessage(getConvexErrorMessage(error));
+                          notify.error(getConvexErrorMessage(error));
                         }
                       }}
-                      onMessage={setMessage}
+                      onMessage={notify.success}
                     />
                   ))}
                 </tbody>
@@ -670,7 +683,7 @@ export function UsersManagementClient({
           onClose={() => setInviteModalOpen(false)}
           onInvited={() => {
             setInviteModalOpen(false);
-            setMessage("Invite sent.");
+            notify.success("Invite sent.");
           }}
           inviteUser={inviteUser}
         />
@@ -683,7 +696,7 @@ export function UsersManagementClient({
           onClose={() => setEditingInvite(null)}
           onSaved={() => {
             setEditingInvite(null);
-            setMessage("Invitation updated.");
+            notify.success("Invitation updated.");
           }}
           updateInvite={updateInvite}
         />
@@ -696,7 +709,7 @@ export function UsersManagementClient({
           onClose={() => setCreateModalOpen(false)}
           onCreated={() => {
             setCreateModalOpen(false);
-            setMessage("User created.");
+            notify.success("User created.");
           }}
           createUser={createUser}
         />
@@ -751,6 +764,7 @@ function UserAdminRow({
   onWaiveOnboarding: () => Promise<void>;
   onMessage: (message: string) => void;
 }) {
+  const { alert } = useAppDialog();
   const updateUser = useMutation(api.users.updateUserAdmin);
   const addMembership = useMutation(api.users.addUserOrganizationMembershipAdmin);
   const removeMembership = useMutation(api.users.removeUserOrganizationMembershipAdmin);
@@ -812,14 +826,14 @@ function UserAdminRow({
 
   async function onAddMembership() {
     if (!membershipDraft.organizationId) {
-      window.alert("Select an organization to add.");
+      await alert("Select an organization to add.");
       return;
     }
     const alreadyExists = user.organizationMemberships.some(
       (membership) => membership.organizationId === membershipDraft.organizationId,
     );
     if (alreadyExists) {
-      window.alert("User already has membership in this organization.");
+      await alert("User already has membership in this organization.");
       return;
     }
     try {
@@ -832,21 +846,21 @@ function UserAdminRow({
       setMembershipDraft({ organizationId: "", role: "org_member" });
       onMessage(`Added membership for ${user.name}.`);
     } catch (error) {
-      onMessage(getConvexErrorMessage(error));
+      notify.error(getConvexErrorMessage(error));
     }
   }
 
   async function onRemoveMembership(organizationId: string) {
     const defaultOrg = form.getValues("defaultOrganizationId");
     if (defaultOrg === organizationId) {
-      window.alert("Change default organization before removing this membership.");
+      await alert("Change default organization before removing this membership.");
       return;
     }
     try {
       await removeMembership({ userId: user.id, organizationId });
       onMessage(`Removed membership for ${user.name}.`);
     } catch (error) {
-      onMessage(getConvexErrorMessage(error));
+      notify.error(getConvexErrorMessage(error));
     }
   }
 

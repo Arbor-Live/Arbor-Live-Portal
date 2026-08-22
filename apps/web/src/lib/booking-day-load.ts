@@ -1,4 +1,4 @@
-import { formatDate, pacificDateAndTimeToMs } from "@/lib/format";
+import { formatDate, pacificDateAndTimeToMs, pacificDateKey } from "@/lib/format";
 
 export type BookingDayLoadLevel = "free" | "busy" | "unavailable";
 
@@ -28,27 +28,22 @@ export function bookingDayLoadClassName(level: BookingDayLoadLevel | undefined) 
 }
 
 export function toDateInput(date: Date) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+  return pacificDateKey(date.getTime());
 }
 
-/** Parse YYYY-MM-DD into a Date whose local Y-M-D matches (calendar UI). */
+/** Parse YYYY-MM-DD as a Pacific calendar day instant. */
 export function parseDateInput(value: string) {
-  if (!value) return null;
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
-  if (!match) return null;
-  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12, 0, 0, 0);
-  return Number.isNaN(date.getTime()) ? null : date;
+  const ms = pacificDateAndTimeToMs(value, "12:00");
+  return ms == null ? null : new Date(ms);
 }
 
 export function monthDateRange(date: Date) {
-  const start = new Date(date.getFullYear(), date.getMonth(), 1);
-  const end = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+  const key = pacificDateKey(date.getTime());
+  const [year, month] = key.split("-").map(Number);
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
   return {
-    rangeStart: toDateInput(start),
-    rangeEnd: toDateInput(end),
+    rangeStart: `${year}-${String(month).padStart(2, "0")}-01`,
+    rangeEnd: `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`,
   };
 }
 

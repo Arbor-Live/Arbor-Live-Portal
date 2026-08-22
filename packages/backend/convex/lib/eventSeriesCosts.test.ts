@@ -53,6 +53,7 @@ describe("series projected costs", () => {
     expect(effectiveExternalRentalsUsd(occurrences[0]!, s)).toBe(50);
     expect(effectiveOtherUsd(occurrences[0]!, s)).toBe(25);
     expect(summary.projectedGrandTotalUsd).toBe(100 + 400 + 50 + 25 + 10);
+    expect(summary.projectedPassThroughUsd).toBe(400 + 50 + 10);
   });
 
   it("prefers recorded occurrence band cost over template", () => {
@@ -60,5 +61,6 @@ describe("series projected costs", () => {
     const occurrences = [event({ bandsCostUsd: 250, crewCostUsd: 80 })];
     const summary = computeSeriesCostSummary(s, occurrences);
     expect(summary.projectedGrandTotalUsd).toBe(80 + 250);
+    expect(summary.projectedPassThroughUsd).toBe(250);
   });
 });

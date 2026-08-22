@@ -4,6 +4,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { CaretDownIcon, CaretRightIcon } from "@phosphor-icons/react";
 import { api, type Id } from "@/lib/convex-api";
+import { useAppDialog } from "@/components/ui/app-dialog";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { EMPTY_LEXICAL_STATE } from "@/components/editor/lexical-theme";
 import { Button } from "@/components/ui/button";
@@ -173,6 +174,7 @@ function collectParentIds(nodes: VenueTreeNode[]): Set<string> {
 }
 
 export function VenuesManager() {
+  const { alert } = useAppDialog();
   const [search, setSearch] = useState("");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -231,7 +233,7 @@ export function VenuesManager() {
         setEditingId(null);
       }
     } catch (error) {
-      window.alert(getConvexErrorMessage(error, "Could not delete selected venues."));
+      await alert(getConvexErrorMessage(error, "Could not delete selected venues."));
     }
   }
 

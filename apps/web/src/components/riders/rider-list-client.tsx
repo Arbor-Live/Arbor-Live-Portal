@@ -7,6 +7,7 @@ import { CopyIcon, PlusIcon, StarIcon, TrashIcon } from "@phosphor-icons/react";
 import { api, type Id } from "@/lib/convex-api";
 import { formatDate } from "@/lib/format";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { useAppDialog } from "@/components/ui/app-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { RiderPdfDownloadButton } from "@/components/riders/rider-pdf-download-button";
@@ -14,6 +15,7 @@ import { RiderTemplatePicker } from "@/components/riders/rider-template-picker";
 import { useAdminBandSelection } from "@/components/bands/admin-band-selection";
 
 export function RiderListClient() {
+  const { confirm } = useAppDialog();
   const { organizationId, isAdminManaging } = useAdminBandSelection();
   const riders = useQuery(
     api.bandRiders.listForActiveBand,
@@ -171,14 +173,18 @@ export function RiderListClient() {
                         className="text-destructive"
                         disabled={busy}
                         onClick={() => {
-                          if (
-                            !window.confirm(
-                              `Delete “${rider.name}”? This cannot be undone.`,
-                            )
-                          ) {
-                            return;
-                          }
-                          void run(rider._id, () => remove({ riderId: rider._id }));
+                          void (async () => {
+                            if (
+                              !(await confirm({
+                                title: `Delete “${rider.name}”?`,
+                                description: "This cannot be undone.",
+                                destructive: true,
+                              }))
+                            ) {
+                              return;
+                            }
+                            await run(rider._id, () => remove({ riderId: rider._id }));
+                          })();
                         }}
                       >
                         <TrashIcon className="size-3.5" />

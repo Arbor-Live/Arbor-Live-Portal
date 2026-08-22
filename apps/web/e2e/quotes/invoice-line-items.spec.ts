@@ -41,12 +41,13 @@ test.describe("invoice line items and totals", () => {
     await expect(page.getByText("Create Invoice").first()).toBeVisible({ timeout: 25_000 });
     await expect(page.getByText(/E2E Admin/i).first()).toBeVisible({ timeout: 25_000 });
 
-    // 2 x $75 = $150
+    // 2 people × 1 hr × $75 = $150
     await page.getByRole("button", { name: "Add artist row" }).click();
     const artistRow = page.getByTestId("invoice-row-artist-0");
     await artistRow.getByPlaceholder("Artist / role").fill(artistLabel);
+    await artistRow.getByPlaceholder("Hours").fill("1");
     await artistRow.getByPlaceholder("People").fill("2");
-    await artistRow.getByPlaceholder("Rate").fill("75");
+    await artistRow.getByPlaceholder("Rate / hr").fill("75");
 
     // 1 x $40 = $40
     await page.getByRole("button", { name: "Add external rental" }).click();

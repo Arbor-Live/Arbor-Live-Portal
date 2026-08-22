@@ -1,16 +1,16 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import DatePicker from "react-datepicker";
 import { useQuery } from "convex/react";
+import { Calendar, CalendarDayButton } from "@/components/ui/calendar";
 import { api } from "@/lib/convex-api";
 import {
   BOOKING_DAY_LOAD_LEGEND,
   bookingDayLoadClassName,
   monthDateRange,
   parseDateInput,
-  toDateInput,
 } from "@/lib/booking-day-load";
+import { PORTAL_TIMEZONE, pacificDateAndTimeToMs, pacificDateKey } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export function BookingAvailabilityCalendar({
@@ -24,53 +24,68 @@ export function BookingAvailabilityCalendar({
   onSelectDate: (dateKey: string) => void;
   minDate?: Date;
 }) {
-  const selected = useMemo(() => parseDateInput(selectedDate), [selectedDate]);
+  const selected = useMemo(() => parseDateInput(selectedDate) ?? undefined, [selectedDate]);
   const [visibleMonth, setVisibleMonth] = useState(() => selected ?? minDate);
   const { rangeStart, rangeEnd } = useMemo(() => monthDateRange(visibleMonth), [visibleMonth]);
   const dayLoad = useQuery(api.eventRequests.getPublicBookingDayLoad, { rangeStart, rangeEnd });
+  const highlighted = useMemo(
+    () =>
+      highlightedDates
+        .map((dateKey) => {
+          const ms = pacificDateAndTimeToMs(dateKey, "12:00");
+          return ms == null ? undefined : new Date(ms);
+        })
+        .filter((date): date is Date => date != null),
+    [highlightedDates],
+  );
 
   return (
     <div className="booking-availability-calendar">
       <div className="booking-availability-calendar-shell">
-        <DatePicker
-          inline
+        <Calendar
+          mode="single"
+          timeZone={PORTAL_TIMEZONE}
+          noonSafe
           selected={selected}
-          onChange={(date: Date | null) => {
+          month={visibleMonth}
+          onMonthChange={setVisibleMonth}
+          onSelect={(date) => {
             if (!date) return;
-            onSelectDate(toDateInput(date));
+            onSelectDate(pacificDateKey(date.getTime()));
           }}
-          onMonthChange={(date) => setVisibleMonth(date)}
-          minDate={minDate}
-          calendarClassName="booking-availability-calendar-panel"
-          dayClassName={(date) => {
-            const dateKey = toDateInput(date);
-            const classes = ["booking-availability-day"];
-            if (highlightedDates.includes(dateKey)) {
-              classes.push("booking-availability-day-highlighted");
-            }
-            if (selectedDate === dateKey) {
-              classes.push("booking-availability-day-selected");
-            }
-            return classes.join(" ");
+          disabled={{ before: minDate }}
+          modifiers={{ highlighted }}
+          modifiersClassNames={{
+            highlighted: "ring-1 ring-primary/50",
           }}
-          renderDayContents={(dayOfMonth, date) => {
-            const dateKey = toDateInput(date);
-            const level = dayLoad?.[dateKey]?.level ?? "free";
-            const isSelected = selectedDate === dateKey;
-            return (
-              <span className="booking-availability-day-contents">
-                <span className="booking-availability-day-number">{dayOfMonth}</span>
-                <span
-                  className={cn(
-                    "booking-day-load-dot",
-                    isSelected
-                      ? "booking-day-load-dot-selected"
-                      : bookingDayLoadClassName(level),
-                  )}
-                  aria-hidden
-                />
-              </span>
-            );
+          className="w-full bg-transparent p-3 [--cell-size:--spacing(11)]"
+          classNames={{
+            root: "w-full",
+            months: "w-full",
+            month: "w-full",
+            month_grid: "w-full",
+          }}
+          components={{
+            DayButton: ({ day, modifiers, children, ...props }) => {
+              const dateKey = pacificDateKey(day.date.getTime());
+              const level = dayLoad?.[dateKey]?.level ?? "free";
+              return (
+                <CalendarDayButton day={day} modifiers={modifiers} {...props}>
+                  {children}
+                  {!modifiers.outside ? (
+                    <span
+                      className={cn(
+                        "booking-day-load-dot",
+                        modifiers.selected
+                          ? "booking-day-load-dot-selected"
+                          : bookingDayLoadClassName(level),
+                      )}
+                      aria-hidden
+                    />
+                  ) : null}
+                </CalendarDayButton>
+              );
+            },
           }}
         />
 

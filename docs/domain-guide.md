@@ -105,7 +105,9 @@ Event types (drive which editor tabs and quick-add blocks appear):
   overlap (the timeline renders overlaps on separate lanes) and may cross
   midnight. `dayIndex` is anchored to the event **start** calendar day —
   strike may run past midnight after an ~11pm show end without moving
-  `events.endAt` (show end and strike end are independent).
+  `events.endAt` (show end and strike end are independent). New blocks default
+  to Day 1 of the event and a 1-hour window; the editor lists them by start
+  time. Double-clicking the timetable adds a block at that time.
 - **Crew shifts** (`eventCrewShifts`) attach to schedule blocks via optional
   `scheduleBlockId`. Legacy shifts without a block must be handled without
   crashing. Shift hours feed expense-report totals and the event's
@@ -114,8 +116,10 @@ Event types (drive which editor tabs and quick-add blocks appear):
   email).
 - Event costs are direct fields on `events` (`crewCostUsd`, `bandsCostUsd`,
   `externalRentalsCostUsd`) — there is no generated expense-report workflow.
-  Band / artist money is an expense: invoice artist lines do not count as Arbor
-  earned revenue for net profit or Insights revenue metrics.
+  Artists and external rentals are pass-through expenses. Invoice lines may bill
+  the host for transparency, but Insights *earned revenue* and net profit exclude
+  them from Arbor margin (equipment / crew / fees). Matching `bandsCostUsd` /
+  `externalRentalsCostUsd` are not double-counted; overruns still reduce profit.
 - **Event series** (`eventSeries.ts`) generate recurring occurrences and have
   their own budgeting and pull lists.
 - Band participation in events is tracked in `eventBandParticipations`
@@ -148,6 +152,8 @@ Event types (drive which editor tabs and quick-add blocks appear):
   `ALINV-` + 7-char nanoid (requests use `ALREQ-`).
 - Lifecycle: `draft` → `finalized` (→ `void`), with a parallel
   `clientApprovalStatus`: `pending` → `approved` / `changes_requested`.
+  Default due date is first linked event start (Day 1) + 30 days; staff can
+  override, then resync.
 - Line items live in a child table, sectioned as equipment package/type,
   external rental, artist, crew, fee. Totals are recomputed server-side
   (`recalculateTotals`); equipment pricing is `subsidized`/`nonSubsidized`
@@ -158,8 +164,8 @@ Event types (drive which editor tabs and quick-add blocks appear):
   `performerHourlyRateUsd` and member count (`bandMembers.length`) from the org
   profile when a band is selected. Linked events auto-fill artist rows from
   assigned performers / payout totals when the invoice has no artist lines yet.
-  Artist amounts are expenses (not Arbor earned revenue) for net profit and
-  Insights.
+  Artist and external-rental amounts are pass-through (excluded from Insights
+  earned revenue and from net-profit margin).
 - Every invoice carries a `publicApprovalToken` for the client-facing quote
   page (`/public/quote/[token]`): view, approve, request changes, set payment
   contacts, download PDF — all token-gated, no login.

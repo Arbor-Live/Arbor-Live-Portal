@@ -22,6 +22,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { notify } from "@/lib/notify";
 import {
   optimisticCompleteOutbound,
   optimisticCompleteReturn,
@@ -328,7 +329,7 @@ export function RentalFulfillmentSheet({
         setPhase("pack");
         if (result.emailWarning) {
           setCompleteWarning(result.emailWarning);
-          onMessage?.(result.emailWarning);
+          notify.warning(result.emailWarning);
         } else {
           onMessage?.(
             `Delivery complete. ${result.rentedCount} item(s) rented. Client notified.`,
@@ -339,7 +340,7 @@ export function RentalFulfillmentSheet({
         setPhase("pack");
         if (result.emailWarning) {
           setCompleteWarning(result.emailWarning);
-          onMessage?.(result.emailWarning);
+          notify.warning(result.emailWarning);
         } else {
           onMessage?.("Return complete. Client notified.");
         }
@@ -376,7 +377,7 @@ export function RentalFulfillmentSheet({
           : await resendReturnClientEmail({ eventId });
       if (result.emailWarning) {
         setCompleteWarning(result.emailWarning);
-        onMessage?.(result.emailWarning);
+        notify.warning(result.emailWarning);
       } else {
         setCompleteWarning(null);
         onMessage?.("Client notification sent.");

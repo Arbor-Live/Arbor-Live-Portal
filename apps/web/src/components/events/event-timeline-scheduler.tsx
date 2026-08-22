@@ -3,8 +3,14 @@
 import { useRef } from "react";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
 import { Button } from "@/components/ui/button";
-import { DateTimePicker } from "@/components/ui/date-time-picker";
+import { DateTimeRangePicker } from "@/components/ui/date-time-picker";
 import { Input } from "@/components/ui/input";
+import {
+  createScheduleBlockDraft,
+  getBlockRef,
+  sortScheduleBlocksByTime,
+} from "@/lib/event-schedule-draft";
+import { localDateTimeInputToMs } from "@/lib/crew-availability";
 
 export type TimelineBlockDraft = {
   id?: string;
@@ -16,8 +22,6 @@ export type TimelineBlockDraft = {
   endsAt: string;
   notes: string;
 };
-
-import { localDateTimeInputToMs } from "@/lib/crew-availability";
 
 const MINUTES_PER_DAY = 24 * 60;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -61,6 +65,12 @@ function snapMinutes(value: number) {
   return Math.round(value / SNAP_MINUTES) * SNAP_MINUTES;
 }
 
+function startMinutesFromTrackClientX(clientX: number, trackWidth: number, trackLeft: number) {
+  if (trackWidth <= 0) return 0;
+  const ratio = clamp((clientX - trackLeft) / trackWidth, 0, 1);
+  return snapMinutes(clamp(ratio * MINUTES_PER_DAY, 0, MINUTES_PER_DAY - SNAP_MINUTES));
+}
+
 function blockColor(type: TimelineBlockDraft["blockType"]) {
   if (type === "setup") return "bg-blue-500/30 border-blue-500";
   if (type === "show") return "bg-emerald-500/30 border-emerald-500";
@@ -101,6 +111,7 @@ export function EventTimelineScheduler({
   quickAddDisabled,
   quickAddDisabledReason,
   readOnly = false,
+  anchorStartsAt,
 }: {
   dayCount: number;
   blocks: TimelineBlockDraft[];
@@ -110,6 +121,8 @@ export function EventTimelineScheduler({
   quickAddDisabled?: boolean;
   quickAddDisabledReason?: string;
   readOnly?: boolean;
+  /** Event start as Pacific wall-clock `YYYY-MM-DDTHH:mm` — new blocks use this Day 1 date. */
+  anchorStartsAt?: string;
 }) {
   const dragRef = useRef<{
     index: number;
@@ -118,6 +131,15 @@ export function EventTimelineScheduler({
     left: number;
     width: number;
   } | null>(null);
+  const latestBlocksRef = useRef(blocks);
+
+  function emit(next: TimelineBlockDraft[], sort = true) {
+    const out = sort ? sortScheduleBlocksByTime(next) : next;
+    latestBlocksRef.current = out;
+    onChange(out);
+  }
+
+  const canCreateOnEventDay = Boolean(anchorStartsAt && localDateTimeInputToMs(anchorStartsAt) != null);
 
   const maxDerivedDay = blocks.reduce((max, block) => {
     const range = toTimelineRange(block);
@@ -156,7 +178,7 @@ export function EventTimelineScheduler({
       oldDayZero.getTime() + (startDayIndex + endDayOffset) * MS_PER_DAY + endMinute * 60_000,
     );
 
-    onChange(
+    emit(
       blocks.map((row, i) =>
         i === index
           ? {
@@ -167,10 +189,12 @@ export function EventTimelineScheduler({
             }
           : row,
       ),
+      false,
     );
   }
 
   function beginDrag(index: number, mode: DragMode, dayIndex: number, clientX: number, width: number, left: number) {
+    latestBlocksRef.current = blocks;
     dragRef.current = { index, mode, dayIndex, left, width };
     const onMove = (event: MouseEvent) => {
       const state = dragRef.current;
@@ -198,6 +222,7 @@ export function EventTimelineScheduler({
       dragRef.current = null;
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
+      emit(latestBlocksRef.current);
     };
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
@@ -222,19 +247,19 @@ export function EventTimelineScheduler({
           <Button
             type="button"
             variant="outline"
-            onClick={() =>
-              onChange([
-                ...blocks,
-                {
-                  blockType: "setup",
-                  label: "New block",
-                  dayIndex: 0,
-                  startsAt: "",
-                  endsAt: "",
-                  notes: "",
-                },
-              ])
+            disabled={!canCreateOnEventDay}
+            title={
+              canCreateOnEventDay
+                ? undefined
+                : "Set event start first."
             }
+            className={!canCreateOnEventDay ? "opacity-40 blur-[0.5px]" : undefined}
+            onClick={() => {
+              if (!anchorStartsAt) return;
+              const next = createScheduleBlockDraft({ anchorStartsAt });
+              if (!next) return;
+              emit([...blocks, next]);
+            }}
           >
             Add Block
           </Button>
@@ -242,16 +267,18 @@ export function EventTimelineScheduler({
       ) : null}
 
       <div className="space-y-2">
-        <div className="relative h-5 rounded border bg-muted/30">
-          {timeMarks.map((mark) => (
-            <div
-              key={`time-${mark}`}
-              className="absolute top-0 -translate-x-1/2 text-[10px] text-muted-foreground"
-              style={{ left: `${(mark / MINUTES_PER_DAY) * 100}%` }}
-            >
-              {String(Math.floor(mark / 60)).padStart(2, "0")}:00
-            </div>
-          ))}
+        <div className="px-3">
+          <div className="relative h-5 rounded border bg-muted/30">
+            {timeMarks.map((mark) => (
+              <div
+                key={`time-${mark}`}
+                className="absolute top-0 -translate-x-1/2 text-[10px] text-muted-foreground"
+                style={{ left: `${(mark / MINUTES_PER_DAY) * 100}%` }}
+              >
+                {String(Math.floor(mark / 60)).padStart(2, "0")}:00
+              </div>
+            ))}
+          </div>
         </div>
         {Array.from({ length: safeDayCount }).map((_, dayIndex) => {
           const dayStart = dayIndex * MINUTES_PER_DAY;
@@ -291,18 +318,40 @@ export function EventTimelineScheduler({
                 {Array.from({ length: 24 }).map((__, hour) => (
                   <div
                     key={`grid-${dayIndex}-${hour}`}
-                    className="absolute top-0 h-full border-l border-border/50"
+                    className="pointer-events-none absolute top-0 h-full border-l border-border/50"
                     style={{ left: `${(hour / 24) * 100}%` }}
                   />
                 ))}
+                {!readOnly && canCreateOnEventDay && anchorStartsAt ? (
+                  <div
+                    className="absolute inset-0 z-0"
+                    onDoubleClick={(event) => {
+                      event.preventDefault();
+                      const rect = event.currentTarget.getBoundingClientRect();
+                      const startMinutesInDay = startMinutesFromTrackClientX(
+                        event.clientX,
+                        rect.width,
+                        rect.left,
+                      );
+                      const next = createScheduleBlockDraft({
+                        anchorStartsAt,
+                        dayIndex,
+                        startMinutesInDay,
+                      });
+                      if (!next) return;
+                      emit([...blocks, next]);
+                    }}
+                  />
+                ) : null}
                 {segments.map((segment) => {
                   const { block, idx, overlapStart, overlapEnd } = segment;
                   const left = ((overlapStart - dayStart) / MINUTES_PER_DAY) * 100;
                   const width = ((overlapEnd - overlapStart) / MINUTES_PER_DAY) * 100;
                   return (
                     <div
-                      key={`${block.id ?? "new"}-${idx}`}
-                      className={`absolute overflow-hidden rounded border px-2 text-xs ${blockColor(block.blockType)}`}
+                      key={getBlockRef(block) ?? `block-${idx}`}
+                      data-schedule-block=""
+                      className={`absolute z-10 overflow-hidden rounded border px-2 text-xs ${blockColor(block.blockType)}`}
                       style={{
                         top: `${segment.lane * laneHeight + 4}px`,
                         height: `${blockHeight}px`,
@@ -349,11 +398,14 @@ export function EventTimelineScheduler({
       {!readOnly ? (
       <div className="space-y-2">
         {blocks.map((block, index) => (
-          <div key={block.id ?? `block-${index}`} className="grid gap-2 md:grid-cols-7">
+          <div
+            key={getBlockRef(block) ?? `block-${index}`}
+            className="grid items-center gap-2 md:grid-cols-[7rem_minmax(0,8rem)_5.5rem_minmax(12rem,1.4fr)_minmax(0,1fr)_auto]"
+          >
             <SearchableSelect
               value={block.blockType}
               onChange={(value) =>
-                onChange(
+                emit(
                   blocks.map((row, i) =>
                     i === index ? { ...row, blockType: value as TimelineBlockDraft["blockType"] } : row,
                   ),
@@ -371,14 +423,14 @@ export function EventTimelineScheduler({
             <Input
               value={block.label}
               onChange={(e) =>
-                onChange(blocks.map((row, i) => (i === index ? { ...row, label: e.target.value } : row)))
+                emit(blocks.map((row, i) => (i === index ? { ...row, label: e.target.value } : row)))
               }
             />
             <SearchableSelect
               value={String(Math.min(block.dayIndex, allowedDayCount - 1))}
               onChange={(value) => {
                 const nextDayIndex = clamp(Number(value), 0, allowedDayCount - 1);
-                onChange(
+                emit(
                   blocks.map((row, i) => {
                     if (i !== index) return row;
                     const deltaDays = nextDayIndex - row.dayIndex;
@@ -404,28 +456,24 @@ export function EventTimelineScheduler({
               placeholder="Search day..."
               emptyLabel="Select day"
             />
-            <DateTimePicker
-              value={block.startsAt}
-              onChange={(value) =>
-                onChange(blocks.map((row, i) => (i === index ? { ...row, startsAt: value } : row)))
+            <DateTimeRangePicker
+              className="min-w-[13rem]"
+              startValue={block.startsAt}
+              endValue={block.endsAt}
+              openToDate={anchorStartsAt}
+              onChange={({ start, end }) =>
+                emit(blocks.map((row, i) => (i === index ? { ...row, startsAt: start, endsAt: end } : row)))
               }
-              placeholder="Block start"
-            />
-            <DateTimePicker
-              value={block.endsAt}
-              onChange={(value) =>
-                onChange(blocks.map((row, i) => (i === index ? { ...row, endsAt: value } : row)))
-              }
-              placeholder="Block end"
+              placeholder="Block start and end"
             />
             <Input
               placeholder="Notes"
               value={block.notes}
               onChange={(e) =>
-                onChange(blocks.map((row, i) => (i === index ? { ...row, notes: e.target.value } : row)))
+                emit(blocks.map((row, i) => (i === index ? { ...row, notes: e.target.value } : row)))
               }
             />
-            <Button type="button" variant="outline" onClick={() => onChange(blocks.filter((_, i) => i !== index))}>
+            <Button type="button" variant="outline" onClick={() => emit(blocks.filter((_, i) => i !== index))}>
               Remove
             </Button>
           </div>

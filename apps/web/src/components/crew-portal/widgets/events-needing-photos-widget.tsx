@@ -10,11 +10,11 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatDateTime } from "@/lib/format";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { notify } from "@/lib/notify";
 import { optimisticResolveMyEventMedia } from "@/lib/crew-portal-optimistic";
 
 export function EventsNeedingPhotosWidget() {
   const [now] = useState(() => Date.now());
-  const [message, setMessage] = useState<string | null>(null);
   const events = useQuery(api.crewPortal.listMyEventsNeedingPhotos, { now });
   const resolveMedia = useMutation(
     api.crewPortal.resolveMyEventMedia,
@@ -32,7 +32,6 @@ export function EventsNeedingPhotosWidget() {
         <p className="text-xs text-muted-foreground">
           Uploads are required after crewed events. Leadership may follow up if media is missing.
         </p>
-        {message ? <p className="text-xs text-emerald-700">{message}</p> : null}
         {events === undefined ? (
           <Skeleton className="h-16 w-full" />
         ) : events.length === 0 ? (
@@ -54,9 +53,9 @@ export function EventsNeedingPhotosWidget() {
                   onClick={async () => {
                     try {
                       await resolveMedia({ eventId: event.eventId, status: "no_media" });
-                      setMessage(`Marked "${event.title}" as no photos/videos.`);
+                      notify.success(`Marked "${event.title}" as no photos/videos.`);
                     } catch (error) {
-                      setMessage(getConvexErrorMessage(error));
+                      notify.error(getConvexErrorMessage(error));
                     }
                   }}
                 >

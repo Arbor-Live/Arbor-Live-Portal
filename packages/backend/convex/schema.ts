@@ -705,6 +705,13 @@ export default defineSchema({
     equipmentQuantityBasis: v.optional(v.union(v.literal("total"), v.literal("per_occurrence"))),
     /** Band/DJ org for artist lines — omitted for TBD / undetermined rows. */
     organizationId: v.optional(v.string()),
+    /**
+     * Artist lines: performers in the group. With `performanceHours` and `rateUsd`
+     * (per person per hour), `quantity` is person-hours (people × hours).
+     */
+    memberCount: v.optional(v.number()),
+    /** Artist lines: hours the group is performing. */
+    performanceHours: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

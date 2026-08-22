@@ -24,7 +24,7 @@ import {
   type EquipmentPricingMode,
 } from "@/lib/invoice-group-labels";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { DateTimePicker } from "@/components/ui/date-time-picker";
+import { DateTimePicker, DateTimeRangePicker } from "@/components/ui/date-time-picker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -37,6 +37,7 @@ import { EventBandRidersSection } from "@/components/events/event-band-riders-se
 import { EventMediaSection } from "@/components/events/event-media-section";
 import { CommentsSection } from "@/components/comments/comments-section";
 import { EventPullList, mapPullListRow, type PullListItemDraft } from "@/components/events/event-pull-list";
+import { LinkedEventDaySwitcher } from "@/components/events/linked-event-day-switcher";
 import { EventTimelineScheduler, type TimelineBlockDraft } from "@/components/events/event-timeline-scheduler";
 import { EventScheduleCrewAssignPanel } from "@/components/events/event-availability-summary";
 import { UserSelect, type UserSelectOption } from "@/components/users/user-select";
@@ -55,6 +56,8 @@ import {
 } from "@/lib/event-visibility";
 import {
   buildQuickAddScheduleBlocks,
+  eventTypeHasCrewAssignment,
+  sortScheduleBlocksByTime,
 } from "@/lib/event-schedule-draft";
 import {
   getAvailabilityNotesForDisplay,
@@ -76,6 +79,8 @@ import {
   type SeriesEditScope,
 } from "@/lib/event-series";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { useAppDialog } from "@/components/ui/app-dialog";
+import { notify } from "@/lib/notify";
 import { FormSaveBar } from "@/components/forms";
 import { StoredAssetImage, StoredAssetLink } from "@/components/files/stored-asset-image";
 import { isImageAssetReference } from "@/lib/r2-assets";
@@ -86,7 +91,13 @@ import {
   pacificEndOfDayMs,
   pacificScheduleDayCount,
 } from "@/lib/format";
-import { arborEarnedRevenueUsd, netProfitFromInvoiceUsd } from "@/lib/invoice-profit";
+import {
+  arborEarnedRevenueUsd,
+  eventPassThroughCostUsd,
+  invoicePassThroughUsd,
+  netProfitCostUsd,
+  netProfitFromInvoiceUsd,
+} from "@/lib/invoice-profit";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { WarningCircleIcon } from "@phosphor-icons/react";
 
@@ -181,6 +192,7 @@ export function EventEditor({
   activeTab?: EventEditorTabId;
 }) {
   const router = useRouter();
+  const { confirm, alert } = useAppDialog();
   const session = authClient.useSession();
   const isCreate = !eventId;
   const loadOverviewLookups = isCreate || activeTab === "overview";
@@ -214,6 +226,13 @@ export function EventEditor({
   const deleteUnassignedShifts = useMutation(api.eventCrew.deleteUnassignedShifts);
   const createArtifact = useMutation(api.eventArtifacts.create);
   const assignPosterDesigner = useMutation(api.marketingDesigns.assignPosterDesigner);
+  const copyDaySetup = useMutation(api.events.copyDaySetup);
+
+  const siblingDays = useQuery(
+    api.events.listSiblingDays,
+    eventId ? { eventId } : "skip",
+  );
+  const [copyingDaySetup, setCopyingDaySetup] = useState(false);
 
   const [title, setTitle] = useState("");
   const [status, setStatus] = useState<EventStatus>("tentative");
@@ -221,7 +240,6 @@ export function EventEditor({
   const [invoiceId, setInvoiceId] = useState("");
   const [startAt, setStartAt] = useState("");
   const [endAt, setEndAt] = useState("");
-  const [endAtTouched, setEndAtTouched] = useState(false);
   const [venueId, setVenueId] = useState("");
   const [eventType, setEventType] = useState<EventType>("Crewed Event");
   const [rentalFulfillmentMode, setRentalFulfillmentMode] = useState<RentalFulfillmentMode>("delivery");
@@ -275,6 +293,13 @@ export function EventEditor({
   const [artifactLinkUrl, setArtifactLinkUrl] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [messageTone, setMessageTone] = useState<"success" | "error">("success");
+
+  function flash(tone: "success" | "error", text: string) {
+    setMessageTone(tone);
+    setMessage(text);
+    if (tone === "success") notify.success(text);
+    else notify.error(text);
+  }
   const [isRecurring, setIsRecurring] = useState(false);
   const [intervalWeeks, setIntervalWeeks] = useState("1");
   const [recurrenceEndMode, setRecurrenceEndMode] = useState<RecurrenceEndMode>("count");
@@ -361,7 +386,6 @@ export function EventEditor({
     setInvoiceId(eventData.event.invoiceId ?? "");
     setStartAt(toLocalDateTimeInput(eventData.event.startAt));
     setEndAt(toLocalDateTimeInput(eventData.event.endAt));
-    setEndAtTouched(true);
     setVenueId(eventData.event.venueId ?? "");
     setEventType(normalizeEventType(eventData.event.eventType as StoredEventType | undefined));
     setRentalFulfillmentMode(
@@ -395,16 +419,18 @@ export function EventEditor({
     setOpenMicEnabled(eventData.event.openMicEnabled === true);
     setOpenMicNotes(eventData.event.openMicNotes ?? "");
     setBlocks(
-      eventData.blocks.map((row) => ({
-        id: row._id,
-        clientId: row._id,
-        blockType: row.blockType,
-        label: row.label,
-        dayIndex: row.dayIndex,
-        startsAt: toLocalDateTimeInput(row.startsAt),
-        endsAt: toLocalDateTimeInput(row.endsAt),
-        notes: row.notes ?? "",
-      })),
+      sortScheduleBlocksByTime(
+        eventData.blocks.map((row) => ({
+          id: row._id,
+          clientId: row._id,
+          blockType: row.blockType,
+          label: row.label,
+          dayIndex: row.dayIndex,
+          startsAt: toLocalDateTimeInput(row.startsAt),
+          endsAt: toLocalDateTimeInput(row.endsAt),
+          notes: row.notes ?? "",
+        })),
+      ),
     );
     setShifts(
       eventData.shifts.map((row) => ({
@@ -677,7 +703,7 @@ export function EventEditor({
       setHostGroupModalOpen(false);
       setNewHostName("");
     } catch (error) {
-      window.alert(getConvexErrorMessage(error, "Failed to create host."));
+      await alert(getConvexErrorMessage(error, "Failed to create host."));
     } finally {
       setCreatingHost(false);
     }
@@ -774,25 +800,21 @@ export function EventEditor({
       editScope: seriesMeta && editScope ? editScope : undefined,
     });
     setLastSavedOverviewSignature(JSON.stringify(payload));
-    setMessageTone("success");
-    setMessage("Overview saved.");
+    flash("success", "Overview saved.");
   }
 
   async function saveCore() {
     if (!title.trim() || !startAt || !endAt) {
-      setMessageTone("error");
-      setMessage("Title, start, and end are required.");
+      flash("error", "Title, start, and end are required.");
       return;
     }
     if (isCreate && isRecurring) {
       if (recurrencePreview.error) {
-        setMessageTone("error");
-        setMessage(recurrencePreview.error);
+        flash("error", recurrencePreview.error);
         return;
       }
       if (recurrencePreview.starts.length === 0) {
-        setMessageTone("error");
-        setMessage("Add valid recurrence settings to preview at least one occurrence.");
+        flash("error", "Add valid recurrence settings to preview at least one occurrence.");
         return;
       }
     }
@@ -803,8 +825,7 @@ export function EventEditor({
       }
       await persistOverview("this");
     } catch (error) {
-      setMessageTone("error");
-      setMessage(`Overview error: ${getConvexErrorMessage(error)}`);
+      flash("error", `Overview error: ${getConvexErrorMessage(error)}`);
     }
   }
 
@@ -813,8 +834,7 @@ export function EventEditor({
     try {
       await persistOverview(scope);
     } catch (error) {
-      setMessageTone("error");
-      setMessage(`Overview error: ${getConvexErrorMessage(error)}`);
+      flash("error", `Overview error: ${getConvexErrorMessage(error)}`);
     }
   }
 
@@ -841,16 +861,18 @@ export function EventEditor({
         })),
       });
       setBlocks(
-        savedBlocks.map((row) => ({
-          id: row.id,
-          clientId: row.clientId ?? row.id,
-          blockType: row.blockType,
-          label: row.label,
-          dayIndex: row.dayIndex,
-          startsAt: toLocalDateTimeInput(row.startsAt),
-          endsAt: toLocalDateTimeInput(row.endsAt),
-          notes: row.notes ?? "",
-        })),
+        sortScheduleBlocksByTime(
+          savedBlocks.map((row) => ({
+            id: row.id,
+            clientId: row.clientId ?? row.id,
+            blockType: row.blockType,
+            label: row.label,
+            dayIndex: row.dayIndex,
+            startsAt: toLocalDateTimeInput(row.startsAt),
+            endsAt: toLocalDateTimeInput(row.endsAt),
+            notes: row.notes ?? "",
+          })),
+        ),
       );
       const persistedBlockIdByRef = mapPersistedBlockIdByRef(
         savedBlocks.map((row) => ({
@@ -890,11 +912,8 @@ export function EventEditor({
           shifts: nextShifts,
         }),
       );
-      setMessageTone("success");
-      setMessage("Schedule saved.");
     } catch (error) {
-      setMessageTone("error");
-      setMessage(`Schedule error: ${getConvexErrorMessage(error)}`);
+      flash("error", `Schedule error: ${getConvexErrorMessage(error)}`);
       throw error;
     }
   }
@@ -926,11 +945,8 @@ export function EventEditor({
         })),
       });
       setLastSavedScheduleSignature(JSON.stringify({ blocks, shifts }));
-      setMessageTone("success");
-      setMessage("Schedule personnel saved.");
     } catch (error) {
-      setMessageTone("error");
-      setMessage(`Schedule personnel error: ${getConvexErrorMessage(error)}`);
+      flash("error", `Schedule personnel error: ${getConvexErrorMessage(error)}`);
       throw error;
     }
   }
@@ -960,8 +976,7 @@ export function EventEditor({
       await saveSchedule();
       if (!eventId) return;
       await saveShifts();
-      setMessageTone("success");
-      setMessage("Schedule and assigned personnel saved.");
+      flash("success", "Schedule and assigned personnel saved.");
     } catch {
       // Individual save handlers already set section-specific messages.
     }
@@ -969,24 +984,27 @@ export function EventEditor({
 
   async function deleteEventPermanently() {
     if (!eventId) return;
-    const shouldDelete = window.confirm(
-      "Permanently delete this cancelled event and all of its schedule, crew, and pull-list data? This cannot be undone.",
-    );
+    const shouldDelete = await confirm({
+      title: "Permanently delete this cancelled event?",
+      description: "This removes all of its schedule, crew, and pull-list data. This cannot be undone.",
+      destructive: true,
+    });
     if (!shouldDelete) return;
     try {
       await deleteEventAdmin({ id: eventId });
       router.push("/dashboard/events");
     } catch (error) {
-      setMessageTone("error");
-      setMessage(getConvexErrorMessage(error));
+      flash("error", getConvexErrorMessage(error));
     }
   }
 
   async function cancelAndDeleteEvent() {
     if (!eventId) return;
-    const shouldDelete = window.confirm(
-      "Cancel this event and permanently delete it, including all schedule, crew, and pull-list data? This cannot be undone.",
-    );
+    const shouldDelete = await confirm({
+      title: "Cancel and delete this event?",
+      description: "This permanently deletes the event, including all schedule, crew, and pull-list data. This cannot be undone.",
+      destructive: true,
+    });
     if (!shouldDelete) return;
     try {
       if (normalizeEventStatus(eventData?.event.status) !== "cancelled") {
@@ -995,43 +1013,42 @@ export function EventEditor({
       await deleteEventAdmin({ id: eventId });
       router.push("/dashboard/events");
     } catch (error) {
-      setMessageTone("error");
-      setMessage(getConvexErrorMessage(error));
+      flash("error", getConvexErrorMessage(error));
     }
   }
 
   async function removeLegacyUnassignedShifts() {
     if (!eventId) return;
-    const shouldDelete = window.confirm(
-      "Delete all legacy shifts that are not assigned to any schedule block?",
-    );
+    const shouldDelete = await confirm({
+      title: "Delete unassigned legacy shifts?",
+      description: "Delete all legacy shifts that are not assigned to any schedule block?",
+      destructive: true,
+    });
     if (!shouldDelete) return;
     try {
       const result = await deleteUnassignedShifts({ eventId });
       setShifts((prev) => prev.filter((shift) => shift.scheduleBlockRef));
-      setMessageTone("success");
-      setMessage(`Deleted ${result.deletedCount} legacy unassigned shift${result.deletedCount === 1 ? "" : "s"}.`);
+      flash("success", `Deleted ${result.deletedCount} legacy unassigned shift${result.deletedCount === 1 ? "" : "s"}.`);
     } catch (error) {
-      setMessageTone("error");
-      setMessage(getConvexErrorMessage(error));
+      flash("error", getConvexErrorMessage(error));
     }
   }
 
   async function resetToSeries() {
     if (!eventId || readOnly) return;
-    const shouldReset = window.confirm(
-      "Reset this occurrence to the series template? This restores overview fields, times, schedule blocks, and unassigned crew shifts, and clears the detached state. Assigned crew shifts are kept.",
-    );
+    const shouldReset = await confirm({
+      title: "Reset this occurrence to the series template?",
+      description: "This restores overview fields, times, schedule blocks, and unassigned crew shifts, and clears the detached state. Assigned crew shifts are kept.",
+      confirmLabel: "Reset",
+    });
     if (!shouldReset) return;
     try {
       await reattachOccurrence({ eventId });
       // Allow the load effect to re-hydrate local form state from the restored occurrence.
       hydratedEventIdRef.current = null;
-      setMessageTone("success");
-      setMessage("Occurrence reset to series template.");
+      flash("success", "Occurrence reset to series template.");
     } catch (error) {
-      setMessageTone("error");
-      setMessage(getConvexErrorMessage(error, "Failed to reset occurrence."));
+      flash("error", getConvexErrorMessage(error, "Failed to reset occurrence."));
     }
   }
 
@@ -1056,7 +1073,7 @@ export function EventEditor({
     api.eventCrewAvailability.getSummaryForEvent,
     currentEventId &&
       activeTab === "schedule" &&
-      (eventType === "Crewed Event" || eventType === "Rental with Crew")
+      eventTypeHasCrewAssignment(eventType)
       ? { eventId: currentEventId }
       : "skip",
   );
@@ -1085,20 +1102,39 @@ export function EventEditor({
     (seriesMeta?.seriesOtherCostUsd ?? 0);
   const totalEventCostUsd = crewCostTotal + bandsCostTotal + externalRentalsCostTotal + otherCostTotal;
   const seriesProjectedCostUsd = seriesMeta?.costSummary?.projectedGrandTotalUsd;
-  const marginCostUsd =
+  const marginEventCostUsd =
     seriesMeta && seriesProjectedCostUsd !== undefined
       ? seriesProjectedCostUsd
       : totalEventCostUsd + seriesRecurringTotalUsd;
+  const eventPassThroughCostsUsd =
+    seriesMeta?.costSummary?.projectedPassThroughUsd !== undefined
+      ? seriesMeta.costSummary.projectedPassThroughUsd
+      : eventPassThroughCostUsd(bandsCostTotal, externalRentalsCostTotal) +
+        (seriesMeta?.seriesBandsCostUsd ?? 0) +
+        (seriesMeta?.seriesExternalRentalsCostUsd ?? 0);
+  const invoicePassThroughSubtotalUsd = invoicePassThroughUsd(
+    linkedInvoice?.artistsSubtotalUsd ?? 0,
+    linkedInvoice?.externalRentalsSubtotalUsd ?? 0,
+  );
   const billedTotalUsd =
     linkedInvoice != null
-      ? arborEarnedRevenueUsd(linkedInvoice.totalUsd, linkedInvoice.artistsSubtotalUsd ?? 0)
+      ? arborEarnedRevenueUsd(linkedInvoice.totalUsd, invoicePassThroughSubtotalUsd)
       : null;
+  const marginCostUsd =
+    linkedInvoice != null
+      ? netProfitCostUsd(
+          marginEventCostUsd,
+          invoicePassThroughSubtotalUsd,
+          eventPassThroughCostsUsd,
+        )
+      : marginEventCostUsd;
   const profitLossUsd =
     linkedInvoice != null
       ? netProfitFromInvoiceUsd(
           linkedInvoice.totalUsd,
-          linkedInvoice.artistsSubtotalUsd ?? 0,
-          marginCostUsd,
+          invoicePassThroughSubtotalUsd,
+          marginEventCostUsd,
+          eventPassThroughCostsUsd,
         )
       : null;
   const quickAddDisabled = !startAt || !endAt;
@@ -1198,6 +1234,53 @@ export function EventEditor({
       <Card>
         <CardHeader>
           <CardTitle>{isCreate ? "Create Event" : "Edit Event"}</CardTitle>
+          {!isCreate && siblingDays && siblingDays.length > 1 ? (
+            <div className="space-y-2 pt-1">
+              <LinkedEventDaySwitcher
+                days={siblingDays}
+                selectedEventId={eventId}
+                onSelect={(nextId) => {
+                  if (!eventId || nextId === eventId) return;
+                  router.push(getEventEditorTabPath(nextId, resolvedActiveTab));
+                }}
+              />
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={readOnly || copyingDaySetup || !eventId}
+                  onClick={() => {
+                    if (!eventId) return;
+                    void (async () => {
+                      const confirmed = await confirm({
+                        title: "Copy this day's setup to the other linked days?",
+                        description:
+                          "Copies crew hours (open slots only, not assigned people) and equipment pull/checkout quantities. Existing schedule slots and pull-list rows on those days will be replaced.",
+                        confirmLabel: "Copy setup",
+                      });
+                      if (!confirmed) return;
+                      setCopyingDaySetup(true);
+                      try {
+                        const result = await copyDaySetup({ sourceEventId: eventId });
+                        setMessageTone("success");
+                        setMessage(
+                          `Copied setup to ${result.copiedToEventIds.length} other day${result.copiedToEventIds.length === 1 ? "" : "s"}.`,
+                        );
+                      } catch (error) {
+                        setMessageTone("error");
+                        setMessage(getConvexErrorMessage(error));
+                      } finally {
+                        setCopyingDaySetup(false);
+                      }
+                    })();
+                  }}
+                >
+                  {copyingDaySetup ? "Copying…" : "Copy setup to other days"}
+                </Button>
+              </div>
+            </div>
+          ) : null}
           {seriesMeta ? (
             <div className="space-y-2">
               <p className="text-sm text-muted-foreground">
@@ -1306,24 +1389,14 @@ export function EventEditor({
             </div>
             <div className="space-y-1">
               <Label>Start</Label>
-              <DateTimePicker
-                value={startAt}
-                onChange={(value) => {
-                  setStartAt(value);
-                  if (!endAtTouched) setEndAt(value);
+              <DateTimeRangePicker
+                startValue={startAt}
+                endValue={endAt}
+                onChange={({ start, end }) => {
+                  setStartAt(start);
+                  setEndAt(end);
                 }}
-                placeholder="Select start date/time"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>End</Label>
-              <DateTimePicker
-                value={endAt}
-                onChange={(value) => {
-                  setEndAt(value);
-                  setEndAtTouched(value.length > 0);
-                }}
-                placeholder="Select end date/time"
+                placeholder="Select start and end"
               />
             </div>
             <div className="space-y-1">
@@ -1446,12 +1519,10 @@ export function EventEditor({
                       assigneeUserId: value || undefined,
                     })
                       .then(() => {
-                        setMessage("Marketing poster designer updated.");
-                        setMessageTone("success");
+                        flash("success", "Marketing poster designer updated.");
                       })
                       .catch((error) => {
-                        setMessage(error instanceof Error ? error.message : "Could not update poster designer.");
-                        setMessageTone("error");
+                        flash("error", error instanceof Error ? error.message : "Could not update poster designer.");
                       });
                   }}
                   options={userSelectOptions}
@@ -1618,7 +1689,7 @@ export function EventEditor({
                 Crew is scheduled separately for each occurrence in this series.
               </p>
             ) : null}
-            {eventId && (eventType === "Crewed Event" || eventType === "Rental with Crew") ? (
+            {eventId && eventTypeHasCrewAssignment(eventType) ? (
               <EventScheduleCrewAssignPanel
                 eventId={eventId}
                 blocks={blocks}
@@ -1630,6 +1701,7 @@ export function EventEditor({
             <EventTimelineScheduler
               dayCount={dayCount}
               blocks={blocks}
+              anchorStartsAt={startAt}
               onChange={(next) => {
                 const nextBlocks = withStableBlockRefs(next);
                 setBlocks(nextBlocks);
@@ -1725,7 +1797,7 @@ export function EventEditor({
                             key={row.id ?? `${blockRef ?? blockIndex}-shift-${rowIndex}`}
                             className="space-y-1"
                           >
-                          <div className="grid gap-2 md:grid-cols-6">
+                          <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(14rem,2fr)_auto]">
                             <Input
                               placeholder="Role"
                               value={row.role}
@@ -1762,23 +1834,17 @@ export function EventEditor({
                                 emptyLabel="Select crew user"
                               />
                             )}
-                            <DateTimePicker
-                              value={row.startsAt}
-                              onChange={(value) =>
+                            <DateTimeRangePicker
+                              startValue={row.startsAt}
+                              endValue={row.endsAt}
+                              onChange={({ start, end }) =>
                                 setShifts((prev) =>
-                                  prev.map((shift, i) => (i === shiftIndex ? { ...shift, startsAt: value } : shift)),
+                                  prev.map((shift, i) =>
+                                    i === shiftIndex ? { ...shift, startsAt: start, endsAt: end } : shift,
+                                  ),
                                 )
                               }
-                              placeholder="Shift start"
-                            />
-                            <DateTimePicker
-                              value={row.endsAt}
-                              onChange={(value) =>
-                                setShifts((prev) =>
-                                  prev.map((shift, i) => (i === shiftIndex ? { ...shift, endsAt: value } : shift)),
-                                )
-                              }
-                              placeholder="Shift end"
+                              placeholder="Shift start and end"
                             />
                             <Button
                               type="button"
@@ -1827,7 +1893,7 @@ export function EventEditor({
                     .map(({ shift, shiftIndex }) => (
                       <div
                         key={shift.id ?? `unassigned-${shiftIndex}`}
-                        className="grid gap-2 rounded-md border border-amber-500/20 bg-background/80 p-2 md:grid-cols-5"
+                        className="grid gap-2 rounded-md border border-amber-500/20 bg-background/80 p-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(14rem,2fr)_auto]"
                       >
                         <Input
                           placeholder="Role"
@@ -1864,23 +1930,17 @@ export function EventEditor({
                             emptyLabel="Select crew user"
                           />
                         )}
-                        <DateTimePicker
-                          value={shift.startsAt}
-                          onChange={(value) =>
+                        <DateTimeRangePicker
+                          startValue={shift.startsAt}
+                          endValue={shift.endsAt}
+                          onChange={({ start, end }) =>
                             setShifts((prev) =>
-                              prev.map((row, i) => (i === shiftIndex ? { ...row, startsAt: value } : row)),
+                              prev.map((row, i) =>
+                                i === shiftIndex ? { ...row, startsAt: start, endsAt: end } : row,
+                              ),
                             )
                           }
-                          placeholder="Shift start"
-                        />
-                        <DateTimePicker
-                          value={shift.endsAt}
-                          onChange={(value) =>
-                            setShifts((prev) =>
-                              prev.map((row, i) => (i === shiftIndex ? { ...row, endsAt: value } : row)),
-                            )
-                          }
-                          placeholder="Shift end"
+                          placeholder="Shift start and end"
                         />
                         <Button
                           type="button"
@@ -1920,12 +1980,10 @@ export function EventEditor({
                 seriesLinked={Boolean(seriesMeta && !seriesMeta.seriesDetached)}
                 initialItems={pullListInitialItems}
                 onSaved={(text) => {
-                  setMessageTone("success");
-                  setMessage(text);
+                  flash("success", text);
                 }}
                 onError={(text) => {
-                  setMessageTone("error");
-                  setMessage(text);
+                  flash("error", text);
                 }}
               />
             )}
@@ -1979,7 +2037,7 @@ export function EventEditor({
                     setArtifactTitle("");
                     setArtifactMarkdown("");
                     setArtifactLinkUrl("");
-                    setMessage("Artifact added.");
+                    flash("success", "Artifact added.");
                   }}
                 >
                   Add Artifact
@@ -2153,10 +2211,21 @@ export function EventEditor({
                 Link an invoice in Overview to view billed total vs event cost margin.
               </p>
             )}
-            {computedCrewCost?.missingRateUsers?.length ? (
+            {computedCrewCost?.missingRateUsers?.length || computedCrewCost?.missingRateOpenSlotCount ? (
               <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-xs text-amber-800">
-                Missing hourly rates for: {computedCrewCost.missingRateUsers.join(", ")}. These rows are included at
-                $0.00 until a base rate is added.{" "}
+                {computedCrewCost.missingRateUsers?.length ? (
+                  <>
+                    Missing hourly rates for: {computedCrewCost.missingRateUsers.join(", ")}. These rows are included at
+                    $0.00 until a base rate is added.{" "}
+                  </>
+                ) : null}
+                {computedCrewCost.missingRateOpenSlotCount ? (
+                  <>
+                    {computedCrewCost.missingRateOpenSlotCount} open slot
+                    {computedCrewCost.missingRateOpenSlotCount === 1 ? " is" : "s are"} estimated at $0.00 because
+                    global Normal/Lead crew rates are unset.{" "}
+                  </>
+                ) : null}
                 <Link href="/dashboard/users/crew-rates" className="underline underline-offset-2">
                   Manage crew rates
                 </Link>

@@ -29,7 +29,9 @@ export const DEFAULT_INVENTORY_CATEGORIES = [
 export function toCategoryOptions(
   categories: Array<{ key: string; label: string; active: boolean }> | undefined,
 ) {
-  if (!categories?.length) return DEFAULT_INVENTORY_CATEGORIES;
+  // While loading, show the built-in list as placeholders. Once the query
+  // resolves, only real DB rows — never invent keys that fail on create.
+  if (categories === undefined) return DEFAULT_INVENTORY_CATEGORIES;
   return categories
     .filter((category) => category.active)
     .map((category) => ({ value: category.key, label: category.label }));

@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { notify } from "@/lib/notify";
 import { formatDate, formatDateTime, formatUsd } from "@/lib/format";
 import { formatBandPayeePayoutMethod } from "@/lib/band-payout-copy";
 
@@ -51,7 +52,6 @@ export function FinancialHubBandPayoutsClient() {
     previewTarget ? { paymentId: previewTarget } : "skip",
   );
   const [settingsDraft, setSettingsDraft] = useState<{ photoAlbumUrl: string } | null>(null);
-  const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const photoAlbumUrl = settingsDraft?.photoAlbumUrl ?? settings?.photoAlbumUrl ?? "";
 
@@ -99,15 +99,14 @@ export function FinancialHubBandPayoutsClient() {
   }
 
   async function onSaveSettings() {
-    setSettingsMessage(null);
     try {
       await updateSettings({
         photoAlbumUrl,
       });
       setSettingsDraft(null);
-      setSettingsMessage("Settings saved.");
+      notify.success("Settings saved.");
     } catch (error) {
-      setSettingsMessage(getConvexErrorMessage(error));
+      notify.error(getConvexErrorMessage(error));
     }
   }
 
@@ -144,7 +143,6 @@ export function FinancialHubBandPayoutsClient() {
               Save defaults
             </Button>
           </div>
-          {settingsMessage ? <p className="text-sm text-muted-foreground">{settingsMessage}</p> : null}
         </CardContent>
       </Card>
 

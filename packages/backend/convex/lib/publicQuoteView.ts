@@ -2,7 +2,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { syncLinkedEventStatusFromInvoice } from "./eventStatus";
 import { listEventsByInvoiceId } from "./invoiceEvents";
-import { toDocumentLineItem } from "./invoiceDocumentBuild";
+import { toDocumentLineItem, recomputeInvoiceTotalsFromDocumentLines } from "./invoiceDocumentBuild";
 import { resolveBillableOccurrenceCount } from "./invoiceSeries";
 import { loadPaymentProofState, normalizeFinanceContactEmail } from "./paymentProof";
 import { recordInvoiceStatusTransition } from "./statusTransitions";
@@ -67,12 +67,21 @@ export async function loadPublicQuoteView(ctx: QueryCtx, invoice: Doc<"invoices"
   const linkedEvent = linkedEvents[0] ?? null;
   const paymentProof = await loadPaymentProofState(ctx, invoice, linkedEvent);
   const billableOccurrenceCount = await resolveBillableOccurrenceCount(ctx, invoice._id);
-  const displayLineItems = lineItems.map((row) => {
+  const documentLineItems = lineItems.map((row) => {
     const doc = toDocumentLineItem(row, billableOccurrenceCount);
+    return doc;
+  });
+  const displayTotals = recomputeInvoiceTotalsFromDocumentLines(documentLineItems, {
+    discountType: invoice.discountType,
+    discountValue: invoice.discountValue,
+  });
+  const displayLineItems = lineItems.map((row, index) => {
+    const doc = documentLineItems[index]!;
     return {
       ...row,
       quantity: doc.quantity,
       quantityDetail: doc.quantityDetail,
+      amountUsd: doc.amountUsd,
     };
   });
   const eventIds = linkedEvents.map((event) => event._id);
@@ -143,14 +152,7 @@ export async function loadPublicQuoteView(ctx: QueryCtx, invoice: Doc<"invoices"
       clientState: invoice.clientState,
       clientPostalCode: invoice.clientPostalCode,
       notes: invoice.notes,
-      equipmentSubtotalUsd: invoice.equipmentSubtotalUsd,
-      externalRentalsSubtotalUsd: invoice.externalRentalsSubtotalUsd,
-      artistsSubtotalUsd: invoice.artistsSubtotalUsd,
-      crewSubtotalUsd: invoice.crewSubtotalUsd,
-      feesSubtotalUsd: invoice.feesSubtotalUsd,
-      subtotalUsd: invoice.subtotalUsd,
-      discountAmountUsd: invoice.discountAmountUsd,
-      totalUsd: invoice.totalUsd,
+      ...displayTotals,
       clientApprovalStatus: invoice.clientApprovalStatus ?? "pending",
       approvedAt: invoice.approvedAt,
       changesRequestedAt: invoice.changesRequestedAt,

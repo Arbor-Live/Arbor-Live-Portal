@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { acceptAppDialog, dismissAppDialog } from "../helpers/auth";
 import { runConvex } from "../helpers/convex";
 import { formField } from "../helpers/form";
 import { deleteInventoryFixtures, waitForInventoryPackage } from "../helpers/inventory";
@@ -154,20 +155,15 @@ test.describe.serial("inventory package CRUD", () => {
 
     await formField(page.locator("#package-editor-form"), "Name").fill(`${packageName} (dirty)`);
 
-    // `requestCloseEditor` guards on `window.confirm`, which Playwright
-    // dismisses by default — so an unhandled dialog looks exactly like a Cancel
-    // button that does not work.
-    let dialogMessage = "";
-    page.once("dialog", (dialog) => {
-      dialogMessage = dialog.message();
-      void dialog.dismiss();
-    });
     await page.getByRole("button", { name: "Cancel", exact: true }).click();
-    expect(dialogMessage).toBe("Discard unsaved changes?");
+    const dialog = page.getByTestId("app-dialog");
+    await expect(dialog).toBeVisible({ timeout: 15_000 });
+    await expect(dialog).toContainText("Discard unsaved changes?");
+    await dismissAppDialog(page);
     await expect(page.locator("#package-editor-form")).toBeVisible();
 
-    page.once("dialog", (dialog) => void dialog.accept());
     await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    await acceptAppDialog(page);
     await expect(page.locator("#package-editor-form")).toHaveCount(0, { timeout: 20_000 });
 
     // Declining to save must leave the stored name alone.

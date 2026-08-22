@@ -38,8 +38,10 @@ import {
   type SeriesShiftEditorFormValues,
 } from "@/lib/validations/event";
 import { formatOccurrencePreview } from "@/lib/event-series";
+import { toLocalDateTimeInput } from "@/lib/crew-availability";
 import { averageCrewHourlyRateUsd } from "@/lib/crew-rates";
 import { formatUsd } from "@/lib/format";
+import { notify } from "@/lib/notify";
 
 type EventSeriesShiftEditorProps = {
   seriesId: Id<"eventSeries">;
@@ -234,7 +236,7 @@ export function EventSeriesShiftEditor({
   async function handleImportFromOccurrence() {
     const importOccurrenceId = form.getValues("importOccurrenceId");
     if (!importOccurrenceId) {
-      onMessage("Select an occurrence to import from.");
+      notify.error("Select an occurrence to import from.");
       return;
     }
     await form.runMutation(async () => {
@@ -357,6 +359,7 @@ export function EventSeriesShiftEditor({
               <EventTimelineScheduler
                 dayCount={dayCount}
                 blocks={timelineBlocks}
+                anchorStartsAt={toLocalDateTimeInput(anchorStartAt)}
                 onChange={() => {}}
                 onQuickAdd={() => {}}
                 quickAddLabel=""

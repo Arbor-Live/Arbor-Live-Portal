@@ -26,6 +26,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useAppDialog } from "@/components/ui/app-dialog";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { AssetScanner } from "./asset-scanner";
 import { CreateAssetWizard } from "./create-asset-wizard";
@@ -55,6 +56,7 @@ function formatTypeDisplay(type: { manufacturer?: string; name: string; model: s
 type SortKey = "assetId" | "category" | "location";
 
 export function ItemsManager() {
+  const { alert } = useAppDialog();
   const siteBase = (process.env.NEXT_PUBLIC_SITE_URL ?? "").replace(/\/$/, "");
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("");
@@ -163,7 +165,7 @@ export function ItemsManager() {
       await Promise.all(selectedIds.map((id) => removeItem({ id: id as never })));
       setSelectedIds([]);
     } catch (error) {
-      window.alert(getConvexErrorMessage(error, "Could not delete selected items."));
+      await alert(getConvexErrorMessage(error, "Could not delete selected items."));
     }
   }
 

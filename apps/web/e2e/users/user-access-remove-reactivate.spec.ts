@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { runConvex } from "../helpers/convex";
-import { signInWithCredentials } from "../helpers/auth";
+import { acceptAppDialog, dismissAppDialog, signInWithCredentials } from "../helpers/auth";
 import { chooseRowAction, pickSelectOption } from "../helpers/select";
 import {
   accessFilterSelect,
@@ -50,10 +50,8 @@ test.describe("user access removal", () => {
     const row = await openUserRow(page, before.userId);
     await expect(userRowCell.active(row).getByRole("checkbox")).toBeChecked();
 
-    // Behind a `window.confirm`; Playwright dismisses dialogs by default, so
-    // without this the mutation is never even requested.
-    page.once("dialog", (dialog) => void dialog.accept());
     await chooseRowAction(page, userRowActionMenu(row), "Remove access");
+    await acceptAppDialog(page, "Remove access");
 
     await expect(page.getByText(`Removed access for ${targetName}.`)).toBeVisible({
       timeout: 30_000,
@@ -69,8 +67,8 @@ test.describe("user access removal", () => {
     await expect(removedRow).toBeVisible({ timeout: 30_000 });
     await expect(removedRow).toContainText("Removed");
 
-    page.once("dialog", (dialog) => void dialog.accept());
     await chooseRowAction(page, userRowActionMenu(removedRow), "Reactivate");
+    await acceptAppDialog(page, "Reactivate");
 
     await expect(page.getByText(`Reactivated ${targetName}.`)).toBeVisible({ timeout: 30_000 });
     const reactivated = await waitForUserAdminState(targetEmail, (state) => state?.active === true);
@@ -85,8 +83,8 @@ test.describe("user access removal", () => {
     const before = await waitForUserAdminState(targetEmail, (state) => state?.active === true);
     const row = await openUserRow(page, before.userId);
 
-    page.once("dialog", (dialog) => void dialog.dismiss());
     await chooseRowAction(page, userRowActionMenu(row), "Remove access");
+    await dismissAppDialog(page);
 
     // Still listed under the Active filter, and still unbanned.
     await expect(row).toBeVisible();
@@ -115,8 +113,8 @@ test.describe("user access removal", () => {
       await signInWithCredentials(page, guardAdminEmail, guardAdminPassword);
       const row = await openUserRow(page, seeded.userId);
 
-      page.once("dialog", (dialog) => void dialog.accept());
       await chooseRowAction(page, userRowActionMenu(row), "Remove access");
+      await acceptAppDialog(page, "Remove access");
 
       // The mutation throws and the page surfaces the message instead of
       // silently doing nothing. `.first()` guards against the dev-mode error

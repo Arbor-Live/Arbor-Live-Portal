@@ -25,7 +25,9 @@ import {
   timelineDraftsToTemplates,
   type SeriesBlockTemplate,
 } from "@/lib/event-series-schedule";
+import { toLocalDateTimeInput } from "@/lib/crew-availability";
 import { formatOccurrencePreview } from "@/lib/event-series";
+import { notify } from "@/lib/notify";
 import {
   seriesScheduleEditorSchema,
   type SeriesScheduleEditorFormValues,
@@ -185,7 +187,7 @@ export function EventSeriesScheduleEditor({
   async function handleImportFromOccurrence() {
     const importOccurrenceId = form.getValues("importOccurrenceId");
     if (!importOccurrenceId) {
-      onMessage("Select an occurrence to import from.");
+      notify.error("Select an occurrence to import from.");
       return;
     }
     await form.runMutation(async () => {
@@ -264,6 +266,7 @@ export function EventSeriesScheduleEditor({
           <EventTimelineScheduler
             dayCount={dayCount}
             blocks={blocks}
+            anchorStartsAt={toLocalDateTimeInput(anchorStartAt)}
             onChange={(next) => {
               setBlocksOverride(withStableBlockRefs(next));
               setBlocksDirty(true);

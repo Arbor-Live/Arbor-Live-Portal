@@ -106,6 +106,23 @@ function CreateAssetWizardForm({ onClose }: { onClose: () => void }) {
   );
   const createType = useMutation(api.inventoryTypes.create);
   const createMany = useMutation(api.inventoryItems.createMany);
+  const ensureDefaultCategories = useMutation(api.inventoryCategories.ensureDefaults);
+
+  useEffect(() => {
+    // Seed built-in categories on first open so fake/test types can be created
+    // without a manual "Ensure defaults" click on a fresh deployment.
+    void ensureDefaultCategories({}).catch(() => {
+      // Non-admin sessions skip seed; type create still auto-seeds server-side.
+    });
+  }, [ensureDefaultCategories]);
+
+  useEffect(() => {
+    if (!categories?.length) return;
+    setTypeDraft((prev) => {
+      if (categories.some((row) => row.key === prev.category)) return prev;
+      return { ...prev, category: categories[0]!.key };
+    });
+  }, [categories]);
 
   const typeLabel = useMemo(() => {
     const type = types?.find((entry) => entry._id === typeId);
@@ -335,7 +352,7 @@ function CreateAssetWizardForm({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col">
+    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
       <SheetHeader className="shrink-0 border-b pr-12">
         <SheetTitle>Create assets</SheetTitle>
         <SheetDescription>
@@ -575,7 +592,7 @@ export function CreateAssetWizard({ open, onOpenChange }: CreateAssetWizardProps
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="flex h-full w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-xl lg:max-w-2xl"
+        className="flex h-full w-full flex-col gap-0 overflow-visible p-0 sm:max-w-xl lg:max-w-2xl"
       >
         {open ? <CreateAssetWizardForm onClose={() => onOpenChange(false)} /> : null}
       </SheetContent>
