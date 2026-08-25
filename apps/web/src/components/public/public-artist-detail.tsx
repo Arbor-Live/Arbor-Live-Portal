@@ -101,6 +101,16 @@ export function PublicArtistDetail({ slug }: { slug: string }) {
                   YouTube ↗
                 </a>
               ) : null}
+              {artist.spotifyUrl ? (
+                <a
+                  href={artist.spotifyUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-none border px-4 py-2 text-sm font-medium hover:bg-muted"
+                >
+                  Spotify ↗
+                </a>
+              ) : null}
             </div>
           </Reveal>
         </div>
