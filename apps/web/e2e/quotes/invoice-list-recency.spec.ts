@@ -23,11 +23,16 @@ test.describe("invoice list recency", () => {
     await page.goto("/dashboard/financial-hub/invoices");
     await page.getByPlaceholder("Invoice, client, series…").fill(target);
 
+    const invoiceNumber = `ALINV-BULK-${stamp}-${INVOICE_COUNT - 1}`;
     const row = page.getByRole("row").filter({ hasText: target });
     await expect(row).toBeVisible({ timeout: 40_000 });
     // The row is built from a slim projection now — check its columns survived.
-    await expect(row).toContainText(`ALINV-BULK-${stamp}-${INVOICE_COUNT - 1}`);
+    await expect(row).toContainText(invoiceNumber);
     await expect(row).toContainText("Draft");
-    await expect(row.getByRole("link", { name: "Open" })).toBeVisible();
+    // Rows open the editor on click (no separate Open link).
+    await row.getByText(invoiceNumber).click();
+    await expect(page).toHaveURL(/\/dashboard\/financial-hub\/invoices\/[^/]+$/, {
+      timeout: 25_000,
+    });
   });
 });

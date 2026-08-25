@@ -47,7 +47,7 @@ import {
   type InvoiceCrewRow,
 } from "@/lib/invoice-crew-from-event";
 import type { SeriesShiftTemplateDraft } from "@/lib/event-series-shifts";
-import { ArrowsClockwiseIcon, CaretDownIcon, CopyIcon } from "@phosphor-icons/react";
+import { ArrowsClockwiseIcon, ArrowCounterClockwiseIcon, CaretDownIcon, CopyIcon, ProhibitIcon, TrashIcon } from "@phosphor-icons/react";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { useAppDialog } from "@/components/ui/app-dialog";
 import { notify } from "@/lib/notify";
@@ -189,6 +189,8 @@ export function InvoiceEditor({
   const convex = useConvex();
   const createDraft = useMutation(api.invoices.createDraft);
   const duplicateInvoice = useMutation(api.invoices.duplicate);
+  const voidInvoice = useMutation(api.invoices.voidInvoice);
+  const unvoidInvoice = useMutation(api.invoices.unvoidInvoice);
   const updateDraft = useMutation(api.invoices.updateDraft);
   const recalculateSeriesEquipmentLines = useMutation(api.invoices.recalculateSeriesEquipmentLines);
   const markReadyForClientReview = useMutation(api.invoices.markReadyForClientReview);
@@ -1420,22 +1422,24 @@ export function InvoiceEditor({
 
   return (
     <div className="mx-auto max-w-7xl space-y-4 pb-20">
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
           <h1 className="text-2xl font-semibold tracking-tight">{activeInvoiceId ? "Edit Invoice" : "Create Invoice"}</h1>
-          <p className="text-sm text-muted-foreground">Build invoice sections and download a PDF when ready.</p>
+          {invoiceData?.invoice?.status === "void" ? (
+            <p className="mt-1 text-sm text-muted-foreground">This invoice is void and hidden from the active list.</p>
+          ) : null}
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-1 sm:justify-end">
           {linkedDayEvents.length === 1 ? (
-            <Button type="button" variant="outline" asChild>
-              <Link href={`/dashboard/events/${linkedDayEvents[0]._id}`}>Open Linked Event</Link>
+            <Button type="button" variant="outline" size="sm" asChild>
+              <Link href={`/dashboard/events/${linkedDayEvents[0]._id}`}>Event</Link>
             </Button>
           ) : linkedDayEvents.length > 1 ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button type="button" variant="outline">
-                  Linked Events ({linkedDayEvents.length})
-                  <CaretDownIcon className="size-4" />
+                <Button type="button" variant="outline" size="sm">
+                  Events ({linkedDayEvents.length})
+                  <CaretDownIcon className="size-3.5" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-72">
@@ -1457,24 +1461,65 @@ export function InvoiceEditor({
               invoiceId={activeInvoiceId}
               invoiceNumber={invoiceData?.invoice?.invoiceNumber}
               variant="outline"
+              size="icon-sm"
+              iconOnly
+              label="PDF"
             />
           ) : null}
           {activeInvoiceId ? (
             <Button
               data-testid="invoice-duplicate"
               type="button"
+              size="icon-sm"
               variant="outline"
+              title="Duplicate"
+              aria-label="Duplicate"
               onClick={() =>
                 void duplicateInvoice({ id: activeInvoiceId }).then((result) => {
                   router.push(`/dashboard/financial-hub/invoices/${result.id}`);
                 })
               }
             >
-              Duplicate
+              <CopyIcon className="size-3.5" />
+            </Button>
+          ) : null}
+          {activeInvoiceId && invoiceData?.invoice?.status === "void" ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                void unvoidInvoice({ id: activeInvoiceId });
+              }}
+            >
+              <ArrowCounterClockwiseIcon className="size-3.5" />
+              Unvoid
+            </Button>
+          ) : activeInvoiceId ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="destructive"
+              onClick={() => {
+                void (async () => {
+                  const confirmed = await confirm({
+                    title: `Void ${invoiceData?.invoice?.invoiceNumber ?? "this invoice"}?`,
+                    description: "It will hide from the active list. You can unvoid it later.",
+                    confirmLabel: "Void",
+                    destructive: true,
+                  });
+                  if (!confirmed) return;
+                  await voidInvoice({ id: activeInvoiceId });
+                })();
+              }}
+            >
+              <ProhibitIcon className="size-3.5" />
+              Void
             </Button>
           ) : null}
           {activeInvoiceId && isAdmin ? (
-            <Button type="button" variant="destructive" onClick={() => setDeleteOpen(true)}>
+            <Button type="button" size="sm" variant="destructive" onClick={() => setDeleteOpen(true)}>
+              <TrashIcon className="size-3.5" />
               Delete quote
             </Button>
           ) : null}
@@ -2141,7 +2186,14 @@ export function InvoiceEditor({
                 <div className="flex flex-wrap gap-2">
                   <Button type="button" variant="outline" size="sm" disabled={!approvalToken} onClick={() => {
                     if (!approvalToken || !origin) return;
-                    void navigator.clipboard.writeText(`${origin}/event/${approvalToken}`);
+                    void (async () => {
+                      try {
+                        await navigator.clipboard.writeText(`${origin}/event/${approvalToken}`);
+                        notify.success("Quote link copied to clipboard.");
+                      } catch {
+                        notify.error("Could not copy link.");
+                      }
+                    })();
                   }}>
                     Copy link
                   </Button>

@@ -195,7 +195,9 @@ export function InvoiceDocumentPdf({ data, logoSrc }: InvoiceDocumentPdfProps) {
               </View>
               <View style={styles.detailsColumn}>
                 <Text style={styles.sectionLabel}>Contact Details</Text>
-                {invoice.clientGroupName ? <DetailLine label="Group" value={invoice.clientGroupName} /> : null}
+                {invoice.clientGroupName ? (
+                  <DetailLine label="Host" value={invoice.clientGroupName} />
+                ) : null}
                 {invoice.clientContactName ? (
                   <DetailLine label="Contact" value={invoice.clientContactName} />
                 ) : null}

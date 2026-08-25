@@ -143,6 +143,7 @@ const submitPublicArgs = {
 };
 
 const publicRequestShape = {
+  _id: v.id("eventRequests"),
   requestNumber: v.string(),
   status: eventRequestStatusValue,
   firstName: v.string(),
@@ -516,6 +517,7 @@ export const getPublicRequestByToken = query({
     }
 
     return {
+      _id: request._id,
       requestNumber: request.requestNumber ?? `LEGACY-${request._id}`,
       status: request.status,
       firstName: request.firstName,

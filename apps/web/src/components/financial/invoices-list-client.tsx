@@ -1,24 +1,43 @@
 "use client";
 
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { createColumnHelper } from "@tanstack/react-table";
+import {
+  CopyIcon,
+  DotsThreeIcon,
+  LinkSimpleIcon,
+  ProhibitIcon,
+  ArrowCounterClockwiseIcon,
+  TrashIcon,
+} from "@phosphor-icons/react";
 import { api, type Id } from "@/lib/convex-api";
 import { AdminCascadeDeleteDialog } from "@/components/admin/admin-cascade-delete-dialog";
 import { InvoicePdfDownloadButton } from "@/components/financial/invoice-pdf-download-button";
 import { useSessionViewer } from "@/components/session-shell-provider";
+import { useAppDialog } from "@/components/ui/app-dialog";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableColumnHeader } from "@/components/ui/data-table-column-header";
 import { type DataTableFeatures } from "@/components/ui/data-table-features";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { formatUsd } from "@/lib/format";
+import { notify } from "@/lib/notify";
 
 type InvoiceStatus = "draft" | "finalized" | "void";
 type ApprovalStatus = "pending" | "approved" | "changes_requested";
+
+type InvoiceRow = FunctionReturnType<typeof api.invoices.listEnriched>[number];
 
 const STATUS_OPTIONS: { value: InvoiceStatus; label: string }[] = [
   { value: "draft", label: "Draft" },
@@ -32,7 +51,15 @@ const APPROVAL_OPTIONS: { value: ApprovalStatus; label: string }[] = [
   { value: "changes_requested", label: "Changes requested" },
 ];
 
-type InvoiceRow = FunctionReturnType<typeof api.invoices.listEnriched>[number];
+async function copyQuoteLink(token: string) {
+  const url = `${window.location.origin}/event/${token}`;
+  try {
+    await navigator.clipboard.writeText(url);
+    notify.success("Quote link copied to clipboard.");
+  } catch {
+    notify.error("Could not copy link.");
+  }
+}
 
 function displayStatus(invoice: {
   status: "draft" | "finalized" | "void";
@@ -59,15 +86,23 @@ function statusBadgeClass(invoice: {
 const columnHelper = createColumnHelper<DataTableFeatures, InvoiceRow>();
 
 export function InvoicesListClient() {
+  const router = useRouter();
+  const { confirm } = useAppDialog();
   const viewer = useSessionViewer();
   const [statusFilters, setStatusFilters] = useState<InvoiceStatus[]>([]);
   const [approvalFilters, setApprovalFilters] = useState<ApprovalStatus[]>([]);
   const [search, setSearch] = useState("");
-  const rows = useQuery(
-    api.invoices.listEnriched,
-    statusFilters.length === 1 ? { status: statusFilters[0] } : {},
-  );
+  const listQueryArgs = useMemo(() => {
+    if (statusFilters.length === 1) {
+      return { status: statusFilters[0] };
+    }
+    return {};
+  }, [statusFilters]);
+  const rows = useQuery(api.invoices.listEnriched, listQueryArgs);
   const deleteInvoiceAdmin = useMutation(api.adminDeletes.deleteInvoiceAdmin);
+  const voidInvoice = useMutation(api.invoices.voidInvoice);
+  const unvoidInvoice = useMutation(api.invoices.unvoidInvoice);
+  const duplicateInvoice = useMutation(api.invoices.duplicate);
   const [deleteInvoiceId, setDeleteInvoiceId] = useState<Id<"invoices"> | null>(null);
   const deletePreview = useQuery(
     api.adminDeletes.previewInvoiceDeletion,
@@ -78,12 +113,14 @@ export function InvoicesListClient() {
   const filteredRows = useMemo(() => {
     const needle = search.trim().toLowerCase();
     return (rows ?? []).filter((invoice) => {
-      if (statusFilters.length > 1 && !statusFilters.includes(invoice.status)) {
+      if (statusFilters.length === 0) {
+        if (invoice.status === "void") return false;
+      } else if (statusFilters.length > 1 && !statusFilters.includes(invoice.status)) {
         return false;
       }
-      const approval = invoice.clientApprovalStatus ?? "pending";
-      if (approvalFilters.length > 0 && !approvalFilters.includes(approval)) {
-        return false;
+      if (approvalFilters.length > 0) {
+        const approval = invoice.clientApprovalStatus ?? "pending";
+        if (!approvalFilters.includes(approval)) return false;
       }
       if (!needle) return true;
       const haystack = [
@@ -99,7 +136,7 @@ export function InvoicesListClient() {
         .toLowerCase();
       return haystack.includes(needle);
     });
-  }, [rows, search, statusFilters, approvalFilters]);
+  }, [rows, search, approvalFilters, statusFilters]);
 
   const columns = useMemo(
     () =>
@@ -120,22 +157,19 @@ export function InvoicesListClient() {
             </span>
           ),
         }),
-        columnHelper.accessor(
-          (row) => row.seriesTitle ?? row.linkedEventTitle ?? "",
-          {
-            id: "series",
-            header: ({ column }) => <DataTableColumnHeader column={column} title="Series / Event" />,
-            cell: ({ row }) => (
-              <span className="text-muted-foreground">
-                {row.original.seriesTitle
-                  ? row.original.seriesTitle
-                  : row.original.linkedEventTitle
-                    ? row.original.linkedEventTitle
-                    : "—"}
-              </span>
-            ),
-          },
-        ),
+        columnHelper.accessor((row) => row.seriesTitle ?? row.linkedEventTitle ?? "", {
+          id: "series",
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Series / Event" />,
+          cell: ({ row }) => (
+            <span className="text-muted-foreground">
+              {row.original.seriesTitle
+                ? row.original.seriesTitle
+                : row.original.linkedEventTitle
+                  ? row.original.linkedEventTitle
+                  : "—"}
+            </span>
+          ),
+        }),
         columnHelper.accessor("managerName", {
           id: "manager",
           header: ({ column }) => <DataTableColumnHeader column={column} title="Manager" />,
@@ -171,39 +205,99 @@ export function InvoicesListClient() {
           cell: ({ row }) => {
             const invoice = row.original;
             return (
-              <div className="flex min-w-[12rem] flex-wrap gap-2">
-                <Button asChild size="sm" variant="outline">
-                  <Link href={`/dashboard/financial-hub/invoices/${invoice._id}`}>Open</Link>
-                </Button>
+              <div
+                className="flex items-center gap-1"
+                onClick={(event) => event.stopPropagation()}
+                onKeyDown={(event) => event.stopPropagation()}
+              >
                 <InvoicePdfDownloadButton
                   invoiceId={invoice._id}
                   invoiceNumber={invoice.invoiceNumber}
-                  size="sm"
+                  size="icon-sm"
+                  iconOnly
                   label="PDF"
                 />
                 {invoice.publicApprovalToken ? (
-                  <Button asChild size="sm" variant="outline">
-                    <Link href={`/event/${invoice.publicApprovalToken}`} target="_blank" rel="noreferrer">
-                      Quote Link
-                    </Link>
-                  </Button>
-                ) : null}
-                {isAdmin ? (
                   <Button
                     type="button"
-                    size="sm"
-                    variant="destructive"
-                    onClick={() => setDeleteInvoiceId(invoice._id)}
+                    size="icon-sm"
+                    variant="outline"
+                    title="Copy quote link"
+                    aria-label="Copy quote link"
+                    onClick={() => {
+                      void copyQuoteLink(invoice.publicApprovalToken!);
+                    }}
                   >
-                    Delete
+                    <LinkSimpleIcon className="size-3.5" />
                   </Button>
                 ) : null}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button type="button" size="icon-sm" variant="outline" aria-label="More actions">
+                      <DotsThreeIcon className="size-3.5" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-44">
+                    <DropdownMenuItem
+                      onSelect={() => {
+                        void duplicateInvoice({ id: invoice._id }).then((result) => {
+                          router.push(`/dashboard/financial-hub/invoices/${result.id}`);
+                        });
+                      }}
+                    >
+                      <CopyIcon className="size-4" />
+                      Duplicate
+                    </DropdownMenuItem>
+                    {invoice.status === "void" ? (
+                      <DropdownMenuItem
+                        onSelect={() => {
+                          void unvoidInvoice({ id: invoice._id });
+                        }}
+                      >
+                        <ArrowCounterClockwiseIcon className="size-4" />
+                        Unvoid
+                      </DropdownMenuItem>
+                    ) : (
+                      <DropdownMenuItem
+                        variant="destructive"
+                        onSelect={() => {
+                          void (async () => {
+                            const confirmed = await confirm({
+                              title: `Void ${invoice.invoiceNumber}?`,
+                              description:
+                                "It will hide from the active list. You can unvoid it later.",
+                              confirmLabel: "Void",
+                              destructive: true,
+                            });
+                            if (!confirmed) return;
+                            await voidInvoice({ id: invoice._id });
+                          })();
+                        }}
+                      >
+                        <ProhibitIcon className="size-4" />
+                        Void
+                      </DropdownMenuItem>
+                    )}
+                    {isAdmin ? (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          variant="destructive"
+                          onSelect={() => setDeleteInvoiceId(invoice._id)}
+                        >
+                          <TrashIcon className="size-4" />
+                          Delete
+                        </DropdownMenuItem>
+                      </>
+                    ) : null}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             );
           },
         }),
       ]),
-    [isAdmin],
+    [confirm, duplicateInvoice, isAdmin, router, unvoidInvoice, voidInvoice],
   );
 
   if (rows === undefined) return <p className="p-2 text-muted-foreground">Loading…</p>;
@@ -216,6 +310,10 @@ export function InvoicesListClient() {
         getRowId={(row) => row._id}
         enableColumnVisibility
         emptyMessage="No invoices match your filters."
+        getRowClassName={() => "cursor-pointer"}
+        getRowProps={(row) => ({
+          onClick: () => router.push(`/dashboard/financial-hub/invoices/${row.original._id}`),
+        })}
         toolbar={
           <div className="flex min-w-0 flex-1 flex-wrap items-end gap-3">
             <div className="min-w-56 flex-1 space-y-1">
@@ -231,6 +329,7 @@ export function InvoicesListClient() {
               options={STATUS_OPTIONS}
               values={statusFilters}
               onChange={(values) => setStatusFilters(values as InvoiceStatus[])}
+              emptyLabel="Active"
             />
             <MultiSelect
               label="Approval"

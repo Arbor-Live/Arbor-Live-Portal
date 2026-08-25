@@ -8,6 +8,8 @@ import {
 
 export const LATE_FEE_USD_PER_MONTH = 25;
 export const PAYMENT_GRACE_MONTH_MS = 30 * 24 * 60 * 60 * 1000;
+/** Don't nag for payment proof until the due date is within this window. */
+export const PAYMENT_PROOF_REMINDER_LEAD_MS = 30 * 24 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WEEK_MS = 7 * DAY_MS;
 
@@ -125,4 +127,12 @@ export function shouldSendMondayPaymentProofReminder(
   if (!isMondayInTimezone(nowMs, timezone)) return false;
   if (reminderDayKey(opensAtMs, timezone) === reminderDayKey(nowMs, timezone)) return false;
   return true;
+}
+
+/** True when due is overdue or fewer than 30 days remain until due. */
+export function isWithinPaymentProofReminderLead(
+  dueAtMs: number,
+  nowMs: number = Date.now(),
+) {
+  return dueAtMs - nowMs < PAYMENT_PROOF_REMINDER_LEAD_MS;
 }

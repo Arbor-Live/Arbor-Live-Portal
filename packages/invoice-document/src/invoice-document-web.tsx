@@ -58,7 +58,7 @@ export function InvoiceDocumentWeb({ data, logoSrc = "/logo.svg" }: InvoiceDocum
           <div>
             <p style={sectionLabelStyle}>Contact Details</p>
             {invoice.clientGroupName ? (
-              <DetailLine label="Group" value={invoice.clientGroupName} />
+              <DetailLine label="Host" value={invoice.clientGroupName} />
             ) : null}
             {invoice.clientContactName ? (
               <DetailLine label="Contact" value={invoice.clientContactName} />

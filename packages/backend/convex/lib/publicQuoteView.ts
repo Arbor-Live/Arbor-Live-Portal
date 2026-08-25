@@ -11,6 +11,7 @@ import {
   schedulePayingPartyAddedEmail,
   shouldNotifyPayingParty,
 } from "../email/payingPartyEmails";
+import { loadEventHostDisplay } from "./hostOrgs";
 
 function resolveInvoiceTermsIds(invoice: Doc<"invoices">): Id<"invoiceTerms">[] {
   if (invoice.termsIds && invoice.termsIds.length > 0) return invoice.termsIds;
@@ -133,6 +134,7 @@ export async function loadPublicQuoteView(ctx: QueryCtx, invoice: Doc<"invoices"
         )
       ).flat()
     : [];
+  const hostDisplay = linkedEvent ? await loadEventHostDisplay(ctx, linkedEvent) : null;
 
   return {
     invoice: {
@@ -179,7 +181,7 @@ export async function loadPublicQuoteView(ctx: QueryCtx, invoice: Doc<"invoices"
             status: linkedEvent.status,
             venueName: linkedEvent.venueName,
             eventType: linkedEvent.eventType,
-            host: linkedEvent.host,
+            host: hostDisplay?.hostLabel,
             startAt: linkedEvent.startAt,
             endAt: linkedEvent.endAt,
             assignments: eventAssignments,

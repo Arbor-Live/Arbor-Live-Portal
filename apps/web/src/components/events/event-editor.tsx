@@ -29,6 +29,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect, type SearchableSelectOption } from "@/components/inventory/searchable-select";
+import { MultiSelectFilter } from "@/components/inventory/multi-select-filter";
 import { VenuePicker } from "@/components/venues/venue-picker";
 import { VenueDetailsButton } from "@/components/venues/venue-details-sheet";
 import { useSessionViewer } from "@/components/session-shell-provider";
@@ -245,6 +246,7 @@ export function EventEditor({
   const [rentalFulfillmentMode, setRentalFulfillmentMode] = useState<RentalFulfillmentMode>("delivery");
   const [teamsInterested, setTeamsInterested] = useState<EventTeam[]>([]);
   const [hostGroupId, setHostGroupId] = useState("");
+  const [additionalHostGroupIds, setAdditionalHostGroupIds] = useState<string[]>([]);
   const [hostGroupModalOpen, setHostGroupModalOpen] = useState(false);
   const [newHostName, setNewHostName] = useState("");
   const [newHostType, setNewHostType] = useState<"vso" | "house" | "department" | "individual">(
@@ -403,6 +405,9 @@ export function EventEditor({
       )?._id ??
       "";
     setHostGroupId(linkedHostGroupId);
+    setAdditionalHostGroupIds(
+      (eventData.event.additionalHostGroupIds ?? []).map((id) => String(id)),
+    );
     setManagerUserId(eventData.event.eventManagerUserId ?? "");
     setDayOfLeadUserId(eventData.event.dayOfLeadUserId ?? "");
     setCrewCostUsd((eventData.event.crewCostUsd ?? 0).toString());
@@ -723,7 +728,12 @@ export function EventEditor({
       eventType: eventType || undefined,
       rentalFulfillmentMode: showFulfillmentPicker ? rentalFulfillmentMode : undefined,
       teamsInterested: teamsInterested.length > 0 ? teamsInterested : undefined,
-      hostGroupId: hostGroupId ? (hostGroupId as Id<"invoiceGroups">) : null,
+      ...(invoiceId
+        ? {}
+        : { hostGroupId: hostGroupId ? (hostGroupId as Id<"invoiceGroups">) : null }),
+      additionalHostGroupIds: additionalHostGroupIds
+        .filter((id) => id && id !== effectivePrimaryHostGroupId)
+        .map((id) => id as Id<"invoiceGroups">),
       eventManagerUserId: managerUserId || undefined,
       dayOfLeadUserId: dayOfLeadUserId || undefined,
       bandsCostUsd: Number(bandsCostUsd || "0"),
@@ -777,6 +787,7 @@ export function EventEditor({
           rentalFulfillmentMode: payload.rentalFulfillmentMode,
           teamsInterested: payload.teamsInterested,
           hostGroupId: payload.hostGroupId ?? undefined,
+          additionalHostGroupIds: payload.additionalHostGroupIds,
           eventManagerUserId: payload.eventManagerUserId,
           dayOfLeadUserId: payload.dayOfLeadUserId,
           notes: payload.notes,
@@ -1092,6 +1103,18 @@ export function EventEditor({
     if (!invoiceId) return null;
     return (invoices ?? []).find((row) => row._id === invoiceId) ?? null;
   }, [linkedInvoiceDetail, invoiceId, invoices]);
+  const invoicePrimaryHostGroupId = linkedInvoice?.groupId ? String(linkedInvoice.groupId) : "";
+  const invoicePrimaryHostName =
+    linkedInvoice?.clientGroupName ??
+    hostGroupOptions.find((option) => option.value === invoicePrimaryHostGroupId)?.label ??
+    "";
+  const effectivePrimaryHostGroupId = invoiceId ? invoicePrimaryHostGroupId : hostGroupId;
+
+  useEffect(() => {
+    if (!invoiceId || !invoicePrimaryHostGroupId) return;
+    setHostGroupId(invoicePrimaryHostGroupId);
+    setAdditionalHostGroupIds((prev) => prev.filter((id) => id !== invoicePrimaryHostGroupId));
+  }, [invoiceId, invoicePrimaryHostGroupId]);
   const crewCostTotal = computedCrewCost?.totalCostUsd ?? Number(crewCostUsd || "0");
   const bandsCostTotal = Number(bandsCostUsd || "0");
   const externalRentalsCostTotal = Number(externalRentalsCostUsd || "0");
@@ -1176,6 +1199,7 @@ export function EventEditor({
       rentalFulfillmentMode,
       teamsInterested,
       hostGroupId,
+      additionalHostGroupIds,
       managerUserId,
       dayOfLeadUserId,
       bandsCostUsd,
@@ -1453,17 +1477,51 @@ export function EventEditor({
                 />
               </div>
             ) : null}
-            <div className="space-y-1">
-              <Label>Host</Label>
-              <SearchableSelect
-                value={hostGroupId}
-                onChange={setHostGroupId}
-                options={hostGroupOptions}
-                placeholder="Search host organizations…"
-                emptyLabel="No host"
-                onCreate={canEdit || isCreate ? openCreateHost : undefined}
-                createLabel="New Host"
-              />
+            <div className="space-y-3 rounded-md border p-3 md:col-span-3">
+              <Label>Hosts</Label>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="space-y-1">
+                  <Label className="text-xs font-normal text-muted-foreground">Primary</Label>
+                  {invoiceId ? (
+                    <div className="space-y-1 text-sm">
+                      <p>{invoicePrimaryHostName || "Set a host on the linked invoice."}</p>
+                      <Button asChild type="button" variant="link" size="sm" className="h-auto p-0">
+                        <Link href={`/dashboard/financial-hub/invoices/${invoiceId}`}>
+                          Edit on invoice
+                        </Link>
+                      </Button>
+                    </div>
+                  ) : (
+                    <SearchableSelect
+                      value={hostGroupId}
+                      onChange={(value) => {
+                        setHostGroupId(value);
+                        setAdditionalHostGroupIds((prev) => prev.filter((id) => id !== value));
+                      }}
+                      options={hostGroupOptions}
+                      placeholder="Search host organizations…"
+                      emptyLabel="No host"
+                      onCreate={canEdit || isCreate ? openCreateHost : undefined}
+                      createLabel="New Host"
+                    />
+                  )}
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs font-normal text-muted-foreground">Co-hosts</Label>
+                  <MultiSelectFilter
+                    label="Co-hosts"
+                    hideLabel
+                    placeholder="Search co-hosts…"
+                    values={additionalHostGroupIds}
+                    onChange={setAdditionalHostGroupIds}
+                    options={hostGroupOptions.filter(
+                      (option) =>
+                        option.value !== "" && option.value !== effectivePrimaryHostGroupId,
+                    )}
+                    emptyLabel="No co-hosts"
+                  />
+                </div>
+              </div>
             </div>
             <div className="space-y-1 md:col-span-3">
               <Label>Teams Interested</Label>

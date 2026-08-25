@@ -1,0 +1,29 @@
+---
+description: Use in-app AppDialog for confirms/alerts — never native window.confirm/alert/prompt
+globs: apps/web/**/*.{ts,tsx}
+alwaysApply: false
+---
+
+# Web confirms and alerts
+
+Do **not** use `window.confirm`, `window.alert`, or `window.prompt` in the web app.
+
+## Use instead
+
+```ts
+import { useAppDialog } from "@/components/ui/app-dialog";
+
+const { confirm, alert } = useAppDialog();
+
+const ok = await confirm({
+  title: "Void this invoice?",
+  description: "It will hide from the active list.",
+  confirmLabel: "Void",
+  destructive: true,
+});
+if (!ok) return;
+```
+
+- Destructive actions: set `destructive: true` (and a clear `confirmLabel`).
+- Admin cascade deletes: `AdminCascadeDeleteDialog`, not a bare confirm.
+- E2E: drive the in-app dialog via helpers in `apps/web/e2e/helpers/auth.ts`.

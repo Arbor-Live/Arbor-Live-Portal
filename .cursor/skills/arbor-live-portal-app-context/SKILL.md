@@ -148,6 +148,17 @@ Cursor rule: `.cursor/rules/portal-timezone.mdc` (always applied).
   Do not import `boring-avatars` directly. Seed is stable — account email, else user id,
   else display name (see module docs in that file).
 
+## Dialogs and confirms
+- **Never** use `window.confirm`, `window.alert`, or `window.prompt` in `apps/web`.
+- Use `useAppDialog()` from `apps/web/src/components/ui/app-dialog.tsx`
+  (`confirm({ title, description?, destructive?, confirmLabel? })` /
+  `alert({ description })`).
+- Admin cascade deletes: `AdminCascadeDeleteDialog` (preview + confirm), not a
+  bare confirm.
+- E2E: accept/dismiss via helpers in `apps/web/e2e/helpers/auth.ts` (in-app
+  dialog), not Playwright's native `page.on("dialog")` unless a native dialog
+  still exists by mistake.
+
 ## Recent High-Risk Areas
 - Event editor state hydration can overwrite in-progress edits if not guarded.
   - Prefer one-time hydration per loaded event id.

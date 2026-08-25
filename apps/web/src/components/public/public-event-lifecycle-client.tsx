@@ -17,6 +17,7 @@ import { PublicQuoteApprovalSection } from "@/components/public/public-quote-app
 import { PublicQuoteChangeRequestSection } from "@/components/public/public-quote-change-request-section";
 import { PublicInvoicePdfDownload } from "@/components/public/public-invoice-pdf-download";
 import { PublicPostEventSection } from "@/components/public/public-post-event-section";
+import { PublicStaffDashboardLinks } from "@/components/public/public-staff-dashboard-links";
 import { formatUsd } from "@/lib/format";
 import type { PublicQuoteApprovalFormValues } from "@/lib/validations/crew-availability";
 import type { PublicPaymentContactsFormValues } from "@/lib/validations/crew-availability";
@@ -105,7 +106,16 @@ export function PublicEventLifecycleClient({ token }: { token: string }) {
 
   return (
     <PublicSiteChrome>
-      <PublicPageHero title={`Quote ${data.invoice.invoiceNumber}`} subtitle={heroSubtitle} />
+      <PublicPageHero
+        title={`Quote ${data.invoice.invoiceNumber}`}
+        subtitle={heroSubtitle}
+        actions={
+          <PublicStaffDashboardLinks
+            invoiceId={data.invoice._id}
+            eventId={linkedEvent?.id}
+          />
+        }
+      />
       <div className="mx-auto max-w-6xl space-y-4 px-4 py-12 sm:px-6 lg:px-8">
         <Card>
           <CardHeader>
@@ -113,7 +123,7 @@ export function PublicEventLifecycleClient({ token }: { token: string }) {
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
             <p>Issued: {data.invoice.issueDate}</p>
-            {data.invoice.clientGroupName ? <p>Group: {data.invoice.clientGroupName}</p> : null}
+            {data.invoice.clientGroupName ? <p>Host: {data.invoice.clientGroupName}</p> : null}
             {data.invoice.clientContactName ? <p>Contact: {data.invoice.clientContactName}</p> : null}
             <p className="text-base font-semibold">Total: {formatUsd(data.invoice.totalUsd)}</p>
             <p className="text-muted-foreground">

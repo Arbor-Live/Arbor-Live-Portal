@@ -2,6 +2,7 @@ import type { MutationCtx } from "../_generated/server";
 import {
   computeLateFeeSummary,
   getPaymentDueAt,
+  isWithinPaymentProofReminderLead,
   shouldSendFirstPaymentProofReminder,
   shouldSendMondayPaymentProofReminder,
 } from "../lib/invoicePaymentStatus";
@@ -48,6 +49,9 @@ export async function runPaymentProofReminders(
     const activeSubmission = await getActivePaymentProofSubmission(ctx, event._id);
     if (activeSubmission) continue;
 
+    const dueAt = getPaymentDueAt(invoice, event);
+    if (!isWithinPaymentProofReminderLead(dueAt, now)) continue;
+
     const timezone = event.timezone || EVENT_TIMEZONE;
     const opensAt = getPaymentProofOpensAt(invoice);
     if (opensAt == null) continue;
@@ -60,7 +64,6 @@ export async function runPaymentProofReminders(
     const portalInfo = await resolvePortalTokenForInvoice(ctx, invoice);
     if (!portalInfo) continue;
 
-    const dueAt = getPaymentDueAt(invoice, event);
     const late = computeLateFeeSummary(dueAt, now);
     const opensDayKey = reminderDayKey(opensAt, timezone);
     const reminderKey =

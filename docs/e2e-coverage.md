@@ -475,13 +475,13 @@ starts failing in CI.
 These fail in ways that do not look like what they are. Items 1–4 cost real
 debugging time in Batch 8, items 5–8 in Batch 9, items 9–13 in Batch 10.
 
-1. **`window.confirm` guards mutations.** `regeneratePublicApprovalToken`,
-   host/contact archive, and the re-approval prompt on saving an edited approved
-   quote all sit behind a native confirm. Playwright **dismisses dialogs by
-   default**, so the mutation silently never runs and the spec times out polling
-   for a change that was never requested. Register `page.once("dialog", d =>
-   d.accept())` before the click. Dismissing is worth asserting too — that is the
-   "operator declined" path.
+1. **In-app confirms (`useAppDialog`), not `window.confirm`.** Mutations that
+   need a confirm (void invoice, regenerate token, archive host, etc.) use
+   `AppDialogProvider`. Drive them with the helpers in `e2e/helpers/auth.ts`
+   (accept/dismiss the in-app dialog). Do **not** register
+   `page.on("dialog")` for these — that only catches native dialogs, which
+   should not exist in product UI. If a native dialog appears, treat it as a
+   regression and fix the app to use `useAppDialog`.
 2. **`SearchableSelect` portals its menu.** It renders into `document.body` at
    `position: fixed`, computed as `trigger.bottom + 4` with no flip-up, and
    recomputes on every scroll event. Opening it while the trigger is below the

@@ -32,7 +32,11 @@ export function PublicEventHeader({
         <div className="flex flex-wrap gap-2 text-xs">
           {eventType ? <span className="rounded bg-muted px-2 py-0.5">{eventType}</span> : null}
           {venueName ? <span className="rounded bg-muted px-2 py-0.5">{venueName}</span> : null}
-          {host ? <span className="rounded bg-muted px-2 py-0.5">Host: {host}</span> : null}
+          {host ? (
+            <span className="rounded bg-muted px-2 py-0.5">
+              {host.includes(" · ") ? "Hosts" : "Host"}: {host}
+            </span>
+          ) : null}
           <span className="rounded bg-muted px-2 py-0.5">Status: {status}</span>
         </div>
       </CardContent>
