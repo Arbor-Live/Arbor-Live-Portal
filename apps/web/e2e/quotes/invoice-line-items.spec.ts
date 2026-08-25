@@ -47,7 +47,7 @@ test.describe("invoice line items and totals", () => {
     await artistRow.getByPlaceholder("Artist / role").fill(artistLabel);
     await artistRow.getByPlaceholder("Hours").fill("1");
     await artistRow.getByPlaceholder("People").fill("2");
-    await artistRow.getByPlaceholder("Rate / hr").fill("75");
+    await artistRow.getByPlaceholder("Rate / person / hr").fill("75");
 
     // 1 x $40 = $40
     await page.getByRole("button", { name: "Add external rental" }).click();
