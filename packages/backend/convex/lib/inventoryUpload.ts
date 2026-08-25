@@ -118,6 +118,16 @@ export function buildEventArtifactObjectKey(args: {
   return `events/${eventSegment}/artifacts/${args.uploadId}-${safeName}`;
 }
 
+export function buildEventPosterObjectKey(args: {
+  eventId: string;
+  fileName: string;
+  uploadId: string;
+}): string {
+  const eventSegment = args.eventId.trim() || `draft/${args.uploadId}`;
+  const safeName = sanitizeInventoryFileName(args.fileName);
+  return `events/${eventSegment}/poster/${args.uploadId}-${safeName}`;
+}
+
 export function buildVenueDocumentObjectKey(args: {
   venueId?: string;
   fileName: string;

@@ -18,6 +18,7 @@ import { PublicQuoteChangeRequestSection } from "@/components/public/public-quot
 import { PublicInvoicePdfDownload } from "@/components/public/public-invoice-pdf-download";
 import { PublicPostEventSection } from "@/components/public/public-post-event-section";
 import { PublicStaffDashboardLinks } from "@/components/public/public-staff-dashboard-links";
+import { PublicEventPosterSection } from "@/components/public/public-event-poster-section";
 import { formatUsd } from "@/lib/format";
 import type { PublicQuoteApprovalFormValues } from "@/lib/validations/crew-availability";
 import type { PublicPaymentContactsFormValues } from "@/lib/validations/crew-availability";
@@ -149,6 +150,7 @@ export function PublicEventLifecycleClient({ token }: { token: string }) {
               status={linkedEvent.status}
             />
             <PublicEventContacts manager={linkedEvent.contacts.manager} dayOfLead={linkedEvent.contacts.dayOfLead} />
+            <PublicEventPosterSection portal="quote" token={token} />
             <PublicEventSchedule blocks={linkedEvent.scheduleBlocks} />
             <PublicEventCrew crew={linkedEvent.crewRoster} />
           </>

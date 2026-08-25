@@ -18,6 +18,7 @@ import { PublicQuoteChangeRequestSection } from "@/components/public/public-quot
 import { PublicInvoicePdfDownload } from "@/components/public/public-invoice-pdf-download";
 import { PublicPostEventSection } from "@/components/public/public-post-event-section";
 import { PublicStaffDashboardLinks } from "@/components/public/public-staff-dashboard-links";
+import { PublicEventPosterSection } from "@/components/public/public-event-poster-section";
 import { formatDateTime, formatUsd } from "@/lib/format";
 import type {
   PublicPaymentContactsFormValues,
@@ -262,6 +263,8 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
           )}
         </CardContent>
       </Card>
+
+      <PublicEventPosterSection portal="request" token={token} />
 
       {quoteData ? (
         <>
