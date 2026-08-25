@@ -30,13 +30,14 @@ export function defaultTitleFromFileName(fileName: string, fallback: string): st
 }
 
 export function defaultAcceptForPurpose(
-  purpose: "hero" | "icon" | "promo" | "manual" | "gdtf" | "artifact" | "damage",
+  purpose: "hero" | "icon" | "promo" | "manual" | "gdtf" | "artifact" | "damage" | "poster",
 ): string {
   switch (purpose) {
     case "hero":
     case "icon":
     case "promo":
     case "damage":
+    case "poster":
       return "image/jpeg,image/png,image/webp,image/gif,image/svg+xml";
     case "manual":
       return "application/pdf,.pdf,.zip,.md,.txt,text/plain,text/markdown";

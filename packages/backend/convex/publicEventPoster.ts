@@ -17,16 +17,36 @@ const PUBLIC_CLIENT_ACTOR = "public-client";
 
 const portalValue = v.union(v.literal("request"), v.literal("quote"));
 
+const designLinkInputValue = v.object({
+  label: v.string(),
+  url: v.string(),
+});
+
 const posterStateValue = v.object({
   eligible: v.boolean(),
   eventId: v.optional(v.id("events")),
   eventTitle: v.optional(v.string()),
   posterImageUrl: v.optional(v.string()),
+  caption: v.optional(v.string()),
+  additionalLinks: v.array(designLinkInputValue),
   /** draft | ready (on website) | published (website + Instagram approved) */
   status: v.optional(v.union(v.literal("draft"), v.literal("ready"), v.literal("published"))),
   onWebsite: v.boolean(),
   instagramPublished: v.boolean(),
 });
+
+const CAPTION_MAX_CHARS = 4000;
+const MAX_ADDITIONAL_LINKS = 10;
+
+function normalizeLinks(links: Array<{ label: string; url: string }> | undefined) {
+  return (links ?? [])
+    .map((link) => ({
+      label: link.label.trim(),
+      url: link.url.trim(),
+    }))
+    .filter((link) => link.label && link.url)
+    .slice(0, MAX_ADDITIONAL_LINKS);
+}
 
 async function loadDesignForEvent(ctx: QueryCtx | MutationCtx, eventId: Id<"events">) {
   return (
@@ -106,12 +126,14 @@ async function serializePosterState(
   eventId?: Id<"events">;
   eventTitle?: string;
   posterImageUrl?: string;
+  caption?: string;
+  additionalLinks: Array<{ label: string; url: string }>;
   status?: "draft" | "ready" | "published";
   onWebsite: boolean;
   instagramPublished: boolean;
 }> {
   if (!event) {
-    return { eligible: false, onWebsite: false, instagramPublished: false };
+    return { eligible: false, additionalLinks: [], onWebsite: false, instagramPublished: false };
   }
   const design = await loadDesignForEvent(ctx, event._id);
   const status = design?.status;
@@ -124,6 +146,8 @@ async function serializePosterState(
     eventId: event._id,
     eventTitle: event.title,
     posterImageUrl,
+    caption: design?.caption?.trim() || undefined,
+    additionalLinks: design?.additionalLinks ?? [],
     status,
     onWebsite,
     instagramPublished: status === "published",
@@ -147,7 +171,7 @@ export const getByRequestToken = query({
   handler: async (ctx, args) => {
     const resolved = await resolveEventByRequestToken(ctx, args.token);
     if (!resolved) {
-      return { eligible: false, onWebsite: false, instagramPublished: false };
+      return { eligible: false, additionalLinks: [], onWebsite: false, instagramPublished: false };
     }
     return await serializePosterState(ctx, resolved.event);
   },
@@ -159,7 +183,7 @@ export const getByQuoteToken = query({
   handler: async (ctx, args) => {
     const resolved = await resolveEventByQuoteToken(ctx, args.token);
     if (!resolved) {
-      return { eligible: false, onWebsite: false, instagramPublished: false };
+      return { eligible: false, additionalLinks: [], onWebsite: false, instagramPublished: false };
     }
     return await serializePosterState(ctx, resolved.event);
   },
@@ -206,7 +230,9 @@ export const save = mutation({
   args: {
     portal: portalValue,
     token: v.string(),
-    imageUrl: v.string(),
+    imageUrl: v.optional(v.string()),
+    caption: v.optional(v.string()),
+    additionalLinks: v.optional(v.array(designLinkInputValue)),
   },
   returns: v.object({ ok: v.literal(true) }),
   handler: async (ctx, args) => {
@@ -215,16 +241,39 @@ export const save = mutation({
       windowMs: HOUR_MS,
     });
     const event = await resolveEventForPortal(ctx, args.portal, args.token);
-    const imageUrl = normalizeOptionalAssetReference(args.imageUrl);
-    if (!imageUrl) throw new Error("Poster image is required.");
-    assertPosterKeyBelongsToEvent(imageUrl, event._id);
+    const hasImage = args.imageUrl !== undefined;
+    const hasCaption = args.caption !== undefined;
+    const hasLinks = args.additionalLinks !== undefined;
+    if (!hasImage && !hasCaption && !hasLinks) {
+      throw new Error("Provide a poster image, description, and/or links to save.");
+    }
+
+    let nextImageUrl: string | undefined;
+    if (hasImage) {
+      nextImageUrl = normalizeOptionalAssetReference(args.imageUrl);
+      if (!nextImageUrl) throw new Error("Poster image is required.");
+      assertPosterKeyBelongsToEvent(nextImageUrl, event._id);
+    }
+
+    let nextCaption: string | undefined;
+    if (hasCaption) {
+      const trimmed = args.caption!.trim();
+      if (trimmed.length > CAPTION_MAX_CHARS) {
+        throw new Error(`Description must be ${CAPTION_MAX_CHARS} characters or fewer.`);
+      }
+      nextCaption = trimmed || undefined;
+    }
+
+    const nextLinks = hasLinks ? normalizeLinks(args.additionalLinks) : undefined;
 
     const now = Date.now();
     const existing = await loadDesignForEvent(ctx, event._id);
     if (existing) {
       const nextStatus = existing.status === "published" ? "published" : "ready";
       await ctx.db.patch(existing._id, {
-        imageUrl,
+        ...(hasImage ? { imageUrl: nextImageUrl } : {}),
+        ...(hasCaption ? { caption: nextCaption } : {}),
+        ...(hasLinks ? { additionalLinks: nextLinks } : {}),
         status: nextStatus,
         updatedAt: now,
         ...(nextStatus === "ready" ? { lastError: undefined } : {}),
@@ -232,7 +281,9 @@ export const save = mutation({
     } else {
       await ctx.db.insert("eventMarketingDesigns", {
         eventId: event._id,
-        imageUrl,
+        imageUrl: nextImageUrl,
+        caption: nextCaption,
+        additionalLinks: nextLinks,
         status: "ready",
         createdByUserId: PUBLIC_CLIENT_ACTOR,
         createdAt: now,

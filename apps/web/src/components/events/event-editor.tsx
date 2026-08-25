@@ -36,6 +36,7 @@ import { useSessionViewer } from "@/components/session-shell-provider";
 import { EventBandPaymentSection } from "@/components/events/event-band-payment-section";
 import { EventBandRidersSection } from "@/components/events/event-band-riders-section";
 import { EventMediaSection } from "@/components/events/event-media-section";
+import { EventMarketingSection } from "@/components/events/event-marketing-section";
 import { CommentsSection } from "@/components/comments/comments-section";
 import { EventPullList, mapPullListRow, type PullListItemDraft } from "@/components/events/event-pull-list";
 import { LinkedEventDaySwitcher } from "@/components/events/linked-event-day-switcher";
@@ -211,10 +212,6 @@ export function EventEditor({
     loadOverviewLookups ? { activeOnly: true } : "skip",
   );
   const managerList = useQuery(api.invoices.listManagers, loadOverviewLookups ? {} : "skip");
-  const posterAssignment = useQuery(
-    api.marketingDesigns.getPosterAssignmentForEvent,
-    eventId && activeTab === "overview" ? { eventId } : "skip",
-  );
   const createEvent = useMutation(api.events.create);
   const createEventSeries = useMutation(api.eventSeries.create);
   const reattachOccurrence = useMutation(api.eventSeries.reattachOccurrence);
@@ -226,7 +223,6 @@ export function EventEditor({
   const upsertShifts = useMutation(api.eventCrew.upsertShifts);
   const deleteUnassignedShifts = useMutation(api.eventCrew.deleteUnassignedShifts);
   const createArtifact = useMutation(api.eventArtifacts.create);
-  const assignPosterDesigner = useMutation(api.marketingDesigns.assignPosterDesigner);
   const copyDaySetup = useMutation(api.events.copyDaySetup);
 
   const siblingDays = useQuery(
@@ -633,11 +629,6 @@ export function EventEditor({
   const selectedCrewUserOption = useMemo(
     () => userOptions.find((option) => option.value === selectedCrewUserId),
     [selectedCrewUserId, userOptions],
-  );
-  const canAssignPosterDesigner = Boolean(
-    viewer?.isAdmin ||
-      viewer?.verticals.includes("Marketing") ||
-      viewer?.verticals.includes("Operations"),
   );
 
   const recurrencePreview = useMemo(() => {
@@ -1565,30 +1556,6 @@ export function EventEditor({
                 emptyLabel="Select day-of lead"
               />
             </div>
-            {!isCreate && canAssignPosterDesigner ? (
-              <div className="space-y-1">
-                <Label>Marketing poster designer</Label>
-                <UserSelect
-                  value={posterAssignment?.assigneeUserId ?? ""}
-                  onChange={(value) => {
-                    if (!eventId) return;
-                    void assignPosterDesigner({
-                      eventId,
-                      assigneeUserId: value || undefined,
-                    })
-                      .then(() => {
-                        flash("success", "Marketing poster designer updated.");
-                      })
-                      .catch((error) => {
-                        flash("error", error instanceof Error ? error.message : "Could not update poster designer.");
-                      });
-                  }}
-                  options={userSelectOptions}
-                  emptyLabel="Unassigned"
-                  placeholder="Assign marketing designer..."
-                />
-              </div>
-            ) : null}
             <div className="space-y-1 md:col-span-3">
               <Label>Notes</Label>
               <textarea className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm" value={notes} onChange={(e) => setNotes(e.target.value)} />
@@ -2132,6 +2099,21 @@ export function EventEditor({
           </Card>
         ) : (
           <EventMediaSection eventId={currentEventId} />
+        )
+      ) : null}
+
+      {resolvedActiveTab === "marketing" ? (
+        !currentEventId ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Marketing</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">Save the event first to manage marketing content.</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <EventMarketingSection eventId={currentEventId} />
         )
       ) : null}
 

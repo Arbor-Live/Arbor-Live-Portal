@@ -3,12 +3,16 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
-import { MarketingPostHeroUploadField } from "@/components/files/file-upload-field";
+import {
+  EventMarketingContentFields,
+  emptyMarketingLink,
+  filterMarketingLinks,
+  type MarketingAdditionalLink,
+} from "@/components/marketing/event-marketing-content-fields";
 import { UserSelect, type UserSelectOption } from "@/components/users/user-select";
 import { buildUserSelectDescription } from "@/lib/user-select-description";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { notify } from "@/lib/notify";
@@ -19,7 +23,6 @@ import {
 } from "@/lib/event-visibility";
 import { cn } from "@/lib/utils";
 
-type AdditionalLink = { label: string; url: string };
 type PosterWorkView = "unassigned" | "mine" | "all";
 
 const POSTER_WORK_VIEWS: Array<{ value: PosterWorkView; label: string }> = [
@@ -27,10 +30,6 @@ const POSTER_WORK_VIEWS: Array<{ value: PosterWorkView; label: string }> = [
   { value: "unassigned", label: "Unassigned" },
   { value: "all", label: "All upcoming" },
 ];
-
-function emptyLink(): AdditionalLink {
-  return { label: "", url: "" };
-}
 
 function formatEventMeta(startAt: number, venueName?: string) {
   const when = formatDateTime(startAt);
@@ -43,7 +42,9 @@ export function MarketingDesignBoard() {
   const [selectedEventId, setSelectedEventId] = useState<Id<"events"> | null>(null);
   const [imageUrl, setImageUrl] = useState("");
   const [caption, setCaption] = useState("");
-  const [additionalLinks, setAdditionalLinks] = useState<AdditionalLink[]>([emptyLink()]);
+  const [additionalLinks, setAdditionalLinks] = useState<MarketingAdditionalLink[]>([
+    emptyMarketingLink(),
+  ]);
 
   const events = useQuery(api.marketingDesigns.listUpcomingPosterWork, { now, view });
   const managerList = useQuery(api.invoices.listManagers, {});
@@ -77,7 +78,7 @@ export function MarketingDesignBoard() {
     setImageUrl(event.design?.imageUrl ?? "");
     setCaption(event.design?.caption ?? "");
     setAdditionalLinks(
-      event.design?.additionalLinks?.length ? event.design.additionalLinks : [emptyLink()],
+      event.design?.additionalLinks?.length ? event.design.additionalLinks : [emptyMarketingLink()],
     );
   }
 
@@ -105,7 +106,7 @@ export function MarketingDesignBoard() {
         assigneeUserId: selectedEvent?.assigneeUserId ?? undefined,
         imageUrl,
         caption: caption.trim() || undefined,
-        additionalLinks: additionalLinks.filter((link) => link.label.trim() && link.url.trim()),
+        additionalLinks: filterMarketingLinks(additionalLinks),
       });
       notify.success("Draft saved.");
     } catch (error) {
@@ -125,7 +126,7 @@ export function MarketingDesignBoard() {
         assigneeUserId: selectedEvent?.assigneeUserId ?? undefined,
         imageUrl,
         caption: caption.trim() || undefined,
-        additionalLinks: additionalLinks.filter((link) => link.label.trim() && link.url.trim()),
+        additionalLinks: filterMarketingLinks(additionalLinks),
       });
       await markReady({ id: designId });
       notify.success("Published to Instagram and the public site.");
@@ -213,7 +214,7 @@ export function MarketingDesignBoard() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {!selectedEvent ? (
+          {!selectedEvent || !selectedEventId ? (
             <p className="text-sm text-muted-foreground">
               Pick an event to assign a designer, upload a poster, add a caption and links, then publish to
               Instagram and the public site.
@@ -230,55 +231,18 @@ export function MarketingDesignBoard() {
                   placeholder="Assign marketing designer..."
                 />
               </div>
-              <MarketingPostHeroUploadField
-                label="Poster image"
-                currentUrl={imageUrl}
-                onUploaded={setImageUrl}
+              <EventMarketingContentFields
+                idPrefix="design-board"
+                imageUrl={imageUrl}
+                onImageUrlChange={setImageUrl}
+                caption={caption}
+                onCaptionChange={setCaption}
+                additionalLinks={additionalLinks}
+                onAdditionalLinksChange={setAdditionalLinks}
+                captionLabel="Caption"
+                captionPlaceholder="Instagram caption and event description"
+                posterUpload={{ type: "event", eventId: selectedEventId }}
               />
-              <div className="space-y-2">
-                <Label htmlFor="design-caption">Caption</Label>
-                <textarea
-                  id="design-caption"
-                  rows={4}
-                  value={caption}
-                  onChange={(e) => setCaption(e.target.value)}
-                  placeholder="Instagram caption and event description"
-                  className="flex min-h-[96px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Additional links</Label>
-                {additionalLinks.map((link, index) => (
-                  <div key={`link-${index}`} className="grid gap-2 md:grid-cols-2">
-                    <Input
-                      value={link.label}
-                      placeholder="Label (e.g. Partiful RSVP)"
-                      onChange={(e) => {
-                        const next = [...additionalLinks];
-                        next[index] = { ...next[index], label: e.target.value };
-                        setAdditionalLinks(next);
-                      }}
-                    />
-                    <Input
-                      value={link.url}
-                      placeholder="https://..."
-                      onChange={(e) => {
-                        const next = [...additionalLinks];
-                        next[index] = { ...next[index], url: e.target.value };
-                        setAdditionalLinks(next);
-                      }}
-                    />
-                  </div>
-                ))}
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setAdditionalLinks((prev) => [...prev, emptyLink()])}
-                >
-                  Add link
-                </Button>
-              </div>
               {selectedDesign?.status === "published" ? (
                 <p className="text-sm text-muted-foreground">
                   Published
@@ -302,7 +266,6 @@ export function MarketingDesignBoard() {
               </div>
             </>
           )}
-
         </CardContent>
       </Card>
     </div>

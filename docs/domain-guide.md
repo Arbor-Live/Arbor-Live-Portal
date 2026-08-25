@@ -171,14 +171,11 @@ Event types (drive which editor tabs and quick-add blocks appear):
   merge so duplicate names resolve to one canonical record; booking can search
   existing hosts or create from free text.
 - Artist lines pick a band/DJ (or **Band TBD**) and pull
-  `performerHourlyRateUsd` (rate **per person per hour**) and member count
-  (`bandMembers.length`) from the org profile when a band is selected. Linked
-  events auto-fill artist rows from assigned performers / payout totals when the
-  invoice has no artist lines yet.
+  `performerHourlyRateUsd` and member count (`bandMembers.length`) from the org
+  profile when a band is selected. Linked events auto-fill artist rows from
+  assigned performers / payout totals when the invoice has no artist lines yet.
   Artist and external-rental amounts are pass-through (excluded from Insights
   earned revenue and from net-profit margin).
-- Public artist profiles (`/artists/[slug]`) surface website, Instagram,
-  YouTube, and Spotify links from `organizationProfiles` when set.
 - Every invoice carries a `publicApprovalToken` for the client-facing quote
   page (`/public/quote/[token]`): view, approve, request changes, set payment
   contacts, download PDF — all token-gated, no login.
@@ -261,10 +258,12 @@ Event types (drive which editor tabs and quick-add blocks appear):
   appear immediately on the board (including internal events). The design board
   filters: assigned to me, unassigned, and all upcoming. Design statuses:
   `draft` (staff WIP, not on site), `ready` (on the public event page; Instagram
-  not yet approved), `published` (website + Instagram). Clients can upload from
+  not yet approved), `published` (website + Instagram).   Clients can upload from
   the booking-request or invoice tracking link once an event exists
-  (`publicEventPoster.ts`); that sets `ready` so the image goes live on the
-  public page immediately while Marketing still publishes to Instagram.
+  (`publicEventPoster.ts`); that sets `ready` so the image and optional
+  public description (`caption` / About) go live on the public page
+  immediately while Marketing still publishes to Instagram. Staff manage the
+  same fields on the event editor **Marketing** tab.
 - `marketingPosts.ts` — case studies and blog posts, Lexical rich text,
   published/featured flags, rendered publicly via `publicMarketing.ts`
   (`/work`). Public crew and artist directories come from

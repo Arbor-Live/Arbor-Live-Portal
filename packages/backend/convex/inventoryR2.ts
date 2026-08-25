@@ -3,10 +3,11 @@ import { v } from "convex/values";
 import { components } from "./_generated/api";
 import type { DataModel } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
-import { requireAdmin, requireAuth, requireBandContext, isAdmin } from "./lib/auth";
+import { requireAdmin, requireAuth, requireBandContext, requireAnyVerticalOrAdmin, isAdmin } from "./lib/auth";
 import {
   buildBandHeroObjectKey,
   buildEventArtifactObjectKey,
+  buildEventPosterObjectKey,
   buildInventoryObjectKey,
   buildMarketingPostContentObjectKey,
   buildMarketingPostHeroObjectKey,
@@ -75,7 +76,12 @@ export const generateR2UploadUrl = mutation({
   args: {
     scope: uploadScopeValue,
     entityKind: v.optional(v.union(v.literal("package"), v.literal("type"), v.literal("item"))),
-    purpose: v.union(inventoryPurposeValue, v.literal("artifact"), v.literal("document")),
+    purpose: v.union(
+      inventoryPurposeValue,
+      v.literal("artifact"),
+      v.literal("document"),
+      v.literal("poster"),
+    ),
     entityId: v.optional(v.string()),
     eventId: v.optional(v.id("events")),
     venueId: v.optional(v.id("venues")),
@@ -140,16 +146,30 @@ export const generateR2UploadUrl = mutation({
             });
     } else if (args.scope === "event") {
       if (!args.eventId) throw new Error("Event id is required for event uploads.");
-      validateEventArtifactUploadRequest({
-        fileName: args.fileName,
-        contentType: args.contentType,
-        contentLength: args.contentLength,
-      });
-      key = buildEventArtifactObjectKey({
-        eventId: args.eventId,
-        fileName: args.fileName,
-        uploadId,
-      });
+      if (args.purpose === "poster") {
+        await requireAnyVerticalOrAdmin(ctx, ["Marketing", "Operations"]);
+        validateMarketingHeroUploadRequest({
+          fileName: args.fileName,
+          contentType: args.contentType,
+          contentLength: args.contentLength,
+        });
+        key = buildEventPosterObjectKey({
+          eventId: args.eventId,
+          fileName: args.fileName,
+          uploadId,
+        });
+      } else {
+        validateEventArtifactUploadRequest({
+          fileName: args.fileName,
+          contentType: args.contentType,
+          contentLength: args.contentLength,
+        });
+        key = buildEventArtifactObjectKey({
+          eventId: args.eventId,
+          fileName: args.fileName,
+          uploadId,
+        });
+      }
     } else if (args.scope === "venue") {
       await requireAdmin(ctx);
       validateVenueDocumentUploadRequest({
@@ -164,8 +184,8 @@ export const generateR2UploadUrl = mutation({
       });
     } else {
       if (!args.entityKind) throw new Error("Inventory entity kind is required.");
-      if (args.purpose === "artifact" || args.purpose === "document") {
-        throw new Error("Artifact/document purpose is only valid for event or venue uploads.");
+      if (args.purpose === "artifact" || args.purpose === "document" || args.purpose === "poster") {
+        throw new Error("Artifact/document/poster purpose is only valid for event or venue uploads.");
       }
       validateInventoryUploadRequest({
         entityKind: args.entityKind,
