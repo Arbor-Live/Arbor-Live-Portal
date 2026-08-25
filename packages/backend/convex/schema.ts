@@ -170,6 +170,27 @@ const eventExpenseStatusValue = v.union(
 
 const rentalFulfillmentModeValue = v.union(v.literal("delivery"), v.literal("will_call"));
 
+/** Stage box an instrument group plugs into (AES50 A / B). */
+export const snakeIdValue = v.union(v.literal("A"), v.literal("B"));
+
+/**
+ * Wing show-file patch plan for one event: whether the second snake is out
+ * tonight and which box each instrument group lands on.
+ */
+export const patchPlanValue = v.object({
+  secondSnake: v.boolean(),
+  /** Scope band scenes to what changes (default true). */
+  scopeScenes: v.optional(v.boolean()),
+  sides: v.object({
+    vox: v.optional(snakeIdValue),
+    guitar: v.optional(snakeIdValue),
+    bass: v.optional(snakeIdValue),
+    flex: v.optional(snakeIdValue),
+    keys: v.optional(snakeIdValue),
+    drums: v.optional(snakeIdValue),
+  }),
+});
+
 const crewAvailabilityResponseStatusValue = v.union(
   v.literal("yes"),
   v.literal("partial"),
@@ -845,6 +866,9 @@ export default defineSchema({
     ),
     /** Free-form crew notes shown on the Open Mic runner and public sign-up. */
     openMicNotes: v.optional(v.string()),
+
+    /** Snake choices behind the generated Wing show file. Unset = one snake. */
+    patchPlan: v.optional(patchPlanValue),
 
     createdAt: v.number(),
     updatedAt: v.number(),

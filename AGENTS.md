@@ -111,6 +111,11 @@ wizards”).
 - Local Playwright: `pnpm test:e2e` boots anonymous Convex (stashes any cloud
   `.env.local` and restores it on exit). Use `E2E_USE_CLOUD_DEV=1` only when you
   intentionally want shared Dev.
+- Wing show files (`packages/show-file`): the `.snap` recall-`scopes` format is
+  reverse-engineered from console saves, not from the public OSC PDF — that PDF
+  is obsolete for this. Read `docs/wing-show-files.md` before touching
+  `snap.ts`, and keep the fixture test against
+  `templates/scopes-reference.json`.
 
 # A note from the devs
 

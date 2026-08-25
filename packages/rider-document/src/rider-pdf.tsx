@@ -124,6 +124,8 @@ const styles = StyleSheet.create({
   headerCell: { fontSize: 7.5, fontWeight: 700, paddingHorizontal: 4, color: muted },
   notesBody: { fontSize: 9, lineHeight: 1.4 },
   emptyNote: { fontSize: 8.5, color: muted, fontStyle: "italic" },
+  changeoverTitle: { fontSize: 9.5, fontWeight: 700, marginBottom: 3, marginTop: 2 },
+  changeoverLine: { fontSize: 9, lineHeight: 1.35, marginLeft: 6, marginBottom: 1 },
   footer: {
     position: "absolute",
     bottom: 18,
@@ -450,6 +452,26 @@ export function RiderPdf({ data }: { data: RiderDocumentData }) {
             emptyMessage="No input channels listed."
           />
         </View>
+
+        {data.changeovers && data.changeovers.length > 0 ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Changes between bands</Text>
+            {data.changeovers.map((block) => (
+              <View key={block.title} style={{ marginBottom: 10 }} wrap={false}>
+                <Text style={styles.changeoverTitle}>{block.title}</Text>
+                {block.lines.length === 0 ? (
+                  <Text style={styles.emptyNote}>No stage swaps for this changeover.</Text>
+                ) : (
+                  block.lines.map((line) => (
+                    <Text key={line} style={styles.changeoverLine}>
+                      {line}
+                    </Text>
+                  ))
+                )}
+              </View>
+            ))}
+          </View>
+        ) : null}
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Monitor mixes</Text>
