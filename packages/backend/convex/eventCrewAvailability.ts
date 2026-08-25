@@ -20,6 +20,7 @@ import {
   isStaffMember,
   resolveProfileMembership,
 } from "./lib/userVerticals";
+import { loadEventHostDisplay } from "./lib/hostOrgs";
 
 
 const crewAvailabilityResponseStatusValue = v.union(
@@ -280,7 +281,8 @@ export const listForAdminOverview = query({
     );
     const userByKey = await findAuthUsersByIds(ctx, allUserIds);
 
-    const rows = bundles.map(({ event, shifts, responses }) => {
+    const rows = await Promise.all(
+      bundles.map(async ({ event, shifts, responses }) => {
       const shiftStats = computeShiftStats(shifts);
       const responseCounts = aggregateResponses(responses);
       const eligibleCrew = countEligibleCrewForEvent(event.teamsInterested, crewProfiles);
@@ -293,6 +295,7 @@ export const listForAdminOverview = query({
             .filter((userId): userId is string => Boolean(userId)),
         ),
       );
+      const hostDisplay = await loadEventHostDisplay(ctx, event);
 
       return {
         _id: event._id,
@@ -300,7 +303,7 @@ export const listForAdminOverview = query({
         status: normalizeEventStatus(event.status),
         eventType: event.eventType,
         venueName: event.venueName,
-        host: event.host,
+        host: hostDisplay.hostLabel,
         teamsInterested: event.teamsInterested,
         startAt: event.startAt,
         endAt: event.endAt,
@@ -314,7 +317,8 @@ export const listForAdminOverview = query({
         responders: buildResponsePeople(responses, userByKey, { includePrivateStatuses: true }),
         assignedCrew: assignedUserIds.map((userId) => toUserSummary(userId, userByKey)),
       };
-    });
+    }),
+    );
 
     if (unconfirmedOnly) {
       return rows.filter((row) => !row.isCrewConfirmed);
@@ -407,7 +411,8 @@ export const listForCrewMember = query({
     );
     const userByKey = await findAuthUsersByIds(ctx, allUserIds);
 
-    return bundles.map(({ event, blocks, shifts, responses }) => {
+    return Promise.all(
+      bundles.map(async ({ event, blocks, shifts, responses }) => {
       const myResponseRow = responses.find((response) => response.userId === userId) ?? null;
       const responseCounts = aggregateResponses(responses);
 
@@ -418,6 +423,7 @@ export const listForCrewMember = query({
             .filter((id): id is string => Boolean(id)),
         ),
       );
+      const hostDisplay = await loadEventHostDisplay(ctx, event);
 
       return {
         _id: event._id,
@@ -425,7 +431,7 @@ export const listForCrewMember = query({
         status: normalizeEventStatus(event.status),
         eventType: event.eventType,
         venueName: event.venueName,
-        host: event.host,
+        host: hostDisplay.hostLabel,
         notes: event.notes,
         teamsInterested: event.teamsInterested,
         startAt: event.startAt,
@@ -458,7 +464,8 @@ export const listForCrewMember = query({
           : null,
         needsResponse: !myResponseRow,
       };
-    });
+    }),
+    );
   },
 });
 
@@ -569,13 +576,15 @@ export const getEventForCrewResponse = query({
       ),
     );
 
+    const hostDisplay = await loadEventHostDisplay(ctx, bundle.event);
+
     return {
       _id: bundle.event._id,
       title: bundle.event.title,
       status: bundle.event.status,
       eventType: bundle.event.eventType,
       venueName: bundle.event.venueName,
-      host: bundle.event.host,
+      host: hostDisplay.hostLabel,
       notes: bundle.event.notes,
       teamsInterested: bundle.event.teamsInterested,
       startAt: bundle.event.startAt,

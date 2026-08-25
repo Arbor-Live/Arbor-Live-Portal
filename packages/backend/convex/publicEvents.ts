@@ -11,6 +11,7 @@ import {
 } from "./lib/publicEvents";
 import { isPublicSiteListableVisibility } from "./lib/eventVisibility";
 import { SITE_URL } from "./email/constants";
+import { loadEventHostDisplay } from "./lib/hostOrgs";
 
 const publicEventLinkValue = v.object({
   label: v.string(),
@@ -26,6 +27,7 @@ const publicEventCardValue = v.object({
   venueAddress: v.optional(v.string()),
   googleMapsUrl: v.optional(v.string()),
   host: v.optional(v.string()),
+  additionalHosts: v.array(v.string()),
   posterImageUrl: v.optional(v.string()),
   caption: v.optional(v.string()),
   publicEventUrl: v.string(),
@@ -45,6 +47,7 @@ async function mapPublicEventCard(
     ? ((await resolveStoredR2AssetUrl(design.imageUrl)) ?? undefined)
     : undefined;
   const publicEventUrl = buildPublicEventUrl(String(event._id), SITE_URL);
+  const hostDisplay = await loadEventHostDisplay(ctx, event);
   return {
     eventId: event._id,
     title: event.title,
@@ -53,7 +56,8 @@ async function mapPublicEventCard(
     venueName: event.venueName,
     venueAddress,
     googleMapsUrl,
-    host: event.host,
+    host: hostDisplay.hostLabel,
+    additionalHosts: hostDisplay.additionalHosts,
     posterImageUrl,
     caption: design?.caption,
     publicEventUrl,

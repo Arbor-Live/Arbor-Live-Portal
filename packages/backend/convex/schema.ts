@@ -728,6 +728,8 @@ export default defineSchema({
     category: v.optional(v.string()),
     hostGroupId: v.optional(v.id("invoiceGroups")),
     host: v.optional(v.string()),
+    /** Co-hosts shown with the primary host; billing stays on the invoice group. */
+    additionalHostGroupIds: v.optional(v.array(v.id("invoiceGroups"))),
     expectedTurnout: v.optional(v.number()),
     budgetUsd: v.optional(v.number()),
     occurrenceBandsCostUsd: v.optional(v.number()),
@@ -799,6 +801,8 @@ export default defineSchema({
     category: v.optional(v.string()),
     hostGroupId: v.optional(v.id("invoiceGroups")),
     host: v.optional(v.string()),
+    /** Co-hosts shown with the primary host; billing stays on the invoice group. */
+    additionalHostGroupIds: v.optional(v.array(v.id("invoiceGroups"))),
     expectedTurnout: v.optional(v.number()),
     actualTurnout: v.optional(v.number()),
     cancelReasonCode: v.optional(

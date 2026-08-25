@@ -1,18 +1,55 @@
 "use client";
 
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
+import {
+  CopyIcon,
+  DotsThreeIcon,
+  LinkSimpleIcon,
+  ProhibitIcon,
+  ArrowCounterClockwiseIcon,
+  TrashIcon,
+} from "@phosphor-icons/react";
 import { api, type Id } from "@/lib/convex-api";
 import { AdminCascadeDeleteDialog } from "@/components/admin/admin-cascade-delete-dialog";
 import { InvoicePdfDownloadButton } from "@/components/financial/invoice-pdf-download-button";
+import { MultiSelectFilter } from "@/components/inventory/multi-select-filter";
 import { useSessionViewer } from "@/components/session-shell-provider";
+import { useAppDialog } from "@/components/ui/app-dialog";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { formatUsd } from "@/lib/format";
+import { notify } from "@/lib/notify";
 
-type StatusFilter = "all" | "draft" | "finalized" | "void";
-type ApprovalFilter = "all" | "pending" | "approved" | "changes_requested";
+async function copyQuoteLink(token: string) {
+  const url = `${window.location.origin}/event/${token}`;
+  try {
+    await navigator.clipboard.writeText(url);
+    notify.success("Quote link copied to clipboard.");
+  } catch {
+    notify.error("Could not copy link.");
+  }
+}
+
+const STATUS_FILTER_OPTIONS = [
+  { value: "draft", label: "Draft" },
+  { value: "finalized", label: "Finalized" },
+  { value: "void", label: "Void" },
+] as const;
+
+const APPROVAL_FILTER_OPTIONS = [
+  { value: "pending", label: "Pending" },
+  { value: "approved", label: "Approved" },
+  { value: "changes_requested", label: "Changes requested" },
+] as const;
 
 function displayStatus(invoice: {
   status: "draft" | "finalized" | "void";
@@ -37,15 +74,23 @@ function statusBadgeClass(invoice: {
 }
 
 export function InvoicesListClient() {
+  const router = useRouter();
+  const { confirm } = useAppDialog();
   const viewer = useSessionViewer();
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [approvalFilter, setApprovalFilter] = useState<ApprovalFilter>("all");
+  const [statusFilters, setStatusFilters] = useState<string[]>([]);
+  const [approvalFilters, setApprovalFilters] = useState<string[]>([]);
   const [search, setSearch] = useState("");
-  const rows = useQuery(
-    api.invoices.listEnriched,
-    statusFilter === "all" ? {} : { status: statusFilter },
-  );
+  const listQueryArgs = useMemo(() => {
+    if (statusFilters.length === 1) {
+      return { status: statusFilters[0] as "draft" | "finalized" | "void" };
+    }
+    return {};
+  }, [statusFilters]);
+  const rows = useQuery(api.invoices.listEnriched, listQueryArgs);
   const deleteInvoiceAdmin = useMutation(api.adminDeletes.deleteInvoiceAdmin);
+  const voidInvoice = useMutation(api.invoices.voidInvoice);
+  const unvoidInvoice = useMutation(api.invoices.unvoidInvoice);
+  const duplicateInvoice = useMutation(api.invoices.duplicate);
   const [deleteInvoiceId, setDeleteInvoiceId] = useState<Id<"invoices"> | null>(null);
   const deletePreview = useQuery(
     api.adminDeletes.previewInvoiceDeletion,
@@ -56,8 +101,14 @@ export function InvoicesListClient() {
   const filteredRows = useMemo(() => {
     const needle = search.trim().toLowerCase();
     return (rows ?? []).filter((invoice) => {
-      if (approvalFilter !== "all" && (invoice.clientApprovalStatus ?? "pending") !== approvalFilter) {
+      if (statusFilters.length === 0) {
+        if (invoice.status === "void") return false;
+      } else if (statusFilters.length > 1 && !statusFilters.includes(invoice.status)) {
         return false;
+      }
+      if (approvalFilters.length > 0) {
+        const approval = invoice.clientApprovalStatus ?? "pending";
+        if (!approvalFilters.includes(approval)) return false;
       }
       if (!needle) return true;
       const haystack = [
@@ -73,7 +124,7 @@ export function InvoicesListClient() {
         .toLowerCase();
       return haystack.includes(needle);
     });
-  }, [rows, search, approvalFilter]);
+  }, [rows, search, approvalFilters, statusFilters]);
 
   if (rows === undefined) return <p className="p-2 text-muted-foreground">Loading…</p>;
 
@@ -88,32 +139,24 @@ export function InvoicesListClient() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">Status</label>
-          <select
-            className="h-9 rounded-md border bg-background px-3 text-sm"
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-          >
-            <option value="all">All</option>
-            <option value="draft">Draft</option>
-            <option value="finalized">Finalized</option>
-            <option value="void">Void</option>
-          </select>
-        </div>
-        <div className="space-y-1">
-          <label className="text-xs text-muted-foreground">Approval</label>
-          <select
-            className="h-9 rounded-md border bg-background px-3 text-sm"
-            value={approvalFilter}
-            onChange={(e) => setApprovalFilter(e.target.value as ApprovalFilter)}
-          >
-            <option value="all">All</option>
-            <option value="pending">Pending</option>
-            <option value="approved">Approved</option>
-            <option value="changes_requested">Changes requested</option>
-          </select>
-        </div>
+        <MultiSelectFilter
+          className="min-w-40"
+          label="Status"
+          placeholder="Filter status…"
+          values={statusFilters}
+          onChange={setStatusFilters}
+          options={[...STATUS_FILTER_OPTIONS]}
+          emptyLabel="Active"
+        />
+        <MultiSelectFilter
+          className="min-w-44"
+          label="Approval"
+          placeholder="Filter approval…"
+          values={approvalFilters}
+          onChange={setApprovalFilters}
+          options={[...APPROVAL_FILTER_OPTIONS]}
+          emptyLabel="All"
+        />
       </div>
 
       <div className="overflow-auto rounded-md border">
@@ -132,7 +175,11 @@ export function InvoicesListClient() {
           </thead>
           <tbody>
             {filteredRows.map((invoice) => (
-              <tr key={invoice._id} className="border-t align-top">
+              <tr
+                key={invoice._id}
+                className="cursor-pointer border-t align-top hover:bg-muted/40"
+                onClick={() => router.push(`/dashboard/financial-hub/invoices/${invoice._id}`)}
+              >
                 <td className="p-2">
                   <div className="font-medium">{invoice.invoiceNumber}</div>
                 </td>
@@ -158,34 +205,90 @@ export function InvoicesListClient() {
                 <td className="p-2 whitespace-nowrap">
                   {invoice.netProfitUsd == null ? "—" : formatUsd(invoice.netProfitUsd)}
                 </td>
-                <td className="p-2">
-                  <div className="flex min-w-[12rem] flex-wrap gap-2">
-                    <Button asChild size="sm" variant="outline">
-                      <Link href={`/dashboard/financial-hub/invoices/${invoice._id}`}>Open</Link>
-                    </Button>
+                <td className="p-2" onClick={(event) => event.stopPropagation()}>
+                  <div className="flex items-center gap-1">
                     <InvoicePdfDownloadButton
                       invoiceId={invoice._id}
                       invoiceNumber={invoice.invoiceNumber}
-                      size="sm"
+                      size="icon-sm"
+                      iconOnly
                       label="PDF"
                     />
                     {invoice.publicApprovalToken ? (
-                      <Button asChild size="sm" variant="outline">
-                        <Link href={`/event/${invoice.publicApprovalToken}`} target="_blank" rel="noreferrer">
-                          Quote Link
-                        </Link>
-                      </Button>
-                    ) : null}
-                    {isAdmin ? (
                       <Button
                         type="button"
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => setDeleteInvoiceId(invoice._id)}
+                        size="icon-sm"
+                        variant="outline"
+                        title="Copy quote link"
+                        aria-label="Copy quote link"
+                        onClick={() => {
+                          void copyQuoteLink(invoice.publicApprovalToken!);
+                        }}
                       >
-                        Delete
+                        <LinkSimpleIcon className="size-3.5" />
                       </Button>
                     ) : null}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button type="button" size="icon-sm" variant="outline" aria-label="More actions">
+                          <DotsThreeIcon className="size-3.5" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-44">
+                        <DropdownMenuItem
+                          onSelect={() => {
+                            void duplicateInvoice({ id: invoice._id }).then((result) => {
+                              router.push(`/dashboard/financial-hub/invoices/${result.id}`);
+                            });
+                          }}
+                        >
+                          <CopyIcon className="size-4" />
+                          Duplicate
+                        </DropdownMenuItem>
+                        {invoice.status === "void" ? (
+                          <DropdownMenuItem
+                            onSelect={() => {
+                              void unvoidInvoice({ id: invoice._id });
+                            }}
+                          >
+                            <ArrowCounterClockwiseIcon className="size-4" />
+                            Unvoid
+                          </DropdownMenuItem>
+                        ) : (
+                          <DropdownMenuItem
+                            variant="destructive"
+                            onSelect={() => {
+                              void (async () => {
+                                const confirmed = await confirm({
+                                  title: `Void ${invoice.invoiceNumber}?`,
+                                  description:
+                                    "It will hide from the active list. You can unvoid it later.",
+                                  confirmLabel: "Void",
+                                  destructive: true,
+                                });
+                                if (!confirmed) return;
+                                await voidInvoice({ id: invoice._id });
+                              })();
+                            }}
+                          >
+                            <ProhibitIcon className="size-4" />
+                            Void
+                          </DropdownMenuItem>
+                        )}
+                        {isAdmin ? (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              variant="destructive"
+                              onSelect={() => setDeleteInvoiceId(invoice._id)}
+                            >
+                              <TrashIcon className="size-4" />
+                              Delete
+                            </DropdownMenuItem>
+                          </>
+                        ) : null}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 </td>
               </tr>

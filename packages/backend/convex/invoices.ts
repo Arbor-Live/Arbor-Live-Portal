@@ -23,6 +23,7 @@ import {
 } from "./lib/publicQuoteView";
 import { listFulfillmentPackageBom } from "./lib/packageBom";
 import { allocateInvoiceNumber } from "./lib/publicReferenceIds";
+import { syncLinkedEventsPrimaryHostFromInvoice } from "./lib/hostOrgs";
 import { enforceRateLimit, HOUR_MS } from "./rateLimit";
 import { scheduleBookingQuoteReadyEmail } from "./email/bookingRequestEmails";
 import {
@@ -875,6 +876,9 @@ export const updateDraft = mutation({
     await replaceLineItems(ctx, args.id, totals.normalized);
     if (args.groupId) await ctx.db.patch(args.groupId, { lastUsedAt: now, updatedAt: now });
     if (args.contactId) await ctx.db.patch(args.contactId, { lastUsedAt: now, updatedAt: now });
+    if (args.groupId !== existing.groupId) {
+      await syncLinkedEventsPrimaryHostFromInvoice(ctx, args.id);
+    }
     return { id: args.id, warning: totals.discountWarning };
   },
 });
@@ -1093,6 +1097,42 @@ export const finalize = mutation({
     const invoice = await ctx.db.get(args.id);
     if (!invoice) throw new Error("Invoice not found.");
     await ctx.db.patch(args.id, { status: "finalized", updatedAt: Date.now() });
+  },
+});
+
+export const voidInvoice = mutation({
+  args: { id: v.id("invoices") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    const invoice = await ctx.db.get(args.id);
+    if (!invoice) throw new Error("Invoice not found.");
+    if (invoice.status === "void") throw new Error("Invoice is already void.");
+    await ctx.db.patch(args.id, { status: "void", updatedAt: Date.now() });
+    return null;
+  },
+});
+
+export const unvoidInvoice = mutation({
+  args: { id: v.id("invoices") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    const invoice = await ctx.db.get(args.id);
+    if (!invoice) throw new Error("Invoice not found.");
+    if (invoice.status !== "void") throw new Error("Invoice is not void.");
+    // Restore published/approved work to finalized; otherwise back to draft.
+    const nextStatus =
+      invoice.clientReviewReadyAt ||
+      invoice.approvedAt ||
+      invoice.paymentReceivedAt ||
+      invoice.clientApprovalStatus === "approved"
+        ? "finalized"
+        : "draft";
+    await ctx.db.patch(args.id, { status: nextStatus, updatedAt: Date.now() });
+    return null;
   },
 });
 

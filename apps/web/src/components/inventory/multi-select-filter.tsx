@@ -22,6 +22,7 @@ export function MultiSelectFilter({
   options,
   emptyLabel = "All",
   className,
+  hideLabel = false,
 }: {
   label: string;
   placeholder: string;
@@ -30,6 +31,7 @@ export function MultiSelectFilter({
   options: MultiSelectOption[];
   emptyLabel?: string;
   className?: string;
+  hideLabel?: boolean;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -96,7 +98,9 @@ export function MultiSelectFilter({
 
   return (
     <div className={cn("space-y-1", className)} ref={rootRef}>
-      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      {hideLabel ? null : (
+        <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      )}
       <button
         ref={triggerRef}
         type="button"

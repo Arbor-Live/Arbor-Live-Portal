@@ -10,6 +10,7 @@ import {
   normalizeHostOrgName,
   searchHostOrganizations,
 } from "./lib/hostOrgIdentity";
+import { rewriteAdditionalHostGroupIds } from "./lib/hostOrgs";
 
 const groupTypeValue = v.union(
   v.literal("vso"),
@@ -401,9 +402,16 @@ export const merge = mutation({
         .withIndex("by_hostGroupId", (q) => q.eq("hostGroupId", victim._id))
         .take(500);
       for (const event of events) {
+        const additionalHostGroupIds = rewriteAdditionalHostGroupIds(
+          event.additionalHostGroupIds,
+          victim._id,
+          args.survivorId,
+          args.survivorId,
+        );
         await ctx.db.patch(event._id, {
           hostGroupId: args.survivorId,
           host: canonicalName,
+          additionalHostGroupIds,
           updatedAt: now,
         });
       }
@@ -413,9 +421,51 @@ export const merge = mutation({
         .withIndex("by_hostGroupId", (q) => q.eq("hostGroupId", victim._id))
         .take(500);
       for (const series of seriesRows) {
+        const additionalHostGroupIds = rewriteAdditionalHostGroupIds(
+          series.additionalHostGroupIds,
+          victim._id,
+          args.survivorId,
+          args.survivorId,
+        );
         await ctx.db.patch(series._id, {
           hostGroupId: args.survivorId,
           host: canonicalName,
+          additionalHostGroupIds,
+          updatedAt: now,
+        });
+      }
+
+      // Events/series where victim is only an additional co-host (not primary).
+      // Rare admin merge — scan recent rows rather than a dedicated index.
+      const recentEvents = await ctx.db.query("events").withIndex("by_createdAt").order("desc").take(2000);
+      for (const event of recentEvents) {
+        if (event.hostGroupId === victim._id) continue;
+        if (!event.additionalHostGroupIds?.includes(victim._id)) continue;
+        await ctx.db.patch(event._id, {
+          additionalHostGroupIds: rewriteAdditionalHostGroupIds(
+            event.additionalHostGroupIds,
+            victim._id,
+            args.survivorId,
+            event.hostGroupId,
+          ),
+          updatedAt: now,
+        });
+      }
+      const recentSeries = await ctx.db
+        .query("eventSeries")
+        .withIndex("by_createdAt")
+        .order("desc")
+        .take(500);
+      for (const series of recentSeries) {
+        if (series.hostGroupId === victim._id) continue;
+        if (!series.additionalHostGroupIds?.includes(victim._id)) continue;
+        await ctx.db.patch(series._id, {
+          additionalHostGroupIds: rewriteAdditionalHostGroupIds(
+            series.additionalHostGroupIds,
+            victim._id,
+            args.survivorId,
+            series.hostGroupId,
+          ),
           updatedAt: now,
         });
       }

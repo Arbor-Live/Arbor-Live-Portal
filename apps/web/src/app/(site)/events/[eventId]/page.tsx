@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PublicMarketingLayout } from "@/components/public/public-marketing-layout";
 import { PublicEventPoster } from "@/components/public/public-event-poster";
+import { PublicStaffDashboardLinks } from "@/components/public/public-staff-dashboard-links";
 import { LandingUpcomingEvents } from "@/components/public/public-events-grid";
 import { api } from "@/lib/convex-api";
 import { fetchPublicQuerySafe } from "@/lib/convex-server";
@@ -43,6 +44,7 @@ export default async function PublicEventDetailPage({ params }: EventDetailPageP
                   <p className="mt-2 text-muted-foreground dark:text-zinc-300">
                     {formatDateTime(event.startAt, "long")}
                   </p>
+                  <PublicStaffDashboardLinks className="mt-4" eventId={event.eventId} />
                 </div>
 
                 {event.venueName || event.venueAddress ? (
@@ -70,7 +72,7 @@ export default async function PublicEventDetailPage({ params }: EventDetailPageP
                 {event.host ? (
                   <div>
                     <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground dark:text-zinc-400">
-                      Host
+                      {event.additionalHosts.length > 0 ? "Hosts" : "Host"}
                     </h2>
                     <p className="mt-1">{event.host}</p>
                   </div>

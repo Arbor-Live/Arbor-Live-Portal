@@ -17,6 +17,7 @@ import { PublicQuoteApprovalSection } from "@/components/public/public-quote-app
 import { PublicQuoteChangeRequestSection } from "@/components/public/public-quote-change-request-section";
 import { PublicInvoicePdfDownload } from "@/components/public/public-invoice-pdf-download";
 import { PublicPostEventSection } from "@/components/public/public-post-event-section";
+import { PublicStaffDashboardLinks } from "@/components/public/public-staff-dashboard-links";
 import { formatDateTime, formatUsd } from "@/lib/format";
 import type {
   PublicPaymentContactsFormValues,
@@ -162,7 +163,17 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
 
   return (
     <PublicSiteChrome>
-      <PublicPageHero title={`Request ${request.requestNumber}`} subtitle={heroSubtitle} />
+      <PublicPageHero
+        title={`Request ${request.requestNumber}`}
+        subtitle={heroSubtitle}
+        actions={
+          <PublicStaffDashboardLinks
+            requestId={request._id}
+            invoiceId={request.linkedInvoiceId ?? quoteData?.invoice._id}
+            eventId={request.convertedEventId ?? linkedEvent?.id}
+          />
+        }
+      />
       <div className="mx-auto max-w-6xl space-y-4 px-4 py-12 sm:px-6 lg:px-8">
       <Card>
         <CardHeader>
@@ -260,7 +271,9 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
               <p>Issued: {quoteData.invoice.issueDate}</p>
-              {quoteData.invoice.clientGroupName ? <p>Group: {quoteData.invoice.clientGroupName}</p> : null}
+              {quoteData.invoice.clientGroupName ? (
+                <p>Host: {quoteData.invoice.clientGroupName}</p>
+              ) : null}
               {quoteData.invoice.clientContactName ? <p>Contact: {quoteData.invoice.clientContactName}</p> : null}
               <p className="text-base font-semibold">Total: {formatUsd(quoteData.invoice.totalUsd)}</p>
               <p className="text-muted-foreground">
