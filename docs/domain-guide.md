@@ -259,8 +259,12 @@ Event types (drive which editor tabs and quick-add blocks appear):
   poster work covers events in the next four weeks. Operations or Marketing can
   assign a poster designer from the event editor or design board; assignments
   appear immediately on the board (including internal events). The design board
-  filters: assigned to me, unassigned, and all upcoming. Posters publish to
-  Instagram and the public event page once the event is public.
+  filters: assigned to me, unassigned, and all upcoming. Design statuses:
+  `draft` (staff WIP, not on site), `ready` (on the public event page; Instagram
+  not yet approved), `published` (website + Instagram). Clients can upload from
+  the booking-request or invoice tracking link once an event exists
+  (`publicEventPoster.ts`); that sets `ready` so the image goes live on the
+  public page immediately while Marketing still publishes to Instagram.
 - `marketingPosts.ts` — case studies and blog posts, Lexical rich text,
   published/featured flags, rendered publicly via `publicMarketing.ts`
   (`/work`). Public crew and artist directories come from

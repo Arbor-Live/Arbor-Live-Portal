@@ -167,6 +167,7 @@ import type * as paymentProofInternals from "../paymentProofInternals.js";
 import type * as paymentProofPublic from "../paymentProofPublic.js";
 import type * as postMortemFeedback from "../postMortemFeedback.js";
 import type * as publicDirectory from "../publicDirectory.js";
+import type * as publicEventPoster from "../publicEventPoster.js";
 import type * as publicEvents from "../publicEvents.js";
 import type * as publicInventory from "../publicInventory.js";
 import type * as publicMarketing from "../publicMarketing.js";
@@ -344,6 +345,7 @@ declare const fullApi: ApiFromModules<{
   paymentProofPublic: typeof paymentProofPublic;
   postMortemFeedback: typeof postMortemFeedback;
   publicDirectory: typeof publicDirectory;
+  publicEventPoster: typeof publicEventPoster;
   publicEvents: typeof publicEvents;
   publicInventory: typeof publicInventory;
   publicMarketing: typeof publicMarketing;
