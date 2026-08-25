@@ -14,8 +14,8 @@ export type BandApplicationFormValues = {
   publicWebsiteUrl: string;
   publicInstagramUrl: string;
   publicYoutubeUrl: string;
+  publicSpotifyUrl: string;
   demoURL: string;
-  publicHeroImageUrl: string;
   genres: string;
   isSolo: boolean;
   members: Array<{ name: string; email: string }>;
@@ -44,8 +44,8 @@ export async function submitBandApplication(
       publicWebsiteUrl: raw.publicWebsiteUrl || undefined,
       publicInstagramUrl: raw.publicInstagramUrl || undefined,
       publicYoutubeUrl: raw.publicYoutubeUrl || undefined,
+      publicSpotifyUrl: raw.publicSpotifyUrl || undefined,
       demoURL: raw.demoURL || undefined,
-      publicHeroImageUrl: raw.publicHeroImageUrl || undefined,
       genres: genres.length ? genres : undefined,
       isSolo: raw.isSolo,
       members: raw.isSolo

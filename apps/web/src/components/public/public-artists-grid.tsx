@@ -68,9 +68,9 @@ export function PublicArtistsGrid() {
                       />
                       <CardContent className="space-y-2 p-4">
                         <h3 className="font-semibold text-foreground">{artist.displayName}</h3>
-                        {artist.bioExcerpt ? (
+                        {artist.oneLiner || artist.bioExcerpt ? (
                           <p className="line-clamp-3 text-sm leading-relaxed text-muted-foreground">
-                            {artist.bioExcerpt}
+                            {artist.oneLiner || artist.bioExcerpt}
                           </p>
                         ) : (
                           <p className="text-sm text-muted-foreground">View profile</p>

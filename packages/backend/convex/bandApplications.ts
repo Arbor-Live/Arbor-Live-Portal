@@ -165,6 +165,7 @@ export const submitPublic = mutation({
     publicWebsiteUrl: v.optional(v.string()),
     publicInstagramUrl: v.optional(v.string()),
     publicYoutubeUrl: v.optional(v.string()),
+    publicSpotifyUrl: v.optional(v.string()),
     demoURL: v.optional(v.string()),
     publicHeroImageUrl: v.optional(v.string()),
     genres: v.optional(v.array(v.string())),
@@ -220,6 +221,7 @@ export const submitPublic = mutation({
       publicWebsiteUrl: trimOptional(args.publicWebsiteUrl),
       publicInstagramUrl: trimOptional(args.publicInstagramUrl),
       publicYoutubeUrl: trimOptional(args.publicYoutubeUrl),
+      publicSpotifyUrl: trimOptional(args.publicSpotifyUrl),
       demoURL: trimOptional(args.demoURL),
       publicHeroImageUrl: trimOptional(args.publicHeroImageUrl),
       genres: args.genres?.map((g) => g.trim()).filter(Boolean),
@@ -269,6 +271,7 @@ export const listAdmin = query({
       publicWebsiteUrl: v.optional(v.string()),
       publicInstagramUrl: v.optional(v.string()),
       publicYoutubeUrl: v.optional(v.string()),
+      publicSpotifyUrl: v.optional(v.string()),
       demoURL: v.optional(v.string()),
       publicHeroImageUrl: v.optional(v.string()),
       genres: v.optional(v.array(v.string())),
@@ -303,6 +306,7 @@ export const listAdmin = query({
         publicWebsiteUrl: row.publicWebsiteUrl,
         publicInstagramUrl: row.publicInstagramUrl,
         publicYoutubeUrl: row.publicYoutubeUrl,
+        publicSpotifyUrl: row.publicSpotifyUrl,
         demoURL: row.demoURL,
         publicHeroImageUrl: row.publicHeroImageUrl,
         genres: row.genres,
@@ -365,6 +369,7 @@ export const approve = mutation({
       publicWebsiteUrl: application.publicWebsiteUrl,
       publicInstagramUrl: application.publicInstagramUrl,
       publicYoutubeUrl: application.publicYoutubeUrl,
+      publicSpotifyUrl: application.publicSpotifyUrl,
       demoURL: application.demoURL,
       publicHeroImageUrl: application.publicHeroImageUrl,
       genres: application.genres,
@@ -403,6 +408,7 @@ export const approve = mutation({
         application.publicWebsiteUrl ||
         application.publicInstagramUrl ||
         application.publicYoutubeUrl ||
+        application.publicSpotifyUrl ||
         application.demoURL
       ) {
         stampPatch.socialsCompletedAt = now;

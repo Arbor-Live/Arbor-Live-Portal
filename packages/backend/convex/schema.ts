@@ -1788,6 +1788,7 @@ export default defineSchema({
     publicWebsiteUrl: v.optional(v.string()),
     publicInstagramUrl: v.optional(v.string()),
     publicYoutubeUrl: v.optional(v.string()),
+    publicSpotifyUrl: v.optional(v.string()),
     demoURL: v.optional(v.string()),
     publicHeroImageUrl: v.optional(v.string()),
     genres: v.optional(v.array(v.string())),

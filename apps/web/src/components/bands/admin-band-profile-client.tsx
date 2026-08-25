@@ -18,22 +18,29 @@ import {
   DEFAULT_BAND_PAYEE_PAYOUT_METHOD,
   type BandPayeePayoutMethod,
 } from "@/lib/band-payout-copy";
+import { formatGenresInput, parseGenresInput } from "@/lib/validations/bands";
 import { bandOrgProfileSchema, type BandOrgProfileFormValues } from "@/lib/validations/users";
 import { useAdminBandSelection } from "@/components/bands/admin-band-selection";
 
 function valuesFromOrg(org: {
   displayName: string;
   bio: string;
+  oneLiner: string;
+  genres: string[];
   performerHourlyRateUsd: number;
   designatedPayeeUserId: string;
   designatedPayeeName: string;
   designatedPayeeEmail: string;
   designatedPayeeMailingAddress: string;
   designatedPayeePayoutMethod: string;
+  mainContactName: string;
+  mainContactEmail: string;
+  mainContactPhone: string;
   publicWebsiteUrl: string;
   publicInstagramUrl: string;
   publicYoutubeUrl: string;
   publicSpotifyUrl: string;
+  demoURL: string;
   publicListing: boolean;
   publicSlug: string;
   publicHeroImageUrl: string;
@@ -41,6 +48,8 @@ function valuesFromOrg(org: {
   return {
     displayName: org.displayName ?? "",
     bio: org.bio ?? "",
+    oneLiner: org.oneLiner ?? "",
+    genres: formatGenresInput(org.genres),
     performerHourlyRateUsd: org.performerHourlyRateUsd ?? 0,
     designatedPayeeUserId: org.designatedPayeeUserId ?? "",
     designatedPayeeName: org.designatedPayeeName ?? "",
@@ -50,10 +59,14 @@ function valuesFromOrg(org: {
       org.designatedPayeePayoutMethod === "pickup" || org.designatedPayeePayoutMethod === "delivery"
         ? org.designatedPayeePayoutMethod
         : DEFAULT_BAND_PAYEE_PAYOUT_METHOD,
+    mainContactName: org.mainContactName ?? "",
+    mainContactEmail: org.mainContactEmail ?? "",
+    mainContactPhone: org.mainContactPhone ?? "",
     publicWebsiteUrl: org.publicWebsiteUrl ?? "",
     publicInstagramUrl: org.publicInstagramUrl ?? "",
     publicYoutubeUrl: org.publicYoutubeUrl ?? "",
     publicSpotifyUrl: org.publicSpotifyUrl ?? "",
+    demoURL: org.demoURL ?? "",
     publicListing: org.publicListing ?? false,
     publicSlug: org.publicSlug ?? "",
     publicHeroImageUrl: org.publicHeroImageUrl ?? "",
@@ -71,16 +84,22 @@ export function AdminBandProfileClient() {
     defaultValues: {
       displayName: "",
       bio: "",
+      oneLiner: "",
+      genres: "",
       performerHourlyRateUsd: 0,
       designatedPayeeUserId: "",
       designatedPayeeName: "",
       designatedPayeeEmail: "",
       designatedPayeeMailingAddress: "",
       designatedPayeePayoutMethod: DEFAULT_BAND_PAYEE_PAYOUT_METHOD,
+      mainContactName: "",
+      mainContactEmail: "",
+      mainContactPhone: "",
       publicWebsiteUrl: "",
       publicInstagramUrl: "",
       publicYoutubeUrl: "",
       publicSpotifyUrl: "",
+      demoURL: "",
       publicListing: false,
       publicSlug: "",
       publicHeroImageUrl: "",
@@ -105,16 +124,22 @@ export function AdminBandProfileClient() {
         organizationId,
         displayName: values.displayName || undefined,
         bio: values.bio || undefined,
+        oneLiner: values.oneLiner || undefined,
+        genres: parseGenresInput(values.genres) ?? [],
         performerHourlyRateUsd: values.performerHourlyRateUsd,
         designatedPayeeUserId: values.designatedPayeeUserId || undefined,
         designatedPayeeName: values.designatedPayeeName || undefined,
         designatedPayeeEmail: values.designatedPayeeEmail || undefined,
         designatedPayeeMailingAddress: values.designatedPayeeMailingAddress || undefined,
         designatedPayeePayoutMethod: payoutMethod,
+        mainContactName: values.mainContactName || undefined,
+        mainContactEmail: values.mainContactEmail || undefined,
+        mainContactPhone: values.mainContactPhone || undefined,
         publicWebsiteUrl: values.publicWebsiteUrl || undefined,
         publicInstagramUrl: values.publicInstagramUrl || undefined,
         publicYoutubeUrl: values.publicYoutubeUrl || undefined,
         publicSpotifyUrl: values.publicSpotifyUrl || undefined,
+        demoURL: values.demoURL || undefined,
         publicListing: values.publicListing,
         publicSlug: values.publicSlug || undefined,
         publicHeroImageUrl: values.publicHeroImageUrl || undefined,
@@ -163,7 +188,17 @@ export function AdminBandProfileClient() {
             <CardContent>
               <div className="space-y-3">
                 <TextFormField name="displayName" label="Display Name" />
+                <TextFormField
+                  name="oneLiner"
+                  label="One-liner"
+                  placeholder="Short vibe for the artists page"
+                />
                 <TextareaFormField name="bio" label="Bio" />
+                <TextFormField
+                  name="genres"
+                  label="Genres"
+                  placeholder="Indie, funk, jazz — comma separated"
+                />
                 <div className="grid gap-2 md:grid-cols-2">
                   <TextFormField
                     name="performerHourlyRateUsd"
@@ -174,6 +209,11 @@ export function AdminBandProfileClient() {
                   <TextFormField name="publicInstagramUrl" label="Instagram URL" />
                   <TextFormField name="publicYoutubeUrl" label="YouTube URL" />
                   <TextFormField name="publicSpotifyUrl" label="Spotify URL" />
+                  <TextFormField
+                    name="demoURL"
+                    label="Demo / listen URL"
+                    placeholder="SoundCloud, Drive…"
+                  />
                 </div>
                 <div className="grid gap-2 md:grid-cols-2">
                   <FormField
@@ -204,6 +244,20 @@ export function AdminBandProfileClient() {
                   onUrlChange={(url) => form.setValue("publicHeroImageUrl", url, { shouldDirty: true })}
                   onClear={() => form.setValue("publicHeroImageUrl", "", { shouldDirty: true })}
                 />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Main contact</CardTitle>
+              <CardDescription>Ops contact from the join application — not shown publicly.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-2 md:grid-cols-2">
+                <TextFormField name="mainContactName" label="Contact name" />
+                <TextFormField name="mainContactEmail" label="Contact email" />
+                <TextFormField name="mainContactPhone" label="Contact phone" />
               </div>
             </CardContent>
           </Card>

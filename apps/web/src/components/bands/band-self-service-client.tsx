@@ -16,6 +16,8 @@ import { formatDate } from "@/lib/format";
 import {
   bandInviteSchema,
   bandProfileSchema,
+  formatGenresInput,
+  parseGenresInput,
   type BandInviteFormValues,
   type BandProfileFormValues,
 } from "@/lib/validations/bands";
@@ -36,11 +38,14 @@ export function BandSelfServiceClient() {
     defaultValues: {
       displayName: "",
       bio: "",
+      oneLiner: "",
+      genres: "",
       performerHourlyRateUsd: 0,
       publicWebsiteUrl: "",
       publicInstagramUrl: "",
       publicYoutubeUrl: "",
       publicSpotifyUrl: "",
+      demoURL: "",
       publicListing: false,
       publicSlug: "",
       publicHeroImageUrl: "",
@@ -60,11 +65,14 @@ export function BandSelfServiceClient() {
     profileForm.reset({
       displayName: profile.displayName ?? "",
       bio: profile.bio ?? "",
+      oneLiner: profile.oneLiner ?? "",
+      genres: formatGenresInput(profile.genres),
       performerHourlyRateUsd: profile.performerHourlyRateUsd ?? 0,
       publicWebsiteUrl: profile.publicWebsiteUrl ?? "",
       publicInstagramUrl: profile.publicInstagramUrl ?? "",
       publicYoutubeUrl: profile.publicYoutubeUrl ?? "",
       publicSpotifyUrl: profile.publicSpotifyUrl ?? "",
+      demoURL: profile.demoURL ?? "",
       publicListing: profile.publicListing ?? false,
       publicSlug: profile.publicSlug ?? "",
       publicHeroImageUrl: profile.publicHeroImageUrl ?? "",
@@ -75,6 +83,8 @@ export function BandSelfServiceClient() {
     await updateProfile({
       displayName: values.displayName,
       bio: values.bio || undefined,
+      oneLiner: values.oneLiner || undefined,
+      genres: parseGenresInput(values.genres) ?? [],
       performerHourlyRateUsd: values.performerHourlyRateUsd,
       // Preserve payee fields managed on the Payments tab.
       designatedPayeeUserId: profile?.designatedPayeeUserId,
@@ -90,6 +100,7 @@ export function BandSelfServiceClient() {
       publicInstagramUrl: values.publicInstagramUrl || undefined,
       publicYoutubeUrl: values.publicYoutubeUrl || undefined,
       publicSpotifyUrl: values.publicSpotifyUrl || undefined,
+      demoURL: values.demoURL || undefined,
       publicListing: values.publicListing,
       publicSlug: values.publicSlug || undefined,
       publicHeroImageUrl: values.publicHeroImageUrl || undefined,
@@ -158,7 +169,13 @@ export function BandSelfServiceClient() {
             <CardContent>
               <div className="space-y-3">
                 <TextFormField name="displayName" label="Display Name" />
+                <TextFormField name="oneLiner" label="One-liner" placeholder="Short vibe for the artists page" />
                 <TextareaFormField name="bio" label="Bio" />
+                <TextFormField
+                  name="genres"
+                  label="Genres"
+                  placeholder="Indie, funk, jazz — comma separated"
+                />
                 <div className="grid gap-2 md:grid-cols-2">
                   <TextFormField
                     name="performerHourlyRateUsd"
@@ -169,6 +186,11 @@ export function BandSelfServiceClient() {
                   <TextFormField name="publicInstagramUrl" label="Instagram URL" />
                   <TextFormField name="publicYoutubeUrl" label="YouTube URL" />
                   <TextFormField name="publicSpotifyUrl" label="Spotify URL" />
+                  <TextFormField
+                    name="demoURL"
+                    label="Demo / listen URL"
+                    placeholder="SoundCloud, Drive…"
+                  />
                 </div>
                 <div className="grid gap-2 md:grid-cols-2">
                   <FormField
@@ -384,11 +406,14 @@ export function BandSelfServiceClient() {
           profileForm.reset({
             displayName: profile.displayName ?? "",
             bio: profile.bio ?? "",
+            oneLiner: profile.oneLiner ?? "",
+            genres: formatGenresInput(profile.genres),
             performerHourlyRateUsd: profile.performerHourlyRateUsd ?? 0,
             publicWebsiteUrl: profile.publicWebsiteUrl ?? "",
             publicInstagramUrl: profile.publicInstagramUrl ?? "",
             publicYoutubeUrl: profile.publicYoutubeUrl ?? "",
             publicSpotifyUrl: profile.publicSpotifyUrl ?? "",
+            demoURL: profile.demoURL ?? "",
             publicListing: profile.publicListing ?? false,
             publicSlug: profile.publicSlug ?? "",
             publicHeroImageUrl: profile.publicHeroImageUrl ?? "",

@@ -414,6 +414,12 @@ export const listBandOrganizationsAdmin = query({
           publicInstagramUrl: profile?.publicInstagramUrl ?? "",
           publicYoutubeUrl: profile?.publicYoutubeUrl ?? "",
           publicSpotifyUrl: profile?.publicSpotifyUrl ?? "",
+          demoURL: profile?.demoURL ?? "",
+          oneLiner: profile?.oneLiner ?? "",
+          genres: profile?.genres ?? [],
+          mainContactName: profile?.mainContactName ?? "",
+          mainContactEmail: profile?.mainContactEmail ?? "",
+          mainContactPhone: profile?.mainContactPhone ?? "",
           publicListing: profile?.publicListing ?? false,
           publicSlug: profile?.publicSlug ?? "",
           publicHeroImageUrl: profile?.publicHeroImageUrl ?? "",
@@ -481,6 +487,8 @@ export const updateBandOrganizationProfileAdmin = mutation({
     organizationId: v.string(),
     displayName: v.optional(v.string()),
     bio: v.optional(v.string()),
+    oneLiner: v.optional(v.string()),
+    genres: v.optional(v.array(v.string())),
     performerHourlyRateUsd: v.optional(v.number()),
     designatedPayeeUserId: v.optional(v.string()),
     designatedPayeeName: v.optional(v.string()),
@@ -489,10 +497,14 @@ export const updateBandOrganizationProfileAdmin = mutation({
     designatedPayeePayoutMethod: v.optional(
       v.union(v.literal("pickup"), v.literal("delivery")),
     ),
+    mainContactName: v.optional(v.string()),
+    mainContactEmail: v.optional(v.string()),
+    mainContactPhone: v.optional(v.string()),
     publicWebsiteUrl: v.optional(v.string()),
     publicInstagramUrl: v.optional(v.string()),
     publicYoutubeUrl: v.optional(v.string()),
     publicSpotifyUrl: v.optional(v.string()),
+    demoURL: v.optional(v.string()),
     publicListing: v.optional(v.boolean()),
     publicSlug: v.optional(v.string()),
     publicHeroImageUrl: v.optional(v.string()),
@@ -520,6 +532,11 @@ export const updateBandOrganizationProfileAdmin = mutation({
       throw new Error("Public slug is required when enabling public artist listing.");
     }
 
+    const genres =
+      args.genres === undefined
+        ? undefined
+        : args.genres.map((genre) => genre.trim()).filter(Boolean);
+
     const existing = await ctx.db
       .query("organizationProfiles")
       .withIndex("by_organizationId", (q) => q.eq("organizationId", args.organizationId))
@@ -529,6 +546,8 @@ export const updateBandOrganizationProfileAdmin = mutation({
         organizationType: existing.organizationType ?? "band",
         displayName: args.displayName?.trim() || undefined,
         bio: args.bio?.trim() || undefined,
+        oneLiner: args.oneLiner?.trim() || undefined,
+        genres: genres && genres.length > 0 ? genres : undefined,
         performerHourlyRateUsd: args.performerHourlyRateUsd ?? existing.performerHourlyRateUsd,
         designatedPayeeUserId:
           args.designatedPayeeUserId !== undefined
@@ -550,10 +569,14 @@ export const updateBandOrganizationProfileAdmin = mutation({
           args.designatedPayeePayoutMethod !== undefined
             ? args.designatedPayeePayoutMethod
             : existing.designatedPayeePayoutMethod,
+        mainContactName: args.mainContactName?.trim() || undefined,
+        mainContactEmail: args.mainContactEmail?.trim().toLowerCase() || undefined,
+        mainContactPhone: args.mainContactPhone?.trim() || undefined,
         publicWebsiteUrl: args.publicWebsiteUrl?.trim() || undefined,
         publicInstagramUrl: args.publicInstagramUrl?.trim() || undefined,
         publicYoutubeUrl: args.publicYoutubeUrl?.trim() || undefined,
         publicSpotifyUrl: args.publicSpotifyUrl?.trim() || undefined,
+        demoURL: args.demoURL?.trim() || undefined,
         publicListing: publicListing ?? existing.publicListing,
         publicSlug: publicSlug ?? (publicListing === false ? undefined : existing.publicSlug),
         publicHeroImageUrl: normalizeOptionalAssetReference(args.publicHeroImageUrl),
@@ -569,16 +592,22 @@ export const updateBandOrganizationProfileAdmin = mutation({
       organizationType: "band",
       displayName: args.displayName?.trim() || organization.name || "Band",
       bio: args.bio?.trim() || undefined,
+      oneLiner: args.oneLiner?.trim() || undefined,
+      genres: genres && genres.length > 0 ? genres : undefined,
       performerHourlyRateUsd: args.performerHourlyRateUsd,
       designatedPayeeUserId: args.designatedPayeeUserId?.trim() || undefined,
       designatedPayeeName: args.designatedPayeeName?.trim() || undefined,
       designatedPayeeEmail: args.designatedPayeeEmail?.trim().toLowerCase() || undefined,
       designatedPayeeMailingAddress: args.designatedPayeeMailingAddress?.trim() || undefined,
       designatedPayeePayoutMethod: args.designatedPayeePayoutMethod,
+      mainContactName: args.mainContactName?.trim() || undefined,
+      mainContactEmail: args.mainContactEmail?.trim().toLowerCase() || undefined,
+      mainContactPhone: args.mainContactPhone?.trim() || undefined,
       publicWebsiteUrl: args.publicWebsiteUrl?.trim() || undefined,
       publicInstagramUrl: args.publicInstagramUrl?.trim() || undefined,
       publicYoutubeUrl: args.publicYoutubeUrl?.trim() || undefined,
       publicSpotifyUrl: args.publicSpotifyUrl?.trim() || undefined,
+      demoURL: args.demoURL?.trim() || undefined,
       publicListing: publicListing ?? false,
       publicSlug: publicListing ? publicSlug : undefined,
       publicHeroImageUrl: normalizeOptionalAssetReference(args.publicHeroImageUrl),
@@ -1974,6 +2003,8 @@ export const getActiveBandProfile = query({
       name: context.organizationName,
       displayName: profile?.displayName ?? context.organizationName,
       bio: profile?.bio ?? "",
+      oneLiner: profile?.oneLiner ?? "",
+      genres: profile?.genres ?? [],
       performerHourlyRateUsd: profile?.performerHourlyRateUsd ?? 0,
       designatedPayeeUserId: profile?.designatedPayeeUserId ?? "",
       designatedPayeeName: profile?.designatedPayeeName ?? "",
@@ -2006,6 +2037,8 @@ export const updateActiveBandProfile = mutation({
   args: {
     displayName: v.optional(v.string()),
     bio: v.optional(v.string()),
+    oneLiner: v.optional(v.string()),
+    genres: v.optional(v.array(v.string())),
     performerHourlyRateUsd: v.optional(v.number()),
     designatedPayeeUserId: v.optional(v.string()),
     designatedPayeeName: v.optional(v.string()),
@@ -2038,6 +2071,11 @@ export const updateActiveBandProfile = mutation({
       throw new Error("Public slug is required when enabling public artist listing.");
     }
 
+    const genres =
+      args.genres === undefined
+        ? undefined
+        : args.genres.map((genre) => genre.trim()).filter(Boolean);
+
     const now = Date.now();
     const existing = await ctx.db
       .query("organizationProfiles")
@@ -2053,6 +2091,9 @@ export const updateActiveBandProfile = mutation({
             ? args.displayName.trim() || undefined
             : existing.displayName,
         bio: args.bio !== undefined ? args.bio.trim() || undefined : existing.bio,
+        oneLiner:
+          args.oneLiner !== undefined ? args.oneLiner.trim() || undefined : existing.oneLiner,
+        genres: args.genres !== undefined ? (genres && genres.length > 0 ? genres : undefined) : existing.genres,
         performerHourlyRateUsd: args.performerHourlyRateUsd ?? existing.performerHourlyRateUsd,
         designatedPayeeUserId:
           args.designatedPayeeUserId !== undefined
@@ -2110,6 +2151,8 @@ export const updateActiveBandProfile = mutation({
       organizationType: "band",
       displayName: args.displayName?.trim() || context.organizationName,
       bio: args.bio?.trim() || undefined,
+      oneLiner: args.oneLiner?.trim() || undefined,
+      genres: genres && genres.length > 0 ? genres : undefined,
       performerHourlyRateUsd: args.performerHourlyRateUsd,
       designatedPayeeUserId: args.designatedPayeeUserId?.trim() || undefined,
       designatedPayeeName: args.designatedPayeeName?.trim() || undefined,

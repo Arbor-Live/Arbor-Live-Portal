@@ -243,6 +243,7 @@ export const listPublicArtists = query({
           profile.displayName?.trim() ||
           orgNameById.get(profile.organizationId) ||
           "Artist",
+        oneLiner: profile.oneLiner?.trim() || undefined,
         bioExcerpt: bioExcerpt(profile.bio),
         heroImageUrl: await resolvePublicHeroImageUrl(profile.publicHeroImageUrl),
         instagramUrl: profile.publicInstagramUrl?.trim() || undefined,
@@ -279,12 +280,15 @@ export const getPublicArtistBySlug = query({
         profile.displayName?.trim() ||
         orgResult?.name?.trim() ||
         "Artist",
+      oneLiner: profile.oneLiner?.trim() || undefined,
       bio: profile.bio?.trim() || undefined,
+      genres: profile.genres?.length ? profile.genres : undefined,
       heroImageUrl: await resolvePublicHeroImageUrl(profile.publicHeroImageUrl),
       websiteUrl: profile.publicWebsiteUrl?.trim() || undefined,
       instagramUrl: profile.publicInstagramUrl?.trim() || undefined,
       youtubeUrl: profile.publicYoutubeUrl?.trim() || undefined,
       spotifyUrl: profile.publicSpotifyUrl?.trim() || undefined,
+      listenUrl: profile.demoURL?.trim() || undefined,
     };
   },
 });

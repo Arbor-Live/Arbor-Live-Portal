@@ -24,8 +24,8 @@ const EMPTY: BandApplicationFormValues = {
   publicWebsiteUrl: "",
   publicInstagramUrl: "",
   publicYoutubeUrl: "",
+  publicSpotifyUrl: "",
   demoURL: "",
-  publicHeroImageUrl: "",
   genres: "",
   isSolo: false,
   members: [{ name: "", email: "" }],
@@ -161,15 +161,6 @@ export function BandApplicationForm() {
             placeholder="Indie, funk, jazz — comma separated"
           />
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="hero-url">Hero image URL (optional)</Label>
-          <Input
-            id="hero-url"
-            value={form.publicHeroImageUrl}
-            onChange={(event) => patch({ publicHeroImageUrl: event.target.value })}
-            placeholder="https://…"
-          />
-        </div>
       </section>
 
       <section className="space-y-4">
@@ -203,12 +194,21 @@ export function BandApplicationForm() {
             />
           </div>
           <div className="space-y-2">
+            <Label htmlFor="spotify-url">Spotify</Label>
+            <Input
+              id="spotify-url"
+              value={form.publicSpotifyUrl}
+              onChange={(event) => patch({ publicSpotifyUrl: event.target.value })}
+              placeholder="https://open.spotify.com/…"
+            />
+          </div>
+          <div className="space-y-2 sm:col-span-2">
             <Label htmlFor="demo-url">Demo / listening link</Label>
             <Input
               id="demo-url"
               value={form.demoURL}
               onChange={(event) => patch({ demoURL: event.target.value })}
-              placeholder="Spotify, SoundCloud, Drive…"
+              placeholder="SoundCloud, Drive…"
             />
           </div>
         </div>
@@ -233,8 +233,8 @@ export function BandApplicationForm() {
               portal. People can belong to more than one Arbor band.
             </p>
             {form.members.map((member, index) => (
-              <div key={index} className="flex flex-col gap-2 sm:flex-row sm:items-end">
-                <div className="min-w-0 flex-1 space-y-2">
+              <div key={index} className="grid gap-2 sm:grid-cols-2 sm:items-start">
+                <div className="min-w-0 space-y-2">
                   <Label htmlFor={`member-name-${index}`}>Name</Label>
                   <Input
                     id={`member-name-${index}`}
@@ -246,32 +246,35 @@ export function BandApplicationForm() {
                     }}
                   />
                 </div>
-                <div className="min-w-0 flex-1 space-y-2">
+                <div className="min-w-0 space-y-2">
                   <Label htmlFor={`member-email-${index}`}>Email (optional)</Label>
-                  <Input
-                    id={`member-email-${index}`}
-                    type="email"
-                    value={member.email}
-                    onChange={(event) => {
-                      const members = [...form.members];
-                      members[index] = { ...member, email: event.target.value };
-                      patch({ members });
-                    }}
-                  />
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id={`member-email-${index}`}
+                      type="email"
+                      className="min-w-0 flex-1"
+                      value={member.email}
+                      onChange={(event) => {
+                        const members = [...form.members];
+                        members[index] = { ...member, email: event.target.value };
+                        patch({ members });
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="shrink-0"
+                      disabled={form.members.length <= 1}
+                      onClick={() =>
+                        patch({ members: form.members.filter((_, i) => i !== index) })
+                      }
+                      aria-label="Remove member"
+                    >
+                      <XIcon className="size-4" />
+                    </Button>
+                  </div>
                 </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="shrink-0"
-                  disabled={form.members.length <= 1}
-                  onClick={() =>
-                    patch({ members: form.members.filter((_, i) => i !== index) })
-                  }
-                  aria-label="Remove member"
-                >
-                  <XIcon className="size-4" />
-                </Button>
               </div>
             ))}
             <Button

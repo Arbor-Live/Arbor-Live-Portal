@@ -81,6 +81,7 @@ export function BandPayeeSettingsSection() {
         publicInstagramUrl: profile.publicInstagramUrl,
         publicYoutubeUrl: profile.publicYoutubeUrl,
         publicSpotifyUrl: profile.publicSpotifyUrl,
+        demoURL: profile.demoURL,
         publicListing: profile.publicListing,
         publicSlug: profile.publicSlug,
         publicHeroImageUrl: profile.publicHeroImageUrl,

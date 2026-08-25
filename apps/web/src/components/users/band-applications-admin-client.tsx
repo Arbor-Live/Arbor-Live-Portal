@@ -160,6 +160,12 @@ export function BandApplicationsAdminClient() {
                   <dd className="truncate">{app.publicWebsiteUrl}</dd>
                 </div>
               ) : null}
+              {app.publicSpotifyUrl ? (
+                <div>
+                  <dt className="font-medium text-foreground/80">Spotify</dt>
+                  <dd className="truncate">{app.publicSpotifyUrl}</dd>
+                </div>
+              ) : null}
             </dl>
 
             <div className="text-sm">

@@ -36,9 +36,15 @@ canonical description of the domain itself.
   + biweekly invoice to `arborlive@stanford.edu`).
 - Public self-serve band applications: `/artists/apply` → `bandApplications`
   table → admin review at `/dashboard/users/band-applications`. Approval creates
-  the band org (no auto public listing), invites the contact/members, and
-  pre-stamps identity/members/socials so they only finish rates + payout in
-  `/onboarding/band`. Admin-invite onboarding for existing bands is unchanged.
+  the band org (no auto public listing), copies profile fields onto
+  `organizationProfiles` (`displayName`, `bio`, `oneLiner`, `genres`, public
+  links including Spotify + `demoURL` as Listen, `mainContact*`, `bandMembers`
+  names for invoice headcount), invites the contact/members, and pre-stamps
+  members/socials so they finish rates + payout (and hero upload) in
+  `/onboarding/band`. Hero image is collected in onboarding, not on apply.
+  Admin-invite onboarding for existing bands is unchanged.
+  Public listing cards prefer `oneLiner` over bio excerpt; detail shows genres
+  and Listen alongside other links. `mainContact*` is admin/ops only.
 - Public self-serve crew applications: `/crew/apply` → `crewApplications`
   table → admin queue at `/dashboard/users/crew-applications`. Statuses:
   `submitted` → `closed` (farewell email), `trainee` (no Better Auth user —
@@ -177,8 +183,9 @@ Event types (drive which editor tabs and quick-add blocks appear):
   invoice has no artist lines yet.
   Artist and external-rental amounts are pass-through (excluded from Insights
   earned revenue and from net-profit margin).
-- Public artist profiles (`/artists/[slug]`) surface website, Instagram,
-  YouTube, and Spotify links from `organizationProfiles` when set.
+- Public artist profiles (`/artists/[slug]`) surface one-liner, genres, website,
+  Instagram, YouTube, Spotify, and Listen (`demoURL`) from `organizationProfiles`
+  when set. Listing cards prefer `oneLiner` over bio excerpt.
 - Every invoice carries a `publicApprovalToken` for the client-facing quote
   page (`/public/quote/[token]`): view, approve, request changes, set payment
   contacts, download PDF — all token-gated, no login.
