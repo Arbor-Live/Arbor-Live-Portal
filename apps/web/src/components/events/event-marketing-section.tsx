@@ -116,7 +116,7 @@ export function EventMarketingSection({ eventId }: { eventId: Id<"events"> }) {
   }
 
   async function handlePublish() {
-    if (!imageUrl.trim() && !design.imageUrl) {
+    if (!imageUrl.trim() && !design?.imageUrl) {
       notify.error("Upload a poster image before publishing to Instagram.");
       return;
     }
