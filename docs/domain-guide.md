@@ -258,10 +258,12 @@ Event types (drive which editor tabs and quick-add blocks appear):
   appear immediately on the board (including internal events). The design board
   filters: assigned to me, unassigned, and all upcoming. Design statuses:
   `draft` (staff WIP, not on site), `ready` (on the public event page; Instagram
-  not yet approved), `published` (website + Instagram). Clients can upload from
+  not yet approved), `published` (website + Instagram).   Clients can upload from
   the booking-request or invoice tracking link once an event exists
-  (`publicEventPoster.ts`); that sets `ready` so the image goes live on the
-  public page immediately while Marketing still publishes to Instagram.
+  (`publicEventPoster.ts`); that sets `ready` so the image and optional
+  public description (`caption` / About) go live on the public page
+  immediately while Marketing still publishes to Instagram. Staff manage the
+  same fields on the event editor **Marketing** tab.
 - `marketingPosts.ts` — case studies and blog posts, Lexical rich text,
   published/featured flags, rendered publicly via `publicMarketing.ts`
   (`/work`). Public crew and artist directories come from

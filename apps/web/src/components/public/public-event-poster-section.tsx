@@ -5,12 +5,17 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
+import {
+  EventMarketingContentFields,
+  emptyMarketingLink,
+  filterMarketingLinks,
+  marketingLinksEqual,
+  type MarketingAdditionalLink,
+} from "@/components/marketing/event-marketing-content-fields";
 import { formatStoredR2Asset } from "@/lib/r2-assets";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { notify } from "@/lib/notify";
-import { cn } from "@/lib/utils";
-import { fileFromClipboardEvent, normalizeClipboardFile } from "@/hooks/use-r2-file-upload";
+import { normalizeClipboardFile } from "@/hooks/use-r2-file-upload";
 
 type Portal = "request" | "quote";
 
@@ -37,10 +42,24 @@ export function PublicEventPosterSection({
   const generateUploadUrl = useMutation(api.publicEventPoster.generateUploadUrl);
   const savePoster = useMutation(api.publicEventPoster.save);
 
-  const inputRef = useRef<HTMLInputElement>(null);
   const draftUploadIdRef = useRef(createUploadId());
   const [busy, setBusy] = useState(false);
+  const [savingDetails, setSavingDetails] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [caption, setCaption] = useState("");
+  const [additionalLinks, setAdditionalLinks] = useState<MarketingAdditionalLink[]>([
+    emptyMarketingLink(),
+  ]);
+  const [detailsSourceKey, setDetailsSourceKey] = useState<string | null>(null);
+
+  const sourceKey = poster?.eligible ? `${token}:${poster.eventId ?? ""}` : null;
+  if (sourceKey && detailsSourceKey !== sourceKey) {
+    setDetailsSourceKey(sourceKey);
+    setCaption(poster?.caption ?? "");
+    setAdditionalLinks(
+      poster?.additionalLinks?.length ? poster.additionalLinks : [emptyMarketingLink()],
+    );
+  }
 
   const uploadFile = useCallback(
     async (file: File) => {
@@ -86,83 +105,81 @@ export function PublicEventPosterSection({
     [generateUploadUrl, portal, savePoster, token],
   );
 
+  const saveDetails = useCallback(async () => {
+    setSavingDetails(true);
+    setError(null);
+    try {
+      await savePoster({
+        portal,
+        token,
+        caption,
+        additionalLinks: filterMarketingLinks(additionalLinks),
+      });
+      notify.success("Event page details saved.");
+    } catch (saveError) {
+      const message = getConvexErrorMessage(saveError);
+      setError(message);
+      notify.error(message);
+    } finally {
+      setSavingDetails(false);
+    }
+  }, [additionalLinks, caption, portal, savePoster, token]);
+
   if (poster === undefined) return null;
   if (!poster.eligible) return null;
+
+  const detailsDirty =
+    caption.trim() !== (poster.caption ?? "").trim() ||
+    !marketingLinksEqual(additionalLinks, poster.additionalLinks ?? []);
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Event poster</CardTitle>
+        <CardTitle>Poster & description</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-3">
-        {poster.posterImageUrl ? (
-          <div className="overflow-hidden rounded-md border bg-muted/20">
-            {/* eslint-disable-next-line @next/next/no-img-element -- resolved R2/CDN URL */}
-            <img
-              src={poster.posterImageUrl}
-              alt=""
-              className="mx-auto max-h-80 w-auto object-contain"
-            />
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            No poster yet. Upload one for {poster.eventTitle ?? "your event"}.
-          </p>
-        )}
-
+      <CardContent className="space-y-4">
         {poster.onWebsite && !poster.instagramPublished ? (
           <p className="text-xs text-muted-foreground">
-            This poster is on the public event page. Arbor Live still reviews it before Instagram.
+            This content is on the public event page. Arbor Live still reviews it before Instagram.
           </p>
         ) : null}
         {poster.instagramPublished ? (
           <p className="text-xs text-muted-foreground">
-            This poster is live on the public event page and Instagram.
+            This content is live on the public event page and Instagram.
           </p>
         ) : null}
 
-        <div
-          className={cn(
-            "space-y-2 rounded-md border border-dashed p-3",
-            busy && "opacity-60",
-          )}
-          onPaste={(event) => {
-            const file = fileFromClipboardEvent(event.nativeEvent);
-            if (!file) return;
-            event.preventDefault();
-            void uploadFile(file);
+        <EventMarketingContentFields
+          idPrefix={`public-${portal}`}
+          imageUrl=""
+          onImageUrlChange={() => undefined}
+          imagePreviewUrl={poster.posterImageUrl}
+          caption={caption}
+          onCaptionChange={setCaption}
+          additionalLinks={additionalLinks}
+          onAdditionalLinksChange={setAdditionalLinks}
+          disabled={savingDetails}
+          captionPlaceholder="Short about text for your public event page"
+          posterUpload={{
+            type: "file",
+            busy,
+            onFile: uploadFile,
           }}
-        >
-          <Label htmlFor={`poster-upload-${portal}`}>Upload poster image</Label>
-          <input
-            ref={inputRef}
-            id={`poster-upload-${portal}`}
-            type="file"
-            accept="image/jpeg,image/png,image/webp,image/gif,image/svg+xml"
-            className="hidden"
-            disabled={busy}
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              event.target.value = "";
-              if (file) void uploadFile(file);
-            }}
-          />
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={busy}
-              onClick={() => inputRef.current?.click()}
-            >
-              {busy ? "Uploading…" : poster.posterImageUrl ? "Replace poster" : "Choose image"}
-            </Button>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            JPEG, PNG, WebP, GIF, or SVG up to 5 MB. Paste an image here, or choose a file.
-          </p>
-          {error ? <p className="text-xs text-destructive">{error}</p> : null}
+        />
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            size="sm"
+            disabled={savingDetails || !detailsDirty}
+            onClick={() => void saveDetails()}
+          >
+            {savingDetails ? "Saving…" : "Save description & links"}
+          </Button>
+          <p className="text-xs text-muted-foreground">Shown on the public event page.</p>
         </div>
+
+        {error ? <p className="text-xs text-destructive">{error}</p> : null}
       </CardContent>
     </Card>
   );

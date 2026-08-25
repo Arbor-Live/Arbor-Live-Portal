@@ -20,7 +20,7 @@ export type R2UploadArgs =
   | {
       scope: "event";
       eventId: string;
-      purpose: "artifact";
+      purpose: "artifact" | "poster";
     }
   | {
       scope: "marketing";
@@ -86,7 +86,7 @@ export function useR2FileUpload(uploadArgs: R2UploadArgs) {
           uploadArgs.scope === "event"
             ? await generateUploadUrl({
                 scope: "event",
-                purpose: "artifact",
+                purpose: uploadArgs.purpose,
                 eventId: uploadArgs.eventId as never,
                 ...common,
               })

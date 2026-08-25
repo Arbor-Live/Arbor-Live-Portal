@@ -62,7 +62,7 @@ function R2UploadField({
 
   const purpose =
     uploadArgs.scope === "event"
-      ? "artifact"
+      ? uploadArgs.purpose
       : uploadArgs.scope === "venue"
         ? "manual"
         : uploadArgs.scope === "marketing" || uploadArgs.scope === "organization"
@@ -260,6 +260,35 @@ export function EventArtifactUploadField({
     <R2UploadField
       label={label}
       uploadArgs={{ scope: "event", eventId, purpose: "artifact" }}
+      helperText={helperText}
+      {...rest}
+    />
+  );
+}
+
+type EventPosterUploadFieldProps = {
+  eventId: string;
+  label?: string;
+  currentUrl?: string;
+  onUploaded: (storedValue: string) => void;
+  onClear?: () => void;
+  urlValue?: string;
+  onUrlChange?: (url: string) => void;
+  helperText?: string;
+  className?: string;
+};
+
+export function EventPosterUploadField({
+  eventId,
+  label = "Poster image",
+  helperText = "JPEG, PNG, WebP, GIF, or SVG up to 5 MB. Shown on the public event page.",
+  ...rest
+}: EventPosterUploadFieldProps) {
+  return (
+    <R2UploadField
+      label={label}
+      uploadArgs={{ scope: "event", eventId, purpose: "poster" }}
+      accept="image/jpeg,image/png,image/webp,image/gif,image/svg+xml"
       helperText={helperText}
       {...rest}
     />

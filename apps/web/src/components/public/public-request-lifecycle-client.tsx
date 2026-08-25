@@ -264,7 +264,9 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
         </CardContent>
       </Card>
 
-      <PublicEventPosterSection portal="request" token={token} />
+      {!(quoteData && linkedEvent) ? (
+        <PublicEventPosterSection portal="request" token={token} />
+      ) : null}
 
       {quoteData ? (
         <>
@@ -301,6 +303,7 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
                 endAt={linkedEvent.endAt}
                 status={linkedEvent.status}
               />
+              <PublicEventPosterSection portal="request" token={token} />
               <PublicEventContacts
                 manager={linkedEvent.contacts.manager}
                 dayOfLead={linkedEvent.contacts.dayOfLead}

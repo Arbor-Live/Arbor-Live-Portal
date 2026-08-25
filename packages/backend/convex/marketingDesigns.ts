@@ -3,7 +3,7 @@ import { internal } from "./_generated/api";
 import { internalMutation, mutation, query } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { getUserId, requireAnyVerticalOrAdmin, requireVerticalOrAdmin, findAuthUsersByIds } from "./lib/auth";
+import { getUserId, requireAnyVerticalOrAdmin, requireArborInternalContext, requireVerticalOrAdmin, findAuthUsersByIds } from "./lib/auth";
 import { SITE_URL } from "./email/constants";
 import { normalizeEventStatus } from "./lib/eventStatus";
 import { normalizeEventVisibility } from "./lib/eventVisibility";
@@ -272,6 +272,63 @@ export const getPosterAssignmentForEvent = query({
   },
 });
 
+export const getForEvent = query({
+  args: { eventId: v.id("events") },
+  handler: async (ctx, args) => {
+    await requireArborInternalContext(ctx);
+    const event = await ctx.db.get(args.eventId);
+    if (!event) return null;
+    const design = (
+      await ctx.db
+        .query("eventMarketingDesigns")
+        .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+        .take(1)
+    )[0];
+    if (!design) {
+      return {
+        eventId: event._id,
+        eventTitle: event.title,
+        visibility: normalizeEventVisibility(event.visibility),
+        designId: null,
+        assigneeUserId: null,
+        assigneeName: null,
+        imageUrl: null as string | null,
+        imagePreviewUrl: null as string | null,
+        caption: "",
+        additionalLinks: [] as Array<{ label: string; url: string }>,
+        status: null as "draft" | "ready" | "published" | null,
+        instagramPostId: null as string | null,
+        publishedAt: null as number | null,
+        lastError: null as string | null,
+        publicEventUrl: buildPublicEventUrl(String(event._id), SITE_URL),
+        canPublish: canPublishMarketingDesignVisibility(event.visibility),
+      };
+    }
+    const userByKey = await findAuthUsersByIds(
+      ctx,
+      design.assigneeUserId ? [design.assigneeUserId] : [],
+    );
+    return {
+      eventId: event._id,
+      eventTitle: event.title,
+      visibility: normalizeEventVisibility(event.visibility),
+      designId: design._id,
+      assigneeUserId: design.assigneeUserId ?? null,
+      assigneeName: userDisplayName(userByKey, design.assigneeUserId),
+      imageUrl: design.imageUrl ?? null,
+      imagePreviewUrl: await resolveDesignImageUrl(design.imageUrl),
+      caption: design.caption ?? "",
+      additionalLinks: design.additionalLinks ?? [],
+      status: design.status,
+      instagramPostId: design.instagramPostId ?? null,
+      publishedAt: design.publishedAt ?? null,
+      lastError: design.lastError ?? null,
+      publicEventUrl: buildPublicEventUrl(String(event._id), SITE_URL),
+      canPublish: canPublishMarketingDesignVisibility(event.visibility),
+    };
+  },
+});
+
 export const assignPosterDesigner = mutation({
   args: {
     eventId: v.id("events"),
@@ -283,6 +340,88 @@ export const assignPosterDesigner = mutation({
     if (!event) throw new Error("Event not found.");
     const assigneeUserId = args.assigneeUserId?.trim() || undefined;
     const designId = await upsertPosterAssignment(ctx, args.eventId, assigneeUserId, getUserId(user));
+    return { designId };
+  },
+});
+
+export const upsertForEvent = mutation({
+  args: {
+    eventId: v.id("events"),
+    assigneeUserId: v.optional(v.string()),
+    imageUrl: v.optional(v.string()),
+    caption: v.optional(v.string()),
+    additionalLinks: v.optional(v.array(designLinkInputValue)),
+  },
+  handler: async (ctx, args) => {
+    const user = await requireAnyVerticalOrAdmin(ctx, ["Marketing", "Operations"]);
+    const event = await ctx.db.get(args.eventId);
+    if (!event) throw new Error("Event not found.");
+
+    const hasImage = args.imageUrl !== undefined;
+    const hasCaption = args.caption !== undefined;
+    const hasLinks = args.additionalLinks !== undefined;
+    const hasAssignee = args.assigneeUserId !== undefined;
+    if (!hasImage && !hasCaption && !hasLinks && !hasAssignee) {
+      throw new Error("Nothing to save.");
+    }
+
+    let nextImageUrl: string | undefined;
+    if (hasImage) {
+      nextImageUrl = normalizeOptionalAssetReference(args.imageUrl) ?? undefined;
+    }
+
+    const nextCaption = hasCaption ? args.caption!.trim() || undefined : undefined;
+    const nextLinks = hasLinks ? normalizeLinks(args.additionalLinks) : undefined;
+    const nextAssignee = hasAssignee ? args.assigneeUserId?.trim() || undefined : undefined;
+
+    const now = Date.now();
+    const existing = (
+      await ctx.db
+        .query("eventMarketingDesigns")
+        .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+        .take(1)
+    )[0];
+
+    if (existing?.status === "published" && (hasImage || hasCaption || hasLinks)) {
+      // Website content can still change after Instagram publish; keep published.
+      await ctx.db.patch(existing._id, {
+        ...(hasImage ? { imageUrl: nextImageUrl } : {}),
+        ...(hasCaption ? { caption: nextCaption } : {}),
+        ...(hasLinks ? { additionalLinks: nextLinks } : {}),
+        ...(hasAssignee ? { assigneeUserId: nextAssignee } : {}),
+        updatedAt: now,
+      });
+      await schedulePublicEventsSiteRevalidation(ctx, String(args.eventId));
+      return { designId: existing._id };
+    }
+
+    if (existing) {
+      const nextStatus = existing.status === "published" ? "published" : "ready";
+      await ctx.db.patch(existing._id, {
+        ...(hasImage ? { imageUrl: nextImageUrl } : {}),
+        ...(hasCaption ? { caption: nextCaption } : {}),
+        ...(hasLinks ? { additionalLinks: nextLinks } : {}),
+        ...(hasAssignee ? { assigneeUserId: nextAssignee } : {}),
+        status: nextStatus,
+        updatedAt: now,
+        ...(nextStatus === "ready" ? { lastError: undefined } : {}),
+      });
+      await schedulePublicEventsSiteRevalidation(ctx, String(args.eventId));
+      return { designId: existing._id };
+    }
+
+    const designId = await ctx.db.insert("eventMarketingDesigns", {
+      eventId: args.eventId,
+      assigneeUserId: nextAssignee,
+      imageUrl: nextImageUrl,
+      caption: nextCaption,
+      additionalLinks: nextLinks,
+      status: "ready",
+      createdByUserId: getUserId(user),
+      createdAt: now,
+      updatedAt: now,
+    });
+    await schedulePublicEventsSiteRevalidation(ctx, String(args.eventId));
     return { designId };
   },
 });

@@ -1,4 +1,12 @@
-export const EVENT_EDITOR_TABS = ["overview", "schedule", "equipment", "artifacts", "media", "expenses"] as const;
+export const EVENT_EDITOR_TABS = [
+  "overview",
+  "schedule",
+  "equipment",
+  "artifacts",
+  "media",
+  "marketing",
+  "expenses",
+] as const;
 
 export type EventEditorTabId = (typeof EVENT_EDITOR_TABS)[number];
 
@@ -8,6 +16,7 @@ export const EVENT_EDITOR_TAB_LABELS: Record<EventEditorTabId, string> = {
   equipment: "Pull List",
   artifacts: "Artifacts",
   media: "Media",
+  marketing: "Marketing",
   expenses: "Expenses",
 };
 

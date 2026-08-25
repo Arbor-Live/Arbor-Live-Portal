@@ -149,8 +149,8 @@ export function PublicEventLifecycleClient({ token }: { token: string }) {
               endAt={linkedEvent.endAt}
               status={linkedEvent.status}
             />
-            <PublicEventContacts manager={linkedEvent.contacts.manager} dayOfLead={linkedEvent.contacts.dayOfLead} />
             <PublicEventPosterSection portal="quote" token={token} />
+            <PublicEventContacts manager={linkedEvent.contacts.manager} dayOfLead={linkedEvent.contacts.dayOfLead} />
             <PublicEventSchedule blocks={linkedEvent.scheduleBlocks} />
             <PublicEventCrew crew={linkedEvent.crewRoster} />
           </>
