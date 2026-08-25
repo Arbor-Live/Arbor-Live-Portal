@@ -66,7 +66,7 @@ test.describe("band onboarding wizard", () => {
     await next(page);
 
     // Rates & payout — payee is pre-seeded; confirm recommended ASSU pickup.
-    const rateField = page.getByLabel("Performer hourly rate (USD)");
+    const rateField = page.getByLabel("Rate per person per hour (USD)");
     await expect(rateField).toBeVisible({ timeout: 20_000 });
     await rateField.fill(String(hourlyRateUsd));
     await page.getByLabel(/Pickup \(ASSU office\)/i).check();

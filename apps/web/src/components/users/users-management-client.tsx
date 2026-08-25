@@ -265,7 +265,9 @@ export function UsersManagementClient({
         }),
         bandOrgColumnHelper.accessor((row) => row.performerHourlyRateUsd ?? 0, {
           id: "performerRate",
-          header: ({ column }) => <DataTableColumnHeader column={column} title="Performer Rate" />,
+          header: ({ column }) => (
+            <DataTableColumnHeader column={column} title="Rate / person / hr" />
+          ),
           sortFn: "basic",
         }),
         bandOrgColumnHelper.display({

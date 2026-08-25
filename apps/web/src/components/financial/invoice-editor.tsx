@@ -2763,7 +2763,7 @@ function SectionArtists({
         const parts: string[] = [];
         if (band.memberCount > 0) parts.push(`${band.memberCount} people`);
         if (band.performerHourlyRateUsd > 0) {
-          parts.push(`${formatUsd(band.performerHourlyRateUsd)}/hr`);
+          parts.push(`${formatUsd(band.performerHourlyRateUsd)}/person/hr`);
         }
         return {
           value: band.organizationId,
@@ -2872,7 +2872,7 @@ function SectionArtists({
                 }
               />
               <Input
-                placeholder="Rate / hr"
+                placeholder="Rate / person / hr"
                 value={row.rateUsd}
                 onChange={(e) =>
                   setRows((prev) =>
