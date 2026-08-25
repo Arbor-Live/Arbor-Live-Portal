@@ -65,24 +65,13 @@ async function mapPublicEventCard(
   };
 }
 
-function isWebsiteVisibleDesign(design: DesignDoc) {
-  return design.status === "published" || design.status === "ready";
-}
-
-async function loadWebsiteVisibleDesignsByEventId(ctx: QueryCtx) {
-  const [published, ready] = await Promise.all([
-    ctx.db
-      .query("eventMarketingDesigns")
-      .withIndex("by_status", (q) => q.eq("status", "published"))
-      .take(500),
-    ctx.db
-      .query("eventMarketingDesigns")
-      .withIndex("by_status", (q) => q.eq("status", "ready"))
-      .take(500),
-  ]);
+async function loadPublishedDesignsByEventId(ctx: QueryCtx) {
+  const designs = await ctx.db
+    .query("eventMarketingDesigns")
+    .withIndex("by_status", (q) => q.eq("status", "published"))
+    .take(500);
   const byEventId = new Map<string, DesignDoc>();
-  for (const design of [...published, ...ready]) {
-    if (!isWebsiteVisibleDesign(design)) continue;
+  for (const design of designs) {
     const existing = byEventId.get(design.eventId);
     if (!existing || design.updatedAt > existing.updatedAt) {
       byEventId.set(design.eventId, design);
@@ -115,7 +104,7 @@ export const listUpcoming = query({
     const events = await listPublicUpcomingEvents(ctx, args.now);
     const limited =
       args.limit !== undefined ? events.slice(0, Math.max(0, args.limit)) : events;
-    const designsByEventId = await loadWebsiteVisibleDesignsByEventId(ctx);
+    const designsByEventId = await loadPublishedDesignsByEventId(ctx);
     return Promise.all(
       limited.map((event) =>
         mapPublicEventCard(ctx, event, designsByEventId.get(event._id) ?? null),
@@ -131,7 +120,7 @@ export const listUpcomingTwoWeeks = query({
     const events = (await listPublicUpcomingEvents(ctx, args.now)).filter((event) =>
       isWithinDays(event.startAt, args.now, 14),
     );
-    const designsByEventId = await loadWebsiteVisibleDesignsByEventId(ctx);
+    const designsByEventId = await loadPublishedDesignsByEventId(ctx);
     return Promise.all(
       events.map((event) =>
         mapPublicEventCard(ctx, event, designsByEventId.get(event._id) ?? null),
@@ -153,8 +142,8 @@ export const getByEventId = query({
       .query("eventMarketingDesigns")
       .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
       .take(20);
-    const visible = design
-      .filter((row) => isWebsiteVisibleDesign(row))
+    const published = design
+      .filter((row) => row.status === "published")
       .sort((a, b) => b.updatedAt - a.updatedAt)[0];
 
     let venueAddress: string | undefined;
@@ -167,6 +156,6 @@ export const getByEventId = query({
       }
     }
 
-    return mapPublicEventCard(ctx, event, visible ?? null, venueAddress, googleMapsUrl);
+    return mapPublicEventCard(ctx, event, published ?? null, venueAddress, googleMapsUrl);
   },
 });
