@@ -13,7 +13,7 @@ import {
   paymentProofSubmissionSchema,
   type PaymentProofSubmissionFormValues,
 } from "@/lib/validations/payment-proof";
-import { formatDate, formatDateTime, formatUsd } from "@/lib/format";
+import { formatDate, formatDateTime, formatUsd, pacificDateKey } from "@/lib/format";
 
 type PaymentProofState = {
   eligible: boolean;
@@ -44,8 +44,55 @@ function formatDueDate(dueAt: number) {
   return formatDate(dueAt);
 }
 
+/** Whole Pacific calendar days from today until due (0 = due today; negative = past). */
+function pacificDaysUntil(dueAt: number, nowMs = Date.now()) {
+  const today = pacificDateKey(nowMs);
+  const due = pacificDateKey(dueAt);
+  const todayMs = Date.parse(`${today}T12:00:00Z`);
+  const dueMs = Date.parse(`${due}T12:00:00Z`);
+  return Math.round((dueMs - todayMs) / (24 * 60 * 60 * 1000));
+}
+
+function paymentDueBannerCopy(dueAt: number) {
+  const days = pacificDaysUntil(dueAt);
+  const dueLabel = formatDueDate(dueAt);
+  if (days > 1) {
+    return `Payment is due by ${dueLabel} (${days} days left). No rush — take the time you need.`;
+  }
+  if (days === 1) {
+    return `Payment is due by ${dueLabel} (tomorrow). No rush — take the time you need.`;
+  }
+  if (days === 0) {
+    return `Payment is due today (${dueLabel}).`;
+  }
+  return `Payment was due ${dueLabel}.`;
+}
+
 function paymentMethodDisplay(method: PaymentProofSubmissionFormValues["paymentMethod"]) {
   return PAYMENT_PROOF_METHOD_OPTIONS.find((option) => option.value === method)?.label ?? method;
+}
+
+function PaymentDueBanner({ lateFee }: { lateFee: NonNullable<PaymentProofState["lateFee"]> }) {
+  if (lateFee.isOverdue) {
+    return (
+      <Alert variant="destructive">
+        <AlertDescription className="space-y-1">
+          <p className="font-medium">This payment is past due.</p>
+          <p>
+            Payment was due {formatDueDate(lateFee.dueAt)}.
+            {lateFee.lateFeeUsd > 0
+              ? ` Accrued late fees: ${formatUsd(lateFee.lateFeeUsd)} ($25/month after the first month past due).`
+              : " Late fees of $25/month apply after the first month past due."}
+          </p>
+        </AlertDescription>
+      </Alert>
+    );
+  }
+  return (
+    <Alert>
+      <AlertDescription>{paymentDueBannerCopy(lateFee.dueAt)}</AlertDescription>
+    </Alert>
+  );
 }
 
 export function PublicPaymentProofSection({
@@ -107,6 +154,7 @@ export function PublicPaymentProofSection({
           <CardTitle>Payment Proof Submitted</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
+          {paymentProof.lateFee ? <PaymentDueBanner lateFee={paymentProof.lateFee} /> : null}
           <p className="text-muted-foreground">
             Submitted {formatDateTime(paymentProof.submission.submittedAt)}
           </p>
@@ -128,19 +176,7 @@ export function PublicPaymentProofSection({
         <CardTitle>Submit Payment Proof</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {paymentProof.lateFee?.isOverdue ? (
-          <Alert variant="destructive">
-            <AlertDescription className="space-y-1">
-              <p className="font-medium">This payment is past due.</p>
-              <p>
-                Payment was due {formatDueDate(paymentProof.lateFee.dueAt)}.
-                {paymentProof.lateFee.lateFeeUsd > 0
-                  ? ` Accrued late fees: ${formatUsd(paymentProof.lateFee.lateFeeUsd)} ($25/month after the first month past due).`
-                  : " Late fees of $25/month apply after the first month past due."}
-              </p>
-            </AlertDescription>
-          </Alert>
-        ) : null}
+        {paymentProof.lateFee ? <PaymentDueBanner lateFee={paymentProof.lateFee} /> : null}
 
         <p className="text-sm text-muted-foreground">
           Submit the payment reference for your invoice once payment has been initiated.
@@ -180,7 +216,7 @@ export function PublicPaymentProofSection({
               placeholder={selectedOption.placeholder}
             />
 
-            <Button type="submit" disabled={form.saveStatus === "saving"}>
+            <Button type="submit" disabled={form.saveStatus === "saving" || !paymentProof.canSubmit}>
               {form.saveStatus === "saving" ? "Submitting..." : "Submit payment proof"}
             </Button>
 

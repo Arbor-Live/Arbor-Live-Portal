@@ -24,7 +24,11 @@ import { syncEventCrewCostUsd } from "./lib/crewCost";
 import { syncEventStatusForLinkedInvoice } from "./lib/eventStatus";
 import { computeSeriesCostSummary, effectiveCrewUsd } from "./lib/eventSeriesCosts";
 import { resolveVenueLink } from "./lib/venues";
-import { resolveHostLink } from "./lib/hostOrgs";
+import {
+  resolveAdditionalHostGroupIds,
+  resolveEventPrimaryHostLink,
+  syncLinkedEventsPrimaryHostFromInvoice,
+} from "./lib/hostOrgs";
 
 const eventTypeValue = v.union(
   v.literal("Crewed Event"),
@@ -180,6 +184,7 @@ export const create = mutation({
     category: v.optional(v.string()),
     hostGroupId: v.optional(v.id("invoiceGroups")),
     host: v.optional(v.string()),
+    additionalHostGroupIds: v.optional(v.array(v.id("invoiceGroups"))),
     expectedTurnout: v.optional(v.number()),
     budgetUsd: v.optional(v.number()),
     occurrenceBandsCostUsd: v.optional(v.number()),
@@ -210,7 +215,15 @@ export const create = mutation({
     });
     const now = Date.now();
     const venueLink = await resolveVenueLink(ctx, args.venueId);
-    const hostLink = await resolveHostLink(ctx, args.hostGroupId);
+    const hostLink = await resolveEventPrimaryHostLink(ctx, {
+      invoiceId: args.invoiceId,
+      hostGroupId: args.hostGroupId,
+    });
+    const additionalHostGroupIds = await resolveAdditionalHostGroupIds(
+      ctx,
+      hostLink.hostGroupId,
+      args.additionalHostGroupIds,
+    );
     const seriesId = await ctx.db.insert("eventSeries", {
       title: args.title.trim(),
       status: "active",
@@ -228,6 +241,7 @@ export const create = mutation({
       category: trimOptional(args.category),
       hostGroupId: hostLink.hostGroupId,
       host: hostLink.host,
+      additionalHostGroupIds,
       expectedTurnout: args.expectedTurnout,
       budgetUsd: args.budgetUsd,
       occurrenceBandsCostUsd: args.occurrenceBandsCostUsd,
@@ -280,6 +294,7 @@ export const linkInvoice = mutation({
       await ctx.db.patch(occurrence._id, { invoiceId: args.invoiceId, updatedAt: now });
       await syncEventStatusForLinkedInvoice(ctx, occurrence._id, args.invoiceId, occurrence.status);
     }
+    await syncLinkedEventsPrimaryHostFromInvoice(ctx, args.invoiceId);
     return args.id;
   },
 });
@@ -319,6 +334,7 @@ export const updateTemplate = mutation({
     category: v.optional(v.string()),
     hostGroupId: v.optional(v.union(v.id("invoiceGroups"), v.null())),
     host: v.optional(v.string()),
+    additionalHostGroupIds: v.optional(v.union(v.array(v.id("invoiceGroups")), v.null())),
     expectedTurnout: v.optional(v.number()),
     budgetUsd: v.optional(v.number()),
     dayOfLeadUserId: v.optional(v.string()),
@@ -347,10 +363,25 @@ export const updateTemplate = mutation({
       args.venueId !== undefined
         ? await resolveVenueLink(ctx, args.venueId)
         : { venueId: series.venueId, venueName: series.venueName, venueAddress: undefined };
-    const hostLink =
-      args.hostGroupId !== undefined
-        ? await resolveHostLink(ctx, args.hostGroupId)
-        : { hostGroupId: series.hostGroupId, host: series.host };
+    const hostLink = await resolveEventPrimaryHostLink(ctx, {
+      invoiceId: series.invoiceId,
+      hostGroupId: args.hostGroupId,
+      existingInvoiceId: series.invoiceId,
+      existingHostGroupId: series.hostGroupId,
+      existingHost: series.host,
+    });
+    const additionalHostGroupIds =
+      args.additionalHostGroupIds !== undefined
+        ? await resolveAdditionalHostGroupIds(
+            ctx,
+            hostLink.hostGroupId,
+            args.additionalHostGroupIds ?? [],
+          )
+        : await resolveAdditionalHostGroupIds(
+            ctx,
+            hostLink.hostGroupId,
+            series.additionalHostGroupIds,
+          );
 
     await ctx.db.patch(args.id, {
       title: args.title?.trim() ?? series.title,
@@ -364,6 +395,7 @@ export const updateTemplate = mutation({
       category: args.category?.trim() ?? series.category,
       hostGroupId: hostLink.hostGroupId,
       host: hostLink.host,
+      additionalHostGroupIds,
       expectedTurnout: args.expectedTurnout ?? series.expectedTurnout,
       budgetUsd: args.budgetUsd ?? series.budgetUsd,
       dayOfLeadUserId: args.dayOfLeadUserId?.trim() ?? series.dayOfLeadUserId,

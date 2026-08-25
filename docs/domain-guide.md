@@ -79,6 +79,14 @@ canonical description of the domain itself.
   `internal` (staff-only), or `informational` (staff-only reference entries that
   are not real producible events). Poster publishing requires `public`
   visibility plus a listable status.
+- Hosts: optional primary `hostGroupId` / denormalized `host`, plus optional
+  `additionalHostGroupIds` co-hosts on the **event only**. When an event links an
+  invoice, primary host is taken from the invoice `groupId` / `clientGroupName`
+  (edit on the invoice Client card). Add co-hosts on the event Overview tab.
+  Public marketing pages, quote/event portals, and crew surfaces show primary +
+  co-hosts joined (`Host A · Host B`).
+- Invoices carry a single primary host (`groupId` / `clientGroupName` on the
+  Client card). They do not store co-hosts.
 
 Event types (drive which editor tabs and quick-add blocks appear):
 
@@ -150,8 +158,10 @@ Event types (drive which editor tabs and quick-add blocks appear):
 
 - One table (`invoices`) serves both quotes and invoices; numbering is
   `ALINV-` + 7-char nanoid (requests use `ALREQ-`).
-- Lifecycle: `draft` → `finalized` (→ `void`), with a parallel
+- Lifecycle: `draft` → `finalized` (→ `void`, reversible via unvoid), with a parallel
   `clientApprovalStatus`: `pending` → `approved` / `changes_requested`.
+  Voided invoices are hidden from the default Active list filter. Staff can void
+  from the invoice list or editor (e.g. cancelled events).
   Default due date is first linked event start (Day 1) + 30 days; staff can
   override, then resync.
 - Line items live in a child table, sectioned as equipment package/type,
@@ -172,7 +182,8 @@ Event types (drive which editor tabs and quick-add blocks appear):
 - PDFs are rendered from `@arbor/invoice-document` (`./pdf` export).
 - **Payment proof**: after approval, payers submit payment evidence
   (`paymentProof*.ts`); staff verify, and cron-driven reminder emails nag
-  outstanding payers.
+  outstanding payers only once fewer than 30 days remain until the invoice due
+  date (approval-day first reminder + Monday follow-ups).
 
 ## Band payments
 
