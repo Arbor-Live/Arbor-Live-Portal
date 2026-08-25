@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
+import type { FunctionReturnType } from "convex/server";
+import { createColumnHelper, type RowSelectionState } from "@tanstack/react-table";
 import { api } from "@/lib/convex-api";
 import { useAppDialog } from "@/components/ui/app-dialog";
 import { FormSaveBar } from "@/components/forms";
@@ -10,6 +12,9 @@ import { TextFormField } from "@/components/forms/text-form-field";
 import { TextareaFormField } from "@/components/forms/textarea-form-field";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DataTable } from "@/components/ui/data-table";
+import { DataTableColumnHeader } from "@/components/ui/data-table-column-header";
+import { type DataTableFeatures } from "@/components/ui/data-table-features";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useConvexForm } from "@/hooks/use-convex-form";
@@ -26,6 +31,10 @@ import {
   FileUploadField,
   InventoryResourceUploadButton,
 } from "@/components/files/file-upload-field";
+
+type InventoryTypeRow = FunctionReturnType<typeof api.inventoryTypes.list>["page"][number];
+
+const typeColumnHelper = createColumnHelper<DataTableFeatures, InventoryTypeRow>();
 
 type PublicVisibilityFilter = "all" | "public" | "hidden";
 type PublicProfileFilter = "all" | "full" | "off";
@@ -182,9 +191,7 @@ export function TypesManager() {
   const [selectedCapability, setSelectedCapability] = useState("");
   const [selectedManufacturer, setSelectedManufacturer] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [sortBy, setSortBy] = useState<"name" | "category" | "msrp" | "normal" | "visibility">("name");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [bulkActionPending, setBulkActionPending] = useState(false);
   const [capabilityForm, setCapabilityForm] = useState({ key: "", label: "", category: "" });
   const [categoryForm, setCategoryForm] = useState({ key: "", label: "", publicBucket: "" });
@@ -278,29 +285,11 @@ export function TypesManager() {
         option.key.toLowerCase().includes(query) || option.label.toLowerCase().includes(query),
     );
   }, [capabilityOptions, capabilityQuery]);
-  const sortedRows = useMemo(() => {
-    const copy = [...rows];
-    copy.sort((a, b) => {
-      const direction = sortDir === "asc" ? 1 : -1;
-      if (sortBy === "category") return a.category.localeCompare(b.category) * direction;
-      if (sortBy === "msrp") return ((a.msrpUsd ?? 0) - (b.msrpUsd ?? 0)) * direction;
-      if (sortBy === "visibility") {
-        const rank = (row: (typeof rows)[number]) => {
-          if (!row.publicListing) return 0;
-          if (row.publicProfile) return 2;
-          return 1;
-        };
-        return (rank(a) - rank(b)) * direction;
-      }
-      if (sortBy === "normal") {
-        const aRate = a.nonSubsidizedRentalPriceUsd ?? a.rentalPriceUsd ?? 0;
-        const bRate = b.nonSubsidizedRentalPriceUsd ?? b.rentalPriceUsd ?? 0;
-        return (aRate - bRate) * direction;
-      }
-      return a.name.localeCompare(b.name) * direction;
-    });
-    return copy;
-  }, [rows, sortBy, sortDir]);
+
+  const selectedIds = useMemo(
+    () => Object.keys(rowSelection).filter((id) => rowSelection[id]),
+    [rowSelection],
+  );
 
   async function handleCreateCategory() {
     if (!categoryForm.key.trim() || !categoryForm.label.trim()) return;
@@ -337,6 +326,111 @@ export function TypesManager() {
     typeForm.resetSaveState();
   }
 
+  const typeColumns = typeColumnHelper.columns([
+    typeColumnHelper.display({
+      id: "select",
+      enableHiding: false,
+      enableSorting: false,
+      header: ({ table }) => (
+        <input
+          type="checkbox"
+          checked={table.getIsAllRowsSelected()}
+          ref={(element) => {
+            if (element) element.indeterminate = table.getIsSomeRowsSelected();
+          }}
+          onChange={(event) => table.toggleAllRowsSelected(event.target.checked)}
+          aria-label="Select all"
+        />
+      ),
+      cell: ({ row }) => (
+        <input
+          type="checkbox"
+          checked={row.getIsSelected()}
+          onChange={(event) => row.toggleSelected(event.target.checked)}
+          aria-label="Select row"
+        />
+      ),
+    }),
+        typeColumnHelper.accessor((row) => formatTypeDisplay(row), {
+          id: "name",
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Name" />,
+          cell: ({ row }) => (
+            <div>
+              <div className="font-medium">{formatTypeDisplay(row.original)}</div>
+              <div className="text-xs text-muted-foreground">
+                {row.original.capabilities.join(", ") || "no capabilities"}
+              </div>
+            </div>
+          ),
+        }),
+    typeColumnHelper.accessor("category", {
+      id: "category",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Category" />,
+    }),
+    typeColumnHelper.accessor(
+      (row) => {
+        if (!row.publicListing) return 0;
+        if (row.publicProfile) return 2;
+        return 1;
+      },
+      {
+        id: "visibility",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Visibility" />,
+        cell: ({ row }) => (
+          <span
+            className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-medium ${visibilityBadgeClass(row.original)}`}
+          >
+            {formatVisibilityLabel(row.original)}
+          </span>
+        ),
+        sortFn: "basic",
+      },
+    ),
+    typeColumnHelper.accessor((row) => row.msrpUsd ?? 0, {
+      id: "msrp",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="MSRP" />,
+      cell: ({ row }) => formatCurrency(row.original.msrpUsd),
+      sortFn: "basic",
+    }),
+    typeColumnHelper.accessor((row) => row.subsidizedRentalPriceUsd ?? 0, {
+      id: "subsidized",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Subsidized" />,
+      cell: ({ row }) => formatCurrency(row.original.subsidizedRentalPriceUsd),
+      sortFn: "basic",
+    }),
+    typeColumnHelper.accessor(
+      (row) => row.nonSubsidizedRentalPriceUsd ?? row.rentalPriceUsd ?? 0,
+      {
+        id: "normal",
+        header: ({ column }) => <DataTableColumnHeader column={column} title="Normal" />,
+        cell: ({ row }) =>
+          formatCurrency(row.original.nonSubsidizedRentalPriceUsd ?? row.original.rentalPriceUsd),
+        sortFn: "basic",
+      },
+    ),
+    typeColumnHelper.display({
+      id: "actions",
+      enableHiding: false,
+      enableSorting: false,
+      header: "Actions",
+      cell: ({ row }) => (
+        <div className="flex gap-2">
+          <Button type="button" size="sm" variant="outline" onClick={() => beginEdit(row.original)}>
+            Edit
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="destructive"
+            onClick={() => void deleteType({ id: row.original._id })}
+          >
+            Delete
+          </Button>
+        </div>
+      ),
+    }),
+  ]);
+
   function cancelEdit() {
     setEditingId(null);
     typeForm.reset(defaultTypeValues);
@@ -346,7 +440,7 @@ export function TypesManager() {
   async function bulkDeleteSelected() {
     try {
       await Promise.all(selectedIds.map((id) => deleteType({ id: id as never })));
-      setSelectedIds([]);
+      setRowSelection({});
     } catch (error) {
       await alert(getConvexErrorMessage(error, "Could not delete selected types."));
     }
@@ -363,7 +457,7 @@ export function TypesManager() {
         ids: selectedIds as never,
         ...options,
       });
-      setSelectedIds([]);
+      setRowSelection({});
     } catch (error) {
       await alert(getConvexErrorMessage(error, "Could not update visibility for selected types."));
     } finally {
@@ -460,27 +554,6 @@ export function TypesManager() {
               </FilterField>
             </div>
             <div className="flex flex-wrap items-end gap-3">
-              <FilterNativeSelect
-                label="Sort by"
-                className="w-full sm:w-44"
-                value={sortBy}
-                onChange={(value) => setSortBy(value as typeof sortBy)}
-              >
-                <option value="name">Name</option>
-                <option value="category">Category</option>
-                <option value="visibility">Visibility</option>
-                <option value="msrp">MSRP</option>
-                <option value="normal">Normal rate</option>
-              </FilterNativeSelect>
-              <FilterNativeSelect
-                label="Order"
-                className="w-full sm:w-32"
-                value={sortDir}
-                onChange={(value) => setSortDir(value as typeof sortDir)}
-              >
-                <option value="asc">Ascending</option>
-                <option value="desc">Descending</option>
-              </FilterNativeSelect>
               <Button
                 type="button"
                 variant="outline"
@@ -490,7 +563,7 @@ export function TypesManager() {
                 Clear filters{activeFilterCount ? ` (${activeFilterCount})` : ""}
               </Button>
               <span className="pb-2 text-sm text-muted-foreground">
-                {sortedRows.length} type{sortedRows.length === 1 ? "" : "s"}
+                {rows.length} type{rows.length === 1 ? "" : "s"}
                 {selectedIds.length ? ` · ${selectedIds.length} selected` : ""}
               </span>
             </div>
@@ -544,90 +617,22 @@ export function TypesManager() {
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="overflow-auto rounded-md border">
-            <table className="min-w-full text-sm">
-              <thead className="bg-muted/50">
-                <tr>
-                  <th className="p-2 text-left">
-                    <input
-                      type="checkbox"
-                      checked={sortedRows.length > 0 && selectedIds.length === sortedRows.length}
-                      onChange={(event) =>
-                        setSelectedIds(event.target.checked ? sortedRows.map((row) => row._id) : [])
-                      }
-                    />
-                  </th>
-                  <th className="p-2 text-left">Name</th>
-                  <th className="p-2 text-left">Category</th>
-                  <th className="p-2 text-left">Visibility</th>
-                  <th className="p-2 text-left">MSRP</th>
-                  <th className="p-2 text-left">Subsidized</th>
-                  <th className="p-2 text-left">Normal</th>
-                  <th className="p-2 text-left">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedRows.map((row) => (
-                  <tr key={row._id} data-testid={`type-row-${row._id}`} className="border-t align-top">
-                    <td className="p-2">
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.includes(row._id)}
-                        onChange={(event) =>
-                          setSelectedIds((prev) =>
-                            event.target.checked
-                              ? [...prev, row._id]
-                              : prev.filter((id) => id !== row._id),
-                          )
-                        }
-                      />
-                    </td>
-                    <td className="p-2">
-                      <div className="font-medium">{formatTypeDisplay(row)}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {row.capabilities.join(", ") || "no capabilities"}
-                      </div>
-                    </td>
-                    <td className="p-2">{row.category}</td>
-                    <td className="p-2">
-                      <span
-                        className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-medium ${visibilityBadgeClass(row)}`}
-                      >
-                        {formatVisibilityLabel(row)}
-                      </span>
-                    </td>
-                    <td className="p-2">{formatCurrency(row.msrpUsd)}</td>
-                    <td className="p-2">{formatCurrency(row.subsidizedRentalPriceUsd)}</td>
-                    <td className="p-2">
-                      {formatCurrency(row.nonSubsidizedRentalPriceUsd ?? row.rentalPriceUsd)}
-                    </td>
-                    <td className="p-2">
-                      <div className="flex gap-2">
-                        <Button type="button" size="sm" variant="outline" onClick={() => beginEdit(row)}>
-                          Edit
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="destructive"
-                          onClick={() => void deleteType({ id: row._id })}
-                        >
-                          Delete
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {!sortedRows.length ? (
-            <p className="text-sm text-muted-foreground">
-              {activeFilterCount
-                ? "No types match the current filters."
-                : "No types found."}
-            </p>
-          ) : null}
+          <DataTable
+            columns={typeColumns}
+            data={rows}
+            getRowId={(row) => row._id}
+            enableRowSelection
+            enableColumnVisibility
+            rowSelection={rowSelection}
+            onRowSelectionChange={setRowSelection}
+            initialSorting={[{ id: "name", desc: false }]}
+            emptyMessage={
+              activeFilterCount ? "No types match the current filters." : "No types found."
+            }
+            getRowProps={(row) => ({
+              "data-testid": `type-row-${row.original._id}`,
+            })}
+          />
           {typesStatus === "CanLoadMore" || typesStatus === "LoadingMore" ? (
             <Button
               type="button"
