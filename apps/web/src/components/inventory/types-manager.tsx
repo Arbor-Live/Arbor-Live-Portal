@@ -351,18 +351,18 @@ export function TypesManager() {
         />
       ),
     }),
-    typeColumnHelper.accessor((row) => formatTypeDisplay(row), {
-      id: "name",
-      header: ({ column }) => <DataTableColumnHeader column={column} title="Name" />,
-      cell: ({ row }) => (
-        <div data-testid={`type-row-${row.original._id}`}>
-          <div className="font-medium">{formatTypeDisplay(row.original)}</div>
-          <div className="text-xs text-muted-foreground">
-            {row.original.capabilities.join(", ") || "no capabilities"}
-          </div>
-        </div>
-      ),
-    }),
+        typeColumnHelper.accessor((row) => formatTypeDisplay(row), {
+          id: "name",
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Name" />,
+          cell: ({ row }) => (
+            <div>
+              <div className="font-medium">{formatTypeDisplay(row.original)}</div>
+              <div className="text-xs text-muted-foreground">
+                {row.original.capabilities.join(", ") || "no capabilities"}
+              </div>
+            </div>
+          ),
+        }),
     typeColumnHelper.accessor("category", {
       id: "category",
       header: ({ column }) => <DataTableColumnHeader column={column} title="Category" />,
@@ -629,6 +629,9 @@ export function TypesManager() {
             emptyMessage={
               activeFilterCount ? "No types match the current filters." : "No types found."
             }
+            getRowProps={(row) => ({
+              "data-testid": `type-row-${row.original._id}`,
+            })}
           />
           {typesStatus === "CanLoadMore" || typesStatus === "LoadingMore" ? (
             <Button

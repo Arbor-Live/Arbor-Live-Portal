@@ -316,9 +316,6 @@ export function UsersManagementClient({
         inviteColumnHelper.accessor("email", {
           id: "email",
           header: ({ column }) => <DataTableColumnHeader column={column} title="Email" />,
-          cell: ({ row }) => (
-            <span data-testid={`invite-row-${row.original.id}`}>{row.original.email}</span>
-          ),
         }),
         inviteColumnHelper.accessor("organizationName", {
           id: "organization",
@@ -532,7 +529,9 @@ export function UsersManagementClient({
               columns={bandOrgColumns}
               data={bandOrganizations ?? []}
               getRowId={(row) => row.organizationId}
-              emptyMessage="No band organizations found yet."
+              emptyMessage={
+                bandOrganizations === undefined ? "Loading…" : "None found yet."
+              }
               renderRow={(row) => (
                 <BandOrgAdminRow
                   org={row.original}
@@ -730,6 +729,9 @@ export function UsersManagementClient({
               enableColumnVisibility
               initialSorting={[{ id: "email", desc: false }]}
               emptyMessage="No invites for this organization yet."
+              getRowProps={(row) => ({
+                "data-testid": `invite-row-${row.original.id}`,
+              })}
             />
           </CardContent>
         </Card>
