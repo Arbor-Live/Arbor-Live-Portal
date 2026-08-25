@@ -87,6 +87,7 @@ type FormState = {
   publicWebsiteUrl: string;
   publicInstagramUrl: string;
   publicYoutubeUrl: string;
+  publicSpotifyUrl: string;
   demoURL: string;
   publicListing: boolean;
   publicSlug: string;
@@ -110,6 +111,7 @@ const EMPTY_FORM: FormState = {
   publicWebsiteUrl: "",
   publicInstagramUrl: "",
   publicYoutubeUrl: "",
+  publicSpotifyUrl: "",
   demoURL: "",
   publicListing: false,
   publicSlug: "",
@@ -211,6 +213,7 @@ export function BandOnboardingWizard() {
       publicWebsiteUrl: profile.publicWebsiteUrl ?? "",
       publicInstagramUrl: profile.publicInstagramUrl ?? "",
       publicYoutubeUrl: profile.publicYoutubeUrl ?? "",
+      publicSpotifyUrl: profile.publicSpotifyUrl ?? "",
       demoURL: profile.demoURL ?? "",
       publicListing: profile.publicListing ?? false,
       publicSlug: profile.publicSlug ?? "",
@@ -333,6 +336,7 @@ export function BandOnboardingWizard() {
           publicWebsiteUrl: form.publicWebsiteUrl.trim() || undefined,
           publicInstagramUrl: form.publicInstagramUrl.trim() || undefined,
           publicYoutubeUrl: form.publicYoutubeUrl.trim() || undefined,
+          publicSpotifyUrl: form.publicSpotifyUrl.trim() || undefined,
           demoURL: form.demoURL.trim() || undefined,
           publicListing: form.publicListing,
           publicSlug: form.publicSlug.trim() || undefined,
@@ -770,6 +774,15 @@ export function BandOnboardingWizard() {
                       placeholder="https://youtube.com/…"
                     />
                   </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="band-spotify">Spotify URL</Label>
+                    <Input
+                      id="band-spotify"
+                      value={form.publicSpotifyUrl}
+                      onChange={(event) => patch({ publicSpotifyUrl: event.target.value })}
+                      placeholder="https://open.spotify.com/…"
+                    />
+                  </div>
                   
                   <div className="space-y-2 sm:col-span-2">
                     <Label htmlFor="band-demo">Demo / listening link</Label>
@@ -777,7 +790,7 @@ export function BandOnboardingWizard() {
                       id="band-demo"
                       value={form.demoURL}
                       onChange={(event) => patch({ demoURL: event.target.value })}
-                      placeholder="Spotify, SoundCloud, Drive…"
+                      placeholder="SoundCloud, Drive…"
                     />
                   </div>
 <OnboardingAckCheckbox
@@ -946,7 +959,7 @@ export function BandOnboardingWizard() {
                 </QuestionnaireTitle>
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="band-rate">Performer hourly rate (USD)</Label>
+                    <Label htmlFor="band-rate">Rate per person per hour (USD)</Label>
                     <Input
                       id="band-rate"
                       type="number"

@@ -40,6 +40,7 @@ export function BandSelfServiceClient() {
       publicWebsiteUrl: "",
       publicInstagramUrl: "",
       publicYoutubeUrl: "",
+      publicSpotifyUrl: "",
       publicListing: false,
       publicSlug: "",
       publicHeroImageUrl: "",
@@ -63,6 +64,7 @@ export function BandSelfServiceClient() {
       publicWebsiteUrl: profile.publicWebsiteUrl ?? "",
       publicInstagramUrl: profile.publicInstagramUrl ?? "",
       publicYoutubeUrl: profile.publicYoutubeUrl ?? "",
+      publicSpotifyUrl: profile.publicSpotifyUrl ?? "",
       publicListing: profile.publicListing ?? false,
       publicSlug: profile.publicSlug ?? "",
       publicHeroImageUrl: profile.publicHeroImageUrl ?? "",
@@ -87,6 +89,7 @@ export function BandSelfServiceClient() {
       publicWebsiteUrl: values.publicWebsiteUrl || undefined,
       publicInstagramUrl: values.publicInstagramUrl || undefined,
       publicYoutubeUrl: values.publicYoutubeUrl || undefined,
+      publicSpotifyUrl: values.publicSpotifyUrl || undefined,
       publicListing: values.publicListing,
       publicSlug: values.publicSlug || undefined,
       publicHeroImageUrl: values.publicHeroImageUrl || undefined,
@@ -159,12 +162,13 @@ export function BandSelfServiceClient() {
                 <div className="grid gap-2 md:grid-cols-2">
                   <TextFormField
                     name="performerHourlyRateUsd"
-                    label="Performer hourly rate (USD)"
+                    label="Rate per person per hour (USD)"
                     type="number"
                   />
                   <TextFormField name="publicWebsiteUrl" label="Website" placeholder="https://..." />
                   <TextFormField name="publicInstagramUrl" label="Instagram URL" />
                   <TextFormField name="publicYoutubeUrl" label="YouTube URL" />
+                  <TextFormField name="publicSpotifyUrl" label="Spotify URL" />
                 </div>
                 <div className="grid gap-2 md:grid-cols-2">
                   <FormField
@@ -384,6 +388,7 @@ export function BandSelfServiceClient() {
             publicWebsiteUrl: profile.publicWebsiteUrl ?? "",
             publicInstagramUrl: profile.publicInstagramUrl ?? "",
             publicYoutubeUrl: profile.publicYoutubeUrl ?? "",
+            publicSpotifyUrl: profile.publicSpotifyUrl ?? "",
             publicListing: profile.publicListing ?? false,
             publicSlug: profile.publicSlug ?? "",
             publicHeroImageUrl: profile.publicHeroImageUrl ?? "",

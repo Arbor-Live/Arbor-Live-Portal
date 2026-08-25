@@ -284,6 +284,7 @@ export const getPublicArtistBySlug = query({
       websiteUrl: profile.publicWebsiteUrl?.trim() || undefined,
       instagramUrl: profile.publicInstagramUrl?.trim() || undefined,
       youtubeUrl: profile.publicYoutubeUrl?.trim() || undefined,
+      spotifyUrl: profile.publicSpotifyUrl?.trim() || undefined,
     };
   },
 });

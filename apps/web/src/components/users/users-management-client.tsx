@@ -402,7 +402,7 @@ export function UsersManagementClient({
                   <tr className="border-b bg-muted/40 text-left">
                     <th className="px-3 py-2 font-medium">Band</th>
                     <th className="px-3 py-2 font-medium">Display Name</th>
-                    <th className="px-3 py-2 font-medium">Performer Rate</th>
+                    <th className="px-3 py-2 font-medium">Rate / person / hr</th>
                     <th className="px-3 py-2 font-medium">Options</th>
                   </tr>
                 </thead>
