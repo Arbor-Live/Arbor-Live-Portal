@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery } from "convex/react";
+import type { FunctionReturnType } from "convex/server";
+import { createColumnHelper } from "@tanstack/react-table";
 import { CheckIcon, CircleNotchIcon, WarningCircleIcon } from "@phosphor-icons/react";
 import { z } from "zod";
 import { api } from "@/lib/convex-api";
@@ -11,6 +13,9 @@ import { TextFormField } from "@/components/forms/text-form-field";
 import { Form } from "@/components/ui/form";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DataTable } from "@/components/ui/data-table";
+import { DataTableColumnHeader } from "@/components/ui/data-table-column-header";
+import { type DataTableFeatures } from "@/components/ui/data-table-features";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -48,9 +53,11 @@ type OrgOption = {
   organizationType?: "arbor_internal" | "band" | "dj" | string;
 };
 
-type AdminUser = NonNullable<ReturnType<typeof useQuery<typeof api.users.listUsersForAdmin>>>[number];
+type AdminUser = FunctionReturnType<typeof api.users.listUsersForAdmin>[number];
 
-type BandOrgRow = NonNullable<ReturnType<typeof useQuery<typeof api.users.listBandOrganizationsAdmin>>>[number];
+type BandOrgRow = FunctionReturnType<typeof api.users.listBandOrganizationsAdmin>[number];
+
+type InviteRow = FunctionReturnType<typeof api.users.listInvitationsAdmin>[number];
 
 type EditingInvite = {
   id: string;
@@ -60,6 +67,10 @@ type EditingInvite = {
   verticals: UserVerticalOption[];
   disciplines: UserDisciplineOption[];
 };
+
+const userColumnHelper = createColumnHelper<DataTableFeatures, AdminUser>();
+const inviteColumnHelper = createColumnHelper<DataTableFeatures, InviteRow>();
+const bandOrgColumnHelper = createColumnHelper<DataTableFeatures, BandOrgRow>();
 
 const NO_DEFAULT_ORG = "__none__";
 
@@ -241,6 +252,127 @@ export function UsersManagementClient({
     });
   }, [users, accessFilter, onboardingFilter, onboardingByUserId]);
 
+  const bandOrgColumns = useMemo(
+    () =>
+      bandOrgColumnHelper.columns([
+        bandOrgColumnHelper.accessor("name", {
+          id: "band",
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Band" />,
+        }),
+        bandOrgColumnHelper.accessor((row) => row.displayName ?? "", {
+          id: "displayName",
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Display Name" />,
+        }),
+        bandOrgColumnHelper.accessor((row) => row.performerHourlyRateUsd ?? 0, {
+          id: "performerRate",
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Performer Rate" />,
+          sortFn: "basic",
+        }),
+        bandOrgColumnHelper.display({
+          id: "options",
+          enableSorting: false,
+          header: "Options",
+        }),
+      ]),
+    [],
+  );
+
+  const userColumns = useMemo(
+    () =>
+      userColumnHelper.columns([
+        userColumnHelper.accessor("name", {
+          id: "name",
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Name" />,
+        }),
+        userColumnHelper.accessor("email", {
+          id: "email",
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Email" />,
+        }),
+        userColumnHelper.accessor("role", {
+          id: "role",
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Role" />,
+        }),
+        userColumnHelper.display({
+          id: "onboarding",
+          enableSorting: false,
+          header: "Onboarding",
+        }),
+        userColumnHelper.accessor("active", {
+          id: "active",
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Active" />,
+        }),
+        userColumnHelper.display({
+          id: "options",
+          enableSorting: false,
+          header: "Options",
+        }),
+      ]),
+    [],
+  );
+
+  const inviteColumns = useMemo(
+    () =>
+      inviteColumnHelper.columns([
+        inviteColumnHelper.accessor("email", {
+          id: "email",
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Email" />,
+          cell: ({ row }) => (
+            <span data-testid={`invite-row-${row.original.id}`}>{row.original.email}</span>
+          ),
+        }),
+        inviteColumnHelper.accessor("organizationName", {
+          id: "organization",
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Organization" />,
+        }),
+        inviteColumnHelper.accessor("role", {
+          id: "role",
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Role" />,
+        }),
+        inviteColumnHelper.accessor("status", {
+          id: "status",
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
+        }),
+        inviteColumnHelper.display({
+          id: "action",
+          enableSorting: false,
+          enableHiding: false,
+          header: "Action",
+          cell: ({ row }) => {
+            const invite = row.original;
+            if (invite.status !== "pending") {
+              return <span className="text-xs text-muted-foreground">—</span>;
+            }
+            return (
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={() => openEditInvite(invite)}>
+                  Edit
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void onResendInvite(invite.id)}
+                >
+                  Resend
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void onCancelInvite(invite)}
+                >
+                  Cancel
+                </Button>
+              </div>
+            );
+          },
+        }),
+      ]),
+    // openEditInvite / onResendInvite / onCancelInvite defined below; stable enough for admin list
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
   async function onCreateOrganization() {
     if (!organizationName.trim()) return;
     try {
@@ -396,32 +528,20 @@ export function UsersManagementClient({
             </label>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="overflow-x-auto rounded-md border">
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="border-b bg-muted/40 text-left">
-                    <th className="px-3 py-2 font-medium">Band</th>
-                    <th className="px-3 py-2 font-medium">Display Name</th>
-                    <th className="px-3 py-2 font-medium">Performer Rate</th>
-                    <th className="px-3 py-2 font-medium">Options</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(bandOrganizations ?? []).map((org) => (
-                    <BandOrgAdminRow
-                      key={org.organizationId}
-                      org={org}
-                      onArchive={() => void onArchiveBandOrganization(org)}
-                      onUnarchive={() => void onUnarchiveBandOrganization(org)}
-                      onDeleteArchived={() => void onDeleteArchivedBandOrganization(org)}
-                    />
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {bandOrganizations?.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No band organizations found yet.</p>
-            ) : null}
+            <DataTable
+              columns={bandOrgColumns}
+              data={bandOrganizations ?? []}
+              getRowId={(row) => row.organizationId}
+              emptyMessage="No band organizations found yet."
+              renderRow={(row) => (
+                <BandOrgAdminRow
+                  org={row.original}
+                  onArchive={() => void onArchiveBandOrganization(row.original)}
+                  onUnarchive={() => void onUnarchiveBandOrganization(row.original)}
+                  onDeleteArchived={() => void onDeleteArchivedBandOrganization(row.original)}
+                />
+              )}
+            />
           </CardContent>
         </Card>
       ) : null}
@@ -534,47 +654,39 @@ export function UsersManagementClient({
                 </Select>
               </div>
             </div>
-            <div className="overflow-x-auto rounded-md border">
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="border-b bg-muted/40 text-left">
-                    <th className="px-3 py-2 font-medium">Name</th>
-                    <th className="px-3 py-2 font-medium">Email</th>
-                    <th className="px-3 py-2 font-medium">Role</th>
-                    <th className="px-3 py-2 font-medium">Onboarding</th>
-                    <th className="px-3 py-2 font-medium">Active</th>
-                    <th className="px-3 py-2 font-medium">Options</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredUsers.map((user) => (
-                    <UserAdminRow
-                      key={user.id}
-                      user={user}
-                      onboarding={onboardingByUserId.get(user.id) ?? null}
-                      orgOptions={orgOptions}
-                      resolvedOrgId={resolvedOrgId}
-                      expanded={Boolean(expandedUserIds[user.id])}
-                      onToggleExpanded={() =>
-                        setExpandedUserIds((prev) => ({ ...prev, [user.id]: !prev[user.id] }))
+            <DataTable
+              columns={userColumns}
+              data={filteredUsers}
+              getRowId={(row) => row.id}
+              initialSorting={[{ id: "name", desc: false }]}
+              emptyMessage={users === undefined ? "Loading users..." : "No users match these filters."}
+              renderRow={(row) => {
+                const user = row.original;
+                return (
+                  <UserAdminRow
+                    user={user}
+                    onboarding={onboardingByUserId.get(user.id) ?? null}
+                    orgOptions={orgOptions}
+                    resolvedOrgId={resolvedOrgId}
+                    expanded={Boolean(expandedUserIds[user.id])}
+                    onToggleExpanded={() =>
+                      setExpandedUserIds((prev) => ({ ...prev, [user.id]: !prev[user.id] }))
+                    }
+                    onPasswordReset={() => void onUserPasswordReset(user)}
+                    onSetAccess={(removed) => void onSetUserAccess(user, removed)}
+                    onWaiveOnboarding={async () => {
+                      try {
+                        await waiveOnboarding({ userId: user.id });
+                        notify.success(`Waived onboarding for ${user.name}.`);
+                      } catch (error) {
+                        notify.error(getConvexErrorMessage(error));
                       }
-                      onPasswordReset={() => void onUserPasswordReset(user)}
-                      onSetAccess={(removed) => void onSetUserAccess(user, removed)}
-                      onWaiveOnboarding={async () => {
-                        try {
-                          await waiveOnboarding({ userId: user.id });
-                          notify.success(`Waived onboarding for ${user.name}.`);
-                        } catch (error) {
-                          notify.error(getConvexErrorMessage(error));
-                        }
-                      }}
-                      onMessage={notify.success}
-                    />
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {users === undefined ? <p className="text-sm text-muted-foreground">Loading users...</p> : null}
+                    }}
+                    onMessage={notify.success}
+                  />
+                );
+              }}
+            />
           </CardContent>
         </Card>
       ) : null}
@@ -611,65 +723,14 @@ export function UsersManagementClient({
                 unless you change the status filter.
               </p>
             </div>
-            <div className="overflow-x-auto rounded-md border">
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="border-b bg-muted/40 text-left">
-                    <th className="px-3 py-2 font-medium">Email</th>
-                    <th className="px-3 py-2 font-medium">Organization</th>
-                    <th className="px-3 py-2 font-medium">Role</th>
-                    <th className="px-3 py-2 font-medium">Status</th>
-                    <th className="px-3 py-2 font-medium">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(invitations ?? []).map((invite) => (
-                    <tr
-                      key={invite.id}
-                      data-testid={`invite-row-${invite.id}`}
-                      className="border-b last:border-b-0"
-                    >
-                      <td className="px-3 py-2">{invite.email}</td>
-                      <td className="px-3 py-2">{invite.organizationName}</td>
-                      <td className="px-3 py-2">{invite.role}</td>
-                      <td className="px-3 py-2">{invite.status}</td>
-                      <td className="px-3 py-2">
-                        <div className="flex flex-wrap gap-2">
-                          {invite.status === "pending" ? (
-                            <>
-                              <Button type="button" variant="outline" size="sm" onClick={() => openEditInvite(invite)}>
-                                Edit
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => void onResendInvite(invite.id)}
-                              >
-                                Resend
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => void onCancelInvite(invite)}
-                              >
-                                Cancel
-                              </Button>
-                            </>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {invitations?.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No invites for this organization yet.</p>
-            ) : null}
+            <DataTable
+              columns={inviteColumns}
+              data={invitations ?? []}
+              getRowId={(row) => row.id}
+              enableColumnVisibility
+              initialSorting={[{ id: "email", desc: false }]}
+              emptyMessage="No invites for this organization yet."
+            />
           </CardContent>
         </Card>
       ) : null}
