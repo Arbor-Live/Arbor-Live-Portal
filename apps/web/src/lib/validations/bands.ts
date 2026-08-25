@@ -19,6 +19,7 @@ export const bandProfileSchema = z.object({
   publicWebsiteUrl: z.string().optional(),
   publicInstagramUrl: z.string().optional(),
   publicYoutubeUrl: z.string().optional(),
+  publicSpotifyUrl: z.string().optional(),
   publicListing: z.boolean().optional(),
   publicSlug: z.string().optional(),
   publicHeroImageUrl: z.string().optional(),

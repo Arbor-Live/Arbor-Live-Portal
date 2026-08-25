@@ -264,7 +264,7 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
         </CardContent>
       </Card>
 
-      {!(quoteData && linkedEvent) ? (
+{!(quoteData && linkedEvent) ? (
         <PublicEventPosterSection portal="request" token={token} />
       ) : null}
 

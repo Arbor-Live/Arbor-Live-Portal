@@ -33,6 +33,7 @@ function valuesFromOrg(org: {
   publicWebsiteUrl: string;
   publicInstagramUrl: string;
   publicYoutubeUrl: string;
+  publicSpotifyUrl: string;
   publicListing: boolean;
   publicSlug: string;
   publicHeroImageUrl: string;
@@ -40,7 +41,7 @@ function valuesFromOrg(org: {
   return {
     displayName: org.displayName ?? "",
     bio: org.bio ?? "",
-    performerHourlyRateUsd: String(org.performerHourlyRateUsd ?? 0),
+    performerHourlyRateUsd: org.performerHourlyRateUsd ?? 0,
     designatedPayeeUserId: org.designatedPayeeUserId ?? "",
     designatedPayeeName: org.designatedPayeeName ?? "",
     designatedPayeeEmail: org.designatedPayeeEmail ?? "",
@@ -52,6 +53,7 @@ function valuesFromOrg(org: {
     publicWebsiteUrl: org.publicWebsiteUrl ?? "",
     publicInstagramUrl: org.publicInstagramUrl ?? "",
     publicYoutubeUrl: org.publicYoutubeUrl ?? "",
+    publicSpotifyUrl: org.publicSpotifyUrl ?? "",
     publicListing: org.publicListing ?? false,
     publicSlug: org.publicSlug ?? "",
     publicHeroImageUrl: org.publicHeroImageUrl ?? "",
@@ -69,7 +71,7 @@ export function AdminBandProfileClient() {
     defaultValues: {
       displayName: "",
       bio: "",
-      performerHourlyRateUsd: "0",
+      performerHourlyRateUsd: 0,
       designatedPayeeUserId: "",
       designatedPayeeName: "",
       designatedPayeeEmail: "",
@@ -78,6 +80,7 @@ export function AdminBandProfileClient() {
       publicWebsiteUrl: "",
       publicInstagramUrl: "",
       publicYoutubeUrl: "",
+      publicSpotifyUrl: "",
       publicListing: false,
       publicSlug: "",
       publicHeroImageUrl: "",
@@ -102,7 +105,7 @@ export function AdminBandProfileClient() {
         organizationId,
         displayName: values.displayName || undefined,
         bio: values.bio || undefined,
-        performerHourlyRateUsd: Number(values.performerHourlyRateUsd || "0"),
+        performerHourlyRateUsd: values.performerHourlyRateUsd,
         designatedPayeeUserId: values.designatedPayeeUserId || undefined,
         designatedPayeeName: values.designatedPayeeName || undefined,
         designatedPayeeEmail: values.designatedPayeeEmail || undefined,
@@ -111,6 +114,7 @@ export function AdminBandProfileClient() {
         publicWebsiteUrl: values.publicWebsiteUrl || undefined,
         publicInstagramUrl: values.publicInstagramUrl || undefined,
         publicYoutubeUrl: values.publicYoutubeUrl || undefined,
+        publicSpotifyUrl: values.publicSpotifyUrl || undefined,
         publicListing: values.publicListing,
         publicSlug: values.publicSlug || undefined,
         publicHeroImageUrl: values.publicHeroImageUrl || undefined,
@@ -163,12 +167,13 @@ export function AdminBandProfileClient() {
                 <div className="grid gap-2 md:grid-cols-2">
                   <TextFormField
                     name="performerHourlyRateUsd"
-                    label="Performer hourly rate (USD)"
+                    label="Rate per person per hour (USD)"
                     type="number"
                   />
                   <TextFormField name="publicWebsiteUrl" label="Website" placeholder="https://..." />
                   <TextFormField name="publicInstagramUrl" label="Instagram URL" />
                   <TextFormField name="publicYoutubeUrl" label="YouTube URL" />
+                  <TextFormField name="publicSpotifyUrl" label="Spotify URL" />
                 </div>
                 <div className="grid gap-2 md:grid-cols-2">
                   <FormField

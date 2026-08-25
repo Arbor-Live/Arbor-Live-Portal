@@ -2,10 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
+import type { FunctionReturnType } from "convex/server";
+import { createColumnHelper, type RowSelectionState } from "@tanstack/react-table";
 import {
-  ArrowsDownUpIcon,
-  ArrowDownIcon,
-  ArrowUpIcon,
   CameraIcon,
   CaretDownIcon,
   CheckIcon,
@@ -18,6 +17,9 @@ import {
 import { api } from "@/lib/convex-api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DataTable } from "@/components/ui/data-table";
+import { DataTableColumnHeader } from "@/components/ui/data-table-column-header";
+import { type DataTableFeatures } from "@/components/ui/data-table-features";
 import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
@@ -53,16 +55,16 @@ function formatTypeDisplay(type: { manufacturer?: string; name: string; model: s
   return maker ? `${maker} ${core}` : core;
 }
 
-type SortKey = "assetId" | "category" | "location";
+type InventoryItemRow = FunctionReturnType<typeof api.inventoryItems.list>["page"][number];
+
+const columnHelper = createColumnHelper<DataTableFeatures, InventoryItemRow>();
 
 export function ItemsManager() {
   const { alert } = useAppDialog();
   const siteBase = (process.env.NEXT_PUBLIC_SITE_URL ?? "").replace(/\/$/, "");
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("");
-  const [sortBy, setSortBy] = useState<SortKey>("assetId");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editorInitial, setEditorInitial] = useState(defaultForm);
   const [damageItemId, setDamageItemId] = useState<string | null>(null);
@@ -95,26 +97,17 @@ export function ItemsManager() {
     scanRaw.trim() ? { raw: scanRaw } : "skip",
   );
 
-  const sortedItems = useMemo(() => {
-    const rows = [...items];
-    rows.sort((a, b) => {
-      const direction = sortDir === "asc" ? 1 : -1;
-      if (sortBy === "category") {
-        return (a.type?.category ?? "").localeCompare(b.type?.category ?? "") * direction;
-      }
-      if (sortBy === "location") {
-        return (a.location?.path ?? "").localeCompare(b.location?.path ?? "") * direction;
-      }
-      return (a.assetId ?? a.serialNumber ?? "").localeCompare(b.assetId ?? b.serialNumber ?? "") * direction;
-    });
-    return rows;
-  }, [items, sortBy, sortDir]);
+  const selectedIds = useMemo(
+    () => Object.keys(rowSelection).filter((id) => rowSelection[id]),
+    [rowSelection],
+  );
+
   const itemLookup = useMemo(() => {
     const map = new Map<
       string,
       { assetId: string; name: string; category: string }
     >();
-    for (const item of sortedItems) {
+    for (const item of items) {
       map.set(item._id, {
         assetId: inventoryItemLabel(item),
         name: `${item.type?.name ?? "Unknown"} ${item.type?.model ?? ""}`.trim(),
@@ -130,7 +123,8 @@ export function ItemsManager() {
       });
     }
     return map;
-  }, [itemSummaries, sortedItems]);
+  }, [itemSummaries, items]);
+
   /** Children by parent — from summaries so list query skips per-row child scans. */
   const childrenByParentId = useMemo(() => {
     const map = new Map<string, Array<{ _id: string; assetId?: string; serialNumber?: string }>>();
@@ -153,19 +147,10 @@ export function ItemsManager() {
     return toCategoryOptions(categories).find((entry) => entry.value === category)?.label ?? category;
   }, [categories, category]);
 
-  function toggleSort(next: SortKey) {
-    if (sortBy === next) {
-      setSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
-    } else {
-      setSortBy(next);
-      setSortDir("asc");
-    }
-  }
-
   async function bulkDeleteSelected() {
     try {
       await Promise.all(selectedIds.map((id) => removeItem({ id: id as never })));
-      setSelectedIds([]);
+      setRowSelection({});
     } catch (error) {
       await alert(getConvexErrorMessage(error, "Could not delete selected items."));
     }
@@ -179,7 +164,7 @@ export function ItemsManager() {
     window.setTimeout(() => row.classList.remove("bg-muted/70"), 1200);
   }
 
-  function beginEdit(item: (typeof sortedItems)[number]) {
+  function beginEdit(item: InventoryItemRow) {
     setEditingId(item._id);
     setEditorInitial({
       assetId: item.assetId ?? "",
@@ -216,9 +201,7 @@ export function ItemsManager() {
     const row = rowRefs.current.get(pendingSelectId);
     if (row) {
       scrollToItemRow(pendingSelectId);
-      setSelectedIds((prev) =>
-        prev.includes(pendingSelectId) ? prev : [...prev, pendingSelectId],
-      );
+      setRowSelection((prev) => ({ ...prev, [pendingSelectId]: true }));
       setPendingSelectId(null);
     }
   }, [items, pendingSelectId]);
@@ -242,30 +225,153 @@ export function ItemsManager() {
     );
   }
 
-  function renderSortableHeader(label: string, sortKey: SortKey) {
-    const active = sortBy === sortKey;
-    return (
-      <th className="p-2 text-left">
-        <button
-          type="button"
-          onClick={() => toggleSort(sortKey)}
-          className="inline-flex items-center gap-1 transition-colors hover:text-foreground"
-          aria-label={`Sort by ${label}`}
-        >
-          {label}
-          {active ? (
-            sortDir === "asc" ? (
-              <ArrowUpIcon className="size-3" />
-            ) : (
-              <ArrowDownIcon className="size-3" />
-            )
-          ) : (
-            <ArrowsDownUpIcon className="size-3 opacity-40" />
-          )}
-        </button>
-      </th>
-    );
-  }
+  const columns = columnHelper.columns([
+    columnHelper.display({
+      id: "select",
+      enableHiding: false,
+      enableSorting: false,
+      header: ({ table }) => (
+        <input
+          type="checkbox"
+          checked={table.getIsAllRowsSelected()}
+          ref={(element) => {
+            if (element) element.indeterminate = table.getIsSomeRowsSelected();
+          }}
+          onChange={(event) => table.toggleAllRowsSelected(event.target.checked)}
+          aria-label="Select all"
+        />
+      ),
+      cell: ({ row }) => (
+        <input
+          type="checkbox"
+          checked={row.getIsSelected()}
+          onChange={(event) => row.toggleSelected(event.target.checked)}
+          aria-label="Select row"
+        />
+      ),
+    }),
+    columnHelper.accessor((row) => row.assetId ?? row.serialNumber ?? "", {
+      id: "assetId",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Asset" />,
+      cell: ({ row }) => {
+        const item = row.original;
+        return (
+          <div>
+            <div className="font-medium">{item.assetId ?? "No ID"}</div>
+            <div className="text-xs text-muted-foreground">Serial: {item.serialNumber || "-"}</div>
+            {item.assetId ? (
+              <div className="mt-1 text-xs">
+                <a
+                  className="underline"
+                  href={`${siteBase}/e/${encodeURIComponent(item.assetId)}`}
+                  target="_blank"
+                >
+                  Public /e link
+                </a>
+              </div>
+            ) : null}
+          </div>
+        );
+      },
+    }),
+    columnHelper.accessor((row) => row.type?.category ?? "", {
+      id: "category",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Type" />,
+      cell: ({ row }) => (
+        <div>
+          {formatTypeDisplay(row.original.type)}
+          <div className="text-xs text-muted-foreground">{row.original.type?.category}</div>
+        </div>
+      ),
+    }),
+    columnHelper.accessor((row) => row.location?.path ?? "", {
+      id: "location",
+      header: ({ column }) => <DataTableColumnHeader column={column} title="Location" />,
+      cell: ({ getValue }) => getValue() || "-",
+    }),
+    columnHelper.display({
+      id: "container",
+      enableSorting: false,
+      header: "Container",
+      cell: ({ row }) => {
+        const item = row.original;
+        const children = childrenByParentId.get(item._id) ?? [];
+        return (
+          <div>
+            <div>
+              In:{" "}
+              {item.containedInAsset
+                ? renderItemChip(item.containedInAsset._id, item.containedInAsset.assetId)
+                : "-"}
+            </div>
+            <div className="text-xs text-muted-foreground">Contains: {children.length}</div>
+            {children.length ? (
+              <div className="mt-1 flex flex-wrap gap-1">
+                {children.map((child) => (
+                  <span key={child._id}>{renderItemChip(child._id, child.assetId)}</span>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        );
+      },
+    }),
+    columnHelper.display({
+      id: "actions",
+      enableHiding: false,
+      enableSorting: false,
+      header: "Actions",
+      cell: ({ row }) => {
+        const item = row.original;
+        return (
+          <div className="flex items-center gap-1.5">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  size="icon-sm"
+                  variant="outline"
+                  aria-label="Edit"
+                  onClick={() => beginEdit(item)}
+                >
+                  <PencilSimpleIcon className="size-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Edit</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  size="icon-sm"
+                  variant="outline"
+                  aria-label="Damage"
+                  onClick={() => setDamageItemId(item._id)}
+                >
+                  <WarningCircleIcon className="size-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Report damage</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  size="icon-sm"
+                  variant="destructive"
+                  aria-label="Delete"
+                  onClick={() => void removeItem({ id: item._id })}
+                >
+                  <TrashIcon className="size-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Delete</TooltipContent>
+            </Tooltip>
+          </div>
+        );
+      },
+    }),
+  ]);
 
   return (
     <TooltipProvider delayDuration={0}>
@@ -350,144 +456,27 @@ export function ItemsManager() {
             ) : null}
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="overflow-auto rounded-md border">
-              <table className="min-w-full text-sm">
-                <thead className="bg-muted/50">
-                  <tr>
-                    <th className="p-2 text-left">
-                      <input
-                        type="checkbox"
-                        checked={sortedItems.length > 0 && selectedIds.length === sortedItems.length}
-                        onChange={(event) =>
-                          setSelectedIds(event.target.checked ? sortedItems.map((item) => item._id) : [])
-                        }
-                      />
-                    </th>
-                    {renderSortableHeader("Asset", "assetId")}
-                    {renderSortableHeader("Type", "category")}
-                    {renderSortableHeader("Location", "location")}
-                    <th className="p-2 text-left">Container</th>
-                    <th className="p-2 text-left">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sortedItems.map((item) => (
-                    <tr
-                      key={item._id}
-                      data-testid={`item-row-${item._id}`}
-                      className="border-t align-top transition-colors"
-                      ref={(element) => {
-                        if (!element) {
-                          rowRefs.current.delete(item._id);
-                          return;
-                        }
-                        rowRefs.current.set(item._id, element);
-                      }}
-                    >
-                      <td className="p-2">
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.includes(item._id)}
-                          onChange={(event) =>
-                            setSelectedIds((prev) =>
-                              event.target.checked
-                                ? [...prev, item._id]
-                                : prev.filter((id) => id !== item._id),
-                            )
-                          }
-                        />
-                      </td>
-                      <td className="p-2">
-                        <div className="font-medium">{item.assetId ?? "No ID"}</div>
-                        <div className="text-xs text-muted-foreground">Serial: {item.serialNumber || "-"}</div>
-                        {item.assetId ? (
-                          <div className="mt-1 text-xs">
-                            <a
-                              className="underline"
-                              href={`${siteBase}/e/${encodeURIComponent(item.assetId)}`}
-                              target="_blank"
-                            >
-                              Public /e link
-                            </a>
-                          </div>
-                        ) : null}
-                      </td>
-                      <td className="p-2">
-                        {formatTypeDisplay(item.type)}
-                        <div className="text-xs text-muted-foreground">{item.type?.category}</div>
-                      </td>
-                      <td className="p-2">{item.location?.path || "-"}</td>
-                      <td className="p-2">
-                        <div>
-                          In:{" "}
-                          {item.containedInAsset
-                            ? renderItemChip(item.containedInAsset._id, item.containedInAsset.assetId)
-                            : "-"}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          Contains: {(childrenByParentId.get(item._id) ?? []).length}
-                        </div>
-                        {(childrenByParentId.get(item._id) ?? []).length ? (
-                          <div className="mt-1 flex flex-wrap gap-1">
-                            {(childrenByParentId.get(item._id) ?? []).map((child) => (
-                              <span key={child._id}>
-                                {renderItemChip(child._id, child.assetId)}
-                              </span>
-                            ))}
-                          </div>
-                        ) : null}
-                      </td>
-                      <td className="p-2">
-                        <div className="flex items-center gap-1.5">
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                type="button"
-                                size="icon-sm"
-                                variant="outline"
-                                aria-label="Edit"
-                                onClick={() => beginEdit(item)}
-                              >
-                                <PencilSimpleIcon className="size-3.5" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>Edit</TooltipContent>
-                          </Tooltip>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                type="button"
-                                size="icon-sm"
-                                variant="outline"
-                                aria-label="Damage"
-                                onClick={() => setDamageItemId(item._id)}
-                              >
-                                <WarningCircleIcon className="size-3.5" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>Report damage</TooltipContent>
-                          </Tooltip>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                type="button"
-                                size="icon-sm"
-                                variant="destructive"
-                                aria-label="Delete"
-                                onClick={() => void removeItem({ id: item._id })}
-                              >
-                                <TrashIcon className="size-3.5" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>Delete</TooltipContent>
-                          </Tooltip>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <DataTable
+              columns={columns}
+              data={items}
+              getRowId={(row) => row._id}
+              enableRowSelection
+              enableColumnVisibility
+              rowSelection={rowSelection}
+              onRowSelectionChange={setRowSelection}
+              initialSorting={[{ id: "assetId", desc: false }]}
+              emptyMessage="No inventory items found."
+              getRowProps={(row) => ({
+                "data-testid": `item-row-${row.original._id}`,
+                ref: (element: HTMLTableRowElement | null) => {
+                  if (!element) {
+                    rowRefs.current.delete(row.original._id);
+                    return;
+                  }
+                  rowRefs.current.set(row.original._id, element);
+                },
+              })}
+            />
             {itemsStatus === "CanLoadMore" || itemsStatus === "LoadingMore" ? (
               <Button
                 type="button"

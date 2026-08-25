@@ -1,14 +1,25 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "convex/react";
+import type { FunctionReturnType } from "convex/server";
+import { createColumnHelper } from "@tanstack/react-table";
 import { api } from "@/lib/convex-api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DataTable } from "@/components/ui/data-table";
+import { DataTableColumnHeader } from "@/components/ui/data-table-column-header";
+import { type DataTableFeatures } from "@/components/ui/data-table-features";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
+
+type TimecardOverviewRow = FunctionReturnType<
+  typeof api.timecards.listCrewTimecardOverview
+>["rows"][number];
+
+const columnHelper = createColumnHelper<DataTableFeatures, TimecardOverviewRow>();
 
 function statusBadgeClass(status: "open" | "due" | "past_due") {
   switch (status) {
@@ -36,6 +47,62 @@ export function AdminTimecardsOverviewClient() {
   const [now] = useState(() => Date.now());
   const [periodIndex, setPeriodIndex] = useState(0);
   const overview = useQuery(api.timecards.listCrewTimecardOverview, { now, periodIndex });
+
+  const columns = useMemo(
+    () =>
+      columnHelper.columns([
+        columnHelper.accessor("name", {
+          id: "crew",
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Crew member" />,
+          cell: ({ row }) => (
+            <div>
+              <p className="font-medium">{row.original.name}</p>
+              <p className="text-xs text-muted-foreground">{row.original.email}</p>
+            </div>
+          ),
+        }),
+        columnHelper.accessor("daysWorked", {
+          id: "daysWorked",
+          header: ({ column }) => (
+            <DataTableColumnHeader column={column} title="Days worked" className="justify-end" />
+          ),
+          cell: ({ getValue }) => <div className="text-right">{getValue()}</div>,
+          sortFn: "basic",
+        }),
+        columnHelper.accessor("totalActualHours", {
+          id: "hoursWorked",
+          header: ({ column }) => (
+            <DataTableColumnHeader column={column} title="Hours worked" className="justify-end" />
+          ),
+          cell: ({ getValue }) => <div className="text-right">{getValue().toFixed(2)}</div>,
+          sortFn: "basic",
+        }),
+        columnHelper.accessor("totalInputHours", {
+          id: "hoursToInput",
+          header: ({ column }) => (
+            <DataTableColumnHeader column={column} title="Hours to input" className="justify-end" />
+          ),
+          cell: ({ getValue }) => (
+            <div className="text-right font-medium">{getValue().toFixed(2)}</div>
+          ),
+          sortFn: "basic",
+        }),
+        columnHelper.display({
+          id: "actions",
+          enableSorting: false,
+          enableHiding: false,
+          header: () => null,
+          cell: ({ row }) => (
+            <div className="text-right">
+              <Button variant="outline" size="sm" asChild>
+                <Link href={`/dashboard/users/timecards/${row.original.userId}`}>View</Link>
+              </Button>
+            </div>
+          ),
+        }),
+      ]),
+    [],
+  );
 
   return (
     <div className="space-y-4">
@@ -79,43 +146,13 @@ export function AdminTimecardsOverviewClient() {
             </span>
           </CardHeader>
           <CardContent>
-            {overview.rows.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No active crew profiles found.</p>
-            ) : (
-              <div className="overflow-x-auto rounded-md border">
-                <table className="w-full text-sm">
-                  <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
-                    <tr>
-                      <th className="px-3 py-2 font-medium">Crew member</th>
-                      <th className="px-3 py-2 font-medium text-right">Days worked</th>
-                      <th className="px-3 py-2 font-medium text-right">Hours worked</th>
-                      <th className="px-3 py-2 font-medium text-right">Hours to input</th>
-                      <th className="px-3 py-2 font-medium" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {overview.rows.map((row) => (
-                      <tr key={row.userId} className="border-t">
-                        <td className="px-3 py-2">
-                          <p className="font-medium">{row.name}</p>
-                          <p className="text-xs text-muted-foreground">{row.email}</p>
-                        </td>
-                        <td className="px-3 py-2 text-right">{row.daysWorked}</td>
-                        <td className="px-3 py-2 text-right">{row.totalActualHours.toFixed(2)}</td>
-                        <td className="px-3 py-2 text-right font-medium">
-                          {row.totalInputHours.toFixed(2)}
-                        </td>
-                        <td className="px-3 py-2 text-right">
-                          <Button variant="outline" size="sm" asChild>
-                            <Link href={`/dashboard/users/timecards/${row.userId}`}>View</Link>
-                          </Button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+            <DataTable
+              columns={columns}
+              data={overview.rows}
+              getRowId={(row) => row.userId}
+              initialSorting={[{ id: "hoursToInput", desc: true }]}
+              emptyMessage="No active crew profiles found."
+            />
           </CardContent>
         </Card>
       )}
