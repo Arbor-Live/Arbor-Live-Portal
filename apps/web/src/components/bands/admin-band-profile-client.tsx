@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
 import { FormSaveBar } from "@/components/forms";
@@ -20,10 +20,19 @@ import {
 } from "@/lib/band-payout-copy";
 import { bandOrgProfileSchema, type BandOrgProfileFormValues } from "@/lib/validations/users";
 import { useAdminBandSelection } from "@/components/bands/admin-band-selection";
+import { bandListingFieldsFromProfile, bandListingFieldsToMutation } from "@/lib/band-profile-lists";
+import { BandListingProfileFields } from "@/components/bands/band-listing-profile-fields";
 
 function valuesFromOrg(org: {
   displayName: string;
   bio: string;
+  oneLiner: string;
+  genres: string[];
+  demoURL: string;
+  bandMembers: string[];
+  mainContactName: string;
+  mainContactEmail: string;
+  mainContactPhone: string;
   performerHourlyRateUsd: number;
   designatedPayeeUserId: string;
   designatedPayeeName: string;
@@ -41,6 +50,7 @@ function valuesFromOrg(org: {
   return {
     displayName: org.displayName ?? "",
     bio: org.bio ?? "",
+    ...bandListingFieldsFromProfile(org),
     performerHourlyRateUsd: org.performerHourlyRateUsd ?? 0,
     designatedPayeeUserId: org.designatedPayeeUserId ?? "",
     designatedPayeeName: org.designatedPayeeName ?? "",
@@ -65,12 +75,20 @@ export function AdminBandProfileClient() {
   const bands = useQuery(api.users.listBandOrganizationsAdmin, { includeArchived: false });
   const updateBand = useMutation(api.users.updateBandOrganizationProfileAdmin);
   const org = bands?.find((row) => row.organizationId === organizationId);
+  const hydratedOrganizationId = useRef<string | null>(null);
 
   const form = useConvexForm<BandOrgProfileFormValues>({
     schema: bandOrgProfileSchema,
     defaultValues: {
       displayName: "",
       bio: "",
+      oneLiner: "",
+      genres: "",
+      demoURL: "",
+      bandMembers: "",
+      mainContactName: "",
+      mainContactEmail: "",
+      mainContactPhone: "",
       performerHourlyRateUsd: 0,
       designatedPayeeUserId: "",
       designatedPayeeName: "",
@@ -89,13 +107,20 @@ export function AdminBandProfileClient() {
   });
 
   useEffect(() => {
-    if (!org || form.formState.isDirty) return;
+    if (!organizationId || !org) return;
+    const switchedBand = hydratedOrganizationId.current !== organizationId;
+    // Switching bands must always reload. Same-band server refreshes keep dirty edits.
+    if (!switchedBand && form.formState.isDirty) return;
+    hydratedOrganizationId.current = organizationId;
     form.reset(valuesFromOrg(org));
-  }, [org, form]);
+  }, [organizationId, org, form]);
 
   const onSave = form.submitMutation(
     async (values) => {
       if (!organizationId) throw new Error("Select a band first.");
+      if (!org || org.organizationId !== organizationId) {
+        throw new Error("Selected band is still loading. Wait a moment and try again.");
+      }
       const payoutMethod =
         values.designatedPayeePayoutMethod === "pickup" ||
         values.designatedPayeePayoutMethod === "delivery"
@@ -105,6 +130,7 @@ export function AdminBandProfileClient() {
         organizationId,
         displayName: values.displayName || undefined,
         bio: values.bio || undefined,
+        ...bandListingFieldsToMutation(values),
         performerHourlyRateUsd: values.performerHourlyRateUsd,
         designatedPayeeUserId: values.designatedPayeeUserId || undefined,
         designatedPayeeName: values.designatedPayeeName || undefined,
@@ -164,6 +190,7 @@ export function AdminBandProfileClient() {
               <div className="space-y-3">
                 <TextFormField name="displayName" label="Display Name" />
                 <TextareaFormField name="bio" label="Bio" />
+                <BandListingProfileFields />
                 <div className="grid gap-2 md:grid-cols-2">
                   <TextFormField
                     name="performerHourlyRateUsd"

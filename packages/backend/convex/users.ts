@@ -94,6 +94,84 @@ function getRecordId(row: { id?: string; _id?: string } | null | undefined) {
   return row?.id ?? row?._id ?? "";
 }
 
+function normalizeStringList(values: string[] | undefined) {
+  return values?.map((value) => value.trim()).filter(Boolean);
+}
+
+const bandListingProfilePatchArgs = {
+  oneLiner: v.optional(v.string()),
+  genres: v.optional(v.array(v.string())),
+  demoURL: v.optional(v.string()),
+  bandMembers: v.optional(v.array(v.string())),
+  mainContactName: v.optional(v.string()),
+  mainContactEmail: v.optional(v.string()),
+  mainContactPhone: v.optional(v.string()),
+};
+
+function patchBandListingProfileFields(
+  existing: {
+    oneLiner?: string;
+    genres?: string[];
+    demoURL?: string;
+    bandMembers?: string[];
+    mainContactName?: string;
+    mainContactEmail?: string;
+    mainContactPhone?: string;
+  },
+  args: {
+    oneLiner?: string;
+    genres?: string[];
+    demoURL?: string;
+    bandMembers?: string[];
+    mainContactName?: string;
+    mainContactEmail?: string;
+    mainContactPhone?: string;
+  },
+) {
+  return {
+    oneLiner:
+      args.oneLiner !== undefined ? args.oneLiner.trim() || undefined : existing.oneLiner,
+    genres: args.genres !== undefined ? normalizeStringList(args.genres) : existing.genres,
+    demoURL: args.demoURL !== undefined ? args.demoURL.trim() || undefined : existing.demoURL,
+    bandMembers:
+      args.bandMembers !== undefined
+        ? normalizeStringList(args.bandMembers)
+        : existing.bandMembers,
+    mainContactName:
+      args.mainContactName !== undefined
+        ? args.mainContactName.trim() || undefined
+        : existing.mainContactName,
+    mainContactEmail:
+      args.mainContactEmail !== undefined
+        ? args.mainContactEmail.trim().toLowerCase() || undefined
+        : existing.mainContactEmail,
+    mainContactPhone:
+      args.mainContactPhone !== undefined
+        ? args.mainContactPhone.trim() || undefined
+        : existing.mainContactPhone,
+  };
+}
+
+function serializeBandListingProfileFields(profile: {
+  oneLiner?: string;
+  genres?: string[];
+  demoURL?: string;
+  bandMembers?: string[];
+  mainContactName?: string;
+  mainContactEmail?: string;
+  mainContactPhone?: string;
+} | null | undefined) {
+  return {
+    oneLiner: profile?.oneLiner ?? "",
+    genres: profile?.genres ?? [],
+    demoURL: profile?.demoURL ?? "",
+    bandMembers: profile?.bandMembers ?? [],
+    mainContactName: profile?.mainContactName ?? "",
+    mainContactEmail: profile?.mainContactEmail ?? "",
+    mainContactPhone: profile?.mainContactPhone ?? "",
+  };
+}
+
 function toSlug(input: string): string {
   return input
     .toLowerCase()
@@ -417,6 +495,7 @@ export const listBandOrganizationsAdmin = query({
           publicListing: profile?.publicListing ?? false,
           publicSlug: profile?.publicSlug ?? "",
           publicHeroImageUrl: profile?.publicHeroImageUrl ?? "",
+          ...serializeBandListingProfileFields(profile),
         };
       })
       .filter((organization) => organization.organizationType === "band" || organization.organizationType === "dj")
@@ -496,6 +575,7 @@ export const updateBandOrganizationProfileAdmin = mutation({
     publicListing: v.optional(v.boolean()),
     publicSlug: v.optional(v.string()),
     publicHeroImageUrl: v.optional(v.string()),
+    ...bandListingProfilePatchArgs,
   },
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
@@ -557,6 +637,7 @@ export const updateBandOrganizationProfileAdmin = mutation({
         publicListing: publicListing ?? existing.publicListing,
         publicSlug: publicSlug ?? (publicListing === false ? undefined : existing.publicSlug),
         publicHeroImageUrl: normalizeOptionalAssetReference(args.publicHeroImageUrl),
+        ...patchBandListingProfileFields(existing, args),
         updatedAt: now,
       });
       await ctx.runMutation(internal.bandPayments.refreshPendingPayeePaymentsForOrg, {
@@ -582,6 +663,7 @@ export const updateBandOrganizationProfileAdmin = mutation({
       publicListing: publicListing ?? false,
       publicSlug: publicListing ? publicSlug : undefined,
       publicHeroImageUrl: normalizeOptionalAssetReference(args.publicHeroImageUrl),
+      ...patchBandListingProfileFields({}, args),
       updatedAt: now,
     });
     await ctx.runMutation(internal.bandPayments.refreshPendingPayeePaymentsForOrg, {
@@ -1994,10 +2076,10 @@ export const getActiveBandProfile = query({
       publicInstagramUrl: profile?.publicInstagramUrl ?? "",
       publicYoutubeUrl: profile?.publicYoutubeUrl ?? "",
       publicSpotifyUrl: profile?.publicSpotifyUrl ?? "",
-      demoURL: profile?.demoURL ?? "",
       publicListing: profile?.publicListing ?? false,
       publicSlug: profile?.publicSlug ?? "",
       publicHeroImageUrl: profile?.publicHeroImageUrl ?? "",
+      ...serializeBandListingProfileFields(profile),
     };
   },
 });
@@ -2022,6 +2104,7 @@ export const updateActiveBandProfile = mutation({
     publicListing: v.optional(v.boolean()),
     publicSlug: v.optional(v.string()),
     publicHeroImageUrl: v.optional(v.string()),
+    ...bandListingProfilePatchArgs,
   },
   handler: async (ctx, args) => {
     const context = await requireBandContext(ctx);
@@ -2098,6 +2181,7 @@ export const updateActiveBandProfile = mutation({
           args.publicHeroImageUrl !== undefined
             ? normalizeOptionalAssetReference(args.publicHeroImageUrl)
             : existing.publicHeroImageUrl,
+        ...patchBandListingProfileFields(existing, args),
         updatedAt: now,
       });
       await ctx.runMutation(internal.bandPayments.refreshPendingPayeePaymentsForOrg, {
@@ -2124,6 +2208,7 @@ export const updateActiveBandProfile = mutation({
       publicListing: publicListing ?? false,
       publicSlug: publicListing ? publicSlug : undefined,
       publicHeroImageUrl: normalizeOptionalAssetReference(args.publicHeroImageUrl),
+      ...patchBandListingProfileFields({}, args),
       updatedAt: now,
     });
     await ctx.runMutation(internal.bandPayments.refreshPendingPayeePaymentsForOrg, {

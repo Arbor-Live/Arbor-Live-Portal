@@ -15,12 +15,16 @@ import {
 } from "@/components/bands/admin-band-selection";
 
 function BandsAndPerformersBody() {
-  const { isAdminManaging } = useAdminBandSelection();
+  const { isAdminManaging, organizationId } = useAdminBandSelection();
 
   return (
     <>
       <AdminBandPickerCard />
-      {isAdminManaging ? <AdminBandProfileClient /> : <BandSelfServiceClient />}
+      {isAdminManaging ? (
+        <AdminBandProfileClient key={organizationId ?? "none"} />
+      ) : (
+        <BandSelfServiceClient />
+      )}
     </>
   );
 }
