@@ -19,6 +19,8 @@ import {
   type BandInviteFormValues,
   type BandProfileFormValues,
 } from "@/lib/validations/bands";
+import { bandListingFieldsFromProfile, bandListingFieldsToMutation } from "@/lib/band-profile-lists";
+import { BandListingProfileFields } from "@/components/bands/band-listing-profile-fields";
 
 export function BandSelfServiceClient() {
   const profile = useQuery(api.users.getActiveBandProfile, {});
@@ -36,6 +38,13 @@ export function BandSelfServiceClient() {
     defaultValues: {
       displayName: "",
       bio: "",
+      oneLiner: "",
+      genres: "",
+      demoURL: "",
+      bandMembers: "",
+      mainContactName: "",
+      mainContactEmail: "",
+      mainContactPhone: "",
       performerHourlyRateUsd: 0,
       publicWebsiteUrl: "",
       publicInstagramUrl: "",
@@ -60,6 +69,7 @@ export function BandSelfServiceClient() {
     profileForm.reset({
       displayName: profile.displayName ?? "",
       bio: profile.bio ?? "",
+      ...bandListingFieldsFromProfile(profile),
       performerHourlyRateUsd: profile.performerHourlyRateUsd ?? 0,
       publicWebsiteUrl: profile.publicWebsiteUrl ?? "",
       publicInstagramUrl: profile.publicInstagramUrl ?? "",
@@ -75,6 +85,7 @@ export function BandSelfServiceClient() {
     await updateProfile({
       displayName: values.displayName,
       bio: values.bio || undefined,
+      ...bandListingFieldsToMutation(values),
       performerHourlyRateUsd: values.performerHourlyRateUsd,
       // Preserve payee fields managed on the Payments tab.
       designatedPayeeUserId: profile?.designatedPayeeUserId,
@@ -159,6 +170,7 @@ export function BandSelfServiceClient() {
               <div className="space-y-3">
                 <TextFormField name="displayName" label="Display Name" />
                 <TextareaFormField name="bio" label="Bio" />
+                <BandListingProfileFields />
                 <div className="grid gap-2 md:grid-cols-2">
                   <TextFormField
                     name="performerHourlyRateUsd"
@@ -384,6 +396,7 @@ export function BandSelfServiceClient() {
           profileForm.reset({
             displayName: profile.displayName ?? "",
             bio: profile.bio ?? "",
+            ...bandListingFieldsFromProfile(profile),
             performerHourlyRateUsd: profile.performerHourlyRateUsd ?? 0,
             publicWebsiteUrl: profile.publicWebsiteUrl ?? "",
             publicInstagramUrl: profile.publicInstagramUrl ?? "",

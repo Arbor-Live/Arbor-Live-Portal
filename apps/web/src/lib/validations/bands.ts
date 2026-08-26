@@ -15,6 +15,13 @@ export type BandPayeeFormValues = z.infer<typeof bandPayeeSchema>;
 export const bandProfileSchema = z.object({
   displayName: z.string().min(1, "Display name is required"),
   bio: z.string().optional(),
+  oneLiner: z.string().optional(),
+  genres: z.string().optional(),
+  demoURL: z.string().optional(),
+  bandMembers: z.string().optional(),
+  mainContactName: z.string().optional(),
+  mainContactEmail: z.string().optional(),
+  mainContactPhone: z.string().optional(),
   performerHourlyRateUsd: z.coerce.number().min(0, "Rate must be non-negative"),
   publicWebsiteUrl: z.string().optional(),
   publicInstagramUrl: z.string().optional(),

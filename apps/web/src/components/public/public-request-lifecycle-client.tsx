@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import Link from "next/link";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,6 +21,7 @@ import { PublicPostEventSection } from "@/components/public/public-post-event-se
 import { PublicStaffDashboardLinks } from "@/components/public/public-staff-dashboard-links";
 import { PublicEventPosterSection } from "@/components/public/public-event-poster-section";
 import { formatDateTime, formatUsd } from "@/lib/format";
+import { ARBOR_CONTACT_EMAIL } from "@/lib/landing-content";
 import type {
   PublicPaymentContactsFormValues,
   PublicQuoteApprovalFormValues,
@@ -41,12 +43,20 @@ type LifecycleStep = {
 function buildLifecycleSteps(request: {
   status: string;
   quote?: {
+    status: "draft" | "finalized" | "void";
     readyForClientReview: boolean;
     clientApprovalStatus: "pending" | "approved" | "changes_requested";
   };
 }): LifecycleStep[] {
   if (request.status === "declined") {
     return [{ key: "declined", label: "Request declined", complete: true, active: true }];
+  }
+
+  if (request.quote?.status === "void") {
+    return [
+      { key: "submitted", label: "Request received", complete: true, active: false },
+      { key: "voided", label: "Quote voided — request finalized", complete: true, active: true },
+    ];
   }
 
   const quoteReady = request.quote?.readyForClientReview ?? false;
@@ -124,6 +134,8 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
 
   const lifecycleSteps = buildLifecycleSteps(request);
   const isDeclined = request.status === "declined";
+  const isQuoteVoided = request.quote?.status === "void";
+  const isFinalized = isDeclined || isQuoteVoided;
   const quoteLocked = quoteData ? quoteData.invoice.clientApprovalStatus !== "pending" : false;
   const linkedEvent = quoteData?.event ?? null;
   const showPaymentContacts =
@@ -156,11 +168,16 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
     });
   };
 
-  const heroSubtitle =
-    request.eventName ??
-    (request.quote?.readyForClientReview
-      ? "Your quote is ready for review."
-      : "Follow your request from submission through quote approval.");
+  const statusLabel = isQuoteVoided
+    ? "Finalized"
+    : (STATUS_LABELS[request.status] ?? request.status);
+
+  const heroSubtitle = isQuoteVoided
+    ? "This quote has been voided. This request is finalized."
+    : (request.eventName ??
+      (request.quote?.readyForClientReview
+        ? "Your quote is ready for review."
+        : "Follow your request from submission through quote approval."));
 
   return (
     <PublicSiteChrome>
@@ -183,7 +200,7 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
         <CardContent className="space-y-3 text-sm">
           <p>
             Status:{" "}
-            <span className="font-medium">{STATUS_LABELS[request.status] ?? request.status}</span>
+            <span className="font-medium">{statusLabel}</span>
           </p>
           <p className="text-muted-foreground">
             Submitted {formatDateTime(request.submittedAt)}
@@ -214,16 +231,18 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
           {request.quote ? (
             <p>
               Quote {request.quote.invoiceNumber}
-              {request.quote.readyForClientReview
-                ? request.quote.clientApprovalStatus === "approved"
-                  ? " · Approved"
-                  : request.quote.clientApprovalStatus === "changes_requested"
-                    ? " · Changes requested"
-                    : " · Ready for your review"
-                : " · Being prepared"}
+              {request.quote.status === "void"
+                ? " · Voided"
+                : request.quote.readyForClientReview
+                  ? request.quote.clientApprovalStatus === "approved"
+                    ? " · Approved"
+                    : request.quote.clientApprovalStatus === "changes_requested"
+                      ? " · Changes requested"
+                      : " · Ready for your review"
+                  : " · Being prepared"}
             </p>
           ) : null}
-          {request.expectedTurnout >= 200 ? (
+          {request.expectedTurnout >= 200 && !isFinalized ? (
             <p className="rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-amber-800">
               Campus sensation ({request.expectedTurnout} guests). Our team will follow up with extra
               coordination steps.
@@ -239,8 +258,45 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
         <CardContent className="space-y-3">
           {isDeclined ? (
             <p className="text-sm text-muted-foreground">
-              This request was declined. Contact arborlive@stanford.edu if you have questions.
+              This request was declined. Contact {ARBOR_CONTACT_EMAIL} if you have questions.
             </p>
+          ) : isQuoteVoided ? (
+            <>
+              <p className="text-sm text-muted-foreground">
+                This quote has been voided and the request is finalized. If you&apos;d like to get
+                in touch or submit a new booking request, email{" "}
+                <a
+                  href={`mailto:${ARBOR_CONTACT_EMAIL}`}
+                  className="font-medium text-foreground underline underline-offset-2"
+                >
+                  {ARBOR_CONTACT_EMAIL}
+                </a>{" "}
+                or{" "}
+                <Link
+                  href="/request"
+                  className="font-medium text-foreground underline underline-offset-2"
+                >
+                  submit a new request
+                </Link>
+                .
+              </p>
+              {lifecycleSteps.map((step, index) => (
+                <div key={step.key} className="flex items-center gap-3 text-sm">
+                  <span
+                    className={`flex size-6 items-center justify-center rounded-full border text-xs ${
+                      step.complete
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "text-muted-foreground"
+                    }`}
+                  >
+                    {index + 1}
+                  </span>
+                  <span className={step.complete || step.active ? "font-medium" : "text-muted-foreground"}>
+                    {step.label}
+                  </span>
+                </div>
+              ))}
+            </>
           ) : (
             lifecycleSteps.map((step, index) => (
               <div key={step.key} className="flex items-center gap-3 text-sm">
@@ -264,11 +320,11 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
         </CardContent>
       </Card>
 
-{!(quoteData && linkedEvent) ? (
+      {!isQuoteVoided && !(quoteData && linkedEvent) ? (
         <PublicEventPosterSection portal="request" token={token} />
       ) : null}
 
-      {quoteData ? (
+      {quoteData && !isQuoteVoided ? (
         <>
           <Card>
             <CardHeader>
@@ -368,7 +424,7 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
 
           <PublicPostEventSection portal="request" token={token} />
         </>
-      ) : request.quote && !request.quote.readyForClientReview ? (
+      ) : !isQuoteVoided && request.quote && !request.quote.readyForClientReview ? (
         <Card>
           <CardContent className="py-6 text-sm text-muted-foreground">
             Your quote is being prepared. You will see the full quote here when it is ready for review.

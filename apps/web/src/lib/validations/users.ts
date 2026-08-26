@@ -56,6 +56,13 @@ export type UserAdminRowFormValues = z.infer<typeof userAdminRowSchema>;
 export const bandOrgProfileSchema = z.object({
   displayName: z.string(),
   bio: z.string(),
+  oneLiner: z.string(),
+  genres: z.string(),
+  demoURL: z.string(),
+  bandMembers: z.string(),
+  mainContactName: z.string(),
+  mainContactEmail: z.string(),
+  mainContactPhone: z.string(),
   performerHourlyRateUsd: z.coerce.number().min(0, "Rate must be non-negative"),
   designatedPayeeUserId: z.string(),
   designatedPayeeName: z.string(),

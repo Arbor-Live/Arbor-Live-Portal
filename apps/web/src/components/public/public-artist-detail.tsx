@@ -55,6 +55,9 @@ export function PublicArtistDetail({ slug }: { slug: string }) {
             <h1 className="display-tight mt-6 text-4xl font-semibold tracking-tight sm:text-5xl">
               {artist.displayName}
             </h1>
+            {artist.oneLiner ? (
+              <p className="mt-3 max-w-2xl text-lg text-zinc-200">{artist.oneLiner}</p>
+            ) : null}
           </Reveal>
         </div>
       </section>
@@ -70,7 +73,30 @@ export function PublicArtistDetail({ slug }: { slug: string }) {
               <p className="text-muted-foreground">No bio yet.</p>
             )}
 
+            {artist.genres.length > 0 ? (
+              <div className="mt-6 flex flex-wrap gap-2">
+                {artist.genres.map((genre) => (
+                  <span
+                    key={genre}
+                    className="rounded-none border px-3 py-1 text-xs font-medium text-muted-foreground"
+                  >
+                    {genre}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+
             <div className="mt-8 flex flex-wrap gap-3">
+              {artist.demoURL ? (
+                <a
+                  href={artist.demoURL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-none border px-4 py-2 text-sm font-medium hover:bg-muted"
+                >
+                  Demo ↗
+                </a>
+              ) : null}
               {artist.websiteUrl ? (
                 <a
                   href={artist.websiteUrl}

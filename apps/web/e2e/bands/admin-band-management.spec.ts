@@ -3,7 +3,7 @@ import { bandAuthFile, crewAuthFile } from "../helpers/auth";
 import { runConvex } from "../helpers/convex";
 import { e2eEnv } from "../helpers/env";
 import { formTextarea } from "../helpers/form";
-import { pickSelectOption } from "../helpers/select";
+import { pickSearchableOption } from "../helpers/select";
 
 function formSaveBar(page: Page) {
   return page.getByRole("status").last();
@@ -22,11 +22,12 @@ async function ensureBand() {
 }
 
 async function pickAdminBand(page: Page, bandLabel: string) {
-  const trigger = page.getByTestId("admin-band-picker");
-  await expect(trigger).toBeVisible({ timeout: 30_000 });
+  const picker = page.getByTestId("admin-band-picker");
+  await expect(picker).toBeVisible({ timeout: 30_000 });
+  const trigger = picker.getByTestId("searchable-select-trigger");
   const current = (await trigger.textContent())?.trim() ?? "";
   if (current !== bandLabel) {
-    await pickSelectOption(page, trigger, bandLabel);
+    await pickSearchableOption(page, trigger, bandLabel, bandLabel);
   }
 }
 
@@ -54,9 +55,12 @@ test.describe("admin band profile management", () => {
     await page.reload();
     await expect(page.getByText("Manage a band").first()).toBeVisible({ timeout: 30_000 });
     // sessionStorage keeps the selected band across reloads.
-    await expect(page.getByTestId("admin-band-picker")).toContainText(e2eEnv.bandOrgName, {
+    await expect(page.getByTestId("admin-band-picker").getByTestId("searchable-select-trigger")).toContainText(
+      e2eEnv.bandOrgName,
+      {
       timeout: 30_000,
-    });
+      },
+    );
     await expect(formTextarea(page.locator("body"), "Bio")).toHaveValue(bio, { timeout: 20_000 });
   });
 });

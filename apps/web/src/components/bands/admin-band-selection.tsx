@@ -5,19 +5,14 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useState,
   type ReactNode,
 } from "react";
 import { useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
 import { useSessionShell, useSessionViewer } from "@/components/session-shell-provider";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SearchableSelect } from "@/components/inventory/searchable-select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 const STORAGE_KEY = "arbor.adminBandOrganizationId";
@@ -91,8 +86,23 @@ export function AdminBandPickerCard() {
     isAdminManaging ? { includeArchived: false } : "skip",
   );
 
+  const options = useMemo(
+    () =>
+      (bands ?? []).map((band) => ({
+        value: band.organizationId,
+        label: band.displayName || band.name,
+        description: band.displayName && band.displayName !== band.name ? band.name : undefined,
+        keywords: `${band.displayName} ${band.name} ${band.slug}`,
+      })),
+    [bands],
+  );
+
   useEffect(() => {
-    if (!isAdminManaging || !bands?.length || organizationId) return;
+    if (!isAdminManaging || !bands?.length) return;
+    const selectedStillExists = Boolean(
+      organizationId && bands.some((band) => band.organizationId === organizationId),
+    );
+    if (selectedStillExists) return;
     setOrganizationId(bands[0].organizationId);
   }, [bands, isAdminManaging, organizationId, setOrganizationId]);
 
@@ -113,18 +123,15 @@ export function AdminBandPickerCard() {
         ) : bands.length === 0 ? (
           <p className="text-sm text-muted-foreground">No band organizations yet.</p>
         ) : (
-          <Select value={organizationId ?? undefined} onValueChange={setOrganizationId}>
-            <SelectTrigger className="max-w-md" data-testid="admin-band-picker">
-              <SelectValue placeholder="Select a band" />
-            </SelectTrigger>
-            <SelectContent>
-              {bands.map((band) => (
-                <SelectItem key={band.organizationId} value={band.organizationId}>
-                  {band.displayName || band.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="max-w-md" data-testid="admin-band-picker">
+            <SearchableSelect
+              value={organizationId ?? ""}
+              onChange={setOrganizationId}
+              options={options}
+              placeholder="Select a band"
+              emptyLabel="No matching bands"
+            />
+          </div>
         )}
       </CardContent>
     </Card>

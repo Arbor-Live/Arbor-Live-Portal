@@ -57,12 +57,25 @@ async function loadDesignForEvent(ctx: QueryCtx | MutationCtx, eventId: Id<"even
   )[0] as Doc<"eventMarketingDesigns"> | undefined;
 }
 
+async function isRequestQuoteVoided(
+  ctx: QueryCtx | MutationCtx,
+  request: Doc<"eventRequests">,
+) {
+  if (!request.linkedInvoiceId) return false;
+  const invoice = await ctx.db.get(request.linkedInvoiceId);
+  return invoice?.status === "void";
+}
+
 async function resolveEventByRequestToken(ctx: QueryCtx | MutationCtx, token: string) {
   const request = await ctx.db
     .query("eventRequests")
     .withIndex("by_publicToken", (q) => q.eq("publicToken", token))
     .unique();
   if (!request) return null;
+
+  if (await isRequestQuoteVoided(ctx, request)) {
+    return { event: null, request };
+  }
 
   const eventId = request.convertedEventId ?? request.convertedEventIds?.[0];
   if (eventId) {
@@ -104,6 +117,9 @@ async function resolveEventForPortal(
   if (portal === "request") {
     const resolved = await resolveEventByRequestToken(ctx, token);
     if (!resolved) throw new Error("Request not found.");
+    if (await isRequestQuoteVoided(ctx, resolved.request)) {
+      throw new Error("Poster upload is unavailable for a voided quote.");
+    }
     if (!resolved.event) {
       throw new Error("Poster upload is available once your event has been created.");
     }
