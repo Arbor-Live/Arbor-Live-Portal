@@ -2100,7 +2100,6 @@ export const updateActiveBandProfile = mutation({
     publicInstagramUrl: v.optional(v.string()),
     publicYoutubeUrl: v.optional(v.string()),
     publicSpotifyUrl: v.optional(v.string()),
-    demoURL: v.optional(v.string()),
     publicListing: v.optional(v.boolean()),
     publicSlug: v.optional(v.string()),
     publicHeroImageUrl: v.optional(v.string()),
@@ -2173,8 +2172,6 @@ export const updateActiveBandProfile = mutation({
           args.publicSpotifyUrl !== undefined
             ? args.publicSpotifyUrl.trim() || undefined
             : existing.publicSpotifyUrl,
-        demoURL:
-          args.demoURL !== undefined ? args.demoURL.trim() || undefined : existing.demoURL,
         publicListing: publicListing ?? existing.publicListing,
         publicSlug: publicSlug ?? (publicListing === false ? undefined : existing.publicSlug),
         publicHeroImageUrl:
@@ -2204,7 +2201,6 @@ export const updateActiveBandProfile = mutation({
       publicInstagramUrl: args.publicInstagramUrl?.trim() || undefined,
       publicYoutubeUrl: args.publicYoutubeUrl?.trim() || undefined,
       publicSpotifyUrl: args.publicSpotifyUrl?.trim() || undefined,
-      demoURL: args.demoURL?.trim() || undefined,
       publicListing: publicListing ?? false,
       publicSlug: publicListing ? publicSlug : undefined,
       publicHeroImageUrl: normalizeOptionalAssetReference(args.publicHeroImageUrl),
