@@ -189,7 +189,7 @@ export function AdminBandProfileClient() {
 
   return (
     <div className="space-y-4 pb-20">
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-4">
           <Form {...form}>
             <form className="space-y-4">
@@ -283,9 +283,9 @@ export function AdminBandProfileClient() {
           </Form>
         </div>
 
-        <aside className="min-w-0 xl:sticky xl:top-4 xl:self-start">
-          <Card>
-            <CardContent className="pt-6">
+        <aside className="mx-auto w-full min-w-0 max-w-lg xl:sticky xl:top-4 xl:mx-0 xl:max-w-none xl:self-start">
+          <Card className="gap-0 py-0">
+            <CardContent className="p-4">
               <BandProfilePreviewPanel data={watched} heroUrl={heroUrl} />
             </CardContent>
           </Card>

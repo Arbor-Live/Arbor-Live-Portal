@@ -3,7 +3,6 @@
 import { Card, CardContent, CardDescription, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { StoredAssetImage } from "@/components/files/stored-asset-image";
 import { PublicArtistPoster } from "@/components/public/public-artist-poster";
 import { cn } from "@/lib/utils";
@@ -39,6 +38,9 @@ function PreviewLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
+/** Both previews share the panel width. */
+const PREVIEW_SECTION_CLASS = "w-full min-w-0 space-y-2";
+
 export function BandProfileCardPreview({
   data,
   heroUrl,
@@ -53,7 +55,7 @@ export function BandProfileCardPreview({
   const displayName = data.displayName.trim() || "Your band name";
 
   return (
-    <div className={cn("min-w-0 space-y-2", className)}>
+    <div className={cn(PREVIEW_SECTION_CLASS, className)}>
       <PreviewLabel>Directory card</PreviewLabel>
       <Card className="gap-0 overflow-hidden border border-border/50 bg-background/70 py-0 shadow-sm ring-0">
         <PublicArtistPoster
@@ -104,10 +106,10 @@ export function BandProfilePagePreview({
   ].filter((link) => link.url?.trim());
 
   return (
-    <div className={cn("min-w-0 space-y-2", className)}>
+    <div className={cn(PREVIEW_SECTION_CLASS, className)}>
       <PreviewLabel>Profile page</PreviewLabel>
-      <div className="max-w-full overflow-hidden border bg-background shadow-sm">
-        <div className="relative h-28 overflow-hidden bg-zinc-950 text-zinc-50">
+      <div className="overflow-hidden border bg-background shadow-sm">
+        <div className="relative h-40 overflow-hidden bg-zinc-950 text-zinc-50">
           <div
             aria-hidden
             className={cn(
@@ -119,39 +121,39 @@ export function BandProfilePagePreview({
             <StoredAssetImage
               storedValue={data.publicHeroImageUrl}
               fill
-              sizes="320px"
+              sizes="(max-width: 360px) 100vw, 360px"
               className="object-cover opacity-50"
             />
           ) : null}
-          <div className="relative flex h-full flex-col justify-end px-3 py-3">
-            <p className="truncate text-[10px] text-zinc-400">← All artists</p>
-            <h2 className="truncate text-base font-semibold tracking-tight">{displayName}</h2>
+          <div className="relative flex h-full flex-col justify-end px-4 py-4">
+            <p className="truncate text-xs text-zinc-400">← All artists</p>
+            <h2 className="truncate text-lg font-semibold tracking-tight">{displayName}</h2>
             {data.oneLiner?.trim() ? (
-              <p className="line-clamp-2 text-xs text-zinc-200">{data.oneLiner.trim()}</p>
+              <p className="line-clamp-2 text-sm text-zinc-200">{data.oneLiner.trim()}</p>
             ) : null}
           </div>
         </div>
-        <div className="space-y-2 p-3">
+        <div className="space-y-3 p-4">
           {data.bio?.trim() ? (
-            <p className="line-clamp-4 text-xs leading-relaxed break-words text-muted-foreground whitespace-pre-wrap">
+            <p className="line-clamp-4 text-sm leading-relaxed break-words text-muted-foreground whitespace-pre-wrap">
               {data.bio.trim()}
             </p>
           ) : (
-            <p className="text-xs text-muted-foreground">No bio yet.</p>
+            <p className="text-sm text-muted-foreground">No bio yet.</p>
           )}
           {genres.length > 0 ? (
-            <div className="flex flex-wrap gap-1">
+            <div className="flex flex-wrap gap-1.5">
               {genres.slice(0, 4).map((genre) => (
-                <Badge key={genre} variant="outline" className="text-[10px]">
+                <Badge key={genre} variant="outline" className="text-xs">
                   {genre}
                 </Badge>
               ))}
             </div>
           ) : null}
           {links.length > 0 ? (
-            <div className="flex flex-wrap gap-1">
+            <div className="flex flex-wrap gap-1.5">
               {links.map((link) => (
-                <Badge key={link.label} variant="outline" className="text-[10px]">
+                <Badge key={link.label} variant="outline" className="text-xs">
                   {link.label} ↗
                 </Badge>
               ))}
@@ -176,7 +178,7 @@ export function BandProfilePreviewPanel({
 
   return (
     <div className={cn("min-w-0 space-y-4", className)}>
-      <div className="flex flex-col gap-1">
+      <div className="space-y-1">
         <CardTitle className="text-sm">Live preview</CardTitle>
         <CardDescription>
           {listed
@@ -184,12 +186,10 @@ export function BandProfilePreviewPanel({
             : "Internal only — Arbor staff can see this info, but it is not listed publicly."}
         </CardDescription>
       </div>
-      <ScrollArea className="h-[min(70vh,640px)] w-full min-w-0">
-        <div className="flex w-full min-w-0 flex-col gap-4 pr-3">
-          <BandProfileCardPreview data={data} heroUrl={heroUrl} />
-          <BandProfilePagePreview data={data} heroUrl={heroUrl} />
-        </div>
-      </ScrollArea>
+      <div className="flex w-full min-w-0 flex-col gap-6">
+        <BandProfileCardPreview data={data} heroUrl={heroUrl} />
+        <BandProfilePagePreview data={data} heroUrl={heroUrl} />
+      </div>
     </div>
   );
 }
