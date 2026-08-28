@@ -2,6 +2,10 @@ name: E2E
 
 on:
   pull_request:
+    paths-ignore:
+      - "docs/**"
+      - "workers/**"
+      - "**/*.md"
   push:
     branches: [main]
 
@@ -11,12 +15,13 @@ concurrency:
 
 jobs:
   playwright:
-    name: Playwright
+    name: Playwright (${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
-    timeout-minutes: 45
-    permissions:
-      contents: write # push failure screenshots to the scratch media branch
-      pull-requests: write # post/update the flake comment
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     env:
       CI: "true"
       CONVEX_AGENT_MODE: anonymous
@@ -26,6 +31,8 @@ jobs:
       # Convex's 1s function limit is wall-clock, so dev-mode compilation
       # competing for the runner's 4 vCPUs times out queries that aren't slow.
       E2E_WEB_MODE: prod
+      # Anonymous Convex is fresh each run — no stale seed/users to prune.
+      E2E_SKIP_PRUNE: "1"
 
     steps:
       - name: Checkout
@@ -69,21 +76,68 @@ jobs:
             ${{ runner.os }}-nextjs-${{ hashFiles('pnpm-lock.yaml') }}-
             ${{ runner.os }}-nextjs-
 
-      - name: Run e2e suite
-        run: pnpm test:e2e
+      - name: Run e2e shard
+        run: pnpm test:e2e -- --shard=${{ matrix.shard }}/4
+
+      - name: Upload blob report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blob-report-${{ matrix.shard }}
+          path: apps/web/blob-report
+          retention-days: 1
+          if-no-files-found: error
+
+  merge-reports:
+    name: Merge reports
+    if: always() && !cancelled()
+    needs: [playwright]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # push failure screenshots to the scratch media branch
+      pull-requests: write # post/update the flake comment
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download blob reports
+        uses: actions/download-artifact@v4
+        with:
+          path: all-blob-reports
+          pattern: blob-report-*
+          merge-multiple: true
+
+      - name: Merge Playwright reports
+        run: >-
+          pnpm --filter web exec playwright merge-reports
+          --config=playwright.merge.config.ts
+          ../../all-blob-reports
 
       # Runs on success too: a green suite can still contain retried (flaky)
       # tests, and those are the ones worth surfacing before they become
       # failures.
       - name: Comment on failures and flakes
-        if: always() && github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: node scripts/e2e-flake-comment.mjs
 
       - name: Upload Playwright report
-        if: failure()
+        if: always() && needs.playwright.result != 'cancelled'
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
@@ -92,3 +146,8 @@ jobs:
             apps/web/test-results
             apps/web/e2e-results.json
           retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Require all shards green
+        if: needs.playwright.result != 'success'
+        run: exit 1
