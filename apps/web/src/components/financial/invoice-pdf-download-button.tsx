@@ -4,7 +4,9 @@ import { useAction } from "convex/react";
 import { useState } from "react";
 import { FilePdfIcon } from "@phosphor-icons/react";
 import { api, type Id } from "@/lib/convex-api";
+import { getConvexErrorMessage } from "@/lib/convex-error";
 import { downloadBytes } from "@/lib/download-bytes";
+import { notify } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -28,48 +30,45 @@ export function InvoicePdfDownloadButton({
   iconOnly?: boolean;
 }) {
   const downloadPdf = useAction(api.invoicePdfDownload.downloadByInvoiceId);
-  const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [loading, setLoading] = useState(false);
 
   async function onDownload() {
-    setStatus("loading");
+    setLoading(true);
     try {
       const bytes = await downloadPdf({
         invoiceId,
         siteOrigin: typeof window !== "undefined" ? window.location.origin : undefined,
       });
       downloadBytes(bytes, `${invoiceNumber ?? invoiceId}.pdf`);
-      setStatus("idle");
-    } catch {
-      setStatus("error");
+    } catch (error) {
+      notify.error(getConvexErrorMessage(error, "Unable to download PDF. Please try again."));
+    } finally {
+      setLoading(false);
     }
   }
 
   // Prefer icon-sm so icon buttons match size="sm" text buttons (h-7).
   const buttonSize = iconOnly ? (size === "icon" || size === "icon-sm" ? size : "icon-sm") : size;
-  const title = status === "loading" ? loadingLabel : label;
+  const title = loading ? loadingLabel : label;
 
   return (
-    <div className={cn("inline-flex items-center gap-2", className)}>
-      <Button
-        type="button"
-        variant={variant}
-        size={buttonSize}
-        disabled={status === "loading"}
-        onClick={() => void onDownload()}
-        title={title}
-        aria-label={title}
-      >
-        {iconOnly ? (
-          <FilePdfIcon className="size-3.5" />
-        ) : status === "loading" ? (
-          loadingLabel
-        ) : (
-          label
-        )}
-      </Button>
-      {status === "error" ? (
-        <span className="text-sm text-destructive">Unable to download PDF. Please try again.</span>
-      ) : null}
-    </div>
+    <Button
+      type="button"
+      variant={variant}
+      size={buttonSize}
+      className={cn(className)}
+      disabled={loading}
+      onClick={() => void onDownload()}
+      title={title}
+      aria-label={title}
+    >
+      {iconOnly ? (
+        <FilePdfIcon className="size-3.5" />
+      ) : loading ? (
+        loadingLabel
+      ) : (
+        label
+      )}
+    </Button>
   );
 }

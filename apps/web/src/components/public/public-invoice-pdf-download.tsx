@@ -4,6 +4,8 @@ import { useAction } from "convex/react";
 import { useState } from "react";
 import { downloadBytes } from "@/lib/download-bytes";
 import { api } from "@/lib/convex-api";
+import { getConvexErrorMessage } from "@/lib/convex-error";
+import { notify } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
 
 export function PublicInvoicePdfDownload({
@@ -17,30 +19,26 @@ export function PublicInvoicePdfDownload({
 }) {
   const downloadQuote = useAction(api.paymentProofPublic.downloadInvoicePdfByQuoteToken);
   const downloadRequest = useAction(api.paymentProofPublic.downloadInvoicePdfByRequestToken);
-  const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [loading, setLoading] = useState(false);
 
   async function onDownload() {
-    setStatus("loading");
+    setLoading(true);
     try {
       const bytes =
         portal === "quote"
           ? await downloadQuote({ token })
           : await downloadRequest({ token });
       downloadBytes(bytes, `${invoiceNumber}.pdf`);
-      setStatus("idle");
-    } catch {
-      setStatus("error");
+    } catch (error) {
+      notify.error(getConvexErrorMessage(error, "Unable to download PDF. Please try again."));
+    } finally {
+      setLoading(false);
     }
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <Button type="button" variant="outline" size="sm" disabled={status === "loading"} onClick={onDownload}>
-        {status === "loading" ? "Preparing PDF…" : "Download invoice PDF"}
-      </Button>
-      {status === "error" ? (
-        <span className="text-sm text-destructive">Unable to download PDF. Please try again.</span>
-      ) : null}
-    </div>
+    <Button type="button" variant="outline" size="sm" disabled={loading} onClick={() => void onDownload()}>
+      {loading ? "Preparing PDF…" : "Download invoice PDF"}
+    </Button>
   );
 }

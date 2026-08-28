@@ -3,7 +3,9 @@
 import { useAction } from "convex/react";
 import { useState } from "react";
 import { api, type Id } from "@/lib/convex-api";
+import { getConvexErrorMessage } from "@/lib/convex-error";
 import { downloadBytes } from "@/lib/download-bytes";
+import { notify } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -23,33 +25,30 @@ export function RiderPdfDownloadButton({
   loadingLabel?: string;
 }) {
   const downloadPdf = useAction(api.bandRiderPdfDownload.downloadByRiderId);
-  const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [loading, setLoading] = useState(false);
 
   async function onDownload() {
-    setStatus("loading");
+    setLoading(true);
     try {
       const result = await downloadPdf({ riderId });
       downloadBytes(result.bytes, result.fileName);
-      setStatus("idle");
-    } catch {
-      setStatus("error");
+    } catch (error) {
+      notify.error(getConvexErrorMessage(error, "Unable to download PDF. Please try again."));
+    } finally {
+      setLoading(false);
     }
   }
 
   return (
-    <div className={cn("inline-flex flex-col gap-1", className)}>
-      <Button
-        type="button"
-        variant={variant}
-        size={size}
-        disabled={status === "loading"}
-        onClick={() => void onDownload()}
-      >
-        {status === "loading" ? loadingLabel : label}
-      </Button>
-      {status === "error" ? (
-        <span className="text-xs text-destructive">Unable to download PDF.</span>
-      ) : null}
-    </div>
+    <Button
+      type="button"
+      variant={variant}
+      size={size}
+      className={cn(className)}
+      disabled={loading}
+      onClick={() => void onDownload()}
+    >
+      {loading ? loadingLabel : label}
+    </Button>
   );
 }
