@@ -1,9 +1,4 @@
 {
   "functions": "convex/",
-  "generateCommonJSApi": false,
-  "node": {
-    "externalPackages": [
-      "*"
-    ]
-  }
+  "generateCommonJSApi": false
 }
