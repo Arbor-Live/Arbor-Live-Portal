@@ -1,8 +1,19 @@
-import { defineConfig, devices } from "@playwright/test";
+import { defineConfig, devices, type ReporterDescription } from "@playwright/test";
 import path from "path";
 
 const authFile = path.join(__dirname, "e2e/.auth/admin.json");
 const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
+
+const reporters: ReporterDescription[] = [["list"]];
+if (process.env.CI) {
+  // Sharded CI jobs upload blob reports; merge-reports emits HTML + JSON.
+  reporters.push(["blob", { outputDir: "blob-report" }]);
+} else {
+  reporters.push(
+    ["html", { open: "never", outputFolder: "e2e-report" }],
+    ["json", { outputFile: "e2e-results.json" }],
+  );
+}
 
 export default defineConfig({
   testDir: "./e2e",
@@ -10,12 +21,7 @@ export default defineConfig({
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 2 : 0,
   workers: 1,
-  reporter: [
-    ["list"],
-    ["html", { open: "never", outputFolder: "e2e-report" }],
-    // Machine-readable results for the CI flake comment.
-    ["json", { outputFile: "e2e-results.json" }],
-  ],
+  reporter: reporters,
   timeout: 90_000,
   expect: { timeout: 15_000 },
   use: {
