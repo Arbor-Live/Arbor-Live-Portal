@@ -11,7 +11,7 @@ import {
   InventoryPackageSearchSelect,
   InventoryTypeSearchSelect,
 } from "@/components/inventory/inventory-search-select";
-import { useSessionViewer } from "@/components/session-shell-provider";
+import { useSessionShell, useSessionViewer } from "@/components/session-shell-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -33,7 +33,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { authClient } from "@/lib/auth-client";
 import { InvoiceQuoteApprovalDetails } from "@/components/financial/invoice-quote-approval-details";
 import { InvoicePaymentStatusSection } from "@/components/financial/invoice-payment-status-section";
 import { InvoiceLinkedEventCrewSection } from "@/components/financial/invoice-linked-event-crew";
@@ -174,9 +173,10 @@ export function InvoiceEditor({
   const router = useRouter();
   const { confirm, alert } = useAppDialog();
   const viewer = useSessionViewer();
+  const shell = useSessionShell();
+  const account = shell?.account;
   const [groupId, setGroupId] = useState("");
   const [contactId, setContactId] = useState("");
-  const session = authClient.useSession();
   const managerList = useQuery(api.invoices.listManagers, {});
   const groups = useQuery(api.invoiceGroups.list, { activeOnly: true });
   const settings = useQuery(api.invoiceSettings.get, {});
@@ -575,13 +575,13 @@ export function InvoiceEditor({
   }, []);
 
   useEffect(() => {
-    if (!managerUserId && session.data?.user?.id) {
+    if (!managerUserId && viewer?.userId) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setManagerUserId(session.data.user.id);
-      setManagerName(session.data.user.name ?? "");
-      setManagerEmail(session.data.user.email ?? "");
+      setManagerUserId(viewer.userId);
+      setManagerName(account?.name ?? "");
+      setManagerEmail(account?.email ?? "");
     }
-  }, [managerUserId, session.data?.user?.id, session.data?.user?.name, session.data?.user?.email]);
+  }, [account?.email, account?.name, managerUserId, viewer?.userId]);
 
   useEffect(() => {
     if (issueDate) return;

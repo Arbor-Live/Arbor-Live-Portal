@@ -26,7 +26,7 @@ import {
 } from "@/lib/validations/event";
 import { EventSeriesScheduleEditor } from "@/components/events/event-series-schedule-editor";
 import { EventSeriesShiftEditor } from "@/components/events/event-series-shift-editor";
-import { authClient } from "@/lib/auth-client";
+import { useSessionShell, useSessionViewer } from "@/components/session-shell-provider";
 
 function intervalLabel(weeks: number) {
   if (weeks === 1) return "Weekly";
@@ -79,7 +79,9 @@ function costsFromSeries(series: SeriesDoc): EventSeriesCostsFormValues {
 export function EventSeriesOverview({ seriesId }: { seriesId: Id<"eventSeries"> }) {
   const router = useRouter();
   const { confirm } = useAppDialog();
-  const session = authClient.useSession();
+  const shell = useSessionShell();
+  const viewer = useSessionViewer();
+  const account = shell?.account;
   const data = useQuery(api.eventSeries.get, { id: seriesId });
   const invoices = useQuery(api.invoices.list, { status: "draft" });
   const addOccurrences = useMutation(api.eventSeries.addOccurrences);
@@ -306,15 +308,15 @@ export function EventSeriesOverview({ seriesId }: { seriesId: Id<"eventSeries"> 
             <div className="flex flex-wrap items-end gap-2">
               <Button
                 type="button"
-                disabled={!session.data?.user?.id}
+                disabled={!viewer?.userId}
                 onClick={() => {
-                  const user = session.data?.user;
-                  if (!user?.id) return;
+                  const userId = viewer?.userId;
+                  if (!userId) return;
                   void createDraftForSeries({
                     seriesId,
-                    managerUserId: user.id,
-                    managerName: user.name ?? "Manager",
-                    managerEmail: user.email ?? undefined,
+                    managerUserId: userId,
+                    managerName: account?.name ?? "Manager",
+                    managerEmail: account?.email ?? undefined,
                   })
                     .then((result) => {
                       router.push(`/dashboard/financial-hub/invoices/${result.id}`);
