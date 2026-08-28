@@ -5,13 +5,13 @@
     "externalPackages": [
       "@react-pdf/renderer",
       "@react-pdf/font",
-      "@react-pdf/pdfkit",
       "@react-pdf/layout",
       "@react-pdf/render",
       "@react-pdf/primitives",
       "@react-pdf/reconciler",
       "@react-pdf/fns",
-      "fontkit"
+      "fontkit",
+      "pdfkit"
     ]
   }
 }
