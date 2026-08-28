@@ -32,7 +32,7 @@ import { SearchableSelect, type SearchableSelectOption } from "@/components/inve
 import { MultiSelectFilter } from "@/components/inventory/multi-select-filter";
 import { VenuePicker } from "@/components/venues/venue-picker";
 import { VenueDetailsButton } from "@/components/venues/venue-details-sheet";
-import { useSessionViewer } from "@/components/session-shell-provider";
+import { useSessionShell, useSessionViewer } from "@/components/session-shell-provider";
 import { EventBandPaymentSection } from "@/components/events/event-band-payment-section";
 import { EventBandRidersSection } from "@/components/events/event-band-riders-section";
 import { EventMediaSection } from "@/components/events/event-media-section";
@@ -44,7 +44,6 @@ import { EventTimelineScheduler, type TimelineBlockDraft } from "@/components/ev
 import { EventScheduleCrewAssignPanel } from "@/components/events/event-availability-summary";
 import { UserSelect, type UserSelectOption } from "@/components/users/user-select";
 import { buildUserSelectDescription } from "@/lib/user-select-description";
-import { authClient } from "@/lib/auth-client";
 import {
   EVENT_STATUS_EDITOR_OPTIONS,
   normalizeEventStatus,
@@ -195,7 +194,9 @@ export function EventEditor({
 }) {
   const router = useRouter();
   const { confirm, alert } = useAppDialog();
-  const session = authClient.useSession();
+  const shell = useSessionShell();
+  const viewer = useSessionViewer();
+  const account = shell?.account;
   const isCreate = !eventId;
   const loadOverviewLookups = isCreate || activeTab === "overview";
   const eventDetail = activeTab === "schedule" ? "schedule" : "full";
@@ -203,7 +204,6 @@ export function EventEditor({
     api.events.get,
     eventId ? { id: eventId, detail: eventDetail } : "skip",
   );
-  const viewer = useSessionViewer();
   // Billing/host lookups are overview-only — schedule/equipment tabs were fan-out
   // saturating local Convex (and slowing prod) for fields they never render.
   const invoices = useQuery(api.invoices.list, loadOverviewLookups ? {} : "skip");
@@ -605,18 +605,18 @@ export function EventEditor({
       avatarUrl: entry.image,
       keywords: `${entry.role ?? ""} ${entry.email ?? ""}`,
     }));
-    const currentUserId = session.data?.user?.id;
+    const currentUserId = viewer?.userId;
     if (currentUserId && !base.some((entry) => entry.value === currentUserId)) {
       base.unshift({
         value: currentUserId,
-        label: session.data?.user?.name ?? session.data?.user?.email ?? "Current user",
-        description: session.data?.user?.email ?? "",
-        avatarUrl: session.data?.user?.image ?? undefined,
-        keywords: session.data?.user?.email ?? "",
+        label: account?.name ?? account?.email ?? "Current user",
+        description: account?.email ?? "",
+        avatarUrl: account?.avatarUrl ?? account?.image ?? undefined,
+        keywords: account?.email ?? "",
       });
     }
     return base.sort((a, b) => a.label.localeCompare(b.label));
-  }, [managerList, session.data?.user]);
+  }, [account, managerList, viewer?.userId]);
   const userSelectOptions: UserSelectOption[] = useMemo(
     () =>
       userOptions.map((option) => ({

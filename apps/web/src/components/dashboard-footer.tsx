@@ -4,13 +4,16 @@ import Link from "next/link";
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { useSessionShell } from "@/components/session-shell-provider";
 
 export function DashboardFooter() {
-  const { data } = authClient.useSession();
+  const shell = useSessionShell();
+  const account = shell?.account;
+  const activeOrganization = shell?.activeOrganization;
 
-  const userName = data?.user?.name ?? "Unknown user";
-  const userEmail = data?.user?.email ?? "No email";
-  const org = "Arbor Live";
+  const userName = account?.name ?? "Unknown user";
+  const userEmail = account?.email ?? "No email";
+  const org = activeOrganization?.name ?? "Arbor Live";
 
   return (
     <div className="border-t p-4">

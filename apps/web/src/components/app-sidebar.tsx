@@ -198,7 +198,6 @@ const secondaryItems = [
 export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
   const pathname = usePathname()
   const router = useRouter()
-  const { data } = authClient.useSession()
   const [now] = useState(() => Date.now())
   const [adminSchedulingRange] = useState(() => getDefaultAdminSchedulingRange())
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({})
@@ -253,8 +252,8 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
   const unconfirmedCrewCount = navBadges?.unconfirmedCrew
   const pendingBandPaymentActionsCount = navBadges?.pendingBandPaymentActions
 
-  const userName = data?.user?.name ?? "Unknown user"
-  const userEmail = data?.user?.email ?? "No email"
+  const userName = account?.name ?? "Unknown user"
+  const userEmail = account?.email ?? "No email"
   const orgName = activeOrganization?.name ?? "No active org"
   const isBandContext = activeOrganization?.organizationType === "band"
   const isCrewContext =

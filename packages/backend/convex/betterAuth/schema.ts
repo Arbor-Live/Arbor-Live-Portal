@@ -12,6 +12,7 @@ const schema = defineSchema({
   ...tables,
   // Adapter membership checks use organizationId + userId together.
   member: tables.member.index("organizationId_userId", ["organizationId", "userId"]),
+  invitation: tables.invitation.index("email_organizationId", ["email", "organizationId"]),
 });
 
 export default schema;

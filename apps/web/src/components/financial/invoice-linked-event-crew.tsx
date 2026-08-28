@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DateTimeRangePicker } from "@/components/ui/date-time-picker";
 import { Input } from "@/components/ui/input";
-import { authClient } from "@/lib/auth-client";
+import { useSessionShell, useSessionViewer } from "@/components/session-shell-provider";
 import { getAvailabilityNotesForDisplay } from "@/lib/crew-availability";
 import {
   attachShiftsToPersistedBlocks,
@@ -98,7 +98,9 @@ export function InvoiceLinkedEventCrewSection({
   onMessage?: (message: string) => void;
 }) {
   const { confirm } = useAppDialog();
-  const session = authClient.useSession();
+  const shell = useSessionShell();
+  const viewer = useSessionViewer();
+  const account = shell?.account;
   const eventData = useQuery(api.events.get, { id: eventId });
   const managerList = useQuery(api.invoices.listManagers, {});
   const upsertBlocks = useMutation(api.eventSchedule.upsertBlocks);
@@ -139,20 +141,20 @@ export function InvoiceLinkedEventCrewSection({
       rateMode: entry.rateMode as "normal" | "lead" | "custom" | undefined,
       hourlyRateUsd: entry.hourlyRateUsd,
     }));
-    const currentUserId = session.data?.user?.id;
+    const currentUserId = viewer?.userId;
     if (currentUserId && !base.some((entry) => entry.value === currentUserId)) {
       base.unshift({
         value: currentUserId,
-        label: session.data?.user?.name ?? session.data?.user?.email ?? "Current user",
-        description: session.data?.user?.email ?? "",
-        avatarUrl: session.data?.user?.image ?? undefined,
-        keywords: session.data?.user?.email ?? "",
+        label: account?.name ?? account?.email ?? "Current user",
+        description: account?.email ?? "",
+        avatarUrl: account?.avatarUrl ?? account?.image ?? undefined,
+        keywords: account?.email ?? "",
         rateMode: undefined,
         hourlyRateUsd: undefined,
       });
     }
     return base.sort((a, b) => a.label.localeCompare(b.label));
-  }, [managerList, session.data?.user]);
+  }, [account, managerList, viewer?.userId]);
 
   const ratesByUserId = useMemo(() => {
     const map = new Map<string, { hourlyRateUsd: number; rateMode: "normal" | "lead" | "custom" }>();

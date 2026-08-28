@@ -2,7 +2,7 @@ import { createClient } from "@convex-dev/better-auth";
 import { convex } from "@convex-dev/better-auth/plugins";
 import type { GenericCtx } from "@convex-dev/better-auth/utils";
 import { passkey } from "@better-auth/passkey";
-import { betterAuth, type BetterAuthOptions } from "better-auth";
+import { betterAuth, type BetterAuthOptions } from "better-auth/minimal";
 import { admin, organization } from "better-auth/plugins";
 import { components, internal } from "./_generated/api";
 import type { DataModel } from "./_generated/dataModel";
@@ -28,6 +28,12 @@ export const createAuthOptions = (ctx: GenericCtx<DataModel>) => {
     baseURL: siteUrl,
     trustedOrigins: buildTrustedOrigins(siteUrl),
     secret: process.env.BETTER_AUTH_SECRET,
+    session: {
+      cookieCache: {
+        enabled: true,
+        maxAge: 5 * 60,
+      },
+    },
     database: authComponent.adapter(ctx),
     user: {
       changeEmail: {
@@ -61,7 +67,7 @@ export const createAuthOptions = (ctx: GenericCtx<DataModel>) => {
       disableSignUp: true,
       async sendResetPassword({ url, user }) {
         if ("runMutation" in ctx && typeof ctx.runMutation === "function") {
-          await ctx.runMutation(internal.email.authEmails.enqueuePasswordReset, {
+          void ctx.runMutation(internal.email.authEmails.enqueuePasswordReset, {
             to: user.email,
             resetUrl: url,
             recipientName: user.name ?? undefined,

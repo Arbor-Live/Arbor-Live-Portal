@@ -9,7 +9,8 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
-import { isAuthenticated } from "@/lib/auth-server";
+import { isAuthenticated, preloadAuthQuery } from "@/lib/auth-server";
+import { api } from "@/lib/convex-api";
 import { ViewModeProvider } from "@/components/view-mode-provider";
 
 export default async function DashboardLayout({
@@ -22,8 +23,10 @@ export default async function DashboardLayout({
     redirect("/sign-in");
   }
 
+  const preloadedShell = await preloadAuthQuery(api.users.getSessionShell);
+
   return (
-    <SessionShellProvider>
+    <SessionShellProvider preloadedShell={preloadedShell}>
       <ViewModeProvider>
         <SidebarProvider>
           <AppSidebar />
