@@ -40,10 +40,10 @@ test.describe("admin band profile management", () => {
     await expect(page.getByText("Manage a band").first()).toBeVisible({ timeout: 30_000 });
     await pickAdminBand(page, e2eEnv.bandOrgName);
 
-    await expect(page.getByText("Band public profile").first()).toBeVisible({ timeout: 20_000 });
     const profileCard = page
       .locator("[data-slot='card']")
-      .filter({ hasText: "Band public profile" });
+      .filter({ has: page.getByRole("heading", { name: "Profile", exact: true }) });
+    await expect(profileCard).toBeVisible({ timeout: 20_000 });
     await formTextarea(profileCard, "Bio").fill(bio);
 
     const save = formSaveBar(page).getByRole("button", { name: "Save", exact: true });
