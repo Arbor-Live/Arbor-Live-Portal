@@ -14,11 +14,11 @@
   },
   "dependencies": {
     "@arbor/format": "workspace:*",
-    "@react-pdf/renderer": "^4.5.1",
+    "@react-pdf/renderer": "^4.6.1",
     "react": "^19.2.8"
   },
   "devDependencies": {
-    "@types/node": "^26.1.2",
+    "@types/node": "^26.2.0",
     "@types/react": "^19.2.18",
     "typescript": "^6.0.3"
   }
