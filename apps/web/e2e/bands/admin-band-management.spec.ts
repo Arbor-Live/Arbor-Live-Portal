@@ -42,7 +42,9 @@ test.describe("admin band profile management", () => {
 
     const profileCard = page
       .locator("[data-slot='card']")
-      .filter({ has: page.getByRole("heading", { name: "Profile", exact: true }) });
+      .filter({
+        has: page.locator("[data-slot='card-title']").filter({ hasText: /^Profile$/ }),
+      });
     await expect(profileCard).toBeVisible({ timeout: 20_000 });
     await formTextarea(profileCard, "Bio").fill(bio);
 
