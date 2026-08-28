@@ -1,9 +1,9 @@
 "use client";
 
 import { TextFormField } from "@/components/forms/text-form-field";
-import { TextareaFormField } from "@/components/forms/textarea-form-field";
 
-export function BandListingProfileFields() {
+/** Fields shown on the public artists directory and profile page. */
+export function BandPublicListingFields() {
   return (
     <>
       <TextFormField name="oneLiner" label="Headline" placeholder="Short tagline for your public listing" />
@@ -13,16 +13,34 @@ export function BandListingProfileFields() {
         placeholder="Indie, funk, jazz — comma separated"
       />
       <TextFormField name="demoURL" label="Demo link" placeholder="https://..." />
-      <TextareaFormField
-        name="bandMembers"
-        label="Band members"
-        placeholder="Names of members who are not on the portal — comma separated"
-      />
+    </>
+  );
+}
+
+/** Booking and contact info for Arbor staff — not shown on the public site. */
+export function BandArborPrivateFields() {
+  return (
+    <>
       <div className="grid gap-2 md:grid-cols-2">
         <TextFormField name="mainContactName" label="Main contact name" />
         <TextFormField name="mainContactEmail" label="Main contact email" type="email" />
         <TextFormField name="mainContactPhone" label="Main contact phone" />
+        <TextFormField
+          name="performerHourlyRateUsd"
+          label="Rate per person per hour (USD)"
+          type="number"
+        />
       </div>
+    </>
+  );
+}
+
+/** @deprecated Use BandPublicListingFields + BandArborPrivateFields */
+export function BandListingProfileFields() {
+  return (
+    <>
+      <BandPublicListingFields />
+      <BandArborPrivateFields />
     </>
   );
 }

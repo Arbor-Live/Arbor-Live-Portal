@@ -18,7 +18,6 @@ export const bandProfileSchema = z.object({
   oneLiner: z.string().optional(),
   genres: z.string().optional(),
   demoURL: z.string().optional(),
-  bandMembers: z.string().optional(),
   mainContactName: z.string().optional(),
   mainContactEmail: z.string().optional(),
   mainContactPhone: z.string().optional(),
