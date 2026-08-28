@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@arbor/invoice-document": "workspace:*",
-    "@react-pdf/renderer": "^4.5.1",
+    "@react-pdf/renderer": "^4.8.1",
     "react": "^19.2.8"
   },
   "devDependencies": {
