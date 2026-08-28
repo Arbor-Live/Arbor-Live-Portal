@@ -19,7 +19,7 @@
     "@arbor/show-file": "workspace:*",
     "@base-ui/react": "^1.7.0",
     "@better-auth/passkey": "^1.6.25",
-    "@convex-dev/better-auth": "0.12.5",
+    "@convex-dev/better-auth": "0.12.3",
     "@convex-dev/r2": "^0.10.2",
     "@fullcalendar/react": "^7.0.2",
     "@hookform/resolvers": "^5.9.1",

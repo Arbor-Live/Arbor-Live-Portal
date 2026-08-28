@@ -1,7 +1,7 @@
 diff --git a/dist/nextjs/index.js b/dist/nextjs/index.js
 index e9d357fac1f073aa61c0cdeac36fd4ebb00fe583..f8f38de384aeb20de07381e49a2d76daea173bc6 100644
 --- a/dist/nextjs/index.js
-+++ b/dist/nextjs/index.js	
++++ b/dist/nextjs/index.js
 @@ -31,9 +31,13 @@ const handler = async (request, siteUrl) => {
      headers.delete("transfer-encoding");
      headers.delete("content-length");
@@ -20,7 +20,7 @@ index e9d357fac1f073aa61c0cdeac36fd4ebb00fe583..f8f38de384aeb20de07381e49a2d76da
 diff --git a/dist/react-start/index.js b/dist/react-start/index.js
 index acc33fdec11fe7b20d02d5422c51a61a271ceddd..33bb161baa02a4e1cde64ada419d1b81679f9f50 100644
 --- a/dist/react-start/index.js
-+++ b/dist/react-start/index.js	
++++ b/dist/react-start/index.js
 @@ -41,9 +41,13 @@ const handler = (request, opts) => {
      headers.delete("transfer-encoding");
      headers.delete("content-length");
@@ -37,9 +37,9 @@ index acc33fdec11fe7b20d02d5422c51a61a271ceddd..33bb161baa02a4e1cde64ada419d1b81
      headers.set("x-better-auth-forwarded-host", requestUrl.host);
      headers.set("x-better-auth-forwarded-proto", requestUrl.protocol.replace(/:$/, ""));
 diff --git a/dist/utils/index.js b/dist/utils/index.js
-index 0adf2ab3400dd1e39243527c99452047a62232d1..8de1eead55c8e6bdd739202305315f9e6187c105 100644
+index c1377d51e0ca71066f8434c0ab61064fd05b3233..0ee91cb75347e2089924a59fe2046d118c0b80a5 100644
 --- a/dist/utils/index.js
-+++ b/dist/utils/index.js	
++++ b/dist/utils/index.js
 @@ -40,6 +40,17 @@ export const requireRunMutationCtx = (ctx) => {
  };
  export const getToken = async (siteUrl, headers, opts) => {
@@ -57,11 +57,11 @@ index 0adf2ab3400dd1e39243527c99452047a62232d1..8de1eead55c8e6bdd739202305315f9e
 +    }
      const fetchToken = async () => {
          const basePath = opts?.basePath
-             ? (opts.basePath.startsWith("/")
+             ? (opts.basePath.startsWith("/") ? opts.basePath : `/${opts.basePath}`)
 diff --git a/src/nextjs/index.test.ts b/src/nextjs/index.test.ts
 index 325617029d91d0646973114e413b3d1ce8559bfd..3b12517001ef3aef78f9e71d36bd87cf62a16ded 100644
 --- a/src/nextjs/index.test.ts
-+++ b/src/nextjs/index.test.ts	
++++ b/src/nextjs/index.test.ts
 @@ -69,7 +69,7 @@ describe("convexBetterAuthNextJs handler", () => {
      await handler.POST(request);
      const headers = headersOf(fetchSpy);
@@ -74,7 +74,7 @@ index 325617029d91d0646973114e413b3d1ce8559bfd..3b12517001ef3aef78f9e71d36bd87cf
 diff --git a/src/nextjs/index.ts b/src/nextjs/index.ts
 index 1eef064afd063e134be1dabc362979c88f297f45..dc77a2ceb3046eddeef619aebbafe4eb1b91460f 100644
 --- a/src/nextjs/index.ts
-+++ b/src/nextjs/index.ts	
++++ b/src/nextjs/index.ts
 @@ -49,9 +49,13 @@ const handler = async (request: Request, siteUrl: string) => {
    headers.delete("transfer-encoding");
    headers.delete("content-length");
@@ -93,7 +93,7 @@ index 1eef064afd063e134be1dabc362979c88f297f45..dc77a2ceb3046eddeef619aebbafe4eb
 diff --git a/src/react-start/index.test.ts b/src/react-start/index.test.ts
 index 709ff146e82c43e9ad8eae8ee28520dbc0f0d60e..d1fce772aa509182e8d3a7694d75690d150a1925 100644
 --- a/src/react-start/index.test.ts
-+++ b/src/react-start/index.test.ts	
++++ b/src/react-start/index.test.ts
 @@ -71,7 +71,7 @@ describe("convexBetterAuthReactStart handler", () => {
      await handler(request);
      const headers = headersOf(fetchSpy);
@@ -106,7 +106,7 @@ index 709ff146e82c43e9ad8eae8ee28520dbc0f0d60e..d1fce772aa509182e8d3a7694d75690d
 diff --git a/src/react-start/index.ts b/src/react-start/index.ts
 index 5652e545502c23b155cadb3351ac8ea311abd6c4..38f2ff8383c5dda58bcceec4fac6219103fbaa87 100644
 --- a/src/react-start/index.ts
-+++ b/src/react-start/index.ts	
++++ b/src/react-start/index.ts
 @@ -68,9 +68,13 @@ const handler = (request: Request, opts: { convexSiteUrl: string }) => {
    headers.delete("transfer-encoding");
    headers.delete("content-length");
@@ -123,13 +123,13 @@ index 5652e545502c23b155cadb3351ac8ea311abd6c4..38f2ff8383c5dda58bcceec4fac62191
    headers.set("x-better-auth-forwarded-host", requestUrl.host);
    headers.set("x-better-auth-forwarded-proto", requestUrl.protocol.replace(/:$/, ""));
 diff --git a/src/utils/index.ts b/src/utils/index.ts
-index 34b9b2f35aba3e2809368792be1d6ccd8f2883f0..d28af03c80b40c9501ade928055da97767906aeb 100644
+index 8f9eddbd40255e2e8cc2f4f2cc1257737112147b..6e5dc85c85a1bb914d3a07ae0487f524ac4ae191 100644
 --- a/src/utils/index.ts
-+++ b/src/utils/index.ts	
++++ b/src/utils/index.ts
 @@ -138,6 +138,17 @@ export const getToken = async (
    opts?: GetTokenOptions
  ) => {
-   headers.set("host", new URL(siteUrl).host);
+   headers.set("host", new URL(siteUrl).host)
 +  // Vercel sets x-forwarded-host on the inbound request; Convex's edge routes
 +  // on it, so forwarding the app domain 404s. Preserve the public origin for
 +  // Better Auth, then drop the edge-routing header.
@@ -143,4 +143,4 @@ index 34b9b2f35aba3e2809368792be1d6ccd8f2883f0..d28af03c80b40c9501ade928055da977
 +  }
    const fetchToken = async () => {
      const basePath = opts?.basePath
-       ? (opts.basePath.startsWith("/")
+       ? (opts.basePath.startsWith("/") ? opts.basePath : `/${opts.basePath}`)
