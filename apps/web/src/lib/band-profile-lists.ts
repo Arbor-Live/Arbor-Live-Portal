@@ -3,6 +3,11 @@ export function formatCommaList(values: string[] | undefined): string {
   return (values ?? []).join(", ");
 }
 
+/** Trim form text; keep `""` so Convex receives an explicit clear (undefined is omitted). */
+export function trimOptional(value: string | undefined): string {
+  return (value ?? "").trim();
+}
+
 export function parseCommaList(input: string | undefined): string[] {
   return (input ?? "")
     .split(",")
@@ -40,12 +45,30 @@ export function bandListingFieldsToMutation(values: {
   mainContactPhone?: string;
 }) {
   return {
-    oneLiner: values.oneLiner?.trim() || undefined,
+    oneLiner: trimOptional(values.oneLiner),
     genres: parseCommaList(values.genres),
-    demoURL: values.demoURL?.trim() || undefined,
+    demoURL: trimOptional(values.demoURL),
     bandMembers: parseCommaList(values.bandMembers),
-    mainContactName: values.mainContactName?.trim() || undefined,
-    mainContactEmail: values.mainContactEmail?.trim() || undefined,
-    mainContactPhone: values.mainContactPhone?.trim() || undefined,
+    mainContactName: trimOptional(values.mainContactName),
+    mainContactEmail: trimOptional(values.mainContactEmail),
+    mainContactPhone: trimOptional(values.mainContactPhone),
+  };
+}
+
+export function bandPublicUrlsToMutation(values: {
+  publicWebsiteUrl?: string;
+  publicInstagramUrl?: string;
+  publicYoutubeUrl?: string;
+  publicSpotifyUrl?: string;
+  publicSlug?: string;
+  publicHeroImageUrl?: string;
+}) {
+  return {
+    publicWebsiteUrl: trimOptional(values.publicWebsiteUrl),
+    publicInstagramUrl: trimOptional(values.publicInstagramUrl),
+    publicYoutubeUrl: trimOptional(values.publicYoutubeUrl),
+    publicSpotifyUrl: trimOptional(values.publicSpotifyUrl),
+    publicSlug: trimOptional(values.publicSlug),
+    publicHeroImageUrl: trimOptional(values.publicHeroImageUrl),
   };
 }

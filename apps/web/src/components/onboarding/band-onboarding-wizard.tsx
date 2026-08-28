@@ -43,6 +43,7 @@ import {
   type BandPayeePayoutMethod,
 } from "@/lib/band-payout-copy";
 import { useDevPreviewReady } from "@/hooks/use-dev-preview";
+import { trimOptional } from "@/lib/band-profile-lists";
 
 type StepId =
   | "welcome"
@@ -309,7 +310,7 @@ export function BandOnboardingWizard() {
         setIsSubmitting(true);
         await updateActiveBandProfile({
           displayName: form.displayName.trim(),
-          bio: form.bio.trim() || undefined,
+          bio: trimOptional(form.bio),
         });
         await saveBandOnboardingStep({ identityCompleted: true });
         return true;
@@ -318,9 +319,9 @@ export function BandOnboardingWizard() {
       if (currentStep === "hero") {
         if (previewOnly) return true;
         setIsSubmitting(true);
-        if (form.publicHeroImageUrl) {
-          await updateActiveBandProfile({ publicHeroImageUrl: form.publicHeroImageUrl });
-        }
+        await updateActiveBandProfile({
+          publicHeroImageUrl: trimOptional(form.publicHeroImageUrl),
+        });
         await saveBandOnboardingStep({ heroCompleted: true });
         return true;
       }
@@ -333,13 +334,13 @@ export function BandOnboardingWizard() {
         if (previewOnly) return true;
         setIsSubmitting(true);
         await updateActiveBandProfile({
-          publicWebsiteUrl: form.publicWebsiteUrl.trim() || undefined,
-          publicInstagramUrl: form.publicInstagramUrl.trim() || undefined,
-          publicYoutubeUrl: form.publicYoutubeUrl.trim() || undefined,
-          publicSpotifyUrl: form.publicSpotifyUrl.trim() || undefined,
-          demoURL: form.demoURL.trim() || undefined,
+          publicWebsiteUrl: trimOptional(form.publicWebsiteUrl),
+          publicInstagramUrl: trimOptional(form.publicInstagramUrl),
+          publicYoutubeUrl: trimOptional(form.publicYoutubeUrl),
+          publicSpotifyUrl: trimOptional(form.publicSpotifyUrl),
+          demoURL: trimOptional(form.demoURL),
           publicListing: form.publicListing,
-          publicSlug: form.publicSlug.trim() || undefined,
+          publicSlug: trimOptional(form.publicSlug),
         });
         await saveBandOnboardingStep({ socialsCompleted: true });
         return true;
@@ -412,10 +413,10 @@ export function BandOnboardingWizard() {
         setIsSubmitting(true);
         await updateActiveBandProfile({
           performerHourlyRateUsd: form.performerHourlyRateUsd,
-          designatedPayeeUserId: form.designatedPayeeUserId.trim() || undefined,
-          designatedPayeeName: form.designatedPayeeName.trim() || undefined,
-          designatedPayeeEmail: form.designatedPayeeEmail.trim() || undefined,
-          designatedPayeeMailingAddress: form.designatedPayeeMailingAddress.trim() || undefined,
+          designatedPayeeUserId: trimOptional(form.designatedPayeeUserId),
+          designatedPayeeName: trimOptional(form.designatedPayeeName),
+          designatedPayeeEmail: trimOptional(form.designatedPayeeEmail),
+          designatedPayeeMailingAddress: trimOptional(form.designatedPayeeMailingAddress),
           designatedPayeePayoutMethod: form.designatedPayeePayoutMethod,
         });
         await saveBandOnboardingStep({ ratesPayeeCompleted: true });

@@ -22,7 +22,12 @@ import {
 } from "@/lib/band-payout-copy";
 import { bandOrgProfileSchema, type BandOrgProfileFormValues } from "@/lib/validations/users";
 import { useAdminBandSelection } from "@/components/bands/admin-band-selection";
-import { bandListingFieldsFromProfile, bandListingFieldsToMutation } from "@/lib/band-profile-lists";
+import {
+  bandListingFieldsFromProfile,
+  bandListingFieldsToMutation,
+  bandPublicUrlsToMutation,
+  trimOptional,
+} from "@/lib/band-profile-lists";
 import {
   BandArborPrivateFields,
   BandPublicListingFields,
@@ -140,22 +145,17 @@ export function AdminBandProfileClient() {
           : DEFAULT_BAND_PAYEE_PAYOUT_METHOD;
       await updateBand({
         organizationId,
-        displayName: values.displayName || undefined,
-        bio: values.bio || undefined,
+        displayName: trimOptional(values.displayName),
+        bio: trimOptional(values.bio),
         ...bandListingFieldsToMutation(values),
         performerHourlyRateUsd: values.performerHourlyRateUsd,
-        designatedPayeeUserId: values.designatedPayeeUserId || undefined,
-        designatedPayeeName: values.designatedPayeeName || undefined,
-        designatedPayeeEmail: values.designatedPayeeEmail || undefined,
-        designatedPayeeMailingAddress: values.designatedPayeeMailingAddress || undefined,
+        designatedPayeeUserId: trimOptional(values.designatedPayeeUserId),
+        designatedPayeeName: trimOptional(values.designatedPayeeName),
+        designatedPayeeEmail: trimOptional(values.designatedPayeeEmail),
+        designatedPayeeMailingAddress: trimOptional(values.designatedPayeeMailingAddress),
         designatedPayeePayoutMethod: payoutMethod,
-        publicWebsiteUrl: values.publicWebsiteUrl || undefined,
-        publicInstagramUrl: values.publicInstagramUrl || undefined,
-        publicYoutubeUrl: values.publicYoutubeUrl || undefined,
-        publicSpotifyUrl: values.publicSpotifyUrl || undefined,
+        ...bandPublicUrlsToMutation(values),
         publicListing: values.publicListing,
-        publicSlug: values.publicSlug || undefined,
-        publicHeroImageUrl: values.publicHeroImageUrl || undefined,
       });
       return values;
     },
@@ -283,7 +283,7 @@ export function AdminBandProfileClient() {
           </Form>
         </div>
 
-        <aside className="xl:sticky xl:top-4 xl:self-start">
+        <aside className="min-w-0 xl:sticky xl:top-4 xl:self-start">
           <Card>
             <CardContent className="pt-6">
               <BandProfilePreviewPanel data={watched} heroUrl={heroUrl} />

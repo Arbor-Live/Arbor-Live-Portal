@@ -53,7 +53,7 @@ export function BandProfileCardPreview({
   const displayName = data.displayName.trim() || "Your band name";
 
   return (
-    <div className={cn("space-y-2", className)}>
+    <div className={cn("min-w-0 space-y-2", className)}>
       <PreviewLabel>Directory card</PreviewLabel>
       <Card className="gap-0 overflow-hidden border border-border/50 bg-background/70 py-0 shadow-sm ring-0">
         <PublicArtistPoster
@@ -118,7 +118,9 @@ export function BandProfilePagePreview({
           {heroUrl ? (
             <StoredAssetImage
               storedValue={data.publicHeroImageUrl}
-              className="absolute inset-0 size-full object-cover opacity-50"
+              fill
+              sizes="320px"
+              className="object-cover opacity-50"
             />
           ) : null}
           <div className="relative flex h-full flex-col justify-end px-3 py-3">
@@ -182,8 +184,8 @@ export function BandProfilePreviewPanel({
             : "Internal only — Arbor staff can see this info, but it is not listed publicly."}
         </CardDescription>
       </div>
-      <ScrollArea className="max-h-[min(70vh,640px)]">
-        <div className="flex flex-col gap-4 pr-3">
+      <ScrollArea className="h-[min(70vh,640px)] w-full min-w-0">
+        <div className="flex w-full min-w-0 flex-col gap-4 pr-3">
           <BandProfileCardPreview data={data} heroUrl={heroUrl} />
           <BandProfilePagePreview data={data} heroUrl={heroUrl} />
         </div>

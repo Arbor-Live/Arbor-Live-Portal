@@ -30,7 +30,12 @@ import {
   type BandInviteFormValues,
   type BandProfileFormValues,
 } from "@/lib/validations/bands";
-import { bandListingFieldsFromProfile, bandListingFieldsToMutation } from "@/lib/band-profile-lists";
+import {
+  bandListingFieldsFromProfile,
+  bandListingFieldsToMutation,
+  bandPublicUrlsToMutation,
+  trimOptional,
+} from "@/lib/band-profile-lists";
 import {
   BandArborPrivateFields,
   BandPublicListingFields,
@@ -104,16 +109,10 @@ export function BandSelfServiceClient() {
   }, [profile, profileForm]);
 
   const persistProfile = async (values: BandProfileFormValues) => {
-    const listing = bandListingFieldsToMutation(values);
     await updateProfile({
-      displayName: values.displayName,
-      bio: values.bio || undefined,
-      oneLiner: listing.oneLiner,
-      genres: listing.genres,
-      demoURL: listing.demoURL,
-      mainContactName: listing.mainContactName,
-      mainContactEmail: listing.mainContactEmail,
-      mainContactPhone: listing.mainContactPhone,
+      displayName: trimOptional(values.displayName),
+      bio: trimOptional(values.bio),
+      ...bandListingFieldsToMutation(values),
       performerHourlyRateUsd: values.performerHourlyRateUsd,
       designatedPayeeUserId: profile?.designatedPayeeUserId,
       designatedPayeeName: profile?.designatedPayeeName,
@@ -124,13 +123,8 @@ export function BandSelfServiceClient() {
         profile?.designatedPayeePayoutMethod === "delivery"
           ? profile.designatedPayeePayoutMethod
           : undefined,
-      publicWebsiteUrl: values.publicWebsiteUrl || undefined,
-      publicInstagramUrl: values.publicInstagramUrl || undefined,
-      publicYoutubeUrl: values.publicYoutubeUrl || undefined,
-      publicSpotifyUrl: values.publicSpotifyUrl || undefined,
+      ...bandPublicUrlsToMutation(values),
       publicListing: values.publicListing,
-      publicSlug: values.publicSlug || undefined,
-      publicHeroImageUrl: values.publicHeroImageUrl || undefined,
     });
   };
 
@@ -431,7 +425,7 @@ export function BandSelfServiceClient() {
           </Card>
         </div>
 
-        <aside className="xl:sticky xl:top-4 xl:self-start">
+        <aside className="min-w-0 xl:sticky xl:top-4 xl:self-start">
           <Card>
             <CardContent className="pt-6">
               <BandProfilePreviewPanel data={watched} heroUrl={heroUrl} />

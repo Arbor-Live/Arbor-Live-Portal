@@ -19,6 +19,7 @@ import {
   DEFAULT_BAND_PAYEE_PAYOUT_METHOD,
   type BandPayeePayoutMethod,
 } from "@/lib/band-payout-copy";
+import { trimOptional } from "@/lib/band-profile-lists";
 import { bandPayeeSchema, type BandPayeeFormValues } from "@/lib/validations/bands";
 
 export function BandPayeeSettingsSection() {
@@ -72,10 +73,10 @@ export function BandPayeeSettingsSection() {
         displayName: profile.displayName ?? "",
         bio: profile.bio,
         performerHourlyRateUsd: profile.performerHourlyRateUsd,
-        designatedPayeeUserId: values.designatedPayeeUserId || undefined,
-        designatedPayeeName: values.designatedPayeeName || undefined,
-        designatedPayeeEmail: values.designatedPayeeEmail || undefined,
-        designatedPayeeMailingAddress: values.designatedPayeeMailingAddress || undefined,
+        designatedPayeeUserId: trimOptional(values.designatedPayeeUserId),
+        designatedPayeeName: trimOptional(values.designatedPayeeName),
+        designatedPayeeEmail: trimOptional(values.designatedPayeeEmail),
+        designatedPayeeMailingAddress: trimOptional(values.designatedPayeeMailingAddress),
         designatedPayeePayoutMethod: values.designatedPayeePayoutMethod,
         publicWebsiteUrl: profile.publicWebsiteUrl,
         publicInstagramUrl: profile.publicInstagramUrl,
