@@ -152,7 +152,7 @@ export function PublicEquipmentSkeleton() {
 
 export function PublicArticleSkeleton() {
   return (
-    <div role="status" aria-label="Loading">
+    <div>
       <PublicHeroSkeleton />
       <div className="mx-auto max-w-3xl space-y-4 px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
         <Skeleton className="h-4 w-full" />

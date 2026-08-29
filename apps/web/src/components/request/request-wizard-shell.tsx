@@ -56,10 +56,15 @@ export function RequestWizardShell({
     >
       {ocean ? (
         <>
-          <FftOceanBackground className="pointer-events-none absolute inset-0 z-0" />
           <div
             aria-hidden
-            className="pointer-events-none absolute inset-0 z-[1] bg-[radial-gradient(ellipse_80%_60%_at_50%_20%,transparent_20%,rgba(0,0,0,0.55)_100%)]"
+            className="pointer-events-none absolute inset-0 z-0 opacity-40"
+            style={GRID_STYLE}
+          />
+          <FftOceanBackground className="pointer-events-none absolute inset-0 z-[1]" />
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 z-[2] bg-[radial-gradient(ellipse_80%_60%_at_50%_20%,transparent_20%,rgba(0,0,0,0.55)_100%)]"
           />
         </>
       ) : (

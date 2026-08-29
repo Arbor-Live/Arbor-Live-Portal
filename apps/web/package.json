@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "node ./scripts/materialize-convex-public-env.mjs && next build",
+    "build": "node ./scripts/materialize-convex-public-env.mjs && next build --webpack",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",

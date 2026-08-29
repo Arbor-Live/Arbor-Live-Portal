@@ -39,5 +39,5 @@ fn coefficient(i: u32) -> f32 {
     let sample2 = textureSample(colorTexture, linearSampler, uv - uvOffset).rgb;
     diffuseSum = diffuseSum + (sample1 + sample2) * w;
   }
-  return vec4f(diffuseSum, 1.0);
+  return vec4f(diffuseSum / weightSum, 1.0);
 }

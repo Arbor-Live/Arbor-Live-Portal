@@ -163,17 +163,21 @@ export function createRenderer({
     if (disposed) return;
     disposed = true;
     resizeGeneration += 1;
-    runCleanups([
-      () => rasterAbort?.abort(),
-      () => {
-        if (animationFrame) cancelAnimationFrame(animationFrame);
-      },
-      () => observer?.disconnect(),
-      () => canvas.removeEventListener("pointermove", handlePointerMove),
-      () => canvas.removeEventListener("pointerleave", handlePointerLeave),
-      () => canvas.removeEventListener("pointercancel", handlePointerLeave),
-      () => gpu?.dispose(),
-    ]);
+    try {
+      runCleanups([
+        () => rasterAbort?.abort(),
+        () => {
+          if (animationFrame) cancelAnimationFrame(animationFrame);
+        },
+        () => observer?.disconnect(),
+        () => canvas.removeEventListener("pointermove", handlePointerMove),
+        () => canvas.removeEventListener("pointerleave", handlePointerLeave),
+        () => canvas.removeEventListener("pointercancel", handlePointerLeave),
+        () => gpu?.dispose(),
+      ]);
+    } catch {
+      // Teardown must not surface during React unmount.
+    }
   };
 
   function fail(error: unknown): never | void {

@@ -20,20 +20,25 @@ export function PortalShaderBand({ className }: PortalShaderBandProps) {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (reduceMotion || typeof navigator === "undefined" || !("gpu" in navigator)) {
-      return;
-    }
-
+    const reduceMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
     let disposed = false;
     let disposeRenderer: (() => void) | undefined;
 
-    void (async () => {
+    const teardown = () => {
+      disposeRenderer?.();
+      disposeRenderer = undefined;
+      setActive(false);
+    };
+
+    const start = async () => {
+      if (reduceMotionQuery.matches) return;
+      if (typeof navigator === "undefined" || !("gpu" in navigator)) return;
+
       try {
         const { init, effect, frameLoop, surface, clock } = await import("vgpu");
-        if (disposed) return;
+        if (disposed || reduceMotionQuery.matches) return;
         const gpu = await init();
-        if (disposed) {
+        if (disposed || reduceMotionQuery.matches) {
           gpu.dispose();
           return;
         }
@@ -53,11 +58,23 @@ export function PortalShaderBand({ className }: PortalShaderBandProps) {
       } catch {
         // Keep CSS radial fallback on PublicPageHero.
       }
-    })();
+    };
+
+    const handleMotionChange = () => {
+      if (reduceMotionQuery.matches) {
+        teardown();
+        return;
+      }
+      void start();
+    };
+
+    void start();
+    reduceMotionQuery.addEventListener("change", handleMotionChange);
 
     return () => {
       disposed = true;
-      disposeRenderer?.();
+      reduceMotionQuery.removeEventListener("change", handleMotionChange);
+      teardown();
     };
   }, []);
 
