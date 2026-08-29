@@ -25,6 +25,11 @@ import { assertUniqueBandPublicSlug, normalizePublicSlug } from "./lib/publicSlu
 import { isBandPayeeComplete } from "./lib/bandPayments";
 import { normalizeOptionalAssetReference } from "./lib/inventoryUpload";
 import {
+  collectKeysFromOrganizationProfile,
+  releaseReplacedR2Reference,
+  releaseR2KeysIfUnreferenced,
+} from "./lib/r2Lifecycle";
+import {
   resolveProfileMembership,
   userDisciplineValue,
   userVerticalValue,
@@ -605,6 +610,10 @@ export const updateBandOrganizationProfileAdmin = mutation({
       .withIndex("by_organizationId", (q) => q.eq("organizationId", args.organizationId))
       .unique();
     if (existing) {
+      const nextHeroImageUrl =
+        args.publicHeroImageUrl !== undefined
+          ? normalizeOptionalAssetReference(args.publicHeroImageUrl)
+          : existing.publicHeroImageUrl;
       await ctx.db.patch(existing._id, {
         organizationType: existing.organizationType ?? "band",
         displayName:
@@ -651,13 +660,13 @@ export const updateBandOrganizationProfileAdmin = mutation({
             : existing.publicSpotifyUrl,
         publicListing: publicListing ?? existing.publicListing,
         publicSlug: publicSlug ?? (publicListing === false ? undefined : existing.publicSlug),
-        publicHeroImageUrl:
-          args.publicHeroImageUrl !== undefined
-            ? normalizeOptionalAssetReference(args.publicHeroImageUrl)
-            : existing.publicHeroImageUrl,
+        publicHeroImageUrl: nextHeroImageUrl,
         ...patchBandListingProfileFields(existing, args),
         updatedAt: now,
       });
+      if (args.publicHeroImageUrl !== undefined) {
+        await releaseReplacedR2Reference(ctx, existing.publicHeroImageUrl, nextHeroImageUrl);
+      }
       await ctx.runMutation(internal.bandPayments.refreshPendingPayeePaymentsForOrg, {
         organizationId: args.organizationId,
       });
@@ -861,7 +870,9 @@ export const deleteArchivedBandOrganizationAdmin = mutation({
     }
 
     await clearActiveOrgSelections(ctx, args.organizationId);
+    const keysToRelease = collectKeysFromOrganizationProfile(profile);
     await ctx.db.delete(profile._id);
+    await releaseR2KeysIfUnreferenced(ctx, keysToRelease);
 
     // Best-effort Better Auth cascade — never block the Convex-side delete on it.
     try {
@@ -2144,6 +2155,10 @@ export const updateActiveBandProfile = mutation({
       .withIndex("by_organizationId", (q) => q.eq("organizationId", context.organizationId))
       .unique();
     if (existing) {
+      const nextHeroImageUrl =
+        args.publicHeroImageUrl !== undefined
+          ? normalizeOptionalAssetReference(args.publicHeroImageUrl)
+          : existing.publicHeroImageUrl;
       await ctx.db.patch(existing._id, {
         organizationType: existing.organizationType ?? "band",
         // Callers send partial payloads (the onboarding wizard saves one step
@@ -2192,13 +2207,13 @@ export const updateActiveBandProfile = mutation({
             : existing.publicSpotifyUrl,
         publicListing: publicListing ?? existing.publicListing,
         publicSlug: publicSlug ?? (publicListing === false ? undefined : existing.publicSlug),
-        publicHeroImageUrl:
-          args.publicHeroImageUrl !== undefined
-            ? normalizeOptionalAssetReference(args.publicHeroImageUrl)
-            : existing.publicHeroImageUrl,
+        publicHeroImageUrl: nextHeroImageUrl,
         ...patchBandListingProfileFields(existing, args),
         updatedAt: now,
       });
+      if (args.publicHeroImageUrl !== undefined) {
+        await releaseReplacedR2Reference(ctx, existing.publicHeroImageUrl, nextHeroImageUrl);
+      }
       await ctx.runMutation(internal.bandPayments.refreshPendingPayeePaymentsForOrg, {
         organizationId: context.organizationId,
       });

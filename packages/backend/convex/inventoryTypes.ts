@@ -7,6 +7,11 @@ import {
   normalizeOptionalAssetReference,
   normalizeResourceLinksForUpload,
 } from "./lib/inventoryUpload";
+import {
+  collectKeysFromInventoryType,
+  diffReleasedR2Keys,
+  releaseR2KeysIfUnreferenced,
+} from "./lib/r2Lifecycle";
 import { scheduleInventoryTypeSiteRevalidation } from "./lib/scheduleSiteRevalidation";
 import { ensureDefaultCategories } from "./inventoryCategories";
 
@@ -485,6 +490,29 @@ export const update = mutation({
       }
     }
 
+    const nextManualUrls =
+      args.manualUrls === undefined
+        ? existing.manualUrls
+        : normalizeResourceLinksForStore(args.manualUrls, "Manual");
+    const nextCategoryMetadata =
+      args.categoryMetadata !== undefined
+        ? normalizeCategoryMetadataInput(args.categoryMetadata ?? {})
+        : existing.categoryMetadata;
+    const nextIconImageUrl =
+      args.iconImageUrl === undefined
+        ? existing.iconImageUrl
+        : normalizeOptionalAssetReference(args.iconImageUrl);
+    const nextPromoImageUrl =
+      args.promoImageUrl === undefined
+        ? existing.promoImageUrl
+        : normalizeOptionalAssetReference(args.promoImageUrl);
+    const nextTypeSnapshot = {
+      iconImageUrl: nextIconImageUrl,
+      promoImageUrl: nextPromoImageUrl,
+      manualUrls: nextManualUrls,
+      categoryMetadata: nextCategoryMetadata,
+    };
+
     await ctx.db.patch(args.id, {
       name: args.name.trim(),
       description: args.description?.trim() || undefined,
@@ -495,20 +523,25 @@ export const update = mutation({
       rentalPriceUsd: nonSubsidizedRentalPriceUsd,
       subsidizedRentalPriceUsd,
       nonSubsidizedRentalPriceUsd,
-      manualUrls: normalizeResourceLinksForStore(args.manualUrls, "Manual"),
+      manualUrls: nextManualUrls,
       tips: args.tips?.trim(),
       capabilities,
-      iconImageUrl: normalizeOptionalAssetReference(args.iconImageUrl),
-      promoImageUrl: normalizeOptionalAssetReference(args.promoImageUrl),
-      categoryMetadata:
-        args.categoryMetadata !== undefined
-          ? normalizeCategoryMetadataInput(args.categoryMetadata ?? {})
-          : existing.categoryMetadata,
+      iconImageUrl: nextIconImageUrl,
+      promoImageUrl: nextPromoImageUrl,
+      categoryMetadata: nextCategoryMetadata,
       publicListing,
       publicProfile,
       publicSlug,
       updatedAt: Date.now(),
     });
+
+    await releaseR2KeysIfUnreferenced(
+      ctx,
+      diffReleasedR2Keys(
+        collectKeysFromInventoryType(existing),
+        collectKeysFromInventoryType(nextTypeSnapshot),
+      ),
+    );
 
     if (publicListing || existing.publicListing) {
       await scheduleInventoryTypeSiteRevalidation(ctx);
@@ -586,7 +619,9 @@ export const remove = mutation({
       throw new Error("Cannot delete type used in packages.");
     }
 
+    const keysToRelease = collectKeysFromInventoryType(existing);
     await ctx.db.delete(args.id);
+    await releaseR2KeysIfUnreferenced(ctx, keysToRelease);
 
     if (existing.publicListing) {
       await scheduleInventoryTypeSiteRevalidation(ctx);

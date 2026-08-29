@@ -53,4 +53,11 @@ crons.interval(
   {},
 );
 
+crons.cron(
+  "prune orphaned r2 assets",
+  "0 5 * * *",
+  internal.r2Assets.pruneOrphans,
+  {},
+);
+
 export default crons;

@@ -4,6 +4,11 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { requireAuth } from "./lib/auth";
 import { normalizeOptionalAssetReference } from "./lib/inventoryUpload";
 import {
+  collectKeysFromInventoryPackage,
+  releaseReplacedR2Reference,
+  releaseR2KeysIfUnreferenced,
+} from "./lib/r2Lifecycle";
+import {
   estimatePackageRentalValueFromContents,
   listFulfillmentPackageBom,
   type HydratedContentUnit,
@@ -612,6 +617,7 @@ export const update = mutation({
       }
     }
 
+    const nextHeroImageUrl = normalizeOptionalAssetReference(args.publicHeroImageUrl);
     await ctx.db.patch(args.id, {
       name: args.name.trim(),
       description: args.description?.trim(),
@@ -621,10 +627,11 @@ export const update = mutation({
       active: args.active,
       publicListing,
       publicBucket: publicListing ? (args.publicBucket ?? existing.publicBucket) : undefined,
-      publicHeroImageUrl: normalizeOptionalAssetReference(args.publicHeroImageUrl),
+      publicHeroImageUrl: nextHeroImageUrl,
       publicSlug,
       updatedAt: now,
     });
+    await releaseReplacedR2Reference(ctx, existing.publicHeroImageUrl, nextHeroImageUrl);
 
     await replacePackageContents(ctx, args.id, contents, now);
 
@@ -651,7 +658,9 @@ export const remove = mutation({
 
     await deleteOptionStructureForPackage(ctx, args.id);
 
+    const keysToRelease = collectKeysFromInventoryPackage(existing);
     await ctx.db.delete(args.id);
+    await releaseR2KeysIfUnreferenced(ctx, keysToRelease);
 
     if (existing.publicListing) {
       await scheduleInventoryPackageSiteRevalidation(ctx, args.id);

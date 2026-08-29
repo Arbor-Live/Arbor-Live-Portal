@@ -9,6 +9,9 @@ import { normalizeEventStatus } from "./lib/eventStatus";
 import { normalizeEventVisibility } from "./lib/eventVisibility";
 import { normalizeOptionalAssetReference } from "./lib/inventoryUpload";
 import {
+  releaseReplacedR2Reference,
+} from "./lib/r2Lifecycle";
+import {
   buildPublicEventUrl,
   formatLinksForCaption,
   isPublicListableEventStatus,
@@ -391,6 +394,9 @@ export const upsertForEvent = mutation({
         ...(hasAssignee ? { assigneeUserId: nextAssignee } : {}),
         updatedAt: now,
       });
+      if (hasImage) {
+        await releaseReplacedR2Reference(ctx, existing.imageUrl, nextImageUrl);
+      }
       await schedulePublicEventsSiteRevalidation(ctx, String(args.eventId));
       return { designId: existing._id };
     }
@@ -406,6 +412,9 @@ export const upsertForEvent = mutation({
         updatedAt: now,
         ...(nextStatus === "ready" ? { lastError: undefined } : {}),
       });
+      if (hasImage) {
+        await releaseReplacedR2Reference(ctx, existing.imageUrl, nextImageUrl);
+      }
       await schedulePublicEventsSiteRevalidation(ctx, String(args.eventId));
       return { designId: existing._id };
     }
@@ -447,13 +456,15 @@ export const create = mutation({
       .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
       .take(1);
     if (existing[0]) {
+      const nextImageUrl = normalizeOptionalAssetReference(args.imageUrl);
       await ctx.db.patch(existing[0]._id, {
         assigneeUserId: args.assigneeUserId ?? existing[0].assigneeUserId,
-        imageUrl,
+        imageUrl: nextImageUrl,
         caption: args.caption?.trim() || undefined,
         additionalLinks: normalizeLinks(args.additionalLinks),
         updatedAt: now,
       });
+      await releaseReplacedR2Reference(ctx, existing[0].imageUrl, nextImageUrl);
       return existing[0]._id;
     }
 
@@ -486,12 +497,13 @@ export const update = mutation({
     if (existing.status === "published") {
       throw new Error("Published designs cannot be edited.");
     }
+    const nextImageUrl =
+      args.imageUrl === undefined
+        ? existing.imageUrl
+        : normalizeOptionalAssetReference(args.imageUrl) ?? existing.imageUrl;
     await ctx.db.patch(args.id, {
       assigneeUserId: args.assigneeUserId ?? existing.assigneeUserId,
-      imageUrl:
-        args.imageUrl === undefined
-          ? existing.imageUrl
-          : normalizeOptionalAssetReference(args.imageUrl) ?? existing.imageUrl,
+      imageUrl: nextImageUrl,
       caption: args.caption?.trim() ?? existing.caption,
       additionalLinks:
         args.additionalLinks === undefined
@@ -499,6 +511,9 @@ export const update = mutation({
           : normalizeLinks(args.additionalLinks),
       updatedAt: Date.now(),
     });
+    if (args.imageUrl !== undefined) {
+      await releaseReplacedR2Reference(ctx, existing.imageUrl, nextImageUrl);
+    }
     return { ok: true };
   },
 });

@@ -102,3 +102,23 @@ External HTTPS URLs can still be pasted manually for resource links hosted elsew
 3. Confirm the saved value looks like `r2:inventory/packages/...`.
 4. Open `/public/packages` — image `src` should be on your custom domain, not `r2.cloudflarestorage.com`.
 5. Open the image URL directly in a browser (no auth) to confirm public read access works.
+
+## Orphan cleanup
+
+Uploaded files can outlive their Convex references when a user abandons a form, replaces an image, or removes a file from a list. The portal handles this in two layers:
+
+1. **Mutation-time release** — update/delete mutations call `releaseR2Keys` when a stored reference is replaced or the owning row is deleted (`lib/r2Lifecycle.ts`).
+2. **Daily cron** — `internal.r2Assets.pruneOrphans` runs at 05:00 UTC, compares R2 component metadata against all referenced keys, skips objects newer than 48 hours, and deletes up to 200 orphans per invocation (self-scheduling until caught up).
+
+Dry-run before the first production sweep:
+
+```bash
+cd packages/backend
+npx convex run r2Assets:reportOrphans --prod
+```
+
+Then trigger a one-off prune (or wait for the cron):
+
+```bash
+npx convex run r2Assets:pruneOrphans --prod
+```

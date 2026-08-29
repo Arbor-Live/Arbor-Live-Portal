@@ -351,7 +351,8 @@ export function parseStoredR2Asset(
     value.startsWith("events/") ||
     value.startsWith("users/") ||
     value.startsWith("marketing/") ||
-    value.startsWith("organizations/")
+    value.startsWith("organizations/") ||
+    value.startsWith("venues/")
   ) {
     return { kind: "r2", key: value };
   }
