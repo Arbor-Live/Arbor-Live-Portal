@@ -32,6 +32,11 @@ import {
   QuestionnaireWizardFooter,
   QuestionnaireWizardProgress,
 } from "@/components/ui/questionnaire-wizard";
+import {
+  firstOpenMicStepForField,
+  firstOpenMicStepWithError,
+  getOpenMicStepFieldError,
+} from "@/lib/open-mic-wizard-validation";
 import { formatDateTime } from "@/lib/format";
 import {
   OPEN_MIC_EQUIPMENT_OPTIONS,
@@ -150,12 +155,22 @@ export function OpenMicWizard() {
     [activeSteps, form, resolvedItem, showIntro],
   );
 
+  const goToFirstInvalidStep = useCallback(() => {
+    const target = firstOpenMicStepWithError(activeSteps, form.formState.errors);
+    if (!target || target === "thankYou") return;
+    didFocusActiveItem.current = false;
+    setItem(target as QuestionStepId);
+  }, [activeSteps, form]);
+
   const handleSubmit = useCallback(
     async (event: React.FormEvent<HTMLFormElement>) => {
       event.preventDefault();
       setSubmitError(null);
       const valid = await form.trigger();
-      if (!valid) return;
+      if (!valid) {
+        goToFirstInvalidStep();
+        return;
+      }
       if (!activeNight) {
         setSubmitError(
           "No upcoming open mic night is open for sign-ups right now. Check back soon!",
@@ -171,12 +186,21 @@ export function OpenMicWizard() {
           for (const [field, message] of Object.entries(result.fieldErrors)) {
             form.setError(field as keyof OpenMicSignupFormValues, { message });
           }
+          const target = Object.keys(result.fieldErrors)
+            .map((field) => firstOpenMicStepForField(activeSteps, field))
+            .find((step): step is OpenMicStepId => step != null);
+          if (target && target !== "thankYou") {
+            didFocusActiveItem.current = false;
+            setItem(target as QuestionStepId);
+          } else {
+            goToFirstInvalidStep();
+          }
         }
         return;
       }
       setConfirmation({ nightTitle: result.nightTitle, nightStartAt: result.nightStartAt });
     },
-    [activeNight, form],
+    [activeNight, activeSteps, form, goToFirstInvalidStep],
   );
 
   const hideFooter = Boolean(confirmation) || resolvedItem === "intro";
@@ -188,7 +212,9 @@ export function OpenMicWizard() {
   const renderedIntroDisabled = resolvedItem === "intro" && !showIntro;
   const renderedDisabled = renderedIntroDisabled || (resolvedItem !== "intro" && !renderedStep);
   const renderedRequired = resolvedItem !== "equipment" && !renderedDisabled;
-  const renderedFieldError = confirmation ? undefined : stepFieldError(form, resolvedItem);
+  const renderedFieldError = confirmation
+    ? undefined
+    : getOpenMicStepFieldError(form.formState.errors, resolvedItem);
 
   if (activeNight === undefined) {
     return (
@@ -337,29 +363,6 @@ export function OpenMicWizard() {
       </FormProvider>
     </PublicMarketingLayout>
   );
-}
-
-function stepFieldError(
-  form: ReturnType<typeof useForm<OpenMicSignupFormValues>>,
-  stepId: OpenMicStepId,
-) {
-  const errors = form.formState.errors;
-  switch (stepId) {
-    case "name":
-      return errors.name?.message;
-    case "email":
-      return errors.email?.message;
-    case "whatYoureDoing":
-      return errors.whatTheyreDoing?.message;
-    case "equipment":
-      return errors.equipment?.message;
-    case "bgMusicLink":
-      return errors.bgMusicLink?.message;
-    case "notes":
-      return errors.notes?.message;
-    default:
-      return undefined;
-  }
 }
 
 function EquipmentChoices() {

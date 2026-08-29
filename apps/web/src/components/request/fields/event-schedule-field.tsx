@@ -131,9 +131,10 @@ const ShowSlotPanel = memo(function ShowSlotPanel({
 
 export function EventScheduleField() {
   const { setValue, getFieldState, formState } = useFormContext<BookingRequestFormValues>();
-  const showSlots = useWatch({ name: "showSlots" }) ?? [];
-  const flexibleSetupTime = useWatch({ name: "flexibleSetupTime" }) ?? false;
-  const setupTime = useWatch({ name: "setupTime" }) ?? "";
+  const showSlots =
+    (useWatch({ name: "showSlots" }) as BookingRequestFormValues["showSlots"] | undefined) ?? [];
+  const flexibleSetupTime = Boolean(useWatch({ name: "flexibleSetupTime" }));
+  const setupTime = (useWatch({ name: "setupTime" }) as string | undefined) ?? "";
   const [activeSlotIndex, setActiveSlotIndex] = useState(0);
   const minDate = useMemo(() => startOfToday(), []);
 

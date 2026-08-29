@@ -33,7 +33,7 @@ export const BOOKING_REQUEST_STEP_WATCH_FIELDS: Record<
 
 /** Maps a useWatch result to step-local values (scalar name → scalar, array name → array). */
 export function buildStepFieldValuesFromWatch<T extends Record<string, unknown>>(
-  fieldNames: readonly (keyof T & string)[],
+  fieldNames: readonly FieldPath<T>[],
   watched: unknown,
 ): Partial<T> {
   if (fieldNames.length === 0) {

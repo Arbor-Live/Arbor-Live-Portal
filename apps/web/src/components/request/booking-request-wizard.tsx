@@ -63,6 +63,11 @@ import {
 } from "@/lib/validations/booking-request";
 
 import { BOOKING_REQUEST_STEP_WATCH_FIELDS, buildStepFieldValuesFromWatch } from "@/lib/booking-request-wizard-subscriptions";
+import {
+  firstBookingRequestStepForField,
+  firstBookingRequestStepWithError,
+  getBookingRequestStepFieldError,
+} from "@/lib/booking-request-wizard-validation";
 
 const QUESTION_STEPS = [
   "welcome",
@@ -300,12 +305,22 @@ export function BookingRequestWizard() {
     [activeSteps, form, includeLighting, item, lookupEmail, skipSponsor],
   );
 
+  const goToFirstInvalidStep = useCallback(() => {
+    const target = firstBookingRequestStepWithError(activeSteps, form.formState.errors);
+    if (!target) return;
+    didFocusActiveItem.current = false;
+    setItem(target);
+  }, [activeSteps, form]);
+
   const handleSubmit = useCallback(
     async (event: React.FormEvent<HTMLFormElement>) => {
       event.preventDefault();
       setSubmitError(null);
       const valid = await form.trigger();
-      if (!valid) return;
+      if (!valid) {
+        goToFirstInvalidStep();
+        return;
+      }
       setIsSubmitting(true);
       const result = await submitBookingRequest(form.getValues());
       setIsSubmitting(false);
@@ -315,19 +330,30 @@ export function BookingRequestWizard() {
           for (const [field, message] of Object.entries(result.fieldErrors)) {
             form.setError(field as keyof BookingRequestFormValues, { message });
           }
+          const target = Object.keys(result.fieldErrors)
+            .map((field) => firstBookingRequestStepForField(activeSteps, field))
+            .find((step): step is BookingRequestStepId => step != null);
+          if (target) {
+            didFocusActiveItem.current = false;
+            setItem(target);
+          } else {
+            goToFirstInvalidStep();
+          }
         }
         return;
       }
       setTrackingInfo({ publicToken: result.publicToken, requestNumber: result.requestNumber });
     },
-    [form],
+    [activeSteps, form, goToFirstInvalidStep],
   );
 
   const returningHeadline =
     contactLookup?.found === true ? `Welcome back, ${contactLookup.firstName}!` : currentStep.headline;
 
   const renderedStep = trackingInfo ? null : activeSteps.find((entry) => entry.id === item);
-  const renderedFieldError = trackingInfo ? undefined : stepFieldError(form, item);
+  const renderedFieldError = trackingInfo
+    ? undefined
+    : getBookingRequestStepFieldError(form.formState.errors, item);
   const renderedHeadline =
     item === "returningUser" ? returningHeadline : (renderedStep?.headline ?? "");
   const renderedRequired =
@@ -423,60 +449,21 @@ export function BookingRequestWizard() {
   );
 }
 
-function stepFieldError(
-  form: ReturnType<typeof useForm<BookingRequestFormValues>>,
-  stepId: BookingRequestStepId,
-) {
-  const errors = form.formState.errors;
-  switch (stepId) {
-    case "email":
-      return errors.email?.message;
-    case "returningUser":
-      return errors.requestContext?.message;
-    case "contact":
-      return errors.firstName?.message ?? errors.lastName?.message ?? errors.phone?.message;
-    case "sponsorType":
-      return errors.sponsorType?.message ?? errors.sponsorTypeOther?.message ?? errors.organization?.message;
-    case "venue":
-      return errors.venueName?.message ?? errors.venueAddress?.message;
-    case "eventSchedule":
-      return errors.showSlots?.message ?? errors.setupTime?.message;
-    case "eventName":
-      return errors.eventName?.message;
-    case "eventCategory":
-      return errors.eventCategory?.message ?? errors.eventCategoryOther?.message;
-    case "services":
-      return errors.crewOrRental?.message ?? errors.servicesNeeded?.message;
-    case "productionTier":
-      return errors.productionTier?.message;
-    case "lighting":
-      return errors.lightingPreference?.message;
-    case "eventDescription":
-      return errors.eventDescription?.message;
-    case "expectedTurnout":
-      return errors.expectedTurnout?.message;
-    case "existingEquipment":
-      return errors.existingEquipment?.message;
-    case "additionalNotes":
-      return errors.additionalNotes?.message;
-    default:
-      return undefined;
-  }
-}
-
 function useStepFieldValues(stepId: BookingRequestStepId) {
   const form = useFormContext<BookingRequestFormValues>();
   const fieldNames = BOOKING_REQUEST_STEP_WATCH_FIELDS[stepId];
-  const watched = useWatch({
+  const watchedSingle = useWatch({
     control: form.control,
-    disabled: fieldNames.length === 0,
-    name:
-      fieldNames.length === 1
-        ? fieldNames[0]
-        : fieldNames.length > 1
-          ? fieldNames
-          : undefined,
+    name: fieldNames[0] ?? "email",
+    disabled: fieldNames.length !== 1,
   });
+  const watchedMany = useWatch({
+    control: form.control,
+    name: fieldNames,
+    disabled: fieldNames.length < 2,
+  });
+  const watched =
+    fieldNames.length === 0 ? undefined : fieldNames.length === 1 ? watchedSingle : watchedMany;
 
   return useMemo(
     () => buildStepFieldValuesFromWatch<BookingRequestFormValues>(fieldNames, watched),
@@ -759,7 +746,7 @@ function SponsorTypeChoices() {
   const invoiceGroupId = values.invoiceGroupId;
   const sponsorTypeOther = values.sponsorTypeOther;
   const sponsorOptions = sponsorTypeOptionsForContext(requestContext);
-  const showOrganization = requiresOrganizationName(sponsorType, invoiceGroupId);
+  const showOrganization = requiresOrganizationName(sponsorType ?? "", invoiceGroupId);
 
   return (
     <div className="space-y-4">

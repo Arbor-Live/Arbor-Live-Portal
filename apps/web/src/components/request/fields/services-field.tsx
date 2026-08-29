@@ -10,9 +10,9 @@ import {
 } from "@/lib/validations/booking-request";
 
 export function ServicesField() {
-  const { setValue, getFieldState } = useFormContext<BookingRequestFormValues>();
-  const crewOrRental = useWatch({ name: "crewOrRental" });
-  const selected = useWatch({ name: "servicesNeeded" }) ?? [];
+  const { setValue, getFieldState, control } = useFormContext<BookingRequestFormValues>();
+  const crewOrRental = useWatch({ control, name: "crewOrRental" });
+  const selected = useWatch({ control, name: "servicesNeeded" }) ?? [];
   const crewError = getFieldState("crewOrRental").error?.message;
   const servicesError = getFieldState("servicesNeeded").error?.message;
 
