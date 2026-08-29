@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildInvoiceDocumentData, currency, groupInvoiceSections } from "./format";
+import {
+  buildInvoiceDocumentData,
+  currency,
+  groupInvoiceSections,
+  normalizeCrewLineLabel,
+} from "./format";
 import type { InvoiceDocumentInvoice, InvoiceLineItem } from "./types";
 
 const line = (
@@ -18,6 +23,24 @@ const line = (
 describe("currency", () => {
   it("delegates to the shared USD formatter", () => {
     expect(currency(2500)).toBe("$2,500.00");
+  });
+});
+
+describe("normalizeCrewLineLabel", () => {
+  it("collapses duplicated assignee names", () => {
+    expect(normalizeCrewLineLabel("Damian Luciano Muschamp (Damian Luciano Muschamp (Lead))")).toBe(
+      "Damian Luciano Muschamp (Lead)",
+    );
+    expect(normalizeCrewLineLabel("Damian Luciano Muschamp (Damian Luciano Muschamp)")).toBe(
+      "Damian Luciano Muschamp",
+    );
+    expect(normalizeCrewLineLabel("Setup — Damian (Damian (Lead))")).toBe("Setup — Damian (Lead)");
+    expect(normalizeCrewLineLabel("Day 1 — Damian (Damian)")).toBe("Day 1 — Damian");
+  });
+
+  it("leaves distinct role + assignee labels alone", () => {
+    expect(normalizeCrewLineLabel("Sound (Damian (Lead))")).toBe("Sound (Damian (Lead))");
+    expect(normalizeCrewLineLabel("FOH (Open slot)")).toBe("FOH (Open slot)");
   });
 });
 
@@ -68,5 +91,21 @@ describe("buildInvoiceDocumentData", () => {
       ],
     });
     expect(result.lineItems.map((l) => l.id)).toEqual(["crew-0", "crew-1"]);
+  });
+
+  it("normalizes duplicated crew labels", () => {
+    const result = buildInvoiceDocumentData({
+      invoice,
+      lineItems: [
+        {
+          section: "crew",
+          label: "Alex (Alex (Lead))",
+          quantity: 1,
+          rateUsd: 1,
+          amountUsd: 1,
+        },
+      ],
+    });
+    expect(result.lineItems[0].label).toBe("Alex (Lead)");
   });
 });

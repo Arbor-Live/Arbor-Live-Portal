@@ -46,6 +46,7 @@ export type EmailTemplate =
   | "payment_proof_reminder"
   | "payment_proof_submitted"
   | "paying_party_added"
+  | "quote_changes_requested"
   | "band_assigned"
   | "band_payment_confirmation"
   | "band_payment_completed"
@@ -68,6 +69,10 @@ export type EmailTemplate =
 
 export function eventDashboardUrl(eventId: string) {
   return `${SITE_URL}/dashboard/events/${eventId}`;
+}
+
+export function invoiceDashboardUrl(invoiceId: string) {
+  return `${SITE_URL}/dashboard/financial-hub/invoices/${invoiceId}`;
 }
 
 /** Deep link that opens the damage queue with the report's detail sheet open. */
@@ -168,6 +173,8 @@ export function subjectForTemplate(template: EmailTemplate, context: string) {
       return `Payment proof received: ${context}`;
     case "paying_party_added":
       return `You've been added as the paying party: ${context}`;
+    case "quote_changes_requested":
+      return `Quote changes requested: ${context}`;
     case "band_assigned":
       return `You're on the bill: ${context}`;
     case "band_payment_confirmation":

@@ -252,6 +252,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
   const pendingDamageReportsCount = navBadges?.pendingDamageReports
   const unconfirmedCrewCount = navBadges?.unconfirmedCrew
   const pendingBandPaymentActionsCount = navBadges?.pendingBandPaymentActions
+  const quoteChangesRequestedCount = navBadges?.quoteChangesRequested
 
   const userName = data?.user?.name ?? "Unknown user"
   const userEmail = data?.user?.email ?? "No email"
@@ -292,6 +293,8 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
         return pendingDamageReportsCount ?? 0
       case "/dashboard/bands-and-performers/payments":
         return pendingBandPaymentActionsCount ?? 0
+      case "/dashboard/financial-hub/invoices":
+        return quoteChangesRequestedCount ?? 0
       default:
         return 0
     }

@@ -6,6 +6,7 @@ import type {
   PaymentProofReminderEmailProps,
   PaymentProofSubmittedEmailProps,
   PayingPartyAddedEmailProps,
+  QuoteChangesRequestedEmailProps,
   BandAssignedEmailProps,
   BandPaymentConfirmationEmailProps,
   BandPaymentCompletedEmailProps,
@@ -149,6 +150,18 @@ export const payingPartyAddedPreviewProps: PayingPartyAddedEmailProps = {
   quoteTotalUsd: 4250,
   managerName: "Alex Chen",
   managerEmail: "alex.chen@stanford.edu",
+};
+
+export const quoteChangesRequestedPreviewProps: QuoteChangesRequestedEmailProps = {
+  recipientName: "Alex Chen",
+  eventTitle: eventDefaults.eventTitle,
+  venueName: eventDefaults.venueName,
+  dateRangeLabel: eventDefaults.dateRangeLabel,
+  invoiceNumber: "ALINV-4K8Z2NP",
+  clientContactName: "Jordan Lee",
+  clientGroupName: "Stanford Concert Network",
+  changeNote: "Please reduce crew hours and swap the wireless package for wired mics.",
+  invoiceUrl: `${ARBOR_WEBSITE_URL}/dashboard/financial-hub/invoices/demo`,
 };
 
 export const bandPaymentConfirmationPreviewProps: BandPaymentConfirmationEmailProps = {

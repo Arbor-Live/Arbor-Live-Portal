@@ -29,6 +29,8 @@ export type EventShiftDraft = {
   estimatedHourlyRateUsd?: number;
   postedToExpense: boolean;
   notes: string;
+  /** When true, shift times stay custom instead of mirroring the linked block. */
+  timesOverridden?: boolean;
 };
 
 export { toLocalDateTimeInput };
@@ -173,19 +175,47 @@ export function shiftBelongsToBlock(shift: ShiftBlockLink, block: TimelineBlockD
   return false;
 }
 
-/**
- * Crew shift times mirror their schedule block's window (the backend
- * force-syncs this on every `upsertBlocks` save). Call this whenever draft
- * block times change so the UI already reflects what a save will persist.
- */
-export function syncShiftsToBlockTimes<T extends ShiftBlockLink & { startsAt: string; endsAt: string }>(
+export function shiftTimesMatchBlock(
+  shift: { startsAt: string; endsAt: string },
+  block: { startsAt: string; endsAt: string },
+) {
+  return shift.startsAt === block.startsAt && shift.endsAt === block.endsAt;
+}
+
+export function shiftRowKey(
+  shift: { id?: string },
+  blockRef: string | undefined,
+  rowIndex: number,
+) {
+  return shift.id ?? `${blockRef ?? "orphan"}-shift-${rowIndex}`;
+}
+
+/** Mark shifts whose stored times differ from their block (loaded overrides). */
+export function applyShiftTimesOverrideFlags<T extends ShiftBlockLink & EventShiftDraft>(
   shifts: T[],
   blocks: TimelineBlockDraft[],
 ): T[] {
   return shifts.map((shift) => {
     const block = blocks.find((candidate) => shiftBelongsToBlock(shift, candidate));
+    if (!block || shift.timesOverridden) return shift;
+    if (shiftTimesMatchBlock(shift, block)) return shift;
+    return { ...shift, timesOverridden: true };
+  });
+}
+
+/**
+ * Crew shift times mirror their schedule block's window unless overridden.
+ * Call whenever draft block times change so non-overridden shifts stay aligned.
+ */
+export function syncShiftsToBlockTimes<T extends ShiftBlockLink & EventShiftDraft>(
+  shifts: T[],
+  blocks: TimelineBlockDraft[],
+): T[] {
+  return shifts.map((shift) => {
+    if (shift.timesOverridden) return shift;
+    const block = blocks.find((candidate) => shiftBelongsToBlock(shift, candidate));
     if (!block) return shift;
-    if (shift.startsAt === block.startsAt && shift.endsAt === block.endsAt) return shift;
+    if (shiftTimesMatchBlock(shift, block)) return shift;
     return { ...shift, startsAt: block.startsAt, endsAt: block.endsAt };
   });
 }

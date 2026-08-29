@@ -4281,6 +4281,23 @@ export const seedRequestLinkedDraftQuote = mutation({
     assertE2eHelpersEnabled();
     const now = Date.now();
     const seeded = await insertSubmittedBookingRequest(ctx, args.eventName);
+    // Sending to the client requires at least one terms template on the quote.
+    let termsId = (
+      await ctx.db
+        .query("invoiceTerms")
+        .withIndex("by_active", (q) => q.eq("active", true))
+        .take(1)
+    )[0]?._id;
+    if (!termsId) {
+      termsId = await ctx.db.insert("invoiceTerms", {
+        label: "E2E Default Terms",
+        version: "v1",
+        markdown: "E2E default payment and cancellation terms.",
+        active: true,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
     const invoiceNumber = `ALINV-${makeInvoiceSuffix()}`;
     const invoiceId = await ctx.db.insert("invoices", {
       invoiceNumber,
@@ -4305,6 +4322,7 @@ export const seedRequestLinkedDraftQuote = mutation({
       feesSubtotalUsd: 0,
       subtotalUsd: 250,
       totalUsd: 250,
+      termsIds: [termsId],
       clientApprovalStatus: "pending",
       sourceEventRequestId: seeded.requestId,
       createdAt: now,

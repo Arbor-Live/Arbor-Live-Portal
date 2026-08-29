@@ -55,6 +55,15 @@ function formatAssigneeName(personName: string | undefined, rateMode: CrewCompen
   return rateMode === "lead" ? `${name} (Lead)` : name;
 }
 
+function namesMatch(a: string, b: string) {
+  return a.trim().toLowerCase() === b.trim().toLowerCase();
+}
+
+/**
+ * Line label: `Setup — Sound (Alex (Lead))`.
+ * When role is empty or just the assignee's name, skip the redundant wrapper
+ * (`Alex (Alex (Lead))` → `Alex (Lead)`).
+ */
 function crewRowLabel(args: {
   blockLabel?: string;
   role: string;
@@ -62,11 +71,16 @@ function crewRowLabel(args: {
   userId?: string;
   rateMode?: CrewCompensationRateMode;
 }) {
-  const role = args.role?.trim() || args.personName?.trim() || "Crew";
+  const role = args.role?.trim() ?? "";
+  const personName = args.personName?.trim() ?? "";
   const assignee = args.userId?.trim()
     ? formatAssigneeName(args.personName, args.rateMode)
     : "Open slot";
   const blockPrefix = args.blockLabel ? `${args.blockLabel} — ` : "";
+  const roleIsJustName = Boolean(role && personName && namesMatch(role, personName));
+  if (!role || roleIsJustName) {
+    return `${blockPrefix}${assignee}`;
+  }
   return `${blockPrefix}${role} (${assignee})`;
 }
 

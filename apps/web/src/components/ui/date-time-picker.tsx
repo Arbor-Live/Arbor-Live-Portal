@@ -176,17 +176,17 @@ export function DateTimePicker({
           data-testid="date-time-picker"
           data-value={value}
           className={cn(
-            "min-w-[13rem] w-full shrink justify-start overflow-hidden font-normal data-[empty=true]:text-muted-foreground",
+            "w-full min-w-0 shrink justify-start overflow-hidden font-normal data-[empty=true]:text-muted-foreground",
             className,
           )}
         >
-          <CalendarBlankIcon />
+          <CalendarBlankIcon className="shrink-0" />
           <span className="min-w-0 truncate">
             {value ? formatDateTimeLabel(value) : (placeholder ?? "Select date")}
           </span>
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="z-[80] w-auto p-0" align="start">
+      <PopoverContent className="z-[80] w-[19.5rem] max-w-[calc(100vw-2rem)] p-0" align="start">
         <div className="flex flex-col gap-2 border-b p-3">
           <Label htmlFor={timeFieldId}>Time</Label>
           <TimeInput
@@ -196,6 +196,7 @@ export function DateTimePicker({
           />
         </div>
         <Calendar
+          className="w-full"
           mode="single"
           timeZone={PORTAL_TIMEZONE}
           noonSafe
@@ -299,20 +300,20 @@ export function DateTimeRangePicker({
           data-start-value={startValue}
           data-end-value={endValue}
           className={cn(
-            "min-w-[13rem] w-full shrink justify-start overflow-hidden font-normal data-[empty=true]:text-muted-foreground",
+            "w-full min-w-0 shrink justify-start overflow-hidden font-normal data-[empty=true]:text-muted-foreground",
             className,
           )}
         >
-          <CalendarBlankIcon />
+          <CalendarBlankIcon className="shrink-0" />
           <span className="min-w-0 truncate">
             {label || placeholder || "Select start and end"}
           </span>
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="z-[80] w-auto p-0" align="start">
+      <PopoverContent className="z-[80] w-[19.5rem] max-w-[calc(100vw-2rem)] p-0" align="start">
         <div className="space-y-2 border-b p-3">
           <Label>Time</Label>
-          <div className="flex min-w-[16rem] items-center gap-2">
+          <div className="flex items-center gap-2">
             <TimeInput
               id={startTimeId}
               value={startTime}
@@ -327,6 +328,7 @@ export function DateTimeRangePicker({
           </div>
         </div>
         <Calendar
+          className="w-full"
           mode="range"
           timeZone={PORTAL_TIMEZONE}
           noonSafe

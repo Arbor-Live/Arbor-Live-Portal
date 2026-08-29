@@ -24,6 +24,8 @@ type ReviewState = {
  * Two things here are new as of #68 and had no coverage: the personal message is
  * required (the mutation rejects an empty one, and the sheet disables Send), and
  * it is persisted to `clientReadyMessage` so the email body can include it.
+ * Sending also requires at least one terms template on the quote (seeded by
+ * `seedRequestLinkedDraftQuote`, enforced by `markReadyForClientReview`).
  *
  * The re-send assertion matters because `scheduleBookingQuoteReadyEmail` keys
  * idempotency on `booking_quote_ready:{invoiceId}:{clientReviewReadyAt}`: a

@@ -7,6 +7,7 @@ import {
   scheduleBlocksContentFingerprint,
   scheduleSchedulePublishedEmails,
 } from "./email/triggers";
+import { pacificDayIndexFromAnchor } from "@arbor/format";
 
 const blockTypeValue = v.union(
   v.literal("setup"),
@@ -36,7 +37,7 @@ export const upsertBlocks = mutation({
         clientId: v.optional(v.string()),
         blockType: blockTypeValue,
         label: v.string(),
-        dayIndex: v.number(),
+        dayIndex: v.optional(v.number()), // Derived from startsAt on save; omit from clients.
         startsAt: v.number(),
         endsAt: v.number(),
         notes: v.optional(v.string()),
@@ -52,15 +53,6 @@ export const upsertBlocks = mutation({
     for (const block of args.blocks) {
       if (block.endsAt <= block.startsAt) {
         throw new Error("Schedule block end must be after start.");
-      }
-      // dayIndex is timeline row placement from the client — do not recompute or
-      // gate it against event.endAt / spansMultipleDays. Overnight strike often
-      // sits on day 1 while show end stays the previous evening.
-      if (!Number.isFinite(block.dayIndex) || block.dayIndex < 0) {
-        throw new Error("Schedule block day index cannot be negative.");
-      }
-      if (block.dayIndex > 60) {
-        throw new Error("Schedule block day index is unreasonably large.");
       }
     }
     // Overlapping blocks are allowed: the timeline renders overlaps on
@@ -95,7 +87,8 @@ export const upsertBlocks = mutation({
     for (const block of args.blocks) {
       const label = block.label.trim();
       const notes = block.notes?.trim() || undefined;
-      const dayIndex = Math.floor(block.dayIndex);
+      // Derived from startsAt vs event start — client day picker removed.
+      const dayIndex = pacificDayIndexFromAnchor(event.startAt, block.startsAt);
       if (block.id) {
         await ctx.db.patch(block.id, {
           blockType: block.blockType,

@@ -13,6 +13,7 @@ import { BandPaymentCompletedEmail } from "../emails/band-payment-completed";
 import { BandPaymentPayeeRequiredEmail } from "../emails/band-payment-payee-required";
 import { PaymentProofReminderEmail } from "../emails/payment-proof-reminder";
 import { PaymentProofSubmittedEmail } from "../emails/payment-proof-submitted";
+import { QuoteChangesRequestedEmail } from "../emails/quote-changes-requested";
 import { CrewScheduledEmail } from "../emails/crew-scheduled";
 import { CrewUnscheduledEmail } from "../emails/crew-unscheduled";
 import { SchedulePublishedEmail } from "../emails/schedule-published";
@@ -44,6 +45,7 @@ import type {
   PaymentProofReminderEmailProps,
   PaymentProofSubmittedEmailProps,
   PayingPartyAddedEmailProps,
+  QuoteChangesRequestedEmailProps,
   BandAssignedEmailProps,
   BandPaymentConfirmationEmailProps,
   BandPaymentCompletedEmailProps,
@@ -127,6 +129,10 @@ export async function renderPaymentProofSubmittedEmail(props: PaymentProofSubmit
 
 export async function renderPayingPartyAddedEmail(props: PayingPartyAddedEmailProps) {
   return render(PayingPartyAddedEmail(props));
+}
+
+export async function renderQuoteChangesRequestedEmail(props: QuoteChangesRequestedEmailProps) {
+  return render(QuoteChangesRequestedEmail(props));
 }
 
 export async function renderBandAssignedEmail(props: BandAssignedEmailProps) {

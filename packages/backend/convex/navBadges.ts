@@ -55,6 +55,7 @@ export const getNavBadges = query({
     pendingCrewApplications: v.number(),
     pendingDamageReports: v.number(),
     pendingBandPaymentActions: v.number(),
+    quoteChangesRequested: v.number(),
   }),
   handler: async (ctx, args) => {
     const user = await requireAuth(ctx);
@@ -76,6 +77,7 @@ export const getNavBadges = query({
       pendingCrewApplications,
       pendingDamageReports,
       pendingBandPaymentActions,
+      quoteChangesRequested,
     ] = await Promise.all([
       args.includeArborInternal
         ? countMyPendingAvailability(ctx, getUserId(user), args.now)
@@ -88,6 +90,7 @@ export const getNavBadges = query({
       args.includeAdmin ? countSubmittedCrewApplications(ctx) : Promise.resolve(0),
       args.includeArborInternal ? countPendingDamageReports(ctx) : Promise.resolve(0),
       args.includeBand ? countPendingBandPaymentActions(ctx) : Promise.resolve(0),
+      args.includeArborInternal ? countQuoteChangesRequested(ctx) : Promise.resolve(0),
     ]);
 
     return {
@@ -98,6 +101,7 @@ export const getNavBadges = query({
       pendingCrewApplications,
       pendingDamageReports,
       pendingBandPaymentActions,
+      quoteChangesRequested,
     };
   },
 });
@@ -198,6 +202,14 @@ async function countPendingDamageReports(ctx: QueryCtx) {
     .withIndex("by_status", (q) => q.eq("status", "in_progress"))
     .take(BADGE_STATUS_TAKE);
   return open.length + inProgress.length;
+}
+
+async function countQuoteChangesRequested(ctx: QueryCtx) {
+  const rows = await ctx.db
+    .query("invoices")
+    .withIndex("by_clientApprovalStatus", (q) => q.eq("clientApprovalStatus", "changes_requested"))
+    .take(BADGE_STATUS_TAKE);
+  return rows.filter((invoice) => invoice.status !== "void").length;
 }
 
 async function countPendingBandPaymentActions(ctx: QueryCtx) {
