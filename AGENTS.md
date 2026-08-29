@@ -110,13 +110,13 @@ Each worktree has a Convex mode managed by `scripts/worktree-convex.mjs`
 
 - **Worktrunk (default)** — `packages/backend/.env.local` is a symlink to the
   shared store, so all worktrees share one cloud dev deployment. Use only when
-  you want shared data.
+  you want shared data, or in the main checkout.
 - **Local** — the worktree runs its **own anonymous Convex backend** on its own
   ports (`:3210`/`:3211`, then `:3220`/`:3221`, …), with real per-worktree
   `.env.local` files. Schema pushes and data are fully isolated.
 
-If you are an agent working on a worktree while other agents are active, start
-with **local** so you never collide with the trunk or another branch:
+All feature-branch work (single agent or many) must start with **local** so
+schema pushes never target the shared trunk deployment:
 
 ```bash
 pnpm dev:backend:local     # switch to local mode, boot, and set deployment env

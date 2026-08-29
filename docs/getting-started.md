@@ -76,20 +76,22 @@ automatically on checkout (`scripts/worktree-convex.mjs ensure`).
 ### Worktrunk (default)
 
 `packages/backend/.env.local` is a **symlink** into `.git/arbor-env/`, so every
-worktree shares one cloud dev deployment and one database. Use it when you
-want shared data, or when you're the only one touching the trunk branch.
+worktree shares one cloud dev deployment and one database. Use it only when you
+want shared data, or in the main checkout.
 
 ```bash
-pnpm dev:backend          # convex dev against the shared trunk deployment
+pnpm worktree-convex trunk   # select the shared trunk .env.local
+pnpm dev:backend             # convex dev against the shared trunk deployment
 ```
 
-### Local Convex (parallel agents)
+### Local Convex (feature work)
 
 Each worktree runs its **own anonymous Convex backend** on its own ports
 (`:3210`/`:3211` for the first worktree, then `:3220`/`:3221`, `:3230`/`:3231`,
 …). `.env.local` files become **real per-worktree files**, so schema pushes and
-data never collide with the trunk or another worktree. This is the mode to use
-when multiple agents work on different worktrees at the same time.
+data never collide with the trunk or another worktree. **All non-trunk feature
+work — a single agent or many, on any feature branch — must use this mode** so
+schema pushes never target the shared trunk deployment.
 
 ```bash
 pnpm dev:backend:local    # switch to local mode, boot the isolated backend,

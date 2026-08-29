@@ -12,6 +12,8 @@ apps/*/.env.local
 packages/*/.env
 packages/*/.env.local
 packages/backend/.env.local.pre-e2e
+# backups of unmanaged .env.local moved aside by scripts/worktree-convex.mjs
+*.worktree-convex.bak
 
 # next.js
 .next/

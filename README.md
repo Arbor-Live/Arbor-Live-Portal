@@ -93,7 +93,7 @@ Env files are **not** committed. They live once in `.git/arbor-env/` and are sym
 | File | How it gets created |
 |------|---------------------|
 | `packages/backend/.env` | Copy from `.env.example` into shared store |
-| `packages/backend/.env.local` | `pnpm dev:backend` (trunk, symlinked) or `pnpm dev:backend:local` (isolated, per-worktree) |
+| `packages/backend/.env.local` | `pnpm worktree-convex trunk`, then `pnpm dev:backend` (trunk, symlinked), or `pnpm dev:backend:local` (isolated, per-worktree) |
 | `apps/web/.env` | Copy from `apps/web/.env.example` into shared store |
 | `apps/web/.env.local` | `pnpm worktree-convex local` (isolated mode only) |
 | `apps/web/.env.production.local` | Written during `pnpm --filter web build` |
@@ -104,11 +104,13 @@ Env files are **not** committed. They live once in `.git/arbor-env/` and are sym
 by the env linker. `scripts/worktree-convex.mjs` owns it:
 
 - **Worktrunk (default)** — `.env.local` is symlinked to the shared store, so
-  every worktree shares one cloud dev deployment and database.
+  every worktree shares one cloud dev deployment and database. Only use it when
+  you want shared data, or in the main checkout.
 - **Local** — each worktree runs its own anonymous Convex backend on its own
   ports (`:3210`/`:3211`, then `:3220`/`:3221`, …), with real per-worktree
-  `.env.local` files. Use `pnpm dev:backend:local` when multiple agents work on
-  different worktrees at the same time so schema pushes and data never collide.
+  `.env.local` files. **All non-trunk feature work must use local mode** so
+  schema pushes never target the shared trunk deployment; start with
+  `pnpm dev:backend:local`.
 
 See the "Worktrunk vs. local Convex" section in
 [docs/getting-started.md](docs/getting-started.md).

@@ -34,6 +34,7 @@ const BACKEND_ENV_LOCAL = "packages/backend/.env.local";
 const WEB_ENV_LOCAL = "apps/web/.env.local";
 const BASE_PORT = Number(process.env.CONVEX_LOCAL_BASE_PORT ?? 3210);
 const STRIDE = 10;
+const GENERATED_MARKER = "managed by scripts/worktree-convex.mjs";
 
 function git(command, cwd = process.cwd()) {
   return execSync(command, { cwd, encoding: "utf8" }).trim();
@@ -51,10 +52,25 @@ const backendDir = path.join(repoRoot, "packages/backend");
 const convexBin = path.join(repoRoot, "node_modules", ".bin", "convex");
 
 function readRegistry() {
+  let raw;
   try {
-    return JSON.parse(fs.readFileSync(registryFile, "utf8"));
-  } catch {
-    return { worktrees: {} };
+    raw = fs.readFileSync(registryFile, "utf8");
+  } catch (error) {
+    if (error?.code === "ENOENT") return { worktrees: {} };
+    throw new Error(
+      `could not read the worktree-convex registry at ${registryFile}: ${
+        error instanceof Error ? error.message : String(error)
+      }\nFix or remove that file, then rerun \`pnpm worktree-convex ensure\`.`,
+    );
+  }
+  try {
+    return JSON.parse(raw);
+  } catch (error) {
+    throw new Error(
+      `worktree-convex registry at ${registryFile} is not valid JSON: ${
+        error instanceof Error ? error.message : String(error)
+      }\nRestore or remove that file, then rerun \`pnpm worktree-convex ensure\`.`,
+    );
   }
 }
 
@@ -112,10 +128,23 @@ function readEnvValue(file, key) {
   return null;
 }
 
-function hasDeploymentSelection(file) {
-  return ["CONVEX_DEPLOYMENT", "CONVEX_DEPLOY_KEY", "CONVEX_SELF_HOSTED_URL"].some(
-    (key) => readEnvValue(file, key),
-  );
+/** True for real files this script wrote (local-mode templates). */
+function isGeneratedByUs(file) {
+  if (!fs.existsSync(file)) return false;
+  return fs.readFileSync(file, "utf8").includes(GENERATED_MARKER);
+}
+
+/**
+ * True for a deployment-selected cloud config (the kind `convex dev` writes for
+ * the shared trunk). Anonymous local configs are per-worktree tool output and
+ * are not trunk material.
+ */
+function isTrunkEnvLocal(file) {
+  if (!fs.existsSync(file)) return false;
+  const deployment = readEnvValue(file, "CONVEX_DEPLOYMENT");
+  const url = readEnvValue(file, "CONVEX_URL") ?? readEnvValue(file, "CONVEX_CLOUD_URL");
+  if (deployment && !deployment.startsWith("anonymous")) return true;
+  return Boolean(url && url.includes(".convex.cloud"));
 }
 
 function isPortFree(port) {
@@ -152,7 +181,9 @@ async function allocatePorts(registry) {
 }
 
 function writeBackendEnvLocal(ports) {
-  removePath(BACKEND_ENV_LOCAL);
+  removeEnvLocal(BACKEND_ENV_LOCAL, {
+    preserve: isTrunkEnvLocal(path.join(repoRoot, BACKEND_ENV_LOCAL)),
+  });
   const contents = [
     "# Isolated local Convex backend for this worktree (managed by scripts/worktree-convex.mjs).",
     "# The Convex CLI keeps CONVEX_URL / CONVEX_SITE_URL in sync on every `convex dev`.",
@@ -164,7 +195,7 @@ function writeBackendEnvLocal(ports) {
 }
 
 function writeWebEnvLocal(ports) {
-  removePath(WEB_ENV_LOCAL);
+  removeEnvLocal(WEB_ENV_LOCAL);
   const contents = [
     "# Isolated local Convex backend for this worktree (managed by scripts/worktree-convex.mjs).",
     `NEXT_PUBLIC_CONVEX_URL=http://127.0.0.1:${ports.cloudPort}`,
@@ -174,14 +205,33 @@ function writeWebEnvLocal(ports) {
   fs.writeFileSync(path.join(repoRoot, WEB_ENV_LOCAL), contents);
 }
 
-function removePath(relativePath) {
+/**
+ * Remove an .env.local path before it is replaced, without losing files this
+ * script did not write. Symlinks and files we generated are deleted; an
+ * unmanaged real file is moved aside to `<file>.worktree-convex.bak` unless
+ * `preserve` is set (meaning its content already lives in the shared store).
+ */
+function removeEnvLocal(relativePath, { preserve = false } = {}) {
   const full = path.join(repoRoot, relativePath);
-  if (lstatOrNull(full)) fs.unlinkSync(full);
+  const stat = lstatOrNull(full);
+  if (!stat) return;
+  if (stat.isSymbolicLink() || preserve || isGeneratedByUs(full)) {
+    fs.unlinkSync(full);
+    return;
+  }
+  const backup = `${full}.worktree-convex.bak`;
+  if (fs.existsSync(backup)) fs.unlinkSync(backup);
+  fs.renameSync(full, backup);
+  console.warn(
+    `worktree-convex: backed up unmanaged ${relativePath} → ${path.basename(backup)}`,
+  );
 }
 
 function linkBackendEnvLocalToShared() {
   const sharedBackendEnvLocal = path.join(sharedRoot, BACKEND_ENV_LOCAL);
-  removePath(BACKEND_ENV_LOCAL);
+  removeEnvLocal(BACKEND_ENV_LOCAL, {
+    preserve: isTrunkEnvLocal(path.join(repoRoot, BACKEND_ENV_LOCAL)),
+  });
   fs.mkdirSync(path.dirname(path.join(repoRoot, BACKEND_ENV_LOCAL)), { recursive: true });
   fs.symlinkSync(sharedBackendEnvLocal, path.join(repoRoot, BACKEND_ENV_LOCAL));
 }
@@ -192,7 +242,7 @@ function promoteBackendEnvLocalToShared() {
   if (fs.existsSync(sharedBackendEnvLocal)) return false;
   const localFile = path.join(repoRoot, BACKEND_ENV_LOCAL);
   const stat = lstatOrNull(localFile);
-  if (!stat || stat.isSymbolicLink() || !hasDeploymentSelection(localFile)) return false;
+  if (!stat || stat.isSymbolicLink() || !isTrunkEnvLocal(localFile)) return false;
   fs.mkdirSync(path.dirname(sharedBackendEnvLocal), { recursive: true });
   fs.copyFileSync(localFile, sharedBackendEnvLocal);
   console.log(
@@ -202,6 +252,10 @@ function promoteBackendEnvLocalToShared() {
 }
 
 async function switchLocal() {
+  // A real cloud .env.local (written by `convex dev` before this script ran)
+  // is the shared trunk deployment — keep it in the shared store so switching
+  // back to trunk later can still link it.
+  promoteBackendEnvLocalToShared();
   return withLock(async () => {
     const registry = readRegistry();
     let entry = registry.worktrees[repoRoot];
@@ -223,7 +277,7 @@ async function switchLocal() {
 async function switchTrunk() {
   promoteBackendEnvLocalToShared();
   linkBackendEnvLocalToShared();
-  removePath(WEB_ENV_LOCAL);
+  removeEnvLocal(WEB_ENV_LOCAL);
   await withLock(() => {
     const registry = readRegistry();
     registry.worktrees[repoRoot] = { mode: "trunk" };
@@ -253,7 +307,7 @@ async function ensure() {
   const stat = lstatOrNull(backendEnvLocal);
   if (stat?.isSymbolicLink()) return; // already trunk-linked
   if (stat?.isFile()) {
-    if (hasDeploymentSelection(backendEnvLocal)) {
+    if (isTrunkEnvLocal(backendEnvLocal)) {
       promoteBackendEnvLocalToShared();
       linkBackendEnvLocalToShared();
       console.log("worktree-convex: linked shared trunk .env.local");
@@ -405,13 +459,16 @@ function status() {
 
 const handlers = { ensure, local: switchLocal, trunk: switchTrunk, start, dev, status };
 const command = process.argv[2];
+function fail(error) {
+  console.error(`worktree-convex: ${error instanceof Error ? error.message : error}`);
+  process.exit(1);
+}
 if (command && handlers[command]) {
-  const result = handlers[command]();
-  if (result?.catch) {
-    result.catch((error) => {
-      console.error(`worktree-convex: ${error instanceof Error ? error.message : error}`);
-      process.exit(1);
-    });
+  try {
+    const result = handlers[command]();
+    if (result?.catch) result.catch(fail);
+  } catch (error) {
+    fail(error);
   }
 } else {
   console.log("Usage: node scripts/worktree-convex.mjs <ensure|local|trunk|status|dev|start>");
