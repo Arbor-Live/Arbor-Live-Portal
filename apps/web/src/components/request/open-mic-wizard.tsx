@@ -20,7 +20,6 @@ import {
   QuestionnaireChoice,
   QuestionnaireChoices,
   QuestionnaireDescription,
-  QuestionnaireError,
   QuestionnaireItem,
   QuestionnaireTitle,
 } from "@/components/ui/questionnaire";
@@ -369,7 +368,6 @@ export function OpenMicWizard() {
                       </div>
                       <StepBody stepId={resolvedItem} />
                       {resolvedItem !== "equipment" ? <MarkStepAnswered /> : null}
-                      <QuestionnaireError className="text-sm">{renderedFieldError}</QuestionnaireError>
                     </>
                   )}
                 </QuestionnaireItem>
