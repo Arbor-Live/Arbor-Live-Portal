@@ -34,22 +34,62 @@ import { MultiSelect } from "@/components/ui/multi-select";
 import { formatUsd } from "@/lib/format";
 import { notify } from "@/lib/notify";
 
-type InvoiceStatus = "draft" | "finalized" | "void";
 type ApprovalStatus = "pending" | "approved" | "changes_requested";
+
+type InvoiceStatus = "draft" | "finalized" | "void";
+
+type InvoiceLifecycle =
+  | "draft"
+  | "awaiting_approval"
+  | "changes_requested"
+  | "payment_pending"
+  | "paid"
+  | "void";
 
 type InvoiceRow = FunctionReturnType<typeof api.invoices.listEnriched>[number];
 
-const STATUS_OPTIONS: { value: InvoiceStatus; label: string }[] = [
+const LIFECYCLE_OPTIONS: { value: InvoiceLifecycle; label: string }[] = [
   { value: "draft", label: "Draft" },
-  { value: "finalized", label: "Published" },
+  { value: "awaiting_approval", label: "Awaiting approval" },
+  { value: "changes_requested", label: "Changes requested" },
+  { value: "payment_pending", label: "Payment pending" },
+  { value: "paid", label: "Paid" },
   { value: "void", label: "Void" },
 ];
 
-const APPROVAL_OPTIONS: { value: ApprovalStatus; label: string }[] = [
-  { value: "pending", label: "Waiting approval" },
-  { value: "approved", label: "Approved" },
-  { value: "changes_requested", label: "Changes requested" },
-];
+function invoiceLifecycle(invoice: {
+  status: InvoiceStatus;
+  clientApprovalStatus?: ApprovalStatus;
+  paymentReceivedAt?: number;
+}): InvoiceLifecycle {
+  if (invoice.status === "void") return "void";
+  if (invoice.status === "draft") return "draft";
+  if (invoice.paymentReceivedAt) return "paid";
+  if (invoice.clientApprovalStatus === "approved") return "payment_pending";
+  if (invoice.clientApprovalStatus === "changes_requested") return "changes_requested";
+  return "awaiting_approval";
+}
+
+function lifecycleLabel(lifecycle: InvoiceLifecycle) {
+  return LIFECYCLE_OPTIONS.find((option) => option.value === lifecycle)?.label ?? lifecycle;
+}
+
+function lifecycleBadgeClass(lifecycle: InvoiceLifecycle) {
+  switch (lifecycle) {
+    case "paid":
+      return "border-emerald-500/30 bg-emerald-500/10 text-emerald-700";
+    case "payment_pending":
+      return "border-sky-500/30 bg-sky-500/10 text-sky-700";
+    case "changes_requested":
+      return "border-amber-500/30 bg-amber-500/10 text-amber-800";
+    case "awaiting_approval":
+      return "border-blue-500/30 bg-blue-500/10 text-blue-700";
+    case "void":
+    case "draft":
+    default:
+      return "border-border bg-muted/50 text-muted-foreground";
+  }
+}
 
 async function copyQuoteLink(token: string) {
   const url = `${window.location.origin}/event/${token}`;
@@ -61,48 +101,21 @@ async function copyQuoteLink(token: string) {
   }
 }
 
-/** Lifecycle label for the list — not the raw draft/finalized/void doc status. */
-function displayStatus(invoice: {
-  status: "draft" | "finalized" | "void";
-  clientApprovalStatus?: "pending" | "approved" | "changes_requested";
-  paymentReceivedAt?: number;
-}) {
-  if (invoice.status === "void") return "Void";
-  if (invoice.status === "draft") return "Draft";
-  if (invoice.paymentReceivedAt) return "Payment received";
-  if (invoice.clientApprovalStatus === "approved") return "Payment pending";
-  if (invoice.clientApprovalStatus === "changes_requested") return "Changes Requested";
-  return "Waiting approval";
-}
-
-function statusBadgeClass(invoice: {
-  status: "draft" | "finalized" | "void";
-  clientApprovalStatus?: "pending" | "approved" | "changes_requested";
-  paymentReceivedAt?: number;
-}) {
-  if (invoice.status === "void") return "bg-muted text-muted-foreground";
-  if (invoice.status === "draft") return "bg-slate-100 text-slate-800";
-  if (invoice.paymentReceivedAt) return "bg-emerald-100 text-emerald-800";
-  if (invoice.clientApprovalStatus === "approved") return "bg-sky-100 text-sky-900";
-  if (invoice.clientApprovalStatus === "changes_requested") return "bg-amber-100 text-amber-900";
-  return "bg-blue-100 text-blue-900";
-}
-
 const columnHelper = createColumnHelper<DataTableFeatures, InvoiceRow>();
 
 export function InvoicesListClient() {
   const router = useRouter();
   const { confirm } = useAppDialog();
   const viewer = useSessionViewer();
-  const [statusFilters, setStatusFilters] = useState<InvoiceStatus[]>([]);
-  const [approvalFilters, setApprovalFilters] = useState<ApprovalStatus[]>([]);
+  const [lifecycleFilters, setLifecycleFilters] = useState<InvoiceLifecycle[]>([]);
   const [search, setSearch] = useState("");
   const listQueryArgs = useMemo(() => {
-    if (statusFilters.length === 1) {
-      return { status: statusFilters[0] };
+    if (lifecycleFilters.length === 1) {
+      if (lifecycleFilters[0] === "draft") return { status: "draft" as const };
+      if (lifecycleFilters[0] === "void") return { status: "void" as const };
     }
     return {};
-  }, [statusFilters]);
+  }, [lifecycleFilters]);
   const rows = useQuery(api.invoices.listEnriched, listQueryArgs);
   const deleteInvoiceAdmin = useMutation(api.adminDeletes.deleteInvoiceAdmin);
   const voidInvoice = useMutation(api.invoices.voidInvoice);
@@ -118,12 +131,9 @@ export function InvoicesListClient() {
   const filteredRows = useMemo(() => {
     const needle = search.trim().toLowerCase();
     return (rows ?? []).filter((invoice) => {
-      if (statusFilters.length > 0 && !statusFilters.includes(invoice.status)) {
+      const lifecycle = invoiceLifecycle(invoice);
+      if (lifecycleFilters.length > 0 && !lifecycleFilters.includes(lifecycle)) {
         return false;
-      }
-      if (approvalFilters.length > 0) {
-        const approval = invoice.clientApprovalStatus ?? "pending";
-        if (!approvalFilters.includes(approval)) return false;
       }
       if (!needle) return true;
       const haystack = [
@@ -139,7 +149,7 @@ export function InvoicesListClient() {
         .toLowerCase();
       return haystack.includes(needle);
     });
-  }, [rows, search, approvalFilters, statusFilters]);
+  }, [rows, search, lifecycleFilters]);
 
   const columns = useMemo(
     () =>
@@ -149,16 +159,19 @@ export function InvoicesListClient() {
           header: ({ column }) => <DataTableColumnHeader column={column} title="Invoice #" />,
           cell: ({ row }) => <div className="font-medium">{row.original.invoiceNumber}</div>,
         }),
-        columnHelper.accessor((row) => displayStatus(row), {
+        columnHelper.accessor((row) => lifecycleLabel(invoiceLifecycle(row)), {
           id: "status",
           header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
-          cell: ({ row }) => (
-            <span
-              className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${statusBadgeClass(row.original)}`}
-            >
-              {displayStatus(row.original)}
-            </span>
-          ),
+          cell: ({ row }) => {
+            const lifecycle = invoiceLifecycle(row.original);
+            return (
+              <span
+                className={`inline-flex max-w-full items-center whitespace-nowrap rounded-md border px-2 py-0.5 text-xs font-medium ${lifecycleBadgeClass(lifecycle)}`}
+              >
+                {lifecycleLabel(lifecycle)}
+              </span>
+            );
+          },
         }),
         columnHelper.accessor((row) => row.seriesTitle ?? row.linkedEventTitle ?? "", {
           id: "series",
@@ -328,17 +341,11 @@ export function InvoicesListClient() {
               />
             </div>
             <MultiSelect
-              label="Status"
-              options={STATUS_OPTIONS}
-              values={statusFilters}
-              onChange={(values) => setStatusFilters(values as InvoiceStatus[])}
+              label="Stage"
+              options={LIFECYCLE_OPTIONS}
+              values={lifecycleFilters}
+              onChange={(values) => setLifecycleFilters(values as InvoiceLifecycle[])}
               emptyLabel="All"
-            />
-            <MultiSelect
-              label="Approval"
-              options={APPROVAL_OPTIONS}
-              values={approvalFilters}
-              onChange={(values) => setApprovalFilters(values as ApprovalStatus[])}
             />
           </div>
         }
