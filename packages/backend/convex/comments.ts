@@ -243,13 +243,13 @@ export const listBySubject = query({
       for (const mentionedUserId of row.mentionedUserIds) userIds.add(mentionedUserId);
     }
     const userById = await findAuthUsersByIds(ctx, [...userIds]);
+    // One bounded scan — same pattern as listMentionCandidates — avoids N
+    // serial by_userId lookups on large threads.
+    const profiles = await ctx.db.query("userAdminProfiles").withIndex("by_active").take(2000);
     const usernameByUserId = new Map<string, string>();
-    for (const userId of userIds) {
-      const profile = await ctx.db
-        .query("userAdminProfiles")
-        .withIndex("by_userId", (q) => q.eq("userId", userId))
-        .unique();
-      if (profile?.username) usernameByUserId.set(userId, profile.username);
+    for (const profile of profiles) {
+      if (!userIds.has(profile.userId) || !profile.username) continue;
+      usernameByUserId.set(profile.userId, profile.username);
     }
     const nameFor = (userId: string) =>
       userById.get(userId)?.name ?? userById.get(userId)?.email ?? "Arbor Live user";

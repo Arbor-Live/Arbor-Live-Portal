@@ -26,7 +26,8 @@ test.describe("event comments and mentions", () => {
       password: e2eEnv.crewPassword,
       name: e2eEnv.crewName,
       username: e2eEnv.crewUsername,
-    }) as { userId: string };
+    }) as { userId: string; username?: string };
+    const mentionHandle = crew.username || e2eEnv.crewName;
 
     const seeded = runConvex("e2eHelpers:seedCrewedEventWithSchedule", {
       title: `E2E Comments ${stamp}`,
@@ -63,14 +64,12 @@ test.describe("event comments and mentions", () => {
     });
     await expect(menu).toHaveCount(0, { timeout: 15_000 });
 
-    await expect(input).toHaveValue(new RegExp(`@${e2eEnv.crewUsername}`));
+    await expect(input).toHaveValue(new RegExp(`@${mentionHandle}`));
     await input.pressSequentially(` please check the pull list ${stamp}`, { delay: 20 });
     await page.getByTestId("comment-post").click();
 
     await expect(page.getByTestId("comment-row").first()).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByTestId("comment-body").first()).toContainText(
-      `@${e2eEnv.crewUsername}`,
-    );
+    await expect(page.getByTestId("comment-body").first()).toContainText(`@${mentionHandle}`);
     await expect(page.getByTestId("comment-body").first()).toContainText(String(stamp));
 
     const saved = await pollConvex<CommentState[]>(
@@ -80,7 +79,7 @@ test.describe("event comments and mentions", () => {
     );
     const posted = saved.find((row) => row.body.includes(String(stamp)));
     expect(posted).toBeTruthy();
-    expect(posted!.body).toContain(`@${e2eEnv.crewUsername}`);
+    expect(posted!.body).toContain(`@${mentionHandle}`);
     expect(posted!.mentionedUserIds).toContain(crew.userId);
 
     const postedRow = page

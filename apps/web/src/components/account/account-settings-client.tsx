@@ -140,7 +140,7 @@ export function AccountSettingsClient() {
     await updateMyProfileDetails({
       phone: values.phone?.trim() || undefined,
       title: values.title?.trim() || undefined,
-      username: values.username?.trim() || undefined,
+      username: values.username?.trim() ?? "",
       pronouns: values.pronouns?.trim() || undefined,
       gradYear: values.gradYear ? Number(values.gradYear) : undefined,
       publicCrewDescription: values.publicCrewDescription?.trim() || undefined,

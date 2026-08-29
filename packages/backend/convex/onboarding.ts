@@ -538,7 +538,8 @@ export const saveCrewProfileStep = mutation({
     if (calendarInviteEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(calendarInviteEmail)) {
       throw new Error("Enter a valid calendar invite email.");
     }
-    const username = normalizeUsername(args.username);
+    const usernameProvided = Object.prototype.hasOwnProperty.call(args, "username");
+    const username = usernameProvided ? normalizeUsername(args.username) : undefined;
     if (username) {
       await assertUsernameAvailable(ctx, username, userId);
     }
@@ -571,7 +572,7 @@ export const saveCrewProfileStep = mutation({
         calendarInviteEmail,
         showOnPublicCrewPage: args.showOnPublicCrewPage,
         publicCrewDescription: args.publicCrewDescription?.trim() || undefined,
-        username,
+        ...(usernameProvided ? { username } : {}),
         pronouns: pronouns ?? profile.pronouns,
         gradYear: gradYear ?? profile.gradYear,
         updatedAt: now,
@@ -586,7 +587,7 @@ export const saveCrewProfileStep = mutation({
         calendarInviteEmail,
         showOnPublicCrewPage: args.showOnPublicCrewPage,
         publicCrewDescription: args.publicCrewDescription?.trim() || undefined,
-        username,
+        ...(usernameProvided ? { username } : {}),
         pronouns,
         gradYear,
         createdAt: now,

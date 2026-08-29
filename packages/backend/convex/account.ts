@@ -154,7 +154,10 @@ export const updateMyProfileDetails = mutation({
     const title = args.title?.trim() || undefined;
     const calendarInviteEmail = args.calendarInviteEmail?.trim().toLowerCase() || undefined;
     const publicCrewDescription = args.publicCrewDescription?.trim() || undefined;
-    const username = normalizeUsername(args.username);
+    // Omitted `username` preserves the stored handle; empty string clears it.
+    // (Convex strips client `undefined`, so the form always sends a string.)
+    const usernameProvided = Object.prototype.hasOwnProperty.call(args, "username");
+    const username = usernameProvided ? normalizeUsername(args.username) : undefined;
     const pronouns = args.pronouns?.trim() || undefined;
     const gradYear =
       args.gradYear !== undefined && Number.isFinite(args.gradYear)
@@ -181,7 +184,7 @@ export const updateMyProfileDetails = mutation({
         title,
         calendarInviteEmail,
         publicCrewDescription,
-        username,
+        ...(usernameProvided ? { username } : {}),
         pronouns,
         gradYear,
         updatedAt: now,
@@ -195,7 +198,7 @@ export const updateMyProfileDetails = mutation({
       title,
       calendarInviteEmail,
       publicCrewDescription,
-      username,
+      ...(usernameProvided ? { username } : {}),
       pronouns,
       gradYear,
       active: true,

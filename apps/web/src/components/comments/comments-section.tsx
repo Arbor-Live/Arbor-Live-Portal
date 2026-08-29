@@ -43,29 +43,42 @@ function mentionHandle(candidate: Pick<MentionCandidate, "username" | "name">) {
   return candidate.username || candidate.name;
 }
 
-function extractMentionedUserIds(body: string, candidates: MentionCandidate[]): string[] {
-  // Longer handles first so `@jane_doe` wins over `@jane`.
-  const tokens = candidates
-    .flatMap((candidate) => {
-      const handles = [candidate.username, candidate.name].filter(
-        (value): value is string => Boolean(value),
-      );
-      return handles.map((handle) => ({ userId: candidate.userId, handle }));
-    })
-    .sort((a, b) => b.handle.length - a.handle.length);
+function extractMentionedUserIds(
+  body: string,
+  candidates: MentionCandidate[],
+  preferredUserIds: string[] = [],
+): string[] {
+  const preferred = new Set(preferredUserIds);
+  const byHandle = new Map<string, MentionCandidate[]>();
+  for (const candidate of candidates) {
+    for (const handle of [candidate.username, candidate.name].filter(
+      (value): value is string => Boolean(value),
+    )) {
+      const group = byHandle.get(handle) ?? [];
+      group.push(candidate);
+      byHandle.set(handle, group);
+    }
+  }
 
+  // Longer handles first so `@jane_doe` wins over `@jane`.
+  const handles = [...byHandle.keys()].sort((a, b) => b.length - a.length);
   const ids: string[] = [];
   const seen = new Set<string>();
-  for (const token of tokens) {
-    if (seen.has(token.userId)) continue;
+  for (const handle of handles) {
     const pattern = new RegExp(
-      `(^|[\\s])@${escapeRegExp(token.handle)}(?=$|[\\s,.!?;:])`,
+      `(^|[\\s])@${escapeRegExp(handle)}(?=$|[\\s,.!?;:])`,
       "g",
     );
-    if (pattern.test(body)) {
-      ids.push(token.userId);
-      seen.add(token.userId);
-    }
+    if (!pattern.test(body)) continue;
+    const group = byHandle.get(handle) ?? [];
+    // Prefer an explicitly picked user, then a username match, then first hit.
+    const pick =
+      group.find((candidate) => preferred.has(candidate.userId)) ??
+      group.find((candidate) => candidate.username === handle) ??
+      group[0];
+    if (!pick || seen.has(pick.userId)) continue;
+    ids.push(pick.userId);
+    seen.add(pick.userId);
   }
   return ids;
 }
@@ -143,6 +156,8 @@ function CommentsPanel({
   const [body, setBody] = useState("");
   const [cursor, setCursor] = useState(0);
   const [mentionPickerKey, setMentionPickerKey] = useState(0);
+  /** User IDs chosen via the picker — wins over ambiguous @handle parsing. */
+  const [draftMentionedUserIds, setDraftMentionedUserIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<Id<"comments"> | null>(null);
 
@@ -196,6 +211,7 @@ function CommentsPanel({
     const nextCursor = before.length + insertion.length;
     setBody(nextBody);
     setCursor(nextCursor);
+    setDraftMentionedUserIds((ids) => (ids.includes(userId) ? ids : [...ids, userId]));
     setMentionPickerKey((key) => key + 1);
     requestAnimationFrame(() => {
       const textarea = textareaRef.current;
@@ -212,10 +228,11 @@ function CommentsPanel({
         subjectType,
         subjectId,
         body,
-        mentionedUserIds: extractMentionedUserIds(body, candidates),
+        mentionedUserIds: extractMentionedUserIds(body, candidates, draftMentionedUserIds),
       });
       setBody("");
       setCursor(0);
+      setDraftMentionedUserIds([]);
     } catch (submitError) {
       notify.error(submitError instanceof Error ? submitError.message : "Failed to post comment.");
     } finally {

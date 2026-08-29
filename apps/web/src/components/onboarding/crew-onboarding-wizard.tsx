@@ -343,7 +343,7 @@ export function CrewOnboardingWizard() {
           calendarInviteEmail: form.calendarInviteEmail.trim() || undefined,
           showOnPublicCrewPage: form.showOnPublicCrewPage,
           publicCrewDescription: form.publicCrewDescription.trim() || undefined,
-          username: trimmedUsername || undefined,
+          username: trimmedUsername,
           pronouns: form.pronouns.trim() || undefined,
           gradYear: trimmedGradYear ? Number(trimmedGradYear) : undefined,
         });
