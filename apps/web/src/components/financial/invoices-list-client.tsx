@@ -34,9 +34,7 @@ import { MultiSelect } from "@/components/ui/multi-select";
 import { formatUsd } from "@/lib/format";
 import { notify } from "@/lib/notify";
 
-type ApprovalStatus = "pending" | "approved" | "changes_requested";
-
-type InvoiceStatus = "draft" | "finalized" | "void";
+type InvoiceRow = FunctionReturnType<typeof api.invoices.listEnriched>[number];
 
 type InvoiceLifecycle =
   | "draft"
@@ -46,7 +44,10 @@ type InvoiceLifecycle =
   | "paid"
   | "void";
 
-type InvoiceRow = FunctionReturnType<typeof api.invoices.listEnriched>[number];
+type InvoiceLifecycleInput = Pick<
+  InvoiceRow,
+  "status" | "clientApprovalStatus" | "paymentReceivedAt"
+>;
 
 const LIFECYCLE_OPTIONS: { value: InvoiceLifecycle; label: string }[] = [
   { value: "draft", label: "Draft" },
@@ -57,11 +58,7 @@ const LIFECYCLE_OPTIONS: { value: InvoiceLifecycle; label: string }[] = [
   { value: "void", label: "Void" },
 ];
 
-function invoiceLifecycle(invoice: {
-  status: InvoiceStatus;
-  clientApprovalStatus?: ApprovalStatus;
-  paymentReceivedAt?: number;
-}): InvoiceLifecycle {
+function invoiceLifecycle(invoice: InvoiceLifecycleInput): InvoiceLifecycle {
   if (invoice.status === "void") return "void";
   if (invoice.status === "draft") return "draft";
   if (invoice.paymentReceivedAt) return "paid";
