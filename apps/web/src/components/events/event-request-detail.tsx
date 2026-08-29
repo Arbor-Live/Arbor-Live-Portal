@@ -199,7 +199,7 @@ export function EventRequestDetailClient({ requestId }: { requestId: Id<"eventRe
         <DetailRow label="Phone" value={request.phone} />
         <div className="grid gap-1 border-b py-3 sm:grid-cols-[180px_1fr]">
           <p className="text-sm font-medium text-muted-foreground">Assignee</p>
-          <div className="max-w-md">
+          <div className="max-w-md" data-testid="request-assignee-picker">
             <UserSelect
               value={request.assigneeUserId ?? ""}
               onChange={(value) => {
