@@ -52,6 +52,7 @@ export const upsertShifts = mutation({
         callTime: v.optional(v.number()),
         startsAt: v.number(),
         endsAt: v.number(),
+        timesOverridden: v.optional(v.boolean()),
         estimatedHourlyRateUsd: v.optional(v.number()),
         postedToExpense: v.boolean(),
         notes: v.optional(v.string()),
@@ -106,6 +107,7 @@ export const upsertShifts = mutation({
       const hours = hoursBetween(shift.startsAt, shift.endsAt);
       const postedToExpense = shift.postedToExpense && !!shift.expenseReportId;
       const userId = shift.userId?.trim() || undefined;
+      const timesOverridden = shift.timesOverridden === true ? true : undefined;
       // Open slots: stamp an estimate from global Normal/Lead when the client
       // didn't send one (common when rates were 0 at edit time, or omitted).
       const estimatedHourlyRateUsd = userId
@@ -131,6 +133,7 @@ export const upsertShifts = mutation({
           startsAt: shift.startsAt,
           endsAt: shift.endsAt,
           hours,
+          timesOverridden,
           estimatedHourlyRateUsd,
           postedToExpense,
           notes: shift.notes?.trim() || undefined,
@@ -149,6 +152,7 @@ export const upsertShifts = mutation({
           startsAt: shift.startsAt,
           endsAt: shift.endsAt,
           hours,
+          timesOverridden,
           estimatedHourlyRateUsd,
           postedToExpense,
           notes: shift.notes?.trim() || undefined,

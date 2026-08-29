@@ -436,25 +436,25 @@ export function EventEditor({
       })),
     );
     setBlocks(nextBlocks);
-    setShifts(
-      applyShiftTimesOverrideFlags(
-        eventData.shifts.map((row) => ({
-          id: row._id,
-          scheduleBlockId: row.scheduleBlockId,
-          scheduleBlockRef: row.scheduleBlockId,
-          expenseReportId: row.expenseReportId,
-          role: row.role,
-          userId: row.userId ?? undefined,
-          crewApplicationId: row.crewApplicationId ?? undefined,
-          personName: row.personName ?? "",
-          startsAt: toLocalDateTimeInput(row.startsAt),
-          endsAt: toLocalDateTimeInput(row.endsAt),
-          postedToExpense: row.postedToExpense,
-          notes: row.notes ?? "",
-        })),
-        nextBlocks,
-      ),
+    const nextShifts = applyShiftTimesOverrideFlags(
+      eventData.shifts.map((row) => ({
+        id: row._id,
+        scheduleBlockId: row.scheduleBlockId,
+        scheduleBlockRef: row.scheduleBlockId,
+        expenseReportId: row.expenseReportId,
+        role: row.role,
+        userId: row.userId ?? undefined,
+        crewApplicationId: row.crewApplicationId ?? undefined,
+        personName: row.personName ?? "",
+        startsAt: toLocalDateTimeInput(row.startsAt),
+        endsAt: toLocalDateTimeInput(row.endsAt),
+        postedToExpense: row.postedToExpense,
+        notes: row.notes ?? "",
+        timesOverridden: row.timesOverridden === true,
+      })),
+      nextBlocks,
     );
+    setShifts(nextShifts);
     const hydratedTeams = (eventData.event.teamsInterested as EventTeam[] | undefined) ?? [];
     const hydratedEventType = normalizeEventType(eventData.event.eventType as StoredEventType | undefined);
     const hydratedFulfillment = normalizeFulfillmentMode(
@@ -482,34 +482,10 @@ export function EventEditor({
       openMicEnabled: eventData.event.openMicEnabled === true,
       openMicNotes: eventData.event.openMicNotes || undefined,
     }));
-    const hydratedBlocks = eventData.blocks.map((row) => ({
-      id: row._id,
-      clientId: row._id,
-      blockType: row.blockType,
-      label: row.label,
-      dayIndex: row.dayIndex,
-      startsAt: toLocalDateTimeInput(row.startsAt),
-      endsAt: toLocalDateTimeInput(row.endsAt),
-      notes: row.notes ?? "",
-    }));
-    const hydratedShifts = eventData.shifts.map((row) => ({
-      id: row._id,
-      scheduleBlockId: row.scheduleBlockId,
-      scheduleBlockRef: row.scheduleBlockId,
-      expenseReportId: row.expenseReportId,
-      role: row.role,
-      userId: row.userId ?? undefined,
-      crewApplicationId: row.crewApplicationId ?? undefined,
-      personName: row.personName ?? "",
-      startsAt: toLocalDateTimeInput(row.startsAt),
-      endsAt: toLocalDateTimeInput(row.endsAt),
-      postedToExpense: row.postedToExpense,
-      notes: row.notes ?? "",
-    }));
     setLastSavedScheduleSignature(
       JSON.stringify({
-        blocks: hydratedBlocks,
-        shifts: hydratedShifts,
+        blocks: nextBlocks,
+        shifts: nextShifts,
       }),
     );
   }, [eventData, hostGroups, loadOverviewLookups]);
@@ -948,6 +924,7 @@ export function EventEditor({
           personName: row.personName || undefined,
           startsAt: requireLocalDateTimeInputMs(row.startsAt, "block start"),
           endsAt: requireLocalDateTimeInputMs(row.endsAt, "block end"),
+          timesOverridden: row.timesOverridden === true ? true : undefined,
           postedToExpense: row.expenseReportId ? row.postedToExpense : false,
           notes: row.notes || undefined,
         })),
@@ -1901,6 +1878,14 @@ export function EventEditor({
                                     setShifts((prev) =>
                                       prev.map((shift, i) => {
                                         if (i !== shiftIndex) return shift;
+                                        if (!start || !end) {
+                                          return {
+                                            ...shift,
+                                            startsAt: block.startsAt,
+                                            endsAt: block.endsAt,
+                                            timesOverridden: false,
+                                          };
+                                        }
                                         const timesOverridden = !shiftTimesMatchBlock(
                                           { startsAt: start, endsAt: end },
                                           block,

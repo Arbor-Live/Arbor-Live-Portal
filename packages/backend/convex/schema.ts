@@ -1127,6 +1127,8 @@ export default defineSchema({
     startsAt: v.number(),
     endsAt: v.number(),
     hours: v.number(),
+    /** When true, shift times stay custom and are not force-synced from the linked block. */
+    timesOverridden: v.optional(v.boolean()),
     estimatedHourlyRateUsd: v.optional(v.number()),
     postedToExpense: v.boolean(),
     notes: v.optional(v.string()),

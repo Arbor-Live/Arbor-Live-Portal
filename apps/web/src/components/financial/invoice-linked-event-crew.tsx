@@ -73,6 +73,7 @@ function shiftsFromEventRows(
     estimatedHourlyRateUsd?: number;
     postedToExpense: boolean;
     notes?: string;
+    timesOverridden?: boolean;
   }>,
 ): EventShiftDraft[] {
   return rows.map((row) => ({
@@ -88,6 +89,7 @@ function shiftsFromEventRows(
     estimatedHourlyRateUsd: row.estimatedHourlyRateUsd,
     postedToExpense: row.postedToExpense,
     notes: row.notes ?? "",
+    timesOverridden: row.timesOverridden === true,
   }));
 }
 
@@ -277,6 +279,7 @@ export function InvoiceLinkedEventCrewSection({
             personName: row.personName || undefined,
             startsAt: requireLocalDateTimeInputMs(row.startsAt, "block start"),
             endsAt: requireLocalDateTimeInputMs(row.endsAt, "block end"),
+            timesOverridden: row.timesOverridden === true ? true : undefined,
             estimatedHourlyRateUsd: row.userId?.trim()
               ? row.estimatedHourlyRateUsd
               : (row.estimatedHourlyRateUsd ?? defaultCrewHourlyRateUsd),
@@ -443,6 +446,16 @@ export function InvoiceLinkedEventCrewSection({
                       setShifts((prev) =>
                         prev.map((shift, i) => {
                           if (i !== shiftIndex) return shift;
+                          if (!start || !end) {
+                            return block
+                              ? {
+                                  ...shift,
+                                  startsAt: block.startsAt,
+                                  endsAt: block.endsAt,
+                                  timesOverridden: false,
+                                }
+                              : shift;
+                          }
                           const timesOverridden = block
                             ? !shiftTimesMatchBlock({ startsAt: start, endsAt: end }, block)
                             : true;

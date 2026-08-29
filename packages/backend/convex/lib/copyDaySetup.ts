@@ -100,6 +100,7 @@ async function replaceScheduleAndOpenSlots(
       startsAt,
       endsAt,
       hours,
+      timesOverridden: shift.timesOverridden === true ? true : undefined,
       estimatedHourlyRateUsd: shift.estimatedHourlyRateUsd,
       postedToExpense: false,
       notes: shift.notes,

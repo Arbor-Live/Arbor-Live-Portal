@@ -138,7 +138,8 @@ export const upsertBlocks = mutation({
       await scheduleSchedulePublishedEmails(ctx, args.eventId, fingerprint);
     }
 
-    // Keep linked crew shifts aligned with their schedule blocks.
+    // Keep linked crew shifts aligned with their schedule blocks, unless the
+    // shift has a persisted custom time window.
     for (const block of savedBlocks) {
       const linkedShifts = await ctx.db
         .query("eventCrewShifts")
@@ -148,6 +149,7 @@ export const upsertBlocks = mutation({
         .take(200);
       for (const shift of linkedShifts) {
         if (shift.eventId !== args.eventId) continue;
+        if (shift.timesOverridden === true) continue;
         const hours = Number(((block.endsAt - block.startsAt) / 3_600_000).toFixed(2));
         await ctx.db.patch(shift._id, {
           startsAt: block.startsAt,

@@ -205,11 +205,18 @@ async function countPendingDamageReports(ctx: QueryCtx) {
 }
 
 async function countQuoteChangesRequested(ctx: QueryCtx) {
+  // Take extra rows so void invoices in the window do not starve the badge cap.
   const rows = await ctx.db
     .query("invoices")
     .withIndex("by_clientApprovalStatus", (q) => q.eq("clientApprovalStatus", "changes_requested"))
-    .take(BADGE_STATUS_TAKE);
-  return rows.filter((invoice) => invoice.status !== "void").length;
+    .take(BADGE_STATUS_TAKE * 4);
+  let count = 0;
+  for (const invoice of rows) {
+    if (invoice.status === "void") continue;
+    count += 1;
+    if (count >= BADGE_STATUS_TAKE) break;
+  }
+  return count;
 }
 
 async function countPendingBandPaymentActions(ctx: QueryCtx) {
