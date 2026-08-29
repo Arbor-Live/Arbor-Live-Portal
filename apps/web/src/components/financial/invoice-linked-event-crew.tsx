@@ -339,7 +339,7 @@ export function InvoiceLinkedEventCrewSection({
       {
         scheduleBlockId: block.id as Id<"eventScheduleBlocks"> | undefined,
         scheduleBlockRef: blockRef,
-        role: selectedUser?.label ?? "",
+        role: "",
         userId: selectedUser?.value,
         personName: selectedUser?.label ?? "",
         startsAt: block.startsAt,

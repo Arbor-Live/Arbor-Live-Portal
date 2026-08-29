@@ -35,6 +35,9 @@ describe("normalizeCrewLineLabel", () => {
       "Damian Luciano Muschamp",
     );
     expect(normalizeCrewLineLabel("Setup — Damian (Damian (Lead))")).toBe("Setup — Damian (Lead)");
+    expect(
+      normalizeCrewLineLabel("Setup — Damian Luciano Muschamp (Damian Luciano Muschamp (Lead))"),
+    ).toBe("Setup — Damian Luciano Muschamp (Lead)");
     expect(normalizeCrewLineLabel("Day 1 — Damian (Damian)")).toBe("Day 1 — Damian");
   });
 

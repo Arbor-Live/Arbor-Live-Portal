@@ -53,6 +53,20 @@ describe("toDocumentLineItem equipment billing", () => {
   });
 });
 
+describe("toDocumentLineItem crew labels", () => {
+  it("normalizes duplicated assignee names for display", () => {
+    const row = {
+      ...equipmentLine({ quantity: 2, rateUsd: 75, amountUsd: 150 }),
+      section: "crew" as const,
+      label: "Setup — Damian Luciano Muschamp (Damian Luciano Muschamp (Lead))",
+    };
+
+    const doc = toDocumentLineItem(row, 1);
+
+    expect(doc.label).toBe("Setup — Damian Luciano Muschamp (Lead)");
+  });
+});
+
 describe("recomputeInvoiceTotalsFromDocumentLines", () => {
   it("sums display line amounts into section subtotals", () => {
     const lines = [

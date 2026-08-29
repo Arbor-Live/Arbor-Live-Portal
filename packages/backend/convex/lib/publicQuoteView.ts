@@ -81,6 +81,7 @@ export async function loadPublicQuoteView(ctx: QueryCtx, invoice: Doc<"invoices"
     const doc = documentLineItems[index]!;
     return {
       ...row,
+      label: doc.label,
       quantity: doc.quantity,
       quantityDetail: doc.quantityDetail,
       amountUsd: doc.amountUsd,
