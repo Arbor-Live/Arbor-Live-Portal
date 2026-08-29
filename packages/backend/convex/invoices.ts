@@ -452,15 +452,11 @@ async function loadActiveOrgMemberUserIds(ctx: QueryCtx, organizationId: string)
 }
 
 export const listManagers = query({
-  args: {
-    /** Defaults to the caller's active organization (Arbor internal context). */
-    organizationId: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
+  args: {},
+  handler: async (ctx) => {
     await requireAuth(ctx);
     const orgContext = await requireArborInternalContext(ctx);
-    const organizationId = args.organizationId?.trim() || orgContext.organizationId;
-    const orgUserIds = await loadActiveOrgMemberUserIds(ctx, organizationId);
+    const orgUserIds = await loadActiveOrgMemberUserIds(ctx, orgContext.organizationId);
     const userByKey = await findAuthUsersByIds(ctx, [...orgUserIds]);
     // Arbor staff quoting events need per-person Normal/Lead/Custom rates so
     // assigned leads bill at lead rate on the invoice (not only global Normal).
@@ -475,8 +471,18 @@ export const listManagers = query({
         },
       ]),
     );
-    const profiles = await ctx.db.query("userAdminProfiles").withIndex("by_active").take(2000);
-    const profileByUserId = new Map(profiles.map((profile) => [profile.userId, profile]));
+    const profileRows = await Promise.all(
+      [...orgUserIds].map(async (userId) => {
+        const profile = await ctx.db
+          .query("userAdminProfiles")
+          .withIndex("by_userId", (q) => q.eq("userId", userId))
+          .unique();
+        return profile ? ([userId, profile] as const) : null;
+      }),
+    );
+    const profileByUserId = new Map(
+      profileRows.filter((entry): entry is NonNullable<typeof entry> => entry !== null),
+    );
     const imageByUserId = await buildUserProfileImageByUserId(
       ctx,
       [...orgUserIds],

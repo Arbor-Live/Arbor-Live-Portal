@@ -23,6 +23,23 @@ export async function resolveUserProfileImageUrl(
   return authImage;
 }
 
+async function loadProfilesByUserIds(
+  ctx: QueryCtx,
+  userIds: readonly string[],
+): Promise<Map<string, { avatarStorageId?: Id<"_storage"> }>> {
+  const profiles = new Map<string, { avatarStorageId?: Id<"_storage"> }>();
+  await Promise.all(
+    userIds.map(async (userId) => {
+      const row = await ctx.db
+        .query("userAdminProfiles")
+        .withIndex("by_userId", (q) => q.eq("userId", userId))
+        .unique();
+      if (row) profiles.set(userId, row);
+    }),
+  );
+  return profiles;
+}
+
 export async function buildUserProfileImageByUserId(
   ctx: QueryCtx,
   userIds: readonly string[],
@@ -33,15 +50,11 @@ export async function buildUserProfileImageByUserId(
   const imageByUserId = new Map<string, string | undefined>();
   if (unique.length === 0) return imageByUserId;
 
-  let profiles = profileByUserId;
-  if (!profiles) {
-    const rows = await ctx.db.query("userAdminProfiles").withIndex("by_active").take(2000);
-    profiles = new Map(rows.map((row) => [row.userId, row]));
-  }
+  const profiles = profileByUserId ?? (await loadProfilesByUserIds(ctx, unique));
 
   await Promise.all(
     unique.map(async (userId) => {
-      const profile = profiles!.get(userId);
+      const profile = profiles.get(userId);
       const user = userByKey.get(userId);
       imageByUserId.set(
         userId,
