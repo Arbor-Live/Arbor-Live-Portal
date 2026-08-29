@@ -61,14 +61,17 @@ import {
   type EventVisibility,
 } from "@/lib/event-visibility";
 import {
+  attachShiftsToPersistedBlocks,
   buildQuickAddScheduleBlocks,
   applyShiftTimesOverrideFlags,
   eventTypeHasCrewAssignment,
   reconcileShiftsForReplacedBlocks,
+  resolveShiftScheduleBlockId,
   shiftRowKey,
   shiftTimesMatchBlock,
   sortScheduleBlocksByTime,
   syncShiftsToBlockTimes,
+  timelineBlocksFromSaved,
 } from "@/lib/event-schedule-draft";
 import {
   getAvailabilityNotesForDisplay,
@@ -348,18 +351,6 @@ export function EventEditor({
    * syncShiftsToBlockTimes (from event-schedule-draft) keeps draft shifts aligned
    * when block times change.
    */
-
-  function mapPersistedBlockIdByRef(inputBlocks: TimelineBlockDraft[]) {
-    const result = new Map<string, Id<"eventScheduleBlocks">>();
-    for (const block of inputBlocks) {
-      if (!block.id) continue;
-      if (block.clientId) {
-        result.set(block.clientId, block.id as Id<"eventScheduleBlocks">);
-      }
-      result.set(block.id, block.id as Id<"eventScheduleBlocks">);
-    }
-    return result;
-  }
 
   useEffect(() => {
     if (!isCreate || createDefaultsAppliedRef.current) return;
@@ -823,7 +814,9 @@ export function EventEditor({
     }
   }
 
-  async function saveSchedule() {
+  async function saveSchedule(): Promise<
+    { blocks: TimelineBlockDraft[]; shifts: ShiftDraft[] } | undefined
+  > {
     if (!eventId) return;
     try {
       const blocksWithRefs = withStableBlockRefs(
@@ -845,80 +838,32 @@ export function EventEditor({
           notes: row.notes || undefined,
         })),
       });
-      setBlocks(
-        sortScheduleBlocksByTime(
-          savedBlocks.map((row) => ({
-            id: row.id,
-            clientId: row.clientId ?? row.id,
-            blockType: row.blockType,
-            label: row.label,
-            dayIndex: row.dayIndex,
-            startsAt: toLocalDateTimeInput(row.startsAt),
-            endsAt: toLocalDateTimeInput(row.endsAt),
-            notes: row.notes ?? "",
-          })),
-        ),
-      );
-      const persistedBlockIdByRef = mapPersistedBlockIdByRef(
-        savedBlocks.map((row) => ({
-          id: row.id,
-          clientId: row.clientId ?? row.id,
-          blockType: row.blockType,
-          label: row.label,
-          dayIndex: row.dayIndex,
-          startsAt: toLocalDateTimeInput(row.startsAt),
-          endsAt: toLocalDateTimeInput(row.endsAt),
-          notes: row.notes ?? "",
-        })),
-      );
-      const nextShifts = shifts.map((shift) => {
-        const persistedId =
-          shift.scheduleBlockId ??
-          (shift.scheduleBlockRef ? persistedBlockIdByRef.get(shift.scheduleBlockRef) : undefined);
-        return {
-          ...shift,
-          scheduleBlockId: persistedId,
-          scheduleBlockRef: shift.scheduleBlockRef ?? persistedId,
-        };
-      });
+      const nextBlocks = timelineBlocksFromSaved(savedBlocks);
+      const nextShifts = attachShiftsToPersistedBlocks(shifts, nextBlocks);
+      setBlocks(nextBlocks);
       setShifts(nextShifts);
-      setLastSavedScheduleSignature(
-        JSON.stringify({
-          blocks: savedBlocks.map((row) => ({
-            id: row.id,
-            clientId: row.clientId ?? row.id,
-            blockType: row.blockType,
-            label: row.label,
-            dayIndex: row.dayIndex,
-            startsAt: toLocalDateTimeInput(row.startsAt),
-            endsAt: toLocalDateTimeInput(row.endsAt),
-            notes: row.notes ?? "",
-          })),
-          shifts: nextShifts,
-        }),
-      );
+      setLastSavedScheduleSignature(JSON.stringify({ blocks: nextBlocks, shifts: nextShifts }));
+      return { blocks: nextBlocks, shifts: nextShifts };
     } catch (error) {
       flash("error", `Schedule error: ${getConvexErrorMessage(error)}`);
       throw error;
     }
   }
 
-  async function saveShifts() {
+  async function saveShifts(
+    blocksOverride?: TimelineBlockDraft[],
+    shiftsOverride?: ShiftDraft[],
+  ) {
     if (!eventId) return;
+    const blocksToSave = blocksOverride ?? blocks;
+    const shiftsToSave = shiftsOverride ?? shifts;
     try {
-      const persistedBlockIdByRef = mapPersistedBlockIdByRef(blocks);
-      const validBlockIds = new Set(blocks.map((block) => block.id).filter(Boolean));
       await upsertShifts({
         eventId,
-        shifts: shifts.map((row) => ({
+        shifts: shiftsToSave.map((row) => ({
           id: row.id,
           expenseReportId: row.expenseReportId,
-          scheduleBlockId:
-            (row.scheduleBlockId && validBlockIds.has(row.scheduleBlockId)
-              ? row.scheduleBlockId
-              : row.scheduleBlockRef
-                ? persistedBlockIdByRef.get(row.scheduleBlockRef)
-                : undefined) ?? undefined,
+          scheduleBlockId: resolveShiftScheduleBlockId(row, blocksToSave),
           role: row.role,
           userId: row.userId || undefined,
           crewApplicationId: row.crewApplicationId,
@@ -930,7 +875,7 @@ export function EventEditor({
           notes: row.notes || undefined,
         })),
       });
-      setLastSavedScheduleSignature(JSON.stringify({ blocks, shifts }));
+      setLastSavedScheduleSignature(JSON.stringify({ blocks: blocksToSave, shifts: shiftsToSave }));
     } catch (error) {
       flash("error", `Schedule personnel error: ${getConvexErrorMessage(error)}`);
       throw error;
@@ -959,9 +904,9 @@ export function EventEditor({
 
   async function saveScheduleAndPersonnel() {
     try {
-      await saveSchedule();
-      if (!eventId) return;
-      await saveShifts();
+      const saved = await saveSchedule();
+      if (!eventId || !saved) return;
+      await saveShifts(saved.blocks, saved.shifts);
       flash("success", "Schedule and assigned personnel saved.");
     } catch {
       // Individual save handlers already set section-specific messages.
