@@ -2,12 +2,28 @@ name: E2E
 
 on:
   pull_request:
-    paths-ignore:
-      - "docs/**"
-      - "workers/**"
-      - "**/*.md"
+    paths:
+      - "apps/web/**"
+      - "packages/**"
+      - "convex/**"
+      - "scripts/**"
+      - "patches/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".github/workflows/e2e.yml"
   push:
     branches: [main]
+    paths:
+      - "apps/web/**"
+      - "packages/**"
+      - "convex/**"
+      - "scripts/**"
+      - "patches/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".github/workflows/e2e.yml"
 
 concurrency:
   group: e2e-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
