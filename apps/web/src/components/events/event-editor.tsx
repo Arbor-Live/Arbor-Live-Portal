@@ -842,7 +842,6 @@ export function EventEditor({
       const nextShifts = attachShiftsToPersistedBlocks(shifts, nextBlocks);
       setBlocks(nextBlocks);
       setShifts(nextShifts);
-      setLastSavedScheduleSignature(JSON.stringify({ blocks: nextBlocks, shifts: nextShifts }));
       return { blocks: nextBlocks, shifts: nextShifts };
     } catch (error) {
       flash("error", `Schedule error: ${getConvexErrorMessage(error)}`);
