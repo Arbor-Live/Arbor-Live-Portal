@@ -1,4 +1,4 @@
-import { normalizeCrewLineLabel } from "@arbor/invoice-document";
+import { normalizeCrewLineLabel } from "@arbor/invoice-document/web";
 import type { Id } from "@/lib/convex-api";
 import { shiftHours, type EventShiftDraft } from "@/lib/event-schedule-draft";
 import type { TimelineBlockDraft } from "@/components/events/event-timeline-scheduler";
