@@ -216,8 +216,11 @@ function mapServicesToTeams(
   servicesNeeded: string[],
 ): Array<"Design" | "Marketing" | "Lighting" | "Sound" | "Operations"> {
   const teams = new Set<"Design" | "Marketing" | "Lighting" | "Sound" | "Operations">();
-  if (crewOrRental === "Crewed") teams.add("Operations");
+  const normalizedCrewOrRental = (crewOrRental ?? "").trim();
+  if (normalizedCrewOrRental === "Crewed") teams.add("Operations");
   for (const service of servicesNeeded) {
+    // Public submit stores crewOrRental inside servicesNeeded; ignore it here.
+    if (service === "Crewed" || service === "Rental") continue;
     if (service === "Sound") teams.add("Sound");
     if (service === "Lighting") teams.add("Lighting");
     if (service === "Staging") teams.add("Operations");

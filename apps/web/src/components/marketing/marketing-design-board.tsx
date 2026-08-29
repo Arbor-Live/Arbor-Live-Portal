@@ -137,10 +137,10 @@ export function MarketingDesignBoard() {
 
   const emptyLabel =
     view === "mine"
-      ? "No upcoming events are assigned to you in the next four weeks."
+      ? "No upcoming events with Marketing selected are assigned to you in the next four weeks."
       : view === "unassigned"
-        ? "No unassigned upcoming events in the next four weeks."
-        : "No upcoming events in the next four weeks.";
+        ? "No unassigned upcoming events with Marketing selected in the next four weeks."
+        : "No upcoming events with Marketing selected in the next four weeks.";
 
   return (
     <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">

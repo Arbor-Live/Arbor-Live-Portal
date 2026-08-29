@@ -253,10 +253,12 @@ Event types (drive which editor tabs and quick-add blocks appear):
 ## Marketing site
 
 - `marketingDesigns.ts` — event poster assignments and publishing. Upcoming
-  poster work covers events in the next four weeks. Operations or Marketing can
-  assign a poster designer from the event editor or design board; assignments
-  appear immediately on the board (including internal events). The design board
-  filters: assigned to me, unassigned, and all upcoming. Design statuses:
+  poster work covers public/internal events in the next four weeks that have
+  **Marketing** selected under Teams Interested (booking conversions only add
+  Marketing when the client chose the Collaboration production area). Operations
+  or Marketing can assign a poster designer from the event editor or design board;
+  assignments appear immediately on the board (including internal events). The
+  design board filters: assigned to me, unassigned, and all upcoming. Design statuses:
   `draft` (staff WIP, not on site), `ready` (on the public event page; Instagram
   not yet approved), `published` (website + Instagram).   Clients can upload from
   the booking-request or invoice tracking link once an event exists

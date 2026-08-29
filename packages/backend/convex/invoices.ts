@@ -432,10 +432,21 @@ async function replaceLineItems(
 }
 
 export const listManagers = query({
-  args: {},
-  handler: async (ctx) => {
+  args: {
+    /** Defaults to the caller's active organization (Arbor internal context). */
+    organizationId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
     await requireAuth(ctx);
-    await requireArborInternalContext(ctx);
+    const orgContext = await requireArborInternalContext(ctx);
+    const organizationId = args.organizationId?.trim() || orgContext.organizationId;
+    const memberships = await ctx.db
+      .query("userOrganizationMemberships")
+      .withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId))
+      .take(500);
+    const orgUserIds = new Set(
+      memberships.filter((membership) => membership.active).map((membership) => membership.userId),
+    );
     const result = await ctx.runQuery(components.betterAuth.adapter.findMany, {
       model: "user",
       paginationOpts: { cursor: null, numItems: 200 },
@@ -480,7 +491,7 @@ export const listManagers = query({
           gradYear: profile?.gradYear ?? undefined,
         };
       })
-      .filter((u) => Boolean(u.id))
+      .filter((user) => Boolean(user.id) && orgUserIds.has(user.id))
       .sort((a, b) => a.name.localeCompare(b.name));
   },
 });

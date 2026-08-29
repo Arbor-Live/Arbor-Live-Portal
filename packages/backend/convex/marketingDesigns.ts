@@ -16,6 +16,7 @@ import {
 } from "./lib/publicEvents";
 import {
   canPublishMarketingDesignVisibility,
+  eventHasMarketingTeamInterest,
   isMarketingPosterWorkVisibility,
 } from "./lib/eventVisibility";
 import { schedulePublicEventsSiteRevalidation } from "./lib/scheduleSiteRevalidation";
@@ -54,6 +55,7 @@ function normalizeLinks(links: Array<{ label: string; url: string }> | undefined
 }
 
 function isMarketingPosterEligible(event: Doc<"events">, now: number): boolean {
+  if (!eventHasMarketingTeamInterest(event.teamsInterested)) return false;
   if (!isMarketingPosterWorkVisibility(event.visibility)) return false;
   if (normalizeEventStatus(event.status) === "cancelled") return false;
   return isWithinDays(event.startAt, now, MARKETING_POSTER_WINDOW_DAYS);
