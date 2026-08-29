@@ -43,9 +43,10 @@ function mentionHandle(candidate: Pick<MentionCandidate, "username" | "name">) {
   return candidate.username || candidate.name;
 }
 
+/** True when `@handle` appears as its own token (not inside a larger identifier). */
 function handleAppearsInBody(body: string, handle: string) {
   const pattern = new RegExp(
-    `(^|[\\s])@${escapeRegExp(handle)}(?=$|[\\s,.!?;:])`,
+    `(?<![A-Za-z0-9_])@${escapeRegExp(handle)}(?![A-Za-z0-9_])`,
     "g",
   );
   return pattern.test(body);
@@ -141,7 +142,7 @@ function renderBodyWithMentions(
   ].sort((a, b) => b.length - a.length);
   if (!handles.length) return body;
   const pattern = new RegExp(
-    `@(?:${handles.map(escapeRegExp).join("|")})(?=$|[\\s,.!?;:])`,
+    `(?<![A-Za-z0-9_])@(?:${handles.map(escapeRegExp).join("|")})(?![A-Za-z0-9_])`,
     "g",
   );
   const nodes: ReactNode[] = [];
