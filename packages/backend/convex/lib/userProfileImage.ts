@@ -13,13 +13,17 @@ export async function resolveUserProfileImageUrl(
     authImage?: string | null;
   },
 ): Promise<string | undefined> {
-  try {
-    if (args.avatarStorageId) {
+  if (args.avatarStorageId) {
+    try {
       const uploaded = (await ctx.storage.getUrl(args.avatarStorageId)) ?? undefined;
       if (uploaded) return uploaded;
+    } catch {
+      // Fall through to Better Auth image when portal storage lookup fails.
     }
-    const authImage = args.authImage?.trim();
-    if (!authImage) return undefined;
+  }
+  const authImage = args.authImage?.trim();
+  if (!authImage) return undefined;
+  try {
     const resolved = await resolveStoredR2AssetUrl(authImage);
     if (resolved) return resolved;
     if (/^https?:\/\//i.test(authImage)) return authImage;
