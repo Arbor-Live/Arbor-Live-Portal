@@ -5,6 +5,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import portalBandWgsl from "./portal-band.wgsl";
 import { cn } from "@/lib/utils";
 
 type PortalShaderBandProps = {
@@ -30,7 +31,6 @@ export function PortalShaderBand({ className }: PortalShaderBandProps) {
     void (async () => {
       try {
         const { init, effect, frameLoop, surface, clock } = await import("vgpu");
-        const fragment = (await import("./portal-band.wgsl")).default;
         if (disposed) return;
         const gpu = await init();
         if (disposed) {
@@ -38,7 +38,7 @@ export function PortalShaderBand({ className }: PortalShaderBandProps) {
           return;
         }
         const output = surface(gpu, canvas, { dpr: [1, 1.5] });
-        const shader = effect(gpu, fragment);
+        const shader = effect(gpu, portalBandWgsl).set({ u: { time: 0 } });
         const time = clock(gpu);
         const loop = frameLoop(gpu, (frame) => {
           shader.set({ u: { time: time.time } });

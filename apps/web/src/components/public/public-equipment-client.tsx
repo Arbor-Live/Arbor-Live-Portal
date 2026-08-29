@@ -95,7 +95,7 @@ export function PublicEquipmentClient({ assetId }: { assetId: string }) {
 
   return (
     <PublicSiteChrome>
-      <PublicPageHero title={displayModelName} subtitle={LOST_FOUND_SUBTITLE} />
+      <PublicPageHero title={displayModelName} subtitle={LOST_FOUND_SUBTITLE} shaderBand />
       <div className="mx-auto max-w-6xl space-y-8 px-4 py-12 sm:px-6 lg:px-8">
         <Card className="overflow-hidden border-primary/20">
           <CardContent className="grid gap-6 p-6 sm:grid-cols-[1fr_auto] sm:items-end">
