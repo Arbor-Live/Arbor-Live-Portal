@@ -5,6 +5,7 @@ import { internalAction, mutation, query, type MutationCtx } from "./_generated/
 import { createAuth } from "./auth";
 import { SITE_URL } from "./email/constants";
 import { getUserId, requireAuth } from "./lib/auth";
+import { assertUsernameAvailable, normalizeUsername } from "./lib/username";
 
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
 
@@ -21,6 +22,7 @@ export const getMyAccount = query({
     title: v.optional(v.string()),
     calendarInviteEmail: v.optional(v.string()),
     publicCrewDescription: v.optional(v.string()),
+    username: v.optional(v.string()),
     pronouns: v.optional(v.string()),
     gradYear: v.optional(v.number()),
   }),
@@ -48,6 +50,7 @@ export const getMyAccount = query({
       title: profile?.title,
       calendarInviteEmail: profile?.calendarInviteEmail ?? "",
       publicCrewDescription: profile?.publicCrewDescription,
+      username: profile?.username,
       pronouns: profile?.pronouns,
       gradYear: profile?.gradYear,
     };
@@ -138,6 +141,7 @@ export const updateMyProfileDetails = mutation({
     title: v.optional(v.string()),
     calendarInviteEmail: v.optional(v.string()),
     publicCrewDescription: v.optional(v.string()),
+    username: v.optional(v.string()),
     pronouns: v.optional(v.string()),
     gradYear: v.optional(v.number()),
   },
@@ -150,6 +154,10 @@ export const updateMyProfileDetails = mutation({
     const title = args.title?.trim() || undefined;
     const calendarInviteEmail = args.calendarInviteEmail?.trim().toLowerCase() || undefined;
     const publicCrewDescription = args.publicCrewDescription?.trim() || undefined;
+    // Omitted `username` preserves the stored handle; empty string clears it.
+    // (Convex strips client `undefined`, so the form always sends a string.)
+    const usernameProvided = Object.prototype.hasOwnProperty.call(args, "username");
+    const username = usernameProvided ? normalizeUsername(args.username) : undefined;
     const pronouns = args.pronouns?.trim() || undefined;
     const gradYear =
       args.gradYear !== undefined && Number.isFinite(args.gradYear)
@@ -160,6 +168,9 @@ export const updateMyProfileDetails = mutation({
     }
     if (gradYear !== undefined && (gradYear < 1950 || gradYear > 2100)) {
       throw new Error("Enter a valid graduation year.");
+    }
+    if (username) {
+      await assertUsernameAvailable(ctx, username, userId);
     }
 
     const existing = await ctx.db
@@ -173,6 +184,7 @@ export const updateMyProfileDetails = mutation({
         title,
         calendarInviteEmail,
         publicCrewDescription,
+        ...(usernameProvided ? { username } : {}),
         pronouns,
         gradYear,
         updatedAt: now,
@@ -186,6 +198,7 @@ export const updateMyProfileDetails = mutation({
       title,
       calendarInviteEmail,
       publicCrewDescription,
+      ...(usernameProvided ? { username } : {}),
       pronouns,
       gradYear,
       active: true,

@@ -14,6 +14,11 @@ import {
 import { resolveProfileMembership } from "./lib/userVerticals";
 import { assertE2eHelpersEnabled } from "./lib/e2eGuard";
 import { findAuthUsersByIds } from "./lib/auth";
+import {
+  assertUsernameAvailable,
+  normalizeUsername,
+  usernameFromEmail,
+} from "./lib/username";
 import { deleteEventRecord, deleteInvoiceRecord } from "./lib/bookingChainDelete";
 import { listEventsLinkedToRequest } from "./lib/bookingDayLoad";
 import { inviteAcceptUrl } from "./email/constants";
@@ -1461,12 +1466,14 @@ export const ensureCrewUser = mutation({
     email: v.string(),
     password: v.string(),
     name: v.optional(v.string()),
+    username: v.optional(v.string()),
   },
   returns: v.object({
     ok: v.literal(true),
     email: v.string(),
     userId: v.string(),
     organizationId: v.string(),
+    username: v.optional(v.string()),
   }),
   handler: async (ctx, args) => {
     assertE2eHelpersEnabled();
@@ -1605,6 +1612,25 @@ export const ensureCrewUser = mutation({
       });
     }
 
+    const desiredUsername =
+      normalizeUsername(args.username) ??
+      normalizeUsername(usernameFromEmail(email) ?? "e2e_crew");
+    let assignedUsername: string | undefined;
+    if (desiredUsername) {
+      try {
+        await assertUsernameAvailable(ctx, desiredUsername, userId);
+        assignedUsername = desiredUsername;
+      } catch {
+        // Another profile already owns this handle — keep theirs; this crew
+        // user can still be mentioned by display name as a fallback.
+        const own = await ctx.db
+          .query("userAdminProfiles")
+          .withIndex("by_userId", (q) => q.eq("userId", userId!))
+          .unique();
+        assignedUsername = own?.username;
+      }
+    }
+
     const existingUserProfile = await ctx.db
       .query("userAdminProfiles")
       .withIndex("by_userId", (q) => q.eq("userId", userId!))
@@ -1615,8 +1641,12 @@ export const ensureCrewUser = mutation({
         verticals: ["Crew"],
         disciplines: ["Sound"],
         defaultOrganizationId: organizationId,
+        ...(assignedUsername ? { username: assignedUsername } : {}),
         updatedAt: now,
       });
+      if (!assignedUsername && existingUserProfile.username) {
+        assignedUsername = existingUserProfile.username;
+      }
     } else {
       await ctx.db.insert("userAdminProfiles", {
         userId,
@@ -1624,6 +1654,7 @@ export const ensureCrewUser = mutation({
         verticals: ["Crew"],
         disciplines: ["Sound"],
         defaultOrganizationId: organizationId,
+        username: assignedUsername,
         createdAt: now,
         updatedAt: now,
       });
@@ -1669,7 +1700,7 @@ export const ensureCrewUser = mutation({
       });
     }
 
-    return { ok: true as const, email, userId, organizationId };
+    return { ok: true as const, email, userId, organizationId, username: assignedUsername };
   },
 });
 

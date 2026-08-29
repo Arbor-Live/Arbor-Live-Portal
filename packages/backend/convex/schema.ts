@@ -903,6 +903,11 @@ export default defineSchema({
     phone: v.optional(v.string()),
     avatarStorageId: v.optional(v.id("_storage")),
     active: v.boolean(),
+    /**
+     * Short @handle for comment mentions (lowercase letters, digits, underscore).
+     * Unique when set; omit/undefined when unset.
+     */
+    username: v.optional(v.string()),
     /** Free-text pronouns (e.g. she/her). */
     pronouns: v.optional(v.string()),
     /** Graduation year (e.g. 2027). */
@@ -924,7 +929,8 @@ export default defineSchema({
   })
     .index("by_userId", ["userId"])
     .index("by_active", ["active"])
-    .index("by_defaultOrganizationId", ["defaultOrganizationId"]),
+    .index("by_defaultOrganizationId", ["defaultOrganizationId"])
+    .index("by_username", ["username"]),
 
   userOrganizationMemberships: defineTable({
     userId: v.string(),
