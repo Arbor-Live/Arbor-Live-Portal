@@ -22,6 +22,7 @@ import {
   eventDayCount,
   eventTypeHasCrewAssignment,
   getBlockRef,
+  reconcileShiftsForReplacedBlocks,
   resolveShiftScheduleBlockId,
   shiftBelongsToBlock,
   shiftRowKey,
@@ -592,15 +593,15 @@ export function InvoiceLinkedEventCrewSection({
           quickAddDisabledReason={quickAddDisabledReason}
           onQuickAdd={() => {
             if (quickAddDisabled) return;
-            setBlocks(
-              buildQuickAddScheduleBlocks({
-                eventType,
-                startAt,
-                endAt,
-                rentalFulfillmentMode,
-                withStableRefs: stableBlocks,
-              }),
-            );
+            const nextBlocks = buildQuickAddScheduleBlocks({
+              eventType,
+              startAt,
+              endAt,
+              rentalFulfillmentMode,
+              withStableRefs: stableBlocks,
+            });
+            setBlocks(nextBlocks);
+            setShifts((prev) => reconcileShiftsForReplacedBlocks(blocks, nextBlocks, prev));
           }}
         />
         {showCrewTools ? (

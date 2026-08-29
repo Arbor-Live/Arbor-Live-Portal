@@ -220,6 +220,58 @@ export function syncShiftsToBlockTimes<T extends ShiftBlockLink & EventShiftDraf
   });
 }
 
+/**
+ * When schedule blocks are wholesale-replaced (e.g. Quick Add), relink crew shifts
+ * from retired blocks to the new ones by block type and sync non-overridden times.
+ */
+export function reconcileShiftsForReplacedBlocks<T extends ShiftBlockLink & EventShiftDraft>(
+  previousBlocks: TimelineBlockDraft[],
+  nextBlocks: TimelineBlockDraft[],
+  shifts: T[],
+): T[] {
+  const blockReplaceMap = new Map<string, TimelineBlockDraft>();
+  const blockTypes: TimelineBlockDraft["blockType"][] = ["setup", "show", "strike", "custom"];
+
+  for (const blockType of blockTypes) {
+    const previousOfType = previousBlocks.filter((block) => block.blockType === blockType);
+    const nextOfType = nextBlocks.filter((block) => block.blockType === blockType);
+    const pairCount = Math.min(previousOfType.length, nextOfType.length);
+    for (let index = 0; index < pairCount; index += 1) {
+      const previousBlock = previousOfType[index];
+      const nextBlock = nextOfType[index];
+      const previousRef = getBlockRef(previousBlock);
+      if (previousRef) blockReplaceMap.set(previousRef, nextBlock);
+      if (previousBlock.id) blockReplaceMap.set(previousBlock.id, nextBlock);
+    }
+  }
+
+  const relinked = shifts.map((shift) => {
+    const previousBlock = previousBlocks.find((block) => shiftBelongsToBlock(shift, block));
+    if (!previousBlock) return shift;
+
+    const previousRef = getBlockRef(previousBlock);
+    const nextBlock =
+      (previousRef ? blockReplaceMap.get(previousRef) : undefined) ??
+      (previousBlock.id ? blockReplaceMap.get(previousBlock.id) : undefined);
+    if (!nextBlock) {
+      return {
+        ...shift,
+        scheduleBlockId: undefined,
+        scheduleBlockRef: undefined,
+      };
+    }
+
+    const nextRef = getBlockRef(nextBlock);
+    return {
+      ...shift,
+      scheduleBlockId: nextBlock.id,
+      scheduleBlockRef: nextRef,
+    };
+  });
+
+  return syncShiftsToBlockTimes(relinked, nextBlocks);
+}
+
 export function timelineBlocksFromSaved(
   savedBlocks: Array<{
     id: string;

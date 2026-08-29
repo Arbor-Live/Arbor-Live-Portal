@@ -64,6 +64,7 @@ import {
   buildQuickAddScheduleBlocks,
   applyShiftTimesOverrideFlags,
   eventTypeHasCrewAssignment,
+  reconcileShiftsForReplacedBlocks,
   shiftRowKey,
   shiftTimesMatchBlock,
   sortScheduleBlocksByTime,
@@ -1721,15 +1722,15 @@ export function EventEditor({
               quickAddDisabledReason={quickAddDisabledReason}
               onQuickAdd={() => {
                 if (quickAddDisabled || !eventType) return;
-                setBlocks(
-                  buildQuickAddScheduleBlocks({
-                    eventType,
-                    startAt,
-                    endAt,
-                    rentalFulfillmentMode,
-                    withStableRefs: withStableBlockRefs,
-                  }),
-                );
+                const nextBlocks = buildQuickAddScheduleBlocks({
+                  eventType,
+                  startAt,
+                  endAt,
+                  rentalFulfillmentMode,
+                  withStableRefs: withStableBlockRefs,
+                });
+                setBlocks(nextBlocks);
+                setShifts((prev) => reconcileShiftsForReplacedBlocks(blocks, nextBlocks, prev));
               }}
             />
             <div className="space-y-2 rounded-md border p-3">
