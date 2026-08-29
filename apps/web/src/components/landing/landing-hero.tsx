@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef } from "react";
@@ -11,6 +12,26 @@ import {
   landingSpringBouncy,
   useLandingMotion,
 } from "./landing-motion";
+
+const LogoFlareMark = dynamic(
+  () =>
+    import("@/components/landing/logo-flare/logo-flare-mark").then(
+      (mod) => mod.LogoFlareMark,
+    ),
+  {
+    ssr: false,
+    loading: () => (
+      <Image
+        src="/icon-outline.svg"
+        alt=""
+        width={307}
+        height={408}
+        className="h-24 w-auto aspect-[307/408] sm:h-28 md:h-32 lg:h-36"
+        priority
+      />
+    ),
+  },
+);
 
 const heroStagger = {
   hidden: {},
@@ -96,14 +117,18 @@ export function LandingHero() {
               variants={heroItem}
               transition={landingSpring}
             >
-              <Image
-                src="/icon.svg"
-                alt=""
-                width={307}
-                height={408}
-                className="h-24 w-auto sm:h-28 md:h-32 lg:h-36"
-                priority
-              />
+              {prefersReducedMotion ? (
+                <Image
+                  src="/icon-outline.svg"
+                  alt=""
+                  width={307}
+                  height={408}
+                  className="h-24 w-auto aspect-[307/408] sm:h-28 md:h-32 lg:h-36"
+                  priority
+                />
+              ) : (
+                <LogoFlareMark />
+              )}
             </motion.div>
 
             <div className="min-w-0 max-w-2xl">

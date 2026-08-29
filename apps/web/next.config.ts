@@ -1,7 +1,11 @@
+import { createRequire } from "node:module";
 import fs from "fs";
 import type { NextConfig } from "next";
 import path from "path";
 import { collectR2ImageHostnames } from "./src/lib/asset-image-hosts";
+
+const require = createRequire(import.meta.url);
+const wgslLoader = require.resolve("@vgpu/wgsl/loader-webpack");
 
 const webDir = __dirname;
 const repoRoot = path.join(webDir, "../..");
@@ -111,9 +115,28 @@ const imageRemotePatterns = [
 ];
 
 const nextConfig: NextConfig = {
-  transpilePackages: ["backend", "@arbor/invoice-document", "@arbor/rider-document"],
+  transpilePackages: [
+    "backend",
+    "@arbor/invoice-document",
+    "@arbor/rider-document",
+    "vgpu",
+    "@vgpu/wgsl",
+  ],
   turbopack: {
     root: repoRoot,
+    rules: {
+      "*.wgsl": {
+        loaders: [wgslLoader],
+        as: "*.js",
+      },
+    },
+  },
+  webpack: (config) => {
+    config.module.rules.push({
+      test: /\.wgsl$/,
+      use: wgslLoader,
+    });
+    return config;
   },
   async redirects() {
     return [

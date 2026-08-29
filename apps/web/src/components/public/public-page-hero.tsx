@@ -1,7 +1,16 @@
+"use client";
+
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { Reveal } from "@/components/landing/landing-motion";
 import { OptimizedRemoteImage } from "@/components/media/optimized-remote-image";
 import { cn } from "@/lib/utils";
+
+const PortalShaderBand = dynamic(
+  () =>
+    import("@/components/public/portal-shader-band").then((mod) => mod.PortalShaderBand),
+  { ssr: false },
+);
 
 type PublicPageHeroProps = {
   title: string;
@@ -14,6 +23,8 @@ type PublicPageHeroProps = {
   className?: string;
   /** Force the dark zinc hero even in light mode. */
   dark?: boolean;
+  /** Thin WebGPU aurora along the top (booking / quote portals). */
+  shaderBand?: boolean;
 };
 
 export function PublicPageHero({
@@ -25,6 +36,7 @@ export function PublicPageHero({
   actions,
   className,
   dark = false,
+  shaderBand = false,
 }: PublicPageHeroProps) {
   const hasImage = Boolean(imageUrl);
 
@@ -39,6 +51,7 @@ export function PublicPageHero({
         className,
       )}
     >
+      {shaderBand && !hasImage ? <PortalShaderBand /> : null}
       {hasImage ? (
         <>
           <div
@@ -71,10 +84,13 @@ export function PublicPageHero({
       ) : (
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_-10%,color-mix(in_oklch,var(--color-primary)_22%,transparent),transparent)] dark:bg-[radial-gradient(ellipse_80%_60%_at_50%_-10%,color-mix(in_oklch,var(--color-primary)_30%,transparent),transparent)]"
+          className={cn(
+            "pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_-10%,color-mix(in_oklch,var(--color-primary)_22%,transparent),transparent)] dark:bg-[radial-gradient(ellipse_80%_60%_at_50%_-10%,color-mix(in_oklch,var(--color-primary)_30%,transparent),transparent)]",
+            shaderBand && "opacity-60",
+          )}
         />
       )}
-      <div className="relative mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+      <div className="relative z-[1] mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
         <Reveal>
           {backLink ? (
             <Link

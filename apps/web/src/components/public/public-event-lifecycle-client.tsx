@@ -5,6 +5,7 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
 import { PublicPageHero } from "@/components/public/public-page-hero";
 import { PublicSiteChrome } from "@/components/public/public-site-chrome";
+import { PublicPortalPageSkeleton } from "@/components/public/public-skeletons";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PublicEventHeader } from "@/components/public/public-event-header";
 import { PublicEventSchedule } from "@/components/public/public-event-schedule";
@@ -52,10 +53,7 @@ export function PublicEventLifecycleClient({ token }: { token: string }) {
   if (data === undefined) {
     return (
       <PublicSiteChrome>
-        <PublicPageHero title="Your quote" subtitle="Loading event and quote details…" />
-        <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 lg:px-8">
-          <p className="text-sm text-muted-foreground">Loading quote…</p>
-        </div>
+        <PublicPortalPageSkeleton titleWidth="w-48" />
       </PublicSiteChrome>
     );
   }
@@ -110,6 +108,7 @@ export function PublicEventLifecycleClient({ token }: { token: string }) {
       <PublicPageHero
         title={`Quote ${data.invoice.invoiceNumber}`}
         subtitle={heroSubtitle}
+        shaderBand
         actions={
           <PublicStaffDashboardLinks
             invoiceId={data.invoice._id}

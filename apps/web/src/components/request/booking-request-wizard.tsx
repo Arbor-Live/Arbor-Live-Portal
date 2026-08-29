@@ -386,6 +386,7 @@ export function BookingRequestWizard() {
         >
           <RequestWizardShell
             eyebrow="Booking request"
+            background="fft-ocean"
             progress={
               <QuestionnaireWizardProgress
                 complete={Boolean(trackingInfo)}
