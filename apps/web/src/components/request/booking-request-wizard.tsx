@@ -4,7 +4,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useConvex } from "convex/react";
-import { FormProvider, useForm, useFormContext, type Resolver } from "react-hook-form";
+import {
+  FormProvider,
+  useForm,
+  useFormContext,
+  useWatch,
+  type FieldPath,
+  type Resolver,
+} from "react-hook-form";
 import type {
   QuestionnaireChoiceDefinition,
   QuestionnaireItemDefinition,
@@ -74,6 +81,30 @@ const QUESTION_STEPS = [
   "existingEquipment",
   "additionalNotes",
 ] as const satisfies readonly BookingRequestStepId[];
+
+/** Fields each step reads via useWatch — avoids whole-form watch() on every keystroke. */
+const STEP_WATCH_FIELDS: Record<
+  BookingRequestStepId,
+  Array<FieldPath<BookingRequestFormValues>>
+> = {
+  welcome: [],
+  email: ["email"],
+  returningUser: ["requestContext", "invoiceGroupId"],
+  contact: [],
+  sponsorType: [],
+  venue: [],
+  eventSchedule: [],
+  eventName: ["eventName"],
+  eventCategory: ["eventCategory", "eventCategoryOther"],
+  services: [],
+  productionTier: ["productionTier"],
+  lighting: ["lightingPreference"],
+  eventDescription: [],
+  expectedTurnout: [],
+  existingEquipment: [],
+  additionalNotes: [],
+  thankYou: [],
+};
 
 type ReturningGroup = {
   groupId: string;
@@ -458,6 +489,25 @@ function stepFieldError(
   }
 }
 
+function useStepFieldValues(stepId: BookingRequestStepId) {
+  const form = useFormContext<BookingRequestFormValues>();
+  const fieldNames = STEP_WATCH_FIELDS[stepId];
+  const watched = useWatch({ control: form.control, name: fieldNames });
+
+  return useMemo(() => {
+    if (fieldNames.length === 0) {
+      return {} as Partial<BookingRequestFormValues>;
+    }
+    if (fieldNames.length === 1) {
+      return { [fieldNames[0]!]: watched } as Partial<BookingRequestFormValues>;
+    }
+    const row = watched as BookingRequestFormValues[keyof BookingRequestFormValues][];
+    return Object.fromEntries(fieldNames.map((name, index) => [name, row[index]])) as Partial<
+      BookingRequestFormValues
+    >;
+  }, [fieldNames, watched]);
+}
+
 function StepFields({
   stepId,
   contactLookup,
@@ -472,7 +522,7 @@ function StepFields({
   onApplyNewGroup: () => void;
 }) {
   const form = useFormContext<BookingRequestFormValues>();
-  const values = form.watch();
+  const values = useStepFieldValues(stepId);
 
   switch (stepId) {
     case "welcome":
@@ -489,7 +539,7 @@ function StepFields({
             placeholder="you@stanford.edu"
             value={values.email}
             onChange={(event) =>
-              form.setValue("email", event.currentTarget.value, { shouldDirty: true, shouldValidate: true })
+              form.setValue("email", event.currentTarget.value, { shouldDirty: true })
             }
           />
         </div>
@@ -550,7 +600,7 @@ function StepFields({
             placeholder="Spring Concert 2026"
             value={values.eventName}
             onChange={(event) =>
-              form.setValue("eventName", event.currentTarget.value, { shouldDirty: true, shouldValidate: true })
+              form.setValue("eventName", event.currentTarget.value, { shouldDirty: true })
             }
           />
         </div>
@@ -579,10 +629,7 @@ function StepFields({
               className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
               value={values.eventCategoryOther ?? ""}
               onChange={(event) =>
-                form.setValue("eventCategoryOther", event.currentTarget.value, {
-                  shouldDirty: true,
-                  shouldValidate: true,
-                })
+                form.setValue("eventCategoryOther", event.currentTarget.value, { shouldDirty: true })
               }
             />
           ) : null}
@@ -771,10 +818,7 @@ function SponsorTypeChoices({
             className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
             value={sponsorTypeOther ?? ""}
             onChange={(event) =>
-              form.setValue("sponsorTypeOther", event.currentTarget.value, {
-                shouldDirty: true,
-                shouldValidate: true,
-              })
+              form.setValue("sponsorTypeOther", event.currentTarget.value, { shouldDirty: true })
             }
           />
         ) : null}

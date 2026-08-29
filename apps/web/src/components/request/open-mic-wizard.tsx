@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery } from "convex/react";
-import { FormProvider, useForm, useFormContext, type Resolver } from "react-hook-form";
+import { FormProvider, useForm, useFormContext, useWatch, type Resolver } from "react-hook-form";
 import type { QuestionnaireItemDefinition } from "@shadcn/react/questionnaire";
 import { api } from "@/lib/convex-api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -367,10 +367,34 @@ function stepFieldError(
   }
 }
 
-function StepBody({ stepId }: { stepId: OpenMicStepId }) {
+function EquipmentChoices() {
   const form = useFormContext<OpenMicSignupFormValues>();
-  const values = form.watch();
+  const equipment = useWatch({ control: form.control, name: "equipment" }) ?? [];
 
+  return (
+    <QuestionnaireChoices>
+      {OPEN_MIC_EQUIPMENT_OPTIONS.map((option) => (
+        <QuestionnaireChoice
+          key={option}
+          value={option}
+          className={QUESTIONNAIRE_CHOICE_CLASSNAME}
+          checked={equipment.includes(option)}
+          onChange={(event) => {
+            const selected = event.currentTarget.checked;
+            const next = selected
+              ? Array.from(new Set([...equipment, option]))
+              : equipment.filter((item) => item !== option);
+            form.setValue("equipment", next, { shouldDirty: true, shouldValidate: true });
+          }}
+        >
+          {option}
+        </QuestionnaireChoice>
+      ))}
+    </QuestionnaireChoices>
+  );
+}
+
+function StepBody({ stepId }: { stepId: OpenMicStepId }) {
   switch (stepId) {
     case "name":
       return <TextField name="name" label="Your name" placeholder="First and last name" autoFocus />;
@@ -394,27 +418,7 @@ function StepBody({ stepId }: { stepId: OpenMicStepId }) {
         />
       );
     case "equipment":
-      return (
-        <QuestionnaireChoices>
-          {OPEN_MIC_EQUIPMENT_OPTIONS.map((option) => (
-            <QuestionnaireChoice
-              key={option}
-              value={option}
-              className={QUESTIONNAIRE_CHOICE_CLASSNAME}
-              checked={values.equipment.includes(option)}
-              onChange={(event) => {
-                const selected = event.currentTarget.checked;
-                const next = selected
-                  ? Array.from(new Set([...values.equipment, option]))
-                  : values.equipment.filter((item) => item !== option);
-                form.setValue("equipment", next, { shouldDirty: true, shouldValidate: true });
-              }}
-            >
-              {option}
-            </QuestionnaireChoice>
-          ))}
-        </QuestionnaireChoices>
-      );
+      return <EquipmentChoices />;
     case "bgMusicLink":
       return (
         <TextField
