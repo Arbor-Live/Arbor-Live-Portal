@@ -37,11 +37,41 @@
       "skillPath": "skills/convex-setup-auth/SKILL.md",
       "computedHash": "b1a940758751c5b2fdc6ced105b19927a1655f0c1d4bd2fd5536dc3264202c00"
     },
+    "deslop": {
+      "source": "cursor/plugins",
+      "sourceType": "github",
+      "skillPath": "cursor-team-kit/skills/deslop/SKILL.md",
+      "computedHash": "8883a7d459c07a0b2ee06972e79baa634009aa3bab969a6650acbefac394ad41"
+    },
+    "frontend-design": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "skillPath": "skills/frontend-design/SKILL.md",
+      "computedHash": "4eabc66183767153e404b39d1b839b1c37f2d82d86f0a0d7e880a579d8d62336"
+    },
     "shadcn": {
       "source": "shadcn/ui",
       "sourceType": "github",
       "skillPath": "skills/shadcn/SKILL.md",
       "computedHash": "c1a68ee06a668aced9ab2b5fbdea5f989864123794eb2e056b339a072dbb7f10"
+    },
+    "vercel-react-best-practices": {
+      "source": "vercel-labs/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/react-best-practices/SKILL.md",
+      "computedHash": "ca7b0c0c6e5f2750043f7f0cd72d16ac4e2abc48f9b5500d047a4b77a2506212"
+    },
+    "vgpu": {
+      "source": "vercel-labs/vgpu",
+      "sourceType": "github",
+      "skillPath": "skills/vgpu/SKILL.md",
+      "computedHash": "9c9731c17bcbc0696a2f0c4a4e88bd7fe53f2981ea0153630c321e6b2e60dad2"
+    },
+    "web-design-guidelines": {
+      "source": "vercel-labs/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/web-design-guidelines/SKILL.md",
+      "computedHash": "f3bc47f890f42a44db1007ab390709ec368e4b8c089baee6b0007182236ac474"
     }
   }
 }
