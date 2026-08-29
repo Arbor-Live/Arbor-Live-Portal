@@ -154,11 +154,8 @@ export function OpenMicWizard() {
     async (event: React.FormEvent<HTMLFormElement>) => {
       event.preventDefault();
       setSubmitError(null);
-      const notesStep = activeSteps.find((step) => step.id === "notes");
-      if (notesStep?.fields.length) {
-        const valid = await form.trigger(notesStep.fields);
-        if (!valid) return;
-      }
+      const valid = await form.trigger();
+      if (!valid) return;
       if (!activeNight) {
         setSubmitError(
           "No upcoming open mic night is open for sign-ups right now. Check back soon!",
@@ -179,10 +176,19 @@ export function OpenMicWizard() {
       }
       setConfirmation({ nightTitle: result.nightTitle, nightStartAt: result.nightStartAt });
     },
-    [activeNight, activeSteps, form],
+    [activeNight, form],
   );
 
   const hideFooter = Boolean(confirmation) || resolvedItem === "intro";
+
+  const renderedStep =
+    resolvedItem === "intro"
+      ? { id: "intro" as const, headline: "", subheader: undefined as string | undefined }
+      : activeSteps.find((entry) => entry.id === resolvedItem);
+  const renderedIntroDisabled = resolvedItem === "intro" && !showIntro;
+  const renderedDisabled = renderedIntroDisabled || (resolvedItem !== "intro" && !renderedStep);
+  const renderedRequired = resolvedItem !== "equipment" && !renderedDisabled;
+  const renderedFieldError = confirmation ? undefined : stepFieldError(form, resolvedItem);
 
   if (activeNight === undefined) {
     return (
@@ -294,47 +300,36 @@ export function OpenMicWizard() {
                   </div>
                 </div>
               ) : (
-                QUESTION_STEPS.map((name) => {
-                  const step =
-                    name === "intro"
-                      ? { id: "intro" as const, headline: "", subheader: undefined }
-                      : activeSteps.find((entry) => entry.id === name);
-                  const introDisabled = name === "intro" && !showIntro;
-                  const disabled = introDisabled || (name !== "intro" && !step);
-                  const required = name !== "equipment" && !disabled;
-                  const fieldError = stepFieldError(form, name);
-
-                  return (
-                    <QuestionnaireItem
-                      key={name}
-                      name={name}
-                      required={required}
-                      disabled={disabled}
-                      multiple={name === "equipment"}
-                      invalid={Boolean(fieldError)}
-                      className={QUESTIONNAIRE_ITEM_CLASSNAME}
-                    >
-                      {name === "intro" ? (
-                        <OpenMicIntroSlide onContinue={() => setItem("welcome")} />
-                      ) : (
-                        <>
-                          <div className="space-y-3">
-                            <QuestionnaireTitle className={QUESTIONNAIRE_TITLE_CLASSNAME}>
-                              {step && "headline" in step ? step.headline : ""}
-                            </QuestionnaireTitle>
-                            {step && "subheader" in step && step.subheader ? (
-                              <StepSubheader text={step.subheader} />
-                            ) : null}
-                          </div>
-                          <StepBody stepId={name} />
-                          {name !== "equipment" ? <MarkStepAnswered /> : null}
-                          <QuestionnaireError className="text-sm">{fieldError}</QuestionnaireError>
-                        </>
-                      )}
-                      {name === "intro" ? <MarkStepAnswered /> : null}
-                    </QuestionnaireItem>
-                  );
-                })
+                <QuestionnaireItem
+                  key={resolvedItem}
+                  name={resolvedItem}
+                  required={renderedRequired}
+                  disabled={renderedDisabled}
+                  multiple={resolvedItem === "equipment"}
+                  invalid={Boolean(renderedFieldError)}
+                  className={QUESTIONNAIRE_ITEM_CLASSNAME}
+                >
+                  {resolvedItem === "intro" ? (
+                    <>
+                      <OpenMicIntroSlide onContinue={() => setItem("welcome")} />
+                      <MarkStepAnswered />
+                    </>
+                  ) : (
+                    <>
+                      <div className="space-y-3">
+                        <QuestionnaireTitle className={QUESTIONNAIRE_TITLE_CLASSNAME}>
+                          {renderedStep && "headline" in renderedStep ? renderedStep.headline : ""}
+                        </QuestionnaireTitle>
+                        {renderedStep && "subheader" in renderedStep && renderedStep.subheader ? (
+                          <StepSubheader text={renderedStep.subheader} />
+                        ) : null}
+                      </div>
+                      <StepBody stepId={resolvedItem} />
+                      {resolvedItem !== "equipment" ? <MarkStepAnswered /> : null}
+                      <QuestionnaireError className="text-sm">{renderedFieldError}</QuestionnaireError>
+                    </>
+                  )}
+                </QuestionnaireItem>
               )}
             </div>
           </RequestWizardShell>

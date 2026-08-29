@@ -9,7 +9,6 @@ import {
   useForm,
   useFormContext,
   useWatch,
-  type FieldPath,
   type Resolver,
 } from "react-hook-form";
 import type {
@@ -63,6 +62,10 @@ import {
   type BookingRequestStepId,
 } from "@/lib/validations/booking-request";
 
+import {
+  BOOKING_REQUEST_STEP_WATCH_FIELDS,
+} from "@/lib/booking-request-wizard-subscriptions";
+
 const QUESTION_STEPS = [
   "welcome",
   "email",
@@ -81,30 +84,6 @@ const QUESTION_STEPS = [
   "existingEquipment",
   "additionalNotes",
 ] as const satisfies readonly BookingRequestStepId[];
-
-/** Fields each step reads via useWatch — avoids whole-form watch() on every keystroke. */
-const STEP_WATCH_FIELDS: Record<
-  BookingRequestStepId,
-  Array<FieldPath<BookingRequestFormValues>>
-> = {
-  welcome: [],
-  email: ["email"],
-  returningUser: ["requestContext", "invoiceGroupId"],
-  contact: [],
-  sponsorType: [],
-  venue: [],
-  eventSchedule: [],
-  eventName: ["eventName"],
-  eventCategory: ["eventCategory", "eventCategoryOther"],
-  services: [],
-  productionTier: ["productionTier"],
-  lighting: ["lightingPreference"],
-  eventDescription: [],
-  expectedTurnout: [],
-  existingEquipment: [],
-  additionalNotes: [],
-  thankYou: [],
-};
 
 type ReturningGroup = {
   groupId: string;
@@ -327,6 +306,8 @@ export function BookingRequestWizard() {
     async (event: React.FormEvent<HTMLFormElement>) => {
       event.preventDefault();
       setSubmitError(null);
+      const valid = await form.trigger();
+      if (!valid) return;
       setIsSubmitting(true);
       const result = await submitBookingRequest(form.getValues());
       setIsSubmitting(false);
@@ -346,6 +327,14 @@ export function BookingRequestWizard() {
 
   const returningHeadline =
     contactLookup?.found === true ? `Welcome back, ${contactLookup.firstName}!` : currentStep.headline;
+
+  const renderedStep = trackingInfo ? null : activeSteps.find((entry) => entry.id === item);
+  const renderedFieldError = trackingInfo ? undefined : stepFieldError(form, item);
+  const renderedHeadline =
+    item === "returningUser" ? returningHeadline : (renderedStep?.headline ?? "");
+  const renderedRequired =
+    item === "additionalNotes" ||
+    Boolean(renderedStep && !renderedStep.skippable && item !== "welcome" && item !== "venue");
 
   return (
     <PublicMarketingLayout hideFooter>
@@ -400,45 +389,33 @@ export function BookingRequestWizard() {
                   </div>
                 </div>
               ) : (
-                QUESTION_STEPS.map((name) => {
-                  const step = activeSteps.find((entry) => entry.id === name);
-                  const disabled = !step;
-                  const required =
-                    name === "additionalNotes" ||
-                    Boolean(step && !step.skippable && name !== "welcome" && name !== "venue");
-                  const headline = name === "returningUser" ? returningHeadline : (step?.headline ?? "");
-                  const fieldError = stepFieldError(form, name);
-
-                  return (
-                    <QuestionnaireItem
-                      key={name}
-                      name={name}
-                      required={required}
-                      disabled={disabled}
-                      invalid={Boolean(fieldError)}
-                      className={QUESTIONNAIRE_ITEM_CLASSNAME}
-                    >
-                      <div className="space-y-3">
-                        <QuestionnaireTitle className={QUESTIONNAIRE_TITLE_CLASSNAME}>
-                          {headline}
-                        </QuestionnaireTitle>
-                        {step?.subheader ? (
-                          <QuestionnaireDescription className="text-sm/relaxed text-foreground/70 whitespace-pre-line">
-                            {step.subheader}
-                          </QuestionnaireDescription>
-                        ) : null}
-                      </div>
-                      <StepFields
-                        stepId={name}
-                        contactLookup={contactLookup}
-                        onApplyGroup={applyGroup}
-                        onApplyPersonal={applyPersonal}
-                        onApplyNewGroup={applyNewGroup}
-                      />
-                      <QuestionnaireError className="text-sm">{fieldError}</QuestionnaireError>
-                    </QuestionnaireItem>
-                  );
-                })
+                <QuestionnaireItem
+                  key={item}
+                  name={item}
+                  required={renderedRequired}
+                  disabled={!renderedStep}
+                  invalid={Boolean(renderedFieldError)}
+                  className={QUESTIONNAIRE_ITEM_CLASSNAME}
+                >
+                  <div className="space-y-3">
+                    <QuestionnaireTitle className={QUESTIONNAIRE_TITLE_CLASSNAME}>
+                      {renderedHeadline}
+                    </QuestionnaireTitle>
+                    {renderedStep?.subheader ? (
+                      <QuestionnaireDescription className="text-sm/relaxed text-foreground/70 whitespace-pre-line">
+                        {renderedStep.subheader}
+                      </QuestionnaireDescription>
+                    ) : null}
+                  </div>
+                  <StepFields
+                    stepId={item}
+                    contactLookup={contactLookup}
+                    onApplyGroup={applyGroup}
+                    onApplyPersonal={applyPersonal}
+                    onApplyNewGroup={applyNewGroup}
+                  />
+                  <QuestionnaireError className="text-sm">{renderedFieldError}</QuestionnaireError>
+                </QuestionnaireItem>
               )}
             </div>
           </RequestWizardShell>
@@ -491,7 +468,7 @@ function stepFieldError(
 
 function useStepFieldValues(stepId: BookingRequestStepId) {
   const form = useFormContext<BookingRequestFormValues>();
-  const fieldNames = STEP_WATCH_FIELDS[stepId];
+  const fieldNames = BOOKING_REQUEST_STEP_WATCH_FIELDS[stepId];
   const watched = useWatch({ control: form.control, name: fieldNames });
 
   return useMemo(() => {
