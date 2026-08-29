@@ -48,6 +48,7 @@ import { EventTimelineScheduler, type TimelineBlockDraft } from "@/components/ev
 import { EventScheduleCrewAssignPanel } from "@/components/events/event-availability-summary";
 import { UserSelect, type UserSelectOption } from "@/components/users/user-select";
 import { buildUserSelectDescription } from "@/lib/user-select-description";
+import { pickUserProfileImageUrl } from "@/lib/user-profile-image";
 import {
   EVENT_STATUS_EDITOR_OPTIONS,
   normalizeEventStatus,
@@ -576,7 +577,7 @@ export function EventEditor({
       value: entry.id,
       label: entry.name,
       description: buildUserSelectDescription(entry),
-      avatarUrl: entry.image,
+      avatarUrl: pickUserProfileImageUrl(entry.avatarUrl, entry.image),
       keywords: `${entry.role ?? ""} ${entry.email ?? ""}`,
     }));
     const currentUserId = viewer?.userId;

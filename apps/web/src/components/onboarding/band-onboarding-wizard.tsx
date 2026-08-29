@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/questionnaire-wizard";
 import { BandHeroUploadField } from "@/components/files/file-upload-field";
 import { UserSelect } from "@/components/users/user-select";
+import { toUserSelectOption } from "@/lib/user-select-description";
 import { BandPayeePayoutMethodField } from "@/components/bands/band-payee-payout-method-field";
 import {
   OnboardingAckCheckbox,
@@ -478,12 +479,15 @@ export function BandOnboardingWizard() {
   );
 
   const payeeOptions = useMemo(() => {
-    const memberOptions = (members ?? []).map((user) => ({
-      value: user.userId,
-      label: user.name,
-      email: user.email,
-      description: user.email,
-    }));
+    const memberOptions = (members ?? []).map((user) =>
+      toUserSelectOption({
+        id: user.userId,
+        name: user.name,
+        email: user.email,
+        avatarUrl: user.avatarUrl,
+        image: user.image,
+      }),
+    );
     const memberEmails = new Set(
       memberOptions.map((option) => normalizeEmail(option.email ?? "")).filter(Boolean),
     );

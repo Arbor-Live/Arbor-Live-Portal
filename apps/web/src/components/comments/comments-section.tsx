@@ -360,6 +360,8 @@ function CommentsPanel({
                       <UserAvatar
                         name={comment.authorName}
                         email={comment.authorEmail}
+                        userId={comment.authorUserId}
+                        imageUrl={comment.authorAvatarUrl}
                         size="sm"
                       />
                     ) : null}

@@ -35,6 +35,7 @@ import {
   resolveAdditionalHostGroupIds,
   resolveEventPrimaryHostLink,
 } from "./lib/hostOrgs";
+import { buildUserProfileImageByUserId } from "./lib/userProfileImage";
 import {
   eventCancelReasonCodeValue,
   recordEventStatusTransition,
@@ -213,6 +214,7 @@ export const listForDashboard = query({
     // Fetch every referenced crew member in a single batched call via the
     // shared _id-first helper (avoids unindexed `field: "id"` scans).
     const userByKey = await findAuthUsersByIds(ctx, allUserIds);
+    const imageByUserId = await buildUserProfileImageByUserId(ctx, allUserIds, userByKey);
 
     return sortedRows.map((row, index) => {
       const blocks = perEventBlocks[index] ?? [];
@@ -231,7 +233,7 @@ export const listForDashboard = query({
           userId,
           name: user?.name ?? user?.email ?? userId,
           email: user?.email ?? "",
-          image: user?.image ?? undefined,
+          image: imageByUserId.get(userId) ?? user?.image ?? undefined,
         };
       });
       const setupBlock = blocks.find((block) => block.blockType === "setup");

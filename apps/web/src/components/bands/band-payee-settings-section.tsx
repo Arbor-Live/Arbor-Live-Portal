@@ -10,6 +10,7 @@ import { TextareaFormField } from "@/components/forms/textarea-form-field";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { UserSelect } from "@/components/users/user-select";
+import { toUserSelectOption } from "@/lib/user-select-description";
 import { BandPayeePayoutMethodField } from "@/components/bands/band-payee-payout-method-field";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import {
@@ -138,12 +139,15 @@ export function BandPayeeSettingsSection() {
                       form.setValue("designatedPayeeEmail", user.email ?? "", { shouldDirty: true });
                     }
                   }}
-                  options={(members ?? []).map((user) => ({
-                    value: user.userId,
-                    label: user.name,
-                    email: user.email,
-                    description: user.email,
-                  }))}
+                  options={(members ?? []).map((user) =>
+                    toUserSelectOption({
+                      id: user.userId,
+                      name: user.name,
+                      email: user.email,
+                      avatarUrl: user.avatarUrl,
+                      image: user.image,
+                    }),
+                  )}
                   placeholder="Select band member payee..."
                   emptyLabel="Select payee"
                 />

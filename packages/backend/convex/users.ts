@@ -47,6 +47,7 @@ import {
   type PayrollMethod,
   type UserCompensationRateMode,
 } from "./lib/crewCompensation";
+import { buildUserProfileImageByUserId } from "./lib/userProfileImage";
 
 const invitationStatusValue = v.union(
   v.literal("pending"),
@@ -2259,6 +2260,12 @@ export const listMembersForActiveOrganization = query({
       .query("userOrganizationMemberships")
       .withIndex("by_organizationId", (q) => q.eq("organizationId", context.organizationId))
       .take(500);
+    const imageByUserId = await buildUserProfileImageByUserId(
+      ctx,
+      memberships.map((membership) => membership.userId),
+      usersById,
+      profileByUserId,
+    );
     return memberships
       .map((membership) => {
         const user = usersById.get(membership.userId);
@@ -2271,6 +2278,8 @@ export const listMembersForActiveOrganization = query({
           bandRole: membership.bandRole ?? "",
           role: membership.role,
           active: membership.active,
+          avatarUrl: imageByUserId.get(membership.userId),
+          image: user?.image ?? undefined,
         };
       })
       .sort((a, b) => a.name.localeCompare(b.name));
