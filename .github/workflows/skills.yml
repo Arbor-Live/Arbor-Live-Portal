@@ -1,0 +1,17 @@
+name: Skills
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  sync:
+    name: Skills sync check
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Check skills are symlinked to .agents/skills
+        run: scripts/check-skills-sync.sh
