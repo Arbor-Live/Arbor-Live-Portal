@@ -1,4 +1,9 @@
-export { buildInvoiceDocumentData, currency, groupInvoiceSections } from "./format";
+export {
+  buildInvoiceDocumentData,
+  currency,
+  groupInvoiceSections,
+  normalizeCrewLineLabel,
+} from "./format";
 export { ArborLogoPdf } from "./arbor-logo-pdf";
 export { InvoiceDocumentPdf } from "./invoice-document-pdf";
 export { InvoiceDocumentWeb } from "./invoice-document-web";

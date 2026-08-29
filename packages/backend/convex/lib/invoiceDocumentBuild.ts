@@ -1,3 +1,4 @@
+import { normalizeCrewLineLabel } from "./normalizeCrewLineLabel";
 import type { Doc } from "../_generated/dataModel";
 import type { InvoiceDocumentData } from "@arbor/invoice-document/types";
 import {
@@ -72,7 +73,7 @@ export function toDocumentLineItem(
     id: row._id,
     section: row.section,
     provider: row.provider,
-    label: row.label,
+    label: row.section === "crew" ? normalizeCrewLineLabel(row.label) : row.label,
     detailNote,
     quantity: billingQuantity,
     quantityDetail,

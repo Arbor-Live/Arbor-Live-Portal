@@ -1,3 +1,4 @@
+import { normalizeCrewLineLabel } from "@arbor/invoice-document/web";
 import type { Id } from "@/lib/convex-api";
 import { shiftHours, type EventShiftDraft } from "@/lib/event-schedule-draft";
 import type { TimelineBlockDraft } from "@/components/events/event-timeline-scheduler";
@@ -79,9 +80,9 @@ function crewRowLabel(args: {
   const blockPrefix = args.blockLabel ? `${args.blockLabel} — ` : "";
   const roleIsJustName = Boolean(role && personName && namesMatch(role, personName));
   if (!role || roleIsJustName) {
-    return `${blockPrefix}${assignee}`;
+    return normalizeCrewLineLabel(`${blockPrefix}${assignee}`);
   }
-  return `${blockPrefix}${role} (${assignee})`;
+  return normalizeCrewLineLabel(`${blockPrefix}${role} (${assignee})`);
 }
 
 function resolveShiftBilling(args: {

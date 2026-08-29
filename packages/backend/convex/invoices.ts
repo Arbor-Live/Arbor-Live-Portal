@@ -4,6 +4,7 @@ import { components } from "./_generated/api";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { requireArborInternalContext, requireAuth } from "./lib/auth";
 import { syncEventStatusForLinkedInvoice, syncLinkedEventStatusFromInvoice } from "./lib/eventStatus";
+import { recordInvoiceStatusTransition } from "./lib/statusTransitions";
 import { listEventsByInvoiceId } from "./lib/invoiceEvents";
 import {
   billingQuantityForEquipmentLine,
@@ -1493,12 +1494,25 @@ export const markReadyForClientReview = mutation({
       throw new Error("Select at least one terms template before sending the quote.");
     }
     const now = Date.now();
+    const fromApprovalStatus = invoice.clientApprovalStatus ?? "pending";
+    const resetAfterChangesRequested = fromApprovalStatus === "changes_requested";
     await ctx.db.patch(args.id, {
       status: "finalized",
       clientReviewReadyAt: now,
       clientReadyMessage,
+      ...(resetAfterChangesRequested
+        ? {
+            clientApprovalStatus: "pending" as const,
+            changesRequestedAt: undefined,
+            clientApprovalNote: undefined,
+          }
+        : {}),
       updatedAt: now,
     });
+    if (resetAfterChangesRequested) {
+      await recordInvoiceStatusTransition(ctx, args.id, fromApprovalStatus, "pending", { at: now });
+      await syncLinkedEventStatusFromInvoice(ctx, args.id, "pending");
+    }
 
     const updatedInvoice = await ctx.db.get(args.id);
     if (updatedInvoice?.sourceEventRequestId) {

@@ -8,6 +8,7 @@ type ReviewState = {
   isRequestLinked: boolean;
   clientReviewReadyAt: number | null;
   clientReadyMessage: string | null;
+  clientApprovalStatus: string | null;
   requestTrackPath: string | null;
 };
 
@@ -149,6 +150,91 @@ test.describe("invoice send for client review", () => {
       ).toBeVisible({ timeout: 25_000 });
     } finally {
       await clientContext.close();
+    }
+  });
+
+  test("re-sending after client requested changes resets approval to pending", async ({
+    page,
+    browser,
+  }) => {
+    const stamp = Date.now();
+    const seeded = runConvex("e2eHelpers:seedRequestLinkedDraftQuote", {
+      eventName: `E2E Resend After Changes ${stamp}`,
+    }) as {
+      invoiceId: string;
+      trackPath: string;
+      editorPath: string;
+    };
+    const resendMessage = `E2E resend after changes ${stamp}`;
+
+    await page.goto(seeded.editorPath);
+    await expect(page.getByRole("heading", { name: "Edit Invoice" })).toBeVisible({
+      timeout: 25_000,
+    });
+
+    await page.getByTestId("invoice-send-quote-to-client").click();
+    await page.locator("#quote-ready-message").fill(`E2E first send ${stamp}`);
+    await page.getByRole("button", { name: "Send email" }).click();
+
+    await pollConvex<ReviewState>(
+      "e2eHelpers:getInvoiceReviewState",
+      { invoiceId: seeded.invoiceId },
+      (row) => row?.clientReviewReadyAt != null,
+    );
+
+    const clientContext = await browser.newContext({ baseURL: e2eEnv.baseURL });
+    try {
+      const clientPage = await clientContext.newPage();
+      await clientPage.goto(seeded.trackPath);
+      await expect(clientPage.getByText(/Terms & Conditions/i).first()).toBeVisible({
+        timeout: 25_000,
+      });
+      await clientPage.getByPlaceholder("Tell us what changes are needed").fill("Please adjust crew hours.");
+      await clientPage.getByRole("button", { name: "Request changes" }).click();
+      await expect(clientPage.getByText(/Changes requested on/i).first()).toBeVisible({
+        timeout: 20_000,
+      });
+    } finally {
+      await clientContext.close();
+    }
+
+    const changesRequested = await pollConvex<ReviewState>(
+      "e2eHelpers:getInvoiceReviewState",
+      { invoiceId: seeded.invoiceId },
+      (row) => row?.clientApprovalStatus === "changes_requested",
+    );
+    expect(changesRequested.clientApprovalStatus).toBe("changes_requested");
+
+    await page.getByTestId("invoice-withdraw-review").click();
+    await pollConvex<ReviewState>(
+      "e2eHelpers:getInvoiceReviewState",
+      { invoiceId: seeded.invoiceId },
+      (row) => row?.clientReviewReadyAt === null,
+    );
+
+    await page.getByTestId("invoice-send-quote-to-client").click();
+    await page.locator("#quote-ready-message").fill(resendMessage);
+    await page.getByRole("button", { name: "Send email" }).click();
+
+    const resent = await pollConvex<ReviewState>(
+      "e2eHelpers:getInvoiceReviewState",
+      { invoiceId: seeded.invoiceId },
+      (row) => row?.clientReadyMessage === resendMessage,
+    );
+    expect(resent.clientApprovalStatus).toBe("pending");
+
+    const recheckContext = await browser.newContext({ baseURL: e2eEnv.baseURL });
+    try {
+      const recheckPage = await recheckContext.newPage();
+      await recheckPage.goto(seeded.trackPath);
+      await expect(recheckPage.getByRole("button", { name: "Approve quote" })).toBeVisible({
+        timeout: 25_000,
+      });
+      await expect(recheckPage.getByText(/Awaiting your approval/i)).toBeVisible({
+        timeout: 25_000,
+      });
+    } finally {
+      await recheckContext.close();
     }
   });
 });
