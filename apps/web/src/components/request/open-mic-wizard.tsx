@@ -230,7 +230,7 @@ export function OpenMicWizard() {
 
   if (activeNight === undefined) {
     return (
-      <PublicMarketingLayout hideFooter>
+      <PublicMarketingLayout hideFooter hideBanner>
         <RequestWizardShell eyebrow="Open Mic sign-up" progressPercent={0}>
           <div className="space-y-4 px-4 py-8 sm:px-6" role="status" aria-label="Loading">
             <Skeleton className="h-8 w-2/3 max-w-sm" />
@@ -246,7 +246,7 @@ export function OpenMicWizard() {
 
   if (activeNight === null) {
     return (
-      <PublicMarketingLayout hideFooter>
+      <PublicMarketingLayout hideFooter hideBanner>
         <RequestWizardShell eyebrow="Open Mic sign-up" progressPercent={0}>
           <div className="px-4 py-8 sm:px-6">
             <div className="space-y-3 border border-border/50 bg-background/70 p-5 shadow-[0_8px_24px_rgba(0,0,0,0.06)] backdrop-blur-xl sm:p-6">
@@ -274,7 +274,7 @@ export function OpenMicWizard() {
   }
 
   return (
-    <PublicMarketingLayout hideFooter>
+    <PublicMarketingLayout hideFooter hideBanner>
       <FormProvider {...form}>
         <Questionnaire
           className="flex min-h-0 w-full flex-1 flex-col gap-0"

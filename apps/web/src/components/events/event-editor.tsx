@@ -485,6 +485,17 @@ export function EventEditor({
   const hideSchedule = eventType === "Services Only";
   const hideEquipment = eventType === "Services Only";
   const showFulfillmentPicker = RENTAL_EVENT_TYPES.includes(eventType);
+
+  const [now] = useState(() => Date.now());
+
+  // Whether the Open Mic runner window (start-1h to end+1h) is open and the
+  // add-on is scheduled/live — i.e. the public sign-up form is accepting entries.
+  const openMicEvent = eventData?.event;
+  const openMicSignupOpen =
+    openMicEvent?.openMicEnabled === true &&
+    (openMicEvent.openMicStatus === "scheduled" || openMicEvent.openMicStatus === "live") &&
+    now >= openMicEvent.startAt - 60 * 60 * 1000 &&
+    now <= openMicEvent.endAt + 60 * 60 * 1000;
   const visibleTabs = useMemo(
     () =>
       EVENT_EDITOR_TABS.filter((tab) => {
@@ -1611,6 +1622,15 @@ export function EventEditor({
                       target="_blank"
                     >
                       Open Mic runner
+                    </Link>
+                    .
+                  </p>
+                ) : null}
+                {openMicSignupOpen ? (
+                  <p className="text-xs text-muted-foreground">
+                    Sign-ups are open.{" "}
+                    <Link href="/open-mic" className="underline" target="_blank">
+                      Open the sign-up form
                     </Link>
                     .
                   </p>

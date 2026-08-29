@@ -4,11 +4,13 @@ import { LandingFooter } from "@/components/landing/landing-footer";
 type PublicMarketingLayoutProps = {
   children: React.ReactNode;
   hideFooter?: boolean;
+  hideBanner?: boolean;
 };
 
 export function PublicMarketingLayout({
   children,
   hideFooter,
+  hideBanner,
 }: PublicMarketingLayoutProps) {
   return (
     <div className="flex min-h-dvh flex-col bg-background text-foreground">
@@ -19,7 +21,7 @@ export function PublicMarketingLayout({
         Skip to content
       </a>
 
-      <FloatingMarketingNav />
+      {hideBanner ? null : <FloatingMarketingNav />}
 
       <main id="main-content" className="flex flex-1 flex-col">
         {children}

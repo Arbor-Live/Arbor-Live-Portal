@@ -5,7 +5,9 @@ import type { Doc } from "./_generated/dataModel";
 import { resolveStoredR2AssetUrl } from "./inventoryR2";
 import {
   buildPublicEventUrl,
+  isOpenMicSignupOpen,
   isPublicListableEventStatus,
+  isPubliclyListableEvent,
   isUpcomingEvent,
   isWithinDays,
 } from "./lib/publicEvents";
@@ -32,6 +34,8 @@ const publicEventCardValue = v.object({
   caption: v.optional(v.string()),
   publicEventUrl: v.string(),
   additionalLinks: v.array(publicEventLinkValue),
+  /** Present when the event's Open Mic add-on is accepting public sign-ups. */
+  openMicSignupUrl: v.optional(v.string()),
 });
 
 type DesignDoc = Doc<"eventMarketingDesigns">;
@@ -48,6 +52,9 @@ async function mapPublicEventCard(
     : undefined;
   const publicEventUrl = buildPublicEventUrl(String(event._id), SITE_URL);
   const hostDisplay = await loadEventHostDisplay(ctx, event);
+  const openMicSignupUrl = isOpenMicSignupOpen(event, Date.now())
+    ? `${SITE_URL}/open-mic`
+    : undefined;
   return {
     eventId: event._id,
     title: event.title,
@@ -62,6 +69,7 @@ async function mapPublicEventCard(
     caption: design?.caption,
     publicEventUrl,
     additionalLinks: design?.additionalLinks ?? [],
+    openMicSignupUrl,
   };
 }
 
@@ -137,6 +145,50 @@ export const listUpcomingTwoWeeks = query({
         mapPublicEventCard(ctx, event, designsByEventId.get(event._id) ?? null),
       ),
     );
+  },
+});
+
+/** Lean projection for the "Happening right now" banner — title + link only,
+ *  so the payload stays cheap (no poster/host/design resolution). */
+const happeningNowEventValue = v.object({
+  eventId: v.id("events"),
+  title: v.string(),
+  startAt: v.number(),
+  endAt: v.number(),
+  publicEventUrl: v.string(),
+});
+
+/** Candidate events for the "Happening right now" banner. Returns a ±window
+ *  around server time; the client filters exactly with its own clock, so the
+ *  subscription args stay stable (no per-minute re-query, no flicker) and the
+ *  banner still flips on/off at the right moments. Lookback covers multi-day
+ *  events still running; +12h covers tabs left open across a start time.
+ *  Series traffic is a handful per week, so 200 is ~10x headroom. */
+export const listHappeningNow = query({
+  args: {},
+  returns: v.array(happeningNowEventValue),
+  handler: async (ctx) => {
+    const now = Date.now();
+    const LOOKBACK_MS = 7 * 24 * 60 * 60 * 1000;
+    const FORWARD_MS = 12 * 60 * 60 * 1000;
+    const events = await ctx.db
+      .query("events")
+      .withIndex("by_startAt", (q) =>
+        q
+          .gte("startAt", now - LOOKBACK_MS)
+          .lte("startAt", now + FORWARD_MS),
+      )
+      .order("asc")
+      .take(200);
+    return events
+      .filter((event) => isPubliclyListableEvent(event))
+      .map((event) => ({
+        eventId: event._id,
+        title: event.title,
+        startAt: event.startAt,
+        endAt: event.endAt,
+        publicEventUrl: buildPublicEventUrl(String(event._id), SITE_URL),
+      }));
   },
 });
 

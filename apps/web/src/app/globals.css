@@ -172,6 +172,10 @@
     letter-spacing: -0.04em;
   }
 
+  .happening-now-drop {
+    animation: happening-now-drop 320ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
   .hero-slot-word {
     font-family: var(--font-heading);
     font-style: italic;
@@ -329,6 +333,23 @@
   scrollbar-width: thin;
   scrollbar-color: color-mix(in oklch, var(--primary) 70%, transparent)
     color-mix(in oklch, var(--foreground) 8%, transparent);
+}
+
+@keyframes happening-now-drop {
+  from {
+    max-height: 0;
+    opacity: 0;
+  }
+  to {
+    max-height: 2.25rem;
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .happening-now-drop {
+    animation: none;
+  }
 }
 
 .marketing-carousel-scroll::-webkit-scrollbar {
