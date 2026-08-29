@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useFormContext } from "react-hook-form";
+import { useFormContext, useFormState } from "react-hook-form";
 import { useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
 import { Input } from "@/components/ui/input";
@@ -18,7 +18,8 @@ type HostMatch = {
  * Search existing host orgs, pick a match, or keep the typed name as a new org.
  */
 export function OrganizationSearchField() {
-  const { watch, setValue, formState } = useFormContext<BookingRequestFormValues>();
+  const { control, watch, setValue, clearErrors } = useFormContext<BookingRequestFormValues>();
+  const { errors } = useFormState({ control, name: "organization" });
   const organization = watch("organization") ?? "";
   const invoiceGroupId = watch("invoiceGroupId") ?? "";
   const [query, setQuery] = useState(organization);
@@ -36,7 +37,7 @@ export function OrganizationSearchField() {
 
   const matches = useMemo(() => results ?? [], [results]);
   const selectedMatch = matches.find((row) => row.groupId === invoiceGroupId);
-  const error = formState.errors.organization?.message;
+  const organizationError = errors.organization?.message;
 
   function selectMatch(match: HostMatch) {
     setValue("invoiceGroupId", match.groupId, { shouldDirty: true, shouldValidate: true });
@@ -54,7 +55,10 @@ export function OrganizationSearchField() {
     if (invoiceGroupId) {
       setValue("invoiceGroupId", "", { shouldDirty: true });
     }
-    setValue("organization", next, { shouldDirty: true, shouldValidate: true });
+    setValue("organization", next, { shouldDirty: true });
+    if (next.trim()) {
+      clearErrors("organization");
+    }
   }
 
   return (
@@ -68,7 +72,7 @@ export function OrganizationSearchField() {
         value={query}
         onChange={(e) => onQueryChange(e.target.value)}
         placeholder="Search or type a new name"
-        aria-invalid={Boolean(error)}
+        aria-invalid={Boolean(organizationError)}
       />
       {invoiceGroupId && selectedMatch ? (
         <p className="text-xs text-muted-foreground">
@@ -91,7 +95,7 @@ export function OrganizationSearchField() {
           ))}
         </ul>
       ) : null}
-      {error ? <p className="text-xs text-destructive">{error}</p> : null}
+      {organizationError ? <p className="text-xs text-destructive">{organizationError}</p> : null}
     </div>
   );
 }

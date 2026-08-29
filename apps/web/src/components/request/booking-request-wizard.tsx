@@ -4,7 +4,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useConvex } from "convex/react";
-import { FormProvider, useForm, useFormContext, type Resolver } from "react-hook-form";
+import {
+  FormProvider,
+  useForm,
+  useFormContext,
+  useWatch,
+  type FieldErrors,
+  type Resolver,
+} from "react-hook-form";
 import type {
   QuestionnaireChoiceDefinition,
   QuestionnaireItemDefinition,
@@ -55,6 +62,13 @@ import {
   type BookingRequestFormValues,
   type BookingRequestStepId,
 } from "@/lib/validations/booking-request";
+
+import { BOOKING_REQUEST_STEP_WATCH_FIELDS, buildStepFieldValuesFromWatch } from "@/lib/booking-request-wizard-subscriptions";
+import {
+  firstBookingRequestStepForField,
+  firstBookingRequestStepWithError,
+  getBookingRequestStepFieldError,
+} from "@/lib/booking-request-wizard-validation";
 
 const QUESTION_STEPS = [
   "welcome",
@@ -292,12 +306,20 @@ export function BookingRequestWizard() {
     [activeSteps, form, includeLighting, item, lookupEmail, skipSponsor],
   );
 
-  const handleSubmit = useCallback(
-    async (event: React.FormEvent<HTMLFormElement>) => {
-      event.preventDefault();
-      setSubmitError(null);
+  const navigateToFirstInvalidStep = useCallback(
+    (errors: FieldErrors<BookingRequestFormValues>) => {
+      const target = firstBookingRequestStepWithError(activeSteps, errors);
+      if (!target) return;
+      didFocusActiveItem.current = false;
+      setItem(target);
+    },
+    [activeSteps],
+  );
+
+  const submitValid = useCallback(
+    async (values: BookingRequestFormValues) => {
       setIsSubmitting(true);
-      const result = await submitBookingRequest(form.getValues());
+      const result = await submitBookingRequest(values);
       setIsSubmitting(false);
       if (!result.ok) {
         setSubmitError(result.message);
@@ -305,16 +327,50 @@ export function BookingRequestWizard() {
           for (const [field, message] of Object.entries(result.fieldErrors)) {
             form.setError(field as keyof BookingRequestFormValues, { message });
           }
+          const target = Object.keys(result.fieldErrors)
+            .map((field) => firstBookingRequestStepForField(activeSteps, field))
+            .find((step): step is BookingRequestStepId => step != null);
+          if (target) {
+            didFocusActiveItem.current = false;
+            setItem(target);
+          } else {
+            const serverErrors = Object.fromEntries(
+              Object.entries(result.fieldErrors).map(([field, message]) => [
+                field.split(".")[0],
+                { type: "server" as const, message },
+              ]),
+            ) as FieldErrors<BookingRequestFormValues>;
+            navigateToFirstInvalidStep(serverErrors);
+          }
         }
         return;
       }
       setTrackingInfo({ publicToken: result.publicToken, requestNumber: result.requestNumber });
     },
-    [form],
+    [activeSteps, form, navigateToFirstInvalidStep],
+  );
+
+  const handleSubmit = useCallback(
+    (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      setSubmitError(null);
+      void form.handleSubmit(submitValid, navigateToFirstInvalidStep)(event);
+    },
+    [form, navigateToFirstInvalidStep, submitValid],
   );
 
   const returningHeadline =
     contactLookup?.found === true ? `Welcome back, ${contactLookup.firstName}!` : currentStep.headline;
+
+  const renderedStep = trackingInfo ? null : activeSteps.find((entry) => entry.id === item);
+  const renderedFieldError = trackingInfo
+    ? undefined
+    : getBookingRequestStepFieldError(form.formState.errors, item);
+  const renderedHeadline =
+    item === "returningUser" ? returningHeadline : (renderedStep?.headline ?? "");
+  const renderedRequired =
+    item === "additionalNotes" ||
+    Boolean(renderedStep && !renderedStep.skippable && item !== "welcome" && item !== "venue");
 
   return (
     <PublicMarketingLayout hideFooter>
@@ -369,45 +425,33 @@ export function BookingRequestWizard() {
                   </div>
                 </div>
               ) : (
-                QUESTION_STEPS.map((name) => {
-                  const step = activeSteps.find((entry) => entry.id === name);
-                  const disabled = !step;
-                  const required =
-                    name === "additionalNotes" ||
-                    Boolean(step && !step.skippable && name !== "welcome" && name !== "venue");
-                  const headline = name === "returningUser" ? returningHeadline : (step?.headline ?? "");
-                  const fieldError = stepFieldError(form, name);
-
-                  return (
-                    <QuestionnaireItem
-                      key={name}
-                      name={name}
-                      required={required}
-                      disabled={disabled}
-                      invalid={Boolean(fieldError)}
-                      className={QUESTIONNAIRE_ITEM_CLASSNAME}
-                    >
-                      <div className="space-y-3">
-                        <QuestionnaireTitle className={QUESTIONNAIRE_TITLE_CLASSNAME}>
-                          {headline}
-                        </QuestionnaireTitle>
-                        {step?.subheader ? (
-                          <QuestionnaireDescription className="text-sm/relaxed text-foreground/70 whitespace-pre-line">
-                            {step.subheader}
-                          </QuestionnaireDescription>
-                        ) : null}
-                      </div>
-                      <StepFields
-                        stepId={name}
-                        contactLookup={contactLookup}
-                        onApplyGroup={applyGroup}
-                        onApplyPersonal={applyPersonal}
-                        onApplyNewGroup={applyNewGroup}
-                      />
-                      <QuestionnaireError className="text-sm">{fieldError}</QuestionnaireError>
-                    </QuestionnaireItem>
-                  );
-                })
+                <QuestionnaireItem
+                  key={item}
+                  name={item}
+                  required={renderedRequired}
+                  disabled={!renderedStep}
+                  invalid={Boolean(renderedFieldError)}
+                  className={QUESTIONNAIRE_ITEM_CLASSNAME}
+                >
+                  <div className="space-y-3">
+                    <QuestionnaireTitle className={QUESTIONNAIRE_TITLE_CLASSNAME}>
+                      {renderedHeadline}
+                    </QuestionnaireTitle>
+                    {renderedStep?.subheader ? (
+                      <QuestionnaireDescription className="text-sm/relaxed text-foreground/70 whitespace-pre-line">
+                        {renderedStep.subheader}
+                      </QuestionnaireDescription>
+                    ) : null}
+                  </div>
+                  <StepFields
+                    stepId={item}
+                    contactLookup={contactLookup}
+                    onApplyGroup={applyGroup}
+                    onApplyPersonal={applyPersonal}
+                    onApplyNewGroup={applyNewGroup}
+                  />
+                  <QuestionnaireError className="text-sm">{renderedFieldError}</QuestionnaireError>
+                </QuestionnaireItem>
               )}
             </div>
           </RequestWizardShell>
@@ -417,45 +461,26 @@ export function BookingRequestWizard() {
   );
 }
 
-function stepFieldError(
-  form: ReturnType<typeof useForm<BookingRequestFormValues>>,
-  stepId: BookingRequestStepId,
-) {
-  const errors = form.formState.errors;
-  switch (stepId) {
-    case "email":
-      return errors.email?.message;
-    case "returningUser":
-      return errors.requestContext?.message;
-    case "contact":
-      return errors.firstName?.message ?? errors.lastName?.message ?? errors.phone?.message;
-    case "sponsorType":
-      return errors.sponsorType?.message ?? errors.sponsorTypeOther?.message ?? errors.organization?.message;
-    case "venue":
-      return errors.venueName?.message ?? errors.venueAddress?.message;
-    case "eventSchedule":
-      return errors.showSlots?.message ?? errors.setupTime?.message;
-    case "eventName":
-      return errors.eventName?.message;
-    case "eventCategory":
-      return errors.eventCategory?.message ?? errors.eventCategoryOther?.message;
-    case "services":
-      return errors.crewOrRental?.message ?? errors.servicesNeeded?.message;
-    case "productionTier":
-      return errors.productionTier?.message;
-    case "lighting":
-      return errors.lightingPreference?.message;
-    case "eventDescription":
-      return errors.eventDescription?.message;
-    case "expectedTurnout":
-      return errors.expectedTurnout?.message;
-    case "existingEquipment":
-      return errors.existingEquipment?.message;
-    case "additionalNotes":
-      return errors.additionalNotes?.message;
-    default:
-      return undefined;
-  }
+function useStepFieldValues(stepId: BookingRequestStepId) {
+  const form = useFormContext<BookingRequestFormValues>();
+  const fieldNames = BOOKING_REQUEST_STEP_WATCH_FIELDS[stepId];
+  const watchedSingle = useWatch({
+    control: form.control,
+    name: fieldNames[0] ?? "email",
+    disabled: fieldNames.length !== 1,
+  });
+  const watchedMany = useWatch({
+    control: form.control,
+    name: fieldNames,
+    disabled: fieldNames.length < 2,
+  });
+  const watched =
+    fieldNames.length === 0 ? undefined : fieldNames.length === 1 ? watchedSingle : watchedMany;
+
+  return useMemo(
+    () => buildStepFieldValuesFromWatch<BookingRequestFormValues>(fieldNames, watched),
+    [fieldNames, watched],
+  );
 }
 
 function StepFields({
@@ -472,7 +497,7 @@ function StepFields({
   onApplyNewGroup: () => void;
 }) {
   const form = useFormContext<BookingRequestFormValues>();
-  const values = form.watch();
+  const values = useStepFieldValues(stepId);
 
   switch (stepId) {
     case "welcome":
@@ -489,7 +514,7 @@ function StepFields({
             placeholder="you@stanford.edu"
             value={values.email}
             onChange={(event) =>
-              form.setValue("email", event.currentTarget.value, { shouldDirty: true, shouldValidate: true })
+              form.setValue("email", event.currentTarget.value, { shouldDirty: true })
             }
           />
         </div>
@@ -521,7 +546,7 @@ function StepFields({
         </>
       );
     case "sponsorType":
-      return <SponsorTypeChoices form={form} />;
+      return <SponsorTypeChoices />;
     case "venue":
       return (
         <>
@@ -550,7 +575,7 @@ function StepFields({
             placeholder="Spring Concert 2026"
             value={values.eventName}
             onChange={(event) =>
-              form.setValue("eventName", event.currentTarget.value, { shouldDirty: true, shouldValidate: true })
+              form.setValue("eventName", event.currentTarget.value, { shouldDirty: true })
             }
           />
         </div>
@@ -579,10 +604,7 @@ function StepFields({
               className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
               value={values.eventCategoryOther ?? ""}
               onChange={(event) =>
-                form.setValue("eventCategoryOther", event.currentTarget.value, {
-                  shouldDirty: true,
-                  shouldValidate: true,
-                })
+                form.setValue("eventCategoryOther", event.currentTarget.value, { shouldDirty: true })
               }
             />
           ) : null}
@@ -728,17 +750,15 @@ function ReturningUserChoices({
   );
 }
 
-function SponsorTypeChoices({
-  form,
-}: {
-  form: ReturnType<typeof useForm<BookingRequestFormValues>>;
-}) {
-  const requestContext = form.watch("requestContext");
-  const sponsorType = form.watch("sponsorType");
-  const invoiceGroupId = form.watch("invoiceGroupId");
-  const sponsorTypeOther = form.watch("sponsorTypeOther");
+function SponsorTypeChoices() {
+  const form = useFormContext<BookingRequestFormValues>();
+  const values = useStepFieldValues("sponsorType");
+  const requestContext = values.requestContext;
+  const sponsorType = values.sponsorType;
+  const invoiceGroupId = values.invoiceGroupId;
+  const sponsorTypeOther = values.sponsorTypeOther;
   const sponsorOptions = sponsorTypeOptionsForContext(requestContext);
-  const showOrganization = requiresOrganizationName(sponsorType, invoiceGroupId);
+  const showOrganization = requiresOrganizationName(sponsorType ?? "", invoiceGroupId);
 
   return (
     <div className="space-y-4">
@@ -771,10 +791,7 @@ function SponsorTypeChoices({
             className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
             value={sponsorTypeOther ?? ""}
             onChange={(event) =>
-              form.setValue("sponsorTypeOther", event.currentTarget.value, {
-                shouldDirty: true,
-                shouldValidate: true,
-              })
+              form.setValue("sponsorTypeOther", event.currentTarget.value, { shouldDirty: true })
             }
           />
         ) : null}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { memo, useMemo, useState, type ComponentProps } from "react";
 import { useQuery } from "convex/react";
 import { Calendar, CalendarDayButton } from "@/components/ui/calendar";
 import { api } from "@/lib/convex-api";
@@ -13,7 +13,45 @@ import {
 import { PORTAL_TIMEZONE, pacificDateAndTimeToMs, pacificDateKey } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-export function BookingAvailabilityCalendar({
+type DayLoadMap = Record<string, { count: number; level: "free" | "busy" | "unavailable" }>;
+
+const pacificDateKeyCache = new Map<number, string>();
+
+function calendarPacificDateKey(ms: number): string {
+  const cached = pacificDateKeyCache.get(ms);
+  if (cached !== undefined) return cached;
+  const key = pacificDateKey(ms);
+  pacificDateKeyCache.set(ms, key);
+  return key;
+}
+
+const BookingCalendarDayButton = memo(function BookingCalendarDayButton({
+  day,
+  modifiers,
+  children,
+  dayLoad,
+  ...props
+}: ComponentProps<typeof CalendarDayButton> & { dayLoad: DayLoadMap | undefined }) {
+  const dateKey = calendarPacificDateKey(day.date.getTime());
+  const level = dayLoad?.[dateKey]?.level ?? "free";
+
+  return (
+    <CalendarDayButton day={day} modifiers={modifiers} {...props}>
+      {children}
+      {!modifiers.outside ? (
+        <span
+          className={cn(
+            "booking-day-load-dot",
+            modifiers.selected ? "booking-day-load-dot-selected" : bookingDayLoadClassName(level),
+          )}
+          aria-hidden
+        />
+      ) : null}
+    </CalendarDayButton>
+  );
+});
+
+export const BookingAvailabilityCalendar = memo(function BookingAvailabilityCalendar({
   selectedDate,
   highlightedDates = [],
   onSelectDate,
@@ -39,6 +77,14 @@ export function BookingAvailabilityCalendar({
     [highlightedDates],
   );
 
+  const dayButtonComponent = useMemo(
+    () =>
+      function DayButton(props: ComponentProps<typeof CalendarDayButton>) {
+        return <BookingCalendarDayButton {...props} dayLoad={dayLoad} />;
+      },
+    [dayLoad],
+  );
+
   return (
     <div className="booking-availability-calendar">
       <div className="booking-availability-calendar-shell">
@@ -51,7 +97,7 @@ export function BookingAvailabilityCalendar({
           onMonthChange={setVisibleMonth}
           onSelect={(date) => {
             if (!date) return;
-            onSelectDate(pacificDateKey(date.getTime()));
+            onSelectDate(calendarPacificDateKey(date.getTime()));
           }}
           disabled={{ before: minDate }}
           modifiers={{ highlighted }}
@@ -66,26 +112,7 @@ export function BookingAvailabilityCalendar({
             month_grid: "w-full",
           }}
           components={{
-            DayButton: ({ day, modifiers, children, ...props }) => {
-              const dateKey = pacificDateKey(day.date.getTime());
-              const level = dayLoad?.[dateKey]?.level ?? "free";
-              return (
-                <CalendarDayButton day={day} modifiers={modifiers} {...props}>
-                  {children}
-                  {!modifiers.outside ? (
-                    <span
-                      className={cn(
-                        "booking-day-load-dot",
-                        modifiers.selected
-                          ? "booking-day-load-dot-selected"
-                          : bookingDayLoadClassName(level),
-                      )}
-                      aria-hidden
-                    />
-                  ) : null}
-                </CalendarDayButton>
-              );
-            },
+            DayButton: dayButtonComponent,
           }}
         />
 
@@ -100,11 +127,8 @@ export function BookingAvailabilityCalendar({
       </div>
     </div>
   );
-}
+});
 
-export function getDayLoadLevel(
-  dayLoad: Record<string, { count: number; level: "free" | "busy" | "unavailable" }> | undefined,
-  dateKey: string,
-) {
+export function getDayLoadLevel(dayLoad: DayLoadMap | undefined, dateKey: string) {
   return dayLoad?.[dateKey]?.level ?? "free";
 }

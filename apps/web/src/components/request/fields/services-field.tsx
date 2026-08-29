@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useFormContext } from "react-hook-form";
+import { useFormContext, useWatch } from "react-hook-form";
 import { CheckIcon } from "@phosphor-icons/react";
 import {
   ADDON_SERVICE_OPTIONS,
@@ -10,9 +10,9 @@ import {
 } from "@/lib/validations/booking-request";
 
 export function ServicesField() {
-  const { watch, setValue, getFieldState } = useFormContext<BookingRequestFormValues>();
-  const crewOrRental = watch("crewOrRental");
-  const selected = watch("servicesNeeded") ?? [];
+  const { setValue, getFieldState, control } = useFormContext<BookingRequestFormValues>();
+  const crewOrRental = useWatch({ control, name: "crewOrRental" });
+  const selected = useWatch({ control, name: "servicesNeeded" }) ?? [];
   const crewError = getFieldState("crewOrRental").error?.message;
   const servicesError = getFieldState("servicesNeeded").error?.message;
 
