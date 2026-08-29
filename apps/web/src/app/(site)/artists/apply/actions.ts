@@ -2,6 +2,7 @@
 
 import { fetchMutation } from "convex/nextjs";
 import { api } from "@/lib/convex-api";
+import { getConvexErrorMessage } from "@/lib/convex-error";
 
 export type BandApplicationFormValues = {
   website: string;
@@ -61,10 +62,10 @@ export async function submitBandApplication(
   } catch (error) {
     return {
       ok: false,
-      message:
-        error instanceof Error
-          ? error.message
-          : "Unable to submit your application. Please try again.",
+      message: getConvexErrorMessage(
+        error,
+        "Unable to submit your application. Please try again.",
+      ),
     };
   }
 }

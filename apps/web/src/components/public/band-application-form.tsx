@@ -44,6 +44,22 @@ export function BandApplicationForm() {
   function onSubmit(event: React.FormEvent) {
     event.preventDefault();
     setError(null);
+
+    if (!form.isSolo) {
+      const namedMembers = form.members.filter((member) => member.name.trim().length > 0);
+      if (namedMembers.length === 0) {
+        setError('Add at least one bandmate, or check "I\'m performing solo".');
+        return;
+      }
+      for (const member of namedMembers) {
+        const email = member.email.trim();
+        if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          setError(`Enter a valid email for ${member.name.trim()}, or leave it blank.`);
+          return;
+        }
+      }
+    }
+
     startTransition(async () => {
       const result = await submitBandApplication(form);
       if (!result.ok) {
