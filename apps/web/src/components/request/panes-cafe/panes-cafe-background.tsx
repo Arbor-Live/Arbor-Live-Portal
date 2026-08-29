@@ -28,7 +28,16 @@ export function PanesCafeBackground({ className }: PanesCafeBackgroundProps) {
 
     let disposed = false;
     let fadeFrame = 0;
-    const renderer = createRenderer({ canvas, softFail: true });
+    const restoreFallback = () => {
+      if (disposed) return;
+      cancelAnimationFrame(fadeFrame);
+      setActive(false);
+    };
+    const renderer = createRenderer({
+      canvas,
+      softFail: true,
+      onFail: restoreFallback,
+    });
     void renderer.ready
       .then(() => {
         if (disposed) return;

@@ -15,9 +15,15 @@ interface RendererOptions {
   readonly canvas: HTMLCanvasElement;
   /** When true, dispose quietly instead of throwing (used as page background). */
   readonly softFail?: boolean;
+  /** Called when a runtime failure disposes the renderer after ready resolved. */
+  readonly onFail?: () => void;
 }
 
-export function createRenderer({ canvas, softFail = false }: RendererOptions) {
+export function createRenderer({
+  canvas,
+  softFail = false,
+  onFail,
+}: RendererOptions) {
   let disposed = false;
   let gpu: Gpu | undefined;
   let output: Surface | undefined;
@@ -39,7 +45,10 @@ export function createRenderer({ canvas, softFail = false }: RendererOptions) {
     } catch {
       // Teardown must not mask the original failure.
     }
-    if (!softFail) throw error;
+    if (!softFail) {
+      throw error;
+    }
+    onFail?.();
   }
 
   const initialize = async () => {
