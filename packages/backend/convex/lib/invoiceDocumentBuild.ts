@@ -1,4 +1,4 @@
-import { normalizeCrewLineLabel } from "@arbor/invoice-document";
+import { normalizeCrewLineLabel } from "./normalizeCrewLineLabel";
 import type { Doc } from "../_generated/dataModel";
 import type { InvoiceDocumentData } from "@arbor/invoice-document/types";
 import {

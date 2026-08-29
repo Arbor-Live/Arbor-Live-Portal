@@ -15,6 +15,7 @@ import {
 } from "./lib/publicReferenceIds";
 import { legacyTeamsToMembership } from "./lib/userVerticals";
 import { consolidatePackageIntoOneIncludedUnit } from "./lib/packageContentMigration";
+import { normalizeCrewLineLabel } from "./lib/normalizeCrewLineLabel";
 
 /**
  * Official @convex-dev/migrations runner.
@@ -301,6 +302,20 @@ export const migrateEventCommentsToComments = migrations.define({
 });
 
 /**
+ * Collapse crew line labels where role was copied from the assignee name, e.g.
+ * `Setup — Alex (Alex (Lead))` → `Setup — Alex (Lead)`.
+ */
+export const normalizeInvoiceCrewLineLabels = migrations.define({
+  table: "invoiceLineItems",
+  migrateOne: async (_ctx, row) => {
+    if (row.section !== "crew") return;
+    const label = normalizeCrewLineLabel(row.label);
+    if (label === row.label) return;
+    return { label, updatedAt: Date.now() };
+  },
+});
+
+/**
  * never reorder or remove completed ones (reset requires an explicit reset:true).
  */
 const MIGRATION_SERIES = [
@@ -317,6 +332,7 @@ const MIGRATION_SERIES = [
   internal.migrations.consolidatePackageContentUnits,
   internal.migrations.stripBandRiderInputGroups,
   internal.migrations.migrateEventCommentsToComments,
+  internal.migrations.normalizeInvoiceCrewLineLabels,
 ] as const;
 
 export const runAll = migrations.runner([...MIGRATION_SERIES]);
