@@ -20,6 +20,7 @@ import {
   isStaffMember,
   resolveProfileMembership,
 } from "./lib/userVerticals";
+import { buildUserProfileImageByUserId } from "./lib/userProfileImage";
 import { loadEventHostDisplay } from "./lib/hostOrgs";
 
 
@@ -70,13 +71,17 @@ function weeksToMs(weeks: number) {
   return weeks * 7 * 24 * 60 * 60 * 1000;
 }
 
-function toUserSummary(userId: string, userByKey: Map<string, AuthUserRecord>) {
+function toUserSummary(
+  userId: string,
+  userByKey: Map<string, AuthUserRecord>,
+  imageByUserId?: Map<string, string | undefined>,
+) {
   const user = userByKey.get(userId);
   return {
     userId,
     name: user?.name ?? user?.email ?? userId,
     email: user?.email ?? "",
-    image: user?.image ?? undefined,
+    image: imageByUserId?.get(userId) ?? user?.image ?? undefined,
   };
 }
 
@@ -127,6 +132,7 @@ function aggregateResponses(responses: Doc<"eventCrewAvailabilityResponses">[]) 
 function buildResponsePeople(
   responses: Doc<"eventCrewAvailabilityResponses">[],
   userByKey: Map<string, AuthUserRecord>,
+  imageByUserId: Map<string, string | undefined>,
   options?: { includePrivateStatuses?: boolean; excludeUserIds?: Set<string> },
 ) {
   const includePrivate = options?.includePrivateStatuses ?? false;
@@ -140,7 +146,7 @@ function buildResponsePeople(
           response.responseStatus === "partial"),
     )
     .map((response) => ({
-      ...toUserSummary(response.userId, userByKey),
+      ...toUserSummary(response.userId, userByKey, imageByUserId),
       responseStatus: response.responseStatus,
       partialWindows: response.partialWindows,
       notes: response.notes,
@@ -280,6 +286,7 @@ export const listForAdminOverview = query({
       ),
     );
     const userByKey = await findAuthUsersByIds(ctx, allUserIds);
+    const imageByUserId = await buildUserProfileImageByUserId(ctx, allUserIds, userByKey);
 
     const rows = await Promise.all(
       bundles.map(async ({ event, shifts, responses }) => {
@@ -314,8 +321,12 @@ export const listForAdminOverview = query({
           pending,
           eligibleCrew,
         },
-        responders: buildResponsePeople(responses, userByKey, { includePrivateStatuses: true }),
-        assignedCrew: assignedUserIds.map((userId) => toUserSummary(userId, userByKey)),
+        responders: buildResponsePeople(responses, userByKey, imageByUserId, {
+          includePrivateStatuses: true,
+        }),
+        assignedCrew: assignedUserIds.map((userId) =>
+          toUserSummary(userId, userByKey, imageByUserId),
+        ),
       };
     }),
     );
@@ -410,6 +421,7 @@ export const listForCrewMember = query({
       ),
     );
     const userByKey = await findAuthUsersByIds(ctx, allUserIds);
+    const imageByUserId = await buildUserProfileImageByUserId(ctx, allUserIds, userByKey);
 
     return Promise.all(
       bundles.map(async ({ event, blocks, shifts, responses }) => {
@@ -446,8 +458,8 @@ export const listForCrewMember = query({
             endsAt: block.endsAt,
             notes: block.notes,
           })),
-        assignedCrew: assignedUserIds.map((id) => toUserSummary(id, userByKey)),
-        interestedCrew: buildResponsePeople(responses, userByKey, {
+        assignedCrew: assignedUserIds.map((id) => toUserSummary(id, userByKey, imageByUserId)),
+        interestedCrew: buildResponsePeople(responses, userByKey, imageByUserId, {
           excludeUserIds: new Set(assignedUserIds),
         }),
         unavailableCounts: {
@@ -565,6 +577,7 @@ export const getEventForCrewResponse = query({
       ].filter((id): id is string => Boolean(id))),
     );
     const userByKey = await findAuthUsersByIds(ctx, allUserIds);
+    const imageByUserId = await buildUserProfileImageByUserId(ctx, allUserIds, userByKey);
 
     const myResponseRow = bundle.responses.find((response) => response.userId === userId) ?? null;
     const responseCounts = aggregateResponses(bundle.responses);
@@ -599,8 +612,8 @@ export const getEventForCrewResponse = query({
           endsAt: block.endsAt,
           notes: block.notes,
         })),
-      assignedCrew: assignedUserIds.map((id) => toUserSummary(id, userByKey)),
-      interestedCrew: buildResponsePeople(bundle.responses, userByKey, {
+      assignedCrew: assignedUserIds.map((id) => toUserSummary(id, userByKey, imageByUserId)),
+      interestedCrew: buildResponsePeople(bundle.responses, userByKey, imageByUserId, {
         excludeUserIds: new Set(assignedUserIds),
       }),
       unavailableCounts: {
@@ -684,10 +697,11 @@ export const getSummaryForEvent = query({
     );
     const assignableUserIds = assignableResponseRows.map((response) => response.userId);
     const userByKey = await findAuthUsersByIds(ctx, assignableUserIds);
+    const imageByUserId = await buildUserProfileImageByUserId(ctx, assignableUserIds, userByKey);
 
     const assignableResponders = assignableResponseRows
       .map((response) => ({
-        ...toUserSummary(response.userId, userByKey),
+        ...toUserSummary(response.userId, userByKey, imageByUserId),
         responseStatus: response.responseStatus,
         partialWindows: response.partialWindows,
         notes: response.notes,

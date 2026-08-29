@@ -129,6 +129,7 @@ import type * as lib_invoicePeople from "../lib/invoicePeople.js";
 import type * as lib_invoiceProfit from "../lib/invoiceProfit.js";
 import type * as lib_invoiceSeries from "../lib/invoiceSeries.js";
 import type * as lib_marketingContent from "../lib/marketingContent.js";
+import type * as lib_normalizeCrewLineLabel from "../lib/normalizeCrewLineLabel.js";
 import type * as lib_onboardingLinks from "../lib/onboardingLinks.js";
 import type * as lib_openMicAddon from "../lib/openMicAddon.js";
 import type * as lib_otForecast from "../lib/otForecast.js";
@@ -149,6 +150,7 @@ import type * as lib_siteRevalidationPaths from "../lib/siteRevalidationPaths.js
 import type * as lib_stanfordHours from "../lib/stanfordHours.js";
 import type * as lib_statusTransitions from "../lib/statusTransitions.js";
 import type * as lib_trustedOrigins from "../lib/trustedOrigins.js";
+import type * as lib_userProfileImage from "../lib/userProfileImage.js";
 import type * as lib_userTimecards from "../lib/userTimecards.js";
 import type * as lib_userVerticals from "../lib/userVerticals.js";
 import type * as lib_venueTypes from "../lib/venueTypes.js";
@@ -311,6 +313,7 @@ declare const fullApi: ApiFromModules<{
   "lib/invoiceProfit": typeof lib_invoiceProfit;
   "lib/invoiceSeries": typeof lib_invoiceSeries;
   "lib/marketingContent": typeof lib_marketingContent;
+  "lib/normalizeCrewLineLabel": typeof lib_normalizeCrewLineLabel;
   "lib/onboardingLinks": typeof lib_onboardingLinks;
   "lib/openMicAddon": typeof lib_openMicAddon;
   "lib/otForecast": typeof lib_otForecast;
@@ -331,6 +334,7 @@ declare const fullApi: ApiFromModules<{
   "lib/stanfordHours": typeof lib_stanfordHours;
   "lib/statusTransitions": typeof lib_statusTransitions;
   "lib/trustedOrigins": typeof lib_trustedOrigins;
+  "lib/userProfileImage": typeof lib_userProfileImage;
   "lib/userTimecards": typeof lib_userTimecards;
   "lib/userVerticals": typeof lib_userVerticals;
   "lib/venueTypes": typeof lib_venueTypes;

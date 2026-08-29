@@ -4,6 +4,7 @@ import { query } from "./_generated/server";
 import type { QueryCtx } from "./_generated/server";
 import { resolveStoredR2AssetUrl } from "./inventoryR2";
 import { getUserId, findAuthOrganizationById, type AuthUser } from "./lib/auth";
+import { resolveUserProfileImageUrl } from "./lib/userProfileImage";
 import {
   getPrimaryVertical,
   getSecondaryTags,
@@ -70,16 +71,10 @@ async function resolveCrewMemberImageUrl(
   },
   user: AuthUser | undefined,
 ) {
-  const authImage = (user as { image?: string | null } | undefined)?.image?.trim();
-  if (authImage) {
-    const resolved = await resolveStoredR2AssetUrl(authImage);
-    if (resolved) return resolved;
-    if (/^https?:\/\//i.test(authImage)) return authImage;
-  }
-  if (profile.avatarStorageId) {
-    return (await ctx.storage.getUrl(profile.avatarStorageId)) ?? undefined;
-  }
-  return undefined;
+  return resolveUserProfileImageUrl(ctx, {
+    avatarStorageId: profile.avatarStorageId,
+    authImage: user?.image,
+  });
 }
 
 export const listPublicCrew = query({

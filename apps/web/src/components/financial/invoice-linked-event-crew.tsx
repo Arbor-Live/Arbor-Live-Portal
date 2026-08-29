@@ -9,6 +9,7 @@ import { EventScheduleCrewAssignPanel } from "@/components/events/event-availabi
 import { EventTimelineScheduler, type TimelineBlockDraft } from "@/components/events/event-timeline-scheduler";
 import { UserSelect, type UserSelectOption } from "@/components/users/user-select";
 import { buildUserSelectDescription } from "@/lib/user-select-description";
+import { pickUserProfileImageUrl } from "@/lib/user-profile-image";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DateTimeRangePicker } from "@/components/ui/date-time-picker";
@@ -145,7 +146,7 @@ export function InvoiceLinkedEventCrewSection({
         rateMode: entry.rateMode,
         hourlyRateUsd: entry.hourlyRateUsd,
       }),
-      avatarUrl: entry.image,
+      avatarUrl: pickUserProfileImageUrl(entry.avatarUrl, entry.image),
       keywords: `${entry.role ?? ""} ${entry.email ?? ""} ${entry.rateMode ?? ""}`,
       rateMode: entry.rateMode as "normal" | "lead" | "custom" | undefined,
       hourlyRateUsd: entry.hourlyRateUsd,

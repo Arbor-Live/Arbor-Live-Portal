@@ -1,3 +1,6 @@
+import type { UserSelectOption } from "@/components/users/user-select";
+import { pickUserProfileImageUrl } from "@/lib/user-profile-image";
+
 /**
  * Shared description-line builder for user pickers (UserSelect, assignee
  * dropdowns, etc). Appends pronouns / graduation year to the role+email
@@ -27,4 +30,26 @@ export function buildUserSelectDescription(row: {
     row.gradYear ? `'${String(row.gradYear).slice(-2)}` : undefined,
   ];
   return parts.filter((part): part is string => Boolean(part && String(part).trim())).join(" • ");
+}
+
+export function toUserSelectOption(entry: {
+  id: string;
+  name: string;
+  email?: string | null;
+  role?: string | null;
+  pronouns?: string | null;
+  gradYear?: number | null;
+  rateMode?: "normal" | "lead" | "custom" | string | null;
+  hourlyRateUsd?: number | null;
+  avatarUrl?: string | null;
+  image?: string | null;
+}): UserSelectOption {
+  return {
+    value: entry.id,
+    label: entry.name,
+    description: buildUserSelectDescription(entry),
+    avatarUrl: pickUserProfileImageUrl(entry.avatarUrl, entry.image),
+    role: entry.role ?? undefined,
+    email: entry.email ?? undefined,
+  };
 }

@@ -37,6 +37,9 @@ import {
   resolveUserCompensationHourlyRateUsd,
 } from "./lib/crewCompensation";
 import {
+  buildUserProfileImageByUserId,
+} from "./lib/userProfileImage";
+import {
   eventPassThroughCostUsd,
   invoicePassThroughUsd,
   netProfitFromInvoiceUsd,
@@ -474,18 +477,26 @@ export const listManagers = query({
     );
     const profiles = await ctx.db.query("userAdminProfiles").withIndex("by_active").take(2000);
     const profileByUserId = new Map(profiles.map((profile) => [profile.userId, profile]));
+    const imageByUserId = await buildUserProfileImageByUserId(
+      ctx,
+      [...orgUserIds],
+      userByKey,
+      profileByUserId,
+    );
     return [...orgUserIds]
       .map((userId) => {
         const user = userByKey.get(userId);
         if (!user) return null;
         const profile = profileByUserId.get(userId);
         const compensation = rateByUserId.get(userId);
+        const avatarUrl = imageByUserId.get(userId);
         return {
           id: userId,
           name: user.name ?? user.email ?? "Unknown user",
           email: user.email,
           role: user.role ?? undefined,
           image: user.image ?? undefined,
+          avatarUrl,
           hourlyRateUsd: compensation?.hourlyRateUsd,
           rateMode: compensation?.rateMode,
           pronouns: profile?.pronouns ?? undefined,

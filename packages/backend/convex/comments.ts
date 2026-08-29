@@ -7,6 +7,7 @@ import {
   requireArborInternalContext,
   requireAuth,
 } from "./lib/auth";
+import { buildUserProfileImageByUserId } from "./lib/userProfileImage";
 import {
   bookingRequestsAdminUrl,
   damageReportUrl,
@@ -205,6 +206,7 @@ const commentRowValidator = v.object({
   authorUserId: v.string(),
   authorName: v.string(),
   authorEmail: v.string(),
+  authorAvatarUrl: v.optional(v.string()),
   body: v.string(),
   mentionedUserIds: v.array(v.string()),
   mentionedUsers: v.array(v.object({ userId: v.string(), name: v.string() })),
@@ -235,6 +237,7 @@ export const listBySubject = query({
       for (const mentionedUserId of row.mentionedUserIds) userIds.add(mentionedUserId);
     }
     const userById = await findAuthUsersByIds(ctx, [...userIds]);
+    const imageByUserId = await buildUserProfileImageByUserId(ctx, [...userIds], userById);
     const nameFor = (userId: string) =>
       userById.get(userId)?.name ?? userById.get(userId)?.email ?? "Arbor Live user";
 
@@ -245,6 +248,7 @@ export const listBySubject = query({
       authorUserId: row.authorUserId,
       authorName: nameFor(row.authorUserId),
       authorEmail: userById.get(row.authorUserId)?.email ?? "",
+      authorAvatarUrl: imageByUserId.get(row.authorUserId),
       body: row.body,
       mentionedUserIds: row.mentionedUserIds,
       mentionedUsers: row.mentionedUserIds.map((userId) => ({
