@@ -636,8 +636,16 @@ async function main() {
   process.exit(code ?? 1);
 }
 
+/**
+ * Exit code reserved for infra/boot failures (Convex binary download, build,
+ * server startup) — distinct from Playwright's test-failure exit code 1 so CI
+ * can retry only the retryable kind. Once Playwright has run, a non-zero shard
+ * is a real failure.
+ */
+const EXIT_INFRA = 10;
+
 main().catch((error) => {
   console.error(error);
   cleanup();
-  process.exit(1);
+  process.exit(EXIT_INFRA);
 });
