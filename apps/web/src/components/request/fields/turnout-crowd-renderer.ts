@@ -48,43 +48,77 @@ export function createCrowdRenderer({ canvas, softFail = false }: CrowdRendererO
   const initializeWebGpu = async () => {
     const { clock, draw, frameLoop: gpuFrameLoop, init, surface } = await import("vgpu");
     if (disposed) return;
-    const gpu = await init({ label: "turnout-crowd" });
-    if (disposed) {
-      gpu.dispose();
-      return;
-    }
 
-    const output = surface(gpu, canvas, {
-      dpr: [1, 2],
-      alphaMode: "premultiplied",
-      clearColor: TRANSPARENT_CLEAR,
-    });
-    const crowd = draw(gpu, {
-      shader: turnoutCrowdWgsl,
-      vertices: 6,
-      instances: 1,
-      blend: "alpha",
-      label: "turnout-crowd",
-    });
-    const time = clock(gpu);
+    let gpu: Awaited<ReturnType<typeof init>> | undefined;
+    let output: ReturnType<typeof surface> | undefined;
+    let loop: ReturnType<typeof gpuFrameLoop> | undefined;
 
-    const loop = gpuFrameLoop(gpu, (frame) => {
-      if (disposed) return;
-      crowd.set({ u: crowdUniforms(state, time.time) });
-
-      frame.pass({ target: output, clear: TRANSPARENT_CLEAR }, (pass) => {
-        if (webGpuInstances > 0) {
-          pass.draw(crowd, { instances: webGpuInstances });
-        }
-      });
-    });
-
-    disposeGpu = () => {
-      loop.stop();
-      output.dispose();
-      gpu.dispose();
+    const releasePartial = () => {
+      try {
+        loop?.stop();
+      } catch {
+        // Best-effort teardown after a partial init failure.
+      }
+      try {
+        output?.dispose();
+      } catch {
+        // Best-effort teardown after a partial init failure.
+      }
+      try {
+        gpu?.dispose();
+      } catch {
+        // Best-effort teardown after a partial init failure.
+      }
+      loop = undefined;
+      output = undefined;
+      gpu = undefined;
     };
-    mode = "webgpu";
+
+    try {
+      gpu = await init({ label: "turnout-crowd" });
+      if (disposed) {
+        releasePartial();
+        return;
+      }
+
+      output = surface(gpu, canvas, {
+        dpr: [1, 2],
+        alphaMode: "premultiplied",
+        clearColor: TRANSPARENT_CLEAR,
+      });
+      const crowd = draw(gpu, {
+        shader: turnoutCrowdWgsl,
+        vertices: 6,
+        instances: 1,
+        blend: "alpha",
+        label: "turnout-crowd",
+      });
+      const time = clock(gpu);
+
+      loop = gpuFrameLoop(gpu, (frame) => {
+        if (disposed) return;
+        crowd.set({ u: crowdUniforms(state, time.time) });
+
+        frame.pass({ target: output!, clear: TRANSPARENT_CLEAR }, (pass) => {
+          if (webGpuInstances > 0) {
+            pass.draw(crowd, { instances: webGpuInstances });
+          }
+        });
+      });
+
+      disposeGpu = () => {
+        loop?.stop();
+        output?.dispose();
+        gpu?.dispose();
+        loop = undefined;
+        output = undefined;
+        gpu = undefined;
+      };
+      mode = "webgpu";
+    } catch (error) {
+      releasePartial();
+      throw error;
+    }
   };
 
   const initialize = async () => {

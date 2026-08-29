@@ -43,8 +43,8 @@ fn easeInOut(t: f32) -> f32 {
 }
 
 fn danceKeyframe(eased: f32, sway: f32, bounce: f32) -> vec2f {
-  let segment = eased * 4.0;
-  let i = min(4u, u32(floor(segment)));
+  let segment = min(eased * 4.0, 4.0);
+  let i = min(3u, u32(floor(segment)));
   let f = segment - floor(segment);
   var a = vec2f(0.0);
   var b = vec2f(0.0);

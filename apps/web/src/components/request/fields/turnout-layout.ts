@@ -65,8 +65,8 @@ function easeInOut(t: number) {
 }
 
 function sampleDanceKeyframe(eased: number, sway: number, bounce: number) {
-  const segment = eased * 4;
-  const i = Math.min(4, Math.floor(segment));
+  const segment = Math.min(4, eased * 4);
+  const i = Math.min(3, Math.floor(segment));
   const f = segment - i;
   const keys = [
     { x: 0, y: 0 },
