@@ -32,6 +32,7 @@ Convex agent skills for common tasks can be installed by running
 ## Notes
 - UI Descriptions: Do not add subtitles, helper text, or descriptive copy beneath headings, labels, cards, or settings by default. If you think it is necessary to prevent misunderstanding explicitly ask for it. For instance, do not label times as Pacific/PT/PST in the web app — the portal timezone is assumed. Keep zone names in code, engineer docs, and external emails when needed.
 - **Confirms / alerts:** Never use `window.confirm`, `window.alert`, or `window.prompt` in the web app. Use `useAppDialog()` from `@/components/ui/app-dialog` (`confirm` / `alert`). For admin cascade deletes, use `AdminCascadeDeleteDialog`. Playwright helpers for the in-app dialog live in `apps/web/e2e/helpers/auth.ts`.
+- **Tests:** Only run e2e/unit tests when the relevant code has changed.
 
 ## Cursor Cloud specific instructions
 
