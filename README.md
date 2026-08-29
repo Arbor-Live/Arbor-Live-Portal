@@ -56,8 +56,8 @@ packages/
 pnpm install
 # Set up env files — see docs/getting-started.md
 pnpm setup:worktree-env
-pnpm --filter backend dev    # terminal 1 — Convex dev server
-pnpm dev:web                 # terminal 2 — http://localhost:3000
+pnpm dev:backend           # terminal 1 — Convex dev server (shared worktrunk)
+pnpm dev:web               # terminal 2 — http://localhost:3000
 ```
 
 On a fresh deployment with no admins, visit `/setup` to create the first admin account. Everyone else is invited by email.
@@ -93,12 +93,28 @@ Env files are **not** committed. They live once in `.git/arbor-env/` and are sym
 | File | How it gets created |
 |------|---------------------|
 | `packages/backend/.env` | Copy from `.env.example` into shared store |
-| `packages/backend/.env.local` | `pnpm --filter backend dev` (Convex CLI) |
+| `packages/backend/.env.local` | `pnpm dev:backend` (trunk, symlinked) or `pnpm dev:backend:local` (isolated, per-worktree) |
 | `apps/web/.env` | Copy from `apps/web/.env.example` into shared store |
-| `apps/web/.env.local` | Optional — not required if `apps/web/.env` exists |
+| `apps/web/.env.local` | `pnpm worktree-convex local` (isolated mode only) |
 | `apps/web/.env.production.local` | Written during `pnpm --filter web build` |
 
-`pnpm prepare` runs the linker but **swallows errors**. If envs are missing, run `pnpm setup:worktree-env` explicitly and read its output.
+### Worktrunk vs. local Convex
+
+`packages/backend/.env.local` is deployment-specific, so it is **not** managed
+by the env linker. `scripts/worktree-convex.mjs` owns it:
+
+- **Worktrunk (default)** — `.env.local` is symlinked to the shared store, so
+  every worktree shares one cloud dev deployment and database.
+- **Local** — each worktree runs its own anonymous Convex backend on its own
+  ports (`:3210`/`:3211`, then `:3220`/`:3221`, …), with real per-worktree
+  `.env.local` files. Use `pnpm dev:backend:local` when multiple agents work on
+  different worktrees at the same time so schema pushes and data never collide.
+
+See the "Worktrunk vs. local Convex" section in
+[docs/getting-started.md](docs/getting-started.md).
+
+`pnpm prepare` runs the linker but **swallows errors**. If envs are missing, run
+`pnpm setup:worktree-env` explicitly and read its output.
 
 ## License
 

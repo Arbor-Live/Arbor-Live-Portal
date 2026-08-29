@@ -523,9 +523,7 @@ function anonymousPublicEnv() {
   if (!url) return { CONVEX_AGENT_MODE: "anonymous" };
   const siteUrl = url.endsWith(".convex.cloud")
     ? url.replace(/\.convex\.cloud$/, ".convex.site")
-    : url.includes(":3210")
-      ? url.replace(":3210", ":3211")
-      : undefined;
+    : deriveLocalSiteUrl(url);
   return {
     CONVEX_AGENT_MODE: "anonymous",
     CONVEX_URL: url,
@@ -535,6 +533,50 @@ function anonymousPublicEnv() {
       ? { CONVEX_SITE_URL: siteUrl, NEXT_PUBLIC_CONVEX_SITE_URL: siteUrl }
       : {}),
   };
+}
+
+/** For a 127.0.0.1/localhost backend, HTTP actions live on cloud port + 1. */
+function deriveLocalSiteUrl(url) {
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname === "127.0.0.1" || parsed.hostname === "localhost") {
+      const port = Number(parsed.port);
+      if (Number.isFinite(port) && port > 0) {
+        parsed.port = String(port + 1);
+        return parsed.toString().replace(/\/$/, "");
+      }
+    }
+  } catch {
+    // Fall through.
+  }
+  return undefined;
+}
+
+/**
+ * If this worktree is in isolated "local" Convex mode (scripts/worktree-convex.mjs),
+ * boot e2e against the worktree's own ports so runs never collide with another
+ * worktree's local backend or with the shared trunk.
+ */
+function readWorktreeLocalPorts() {
+  try {
+    const gitCommonDirRaw = execFileSync("git", ["rev-parse", "--git-common-dir"], {
+      cwd: root,
+      encoding: "utf8",
+    }).trim();
+    const gitCommonDir = path.isAbsolute(gitCommonDirRaw)
+      ? gitCommonDirRaw
+      : path.resolve(root, gitCommonDirRaw);
+    const registry = JSON.parse(
+      fs.readFileSync(path.join(gitCommonDir, "arbor-env", "worktree-convex.json"), "utf8"),
+    );
+    const entry = registry.worktrees?.[root];
+    if (entry?.mode === "local" && entry.cloudPort && entry.sitePort) {
+      return { cloudPort: entry.cloudPort, sitePort: entry.sitePort };
+    }
+  } catch {
+    // Not in local mode or registry missing — fall back to Convex's default ports.
+  }
+  return null;
 }
 
 async function main() {
@@ -561,7 +603,22 @@ async function main() {
     // Anonymous provisions into the default `.env.local` path — `--env-file`
     // cannot be used to create a new deployment (Convex requires credentials
     // already present in that file).
-    run("pnpm", ["exec", "convex", "dev", "--typecheck", "disable"], {
+    const devArgs = ["exec", "convex", "dev", "--typecheck", "disable"];
+    if (useAnonymous) {
+      const localPorts = readWorktreeLocalPorts();
+      if (localPorts) {
+        devArgs.push(
+          "--local-cloud-port",
+          String(localPorts.cloudPort),
+          "--local-site-port",
+          String(localPorts.sitePort),
+        );
+        console.log(
+          `E2E Convex ports: this worktree is local mode — using :${localPorts.cloudPort}/:${localPorts.sitePort}`,
+        );
+      }
+    }
+    run("pnpm", devArgs, {
       cwd: backendDir,
       prefix: "convex",
       env: convexEnv(),

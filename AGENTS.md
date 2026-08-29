@@ -103,6 +103,29 @@ redirect away, use the floating **Dev** menu (or `?devPreview=1`) — local
 `NODE_ENV=development` only. Details: `docs/getting-started.md` (“Dev preview
 wizards”).
 
+### Multiple agents on parallel worktrees
+
+Each worktree has a Convex mode managed by `scripts/worktree-convex.mjs`
+(registry: `.git/arbor-env/worktree-convex.json`, restored on checkout):
+
+- **Worktrunk (default)** — `packages/backend/.env.local` is a symlink to the
+  shared store, so all worktrees share one cloud dev deployment. Use only when
+  you want shared data.
+- **Local** — the worktree runs its **own anonymous Convex backend** on its own
+  ports (`:3210`/`:3211`, then `:3220`/`:3221`, …), with real per-worktree
+  `.env.local` files. Schema pushes and data are fully isolated.
+
+If you are an agent working on a worktree while other agents are active, start
+with **local** so you never collide with the trunk or another branch:
+
+```bash
+pnpm dev:backend:local     # switch to local mode, boot, and set deployment env
+pnpm dev:web
+```
+
+`pnpm worktree-convex status` shows the current mode and ports. Never point
+schema pushes at the shared trunk from a feature branch.
+
 ### Non-obvious runtime notes
 
 - After schema/backend API edits, run `pnpm --filter backend codegen` (or just

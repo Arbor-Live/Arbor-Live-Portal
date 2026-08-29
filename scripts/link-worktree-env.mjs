@@ -4,6 +4,10 @@
  *
  * Canonical copies live in $GIT_COMMON_DIR/arbor-env/. Each worktree gets
  * symlinks at the paths the app expects (apps/web, packages/backend).
+ *
+ * Only shared `.env` files are managed here. `.env.local` is deployment
+ * specific and owned by scripts/worktree-convex.mjs: symlinked to the shared
+ * store in "trunk" mode, or a real per-worktree file in isolated "local" mode.
  */
 import { execSync } from "node:child_process";
 import fs from "node:fs";
@@ -11,10 +15,8 @@ import path from "node:path";
 
 const ENV_RELATIVE_PATHS = [
   "apps/web/.env",
-  "apps/web/.env.local",
   "apps/web/.env.production.local",
   "packages/backend/.env",
-  "packages/backend/.env.local",
 ];
 
 /** When no worktree has a real env file yet, seed shared copies from examples. */
@@ -163,8 +165,8 @@ function main() {
         "Still missing in the shared store:",
         ...missing.map((relativePath) => `  - ${relativePath}`),
         "",
-        "packages/backend/.env.local is created by `pnpm --filter backend dev` (Convex CLI).",
         "apps/web/.env.local is optional; apps/web/.env + backend env are enough for local dev.",
+        "Deployment-specific packages/backend/.env.local is owned by scripts/worktree-convex.mjs.",
       ].join("\n"),
     );
   } else {

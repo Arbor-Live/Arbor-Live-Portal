@@ -1,3 +1,5 @@
 #!/bin/sh
 # Link shared env files into this worktree after checkout / worktree creation.
 node "$(git rev-parse --show-toplevel)/scripts/link-worktree-env.mjs" >/dev/null 2>&1 || true
+# Restore this worktree's Convex mode (trunk vs. isolated local).
+node "$(git rev-parse --show-toplevel)/scripts/worktree-convex.mjs" ensure >/dev/null 2>&1 || true
