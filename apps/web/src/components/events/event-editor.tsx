@@ -486,7 +486,13 @@ export function EventEditor({
   const hideEquipment = eventType === "Services Only";
   const showFulfillmentPicker = RENTAL_EVENT_TYPES.includes(eventType);
 
-  const [now] = useState(() => Date.now());
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    // Keep the Open Mic sign-up window check fresh while the editor stays open.
+    const id = window.setInterval(() => setNow(Date.now()), 60_000);
+    return () => window.clearInterval(id);
+  }, []);
 
   // Whether the Open Mic runner window (start-1h to end+1h) is open and the
   // add-on is scheduled/live — i.e. the public sign-up form is accepting entries.

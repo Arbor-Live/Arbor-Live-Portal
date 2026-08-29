@@ -36,8 +36,9 @@ export function useHappeningNowEvents(): HappeningNowEvent[] {
 export function HappeningNowBar({ events }: { events: HappeningNowEvent[] }) {
   if (events.length === 0) return null;
   const shown = events.slice(0, MAX_SHOWN);
-  const more = events.length - shown.length;
 
+  // Visible slots are breakpoint-based (1 mobile / 2 sm / 3 lg), so each
+  // breakpoint gets its own "+N more" count for the events it hides.
   return (
     <div className="flex h-8 items-center gap-x-2 overflow-hidden bg-emerald-600 px-3 text-white sm:h-9 sm:gap-x-3 sm:px-4">
       <span className="flex shrink-0 items-center gap-2 text-[11px] font-bold uppercase tracking-[0.14em]">
@@ -65,7 +66,17 @@ export function HappeningNowBar({ events }: { events: HappeningNowEvent[] }) {
             </Link>
           </span>
         ))}
-        {more > 0 ? <span className="shrink-0 opacity-90">+{more} more</span> : null}
+        {events.length > 1 ? (
+          <span className="shrink-0 opacity-90 sm:hidden">+{events.length - 1} more</span>
+        ) : null}
+        {events.length > 2 ? (
+          <span className="hidden shrink-0 opacity-90 sm:inline lg:hidden">
+            +{events.length - 2} more
+          </span>
+        ) : null}
+        {events.length > 3 ? (
+          <span className="hidden shrink-0 opacity-90 lg:inline">+{events.length - 3} more</span>
+        ) : null}
       </span>
     </div>
   );
