@@ -11,6 +11,7 @@ import {
   schedulePayingPartyAddedEmail,
   shouldNotifyPayingParty,
 } from "../email/payingPartyEmails";
+import { scheduleQuoteChangesRequestedEmail } from "../email/quoteChangesRequestedEmails";
 import { loadEventHostDisplay } from "./hostOrgs";
 
 function resolveInvoiceTermsIds(invoice: Doc<"invoices">): Id<"invoiceTerms">[] {
@@ -396,4 +397,9 @@ export async function requestInvoiceQuoteChanges(
   });
   await recordInvoiceStatusTransition(ctx, invoice._id, fromStatus, "changes_requested", { at: now });
   await syncLinkedEventStatusFromInvoice(ctx, invoice._id, "changes_requested");
+  await scheduleQuoteChangesRequestedEmail(ctx, {
+    invoice,
+    changeNote: trimmed,
+    requestedAt: now,
+  });
 }

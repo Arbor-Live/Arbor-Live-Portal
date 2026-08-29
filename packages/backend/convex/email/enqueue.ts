@@ -23,6 +23,7 @@ const emailTemplateValue = v.union(
   v.literal("payment_proof_reminder"),
   v.literal("payment_proof_submitted"),
   v.literal("paying_party_added"),
+  v.literal("quote_changes_requested"),
   v.literal("band_assigned"),
   v.literal("band_payment_confirmation"),
   v.literal("band_payment_completed"),

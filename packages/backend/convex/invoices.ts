@@ -586,6 +586,7 @@ export const listEnriched = query({
           invoiceNumber: invoice.invoiceNumber,
           status: invoice.status,
           clientApprovalStatus: invoice.clientApprovalStatus,
+          paymentReceivedAt: invoice.paymentReceivedAt,
           managerName: invoice.managerName,
           issueDate: invoice.issueDate,
           totalUsd: invoice.totalUsd,
@@ -1487,6 +1488,9 @@ export const markReadyForClientReview = mutation({
     const clientReadyMessage = args.clientMessage.trim();
     if (!clientReadyMessage) {
       throw new Error("A message to the client is required before sending the quote.");
+    }
+    if (resolveInvoiceTermsIds(invoice).length === 0) {
+      throw new Error("Select at least one terms template before sending the quote.");
     }
     const now = Date.now();
     await ctx.db.patch(args.id, {

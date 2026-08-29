@@ -1149,8 +1149,15 @@ export function InvoiceEditor({
 
   async function sendQuoteToClient(clientMessage: string) {
     if (!activeInvoiceId) return;
+    if (termsIds.length === 0) {
+      throw new Error("Select at least one terms template before sending.");
+    }
     setSendingQuote(true);
     try {
+      if (isDraftDirty) {
+        const saved = await persistDraft();
+        if (!saved) throw new Error("Save the quote before sending.");
+      }
       await markReadyForClientReview({ id: activeInvoiceId, clientMessage });
       notify.success("Quote emailed to the client and marked ready on the request portal.");
     } catch (error) {
@@ -2159,7 +2166,17 @@ export function InvoiceEditor({
                     type="button"
                     size="sm"
                     disabled={!activeInvoiceId || !sourceRequest?.email}
+                    title={
+                      termsIds.length === 0
+                        ? "Select at least one terms template first"
+                        : undefined
+                    }
                     onClick={() => {
+                      if (termsIds.length === 0) {
+                        notify.error("Select at least one terms template before sending.");
+                        setTermsCatalogEnabled(true);
+                        return;
+                      }
                       setSendQuoteFormKey((key) => key + 1);
                       setSendQuoteOpen(true);
                     }}

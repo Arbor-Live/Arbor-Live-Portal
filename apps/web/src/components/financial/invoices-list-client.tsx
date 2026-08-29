@@ -41,12 +41,12 @@ type InvoiceRow = FunctionReturnType<typeof api.invoices.listEnriched>[number];
 
 const STATUS_OPTIONS: { value: InvoiceStatus; label: string }[] = [
   { value: "draft", label: "Draft" },
-  { value: "finalized", label: "Finalized" },
+  { value: "finalized", label: "Published" },
   { value: "void", label: "Void" },
 ];
 
 const APPROVAL_OPTIONS: { value: ApprovalStatus; label: string }[] = [
-  { value: "pending", label: "Pending" },
+  { value: "pending", label: "Waiting approval" },
   { value: "approved", label: "Approved" },
   { value: "changes_requested", label: "Changes requested" },
 ];
@@ -61,26 +61,31 @@ async function copyQuoteLink(token: string) {
   }
 }
 
+/** Lifecycle label for the list — not the raw draft/finalized/void doc status. */
 function displayStatus(invoice: {
   status: "draft" | "finalized" | "void";
   clientApprovalStatus?: "pending" | "approved" | "changes_requested";
+  paymentReceivedAt?: number;
 }) {
-  if (invoice.status === "finalized") return "Finalized";
   if (invoice.status === "void") return "Void";
+  if (invoice.status === "draft") return "Draft";
+  if (invoice.paymentReceivedAt) return "Payment received";
+  if (invoice.clientApprovalStatus === "approved") return "Payment pending";
   if (invoice.clientApprovalStatus === "changes_requested") return "Changes Requested";
-  if (invoice.clientApprovalStatus === "approved") return "Approved";
-  return "Draft";
+  return "Waiting approval";
 }
 
 function statusBadgeClass(invoice: {
   status: "draft" | "finalized" | "void";
   clientApprovalStatus?: "pending" | "approved" | "changes_requested";
+  paymentReceivedAt?: number;
 }) {
   if (invoice.status === "void") return "bg-muted text-muted-foreground";
-  if (invoice.clientApprovalStatus === "approved") return "bg-emerald-100 text-emerald-800";
+  if (invoice.status === "draft") return "bg-slate-100 text-slate-800";
+  if (invoice.paymentReceivedAt) return "bg-emerald-100 text-emerald-800";
+  if (invoice.clientApprovalStatus === "approved") return "bg-sky-100 text-sky-900";
   if (invoice.clientApprovalStatus === "changes_requested") return "bg-amber-100 text-amber-900";
-  if (invoice.status === "finalized") return "bg-blue-100 text-blue-900";
-  return "bg-slate-100 text-slate-800";
+  return "bg-blue-100 text-blue-900";
 }
 
 const columnHelper = createColumnHelper<DataTableFeatures, InvoiceRow>();
@@ -113,9 +118,7 @@ export function InvoicesListClient() {
   const filteredRows = useMemo(() => {
     const needle = search.trim().toLowerCase();
     return (rows ?? []).filter((invoice) => {
-      if (statusFilters.length === 0) {
-        if (invoice.status === "void") return false;
-      } else if (statusFilters.length > 1 && !statusFilters.includes(invoice.status)) {
+      if (statusFilters.length > 0 && !statusFilters.includes(invoice.status)) {
         return false;
       }
       if (approvalFilters.length > 0) {
@@ -329,7 +332,7 @@ export function InvoicesListClient() {
               options={STATUS_OPTIONS}
               values={statusFilters}
               onChange={(values) => setStatusFilters(values as InvoiceStatus[])}
-              emptyLabel="Active"
+              emptyLabel="All"
             />
             <MultiSelect
               label="Approval"

@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef } from "react";
+import { TrashIcon } from "@phosphor-icons/react";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
 import { Button } from "@/components/ui/button";
 import { DateTimeRangePicker } from "@/components/ui/date-time-picker";
@@ -11,6 +12,7 @@ import {
   sortScheduleBlocksByTime,
 } from "@/lib/event-schedule-draft";
 import { localDateTimeInputToMs } from "@/lib/crew-availability";
+import { pacificDayIndexFromAnchor } from "@/lib/format";
 
 export type TimelineBlockDraft = {
   id?: string;
@@ -76,6 +78,14 @@ function blockColor(type: TimelineBlockDraft["blockType"]) {
   if (type === "show") return "bg-emerald-500/30 border-emerald-500";
   if (type === "strike") return "bg-amber-500/30 border-amber-500";
   return "bg-muted border-border";
+}
+
+function dayIndexForStart(anchorStartsAt: string | undefined, startsAt: string, fallback: number) {
+  if (!anchorStartsAt) return fallback;
+  const anchorMs = localDateTimeInputToMs(anchorStartsAt);
+  const startMs = localDateTimeInputToMs(startsAt);
+  if (anchorMs == null || startMs == null) return fallback;
+  return pacificDayIndexFromAnchor(anchorMs, startMs);
 }
 
 function toTimelineRange(block: TimelineBlockDraft) {
@@ -231,7 +241,7 @@ export function EventTimelineScheduler({
   const timeMarks = Array.from({ length: 13 }).map((_, idx) => idx * 120);
 
   return (
-    <div className="space-y-3">
+    <div className="min-w-0 space-y-3">
       {!readOnly ? (
         <div className="flex flex-wrap gap-2">
           <Button
@@ -400,81 +410,77 @@ export function EventTimelineScheduler({
         {blocks.map((block, index) => (
           <div
             key={getBlockRef(block) ?? `block-${index}`}
-            className="grid items-center gap-2 md:grid-cols-[7rem_minmax(0,8rem)_5.5rem_minmax(12rem,1.4fr)_minmax(0,1fr)_auto]"
+            className="flex min-w-0 flex-wrap items-center gap-2"
           >
-            <SearchableSelect
-              value={block.blockType}
-              onChange={(value) =>
-                emit(
-                  blocks.map((row, i) =>
-                    i === index ? { ...row, blockType: value as TimelineBlockDraft["blockType"] } : row,
-                  ),
-                )
-              }
-              options={[
-                { value: "setup", label: "setup" },
-                { value: "show", label: "show" },
-                { value: "strike", label: "strike" },
-                { value: "custom", label: "custom" },
-              ]}
-              placeholder="Search block type..."
-              emptyLabel="Select block type"
-            />
-            <Input
-              value={block.label}
-              onChange={(e) =>
-                emit(blocks.map((row, i) => (i === index ? { ...row, label: e.target.value } : row)))
-              }
-            />
-            <SearchableSelect
-              value={String(Math.min(block.dayIndex, allowedDayCount - 1))}
-              onChange={(value) => {
-                const nextDayIndex = clamp(Number(value), 0, allowedDayCount - 1);
-                emit(
-                  blocks.map((row, i) => {
-                    if (i !== index) return row;
-                    const deltaDays = nextDayIndex - row.dayIndex;
-                    if (deltaDays === 0) return { ...row, dayIndex: nextDayIndex };
-                    const shift = (input: string) => {
-                      const date = parseInputDate(input);
-                      if (!date) return input;
-                      return toLocalInput(new Date(date.getTime() + deltaDays * MS_PER_DAY));
-                    };
-                    return {
-                      ...row,
-                      dayIndex: nextDayIndex,
-                      startsAt: shift(row.startsAt),
-                      endsAt: shift(row.endsAt),
-                    };
-                  }),
-                );
-              }}
-              options={Array.from({ length: allowedDayCount }).map((__, idx) => ({
-                value: String(idx),
-                label: `Day ${idx + 1}`,
-              }))}
-              placeholder="Search day..."
-              emptyLabel="Select day"
-            />
-            <DateTimeRangePicker
-              className="min-w-[13rem]"
-              startValue={block.startsAt}
-              endValue={block.endsAt}
-              openToDate={anchorStartsAt}
-              onChange={({ start, end }) =>
-                emit(blocks.map((row, i) => (i === index ? { ...row, startsAt: start, endsAt: end } : row)))
-              }
-              placeholder="Block start and end"
-            />
-            <Input
-              placeholder="Notes"
-              value={block.notes}
-              onChange={(e) =>
-                emit(blocks.map((row, i) => (i === index ? { ...row, notes: e.target.value } : row)))
-              }
-            />
-            <Button type="button" variant="outline" onClick={() => emit(blocks.filter((_, i) => i !== index))}>
-              Remove
+            <div className="w-full min-w-0 sm:w-28 sm:flex-none">
+              <SearchableSelect
+                value={block.blockType}
+                onChange={(value) =>
+                  emit(
+                    blocks.map((row, i) =>
+                      i === index ? { ...row, blockType: value as TimelineBlockDraft["blockType"] } : row,
+                    ),
+                  )
+                }
+                options={[
+                  { value: "setup", label: "setup" },
+                  { value: "show", label: "show" },
+                  { value: "strike", label: "strike" },
+                  { value: "custom", label: "custom" },
+                ]}
+                placeholder="Search block type..."
+                emptyLabel="Select block type"
+              />
+            </div>
+            <div className="min-w-0 flex-1 basis-[7rem]">
+              <Input
+                value={block.label}
+                onChange={(e) =>
+                  emit(blocks.map((row, i) => (i === index ? { ...row, label: e.target.value } : row)))
+                }
+                placeholder="Label"
+              />
+            </div>
+            <div className="min-w-0 flex-1 basis-[12rem]">
+              <DateTimeRangePicker
+                startValue={block.startsAt}
+                endValue={block.endsAt}
+                openToDate={anchorStartsAt}
+                onChange={({ start, end }) =>
+                  emit(
+                    blocks.map((row, i) =>
+                      i === index
+                        ? {
+                            ...row,
+                            startsAt: start,
+                            endsAt: end,
+                            dayIndex: dayIndexForStart(anchorStartsAt, start, row.dayIndex),
+                          }
+                        : row,
+                    ),
+                  )
+                }
+                placeholder="Block start and end"
+              />
+            </div>
+            <div className="min-w-0 flex-1 basis-[8rem]">
+              <Input
+                placeholder="Notes"
+                value={block.notes}
+                onChange={(e) =>
+                  emit(blocks.map((row, i) => (i === index ? { ...row, notes: e.target.value } : row)))
+                }
+              />
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-lg"
+              className="shrink-0"
+              aria-label="Remove block"
+              onClick={() => emit(blocks.filter((_, i) => i !== index))}
+            >
+              <TrashIcon className="size-4" />
             </Button>
           </div>
         ))}

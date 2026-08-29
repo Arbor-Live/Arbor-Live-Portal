@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
+import { ClockIcon, PlusIcon, TrashIcon, UserPlusIcon, XIcon } from "@phosphor-icons/react";
 import { api, type Id } from "@/lib/convex-api";
 import { EventScheduleCrewAssignPanel } from "@/components/events/event-availability-summary";
 import { EventTimelineScheduler, type TimelineBlockDraft } from "@/components/events/event-timeline-scheduler";
@@ -15,14 +16,17 @@ import { Input } from "@/components/ui/input";
 import { useSessionShell, useSessionViewer } from "@/components/session-shell-provider";
 import { getAvailabilityNotesForDisplay } from "@/lib/crew-availability";
 import {
+  applyShiftTimesOverrideFlags,
   attachShiftsToPersistedBlocks,
   buildQuickAddScheduleBlocks,
   eventDayCount,
   eventTypeHasCrewAssignment,
   getBlockRef,
+  reconcileShiftsForReplacedBlocks,
   resolveShiftScheduleBlockId,
   shiftBelongsToBlock,
-  shiftHours,
+  shiftRowKey,
+  shiftTimesMatchBlock,
   syncShiftsToBlockTimes,
   timelineBlocksFromSaved,
   toLocalDateTimeInput,
@@ -36,7 +40,9 @@ import { FormSaveBar } from "@/components/forms";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { useAppDialog } from "@/components/ui/app-dialog";
 import { notify } from "@/lib/notify";
-import { formatUsd } from "@/lib/format";
+import { formatUsd, formatDateTimeRange } from "@/lib/format";
+import { localDateTimeInputToMs } from "@/lib/crew-availability";
+import { cn } from "@/lib/utils";
 import type { SaveStatus } from "@/hooks/use-convex-form";
 
 type EventType = "Crewed Event" | "Rental with Crew" | "Dry Hire" | "Services Only";
@@ -68,6 +74,7 @@ function shiftsFromEventRows(
     estimatedHourlyRateUsd?: number;
     postedToExpense: boolean;
     notes?: string;
+    timesOverridden?: boolean;
   }>,
 ): EventShiftDraft[] {
   return rows.map((row) => ({
@@ -83,6 +90,7 @@ function shiftsFromEventRows(
     estimatedHourlyRateUsd: row.estimatedHourlyRateUsd,
     postedToExpense: row.postedToExpense,
     notes: row.notes ?? "",
+    timesOverridden: row.timesOverridden === true,
   }));
 }
 
@@ -117,6 +125,7 @@ export function InvoiceLinkedEventCrewSection({
   const [saving, setSaving] = useState(false);
   const [autoSaveState, setAutoSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [autoSaveError, setAutoSaveError] = useState<string | null>(null);
+  const [editingShiftTimeKey, setEditingShiftTimeKey] = useState<string | null>(null);
 
   const eventType = normalizeEventType(eventData?.event.eventType as StoredEventType | undefined);
   const rentalFulfillmentMode = normalizeFulfillmentMode(
@@ -180,11 +189,6 @@ export function InvoiceLinkedEventCrewSection({
     [userOptions],
   );
 
-  const selectedCrewUserOption = useMemo(
-    () => userOptions.find((option) => option.value === selectedCrewUserId),
-    [selectedCrewUserId, userOptions],
-  );
-
   const availabilitySummary = useQuery(
     api.eventCrewAvailability.getSummaryForEvent,
     showCrewTools ? { eventId } : "skip",
@@ -223,7 +227,10 @@ export function InvoiceLinkedEventCrewSection({
       notes: row.notes ?? "",
     }));
     const nextShifts = shiftsFromEventRows(eventData.shifts);
-    const linkedShifts = attachShiftsToPersistedBlocks(nextShifts, nextBlocks);
+    const linkedShifts = applyShiftTimesOverrideFlags(
+      attachShiftsToPersistedBlocks(nextShifts, nextBlocks),
+      nextBlocks,
+    );
     setBlocks(nextBlocks);
     setShifts(linkedShifts);
     scheduleHydratedRef.current = true;
@@ -275,6 +282,7 @@ export function InvoiceLinkedEventCrewSection({
             personName: row.personName || undefined,
             startsAt: requireLocalDateTimeInputMs(row.startsAt, "block start"),
             endsAt: requireLocalDateTimeInputMs(row.endsAt, "block end"),
+            timesOverridden: row.timesOverridden === true ? true : undefined,
             estimatedHourlyRateUsd: row.userId?.trim()
               ? row.estimatedHourlyRateUsd
               : (row.estimatedHourlyRateUsd ?? defaultCrewHourlyRateUsd),
@@ -366,6 +374,7 @@ export function InvoiceLinkedEventCrewSection({
   function renderShiftRow(
     row: EventShiftDraft,
     shiftIndex: number,
+    block: TimelineBlockDraft | undefined,
     blockRef: string | undefined,
     blockIndex: number,
     rowIndex: number,
@@ -375,53 +384,128 @@ export function InvoiceLinkedEventCrewSection({
           scheduleBlockId: row.scheduleBlockId,
         })
       : [];
+    const blockLinked = Boolean(block);
+    const rowKey = shiftRowKey(row, blockRef, rowIndex);
+    const editingTime = editingShiftTimeKey === rowKey;
 
     return (
-      <div key={row.id ?? `${blockRef ?? blockIndex}-shift-${rowIndex}`} className="space-y-1">
-        <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(14rem,2fr)_5rem_auto]">
-          <Input
-            placeholder="Role"
-            value={row.role}
-            onChange={(e) =>
-              setShifts((prev) =>
-                prev.map((shift, i) => (i === shiftIndex ? { ...shift, role: e.target.value } : shift)),
-              )
-            }
-          />
-          <UserSelect
-            value={row.userId ?? ""}
-            onChange={(value) =>
-              setShifts((prev) =>
-                prev.map((shift, i) =>
-                  i === shiftIndex
-                    ? {
-                        ...shift,
-                        userId: value || undefined,
-                        personName: userOptions.find((option) => option.value === value)?.label ?? shift.personName,
-                        estimatedHourlyRateUsd: value ? shift.estimatedHourlyRateUsd : defaultCrewHourlyRateUsd,
-                      }
-                    : shift,
-                ),
-              )
-            }
-            options={userSelectOptions}
-            emptyLabel="Open slot"
-          />
-          <DateTimeRangePicker
-            startValue={row.startsAt}
-            endValue={row.endsAt}
-            onChange={({ start, end }) =>
-              setShifts((prev) =>
-                prev.map((shift, i) =>
-                  i === shiftIndex ? { ...shift, startsAt: start, endsAt: end } : shift,
-                ),
-              )
-            }
-            placeholder="Shift start and end"
-          />
-          <Input readOnly value={`${shiftHours(row).toFixed(2)}h`} aria-label="Shift hours" />
-          <Button type="button" variant="outline" onClick={() => setShifts((prev) => prev.filter((_, i) => i !== shiftIndex))}>
-            Remove
+      <div key={rowKey} className="space-y-1">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <div className="min-w-0 flex-1 basis-[6rem]">
+            <Input
+              placeholder="Role"
+              value={row.role}
+              onChange={(e) =>
+                setShifts((prev) =>
+                  prev.map((shift, i) => (i === shiftIndex ? { ...shift, role: e.target.value } : shift)),
+                )
+              }
+            />
+          </div>
+          <div className="min-w-0 flex-1 basis-[10rem]">
+            <UserSelect
+              value={row.userId ?? ""}
+              onChange={(value) =>
+                setShifts((prev) =>
+                  prev.map((shift, i) =>
+                    i === shiftIndex
+                      ? {
+                          ...shift,
+                          userId: value || undefined,
+                          personName: userOptions.find((option) => option.value === value)?.label ?? shift.personName,
+                          estimatedHourlyRateUsd: value ? shift.estimatedHourlyRateUsd : defaultCrewHourlyRateUsd,
+                        }
+                      : shift,
+                  ),
+                )
+              }
+              options={userSelectOptions}
+              emptyLabel="Open slot"
+            />
+          </div>
+          {blockLinked ? (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon-lg"
+                className={cn(
+                  "shrink-0",
+                  row.timesOverridden &&
+                    "border-amber-500/50 bg-amber-500/15 text-amber-800 hover:bg-amber-500/25 hover:text-amber-900",
+                )}
+                aria-label={row.timesOverridden ? "Edit custom shift time" : "Edit shift time"}
+                title={row.timesOverridden ? "Custom shift time" : "Edit shift time"}
+                onClick={() => setEditingShiftTimeKey((prev) => (prev === rowKey ? null : rowKey))}
+              >
+                <ClockIcon className="size-4" weight={row.timesOverridden ? "fill" : "regular"} />
+              </Button>
+              {editingTime ? (
+                <div className="min-w-0 flex-1 basis-[12rem]">
+                  <DateTimeRangePicker
+                    startValue={row.startsAt}
+                    endValue={row.endsAt}
+                    onChange={({ start, end }) =>
+                      setShifts((prev) =>
+                        prev.map((shift, i) => {
+                          if (i !== shiftIndex) return shift;
+                          if (!start || !end) {
+                            return block
+                              ? {
+                                  ...shift,
+                                  startsAt: block.startsAt,
+                                  endsAt: block.endsAt,
+                                  timesOverridden: false,
+                                }
+                              : shift;
+                          }
+                          const timesOverridden = block
+                            ? !shiftTimesMatchBlock({ startsAt: start, endsAt: end }, block)
+                            : true;
+                          return { ...shift, startsAt: start, endsAt: end, timesOverridden };
+                        }),
+                      )
+                    }
+                    placeholder="Shift start and end"
+                  />
+                </div>
+              ) : row.timesOverridden ? (
+                <span className="shrink-0 self-center text-xs text-amber-800 tabular-nums">
+                  {formatDateTimeRange(
+                    localDateTimeInputToMs(row.startsAt) ?? 0,
+                    localDateTimeInputToMs(row.endsAt) ?? 0,
+                  )}
+                </span>
+              ) : null}
+            </>
+          ) : (
+            <div className="min-w-0 flex-1 basis-[12rem]">
+              <DateTimeRangePicker
+                startValue={row.startsAt}
+                endValue={row.endsAt}
+                onChange={({ start, end }) =>
+                  setShifts((prev) =>
+                    prev.map((shift, i) =>
+                      i === shiftIndex ? { ...shift, startsAt: start, endsAt: end } : shift,
+                    ),
+                  )
+                }
+                placeholder="Shift start and end"
+              />
+            </div>
+          )}
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-lg"
+            className="shrink-0"
+            aria-label="Remove shift"
+            onClick={() => {
+              setEditingShiftTimeKey((prev) => (prev === rowKey ? null : prev));
+              setShifts((prev) => prev.filter((_, i) => i !== shiftIndex));
+            }}
+          >
+            <TrashIcon className="size-4" />
           </Button>
         </div>
         {!row.userId?.trim() ? (
@@ -511,23 +595,23 @@ export function InvoiceLinkedEventCrewSection({
           quickAddDisabledReason={quickAddDisabledReason}
           onQuickAdd={() => {
             if (quickAddDisabled) return;
-            setBlocks(
-              buildQuickAddScheduleBlocks({
-                eventType,
-                startAt,
-                endAt,
-                rentalFulfillmentMode,
-                withStableRefs: stableBlocks,
-              }),
-            );
+            const nextBlocks = buildQuickAddScheduleBlocks({
+              eventType,
+              startAt,
+              endAt,
+              rentalFulfillmentMode,
+              withStableRefs: stableBlocks,
+            });
+            setBlocks(nextBlocks);
+            setShifts((prev) => reconcileShiftsForReplacedBlocks(blocks, nextBlocks, prev));
           }}
         />
         {showCrewTools ? (
           <>
             <div className="space-y-2 rounded-md border p-3">
-              <p className="text-sm font-medium">Quick assign crew user</p>
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="min-w-[260px] flex-1">
+              <p className="text-sm font-medium">Quick assign</p>
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <div className="min-w-0 flex-1 basis-[12rem]">
                   <UserSelect
                     value={selectedCrewUserId}
                     onChange={(value) => setSelectedCrewUserId(value)}
@@ -535,21 +619,18 @@ export function InvoiceLinkedEventCrewSection({
                     emptyLabel="Select crew user"
                   />
                 </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={!selectedCrewUserId}
-                  onClick={() => setSelectedCrewUserId("")}
-                >
-                  Clear Selected User
-                </Button>
+                {selectedCrewUserId ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon-lg"
+                    aria-label="Clear selected user"
+                    onClick={() => setSelectedCrewUserId("")}
+                  >
+                    <XIcon className="size-3.5" />
+                  </Button>
+                ) : null}
               </div>
-              <p className="text-xs text-muted-foreground">
-                {selectedCrewUserOption
-                  ? `Selected: ${selectedCrewUserOption.label}. Use Add Shift for Selected User on each block.`
-                  : "Select a crew user, then use Add Shift for Selected User on each block."}
-              </p>
             </div>
             <div className="space-y-2 rounded-md border p-3">
               <p className="text-sm font-medium">Assigned personnel by block</p>
@@ -564,28 +645,37 @@ export function InvoiceLinkedEventCrewSection({
                 return (
                   <div key={blockRef ?? `block-assignment-${blockIndex}`} className="space-y-2 rounded-md border p-2">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-sm font-medium">
+                      <p className="min-w-0 truncate text-sm font-medium">
                         {block.label || `Block ${blockIndex + 1}`} ({block.blockType})
                       </p>
-                      <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex shrink-0 items-center gap-1">
                         <Button
                           type="button"
                           variant="default"
-                          size="sm"
+                          size="icon-lg"
                           disabled={!selectedCrewUserId}
+                          aria-label="Add shift for selected user"
+                          title="Add shift for selected user"
                           onClick={() => addPersonnelShift(block, { userId: selectedCrewUserId })}
                         >
-                          Add Shift for Selected User
+                          <UserPlusIcon className="size-3.5" />
                         </Button>
-                        <Button type="button" variant="outline" size="sm" onClick={() => addPersonnelShift(block)}>
-                          Add Empty Shift
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon-lg"
+                          aria-label="Add empty shift"
+                          title="Add empty shift"
+                          onClick={() => addPersonnelShift(block)}
+                        >
+                          <PlusIcon className="size-3.5" />
                         </Button>
                       </div>
                     </div>
                     {blockShifts.length ? (
                       blockShifts.map((row, rowIndex) => {
                         const shiftIndex = shifts.findIndex((entry) => entry === row);
-                        return renderShiftRow(row, shiftIndex, blockRef, blockIndex, rowIndex);
+                        return renderShiftRow(row, shiftIndex, block, blockRef, blockIndex, rowIndex);
                       })
                     ) : (
                       <p className="text-xs text-muted-foreground">No personnel assigned to this block yet.</p>
@@ -607,7 +697,7 @@ export function InvoiceLinkedEventCrewSection({
                   </p>
                   {orphanedShifts.map((row, rowIndex) => {
                     const shiftIndex = shifts.findIndex((entry) => entry === row);
-                    return renderShiftRow(row, shiftIndex, undefined, -1, rowIndex);
+                    return renderShiftRow(row, shiftIndex, undefined, undefined, -1, rowIndex);
                   })}
                 </div>
               ) : null}

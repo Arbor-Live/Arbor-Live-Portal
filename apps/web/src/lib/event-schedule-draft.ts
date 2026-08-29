@@ -29,6 +29,8 @@ export type EventShiftDraft = {
   estimatedHourlyRateUsd?: number;
   postedToExpense: boolean;
   notes: string;
+  /** When true, shift times stay custom instead of mirroring the linked block. */
+  timesOverridden?: boolean;
 };
 
 export { toLocalDateTimeInput };
@@ -173,21 +175,101 @@ export function shiftBelongsToBlock(shift: ShiftBlockLink, block: TimelineBlockD
   return false;
 }
 
-/**
- * Crew shift times mirror their schedule block's window (the backend
- * force-syncs this on every `upsertBlocks` save). Call this whenever draft
- * block times change so the UI already reflects what a save will persist.
- */
-export function syncShiftsToBlockTimes<T extends ShiftBlockLink & { startsAt: string; endsAt: string }>(
+export function shiftTimesMatchBlock(
+  shift: { startsAt: string; endsAt: string },
+  block: { startsAt: string; endsAt: string },
+) {
+  return shift.startsAt === block.startsAt && shift.endsAt === block.endsAt;
+}
+
+export function shiftRowKey(
+  shift: { id?: string },
+  blockRef: string | undefined,
+  rowIndex: number,
+) {
+  return shift.id ?? `${blockRef ?? "orphan"}-shift-${rowIndex}`;
+}
+
+/** Mark shifts whose stored times differ from their block (loaded overrides). */
+export function applyShiftTimesOverrideFlags<T extends ShiftBlockLink & EventShiftDraft>(
   shifts: T[],
   blocks: TimelineBlockDraft[],
 ): T[] {
   return shifts.map((shift) => {
     const block = blocks.find((candidate) => shiftBelongsToBlock(shift, candidate));
+    if (!block || shift.timesOverridden) return shift;
+    if (shiftTimesMatchBlock(shift, block)) return shift;
+    return { ...shift, timesOverridden: true };
+  });
+}
+
+/**
+ * Crew shift times mirror their schedule block's window unless overridden.
+ * Call whenever draft block times change so non-overridden shifts stay aligned.
+ */
+export function syncShiftsToBlockTimes<T extends ShiftBlockLink & EventShiftDraft>(
+  shifts: T[],
+  blocks: TimelineBlockDraft[],
+): T[] {
+  return shifts.map((shift) => {
+    if (shift.timesOverridden) return shift;
+    const block = blocks.find((candidate) => shiftBelongsToBlock(shift, candidate));
     if (!block) return shift;
-    if (shift.startsAt === block.startsAt && shift.endsAt === block.endsAt) return shift;
+    if (shiftTimesMatchBlock(shift, block)) return shift;
     return { ...shift, startsAt: block.startsAt, endsAt: block.endsAt };
   });
+}
+
+/**
+ * When schedule blocks are wholesale-replaced (e.g. Quick Add), relink crew shifts
+ * from retired blocks to the new ones by block type and sync non-overridden times.
+ */
+export function reconcileShiftsForReplacedBlocks<T extends ShiftBlockLink & EventShiftDraft>(
+  previousBlocks: TimelineBlockDraft[],
+  nextBlocks: TimelineBlockDraft[],
+  shifts: T[],
+): T[] {
+  const blockReplaceMap = new Map<string, TimelineBlockDraft>();
+  const blockTypes: TimelineBlockDraft["blockType"][] = ["setup", "show", "strike", "custom"];
+
+  for (const blockType of blockTypes) {
+    const previousOfType = previousBlocks.filter((block) => block.blockType === blockType);
+    const nextOfType = nextBlocks.filter((block) => block.blockType === blockType);
+    const pairCount = Math.min(previousOfType.length, nextOfType.length);
+    for (let index = 0; index < pairCount; index += 1) {
+      const previousBlock = previousOfType[index];
+      const nextBlock = nextOfType[index];
+      const previousRef = getBlockRef(previousBlock);
+      if (previousRef) blockReplaceMap.set(previousRef, nextBlock);
+      if (previousBlock.id) blockReplaceMap.set(previousBlock.id, nextBlock);
+    }
+  }
+
+  const relinked = shifts.map((shift) => {
+    const previousBlock = previousBlocks.find((block) => shiftBelongsToBlock(shift, block));
+    if (!previousBlock) return shift;
+
+    const previousRef = getBlockRef(previousBlock);
+    const nextBlock =
+      (previousRef ? blockReplaceMap.get(previousRef) : undefined) ??
+      (previousBlock.id ? blockReplaceMap.get(previousBlock.id) : undefined);
+    if (!nextBlock) {
+      return {
+        ...shift,
+        scheduleBlockId: undefined,
+        scheduleBlockRef: undefined,
+      };
+    }
+
+    const nextRef = getBlockRef(nextBlock);
+    return {
+      ...shift,
+      scheduleBlockId: nextBlock.id,
+      scheduleBlockRef: nextRef,
+    };
+  });
+
+  return syncShiftsToBlockTimes(relinked, nextBlocks);
 }
 
 export function timelineBlocksFromSaved(

@@ -50,7 +50,7 @@ function Calendar({
       }}
       classNames={{
         ...classNames,
-        root: cn("w-fit", defaultClassNames.root, classNames?.root),
+        root: cn("w-full", defaultClassNames.root, classNames?.root),
         months: cn(
           "relative flex flex-col gap-4 md:flex-row",
           defaultClassNames.months,

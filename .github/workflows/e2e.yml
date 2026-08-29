@@ -77,7 +77,18 @@ jobs:
             ${{ runner.os }}-nextjs-
 
       - name: Run e2e shard
-        run: pnpm test:e2e -- --shard=${{ matrix.shard }}/4
+        run: |
+          for attempt in 1 2 3; do
+            echo "e2e shard ${{ matrix.shard }}/4 attempt ${attempt}/3"
+            if pnpm test:e2e -- --shard=${{ matrix.shard }}/4; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              echo "Shard failed (often anonymous Convex binary download); retrying in 30s…"
+              sleep 30
+            fi
+          done
+          exit 1
 
       - name: Upload blob report
         if: always()
@@ -86,7 +97,7 @@ jobs:
           name: blob-report-${{ matrix.shard }}
           path: apps/web/blob-report
           retention-days: 1
-          if-no-files-found: error
+          if-no-files-found: ignore
 
   merge-reports:
     name: Merge reports

@@ -5,6 +5,16 @@ export function currency(value: number) {
   return formatUsd(value);
 }
 
+/**
+ * Older crew labels used role fallback = person name, producing
+ * `Alex (Alex (Lead))`. Collapse that redundancy for display.
+ */
+export function normalizeCrewLineLabel(label: string): string {
+  return label
+    .replace(/^((?:.* — )?)(.+?) \(\2 \(Lead\)\)$/, "$1$2 (Lead)")
+    .replace(/^((?:.* — )?)(.+?) \(\2\)$/, "$1$2");
+}
+
 export function groupInvoiceSections(lineItems: InvoiceLineItem[]): GroupedInvoiceSections {
   return {
     equipment: lineItems.filter(
@@ -27,7 +37,7 @@ export function buildInvoiceDocumentData(args: {
       id: line.id ?? `${line.section}-${index}`,
       section: line.section,
       provider: line.provider,
-      label: line.label,
+      label: line.section === "crew" ? normalizeCrewLineLabel(line.label) : line.label,
       detailNote: line.detailNote,
       quantity: line.quantity,
       quantityDetail: line.quantityDetail,

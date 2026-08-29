@@ -1127,6 +1127,8 @@ export default defineSchema({
     startsAt: v.number(),
     endsAt: v.number(),
     hours: v.number(),
+    /** When true, shift times stay custom and are not force-synced from the linked block. */
+    timesOverridden: v.optional(v.boolean()),
     estimatedHourlyRateUsd: v.optional(v.number()),
     postedToExpense: v.boolean(),
     notes: v.optional(v.string()),
@@ -1330,6 +1332,7 @@ export default defineSchema({
       v.literal("payment_proof_reminder"),
       v.literal("payment_proof_submitted"),
       v.literal("paying_party_added"),
+      v.literal("quote_changes_requested"),
       v.literal("band_assigned"),
       v.literal("band_payment_confirmation"),
       v.literal("band_payment_completed"),

@@ -51,10 +51,12 @@ export function UserSelect({
         </div>
       )}
       renderSelected={(selected) => (
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2">
           {selected ? (
             <>
-              <OptionAvatar option={selected as UserSelectOption} />
+              <span className="shrink-0">
+                <OptionAvatar option={selected as UserSelectOption} />
+              </span>
               <span className="truncate">{selected.label}</span>
             </>
           ) : (

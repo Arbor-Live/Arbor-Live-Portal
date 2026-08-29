@@ -8,11 +8,15 @@ import { EventArtifactUploadField } from "@/components/files/file-upload-field";
 import {
   FilmSlateIcon,
   GearIcon,
+  ClockIcon,
   MegaphoneIcon,
   PackageIcon,
   PaintBrushIcon,
+  PlusIcon,
   SpeakerHighIcon,
+  TrashIcon,
   TruckIcon,
+  UserPlusIcon,
   WrenchIcon,
   type Icon,
 } from "@phosphor-icons/react";
@@ -24,7 +28,7 @@ import {
   type EquipmentPricingMode,
 } from "@/lib/invoice-group-labels";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { DateTimePicker, DateTimeRangePicker } from "@/components/ui/date-time-picker";
+import { DateTimeRangePicker } from "@/components/ui/date-time-picker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -56,9 +60,17 @@ import {
   type EventVisibility,
 } from "@/lib/event-visibility";
 import {
+  attachShiftsToPersistedBlocks,
   buildQuickAddScheduleBlocks,
+  applyShiftTimesOverrideFlags,
   eventTypeHasCrewAssignment,
+  reconcileShiftsForReplacedBlocks,
+  resolveShiftScheduleBlockId,
+  shiftRowKey,
+  shiftTimesMatchBlock,
   sortScheduleBlocksByTime,
+  syncShiftsToBlockTimes,
+  timelineBlocksFromSaved,
 } from "@/lib/event-schedule-draft";
 import {
   getAvailabilityNotesForDisplay,
@@ -80,6 +92,7 @@ import {
   type SeriesEditScope,
 } from "@/lib/event-series";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { cn } from "@/lib/utils";
 import { useAppDialog } from "@/components/ui/app-dialog";
 import { notify } from "@/lib/notify";
 import { FormSaveBar } from "@/components/forms";
@@ -87,6 +100,7 @@ import { StoredAssetImage, StoredAssetLink } from "@/components/files/stored-ass
 import { isImageAssetReference } from "@/lib/r2-assets";
 import {
   formatDateTime,
+  formatDateTimeRange,
   formatUsd,
   payPeriodForDate,
   pacificEndOfDayMs,
@@ -145,6 +159,7 @@ type ShiftDraft = {
   endsAt: string;
   postedToExpense: boolean;
   notes: string;
+  timesOverridden?: boolean;
 };
 
 const EVENT_TYPES: EventType[] = ["Crewed Event", "Rental with Crew", "Dry Hire", "Services Only"];
@@ -304,6 +319,7 @@ export function EventEditor({
   const [occurrenceCount, setOccurrenceCount] = useState("10");
   const [seriesEndAt, setSeriesEndAt] = useState("");
   const [editScopeModalOpen, setEditScopeModalOpen] = useState(false);
+  const [editingShiftTimeKey, setEditingShiftTimeKey] = useState<string | null>(null);
   const hydratedEventIdRef = useRef<string | null>(null);
   const [lastSavedOverviewSignature, setLastSavedOverviewSignature] = useState("");
   const [lastSavedScheduleSignature, setLastSavedScheduleSignature] = useState("");
@@ -331,30 +347,10 @@ export function EventEditor({
   }
 
   /**
-   * Crew shift times mirror their schedule block's window (the backend
-   * force-syncs this on every schedule save). Sync draft shift times whenever
-   * blocks change so the UI already reflects what a save will persist.
+   * Block-linked crew shift times mirror their schedule block unless overridden.
+   * syncShiftsToBlockTimes (from event-schedule-draft) keeps draft shifts aligned
+   * when block times change.
    */
-  function syncShiftsToBlockTimes(nextShifts: ShiftDraft[], nextBlocks: TimelineBlockDraft[]): ShiftDraft[] {
-    return nextShifts.map((shift) => {
-      const block = nextBlocks.find((candidate) => getBlockRef(candidate) === shift.scheduleBlockRef);
-      if (!block) return shift;
-      if (shift.startsAt === block.startsAt && shift.endsAt === block.endsAt) return shift;
-      return { ...shift, startsAt: block.startsAt, endsAt: block.endsAt };
-    });
-  }
-
-  function mapPersistedBlockIdByRef(inputBlocks: TimelineBlockDraft[]) {
-    const result = new Map<string, Id<"eventScheduleBlocks">>();
-    for (const block of inputBlocks) {
-      if (!block.id) continue;
-      if (block.clientId) {
-        result.set(block.clientId, block.id as Id<"eventScheduleBlocks">);
-      }
-      result.set(block.id, block.id as Id<"eventScheduleBlocks">);
-    }
-    return result;
-  }
 
   useEffect(() => {
     if (!isCreate || createDefaultsAppliedRef.current) return;
@@ -419,21 +415,20 @@ export function EventEditor({
     setNotes(eventData.event.notes ?? "");
     setOpenMicEnabled(eventData.event.openMicEnabled === true);
     setOpenMicNotes(eventData.event.openMicNotes ?? "");
-    setBlocks(
-      sortScheduleBlocksByTime(
-        eventData.blocks.map((row) => ({
-          id: row._id,
-          clientId: row._id,
-          blockType: row.blockType,
-          label: row.label,
-          dayIndex: row.dayIndex,
-          startsAt: toLocalDateTimeInput(row.startsAt),
-          endsAt: toLocalDateTimeInput(row.endsAt),
-          notes: row.notes ?? "",
-        })),
-      ),
+    const nextBlocks = sortScheduleBlocksByTime(
+      eventData.blocks.map((row) => ({
+        id: row._id,
+        clientId: row._id,
+        blockType: row.blockType,
+        label: row.label,
+        dayIndex: row.dayIndex,
+        startsAt: toLocalDateTimeInput(row.startsAt),
+        endsAt: toLocalDateTimeInput(row.endsAt),
+        notes: row.notes ?? "",
+      })),
     );
-    setShifts(
+    setBlocks(nextBlocks);
+    const nextShifts = applyShiftTimesOverrideFlags(
       eventData.shifts.map((row) => ({
         id: row._id,
         scheduleBlockId: row.scheduleBlockId,
@@ -447,8 +442,11 @@ export function EventEditor({
         endsAt: toLocalDateTimeInput(row.endsAt),
         postedToExpense: row.postedToExpense,
         notes: row.notes ?? "",
+        timesOverridden: row.timesOverridden === true,
       })),
+      nextBlocks,
     );
+    setShifts(nextShifts);
     const hydratedTeams = (eventData.event.teamsInterested as EventTeam[] | undefined) ?? [];
     const hydratedEventType = normalizeEventType(eventData.event.eventType as StoredEventType | undefined);
     const hydratedFulfillment = normalizeFulfillmentMode(
@@ -476,34 +474,10 @@ export function EventEditor({
       openMicEnabled: eventData.event.openMicEnabled === true,
       openMicNotes: eventData.event.openMicNotes || undefined,
     }));
-    const hydratedBlocks = eventData.blocks.map((row) => ({
-      id: row._id,
-      clientId: row._id,
-      blockType: row.blockType,
-      label: row.label,
-      dayIndex: row.dayIndex,
-      startsAt: toLocalDateTimeInput(row.startsAt),
-      endsAt: toLocalDateTimeInput(row.endsAt),
-      notes: row.notes ?? "",
-    }));
-    const hydratedShifts = eventData.shifts.map((row) => ({
-      id: row._id,
-      scheduleBlockId: row.scheduleBlockId,
-      scheduleBlockRef: row.scheduleBlockId,
-      expenseReportId: row.expenseReportId,
-      role: row.role,
-      userId: row.userId ?? undefined,
-      crewApplicationId: row.crewApplicationId ?? undefined,
-      personName: row.personName ?? "",
-      startsAt: toLocalDateTimeInput(row.startsAt),
-      endsAt: toLocalDateTimeInput(row.endsAt),
-      postedToExpense: row.postedToExpense,
-      notes: row.notes ?? "",
-    }));
     setLastSavedScheduleSignature(
       JSON.stringify({
-        blocks: hydratedBlocks,
-        shifts: hydratedShifts,
+        blocks: nextBlocks,
+        shifts: nextShifts,
       }),
     );
   }, [eventData, hostGroups, loadOverviewLookups]);
@@ -840,7 +814,9 @@ export function EventEditor({
     }
   }
 
-  async function saveSchedule() {
+  async function saveSchedule(): Promise<
+    { blocks: TimelineBlockDraft[]; shifts: ShiftDraft[] } | undefined
+  > {
     if (!eventId) return;
     try {
       const blocksWithRefs = withStableBlockRefs(
@@ -862,91 +838,43 @@ export function EventEditor({
           notes: row.notes || undefined,
         })),
       });
-      setBlocks(
-        sortScheduleBlocksByTime(
-          savedBlocks.map((row) => ({
-            id: row.id,
-            clientId: row.clientId ?? row.id,
-            blockType: row.blockType,
-            label: row.label,
-            dayIndex: row.dayIndex,
-            startsAt: toLocalDateTimeInput(row.startsAt),
-            endsAt: toLocalDateTimeInput(row.endsAt),
-            notes: row.notes ?? "",
-          })),
-        ),
-      );
-      const persistedBlockIdByRef = mapPersistedBlockIdByRef(
-        savedBlocks.map((row) => ({
-          id: row.id,
-          clientId: row.clientId ?? row.id,
-          blockType: row.blockType,
-          label: row.label,
-          dayIndex: row.dayIndex,
-          startsAt: toLocalDateTimeInput(row.startsAt),
-          endsAt: toLocalDateTimeInput(row.endsAt),
-          notes: row.notes ?? "",
-        })),
-      );
-      const nextShifts = shifts.map((shift) => {
-        const persistedId =
-          shift.scheduleBlockId ??
-          (shift.scheduleBlockRef ? persistedBlockIdByRef.get(shift.scheduleBlockRef) : undefined);
-        return {
-          ...shift,
-          scheduleBlockId: persistedId,
-          scheduleBlockRef: shift.scheduleBlockRef ?? persistedId,
-        };
-      });
+      const nextBlocks = timelineBlocksFromSaved(savedBlocks);
+      const nextShifts = attachShiftsToPersistedBlocks(shifts, nextBlocks);
+      setBlocks(nextBlocks);
       setShifts(nextShifts);
-      setLastSavedScheduleSignature(
-        JSON.stringify({
-          blocks: savedBlocks.map((row) => ({
-            id: row.id,
-            clientId: row.clientId ?? row.id,
-            blockType: row.blockType,
-            label: row.label,
-            dayIndex: row.dayIndex,
-            startsAt: toLocalDateTimeInput(row.startsAt),
-            endsAt: toLocalDateTimeInput(row.endsAt),
-            notes: row.notes ?? "",
-          })),
-          shifts: nextShifts,
-        }),
-      );
+      return { blocks: nextBlocks, shifts: nextShifts };
     } catch (error) {
       flash("error", `Schedule error: ${getConvexErrorMessage(error)}`);
       throw error;
     }
   }
 
-  async function saveShifts() {
+  async function saveShifts(
+    blocksOverride?: TimelineBlockDraft[],
+    shiftsOverride?: ShiftDraft[],
+  ) {
     if (!eventId) return;
+    const blocksToSave = blocksOverride ?? blocks;
+    const shiftsToSave = shiftsOverride ?? shifts;
     try {
-      const persistedBlockIdByRef = mapPersistedBlockIdByRef(blocks);
-      const validBlockIds = new Set(blocks.map((block) => block.id).filter(Boolean));
       await upsertShifts({
         eventId,
-        shifts: shifts.map((row) => ({
+        shifts: shiftsToSave.map((row) => ({
           id: row.id,
           expenseReportId: row.expenseReportId,
-          scheduleBlockId:
-            (row.scheduleBlockId && validBlockIds.has(row.scheduleBlockId)
-              ? row.scheduleBlockId
-              : row.scheduleBlockRef
-                ? persistedBlockIdByRef.get(row.scheduleBlockRef)
-                : undefined) ?? undefined,
+          scheduleBlockId: resolveShiftScheduleBlockId(row, blocksToSave),
           role: row.role,
           userId: row.userId || undefined,
           crewApplicationId: row.crewApplicationId,
           personName: row.personName || undefined,
           startsAt: requireLocalDateTimeInputMs(row.startsAt, "block start"),
           endsAt: requireLocalDateTimeInputMs(row.endsAt, "block end"),
+          timesOverridden: row.timesOverridden === true ? true : undefined,
           postedToExpense: row.expenseReportId ? row.postedToExpense : false,
           notes: row.notes || undefined,
         })),
       });
-      setLastSavedScheduleSignature(JSON.stringify({ blocks, shifts }));
+      setLastSavedScheduleSignature(JSON.stringify({ blocks: blocksToSave, shifts: shiftsToSave }));
     } catch (error) {
       flash("error", `Schedule personnel error: ${getConvexErrorMessage(error)}`);
       throw error;
@@ -975,9 +903,9 @@ export function EventEditor({
 
   async function saveScheduleAndPersonnel() {
     try {
-      await saveSchedule();
-      if (!eventId) return;
-      await saveShifts();
+      const saved = await saveSchedule();
+      if (!eventId || !saved) return;
+      await saveShifts(saved.blocks, saved.shifts);
       flash("success", "Schedule and assigned personnel saved.");
     } catch {
       // Individual save handlers already set section-specific messages.
@@ -1738,15 +1666,15 @@ export function EventEditor({
               quickAddDisabledReason={quickAddDisabledReason}
               onQuickAdd={() => {
                 if (quickAddDisabled || !eventType) return;
-                setBlocks(
-                  buildQuickAddScheduleBlocks({
-                    eventType,
-                    startAt,
-                    endAt,
-                    rentalFulfillmentMode,
-                    withStableRefs: withStableBlockRefs,
-                  }),
-                );
+                const nextBlocks = buildQuickAddScheduleBlocks({
+                  eventType,
+                  startAt,
+                  endAt,
+                  rentalFulfillmentMode,
+                  withStableRefs: withStableBlockRefs,
+                });
+                setBlocks(nextBlocks);
+                setShifts((prev) => reconcileShiftsForReplacedBlocks(blocks, nextBlocks, prev));
               }}
             />
             <div className="space-y-2 rounded-md border p-3">
@@ -1791,21 +1719,30 @@ export function EventEditor({
                 return (
                   <div key={blockRef ?? `block-assignment-${blockIndex}`} className="space-y-2 rounded-md border p-2">
                     <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm font-medium">
+                      <p className="min-w-0 truncate text-sm font-medium">
                         {block.label || `Block ${blockIndex + 1}`} ({block.blockType})
                       </p>
-                      <div className="flex items-center gap-2">
+                      <div className="flex shrink-0 items-center gap-1">
                         <Button
                           type="button"
                           variant="default"
-                          size="sm"
+                          size="icon-lg"
                           disabled={!selectedCrewUserId}
+                          aria-label="Add shift for selected user"
+                          title="Add shift for selected user"
                           onClick={() => addPersonnelShift(block, { userId: selectedCrewUserId })}
                         >
-                          Add Shift for Selected User
+                          <UserPlusIcon className="size-3.5" />
                         </Button>
-                        <Button type="button" variant="outline" size="sm" onClick={() => addPersonnelShift(block)}>
-                          Add Empty Shift
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon-lg"
+                          aria-label="Add empty shift"
+                          title="Add empty shift"
+                          onClick={() => addPersonnelShift(block)}
+                        >
+                          <PlusIcon className="size-3.5" />
                         </Button>
                       </div>
                     </div>
@@ -1817,66 +1754,114 @@ export function EventEditor({
                               scheduleBlockId: row.scheduleBlockId,
                             })
                           : [];
+                        const rowKey = shiftRowKey(row, blockRef, rowIndex);
+                        const editingTime = editingShiftTimeKey === rowKey;
                         return (
-                          <div
-                            key={row.id ?? `${blockRef ?? blockIndex}-shift-${rowIndex}`}
-                            className="space-y-1"
-                          >
-                          <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(14rem,2fr)_auto]">
-                            <Input
-                              placeholder="Role"
-                              value={row.role}
-                              onChange={(e) =>
-                                setShifts((prev) =>
-                                  prev.map((shift, i) => (i === shiftIndex ? { ...shift, role: e.target.value } : shift)),
-                                )
-                              }
-                            />
+                          <div key={rowKey} className="space-y-1">
+                          <div className="flex min-w-0 flex-wrap items-center gap-2">
+                            <div className="min-w-0 flex-1 basis-[6rem]">
+                              <Input
+                                placeholder="Role"
+                                value={row.role}
+                                onChange={(e) =>
+                                  setShifts((prev) =>
+                                    prev.map((shift, i) => (i === shiftIndex ? { ...shift, role: e.target.value } : shift)),
+                                  )
+                                }
+                              />
+                            </div>
                             {row.crewApplicationId ? (
-                              <div className="flex h-9 items-center rounded-md border bg-muted/40 px-3 text-sm">
+                              <div className="flex h-9 min-w-0 flex-1 basis-[10rem] items-center rounded-md border bg-muted/40 px-3 text-sm">
                                 <span className="truncate font-medium">{row.personName || "Trainee"}</span>
                                 <span className="ml-1.5 shrink-0 text-xs text-muted-foreground">trainee</span>
                               </div>
                             ) : (
-                              <UserSelect
-                                value={row.userId ?? ""}
-                                onChange={(value) =>
-                                  setShifts((prev) =>
-                                    prev.map((shift, i) =>
-                                      i === shiftIndex
-                                        ? {
-                                            ...shift,
-                                            userId: value || undefined,
-                                            personName:
-                                              userOptions.find((option) => option.value === value)?.label ??
-                                              shift.personName,
-                                          }
-                                        : shift,
-                                    ),
-                                  )
-                                }
-                                options={userSelectOptions}
-                                emptyLabel="Select crew user"
-                              />
+                              <div className="min-w-0 flex-1 basis-[10rem]">
+                                <UserSelect
+                                  value={row.userId ?? ""}
+                                  onChange={(value) =>
+                                    setShifts((prev) =>
+                                      prev.map((shift, i) =>
+                                        i === shiftIndex
+                                          ? {
+                                              ...shift,
+                                              userId: value || undefined,
+                                              personName:
+                                                userOptions.find((option) => option.value === value)?.label ??
+                                                shift.personName,
+                                            }
+                                          : shift,
+                                      ),
+                                    )
+                                  }
+                                  options={userSelectOptions}
+                                  emptyLabel="Select crew user"
+                                />
+                              </div>
                             )}
-                            <DateTimeRangePicker
-                              startValue={row.startsAt}
-                              endValue={row.endsAt}
-                              onChange={({ start, end }) =>
-                                setShifts((prev) =>
-                                  prev.map((shift, i) =>
-                                    i === shiftIndex ? { ...shift, startsAt: start, endsAt: end } : shift,
-                                  ),
-                                )
-                              }
-                              placeholder="Shift start and end"
-                            />
                             <Button
                               type="button"
                               variant="outline"
-                              onClick={() => setShifts((prev) => prev.filter((_, i) => i !== shiftIndex))}
+                              size="icon-lg"
+                              className={cn(
+                                "shrink-0",
+                                row.timesOverridden &&
+                                  "border-amber-500/50 bg-amber-500/15 text-amber-800 hover:bg-amber-500/25 hover:text-amber-900",
+                              )}
+                              aria-label={row.timesOverridden ? "Edit custom shift time" : "Edit shift time"}
+                              title={row.timesOverridden ? "Custom shift time" : "Edit shift time"}
+                              onClick={() => setEditingShiftTimeKey((prev) => (prev === rowKey ? null : rowKey))}
                             >
-                              Remove
+                              <ClockIcon className="size-4" weight={row.timesOverridden ? "fill" : "regular"} />
+                            </Button>
+                            {editingTime ? (
+                              <div className="min-w-0 flex-1 basis-[12rem]">
+                                <DateTimeRangePicker
+                                  startValue={row.startsAt}
+                                  endValue={row.endsAt}
+                                  onChange={({ start, end }) =>
+                                    setShifts((prev) =>
+                                      prev.map((shift, i) => {
+                                        if (i !== shiftIndex) return shift;
+                                        if (!start || !end) {
+                                          return {
+                                            ...shift,
+                                            startsAt: block.startsAt,
+                                            endsAt: block.endsAt,
+                                            timesOverridden: false,
+                                          };
+                                        }
+                                        const timesOverridden = !shiftTimesMatchBlock(
+                                          { startsAt: start, endsAt: end },
+                                          block,
+                                        );
+                                        return { ...shift, startsAt: start, endsAt: end, timesOverridden };
+                                      }),
+                                    )
+                                  }
+                                  placeholder="Shift start and end"
+                                />
+                              </div>
+                            ) : row.timesOverridden ? (
+                              <span className="shrink-0 self-center text-xs text-amber-800 tabular-nums">
+                                {formatDateTimeRange(
+                                  localDateTimeInputToMs(row.startsAt) ?? 0,
+                                  localDateTimeInputToMs(row.endsAt) ?? 0,
+                                )}
+                              </span>
+                            ) : null}
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon-lg"
+                              className="shrink-0"
+                              aria-label="Remove shift"
+                              onClick={() => {
+                                setEditingShiftTimeKey((prev) => (prev === rowKey ? null : prev));
+                                setShifts((prev) => prev.filter((_, i) => i !== shiftIndex));
+                              }}
+                            >
+                              <TrashIcon className="size-4" />
                             </Button>
                           </div>
                           {availabilityNotes.length > 0 ? (
@@ -1918,61 +1903,70 @@ export function EventEditor({
                     .map(({ shift, shiftIndex }) => (
                       <div
                         key={shift.id ?? `unassigned-${shiftIndex}`}
-                        className="grid gap-2 rounded-md border border-amber-500/20 bg-background/80 p-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(14rem,2fr)_auto]"
+                        className="flex min-w-0 flex-wrap items-center gap-2 rounded-md border border-amber-500/20 bg-background/80 p-2"
                       >
-                        <Input
-                          placeholder="Role"
-                          value={shift.role}
-                          onChange={(e) =>
-                            setShifts((prev) =>
-                              prev.map((row, i) => (i === shiftIndex ? { ...row, role: e.target.value } : row)),
-                            )
-                          }
-                        />
+                        <div className="min-w-0 flex-1 basis-[6rem]">
+                          <Input
+                            placeholder="Role"
+                            value={shift.role}
+                            onChange={(e) =>
+                              setShifts((prev) =>
+                                prev.map((row, i) => (i === shiftIndex ? { ...row, role: e.target.value } : row)),
+                              )
+                            }
+                          />
+                        </div>
                         {shift.crewApplicationId ? (
-                          <div className="flex h-9 items-center rounded-md border bg-muted/40 px-3 text-sm">
+                          <div className="flex h-9 min-w-0 flex-1 basis-[10rem] items-center rounded-md border bg-muted/40 px-3 text-sm">
                             <span className="truncate font-medium">{shift.personName || "Trainee"}</span>
                             <span className="ml-1.5 shrink-0 text-xs text-muted-foreground">trainee</span>
                           </div>
                         ) : (
-                          <UserSelect
-                            value={shift.userId ?? ""}
-                            onChange={(value) =>
+                          <div className="min-w-0 flex-1 basis-[10rem]">
+                            <UserSelect
+                              value={shift.userId ?? ""}
+                              onChange={(value) =>
+                                setShifts((prev) =>
+                                  prev.map((row, i) =>
+                                    i === shiftIndex
+                                      ? {
+                                          ...row,
+                                          userId: value || undefined,
+                                          personName:
+                                            userOptions.find((option) => option.value === value)?.label ?? row.personName,
+                                        }
+                                      : row,
+                                  ),
+                                )
+                              }
+                              options={userSelectOptions}
+                              emptyLabel="Select crew user"
+                            />
+                          </div>
+                        )}
+                        <div className="min-w-0 flex-1 basis-[12rem]">
+                          <DateTimeRangePicker
+                            startValue={shift.startsAt}
+                            endValue={shift.endsAt}
+                            onChange={({ start, end }) =>
                               setShifts((prev) =>
                                 prev.map((row, i) =>
-                                  i === shiftIndex
-                                    ? {
-                                        ...row,
-                                        userId: value || undefined,
-                                        personName:
-                                          userOptions.find((option) => option.value === value)?.label ?? row.personName,
-                                      }
-                                    : row,
+                                  i === shiftIndex ? { ...row, startsAt: start, endsAt: end } : row,
                                 ),
                               )
                             }
-                            options={userSelectOptions}
-                            emptyLabel="Select crew user"
+                            placeholder="Shift start and end"
                           />
-                        )}
-                        <DateTimeRangePicker
-                          startValue={shift.startsAt}
-                          endValue={shift.endsAt}
-                          onChange={({ start, end }) =>
-                            setShifts((prev) =>
-                              prev.map((row, i) =>
-                                i === shiftIndex ? { ...row, startsAt: start, endsAt: end } : row,
-                              ),
-                            )
-                          }
-                          placeholder="Shift start and end"
-                        />
+                        </div>
                         <Button
                           type="button"
                           variant="outline"
+                          size="icon-lg"
+                          className="shrink-0"
+                          aria-label="Remove shift"
                           onClick={() => setShifts((prev) => prev.filter((_, i) => i !== shiftIndex))}
                         >
-                          Remove
+                          <TrashIcon className="size-4" />
                         </Button>
                       </div>
                     ))}

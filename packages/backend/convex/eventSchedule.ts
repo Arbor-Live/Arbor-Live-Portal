@@ -1,12 +1,12 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import type { Id } from "./_generated/dataModel";
 import { requireArborInternalContext, requireAuth } from "./lib/auth";
 import { requireEventEditAccess } from "./lib/eventAccess";
 import {
   scheduleBlocksContentFingerprint,
   scheduleSchedulePublishedEmails,
 } from "./email/triggers";
+import { pacificDayIndexFromAnchor } from "@arbor/format";
 
 const blockTypeValue = v.union(
   v.literal("setup"),
@@ -36,7 +36,7 @@ export const upsertBlocks = mutation({
         clientId: v.optional(v.string()),
         blockType: blockTypeValue,
         label: v.string(),
-        dayIndex: v.number(),
+        dayIndex: v.optional(v.number()), // Derived from startsAt on save; omit from clients.
         startsAt: v.number(),
         endsAt: v.number(),
         notes: v.optional(v.string()),
@@ -52,15 +52,6 @@ export const upsertBlocks = mutation({
     for (const block of args.blocks) {
       if (block.endsAt <= block.startsAt) {
         throw new Error("Schedule block end must be after start.");
-      }
-      // dayIndex is timeline row placement from the client — do not recompute or
-      // gate it against event.endAt / spansMultipleDays. Overnight strike often
-      // sits on day 1 while show end stays the previous evening.
-      if (!Number.isFinite(block.dayIndex) || block.dayIndex < 0) {
-        throw new Error("Schedule block day index cannot be negative.");
-      }
-      if (block.dayIndex > 60) {
-        throw new Error("Schedule block day index is unreasonably large.");
       }
     }
     // Overlapping blocks are allowed: the timeline renders overlaps on
@@ -95,7 +86,8 @@ export const upsertBlocks = mutation({
     for (const block of args.blocks) {
       const label = block.label.trim();
       const notes = block.notes?.trim() || undefined;
-      const dayIndex = Math.floor(block.dayIndex);
+      // Derived from startsAt vs event start — client day picker removed.
+      const dayIndex = pacificDayIndexFromAnchor(event.startAt, block.startsAt);
       if (block.id) {
         await ctx.db.patch(block.id, {
           blockType: block.blockType,
@@ -145,25 +137,9 @@ export const upsertBlocks = mutation({
       await scheduleSchedulePublishedEmails(ctx, args.eventId, fingerprint);
     }
 
-    // Keep linked crew shifts aligned with their schedule blocks.
-    for (const block of savedBlocks) {
-      const linkedShifts = await ctx.db
-        .query("eventCrewShifts")
-        .withIndex("by_scheduleBlockId", (q) =>
-          q.eq("scheduleBlockId", block.id as Id<"eventScheduleBlocks">),
-        )
-        .take(200);
-      for (const shift of linkedShifts) {
-        if (shift.eventId !== args.eventId) continue;
-        const hours = Number(((block.endsAt - block.startsAt) / 3_600_000).toFixed(2));
-        await ctx.db.patch(shift._id, {
-          startsAt: block.startsAt,
-          endsAt: block.endsAt,
-          hours,
-          updatedAt: now,
-        });
-      }
-    }
+    // Linked shift times are owned by eventCrew.upsertShifts (the web client
+    // syncs non-overridden shifts to blocks before saving). Do not force-sync
+    // here — that overwrote persisted custom windows when blocks saved first.
 
     return savedBlocks;
   },
