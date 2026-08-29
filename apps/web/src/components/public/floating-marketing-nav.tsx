@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/sheet";
 import { landingNavLinks } from "@/lib/landing-content";
 import { cn } from "@/lib/utils";
+import { HappeningNowBar, useHappeningNowEvents } from "@/components/public/happening-now-banner";
 
 const GLOW_EASE = 0.14;
 
@@ -23,6 +24,8 @@ export function FloatingMarketingNav() {
   const { reduceMotion } = useLandingMotion();
   const shellRef = useRef<HTMLDivElement>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const happeningNow = useHappeningNowEvents();
+  const bannerVisible = happeningNow.length > 0;
 
   useEffect(() => {
     if (reduceMotion) return;
@@ -68,95 +71,111 @@ export function FloatingMarketingNav() {
   return (
     // Avoid pointer-events-none on this shell: Radix Sheet portals from here, and
     // iOS Safari often drops taps on dialog content nested under pointer-events-none.
-    <header className="fixed inset-x-0 top-0 z-40 flex justify-center p-3 sm:p-4">
-      <div
-        ref={shellRef}
-        className={cn(
-          "relative w-full max-w-6xl p-px shadow-[0_8px_28px_rgba(0,0,0,0.12)]",
-          reduceMotion ? "bg-border/60" : "marketing-nav-glow",
-        )}
-      >
-        <div className="flex items-center justify-between gap-3 bg-background/95 px-4 py-2.5 sm:gap-4 sm:bg-background/70 sm:px-5 sm:py-3 sm:backdrop-blur-xl">
-          <Link href="/" className="flex shrink-0 items-center gap-2">
-            <Image
-              src="/logo.svg"
-              alt="Arbor Live"
-              width={1014}
-              height={463}
-              className="h-7 w-auto brightness-0 dark:invert sm:h-8"
-              priority
-            />
-          </Link>
+    <>
+      <header className="fixed inset-x-0 top-0 z-40">
+        {/* When the banner shows it becomes the chrome's bottom edge, so the
+            page keeps its original top spacing and nothing shifts underneath. */}
+        <div
+          className={cn(
+            "flex flex-col items-center px-3 pt-3 sm:px-4 sm:pt-4",
+            bannerVisible ? "pb-0" : "pb-3 sm:pb-4",
+          )}
+        >
+          <div
+            ref={shellRef}
+            className={cn(
+              "relative w-full max-w-6xl p-px shadow-[0_8px_28px_rgba(0,0,0,0.12)]",
+              reduceMotion ? "bg-border/60" : "marketing-nav-glow",
+            )}
+          >
+            <div className="flex items-center justify-between gap-3 bg-background/95 px-4 py-2.5 sm:gap-4 sm:bg-background/70 sm:px-5 sm:py-3 sm:backdrop-blur-xl">
+              <Link href="/" className="flex shrink-0 items-center gap-2">
+                <Image
+                  src="/logo.svg"
+                  alt="Arbor Live"
+                  width={1014}
+                  height={463}
+                  className="h-7 w-auto brightness-0 dark:invert sm:h-8"
+                  priority
+                />
+              </Link>
 
-          <nav className="hidden items-center gap-1 lg:flex">
-            {landingNavLinks.map((link) => (
-              <Button key={link.label} asChild variant="ghost" size="sm">
-                <Link
-                  href={link.href}
-                  target={link.external ? "_blank" : undefined}
-                  rel={link.external ? "noopener noreferrer" : undefined}
-                >
-                  {link.label}
-                </Link>
-              </Button>
-            ))}
-          </nav>
+              <nav className="hidden items-center gap-1 lg:flex">
+                {landingNavLinks.map((link) => (
+                  <Button key={link.label} asChild variant="ghost" size="sm">
+                    <Link
+                      href={link.href}
+                      target={link.external ? "_blank" : undefined}
+                      rel={link.external ? "noopener noreferrer" : undefined}
+                    >
+                      {link.label}
+                    </Link>
+                  </Button>
+                ))}
+              </nav>
 
-          <div className="flex items-center gap-2">
-            <DashboardNavLink className="hidden sm:inline-flex" />
-            <Button asChild size="sm" className="hidden sm:inline-flex">
-              <Link href="/request">Book us</Link>
-            </Button>
-
-            <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-              <SheetTrigger asChild>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon-sm"
-                  className="lg:hidden"
-                  aria-label="Open menu"
-                >
-                  <ListIcon className="size-4" />
+              <div className="flex items-center gap-2">
+                <DashboardNavLink className="hidden sm:inline-flex" />
+                <Button asChild size="sm" className="hidden sm:inline-flex">
+                  <Link href="/request">Book us</Link>
                 </Button>
-              </SheetTrigger>
-              <SheetContent
-                side="right"
-                className="z-[60] w-[min(100%,20rem)] gap-0 p-0 pointer-events-auto"
-              >
-                <SheetHeader className="border-b px-5 py-4 text-left">
-                  <SheetTitle className="font-heading text-base">Menu</SheetTitle>
-                </SheetHeader>
-                <nav className="flex flex-col gap-1 p-3">
-                  {landingNavLinks.map((link) => (
-                    <Button key={link.label} asChild variant="ghost" className="justify-start">
-                      <Link
-                        href={link.href}
-                        target={link.external ? "_blank" : undefined}
-                        rel={link.external ? "noopener noreferrer" : undefined}
-                        onClick={() => setMobileOpen(false)}
-                      >
-                        {link.label}
-                      </Link>
+
+                <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+                  <SheetTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon-sm"
+                      className="lg:hidden"
+                      aria-label="Open menu"
+                    >
+                      <ListIcon className="size-4" />
                     </Button>
-                  ))}
-                  <DashboardNavLink
-                    className="justify-start sm:hidden"
-                    linkClassName="w-full justify-start"
-                  />
-                  <div className="mt-2 border-t pt-3">
-                    <Button asChild className="w-full">
-                      <Link href="/request" onClick={() => setMobileOpen(false)}>
-                        Book us
-                      </Link>
-                    </Button>
-                  </div>
-                </nav>
-              </SheetContent>
-            </Sheet>
+                  </SheetTrigger>
+                  <SheetContent
+                    side="right"
+                    className="z-[60] w-[min(100%,20rem)] gap-0 p-0 pointer-events-auto"
+                  >
+                    <SheetHeader className="border-b px-5 py-4 text-left">
+                      <SheetTitle className="font-heading text-base">Menu</SheetTitle>
+                    </SheetHeader>
+                    <nav className="flex flex-col gap-1 p-3">
+                      {landingNavLinks.map((link) => (
+                        <Button key={link.label} asChild variant="ghost" className="justify-start">
+                          <Link
+                            href={link.href}
+                            target={link.external ? "_blank" : undefined}
+                            rel={link.external ? "noopener noreferrer" : undefined}
+                            onClick={() => setMobileOpen(false)}
+                          >
+                            {link.label}
+                          </Link>
+                        </Button>
+                      ))}
+                      <DashboardNavLink
+                        className="justify-start sm:hidden"
+                        linkClassName="w-full justify-start"
+                      />
+                      <div className="mt-2 border-t pt-3">
+                        <Button asChild className="w-full">
+                          <Link href="/request" onClick={() => setMobileOpen(false)}>
+                            Book us
+                          </Link>
+                        </Button>
+                      </div>
+                    </nav>
+                  </SheetContent>
+                </Sheet>
+              </div>
+            </div>
           </div>
+            {bannerVisible ? (
+              <div className="happening-now-drop w-full max-w-6xl overflow-hidden px-4 sm:px-5">
+                <HappeningNowBar events={happeningNow} />
+              </div>
+            ) : null}
         </div>
-      </div>
-    </header>
+      </header>
+    </>
   );
 }

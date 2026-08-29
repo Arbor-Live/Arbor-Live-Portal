@@ -4,6 +4,7 @@ import { PublicMarketingLayout } from "@/components/public/public-marketing-layo
 import { PublicEventPoster } from "@/components/public/public-event-poster";
 import { PublicStaffDashboardLinks } from "@/components/public/public-staff-dashboard-links";
 import { LandingUpcomingEvents } from "@/components/public/public-events-grid";
+import { Button } from "@/components/ui/button";
 import { api } from "@/lib/convex-api";
 import { fetchPublicQuerySafe } from "@/lib/convex-server";
 import { formatDateTime } from "@/lib/format";
@@ -45,6 +46,11 @@ export default async function PublicEventDetailPage({ params }: EventDetailPageP
                     {formatDateTime(event.startAt, "long")}
                   </p>
                   <PublicStaffDashboardLinks className="mt-4" eventId={event.eventId} />
+                  {event.openMicSignupUrl ? (
+                    <Button asChild size="lg" className="mt-4 self-start">
+                      <Link href={event.openMicSignupUrl}>Sign up to perform</Link>
+                    </Button>
+                  ) : null}
                 </div>
 
                 {event.venueName || event.venueAddress ? (
