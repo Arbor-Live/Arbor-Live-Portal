@@ -64,7 +64,7 @@ export function LogoFlareMark({ className }: LogoFlareMarkProps) {
       className={cn("relative overflow-visible", LOGO_MARK_CLASSNAME, className)}
     >
       <Image
-        src="/icon.svg"
+        src="/icon-outline.svg"
         alt=""
         width={307}
         height={408}

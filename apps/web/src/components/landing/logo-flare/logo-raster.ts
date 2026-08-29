@@ -1,8 +1,8 @@
 import { logoPixelSize } from "./pipeline";
 
-/** Arbor Live mark — filled white for luma/alpha sampling in the flare pipeline. */
+/** Arbor Live mark — white outline for luma/alpha sampling in the flare pipeline. */
 const LOGO_SVG =
-  '<svg width="307" height="408" viewBox="0 0 307 408" fill="none" ' +
+  '<svg width="307" height="408" viewBox="-12 -12 331 432" fill="none" ' +
   'xmlns="http://www.w3.org/2000/svg">' +
   '<path d="M306.123 282.262L232.616 143.318L159.109 4.37317C156.024 -1.4577 ' +
   "150.976 -1.4577 147.891 4.37317L74.3843 143.318L0.877873 282.262C-1.61592 " +
@@ -11,7 +11,8 @@ const LOGO_SVG =
   "80.092 408 85.1423 408H154.031H220.401C226.571 408 230.427 401.041 227.342 " +
   "395.473L194.157 335.579L174.737 300.529C172.684 296.824 176.7 292.865 " +
   "182.509 292.865H300.514C305.499 292.865 308.615 286.974 306.123 282.262Z\" " +
-  'fill="white"/></svg>';
+  'stroke="white" stroke-width="16" stroke-linejoin="round" stroke-linecap="round"/>' +
+  "</svg>";
 
 export async function rasterizeLogo(
   size: number,

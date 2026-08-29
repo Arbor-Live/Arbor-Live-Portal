@@ -16,7 +16,6 @@ import {
 type RenderSize = Readonly<{ width: number; height: number; dpr: number }>;
 
 const FRAME_INTERVAL_MS = 33;
-const PULSE_HOLD_SECONDS = 0.35;
 
 export function createRenderer({
   canvas,
@@ -32,7 +31,6 @@ export function createRenderer({
   let placement: FlarePlacement | undefined;
   let light: Point = LOGO_CENTER;
   let pointer: Point | undefined;
-  let pulseHold = 0;
   let frameIndex = 0;
   let staticDirty = true;
   let lastTime = 0;
@@ -154,16 +152,7 @@ export function createRenderer({
       lastTime = time;
       const target = pointer ?? mapAutonomousLight(time, placement);
       light = followLight(light, target, dt);
-      pulseHold +=
-        ((pointer ? 1 : 0) - pulseHold) *
-        (1 - Math.exp(-dt / PULSE_HOLD_SECONDS));
-      activePipeline.setFrameUniforms(
-        placement,
-        light,
-        frameIndex,
-        time,
-        pulseHold
-      );
+      activePipeline.setFrameUniforms(placement, light, frameIndex);
       activePipeline.draw(staticDirty);
       staticDirty = false;
       frameIndex += 1;

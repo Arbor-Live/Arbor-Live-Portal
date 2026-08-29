@@ -84,8 +84,6 @@ const GLYPH_CENTER_IN_BOX: Point = [0.5, 0.5];
 export const CANVAS_OVERSCAN = 4;
 const LOGO_HEIGHT_RATIO = 408 / 307 / CANVAS_OVERSCAN;
 const MAX_RENDER_WIDTH = 1920;
-const PULSE_TRANSITION_SECONDS = 2;
-const PULSE_FLOOR = 0.2;
 /** White flare to match the static mark. */
 const FLARE_COLOR = [1, 1, 1] as const;
 const BLUR_CENTER_WEIGHT = 0.0799404796215474;
@@ -218,8 +216,6 @@ export class FlarePipeline {
     placement: FlarePlacement,
     light: Point,
     frameIndex: number,
-    timeSeconds: number,
-    pulseHold: number
   ): void {
     if (!this.targets) return;
     const blurTexel: Point = [
@@ -253,17 +249,15 @@ export class FlarePipeline {
     this.effects.rimBlurV.set({
       params: { ...blurParams, direction: [0, blurTexel[1]] },
     });
-    const pulse = lightPulse(timeSeconds);
-    const attenuation = pulse + (1 - pulse) * pulseHold;
     this.effects.composite.set({
       params: {
         light,
         aspect: placement.canvasToLogo,
         logoCenter: placement.logoCenter,
         flareColor: FLARE_COLOR,
-        rimIntensity: attenuation,
+        rimIntensity: 1,
         extension: 0.55,
-        beamIntensity: 0.75 * attenuation,
+        beamIntensity: 0.75,
         filmGrain: 0.02,
         smoothness: 1,
         logoOpacity: 1,
@@ -526,31 +520,6 @@ function padTextureRows(
     );
   }
   return padded;
-}
-
-function lightPulse(timeSeconds: number): number {
-  let remaining = Math.max(timeSeconds, 0);
-  let index = 0;
-  let on = true;
-  for (;;) {
-    const hold = index === 0 ? 6 : 3 + pulseHash(index) * 3;
-    if (remaining < hold) return on ? 1 : PULSE_FLOOR;
-    remaining -= hold;
-    if (remaining < PULSE_TRANSITION_SECONDS) {
-      const progress = remaining / PULSE_TRANSITION_SECONDS;
-      const eased = progress * progress * (3 - 2 * progress);
-      const raw = on ? 1 - eased : eased;
-      return PULSE_FLOOR + (1 - PULSE_FLOOR) * raw;
-    }
-    remaining -= PULSE_TRANSITION_SECONDS;
-    on = !on;
-    index += 1;
-  }
-}
-
-function pulseHash(index: number): number {
-  const value = Math.sin(index * 127.1 + 311.7) * 43758.5453;
-  return value - Math.floor(value);
 }
 
 function fullscreen(shader: string | { readonly wgsl: string }): string {

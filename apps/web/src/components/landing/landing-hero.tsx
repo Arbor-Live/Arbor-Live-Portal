@@ -22,7 +22,7 @@ const LogoFlareMark = dynamic(
     ssr: false,
     loading: () => (
       <Image
-        src="/icon.svg"
+        src="/icon-outline.svg"
         alt=""
         width={307}
         height={408}
@@ -119,7 +119,7 @@ export function LandingHero() {
             >
               {prefersReducedMotion ? (
                 <Image
-                  src="/icon.svg"
+                  src="/icon-outline.svg"
                   alt=""
                   width={307}
                   height={408}
