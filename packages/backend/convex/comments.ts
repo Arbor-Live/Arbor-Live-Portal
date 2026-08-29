@@ -65,6 +65,7 @@ export const listMentionCandidates = query({
       userId: v.string(),
       name: v.string(),
       email: v.string(),
+      username: v.optional(v.string()),
       pronouns: v.optional(v.string()),
       gradYear: v.optional(v.number()),
     }),
@@ -86,6 +87,7 @@ export const listMentionCandidates = query({
           userId,
           name: user?.name ?? user?.email ?? "Arbor Live user",
           email: user?.email ?? "",
+          username: profile?.username,
           pronouns: profile?.pronouns,
           gradYear: profile?.gradYear,
         };
@@ -207,7 +209,13 @@ const commentRowValidator = v.object({
   authorEmail: v.string(),
   body: v.string(),
   mentionedUserIds: v.array(v.string()),
-  mentionedUsers: v.array(v.object({ userId: v.string(), name: v.string() })),
+  mentionedUsers: v.array(
+    v.object({
+      userId: v.string(),
+      name: v.string(),
+      username: v.optional(v.string()),
+    }),
+  ),
   canDelete: v.boolean(),
   createdAt: v.number(),
   updatedAt: v.number(),
@@ -235,6 +243,14 @@ export const listBySubject = query({
       for (const mentionedUserId of row.mentionedUserIds) userIds.add(mentionedUserId);
     }
     const userById = await findAuthUsersByIds(ctx, [...userIds]);
+    const usernameByUserId = new Map<string, string>();
+    for (const userId of userIds) {
+      const profile = await ctx.db
+        .query("userAdminProfiles")
+        .withIndex("by_userId", (q) => q.eq("userId", userId))
+        .unique();
+      if (profile?.username) usernameByUserId.set(userId, profile.username);
+    }
     const nameFor = (userId: string) =>
       userById.get(userId)?.name ?? userById.get(userId)?.email ?? "Arbor Live user";
 
@@ -250,6 +266,7 @@ export const listBySubject = query({
       mentionedUsers: row.mentionedUserIds.map((userId) => ({
         userId,
         name: nameFor(userId),
+        username: usernameByUserId.get(userId),
       })),
       canDelete: row.authorUserId === viewerUserId,
       createdAt: row.createdAt,

@@ -260,12 +260,7 @@ export function EventRequestDetailClient({ requestId }: { requestId: Id<"eventRe
       <CommentsSection
         subjectType="event_request"
         subjectId={requestId}
-        description={
-          <>
-            Internal discussion on this request — the client never sees it. Type{" "}
-            <span className="font-medium">@</span> to mention a teammate.
-          </>
-        }
+        description="Internal discussion on this request — the client never sees it."
       />
 
       {request.status !== "converted" && request.status !== "declined" ? (

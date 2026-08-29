@@ -94,6 +94,7 @@ type CrewOnboardingData = {
     calendarInviteEmail?: string;
     showOnPublicCrewPage: boolean;
     publicCrewDescription?: string;
+    username?: string;
     pronouns?: string;
     gradYear?: number;
   };
@@ -152,6 +153,7 @@ type FormState = {
   calendarInviteEmail: string;
   showOnPublicCrewPage: boolean;
   publicCrewDescription: string;
+  username: string;
   pronouns: string;
   gradYear: string;
   whatsappAcknowledged: boolean;
@@ -179,6 +181,7 @@ const EMPTY_FORM: FormState = {
   calendarInviteEmail: "",
   showOnPublicCrewPage: false,
   publicCrewDescription: "",
+  username: "",
   pronouns: "",
   gradYear: "",
   whatsappAcknowledged: false,
@@ -244,6 +247,7 @@ export function CrewOnboardingWizard() {
       showOnPublicCrewPage: onboarding.profile.showOnPublicCrewPage ?? false,
       publicCrewDescription: onboarding.profile.publicCrewDescription ?? "",
       pronouns: onboarding.profile.pronouns ?? "",
+      username: onboarding.profile.username ?? "",
       gradYear: onboarding.profile.gradYear != null ? String(onboarding.profile.gradYear) : "",
       whatsappAcknowledged: Boolean(onboarding.whatsappAcknowledgedAt),
       instagramAcknowledged: Boolean(onboarding.instagramAcknowledgedAt),
@@ -324,6 +328,13 @@ export function CrewOnboardingWizard() {
           setFieldError("Enter a 4-digit graduation year.");
           return false;
         }
+        const trimmedUsername = form.username.trim();
+        if (trimmedUsername && !/^[a-zA-Z0-9_]{3,30}$/.test(trimmedUsername)) {
+          setFieldError(
+            "Username must be 3–30 characters and use only letters, numbers, and underscores.",
+          );
+          return false;
+        }
         if (previewOnly) return true;
         setIsSubmitting(true);
         await saveProfileStep({
@@ -332,6 +343,7 @@ export function CrewOnboardingWizard() {
           calendarInviteEmail: form.calendarInviteEmail.trim() || undefined,
           showOnPublicCrewPage: form.showOnPublicCrewPage,
           publicCrewDescription: form.publicCrewDescription.trim() || undefined,
+          username: trimmedUsername || undefined,
           pronouns: form.pronouns.trim() || undefined,
           gradYear: trimmedGradYear ? Number(trimmedGradYear) : undefined,
         });
@@ -717,6 +729,17 @@ function StepBody({
               onChange={(event) => patch({ name: event.target.value })}
               placeholder="Your full name"
               autoFocus
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="crew-username">Username (optional)</Label>
+            <Input
+              id="crew-username"
+              value={form.username}
+              onChange={(event) => patch({ username: event.target.value })}
+              placeholder="jane_doe"
+              autoComplete="username"
             />
           </div>
 

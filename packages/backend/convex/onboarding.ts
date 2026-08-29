@@ -27,6 +27,7 @@ import {
   normalizePayrollMethod,
   type PayrollMethod,
 } from "./lib/crewCompensation";
+import { assertUsernameAvailable, normalizeUsername } from "./lib/username";
 
 const onboardingStatusValue = v.union(
   v.literal("not_started"),
@@ -344,6 +345,7 @@ const crewOnboardingReturn = v.object({
     calendarInviteEmail: v.optional(v.string()),
     showOnPublicCrewPage: v.boolean(),
     publicCrewDescription: v.optional(v.string()),
+    username: v.optional(v.string()),
     pronouns: v.optional(v.string()),
     gradYear: v.optional(v.number()),
   }),
@@ -359,6 +361,7 @@ function serializeCrewOnboarding(
     calendarInviteEmail?: string;
     showOnPublicCrewPage: boolean;
     publicCrewDescription?: string;
+    username?: string;
     pronouns?: string;
     gradYear?: number;
   },
@@ -465,6 +468,7 @@ export const getMyCrewOnboarding = query({
       calendarInviteEmail: profile?.calendarInviteEmail,
       showOnPublicCrewPage: profile?.showOnPublicCrewPage ?? false,
       publicCrewDescription: profile?.publicCrewDescription,
+      username: profile?.username,
       pronouns: profile?.pronouns,
       gradYear: profile?.gradYear,
     };
@@ -516,6 +520,7 @@ export const saveCrewProfileStep = mutation({
     calendarInviteEmail: v.optional(v.string()),
     showOnPublicCrewPage: v.boolean(),
     publicCrewDescription: v.optional(v.string()),
+    username: v.optional(v.string()),
     pronouns: v.optional(v.string()),
     gradYear: v.optional(v.number()),
   },
@@ -532,6 +537,10 @@ export const saveCrewProfileStep = mutation({
     const calendarInviteEmail = args.calendarInviteEmail?.trim().toLowerCase() || undefined;
     if (calendarInviteEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(calendarInviteEmail)) {
       throw new Error("Enter a valid calendar invite email.");
+    }
+    const username = normalizeUsername(args.username);
+    if (username) {
+      await assertUsernameAvailable(ctx, username, userId);
     }
     const pronouns = args.pronouns?.trim() || undefined;
     const gradYear =
@@ -562,6 +571,7 @@ export const saveCrewProfileStep = mutation({
         calendarInviteEmail,
         showOnPublicCrewPage: args.showOnPublicCrewPage,
         publicCrewDescription: args.publicCrewDescription?.trim() || undefined,
+        username,
         pronouns: pronouns ?? profile.pronouns,
         gradYear: gradYear ?? profile.gradYear,
         updatedAt: now,
@@ -576,6 +586,7 @@ export const saveCrewProfileStep = mutation({
         calendarInviteEmail,
         showOnPublicCrewPage: args.showOnPublicCrewPage,
         publicCrewDescription: args.publicCrewDescription?.trim() || undefined,
+        username,
         pronouns,
         gradYear,
         createdAt: now,
