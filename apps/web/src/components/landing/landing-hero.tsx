@@ -1,8 +1,8 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useRef } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { landingHero } from "@/lib/landing-content";
@@ -11,6 +11,14 @@ import {
   landingSpringBouncy,
   useLandingMotion,
 } from "./landing-motion";
+
+const TriangleLedBackground = dynamic(
+  () =>
+    import("@/components/landing/triangle-led/triangle-led-background").then(
+      (mod) => mod.TriangleLedBackground,
+    ),
+  { ssr: false },
+);
 
 const heroStagger = {
   hidden: {},
@@ -27,52 +35,15 @@ const heroItem = {
 export function LandingHero() {
   const { reduceMotion } = useLandingMotion();
   const prefersReducedMotion = useReducedMotion();
-  const sectionRef = useRef<HTMLElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
-
-  useEffect(() => {
-    if (prefersReducedMotion) return;
-    const section = sectionRef.current;
-    const video = videoRef.current;
-    if (!section || !video) return;
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry?.isIntersecting) {
-          void video.play().catch(() => {
-            // Autoplay can be blocked by the browser; muted playback usually still works.
-          });
-        } else {
-          video.pause();
-        }
-      },
-      { threshold: 0.1 },
-    );
-
-    observer.observe(section);
-    return () => observer.disconnect();
-  }, [prefersReducedMotion]);
 
   return (
-    <section ref={sectionRef} className="relative overflow-hidden bg-zinc-950 text-zinc-50">
+    <section className="relative overflow-hidden bg-zinc-950 text-zinc-50">
       {!prefersReducedMotion ? (
-        <div aria-hidden className="pointer-events-none absolute inset-0 z-0">
-          <video
-            ref={videoRef}
-            autoPlay
-            muted
-            loop
-            playsInline
-            preload="metadata"
-            className="size-full object-cover opacity-60"
-          >
-            <source src="/hero-video" type="video/mp4" />
-          </video>
-        </div>
+        <TriangleLedBackground className="pointer-events-none absolute inset-0 z-0" />
       ) : null}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 z-[1] bg-zinc-950/35"
+        className="pointer-events-none absolute inset-0 z-[1] bg-zinc-950/25"
       />
       <div
         aria-hidden
@@ -160,18 +131,6 @@ export function LandingHero() {
           </div>
         </motion.div>
       </div>
-
-      <p className="absolute right-4 bottom-4 z-[2] text-[10px] tracking-wide text-zinc-400/80 sm:right-6 sm:bottom-6 sm:text-xs">
-        Video by{" "}
-        <a
-          href={landingHero.backgroundVideoCredit.href}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-zinc-300/90 underline-offset-2 hover:text-white hover:underline"
-        >
-          {landingHero.backgroundVideoCredit.label}
-        </a>
-      </p>
     </section>
   );
 }

@@ -6,6 +6,7 @@ import { api } from "@/lib/convex-api";
 import { StoredAssetImage } from "@/components/files/stored-asset-image";
 import { PublicPageHero } from "@/components/public/public-page-hero";
 import { PublicSiteChrome } from "@/components/public/public-site-chrome";
+import { PublicEquipmentSkeleton } from "@/components/public/public-skeletons";
 import { MarkdownContent } from "@/components/markdown-content";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -62,10 +63,8 @@ export function PublicEquipmentClient({ assetId }: { assetId: string }) {
   if (data === undefined) {
     return (
       <PublicSiteChrome>
-        <PublicPageHero title="Lost & Found" subtitle={LOST_FOUND_SUBTITLE} />
-        <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 lg:px-8">
-          <p className="text-sm text-muted-foreground">Loading…</p>
-        </div>
+        <PublicPageHero title="Lost & Found" subtitle={LOST_FOUND_SUBTITLE} shaderBand />
+        <PublicEquipmentSkeleton />
       </PublicSiteChrome>
     );
   }

@@ -10,6 +10,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { PublicMarketingLayout } from "@/components/public/public-marketing-layout";
 import { submitOpenMicSignup } from "@/app/(site)/open-mic/actions";
+import { Skeleton } from "@/components/ui/skeleton";
 import { RequestWizardShell } from "@/components/request/request-wizard-shell";
 import { TextField } from "@/components/request/fields/text-field";
 import { TextareaField } from "@/components/request/fields/textarea-field";
@@ -188,8 +189,12 @@ export function OpenMicWizard() {
     return (
       <PublicMarketingLayout hideFooter>
         <RequestWizardShell eyebrow="Open Mic sign-up" progressPercent={0}>
-          <div className="px-4 py-8 sm:px-6">
-            <p className="text-sm text-foreground/70">Loading…</p>
+          <div className="space-y-4 px-4 py-8 sm:px-6" role="status" aria-label="Loading">
+            <Skeleton className="h-8 w-2/3 max-w-sm" />
+            <Skeleton className="h-4 w-full max-w-md" />
+            <Skeleton className="h-4 w-4/5 max-w-sm" />
+            <Skeleton className="mt-4 h-40 w-full" />
+            <span className="sr-only">Loading…</span>
           </div>
         </RequestWizardShell>
       </PublicMarketingLayout>

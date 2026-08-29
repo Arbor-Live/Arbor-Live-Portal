@@ -6,6 +6,7 @@ import { BoringUserAvatar } from "@/components/account/user-avatar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Reveal, Stagger, StaggerItem } from "@/components/landing/landing-motion";
 import { useResolvedAssetUrl } from "@/components/files/stored-asset-image";
+import { PublicCardGridSkeleton } from "@/components/public/public-skeletons";
 
 function CrewCard({
   member,
@@ -69,9 +70,7 @@ export function PublicCrewGrid() {
   return (
     <section className="py-12 sm:py-16">
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-        {crew === undefined ? (
-          <p className="text-sm text-muted-foreground">Loading crew…</p>
-        ) : null}
+        {crew === undefined ? <PublicCardGridSkeleton count={8} /> : null}
 
         {crew && sections.length === 0 ? (
           <Card>

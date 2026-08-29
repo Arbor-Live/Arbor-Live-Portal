@@ -7,6 +7,7 @@ import { api } from "@/lib/convex-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PublicPageHero } from "@/components/public/public-page-hero";
 import { PublicSiteChrome } from "@/components/public/public-site-chrome";
+import { PublicPortalPageSkeleton } from "@/components/public/public-skeletons";
 import { PublicEventHeader } from "@/components/public/public-event-header";
 import { PublicEventSchedule } from "@/components/public/public-event-schedule";
 import { PublicEventCrew } from "@/components/public/public-event-crew";
@@ -114,10 +115,7 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
   if (request === undefined) {
     return (
       <PublicSiteChrome>
-        <PublicPageHero title="Track your request" subtitle="Loading your booking request…" />
-        <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 lg:px-8">
-          <p className="text-sm text-muted-foreground">Loading your request…</p>
-        </div>
+        <PublicPortalPageSkeleton titleWidth="w-72" />
       </PublicSiteChrome>
     );
   }
@@ -184,6 +182,7 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
       <PublicPageHero
         title={`Request ${request.requestNumber}`}
         subtitle={heroSubtitle}
+        shaderBand
         actions={
           <PublicStaffDashboardLinks
             requestId={request._id}

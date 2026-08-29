@@ -5,13 +5,14 @@ import { useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
 import { StoredAssetImage } from "@/components/files/stored-asset-image";
 import { Reveal } from "@/components/landing/landing-motion";
+import { PublicArticleSkeleton } from "@/components/public/public-skeletons";
 import { cn } from "@/lib/utils";
 
 export function PublicArtistDetail({ slug }: { slug: string }) {
   const artist = useQuery(api.publicDirectory.getPublicArtistBySlug, { slug });
 
   if (artist === undefined) {
-    return <p className="text-sm text-muted-foreground">Loading artist…</p>;
+    return <PublicArticleSkeleton />;
   }
 
   if (artist === null) {
