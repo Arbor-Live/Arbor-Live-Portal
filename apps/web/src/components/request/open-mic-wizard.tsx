@@ -231,7 +231,7 @@ export function OpenMicWizard() {
   if (activeNight === undefined) {
     return (
       <PublicMarketingLayout hideFooter hideBanner>
-        <RequestWizardShell eyebrow="Open Mic sign-up" progressPercent={0}>
+        <RequestWizardShell eyebrow="Open Mic sign-up" progressPercent={0} background="panes-cafe">
           <div className="space-y-4 px-4 py-8 sm:px-6" role="status" aria-label="Loading">
             <Skeleton className="h-8 w-2/3 max-w-sm" />
             <Skeleton className="h-4 w-full max-w-md" />
@@ -247,7 +247,7 @@ export function OpenMicWizard() {
   if (activeNight === null) {
     return (
       <PublicMarketingLayout hideFooter hideBanner>
-        <RequestWizardShell eyebrow="Open Mic sign-up" progressPercent={0}>
+        <RequestWizardShell eyebrow="Open Mic sign-up" progressPercent={0} background="panes-cafe">
           <div className="px-4 py-8 sm:px-6">
             <div className="space-y-3 border border-border/50 bg-background/70 p-5 shadow-[0_8px_24px_rgba(0,0,0,0.06)] backdrop-blur-xl sm:p-6">
               <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
@@ -291,6 +291,7 @@ export function OpenMicWizard() {
           <RequestWizardShell
             eyebrow={`Open Mic sign-up · ${activeNight.title}`}
             meta={formatDateTime(activeNight.startAt)}
+            background="panes-cafe"
             progress={
               <QuestionnaireWizardProgress
                 complete={Boolean(confirmation)}

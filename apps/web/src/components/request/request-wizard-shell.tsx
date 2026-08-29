@@ -12,6 +12,14 @@ const FftOceanBackground = dynamic(
   { ssr: false },
 );
 
+const PanesCafeBackground = dynamic(
+  () =>
+    import("@/components/request/panes-cafe/panes-cafe-background").then(
+      (mod) => mod.PanesCafeBackground,
+    ),
+  { ssr: false },
+);
+
 const spring = { type: "spring" as const, stiffness: 380, damping: 36 };
 
 const GRID_STYLE: React.CSSProperties = {
@@ -30,8 +38,8 @@ type RequestWizardShellProps = {
   children: React.ReactNode;
   footer?: React.ReactNode;
   className?: string;
-  /** Booking request uses the WebGPU FFT ocean; other wizards keep the grid. */
-  background?: "grid" | "fft-ocean";
+  /** Booking request uses the WebGPU FFT ocean; open mic uses the cafe panes; other wizards keep the grid. */
+  background?: "grid" | "fft-ocean" | "panes-cafe";
 };
 
 export function RequestWizardShell({
@@ -45,6 +53,7 @@ export function RequestWizardShell({
   background = "grid",
 }: RequestWizardShellProps) {
   const ocean = background === "fft-ocean";
+  const panes = background === "panes-cafe";
 
   return (
     <div
@@ -78,6 +87,9 @@ export function RequestWizardShell({
             className="pointer-events-none absolute inset-0 z-0 opacity-40"
             style={GRID_STYLE}
           />
+          {panes ? (
+            <PanesCafeBackground className="pointer-events-none absolute inset-0 z-[1]" />
+          ) : null}
         </>
       )}
 
