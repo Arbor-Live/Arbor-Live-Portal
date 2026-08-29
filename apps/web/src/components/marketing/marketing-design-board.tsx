@@ -10,7 +10,7 @@ import {
   type MarketingAdditionalLink,
 } from "@/components/marketing/event-marketing-content-fields";
 import { UserSelect, type UserSelectOption } from "@/components/users/user-select";
-import { buildUserSelectDescription } from "@/lib/user-select-description";
+import { toUserSelectOption } from "@/lib/user-select-description";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -53,14 +53,7 @@ export function MarketingDesignBoard() {
   const assignPosterDesigner = useMutation(api.marketingDesigns.assignPosterDesigner);
 
   const userSelectOptions: UserSelectOption[] = useMemo(
-    () =>
-      (managerList ?? []).map((entry) => ({
-        value: entry.id,
-        label: entry.name,
-        description: buildUserSelectDescription(entry),
-        role: entry.role,
-        email: entry.email,
-      })),
+    () => (managerList ?? []).map((entry) => toUserSelectOption(entry)),
     [managerList],
   );
 
@@ -137,10 +130,10 @@ export function MarketingDesignBoard() {
 
   const emptyLabel =
     view === "mine"
-      ? "No upcoming events are assigned to you in the next four weeks."
+      ? "No upcoming events with Marketing selected are assigned to you in the next four weeks."
       : view === "unassigned"
-        ? "No unassigned upcoming events in the next four weeks."
-        : "No upcoming events in the next four weeks.";
+        ? "No unassigned upcoming events with Marketing selected in the next four weeks."
+        : "No upcoming events with Marketing selected in the next four weeks.";
 
   return (
     <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">

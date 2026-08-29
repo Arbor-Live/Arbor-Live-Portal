@@ -27,6 +27,11 @@ export function isMarketingPosterWorkVisibility(visibility: string | undefined):
   return visibility === "public" || visibility === "internal";
 }
 
+/** True when staff marked Marketing under Teams Interested on the event. */
+export function eventHasMarketingTeamInterest(teamsInterested: string[] | undefined): boolean {
+  return (teamsInterested ?? []).includes("Marketing");
+}
+
 /** Marketing designs can only publish when the event is fully public. */
 export function canPublishMarketingDesignVisibility(visibility: string | undefined): boolean {
   return visibility === "public";

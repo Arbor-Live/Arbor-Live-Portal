@@ -14,6 +14,7 @@ function OptionAvatar({ option }: { option: UserSelectOption }) {
       name={option.label}
       email={option.email ?? ""}
       userId={option.value}
+      imageUrl={option.avatarUrl}
       size="sm"
       pixelSize={24}
       className="size-6 rounded-md"

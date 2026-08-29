@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { components } from "./_generated/api";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
-import { requireArborInternalContext, requireAuth } from "./lib/auth";
+import { requireArborInternalContext, requireAuth, findAuthUsersByIds } from "./lib/auth";
 import { syncEventStatusForLinkedInvoice, syncLinkedEventStatusFromInvoice } from "./lib/eventStatus";
 import { recordInvoiceStatusTransition } from "./lib/statusTransitions";
 import { listEventsByInvoiceId } from "./lib/invoiceEvents";
@@ -36,6 +36,10 @@ import {
   normalizeCompensationRateMode,
   resolveUserCompensationHourlyRateUsd,
 } from "./lib/crewCompensation";
+import {
+  buildUserProfileImageByUserId,
+  loadAdminProfilesByUserIds,
+} from "./lib/userProfileImage";
 import {
   eventPassThroughCostUsd,
   invoicePassThroughUsd,
@@ -431,23 +435,30 @@ async function replaceLineItems(
   }
 }
 
+async function loadActiveOrgMemberUserIds(ctx: QueryCtx, organizationId: string) {
+  const orgUserIds = new Set<string>();
+  let cursor: string | null = null;
+  for (;;) {
+    const page = await ctx.db
+      .query("userOrganizationMemberships")
+      .withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId))
+      .paginate({ cursor, numItems: 500 });
+    for (const membership of page.page) {
+      if (membership.active) orgUserIds.add(membership.userId);
+    }
+    if (page.isDone) break;
+    cursor = page.continueCursor;
+  }
+  return orgUserIds;
+}
+
 export const listManagers = query({
   args: {},
   handler: async (ctx) => {
     await requireAuth(ctx);
-    await requireArborInternalContext(ctx);
-    const result = await ctx.runQuery(components.betterAuth.adapter.findMany, {
-      model: "user",
-      paginationOpts: { cursor: null, numItems: 200 },
-    });
-    const users = (result?.page ?? []) as Array<{
-      _id?: string;
-      id?: string;
-      name?: string;
-      email?: string;
-      role?: string | null;
-      image?: string | null;
-    }>;
+    const orgContext = await requireArborInternalContext(ctx);
+    const orgUserIds = await loadActiveOrgMemberUserIds(ctx, orgContext.organizationId);
+    const userByKey = await findAuthUsersByIds(ctx, [...orgUserIds]);
     // Arbor staff quoting events need per-person Normal/Lead/Custom rates so
     // assigned leads bill at lead rate on the invoice (not only global Normal).
     const settings = await loadInvoiceCrewRateSettings(ctx);
@@ -461,26 +472,34 @@ export const listManagers = query({
         },
       ]),
     );
-    const profiles = await ctx.db.query("userAdminProfiles").withIndex("by_active").take(2000);
-    const profileByUserId = new Map(profiles.map((profile) => [profile.userId, profile]));
-    return users
-      .map((user) => {
-        const userId = user.id ?? user._id ?? "";
+    const profileByUserId = await loadAdminProfilesByUserIds(ctx, [...orgUserIds]);
+    const imageByUserId = await buildUserProfileImageByUserId(
+      ctx,
+      [...orgUserIds],
+      userByKey,
+      profileByUserId,
+    );
+    return [...orgUserIds]
+      .map((userId) => {
+        const user = userByKey.get(userId);
+        if (!user) return null;
         const profile = profileByUserId.get(userId);
         const compensation = rateByUserId.get(userId);
+        const avatarUrl = imageByUserId.get(userId);
         return {
           id: userId,
           name: user.name ?? user.email ?? "Unknown user",
           email: user.email,
           role: user.role ?? undefined,
           image: user.image ?? undefined,
+          avatarUrl,
           hourlyRateUsd: compensation?.hourlyRateUsd,
           rateMode: compensation?.rateMode,
           pronouns: profile?.pronouns ?? undefined,
           gradYear: profile?.gradYear ?? undefined,
         };
       })
-      .filter((u) => Boolean(u.id))
+      .filter((user): user is NonNullable<typeof user> => user !== null)
       .sort((a, b) => a.name.localeCompare(b.name));
   },
 });

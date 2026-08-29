@@ -12,7 +12,7 @@ import {
   type MarketingAdditionalLink,
 } from "@/components/marketing/event-marketing-content-fields";
 import { UserSelect, type UserSelectOption } from "@/components/users/user-select";
-import { buildUserSelectDescription } from "@/lib/user-select-description";
+import { toUserSelectOption } from "@/lib/user-select-description";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -61,14 +61,7 @@ export function EventMarketingSection({ eventId }: { eventId: Id<"events"> }) {
   }
 
   const userSelectOptions: UserSelectOption[] = useMemo(
-    () =>
-      (managerList ?? []).map((entry) => ({
-        value: entry.id,
-        label: entry.name,
-        description: buildUserSelectDescription(entry),
-        role: entry.role,
-        email: entry.email,
-      })),
+    () => (managerList ?? []).map((entry) => toUserSelectOption(entry)),
     [managerList],
   );
 

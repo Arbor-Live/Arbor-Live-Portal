@@ -15,6 +15,7 @@ import {
   eventMatchesUserTeams,
 } from "./lib/crewTeams";
 import { getDisciplinesForEventMatching, resolveProfileMembership } from "./lib/userVerticals";
+import { buildUserProfileImageByUserId } from "./lib/userProfileImage";
 import { normalizeEventStatus } from "./lib/eventStatus";
 
 const scheduleBlockSummaryValue = v.object({
@@ -359,6 +360,7 @@ export const listCrewMediaStatusForEvent = query({
         .take(500),
       findAuthUsersByIds(ctx, userIds),
     ]);
+    const imageByUserId = await buildUserProfileImageByUserId(ctx, userIds, userByKey);
     const statusByUserId = new Map(statusRows.map((row) => [row.userId, row]));
 
     const rows = userIds.map((userId) => {
@@ -368,7 +370,7 @@ export const listCrewMediaStatusForEvent = query({
         userId,
         name: user?.name ?? user?.email ?? userId,
         email: user?.email ?? "",
-        image: user?.image ?? undefined,
+        image: imageByUserId.get(userId) ?? user?.image ?? undefined,
         role: userRole.get(userId) ?? "",
         status: (statusRow?.status ?? "pending") as "pending" | "uploaded" | "no_media",
         resolvedAt: statusRow?.resolvedAt,

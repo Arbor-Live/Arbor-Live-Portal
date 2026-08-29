@@ -43,6 +43,14 @@ function mentionHandle(candidate: Pick<MentionCandidate, "username" | "name">) {
   return candidate.username || candidate.name;
 }
 
+function handleAppearsInBody(body: string, handle: string) {
+  const pattern = new RegExp(
+    `(^|[\\s])@${escapeRegExp(handle)}(?=$|[\\s,.!?;:])`,
+    "g",
+  );
+  return pattern.test(body);
+}
+
 function extractMentionedUserIds(
   body: string,
   candidates: MentionCandidate[],
@@ -65,11 +73,7 @@ function extractMentionedUserIds(
   const ids: string[] = [];
   const seen = new Set<string>();
   for (const handle of handles) {
-    const pattern = new RegExp(
-      `(^|[\\s])@${escapeRegExp(handle)}(?=$|[\\s,.!?;:])`,
-      "g",
-    );
-    if (!pattern.test(body)) continue;
+    if (!handleAppearsInBody(body, handle)) continue;
     const group = byHandle.get(handle) ?? [];
     // Prefer an explicitly picked user, then a username match, then first hit.
     const pick =
@@ -79,6 +83,36 @@ function extractMentionedUserIds(
     if (!pick || seen.has(pick.userId)) continue;
     ids.push(pick.userId);
     seen.add(pick.userId);
+  }
+  return ids;
+}
+
+/**
+ * Prefer picker-selected users (even when two people share a handle), then
+ * parse any manually typed @mentions from the body.
+ */
+function resolveMentionedUserIds(
+  body: string,
+  candidates: MentionCandidate[],
+  preferredUserIds: string[],
+): string[] {
+  const byId = new Map(candidates.map((candidate) => [candidate.userId, candidate]));
+  const ids: string[] = [];
+  const seen = new Set<string>();
+
+  for (const userId of preferredUserIds) {
+    const candidate = byId.get(userId);
+    if (!candidate) continue;
+    if (!handleAppearsInBody(body, mentionHandle(candidate))) continue;
+    if (seen.has(userId)) continue;
+    ids.push(userId);
+    seen.add(userId);
+  }
+
+  for (const userId of extractMentionedUserIds(body, candidates, preferredUserIds)) {
+    if (seen.has(userId)) continue;
+    ids.push(userId);
+    seen.add(userId);
   }
   return ids;
 }
@@ -228,7 +262,7 @@ function CommentsPanel({
         subjectType,
         subjectId,
         body,
-        mentionedUserIds: extractMentionedUserIds(body, candidates, draftMentionedUserIds),
+        mentionedUserIds: resolveMentionedUserIds(body, candidates, draftMentionedUserIds),
       });
       setBody("");
       setCursor(0);
@@ -294,6 +328,8 @@ function CommentsPanel({
                       <UserAvatar
                         name={comment.authorName}
                         email={comment.authorEmail}
+                        userId={comment.authorUserId}
+                        imageUrl={comment.authorAvatarUrl}
                         size="sm"
                       />
                     ) : null}
