@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { pacificDateAndTimeToMs } from "@arbor/format";
+import { pacificDateAndTimeToMs, pacificDayIndexFromAnchor } from "@arbor/format";
 import { mutation, query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
@@ -277,6 +277,7 @@ async function seedScheduleBlocksForConvertedEvent(
   const { eventId, eventType, dayPlan, setupAtMs, now } = args;
   const showStart = dayPlan.startAt;
   const showEnd = dayPlan.endAt;
+  const dayIndexFrom = (startsAt: number) => pacificDayIndexFromAnchor(showStart, startsAt);
   const blocks: Array<{
     blockType: "setup" | "show" | "strike" | "custom";
     label: string;
@@ -290,7 +291,7 @@ async function seedScheduleBlocksForConvertedEvent(
     blocks.push({
       blockType: "setup",
       label: "Setup",
-      dayIndex: 0,
+      dayIndex: dayIndexFrom(setupStart),
       startsAt: setupStart,
       endsAt: showStart,
     });
@@ -305,7 +306,7 @@ async function seedScheduleBlocksForConvertedEvent(
     blocks.push({
       blockType: "strike",
       label: "Strike",
-      dayIndex: toPacificDateKey(showEnd) === toPacificDateKey(showStart) ? 0 : 1,
+      dayIndex: dayIndexFrom(showEnd),
       startsAt: showEnd,
       endsAt: strikeEnd,
     });
@@ -319,14 +320,14 @@ async function seedScheduleBlocksForConvertedEvent(
     blocks.push({
       blockType: "setup",
       label: isDryHire ? "Drop-off Window" : "Setup",
-      dayIndex: 0,
+      dayIndex: dayIndexFrom(deliveryStart),
       startsAt: deliveryStart,
       endsAt: showStart,
     });
     blocks.push({
       blockType: "strike",
       label: isDryHire ? "Pickup Window" : "Strike",
-      dayIndex: 0,
+      dayIndex: dayIndexFrom(showEnd),
       startsAt: showEnd,
       endsAt: showEnd + 60 * 60 * 1000,
     });
