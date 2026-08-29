@@ -658,8 +658,9 @@ export const remove = mutation({
 
     await deleteOptionStructureForPackage(ctx, args.id);
 
-    await releaseR2KeysIfUnreferenced(ctx, collectKeysFromInventoryPackage(existing));
+    const keysToRelease = collectKeysFromInventoryPackage(existing);
     await ctx.db.delete(args.id);
+    await releaseR2KeysIfUnreferenced(ctx, keysToRelease);
 
     if (existing.publicListing) {
       await scheduleInventoryPackageSiteRevalidation(ctx, args.id);

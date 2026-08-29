@@ -480,8 +480,9 @@ export const remove = mutation({
       throw new Error("Cannot delete venue used by event series.");
     }
 
-    await releaseR2KeysIfUnreferenced(ctx, collectKeysFromVenue(existing));
+    const keysToRelease = collectKeysFromVenue(existing);
     await ctx.db.delete(args.id);
+    await releaseR2KeysIfUnreferenced(ctx, keysToRelease);
   },
 });
 

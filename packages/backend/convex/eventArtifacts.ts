@@ -109,7 +109,8 @@ export const remove = mutation({
     await requireArborInternalContext(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Artifact not found.");
-    await releaseR2KeysIfUnreferenced(ctx, collectKeysFromEventArtifact(existing));
+    const keysToRelease = collectKeysFromEventArtifact(existing);
     await ctx.db.delete(args.id);
+    await releaseR2KeysIfUnreferenced(ctx, keysToRelease);
   },
 });

@@ -870,8 +870,9 @@ export const deleteArchivedBandOrganizationAdmin = mutation({
     }
 
     await clearActiveOrgSelections(ctx, args.organizationId);
-    await releaseR2KeysIfUnreferenced(ctx, collectKeysFromOrganizationProfile(profile));
+    const keysToRelease = collectKeysFromOrganizationProfile(profile);
     await ctx.db.delete(profile._id);
+    await releaseR2KeysIfUnreferenced(ctx, keysToRelease);
 
     // Best-effort Better Auth cascade — never block the Convex-side delete on it.
     try {

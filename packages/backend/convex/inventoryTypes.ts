@@ -619,8 +619,9 @@ export const remove = mutation({
       throw new Error("Cannot delete type used in packages.");
     }
 
-    await releaseR2KeysIfUnreferenced(ctx, collectKeysFromInventoryType(existing));
+    const keysToRelease = collectKeysFromInventoryType(existing);
     await ctx.db.delete(args.id);
+    await releaseR2KeysIfUnreferenced(ctx, keysToRelease);
 
     if (existing.publicListing) {
       await scheduleInventoryTypeSiteRevalidation(ctx);

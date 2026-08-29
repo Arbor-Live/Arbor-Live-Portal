@@ -231,8 +231,15 @@ export function collectKeysFromDamageReport(report: Pick<Doc<"damageReports">, "
   return key ? [key] : [];
 }
 
-function markScanComplete<T>(rows: T[], limit: number, complete: boolean): boolean {
-  return complete && rows.length < limit;
+async function takeBounded<T>(
+  load: (limit: number) => Promise<T[]>,
+  limit: number,
+): Promise<{ rows: T[]; complete: boolean }> {
+  const rows = await load(limit + 1);
+  return {
+    rows: rows.slice(0, limit),
+    complete: rows.length <= limit,
+  };
 }
 
 /**
@@ -245,61 +252,75 @@ export async function collectReferencedR2Keys(
   const keys = new Set<string>();
   let complete = true;
 
-  const packages = await ctx.db
-    .query("inventoryPackages")
-    .take(REFERENCE_SCAN_LIMITS.inventoryPackages);
-  complete = markScanComplete(packages, REFERENCE_SCAN_LIMITS.inventoryPackages, complete);
-  for (const pkg of packages) {
+  const packages = await takeBounded(
+    (limit) => ctx.db.query("inventoryPackages").take(limit),
+    REFERENCE_SCAN_LIMITS.inventoryPackages,
+  );
+  if (!packages.complete) complete = false;
+  for (const pkg of packages.rows) {
     for (const key of collectKeysFromInventoryPackage(pkg)) keys.add(key);
   }
 
-  const types = await ctx.db.query("inventoryTypes").take(REFERENCE_SCAN_LIMITS.inventoryTypes);
-  complete = markScanComplete(types, REFERENCE_SCAN_LIMITS.inventoryTypes, complete);
-  for (const type of types) {
+  const types = await takeBounded(
+    (limit) => ctx.db.query("inventoryTypes").take(limit),
+    REFERENCE_SCAN_LIMITS.inventoryTypes,
+  );
+  if (!types.complete) complete = false;
+  for (const type of types.rows) {
     for (const key of collectKeysFromInventoryType(type)) keys.add(key);
   }
 
-  const profiles = await ctx.db
-    .query("organizationProfiles")
-    .take(REFERENCE_SCAN_LIMITS.organizationProfiles);
-  complete = markScanComplete(profiles, REFERENCE_SCAN_LIMITS.organizationProfiles, complete);
-  for (const profile of profiles) {
+  const profiles = await takeBounded(
+    (limit) => ctx.db.query("organizationProfiles").take(limit),
+    REFERENCE_SCAN_LIMITS.organizationProfiles,
+  );
+  if (!profiles.complete) complete = false;
+  for (const profile of profiles.rows) {
     for (const key of collectKeysFromOrganizationProfile(profile)) keys.add(key);
   }
 
-  const designs = await ctx.db
-    .query("eventMarketingDesigns")
-    .take(REFERENCE_SCAN_LIMITS.eventMarketingDesigns);
-  complete = markScanComplete(designs, REFERENCE_SCAN_LIMITS.eventMarketingDesigns, complete);
-  for (const design of designs) {
+  const designs = await takeBounded(
+    (limit) => ctx.db.query("eventMarketingDesigns").take(limit),
+    REFERENCE_SCAN_LIMITS.eventMarketingDesigns,
+  );
+  if (!designs.complete) complete = false;
+  for (const design of designs.rows) {
     for (const key of collectKeysFromEventMarketingDesign(design)) keys.add(key);
   }
 
-  const posts = await ctx.db.query("marketingPosts").take(REFERENCE_SCAN_LIMITS.marketingPosts);
-  complete = markScanComplete(posts, REFERENCE_SCAN_LIMITS.marketingPosts, complete);
-  for (const post of posts) {
+  const posts = await takeBounded(
+    (limit) => ctx.db.query("marketingPosts").take(limit),
+    REFERENCE_SCAN_LIMITS.marketingPosts,
+  );
+  if (!posts.complete) complete = false;
+  for (const post of posts.rows) {
     for (const key of collectKeysFromMarketingPost(post)) keys.add(key);
   }
 
-  const artifacts = await ctx.db
-    .query("eventArtifacts")
-    .take(REFERENCE_SCAN_LIMITS.eventArtifacts);
-  complete = markScanComplete(artifacts, REFERENCE_SCAN_LIMITS.eventArtifacts, complete);
-  for (const artifact of artifacts) {
+  const artifacts = await takeBounded(
+    (limit) => ctx.db.query("eventArtifacts").take(limit),
+    REFERENCE_SCAN_LIMITS.eventArtifacts,
+  );
+  if (!artifacts.complete) complete = false;
+  for (const artifact of artifacts.rows) {
     for (const key of collectKeysFromEventArtifact(artifact)) keys.add(key);
   }
 
-  const venues = await ctx.db.query("venues").take(REFERENCE_SCAN_LIMITS.venues);
-  complete = markScanComplete(venues, REFERENCE_SCAN_LIMITS.venues, complete);
-  for (const venue of venues) {
+  const venues = await takeBounded(
+    (limit) => ctx.db.query("venues").take(limit),
+    REFERENCE_SCAN_LIMITS.venues,
+  );
+  if (!venues.complete) complete = false;
+  for (const venue of venues.rows) {
     for (const key of collectKeysFromVenue(venue)) keys.add(key);
   }
 
-  const damageReports = await ctx.db
-    .query("damageReports")
-    .take(REFERENCE_SCAN_LIMITS.damageReports);
-  complete = markScanComplete(damageReports, REFERENCE_SCAN_LIMITS.damageReports, complete);
-  for (const report of damageReports) {
+  const damageReports = await takeBounded(
+    (limit) => ctx.db.query("damageReports").take(limit),
+    REFERENCE_SCAN_LIMITS.damageReports,
+  );
+  if (!damageReports.complete) complete = false;
+  for (const report of damageReports.rows) {
     for (const key of collectKeysFromDamageReport(report)) keys.add(key);
   }
 

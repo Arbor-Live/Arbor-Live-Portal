@@ -251,8 +251,9 @@ export const remove = mutation({
     await requireAdmin(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Post not found.");
-    await releaseR2KeysIfUnreferenced(ctx, collectKeysFromMarketingPost(existing));
+    const keysToRelease = collectKeysFromMarketingPost(existing);
     await ctx.db.delete(args.id);
+    await releaseR2KeysIfUnreferenced(ctx, keysToRelease);
     if (existing.published) {
       await scheduleMarketingSiteRevalidation(ctx, existing.slug);
     }
