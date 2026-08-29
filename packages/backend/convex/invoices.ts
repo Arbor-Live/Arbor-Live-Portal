@@ -38,6 +38,7 @@ import {
 } from "./lib/crewCompensation";
 import {
   buildUserProfileImageByUserId,
+  loadAdminProfilesByUserIds,
 } from "./lib/userProfileImage";
 import {
   eventPassThroughCostUsd,
@@ -471,18 +472,7 @@ export const listManagers = query({
         },
       ]),
     );
-    const profileRows = await Promise.all(
-      [...orgUserIds].map(async (userId) => {
-        const profile = await ctx.db
-          .query("userAdminProfiles")
-          .withIndex("by_userId", (q) => q.eq("userId", userId))
-          .unique();
-        return profile ? ([userId, profile] as const) : null;
-      }),
-    );
-    const profileByUserId = new Map(
-      profileRows.filter((entry): entry is NonNullable<typeof entry> => entry !== null),
-    );
+    const profileByUserId = await loadAdminProfilesByUserIds(ctx, [...orgUserIds]);
     const imageByUserId = await buildUserProfileImageByUserId(
       ctx,
       [...orgUserIds],

@@ -3,6 +3,8 @@ import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { resolveStoredR2AssetUrl } from "../inventoryR2";
 import type { AuthUser } from "./auth";
 
+type ProfileImageSource = { avatarStorageId?: Id<"_storage"> };
+
 /** Portal profile photo (Convex storage) wins over Better Auth `user.image`. */
 export async function resolveUserProfileImageUrl(
   ctx: QueryCtx | MutationCtx,
@@ -11,30 +13,37 @@ export async function resolveUserProfileImageUrl(
     authImage?: string | null;
   },
 ): Promise<string | undefined> {
-  if (args.avatarStorageId) {
-    const uploaded = (await ctx.storage.getUrl(args.avatarStorageId)) ?? undefined;
-    if (uploaded) return uploaded;
+  try {
+    if (args.avatarStorageId) {
+      const uploaded = (await ctx.storage.getUrl(args.avatarStorageId)) ?? undefined;
+      if (uploaded) return uploaded;
+    }
+    const authImage = args.authImage?.trim();
+    if (!authImage) return undefined;
+    const resolved = await resolveStoredR2AssetUrl(authImage);
+    if (resolved) return resolved;
+    if (/^https?:\/\//i.test(authImage)) return authImage;
+    return authImage;
+  } catch {
+    return undefined;
   }
-  const authImage = args.authImage?.trim();
-  if (!authImage) return undefined;
-  const resolved = await resolveStoredR2AssetUrl(authImage);
-  if (resolved) return resolved;
-  if (/^https?:\/\//i.test(authImage)) return authImage;
-  return authImage;
 }
 
-async function loadProfilesByUserIds(
+/** Indexed lookups for only the requested users (avoids scanning all active profiles). */
+export async function loadAdminProfilesByUserIds(
   ctx: QueryCtx,
   userIds: readonly string[],
-): Promise<Map<string, { avatarStorageId?: Id<"_storage"> }>> {
-  const profiles = new Map<string, { avatarStorageId?: Id<"_storage"> }>();
+): Promise<Map<string, ProfileImageSource & { pronouns?: string; gradYear?: number }>> {
+  const profiles = new Map<string, ProfileImageSource & { pronouns?: string; gradYear?: number }>();
   await Promise.all(
     userIds.map(async (userId) => {
+      // Prefer first row over `.unique()` — the index is not a DB unique constraint.
       const row = await ctx.db
         .query("userAdminProfiles")
         .withIndex("by_userId", (q) => q.eq("userId", userId))
-        .unique();
-      if (row) profiles.set(userId, row);
+        .take(1);
+      const profile = row[0];
+      if (profile) profiles.set(userId, profile);
     }),
   );
   return profiles;
@@ -44,13 +53,13 @@ export async function buildUserProfileImageByUserId(
   ctx: QueryCtx,
   userIds: readonly string[],
   userByKey: Map<string, AuthUser>,
-  profileByUserId?: Map<string, { avatarStorageId?: Id<"_storage"> }>,
+  profileByUserId?: Map<string, ProfileImageSource>,
 ): Promise<Map<string, string | undefined>> {
   const unique = [...new Set(userIds.map((id) => id.trim()).filter(Boolean))];
   const imageByUserId = new Map<string, string | undefined>();
   if (unique.length === 0) return imageByUserId;
 
-  const profiles = profileByUserId ?? (await loadProfilesByUserIds(ctx, unique));
+  const profiles = profileByUserId ?? (await loadAdminProfilesByUserIds(ctx, unique));
 
   await Promise.all(
     unique.map(async (userId) => {
