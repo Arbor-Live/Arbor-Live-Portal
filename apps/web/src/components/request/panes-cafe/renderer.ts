@@ -1,0 +1,78 @@
+import {
+  clock,
+  effect,
+  frameLoop,
+  init,
+  surface,
+  type Effect,
+  type Gpu,
+  type Surface,
+} from "vgpu";
+
+import panesCafeWgsl from "./panes-cafe.wgsl";
+
+interface RendererOptions {
+  readonly canvas: HTMLCanvasElement;
+  /** When true, dispose quietly instead of throwing (used as page background). */
+  readonly softFail?: boolean;
+}
+
+export function createRenderer({ canvas, softFail = false }: RendererOptions) {
+  let disposed = false;
+  let gpu: Gpu | undefined;
+  let output: Surface | undefined;
+  let scene: Effect | undefined;
+
+  function dispose(): void {
+    if (disposed) return;
+    disposed = true;
+    try {
+      gpu?.dispose();
+    } catch {
+      // Teardown must not mask the original failure.
+    }
+  }
+
+  function fail(error: unknown): void {
+    try {
+      dispose();
+    } catch {
+      // Teardown must not mask the original failure.
+    }
+    if (!softFail) throw error;
+  }
+
+  const initialize = async () => {
+    const nextGpu = await init();
+    if (disposed) {
+      nextGpu.dispose();
+      return;
+    }
+
+    gpu = nextGpu;
+    output = surface(gpu, canvas, { dpr: [1, 1.6] });
+    scene = effect(gpu, panesCafeWgsl, {
+      label: "panes-cafe",
+      set: { u: { time: 0, w: 1, h: 1, aspect: 1 } },
+    });
+
+    const time = clock(gpu);
+    frameLoop(gpu, (currentFrame) => {
+      if (disposed || !output || !scene) return;
+      try {
+        const [w, h] = output.size;
+        scene.set({ u: { time: time.time, w, h, aspect: w / h } });
+        currentFrame.pass(output, scene);
+      } catch (error) {
+        fail(error);
+      }
+    });
+  };
+
+  const ready = initialize().catch((error: unknown) => {
+    if (!disposed) fail(error);
+    throw error;
+  });
+
+  return { ready, dispose };
+}
