@@ -187,11 +187,11 @@ export function createRenderer({
     throw error;
   }
 
-  function guard<T>(work: () => T): T {
+  function guard(work: () => void): void {
     try {
-      return work();
+      work();
     } catch (error) {
-      return fail(error);
+      fail(error);
     }
   }
 
