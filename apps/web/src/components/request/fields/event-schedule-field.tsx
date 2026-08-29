@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useId, useMemo, useState } from "react";
-import { useFormContext } from "react-hook-form";
+import { memo, useCallback, useId, useMemo, useState } from "react";
+import { useFormContext, useWatch } from "react-hook-form";
 import { useQuery } from "convex/react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -20,6 +20,12 @@ import {
   getDayLoadLevel,
 } from "@/components/request/booking-availability-calendar";
 import { cn } from "@/lib/utils";
+
+function startOfToday() {
+  const date = new Date();
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
 
 function TimePicker({
   value,
@@ -42,7 +48,7 @@ function TimePicker({
   );
 }
 
-function ShowSlotPanel({
+const ShowSlotPanel = memo(function ShowSlotPanel({
   index,
   slot,
   isActive,
@@ -121,14 +127,15 @@ function ShowSlotPanel({
       </div>
     </div>
   );
-}
+});
 
 export function EventScheduleField() {
-  const { watch, setValue, getFieldState, trigger, formState } =
-    useFormContext<BookingRequestFormValues>();
-  const showSlots = watch("showSlots");
-  const flexibleSetupTime = watch("flexibleSetupTime");
+  const { setValue, getFieldState, formState } = useFormContext<BookingRequestFormValues>();
+  const showSlots = useWatch({ name: "showSlots" }) ?? [];
+  const flexibleSetupTime = useWatch({ name: "flexibleSetupTime" }) ?? false;
+  const setupTime = useWatch({ name: "setupTime" }) ?? "";
   const [activeSlotIndex, setActiveSlotIndex] = useState(0);
+  const minDate = useMemo(() => startOfToday(), []);
 
   const activeIndex = Math.min(activeSlotIndex, Math.max(showSlots.length - 1, 0));
   const activeSlot = showSlots[activeIndex] ?? showSlots[0] ?? createDefaultShowSlot();
@@ -140,32 +147,70 @@ export function EventScheduleField() {
   const dayLoad = useQuery(api.eventRequests.getPublicBookingDayLoad, { rangeStart, rangeEnd });
   const activeDayLevel = getDayLoadLevel(dayLoad, activeSlot.date);
 
-  const revalidateSchedule = useCallback(async () => {
-    await trigger(["showSlots", "setupTime"]);
-  }, [trigger]);
-
   const updateSlot = useCallback(
     (index: number, next: BookingRequestFormValues["showSlots"][number]) => {
-      const updated = [...showSlots];
-      updated[index] = next;
-      setValue("showSlots", updated, { shouldDirty: true });
-      void revalidateSchedule();
+      setValue(
+        "showSlots",
+        showSlots.map((slot, slotIndex) => (slotIndex === index ? next : slot)),
+        { shouldDirty: true },
+      );
     },
-    [showSlots, setValue, revalidateSchedule],
+    [showSlots, setValue],
+  );
+
+  const handleSelectDate = useCallback(
+    (date: string) => {
+      updateSlot(activeIndex, { ...activeSlot, date });
+    },
+    [activeIndex, activeSlot, updateSlot],
   );
 
   const setupError = getFieldState("setupTime").error?.message;
   const showSlotsError = getFieldState("showSlots").error?.message;
 
-  const slotErrors = showSlots.map((_, index) => ({
-    date: formState.errors.showSlots?.[index]?.date?.message,
-    startTime: formState.errors.showSlots?.[index]?.startTime?.message,
-    endTime: formState.errors.showSlots?.[index]?.endTime?.message,
-  }));
+  const slotErrors = useMemo(
+    () =>
+      showSlots.map((_, index) => ({
+        date: formState.errors.showSlots?.[index]?.date?.message,
+        startTime: formState.errors.showSlots?.[index]?.startTime?.message,
+        endTime: formState.errors.showSlots?.[index]?.endTime?.message,
+      })),
+    [formState.errors.showSlots, showSlots],
+  );
 
-  const highlightedDates = showSlots
-    .map((slot, index) => (index === activeIndex ? null : slot.date.trim()))
-    .filter((date): date is string => Boolean(date));
+  const highlightedDates = useMemo(
+    () =>
+      showSlots
+        .map((slot, index) => (index === activeIndex ? null : slot.date.trim()))
+        .filter((date): date is string => Boolean(date)),
+    [activeIndex, showSlots],
+  );
+
+  const handleRemoveSlot = useCallback(
+    (index: number) => {
+      const next = showSlots.filter((_, rowIndex) => rowIndex !== index);
+      setValue("showSlots", next, { shouldDirty: true });
+      setActiveSlotIndex((current) => Math.min(current, Math.max(next.length - 1, 0)));
+    },
+    [setValue, showSlots],
+  );
+
+  const handleAddSlot = useCallback(() => {
+    const template = showSlots[0] ?? createDefaultShowSlot();
+    setValue(
+      "showSlots",
+      [
+        ...showSlots,
+        {
+          date: template.date,
+          startTime: template.startTime,
+          endTime: template.endTime,
+        },
+      ],
+      { shouldDirty: true },
+    );
+    setActiveSlotIndex(showSlots.length);
+  }, [setValue, showSlots]);
 
   return (
     <div className="space-y-4">
@@ -174,8 +219,8 @@ export function EventScheduleField() {
           <BookingAvailabilityCalendar
             selectedDate={activeSlot.date}
             highlightedDates={highlightedDates}
-            minDate={new Date()}
-            onSelectDate={(date) => updateSlot(activeIndex, { ...activeSlot, date })}
+            minDate={minDate}
+            onSelectDate={handleSelectDate}
           />
         </div>
 
@@ -190,12 +235,7 @@ export function EventScheduleField() {
               errors={slotErrors[index] ?? {}}
               onActivate={() => setActiveSlotIndex(index)}
               onChange={(next) => updateSlot(index, next)}
-              onRemove={() => {
-                const next = showSlots.filter((_, rowIndex) => rowIndex !== index);
-                setValue("showSlots", next, { shouldDirty: true });
-                setActiveSlotIndex((current) => Math.min(current, Math.max(next.length - 1, 0)));
-                void revalidateSchedule();
-              }}
+              onRemove={() => handleRemoveSlot(index)}
             />
           ))}
         </div>
@@ -209,28 +249,7 @@ export function EventScheduleField() {
 
       {showSlotsError ? <p className="text-sm text-destructive">{showSlotsError}</p> : null}
 
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={() => {
-          const template = showSlots[0] ?? createDefaultShowSlot();
-          setValue(
-            "showSlots",
-            [
-              ...showSlots,
-              {
-                date: template.date,
-                startTime: template.startTime,
-                endTime: template.endTime,
-              },
-            ],
-            { shouldDirty: true },
-          );
-          setActiveSlotIndex(showSlots.length);
-          void revalidateSchedule();
-        }}
-      >
+      <Button type="button" variant="outline" size="sm" onClick={handleAddSlot}>
         Add another event
       </Button>
       <p className="text-xs text-muted-foreground">
@@ -241,11 +260,8 @@ export function EventScheduleField() {
       <div className="space-y-3 rounded-md border p-3">
         <TimePicker
           label="Earliest setup availability"
-          value={watch("setupTime") ?? ""}
-          onChange={(value) => {
-            setValue("setupTime", value, { shouldDirty: true });
-            void revalidateSchedule();
-          }}
+          value={setupTime}
+          onChange={(value) => setValue("setupTime", value, { shouldDirty: true })}
           disabled={flexibleSetupTime}
         />
         {setupError ? <p className="text-sm text-destructive">{setupError}</p> : null}
@@ -255,7 +271,6 @@ export function EventScheduleField() {
             checked={flexibleSetupTime}
             onChange={(event) => {
               setValue("flexibleSetupTime", event.target.checked, { shouldDirty: true });
-              void revalidateSchedule();
             }}
           />
           Flexible setup time

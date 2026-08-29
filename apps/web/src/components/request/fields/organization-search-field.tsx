@@ -18,7 +18,7 @@ type HostMatch = {
  * Search existing host orgs, pick a match, or keep the typed name as a new org.
  */
 export function OrganizationSearchField() {
-  const { watch, setValue, formState } = useFormContext<BookingRequestFormValues>();
+  const { watch, setValue, getFieldState } = useFormContext<BookingRequestFormValues>();
   const organization = watch("organization") ?? "";
   const invoiceGroupId = watch("invoiceGroupId") ?? "";
   const [query, setQuery] = useState(organization);
@@ -36,7 +36,7 @@ export function OrganizationSearchField() {
 
   const matches = useMemo(() => results ?? [], [results]);
   const selectedMatch = matches.find((row) => row.groupId === invoiceGroupId);
-  const error = formState.errors.organization?.message;
+  const error = getFieldState("organization").error?.message;
 
   function selectMatch(match: HostMatch) {
     setValue("invoiceGroupId", match.groupId, { shouldDirty: true, shouldValidate: true });
@@ -54,7 +54,7 @@ export function OrganizationSearchField() {
     if (invoiceGroupId) {
       setValue("invoiceGroupId", "", { shouldDirty: true });
     }
-    setValue("organization", next, { shouldDirty: true, shouldValidate: true });
+    setValue("organization", next, { shouldDirty: true });
   }
 
   return (

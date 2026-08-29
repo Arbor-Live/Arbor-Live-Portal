@@ -16,7 +16,7 @@ export const BOOKING_REQUEST_STEP_WATCH_FIELDS: Record<
   email: ["email"],
   returningUser: ["requestContext", "invoiceGroupId"],
   contact: [],
-  sponsorType: [],
+  sponsorType: ["requestContext", "sponsorType", "invoiceGroupId", "sponsorTypeOther"],
   venue: [],
   eventSchedule: [],
   eventName: ["eventName"],

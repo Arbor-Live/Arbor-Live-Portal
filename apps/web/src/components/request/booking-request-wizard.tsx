@@ -547,7 +547,7 @@ function StepFields({
         </>
       );
     case "sponsorType":
-      return <SponsorTypeChoices form={form} />;
+      return <SponsorTypeChoices />;
     case "venue":
       return (
         <>
@@ -751,15 +751,13 @@ function ReturningUserChoices({
   );
 }
 
-function SponsorTypeChoices({
-  form,
-}: {
-  form: ReturnType<typeof useForm<BookingRequestFormValues>>;
-}) {
-  const requestContext = form.watch("requestContext");
-  const sponsorType = form.watch("sponsorType");
-  const invoiceGroupId = form.watch("invoiceGroupId");
-  const sponsorTypeOther = form.watch("sponsorTypeOther");
+function SponsorTypeChoices() {
+  const form = useFormContext<BookingRequestFormValues>();
+  const values = useStepFieldValues("sponsorType");
+  const requestContext = values.requestContext;
+  const sponsorType = values.sponsorType;
+  const invoiceGroupId = values.invoiceGroupId;
+  const sponsorTypeOther = values.sponsorTypeOther;
   const sponsorOptions = sponsorTypeOptionsForContext(requestContext);
   const showOrganization = requiresOrganizationName(sponsorType, invoiceGroupId);
 

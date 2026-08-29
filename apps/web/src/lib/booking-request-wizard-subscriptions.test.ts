@@ -13,6 +13,15 @@ describe("booking request wizard subscriptions", () => {
     expect(BOOKING_REQUEST_STEP_WATCH_FIELDS.eventSchedule).toEqual([]);
   });
 
+  it("scopes sponsor type step to sponsor fields only", () => {
+    expect(BOOKING_REQUEST_STEP_WATCH_FIELDS.sponsorType).toEqual([
+      "requestContext",
+      "sponsorType",
+      "invoiceGroupId",
+      "sponsorTypeOther",
+    ]);
+  });
+
   it("keeps schedule fields off the email step subscription", () => {
     expect(BOOKING_REQUEST_STEP_WATCH_FIELDS.email).not.toContain("showSlots");
     expect(BOOKING_REQUEST_STEP_WATCH_FIELDS.email).not.toContain("setupTime");
