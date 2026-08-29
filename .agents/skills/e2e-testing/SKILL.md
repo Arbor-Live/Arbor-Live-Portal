@@ -13,7 +13,9 @@ so the new test lands in the right file.
 ## Running
 
 - `pnpm test:e2e` — boots **anonymous** local Convex + Next, then runs
-  Playwright. Stashes/restores any cloud `.env.local` automatically.
+  Playwright. Stashes/restores any cloud `.env.local` automatically. In a
+  **local**-mode worktree (`pnpm worktree-convex status`) it reuses that
+  worktree's own Convex ports instead of the default `:3210`.
 - `pnpm test:e2e:skip-boot` — reuse an already-running stack.
 - `E2E_USE_CLOUD_DEV=1` — intentionally target shared cloud Dev (rarely what
   you want; burns team-plan DB I/O).

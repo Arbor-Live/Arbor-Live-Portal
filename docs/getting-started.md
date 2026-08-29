@@ -33,10 +33,13 @@ variable does and where it must be set.
 ## 3. Start the backend
 
 ```bash
-pnpm --filter backend dev
+pnpm dev:backend
 ```
 
-The first run provisions a Convex dev deployment and writes
+This runs `convex dev` against the **worktrunk** — the shared cloud dev
+deployment that every worktree symlinks to (see
+[Worktrunk vs. local Convex](#worktrunk-vs-local-convex)). The first run
+provisions the Convex dev deployment and writes
 `packages/backend/.env.local` with `CONVEX_DEPLOYMENT` and `CONVEX_URL`.
 Leave this running: it watches `packages/backend/convex/` and pushes changes.
 
@@ -63,6 +66,53 @@ pnpm dev:web
 
 Visit `http://localhost:3000/setup` for first-admin bootstrap (fresh
 deployment only), or `/sign-in` after an admin exists, then the dashboard.
+
+## Worktrunk vs. local Convex
+
+Every git worktree gets one of two Convex backends. Which one a worktree uses
+is recorded per-worktree in `.git/arbor-env/worktree-convex.json` and restored
+automatically on checkout (`scripts/worktree-convex.mjs ensure`).
+
+### Worktrunk (default)
+
+`packages/backend/.env.local` is a **symlink** into `.git/arbor-env/`, so every
+worktree shares one cloud dev deployment and one database. Use it only when you
+want shared data, or in the main checkout.
+
+```bash
+pnpm worktree-convex trunk   # select the shared trunk .env.local
+pnpm dev:backend             # convex dev against the shared trunk deployment
+```
+
+### Local Convex (feature work)
+
+Each worktree runs its **own anonymous Convex backend** on its own ports
+(`:3210`/`:3211` for the first worktree, then `:3220`/`:3221`, `:3230`/`:3231`,
+…). `.env.local` files become **real per-worktree files**, so schema pushes and
+data never collide with the trunk or another worktree. **All non-trunk feature
+work — a single agent or many, on any feature branch — must use this mode** so
+schema pushes never target the shared trunk deployment.
+
+```bash
+pnpm dev:backend:local    # switch to local mode, boot the isolated backend,
+                          # and set BETTER_AUTH_SECRET / SITE_URL / EMAIL_TEST_MODE
+                          # on that deployment (web auth works out of the box)
+pnpm dev:web              # same as always, but pointed at the local backend
+```
+
+| Command | What it does |
+|---|---|
+| `pnpm worktree-convex status` | Show this worktree's mode, ports, and `.env.local` files |
+| `pnpm worktree-convex local` | Switch this worktree to isolated local Convex (no boot) |
+| `pnpm worktree-convex trunk` | Switch back to the shared worktrunk |
+| `pnpm dev:backend:local` | Local mode + boot + bootstrap deployment env |
+| `pnpm dev:backend` | `convex dev` in this worktree's current mode |
+
+Ports are allocated once per worktree and reused, so restarts are stable. Each
+worktree's deployment config lives in its own gitignored
+`packages/backend/.convex/`. A local backend only needs the shared `.env`
+secrets plus the three vars `dev:backend:local` sets; R2 / Immich / Resend
+features degrade gracefully without them.
 
 ## Dev preview wizards
 
@@ -95,7 +145,7 @@ Do not rely on this for production testing, and never ship a build with
 | Symptom | Likely cause |
 |---|---|
 | `ctx.auth.getUserIdentity()` always null / sign-in loops | `BETTER_AUTH_SECRET` or `SITE_URL` not set on the Convex deployment |
-| Web build fails with "Convex URL missing at build time" | `NEXT_PUBLIC_CONVEX_URL` missing; run `pnpm --filter backend dev` first or see [deployment.md](deployment.md) |
+| Web build fails with "Convex URL missing at build time" | `NEXT_PUBLIC_CONVEX_URL` missing; run `pnpm dev:backend` first or see [deployment.md](deployment.md) |
 | Type errors referencing `_generated` | Stale codegen — run `pnpm --filter backend codegen` |
 | Emails never send | `RESEND_API_KEY` / `EMAIL_FROM` unset, or `EMAIL_TEST_MODE` is on |
 | Image upload/serving broken | R2 vars unset — see [r2-storage.md](r2-storage.md) |
@@ -105,7 +155,8 @@ Do not rely on this for production testing, and never ship a build with
 | Command | What it does |
 |---|---|
 | `pnpm dev:web` | Next.js dev server (apps/web) |
-| `pnpm dev:backend` | Convex dev (watch + push) |
+| `pnpm dev:backend` | Convex dev in this worktree's mode (trunk by default) |
+| `pnpm dev:backend:local` | Switch to isolated local Convex and boot it (parallel agents) |
 | `pnpm dev:email` | react-email preview server on port 3001 |
 | `pnpm codegen:backend` | Regenerate Convex bindings after schema/API changes |
 | `pnpm lint` / `pnpm typecheck` | Lint / typecheck all workspace packages |

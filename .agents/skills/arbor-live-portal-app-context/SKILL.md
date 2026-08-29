@@ -21,6 +21,10 @@ Human-readable docs live in `docs/` (`getting-started.md`, `architecture.md`, `d
 - Convex type/code generation: `pnpm --filter backend codegen`
 - Web lint: `pnpm --filter web exec eslint "<path>"`
 - Web build check: `pnpm --filter web build`
+- Convex backend modes (per-worktree, `scripts/worktree-convex.mjs`): feature
+  work uses `pnpm dev:backend:local` (isolated per-worktree backend); the
+  shared trunk is `pnpm dev:backend`. `pnpm worktree-convex status` shows the
+  mode. See `docs/getting-started.md` “Worktrunk vs. local Convex”.
 
 ## Convex Rules for this Repo
 - Always keep argument validators on queries/mutations/actions.

@@ -4,9 +4,12 @@ Single reference for every variable the code reads via `process.env`.
 
 Where variables live:
 
-- **Local files** — symlinked from `.git/arbor-env/` by `pnpm setup:worktree-env`
-  (see the root [README](../README.md)). `packages/backend/.env.local` is
-  written automatically by `convex dev`.
+- **Local files** — shared `.env` files are symlinked from `.git/arbor-env/` by
+  `pnpm setup:worktree-env` (see the root [README](../README.md)).
+  `packages/backend/.env.local` is deployment-specific and owned by
+  `scripts/worktree-convex.mjs`: symlinked to the shared **worktrunk** by
+  default, or a real per-worktree file in isolated **local** mode
+  (see [getting-started.md](getting-started.md#worktrunk-vs-local-convex)).
 - **Convex dashboard** — per-deployment env vars; this is where backend
   runtime values must be set for dev *and* prod deployments (a local `.env`
   only affects the CLI, not deployed functions).
