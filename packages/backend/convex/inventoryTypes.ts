@@ -10,7 +10,7 @@ import {
 import {
   collectKeysFromInventoryType,
   diffReleasedR2Keys,
-  releaseR2Keys,
+  releaseR2KeysIfUnreferenced,
 } from "./lib/r2Lifecycle";
 import { scheduleInventoryTypeSiteRevalidation } from "./lib/scheduleSiteRevalidation";
 import { ensureDefaultCategories } from "./inventoryCategories";
@@ -490,13 +490,22 @@ export const update = mutation({
       }
     }
 
-    const nextManualUrls = normalizeResourceLinksForStore(args.manualUrls, "Manual");
+    const nextManualUrls =
+      args.manualUrls === undefined
+        ? existing.manualUrls
+        : normalizeResourceLinksForStore(args.manualUrls, "Manual");
     const nextCategoryMetadata =
       args.categoryMetadata !== undefined
         ? normalizeCategoryMetadataInput(args.categoryMetadata ?? {})
         : existing.categoryMetadata;
-    const nextIconImageUrl = normalizeOptionalAssetReference(args.iconImageUrl);
-    const nextPromoImageUrl = normalizeOptionalAssetReference(args.promoImageUrl);
+    const nextIconImageUrl =
+      args.iconImageUrl === undefined
+        ? existing.iconImageUrl
+        : normalizeOptionalAssetReference(args.iconImageUrl);
+    const nextPromoImageUrl =
+      args.promoImageUrl === undefined
+        ? existing.promoImageUrl
+        : normalizeOptionalAssetReference(args.promoImageUrl);
     const nextTypeSnapshot = {
       iconImageUrl: nextIconImageUrl,
       promoImageUrl: nextPromoImageUrl,
@@ -526,7 +535,7 @@ export const update = mutation({
       updatedAt: Date.now(),
     });
 
-    await releaseR2Keys(
+    await releaseR2KeysIfUnreferenced(
       ctx,
       diffReleasedR2Keys(
         collectKeysFromInventoryType(existing),
@@ -610,7 +619,7 @@ export const remove = mutation({
       throw new Error("Cannot delete type used in packages.");
     }
 
-    await releaseR2Keys(ctx, collectKeysFromInventoryType(existing));
+    await releaseR2KeysIfUnreferenced(ctx, collectKeysFromInventoryType(existing));
     await ctx.db.delete(args.id);
 
     if (existing.publicListing) {

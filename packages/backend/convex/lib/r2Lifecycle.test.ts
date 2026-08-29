@@ -4,6 +4,7 @@ import {
   collectR2KeysFromResourceLinks,
   diffReleasedR2Keys,
   isWithinOrphanGracePeriod,
+  keysToReleaseIfUnreferenced,
   r2KeyFromReference,
   r2KeyFromStoredValue,
 } from "./r2Lifecycle";
@@ -67,6 +68,15 @@ describe("collectR2KeysFromLexicalContentJson", () => {
 describe("diffReleasedR2Keys", () => {
   it("returns keys removed from the after set", () => {
     expect(diffReleasedR2Keys(["a", "b"], ["b", "c"])).toEqual(["a"]);
+  });
+});
+
+describe("keysToReleaseIfUnreferenced", () => {
+  it("drops keys still referenced elsewhere", () => {
+    const referenced = new Set(["shared-key", "kept-key"]);
+    expect(keysToReleaseIfUnreferenced(["shared-key", "orphan-key"], referenced)).toEqual([
+      "orphan-key",
+    ]);
   });
 });
 

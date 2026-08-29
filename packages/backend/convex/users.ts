@@ -27,7 +27,7 @@ import { normalizeOptionalAssetReference } from "./lib/inventoryUpload";
 import {
   collectKeysFromOrganizationProfile,
   releaseReplacedR2Reference,
-  releaseR2Keys,
+  releaseR2KeysIfUnreferenced,
 } from "./lib/r2Lifecycle";
 import {
   resolveProfileMembership,
@@ -870,7 +870,7 @@ export const deleteArchivedBandOrganizationAdmin = mutation({
     }
 
     await clearActiveOrgSelections(ctx, args.organizationId);
-    await releaseR2Keys(ctx, collectKeysFromOrganizationProfile(profile));
+    await releaseR2KeysIfUnreferenced(ctx, collectKeysFromOrganizationProfile(profile));
     await ctx.db.delete(profile._id);
 
     // Best-effort Better Auth cascade — never block the Convex-side delete on it.

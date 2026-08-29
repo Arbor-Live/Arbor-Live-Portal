@@ -15,9 +15,13 @@ const MAX_DELETES_PER_RUN = 200;
 
 export const listReferencedKeys = internalQuery({
   args: {},
-  returns: v.array(v.string()),
+  returns: v.object({
+    keys: v.array(v.string()),
+    complete: v.boolean(),
+  }),
   handler: async (ctx) => {
-    return [...(await collectReferencedR2Keys(ctx))];
+    const scan = await collectReferencedR2Keys(ctx);
+    return { keys: [...scan.keys], complete: scan.complete };
   },
 });
 
@@ -25,13 +29,15 @@ export const reportOrphans = internalMutation({
   args: {},
   returns: v.object({
     referencedCount: v.number(),
+    referenceScanComplete: v.boolean(),
     scannedCount: v.number(),
     orphanCount: v.number(),
     graceSkippedCount: v.number(),
     orphanKeys: v.array(v.string()),
   }),
   handler: async (ctx) => {
-    const referenced = await collectReferencedR2Keys(ctx);
+    const { keys: referenced, complete: referenceScanComplete } =
+      await collectReferencedR2Keys(ctx);
     const now = Date.now();
     let scannedCount = 0;
     let orphanCount = 0;
@@ -57,6 +63,7 @@ export const reportOrphans = internalMutation({
 
     return {
       referencedCount: referenced.size,
+      referenceScanComplete,
       scannedCount,
       orphanCount,
       graceSkippedCount,
@@ -72,7 +79,12 @@ export const pruneOrphans = internalMutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const referenced = await collectReferencedR2Keys(ctx);
+    const { keys: referenced, complete: referenceScanComplete } =
+      await collectReferencedR2Keys(ctx);
+    if (!referenceScanComplete) {
+      console.warn("Skipping R2 orphan prune: referenced-key scan hit a table limit.");
+      return null;
+    }
     const now = Date.now();
     let deletedThisRun = args.deletedThisRun ?? 0;
     let cursor: string | null = args.cursor ?? null;

@@ -15,6 +15,23 @@ const R2_KEY_PREFIXES = [
   "venues/",
 ] as const;
 
+/** Per-table scan caps for referenced-key collection. Hitting a cap marks the scan incomplete. */
+const REFERENCE_SCAN_LIMITS = {
+  inventoryPackages: 2000,
+  inventoryTypes: 2000,
+  organizationProfiles: 2000,
+  eventMarketingDesigns: 2000,
+  marketingPosts: 1000,
+  eventArtifacts: 5000,
+  venues: 1000,
+  damageReports: 5000,
+} as const;
+
+export type ReferencedR2KeysScan = {
+  keys: Set<string>;
+  complete: boolean;
+};
+
 type LexicalJsonNode = {
   type?: string;
   src?: string;
@@ -90,7 +107,22 @@ export function diffReleasedR2Keys(before: Iterable<string>, after: Iterable<str
   return released;
 }
 
-export async function releaseR2Keys(ctx: MutationCtx, keys: Iterable<string>): Promise<void> {
+export function keysToReleaseIfUnreferenced(
+  candidates: Iterable<string>,
+  referenced: Set<string>,
+): string[] {
+  const toRelease: string[] = [];
+  const seen = new Set<string>();
+  for (const key of candidates) {
+    const trimmed = key.trim();
+    if (!trimmed || seen.has(trimmed) || referenced.has(trimmed)) continue;
+    seen.add(trimmed);
+    toRelease.push(trimmed);
+  }
+  return toRelease;
+}
+
+async function releaseR2KeysDirect(ctx: MutationCtx, keys: Iterable<string>): Promise<void> {
   const seen = new Set<string>();
   for (const key of keys) {
     const trimmed = key.trim();
@@ -104,6 +136,22 @@ export async function releaseR2Keys(ctx: MutationCtx, keys: Iterable<string>): P
   }
 }
 
+/**
+ * Delete R2 objects only when no remaining Convex row still references them.
+ * Skips deletion entirely when the referenced-key scan was truncated.
+ */
+export async function releaseR2KeysIfUnreferenced(
+  ctx: MutationCtx,
+  keys: Iterable<string>,
+): Promise<void> {
+  const scan = await collectReferencedR2Keys(ctx);
+  if (!scan.complete) {
+    console.warn("Skipping R2 release: referenced-key scan hit a table limit.");
+    return;
+  }
+  await releaseR2KeysDirect(ctx, keysToReleaseIfUnreferenced(keys, scan.keys));
+}
+
 export async function releaseReplacedR2Reference(
   ctx: MutationCtx,
   previous: string | undefined,
@@ -112,7 +160,7 @@ export async function releaseReplacedR2Reference(
   const oldKey = r2KeyFromReference(previous);
   const newKey = r2KeyFromReference(next);
   if (oldKey && oldKey !== newKey) {
-    await releaseR2Keys(ctx, [oldKey]);
+    await releaseR2KeysIfUnreferenced(ctx, [oldKey]);
   }
 }
 
@@ -183,54 +231,79 @@ export function collectKeysFromDamageReport(report: Pick<Doc<"damageReports">, "
   return key ? [key] : [];
 }
 
+function markScanComplete<T>(rows: T[], limit: number, complete: boolean): boolean {
+  return complete && rows.length < limit;
+}
+
 /**
  * Walk product tables and return every R2 object key still referenced in Convex.
  * Used by the orphan sweeper — keep in sync with fields that store uploaded assets.
  */
-export async function collectReferencedR2Keys(ctx: QueryCtx | MutationCtx): Promise<Set<string>> {
+export async function collectReferencedR2Keys(
+  ctx: QueryCtx | MutationCtx,
+): Promise<ReferencedR2KeysScan> {
   const keys = new Set<string>();
+  let complete = true;
 
-  const packages = await ctx.db.query("inventoryPackages").take(2000);
+  const packages = await ctx.db
+    .query("inventoryPackages")
+    .take(REFERENCE_SCAN_LIMITS.inventoryPackages);
+  complete = markScanComplete(packages, REFERENCE_SCAN_LIMITS.inventoryPackages, complete);
   for (const pkg of packages) {
     for (const key of collectKeysFromInventoryPackage(pkg)) keys.add(key);
   }
 
-  const types = await ctx.db.query("inventoryTypes").take(2000);
+  const types = await ctx.db.query("inventoryTypes").take(REFERENCE_SCAN_LIMITS.inventoryTypes);
+  complete = markScanComplete(types, REFERENCE_SCAN_LIMITS.inventoryTypes, complete);
   for (const type of types) {
     for (const key of collectKeysFromInventoryType(type)) keys.add(key);
   }
 
-  const profiles = await ctx.db.query("organizationProfiles").take(2000);
+  const profiles = await ctx.db
+    .query("organizationProfiles")
+    .take(REFERENCE_SCAN_LIMITS.organizationProfiles);
+  complete = markScanComplete(profiles, REFERENCE_SCAN_LIMITS.organizationProfiles, complete);
   for (const profile of profiles) {
     for (const key of collectKeysFromOrganizationProfile(profile)) keys.add(key);
   }
 
-  const designs = await ctx.db.query("eventMarketingDesigns").take(2000);
+  const designs = await ctx.db
+    .query("eventMarketingDesigns")
+    .take(REFERENCE_SCAN_LIMITS.eventMarketingDesigns);
+  complete = markScanComplete(designs, REFERENCE_SCAN_LIMITS.eventMarketingDesigns, complete);
   for (const design of designs) {
     for (const key of collectKeysFromEventMarketingDesign(design)) keys.add(key);
   }
 
-  const posts = await ctx.db.query("marketingPosts").take(1000);
+  const posts = await ctx.db.query("marketingPosts").take(REFERENCE_SCAN_LIMITS.marketingPosts);
+  complete = markScanComplete(posts, REFERENCE_SCAN_LIMITS.marketingPosts, complete);
   for (const post of posts) {
     for (const key of collectKeysFromMarketingPost(post)) keys.add(key);
   }
 
-  const artifacts = await ctx.db.query("eventArtifacts").take(5000);
+  const artifacts = await ctx.db
+    .query("eventArtifacts")
+    .take(REFERENCE_SCAN_LIMITS.eventArtifacts);
+  complete = markScanComplete(artifacts, REFERENCE_SCAN_LIMITS.eventArtifacts, complete);
   for (const artifact of artifacts) {
     for (const key of collectKeysFromEventArtifact(artifact)) keys.add(key);
   }
 
-  const venues = await ctx.db.query("venues").take(1000);
+  const venues = await ctx.db.query("venues").take(REFERENCE_SCAN_LIMITS.venues);
+  complete = markScanComplete(venues, REFERENCE_SCAN_LIMITS.venues, complete);
   for (const venue of venues) {
     for (const key of collectKeysFromVenue(venue)) keys.add(key);
   }
 
-  const damageReports = await ctx.db.query("damageReports").take(5000);
+  const damageReports = await ctx.db
+    .query("damageReports")
+    .take(REFERENCE_SCAN_LIMITS.damageReports);
+  complete = markScanComplete(damageReports, REFERENCE_SCAN_LIMITS.damageReports, complete);
   for (const report of damageReports) {
     for (const key of collectKeysFromDamageReport(report)) keys.add(key);
   }
 
-  return keys;
+  return { keys, complete };
 }
 
 export function isWithinOrphanGracePeriod(lastModified: string | undefined, nowMs: number): boolean {

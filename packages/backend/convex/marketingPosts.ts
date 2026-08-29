@@ -5,7 +5,7 @@ import { normalizeOptionalAssetReference } from "./lib/inventoryUpload";
 import {
   collectKeysFromMarketingPost,
   diffReleasedR2Keys,
-  releaseR2Keys,
+  releaseR2KeysIfUnreferenced,
 } from "./lib/r2Lifecycle";
 import {
   EMPTY_LEXICAL_STATE,
@@ -229,7 +229,7 @@ export const update = mutation({
       updatedAt: now,
     });
 
-    await releaseR2Keys(
+    await releaseR2KeysIfUnreferenced(
       ctx,
       diffReleasedR2Keys(
         collectKeysFromMarketingPost(existing),
@@ -251,7 +251,7 @@ export const remove = mutation({
     await requireAdmin(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Post not found.");
-    await releaseR2Keys(ctx, collectKeysFromMarketingPost(existing));
+    await releaseR2KeysIfUnreferenced(ctx, collectKeysFromMarketingPost(existing));
     await ctx.db.delete(args.id);
     if (existing.published) {
       await scheduleMarketingSiteRevalidation(ctx, existing.slug);

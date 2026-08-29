@@ -6,7 +6,7 @@ import { normalizeOptionalAssetReference } from "./lib/inventoryUpload";
 import {
   collectKeysFromInventoryPackage,
   releaseReplacedR2Reference,
-  releaseR2Keys,
+  releaseR2KeysIfUnreferenced,
 } from "./lib/r2Lifecycle";
 import {
   estimatePackageRentalValueFromContents,
@@ -658,7 +658,7 @@ export const remove = mutation({
 
     await deleteOptionStructureForPackage(ctx, args.id);
 
-    await releaseR2Keys(ctx, collectKeysFromInventoryPackage(existing));
+    await releaseR2KeysIfUnreferenced(ctx, collectKeysFromInventoryPackage(existing));
     await ctx.db.delete(args.id);
 
     if (existing.publicListing) {

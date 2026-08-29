@@ -19,7 +19,7 @@ import {
 import {
   collectKeysFromVenue,
   diffReleasedR2Keys,
-  releaseR2Keys,
+  releaseR2KeysIfUnreferenced,
 } from "./lib/r2Lifecycle";
 
 const venueKindValue = v.union(v.literal("building"), v.literal("indoor"), v.literal("outdoor"));
@@ -424,7 +424,7 @@ export const update = mutation({
       contactPhone: trimOptional(args.contactPhone),
       updatedAt: now,
     });
-    await releaseR2Keys(
+    await releaseR2KeysIfUnreferenced(
       ctx,
       diffReleasedR2Keys(collectKeysFromVenue(existing), collectKeysFromVenue({ files: nextFiles })),
     );
@@ -480,7 +480,7 @@ export const remove = mutation({
       throw new Error("Cannot delete venue used by event series.");
     }
 
-    await releaseR2Keys(ctx, collectKeysFromVenue(existing));
+    await releaseR2KeysIfUnreferenced(ctx, collectKeysFromVenue(existing));
     await ctx.db.delete(args.id);
   },
 });

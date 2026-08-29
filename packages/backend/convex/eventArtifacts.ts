@@ -5,7 +5,7 @@ import { normalizeOptionalAssetReference } from "./lib/inventoryUpload";
 import {
   collectKeysFromEventArtifact,
   releaseReplacedR2Reference,
-  releaseR2Keys,
+  releaseR2KeysIfUnreferenced,
 } from "./lib/r2Lifecycle";
 import { resolveStoredR2AssetUrl } from "./inventoryR2";
 
@@ -109,7 +109,7 @@ export const remove = mutation({
     await requireArborInternalContext(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Artifact not found.");
-    await releaseR2Keys(ctx, collectKeysFromEventArtifact(existing));
+    await releaseR2KeysIfUnreferenced(ctx, collectKeysFromEventArtifact(existing));
     await ctx.db.delete(args.id);
   },
 });
