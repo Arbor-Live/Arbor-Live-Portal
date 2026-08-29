@@ -2,6 +2,11 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireArborInternalContext, requireAuth } from "./lib/auth";
 import { normalizeOptionalAssetReference } from "./lib/inventoryUpload";
+import {
+  collectKeysFromEventArtifact,
+  releaseReplacedR2Reference,
+  releaseR2Keys,
+} from "./lib/r2Lifecycle";
 import { resolveStoredR2AssetUrl } from "./inventoryR2";
 
 const artifactTypeValue = v.union(
@@ -80,18 +85,20 @@ export const update = mutation({
     await requireArborInternalContext(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Artifact not found.");
+    const nextLinkUrl =
+      args.linkUrl === undefined
+        ? existing.linkUrl
+        : normalizeOptionalAssetReference(args.linkUrl);
     await ctx.db.patch(args.id, {
       title: args.title?.trim() ?? existing.title,
       markdown: args.markdown?.trim() ?? existing.markdown,
-      linkUrl:
-        args.linkUrl === undefined
-          ? existing.linkUrl
-          : normalizeOptionalAssetReference(args.linkUrl),
+      linkUrl: nextLinkUrl,
       storageFileId: args.storageFileId ?? existing.storageFileId,
       active: args.active ?? existing.active,
       version: existing.version + 1,
       updatedAt: Date.now(),
     });
+    await releaseReplacedR2Reference(ctx, existing.linkUrl, nextLinkUrl);
   },
 });
 
@@ -102,6 +109,7 @@ export const remove = mutation({
     await requireArborInternalContext(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Artifact not found.");
+    await releaseR2Keys(ctx, collectKeysFromEventArtifact(existing));
     await ctx.db.delete(args.id);
   },
 });

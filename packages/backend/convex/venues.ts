@@ -16,6 +16,11 @@ import {
   resolveInheritedVenueFields,
   syncDenormalizedVenueName,
 } from "./lib/venues";
+import {
+  collectKeysFromVenue,
+  diffReleasedR2Keys,
+  releaseR2Keys,
+} from "./lib/r2Lifecycle";
 
 const venueKindValue = v.union(v.literal("building"), v.literal("indoor"), v.literal("outdoor"));
 
@@ -398,6 +403,8 @@ export const update = mutation({
     const path = await buildVenuePath(ctx, name, parentId);
     const now = Date.now();
 
+    const nextFiles = normalizeFiles(args.files);
+
     await ctx.db.patch(args.id, {
       name,
       nicknames: normalizeNicknames(args.nicknames),
@@ -411,12 +418,16 @@ export const update = mutation({
       notesJson: trimOptional(args.notesJson),
       circuits: normalizeCircuits(args.circuits),
       documentationLinks: normalizeLinks(args.documentationLinks),
-      files: normalizeFiles(args.files),
+      files: nextFiles,
       contactName: trimOptional(args.contactName),
       contactEmail: trimOptional(args.contactEmail),
       contactPhone: trimOptional(args.contactPhone),
       updatedAt: now,
     });
+    await releaseR2Keys(
+      ctx,
+      diffReleasedR2Keys(collectKeysFromVenue(existing), collectKeysFromVenue({ files: nextFiles })),
+    );
 
     const oldPrefix = existing.path;
     if (oldPrefix !== path) {
@@ -469,6 +480,7 @@ export const remove = mutation({
       throw new Error("Cannot delete venue used by event series.");
     }
 
+    await releaseR2Keys(ctx, collectKeysFromVenue(existing));
     await ctx.db.delete(args.id);
   },
 });

@@ -12,6 +12,7 @@ import {
 import { listEventsByInvoiceId } from "./lib/invoiceEvents";
 import { schedulePublicEventsSiteRevalidation } from "./lib/scheduleSiteRevalidation";
 import { enforceRateLimit, HOUR_MS } from "./rateLimit";
+import { releaseReplacedR2Reference } from "./lib/r2Lifecycle";
 
 const PUBLIC_CLIENT_ACTOR = "public-client";
 
@@ -294,6 +295,9 @@ export const save = mutation({
         updatedAt: now,
         ...(nextStatus === "ready" ? { lastError: undefined } : {}),
       });
+      if (hasImage) {
+        await releaseReplacedR2Reference(ctx, existing.imageUrl, nextImageUrl);
+      }
     } else {
       await ctx.db.insert("eventMarketingDesigns", {
         eventId: event._id,

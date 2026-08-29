@@ -3,6 +3,11 @@ import { internalQuery, mutation, query } from "./_generated/server";
 import { getUserId, requireAdmin } from "./lib/auth";
 import { normalizeOptionalAssetReference } from "./lib/inventoryUpload";
 import {
+  collectKeysFromMarketingPost,
+  diffReleasedR2Keys,
+  releaseR2Keys,
+} from "./lib/r2Lifecycle";
+import {
   EMPTY_LEXICAL_STATE,
   normalizeFeaturedStats,
   resolveLexicalContentJson,
@@ -193,29 +198,44 @@ export const update = mutation({
       publishedAt = now;
     }
 
+    const nextHeroImageUrl =
+      args.heroImageUrl !== undefined
+        ? normalizeOptionalAssetReference(args.heroImageUrl)
+        : existing.heroImageUrl;
+    const nextContentJson =
+      args.contentJson !== undefined
+        ? normalizeContentJson(args.contentJson)
+        : existing.contentJson;
+    const nextPostSnapshot = {
+      heroImageUrl: nextHeroImageUrl,
+      contentJson: nextContentJson,
+    };
+
     await ctx.db.patch(args.id, {
       title: args.title?.trim() || existing.title,
       slug: published ? slug : slug ?? undefined,
       excerpt: args.excerpt !== undefined ? args.excerpt.trim() || undefined : existing.excerpt,
       kind: args.kind ?? existing.kind,
-      heroImageUrl:
-        args.heroImageUrl !== undefined
-          ? normalizeOptionalAssetReference(args.heroImageUrl)
-          : existing.heroImageUrl,
+      heroImageUrl: nextHeroImageUrl,
       featuredStats:
         args.featuredStats !== undefined
           ? normalizeFeaturedStats(args.featuredStats)
           : existing.featuredStats,
-      contentJson:
-        args.contentJson !== undefined
-          ? normalizeContentJson(args.contentJson)
-          : existing.contentJson,
+      contentJson: nextContentJson,
       published,
       featured: published ? featured : false,
       publishedAt,
       updatedByUserId: getUserId(admin) || undefined,
       updatedAt: now,
     });
+
+    await releaseR2Keys(
+      ctx,
+      diffReleasedR2Keys(
+        collectKeysFromMarketingPost(existing),
+        collectKeysFromMarketingPost(nextPostSnapshot),
+      ),
+    );
 
     if (published || existing.published) {
       await scheduleMarketingSiteRevalidation(ctx, published ? slug : existing.slug);
@@ -231,6 +251,7 @@ export const remove = mutation({
     await requireAdmin(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing) throw new Error("Post not found.");
+    await releaseR2Keys(ctx, collectKeysFromMarketingPost(existing));
     await ctx.db.delete(args.id);
     if (existing.published) {
       await scheduleMarketingSiteRevalidation(ctx, existing.slug);
