@@ -34,6 +34,7 @@ fn coefficient(i: u32) -> f32 {
   for (var i = 1u; i < KERNEL_RADIUS; i = i + 1u) {
     let x = f32(i);
     let w = coefficient(i);
+    weightSum = weightSum + 2.0 * w;
     let uvOffset = uniforms.direction * uniforms.invSize * x;
     let sample1 = textureSample(colorTexture, linearSampler, uv + uvOffset).rgb;
     let sample2 = textureSample(colorTexture, linearSampler, uv - uvOffset).rgb;
