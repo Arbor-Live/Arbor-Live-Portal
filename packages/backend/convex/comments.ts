@@ -66,6 +66,7 @@ export const listMentionCandidates = query({
       userId: v.string(),
       name: v.string(),
       email: v.string(),
+      username: v.optional(v.string()),
       pronouns: v.optional(v.string()),
       gradYear: v.optional(v.number()),
     }),
@@ -87,6 +88,7 @@ export const listMentionCandidates = query({
           userId,
           name: user?.name ?? user?.email ?? "Arbor Live user",
           email: user?.email ?? "",
+          username: profile?.username,
           pronouns: profile?.pronouns,
           gradYear: profile?.gradYear,
         };
@@ -209,7 +211,13 @@ const commentRowValidator = v.object({
   authorAvatarUrl: v.optional(v.string()),
   body: v.string(),
   mentionedUserIds: v.array(v.string()),
-  mentionedUsers: v.array(v.object({ userId: v.string(), name: v.string() })),
+  mentionedUsers: v.array(
+    v.object({
+      userId: v.string(),
+      name: v.string(),
+      username: v.optional(v.string()),
+    }),
+  ),
   canDelete: v.boolean(),
   createdAt: v.number(),
   updatedAt: v.number(),
@@ -237,6 +245,14 @@ export const listBySubject = query({
       for (const mentionedUserId of row.mentionedUserIds) userIds.add(mentionedUserId);
     }
     const userById = await findAuthUsersByIds(ctx, [...userIds]);
+    // One bounded scan — same pattern as listMentionCandidates — avoids N
+    // serial by_userId lookups on large threads.
+    const profiles = await ctx.db.query("userAdminProfiles").withIndex("by_active").take(2000);
+    const usernameByUserId = new Map<string, string>();
+    for (const profile of profiles) {
+      if (!userIds.has(profile.userId) || !profile.username) continue;
+      usernameByUserId.set(profile.userId, profile.username);
+    }
     const imageByUserId = await buildUserProfileImageByUserId(ctx, [...userIds], userById);
     const nameFor = (userId: string) =>
       userById.get(userId)?.name ?? userById.get(userId)?.email ?? "Arbor Live user";
@@ -254,6 +270,7 @@ export const listBySubject = query({
       mentionedUsers: row.mentionedUserIds.map((userId) => ({
         userId,
         name: nameFor(userId),
+        username: usernameByUserId.get(userId),
       })),
       canDelete: row.authorUserId === viewerUserId,
       createdAt: row.createdAt,

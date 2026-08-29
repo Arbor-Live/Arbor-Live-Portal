@@ -1,14 +1,6 @@
 "use client";
 
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type KeyboardEvent,
-  type ReactNode,
-} from "react";
-import { createPortal } from "react-dom";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
 import { TrashIcon } from "@phosphor-icons/react";
@@ -24,10 +16,11 @@ import {
   MessageGroup,
   MessageHeader,
 } from "@/components/ui/message";
+import { UserSelect, type UserSelectOption } from "@/components/users/user-select";
 import { ArborOnlyGuard } from "@/components/org-context-guard";
 import { notify } from "@/lib/notify";
 import { PORTAL_TIMEZONE } from "@/lib/format";
-import { fuzzyScoreHaystack } from "@/lib/fuzzy-match";
+import { buildUserSelectDescription } from "@/lib/user-select-description";
 
 /** Threads are keyed by subject, so a new surface only adds a literal here. */
 export type CommentSubjectType = "event" | "damage_batch" | "event_request";
@@ -36,6 +29,7 @@ type MentionCandidate = {
   userId: string;
   name: string;
   email: string;
+  username?: string;
   pronouns?: string;
   gradYear?: number;
 };
@@ -44,31 +38,84 @@ function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function extractMentionedUserIds(body: string, candidates: MentionCandidate[]): string[] {
-  const sorted = [...candidates].sort((a, b) => b.name.length - a.name.length);
+/** Prefer @username; fall back to display name for people who have not set one. */
+function mentionHandle(candidate: Pick<MentionCandidate, "username" | "name">) {
+  return candidate.username || candidate.name;
+}
+
+/** True when `@handle` appears as its own token (not inside a larger identifier). */
+function handleAppearsInBody(body: string, handle: string) {
+  const pattern = new RegExp(
+    `(?<![\\p{L}\\p{N}_])@${escapeRegExp(handle)}(?![\\p{L}\\p{N}_])`,
+    "gu",
+  );
+  return pattern.test(body);
+}
+
+function extractMentionedUserIds(
+  body: string,
+  candidates: MentionCandidate[],
+  preferredUserIds: string[] = [],
+): string[] {
+  const preferred = new Set(preferredUserIds);
+  const byHandle = new Map<string, MentionCandidate[]>();
+  for (const candidate of candidates) {
+    for (const handle of [candidate.username, candidate.name].filter(
+      (value): value is string => Boolean(value),
+    )) {
+      const group = byHandle.get(handle) ?? [];
+      group.push(candidate);
+      byHandle.set(handle, group);
+    }
+  }
+
+  // Longer handles first so `@jane_doe` wins over `@jane`.
+  const handles = [...byHandle.keys()].sort((a, b) => b.length - a.length);
   const ids: string[] = [];
-  for (const candidate of sorted) {
-    const pattern = new RegExp(
-      `(^|[\\s])@${escapeRegExp(candidate.name)}(?=$|[\\s,.!?;:])`,
-      "g",
-    );
-    if (pattern.test(body)) ids.push(candidate.userId);
+  const seen = new Set<string>();
+  for (const handle of handles) {
+    if (!handleAppearsInBody(body, handle)) continue;
+    const group = byHandle.get(handle) ?? [];
+    // Prefer an explicitly picked user, then a username match, then first hit.
+    const pick =
+      group.find((candidate) => preferred.has(candidate.userId)) ??
+      group.find((candidate) => candidate.username === handle) ??
+      group[0];
+    if (!pick || seen.has(pick.userId)) continue;
+    ids.push(pick.userId);
+    seen.add(pick.userId);
   }
   return ids;
 }
 
-/** Active `@query` at the caret, if any. */
-function getActiveMention(
-  text: string,
-  cursor: number,
-): { start: number; query: string } | null {
-  const before = text.slice(0, cursor);
-  const atIndex = before.lastIndexOf("@");
-  if (atIndex < 0) return null;
-  if (atIndex > 0 && !/\s/.test(before[atIndex - 1]!)) return null;
-  const query = before.slice(atIndex + 1);
-  if (/\s/.test(query)) return null;
-  return { start: atIndex, query };
+/**
+ * Prefer picker-selected users (even when two people share a handle), then
+ * parse any manually typed @mentions from the body.
+ */
+function resolveMentionedUserIds(
+  body: string,
+  candidates: MentionCandidate[],
+  preferredUserIds: string[],
+): string[] {
+  const byId = new Map(candidates.map((candidate) => [candidate.userId, candidate]));
+  const ids: string[] = [];
+  const seen = new Set<string>();
+
+  for (const userId of preferredUserIds) {
+    const candidate = byId.get(userId);
+    if (!candidate) continue;
+    if (!handleAppearsInBody(body, mentionHandle(candidate))) continue;
+    if (seen.has(userId)) continue;
+    ids.push(userId);
+    seen.add(userId);
+  }
+
+  for (const userId of extractMentionedUserIds(body, candidates, preferredUserIds)) {
+    if (seen.has(userId)) continue;
+    ids.push(userId);
+    seen.add(userId);
+  }
+  return ids;
 }
 
 function formatCommentTime(ms: number) {
@@ -84,12 +131,19 @@ function formatCommentTime(ms: number) {
 
 const COMMENT_TIME_COLLAPSE_MS = 2 * 60 * 1000;
 
-function renderBodyWithMentions(body: string, mentionedNames: string[]): ReactNode {
-  if (!mentionedNames.length) return body;
-  const sorted = [...mentionedNames].sort((a, b) => b.length - a.length);
+function renderBodyWithMentions(
+  body: string,
+  mentioned: { name: string; username?: string }[],
+): ReactNode {
+  const handles = [
+    ...new Set(
+      mentioned.flatMap((user) => [user.username, user.name].filter(Boolean) as string[]),
+    ),
+  ].sort((a, b) => b.length - a.length);
+  if (!handles.length) return body;
   const pattern = new RegExp(
-    `@(?:${sorted.map(escapeRegExp).join("|")})(?=$|[\\s,.!?;:])`,
-    "g",
+    `(?<![\\p{L}\\p{N}_])@(?:${handles.map(escapeRegExp).join("|")})(?![\\p{L}\\p{N}_])`,
+    "gu",
   );
   const nodes: ReactNode[] = [];
   let lastIndex = 0;
@@ -112,12 +166,6 @@ export type CommentsSectionProps = {
   subjectId: string;
   title?: string;
   description?: ReactNode;
-  /**
-   * Where to portal the mention typeahead. Defaults to `document.body`, which a
-   * modal Radix layer blocks from receiving pointer events — inside a dialog or
-   * sheet, pass that layer's element so the menu stays clickable.
-   */
-  menuContainer?: HTMLElement | null;
 };
 
 export function CommentsSection(props: CommentsSectionProps) {
@@ -133,7 +181,6 @@ function CommentsPanel({
   subjectId,
   title = "Comments",
   description,
-  menuContainer,
 }: CommentsSectionProps) {
   const comments = useQuery(api.comments.listBySubject, { subjectType, subjectId });
   const mentionCandidates = useQuery(api.comments.listMentionCandidates, {});
@@ -143,8 +190,9 @@ function CommentsPanel({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [body, setBody] = useState("");
   const [cursor, setCursor] = useState(0);
-  const [highlightIndex, setHighlightIndex] = useState(0);
-  const [focused, setFocused] = useState(false);
+  const [mentionPickerKey, setMentionPickerKey] = useState(0);
+  /** User IDs chosen via the picker — wins over ambiguous @handle parsing. */
+  const [draftMentionedUserIds, setDraftMentionedUserIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<Id<"comments"> | null>(null);
 
@@ -163,90 +211,48 @@ function CommentsPanel({
   }, [comments]);
 
   const candidates = useMemo(() => mentionCandidates ?? [], [mentionCandidates]);
-  const activeMention = getActiveMention(body, cursor);
-  const filteredMentions = useMemo(() => {
-    if (!activeMention) return [];
-    const query = activeMention.query.trim().toLowerCase();
-    const scored = candidates
-      .map((row) => {
-        const score = query
-          ? fuzzyScoreHaystack(query, [row.name, row.email, row.pronouns])
-          : 1;
-        return { row, score };
-      })
-      .filter((entry) => entry.score > 0)
-      .sort((a, b) => b.score - a.score || a.row.name.localeCompare(b.row.name));
-    return scored.slice(0, 8).map((entry) => entry.row);
-  }, [activeMention, candidates]);
+  const candidatesById = useMemo(
+    () => new Map(candidates.map((row) => [row.userId, row])),
+    [candidates],
+  );
+  const mentionOptions: UserSelectOption[] = useMemo(
+    () =>
+      candidates.map((row) => ({
+        value: row.userId,
+        label: row.name,
+        email: row.email,
+        description: buildUserSelectDescription({
+          role: row.username ? `@${row.username}` : undefined,
+          email: row.email,
+          pronouns: row.pronouns,
+          gradYear: row.gradYear,
+        }),
+        keywords: [row.username, row.email].filter(Boolean).join(" "),
+      })),
+    [candidates],
+  );
 
-  // The menu is portaled out of the card, so it must not outlive textarea focus.
-  const showMentionMenu = focused && Boolean(activeMention) && filteredMentions.length > 0;
-
-  // The surrounding Card clips overflow, so the menu is portaled out and anchored
-  // to the textarea by coordinate. Portaled to the body it can stay `fixed`, but
-  // inside a container it must be `absolute` — a Radix sheet animates with a
-  // transform, which would make `fixed` resolve against the sheet, not the
-  // viewport.
-  const [menuPosition, setMenuPosition] = useState<{
-    position: "fixed" | "absolute";
-    top: number;
-    left: number;
-    width: number;
-    maxHeight: number;
-  } | null>(null);
-
-  useEffect(() => {
-    if (!showMentionMenu) return;
-
-    function updatePosition() {
-      const el = textareaRef.current;
-      if (!el) return;
-      const rect = el.getBoundingClientRect();
-      const spaceBelow = window.innerHeight - rect.bottom - 12;
-      const spaceAbove = rect.top - 12;
-      const openUp = spaceBelow < 160 && spaceAbove > spaceBelow;
-      const maxHeight = Math.max(96, Math.min(224, openUp ? spaceAbove : spaceBelow));
-      const top = openUp ? rect.top - 4 - maxHeight : rect.bottom + 4;
-
-      if (!menuContainer) {
-        setMenuPosition({ position: "fixed", top, left: rect.left, width: rect.width, maxHeight });
-        return;
-      }
-
-      const containerRect = menuContainer.getBoundingClientRect();
-      setMenuPosition({
-        position: "absolute",
-        top: top - containerRect.top + menuContainer.scrollTop,
-        left: rect.left - containerRect.left + menuContainer.scrollLeft,
-        width: rect.width,
-        maxHeight,
-      });
-    }
-
-    updatePosition();
-    window.addEventListener("resize", updatePosition);
-    window.addEventListener("scroll", updatePosition, true);
-    return () => {
-      window.removeEventListener("resize", updatePosition);
-      window.removeEventListener("scroll", updatePosition, true);
-    };
-  }, [showMentionMenu, filteredMentions.length, menuContainer]);
-
-  function insertMention(candidate: MentionCandidate) {
-    if (!activeMention) return;
-    const before = body.slice(0, activeMention.start);
-    const after = body.slice(cursor);
-    const insertion = `@${candidate.name} `;
+  function insertMention(userId: string) {
+    const candidate = candidatesById.get(userId);
+    if (!candidate) return;
+    const el = textareaRef.current;
+    const start = el?.selectionStart ?? cursor;
+    const end = el?.selectionEnd ?? cursor;
+    const before = body.slice(0, start);
+    const after = body.slice(end);
+    const needsSpaceBefore = before.length > 0 && !/\s$/.test(before);
+    const insertion = `${needsSpaceBefore ? " " : ""}@${mentionHandle(candidate)} `;
     const nextBody = `${before}${insertion}${after}`;
     const nextCursor = before.length + insertion.length;
     setBody(nextBody);
     setCursor(nextCursor);
-    setHighlightIndex(0);
+    setDraftMentionedUserIds((ids) => (ids.includes(userId) ? ids : [...ids, userId]));
+    setMentionPickerKey((key) => key + 1);
     requestAnimationFrame(() => {
-      const el = textareaRef.current;
-      if (!el) return;
-      el.focus();
-      el.setSelectionRange(nextCursor, nextCursor);
+      const textarea = textareaRef.current;
+      if (!textarea) return;
+      textarea.focus();
+      textarea.setSelectionRange(nextCursor, nextCursor);
     });
   }
 
@@ -257,11 +263,11 @@ function CommentsPanel({
         subjectType,
         subjectId,
         body,
-        mentionedUserIds: extractMentionedUserIds(body, candidates),
+        mentionedUserIds: resolveMentionedUserIds(body, candidates, draftMentionedUserIds),
       });
       setBody("");
       setCursor(0);
-      setHighlightIndex(0);
+      setDraftMentionedUserIds([]);
     } catch (submitError) {
       notify.error(submitError instanceof Error ? submitError.message : "Failed to post comment.");
     } finally {
@@ -286,38 +292,6 @@ function CommentsPanel({
     }
   }
 
-  function onTextareaKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    if (!showMentionMenu) return;
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      setHighlightIndex((index) => (index + 1) % filteredMentions.length);
-      return;
-    }
-    if (event.key === "ArrowUp") {
-      event.preventDefault();
-      setHighlightIndex(
-        (index) => (index - 1 + filteredMentions.length) % filteredMentions.length,
-      );
-      return;
-    }
-    if (event.key === "Enter" || event.key === "Tab") {
-      const selected = filteredMentions[highlightIndex];
-      if (!selected) return;
-      event.preventDefault();
-      insertMention(selected);
-      return;
-    }
-    if (event.key === "Escape") {
-      event.preventDefault();
-      // Move cursor past the @ so the menu closes without deleting text.
-      const el = textareaRef.current;
-      if (!el) return;
-      const next = Math.min(body.length, cursor + 1);
-      el.setSelectionRange(next, next);
-      setCursor(next);
-    }
-  }
-
   return (
     <div
       className="space-y-3 rounded-md border p-4"
@@ -330,12 +304,7 @@ function CommentsPanel({
       <div>
         <h3 className="font-medium">{title}</h3>
         <p className="text-sm text-muted-foreground">
-          {description ?? (
-            <>
-              Type <span className="font-medium">@</span> to mention a teammate — they get an
-              email.
-            </>
-          )}
+          {description ?? <>Mention a teammate — they get an email.</>}
         </p>
       </div>
 
@@ -375,10 +344,7 @@ function CommentsPanel({
                         className="text-sm break-words whitespace-pre-wrap"
                         data-testid="comment-body"
                       >
-                        {renderBodyWithMentions(
-                          comment.body,
-                          comment.mentionedUsers.map((user) => user.name),
-                        )}
+                        {renderBodyWithMentions(comment.body, comment.mentionedUsers)}
                       </BubbleContent>
                     </Bubble>
                     {showTime || isOwn ? (
@@ -409,76 +375,31 @@ function CommentsPanel({
         ) : null}
       </div>
 
-      <div className="relative space-y-2">
+      <div className="space-y-2">
         <textarea
           ref={textareaRef}
           data-testid="comment-input"
           className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm"
-          placeholder="Write a comment… use @ to mention someone"
+          placeholder="Write a comment…"
           value={body}
           onChange={(e) => {
             setBody(e.target.value);
             setCursor(e.target.selectionStart);
-            setHighlightIndex(0);
           }}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
           onClick={(e) => setCursor(e.currentTarget.selectionStart)}
           onKeyUp={(e) => setCursor(e.currentTarget.selectionStart)}
           onSelect={(e) => setCursor(e.currentTarget.selectionStart)}
-          onKeyDown={onTextareaKeyDown}
         />
-
-        {showMentionMenu && menuPosition
-          ? createPortal(
-              <div
-                className="z-[100] overflow-auto rounded-md border bg-popover p-1 shadow-md"
-                style={{
-                  position: menuPosition.position,
-                  top: menuPosition.top,
-                  left: menuPosition.left,
-                  width: menuPosition.width,
-                  maxHeight: menuPosition.maxHeight,
-                  // A modal Radix layer sets pointer-events:none on everything
-                  // outside its content; the menu must opt back in.
-                  pointerEvents: "auto",
-                }}
-                role="listbox"
-                data-testid="comment-mention-menu"
-              >
-                {filteredMentions.map((candidate, index) => {
-                  const candidateDescription = [
-                    candidate.pronouns,
-                    candidate.gradYear ? `’${String(candidate.gradYear).slice(-2)}` : null,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ");
-                  return (
-                    <button
-                      key={candidate.userId}
-                      type="button"
-                      role="option"
-                      aria-selected={index === highlightIndex}
-                      className={`flex w-full min-w-0 flex-col rounded px-2 py-1.5 text-left text-sm ${
-                        index === highlightIndex ? "bg-accent" : "hover:bg-muted/60"
-                      }`}
-                      onMouseDown={(event) => {
-                        event.preventDefault();
-                        insertMention(candidate);
-                      }}
-                      onMouseEnter={() => setHighlightIndex(index)}
-                    >
-                      <span className="truncate font-medium">{candidate.name}</span>
-                      <span className="truncate text-xs text-muted-foreground">
-                        {[candidate.email, candidateDescription].filter(Boolean).join(" · ")}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>,
-              menuContainer ?? document.body,
-            )
-          : null}
+        <div data-testid="comment-mention-picker">
+          <UserSelect
+            key={mentionPickerKey}
+            value=""
+            onChange={insertMention}
+            options={mentionOptions}
+            placeholder="Search teammates…"
+            emptyLabel="Mention someone…"
+          />
+        </div>
       </div>
 
       <Button
