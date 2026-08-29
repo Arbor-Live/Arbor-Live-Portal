@@ -62,9 +62,7 @@ import {
   type BookingRequestStepId,
 } from "@/lib/validations/booking-request";
 
-import {
-  BOOKING_REQUEST_STEP_WATCH_FIELDS,
-} from "@/lib/booking-request-wizard-subscriptions";
+import { BOOKING_REQUEST_STEP_WATCH_FIELDS, buildStepFieldValuesFromWatch } from "@/lib/booking-request-wizard-subscriptions";
 
 const QUESTION_STEPS = [
   "welcome",
@@ -469,20 +467,21 @@ function stepFieldError(
 function useStepFieldValues(stepId: BookingRequestStepId) {
   const form = useFormContext<BookingRequestFormValues>();
   const fieldNames = BOOKING_REQUEST_STEP_WATCH_FIELDS[stepId];
-  const watched = useWatch({ control: form.control, name: fieldNames });
+  const watched = useWatch({
+    control: form.control,
+    disabled: fieldNames.length === 0,
+    name:
+      fieldNames.length === 1
+        ? fieldNames[0]
+        : fieldNames.length > 1
+          ? fieldNames
+          : undefined,
+  });
 
-  return useMemo(() => {
-    if (fieldNames.length === 0) {
-      return {} as Partial<BookingRequestFormValues>;
-    }
-    if (fieldNames.length === 1) {
-      return { [fieldNames[0]!]: watched } as Partial<BookingRequestFormValues>;
-    }
-    const row = watched as BookingRequestFormValues[keyof BookingRequestFormValues][];
-    return Object.fromEntries(fieldNames.map((name, index) => [name, row[index]])) as Partial<
-      BookingRequestFormValues
-    >;
-  }, [fieldNames, watched]);
+  return useMemo(
+    () => buildStepFieldValuesFromWatch<BookingRequestFormValues>(fieldNames, watched),
+    [fieldNames, watched],
+  );
 }
 
 function StepFields({

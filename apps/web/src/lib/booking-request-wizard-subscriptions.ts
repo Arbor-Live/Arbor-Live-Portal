@@ -30,3 +30,19 @@ export const BOOKING_REQUEST_STEP_WATCH_FIELDS: Record<
   additionalNotes: [],
   thankYou: [],
 };
+
+/** Maps a useWatch result to step-local values (scalar name → scalar, array name → array). */
+export function buildStepFieldValuesFromWatch<T extends Record<string, unknown>>(
+  fieldNames: readonly (keyof T & string)[],
+  watched: unknown,
+): Partial<T> {
+  if (fieldNames.length === 0) {
+    return {};
+  }
+  if (fieldNames.length === 1) {
+    const value = Array.isArray(watched) ? watched[0] : watched;
+    return { [fieldNames[0]!]: value } as Partial<T>;
+  }
+  const row = (Array.isArray(watched) ? watched : [watched]) as T[keyof T][];
+  return Object.fromEntries(fieldNames.map((name, index) => [name, row[index]])) as Partial<T>;
+}
