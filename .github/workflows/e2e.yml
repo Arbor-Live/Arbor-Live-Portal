@@ -99,8 +99,16 @@ jobs:
             if pnpm test:e2e -- --shard=${{ matrix.shard }}/4; then
               exit 0
             fi
+            code=$?
+            # 10 = infra/boot failure (e2e-run.mjs), e.g. anonymous Convex
+            # binary download. Playwright exit 1 means the suite actually ran
+            # and failed — do not retry those.
+            if [ "$code" -ne 10 ]; then
+              echo "Shard failed (real test failure or unexpected error); not retrying."
+              exit 1
+            fi
             if [ "$attempt" -lt 3 ]; then
-              echo "Shard failed (often anonymous Convex binary download); retrying in 30s…"
+              echo "Infra boot failed (often anonymous Convex binary download); retrying in 30s…"
               sleep 30
             fi
           done
