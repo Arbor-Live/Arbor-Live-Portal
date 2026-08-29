@@ -76,6 +76,7 @@ export function AccountSettingsClient() {
       name: "",
       phone: "",
       title: "",
+      username: "",
       pronouns: "",
       gradYear: "",
       publicCrewDescription: "",
@@ -114,6 +115,7 @@ export function AccountSettingsClient() {
       name: account.name,
       phone: account.phone ?? "",
       title: account.title ?? "",
+      username: account.username ?? "",
       pronouns: account.pronouns ?? "",
       gradYear: account.gradYear != null ? String(account.gradYear) : "",
       publicCrewDescription: account.publicCrewDescription ?? "",
@@ -138,6 +140,7 @@ export function AccountSettingsClient() {
     await updateMyProfileDetails({
       phone: values.phone?.trim() || undefined,
       title: values.title?.trim() || undefined,
+      username: values.username?.trim() ?? "",
       pronouns: values.pronouns?.trim() || undefined,
       gradYear: values.gradYear ? Number(values.gradYear) : undefined,
       publicCrewDescription: values.publicCrewDescription?.trim() || undefined,
@@ -335,6 +338,12 @@ export function AccountSettingsClient() {
           <Form {...profileForm}>
             <form onSubmit={profileForm.handleSubmit(onProfileSubmit)} className="space-y-4">
               <TextFormField name="name" label="Display name" />
+              <TextFormField
+                name="username"
+                label="Username"
+                placeholder="jane_doe"
+                autoComplete="username"
+              />
               <TextFormField name="title" label="Job title" />
               <TextFormField name="phone" label="Phone" type="tel" />
               <TextFormField name="pronouns" label="Pronouns" placeholder="she/her" />

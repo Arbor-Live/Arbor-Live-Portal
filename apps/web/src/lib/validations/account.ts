@@ -4,6 +4,17 @@ export const profileSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(120, "Name is too long"),
   phone: z.string().trim().max(40, "Phone is too long").optional(),
   title: z.string().trim().max(120, "Title is too long").optional(),
+  username: z
+    .string()
+    .trim()
+    .optional()
+    .refine(
+      (value) => !value || /^[a-zA-Z0-9_]{3,30}$/.test(value),
+      {
+        message:
+          "Username must be 3–30 characters and use only letters, numbers, and underscores",
+      },
+    ),
   pronouns: z.string().trim().max(80, "Pronouns are too long").optional(),
   gradYear: z
     .string()

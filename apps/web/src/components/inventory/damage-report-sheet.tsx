@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import type { ComponentRef } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
 import { useAppDialog } from "@/components/ui/app-dialog";
@@ -42,11 +41,6 @@ export function DamageReportSheet({
 }) {
   const { confirm } = useAppDialog();
   const [error, setError] = useState<string | null>(null);
-  // The sheet is a modal Radix layer, so the mention typeahead has to be
-  // portaled inside it or its clicks are swallowed by the pointer-event trap.
-  const [sheetElement, setSheetElement] = useState<ComponentRef<typeof SheetContent> | null>(
-    null,
-  );
   const details = useQuery(
     api.damageReports.getById,
     reportId && open ? { reportId } : "skip",
@@ -73,7 +67,6 @@ export function DamageReportSheet({
       }}
     >
       <SheetContent
-        ref={setSheetElement}
         side="right"
         className="w-full overflow-y-auto sm:max-w-xl"
         data-testid="damage-report-sheet"
@@ -223,11 +216,7 @@ export function DamageReportSheet({
               </div>
             ) : null}
 
-            <CommentsSection
-              subjectType="damage_batch"
-              subjectId={report.threadId}
-              menuContainer={sheetElement}
-            />
+            <CommentsSection subjectType="damage_batch" subjectId={report.threadId} />
           </div>
         )}
       </SheetContent>

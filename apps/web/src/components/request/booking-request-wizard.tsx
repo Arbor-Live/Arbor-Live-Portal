@@ -373,7 +373,7 @@ export function BookingRequestWizard() {
     Boolean(renderedStep && !renderedStep.skippable && item !== "welcome" && item !== "venue");
 
   return (
-    <PublicMarketingLayout hideFooter>
+    <PublicMarketingLayout hideFooter hideBanner>
       <FormProvider {...form}>
         <Questionnaire
           className="flex min-h-0 w-full flex-1 flex-col gap-0"

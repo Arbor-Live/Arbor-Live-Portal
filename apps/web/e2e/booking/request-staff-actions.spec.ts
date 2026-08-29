@@ -34,7 +34,9 @@ test.describe("booking request staff actions", () => {
     await page.goto(seeded.path);
     await expect(page.getByText(seeded.requestNumber).first()).toBeVisible({ timeout: 25_000 });
 
-    const assignee = page.getByTestId("searchable-select-trigger");
+    const assignee = page
+      .getByTestId("request-assignee-picker")
+      .getByTestId("searchable-select-trigger");
     await pickSearchableOption(page, assignee, e2eEnv.adminName, e2eEnv.adminName);
 
     const state = await pollConvex<{

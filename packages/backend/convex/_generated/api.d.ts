@@ -154,6 +154,7 @@ import type * as lib_trustedOrigins from "../lib/trustedOrigins.js";
 import type * as lib_userProfileImage from "../lib/userProfileImage.js";
 import type * as lib_userTimecards from "../lib/userTimecards.js";
 import type * as lib_userVerticals from "../lib/userVerticals.js";
+import type * as lib_username from "../lib/username.js";
 import type * as lib_venueTypes from "../lib/venueTypes.js";
 import type * as lib_venues from "../lib/venues.js";
 import type * as lostFoundSettings from "../lostFoundSettings.js";
@@ -340,6 +341,7 @@ declare const fullApi: ApiFromModules<{
   "lib/userProfileImage": typeof lib_userProfileImage;
   "lib/userTimecards": typeof lib_userTimecards;
   "lib/userVerticals": typeof lib_userVerticals;
+  "lib/username": typeof lib_username;
   "lib/venueTypes": typeof lib_venueTypes;
   "lib/venues": typeof lib_venues;
   lostFoundSettings: typeof lostFoundSettings;

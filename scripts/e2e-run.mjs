@@ -302,6 +302,33 @@ function setConvexEnv(key, value) {
   });
 }
 
+/**
+ * `convex env set` on a just-booted anonymous backend can race provisioning and
+ * fail once even though the deployment is reachable. Retry transient failures
+ * with a backoff instead of one-shot-and-move-on — a silently dropped env var
+ * (E2E_HELPERS etc.) makes every e2e helper fail minutes later at boot time.
+ */
+async function setConvexEnvWithRetry(key, value, { attempts = 6, delayMs = 10_000 } = {}) {
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      setConvexEnv(key, value);
+      console.log(`Set Convex env ${key}`);
+      return;
+    } catch (error) {
+      const detail = error instanceof Error ? error.message.split("\n")[0] : String(error);
+      if (attempt === attempts) {
+        throw new Error(
+          `Could not set Convex env ${key} after ${attempts} attempts: ${detail}`,
+        );
+      }
+      console.warn(
+        `Convex env set ${key} raced the backend (attempt ${attempt}/${attempts}): ${detail}; retrying in ${delayMs / 1000}s…`,
+      );
+      await delay(delayMs);
+    }
+  }
+}
+
 function resolveConvexDeploymentUrl() {
   const fromEnv =
     process.env.NEXT_PUBLIC_CONVEX_URL?.trim() ||
@@ -378,12 +405,7 @@ async function ensureConvexDeploymentEnv(secret, { includeAuthSecret = true } = 
     ["E2E_EMAIL_MOCK", "true"],
   ];
   for (const [key, value] of pairs) {
-    try {
-      setConvexEnv(key, value);
-      console.log(`Set Convex env ${key}`);
-    } catch (error) {
-      console.warn(`Could not set Convex env ${key}: ${error.message}`);
-    }
+    await setConvexEnvWithRetry(key, value);
   }
 }
 
@@ -693,8 +715,16 @@ async function main() {
   process.exit(code ?? 1);
 }
 
+/**
+ * Exit code reserved for infra/boot failures (Convex binary download, build,
+ * server startup) — distinct from Playwright's test-failure exit code 1 so CI
+ * can retry only the retryable kind. Once Playwright has run, a non-zero shard
+ * is a real failure.
+ */
+const EXIT_INFRA = 10;
+
 main().catch((error) => {
   console.error(error);
   cleanup();
-  process.exit(1);
+  process.exit(EXIT_INFRA);
 });
