@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { components } from "./_generated/api";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
-import { requireArborInternalContext, requireAuth } from "./lib/auth";
+import { requireArborInternalContext, requireAuth, findAuthUsersByIds } from "./lib/auth";
 import { syncEventStatusForLinkedInvoice, syncLinkedEventStatusFromInvoice } from "./lib/eventStatus";
 import { recordInvoiceStatusTransition } from "./lib/statusTransitions";
 import { listEventsByInvoiceId } from "./lib/invoiceEvents";
@@ -431,6 +431,23 @@ async function replaceLineItems(
   }
 }
 
+async function loadActiveOrgMemberUserIds(ctx: QueryCtx, organizationId: string) {
+  const orgUserIds = new Set<string>();
+  let cursor: string | null = null;
+  for (;;) {
+    const page = await ctx.db
+      .query("userOrganizationMemberships")
+      .withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId))
+      .paginate({ cursor, numItems: 500 });
+    for (const membership of page.page) {
+      if (membership.active) orgUserIds.add(membership.userId);
+    }
+    if (page.isDone) break;
+    cursor = page.continueCursor;
+  }
+  return orgUserIds;
+}
+
 export const listManagers = query({
   args: {
     /** Defaults to the caller's active organization (Arbor internal context). */
@@ -440,25 +457,8 @@ export const listManagers = query({
     await requireAuth(ctx);
     const orgContext = await requireArborInternalContext(ctx);
     const organizationId = args.organizationId?.trim() || orgContext.organizationId;
-    const memberships = await ctx.db
-      .query("userOrganizationMemberships")
-      .withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId))
-      .take(500);
-    const orgUserIds = new Set(
-      memberships.filter((membership) => membership.active).map((membership) => membership.userId),
-    );
-    const result = await ctx.runQuery(components.betterAuth.adapter.findMany, {
-      model: "user",
-      paginationOpts: { cursor: null, numItems: 200 },
-    });
-    const users = (result?.page ?? []) as Array<{
-      _id?: string;
-      id?: string;
-      name?: string;
-      email?: string;
-      role?: string | null;
-      image?: string | null;
-    }>;
+    const orgUserIds = await loadActiveOrgMemberUserIds(ctx, organizationId);
+    const userByKey = await findAuthUsersByIds(ctx, [...orgUserIds]);
     // Arbor staff quoting events need per-person Normal/Lead/Custom rates so
     // assigned leads bill at lead rate on the invoice (not only global Normal).
     const settings = await loadInvoiceCrewRateSettings(ctx);
@@ -474,9 +474,10 @@ export const listManagers = query({
     );
     const profiles = await ctx.db.query("userAdminProfiles").withIndex("by_active").take(2000);
     const profileByUserId = new Map(profiles.map((profile) => [profile.userId, profile]));
-    return users
-      .map((user) => {
-        const userId = user.id ?? user._id ?? "";
+    return [...orgUserIds]
+      .map((userId) => {
+        const user = userByKey.get(userId);
+        if (!user) return null;
         const profile = profileByUserId.get(userId);
         const compensation = rateByUserId.get(userId);
         return {
@@ -491,7 +492,7 @@ export const listManagers = query({
           gradYear: profile?.gradYear ?? undefined,
         };
       })
-      .filter((user) => Boolean(user.id) && orgUserIds.has(user.id))
+      .filter((user): user is NonNullable<typeof user> => user !== null)
       .sort((a, b) => a.name.localeCompare(b.name));
   },
 });
