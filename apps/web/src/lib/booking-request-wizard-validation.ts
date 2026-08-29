@@ -13,6 +13,9 @@ function showSlotsFieldError(errors: FieldErrors<BookingRequestFormValues>): str
   if (errors.setupTime?.message) {
     return errors.setupTime.message;
   }
+  if (errors.flexibleSetupTime?.message) {
+    return errors.flexibleSetupTime.message;
+  }
   if (Array.isArray(showSlots)) {
     for (const slot of showSlots) {
       if (!slot || typeof slot !== "object") continue;

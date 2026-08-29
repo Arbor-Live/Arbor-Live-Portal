@@ -26,6 +26,17 @@ describe("booking request wizard validation", () => {
     expect(getBookingRequestStepFieldError(errors, "eventSchedule")).toBe("Invalid show time");
   });
 
+  it("surfaces flexible setup time errors on the schedule step", () => {
+    const errors = {
+      flexibleSetupTime: { type: "custom", message: "Select whether setup time is flexible" },
+    } as FieldErrors<BookingRequestFormValues>;
+
+    expect(getBookingRequestStepFieldError(errors, "eventSchedule")).toBe(
+      "Select whether setup time is flexible",
+    );
+    expect(firstBookingRequestStepWithError(ACTIVE_STEPS, errors)).toBe("eventSchedule");
+  });
+
   it("returns the first active step with an error", () => {
     const errors = {
       email: { type: "custom", message: "Use your @stanford.edu email address" },

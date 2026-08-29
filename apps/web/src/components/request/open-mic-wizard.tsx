@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery } from "convex/react";
-import { FormProvider, useForm, useFormContext, useWatch, type Resolver } from "react-hook-form";
+import { FormProvider, useForm, useFormContext, useWatch, type FieldErrors, type Resolver } from "react-hook-form";
 import type { QuestionnaireItemDefinition } from "@shadcn/react/questionnaire";
 import { api } from "@/lib/convex-api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -155,22 +155,18 @@ export function OpenMicWizard() {
     [activeSteps, form, resolvedItem, showIntro],
   );
 
-  const goToFirstInvalidStep = useCallback(() => {
-    const target = firstOpenMicStepWithError(activeSteps, form.formState.errors);
-    if (!target || target === "thankYou") return;
-    didFocusActiveItem.current = false;
-    setItem(target as QuestionStepId);
-  }, [activeSteps, form]);
+  const navigateToFirstInvalidStep = useCallback(
+    (errors: FieldErrors<OpenMicSignupFormValues>) => {
+      const target = firstOpenMicStepWithError(activeSteps, errors);
+      if (!target || target === "thankYou") return;
+      didFocusActiveItem.current = false;
+      setItem(target as QuestionStepId);
+    },
+    [activeSteps],
+  );
 
-  const handleSubmit = useCallback(
-    async (event: React.FormEvent<HTMLFormElement>) => {
-      event.preventDefault();
-      setSubmitError(null);
-      const valid = await form.trigger();
-      if (!valid) {
-        goToFirstInvalidStep();
-        return;
-      }
+  const submitValid = useCallback(
+    async (values: OpenMicSignupFormValues) => {
       if (!activeNight) {
         setSubmitError(
           "No upcoming open mic night is open for sign-ups right now. Check back soon!",
@@ -178,7 +174,7 @@ export function OpenMicWizard() {
         return;
       }
       setIsSubmitting(true);
-      const result = await submitOpenMicSignup(activeNight._id, form.getValues());
+      const result = await submitOpenMicSignup(activeNight._id, values);
       setIsSubmitting(false);
       if (!result.ok) {
         setSubmitError(result.message);
@@ -193,14 +189,29 @@ export function OpenMicWizard() {
             didFocusActiveItem.current = false;
             setItem(target as QuestionStepId);
           } else {
-            goToFirstInvalidStep();
+            const serverErrors = Object.fromEntries(
+              Object.entries(result.fieldErrors).map(([field, message]) => [
+                field.split(".")[0],
+                { type: "server" as const, message },
+              ]),
+            ) as FieldErrors<OpenMicSignupFormValues>;
+            navigateToFirstInvalidStep(serverErrors);
           }
         }
         return;
       }
       setConfirmation({ nightTitle: result.nightTitle, nightStartAt: result.nightStartAt });
     },
-    [activeNight, activeSteps, form, goToFirstInvalidStep],
+    [activeNight, activeSteps, form, navigateToFirstInvalidStep],
+  );
+
+  const handleSubmit = useCallback(
+    (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      setSubmitError(null);
+      void form.handleSubmit(submitValid, navigateToFirstInvalidStep)(event);
+    },
+    [form, navigateToFirstInvalidStep, submitValid],
   );
 
   const hideFooter = Boolean(confirmation) || resolvedItem === "intro";

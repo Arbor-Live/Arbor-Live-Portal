@@ -18,7 +18,7 @@ type HostMatch = {
  * Search existing host orgs, pick a match, or keep the typed name as a new org.
  */
 export function OrganizationSearchField() {
-  const { control, watch, setValue } = useFormContext<BookingRequestFormValues>();
+  const { control, watch, setValue, clearErrors } = useFormContext<BookingRequestFormValues>();
   const { errors } = useFormState({ control, name: "organization" });
   const organization = watch("organization") ?? "";
   const invoiceGroupId = watch("invoiceGroupId") ?? "";
@@ -56,6 +56,9 @@ export function OrganizationSearchField() {
       setValue("invoiceGroupId", "", { shouldDirty: true });
     }
     setValue("organization", next, { shouldDirty: true });
+    if (next.trim()) {
+      clearErrors("organization");
+    }
   }
 
   return (

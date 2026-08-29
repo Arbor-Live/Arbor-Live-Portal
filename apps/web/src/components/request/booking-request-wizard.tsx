@@ -9,6 +9,7 @@ import {
   useForm,
   useFormContext,
   useWatch,
+  type FieldErrors,
   type Resolver,
 } from "react-hook-form";
 import type {
@@ -305,24 +306,20 @@ export function BookingRequestWizard() {
     [activeSteps, form, includeLighting, item, lookupEmail, skipSponsor],
   );
 
-  const goToFirstInvalidStep = useCallback(() => {
-    const target = firstBookingRequestStepWithError(activeSteps, form.formState.errors);
-    if (!target) return;
-    didFocusActiveItem.current = false;
-    setItem(target);
-  }, [activeSteps, form]);
+  const navigateToFirstInvalidStep = useCallback(
+    (errors: FieldErrors<BookingRequestFormValues>) => {
+      const target = firstBookingRequestStepWithError(activeSteps, errors);
+      if (!target) return;
+      didFocusActiveItem.current = false;
+      setItem(target);
+    },
+    [activeSteps],
+  );
 
-  const handleSubmit = useCallback(
-    async (event: React.FormEvent<HTMLFormElement>) => {
-      event.preventDefault();
-      setSubmitError(null);
-      const valid = await form.trigger();
-      if (!valid) {
-        goToFirstInvalidStep();
-        return;
-      }
+  const submitValid = useCallback(
+    async (values: BookingRequestFormValues) => {
       setIsSubmitting(true);
-      const result = await submitBookingRequest(form.getValues());
+      const result = await submitBookingRequest(values);
       setIsSubmitting(false);
       if (!result.ok) {
         setSubmitError(result.message);
@@ -337,14 +334,29 @@ export function BookingRequestWizard() {
             didFocusActiveItem.current = false;
             setItem(target);
           } else {
-            goToFirstInvalidStep();
+            const serverErrors = Object.fromEntries(
+              Object.entries(result.fieldErrors).map(([field, message]) => [
+                field.split(".")[0],
+                { type: "server" as const, message },
+              ]),
+            ) as FieldErrors<BookingRequestFormValues>;
+            navigateToFirstInvalidStep(serverErrors);
           }
         }
         return;
       }
       setTrackingInfo({ publicToken: result.publicToken, requestNumber: result.requestNumber });
     },
-    [activeSteps, form, goToFirstInvalidStep],
+    [activeSteps, form, navigateToFirstInvalidStep],
+  );
+
+  const handleSubmit = useCallback(
+    (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      setSubmitError(null);
+      void form.handleSubmit(submitValid, navigateToFirstInvalidStep)(event);
+    },
+    [form, navigateToFirstInvalidStep, submitValid],
   );
 
   const returningHeadline =
