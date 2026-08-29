@@ -1,7 +1,16 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
+
+const FftOceanBackground = dynamic(
+  () =>
+    import("@/components/request/fft-ocean/fft-ocean-background").then(
+      (mod) => mod.FftOceanBackground,
+    ),
+  { ssr: false },
+);
 
 const spring = { type: "spring" as const, stiffness: 380, damping: 36 };
 
@@ -21,6 +30,8 @@ type RequestWizardShellProps = {
   children: React.ReactNode;
   footer?: React.ReactNode;
   className?: string;
+  /** Booking request uses the WebGPU FFT ocean; other wizards keep the grid. */
+  background?: "grid" | "fft-ocean";
 };
 
 export function RequestWizardShell({
@@ -31,23 +42,39 @@ export function RequestWizardShell({
   children,
   footer,
   className,
+  background = "grid",
 }: RequestWizardShellProps) {
+  const ocean = background === "fft-ocean";
+
   return (
     <div
       className={cn(
         "relative flex min-h-dvh flex-1 flex-col overflow-hidden",
+        ocean && "bg-black",
         className,
       )}
     >
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(ellipse_70%_50%_at_50%_-10%,color-mix(in_oklch,var(--color-primary)_16%,transparent),transparent)]"
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 z-0 opacity-40"
-        style={GRID_STYLE}
-      />
+      {ocean ? (
+        <>
+          <FftOceanBackground className="pointer-events-none absolute inset-0 z-0" />
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 z-[1] bg-[radial-gradient(ellipse_80%_60%_at_50%_20%,transparent_20%,rgba(0,0,0,0.55)_100%)]"
+          />
+        </>
+      ) : (
+        <>
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(ellipse_70%_50%_at_50%_-10%,color-mix(in_oklch,var(--color-primary)_16%,transparent),transparent)]"
+          />
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 z-0 opacity-40"
+            style={GRID_STYLE}
+          />
+        </>
+      )}
 
       <div className="relative z-10 flex min-h-0 flex-1 flex-col pt-[5.5rem] sm:pt-24">
         <div className="px-4 sm:px-5">
