@@ -6,6 +6,8 @@ import { requireArborInternalContext, requireAuth, findAuthUsersByIds } from "./
 import { syncEventStatusForLinkedInvoice, syncLinkedEventStatusFromInvoice } from "./lib/eventStatus";
 import { recordInvoiceStatusTransition } from "./lib/statusTransitions";
 import { listEventsByInvoiceId } from "./lib/invoiceEvents";
+import { getActivePaymentProofSubmission } from "./lib/paymentProof";
+import { invoiceDueEndMs } from "./lib/invoicePaymentStatus";
 import {
   billingQuantityForEquipmentLine,
   findSeriesByInvoiceId,
@@ -520,6 +522,7 @@ const invoiceListStatusValue = v.union(
 async function recentInvoices(
   ctx: QueryCtx,
   status: "draft" | "finalized" | "void" | undefined,
+  excludeClosed = false,
 ) {
   if (status) {
     return await ctx.db
@@ -527,6 +530,25 @@ async function recentInvoices(
       .withIndex("by_status_and_createdAt", (q) => q.eq("status", status))
       .order("desc")
       .take(INVOICE_LIST_LIMIT);
+  }
+  if (excludeClosed) {
+    // Active view: everything except void, and except paid (payment received).
+    // Merge the two live statuses recency-first, then drop paid so the cap is
+    // spent on rows the default view actually shows.
+    const draft = await ctx.db
+      .query("invoices")
+      .withIndex("by_status_and_createdAt", (q) => q.eq("status", "draft"))
+      .order("desc")
+      .take(INVOICE_LIST_LIMIT);
+    const finalized = await ctx.db
+      .query("invoices")
+      .withIndex("by_status_and_createdAt", (q) => q.eq("status", "finalized"))
+      .order("desc")
+      .take(INVOICE_LIST_LIMIT);
+    return [...draft, ...finalized]
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .filter((invoice) => !invoice.paymentReceivedAt)
+      .slice(0, INVOICE_LIST_LIMIT);
   }
   return await ctx.db
     .query("invoices")
@@ -562,6 +584,7 @@ async function resolveInvoiceListLabels(ctx: QueryCtx, invoiceId: Id<"invoices">
       linkedEventTitle: linkedEvents[0]?.title,
       eventCostsUsd,
       eventPassThroughCostsUsd,
+      primaryEvent,
     };
   }
   const seriesIds = [
@@ -575,6 +598,7 @@ async function resolveInvoiceListLabels(ctx: QueryCtx, invoiceId: Id<"invoices">
     linkedEventTitle: linkedEvents[0]?.title,
     eventCostsUsd,
     eventPassThroughCostsUsd,
+    primaryEvent,
   };
 }
 
@@ -587,26 +611,85 @@ export const list = query({
   },
 });
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+type InvoiceListPaymentStatus =
+  | "payment_pending"
+  | "proof_received"
+  | "overdue"
+  | "paid";
+
+/**
+ * Payment status for the invoice list, computed only for approved quotes:
+ * `paid` once money landed on our account, `overdue` past the due date
+ * (counting days since), `proof_received` when the client submitted payment
+ * proof we haven't confirmed yet, else `payment_pending`. Non-approved quotes
+ * (draft / awaiting approval / changes requested) return null.
+ */
+async function resolveInvoiceListPaymentStatus(
+  ctx: QueryCtx,
+  invoice: Doc<"invoices">,
+  primaryEvent: Doc<"events"> | undefined,
+): Promise<{ paymentStatus: InvoiceListPaymentStatus | null; daysOverdue: number }> {
+  if ((invoice.clientApprovalStatus ?? "pending") !== "approved") {
+    return { paymentStatus: null, daysOverdue: 0 };
+  }
+  if (invoice.paymentReceivedAt) {
+    return { paymentStatus: "paid", daysOverdue: 0 };
+  }
+  const now = Date.now();
+  const activeSubmission = primaryEvent
+    ? await getActivePaymentProofSubmission(ctx, primaryEvent._id)
+    : null;
+  const dueEndMs = invoiceDueEndMs(invoice, primaryEvent?.timezone);
+  if (dueEndMs != null && now > dueEndMs) {
+    return {
+      paymentStatus: "overdue",
+      daysOverdue: Math.max(0, Math.floor((now - dueEndMs) / DAY_MS) + 1),
+    };
+  }
+  return {
+    paymentStatus: activeSubmission ? "proof_received" : "payment_pending",
+    daysOverdue: 0,
+  };
+}
+
 /**
  * Invoice list rows. Returns an explicit slim projection rather than spreading
  * the whole doc — the list table renders seven columns, not sixty fields.
  */
 export const listEnriched = query({
-  args: { status: v.optional(invoiceListStatusValue) },
+  args: {
+    status: v.optional(invoiceListStatusValue),
+    // Active view (default): drop void and paid before the recency cap applies.
+    excludeClosed: v.optional(v.boolean()),
+  },
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
-    const rows = await recentInvoices(ctx, args.status);
+    const rows = await recentInvoices(ctx, args.status, args.excludeClosed);
     return await Promise.all(
       rows.map(async (invoice) => {
-        const { seriesTitle, linkedEventTitle, eventCostsUsd, eventPassThroughCostsUsd } =
-          await resolveInvoiceListLabels(ctx, invoice._id);
+        const {
+          seriesTitle,
+          linkedEventTitle,
+          eventCostsUsd,
+          eventPassThroughCostsUsd,
+          primaryEvent,
+        } = await resolveInvoiceListLabels(ctx, invoice._id);
+        const { paymentStatus, daysOverdue } = await resolveInvoiceListPaymentStatus(
+          ctx,
+          invoice,
+          primaryEvent,
+        );
         return {
           _id: invoice._id,
           invoiceNumber: invoice.invoiceNumber,
           status: invoice.status,
           clientApprovalStatus: invoice.clientApprovalStatus,
           paymentReceivedAt: invoice.paymentReceivedAt,
+          paymentStatus,
+          daysOverdue,
           managerName: invoice.managerName,
           issueDate: invoice.issueDate,
           totalUsd: invoice.totalUsd,
