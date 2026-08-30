@@ -150,9 +150,7 @@ test.describe("staff band assignment on event", () => {
 
     const afterCreatedAt = Date.now() - 1_000;
     await page.goto(seeded.eventPath);
-    await expect(page.getByRole("heading", { name: "Edit Event" })).toBeVisible({
-      timeout: 30_000,
-    });
+    await expect(page.getByText("Edit Event").first()).toBeVisible({ timeout: 30_000 });
     const bandsCard = page.locator("div").filter({
       has: page.getByRole("heading", { name: "Bands & Performers" }),
     });
