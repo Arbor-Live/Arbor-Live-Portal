@@ -257,7 +257,10 @@ function GpuCrowd({
     animate: reducedMotion !== true,
   });
   const onFallbackRef = useRef(onFallback);
-  onFallbackRef.current = onFallback;
+
+  useEffect(() => {
+    onFallbackRef.current = onFallback;
+  }, [onFallback]);
 
   useEffect(() => {
     stateRef.current = { count, energy, animate: reducedMotion !== true };

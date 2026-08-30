@@ -38,12 +38,9 @@ function DismissAllButton({ visible }: { visible: boolean }) {
   const [anchor, setAnchor] = useState<DismissAllAnchor | null>(null)
 
   useEffect(() => {
-    if (!visible) {
-      setAnchor(null)
-      return
-    }
+    if (!visible) return;
 
-    let frame = 0
+    let frame = 0;
     const loop = () => {
       const next = measureDismissAllAnchor()
       setAnchor((prev) => {

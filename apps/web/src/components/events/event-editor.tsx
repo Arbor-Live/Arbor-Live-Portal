@@ -1047,11 +1047,6 @@ export function EventEditor({
     "";
   const effectivePrimaryHostGroupId = invoiceId ? invoicePrimaryHostGroupId : hostGroupId;
 
-  useEffect(() => {
-    if (!invoiceId || !invoicePrimaryHostGroupId) return;
-    setHostGroupId(invoicePrimaryHostGroupId);
-    setAdditionalHostGroupIds((prev) => prev.filter((id) => id !== invoicePrimaryHostGroupId));
-  }, [invoiceId, invoicePrimaryHostGroupId]);
   const crewCostTotal = computedCrewCost?.totalCostUsd ?? Number(crewCostUsd || "0");
   const bandsCostTotal = Number(bandsCostUsd || "0");
   const externalRentalsCostTotal = Number(externalRentalsCostUsd || "0");

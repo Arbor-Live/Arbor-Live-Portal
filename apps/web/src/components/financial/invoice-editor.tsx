@@ -632,6 +632,7 @@ export function InvoiceEditor({
 
     const { invoice, lineItems } = invoiceData;
     hasHydratedFromServerRef.current = true;
+    /* eslint-disable react-hooks/set-state-in-effect -- one-time hydration per invoice id, see hasHydratedFromServerRef guard */
     setActiveInvoiceId(invoice._id);
     setApprovalToken(invoice.publicApprovalToken ?? "");
     setIssueDate(invoice.issueDate);
@@ -728,6 +729,7 @@ export function InvoiceEditor({
     reapprovalDecisionRef.current = null;
     baselineSignaturePendingRef.current = true;
     setInvoiceFieldsHydrated(true);
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [invoiceData, invoiceId]);
 
   useEffect(() => {

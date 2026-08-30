@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -13,17 +13,12 @@ export function BookingRequestSettingsClient() {
   const settings = useQuery(api.eventRequests.getBookingRequestSettings, {});
   const managers = useQuery(api.invoices.listManagers, {});
   const updateSettings = useMutation(api.eventRequests.updateBookingRequestSettings);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [localSelectedIds, setLocalSelectedIds] = useState<string[] | null>(null);
+  const settingsReady = settings !== undefined;
+  const selectedIds = localSelectedIds ?? settings?.roundRobinUserIds ?? [];
   const [pickerValue, setPickerValue] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [hydrated, setHydrated] = useState(false);
-
-  useEffect(() => {
-    if (!settings || hydrated) return;
-    setSelectedIds(settings.roundRobinUserIds);
-    setHydrated(true);
-  }, [settings, hydrated]);
 
   const options: UserSelectOption[] = useMemo(
     () =>
@@ -85,7 +80,11 @@ export function BookingRequestSettingsClient() {
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => setSelectedIds((ids) => ids.filter((id) => id !== option.value))}
+                disabled={!settingsReady}
+                onClick={() => {
+                  if (!settingsReady) return;
+                  setLocalSelectedIds(selectedIds.filter((id) => id !== option.value));
+                }}
               >
                 Remove
               </Button>
@@ -96,7 +95,10 @@ export function BookingRequestSettingsClient() {
           ) : null}
         </div>
 
-        <div className="flex flex-wrap items-end gap-2">
+        <fieldset
+          disabled={!settingsReady}
+          className="flex flex-wrap items-end gap-2 border-0 p-0 m-0 min-w-0"
+        >
           <div className="min-w-[240px] flex-1">
             <UserSelect
               value={pickerValue}
@@ -109,18 +111,18 @@ export function BookingRequestSettingsClient() {
           <Button
             type="button"
             variant="outline"
-            disabled={!pickerValue}
+            disabled={!settingsReady || !pickerValue}
             onClick={() => {
-              if (!pickerValue) return;
-              setSelectedIds((ids) => [...ids, pickerValue]);
+              if (!settingsReady || !pickerValue) return;
+              setLocalSelectedIds([...selectedIds, pickerValue]);
               setPickerValue("");
             }}
           >
             Add
           </Button>
-        </div>
+        </fieldset>
 
-        <Button type="button" onClick={() => void handleSave()} disabled={saving || !hydrated}>
+        <Button type="button" onClick={() => void handleSave()} disabled={saving || !settingsReady}>
           {saving ? "Saving..." : "Save rotation"}
         </Button>
       </div>

@@ -4,9 +4,8 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
-  useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 import { useQuery } from "convex/react";
@@ -16,6 +15,36 @@ import { SearchableSelect } from "@/components/inventory/searchable-select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 const STORAGE_KEY = "arbor.adminBandOrganizationId";
+
+const adminBandOrgStorageListeners = new Set<() => void>();
+
+function subscribeAdminBandOrgStorage(onStoreChange: () => void) {
+  adminBandOrgStorageListeners.add(onStoreChange);
+  return () => adminBandOrgStorageListeners.delete(onStoreChange);
+}
+
+function getAdminBandOrgStorageSnapshot() {
+  try {
+    return sessionStorage.getItem(STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function getAdminBandOrgStorageServerSnapshot() {
+  return null;
+}
+
+function setAdminBandOrgStorage(next: string) {
+  try {
+    sessionStorage.setItem(STORAGE_KEY, next);
+  } catch {
+    // ignore
+  }
+  for (const listener of adminBandOrgStorageListeners) {
+    listener();
+  }
+}
 
 type AdminBandSelectionContextValue = {
   /** When set, rider/profile APIs should target this band (admin mode). */
@@ -41,35 +70,38 @@ export function AdminBandSelectionProvider({ children }: { children: ReactNode }
   const isBandContext =
     activeOrg?.organizationType === "band" || activeOrg?.organizationType === "dj";
   const isAdminManaging = Boolean(viewer?.isAdmin && !isBandContext);
+  const bands = useQuery(
+    api.users.listBandOrganizationsAdmin,
+    isAdminManaging ? { includeArchived: false } : "skip",
+  );
 
-  const [organizationId, setOrganizationIdState] = useState<string | null>(null);
+  const organizationIdState = useSyncExternalStore(
+    subscribeAdminBandOrgStorage,
+    getAdminBandOrgStorageSnapshot,
+    getAdminBandOrgStorageServerSnapshot,
+  );
 
-  useEffect(() => {
-    if (!isAdminManaging) {
-      setOrganizationIdState(null);
-      return;
+  const organizationId = useMemo(() => {
+    if (!isAdminManaging) return null;
+    if (bands === undefined) return organizationIdState;
+    if (bands.length === 0) return null;
+    if (
+      organizationIdState &&
+      bands.some((band) => band.organizationId === organizationIdState)
+    ) {
+      return organizationIdState;
     }
-    try {
-      const stored = sessionStorage.getItem(STORAGE_KEY);
-      if (stored) setOrganizationIdState(stored);
-    } catch {
-      // ignore
-    }
-  }, [isAdminManaging]);
+    return bands[0]?.organizationId ?? organizationIdState;
+  }, [bands, isAdminManaging, organizationIdState]);
 
   const setOrganizationId = useCallback((next: string) => {
-    setOrganizationIdState(next);
-    try {
-      sessionStorage.setItem(STORAGE_KEY, next);
-    } catch {
-      // ignore
-    }
+    setAdminBandOrgStorage(next);
   }, []);
 
   return (
     <AdminBandSelectionContext.Provider
       value={{
-        organizationId: isAdminManaging ? organizationId : null,
+        organizationId,
         setOrganizationId,
         isAdminManaging,
       }}
@@ -96,15 +128,6 @@ export function AdminBandPickerCard() {
       })),
     [bands],
   );
-
-  useEffect(() => {
-    if (!isAdminManaging || !bands?.length) return;
-    const selectedStillExists = Boolean(
-      organizationId && bands.some((band) => band.organizationId === organizationId),
-    );
-    if (selectedStillExists) return;
-    setOrganizationId(bands[0].organizationId);
-  }, [bands, isAdminManaging, organizationId, setOrganizationId]);
 
   if (!isAdminManaging) return null;
 
