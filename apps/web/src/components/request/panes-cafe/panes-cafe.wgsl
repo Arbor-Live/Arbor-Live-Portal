@@ -35,8 +35,16 @@ fn fbm(p: vec2f) -> f32 {
   return v;
 }
 
+fn toroidalDelta(a: vec2f, b: vec2f, period: vec2f) -> vec2f {
+  var d = a - b;
+  d = d - period * round(d / period);
+  return d;
+}
+
 fn bokeh(p: vec2f, t: f32, count: i32, sizeScale: f32, brightness: f32) -> f32 {
   var acc = 0.0;
+  let period = vec2f(u.aspect, 0.9);
+  let yBase = 0.05;
   for (var i = 0; i < count; i++) {
     let fi = f32(i);
     let s1 = hash21(vec2f(fi, 1.0));
@@ -44,9 +52,9 @@ fn bokeh(p: vec2f, t: f32, count: i32, sizeScale: f32, brightness: f32) -> f32 {
     let s3 = hash21(vec2f(fi, 3.0));
     let speed = 0.02 + 0.04 * s3;
     let bx = fract(s1 + 0.02 * t * speed * 3.0) * u.aspect;
-    let by = fract(s2 + 0.008 * t * speed) * 0.9 + 0.05;
+    let by = fract(s2 + 0.008 * t * speed) * period.y + yBase;
     let r = (0.02 + 0.09 * s2) * sizeScale;
-    let d = length(p - vec2f(bx, by));
+    let d = length(toroidalDelta(p, vec2f(bx, by), period));
     acc = acc + smoothstep(r, r * 0.35, d) * brightness * (0.4 + 0.6 * s3);
   }
   return acc;
