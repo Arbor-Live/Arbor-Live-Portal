@@ -2,7 +2,6 @@ import { test, expect } from "@playwright/test";
 import { acceptAppDialog } from "../helpers/auth";
 import { e2eEnv } from "../helpers/env";
 import { pollConvex, runConvex } from "../helpers/convex";
-import { fillSearchableSelectQuery } from "../helpers/select";
 
 type CommentState = {
   body: string;
@@ -12,10 +11,10 @@ type CommentState = {
 };
 
 /**
- * Event comments + @mentions via UserSelect.
+ * Event comments + inline @mentions.
  *
- * Mentions are still stored as `@Name` in the body; the picker inserts the
- * candidate's display name verbatim. Persistence is asserted via Convex so a
+ * Typing `@` in the comment box opens a suggestion popup; picking a teammate
+ * inserts their handle inline. Persistence is asserted via Convex so a
  * UI-only success that never reached `comments.createComment` still fails.
  */
 test.describe("event comments and mentions", () => {
@@ -48,21 +47,20 @@ test.describe("event comments and mentions", () => {
       .toBeGreaterThan(0);
 
     const input = page.getByTestId("comment-input");
-    const trigger = comments
-      .getByTestId("comment-mention-picker")
-      .getByTestId("searchable-select-trigger");
-    await trigger.click();
-    const menu = page.getByTestId("searchable-select-menu");
-    await expect(menu).toBeVisible({ timeout: 15_000 });
-    await fillSearchableSelectQuery(menu, "Crew");
+    await input.click();
+    await input.pressSequentially(`@${mentionHandle}`, { delay: 20 });
+    const picker = page.getByTestId("comment-mention-picker");
+    await expect(picker).toBeVisible({ timeout: 15_000 });
     // Match on the stable crew email, not the name: `smoke/invite.spec.ts`
     // creates a new "E2E Crew"-named member on every run, so a name-scoped
     // locator strict-violates once more than one of those has accumulated on a
-    // shared deployment.
-    await menu.getByRole("option", { name: new RegExp(e2eEnv.crewEmail, "i") }).click({
-      force: true,
-    });
-    await expect(menu).toHaveCount(0, { timeout: 15_000 });
+    // shared deployment. Escape it: the `.` in the domain is data, not a wildcard.
+    const emailPattern = new RegExp(
+      e2eEnv.crewEmail.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+      "i",
+    );
+    await picker.getByRole("option", { name: emailPattern }).click();
+    await expect(picker).toBeHidden({ timeout: 15_000 });
 
     await expect(input).toHaveValue(new RegExp(`@${mentionHandle}`));
     await input.pressSequentially(` please check the pull list ${stamp}`, { delay: 20 });

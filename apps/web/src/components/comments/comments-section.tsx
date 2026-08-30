@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
 import { TrashIcon } from "@phosphor-icons/react";
@@ -16,11 +16,11 @@ import {
   MessageGroup,
   MessageHeader,
 } from "@/components/ui/message";
-import { UserSelect, type UserSelectOption } from "@/components/users/user-select";
 import { ArborOnlyGuard } from "@/components/org-context-guard";
 import { notify } from "@/lib/notify";
 import { PORTAL_TIMEZONE } from "@/lib/format";
 import { buildUserSelectDescription } from "@/lib/user-select-description";
+import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 
 /** Threads are keyed by subject, so a new surface only adds a literal here. */
 export type CommentSubjectType = "event" | "damage_batch" | "event_request";
@@ -50,6 +50,17 @@ function handleAppearsInBody(body: string, handle: string) {
     "gu",
   );
   return pattern.test(body);
+}
+
+/**
+ * The active `@query` token when the caret sits at the end of one. The `@`
+ * must open its own token (start of input or after whitespace) so emails like
+ * `me@x` never trigger the picker.
+ */
+function detectMentionToken(text: string, caret: number) {
+  const match = /(^|\s)@([\p{L}\p{N}_]*)$/u.exec(text.slice(0, caret));
+  if (!match) return null;
+  return { start: match.index + match[1].length, query: match[2] };
 }
 
 function extractMentionedUserIds(
@@ -131,6 +142,9 @@ function formatCommentTime(ms: number) {
 
 const COMMENT_TIME_COLLAPSE_MS = 2 * 60 * 1000;
 
+/** Rows shown in the mention popup; matching still runs over every candidate. */
+const MENTION_POPUP_LIMIT = 20;
+
 function renderBodyWithMentions(
   body: string,
   mentioned: { name: string; username?: string }[],
@@ -189,9 +203,10 @@ function CommentsPanel({
   const { confirm } = useAppDialog();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [body, setBody] = useState("");
-  const [cursor, setCursor] = useState(0);
-  const [mentionPickerKey, setMentionPickerKey] = useState(0);
-  /** User IDs chosen via the picker — wins over ambiguous @handle parsing. */
+  const [mentionToken, setMentionToken] = useState<{ start: number; query: string } | null>(null);
+  const [mentionHighlight, setMentionHighlight] = useState(0);
+  const [mentionFocused, setMentionFocused] = useState(false);
+  /** User IDs picked from the popup — wins over ambiguous @handle parsing. */
   const [draftMentionedUserIds, setDraftMentionedUserIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<Id<"comments"> | null>(null);
@@ -211,49 +226,69 @@ function CommentsPanel({
   }, [comments]);
 
   const candidates = useMemo(() => mentionCandidates ?? [], [mentionCandidates]);
-  const candidatesById = useMemo(
-    () => new Map(candidates.map((row) => [row.userId, row])),
-    [candidates],
-  );
-  const mentionOptions: UserSelectOption[] = useMemo(
-    () =>
-      candidates.map((row) => ({
-        value: row.userId,
-        label: row.name,
-        email: row.email,
-        description: buildUserSelectDescription({
-          role: row.username ? `@${row.username}` : undefined,
-          email: row.email,
-          pronouns: row.pronouns,
-          gradYear: row.gradYear,
-        }),
-        keywords: [row.username, row.email].filter(Boolean).join(" "),
-      })),
-    [candidates],
-  );
 
-  function insertMention(userId: string) {
-    const candidate = candidatesById.get(userId);
-    if (!candidate) return;
+  const filteredMentions = useMemo(() => {
+    if (!mentionToken) return [];
+    const query = mentionToken.query.toLowerCase();
+    const matches = candidates.filter(
+      (candidate) =>
+        !query ||
+        mentionHandle(candidate).toLowerCase().includes(query) ||
+        candidate.name.toLowerCase().includes(query) ||
+        candidate.email.toLowerCase().includes(query),
+    );
+    // Handles that start with the query float up so `@ja` surfaces @jane first.
+    matches.sort(
+      (a, b) =>
+        Number(mentionHandle(b).toLowerCase().startsWith(query)) -
+          Number(mentionHandle(a).toLowerCase().startsWith(query)) ||
+        mentionHandle(a).localeCompare(mentionHandle(b)),
+    );
+    return matches.slice(0, MENTION_POPUP_LIMIT);
+  }, [mentionToken, candidates]);
+
+  const mentionPopupOpen =
+    mentionFocused && mentionToken !== null && filteredMentions.length > 0;
+
+  function syncMentionToken(value: string, caret: number) {
+    setMentionToken(detectMentionToken(value, caret));
+    setMentionHighlight(0);
+  }
+
+  function pickMention(candidate: MentionCandidate) {
+    if (!mentionToken) return;
     const el = textareaRef.current;
-    const start = el?.selectionStart ?? cursor;
-    const end = el?.selectionEnd ?? cursor;
-    const before = body.slice(0, start);
-    const after = body.slice(end);
-    const needsSpaceBefore = before.length > 0 && !/\s$/.test(before);
-    const insertion = `${needsSpaceBefore ? " " : ""}@${mentionHandle(candidate)} `;
-    const nextBody = `${before}${insertion}${after}`;
+    const caret = el?.selectionStart ?? body.length;
+    const before = body.slice(0, mentionToken.start);
+    const after = body.slice(caret);
+    const insertion = `@${mentionHandle(candidate)} `;
     const nextCursor = before.length + insertion.length;
-    setBody(nextBody);
-    setCursor(nextCursor);
-    setDraftMentionedUserIds((ids) => (ids.includes(userId) ? ids : [...ids, userId]));
-    setMentionPickerKey((key) => key + 1);
+    setBody(`${before}${insertion}${after}`);
+    setMentionToken(null);
+    setDraftMentionedUserIds((ids) =>
+      ids.includes(candidate.userId) ? ids : [...ids, candidate.userId],
+    );
     requestAnimationFrame(() => {
       const textarea = textareaRef.current;
       if (!textarea) return;
       textarea.focus();
       textarea.setSelectionRange(nextCursor, nextCursor);
     });
+  }
+
+  function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (!mentionPopupOpen || !mentionToken) return;
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const delta = event.key === "ArrowDown" ? 1 : -1;
+      setMentionHighlight(
+        (index) => (index + delta + filteredMentions.length) % filteredMentions.length,
+      );
+    } else if (event.key === "Enter" || event.key === "Tab") {
+      event.preventDefault();
+      pickMention(filteredMentions[mentionHighlight] ?? filteredMentions[0]);
+    }
+    // Escape is handled by the Popover dismiss (onOpenChange clears the token).
   }
 
   async function handleSubmit() {
@@ -266,7 +301,7 @@ function CommentsPanel({
         mentionedUserIds: resolveMentionedUserIds(body, candidates, draftMentionedUserIds),
       });
       setBody("");
-      setCursor(0);
+      setMentionToken(null);
       setDraftMentionedUserIds([]);
     } catch (submitError) {
       notify.error(submitError instanceof Error ? submitError.message : "Failed to post comment.");
@@ -375,32 +410,86 @@ function CommentsPanel({
         ) : null}
       </div>
 
-      <div className="space-y-2">
-        <textarea
-          ref={textareaRef}
-          data-testid="comment-input"
-          className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm"
-          placeholder="Write a comment…"
-          value={body}
-          onChange={(e) => {
-            setBody(e.target.value);
-            setCursor(e.target.selectionStart);
-          }}
-          onClick={(e) => setCursor(e.currentTarget.selectionStart)}
-          onKeyUp={(e) => setCursor(e.currentTarget.selectionStart)}
-          onSelect={(e) => setCursor(e.currentTarget.selectionStart)}
-        />
-        <div data-testid="comment-mention-picker">
-          <UserSelect
-            key={mentionPickerKey}
-            value=""
-            onChange={insertMention}
-            options={mentionOptions}
-            placeholder="Search teammates…"
-            emptyLabel="Mention someone…"
+      <Popover
+        open={mentionPopupOpen}
+        onOpenChange={(open) => {
+          if (!open) setMentionToken(null);
+        }}
+      >
+        <PopoverAnchor asChild>
+          <textarea
+            ref={textareaRef}
+            data-testid="comment-input"
+            className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm"
+            placeholder="Write a comment… type @ to mention a teammate"
+            value={body}
+            aria-activedescendant={
+              mentionPopupOpen && filteredMentions[mentionHighlight]
+                ? `comment-mention-option-${filteredMentions[mentionHighlight].userId}`
+                : undefined
+            }
+            onChange={(e) => {
+              setBody(e.target.value);
+              syncMentionToken(e.target.value, e.target.selectionStart);
+            }}
+            onFocus={() => setMentionFocused(true)}
+            onBlur={() => setMentionFocused(false)}
+            onKeyDown={handleComposerKeyDown}
+            onSelect={(e) =>
+              syncMentionToken(e.currentTarget.value, e.currentTarget.selectionStart)
+            }
           />
-        </div>
-      </div>
+        </PopoverAnchor>
+        <PopoverContent
+          side="bottom"
+          align="start"
+          sideOffset={6}
+          role="listbox"
+          aria-label="Mention a teammate"
+          data-testid="comment-mention-picker"
+          className="max-h-60 w-(--radix-popover-trigger-width) gap-0 overflow-y-auto p-1 text-sm"
+          onOpenAutoFocus={(event) => event.preventDefault()}
+        >
+          {filteredMentions.map((candidate, index) => (
+            <button
+              key={candidate.userId}
+              type="button"
+              id={`comment-mention-option-${candidate.userId}`}
+              role="option"
+              aria-selected={index === mentionHighlight}
+              data-active={index === mentionHighlight}
+              className={`flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm ${
+                index === mentionHighlight ? "bg-muted" : "hover:bg-muted"
+              }`}
+              onMouseDown={(event) => {
+                event.preventDefault();
+                pickMention(candidate);
+              }}
+              onMouseEnter={() => setMentionHighlight(index)}
+            >
+              <UserAvatar
+                name={candidate.name}
+                email={candidate.email}
+                userId={candidate.userId}
+                size="sm"
+                pixelSize={24}
+                className="size-6 rounded-md"
+              />
+              <span className="min-w-0">
+                <span className="block truncate">{candidate.name}</span>
+                <span className="block truncate text-xs text-muted-foreground">
+                  {buildUserSelectDescription({
+                    role: candidate.username ? `@${candidate.username}` : undefined,
+                    email: candidate.email,
+                    pronouns: candidate.pronouns,
+                    gradYear: candidate.gradYear,
+                  })}
+                </span>
+              </span>
+            </button>
+          ))}
+        </PopoverContent>
+      </Popover>
 
       <Button
         type="button"
