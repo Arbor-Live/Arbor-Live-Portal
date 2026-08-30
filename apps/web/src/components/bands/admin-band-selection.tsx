@@ -40,8 +40,12 @@ export function AdminBandSelectionProvider({ children }: { children: ReactNode }
   const isBandContext =
     activeOrg?.organizationType === "band" || activeOrg?.organizationType === "dj";
   const isAdminManaging = Boolean(viewer?.isAdmin && !isBandContext);
+  const bands = useQuery(
+    api.users.listBandOrganizationsAdmin,
+    isAdminManaging ? { includeArchived: false } : "skip",
+  );
 
-  const [organizationId, setOrganizationIdState] = useState<string | null>(() => {
+  const [organizationIdState, setOrganizationIdState] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
     try {
       return sessionStorage.getItem(STORAGE_KEY);
@@ -49,6 +53,18 @@ export function AdminBandSelectionProvider({ children }: { children: ReactNode }
       return null;
     }
   });
+
+  const organizationId = useMemo(() => {
+    if (!isAdminManaging) return null;
+    if (!bands?.length) return organizationIdState;
+    if (
+      organizationIdState &&
+      bands.some((band) => band.organizationId === organizationIdState)
+    ) {
+      return organizationIdState;
+    }
+    return bands[0]?.organizationId ?? organizationIdState;
+  }, [bands, isAdminManaging, organizationIdState]);
 
   const setOrganizationId = useCallback((next: string) => {
     setOrganizationIdState(next);
@@ -62,7 +78,7 @@ export function AdminBandSelectionProvider({ children }: { children: ReactNode }
   return (
     <AdminBandSelectionContext.Provider
       value={{
-        organizationId: isAdminManaging ? organizationId : null,
+        organizationId,
         setOrganizationId,
         isAdminManaging,
       }}
@@ -89,15 +105,6 @@ export function AdminBandPickerCard() {
       })),
     [bands],
   );
-
-  useEffect(() => {
-    if (!isAdminManaging || !bands?.length) return;
-    const selectedStillExists = Boolean(
-      organizationId && bands.some((band) => band.organizationId === organizationId),
-    );
-    if (selectedStillExists) return;
-    setOrganizationId(bands[0].organizationId);
-  }, [bands, isAdminManaging, organizationId, setOrganizationId]);
 
   if (!isAdminManaging) return null;
 
