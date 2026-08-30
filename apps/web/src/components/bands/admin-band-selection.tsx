@@ -5,7 +5,7 @@ import {
   useCallback,
   useContext,
   useMemo,
-  useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 import { useQuery } from "convex/react";
@@ -15,6 +15,36 @@ import { SearchableSelect } from "@/components/inventory/searchable-select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 const STORAGE_KEY = "arbor.adminBandOrganizationId";
+
+const adminBandOrgStorageListeners = new Set<() => void>();
+
+function subscribeAdminBandOrgStorage(onStoreChange: () => void) {
+  adminBandOrgStorageListeners.add(onStoreChange);
+  return () => adminBandOrgStorageListeners.delete(onStoreChange);
+}
+
+function getAdminBandOrgStorageSnapshot() {
+  try {
+    return sessionStorage.getItem(STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function getAdminBandOrgStorageServerSnapshot() {
+  return null;
+}
+
+function setAdminBandOrgStorage(next: string) {
+  try {
+    sessionStorage.setItem(STORAGE_KEY, next);
+  } catch {
+    // ignore
+  }
+  for (const listener of adminBandOrgStorageListeners) {
+    listener();
+  }
+}
 
 type AdminBandSelectionContextValue = {
   /** When set, rider/profile APIs should target this band (admin mode). */
@@ -45,18 +75,16 @@ export function AdminBandSelectionProvider({ children }: { children: ReactNode }
     isAdminManaging ? { includeArchived: false } : "skip",
   );
 
-  const [organizationIdState, setOrganizationIdState] = useState<string | null>(() => {
-    if (typeof window === "undefined") return null;
-    try {
-      return sessionStorage.getItem(STORAGE_KEY);
-    } catch {
-      return null;
-    }
-  });
+  const organizationIdState = useSyncExternalStore(
+    subscribeAdminBandOrgStorage,
+    getAdminBandOrgStorageSnapshot,
+    getAdminBandOrgStorageServerSnapshot,
+  );
 
   const organizationId = useMemo(() => {
     if (!isAdminManaging) return null;
-    if (!bands?.length) return organizationIdState;
+    if (bands === undefined) return organizationIdState;
+    if (bands.length === 0) return null;
     if (
       organizationIdState &&
       bands.some((band) => band.organizationId === organizationIdState)
@@ -67,12 +95,7 @@ export function AdminBandSelectionProvider({ children }: { children: ReactNode }
   }, [bands, isAdminManaging, organizationIdState]);
 
   const setOrganizationId = useCallback((next: string) => {
-    setOrganizationIdState(next);
-    try {
-      sessionStorage.setItem(STORAGE_KEY, next);
-    } catch {
-      // ignore
-    }
+    setAdminBandOrgStorage(next);
   }, []);
 
   return (

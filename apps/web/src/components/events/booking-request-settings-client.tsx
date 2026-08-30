@@ -14,6 +14,7 @@ export function BookingRequestSettingsClient() {
   const managers = useQuery(api.invoices.listManagers, {});
   const updateSettings = useMutation(api.eventRequests.updateBookingRequestSettings);
   const [localSelectedIds, setLocalSelectedIds] = useState<string[] | null>(null);
+  const settingsReady = settings !== undefined;
   const selectedIds = localSelectedIds ?? settings?.roundRobinUserIds ?? [];
   const [pickerValue, setPickerValue] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -79,7 +80,11 @@ export function BookingRequestSettingsClient() {
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => setLocalSelectedIds(selectedIds.filter((id) => id !== option.value))}
+                disabled={!settingsReady}
+                onClick={() => {
+                  if (!settingsReady) return;
+                  setLocalSelectedIds(selectedIds.filter((id) => id !== option.value));
+                }}
               >
                 Remove
               </Button>
@@ -90,7 +95,10 @@ export function BookingRequestSettingsClient() {
           ) : null}
         </div>
 
-        <div className="flex flex-wrap items-end gap-2">
+        <fieldset
+          disabled={!settingsReady}
+          className="flex flex-wrap items-end gap-2 border-0 p-0 m-0 min-w-0"
+        >
           <div className="min-w-[240px] flex-1">
             <UserSelect
               value={pickerValue}
@@ -103,18 +111,18 @@ export function BookingRequestSettingsClient() {
           <Button
             type="button"
             variant="outline"
-            disabled={!pickerValue}
+            disabled={!settingsReady || !pickerValue}
             onClick={() => {
-              if (!pickerValue) return;
+              if (!settingsReady || !pickerValue) return;
               setLocalSelectedIds([...selectedIds, pickerValue]);
               setPickerValue("");
             }}
           >
             Add
           </Button>
-        </div>
+        </fieldset>
 
-        <Button type="button" onClick={() => void handleSave()} disabled={saving || settings === undefined}>
+        <Button type="button" onClick={() => void handleSave()} disabled={saving || !settingsReady}>
           {saving ? "Saving..." : "Save rotation"}
         </Button>
       </div>
