@@ -1,5 +1,4 @@
 import {
-  clock,
   effect,
   frameLoop,
   init,
@@ -65,12 +64,20 @@ export function createRenderer({
       set: { u: { time: 0, w: 1, h: 1, aspect: 1 } },
     });
 
-    const time = clock(gpu);
+    // Wall-clock from the first rendered frame — avoids a large vgpu clock delta
+    // after async init, which made early bokeh wraps pop on screen.
+    let startMs: number | undefined;
     frameLoop(gpu, (currentFrame) => {
       if (disposed || !output || !scene) return;
       try {
         const [w, h] = output.size;
-        scene.set({ u: { time: time.time, w, h, aspect: w / h } });
+        if (w < 2 || h < 2) return;
+
+        const nowMs = performance.now();
+        if (startMs === undefined) startMs = nowMs;
+        const elapsed = (nowMs - startMs) / 1000;
+
+        scene.set({ u: { time: elapsed, w, h, aspect: w / h } });
         currentFrame.pass(output, scene);
       } catch (error) {
         fail(error);
