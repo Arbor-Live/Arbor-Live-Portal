@@ -33,6 +33,21 @@ function parseDueDateString(dueDate: string, timezone: string) {
   return zonedLocalTimeToUtcMs(trimmed, 9, 0, timezone);
 }
 
+/**
+ * End of the due-date calendar day (Pacific), or null when no due date is set.
+ * An invoice is "overdue" once this instant has passed. Parses at 9am then
+ * adds 15h so the boundary lands on the midnight after the due day — a due
+ * date that is still today is not yet overdue.
+ */
+export function invoiceDueEndMs(
+  invoice: Pick<Doc<"invoices">, "dueDate">,
+  timezone: string = EVENT_TIMEZONE,
+): number | null {
+  if (!invoice.dueDate) return null;
+  const dueAt = parseDueDateString(invoice.dueDate, timezone);
+  return dueAt == null ? null : dueAt + 15 * 60 * 60 * 1000;
+}
+
 export function getPaymentDueAt(
   invoice: Pick<Doc<"invoices">, "dueDate" | "approvedAt" | "clientApprovalStatus">,
   event: Pick<Doc<"events">, "timezone">,

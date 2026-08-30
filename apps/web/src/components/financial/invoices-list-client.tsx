@@ -41,12 +41,14 @@ type InvoiceLifecycle =
   | "awaiting_approval"
   | "changes_requested"
   | "payment_pending"
+  | "proof_received"
+  | "overdue"
   | "paid"
   | "void";
 
 type InvoiceLifecycleInput = Pick<
   InvoiceRow,
-  "status" | "clientApprovalStatus" | "paymentReceivedAt"
+  "status" | "clientApprovalStatus" | "paymentStatus"
 >;
 
 const LIFECYCLE_OPTIONS: { value: InvoiceLifecycle; label: string }[] = [
@@ -54,6 +56,8 @@ const LIFECYCLE_OPTIONS: { value: InvoiceLifecycle; label: string }[] = [
   { value: "awaiting_approval", label: "Awaiting approval" },
   { value: "changes_requested", label: "Changes requested" },
   { value: "payment_pending", label: "Payment pending" },
+  { value: "proof_received", label: "Payment proof received" },
+  { value: "overdue", label: "Overdue" },
   { value: "paid", label: "Paid" },
   { value: "void", label: "Void" },
 ];
@@ -61,8 +65,7 @@ const LIFECYCLE_OPTIONS: { value: InvoiceLifecycle; label: string }[] = [
 function invoiceLifecycle(invoice: InvoiceLifecycleInput): InvoiceLifecycle {
   if (invoice.status === "void") return "void";
   if (invoice.status === "draft") return "draft";
-  if (invoice.paymentReceivedAt) return "paid";
-  if (invoice.clientApprovalStatus === "approved") return "payment_pending";
+  if (invoice.paymentStatus) return invoice.paymentStatus;
   if (invoice.clientApprovalStatus === "changes_requested") return "changes_requested";
   return "awaiting_approval";
 }
@@ -77,6 +80,10 @@ function lifecycleBadgeClass(lifecycle: InvoiceLifecycle) {
       return "border-emerald-500/30 bg-emerald-500/10 text-emerald-700";
     case "payment_pending":
       return "border-sky-500/30 bg-sky-500/10 text-sky-700";
+    case "proof_received":
+      return "border-violet-500/30 bg-violet-500/10 text-violet-700";
+    case "overdue":
+      return "border-red-500/30 bg-red-500/10 text-red-700";
     case "changes_requested":
       return "border-amber-500/30 bg-amber-500/10 text-amber-800";
     case "awaiting_approval":
@@ -111,7 +118,10 @@ export function InvoicesListClient() {
       if (lifecycleFilters[0] === "draft") return { status: "draft" as const };
       if (lifecycleFilters[0] === "void") return { status: "void" as const };
     }
-    return {};
+    // Void and paid are hidden unless explicitly selected in the Stage filter.
+    const hideClosed =
+      !lifecycleFilters.includes("void") && !lifecycleFilters.includes("paid");
+    return hideClosed ? { excludeClosed: true as const } : {};
   }, [lifecycleFilters]);
   const rows = useQuery(api.invoices.listEnriched, listQueryArgs);
   const deleteInvoiceAdmin = useMutation(api.adminDeletes.deleteInvoiceAdmin);
@@ -130,6 +140,14 @@ export function InvoicesListClient() {
     return (rows ?? []).filter((invoice) => {
       const lifecycle = invoiceLifecycle(invoice);
       if (lifecycleFilters.length > 0 && !lifecycleFilters.includes(lifecycle)) {
+        return false;
+      }
+      // Void and paid are archived by default; selecting them in the Stage
+      // filter opts back in.
+      if (
+        (lifecycle === "void" || lifecycle === "paid") &&
+        !lifecycleFilters.includes(lifecycle)
+      ) {
         return false;
       }
       if (!needle) return true;
@@ -161,11 +179,17 @@ export function InvoicesListClient() {
           header: ({ column }) => <DataTableColumnHeader column={column} title="Status" />,
           cell: ({ row }) => {
             const lifecycle = invoiceLifecycle(row.original);
+            const label =
+              lifecycle === "overdue" && row.original.daysOverdue > 0
+                ? `Overdue · ${row.original.daysOverdue} day${
+                    row.original.daysOverdue === 1 ? "" : "s"
+                  }`
+                : lifecycleLabel(lifecycle);
             return (
               <span
                 className={`inline-flex max-w-full items-center whitespace-nowrap rounded-md border px-2 py-0.5 text-xs font-medium ${lifecycleBadgeClass(lifecycle)}`}
               >
-                {lifecycleLabel(lifecycle)}
+                {label}
               </span>
             );
           },
