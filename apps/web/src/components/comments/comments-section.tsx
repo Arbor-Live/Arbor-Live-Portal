@@ -240,8 +240,8 @@ function CommentsPanel({
     // Handles that start with the query float up so `@ja` surfaces @jane first.
     matches.sort(
       (a, b) =>
-        Number(mentionHandle(a).toLowerCase().startsWith(query)) -
-          Number(mentionHandle(b).toLowerCase().startsWith(query)) ||
+        Number(mentionHandle(b).toLowerCase().startsWith(query)) -
+          Number(mentionHandle(a).toLowerCase().startsWith(query)) ||
         mentionHandle(a).localeCompare(mentionHandle(b)),
     );
     return matches.slice(0, MENTION_POPUP_LIMIT);

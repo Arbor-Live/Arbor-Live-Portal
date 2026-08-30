@@ -54,8 +54,12 @@ test.describe("event comments and mentions", () => {
     // Match on the stable crew email, not the name: `smoke/invite.spec.ts`
     // creates a new "E2E Crew"-named member on every run, so a name-scoped
     // locator strict-violates once more than one of those has accumulated on a
-    // shared deployment.
-    await picker.getByRole("option", { name: new RegExp(e2eEnv.crewEmail, "i") }).click();
+    // shared deployment. Escape it: the `.` in the domain is data, not a wildcard.
+    const emailPattern = new RegExp(
+      e2eEnv.crewEmail.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+      "i",
+    );
+    await picker.getByRole("option", { name: emailPattern }).click();
     await expect(picker).toBeHidden({ timeout: 15_000 });
 
     await expect(input).toHaveValue(new RegExp(`@${mentionHandle}`));
