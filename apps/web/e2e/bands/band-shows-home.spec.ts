@@ -151,10 +151,10 @@ test.describe("staff band assignment on event", () => {
     const afterCreatedAt = Date.now() - 1_000;
     await page.goto(seeded.eventPath);
     await expect(page.getByText("Edit Event").first()).toBeVisible({ timeout: 30_000 });
-    const bandsCard = page.locator("div").filter({
-      has: page.getByRole("heading", { name: "Bands & Performers" }),
+    const bandsCard = page.locator('[data-slot="card"]').filter({
+      has: page.getByText("Bands & Performers"),
     });
-    await bandsCard.scrollIntoViewIfNeeded();
+    await expect(bandsCard).toBeVisible({ timeout: 20_000 });
     await expect(bandsCard.getByRole("button", { name: "Invite new band" })).toBeVisible({
       timeout: 20_000,
     });
