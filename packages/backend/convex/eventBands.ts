@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
-import { components } from "./_generated/api";
+import { components, internal } from "./_generated/api";
 import { requireArborInternalContext, requireAuth, requireBandContext, getUserId } from "./lib/auth";
 import { inviteEmailToBandOrg, provisionBandOrganization } from "./lib/bandOrgInvite";
 import { scheduleBandEventOnboardingInviteEmail } from "./email/bandEventInviteEmails";
@@ -18,6 +18,11 @@ const participationRoleValue = v.union(
   v.literal("headliner"),
   v.literal("support"),
   v.literal("other"),
+);
+
+const bandPricingModeValue = v.union(
+  v.literal("per_member_hourly"),
+  v.literal("fixed_total"),
 );
 
 const paymentStatusValue = v.union(
@@ -433,6 +438,11 @@ export const inviteBandFromEvent = mutation({
     email: v.string(),
     artistName: v.string(),
     role: participationRoleValue,
+    pricingMode: bandPricingModeValue,
+    ratePerMemberPerHourUsd: v.optional(v.number()),
+    performanceHours: v.optional(v.number()),
+    memberCount: v.optional(v.number()),
+    totalUsd: v.optional(v.number()),
   },
   returns: v.object({
     organizationId: v.string(),
@@ -450,6 +460,7 @@ export const inviteBandFromEvent = mutation({
     const { organizationId, displayName, contactEmail } = await provisionBandOrganization(ctx, {
       displayName: args.artistName,
       contactEmail: args.email,
+      rejectExistingOrganization: true,
     });
 
     const existingParticipation = await ctx.db
@@ -475,6 +486,17 @@ export const inviteBandFromEvent = mutation({
       eventId: args.eventId,
       organizationId,
       role: args.role,
+    });
+
+    await ctx.runMutation(internal.bandPayments.upsertForEventInternal, {
+      eventId: args.eventId,
+      organizationId,
+      role: args.role,
+      pricingMode: args.pricingMode,
+      ratePerMemberPerHourUsd: args.ratePerMemberPerHourUsd,
+      performanceHours: args.performanceHours,
+      memberCount: args.memberCount,
+      totalUsd: args.totalUsd,
     });
 
     await scheduleBandEventOnboardingInviteEmail(ctx, {

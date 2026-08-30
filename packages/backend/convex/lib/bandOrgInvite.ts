@@ -18,6 +18,14 @@ function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
 }
 
+function toSlug(input: string) {
+  return input
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 export function isValidEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 }
@@ -104,12 +112,27 @@ export async function provisionBandOrganization(
     displayName: string;
     contactEmail: string;
     contactName?: string;
+    /** When true, refuse to reuse an org whose slug matches the display name. */
+    rejectExistingOrganization?: boolean;
   },
 ) {
   const displayName = args.displayName.trim();
   const contactEmail = normalizeEmail(args.contactEmail);
   if (!displayName) throw new Error("Enter an artist or band name.");
   if (!isValidEmail(contactEmail)) throw new Error("Enter a valid email address.");
+
+  if (args.rejectExistingOrganization) {
+    const slug = toSlug(displayName);
+    const existingOrg = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
+      model: "organization",
+      where: [{ field: "slug", value: slug }],
+    })) as { id?: string; _id?: string } | null;
+    if (existingOrg) {
+      throw new Error(
+        'A band with this name already exists. Use "Add band" to assign an existing band.',
+      );
+    }
+  }
 
   const now = Date.now();
   const resolved = await resolveOrCreateOrganization(ctx, displayName);

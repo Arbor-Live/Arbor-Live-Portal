@@ -14,7 +14,7 @@ import { notify } from "@/lib/notify";
 import { ArborOnlyGuard } from "@/components/org-context-guard";
 import { formatUsd } from "@/lib/format";
 import { formatBandPayeePayoutMethod } from "@/lib/band-payout-copy";
-import { eventBandOnboardingInviteSchema } from "@/lib/validations/bands";
+import { eventBandOnboardingInviteSchema, eventBandPayoutFieldsSchema } from "@/lib/validations/bands";
 
 type PricingMode = "per_member_hourly" | "fixed_total";
 type ParticipationRole = "headliner" | "support" | "other";
@@ -297,7 +297,6 @@ function InviteBandForm({
   onCancel: () => void;
 }) {
   const inviteBand = useMutation(api.eventBands.inviteBandFromEvent);
-  const upsertPayment = useMutation(api.bandPayments.upsertForEvent);
   const [email, setEmail] = useState("");
   const [artistName, setArtistName] = useState("");
   const [role, setRole] = useState<ParticipationRole>("headliner");
@@ -334,15 +333,10 @@ function InviteBandForm({
     }
     setBusy(true);
     try {
-      const { organizationId } = await inviteBand({
+      await inviteBand({
         eventId,
         email: parsed.data.email,
         artistName: parsed.data.artistName,
-        role: parsed.data.role,
-      });
-      await upsertPayment({
-        eventId,
-        organizationId,
         role: parsed.data.role,
         pricingMode: parsed.data.pricingMode,
         ratePerMemberPerHourUsd:
@@ -626,6 +620,17 @@ function EventBandPaymentForm({
       notify.error("Select a band or artist.");
       return;
     }
+    const payoutParsed = eventBandPayoutFieldsSchema.safeParse({
+      pricingMode,
+      ratePerMemberPerHourUsd,
+      performanceHours,
+      memberCount,
+      fixedTotalUsd,
+    });
+    if (!payoutParsed.success) {
+      notify.error(payoutParsed.error.issues[0]?.message ?? "Check the form and try again.");
+      return;
+    }
     setBusy(true);
     try {
       await upsert({
@@ -633,15 +638,20 @@ function EventBandPaymentForm({
         paymentId: payment?._id,
         organizationId: resolvedOrgId,
         role,
-        pricingMode,
+        pricingMode: payoutParsed.data.pricingMode,
         ratePerMemberPerHourUsd:
-          pricingMode === "per_member_hourly"
-            ? Number(ratePerMemberPerHourUsd || "0")
+          payoutParsed.data.pricingMode === "per_member_hourly"
+            ? payoutParsed.data.ratePerMemberPerHourUsd
             : undefined,
-        performanceHours: Number(performanceHours || "0"),
+        performanceHours: payoutParsed.data.performanceHours,
         memberCount:
-          pricingMode === "per_member_hourly" ? Number(memberCount || "0") : undefined,
-        totalUsd: pricingMode === "fixed_total" ? Number(fixedTotalUsd || "0") : computedTotal,
+          payoutParsed.data.pricingMode === "per_member_hourly"
+            ? payoutParsed.data.memberCount
+            : undefined,
+        totalUsd:
+          payoutParsed.data.pricingMode === "fixed_total"
+            ? payoutParsed.data.fixedTotalUsd
+            : computedTotal,
         photoAlbumUrl: photoAlbumUrl.trim() || undefined,
       });
       onSaved();
