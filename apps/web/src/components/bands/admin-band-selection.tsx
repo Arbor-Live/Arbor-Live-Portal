@@ -4,7 +4,6 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -42,20 +41,14 @@ export function AdminBandSelectionProvider({ children }: { children: ReactNode }
     activeOrg?.organizationType === "band" || activeOrg?.organizationType === "dj";
   const isAdminManaging = Boolean(viewer?.isAdmin && !isBandContext);
 
-  const [organizationId, setOrganizationIdState] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!isAdminManaging) {
-      setOrganizationIdState(null);
-      return;
-    }
+  const [organizationId, setOrganizationIdState] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
     try {
-      const stored = sessionStorage.getItem(STORAGE_KEY);
-      if (stored) setOrganizationIdState(stored);
+      return sessionStorage.getItem(STORAGE_KEY);
     } catch {
-      // ignore
+      return null;
     }
-  }, [isAdminManaging]);
+  });
 
   const setOrganizationId = useCallback((next: string) => {
     setOrganizationIdState(next);

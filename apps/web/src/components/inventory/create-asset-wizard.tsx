@@ -116,20 +116,19 @@ function CreateAssetWizardForm({ onClose }: { onClose: () => void }) {
     });
   }, [ensureDefaultCategories]);
 
-  useEffect(() => {
-    if (!categories?.length) return;
-    setTypeDraft((prev) => {
-      if (categories.some((row) => row.key === prev.category)) return prev;
-      return { ...prev, category: categories[0]!.key };
-    });
-  }, [categories]);
+  const categoryOptions = useMemo(() => toCategoryOptions(categories), [categories]);
+
+  const effectiveTypeDraftCategory = useMemo(() => {
+    if (!categories?.length) return typeDraft.category;
+    return categories.some((row) => row.key === typeDraft.category)
+      ? typeDraft.category
+      : categories[0]!.key;
+  }, [categories, typeDraft.category]);
 
   const typeLabel = useMemo(() => {
     const type = types?.find((entry) => entry._id === typeId);
     return type ? formatTypeDisplay(type) : "";
   }, [typeId, types]);
-
-  const categoryOptions = useMemo(() => toCategoryOptions(categories), [categories]);
 
   /** Sibling tags + existing items, as containment options keyed by assetId. */
   const containmentOptions = useMemo(() => {
@@ -256,7 +255,7 @@ function CreateAssetWizardForm({ onClose }: { onClose: () => void }) {
   }, [resolveResult]);
 
   async function createNewType() {
-    if (!typeDraft.name.trim() || !typeDraft.model.trim() || !typeDraft.category) {
+    if (!typeDraft.name.trim() || !typeDraft.model.trim() || !effectiveTypeDraftCategory) {
       setTypeDraftError("Name, model, and category are required.");
       return;
     }
@@ -267,7 +266,7 @@ function CreateAssetWizardForm({ onClose }: { onClose: () => void }) {
         name: typeDraft.name.trim(),
         model: typeDraft.model.trim(),
         manufacturer: typeDraft.manufacturer.trim() || undefined,
-        category: typeDraft.category,
+        category: effectiveTypeDraftCategory,
         msrpUsd: typeDraft.msrpUsd === "" ? undefined : Number(typeDraft.msrpUsd),
       });
       setTypeId(id);
@@ -417,7 +416,7 @@ function CreateAssetWizardForm({ onClose }: { onClose: () => void }) {
                     <div className="space-y-2">
                       <Label>Category</Label>
                       <SearchableSelect
-                        value={typeDraft.category}
+                        value={effectiveTypeDraftCategory}
                         onChange={(category) => setTypeDraft((prev) => ({ ...prev, category }))}
                         options={categoryOptions.map((category) => ({
                           value: category.value,

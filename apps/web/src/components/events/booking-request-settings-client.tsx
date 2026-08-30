@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -13,17 +13,11 @@ export function BookingRequestSettingsClient() {
   const settings = useQuery(api.eventRequests.getBookingRequestSettings, {});
   const managers = useQuery(api.invoices.listManagers, {});
   const updateSettings = useMutation(api.eventRequests.updateBookingRequestSettings);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [localSelectedIds, setLocalSelectedIds] = useState<string[] | null>(null);
+  const selectedIds = localSelectedIds ?? settings?.roundRobinUserIds ?? [];
   const [pickerValue, setPickerValue] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [hydrated, setHydrated] = useState(false);
-
-  useEffect(() => {
-    if (!settings || hydrated) return;
-    setSelectedIds(settings.roundRobinUserIds);
-    setHydrated(true);
-  }, [settings, hydrated]);
 
   const options: UserSelectOption[] = useMemo(
     () =>
@@ -85,7 +79,7 @@ export function BookingRequestSettingsClient() {
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => setSelectedIds((ids) => ids.filter((id) => id !== option.value))}
+                onClick={() => setLocalSelectedIds(selectedIds.filter((id) => id !== option.value))}
               >
                 Remove
               </Button>
@@ -112,7 +106,7 @@ export function BookingRequestSettingsClient() {
             disabled={!pickerValue}
             onClick={() => {
               if (!pickerValue) return;
-              setSelectedIds((ids) => [...ids, pickerValue]);
+              setLocalSelectedIds([...selectedIds, pickerValue]);
               setPickerValue("");
             }}
           >
@@ -120,7 +114,7 @@ export function BookingRequestSettingsClient() {
           </Button>
         </div>
 
-        <Button type="button" onClick={() => void handleSave()} disabled={saving || !hydrated}>
+        <Button type="button" onClick={() => void handleSave()} disabled={saving || settings === undefined}>
           {saving ? "Saving..." : "Save rotation"}
         </Button>
       </div>

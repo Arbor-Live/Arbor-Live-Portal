@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useId, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useId, useMemo, useState } from "react";
 import { useFormContext, useWatch } from "react-hook-form";
 import { useQuery } from "convex/react";
 import { Button } from "@/components/ui/button";
@@ -129,14 +129,14 @@ const ShowSlotPanel = memo(function ShowSlotPanel({
 
 export function EventScheduleField() {
   const { setValue, getFieldState, formState } = useFormContext<BookingRequestFormValues>();
-  const showSlots =
-    (useWatch({ name: "showSlots" }) as BookingRequestFormValues["showSlots"] | undefined) ?? [];
+  const watchedShowSlots = useWatch({ name: "showSlots" }) as
+    | BookingRequestFormValues["showSlots"]
+    | undefined;
+  const showSlots = useMemo(() => watchedShowSlots ?? [], [watchedShowSlots]);
   const flexibleSetupTime = Boolean(useWatch({ name: "flexibleSetupTime" }));
   const setupTime = (useWatch({ name: "setupTime" }) as string | undefined) ?? "";
   const [activeSlotIndex, setActiveSlotIndex] = useState(0);
   const minDate = useMemo(() => startOfToday(), []);
-  const showSlotsRef = useRef(showSlots);
-  showSlotsRef.current = showSlots;
 
   const activeIndex = Math.min(activeSlotIndex, Math.max(showSlots.length - 1, 0));
   const activeSlot = showSlots[activeIndex] ?? showSlots[0] ?? createDefaultShowSlot();
@@ -150,14 +150,13 @@ export function EventScheduleField() {
 
   const updateSlotAt = useCallback(
     (index: number, next: ShowSlot) => {
-      const slots = showSlotsRef.current;
       setValue(
         "showSlots",
-        slots.map((slot, slotIndex) => (slotIndex === index ? next : slot)),
+        showSlots.map((slot, slotIndex) => (slotIndex === index ? next : slot)),
         { shouldDirty: true, shouldValidate: true },
       );
     },
-    [setValue],
+    [setValue, showSlots],
   );
 
   const handleSelectDate = useCallback(
@@ -194,24 +193,22 @@ export function EventScheduleField() {
 
   const handleRemoveSlotAt = useCallback(
     (index: number) => {
-      const slots = showSlotsRef.current;
-      const next = slots.filter((_, rowIndex) => rowIndex !== index);
+      const next = showSlots.filter((_, rowIndex) => rowIndex !== index);
       setValue("showSlots", next, { shouldDirty: true, shouldValidate: true });
       setActiveSlotIndex((current) => {
         const adjusted = index < current ? current - 1 : current;
         return Math.min(adjusted, Math.max(next.length - 1, 0));
       });
     },
-    [setValue],
+    [setValue, showSlots],
   );
 
   const handleAddSlot = useCallback(() => {
-    const slots = showSlotsRef.current;
-    const template = slots[0] ?? createDefaultShowSlot();
+    const template = showSlots[0] ?? createDefaultShowSlot();
     setValue(
       "showSlots",
       [
-        ...slots,
+        ...showSlots,
         {
           date: template.date,
           startTime: template.startTime,
@@ -220,8 +217,8 @@ export function EventScheduleField() {
       ],
       { shouldDirty: true, shouldValidate: true },
     );
-    setActiveSlotIndex(slots.length);
-  }, [setValue]);
+    setActiveSlotIndex(showSlots.length);
+  }, [setValue, showSlots]);
 
   return (
     <div className="space-y-4">
