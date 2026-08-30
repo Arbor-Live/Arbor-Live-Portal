@@ -49,7 +49,7 @@ test.describe("event comments and mentions", () => {
     const input = page.getByTestId("comment-input");
     await input.click();
     await input.pressSequentially(`@${mentionHandle}`, { delay: 20 });
-    const picker = comments.getByTestId("comment-mention-picker");
+    const picker = page.getByTestId("comment-mention-picker");
     await expect(picker).toBeVisible({ timeout: 15_000 });
     // Match on the stable crew email, not the name: `smoke/invite.spec.ts`
     // creates a new "E2E Crew"-named member on every run, so a name-scoped

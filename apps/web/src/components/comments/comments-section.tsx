@@ -20,6 +20,7 @@ import { ArborOnlyGuard } from "@/components/org-context-guard";
 import { notify } from "@/lib/notify";
 import { PORTAL_TIMEZONE } from "@/lib/format";
 import { buildUserSelectDescription } from "@/lib/user-select-description";
+import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 
 /** Threads are keyed by subject, so a new surface only adds a literal here. */
 export type CommentSubjectType = "event" | "damage_batch" | "event_request";
@@ -205,8 +206,6 @@ function CommentsPanel({
   const [mentionToken, setMentionToken] = useState<{ start: number; query: string } | null>(null);
   const [mentionHighlight, setMentionHighlight] = useState(0);
   const [mentionFocused, setMentionFocused] = useState(false);
-  /** Token (`start:query`) hidden after Escape until the token changes. */
-  const [dismissedTokenKey, setDismissedTokenKey] = useState<string | null>(null);
   /** User IDs picked from the popup — wins over ambiguous @handle parsing. */
   const [draftMentionedUserIds, setDraftMentionedUserIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
@@ -249,10 +248,7 @@ function CommentsPanel({
   }, [mentionToken, candidates]);
 
   const mentionPopupOpen =
-    mentionFocused &&
-    mentionToken !== null &&
-    filteredMentions.length > 0 &&
-    `${mentionToken.start}:${mentionToken.query}` !== dismissedTokenKey;
+    mentionFocused && mentionToken !== null && filteredMentions.length > 0;
 
   function syncMentionToken(value: string, caret: number) {
     setMentionToken(detectMentionToken(value, caret));
@@ -291,10 +287,8 @@ function CommentsPanel({
     } else if (event.key === "Enter" || event.key === "Tab") {
       event.preventDefault();
       pickMention(filteredMentions[mentionHighlight] ?? filteredMentions[0]);
-    } else if (event.key === "Escape") {
-      event.preventDefault();
-      setDismissedTokenKey(`${mentionToken.start}:${mentionToken.query}`);
     }
+    // Escape is handled by the Popover dismiss (onOpenChange clears the token).
   }
 
   async function handleSubmit() {
@@ -416,75 +410,86 @@ function CommentsPanel({
         ) : null}
       </div>
 
-      <div className="relative">
-        <textarea
-          ref={textareaRef}
-          data-testid="comment-input"
-          className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm"
-          placeholder="Write a comment… type @ to mention a teammate"
-          value={body}
-          aria-activedescendant={
-            mentionPopupOpen && filteredMentions[mentionHighlight]
-              ? `comment-mention-option-${filteredMentions[mentionHighlight].userId}`
-              : undefined
-          }
-          onChange={(e) => {
-            setBody(e.target.value);
-            syncMentionToken(e.target.value, e.target.selectionStart);
-          }}
-          onFocus={() => setMentionFocused(true)}
-          onBlur={() => setMentionFocused(false)}
-          onKeyDown={handleComposerKeyDown}
-          onSelect={(e) => syncMentionToken(e.currentTarget.value, e.currentTarget.selectionStart)}
-        />
-        {mentionPopupOpen ? (
-          <div
-            data-testid="comment-mention-picker"
-            role="listbox"
-            aria-label="Mention a teammate"
-            className="absolute inset-x-0 top-full z-20 mt-1 max-h-60 overflow-y-auto rounded-md border bg-popover p-1 shadow-md"
-          >
-            {filteredMentions.map((candidate, index) => (
-              <button
-                key={candidate.userId}
-                type="button"
-                id={`comment-mention-option-${candidate.userId}`}
-                role="option"
-                aria-selected={index === mentionHighlight}
-                data-active={index === mentionHighlight}
-                className={`flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm ${
-                  index === mentionHighlight ? "bg-muted" : "hover:bg-muted"
-                }`}
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                  pickMention(candidate);
-                }}
-                onMouseEnter={() => setMentionHighlight(index)}
-              >
-                <UserAvatar
-                  name={candidate.name}
-                  email={candidate.email}
-                  userId={candidate.userId}
-                  size="sm"
-                  pixelSize={24}
-                  className="size-6 rounded-md"
-                />
-                <span className="min-w-0">
-                  <span className="block truncate">{candidate.name}</span>
-                  <span className="block truncate text-xs text-muted-foreground">
-                    {buildUserSelectDescription({
-                      role: candidate.username ? `@${candidate.username}` : undefined,
-                      email: candidate.email,
-                      pronouns: candidate.pronouns,
-                      gradYear: candidate.gradYear,
-                    })}
-                  </span>
+      <Popover
+        open={mentionPopupOpen}
+        onOpenChange={(open) => {
+          if (!open) setMentionToken(null);
+        }}
+      >
+        <PopoverAnchor asChild>
+          <textarea
+            ref={textareaRef}
+            data-testid="comment-input"
+            className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm"
+            placeholder="Write a comment… type @ to mention a teammate"
+            value={body}
+            aria-activedescendant={
+              mentionPopupOpen && filteredMentions[mentionHighlight]
+                ? `comment-mention-option-${filteredMentions[mentionHighlight].userId}`
+                : undefined
+            }
+            onChange={(e) => {
+              setBody(e.target.value);
+              syncMentionToken(e.target.value, e.target.selectionStart);
+            }}
+            onFocus={() => setMentionFocused(true)}
+            onBlur={() => setMentionFocused(false)}
+            onKeyDown={handleComposerKeyDown}
+            onSelect={(e) =>
+              syncMentionToken(e.currentTarget.value, e.currentTarget.selectionStart)
+            }
+          />
+        </PopoverAnchor>
+        <PopoverContent
+          side="bottom"
+          align="start"
+          sideOffset={6}
+          role="listbox"
+          aria-label="Mention a teammate"
+          data-testid="comment-mention-picker"
+          className="max-h-60 w-(--radix-popover-trigger-width) gap-0 overflow-y-auto p-1 text-sm"
+          onOpenAutoFocus={(event) => event.preventDefault()}
+        >
+          {filteredMentions.map((candidate, index) => (
+            <button
+              key={candidate.userId}
+              type="button"
+              id={`comment-mention-option-${candidate.userId}`}
+              role="option"
+              aria-selected={index === mentionHighlight}
+              data-active={index === mentionHighlight}
+              className={`flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm ${
+                index === mentionHighlight ? "bg-muted" : "hover:bg-muted"
+              }`}
+              onMouseDown={(event) => {
+                event.preventDefault();
+                pickMention(candidate);
+              }}
+              onMouseEnter={() => setMentionHighlight(index)}
+            >
+              <UserAvatar
+                name={candidate.name}
+                email={candidate.email}
+                userId={candidate.userId}
+                size="sm"
+                pixelSize={24}
+                className="size-6 rounded-md"
+              />
+              <span className="min-w-0">
+                <span className="block truncate">{candidate.name}</span>
+                <span className="block truncate text-xs text-muted-foreground">
+                  {buildUserSelectDescription({
+                    role: candidate.username ? `@${candidate.username}` : undefined,
+                    email: candidate.email,
+                    pronouns: candidate.pronouns,
+                    gradYear: candidate.gradYear,
+                  })}
                 </span>
-              </button>
-            ))}
-          </div>
-        ) : null}
-      </div>
+              </span>
+            </button>
+          ))}
+        </PopoverContent>
+      </Popover>
 
       <Button
         type="button"
