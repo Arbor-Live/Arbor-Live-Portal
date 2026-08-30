@@ -28,6 +28,10 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const backendDir = path.join(root, "packages/backend");
 const webDir = path.join(root, "apps/web");
 const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
+// Web origin and port follow E2E_BASE_URL so parallel worktrees (or anything
+// else squatting on :3000) can run e2e without colliding.
+const siteUrl = new URL(baseURL).origin;
+const webPort = new URL(baseURL).port;
 const skipBoot = process.env.E2E_SKIP_BOOT === "1";
 const isCi = process.env.CI === "true" || process.env.CI === "1";
 
@@ -214,7 +218,7 @@ function ensureLocalBackendEnvFile(secret) {
   const envPath = path.join(backendDir, ".env");
   const contents = [
     `BETTER_AUTH_SECRET=${secret}`,
-    "SITE_URL=http://localhost:3000",
+    `SITE_URL=${siteUrl}`,
     "EMAIL_TEST_MODE=true",
     "",
   ].join("\n");
@@ -399,7 +403,7 @@ async function waitForConvexReady(timeoutMs = 240_000) {
 async function ensureConvexDeploymentEnv(secret, { includeAuthSecret = true } = {}) {
   const pairs = [
     ...(includeAuthSecret ? [["BETTER_AUTH_SECRET", secret]] : []),
-    ["SITE_URL", "http://localhost:3000"],
+    ["SITE_URL", siteUrl],
     ["EMAIL_TEST_MODE", "true"],
     ["E2E_HELPERS", "true"],
     ["E2E_EMAIL_MOCK", "true"],
@@ -658,7 +662,8 @@ async function main() {
       ...process.env,
       ...publicEnv,
       BETTER_AUTH_SECRET: secret,
-      SITE_URL: "http://localhost:3000",
+      SITE_URL: siteUrl,
+      ...(webPort ? { PORT: webPort } : {}),
     };
 
     if (webMode === "prod") {
