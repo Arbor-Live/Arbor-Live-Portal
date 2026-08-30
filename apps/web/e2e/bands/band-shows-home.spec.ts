@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { bandAuthFile, selectSearchableOption } from "../helpers/auth";
 import { e2eEnv } from "../helpers/env";
+import { e2eTestEmail } from "../helpers/email";
 import { pollConvex, runConvex } from "../helpers/convex";
 
 function ensurePayee() {
@@ -135,5 +136,53 @@ test.describe("staff band assignment on event", () => {
     await expect(card).toBeVisible({ timeout: 20_000 });
     await expect(card.getByText("No payout yet")).toBeVisible();
     await bandContext.close();
+  });
+
+  test("admin invites a new band with payout from the event page", async ({ page }) => {
+    test.setTimeout(120_000);
+
+    const stamp = Date.now();
+    const bandName = `E2E Invite Band ${stamp}`;
+    const contactEmail = e2eTestEmail(`invite-${stamp}`);
+    const seeded = runConvex("e2eHelpers:seedUpcomingBandShow", {
+      eventTitle: `E2E Invite Flow ${stamp}`,
+    }) as { eventPath: string; eventTitle: string };
+
+    const afterCreatedAt = Date.now() - 1_000;
+    await page.goto(seeded.eventPath);
+    await expect(page.getByText("Edit Event").first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText("Bands & Performers").first()).toBeVisible({ timeout: 20_000 });
+
+    await page.getByRole("button", { name: "Invite new band" }).click();
+    await page.locator("#invite-band-artist-name").fill(bandName);
+    await page.locator("#invite-band-email").fill(contactEmail);
+    await page.getByRole("button", { name: "Send invite" }).click();
+
+    await expect(page.getByText(bandName).first()).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText("Onboarding pending").first()).toBeVisible();
+    await expect(page.getByText("$600.00").first()).toBeVisible();
+
+    const portalInvite = await pollConvex<{ template: string; to: string }>(
+      "e2eHelpers:getLatestEmailNotification",
+      {
+        to: contactEmail,
+        template: "user_invite",
+        afterCreatedAt,
+      },
+      (row) => row?.template === "user_invite",
+    );
+    expect(portalInvite.to.toLowerCase()).toBe(contactEmail.toLowerCase());
+
+    const eventInvite = await pollConvex<{ template: string; to: string; subject: string }>(
+      "e2eHelpers:getLatestEmailNotification",
+      {
+        to: contactEmail,
+        template: "band_event_onboarding_invite",
+        afterCreatedAt,
+      },
+      (row) => row?.template === "band_event_onboarding_invite",
+    );
+    expect(eventInvite.to.toLowerCase()).toBe(contactEmail.toLowerCase());
+    expect(eventInvite.subject).toMatch(/Finish onboarding for/i);
   });
 });

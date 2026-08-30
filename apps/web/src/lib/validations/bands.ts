@@ -40,3 +40,16 @@ export const bandInviteSchema = z.object({
 });
 
 export type BandInviteFormValues = z.infer<typeof bandInviteSchema>;
+
+export const eventBandOnboardingInviteSchema = z.object({
+  email: z.string().email("Enter a valid email"),
+  artistName: z.string().trim().min(1, "Enter an artist or band name"),
+  role: z.enum(["headliner", "support", "other"]),
+  pricingMode: z.enum(["per_member_hourly", "fixed_total"]),
+  ratePerMemberPerHourUsd: z.coerce.number().min(0, "Rate must be non-negative"),
+  performanceHours: z.coerce.number().min(0, "Performance length must be non-negative"),
+  memberCount: z.coerce.number().min(1, "Member count must be at least 1"),
+  fixedTotalUsd: z.coerce.number().min(0, "Total must be non-negative"),
+});
+
+export type EventBandOnboardingInviteFormValues = z.infer<typeof eventBandOnboardingInviteSchema>;

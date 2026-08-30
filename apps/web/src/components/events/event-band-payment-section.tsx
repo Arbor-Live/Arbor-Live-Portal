@@ -14,6 +14,7 @@ import { notify } from "@/lib/notify";
 import { ArborOnlyGuard } from "@/components/org-context-guard";
 import { formatUsd } from "@/lib/format";
 import { formatBandPayeePayoutMethod } from "@/lib/band-payout-copy";
+import { eventBandOnboardingInviteSchema } from "@/lib/validations/bands";
 
 type PricingMode = "per_member_hourly" | "fixed_total";
 type ParticipationRole = "headliner" | "support" | "other";
@@ -64,6 +65,7 @@ function EventBandsPerformersPanel({ eventId }: { eventId: Id<"events"> }) {
   const updateRole = useMutation(api.eventBands.updateParticipationRole);
   const [editingPaymentForOrg, setEditingPaymentForOrg] = useState<string | null>(null);
   const [addingBand, setAddingBand] = useState(false);
+  const [addBandMode, setAddBandMode] = useState<"existing" | "invite">("existing");
   const [busyOrgId, setBusyOrgId] = useState<string | null>(null);
 
   const totalBandsCost = useMemo(
@@ -152,6 +154,9 @@ function EventBandsPerformersPanel({ eventId }: { eventId: Id<"events"> }) {
                       ) : (
                         <p className="text-muted-foreground">No payout set</p>
                       )}
+                      {performer.awaitingOnboarding ? (
+                        <p className="text-amber-700 dark:text-amber-300">Onboarding pending</p>
+                      ) : null}
                     </div>
                     {performer.payment ? (
                       <p className="text-xs text-muted-foreground">
@@ -221,20 +226,247 @@ function EventBandsPerformersPanel({ eventId }: { eventId: Id<"events"> }) {
         )}
 
         {addingBand ? (
-          <AddBandForm
-            eventId={eventId}
-            excludedOrganizationIds={performers.map((row) => row.organizationId)}
-            onSaved={() => setAddingBand(false)}
-            onCancel={() => setAddingBand(false)}
-          />
+          <div className="space-y-3">
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant={addBandMode === "existing" ? "default" : "outline"}
+                onClick={() => setAddBandMode("existing")}
+              >
+                Existing band
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={addBandMode === "invite" ? "default" : "outline"}
+                onClick={() => setAddBandMode("invite")}
+              >
+                Invite new band
+              </Button>
+            </div>
+            {addBandMode === "invite" ? (
+              <InviteBandForm
+                eventId={eventId}
+                onSaved={() => setAddingBand(false)}
+                onCancel={() => setAddingBand(false)}
+              />
+            ) : (
+              <AddBandForm
+                eventId={eventId}
+                excludedOrganizationIds={performers.map((row) => row.organizationId)}
+                onSaved={() => setAddingBand(false)}
+                onCancel={() => setAddingBand(false)}
+              />
+            )}
+          </div>
         ) : (
-          <Button type="button" size="sm" onClick={() => setAddingBand(true)}>
-            Add band
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" size="sm" onClick={() => {
+              setAddBandMode("existing");
+              setAddingBand(true);
+            }}>
+              Add band
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setAddBandMode("invite");
+                setAddingBand(true);
+              }}
+            >
+              Invite new band
+            </Button>
+          </div>
         )}
 
       </CardContent>
     </Card>
+  );
+}
+
+function InviteBandForm({
+  eventId,
+  onSaved,
+  onCancel,
+}: {
+  eventId: Id<"events">;
+  onSaved: () => void;
+  onCancel: () => void;
+}) {
+  const inviteBand = useMutation(api.eventBands.inviteBandFromEvent);
+  const upsertPayment = useMutation(api.bandPayments.upsertForEvent);
+  const [email, setEmail] = useState("");
+  const [artistName, setArtistName] = useState("");
+  const [role, setRole] = useState<ParticipationRole>("headliner");
+  const [pricingMode, setPricingMode] = useState<PricingMode>("per_member_hourly");
+  const [ratePerMemberPerHourUsd, setRatePerMemberPerHourUsd] = useState("150");
+  const [performanceHours, setPerformanceHours] = useState("1");
+  const [memberCount, setMemberCount] = useState("4");
+  const [fixedTotalUsd, setFixedTotalUsd] = useState("0");
+  const [busy, setBusy] = useState(false);
+
+  const computedTotal = useMemo(() => {
+    if (pricingMode === "fixed_total") return Number(fixedTotalUsd || "0");
+    return (
+      Number(ratePerMemberPerHourUsd || "0") *
+      Number(performanceHours || "0") *
+      Number(memberCount || "0")
+    );
+  }, [pricingMode, ratePerMemberPerHourUsd, performanceHours, memberCount, fixedTotalUsd]);
+
+  async function onSubmit() {
+    const parsed = eventBandOnboardingInviteSchema.safeParse({
+      email,
+      artistName,
+      role,
+      pricingMode,
+      ratePerMemberPerHourUsd,
+      performanceHours,
+      memberCount,
+      fixedTotalUsd,
+    });
+    if (!parsed.success) {
+      notify.error(parsed.error.issues[0]?.message ?? "Check the form and try again.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const { organizationId } = await inviteBand({
+        eventId,
+        email: parsed.data.email,
+        artistName: parsed.data.artistName,
+        role: parsed.data.role,
+      });
+      await upsertPayment({
+        eventId,
+        organizationId,
+        role: parsed.data.role,
+        pricingMode: parsed.data.pricingMode,
+        ratePerMemberPerHourUsd:
+          parsed.data.pricingMode === "per_member_hourly"
+            ? parsed.data.ratePerMemberPerHourUsd
+            : undefined,
+        performanceHours: parsed.data.performanceHours,
+        memberCount:
+          parsed.data.pricingMode === "per_member_hourly" ? parsed.data.memberCount : undefined,
+        totalUsd:
+          parsed.data.pricingMode === "fixed_total" ? parsed.data.fixedTotalUsd : computedTotal,
+      });
+      notify.success(`Invite sent to ${parsed.data.email}.`);
+      onSaved();
+    } catch (error) {
+      notify.error(getConvexErrorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="space-y-3 rounded-md border bg-muted/10 p-4">
+      <p className="text-sm font-medium">Invite new band</p>
+      <div className="grid gap-3 md:grid-cols-2">
+        <div className="space-y-1 md:col-span-2">
+          <Label htmlFor="invite-band-artist-name">Band / artist name</Label>
+          <Input
+            id="invite-band-artist-name"
+            value={artistName}
+            onChange={(e) => setArtistName(e.target.value)}
+            placeholder="The Redwoods"
+            autoComplete="off"
+          />
+        </div>
+        <div className="space-y-1 md:col-span-2">
+          <Label htmlFor="invite-band-email">Contact email</Label>
+          <Input
+            id="invite-band-email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="artist@stanford.edu"
+            autoComplete="email"
+          />
+        </div>
+        <div className="space-y-1">
+          <Label>Role</Label>
+          <SearchableSelect
+            value={role}
+            onChange={(value) => setRole(value as ParticipationRole)}
+            options={ROLE_OPTIONS}
+            placeholder="Role"
+            emptyLabel="Role"
+          />
+        </div>
+        <div className="space-y-1">
+          <Label>Pricing mode</Label>
+          <SearchableSelect
+            value={pricingMode}
+            onChange={(value) => setPricingMode(value as PricingMode)}
+            options={PRICING_OPTIONS}
+            placeholder="Pricing mode"
+            emptyLabel="Select pricing mode"
+          />
+        </div>
+        <div className="space-y-1">
+          <Label>Performance length (hours)</Label>
+          <Input
+            type="number"
+            min="0"
+            step="0.25"
+            value={performanceHours}
+            onChange={(e) => setPerformanceHours(e.target.value)}
+          />
+        </div>
+        {pricingMode === "per_member_hourly" ? (
+          <>
+            <div className="space-y-1">
+              <Label>Rate per member per hour (USD)</Label>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                value={ratePerMemberPerHourUsd}
+                onChange={(e) => setRatePerMemberPerHourUsd(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Member count</Label>
+              <Input
+                type="number"
+                min="1"
+                step="1"
+                value={memberCount}
+                onChange={(e) => setMemberCount(e.target.value)}
+              />
+            </div>
+          </>
+        ) : (
+          <div className="space-y-1">
+            <Label>Total payout (USD)</Label>
+            <Input
+              type="number"
+              min="0"
+              step="0.01"
+              value={fixedTotalUsd}
+              onChange={(e) => setFixedTotalUsd(e.target.value)}
+            />
+          </div>
+        )}
+        <div className="rounded-md border px-3 py-2 text-sm md:col-span-2">
+          <span className="font-medium">Computed total:</span> {formatUsd(computedTotal)}
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" onClick={() => void onSubmit()} disabled={busy}>
+          {busy ? "Sending…" : "Send invite"}
+        </Button>
+        <Button type="button" variant="outline" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </div>
   );
 }
 

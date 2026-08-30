@@ -1,12 +1,10 @@
 import { v } from "convex/values";
-import { components } from "./_generated/api";
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import {
   getUserId,
   listAdminEmailsForVertical,
   requireAdmin,
-  type AuthUser,
 } from "./lib/auth";
 import {
   bandApplicationsAdminUrl,
@@ -14,18 +12,10 @@ import {
   subjectForTemplate,
 } from "./email/constants";
 import { enqueueEmail } from "./email/enqueue";
-import {
-  markInvitationAccepted,
-  scheduleUserInviteEmail,
-} from "./email/invitations";
 import { ensureOrganizationOnboarding } from "./onboarding";
 import { enforceRateLimit, HOUR_MS } from "./rateLimit";
-import {
-  ensureUserProfileDefaults,
-  getAuthRecordId,
-  resolveOrCreateOrganization,
-  upsertOrgMembership,
-} from "./users";
+import { inviteEmailToBandOrg, isValidEmail } from "./lib/bandOrgInvite";
+import { resolveOrCreateOrganization } from "./users";
 
 const memberValue = v.object({
   name: v.string(),
@@ -49,10 +39,6 @@ function normalizeEmail(email: string) {
 
 function isStanfordEmail(email: string) {
   return /^[^\s@]+@(?:stanford\.edu|alumni\.stanford\.edu)$/i.test(email.trim());
-}
-
-function isValidEmail(email: string) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 }
 
 async function scheduleApplicationReceivedEmails(
@@ -80,77 +66,6 @@ async function scheduleApplicationReceivedEmails(
       },
     });
   }
-}
-
-async function inviteEmailToOrg(
-  ctx: MutationCtx,
-  args: {
-    email: string;
-    organizationId: string;
-    role: "org_admin" | "org_member";
-    inviterId: string;
-    /** When true, do not overwrite an existing user's default org (multi-band). */
-    preserveDefaultOrganization: boolean;
-  },
-) {
-  const email = normalizeEmail(args.email);
-  if (!email || !isValidEmail(email)) return null;
-
-  const now = Date.now();
-  const expiresAt = now + 14 * 24 * 60 * 60 * 1000;
-  const created = await ctx.runMutation(components.betterAuth.adapter.create, {
-    input: {
-      model: "invitation",
-      data: {
-        organizationId: args.organizationId,
-        email,
-        role: args.role,
-        status: "pending",
-        expiresAt,
-        createdAt: now,
-        inviterId: args.inviterId,
-      },
-    },
-  });
-  const invitationId = getAuthRecordId(created as { id?: string; _id?: string });
-
-  const existingUser = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
-    model: "user",
-    where: [{ field: "email", value: email }],
-  })) as AuthUser | null;
-  const existingUserId = existingUser ? getUserId(existingUser) : "";
-
-  if (existingUserId) {
-    await ensureUserProfileDefaults(ctx, existingUserId, {
-      active: true,
-      verticals: [],
-      disciplines: [],
-      defaultOrganizationId: args.preserveDefaultOrganization
-        ? undefined
-        : args.organizationId,
-    });
-    await upsertOrgMembership(ctx, {
-      userId: existingUserId,
-      organizationId: args.organizationId,
-      role: args.role,
-      active: true,
-    });
-    await markInvitationAccepted(ctx, invitationId);
-  } else {
-    // New accounts still get this org as default when they accept.
-  }
-
-  await scheduleUserInviteEmail(ctx, {
-    invitationId,
-    email,
-    organizationId: args.organizationId,
-    role: args.role,
-    inviterId: args.inviterId,
-    expiresAt,
-    isExistingUser: Boolean(existingUserId),
-  });
-
-  return { invitationId, email, isExistingUser: Boolean(existingUserId), expiresAt };
 }
 
 export const submitPublic = mutation({
@@ -416,7 +331,7 @@ export const approve = mutation({
       await ctx.db.patch(onboarding._id, stampPatch);
     }
 
-    const contactInvite = await inviteEmailToOrg(ctx, {
+    const contactInvite = await inviteEmailToBandOrg(ctx, {
       email: application.contactEmail,
       organizationId: resolved.id,
       role: "org_admin",
@@ -431,7 +346,7 @@ export const approve = mutation({
         const email = member.email ? normalizeEmail(member.email) : "";
         if (!email || invitedEmails.has(email)) continue;
         invitedEmails.add(email);
-        await inviteEmailToOrg(ctx, {
+        await inviteEmailToBandOrg(ctx, {
           email,
           organizationId: resolved.id,
           role: "org_member",
