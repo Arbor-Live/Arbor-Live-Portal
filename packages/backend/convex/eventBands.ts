@@ -1,8 +1,10 @@
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
-import { components } from "./_generated/api";
+import { components, internal } from "./_generated/api";
 import { requireArborInternalContext, requireAuth, requireBandContext, getUserId } from "./lib/auth";
+import { inviteEmailToBandOrg, provisionBandOrganization } from "./lib/bandOrgInvite";
+import { scheduleBandEventOnboardingInviteEmail } from "./email/bandEventInviteEmails";
 import { listBandLinkedEvents } from "./lib/eventBandAccess";
 import {
   bandPaymentHasAgreementPdf,
@@ -16,6 +18,11 @@ const participationRoleValue = v.union(
   v.literal("headliner"),
   v.literal("support"),
   v.literal("other"),
+);
+
+const bandPricingModeValue = v.union(
+  v.literal("per_member_hourly"),
+  v.literal("fixed_total"),
 );
 
 const paymentStatusValue = v.union(
@@ -179,6 +186,14 @@ export const listPerformersForEvent = query({
           eventEnded: v.boolean(),
         }),
       ),
+      onboardingStatus: v.union(
+        v.literal("not_started"),
+        v.literal("in_progress"),
+        v.literal("completed"),
+        v.literal("waived"),
+        v.null(),
+      ),
+      awaitingOnboarding: v.boolean(),
     }),
   ),
   handler: async (ctx, args) => {
@@ -213,11 +228,20 @@ export const listPerformersForEvent = query({
             designatedPayeePayoutMethod: payment.designatedPayeePayoutMethod,
           })
         : false;
+      const onboarding = await ctx.db
+        .query("organizationOnboarding")
+        .withIndex("by_organizationId", (q) => q.eq("organizationId", row.organizationId))
+        .unique();
+      const onboardingStatus = onboarding?.status ?? null;
+      const awaitingOnboarding =
+        onboardingStatus !== "completed" && onboardingStatus !== "waived";
       result.push({
         participationId: row._id,
         organizationId: row.organizationId,
         bandName: await getOrganizationName(ctx, row.organizationId),
         role: row.role,
+        onboardingStatus,
+        awaitingOnboarding,
         payment: payment
           ? {
               _id: payment._id,
@@ -405,6 +429,85 @@ export const addParticipation = mutation({
       organizationId: args.organizationId,
       role: args.role,
     });
+  },
+});
+
+export const inviteBandFromEvent = mutation({
+  args: {
+    eventId: v.id("events"),
+    email: v.string(),
+    artistName: v.string(),
+    role: participationRoleValue,
+    pricingMode: bandPricingModeValue,
+    ratePerMemberPerHourUsd: v.optional(v.number()),
+    performanceHours: v.optional(v.number()),
+    memberCount: v.optional(v.number()),
+    totalUsd: v.optional(v.number()),
+  },
+  returns: v.object({
+    organizationId: v.string(),
+    participationId: v.id("eventBandParticipations"),
+  }),
+  handler: async (ctx, args) => {
+    await requireArborInternalContext(ctx);
+    const staff = await requireAuth(ctx);
+    const inviterId = getUserId(staff);
+    if (!inviterId) throw new Error("Unable to resolve your account.");
+
+    const event = await ctx.db.get(args.eventId);
+    if (!event) throw new Error("Event not found.");
+
+    const { organizationId, displayName, contactEmail } = await provisionBandOrganization(ctx, {
+      displayName: args.artistName,
+      contactEmail: args.email,
+      rejectExistingOrganization: true,
+    });
+
+    const existingParticipation = await ctx.db
+      .query("eventBandParticipations")
+      .withIndex("by_eventId_and_organizationId", (q) =>
+        q.eq("eventId", args.eventId).eq("organizationId", organizationId),
+      )
+      .unique();
+    if (existingParticipation) {
+      throw new Error(`${displayName} is already assigned to this event.`);
+    }
+
+    const invite = await inviteEmailToBandOrg(ctx, {
+      email: contactEmail,
+      organizationId,
+      role: "org_admin",
+      inviterId,
+      preserveDefaultOrganization: true,
+    });
+    if (!invite) throw new Error("Enter a valid email address.");
+
+    const participationId = await upsertEventBandParticipation(ctx, {
+      eventId: args.eventId,
+      organizationId,
+      role: args.role,
+    });
+
+    await ctx.runMutation(internal.bandPayments.upsertForEventInternal, {
+      eventId: args.eventId,
+      organizationId,
+      role: args.role,
+      pricingMode: args.pricingMode,
+      ratePerMemberPerHourUsd: args.ratePerMemberPerHourUsd,
+      performanceHours: args.performanceHours,
+      memberCount: args.memberCount,
+      totalUsd: args.totalUsd,
+    });
+
+    await scheduleBandEventOnboardingInviteEmail(ctx, {
+      eventId: args.eventId,
+      organizationId,
+      bandName: displayName,
+      contactEmail,
+      role: args.role,
+    });
+
+    return { organizationId, participationId };
   },
 });
 

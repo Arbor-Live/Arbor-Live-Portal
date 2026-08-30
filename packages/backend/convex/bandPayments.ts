@@ -497,129 +497,124 @@ export const getQueueCounts = query({
   },
 });
 
-export const upsertForEvent = mutation({
+const upsertForEventArgs = {
+  eventId: v.id("events"),
+  paymentId: v.optional(v.id("eventBandPayments")),
+  organizationId: v.string(),
+  pricingMode: pricingModeValue,
+  ratePerMemberPerHourUsd: v.optional(v.number()),
+  performanceHours: v.optional(v.number()),
+  memberCount: v.optional(v.number()),
+  totalUsd: v.optional(v.number()),
+  designatedPayeeName: v.optional(v.string()),
+  designatedPayeeEmail: v.optional(v.string()),
+  designatedPayeeUserId: v.optional(v.string()),
+  photoAlbumUrl: v.optional(v.string()),
+  role: v.optional(
+    v.union(v.literal("headliner"), v.literal("support"), v.literal("other")),
+  ),
+};
+
+async function upsertEventBandPayment(
+  ctx: MutationCtx,
   args: {
-    eventId: v.id("events"),
-    paymentId: v.optional(v.id("eventBandPayments")),
-    organizationId: v.string(),
-    pricingMode: pricingModeValue,
-    ratePerMemberPerHourUsd: v.optional(v.number()),
-    performanceHours: v.optional(v.number()),
-    memberCount: v.optional(v.number()),
-    totalUsd: v.optional(v.number()),
-    designatedPayeeName: v.optional(v.string()),
-    designatedPayeeEmail: v.optional(v.string()),
-    designatedPayeeUserId: v.optional(v.string()),
-    photoAlbumUrl: v.optional(v.string()),
-    role: v.optional(
-      v.union(v.literal("headliner"), v.literal("support"), v.literal("other")),
-    ),
+    eventId: Id<"events">;
+    paymentId?: Id<"eventBandPayments">;
+    organizationId: string;
+    pricingMode: BandPaymentPricingMode;
+    ratePerMemberPerHourUsd?: number;
+    performanceHours?: number;
+    memberCount?: number;
+    totalUsd?: number;
+    designatedPayeeName?: string;
+    designatedPayeeEmail?: string;
+    designatedPayeeUserId?: string;
+    photoAlbumUrl?: string;
+    role?: "headliner" | "support" | "other";
   },
-  returns: v.id("eventBandPayments"),
-  handler: async (ctx, args) => {
-    await requireArborInternalContext(ctx);
-    const event = await ctx.db.get(args.eventId);
-    if (!event) throw new Error("Event not found.");
+): Promise<Id<"eventBandPayments">> {
+  const event = await ctx.db.get(args.eventId);
+  if (!event) throw new Error("Event not found.");
 
-    const totalUsd = computeBandPaymentTotal({
-      pricingMode: args.pricingMode as BandPaymentPricingMode,
-      ratePerMemberPerHourUsd: args.ratePerMemberPerHourUsd,
-      performanceHours: args.performanceHours,
-      memberCount: args.memberCount,
-      totalUsd: args.totalUsd,
-    });
+  const totalUsd = computeBandPaymentTotal({
+    pricingMode: args.pricingMode,
+    ratePerMemberPerHourUsd: args.ratePerMemberPerHourUsd,
+    performanceHours: args.performanceHours,
+    memberCount: args.memberCount,
+    totalUsd: args.totalUsd,
+  });
 
-    const now = Date.now();
-    const settings = await getBandPaymentSettings(ctx);
+  const now = Date.now();
+  const settings = await getBandPaymentSettings(ctx);
 
-    let existing: Doc<"eventBandPayments"> | null = null;
-    if (args.paymentId) {
-      const payment = await ctx.db.get(args.paymentId);
-      if (!payment || payment.eventId !== args.eventId) {
-        throw new Error("Band payment not found.");
-      }
-      existing = payment;
-    } else {
-      existing = await ctx.db
-        .query("eventBandPayments")
-        .withIndex("by_eventId_and_organizationId", (q) =>
-          q.eq("eventId", args.eventId).eq("organizationId", args.organizationId),
-        )
-        .unique();
+  let existing: Doc<"eventBandPayments"> | null = null;
+  if (args.paymentId) {
+    const payment = await ctx.db.get(args.paymentId);
+    if (!payment || payment.eventId !== args.eventId) {
+      throw new Error("Band payment not found.");
     }
+    existing = payment;
+  } else {
+    existing = await ctx.db
+      .query("eventBandPayments")
+      .withIndex("by_eventId_and_organizationId", (q) =>
+        q.eq("eventId", args.eventId).eq("organizationId", args.organizationId),
+      )
+      .unique();
+  }
 
-    if (
-      existing &&
-      args.paymentId &&
-      existing.organizationId !== args.organizationId
-    ) {
-      const duplicate = await ctx.db
-        .query("eventBandPayments")
-        .withIndex("by_eventId_and_organizationId", (q) =>
-          q.eq("eventId", args.eventId).eq("organizationId", args.organizationId),
-        )
-        .unique();
-      if (duplicate && duplicate._id !== existing._id && duplicate.status !== "cancelled") {
-        throw new Error("This band is already linked to the event.");
-      }
+  if (
+    existing &&
+    args.paymentId &&
+    existing.organizationId !== args.organizationId
+  ) {
+    const duplicate = await ctx.db
+      .query("eventBandPayments")
+      .withIndex("by_eventId_and_organizationId", (q) =>
+        q.eq("eventId", args.eventId).eq("organizationId", args.organizationId),
+      )
+      .unique();
+    if (duplicate && duplicate._id !== existing._id && duplicate.status !== "cancelled") {
+      throw new Error("This band is already linked to the event.");
     }
+  }
 
-    const payeeSnapshot = await refreshPayeeSnapshot(ctx, args.organizationId, {
-      designatedPayeeName: args.designatedPayeeName,
-      designatedPayeeEmail: args.designatedPayeeEmail,
-      designatedPayeeUserId: args.designatedPayeeUserId,
-    });
+  const payeeSnapshot = await refreshPayeeSnapshot(ctx, args.organizationId, {
+    designatedPayeeName: args.designatedPayeeName,
+    designatedPayeeEmail: args.designatedPayeeEmail,
+    designatedPayeeUserId: args.designatedPayeeUserId,
+  });
 
-    const nextStatus = computeNextStatus({
-      existing: existing?.status === "cancelled" ? null : existing,
-      event,
-      nowMs: now,
-      payeeComplete: payeeSnapshot.payeeComplete,
-    });
+  const nextStatus = computeNextStatus({
+    existing: existing?.status === "cancelled" ? null : existing,
+    event,
+    nowMs: now,
+    payeeComplete: payeeSnapshot.payeeComplete,
+  });
 
-    const payload = {
-      eventId: args.eventId,
-      organizationId: args.organizationId,
-      pricingMode: args.pricingMode,
-      ratePerMemberPerHourUsd: args.ratePerMemberPerHourUsd,
-      performanceHours: args.performanceHours,
-      memberCount: args.memberCount,
-      totalUsd,
-      designatedPayeeName: payeeSnapshot.designatedPayeeName,
-      designatedPayeeEmail: payeeSnapshot.designatedPayeeEmail,
-      designatedPayeeUserId: payeeSnapshot.designatedPayeeUserId,
-      designatedPayeeMailingAddress: payeeSnapshot.designatedPayeeMailingAddress,
-      designatedPayeePayoutMethod: payeeSnapshot.designatedPayeePayoutMethod,
-      status: nextStatus,
-      photoAlbumUrl: args.photoAlbumUrl?.trim() || settings.photoAlbumUrl || undefined,
-      updatedAt: now,
-    };
+  const payload = {
+    eventId: args.eventId,
+    organizationId: args.organizationId,
+    pricingMode: args.pricingMode,
+    ratePerMemberPerHourUsd: args.ratePerMemberPerHourUsd,
+    performanceHours: args.performanceHours,
+    memberCount: args.memberCount,
+    totalUsd,
+    designatedPayeeName: payeeSnapshot.designatedPayeeName,
+    designatedPayeeEmail: payeeSnapshot.designatedPayeeEmail,
+    designatedPayeeUserId: payeeSnapshot.designatedPayeeUserId,
+    designatedPayeeMailingAddress: payeeSnapshot.designatedPayeeMailingAddress,
+    designatedPayeePayoutMethod: payeeSnapshot.designatedPayeePayoutMethod,
+    status: nextStatus,
+    photoAlbumUrl: args.photoAlbumUrl?.trim() || settings.photoAlbumUrl || undefined,
+    updatedAt: now,
+  };
 
-    if (existing) {
-      if (existing.status === "paid") {
-        throw new Error("This band payment has already been marked paid.");
-      }
-      await ctx.db.patch(existing._id, payload);
-      await syncEventBandsCost(ctx, args.eventId);
-      const existingParticipation = await ctx.db
-        .query("eventBandParticipations")
-        .withIndex("by_eventId_and_organizationId", (q) =>
-          q.eq("eventId", args.eventId).eq("organizationId", args.organizationId),
-        )
-        .unique();
-      await upsertEventBandParticipation(ctx, {
-        eventId: args.eventId,
-        organizationId: args.organizationId,
-        role: args.role ?? existingParticipation?.role ?? "headliner",
-      });
-      return existing._id;
+  if (existing) {
+    if (existing.status === "paid") {
+      throw new Error("This band payment has already been marked paid.");
     }
-
-    const paymentId = await ctx.db.insert("eventBandPayments", {
-      ...payload,
-      confirmationToken: await allocateBandPaymentConfirmationToken(ctx),
-      createdAt: now,
-    });
+    await ctx.db.patch(existing._id, payload);
     await syncEventBandsCost(ctx, args.eventId);
     const existingParticipation = await ctx.db
       .query("eventBandParticipations")
@@ -632,7 +627,49 @@ export const upsertForEvent = mutation({
       organizationId: args.organizationId,
       role: args.role ?? existingParticipation?.role ?? "headliner",
     });
-    return paymentId;
+    return existing._id;
+  }
+
+  const paymentId = await ctx.db.insert("eventBandPayments", {
+    ...payload,
+    confirmationToken: await allocateBandPaymentConfirmationToken(ctx),
+    createdAt: now,
+  });
+  await syncEventBandsCost(ctx, args.eventId);
+  const existingParticipation = await ctx.db
+    .query("eventBandParticipations")
+    .withIndex("by_eventId_and_organizationId", (q) =>
+      q.eq("eventId", args.eventId).eq("organizationId", args.organizationId),
+    )
+    .unique();
+  await upsertEventBandParticipation(ctx, {
+    eventId: args.eventId,
+    organizationId: args.organizationId,
+    role: args.role ?? existingParticipation?.role ?? "headliner",
+  });
+  return paymentId;
+}
+
+export const upsertForEventInternal = internalMutation({
+  args: upsertForEventArgs,
+  returns: v.id("eventBandPayments"),
+  handler: async (ctx, args) => {
+    return await upsertEventBandPayment(ctx, {
+      ...args,
+      pricingMode: args.pricingMode as BandPaymentPricingMode,
+    });
+  },
+});
+
+export const upsertForEvent = mutation({
+  args: upsertForEventArgs,
+  returns: v.id("eventBandPayments"),
+  handler: async (ctx, args) => {
+    await requireArborInternalContext(ctx);
+    return await upsertEventBandPayment(ctx, {
+      ...args,
+      pricingMode: args.pricingMode as BandPaymentPricingMode,
+    });
   },
 });
 

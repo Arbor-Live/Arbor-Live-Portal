@@ -11,6 +11,7 @@ import {
   renderPayingPartyAddedEmail,
   renderQuoteChangesRequestedEmail,
   renderBandAssignedEmail,
+  renderBandEventOnboardingInviteEmail,
   renderBandPaymentConfirmationEmail,
   renderBandPaymentCompletedEmail,
   renderBandPaymentPayeeRequiredEmail,
@@ -48,6 +49,7 @@ import type {
   PayingPartyAddedEmailProps,
   QuoteChangesRequestedEmailProps,
   BandAssignedEmailProps,
+  BandEventOnboardingInviteEmailProps,
   BandPaymentConfirmationEmailProps,
   BandPaymentCompletedEmailProps,
   BandPaymentPayeeRequiredEmailProps,
@@ -109,6 +111,10 @@ export async function renderEmailHtml(template: EmailTemplate, payload: unknown)
       return renderQuoteChangesRequestedEmail(payload as QuoteChangesRequestedEmailProps);
     case "band_assigned":
       return renderBandAssignedEmail(payload as BandAssignedEmailProps);
+    case "band_event_onboarding_invite":
+      return renderBandEventOnboardingInviteEmail(
+        payload as BandEventOnboardingInviteEmailProps,
+      );
     case "band_payment_confirmation":
       return renderBandPaymentConfirmationEmail(payload as BandPaymentConfirmationEmailProps);
     case "band_payment_completed":
