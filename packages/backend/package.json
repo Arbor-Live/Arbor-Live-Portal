@@ -7,7 +7,7 @@
     "./convex/_generated/dataModel": "./convex/_generated/dataModel.d.ts"
   },
   "scripts": {
-    "dev": "convex dev",
+    "dev": "node ../../scripts/worktree-convex.mjs dev",
     "build": "pnpm --dir ../../apps/web run build",
     "codegen": "convex codegen",
     "migrate": "convex run migrations:runAll",

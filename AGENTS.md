@@ -112,19 +112,23 @@ Each worktree has a Convex mode managed by `scripts/worktree-convex.mjs`
   shared store, so all worktrees share one cloud dev deployment. Use only when
   you want shared data, or in the main checkout.
 - **Local** — the worktree runs its **own anonymous Convex backend** on its own
-  ports (`:3210`/`:3211`, then `:3220`/`:3221`, …), with real per-worktree
-  `.env.local` files. Schema pushes and data are fully isolated.
+  ports (`:3210`/`:3211`, then `:3220`/`:3221`, …) and gets its **own Next.js
+  web port**, with real per-worktree `.env.local` files. Schema pushes and data
+  are fully isolated.
 
 All feature-branch work (single agent or many) must start with **local** so
 schema pushes never target the shared trunk deployment:
 
 ```bash
-pnpm dev:backend:local     # switch to local mode, boot, and set deployment env
-pnpm dev:web
+pnpm setup:worktree-env    # one time: ports + boot + deployment env + seeded
+                           # accounts/demo data; prints the login + web port
+pnpm run dev               # backend + web, conflict-free across worktrees
 ```
 
 `pnpm worktree-convex status` shows the current mode and ports. Never point
-schema pushes at the shared trunk from a feature branch.
+schema pushes at the shared trunk from a feature branch. `pnpm prune` removes
+worktrees whose PR is merged or that have been idle 7+ days (and frees their
+registry ports); preview with `pnpm prune --dry-run`.
 
 ### Non-obvious runtime notes
 

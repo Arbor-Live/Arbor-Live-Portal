@@ -19,7 +19,7 @@
     "codegen:backend": "pnpm --filter backend codegen",
     "auth:generate": "pnpm --filter backend auth:generate",
     "worktree-convex": "node scripts/worktree-convex.mjs",
-    "setup:worktree-env": "node scripts/link-worktree-env.mjs",
+    "setup:worktree-env": "node scripts/setup-worktree.mjs",
     "setup:worktree-convex": "pnpm worktree-convex ensure",
     "dev": "pnpm -r --parallel --stream dev",
     "build": "pnpm -r build",
@@ -31,6 +31,7 @@
     "test:e2e:skip-boot": "E2E_SKIP_BOOT=1 node scripts/e2e-run.mjs",
     "test:e2e:ui": "pnpm --filter web exec playwright test --ui",
     "test:e2e:codegen": "pnpm --filter web exec playwright codegen http://localhost:3000",
+    "prune": "node scripts/prune-worktrees.mjs",
     "prepare": "git config core.hooksPath .githooks 2>/dev/null || true && node scripts/link-worktree-env.mjs 2>/dev/null || true && node scripts/worktree-convex.mjs ensure"
   },
   "dependencies": {
