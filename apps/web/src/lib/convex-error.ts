@@ -41,6 +41,17 @@ function extractRawMessage(error: unknown): string | null {
 function cleanConvexServerMessage(message: string): string {
   let text = message.trim();
 
+  if (text.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(text) as { message?: unknown };
+      if (typeof parsed.message === "string" && parsed.message.trim()) {
+        text = parsed.message.trim();
+      }
+    } catch {
+      // Keep the raw message when it is not JSON.
+    }
+  }
+
   // Prefer the human message after "Uncaught Error:" / "Error:".
   const uncaught = text.match(/Uncaught (?:Error|ConvexError):\s*([\s\S]+)/i);
   if (uncaught?.[1]) {
@@ -59,6 +70,10 @@ function cleanConvexServerMessage(message: string): string {
     .replace(/\s+at handler\s*\([^)]*\)[\s\S]*$/i, "")
     .replace(/\s+Called by client\.?\s*$/i, "")
     .trim();
+
+  if (/^client error$/i.test(text)) {
+    return "";
+  }
 
   // If multiple lines remain, keep the first meaningful line.
   const firstLine = text.split("\n").map((line) => line.trim()).find(Boolean);

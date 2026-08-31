@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { bandPublicListingRefinement } from "@/lib/validations/bands";
 
 export const USER_VERTICAL_OPTIONS = ["Operations", "Crew", "Trivia", "Marketing"] as const;
 export const USER_DISCIPLINE_OPTIONS = ["Sound", "Lights", "Design"] as const;
@@ -53,30 +54,32 @@ export const userAdminRowSchema = z
 
 export type UserAdminRowFormValues = z.infer<typeof userAdminRowSchema>;
 
-export const bandOrgProfileSchema = z.object({
-  displayName: z.string(),
-  bio: z.string(),
-  oneLiner: z.string(),
-  genres: z.string(),
-  demoURL: z.string(),
-  bandMembers: z.string(),
-  mainContactName: z.string(),
-  mainContactEmail: z.string(),
-  mainContactPhone: z.string(),
-  performerHourlyRateUsd: z.coerce.number().min(0, "Rate must be non-negative"),
-  designatedPayeeUserId: z.string(),
-  designatedPayeeName: z.string(),
-  designatedPayeeEmail: z.string(),
-  designatedPayeeMailingAddress: z.string(),
-  designatedPayeePayoutMethod: z.enum(["pickup", "delivery"]).or(z.literal("")),
-  publicWebsiteUrl: z.string(),
-  publicInstagramUrl: z.string(),
-  publicYoutubeUrl: z.string(),
-  publicSpotifyUrl: z.string(),
-  publicListing: z.boolean(),
-  publicSlug: z.string(),
-  publicHeroImageUrl: z.string(),
-});
+export const bandOrgProfileSchema = z
+  .object({
+    displayName: z.string(),
+    bio: z.string(),
+    oneLiner: z.string(),
+    genres: z.string(),
+    demoURL: z.string(),
+    bandMembers: z.string(),
+    mainContactName: z.string(),
+    mainContactEmail: z.string(),
+    mainContactPhone: z.string(),
+    performerHourlyRateUsd: z.coerce.number().min(0, "Rate must be non-negative"),
+    designatedPayeeUserId: z.string(),
+    designatedPayeeName: z.string(),
+    designatedPayeeEmail: z.string(),
+    designatedPayeeMailingAddress: z.string(),
+    designatedPayeePayoutMethod: z.enum(["pickup", "delivery"]).or(z.literal("")),
+    publicWebsiteUrl: z.string(),
+    publicInstagramUrl: z.string(),
+    publicYoutubeUrl: z.string(),
+    publicSpotifyUrl: z.string(),
+    publicListing: z.boolean(),
+    publicSlug: z.string(),
+    publicHeroImageUrl: z.string(),
+  })
+  .superRefine(bandPublicListingRefinement);
 
 export type BandOrgProfileFormValues = z.infer<typeof bandOrgProfileSchema>;
 

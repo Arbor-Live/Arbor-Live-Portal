@@ -19,6 +19,7 @@ type TextFormFieldProps<T extends FieldValues> = {
   autoFocus?: boolean;
   disabled?: boolean;
   description?: string;
+  onValueChange?: (value: string) => void;
 };
 
 export function TextFormField<T extends FieldValues>({
@@ -30,6 +31,7 @@ export function TextFormField<T extends FieldValues>({
   autoFocus,
   disabled,
   description,
+  onValueChange,
 }: TextFormFieldProps<T>) {
   return (
     <FormField
@@ -54,6 +56,7 @@ export function TextFormField<T extends FieldValues>({
                       : Number(e.target.value)
                     : e.target.value;
                 field.onChange(value);
+                onValueChange?.(String(value));
               }}
             />
           </FormControl>

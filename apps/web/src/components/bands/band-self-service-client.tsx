@@ -23,10 +23,12 @@ import {
 import { BandHeroUploadField } from "@/components/files/file-upload-field";
 import { useResolvedAssetUrl } from "@/components/files/stored-asset-image";
 import { useConvexForm } from "@/hooks/use-convex-form";
+import { useBandPublicSlugAutofill } from "@/hooks/use-band-public-slug-autofill";
 import { formatDate } from "@/lib/format";
 import {
   bandInviteSchema,
   bandProfileSchema,
+  ensureBandPublicSlug,
   type BandInviteFormValues,
   type BandProfileFormValues,
 } from "@/lib/validations/bands";
@@ -89,6 +91,7 @@ export function BandSelfServiceClient() {
 
   const watched = profileForm.watch();
   const heroUrl = useResolvedAssetUrl(watched.publicHeroImageUrl);
+  const { markSlugTouched, syncSlugTouchedFromForm } = useBandPublicSlugAutofill(profileForm);
 
   useEffect(() => {
     if (!profile) return;
@@ -106,14 +109,16 @@ export function BandSelfServiceClient() {
       publicSlug: profile.publicSlug ?? "",
       publicHeroImageUrl: profile.publicHeroImageUrl ?? "",
     });
-  }, [profile, profileForm]);
+    syncSlugTouchedFromForm();
+  }, [profile, profileForm, syncSlugTouchedFromForm]);
 
   const persistProfile = async (values: BandProfileFormValues) => {
+    const payload = ensureBandPublicSlug(values);
     await updateProfile({
-      displayName: trimOptional(values.displayName),
-      bio: trimOptional(values.bio),
-      ...bandListingFieldsToMutation(values),
-      performerHourlyRateUsd: values.performerHourlyRateUsd,
+      displayName: trimOptional(payload.displayName),
+      bio: trimOptional(payload.bio),
+      ...bandListingFieldsToMutation(payload),
+      performerHourlyRateUsd: payload.performerHourlyRateUsd,
       designatedPayeeUserId: profile?.designatedPayeeUserId,
       designatedPayeeName: profile?.designatedPayeeName,
       designatedPayeeEmail: profile?.designatedPayeeEmail,
@@ -123,8 +128,8 @@ export function BandSelfServiceClient() {
         profile?.designatedPayeePayoutMethod === "delivery"
           ? profile.designatedPayeePayoutMethod
           : undefined,
-      ...bandPublicUrlsToMutation(values),
-      publicListing: values.publicListing,
+      ...bandPublicUrlsToMutation(payload),
+      publicListing: payload.publicListing,
     });
   };
 
@@ -190,6 +195,7 @@ export function BandSelfServiceClient() {
       publicSlug: profile.publicSlug ?? "",
       publicHeroImageUrl: profile.publicHeroImageUrl ?? "",
     });
+    syncSlugTouchedFromForm();
   }
 
   if (profile === undefined) {
@@ -243,6 +249,7 @@ export function BandSelfServiceClient() {
                         name="publicSlug"
                         label="Public URL slug"
                         placeholder="my-band-name"
+                        onValueChange={() => markSlugTouched()}
                       />
                       <BandPublicArtistLinkCopy publicSlug={watched.publicSlug} />
                     </div>
