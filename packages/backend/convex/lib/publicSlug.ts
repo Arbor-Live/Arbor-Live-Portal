@@ -6,7 +6,8 @@ export function slugifyPublicSlugFromName(name: string) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
-    .slice(0, 80);
+    .slice(0, 80)
+    .replace(/-+$/g, "");
   if (!slug || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) return undefined;
   return slug;
 }
@@ -15,7 +16,15 @@ export function resolveBandPublicSlug(args: {
   slugInput: string | undefined;
   publicListing: boolean | undefined;
   displayName: string | undefined;
+  existingPublicSlug?: string;
 }) {
+  if (args.slugInput === undefined) {
+    const existing = args.existingPublicSlug?.trim();
+    if (existing) {
+      return normalizePublicSlug(existing);
+    }
+  }
+
   const fromInput =
     args.slugInput === undefined ? undefined : normalizePublicSlug(args.slugInput);
   if (fromInput) return fromInput;

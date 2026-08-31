@@ -270,8 +270,7 @@ export function BandApplicationForm() {
                   <Label htmlFor={`member-email-${index}`}>Email</Label>
                   <Input
                     id={`member-email-${index}`}
-                    type="email"
-                    required
+                    inputMode="email"
                     value={member.email}
                     onChange={(event) => {
                       const members = [...form.members];

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import type { FieldPath, FieldValues, UseFormReturn } from "react-hook-form";
 import { slugifyBandName } from "@/lib/validations/bands";
 
@@ -20,12 +20,20 @@ export function useBandPublicSlugAutofill<T extends FieldValues & SlugAutofillFi
   const displayName = form.watch("displayName" as FieldPath<T>) as string;
   const publicListing = form.watch("publicListing" as FieldPath<T>) as boolean | undefined;
 
+  const markSlugTouched = useCallback(() => {
+    slugTouchedRef.current = true;
+  }, []);
+
+  const syncSlugTouchedFromForm = useCallback(() => {
+    slugTouchedRef.current = Boolean(String(form.getValues(slugFieldName) ?? "").trim());
+  }, [form, slugFieldName]);
+
   useEffect(() => {
     if (slugTouchedRef.current) return;
     const nextSlug = slugifyBandName(displayName ?? "");
     if (!nextSlug) return;
     form.setValue(slugFieldName, nextSlug as T[FieldPath<T>], {
-      shouldDirty: true,
+      shouldDirty: false,
       shouldValidate: true,
     });
   }, [displayName, form, slugFieldName]);
@@ -37,17 +45,13 @@ export function useBandPublicSlugAutofill<T extends FieldValues & SlugAutofillFi
     const nextSlug = slugifyBandName(displayName ?? "");
     if (!nextSlug) return;
     form.setValue(slugFieldName, nextSlug as T[FieldPath<T>], {
-      shouldDirty: true,
+      shouldDirty: false,
       shouldValidate: true,
     });
   }, [publicListing, displayName, form, slugFieldName]);
 
   return {
-    markSlugTouched: () => {
-      slugTouchedRef.current = true;
-    },
-    syncSlugTouchedFromForm: () => {
-      slugTouchedRef.current = Boolean(String(form.getValues(slugFieldName) ?? "").trim());
-    },
+    markSlugTouched,
+    syncSlugTouchedFromForm,
   };
 }

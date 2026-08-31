@@ -611,6 +611,7 @@ export const updateBandOrganizationProfileAdmin = mutation({
       slugInput: args.publicSlug,
       publicListing,
       displayName: displayNameForSlug,
+      existingPublicSlug: existing?.publicSlug,
     });
     if (publicSlug) {
       await assertUniqueBandPublicSlug(ctx, publicSlug, args.organizationId);
@@ -2162,6 +2163,7 @@ export const updateActiveBandProfile = mutation({
       slugInput: args.publicSlug,
       publicListing,
       displayName: displayNameForSlug ?? context.organizationName,
+      existingPublicSlug: existing?.publicSlug,
     });
     if (publicSlug) {
       await assertUniqueBandPublicSlug(ctx, publicSlug, context.organizationId);
