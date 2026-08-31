@@ -30,7 +30,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { isPortFree, stopProcessesOnPort } from "./lib/ports.mjs";
+import { isPortFree, stopProcessesOnPort, waitForPortListening } from "./lib/ports.mjs";
 
 const BACKEND_ENV_LOCAL = "packages/backend/.env.local";
 const WEB_ENV_LOCAL = "apps/web/.env.local";
@@ -167,11 +167,14 @@ async function allocatePortPair(registry) {
 }
 
 /** Next.js dev port for this worktree — unique across worktrees, stable across restarts. */
-async function allocateWebPort(registry) {
+async function allocateWebPort(registry, reservedPorts = []) {
+  // Reserve every registered port plus the current entry's just-allocated
+  // Convex pair (not yet in the registry) so the web scan cannot collide.
   const claimed = new Set(
-    Object.values(registry.worktrees)
-      .map((w) => w.webPort)
-      .filter(Boolean),
+    [
+      ...Object.values(registry.worktrees).flatMap((w) => [w.cloudPort, w.sitePort, w.webPort]),
+      ...reservedPorts,
+    ].filter(Boolean),
   );
   for (let port = WEB_BASE_PORT; port < 65535; port += 1) {
     if (claimed.has(port)) continue;
@@ -193,7 +196,7 @@ async function ensureEntry(registry, mode) {
     dirty = true;
   }
   if (!entry.webPort) {
-    entry.webPort = await allocateWebPort(registry);
+    entry.webPort = await allocateWebPort(registry, [entry.cloudPort, entry.sitePort]);
     dirty = true;
   }
   entry.mode = mode;
@@ -459,9 +462,16 @@ async function dev() {
       anonymous: true,
     });
     forwardSignals(child);
-    // Idempotent: makes `pnpm run dev` self-sufficient on a fresh local
-    // deployment even when setup:worktree-env was skipped or interrupted.
-    await bootstrapDeploymentEnv({ webPort: entry.webPort });
+    // Wait for the dev backend to bind before any `convex env` probing — an
+    // env command that beats it to the port spawns a second backend and the
+    // loser dies with EADDRINUSE.
+    if (await waitForPortListening(entry.cloudPort)) {
+      // Idempotent: makes `pnpm run dev` self-sufficient on a fresh local
+      // deployment even when setup:worktree-env was skipped or interrupted.
+      await bootstrapDeploymentEnv({ webPort: entry.webPort });
+    } else {
+      console.warn("worktree-convex: backend never bound its port — skipping deployment env bootstrap");
+    }
     process.exit((await waitForExit(child)) ?? 0);
   }
   console.log("worktree-convex: trunk mode — shared cloud dev deployment");
@@ -477,7 +487,9 @@ async function start() {
   }
   const child = runConvexDev({ ...ports, anonymous: true });
   forwardSignals(child);
-  await bootstrapDeploymentEnv(ports);
+  if (await waitForPortListening(ports.cloudPort)) {
+    await bootstrapDeploymentEnv(ports);
+  }
   process.exit((await waitForExit(child)) ?? 0);
 }
 

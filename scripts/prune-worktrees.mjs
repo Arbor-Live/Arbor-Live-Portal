@@ -147,8 +147,11 @@ function isMerged(entry) {
 function lastCommitAgeMs(entry) {
   const ref = entry.branch ?? entry.head;
   if (!ref) return 0;
-  const committedAt = Number(tryGit(["log", "-1", "--format=%ct", ref]));
-  if (!Number.isFinite(committedAt)) return 0;
+  // Number(null) / Number("") are 0 — treat a failed git log as unknown age,
+  // never as "ancient" (which would classify the worktree stale and remove it).
+  const raw = tryGit(["log", "-1", "--format=%ct", ref]);
+  const committedAt = raw ? Number(raw) : Number.NaN;
+  if (!Number.isFinite(committedAt) || committedAt <= 0) return 0;
   return Date.now() - committedAt * 1000;
 }
 
@@ -209,7 +212,10 @@ function cleanRegistry() {
 }
 
 function main() {
-  const currentPath = realpathOrNull(process.cwd());
+  // Protect the worktree containing the current directory by its root — `pnpm
+  // prune` is often run from a subdirectory (pnpm resolves the package root).
+  const currentWorktree = tryGit(["rev-parse", "--show-toplevel"], process.cwd());
+  const currentPath = realpathOrNull(currentWorktree ?? process.cwd());
   const entries = listWorktrees();
   if (entries.length === 0) return;
 

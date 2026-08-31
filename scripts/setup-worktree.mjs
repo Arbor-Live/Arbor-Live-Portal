@@ -28,7 +28,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
-import { isPortFree, stopProcessesOnPort } from "./lib/ports.mjs";
+import { isPortFree, stopProcessesOnPort, waitForPortListening } from "./lib/ports.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const backendDir = path.join(root, "packages/backend");
@@ -148,7 +148,11 @@ function repairSharedBackendEnv() {
   console.log("setup:worktree-env: repaired packages/backend/.env (shared across worktrees)");
 }
 
-async function waitForConvexReady(timeoutMs = 240_000) {
+async function waitForConvexReady(cloudPort, timeoutMs = 240_000) {
+  // Wait for the `convex dev` backend to bind before any `convex env`
+  // probing — an env command that beats it to the port spawns a second
+  // backend and the loser dies with EADDRINUSE.
+  await waitForPortListening(cloudPort, timeoutMs);
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     try {
@@ -223,20 +227,28 @@ async function seed() {
     ["seedCrewedEventWithSchedule", { title: "Dev Seed — Coffeehouse", traineeReady: true }],
     ["seedApprovablePublicQuote", { clientGroupName: "Dev Seed Client Group" }],
   ];
+  // Every remaining seed is still attempted, but a failed one is a failed
+  // setup: the script must not print credentials for accounts that may not
+  // exist. Rerunning setup retries the failed seeders.
+  const failures = [];
   for (const [functionName, args] of extras) {
     try {
       runSeed(functionName, args);
     } catch (error) {
-      // One stale/wrong-shape seeder should not sink the whole setup —
-      // the account to log in with is the hard requirement.
+      failures.push(functionName);
       console.warn(
-        `  seed ${functionName} failed (continuing): ${
+        `  seed ${functionName} failed: ${
           error instanceof Error ? error.message.split("\n")[0] : String(error)
         }`,
       );
       continue;
     }
     console.log(`  seeded: ${functionName}`);
+  }
+  if (failures.length > 0) {
+    throw new Error(
+      `seeding failed for: ${failures.join(", ")} — rerun pnpm setup:worktree-env to retry`,
+    );
   }
   console.log(`  crew:   dev-crew@arborlive.test, dev-crew-b@arborlive.test`);
   console.log(`  band:   dev-band@arborlive.test`);
@@ -312,7 +324,7 @@ async function main() {
   ];
   run(process.execPath, [convexEntry, ...devArgs], { cwd: backendDir, prefix: "convex", env: convexEnv() });
 
-  await waitForConvexReady();
+  await waitForConvexReady(ports.cloudPort);
   const siteUrl = `http://localhost:${ports.webPort}`;
   const secret = readEnvValue(path.join(backendDir, ".env"), "BETTER_AUTH_SECRET");
   for (const [key, value] of [
