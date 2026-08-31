@@ -53,8 +53,12 @@ export function BandApplicationForm() {
       }
       for (const member of namedMembers) {
         const email = member.email.trim();
-        if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-          setError(`Enter a valid email for ${member.name.trim()}, or leave it blank.`);
+        if (!email) {
+          setError(`Enter an email for ${member.name.trim()}.`);
+          return;
+        }
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          setError(`Enter a valid email for ${member.name.trim()}.`);
           return;
         }
       }
@@ -245,8 +249,8 @@ export function BandApplicationForm() {
         {!form.isSolo ? (
           <div className="space-y-3">
             <p className="text-xs text-muted-foreground">
-              Add everyone in the band. Include emails when you can — we&apos;ll invite them to the
-              portal. People can belong to more than one Arbor band.
+              Add everyone in the band with their email — we&apos;ll invite them to the portal.
+              People can belong to more than one Arbor band.
             </p>
             {form.members.map((member, index) => (
               <div key={index} className="flex flex-col gap-2 sm:flex-row sm:items-end">
@@ -263,10 +267,10 @@ export function BandApplicationForm() {
                   />
                 </div>
                 <div className="min-w-0 flex-1 space-y-2">
-                  <Label htmlFor={`member-email-${index}`}>Email (optional)</Label>
+                  <Label htmlFor={`member-email-${index}`}>Email</Label>
                   <Input
                     id={`member-email-${index}`}
-                    type="email"
+                    inputMode="email"
                     value={member.email}
                     onChange={(event) => {
                       const members = [...form.members];

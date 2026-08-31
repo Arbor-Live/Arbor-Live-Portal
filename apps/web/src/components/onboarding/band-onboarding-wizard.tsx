@@ -45,6 +45,7 @@ import {
 } from "@/lib/band-payout-copy";
 import { useDevPreviewReady } from "@/hooks/use-dev-preview";
 import { trimOptional } from "@/lib/band-profile-lists";
+import { slugifyBandName } from "@/lib/validations/bands";
 
 type StepId =
   | "welcome"
@@ -328,9 +329,13 @@ export function BandOnboardingWizard() {
       }
 
       if (currentStep === "socials") {
-        if (form.publicListing && !form.publicSlug.trim()) {
-          setFieldError("Add a public URL slug to enable the public listing.");
-          return false;
+        let publicSlug = form.publicSlug.trim();
+        if (form.publicListing && !publicSlug) {
+          publicSlug = slugifyBandName(form.displayName);
+          if (!publicSlug) {
+            setFieldError("Add a public URL slug to list on the artists page.");
+            return false;
+          }
         }
         if (previewOnly) return true;
         setIsSubmitting(true);
@@ -341,7 +346,7 @@ export function BandOnboardingWizard() {
           publicSpotifyUrl: trimOptional(form.publicSpotifyUrl),
           demoURL: trimOptional(form.demoURL),
           publicListing: form.publicListing,
-          publicSlug: trimOptional(form.publicSlug),
+          publicSlug: trimOptional(publicSlug),
         });
         await saveBandOnboardingStep({ socialsCompleted: true });
         return true;
@@ -800,7 +805,16 @@ export function BandOnboardingWizard() {
                   </div>
 <OnboardingAckCheckbox
                     checked={form.publicListing}
-                    onChange={(next) => patch({ publicListing: next })}
+                    onChange={(next) => {
+                      const nextSlug =
+                        next && !form.publicSlug.trim()
+                          ? slugifyBandName(form.displayName)
+                          : form.publicSlug;
+                      patch({
+                        publicListing: next,
+                        ...(nextSlug !== form.publicSlug ? { publicSlug: nextSlug } : {}),
+                      });
+                    }}
                     label="List us on the public artists page."
                   />
                   {form.publicListing ? (

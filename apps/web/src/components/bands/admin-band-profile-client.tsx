@@ -13,6 +13,7 @@ import { BandHeroUploadField } from "@/components/files/file-upload-field";
 import { useResolvedAssetUrl } from "@/components/files/stored-asset-image";
 import { BandPayeePayoutMethodField } from "@/components/bands/band-payee-payout-method-field";
 import { useConvexForm } from "@/hooks/use-convex-form";
+import { useBandPublicSlugAutofill } from "@/hooks/use-band-public-slug-autofill";
 import {
   BAND_PAYEE_1099_NOTICE,
   BAND_PAYEE_MAILING_ADDRESS_HINT,
@@ -21,6 +22,7 @@ import {
   type BandPayeePayoutMethod,
 } from "@/lib/band-payout-copy";
 import { bandOrgProfileSchema, type BandOrgProfileFormValues } from "@/lib/validations/users";
+import { ensureBandPublicSlug } from "@/lib/validations/bands";
 import { useAdminBandSelection } from "@/components/bands/admin-band-selection";
 import {
   bandListingFieldsFromProfile,
@@ -123,6 +125,7 @@ export function AdminBandProfileClient() {
 
   const watched = form.watch();
   const heroUrl = useResolvedAssetUrl(watched.publicHeroImageUrl);
+  const { markSlugTouched, syncSlugTouchedFromForm } = useBandPublicSlugAutofill(form);
 
   useEffect(() => {
     if (!organizationId || !org) return;
@@ -130,7 +133,8 @@ export function AdminBandProfileClient() {
     if (!switchedBand && form.formState.isDirty) return;
     hydratedOrganizationId.current = organizationId;
     form.reset(valuesFromOrg(org));
-  }, [organizationId, org, form]);
+    syncSlugTouchedFromForm();
+  }, [organizationId, org, form, syncSlugTouchedFromForm]);
 
   const onSave = form.submitMutation(
     async (values) => {
@@ -143,21 +147,22 @@ export function AdminBandProfileClient() {
         values.designatedPayeePayoutMethod === "delivery"
           ? values.designatedPayeePayoutMethod
           : DEFAULT_BAND_PAYEE_PAYOUT_METHOD;
+      const payload = ensureBandPublicSlug(values);
       await updateBand({
         organizationId,
-        displayName: trimOptional(values.displayName),
-        bio: trimOptional(values.bio),
-        ...bandListingFieldsToMutation(values),
-        performerHourlyRateUsd: values.performerHourlyRateUsd,
-        designatedPayeeUserId: trimOptional(values.designatedPayeeUserId),
-        designatedPayeeName: trimOptional(values.designatedPayeeName),
-        designatedPayeeEmail: trimOptional(values.designatedPayeeEmail),
-        designatedPayeeMailingAddress: trimOptional(values.designatedPayeeMailingAddress),
+        displayName: trimOptional(payload.displayName),
+        bio: trimOptional(payload.bio),
+        ...bandListingFieldsToMutation(payload),
+        performerHourlyRateUsd: payload.performerHourlyRateUsd,
+        designatedPayeeUserId: trimOptional(payload.designatedPayeeUserId),
+        designatedPayeeName: trimOptional(payload.designatedPayeeName),
+        designatedPayeeEmail: trimOptional(payload.designatedPayeeEmail),
+        designatedPayeeMailingAddress: trimOptional(payload.designatedPayeeMailingAddress),
         designatedPayeePayoutMethod: payoutMethod,
-        ...bandPublicUrlsToMutation(values),
-        publicListing: values.publicListing,
+        ...bandPublicUrlsToMutation(payload),
+        publicListing: payload.publicListing,
       });
-      return values;
+      return payload;
     },
     {
       onSuccess: (values) => {
@@ -231,6 +236,7 @@ export function AdminBandProfileClient() {
                         name="publicSlug"
                         label="Public URL slug"
                         placeholder="my-band-name"
+                        onValueChange={() => markSlugTouched()}
                       />
                       <BandPublicArtistLinkCopy publicSlug={watched.publicSlug} />
                     </div>

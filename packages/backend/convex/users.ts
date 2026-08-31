@@ -21,7 +21,10 @@ import {
   scheduleUserInviteEmail,
   updatePendingInviteDetails,
 } from "./email/invitations";
-import { assertUniqueBandPublicSlug, normalizePublicSlug } from "./lib/publicSlug";
+import {
+  assertUniqueBandPublicSlug,
+  resolveBandPublicSlug,
+} from "./lib/publicSlug";
 import { isBandPayeeComplete } from "./lib/bandPayments";
 import { normalizeOptionalAssetReference } from "./lib/inventoryUpload";
 import {
@@ -596,20 +599,27 @@ export const updateBandOrganizationProfileAdmin = mutation({
       throw new Error("Performer hourly rate must be 0 or greater.");
     }
 
-    const publicSlug =
-      args.publicSlug === undefined ? undefined : normalizePublicSlug(args.publicSlug);
-    if (publicSlug) {
-      await assertUniqueBandPublicSlug(ctx, publicSlug, args.organizationId);
-    }
-    const publicListing = args.publicListing;
-    if (publicListing && !publicSlug) {
-      throw new Error("Public slug is required when enabling public artist listing.");
-    }
-
     const existing = await ctx.db
       .query("organizationProfiles")
       .withIndex("by_organizationId", (q) => q.eq("organizationId", args.organizationId))
       .unique();
+
+    const publicListing = args.publicListing;
+    const displayNameForSlug =
+      args.displayName !== undefined ? args.displayName : existing?.displayName;
+    const publicSlug = resolveBandPublicSlug({
+      slugInput: args.publicSlug,
+      publicListing,
+      displayName: displayNameForSlug,
+      existingPublicSlug: existing?.publicSlug,
+    });
+    if (publicSlug) {
+      await assertUniqueBandPublicSlug(ctx, publicSlug, args.organizationId);
+    }
+    if (publicListing && !publicSlug) {
+      throw new Error("Add a public URL slug to list on the artists page.");
+    }
+
     if (existing) {
       const nextHeroImageUrl =
         args.publicHeroImageUrl !== undefined
@@ -2140,21 +2150,29 @@ export const updateActiveBandProfile = mutation({
     if (args.performerHourlyRateUsd !== undefined && args.performerHourlyRateUsd < 0) {
       throw new Error("Performer hourly rate must be 0 or greater.");
     }
-    const publicSlug =
-      args.publicSlug === undefined ? undefined : normalizePublicSlug(args.publicSlug);
-    if (publicSlug) {
-      await assertUniqueBandPublicSlug(ctx, publicSlug, context.organizationId);
-    }
-    const publicListing = args.publicListing;
-    if (publicListing && !publicSlug) {
-      throw new Error("Public slug is required when enabling public artist listing.");
-    }
 
-    const now = Date.now();
     const existing = await ctx.db
       .query("organizationProfiles")
       .withIndex("by_organizationId", (q) => q.eq("organizationId", context.organizationId))
       .unique();
+
+    const publicListing = args.publicListing;
+    const displayNameForSlug =
+      args.displayName !== undefined ? args.displayName : existing?.displayName;
+    const publicSlug = resolveBandPublicSlug({
+      slugInput: args.publicSlug,
+      publicListing,
+      displayName: displayNameForSlug ?? context.organizationName,
+      existingPublicSlug: existing?.publicSlug,
+    });
+    if (publicSlug) {
+      await assertUniqueBandPublicSlug(ctx, publicSlug, context.organizationId);
+    }
+    if (publicListing && !publicSlug) {
+      throw new Error("Add a public URL slug to list on the artists page.");
+    }
+
+    const now = Date.now();
     if (existing) {
       const nextHeroImageUrl =
         args.publicHeroImageUrl !== undefined

@@ -115,8 +115,11 @@ export const submitPublic = mutation({
       throw new Error("Add at least one bandmate, or mark that you perform solo.");
     }
     for (const member of members) {
-      if (member.email && !isValidEmail(member.email)) {
-        throw new Error(`Invalid email for ${member.name}.`);
+      if (!member.email) {
+        throw new Error(`Enter an email for ${member.name}.`);
+      }
+      if (!isValidEmail(member.email)) {
+        throw new Error(`Enter a valid email for ${member.name}.`);
       }
     }
 
