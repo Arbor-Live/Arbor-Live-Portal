@@ -33,7 +33,12 @@ import {
 import particlesWgsl from "./particles.wgsl";
 import presentWgsl from "./present.wgsl";
 import spectrumWgsl from "./spectrum.wgsl";
-import { gaussianCoefficients, OCEAN_TUNING } from "./tuning";
+import {
+  gaussianCoefficients,
+  OCEAN_PALETTES,
+  OCEAN_TUNING,
+  type OceanPaletteKey,
+} from "./tuning";
 
 type Output = Surface | Target;
 
@@ -41,13 +46,19 @@ interface RendererOptions {
   readonly canvas: HTMLCanvasElement;
   /** When true, dispose quietly instead of throwing (used as page background). */
   readonly softFail?: boolean;
+  /** Particle palette keyed to the current app theme. */
+  readonly colorScheme?: OceanPaletteKey;
 }
 
 const SIM_FORMAT: GPUTextureFormat = "rgba32float";
 const HDR_FORMAT: GPUTextureFormat = "rgba16float";
 const TRANSPARENT = [0, 0, 0, 0] as const;
 
-export function createRenderer({ canvas, softFail = false }: RendererOptions) {
+export function createRenderer({
+  canvas,
+  softFail = false,
+  colorScheme: initialColorScheme = "dark",
+}: RendererOptions) {
   let disposed = false;
   let gpu: Gpu | undefined;
   let output: Surface | undefined;
@@ -55,6 +66,8 @@ export function createRenderer({ canvas, softFail = false }: RendererOptions) {
   let unsubscribeResize: (() => void) | undefined;
   let resizeFrame = 0;
   let resizeGeneration = 0;
+  let colorScheme: OceanPaletteKey = initialColorScheme;
+  let appliedScheme: OceanPaletteKey | undefined;
 
   function dispose(): void {
     if (disposed) return;
@@ -67,6 +80,11 @@ export function createRenderer({ canvas, softFail = false }: RendererOptions) {
       () => unsubscribeResize?.(),
       () => gpu?.dispose(),
     ]);
+  }
+
+  /** Swap the particle palette to match the current app theme. */
+  function setColorScheme(next: OceanPaletteKey): void {
+    colorScheme = next;
   }
 
   function fail(error: unknown): never | void {
@@ -82,10 +100,12 @@ export function createRenderer({ canvas, softFail = false }: RendererOptions) {
   const rebuild = async (generation: number) => {
     if (disposed || !gpu || !output || !graph) return;
     if (sameSize(graph.scene.size, output.size)) return;
+    const graphScheme = colorScheme;
     const next = await createGraph(
       gpu,
       output,
-      `fft-ocean-resize-${generation}`
+      `fft-ocean-resize-${generation}`,
+      graphScheme,
     );
     if (disposed) return;
     if (generation !== resizeGeneration) {
@@ -98,6 +118,7 @@ export function createRenderer({ canvas, softFail = false }: RendererOptions) {
     }
     const previous = graph;
     graph = next;
+    appliedScheme = graphScheme;
     destroyGraph(previous);
   };
 
@@ -125,7 +146,9 @@ export function createRenderer({ canvas, softFail = false }: RendererOptions) {
 
     gpu = nextGpu;
     output = surface(gpu, canvas, { dpr: [1, 1.6] });
-    graph = await createGraph(gpu, output, "fft-ocean-live");
+    const graphScheme = colorScheme;
+    graph = await createGraph(gpu, output, "fft-ocean-live", graphScheme);
+    appliedScheme = graphScheme;
     if (disposed) return;
 
     unsubscribeResize = output.onResize(scheduleResize);
@@ -134,6 +157,11 @@ export function createRenderer({ canvas, softFail = false }: RendererOptions) {
     frameLoop(gpu, (currentFrame) => {
       if (disposed || !graph || !output) return;
       try {
+        if (appliedScheme !== colorScheme) {
+          setParticleConstants(graph.particles, output, colorScheme);
+          setBloomConstants(graph.effects.composite, colorScheme);
+          appliedScheme = colorScheme;
+        }
         setDynamics(graph, time.time * OCEAN_TUNING.simulation.timeScale);
         renderGraph(currentFrame, graph, output);
       } catch (error) {
@@ -147,17 +175,18 @@ export function createRenderer({ canvas, softFail = false }: RendererOptions) {
     throw error;
   });
 
-  return { ready, dispose };
+  return { ready, dispose, setColorScheme };
 }
 
 export async function createGraph(
   gpu: Gpu,
   output: Output,
-  label: string
+  label: string,
+  colorScheme: OceanPaletteKey,
 ): Promise<OceanGraph> {
   const ownedTargets: Target[] = [];
   try {
-    const graph = buildGraph(gpu, output, label, (value) => {
+    const graph = buildGraph(gpu, output, label, colorScheme, (value) => {
       ownedTargets.push(value);
       return value;
     });
@@ -177,6 +206,7 @@ function buildGraph(
   gpu: Gpu,
   output: Output,
   label: string,
+  colorScheme: OceanPaletteKey,
   own: (value: Target) => Target
 ) {
   const resolution = OCEAN_RESOLUTION;
@@ -285,7 +315,7 @@ function buildGraph(
     u_displacement: displacement,
     u_normalFoam: simulation.normalFoam,
   });
-  setParticleConstants(particles, output);
+  setParticleConstants(particles, output, colorScheme);
   const brightEffect = configuredEffect(
     gpu,
     bloomBrightWgsl,
@@ -326,17 +356,7 @@ function buildGraph(
     bloomInput = vertical;
     return { horizontal, vertical, horizontalEffect, verticalEffect };
   });
-  const compositeEffect = configuredEffect(
-    gpu,
-    bloomCompositeWgsl,
-    `${label}-bloom-composite`,
-    {
-      uniforms: {
-        bloomStrength: OCEAN_TUNING.bloom.strength,
-        bloomRadius: OCEAN_TUNING.bloom.radius,
-        bloomFactors0: [1, 0.8, 0.6, 0.4],
-        bloomFactors1: [0.2, 0, 0, 0],
-      },
+  const compositeEffect = configuredEffect(gpu, bloomCompositeWgsl, `${label}-bloom-composite`, {
       blurTexture1: levels[0]!.vertical,
       blurTexture2: levels[1]!.vertical,
       blurTexture3: levels[2]!.vertical,
@@ -345,6 +365,7 @@ function buildGraph(
       linearSampler,
     }
   );
+  setBloomConstants(compositeEffect, colorScheme);
   const present = configuredEffect(gpu, presentWgsl, `${label}-present`, {
     sceneHDR: scene,
     bloomTexture: composite,
@@ -437,9 +458,31 @@ function setDynamics(graph: OceanGraph, timeSeconds: number): void {
   });
 }
 
-function setParticleConstants(particles: Draw, output: Output): void {
+function setBloomConstants(
+  composite: Effect,
+  colorScheme: OceanPaletteKey
+): void {
+  composite.set({
+    uniforms: {
+      // The light palette is near-white, so the color-based bloom bright pass
+      // would flood the whole scene; skip bloom for it.
+      bloomStrength:
+        colorScheme === "light" ? 0 : OCEAN_TUNING.bloom.strength,
+      bloomRadius: OCEAN_TUNING.bloom.radius,
+      bloomFactors0: [1, 0.8, 0.6, 0.4],
+      bloomFactors1: [0.2, 0, 0, 0],
+    },
+  });
+}
+
+function setParticleConstants(
+  particles: Draw,
+  output: Output,
+  colorScheme: OceanPaletteKey
+): void {
   const camera = oceanCamera(output.size);
   const tuning = OCEAN_TUNING;
+  const colors = OCEAN_PALETTES[colorScheme];
   particles.set({
     u: {
       view: camera.view,
@@ -457,9 +500,10 @@ function setParticleConstants(particles: Draw, output: Output): void {
         tuning.particles.fadePower,
         0,
       ],
-      oceanColor: tuning.particles.oceanColor,
-      neonColor: tuning.particles.neonColor,
-      foamColor: tuning.particles.foamColor,
+      oceanColor: colors.oceanColor,
+      neonColor: colors.neonColor,
+      foamColor: colors.foamColor,
+      gain: colors.gain,
     },
   });
 }

@@ -50,6 +50,29 @@ export const OCEAN_TUNING = {
   },
 } as const;
 
+/**
+ * Per-theme particle palettes. `dark` is the canonical Arbor-green ocean;
+ * `light` is the pale/white ocean used against light-mode backgrounds.
+ */
+export const OCEAN_PALETTES = {
+  dark: {
+    oceanColor: OCEAN_TUNING.particles.oceanColor,
+    neonColor: OCEAN_TUNING.particles.neonColor,
+    foamColor: OCEAN_TUNING.particles.foamColor,
+    gain: [1, 1, 1, 1] as const,
+  },
+  light: {
+    oceanColor: [0.98, 0.99, 0.975, 0] as const,
+    neonColor: [1, 1, 1, 0] as const,
+    foamColor: [1, 1, 1, 0] as const,
+    // Lift the near-white particles (the shader halves the base color and
+    // uses tiny base alphas) so the light ocean reads clearly on a pale bg.
+    gain: [2, 2, 2, 4] as const,
+  },
+} as const;
+
+export type OceanPaletteKey = keyof typeof OCEAN_PALETTES;
+
 /** Matches front's `gaussianCoefficients`: sigma=radius/3, no normalization pass. */
 export function gaussianCoefficients(kernelRadius: number): readonly number[] {
   return Array.from({ length: 24 }, (_, index) =>

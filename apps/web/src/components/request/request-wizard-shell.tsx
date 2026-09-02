@@ -59,7 +59,7 @@ export function RequestWizardShell({
     <div
       className={cn(
         "relative flex min-h-dvh flex-1 flex-col overflow-hidden",
-        ocean && "bg-black",
+        ocean && "bg-[oklch(0.93_0.02_160)] dark:bg-black",
         className,
       )}
     >
@@ -73,7 +73,7 @@ export function RequestWizardShell({
           <FftOceanBackground className="pointer-events-none absolute inset-0 z-[1]" />
           <div
             aria-hidden
-            className="pointer-events-none absolute inset-0 z-[2] bg-[radial-gradient(ellipse_80%_60%_at_50%_20%,transparent_20%,rgba(0,0,0,0.55)_100%)]"
+            className="pointer-events-none absolute inset-0 z-[2] bg-[radial-gradient(ellipse_80%_60%_at_50%_20%,transparent_20%,rgba(255,255,255,0.5)_100%)] dark:bg-[radial-gradient(ellipse_80%_60%_at_50%_20%,transparent_20%,rgba(0,0,0,0.55)_100%)]"
           />
         </>
       ) : (

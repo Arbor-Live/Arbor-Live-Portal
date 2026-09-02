@@ -6,6 +6,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createRenderer } from "./renderer";
+import type { OceanPaletteKey } from "./tuning";
+import { useTheme } from "@/components/theme-provider";
 import { cn } from "@/lib/utils";
 
 type FftOceanBackgroundProps = {
@@ -14,11 +16,33 @@ type FftOceanBackgroundProps = {
 
 /**
  * WebGPU FFT ocean background. Renders nothing useful when WebGPU is
- * unavailable or the user prefers reduced motion — the shell keeps a black fill.
+ * unavailable or the user prefers reduced motion — the shell keeps its fill.
+ * Adapts its palette (dark / light) to the current app theme.
  */
 export function FftOceanBackground({ className }: FftOceanBackgroundProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const rendererRef = useRef<ReturnType<typeof createRenderer> | null>(null);
   const [active, setActive] = useState(false);
+  const [colorScheme, setColorSchemeState] = useState<OceanPaletteKey>("dark");
+  const colorSchemeRef = useRef<OceanPaletteKey>(colorScheme);
+  const { theme } = useTheme();
+
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const resolve = () => {
+      const next =
+        theme === "system" ? (media.matches ? "dark" : "light") : theme;
+      colorSchemeRef.current = next;
+      setColorSchemeState(next);
+    };
+    resolve();
+    media.addEventListener("change", resolve);
+    return () => media.removeEventListener("change", resolve);
+  }, [theme]);
+
+  useEffect(() => {
+    rendererRef.current?.setColorScheme(colorScheme);
+  }, [colorScheme]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -31,7 +55,12 @@ export function FftOceanBackground({ className }: FftOceanBackgroundProps) {
 
     let disposed = false;
     let fadeFrame = 0;
-    const renderer = createRenderer({ canvas, softFail: true });
+    const renderer = createRenderer({
+      canvas,
+      softFail: true,
+      colorScheme: colorSchemeRef.current,
+    });
+    rendererRef.current = renderer;
     void renderer.ready
       .then(() => {
         if (disposed) return;
@@ -50,6 +79,7 @@ export function FftOceanBackground({ className }: FftOceanBackgroundProps) {
       disposed = true;
       cancelAnimationFrame(fadeFrame);
       renderer.dispose();
+      rendererRef.current = null;
     };
   }, []);
 
