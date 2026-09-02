@@ -100,11 +100,12 @@ export function createRenderer({
   const rebuild = async (generation: number) => {
     if (disposed || !gpu || !output || !graph) return;
     if (sameSize(graph.scene.size, output.size)) return;
+    const graphScheme = colorScheme;
     const next = await createGraph(
       gpu,
       output,
       `fft-ocean-resize-${generation}`,
-      colorScheme,
+      graphScheme,
     );
     if (disposed) return;
     if (generation !== resizeGeneration) {
@@ -117,7 +118,7 @@ export function createRenderer({
     }
     const previous = graph;
     graph = next;
-    appliedScheme = colorScheme;
+    appliedScheme = graphScheme;
     destroyGraph(previous);
   };
 
@@ -145,8 +146,9 @@ export function createRenderer({
 
     gpu = nextGpu;
     output = surface(gpu, canvas, { dpr: [1, 1.6] });
-    graph = await createGraph(gpu, output, "fft-ocean-live", colorScheme);
-    appliedScheme = colorScheme;
+    const graphScheme = colorScheme;
+    graph = await createGraph(gpu, output, "fft-ocean-live", graphScheme);
+    appliedScheme = graphScheme;
     if (disposed) return;
 
     unsubscribeResize = output.onResize(scheduleResize);
@@ -157,6 +159,7 @@ export function createRenderer({
       try {
         if (appliedScheme !== colorScheme) {
           setParticleConstants(graph.particles, output, colorScheme);
+          setBloomConstants(graph.effects.composite, colorScheme);
           appliedScheme = colorScheme;
         }
         setDynamics(graph, time.time * OCEAN_TUNING.simulation.timeScale);
@@ -353,20 +356,7 @@ function buildGraph(
     bloomInput = vertical;
     return { horizontal, vertical, horizontalEffect, verticalEffect };
   });
-  const compositeEffect = configuredEffect(
-    gpu,
-    bloomCompositeWgsl,
-    `${label}-bloom-composite`,
-    {
-      uniforms: {
-        // The light palette is near-white, so the color-based bloom bright pass
-        // would flood the whole scene; skip bloom for it.
-        bloomStrength:
-          colorScheme === "light" ? 0 : OCEAN_TUNING.bloom.strength,
-        bloomRadius: OCEAN_TUNING.bloom.radius,
-        bloomFactors0: [1, 0.8, 0.6, 0.4],
-        bloomFactors1: [0.2, 0, 0, 0],
-      },
+  const compositeEffect = configuredEffect(gpu, bloomCompositeWgsl, `${label}-bloom-composite`, {
       blurTexture1: levels[0]!.vertical,
       blurTexture2: levels[1]!.vertical,
       blurTexture3: levels[2]!.vertical,
@@ -375,6 +365,7 @@ function buildGraph(
       linearSampler,
     }
   );
+  setBloomConstants(compositeEffect, colorScheme);
   const present = configuredEffect(gpu, presentWgsl, `${label}-present`, {
     sceneHDR: scene,
     bloomTexture: composite,
@@ -464,6 +455,23 @@ async function prewarm(graph: OceanGraph, output: Output): Promise<void> {
 function setDynamics(graph: OceanGraph, timeSeconds: number): void {
   graph.effects.evolveSpectrum.set({
     u: { time: timeSeconds * OCEAN_TUNING.simulation.spectrumTimeScale },
+  });
+}
+
+function setBloomConstants(
+  composite: Effect,
+  colorScheme: OceanPaletteKey
+): void {
+  composite.set({
+    uniforms: {
+      // The light palette is near-white, so the color-based bloom bright pass
+      // would flood the whole scene; skip bloom for it.
+      bloomStrength:
+        colorScheme === "light" ? 0 : OCEAN_TUNING.bloom.strength,
+      bloomRadius: OCEAN_TUNING.bloom.radius,
+      bloomFactors0: [1, 0.8, 0.6, 0.4],
+      bloomFactors1: [0.2, 0, 0, 0],
+    },
   });
 }
 
