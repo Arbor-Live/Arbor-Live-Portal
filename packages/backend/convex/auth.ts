@@ -40,7 +40,7 @@ export const createAuthOptions = (ctx: GenericCtx<DataModel>) => {
         enabled: true,
         sendChangeEmailConfirmation: async ({ user, newEmail, url }) => {
           if ("runMutation" in ctx && typeof ctx.runMutation === "function") {
-            void ctx.runMutation(internal.email.authEmails.enqueueChangeEmailConfirmation, {
+            await ctx.runMutation(internal.email.authEmails.enqueueChangeEmailConfirmation, {
               to: user.email,
               newEmail,
               confirmUrl: url,
@@ -54,7 +54,7 @@ export const createAuthOptions = (ctx: GenericCtx<DataModel>) => {
       sendOnSignUp: false,
       async sendVerificationEmail({ user, url }) {
         if ("runMutation" in ctx && typeof ctx.runMutation === "function") {
-          void ctx.runMutation(internal.email.authEmails.enqueueEmailVerification, {
+          await ctx.runMutation(internal.email.authEmails.enqueueEmailVerification, {
             to: user.email,
             verificationUrl: url,
             recipientName: user.name ?? undefined,
@@ -67,7 +67,7 @@ export const createAuthOptions = (ctx: GenericCtx<DataModel>) => {
       disableSignUp: true,
       async sendResetPassword({ url, user }) {
         if ("runMutation" in ctx && typeof ctx.runMutation === "function") {
-          void ctx.runMutation(internal.email.authEmails.enqueuePasswordReset, {
+          await ctx.runMutation(internal.email.authEmails.enqueuePasswordReset, {
             to: user.email,
             resetUrl: url,
             recipientName: user.name ?? undefined,
