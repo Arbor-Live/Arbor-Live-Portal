@@ -7,6 +7,7 @@ struct ParticleUniforms {
   oceanColor: vec4f,
   neonColor: vec4f,
   foamColor: vec4f,
+  gain: vec4f,
 };
 
 struct VertexOut {
@@ -101,5 +102,7 @@ fn quadCorner(vertexIndex: u32) -> vec2f {
   alpha = mix(alpha, 1.0, foam);
   color *= in.fade;
   alpha *= in.fade;
+  color *= u.gain.rgb;
+  alpha *= u.gain.a;
   return vec4f(color, clamp(alpha, 0.0, 1.0));
 }
