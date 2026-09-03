@@ -2,6 +2,7 @@
  * Extract a user-readable message from Convex mutation/query errors.
  * Strips Convex client wrappers like:
  * `[CONVEX M(...)] [Request ID: ...] Server Error Uncaught Error: … at handler …`
+ * `  Called by client`
  */
 export function getConvexErrorMessage(
   error: unknown,
@@ -57,25 +58,33 @@ function cleanConvexServerMessage(message: string): string {
   if (uncaught?.[1]) {
     text = uncaught[1].trim();
   } else {
-    // Drop leading Convex metadata prefixes when present.
-    text = text
-      .replace(/^\[CONVEX[^\]]*\]\s*/i, "")
-      .replace(/^\[Request ID:[^\]]*\]\s*/i, "")
-      .replace(/^Server Error\s*/i, "")
-      .trim();
+    // Drop leading Convex metadata prefixes when present (may repeat).
+    for (let i = 0; i < 4; i += 1) {
+      const next = text
+        .replace(/^\[CONVEX[^\]]*\]\s*/i, "")
+        .replace(/^\[Request ID:[^\]]*\]\s*/i, "")
+        .replace(/^Server Error\s*/i, "")
+        .trim();
+      if (next === text) break;
+      text = next;
+    }
   }
 
   // Drop trailing stack / "Called by client" noise.
+  // Convex formats: `…\n  Called by client` (always appended by the browser client).
   text = text
-    .replace(/\s+at handler\s*\([^)]*\)[\s\S]*$/i, "")
-    .replace(/\s+Called by client\.?\s*$/i, "")
+    .replace(/\s+at (?:async\s+)?handler\s*\([^)]*\)[\s\S]*$/i, "")
+    .replace(/(?:^|\s+)Called by client\.?\s*$/i, "")
     .trim();
 
-  if (/^client error$/i.test(text)) {
+  if (!text || /^(?:client error|server error)$/i.test(text)) {
     return "";
   }
 
-  // If multiple lines remain, keep the first meaningful line.
-  const firstLine = text.split("\n").map((line) => line.trim()).find(Boolean);
+  // If multiple lines remain, keep the first meaningful line (skip bare stack frames).
+  const firstLine = text
+    .split("\n")
+    .map((line) => line.trim())
+    .find((line) => line && !/^at\s+/i.test(line) && !/^called by client\.?$/i.test(line));
   return firstLine ?? text;
 }

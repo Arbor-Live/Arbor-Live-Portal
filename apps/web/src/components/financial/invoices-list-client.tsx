@@ -33,6 +33,7 @@ import { Input } from "@/components/ui/input";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { formatUsd } from "@/lib/format";
 import { notify } from "@/lib/notify";
+import { getConvexErrorMessage } from "@/lib/convex-error";
 
 type InvoiceRow = FunctionReturnType<typeof api.invoices.listEnriched>[number];
 
@@ -288,7 +289,14 @@ export function InvoicesListClient() {
                     {invoice.status === "void" ? (
                       <DropdownMenuItem
                         onSelect={() => {
-                          void unvoidInvoice({ id: invoice._id });
+                          void (async () => {
+                            try {
+                              await unvoidInvoice({ id: invoice._id });
+                              notify.success("Invoice restored.");
+                            } catch (error) {
+                              notify.error(getConvexErrorMessage(error, "Could not unvoid the invoice."));
+                            }
+                          })();
                         }}
                       >
                         <ArrowCounterClockwiseIcon className="size-4" />
@@ -307,7 +315,12 @@ export function InvoicesListClient() {
                               destructive: true,
                             });
                             if (!confirmed) return;
-                            await voidInvoice({ id: invoice._id });
+                            try {
+                              await voidInvoice({ id: invoice._id });
+                              notify.success("Invoice voided.");
+                            } catch (error) {
+                              notify.error(getConvexErrorMessage(error, "Could not void the invoice."));
+                            }
                           })();
                         }}
                       >

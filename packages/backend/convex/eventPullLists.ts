@@ -256,11 +256,13 @@ export const getInvoiceSyncStatus = query({
       return { hasInvoice: false, inSync: true };
     }
 
-    const series = event.seriesId ? await ctx.db.get(event.seriesId) : null;
-    const useSeriesQty = Boolean(series?.invoiceId && series.invoiceId === event.invoiceId);
-    const billableOccurrenceCount = useSeriesQty
-      ? await resolveBillableOccurrenceCount(ctx, event.invoiceId)
-      : 1;
+    // Series invoices and multi-day booking invoices (sibling day-events sharing
+    // one invoice) both need the occurrence count so "total" qty splits per day.
+    // A lone single-day event resolves to 1.
+    const billableOccurrenceCount = Math.max(
+      1,
+      await resolveBillableOccurrenceCount(ctx, event.invoiceId),
+    );
 
     let expectedRows: ScaffoldRow[];
     try {
@@ -521,26 +523,26 @@ export const scaffoldFromInvoice = mutation({
     if (!event) throw new Error("Event not found.");
     if (!event.invoiceId) throw new Error("Link an invoice to this event before scaffolding.");
 
-    const series = event.seriesId ? await ctx.db.get(event.seriesId) : null;
-    const useSeriesQty =
-      Boolean(series?.invoiceId && series.invoiceId === event.invoiceId);
-    const billableOccurrenceCount = useSeriesQty
-      ? await resolveBillableOccurrenceCount(ctx, event.invoiceId)
-      : 1;
+    // Match getInvoiceSyncStatus: split "total" quantities across sibling days /
+    // series occurrences so sync comparison stays stable after scaffolding.
+    const billableOccurrenceCount = Math.max(
+      1,
+      await resolveBillableOccurrenceCount(ctx, event.invoiceId),
+    );
     const scaffoldRows = await buildScaffoldRowsFromInvoice(
       ctx,
       event.invoiceId,
       billableOccurrenceCount,
     );
-    if (scaffoldRows.length === 0) {
-      throw new Error("Linked invoice has no equipment line items to scaffold.");
-    }
 
     const existing = await ctx.db
       .query("eventPullListItems")
       .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
       .take(500);
 
+    // Always drop non-manual rows first. An invoice with no equipment lines
+    // should clear invoice-sourced pull list rows (not throw) so "sync to
+    // match invoice" works when equipment was removed.
     for (const row of existing) {
       if (row.source !== "manual") {
         await ctx.db.delete(row._id);
