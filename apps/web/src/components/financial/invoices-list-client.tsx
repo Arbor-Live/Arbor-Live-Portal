@@ -319,9 +319,7 @@ export function InvoicesListClient() {
                               await voidInvoice({ id: invoice._id });
                               notify.success("Invoice voided.");
                             } catch (error) {
-                              notify.error(
-                                error instanceof Error ? error.message : "Could not void the invoice.",
-                              );
+                              notify.error(getConvexErrorMessage(error, "Could not void the invoice."));
                             }
                           })();
                         }}
