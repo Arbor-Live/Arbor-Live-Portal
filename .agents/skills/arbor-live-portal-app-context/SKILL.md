@@ -163,6 +163,13 @@ Cursor rule: `.cursor/rules/portal-timezone.mdc` (always applied).
   dialog), not Playwright's native `page.on("dialog")` unless a native dialog
   still exists by mistake.
 
+## Awaited status / toasts
+- Await mutations (and any follow-up the message claims finished) before
+  success/error toasts or save-bar status.
+- `onClick={() => void handler()}` is fine only when `handler` itself awaits and
+  catches. Never toast success then run more work that can still fail — split
+  statuses instead of one false success.
+
 ## Recent High-Risk Areas
 - Event editor state hydration can overwrite in-progress edits if not guarded.
   - Prefer one-time hydration per loaded event id.

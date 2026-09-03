@@ -1193,9 +1193,13 @@ export function InvoiceEditor({
   async function regenerateToken() {
     if (!activeInvoiceId) return;
     if (!(await confirm({ title: "Regenerate the public quote token?", description: "Old links will stop working." }))) return;
-    const result = await regeneratePublicApprovalToken({ id: activeInvoiceId });
-    setApprovalToken(result.token);
-    notify.success("Public quote link regenerated.");
+    try {
+      const result = await regeneratePublicApprovalToken({ id: activeInvoiceId });
+      setApprovalToken(result.token);
+      notify.success("Public quote link regenerated.");
+    } catch (error) {
+      notify.error(getConvexErrorMessage(error, "Could not regenerate the quote link."));
+    }
   }
 
   async function sendQuoteToClient(clientMessage: string) {
@@ -1220,8 +1224,39 @@ export function InvoiceEditor({
 
   async function withdrawFromRequestPortal() {
     if (!activeInvoiceId) return;
-    await withdrawFromClientReview({ id: activeInvoiceId });
-    notify.success("Quote withdrawn from the request portal for editing.");
+    try {
+      await withdrawFromClientReview({ id: activeInvoiceId });
+      notify.success("Quote withdrawn from the request portal for editing.");
+    } catch (error) {
+      notify.error(getConvexErrorMessage(error, "Could not withdraw the quote."));
+    }
+  }
+
+  async function recalculateEquipmentTotals() {
+    if (!activeInvoiceId) return;
+    try {
+      await recalculateSeriesEquipmentLines({ id: activeInvoiceId });
+      notify.success("Recalculated billed equipment totals.");
+    } catch (error) {
+      notify.error(getConvexErrorMessage(error, "Could not recalculate equipment totals."));
+    }
+  }
+
+  async function handleVoidInvoice() {
+    if (!activeInvoiceId) return;
+    const confirmed = await confirm({
+      title: `Void ${invoiceData?.invoice?.invoiceNumber ?? "this invoice"}?`,
+      description: "It will hide from the active list. You can unvoid it later.",
+      confirmLabel: "Void",
+      destructive: true,
+    });
+    if (!confirmed) return;
+    try {
+      await voidInvoice({ id: activeInvoiceId });
+      notify.success("Invoice voided.");
+    } catch (error) {
+      notify.error(getConvexErrorMessage(error, "Could not void the invoice."));
+    }
   }
 
   const draftSignature = useMemo(() => {
@@ -1558,18 +1593,7 @@ export function InvoiceEditor({
               type="button"
               size="sm"
               variant="destructive"
-              onClick={() => {
-                void (async () => {
-                  const confirmed = await confirm({
-                    title: `Void ${invoiceData?.invoice?.invoiceNumber ?? "this invoice"}?`,
-                    description: "It will hide from the active list. You can unvoid it later.",
-                    confirmLabel: "Void",
-                    destructive: true,
-                  });
-                  if (!confirmed) return;
-                  await voidInvoice({ id: activeInvoiceId });
-                })();
-              }}
+              onClick={() => void handleVoidInvoice()}
             >
               <ProhibitIcon className="size-3.5" />
               Void
@@ -1690,11 +1714,7 @@ export function InvoiceEditor({
               variant="outline"
               size="sm"
               className="ml-2"
-              onClick={() =>
-                void recalculateSeriesEquipmentLines({ id: activeInvoiceId }).then(() =>
-                  notify.success("Recalculated billed equipment totals."),
-                )
-              }
+              onClick={() => void recalculateEquipmentTotals()}
             >
               Recalculate now
             </Button>
@@ -2048,11 +2068,7 @@ export function InvoiceEditor({
                     variant="outline"
                     size="sm"
                     className="w-full"
-                    onClick={() =>
-                      void recalculateSeriesEquipmentLines({ id: activeInvoiceId }).then(() =>
-                        notify.success("Recalculated billed equipment totals."),
-                      )
-                    }
+                    onClick={() => void recalculateEquipmentTotals()}
                   >
                     Recalculate equipment totals
                   </Button>
