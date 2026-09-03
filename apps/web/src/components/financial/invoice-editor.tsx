@@ -231,6 +231,7 @@ export function InvoiceEditor({
   const [feesCatalogEnabled, setFeesCatalogEnabled] = useState(false);
   const [termsCatalogEnabled, setTermsCatalogEnabled] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [syncingPullList, setSyncingPullList] = useState(false);
   const [autoSaveState, setAutoSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [autoSaveError, setAutoSaveError] = useState<string | null>(null);
   const [activeInvoiceId, setActiveInvoiceId] = useState<Id<"invoices"> | undefined>(invoiceId);
@@ -1110,25 +1111,8 @@ export function InvoiceEditor({
       setLastSavedSignature(signature);
       if (requestId === saveRequestIdRef.current) {
         setAutoSaveState("saved");
+        setAutoSaveError(null);
       }
-      if (promptForPullListSync && activeInvoiceId && linkedEvent && !linkedSeries) {
-        const status = await convex.query(api.eventPullLists.getInvoiceSyncStatus, {
-          eventId: linkedEvent._id,
-        });
-        if (status.hasInvoice && !status.inSync) {
-          const shouldResync = await confirm({
-            title: "Update the pull list?",
-            description: "This invoice's equipment lines no longer match the event's pull list. Update the pull list to match?",
-          });
-          if (shouldResync) {
-            await scaffoldPullListsForLinkedDays();
-            if (requestId === saveRequestIdRef.current) {
-              notify.success("Invoice saved and pull list resynced.");
-            }
-          }
-        }
-      }
-      return true;
     } catch (error) {
       const message = getConvexErrorMessage(error, "Could not save invoice.");
       if (requestId === saveRequestIdRef.current) {
@@ -1138,6 +1122,71 @@ export function InvoiceEditor({
       return false;
     } finally {
       setSaving(false);
+    }
+
+    // Pull-list sync is best-effort after a successful save. Do not roll the
+    // invoice save back into an error state if scaffolding fails.
+    if (promptForPullListSync && activeInvoiceId && linkedEvent && !linkedSeries) {
+      try {
+        const status = await convex.query(api.eventPullLists.getInvoiceSyncStatus, {
+          eventId: linkedEvent._id,
+        });
+        if (status.hasInvoice && !status.inSync) {
+          const shouldResync = await confirm({
+            title: "Update the pull list?",
+            description:
+              "This invoice's equipment lines no longer match the event's pull list. Update the pull list to match?",
+          });
+          if (shouldResync) {
+            await scaffoldPullListsForLinkedDays();
+            if (requestId === saveRequestIdRef.current) {
+              notify.success("Invoice saved and pull list resynced.");
+            }
+          }
+        }
+      } catch (error) {
+        const message = getConvexErrorMessage(error, "Could not sync the pull list.");
+        notify.error(message);
+        if (requestId === saveRequestIdRef.current) {
+          setAutoSaveError(message);
+        }
+      }
+    }
+
+    return true;
+  }
+
+  async function handleSyncPullList() {
+    if (!linkedEvent || syncingPullList) return;
+    const shouldSync = await confirm({
+      title: "Update the pull list?",
+      description: isDraftDirty
+        ? "Save this quote, then update the pull list to match its equipment lines?"
+        : "Update the pull list to match this invoice's equipment lines?",
+    });
+    if (!shouldSync) return;
+
+    setSyncingPullList(true);
+    try {
+      // Pull-list scaffolding reads committed invoice lines. Persist unsaved
+      // equipment edits first or the sync silently matches stale DB state and
+      // Save will immediately ask again.
+      if (isDraftDirty) {
+        const saved = await persistDraft(false);
+        if (!saved) {
+          notify.error("Save the quote before syncing the pull list.");
+          return;
+        }
+      }
+      await scaffoldPullListsForLinkedDays();
+      notify.success("Pull list resynced from invoice.");
+      setAutoSaveError(null);
+    } catch (error) {
+      const message = getConvexErrorMessage(error, "Could not sync the pull list.");
+      notify.error(message);
+      setAutoSaveError(message);
+    } finally {
+      setSyncingPullList(false);
     }
   }
 
@@ -1691,20 +1740,8 @@ export function InvoiceEditor({
             equipmentPricingMode={equipmentPricingMode}
             defaultBasis={defaultEquipmentBasis}
             pullListOutOfSync={Boolean(pullListSyncStatus?.hasInvoice && !pullListSyncStatus.inSync)}
-            onSyncPullList={() =>
-              void (async () => {
-                if (!linkedEvent) return;
-                if (
-                  !(await confirm({
-                    title: "Update the pull list?",
-                    description: "Update the pull list to match this invoice's equipment lines?",
-                  }))
-                )
-                  return;
-                await scaffoldPullListsForLinkedDays();
-                notify.success("Pull list resynced from invoice.");
-              })().catch((error) => setAutoSaveError(getConvexErrorMessage(error)))
-            }
+            syncingPullList={syncingPullList}
+            onSyncPullList={() => void handleSyncPullList()}
           />
           </div>
           <div id="section-equipment-types">
@@ -2418,12 +2455,14 @@ function SectionEquipmentPackages({
   equipmentPricingMode,
   defaultBasis = "total",
   pullListOutOfSync = false,
+  syncingPullList = false,
   onSyncPullList,
 }: {
   rows: EquipmentRow[];
   setRows: Dispatch<SetStateAction<EquipmentRow[]>>;
   billableOccurrenceCount: number;
   pullListOutOfSync?: boolean;
+  syncingPullList?: boolean;
   onSyncPullList?: () => void;
   packageById: Map<
     string,
@@ -2453,8 +2492,14 @@ function SectionEquipmentPackages({
     <Card className="relative">
       {pullListOutOfSync && onSyncPullList ? (
         <div className="absolute top-3.5 right-4 z-10">
-          <Button type="button" size="sm" variant="outline" onClick={onSyncPullList}>
-            Sync pull list
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={syncingPullList}
+            onClick={onSyncPullList}
+          >
+            {syncingPullList ? "Syncing…" : "Sync pull list"}
           </Button>
         </div>
       ) : null}
