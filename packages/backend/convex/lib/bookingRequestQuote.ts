@@ -36,7 +36,7 @@ export function mapGroupTypeToSponsor(type: GroupType): string {
     case "individual":
       return "Individual Stanford Affiliate";
     case "vso":
-      return "Large Voulunteer Student Organization";
+      return "Large Voluntary Student Organization";
   }
 }
 

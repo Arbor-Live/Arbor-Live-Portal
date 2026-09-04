@@ -490,7 +490,7 @@ async function insertSubmittedBookingRequest(ctx: MutationCtx, eventName?: strin
     email: "e2e.requester@stanford.edu",
     phone: "6505550100",
     organization: "E2E Test Org",
-    sponsorType: "Large Volunteer Student Organization",
+    sponsorType: "Large Voluntary Student Organization",
     venueName: "E2E Venue",
     eventDateText,
     eventStartTimeText,
