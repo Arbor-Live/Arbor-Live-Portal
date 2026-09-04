@@ -19,8 +19,8 @@ export function requiresOrganizationName(
 
 export const SPONSOR_TYPE_OPTIONS = [
   "Stanford Department",
-  "Large Voulunteer Student Organization",
-  "Small Voulunteer Student Organization",
+  "Large Voluntary Student Organization",
+  "Small Voluntary Student Organization",
   "Stanford House / Greek Life",
   "Individual Stanford Affiliate",
   "Other",
