@@ -50,17 +50,18 @@ packages/
 
 ## Quick start
 
-**Prerequisites:** Node.js 20+, pnpm 10, and a [Convex](https://convex.dev) account.
+**Prerequisites:** Node.js 20+ and pnpm 10.
 
 ```bash
 pnpm install
-# Set up env files — see docs/getting-started.md
-pnpm setup:worktree-env
-pnpm dev:backend           # terminal 1 — Convex dev server (shared worktrunk)
-pnpm dev:web               # terminal 2 — http://localhost:3000
+pnpm setup:worktree-env    # env files + isolated Convex + seeded accounts (one time per worktree)
+pnpm run dev               # backend + web on this worktree's own ports
 ```
 
-On a fresh deployment with no admins, visit `/setup` to create the first admin account. Everyone else is invited by email.
+`setup:worktree-env` prints the port and the seeded login (admin, crew, and band
+accounts with demo data) when it finishes. A fresh deployment on the main
+checkout with no admins still needs `/setup`; feature worktrees get a loginable
+admin from the seed.
 
 Full walkthrough (env vars, first admin, dev preview wizards): **[docs/getting-started.md](docs/getting-started.md)**
 
@@ -83,6 +84,7 @@ pnpm typecheck          # TypeScript across workspaces
 pnpm lint               # ESLint across workspaces
 pnpm test               # Vitest unit tests
 pnpm test:e2e           # Playwright (boots anonymous Convex)
+pnpm prune              # remove merged/stale worktrees (frees registry ports)
 pnpm --filter backend codegen   # Regenerate Convex bindings after schema/API changes
 ```
 
@@ -92,10 +94,10 @@ Env files are **not** committed. They live once in `.git/arbor-env/` and are sym
 
 | File | How it gets created |
 |------|---------------------|
-| `packages/backend/.env` | Copy from `.env.example` into shared store |
+| `packages/backend/.env` | Copy from `.env.example` into shared store (setup:worktree-env repairs placeholders / adds the auth secret) |
 | `packages/backend/.env.local` | `pnpm worktree-convex trunk`, then `pnpm dev:backend` (trunk, symlinked), or `pnpm dev:backend:local` (isolated, per-worktree) |
 | `apps/web/.env` | Copy from `apps/web/.env.example` into shared store |
-| `apps/web/.env.local` | `pnpm worktree-convex local` (isolated mode only) |
+| `apps/web/.env.local` | `pnpm worktree-convex local` (isolated mode only; also sets this worktree's `SITE_URL`/web port) |
 | `apps/web/.env.production.local` | Written during `pnpm --filter web build` |
 
 ### Worktrunk vs. local Convex
@@ -107,10 +109,10 @@ by the env linker. `scripts/worktree-convex.mjs` owns it:
   every worktree shares one cloud dev deployment and database. Only use it when
   you want shared data, or in the main checkout.
 - **Local** — each worktree runs its own anonymous Convex backend on its own
-  ports (`:3210`/`:3211`, then `:3220`/`:3221`, …), with real per-worktree
-  `.env.local` files. **All non-trunk feature work must use local mode** so
-  schema pushes never target the shared trunk deployment; start with
-  `pnpm dev:backend:local`.
+  ports (`:3210`/`:3211`, then `:3220`/`:3221`, …) and gets its own Next.js
+  port, with real per-worktree `.env.local` files. **All non-trunk feature work
+  must use local mode** so schema pushes never target the shared trunk
+  deployment; start with `pnpm setup:worktree-env`.
 
 See the "Worktrunk vs. local Convex" section in
 [docs/getting-started.md](docs/getting-started.md).
