@@ -5,6 +5,7 @@ import { requireAdmin, requireAuth } from "./lib/auth";
 const publicBucketValue = v.union(
   v.literal("lighting"),
   v.literal("sound"),
+  v.literal("backline"),
   v.literal("environmental"),
   v.literal("staging"),
   v.literal("misc"),
@@ -35,7 +36,8 @@ const DEFAULT_CATEGORIES = [
   { key: "organizers", label: "Organizers", sortOrder: 170, publicBucket: "staging" as const },
   { key: "road_case", label: "Road Case", sortOrder: 180, publicBucket: "staging" as const },
   { key: "environmentals", label: "Environmentals", sortOrder: 190, publicBucket: "environmental" as const },
-  { key: "instruments", label: "Instruments", sortOrder: 200, publicBucket: "sound" as const },
+  { key: "instruments", label: "Instruments", sortOrder: 200, publicBucket: "backline" as const },
+  { key: "backline", label: "Backline", sortOrder: 205, publicBucket: "backline" as const },
   { key: "dollies", label: "Dollies", sortOrder: 210, publicBucket: "staging" as const },
   { key: "video_photo", label: "Video & Photo", sortOrder: 220, publicBucket: "staging" as const },
   { key: "wireless_dmx", label: "Wireless DMX", sortOrder: 230, publicBucket: "lighting" as const },

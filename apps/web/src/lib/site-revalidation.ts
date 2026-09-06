@@ -1,14 +1,15 @@
-export const SITE_REVALIDATE_SECONDS = 3600;
-
 export const PUBLIC_PACKAGE_BUCKETS = [
   "lighting",
   "sound",
+  "backline",
   "environmental",
   "staging",
   "misc",
 ] as const;
 
 export type PublicPackageBucket = (typeof PUBLIC_PACKAGE_BUCKETS)[number];
+
+export const SITE_REVALIDATE_SECONDS = 3600;
 
 export const siteRevalidateTags = {
   marketing: "site-marketing",
@@ -26,11 +27,7 @@ export function marketingRevalidatePaths(slug?: string) {
 export function inventoryPackageRevalidatePaths(packageId?: string) {
   const paths = [
     "/packages",
-    "/packages/lighting",
-    "/packages/sound",
-    "/packages/environmental",
-    "/packages/staging",
-    "/packages/misc",
+    ...PUBLIC_PACKAGE_BUCKETS.map((bucket) => `/packages/${bucket}`),
   ];
   if (packageId) {
     paths.push(`/packages/view/${packageId}`);
@@ -45,12 +42,5 @@ export function publicEventsRevalidatePaths(eventId?: string) {
 }
 
 export function inventoryTypeRevalidatePaths() {
-  return [
-    "/types",
-    "/types/lighting",
-    "/types/sound",
-    "/types/environmental",
-    "/types/staging",
-    "/types/misc",
-  ];
+  return ["/types", ...PUBLIC_PACKAGE_BUCKETS.map((bucket) => `/types/${bucket}`)];
 }

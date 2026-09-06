@@ -6,14 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Reveal, Stagger, StaggerItem } from "@/components/landing/landing-motion";
 import type { PublicCapabilityFilter } from "@/components/public/public-types-explorer";
 import type { PublicPackageBucket } from "@/lib/site-revalidation";
-
-const bucketLabels: Record<PublicPackageBucket, string> = {
-  lighting: "Lighting",
-  sound: "Sound",
-  environmental: "Environmental",
-  staging: "Staging",
-  misc: "Misc",
-};
+import { publicBucketLabels } from "@/components/inventory/package-section-utils";
 
 type PublicTypeSummary = {
   _id: string;
@@ -192,7 +185,7 @@ export function PublicPackageDetailContent({
   capabilityFilters: PublicCapabilityFilter[];
 }) {
   const labelByKey = new Map(capabilityFilters.map((entry) => [entry.key, entry.label]));
-  const bucketLabel = bucketLabels[data.bucket] ?? data.bucket;
+  const bucketLabel = publicBucketLabels[data.bucket] ?? data.bucket;
 
   return (
     <PublicSiteChrome>

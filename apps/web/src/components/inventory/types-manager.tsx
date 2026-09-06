@@ -31,6 +31,11 @@ import {
   FileUploadField,
   InventoryResourceUploadButton,
 } from "@/components/files/file-upload-field";
+import {
+  publicBucketLabels,
+  sectionOrder,
+  type PublicPackageBucket,
+} from "@/components/inventory/package-section-utils";
 
 type InventoryTypeRow = FunctionReturnType<typeof api.inventoryTypes.list>["page"][number];
 
@@ -297,7 +302,7 @@ export function TypesManager() {
       key: categoryForm.key,
       label: categoryForm.label,
       publicBucket: categoryForm.publicBucket
-        ? (categoryForm.publicBucket as "lighting" | "sound" | "environmental" | "staging" | "misc")
+        ? (categoryForm.publicBucket as PublicPackageBucket)
         : undefined,
       active: true,
     });
@@ -1103,11 +1108,11 @@ export function TypesManager() {
                 }
               >
                 <option value="">Auto / unset</option>
-                <option value="lighting">Lighting</option>
-                <option value="sound">Sound</option>
-                <option value="environmental">Environmental</option>
-                <option value="staging">Staging</option>
-                <option value="misc">Misc</option>
+                {sectionOrder.map((key) => (
+                  <option key={key} value={key}>
+                    {publicBucketLabels[key]}
+                  </option>
+                ))}
               </select>
             </div>
             <Button type="button" onClick={() => void handleCreateCategory()}>
@@ -1132,22 +1137,17 @@ export function TypesManager() {
                           void updateCategory({
                             id: category._id,
                             publicBucket: event.target.value
-                              ? (event.target.value as
-                                  | "lighting"
-                                  | "sound"
-                                  | "environmental"
-                                  | "staging"
-                                  | "misc")
+                              ? (event.target.value as PublicPackageBucket)
                               : null,
                           })
                         }
                       >
                         <option value="">Auto</option>
-                        <option value="lighting">Lighting</option>
-                        <option value="sound">Sound</option>
-                        <option value="environmental">Environmental</option>
-                        <option value="staging">Staging</option>
-                        <option value="misc">Misc</option>
+                        {sectionOrder.map((key) => (
+                          <option key={key} value={key}>
+                            {publicBucketLabels[key]}
+                          </option>
+                        ))}
                       </select>
                     </div>
                   </div>

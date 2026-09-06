@@ -10,14 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Reveal, Stagger, StaggerItem } from "@/components/landing/landing-motion";
 import { cn } from "@/lib/utils";
 import type { PublicPackageBucket } from "@/lib/site-revalidation";
-
-const bucketLabels: Record<PublicPackageBucket, string> = {
-  lighting: "Lighting",
-  sound: "Sound",
-  environmental: "Environmental",
-  staging: "Staging",
-  misc: "Misc",
-};
+import { publicBucketLabels, sectionOrder } from "@/components/inventory/package-section-utils";
 
 export type PublicPackageRow = {
   bucket: PublicPackageBucket;
@@ -38,35 +31,24 @@ export function PublicPackagesExplorer({
   bucket?: PublicPackageBucket;
 }) {
   const grouped = useMemo(() => {
-    const ordered: PublicPackageBucket[] = [
-      "lighting",
-      "sound",
-      "environmental",
-      "staging",
-      "misc",
-    ];
-    const map: Record<PublicPackageBucket, PublicPackageRow[]> = {
-      lighting: [],
-      sound: [],
-      environmental: [],
-      staging: [],
-      misc: [],
-    };
+    const map = Object.fromEntries(
+      sectionOrder.map((key) => [key, [] as PublicPackageRow[]]),
+    ) as Record<PublicPackageBucket, PublicPackageRow[]>;
 
     for (const row of rows) {
       map[row.bucket].push(row);
     }
 
-    return ordered.map((key) => ({ key, items: map[key] }));
+    return sectionOrder.map((key) => ({ key, items: map[key] }));
   }, [rows]);
 
   return (
     <PublicSiteChrome>
       <PublicPageHero
-        title={bucket ? `${bucketLabels[bucket]} packages` : "Equipment packages"}
+        title={bucket ? `${publicBucketLabels[bucket]} packages` : "Equipment packages"}
         subtitle={
           bucket
-            ? `Browse ${bucketLabels[bucket].toLowerCase()} rental packages from Arbor Live.`
+            ? `Browse ${publicBucketLabels[bucket].toLowerCase()} rental packages from Arbor Live.`
             : "Browse publicly listed equipment packages for your next event."
         }
       />
@@ -89,7 +71,7 @@ export function PublicPackagesExplorer({
             return (
               <section key={group.key} className="space-y-4">
                 <Reveal>
-                  <h2 className="text-xl font-semibold tracking-tight">{bucketLabels[group.key]}</h2>
+                  <h2 className="text-xl font-semibold tracking-tight">{publicBucketLabels[group.key]}</h2>
                 </Reveal>
 
                 <Stagger className="grid gap-6 md:grid-cols-2">
@@ -127,7 +109,7 @@ export function PublicPackagesExplorer({
                             {row.package.name}
                           </CardTitle>
                           <p className="text-xs text-muted-foreground">
-                            {bucketLabels[group.key]} package
+                            {publicBucketLabels[group.key]} package
                           </p>
                         </CardHeader>
                         <CardContent className="space-y-3 pb-4 pt-0 text-sm">

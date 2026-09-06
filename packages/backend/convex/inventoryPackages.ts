@@ -85,6 +85,7 @@ function normalizeWriteContents(args: {
 const publicBucketValue = v.union(
   v.literal("lighting"),
   v.literal("sound"),
+  v.literal("backline"),
   v.literal("environmental"),
   v.literal("staging"),
   v.literal("misc"),

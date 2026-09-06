@@ -5,6 +5,7 @@ import { riderContentFields, riderStatusValue } from "./lib/riderSchema";
 const publicBucketValue = v.union(
   v.literal("lighting"),
   v.literal("sound"),
+  v.literal("backline"),
   v.literal("environmental"),
   v.literal("staging"),
   v.literal("misc"),

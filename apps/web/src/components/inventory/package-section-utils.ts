@@ -1,8 +1,15 @@
-export type PublicPackageBucket = "lighting" | "sound" | "environmental" | "staging" | "misc";
+export type PublicPackageBucket =
+  | "lighting"
+  | "sound"
+  | "backline"
+  | "environmental"
+  | "staging"
+  | "misc";
 
 export const publicBucketLabels: Record<PublicPackageBucket, string> = {
   lighting: "Lighting",
   sound: "Sound",
+  backline: "Backline",
   environmental: "Environmental",
   staging: "Staging",
   misc: "Misc",
@@ -11,6 +18,7 @@ export const publicBucketLabels: Record<PublicPackageBucket, string> = {
 export const sectionOrder: PublicPackageBucket[] = [
   "lighting",
   "sound",
+  "backline",
   "environmental",
   "staging",
   "misc",
@@ -29,6 +37,9 @@ type CategoryRow = {
 export function inferBucketFromCategoryKey(key: string): PublicPackageBucket | undefined {
   const k = key.toLowerCase();
   if (k.includes("light") || k.includes("dmx")) return "lighting";
+  if (k.includes("backline") || k.includes("instrument") || k.includes("drum")) {
+    return "backline";
+  }
   if (k.includes("sound") || k.includes("speaker") || k.includes("mic") || k.includes("audio")) {
     return "sound";
   }
