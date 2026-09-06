@@ -8,16 +8,26 @@ import { listFulfillmentPackageBom } from "./lib/packageBom";
 const publicBucketValue = v.union(
   v.literal("lighting"),
   v.literal("sound"),
+  v.literal("backline"),
   v.literal("environmental"),
   v.literal("staging"),
   v.literal("misc"),
 );
 
-type PublicBucket = "lighting" | "sound" | "environmental" | "staging" | "misc";
+type PublicBucket =
+  | "lighting"
+  | "sound"
+  | "backline"
+  | "environmental"
+  | "staging"
+  | "misc";
 
 function inferBucketFromCategoryKey(key: string): PublicBucket | undefined {
   const k = key.toLowerCase();
   if (k.includes("light") || k.includes("dmx")) return "lighting";
+  if (k.includes("backline") || k.includes("instrument") || k.includes("drum")) {
+    return "backline";
+  }
   if (k.includes("sound") || k.includes("speaker") || k.includes("mic") || k.includes("audio")) {
     return "sound";
   }

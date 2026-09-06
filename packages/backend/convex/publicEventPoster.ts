@@ -27,6 +27,8 @@ const posterStateValue = v.object({
   eligible: v.boolean(),
   eventId: v.optional(v.id("events")),
   eventTitle: v.optional(v.string()),
+  startAt: v.optional(v.number()),
+  venueName: v.optional(v.string()),
   posterImageUrl: v.optional(v.string()),
   caption: v.optional(v.string()),
   additionalLinks: v.array(designLinkInputValue),
@@ -142,6 +144,8 @@ async function serializePosterState(
   eligible: boolean;
   eventId?: Id<"events">;
   eventTitle?: string;
+  startAt?: number;
+  venueName?: string;
   posterImageUrl?: string;
   caption?: string;
   additionalLinks: Array<{ label: string; url: string }>;
@@ -162,6 +166,8 @@ async function serializePosterState(
     eligible: true,
     eventId: event._id,
     eventTitle: event.title,
+    startAt: event.startAt,
+    venueName: event.venueName,
     posterImageUrl,
     caption: design?.caption?.trim() || undefined,
     additionalLinks: design?.additionalLinks ?? [],

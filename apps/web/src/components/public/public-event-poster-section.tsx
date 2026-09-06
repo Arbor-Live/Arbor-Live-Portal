@@ -12,6 +12,7 @@ import {
   marketingLinksEqual,
   type MarketingAdditionalLink,
 } from "@/components/marketing/event-marketing-content-fields";
+import { EventMarketingPreviewPanel } from "@/components/marketing/event-marketing-preview";
 import { formatStoredR2Asset } from "@/lib/r2-assets";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { notify } from "@/lib/notify";
@@ -126,61 +127,82 @@ export function PublicEventPosterSection({
   }, [additionalLinks, caption, portal, savePoster, token]);
 
   if (poster === undefined) return null;
-  if (!poster.eligible) return null;
+  if (!poster.eligible || !poster.eventId) return null;
 
   const detailsDirty =
     caption.trim() !== (poster.caption ?? "").trim() ||
     !marketingLinksEqual(additionalLinks, poster.additionalLinks ?? []);
 
+  const previewData = {
+    eventId: poster.eventId,
+    title: poster.eventTitle ?? "Your event",
+    startAt: poster.startAt,
+    venueName: poster.venueName,
+    posterImageUrl: poster.posterImageUrl,
+    caption,
+    additionalLinks,
+    onWebsite: poster.onWebsite,
+  };
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Poster & description</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {poster.onWebsite && !poster.instagramPublished ? (
-          <p className="text-xs text-muted-foreground">
-            This content is on the public event page. Arbor Live still reviews it before Instagram.
-          </p>
-        ) : null}
-        {poster.instagramPublished ? (
-          <p className="text-xs text-muted-foreground">
-            This content is live on the public event page and Instagram.
-          </p>
-        ) : null}
+    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(16rem,20rem)] lg:items-start">
+      <Card>
+        <CardHeader>
+          <CardTitle>Poster & description</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {poster.onWebsite && !poster.instagramPublished ? (
+            <p className="text-xs text-muted-foreground">
+              This content is on the public event page. Arbor Live still reviews it before Instagram.
+            </p>
+          ) : null}
+          {poster.instagramPublished ? (
+            <p className="text-xs text-muted-foreground">
+              This content is live on the public event page and Instagram.
+            </p>
+          ) : null}
 
-        <EventMarketingContentFields
-          idPrefix={`public-${portal}`}
-          imageUrl=""
-          onImageUrlChange={() => undefined}
-          imagePreviewUrl={poster.posterImageUrl}
-          caption={caption}
-          onCaptionChange={setCaption}
-          additionalLinks={additionalLinks}
-          onAdditionalLinksChange={setAdditionalLinks}
-          disabled={savingDetails}
-          captionPlaceholder="Short about text for your public event page"
-          posterUpload={{
-            type: "file",
-            busy,
-            onFile: uploadFile,
-          }}
-        />
+          <EventMarketingContentFields
+            idPrefix={`public-${portal}`}
+            imageUrl=""
+            onImageUrlChange={() => undefined}
+            imagePreviewUrl={poster.posterImageUrl}
+            caption={caption}
+            onCaptionChange={setCaption}
+            additionalLinks={additionalLinks}
+            onAdditionalLinksChange={setAdditionalLinks}
+            disabled={savingDetails}
+            captionPlaceholder="Short about text for your public event page"
+            posterUpload={{
+              type: "file",
+              busy,
+              onFile: uploadFile,
+            }}
+          />
 
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            size="sm"
-            disabled={savingDetails || !detailsDirty}
-            onClick={() => void saveDetails()}
-          >
-            {savingDetails ? "Saving…" : "Save description & links"}
-          </Button>
-          <p className="text-xs text-muted-foreground">Shown on the public event page.</p>
-        </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              disabled={savingDetails || !detailsDirty}
+              onClick={() => void saveDetails()}
+            >
+              {savingDetails ? "Saving…" : "Save description & links"}
+            </Button>
+            <p className="text-xs text-muted-foreground">Shown on the public event page.</p>
+          </div>
 
-        {error ? <p className="text-xs text-destructive">{error}</p> : null}
-      </CardContent>
-    </Card>
+          {error ? <p className="text-xs text-destructive">{error}</p> : null}
+        </CardContent>
+      </Card>
+
+      <aside className="mx-auto w-full min-w-0 max-w-md lg:sticky lg:top-4 lg:mx-0 lg:max-w-none lg:self-start">
+        <Card className="gap-0 py-0">
+          <CardContent className="p-4">
+            <EventMarketingPreviewPanel data={previewData} />
+          </CardContent>
+        </Card>
+      </aside>
+    </div>
   );
 }

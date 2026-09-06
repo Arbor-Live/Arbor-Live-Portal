@@ -35,6 +35,7 @@ export type InventoryItemFormValues = z.infer<typeof inventoryItemSchema>;
 export const publicPackageBucketSchema = z.enum([
   "lighting",
   "sound",
+  "backline",
   "environmental",
   "staging",
   "misc",

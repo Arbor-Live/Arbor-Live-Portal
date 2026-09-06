@@ -8,14 +8,7 @@ import { MarkdownContent } from "@/components/markdown-content";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Reveal, Stagger, StaggerItem } from "@/components/landing/landing-motion";
 import type { PublicPackageBucket } from "@/lib/site-revalidation";
-
-const bucketLabels: Record<PublicPackageBucket, string> = {
-  lighting: "Lighting",
-  sound: "Sound",
-  environmental: "Environmental",
-  staging: "Staging",
-  misc: "Misc",
-};
+import { publicBucketLabels, sectionOrder } from "@/components/inventory/package-section-utils";
 
 type PublicTypeSummary = {
   _id: string;
@@ -86,35 +79,24 @@ export function PublicTypesExplorer({
   }, [capabilityKey, rows]);
 
   const grouped = useMemo(() => {
-    const ordered: PublicPackageBucket[] = [
-      "lighting",
-      "sound",
-      "environmental",
-      "staging",
-      "misc",
-    ];
-    const map: Record<PublicPackageBucket, PublicTypeRow[]> = {
-      lighting: [],
-      sound: [],
-      environmental: [],
-      staging: [],
-      misc: [],
-    };
+    const map = Object.fromEntries(
+      sectionOrder.map((key) => [key, [] as PublicTypeRow[]]),
+    ) as Record<PublicPackageBucket, PublicTypeRow[]>;
 
     for (const row of filteredRows) {
       map[row.bucket].push(row);
     }
 
-    return ordered.map((key) => ({ key, items: map[key] }));
+    return sectionOrder.map((key) => ({ key, items: map[key] }));
   }, [filteredRows]);
 
   return (
     <PublicSiteChrome>
       <PublicPageHero
-        title={bucket ? `${bucketLabels[bucket]} model types` : "Model types"}
+        title={bucket ? `${publicBucketLabels[bucket]} model types` : "Model types"}
         subtitle={
           bucket
-            ? `Reference specs for ${bucketLabels[bucket].toLowerCase()} equipment.`
+            ? `Reference specs for ${publicBucketLabels[bucket].toLowerCase()} equipment.`
             : "Browse publicly listed inventory model types and capabilities."
         }
       />
@@ -156,7 +138,7 @@ export function PublicTypesExplorer({
             return (
               <section key={group.key} className="space-y-4">
                 <Reveal>
-                  <h2 className="text-xl font-semibold tracking-tight">{bucketLabels[group.key]}</h2>
+                  <h2 className="text-xl font-semibold tracking-tight">{publicBucketLabels[group.key]}</h2>
                 </Reveal>
 
                 <Stagger className="grid gap-6 md:grid-cols-2">
