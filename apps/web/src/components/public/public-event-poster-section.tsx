@@ -25,6 +25,7 @@ import { fileFromClipboardEvent, normalizeClipboardFile } from "@/hooks/use-r2-f
 type Portal = "request" | "quote";
 
 const MAX_ADDITIONAL_LINKS = 10;
+const POSTER_ACCEPT = "image/jpeg,image/png,image/webp,image/gif,image/svg+xml";
 
 const textareaClassName =
   "flex min-h-[96px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
@@ -34,6 +35,15 @@ function createUploadId() {
     return crypto.randomUUID();
   }
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function imageFileFromDataTransfer(dataTransfer: DataTransfer): File | null {
+  const files = Array.from(dataTransfer.files);
+  return (
+    files.find((file) => file.type.startsWith("image/")) ??
+    files.find((file) => /\.(jpe?g|png|webp|gif|svg)$/i.test(file.name)) ??
+    null
+  );
 }
 
 export function PublicEventPosterSection({
@@ -55,6 +65,7 @@ export function PublicEventPosterSection({
   const draftUploadIdRef = useRef(createUploadId());
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
   const [savingDetails, setSavingDetails] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [caption, setCaption] = useState("");
@@ -166,7 +177,7 @@ export function PublicEventPosterSection({
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/jpeg,image/png,image/webp,image/gif,image/svg+xml"
+          accept={POSTER_ACCEPT}
           className="hidden"
           disabled={uploadDisabled}
           onChange={(event) => {
@@ -183,9 +194,10 @@ export function PublicEventPosterSection({
             role="button"
             aria-label={hasPoster ? "Replace poster image" : "Upload poster image"}
             className={cn(
-              "group relative overflow-hidden rounded-xl outline-none ring-1 ring-border",
+              "group relative overflow-hidden rounded-xl outline-none ring-1 ring-border transition-[box-shadow,ring-color]",
               "focus-visible:ring-2 focus-visible:ring-ring",
               uploadDisabled ? "opacity-60" : "cursor-pointer",
+              dragActive && "ring-2 ring-primary",
             )}
             onClick={() => {
               if (uploadDisabled) return;
@@ -205,6 +217,30 @@ export function PublicEventPosterSection({
               event.preventDefault();
               void uploadFile(file);
             }}
+            onDragEnter={(event) => {
+              event.preventDefault();
+              if (uploadDisabled) return;
+              setDragActive(true);
+            }}
+            onDragOver={(event) => {
+              event.preventDefault();
+              event.dataTransfer.dropEffect = uploadDisabled ? "none" : "copy";
+            }}
+            onDragLeave={(event) => {
+              if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+              setDragActive(false);
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
+              setDragActive(false);
+              if (uploadDisabled) return;
+              const file = imageFileFromDataTransfer(event.dataTransfer);
+              if (!file) {
+                notify.error("Drop an image file (JPEG, PNG, WebP, GIF, or SVG).");
+                return;
+              }
+              void uploadFile(file);
+            }}
           >
             <PublicEventPoster
               imageUrl={poster.posterImageUrl}
@@ -214,14 +250,23 @@ export function PublicEventPosterSection({
             <div
               className={cn(
                 "pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/70 px-4 text-center transition-opacity",
-                hasPoster
-                  ? "opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100"
-                  : "opacity-100",
+                dragActive || !hasPoster
+                  ? "opacity-100"
+                  : "opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100",
               )}
             >
               <ImageIcon className="size-6 text-muted-foreground" aria-hidden />
               <p className="text-sm font-medium">
-                {busy ? "Uploading…" : hasPoster ? "Replace poster" : "Upload poster"}
+                {busy
+                  ? "Uploading…"
+                  : dragActive
+                    ? "Drop to upload"
+                    : hasPoster
+                      ? "Replace poster"
+                      : "Upload poster"}
+              </p>
+              <p className="max-w-[14rem] text-xs text-muted-foreground">
+                Drag an image here, click to choose, or paste with Ctrl+V
               </p>
             </div>
           </div>
