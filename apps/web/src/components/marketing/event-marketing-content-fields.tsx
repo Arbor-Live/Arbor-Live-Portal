@@ -85,9 +85,9 @@ export function EventMarketingContentFields({
     return (
       <div className={cn("space-y-4", className)}>
         {previewSrc ? (
-          <div className="overflow-hidden rounded-md border bg-muted/20">
+          <div className="mx-auto w-full max-w-xs overflow-hidden rounded-xl border bg-muted/20">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={previewSrc} alt="" className="mx-auto max-h-80 w-auto object-contain" />
+            <img src={previewSrc} alt="" className="aspect-[4/5] w-full object-cover" />
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">No poster uploaded yet.</p>
@@ -162,9 +162,9 @@ export function EventMarketingContentFields({
             }}
           />
           {previewSrc ? (
-            <div className="overflow-hidden rounded-md border bg-muted/20">
+            <div className="mx-auto w-full max-w-xs overflow-hidden rounded-xl border bg-muted/20">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={previewSrc} alt="" className="mx-auto max-h-80 w-auto object-contain" />
+              <img src={previewSrc} alt="" className="aspect-[4/5] w-full object-cover" />
             </div>
           ) : null}
           <div className="flex flex-wrap gap-2">
