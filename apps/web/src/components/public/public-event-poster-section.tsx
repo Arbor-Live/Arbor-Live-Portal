@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { PublicEventPoster } from "@/components/public/public-event-poster";
 import {
   emptyMarketingLink,
@@ -26,6 +27,10 @@ type Portal = "request" | "quote";
 
 const MAX_ADDITIONAL_LINKS = 10;
 const POSTER_ACCEPT = "image/jpeg,image/png,image/webp,image/gif,image/svg+xml";
+const POSTER_ACCEPT_TYPES = new Set(
+  POSTER_ACCEPT.split(",").map((type) => type.trim()).filter(Boolean),
+);
+const POSTER_ACCEPT_EXT = /\.(jpe?g|png|webp|gif|svg)$/i;
 
 const textareaClassName =
   "flex min-h-[96px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
@@ -37,13 +42,14 @@ function createUploadId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
+function isAcceptedPosterFile(file: File) {
+  if (file.type) return POSTER_ACCEPT_TYPES.has(file.type);
+  // Some OS drops omit MIME; fall back to extension only then.
+  return POSTER_ACCEPT_EXT.test(file.name);
+}
+
 function imageFileFromDataTransfer(dataTransfer: DataTransfer): File | null {
-  const files = Array.from(dataTransfer.files);
-  return (
-    files.find((file) => file.type.startsWith("image/")) ??
-    files.find((file) => /\.(jpe?g|png|webp|gif|svg)$/i.test(file.name)) ??
-    null
-  );
+  return Array.from(dataTransfer.files).find(isAcceptedPosterFile) ?? null;
 }
 
 export function PublicEventPosterSection({
@@ -250,7 +256,7 @@ export function PublicEventPosterSection({
             <div
               className={cn(
                 "pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/70 px-4 text-center transition-opacity",
-                dragActive || !hasPoster
+                dragActive || busy || !hasPoster
                   ? "opacity-100"
                   : "opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100",
               )}
@@ -265,8 +271,17 @@ export function PublicEventPosterSection({
                       ? "Replace poster"
                       : "Upload poster"}
               </p>
-              <p className="max-w-[14rem] text-xs text-muted-foreground">
-                Drag an image here, click to choose, or paste with Ctrl+V
+              <p className="flex max-w-[16rem] flex-wrap items-center justify-center gap-x-1 gap-y-1 text-xs text-muted-foreground">
+                <span>Drag an image here, click to choose, or paste with</span>
+                <KbdGroup>
+                  <Kbd>Ctrl</Kbd>
+                  <Kbd>V</Kbd>
+                </KbdGroup>
+                <span>/</span>
+                <KbdGroup>
+                  <Kbd>⌘</Kbd>
+                  <Kbd>V</Kbd>
+                </KbdGroup>
               </p>
             </div>
           </div>
