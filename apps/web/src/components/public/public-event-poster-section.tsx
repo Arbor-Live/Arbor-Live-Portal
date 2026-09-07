@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
-import { ImagePlus } from "lucide-react";
+import { ImageIcon } from "@phosphor-icons/react";
 import { api } from "@/lib/convex-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -219,7 +219,7 @@ export function PublicEventPosterSection({
                   : "opacity-100",
               )}
             >
-              <ImagePlus className="size-6 text-muted-foreground" aria-hidden />
+              <ImageIcon className="size-6 text-muted-foreground" aria-hidden />
               <p className="text-sm font-medium">
                 {busy ? "Uploading…" : hasPoster ? "Replace poster" : "Upload poster"}
               </p>
