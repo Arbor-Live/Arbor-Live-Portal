@@ -34,6 +34,8 @@ type R2UploadFieldProps = {
   helperText?: string;
   className?: string;
   pasteHint?: string;
+  /** Frame around the image preview (defaults to a short landscape thumb). */
+  previewFrameClassName?: string;
 };
 
 function R2UploadField({
@@ -49,6 +51,7 @@ function R2UploadField({
   helperText,
   className,
   pasteHint = "Focus this area and paste (Ctrl+V), or choose a file.",
+  previewFrameClassName = "relative h-28 w-full max-w-xs",
 }: R2UploadFieldProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const zoneRef = useRef<HTMLDivElement>(null);
@@ -99,7 +102,12 @@ function R2UploadField({
       {helperText ? <p className="text-xs text-muted-foreground">{helperText}</p> : null}
 
       {showImagePreview && previewHref ? (
-        <div className="relative h-28 w-full max-w-xs overflow-hidden rounded-md border bg-muted">
+        <div
+          className={cn(
+            "overflow-hidden rounded-md border bg-muted",
+            previewFrameClassName,
+          )}
+        >
           <Image src={previewHref} alt="" fill className="object-cover" unoptimized />
         </div>
       ) : storedValue ? (
@@ -290,6 +298,7 @@ export function EventPosterUploadField({
       uploadArgs={{ scope: "event", eventId, purpose: "poster" }}
       accept="image/jpeg,image/png,image/webp,image/gif,image/svg+xml"
       helperText={helperText}
+      previewFrameClassName="relative aspect-[4/5] w-full max-w-xs rounded-xl"
       {...rest}
     />
   );
