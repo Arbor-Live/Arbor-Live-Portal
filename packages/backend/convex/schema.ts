@@ -921,6 +921,13 @@ export default defineSchema({
     showOnPublicCrewPage: v.optional(v.boolean()),
     /** Admin-written blurb shown on the public /crew page. */
     publicCrewDescription: v.optional(v.string()),
+    /**
+     * Participation flags (Arbor staff). Missing/legacy ⇒ crew defaults:
+     * onboarding + timecards + assignable. Advisor invites set these false.
+     */
+    requiresOnboarding: v.optional(v.boolean()),
+    includeInTimecards: v.optional(v.boolean()),
+    assignableAsCrew: v.optional(v.boolean()),
     calendarInviteEmail: v.optional(v.string()),
     /** Missing/legacy ⇒ stanford payroll. */
     payrollMethod: v.optional(payrollMethodValue),
@@ -1314,6 +1321,12 @@ export default defineSchema({
     rateMode: v.optional(userCompensationRateModeValue),
     customHourlyRateUsd: v.optional(v.number()),
     payrollMethod: v.optional(payrollMethodValue),
+    /** Arbor Live invite preset — `advisor` skips pay/rate and sets participation flags. */
+    inviteKind: v.optional(v.union(v.literal("crew"), v.literal("advisor"))),
+    requiresOnboarding: v.optional(v.boolean()),
+    includeInTimecards: v.optional(v.boolean()),
+    assignableAsCrew: v.optional(v.boolean()),
+    showOnPublicCrewPage: v.optional(v.boolean()),
     /** Arbor Live crew invites converted from a crew application, when present. */
     gradYear: v.optional(v.number()),
     expiresAt: v.number(),

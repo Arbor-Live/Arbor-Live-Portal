@@ -20,6 +20,7 @@ import {
   isStaffMember,
   resolveProfileMembership,
 } from "./lib/userVerticals";
+import { resolveParticipationFlags } from "./lib/userParticipation";
 import { buildUserProfileImageByUserId } from "./lib/userProfileImage";
 import { loadEventHostDisplay } from "./lib/hostOrgs";
 
@@ -90,7 +91,10 @@ async function getActiveCrewProfiles(ctx: QueryCtx) {
     .query("userAdminProfiles")
     .withIndex("by_active", (q) => q.eq("active", true))
     .take(500);
-  return profiles.filter((profile) => isStaffMember(resolveProfileMembership(profile)));
+  return profiles.filter((profile) => {
+    if (!resolveParticipationFlags(profile).assignableAsCrew) return false;
+    return isStaffMember(resolveProfileMembership(profile));
+  });
 }
 
 function countEligibleCrewForEvent(

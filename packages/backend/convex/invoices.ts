@@ -3,6 +3,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { components } from "./_generated/api";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { requireArborInternalContext, requireAuth, findAuthUsersByIds } from "./lib/auth";
+import { resolveParticipationFlags } from "./lib/userParticipation";
 import { syncEventStatusForLinkedInvoice, syncLinkedEventStatusFromInvoice } from "./lib/eventStatus";
 import { recordInvoiceStatusTransition } from "./lib/statusTransitions";
 import { listEventsByInvoiceId } from "./lib/invoiceEvents";
@@ -486,6 +487,9 @@ export const listManagers = query({
         const user = userByKey.get(userId);
         if (!user) return null;
         const profile = profileByUserId.get(userId);
+        if (profile && !resolveParticipationFlags(profile).assignableAsCrew) {
+          return null;
+        }
         const compensation = rateByUserId.get(userId);
         const avatarUrl = imageByUserId.get(userId);
         return {

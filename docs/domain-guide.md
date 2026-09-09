@@ -55,6 +55,12 @@ canonical description of the domain itself.
 - Staff capabilities/teams: verticals `Operations`, `Crew`, `Trivia`,
   `Marketing` with Crew disciplines `Sound`, `Lights`, `Design`
   (see `userVerticals.ts` and `userAdminProfiles`).
+- **Participation flags** on `userAdminProfiles` (missing ⇒ crew defaults):
+  `requiresOnboarding`, `includeInTimecards`, `assignableAsCrew`, plus existing
+  `showOnPublicCrewPage`. Advisors/supervisors use the **Advisor** invite
+  preset (no compensation/payroll required): skips crew onboarding, hides from
+  timecard overview and assignable-crew pickers, and stays off the public
+  `/crew` page. Flags remain editable per user in Users admin.
 
 ## Venues
 

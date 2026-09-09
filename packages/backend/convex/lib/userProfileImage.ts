@@ -37,8 +37,24 @@ export async function resolveUserProfileImageUrl(
 export async function loadAdminProfilesByUserIds(
   ctx: QueryCtx,
   userIds: readonly string[],
-): Promise<Map<string, ProfileImageSource & { pronouns?: string; gradYear?: number }>> {
-  const profiles = new Map<string, ProfileImageSource & { pronouns?: string; gradYear?: number }>();
+): Promise<
+  Map<
+    string,
+    ProfileImageSource & {
+      pronouns?: string;
+      gradYear?: number;
+      assignableAsCrew?: boolean;
+    }
+  >
+> {
+  const profiles = new Map<
+    string,
+    ProfileImageSource & {
+      pronouns?: string;
+      gradYear?: number;
+      assignableAsCrew?: boolean;
+    }
+  >();
   await Promise.all(
     userIds.map(async (userId) => {
       // Prefer first row over `.unique()` — the index is not a DB unique constraint.
@@ -47,7 +63,14 @@ export async function loadAdminProfilesByUserIds(
         .withIndex("by_userId", (q) => q.eq("userId", userId))
         .take(1);
       const profile = row[0];
-      if (profile) profiles.set(userId, profile);
+      if (profile) {
+        profiles.set(userId, {
+          avatarStorageId: profile.avatarStorageId,
+          pronouns: profile.pronouns,
+          gradYear: profile.gradYear,
+          assignableAsCrew: profile.assignableAsCrew,
+        });
+      }
     }),
   );
   return profiles;

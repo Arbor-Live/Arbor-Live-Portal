@@ -39,6 +39,13 @@ import {
   type UserDiscipline,
   type UserVertical,
 } from "./lib/userVerticals";
+import {
+  participationForInviteKind,
+  resolveParticipationFlags,
+  userInviteKindValue,
+  type UserInviteKind,
+  type UserParticipationFlags,
+} from "./lib/userParticipation";
 import { ensureOnboardingForOrgMembership, ensureOrganizationOnboarding, resolveMyOnboardingStatus } from "./onboarding";
 import {
   applyPayrollMethodToProfile,
@@ -268,6 +275,9 @@ export async function ensureUserProfileDefaults(
     disciplines = [],
     showOnPublicCrewPage,
     publicCrewDescription,
+    requiresOnboarding,
+    includeInTimecards,
+    assignableAsCrew,
     payrollMethod,
     defaultOrganizationId,
     gradYear,
@@ -279,6 +289,9 @@ export async function ensureUserProfileDefaults(
     disciplines?: UserDiscipline[];
     showOnPublicCrewPage?: boolean;
     publicCrewDescription?: string;
+    requiresOnboarding?: boolean;
+    includeInTimecards?: boolean;
+    assignableAsCrew?: boolean;
     payrollMethod?: PayrollMethod;
     defaultOrganizationId?: string;
     gradYear?: number;
@@ -301,6 +314,12 @@ export async function ensureUserProfileDefaults(
         showOnPublicCrewPage !== undefined ? showOnPublicCrewPage : existing.showOnPublicCrewPage,
       publicCrewDescription:
         publicCrewDescription !== undefined ? normalizedDescription : existing.publicCrewDescription,
+      requiresOnboarding:
+        requiresOnboarding !== undefined ? requiresOnboarding : existing.requiresOnboarding,
+      includeInTimecards:
+        includeInTimecards !== undefined ? includeInTimecards : existing.includeInTimecards,
+      assignableAsCrew:
+        assignableAsCrew !== undefined ? assignableAsCrew : existing.assignableAsCrew,
       payrollMethod: payrollMethod ?? existing.payrollMethod,
       defaultOrganizationId: defaultOrganizationId ?? existing.defaultOrganizationId,
       gradYear: gradYear ?? existing.gradYear,
@@ -317,6 +336,9 @@ export async function ensureUserProfileDefaults(
     disciplines,
     showOnPublicCrewPage,
     publicCrewDescription: normalizedDescription,
+    requiresOnboarding,
+    includeInTimecards,
+    assignableAsCrew,
     payrollMethod,
     defaultOrganizationId,
     gradYear,
@@ -329,6 +351,7 @@ async function assertArborCrewInviteCompensation(
   ctx: QueryCtx | MutationCtx,
   organizationId: string,
   args: {
+    inviteKind?: UserInviteKind;
     rateMode?: UserCompensationRateMode;
     customHourlyRateUsd?: number;
     payrollMethod?: PayrollMethod;
@@ -345,6 +368,15 @@ async function assertArborCrewInviteCompensation(
   if (!isArbor) {
     return { isArbor: false as const };
   }
+  const inviteKind = args.inviteKind ?? "crew";
+  const participation = participationForInviteKind(inviteKind);
+  if (inviteKind === "advisor") {
+    return {
+      isArbor: true as const,
+      inviteKind: "advisor" as const,
+      participation,
+    };
+  }
   if (!args.rateMode) {
     throw new Error("Rate mode is required for Arbor Live crew invites.");
   }
@@ -358,6 +390,8 @@ async function assertArborCrewInviteCompensation(
   }
   return {
     isArbor: true as const,
+    inviteKind: "crew" as const,
+    participation,
     rateMode: args.rateMode,
     customHourlyRateUsd: args.customHourlyRateUsd,
     payrollMethod: args.payrollMethod,
@@ -1340,6 +1374,7 @@ export const listUsersForAdmin = query({
           }))
           .sort((a, b) => a.organizationName.localeCompare(b.organizationName));
         const membership = resolveProfileMembership(profile ?? {});
+        const participation = resolveParticipationFlags(profile);
         return {
           id,
           name: user.name ?? user.email ?? "Unknown user",
@@ -1351,8 +1386,11 @@ export const listUsersForAdmin = query({
           title: profile?.title ?? "",
           verticals: membership.verticals,
           disciplines: membership.disciplines,
-          showOnPublicCrewPage: profile?.showOnPublicCrewPage ?? false,
+          showOnPublicCrewPage: participation.showOnPublicCrewPage,
           publicCrewDescription: profile?.publicCrewDescription ?? "",
+          requiresOnboarding: participation.requiresOnboarding,
+          includeInTimecards: participation.includeInTimecards,
+          assignableAsCrew: participation.assignableAsCrew,
           defaultOrganizationId: profile?.defaultOrganizationId ?? "",
           organizationMemberships: memberships,
           rateMode: rate?.rateMode ?? null,
@@ -1442,6 +1480,7 @@ export const inviteUserAdmin = mutation({
     role: v.optional(v.string()),
     verticals: v.optional(v.array(userVerticalValue)),
     disciplines: v.optional(v.array(userDisciplineValue)),
+    inviteKind: v.optional(userInviteKindValue),
     rateMode: v.optional(userCompensationRateModeValue),
     customHourlyRateUsd: v.optional(v.number()),
     payrollMethod: v.optional(payrollMethodValue),
@@ -1456,10 +1495,14 @@ export const inviteUserAdmin = mutation({
     const expiresAt = now + 14 * 24 * 60 * 60 * 1000;
 
     const crewInvite = await assertArborCrewInviteCompensation(ctx, args.organizationId, {
+      inviteKind: args.inviteKind,
       rateMode: args.rateMode,
       customHourlyRateUsd: args.customHourlyRateUsd,
       payrollMethod: args.payrollMethod,
     });
+    const participation: UserParticipationFlags | undefined = crewInvite.isArbor
+      ? crewInvite.participation
+      : undefined;
 
     const membershipRole = await normalizeMembershipRole(ctx, args.organizationId, args.role ?? "member");
     const created = (await ctx.runMutation(components.betterAuth.adapter.create, {
@@ -1488,7 +1531,14 @@ export const inviteUserAdmin = mutation({
         verticals: args.verticals ?? [],
         disciplines: args.disciplines ?? [],
         defaultOrganizationId: args.organizationId,
-        payrollMethod: crewInvite.isArbor ? crewInvite.payrollMethod : undefined,
+        payrollMethod:
+          crewInvite.isArbor && crewInvite.inviteKind === "crew"
+            ? crewInvite.payrollMethod
+            : undefined,
+        requiresOnboarding: participation?.requiresOnboarding,
+        includeInTimecards: participation?.includeInTimecards,
+        assignableAsCrew: participation?.assignableAsCrew,
+        showOnPublicCrewPage: participation?.showOnPublicCrewPage,
       });
       await upsertOrgMembership(ctx, {
         userId: existingUserId,
@@ -1496,7 +1546,7 @@ export const inviteUserAdmin = mutation({
         role: membershipRole,
         active: true,
       });
-      if (crewInvite.isArbor) {
+      if (crewInvite.isArbor && crewInvite.inviteKind === "crew") {
         await applyCrewCompensationAndPayroll(ctx, {
           userId: existingUserId,
           rateMode: crewInvite.rateMode,
@@ -1524,9 +1574,21 @@ export const inviteUserAdmin = mutation({
       expiresAt,
       verticals: args.verticals,
       disciplines: args.disciplines,
-      rateMode: crewInvite.isArbor ? crewInvite.rateMode : undefined,
-      customHourlyRateUsd: crewInvite.isArbor ? crewInvite.customHourlyRateUsd : undefined,
-      payrollMethod: crewInvite.isArbor ? crewInvite.payrollMethod : undefined,
+      rateMode:
+        crewInvite.isArbor && crewInvite.inviteKind === "crew" ? crewInvite.rateMode : undefined,
+      customHourlyRateUsd:
+        crewInvite.isArbor && crewInvite.inviteKind === "crew"
+          ? crewInvite.customHourlyRateUsd
+          : undefined,
+      payrollMethod:
+        crewInvite.isArbor && crewInvite.inviteKind === "crew"
+          ? crewInvite.payrollMethod
+          : undefined,
+      inviteKind: crewInvite.isArbor ? crewInvite.inviteKind : undefined,
+      requiresOnboarding: participation?.requiresOnboarding,
+      includeInTimecards: participation?.includeInTimecards,
+      assignableAsCrew: participation?.assignableAsCrew,
+      showOnPublicCrewPage: participation?.showOnPublicCrewPage,
       isExistingUser: Boolean(existingUserId),
     });
 
@@ -1576,6 +1638,11 @@ export const resendInviteAdmin = mutation({
       rateMode: pending?.rateMode,
       customHourlyRateUsd: pending?.customHourlyRateUsd,
       payrollMethod: pending?.payrollMethod,
+      inviteKind: pending?.inviteKind,
+      requiresOnboarding: pending?.requiresOnboarding,
+      includeInTimecards: pending?.includeInTimecards,
+      assignableAsCrew: pending?.assignableAsCrew,
+      showOnPublicCrewPage: pending?.showOnPublicCrewPage,
       isExistingUser: await userExistsForInvite(ctx, invite.email),
       resendKey: String(now),
     });
@@ -1671,6 +1738,7 @@ export const createUserAdmin = mutation({
     title: v.optional(v.string()),
     verticals: v.optional(v.array(userVerticalValue)),
     disciplines: v.optional(v.array(userDisciplineValue)),
+    inviteKind: v.optional(userInviteKindValue),
     rateMode: v.optional(userCompensationRateModeValue),
     customHourlyRateUsd: v.optional(v.number()),
     hourlyRateUsd: v.optional(v.number()),
@@ -1686,6 +1754,7 @@ export const createUserAdmin = mutation({
     const now = Date.now();
 
     const crewInvite = await assertArborCrewInviteCompensation(ctx, args.organizationId, {
+      inviteKind: args.inviteKind,
       rateMode:
         args.rateMode ??
         (args.hourlyRateUsd !== undefined || args.customHourlyRateUsd !== undefined
@@ -1694,6 +1763,9 @@ export const createUserAdmin = mutation({
       customHourlyRateUsd: args.customHourlyRateUsd ?? args.hourlyRateUsd,
       payrollMethod: args.payrollMethod,
     });
+    const participation: UserParticipationFlags | undefined = crewInvite.isArbor
+      ? crewInvite.participation
+      : undefined;
 
     const existing = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
       model: "user",
@@ -1750,7 +1822,14 @@ export const createUserAdmin = mutation({
       verticals: args.verticals ?? [],
       disciplines: args.disciplines ?? [],
       defaultOrganizationId: args.organizationId,
-      payrollMethod: crewInvite.isArbor ? crewInvite.payrollMethod : args.payrollMethod,
+      payrollMethod:
+        crewInvite.isArbor && crewInvite.inviteKind === "crew"
+          ? crewInvite.payrollMethod
+          : args.payrollMethod,
+      requiresOnboarding: participation?.requiresOnboarding,
+      includeInTimecards: participation?.includeInTimecards,
+      assignableAsCrew: participation?.assignableAsCrew,
+      showOnPublicCrewPage: participation?.showOnPublicCrewPage,
     });
     await upsertOrgMembership(ctx, {
       userId,
@@ -1758,7 +1837,7 @@ export const createUserAdmin = mutation({
       role: membershipRole,
       active: true,
     });
-    if (crewInvite.isArbor) {
+    if (crewInvite.isArbor && crewInvite.inviteKind === "crew") {
       await applyCrewCompensationAndPayroll(ctx, {
         userId,
         rateMode: crewInvite.rateMode,
@@ -1838,6 +1917,9 @@ export const updateUserAdmin = mutation({
     disciplines: v.optional(v.array(userDisciplineValue)),
     showOnPublicCrewPage: v.optional(v.boolean()),
     publicCrewDescription: v.optional(v.string()),
+    requiresOnboarding: v.optional(v.boolean()),
+    includeInTimecards: v.optional(v.boolean()),
+    assignableAsCrew: v.optional(v.boolean()),
     defaultOrganizationId: v.optional(v.string()),
     rateMode: v.optional(userCompensationRateModeValue),
     customHourlyRateUsd: v.optional(v.number()),
@@ -1898,9 +1980,50 @@ export const updateUserAdmin = mutation({
         args.publicCrewDescription !== undefined
           ? args.publicCrewDescription
           : existingProfile?.publicCrewDescription,
+      requiresOnboarding:
+        args.requiresOnboarding !== undefined
+          ? args.requiresOnboarding
+          : existingProfile?.requiresOnboarding,
+      includeInTimecards:
+        args.includeInTimecards !== undefined
+          ? args.includeInTimecards
+          : existingProfile?.includeInTimecards,
+      assignableAsCrew:
+        args.assignableAsCrew !== undefined
+          ? args.assignableAsCrew
+          : existingProfile?.assignableAsCrew,
       payrollMethod: args.payrollMethod ?? existingProfile?.payrollMethod,
       defaultOrganizationId: args.defaultOrganizationId ?? existingProfile?.defaultOrganizationId,
     });
+
+    const nextFlags = resolveParticipationFlags({
+      requiresOnboarding:
+        args.requiresOnboarding !== undefined
+          ? args.requiresOnboarding
+          : existingProfile?.requiresOnboarding,
+      includeInTimecards:
+        args.includeInTimecards !== undefined
+          ? args.includeInTimecards
+          : existingProfile?.includeInTimecards,
+      assignableAsCrew:
+        args.assignableAsCrew !== undefined
+          ? args.assignableAsCrew
+          : existingProfile?.assignableAsCrew,
+      showOnPublicCrewPage:
+        args.showOnPublicCrewPage !== undefined
+          ? args.showOnPublicCrewPage
+          : existingProfile?.showOnPublicCrewPage,
+    });
+    if (!nextFlags.requiresOnboarding) {
+      const defaultOrgId =
+        args.defaultOrganizationId ?? existingProfile?.defaultOrganizationId;
+      if (defaultOrgId) {
+        await ensureOnboardingForOrgMembership(ctx, {
+          userId: args.userId,
+          organizationId: defaultOrgId,
+        });
+      }
+    }
 
     if (args.rateMode !== undefined || args.hourlyRateUsd !== undefined || args.customHourlyRateUsd !== undefined) {
       const rateMode =

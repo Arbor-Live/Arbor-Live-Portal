@@ -27,6 +27,7 @@ import {
   normalizePayrollMethod,
   type PayrollMethod,
 } from "./lib/crewCompensation";
+import { resolveParticipationFlags } from "./lib/userParticipation";
 import { assertUsernameAvailable, normalizeUsername } from "./lib/username";
 
 const onboardingStatusValue = v.union(
@@ -151,23 +152,31 @@ export async function resolveMyOnboardingStatus(
   let band: MyOnboardingStatus["band"] = { applicable: false };
 
   if (orgContext?.organizationType === "arbor_internal") {
-    const row = await ctx.db
-      .query("userOnboarding")
+    const profile = await ctx.db
+      .query("userAdminProfiles")
       .withIndex("by_userId", (q) => q.eq("userId", userId))
       .unique();
-    const payrollMethod = await getPayrollMethodForUser(ctx, userId);
-    if (row) {
-      crew = {
-        applicable: true,
-        status: row.status,
-        incompleteStepCount: countIncompleteCrewSteps(row, payrollMethod),
-      };
+    if (!resolveParticipationFlags(profile).requiresOnboarding) {
+      crew = { applicable: false };
     } else {
-      crew = {
-        applicable: true,
-        status: "not_started",
-        incompleteStepCount: payrollMethod === "external" ? 10 : 12,
-      };
+      const row = await ctx.db
+        .query("userOnboarding")
+        .withIndex("by_userId", (q) => q.eq("userId", userId))
+        .unique();
+      const payrollMethod = await getPayrollMethodForUser(ctx, userId);
+      if (row) {
+        crew = {
+          applicable: true,
+          status: row.status,
+          incompleteStepCount: countIncompleteCrewSteps(row, payrollMethod),
+        };
+      } else {
+        crew = {
+          applicable: true,
+          status: "not_started",
+          incompleteStepCount: payrollMethod === "external" ? 10 : 12,
+        };
+      }
     }
   }
 
@@ -196,7 +205,21 @@ export async function ensureCrewOnboarding(
     .query("userOnboarding")
     .withIndex("by_userId", (q) => q.eq("userId", userId))
     .unique();
-  if (existing) return existing._id;
+  if (existing) {
+    if (
+      opts?.waived &&
+      existing.status !== "waived" &&
+      existing.status !== "completed"
+    ) {
+      await ctx.db.patch(existing._id, {
+        status: "waived",
+        waivedAt: now,
+        waivedByUserId: opts.waivedByUserId ?? userId,
+        updatedAt: now,
+      });
+    }
+    return existing._id;
+  }
   if (opts?.waived) {
     return await ctx.db.insert("userOnboarding", {
       userId,
@@ -257,7 +280,18 @@ export async function ensureOnboardingForOrgMembership(
 ) {
   const orgType = await resolveOrgType(ctx, args.organizationId);
   if (orgType === "arbor_internal") {
-    await ensureCrewOnboarding(ctx, args.userId);
+    const profile = await ctx.db
+      .query("userAdminProfiles")
+      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+      .unique();
+    if (!resolveParticipationFlags(profile).requiresOnboarding) {
+      await ensureCrewOnboarding(ctx, args.userId, {
+        waived: true,
+        waivedByUserId: args.userId,
+      });
+    } else {
+      await ensureCrewOnboarding(ctx, args.userId);
+    }
   } else {
     await ensureOrganizationOnboarding(ctx, args.organizationId);
   }

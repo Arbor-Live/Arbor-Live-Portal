@@ -28,12 +28,14 @@ import {
   CREW_RATE_MODE_OPTIONS,
   PAYROLL_METHOD_OPTIONS,
   USER_DISCIPLINE_OPTIONS,
+  USER_INVITE_KIND_OPTIONS,
   USER_VERTICAL_OPTIONS,
   createUserAdminSchema,
   editInviteSchema,
   inviteUserSchema,
   userAdminRowSchema,
   type UserDisciplineOption,
+  type UserInviteKindOption,
   type UserVerticalOption,
   type CreateUserAdminFormValues,
   type EditInviteFormValues,
@@ -147,6 +149,9 @@ function userValuesFromRow(user: AdminUser, resolvedOrgId: string): UserAdminRow
   return {
     role: user.role || "member",
     active: user.active,
+    requiresOnboarding: user.requiresOnboarding ?? true,
+    includeInTimecards: user.includeInTimecards ?? true,
+    assignableAsCrew: user.assignableAsCrew ?? true,
     showOnPublicCrewPage: user.showOnPublicCrewPage ?? false,
     publicCrewDescription: user.publicCrewDescription ?? "",
     title: user.title || "",
@@ -855,6 +860,9 @@ function UserAdminRow({
       userId: user.id,
       role: values.role,
       active: values.active,
+      requiresOnboarding: values.requiresOnboarding,
+      includeInTimecards: values.includeInTimecards,
+      assignableAsCrew: values.assignableAsCrew,
       showOnPublicCrewPage: values.showOnPublicCrewPage,
       publicCrewDescription: values.publicCrewDescription || undefined,
       title: values.title || undefined,
@@ -1156,7 +1164,42 @@ function UserAdminRow({
                 idPrefix={`user-${user.id}-discipline`}
               />
               <div className="rounded-md border p-2 md:col-span-2">
-                <p className="mb-2 text-xs font-medium">Public crew page</p>
+                <p className="mb-2 text-xs font-medium">Participation</p>
+                <div className="mb-3 grid gap-2 sm:grid-cols-2">
+                  <label className="flex items-center gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={form.watch("requiresOnboarding")}
+                      onChange={(e) =>
+                        form.setValue("requiresOnboarding", e.target.checked, { shouldDirty: true })
+                      }
+                    />
+                    Requires onboarding
+                  </label>
+                  <label className="flex items-center gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={form.watch("includeInTimecards")}
+                      onChange={(e) =>
+                        form.setValue("includeInTimecards", e.target.checked, { shouldDirty: true })
+                      }
+                    />
+                    Include in timecards
+                  </label>
+                  <label className="flex items-center gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={form.watch("assignableAsCrew")}
+                      onChange={(e) =>
+                        form.setValue("assignableAsCrew", e.target.checked, { shouldDirty: true })
+                      }
+                    />
+                    Assignable as crew
+                  </label>
+                </div>
+              </div>
+              <div className="rounded-md border p-2 md:col-span-2">
+                <p className="mb-2 text-xs font-medium">Show publicly</p>
                 <label className="mb-3 flex items-center gap-2 text-xs">
                   <input
                     type="checkbox"
@@ -1383,6 +1426,7 @@ function InviteUserModal({
     defaultValues: {
       email: "",
       role: "member",
+      inviteKind: "crew",
       verticals: [],
       disciplines: [],
       rateMode: "normal",
@@ -1393,13 +1437,16 @@ function InviteUserModal({
   });
 
   const arborInvite = isArborOrg(orgOptions, orgId);
+  const inviteKind = form.watch("inviteKind");
+  const isAdvisorInvite = arborInvite && inviteKind === "advisor";
 
   const onSubmit = form.submitMutation(async (values) => {
     if (!orgId) throw new Error("Create or select an organization first.");
-    if (arborInvite && !values.rateMode) {
+    const kind = arborInvite ? values.inviteKind : "crew";
+    if (arborInvite && kind === "crew" && !values.rateMode) {
       throw new Error("Select a rate mode.");
     }
-    if (arborInvite && !values.payrollMethod) {
+    if (arborInvite && kind === "crew" && !values.payrollMethod) {
       throw new Error("Select a payment method.");
     }
     await inviteUser({
@@ -1408,16 +1455,18 @@ function InviteUserModal({
       role: values.role,
       verticals: values.verticals,
       disciplines: values.disciplines,
-      rateMode: arborInvite ? values.rateMode : undefined,
+      inviteKind: arborInvite ? kind : undefined,
+      rateMode: arborInvite && kind === "crew" ? values.rateMode : undefined,
       customHourlyRateUsd:
-        arborInvite && values.rateMode === "custom"
+        arborInvite && kind === "crew" && values.rateMode === "custom"
           ? Number(values.customHourlyRateUsd || "0")
           : undefined,
-      payrollMethod: arborInvite ? values.payrollMethod : undefined,
+      payrollMethod: arborInvite && kind === "crew" ? values.payrollMethod : undefined,
     });
     form.reset({
       email: "",
       role: "member",
+      inviteKind: "crew",
       verticals: [],
       disciplines: [],
       rateMode: "normal",
@@ -1460,6 +1509,30 @@ function InviteUserModal({
                   </Select>
                 </div>
               </div>
+              {arborInvite ? (
+                <div className="space-y-1">
+                  <Label>Invite as</Label>
+                  <Select
+                    value={inviteKind}
+                    onValueChange={(value) =>
+                      form.setValue("inviteKind", value as UserInviteKindOption, {
+                        shouldDirty: true,
+                      })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {USER_INVITE_KIND_OPTIONS.map((kind) => (
+                        <SelectItem key={`invite-kind-${kind}`} value={kind}>
+                          {kind === "advisor" ? "Advisor" : "Crew"}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : null}
               <div className="grid gap-2 md:grid-cols-2">
                 <MembershipCheckboxes
                   label="Verticals"
@@ -1476,7 +1549,7 @@ function InviteUserModal({
                   idPrefix="invite-discipline"
                 />
               </div>
-              {arborInvite ? (
+              {arborInvite && !isAdvisorInvite ? (
                 <div className="grid gap-2 md:grid-cols-2">
                   <div className="space-y-1">
                     <Label>Rate</Label>
@@ -1549,6 +1622,7 @@ function InviteUserModal({
           form.reset({
             email: "",
             role: "member",
+            inviteKind: "crew",
             verticals: [],
             disciplines: [],
             rateMode: "normal",
@@ -1703,6 +1777,7 @@ function CreateUserModal({
       email: "",
       password: "",
       role: "member",
+      inviteKind: "crew",
       verticals: [],
       disciplines: [],
       rateMode: "normal",
@@ -1713,9 +1788,12 @@ function CreateUserModal({
   });
 
   const arborCreate = isArborOrg(orgOptions, orgId);
+  const createKind = form.watch("inviteKind");
+  const isAdvisorCreate = arborCreate && createKind === "advisor";
 
   const onSubmit = form.submitMutation(async (values) => {
     if (!orgId) throw new Error("Create or select an organization first.");
+    const kind = arborCreate ? values.inviteKind : "crew";
     await createUser({
       organizationId: orgId,
       name: values.name.trim(),
@@ -1725,12 +1803,13 @@ function CreateUserModal({
       role: values.role,
       verticals: values.verticals,
       disciplines: values.disciplines,
-      rateMode: arborCreate ? values.rateMode : undefined,
+      inviteKind: arborCreate ? kind : undefined,
+      rateMode: arborCreate && kind === "crew" ? values.rateMode : undefined,
       customHourlyRateUsd:
-        arborCreate && values.rateMode === "custom"
+        arborCreate && kind === "crew" && values.rateMode === "custom"
           ? Number(values.hourlyRateUsd || "0")
           : undefined,
-      payrollMethod: arborCreate ? values.payrollMethod : undefined,
+      payrollMethod: arborCreate && kind === "crew" ? values.payrollMethod : undefined,
     });
     form.reset({
       name: "",
@@ -1738,6 +1817,7 @@ function CreateUserModal({
       email: "",
       password: "",
       role: "member",
+      inviteKind: "crew",
       verticals: [],
       disciplines: [],
       rateMode: "normal",
@@ -1783,11 +1863,35 @@ function CreateUserModal({
                   </Select>
                 </div>
                 {arborCreate ? (
+                  <div className="space-y-1">
+                    <Label>Create as</Label>
+                    <Select
+                      value={createKind}
+                      onValueChange={(value) =>
+                        form.setValue("inviteKind", value as UserInviteKindOption, {
+                          shouldDirty: true,
+                        })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {USER_INVITE_KIND_OPTIONS.map((kind) => (
+                          <SelectItem key={`create-kind-${kind}`} value={kind}>
+                            {kind === "advisor" ? "Advisor" : "Crew"}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ) : null}
+                {arborCreate && !isAdvisorCreate ? (
                   <>
                     <div className="space-y-1">
                       <Label>Rate</Label>
                       <Select
-                        value={form.watch("rateMode")}
+                        value={form.watch("rateMode") ?? "normal"}
                         onValueChange={(value) =>
                           form.setValue(
                             "rateMode",
@@ -1819,7 +1923,7 @@ function CreateUserModal({
                     <div className="space-y-1">
                       <Label>Payment method</Label>
                       <Select
-                        value={form.watch("payrollMethod")}
+                        value={form.watch("payrollMethod") ?? "stanford"}
                         onValueChange={(value) =>
                           form.setValue(
                             "payrollMethod",
@@ -1882,11 +1986,12 @@ function CreateUserModal({
             email: "",
             password: "",
             role: "member",
+            inviteKind: "crew",
             verticals: [],
             disciplines: [],
             rateMode: "normal",
-      hourlyRateUsd: "0",
-      payrollMethod: "stanford",
+            hourlyRateUsd: "0",
+            payrollMethod: "stanford",
           });
           onClose();
         }}
