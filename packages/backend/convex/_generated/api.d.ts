@@ -153,6 +153,7 @@ import type * as lib_siteRevalidationPaths from "../lib/siteRevalidationPaths.js
 import type * as lib_stanfordHours from "../lib/stanfordHours.js";
 import type * as lib_statusTransitions from "../lib/statusTransitions.js";
 import type * as lib_trustedOrigins from "../lib/trustedOrigins.js";
+import type * as lib_userParticipation from "../lib/userParticipation.js";
 import type * as lib_userProfileImage from "../lib/userProfileImage.js";
 import type * as lib_userTimecards from "../lib/userTimecards.js";
 import type * as lib_userVerticals from "../lib/userVerticals.js";
@@ -342,6 +343,7 @@ declare const fullApi: ApiFromModules<{
   "lib/stanfordHours": typeof lib_stanfordHours;
   "lib/statusTransitions": typeof lib_statusTransitions;
   "lib/trustedOrigins": typeof lib_trustedOrigins;
+  "lib/userParticipation": typeof lib_userParticipation;
   "lib/userProfileImage": typeof lib_userProfileImage;
   "lib/userTimecards": typeof lib_userTimecards;
   "lib/userVerticals": typeof lib_userVerticals;

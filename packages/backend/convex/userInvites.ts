@@ -10,11 +10,10 @@ import {
 } from "./email/invitations";
 import {
   legacyTeamsToMembership,
-  userDisciplineValue,
-  userVerticalValue,
   type UserDiscipline,
   type UserVertical,
 } from "./lib/userVerticals";
+import { resolveParticipationFlags } from "./lib/userParticipation";
 import { ensureOnboardingForOrgMembership } from "./onboarding";
 import {
   applyPayrollMethodToProfile,
@@ -44,6 +43,10 @@ async function ensureUserProfileDefaults(
     defaultOrganizationId?: string;
     payrollMethod?: PayrollMethod;
     gradYear?: number;
+    requiresOnboarding?: boolean;
+    includeInTimecards?: boolean;
+    assignableAsCrew?: boolean;
+    showOnPublicCrewPage?: boolean;
   },
 ) {
   const now = Date.now();
@@ -59,6 +62,20 @@ async function ensureUserProfileDefaults(
       defaultOrganizationId: args.defaultOrganizationId ?? existing.defaultOrganizationId,
       payrollMethod: args.payrollMethod ?? existing.payrollMethod,
       gradYear: args.gradYear ?? existing.gradYear,
+      requiresOnboarding:
+        args.requiresOnboarding !== undefined
+          ? args.requiresOnboarding
+          : existing.requiresOnboarding,
+      includeInTimecards:
+        args.includeInTimecards !== undefined
+          ? args.includeInTimecards
+          : existing.includeInTimecards,
+      assignableAsCrew:
+        args.assignableAsCrew !== undefined ? args.assignableAsCrew : existing.assignableAsCrew,
+      showOnPublicCrewPage:
+        args.showOnPublicCrewPage !== undefined
+          ? args.showOnPublicCrewPage
+          : existing.showOnPublicCrewPage,
       updatedAt: now,
     });
     return;
@@ -71,6 +88,10 @@ async function ensureUserProfileDefaults(
     defaultOrganizationId: args.defaultOrganizationId,
     payrollMethod: args.payrollMethod,
     gradYear: args.gradYear,
+    requiresOnboarding: args.requiresOnboarding,
+    includeInTimecards: args.includeInTimecards,
+    assignableAsCrew: args.assignableAsCrew,
+    showOnPublicCrewPage: args.showOnPublicCrewPage,
     createdAt: now,
     updatedAt: now,
   });
@@ -153,7 +174,9 @@ export const getInviteByToken = query({
     const onboardingPath =
       organizationType === "band" || organizationType === "dj"
         ? "/onboarding/band"
-        : "/onboarding";
+        : resolveParticipationFlags(resolved.pending).requiresOnboarding
+          ? "/onboarding"
+          : "/dashboard";
 
     if (resolved.expired) {
       return {
@@ -245,6 +268,10 @@ export const acceptInviteWithPassword = mutation({
       defaultOrganizationId: pending.organizationId,
       payrollMethod: pending.payrollMethod,
       gradYear: pending.gradYear,
+      requiresOnboarding: pending.requiresOnboarding,
+      includeInTimecards: pending.includeInTimecards,
+      assignableAsCrew: pending.assignableAsCrew,
+      showOnPublicCrewPage: pending.showOnPublicCrewPage,
     });
     await upsertOrgMembership(ctx, {
       userId,
@@ -288,7 +315,11 @@ export const acceptInviteWithPassword = mutation({
     await markInvitationAccepted(ctx, pending.invitationId);
 
     const onboardingPath =
-      orgType === "band" || orgType === "dj" ? "/onboarding/band" : "/onboarding";
+      orgType === "band" || orgType === "dj"
+        ? "/onboarding/band"
+        : resolveParticipationFlags(pending).requiresOnboarding
+          ? "/onboarding"
+          : "/dashboard";
 
     return { email, onboardingPath };
   },

@@ -60,6 +60,11 @@ export async function upsertPendingInviteToken(
     rateMode?: "normal" | "lead" | "custom";
     customHourlyRateUsd?: number;
     payrollMethod?: "stanford" | "external";
+    inviteKind?: "crew" | "advisor";
+    requiresOnboarding?: boolean;
+    includeInTimecards?: boolean;
+    assignableAsCrew?: boolean;
+    showOnPublicCrewPage?: boolean;
     gradYear?: number;
     expiresAt: number;
   },
@@ -84,6 +89,11 @@ export async function upsertPendingInviteToken(
     rateMode: args.rateMode,
     customHourlyRateUsd: args.customHourlyRateUsd,
     payrollMethod: args.payrollMethod,
+    inviteKind: args.inviteKind,
+    requiresOnboarding: args.requiresOnboarding,
+    includeInTimecards: args.includeInTimecards,
+    assignableAsCrew: args.assignableAsCrew,
+    showOnPublicCrewPage: args.showOnPublicCrewPage,
     gradYear: args.gradYear,
     expiresAt: args.expiresAt,
     createdAt: now,
@@ -114,6 +124,11 @@ export async function scheduleUserInviteEmail(
     rateMode?: "normal" | "lead" | "custom";
     customHourlyRateUsd?: number;
     payrollMethod?: "stanford" | "external";
+    inviteKind?: "crew" | "advisor";
+    requiresOnboarding?: boolean;
+    includeInTimecards?: boolean;
+    assignableAsCrew?: boolean;
+    showOnPublicCrewPage?: boolean;
     gradYear?: number;
     isExistingUser: boolean;
     resendKey?: string;
@@ -130,7 +145,9 @@ export async function scheduleUserInviteEmail(
   const onboardingPath =
     orgProfile?.organizationType === "band" || orgProfile?.organizationType === "dj"
       ? "/onboarding/band"
-      : "/onboarding";
+      : args.requiresOnboarding === false
+        ? "/dashboard"
+        : "/onboarding";
 
   let inviteUrl = signInUrl(args.email, onboardingPath);
   if (!args.isExistingUser) {
@@ -146,6 +163,11 @@ export async function scheduleUserInviteEmail(
       rateMode: args.rateMode,
       customHourlyRateUsd: args.customHourlyRateUsd,
       payrollMethod: args.payrollMethod,
+      inviteKind: args.inviteKind,
+      requiresOnboarding: args.requiresOnboarding,
+      includeInTimecards: args.includeInTimecards,
+      assignableAsCrew: args.assignableAsCrew,
+      showOnPublicCrewPage: args.showOnPublicCrewPage,
       gradYear: args.gradYear,
       expiresAt: args.expiresAt,
     });
