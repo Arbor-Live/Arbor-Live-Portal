@@ -67,6 +67,8 @@ export const OCEAN_PALETTES = {
     foamColor: [1, 1, 1, 0] as const,
     // Lift the near-white particles (the shader halves the base color and
     // uses tiny base alphas) so the light ocean reads clearly on a pale bg.
+    // Alpha gain still drives additive writes into the HDR scene; present
+    // zeros canvas alpha in light mode so the pale CSS fill is not occluded.
     gain: [2, 2, 2, 4] as const,
   },
 } as const;
