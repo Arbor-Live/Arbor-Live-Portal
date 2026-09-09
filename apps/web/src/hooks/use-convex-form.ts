@@ -112,6 +112,10 @@ export function useConvexForm<T extends FieldValues>({
   return useMemo(
     () => ({
       ...form,
+      // Spreading `form` snapshots formState; keep a live getter for FormProvider.
+      get formState() {
+        return form.formState;
+      },
       saveStatus,
       saveError,
       setSaveStatus,

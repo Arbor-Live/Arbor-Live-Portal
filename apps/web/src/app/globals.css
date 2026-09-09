@@ -138,6 +138,7 @@
   html {
     @apply font-sans;
     scroll-padding-top: 6rem;
+    scrollbar-gutter: stable;
   }
   h1,
   h2,

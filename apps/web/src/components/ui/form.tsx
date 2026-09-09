@@ -5,6 +5,7 @@ import {
   Controller,
   FormProvider,
   useFormContext,
+  useFormState,
   type ControllerProps,
   type FieldPath,
   type FieldValues,
@@ -41,7 +42,8 @@ function FormField<
 function useFormField() {
   const fieldContext = React.useContext(FormFieldContext);
   const itemContext = React.useContext(FormItemContext);
-  const { getFieldState, formState } = useFormContext();
+  const { getFieldState } = useFormContext();
+  const formState = useFormState({ name: fieldContext.name });
 
   if (!fieldContext.name) {
     throw new Error("useFormField should be used within <FormField>");
@@ -124,7 +126,7 @@ function FormMessage({ className, children, ...props }: React.ComponentProps<"p"
     <p
       data-slot="form-message"
       id={formMessageId}
-      className={cn("text-sm text-destructive", className)}
+      className={cn("max-w-full text-sm text-destructive wrap-break-word", className)}
       {...props}
     >
       {body}

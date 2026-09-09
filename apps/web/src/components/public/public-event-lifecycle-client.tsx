@@ -116,7 +116,7 @@ export function PublicEventLifecycleClient({ token }: { token: string }) {
           />
         }
       />
-      <div className="mx-auto max-w-6xl space-y-4 px-4 py-12 sm:px-6 lg:px-8">
+      <div className="mx-auto w-full min-w-0 max-w-6xl space-y-4 px-4 py-12 sm:px-6 lg:px-8">
         <Card>
           <CardHeader>
             <CardTitle>Quote {data.invoice.invoiceNumber}</CardTitle>
@@ -150,7 +150,6 @@ export function PublicEventLifecycleClient({ token }: { token: string }) {
             />
             <PublicEventPosterSection portal="quote" token={token} />
             <PublicEventContacts manager={linkedEvent.contacts.manager} dayOfLead={linkedEvent.contacts.dayOfLead} />
-            <PublicEventPosterSection portal="quote" token={token} />
             <PublicEventSchedule blocks={linkedEvent.scheduleBlocks} />
             <PublicEventCrew crew={linkedEvent.crewRoster} />
           </>

@@ -196,8 +196,11 @@ export function PublicPaymentProofSection({
                       value={option.value}
                       checked={selectedMethod === option.value}
                       onChange={() => {
-                        form.setValue("paymentMethod", option.value, { shouldDirty: true });
-                        form.setValue("paymentReference", "", { shouldDirty: true });
+                        form.resetSaveState();
+                        form.reset({
+                          paymentMethod: option.value,
+                          paymentReference: "",
+                        });
                       }}
                       className="mt-1"
                     />
@@ -211,6 +214,7 @@ export function PublicPaymentProofSection({
             </div>
 
             <TextFormField
+              key={selectedMethod}
               name="paymentReference"
               label={paymentProofReferenceLabel(selectedMethod)}
               placeholder={selectedOption.placeholder}

@@ -73,6 +73,13 @@ export function isPaymentProofOpen(nowMs: number, invoice: PaymentProofInvoice) 
   return nowMs >= opensAt;
 }
 
+const PAYMENT_PROOF_HELP =
+  "If you have any questions, contact your event manager or arborlive@stanford.edu.";
+
+function paymentProofReferenceError(message: string): never {
+  throw new Error(`${message} ${PAYMENT_PROOF_HELP}`);
+}
+
 export function normalizePaymentReference(method: PaymentProofMethod, raw: string) {
   const trimmed = raw.trim();
   if (!trimmed) throw new Error("Payment reference is required.");
@@ -80,23 +87,38 @@ export function normalizePaymentReference(method: PaymentProofMethod, raw: strin
   if (method === "assu_epay") {
     const digits = trimmed.replace(/^#/, "");
     if (!/^\d+$/.test(digits)) {
-      throw new Error("ASSU ePay payment numbers should contain digits only.");
+      paymentProofReferenceError(
+        "Enter the ASSU ePay payment number as shown in the example (e.g. 24278).",
+      );
     }
     return digits;
   }
 
   if (method === "granted_transfer") {
     const normalized = trimmed.toUpperCase();
-    if (!/^GT-[A-Z0-9]+$/.test(normalized)) {
-      throw new Error("GrantEd transfer codes should look like GT-XXXXXX.");
+    if (/^GT-[A-Z0-9]+$/.test(normalized)) return normalized;
+    if (/^[A-Z]+-/.test(normalized)) {
+      paymentProofReferenceError(
+        'You submitted the incorrect payment type in GrantEd. Resubmit using the "Group Transfer" option under the "Transfers" tab (codes look like GT-XXXXXX).',
+      );
     }
-    return normalized;
+    paymentProofReferenceError(
+      "Enter the GrantEd Group Transfer code as shown in the example (e.g. GT-XXXXXX).",
+    );
   }
 
-  if (trimmed.length < 3) {
-    throw new Error("iJournal transfer numbers must be at least 3 characters.");
+  // Accept the Unicode ij ligature some systems display (ĳ / Ĳ).
+  const ijournal = trimmed.replace(/^[ĳĲ]/u, "ij");
+  const match = /^ij(\d+)$/i.exec(ijournal);
+  if (match) return `ij${match[1]}`;
+  if (ijournal.includes("-")) {
+    paymentProofReferenceError(
+      "We do not accept PTAs as proof of payment. Payment must be submitted, and you must provide an iJournal number (e.g. ij2251454).",
+    );
   }
-  return trimmed;
+  paymentProofReferenceError(
+    "Enter an iJournal number in the form ij followed by digits (e.g. ij2251454).",
+  );
 }
 
 export function paymentMethodLabel(method: PaymentProofMethod) {
