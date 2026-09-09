@@ -191,7 +191,7 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
           />
         }
       />
-      <div className="mx-auto max-w-6xl space-y-4 px-4 py-12 sm:px-6 lg:px-8">
+      <div className="mx-auto w-full min-w-0 max-w-6xl space-y-4 px-4 py-12 sm:px-6 lg:px-8">
       <Card>
         <CardHeader>
           <CardTitle>Request {request.requestNumber}</CardTitle>

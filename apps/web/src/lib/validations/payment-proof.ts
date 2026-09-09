@@ -2,6 +2,22 @@ import { z } from "zod";
 
 const paymentMethodSchema = z.enum(["assu_epay", "ijournal", "granted_transfer"]);
 
+const PAYMENT_PROOF_HELP =
+  "If you have any questions, contact your event manager or arborlive@stanford.edu.";
+
+function normalizeIjournalReference(raw: string) {
+  // Accept the Unicode ij ligature some systems display (ĳ / Ĳ).
+  return raw.trim().replace(/^[ĳĲ]/u, "ij");
+}
+
+function paymentProofReferenceIssue(message: string) {
+  return {
+    code: z.ZodIssueCode.custom,
+    message: `${message} ${PAYMENT_PROOF_HELP}`,
+    path: ["paymentReference"],
+  };
+}
+
 export const paymentProofSubmissionSchema = z
   .object({
     paymentMethod: paymentMethodSchema,
@@ -12,29 +28,46 @@ export const paymentProofSubmissionSchema = z
     if (values.paymentMethod === "assu_epay") {
       const digits = reference.replace(/^#/, "");
       if (!/^\d+$/.test(digits)) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Enter the ASSU ePay payment number (digits only)",
-          path: ["paymentReference"],
-        });
+        ctx.addIssue(
+          paymentProofReferenceIssue(
+            "Enter the ASSU ePay payment number as shown in the example (e.g. 24278).",
+          ),
+        );
       }
+      return;
     }
     if (values.paymentMethod === "granted_transfer") {
-      if (!/^GT-[A-Za-z0-9]+$/i.test(reference)) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "GrantEd codes look like GT-XXXXXX",
-          path: ["paymentReference"],
-        });
+      if (/^GT-[A-Za-z0-9]+$/i.test(reference)) return;
+      if (/^[A-Za-z]+-/i.test(reference)) {
+        ctx.addIssue(
+          paymentProofReferenceIssue(
+            'You submitted the incorrect payment type in GrantEd. Resubmit using the "Group Transfer" option under the "Transfers" tab (codes look like GT-XXXXXX).',
+          ),
+        );
+        return;
       }
+      ctx.addIssue(
+        paymentProofReferenceIssue(
+          "Enter the GrantEd Group Transfer code as shown in the example (e.g. GT-XXXXXX).",
+        ),
+      );
+      return;
     }
-    if (values.paymentMethod === "ijournal" && reference.length < 3) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Enter the iJournal transfer number",
-        path: ["paymentReference"],
-      });
+    const ijournal = normalizeIjournalReference(reference);
+    if (/^ij\d+$/i.test(ijournal)) return;
+    if (ijournal.includes("-")) {
+      ctx.addIssue(
+        paymentProofReferenceIssue(
+          "We do not accept PTAs as proof of payment. Payment must be submitted, and you must provide an iJournal number (e.g. ij2251454).",
+        ),
+      );
+      return;
     }
+    ctx.addIssue(
+      paymentProofReferenceIssue(
+        "Enter an iJournal number in the form ij followed by digits (e.g. ij2251454).",
+      ),
+    );
   });
 
 export type PaymentProofSubmissionFormValues = z.infer<typeof paymentProofSubmissionSchema>;
@@ -49,8 +82,8 @@ export const PAYMENT_PROOF_METHOD_OPTIONS = [
   {
     value: "ijournal" as const,
     label: "iJournal transfer",
-    description: "Transfer number (e.g. ĳ2251454)",
-    placeholder: "ĳ2251454",
+    description: "Transfer number (e.g. ij2251454)",
+    placeholder: "ij2251454",
   },
   {
     value: "granted_transfer" as const,
