@@ -14,7 +14,7 @@ function paymentProofReferenceIssue(message: string) {
   return {
     code: z.ZodIssueCode.custom,
     message: `${message} ${PAYMENT_PROOF_HELP}`,
-    path: ["paymentReference"] as const,
+    path: ["paymentReference"],
   };
 }
 
