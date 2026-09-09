@@ -160,6 +160,7 @@ export function createRenderer({
         if (appliedScheme !== colorScheme) {
           setParticleConstants(graph.particles, output, colorScheme);
           setBloomConstants(graph.effects.composite, colorScheme);
+          setPresentConstants(graph.effects.present, colorScheme);
           appliedScheme = colorScheme;
         }
         setDynamics(graph, time.time * OCEAN_TUNING.simulation.timeScale);
@@ -371,6 +372,7 @@ function buildGraph(
     bloomTexture: composite,
     linearSampler,
   });
+  setPresentConstants(present, colorScheme);
   return {
     simulation,
     scene,
@@ -471,6 +473,20 @@ function setBloomConstants(
       bloomRadius: OCEAN_TUNING.bloom.radius,
       bloomFactors0: [1, 0.8, 0.6, 0.4],
       bloomFactors1: [0.2, 0, 0, 0],
+    },
+  });
+}
+
+function setPresentConstants(
+  present: Effect,
+  colorScheme: OceanPaletteKey
+): void {
+  present.set({
+    u: {
+      // Light mode composites over a pale CSS fill. Scene alpha was written
+      // for additive particle blending into a black-cleared HDR target; keeping
+      // it on the canvas punches dark holes into that fill. Force additive.
+      alphaScale: colorScheme === "light" ? 0 : 1,
     },
   });
 }
