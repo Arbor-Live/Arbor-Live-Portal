@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Script from "next/script";
 import { Inter, JetBrains_Mono, Space_Grotesk } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import { ConvexClientProvider } from "@/components/convex-client-provider";
 import { DevUtilityMenu } from "@/components/dev/dev-utility-menu";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -63,6 +64,7 @@ export default async function RootLayout({
             </AppDialogProvider>
           </ConvexClientProvider>
         </ThemeProvider>
+        <Analytics />
       </body>
     </html>
   );
