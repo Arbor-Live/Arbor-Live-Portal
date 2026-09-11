@@ -7,7 +7,11 @@ import {
   requireArborInternalContext,
   requireAuth,
 } from "./lib/auth";
-import { buildUserProfileImageByUserId } from "./lib/userProfileImage";
+import { loadActiveOrgMemberUserIds } from "./lib/orgMembership";
+import {
+  buildUserProfileImageByUserId,
+  loadAdminProfilesByUserIds,
+} from "./lib/userProfileImage";
 import {
   bookingRequestsAdminUrl,
   damageReportUrl,
@@ -32,17 +36,6 @@ const subjectTypeValue = v.union(
 );
 
 type SubjectType = "event" | "damage_batch" | "event_request";
-
-async function listActiveArborInternalUserIds(
-  ctx: QueryCtx | MutationCtx,
-  organizationId: string,
-): Promise<Set<string>> {
-  const memberships = await ctx.db
-    .query("userOrganizationMemberships")
-    .withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId))
-    .take(1000);
-  return new Set(memberships.filter((row) => row.active).map((row) => row.userId));
-}
 
 /**
  * `in_progress` → `In progress`. The UI leans on a `capitalize` class for the
@@ -69,30 +62,41 @@ export const listMentionCandidates = query({
       username: v.optional(v.string()),
       pronouns: v.optional(v.string()),
       gradYear: v.optional(v.number()),
+      avatarUrl: v.optional(v.string()),
     }),
   ),
   handler: async (ctx) => {
     const context = await requireArborInternalContext(ctx);
-    const memberIds = await listActiveArborInternalUserIds(ctx, context.organizationId);
+    // Same org membership source as crew/manager pickers — mentions keep the
+    // full teammate pool (including non-assignable advisors).
+    const memberIds = await loadActiveOrgMemberUserIds(ctx, context.organizationId);
     if (!memberIds.size) return [];
 
     const userById = await findAuthUsersByIds(ctx, [...memberIds]);
-    const profiles = await ctx.db.query("userAdminProfiles").withIndex("by_active").take(2000);
-    const profileByUserId = new Map(profiles.map((profile) => [profile.userId, profile]));
+    const profileByUserId = await loadAdminProfilesByUserIds(ctx, [...memberIds]);
+    const imageByUserId = await buildUserProfileImageByUserId(
+      ctx,
+      [...memberIds],
+      userById,
+      profileByUserId,
+    );
 
     return [...memberIds]
       .map((userId) => {
         const user = userById.get(userId);
+        if (!user) return null;
         const profile = profileByUserId.get(userId);
         return {
           userId,
-          name: user?.name ?? user?.email ?? "Arbor Live user",
-          email: user?.email ?? "",
+          name: user.name ?? user.email ?? "Arbor Live user",
+          email: user.email ?? "",
           username: profile?.username,
           pronouns: profile?.pronouns,
           gradYear: profile?.gradYear,
+          avatarUrl: imageByUserId.get(userId),
         };
       })
+      .filter((row): row is NonNullable<typeof row> => row !== null)
       .sort((a, b) => a.name.localeCompare(b.name));
   },
 });
@@ -331,7 +335,7 @@ export const createComment = mutation({
     }
 
     if (mentionedUserIds.length > 0) {
-      const activeMemberIds = await listActiveArborInternalUserIds(ctx, context.organizationId);
+      const activeMemberIds = await loadActiveOrgMemberUserIds(ctx, context.organizationId);
       const invalid = mentionedUserIds.filter(
         (userId) => userId !== authorUserId && !activeMemberIds.has(userId),
       );

@@ -4,6 +4,7 @@ import { components } from "./_generated/api";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { requireArborInternalContext, requireAuth, findAuthUsersByIds } from "./lib/auth";
 import { resolveParticipationFlags } from "./lib/userParticipation";
+import { loadActiveOrgMemberUserIds } from "./lib/orgMembership";
 import { syncEventStatusForLinkedInvoice, syncLinkedEventStatusFromInvoice } from "./lib/eventStatus";
 import { recordInvoiceStatusTransition } from "./lib/statusTransitions";
 import { listEventsByInvoiceId } from "./lib/invoiceEvents";
@@ -436,23 +437,6 @@ async function replaceLineItems(
       updatedAt: now,
     });
   }
-}
-
-async function loadActiveOrgMemberUserIds(ctx: QueryCtx, organizationId: string) {
-  const orgUserIds = new Set<string>();
-  let cursor: string | null = null;
-  for (;;) {
-    const page = await ctx.db
-      .query("userOrganizationMemberships")
-      .withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId))
-      .paginate({ cursor, numItems: 500 });
-    for (const membership of page.page) {
-      if (membership.active) orgUserIds.add(membership.userId);
-    }
-    if (page.isDone) break;
-    cursor = page.continueCursor;
-  }
-  return orgUserIds;
 }
 
 export const listManagers = query({

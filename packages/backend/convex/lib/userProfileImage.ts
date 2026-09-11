@@ -41,6 +41,7 @@ export async function loadAdminProfilesByUserIds(
   Map<
     string,
     ProfileImageSource & {
+      username?: string;
       pronouns?: string;
       gradYear?: number;
       assignableAsCrew?: boolean;
@@ -50,6 +51,7 @@ export async function loadAdminProfilesByUserIds(
   const profiles = new Map<
     string,
     ProfileImageSource & {
+      username?: string;
       pronouns?: string;
       gradYear?: number;
       assignableAsCrew?: boolean;
@@ -66,6 +68,7 @@ export async function loadAdminProfilesByUserIds(
       if (profile) {
         profiles.set(userId, {
           avatarStorageId: profile.avatarStorageId,
+          username: profile.username,
           pronouns: profile.pronouns,
           gradYear: profile.gradYear,
           assignableAsCrew: profile.assignableAsCrew,

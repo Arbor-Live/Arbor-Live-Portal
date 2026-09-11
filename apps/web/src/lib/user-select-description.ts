@@ -32,7 +32,7 @@ export function buildUserSelectDescription(row: {
   return parts.filter((part): part is string => Boolean(part && String(part).trim())).join(" • ");
 }
 
-export function toUserSelectOption(entry: {
+export type UserSelectSource = {
   id: string;
   name: string;
   email?: string | null;
@@ -43,7 +43,9 @@ export function toUserSelectOption(entry: {
   hourlyRateUsd?: number | null;
   avatarUrl?: string | null;
   image?: string | null;
-}): UserSelectOption {
+};
+
+export function toUserSelectOption(entry: UserSelectSource): UserSelectOption {
   return {
     value: entry.id,
     label: entry.name,
@@ -52,4 +54,19 @@ export function toUserSelectOption(entry: {
     role: entry.role ?? undefined,
     email: entry.email ?? undefined,
   };
+}
+
+/**
+ * Dashboard assignable-crew / teammate picker options from `listManagers`
+ * (or the same shape). Optionally injects the signed-in user when absent.
+ */
+export function assignableCrewSelectOptions(
+  managers: readonly UserSelectSource[] | null | undefined,
+  currentUser?: UserSelectSource | null,
+): UserSelectOption[] {
+  const options = (managers ?? []).map(toUserSelectOption);
+  if (currentUser?.id && !options.some((option) => option.value === currentUser.id)) {
+    options.unshift(toUserSelectOption(currentUser));
+  }
+  return options.sort((a, b) => a.label.localeCompare(b.label));
 }

@@ -10,7 +10,7 @@ import {
   type MarketingAdditionalLink,
 } from "@/components/marketing/event-marketing-content-fields";
 import { UserSelect, type UserSelectOption } from "@/components/users/user-select";
-import { toUserSelectOption } from "@/lib/user-select-description";
+import { assignableCrewSelectOptions } from "@/lib/user-select-description";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -53,7 +53,7 @@ export function MarketingDesignBoard() {
   const assignPosterDesigner = useMutation(api.marketingDesigns.assignPosterDesigner);
 
   const userSelectOptions: UserSelectOption[] = useMemo(
-    () => (managerList ?? []).map((entry) => toUserSelectOption(entry)),
+    () => assignableCrewSelectOptions(managerList),
     [managerList],
   );
 

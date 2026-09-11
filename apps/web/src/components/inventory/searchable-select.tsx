@@ -46,6 +46,7 @@ export function SearchableSelect({
   minQueryLength = 0,
   searchHint,
   searching = false,
+  contentClassName,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -61,6 +62,7 @@ export function SearchableSelect({
   minQueryLength?: number;
   searchHint?: string;
   searching?: boolean;
+  contentClassName?: string;
 }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -147,7 +149,7 @@ export function SearchableSelect({
       </ComboboxTrigger>
       <ComboboxContent
         data-testid="searchable-select-menu"
-        className="min-w-[min(100%,20rem)]"
+        className={cn("min-w-[min(100%,20rem)]", contentClassName)}
       >
         <ComboboxInput showTrigger={false} placeholder={placeholder} />
         {searching ? (
@@ -160,7 +162,7 @@ export function SearchableSelect({
               {renderOption ? (
                 renderOption(item)
               ) : (
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1 overflow-hidden">
                   <p className="truncate">{item.label}</p>
                   {item.description ? (
                     <p className="truncate text-xs text-muted-foreground">{item.description}</p>

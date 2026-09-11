@@ -42,23 +42,28 @@ export function UserSelect({
       options={options}
       placeholder={placeholder}
       emptyLabel={emptyLabel}
+      contentClassName="min-w-[min(100%,24rem)]"
       renderOption={(option) => (
-        <div className="flex items-center gap-2">
-          <OptionAvatar option={option as UserSelectOption} />
-          <div className="min-w-0">
+        <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
+          <span className="shrink-0">
+            <OptionAvatar option={option as UserSelectOption} />
+          </span>
+          <div className="min-w-0 flex-1 overflow-hidden">
             <p className="truncate">{option.label}</p>
-            {option.description ? <p className="truncate text-xs text-muted-foreground">{option.description}</p> : null}
+            {option.description ? (
+              <p className="truncate text-xs text-muted-foreground">{option.description}</p>
+            ) : null}
           </div>
         </div>
       )}
       renderSelected={(selected) => (
-        <div className="flex min-w-0 items-center gap-2">
+        <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
           {selected ? (
             <>
               <span className="shrink-0">
                 <OptionAvatar option={selected as UserSelectOption} />
               </span>
-              <span className="truncate">{selected.label}</span>
+              <span className="min-w-0 truncate">{selected.label}</span>
             </>
           ) : (
             <span className="truncate text-muted-foreground">{emptyLabel}</span>
