@@ -1,5 +1,6 @@
 "use client";
 
+import { BoringUserAvatar } from "@/components/account/user-avatar";
 import { StoredAssetImage } from "@/components/files/stored-asset-image";
 import { SearchableSelect, type SearchableSelectOption } from "@/components/inventory/searchable-select";
 import { formatUsd } from "@/lib/format";
@@ -80,13 +81,6 @@ export function artistSelectOptions(
 }
 
 function ArtistMark({ option }: { option: ArtistSelectOption }) {
-  const initials = option.label
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("");
-
   if (option.avatarUrl) {
     return (
       <StoredAssetImage
@@ -95,18 +89,20 @@ function ArtistMark({ option }: { option: ArtistSelectOption }) {
         width={24}
         height={24}
         className="size-6 shrink-0 rounded-md object-cover"
-        fallbackClassName="flex size-6 shrink-0 items-center justify-center rounded-md bg-muted text-[10px] font-medium text-muted-foreground"
+        fallbackClassName="size-6 shrink-0 rounded-md bg-muted"
       />
     );
   }
 
+  // SVG beam avatar — no letter initials in the DOM (keeps trigger textContent
+  // equal to the label for e2e `toHaveText` assertions).
   return (
-    <span
-      aria-hidden
-      className="flex size-6 shrink-0 items-center justify-center rounded-md bg-muted text-[10px] font-medium text-muted-foreground"
-    >
-      {initials || "?"}
-    </span>
+    <BoringUserAvatar
+      name={option.label}
+      userId={option.value}
+      size={24}
+      className="size-6 shrink-0 rounded-md"
+    />
   );
 }
 
