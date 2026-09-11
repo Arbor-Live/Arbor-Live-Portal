@@ -287,6 +287,7 @@ const bandPaymentPricingModeValue = v.union(
 
 const bandPaymentStatusValue = v.union(
   v.literal("draft"),
+  v.literal("pending_onboarding"),
   v.literal("pending_payee"),
   v.literal("pending_email"),
   v.literal("awaiting_confirmation"),
@@ -1062,6 +1063,7 @@ export default defineSchema({
     completedAt: v.optional(v.number()),
     waivedAt: v.optional(v.number()),
     waivedByUserId: v.optional(v.string()),
+    lastReminderSentAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_organizationId", ["organizationId"]).index("by_status", ["status"]),
@@ -1355,6 +1357,7 @@ export default defineSchema({
       v.literal("quote_changes_requested"),
       v.literal("band_assigned"),
       v.literal("band_event_onboarding_invite"),
+      v.literal("band_onboarding_reminder"),
       v.literal("band_payment_confirmation"),
       v.literal("band_payment_completed"),
       v.literal("band_payment_payee_required"),

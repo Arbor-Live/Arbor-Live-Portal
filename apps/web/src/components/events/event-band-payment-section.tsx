@@ -102,7 +102,7 @@ function EventBandsPerformersPanel({ eventId }: { eventId: Id<"events"> }) {
     return (
       <Card>
         <CardContent className="py-6 text-sm text-muted-foreground">
-          Loading bands &amp; performers…
+          Loading artists…
         </CardContent>
       </Card>
     );
@@ -112,10 +112,10 @@ function EventBandsPerformersPanel({ eventId }: { eventId: Id<"events"> }) {
     <Card>
       <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-2">
         <div>
-          <CardTitle>Bands &amp; Performers</CardTitle>
+          <CardTitle>Artists</CardTitle>
           <p className="mt-1 text-sm text-muted-foreground">
-            Assign bands to this event (notifies them and unlocks media). Optionally set payout
-            details on the same row — removing a band also cancels any unpaid payout and media
+            Assign artists to this event (notifies them and unlocks media). Optionally set payout
+            details on the same row — removing an artist also cancels any unpaid payout and media
             access.
           </p>
         </div>
@@ -127,7 +127,7 @@ function EventBandsPerformersPanel({ eventId }: { eventId: Id<"events"> }) {
       </CardHeader>
       <CardContent className="space-y-4">
         {performers.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No bands assigned yet.</p>
+          <p className="text-sm text-muted-foreground">No artists assigned yet.</p>
         ) : (
           <div className="space-y-2">
             {performers.map((performer) => (
@@ -235,7 +235,7 @@ function EventBandsPerformersPanel({ eventId }: { eventId: Id<"events"> }) {
                 variant={addBandMode === "existing" ? "default" : "outline"}
                 onClick={() => setAddBandMode("existing")}
               >
-                Existing band
+                Existing artist
               </Button>
               <Button
                 type="button"
@@ -243,7 +243,7 @@ function EventBandsPerformersPanel({ eventId }: { eventId: Id<"events"> }) {
                 variant={addBandMode === "invite" ? "default" : "outline"}
                 onClick={() => setAddBandMode("invite")}
               >
-                Invite new band
+                Invite new artist
               </Button>
             </div>
             {addBandMode === "invite" ? (
@@ -267,7 +267,7 @@ function EventBandsPerformersPanel({ eventId }: { eventId: Id<"events"> }) {
               setAddBandMode("existing");
               setAddingBand(true);
             }}>
-              Add band
+              Add artist
             </Button>
             <Button
               type="button"
@@ -278,7 +278,7 @@ function EventBandsPerformersPanel({ eventId }: { eventId: Id<"events"> }) {
                 setAddingBand(true);
               }}
             >
-              Invite new band
+              Invite new artist
             </Button>
           </div>
         )}
@@ -361,10 +361,10 @@ function InviteBandForm({
 
   return (
     <div className="space-y-3 rounded-md border bg-muted/10 p-4">
-      <p className="text-sm font-medium">Invite new band</p>
+      <p className="text-sm font-medium">Invite new artist</p>
       <div className="grid gap-3 md:grid-cols-2">
         <div className="space-y-1 md:col-span-2">
-          <Label htmlFor="invite-band-artist-name">Band / artist name</Label>
+          <Label htmlFor="invite-band-artist-name">Artist name</Label>
           <Input
             id="invite-band-artist-name"
             value={artistName}
@@ -489,7 +489,7 @@ function AddBandForm({
 
   async function onSave() {
     if (!organizationId) {
-      notify.error("Select a band or artist.");
+      notify.error("Select an artist.");
       return;
     }
     setBusy(true);
@@ -505,10 +505,10 @@ function AddBandForm({
 
   return (
     <div className="space-y-3 rounded-md border bg-muted/10 p-4">
-      <p className="text-sm font-medium">Add band</p>
+      <p className="text-sm font-medium">Add artist</p>
       <div className="grid gap-3 md:grid-cols-2">
         <div className="space-y-1 md:col-span-2">
-          <Label>Band / artist</Label>
+          <Label>Artist</Label>
           <ArtistSelect
             value={organizationId}
             onChange={setOrganizationId}
@@ -530,7 +530,7 @@ function AddBandForm({
       </div>
       <div className="flex flex-wrap gap-2">
         <Button type="button" onClick={() => void onSave()} disabled={busy}>
-          {busy ? "Adding…" : "Assign band"}
+          {busy ? "Adding…" : "Assign artist"}
         </Button>
         <Button type="button" variant="outline" onClick={onCancel}>
           Cancel
@@ -606,7 +606,7 @@ function EventBandPaymentForm({
 
   async function onSave() {
     if (!resolvedOrgId) {
-      notify.error("Select a band or artist.");
+      notify.error("Select an artist.");
       return;
     }
     const payoutParsed = eventBandPayoutFieldsSchema.safeParse({
@@ -672,15 +672,20 @@ function EventBandPaymentForm({
               This event has ended and will enter the payout queue on save.
             </p>
           ) : null}
+          {payment.status === "pending_onboarding" ? (
+            <p className="text-amber-700 dark:text-amber-300">
+              Waiting for the artist to finish onboarding before payout can proceed.
+            </p>
+          ) : null}
           {payment.status === "pending_payee" && !payeeComplete ? (
             <p className="text-amber-700 dark:text-amber-300">
-              Waiting for the band to configure their designated payee before confirmation can be
+              Waiting for the artist to configure their designated payee before confirmation can be
               sent.
             </p>
           ) : null}
           {payment.status === "pending_payee" && payeeComplete ? (
             <p className="text-muted-foreground">
-              Payee is on file for this band. The payout queue will update automatically, or save
+              Payee is on file for this artist. The payout queue will update automatically, or save
               this payment to refresh it now.
             </p>
           ) : null}
@@ -690,7 +695,7 @@ function EventBandPaymentForm({
       <div className="grid gap-3 md:grid-cols-2">
         {!organizationLocked ? (
           <div className="space-y-1 md:col-span-2">
-            <Label>Band / artist</Label>
+            <Label>Artist</Label>
             <ArtistSelect
               value={organizationId}
               onChange={(value) => {
@@ -773,7 +778,7 @@ function EventBandPaymentForm({
         </div>
 
         <div className="space-y-2 md:col-span-2">
-          <Label>Designated payee (from band org profile)</Label>
+          <Label>Designated payee (from artist org profile)</Label>
           {resolvedOrgId ? (
             payeeComplete ? (
               <div className="rounded-md border bg-muted/20 px-3 py-2 text-sm">
@@ -794,18 +799,18 @@ function EventBandPaymentForm({
             ) : (
               <div className="rounded-md border border-dashed px-3 py-3 text-sm">
                 <p className="text-muted-foreground">
-                  This band has not configured a designated payee with mailing address and payout
+                  This artist has not configured a designated payee with mailing address and payout
                   method. Confirmation emails cannot be sent until payee info is on file.
                 </p>
                 <Button asChild size="sm" variant="outline" className="mt-2">
                   <Link href="/dashboard/bands-and-performers/payments#payee">
-                    Open band payee settings
+                    Open artist payee settings
                   </Link>
                 </Button>
               </div>
             )
           ) : (
-            <p className="text-sm text-muted-foreground">Select a band to view payee details.</p>
+            <p className="text-sm text-muted-foreground">Select an artist to view payee details.</p>
           )}
         </div>
 

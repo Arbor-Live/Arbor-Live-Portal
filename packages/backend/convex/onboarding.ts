@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { components } from "./_generated/api";
+import { components, internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import {
   internalMutation,
@@ -914,14 +914,14 @@ export const saveBandOnboardingStep = mutation({
     await requireAuth(ctx);
     const orgContext = await getActiveOrganizationContextOrNull(ctx);
     if (!orgContext || (orgContext.organizationType !== "band" && orgContext.organizationType !== "dj")) {
-      throw new Error("Band organization context required.");
+      throw new Error("Artist organization context required.");
     }
     await ensureOrganizationOnboarding(ctx, orgContext.organizationId);
     const row = await ctx.db
       .query("organizationOnboarding")
       .withIndex("by_organizationId", (q) => q.eq("organizationId", orgContext.organizationId))
       .unique();
-    if (!row) throw new Error("Band onboarding record missing.");
+    if (!row) throw new Error("Artist onboarding record missing.");
     if (row.status === "completed" || row.status === "waived") return null;
 
     const now = Date.now();
@@ -952,13 +952,13 @@ export const completeBandOnboarding = mutation({
     await requireAuth(ctx);
     const orgContext = await getActiveOrganizationContextOrNull(ctx);
     if (!orgContext || (orgContext.organizationType !== "band" && orgContext.organizationType !== "dj")) {
-      throw new Error("Band organization context required.");
+      throw new Error("Artist organization context required.");
     }
     const row = await ctx.db
       .query("organizationOnboarding")
       .withIndex("by_organizationId", (q) => q.eq("organizationId", orgContext.organizationId))
       .unique();
-    if (!row) throw new Error("Band onboarding record missing.");
+    if (!row) throw new Error("Artist onboarding record missing.");
     if (row.status === "completed" || row.status === "waived") return { ok: true };
 
     const membersDone = Boolean(row.membersCompletedAt || row.soloAcknowledgedAt);
@@ -976,6 +976,9 @@ export const completeBandOnboarding = mutation({
       status: "completed",
       completedAt: now,
       updatedAt: now,
+    });
+    await ctx.runMutation(internal.bandPayments.refreshPendingPayeePaymentsForOrg, {
+      organizationId: orgContext.organizationId,
     });
     return { ok: true };
   },
@@ -1000,10 +1003,14 @@ export const waiveBandOnboarding = mutation({
       waivedByUserId: adminId,
       updatedAt: now,
     });
+    await ctx.runMutation(internal.bandPayments.refreshPendingPayeePaymentsForOrg, {
+      organizationId: args.organizationId,
+    });
     return null;
   },
 });
 
+/** Crew onboarding reminders — scheduled from `weeklyJobs.run`. */
 export const remindIncomplete = internalMutation({
   args: {},
   returns: v.object({ enqueuedCount: v.number() }),

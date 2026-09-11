@@ -15,12 +15,6 @@ crons.daily(
   internal.email.paymentProofReminders.runFirst,
 );
 
-crons.cron(
-  "payment proof monday reminders",
-  "0 17 * * 1",
-  internal.email.paymentProofReminders.runMonday,
-);
-
 crons.daily(
   "post event album reminders",
   { hourUTC: 17, minuteUTC: 0 },
@@ -34,9 +28,9 @@ crons.daily(
 );
 
 crons.cron(
-  "onboarding incomplete reminders",
+  "weekly jobs",
   "0 17 * * 1",
-  internal.onboarding.remindIncomplete,
+  internal.weeklyJobs.run,
 );
 
 crons.cron(

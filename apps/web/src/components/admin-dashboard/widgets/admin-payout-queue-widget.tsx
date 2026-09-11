@@ -31,7 +31,7 @@ export function AdminPayoutQueueWidget() {
       <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
         <CardTitle className="flex items-center gap-2 text-base">
           <CurrencyDollarIcon className="size-4" />
-          Band payout queue
+          Artist payout queue
         </CardTitle>
         <Button variant="outline" size="sm" asChild>
           <Link href="/dashboard/financial-hub/band-payouts">Payouts</Link>
@@ -43,6 +43,7 @@ export function AdminPayoutQueueWidget() {
         ) : (
           <>
             <div className="grid gap-2 sm:grid-cols-2">
+              <QueueStat label="Pending onboarding" value={counts.needs_onboarding} />
               <QueueStat label="Needs payee" value={counts.needs_payee} />
               <QueueStat label="Needs signature request" value={counts.needs_email} />
               <QueueStat label="Awaiting signature" value={counts.awaiting_reply} />

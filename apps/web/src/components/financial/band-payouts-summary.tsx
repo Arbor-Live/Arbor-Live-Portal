@@ -13,11 +13,18 @@ export function BandPayoutsSummary() {
   }
 
   const pendingTotal =
-    counts.needs_payee + counts.needs_email + counts.awaiting_reply + counts.ready_to_pay;
+    counts.needs_onboarding +
+    counts.needs_payee +
+    counts.needs_email +
+    counts.awaiting_reply +
+    counts.ready_to_pay;
 
   return (
     <div className="space-y-3">
       <div className="grid gap-2 text-sm sm:grid-cols-2">
+        <p>
+          <span className="font-medium">Pending onboarding:</span> {counts.needs_onboarding}
+        </p>
         <p>
           <span className="font-medium">Needs payee:</span> {counts.needs_payee}
         </p>
@@ -35,7 +42,7 @@ export function BandPayoutsSummary() {
         {pendingTotal} pending payout{pendingTotal === 1 ? "" : "s"} · {counts.paid} paid
       </p>
       <Button asChild variant="outline" size="sm">
-        <Link href="/dashboard/financial-hub/band-payouts">Open band payouts</Link>
+        <Link href="/dashboard/financial-hub/band-payouts">Open artist payouts</Link>
       </Button>
     </div>
   );

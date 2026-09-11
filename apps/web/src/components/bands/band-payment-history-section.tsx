@@ -33,6 +33,7 @@ function statusBadgeClass(status: string) {
       return "bg-blue-100 text-blue-900 dark:bg-blue-500/15 dark:text-blue-200";
     case "paid":
       return "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300";
+    case "pending_onboarding":
     case "pending_payee":
     case "pending_email":
       return "bg-slate-100 text-slate-800 dark:bg-slate-500/15 dark:text-slate-200";

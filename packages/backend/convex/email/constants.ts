@@ -49,6 +49,7 @@ export type EmailTemplate =
   | "quote_changes_requested"
   | "band_assigned"
   | "band_event_onboarding_invite"
+  | "band_onboarding_reminder"
   | "band_payment_confirmation"
   | "band_payment_completed"
   | "band_payment_payee_required"
@@ -180,10 +181,12 @@ export function subjectForTemplate(template: EmailTemplate, context: string) {
       return `You're on the bill: ${context}`;
     case "band_event_onboarding_invite":
       return `Finish onboarding for: ${context}`;
+    case "band_onboarding_reminder":
+      return `Finish onboarding to get paid: ${context}`;
     case "band_payment_confirmation":
       return `Payment ready for your signature: ${context}`;
     case "band_payment_completed":
-      return `Band payment submitted for processing: ${context}`;
+      return `Artist payment submitted for processing: ${context}`;
     case "band_payment_payee_required":
       return `Payment payee info needed: ${context}`;
     case "onboarding_completed":
@@ -191,7 +194,7 @@ export function subjectForTemplate(template: EmailTemplate, context: string) {
     case "onboarding_reminder":
       return "Finish your Arbor Live onboarding";
     case "band_application_received":
-      return `New band application: ${context}`;
+      return `New artist application: ${context}`;
     case "band_application_approved":
       return `You're approved: ${context}`;
     case "band_application_declined":

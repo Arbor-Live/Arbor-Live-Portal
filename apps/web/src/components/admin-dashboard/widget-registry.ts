@@ -30,7 +30,7 @@ export const ADMIN_HOME_WIDGETS: DashboardWidgetDefinition[] = [
   },
   {
     id: "admin-payout-queue",
-    title: "Band payout queue",
+    title: "Artist payout queue",
     component: AdminPayoutQueueWidget,
   },
   {

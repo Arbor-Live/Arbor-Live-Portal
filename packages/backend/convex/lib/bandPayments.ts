@@ -8,12 +8,36 @@ export { BAND_PAYMENT_REFERENCE_PREFIX as BAND_PAYMENT_TOKEN_PREFIX } from "./pu
 export type BandPaymentPricingMode = "per_member_hourly" | "fixed_total";
 export type BandPaymentStatus =
   | "draft"
+  | "pending_onboarding"
   | "pending_payee"
   | "pending_email"
   | "awaiting_confirmation"
   | "confirmed"
   | "paid"
   | "cancelled";
+
+export type BandOrgOnboardingStatus =
+  | "not_started"
+  | "in_progress"
+  | "completed"
+  | "waived";
+
+export function isBandOrgOnboardingComplete(
+  status: BandOrgOnboardingStatus | null | undefined,
+) {
+  return status === "completed" || status === "waived";
+}
+
+export async function isOrganizationBandOnboardingComplete(
+  ctx: QueryCtx | MutationCtx,
+  organizationId: string,
+) {
+  const row = await ctx.db
+    .query("organizationOnboarding")
+    .withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId))
+    .unique();
+  return isBandOrgOnboardingComplete(row?.status);
+}
 
 export type BandPayeePayoutMethod = "pickup" | "delivery";
 
@@ -76,8 +100,12 @@ export function resolvePayeeSnapshot(
   };
 }
 
-export function queueStatusForEndedEvent(payeeComplete: boolean): "pending_payee" | "pending_email" {
-  return payeeComplete ? "pending_email" : "pending_payee";
+export function queueStatusForEndedEvent(args: {
+  onboardingComplete: boolean;
+  payeeComplete: boolean;
+}): "pending_onboarding" | "pending_payee" | "pending_email" {
+  if (!args.onboardingComplete) return "pending_onboarding";
+  return args.payeeComplete ? "pending_email" : "pending_payee";
 }
 
 export function computeBandPaymentTotal(args: {
@@ -127,6 +155,8 @@ export async function getBandPaymentSettings(ctx: QueryCtx | MutationCtx) {
 
 export function bandPaymentQueueForStatus(status: BandPaymentStatus) {
   switch (status) {
+    case "pending_onboarding":
+      return "needs_onboarding" as const;
     case "pending_payee":
       return "needs_payee" as const;
     case "pending_email":
@@ -146,6 +176,8 @@ export function bandPaymentStatusLabel(status: BandPaymentStatus) {
   switch (status) {
     case "draft":
       return "Draft";
+    case "pending_onboarding":
+      return "Pending onboarding";
     case "pending_payee":
       return "Needs payee info";
     case "pending_email":

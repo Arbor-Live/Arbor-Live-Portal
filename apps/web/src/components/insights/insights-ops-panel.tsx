@@ -30,6 +30,8 @@ function formatRate(value: number | null) {
 
 function queueLabel(status: string) {
   switch (status) {
+    case "pending_onboarding":
+      return "Pending onboarding";
     case "pending_payee":
       return "Needs payee";
     case "pending_email":
@@ -69,7 +71,7 @@ export function InsightsOpsPanel({ startMs, endMs }: InsightsOpsPanelProps) {
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader>
-            <CardTitle>Band payouts</CardTitle>
+            <CardTitle>Artist payouts</CardTitle>
             <CardDescription>Paid in range</CardDescription>
           </CardHeader>
           <CardContent>
@@ -136,7 +138,7 @@ export function InsightsOpsPanel({ startMs, endMs }: InsightsOpsPanelProps) {
             ) : (
               <RevenueBarChart
                 months={spend.byMonth}
-                emptyLabel="No band payouts paid in this range."
+                emptyLabel="No artist payouts paid in this range."
                 valueLabel="Payouts"
               />
             )}

@@ -248,6 +248,9 @@ async function countPendingBandPaymentActions(ctx: QueryCtx) {
     if (payment.status === "pending_payee" && !payeeComplete) {
       waitingOnPayeeSetup += 1;
     }
+    if (payment.status === "pending_onboarding") {
+      waitingOnPayeeSetup += 1;
+    }
   }
   return awaitingSignatureForMe + (waitingOnPayeeSetup > 0 ? 1 : 0);
 }

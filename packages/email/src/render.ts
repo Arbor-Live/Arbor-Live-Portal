@@ -9,6 +9,7 @@ import { ChangeEmailConfirmationEmail } from "../emails/change-email-confirmatio
 import { PayingPartyAddedEmail } from "../emails/paying-party-added";
 import { BandAssignedEmail } from "../emails/band-assigned";
 import { BandEventOnboardingInviteEmail } from "../emails/band-event-onboarding-invite";
+import { BandOnboardingReminderEmail } from "../emails/band-onboarding-reminder";
 import { BandPaymentConfirmationEmail } from "../emails/band-payment-confirmation";
 import { BandPaymentCompletedEmail } from "../emails/band-payment-completed";
 import { BandPaymentPayeeRequiredEmail } from "../emails/band-payment-payee-required";
@@ -49,6 +50,7 @@ import type {
   QuoteChangesRequestedEmailProps,
   BandAssignedEmailProps,
   BandEventOnboardingInviteEmailProps,
+  BandOnboardingReminderEmailProps,
   BandPaymentConfirmationEmailProps,
   BandPaymentCompletedEmailProps,
   BandPaymentPayeeRequiredEmailProps,
@@ -145,6 +147,12 @@ export async function renderBandEventOnboardingInviteEmail(
   props: BandEventOnboardingInviteEmailProps,
 ) {
   return render(BandEventOnboardingInviteEmail(props));
+}
+
+export async function renderBandOnboardingReminderEmail(
+  props: BandOnboardingReminderEmailProps,
+) {
+  return render(BandOnboardingReminderEmail(props));
 }
 
 export async function renderBandPaymentConfirmationEmail(props: BandPaymentConfirmationEmailProps) {
