@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { listEventsByInvoiceId } from "./lib/invoiceEvents";
+import { getCanonicalAlbumLink } from "./lib/immichAlbumLinks";
 import { enforceRateLimit, HOUR_MS } from "./rateLimit";
 
 const portalValue = v.union(v.literal("request"), v.literal("quote"));
@@ -63,12 +64,7 @@ export const getStatusByToken = query({
       .withIndex("by_invoiceId", (q) => q.eq("invoiceId", resolved.invoice._id))
       .first();
 
-    const albumLink = await ctx.db
-      .query("immichAlbumLinks")
-      .withIndex("by_entityType_and_entityId", (q) =>
-        q.eq("entityType", "event").eq("entityId", resolved.event._id),
-      )
-      .unique();
+    const albumLink = await getCanonicalAlbumLink(ctx, "event", resolved.event._id);
 
     return {
       submitted: Boolean(existing),

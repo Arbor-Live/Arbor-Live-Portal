@@ -39,6 +39,7 @@ import {
   bandOnboardingIncompleteStepValidator,
 } from "./lib/bandOnboardingSteps";
 import { allocateBandPaymentConfirmationToken } from "./lib/publicReferenceIds";
+import { resolveEventAlbumShareUrl } from "./lib/immichAlbumLinks";
 import {
   scheduleBandPaymentCompletedEmails,
   scheduleBandPaymentConfirmationEmail,
@@ -843,7 +844,11 @@ export const sendConfirmationEmail = mutation({
       "Arbor staff";
     const senderEmail = senderIdentity?.email || user.email?.trim() || undefined;
 
-    await scheduleBandPaymentConfirmationEmail(ctx, { payment, event });
+    const idempotencySentAt = payment.confirmationEmailSentAt ?? 0;
+    await ctx.scheduler.runAfter(0, internal.bandPaymentConfirmationActions.deliverConfirmationEmail, {
+      paymentId: payment._id,
+      idempotencySentAt,
+    });
 
     await ctx.db.patch(payment._id, {
       designatedPayeeName: effectivePayee.designatedPayeeName,
@@ -857,6 +862,50 @@ export const sendConfirmationEmail = mutation({
       confirmationSentByName: senderName,
       confirmationSentByEmail: senderEmail,
       updatedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
+export const getConfirmationEmailContext = internalQuery({
+  args: { paymentId: v.id("eventBandPayments") },
+  returns: v.union(
+    v.null(),
+    v.object({
+      eventId: v.id("events"),
+      eventTitle: v.string(),
+      venueName: v.optional(v.string()),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const payment = await ctx.db.get(args.paymentId);
+    if (!payment || payment.status === "paid" || payment.status === "cancelled") return null;
+    const event = await ctx.db.get(payment.eventId);
+    if (!event) return null;
+    return {
+      eventId: event._id,
+      eventTitle: event.title,
+      venueName: event.venueName,
+    };
+  },
+});
+
+export const enqueueConfirmationEmailInternal = internalMutation({
+  args: {
+    paymentId: v.id("eventBandPayments"),
+    idempotencySentAt: v.number(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const payment = await ctx.db.get(args.paymentId);
+    if (!payment) return null;
+    if (payment.status === "paid" || payment.status === "cancelled") return null;
+    const event = await ctx.db.get(payment.eventId);
+    if (!event) return null;
+    await scheduleBandPaymentConfirmationEmail(ctx, {
+      payment,
+      event,
+      idempotencySentAt: args.idempotencySentAt,
     });
     return null;
   },
@@ -1446,11 +1495,16 @@ export const buildConfirmationPreview = query({
       "Sign in to the band portal to review the amount and e-sign your agreement.",
       "",
     );
-    if (payment.photoAlbumUrl) {
+    const photoAlbumUrl = await resolveEventAlbumShareUrl(
+      ctx,
+      event._id,
+      payment.photoAlbumUrl,
+    );
+    if (photoAlbumUrl) {
       lines.push(
         "Additionally, if you have any videos or photos of the event, uploading them to the following photo album would be much appreciated!",
         "",
-        payment.photoAlbumUrl,
+        photoAlbumUrl,
         "",
       );
     }

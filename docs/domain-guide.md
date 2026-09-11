@@ -221,11 +221,16 @@ Event types (drive which editor tabs and quick-add blocks appear):
   queue.
 - Confirmation loop: admin sends a signature-request email from the payout
   queue; the designated payee e-signs under **Artists → Payments**
-  or from the artist home show card (typed legal name + amount checkbox). Admin
-  then marks paid with a GrantEd transfer / Service Payment number; all artist
-  members are notified that Stanford is processing the payout. The Payments
-  subtab shows a pending chip when the payee needs to sign or payee setup is
-  incomplete.
+  or from the artist home show card (typed legal name + amount checkbox). The
+  signature email includes the event’s Immich share album URL when one exists
+  (same album as crew/artist media, booking-request/quote feedback, and the
+  post-event album reminder). Outbound emails that include that URL (signature
+  request + post-event album reminder) ensure the event album first when Immich
+  is configured (best-effort; Immich failures do not block the email). Admin
+  then marks paid with a GrantEd transfer /
+  Service Payment number; all artist members are notified that Stanford is
+  processing the payout. The Payments subtab shows a pending chip when the
+  payee needs to sign or payee setup is incomplete.
 - Artist home (`/dashboard`) lists upcoming and recent assigned shows with payout
   status chips (including upcoming/pre-event payments and participation-only
   bookings). Full payment history and payee settings remain under Payments.
@@ -276,7 +281,11 @@ Event types (drive which editor tabs and quick-add blocks appear):
   creates albums and upload share links (`immichEnsure.ts`,
   `lib/immichClient.ts`); access is scoped by event/band participation
   (`lib/immichAccess.ts`). Marketing can browse/import from a library
-  (`marketingImmich*.ts`).
+  (`marketingImmich*.ts`). Event album share URLs surface for crew/artist
+  media UIs, public booking-request / quote feedback, post-event album
+  reminder emails, and artist payout signature-request emails
+  (`resolveEventAlbumShareUrl`). Emails that attach the share URL ensure the
+  event album on send when Immich is configured (`ensureEventAlbumBestEffort`).
 
 ## Marketing site
 

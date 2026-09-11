@@ -750,7 +750,6 @@ function EventBandPaymentForm({
     String(payment?.memberCount ?? seedDefaults.memberCount),
   );
   const [fixedTotalUsd, setFixedTotalUsd] = useState(String(payment?.totalUsd ?? 0));
-  const [photoAlbumUrl, setPhotoAlbumUrl] = useState(payment?.photoAlbumUrl ?? "");
   const [busy, setBusy] = useState(false);
   const [defaultsReadyForOrg, setDefaultsReadyForOrg] = useState(
     Boolean(payment) || !lockedOrganizationId,
@@ -823,7 +822,6 @@ function EventBandPaymentForm({
           payoutParsed.data.pricingMode === "fixed_total"
             ? payoutParsed.data.fixedTotalUsd
             : computedTotal,
-        photoAlbumUrl: photoAlbumUrl.trim() || undefined,
       });
       onSaved();
     } catch (error) {
@@ -1003,16 +1001,6 @@ function EventBandPaymentForm({
           ) : (
             <p className="text-sm text-muted-foreground">Select an artist to view payee details.</p>
           )}
-        </div>
-
-        <div className="space-y-1 md:col-span-2">
-          <Label>Photo album URL (optional)</Label>
-          <Input
-            value={photoAlbumUrl}
-            onChange={(e) => setPhotoAlbumUrl(e.target.value)}
-            placeholder="https://photos.arbor.st/share/..."
-            disabled={payment?.status === "paid"}
-          />
         </div>
       </div>
 

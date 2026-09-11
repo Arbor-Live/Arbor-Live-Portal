@@ -14,6 +14,7 @@ import {
   formatBandPaymentDate,
   formatPerformanceHours,
 } from "../lib/bandPayments";
+import { resolveEventAlbumShareUrl } from "../lib/immichAlbumLinks";
 
 type BandPaymentEmailContext = {
   payment: Doc<"eventBandPayments">;
@@ -23,17 +24,27 @@ type BandPaymentEmailContext = {
 
 export async function scheduleBandPaymentConfirmationEmail(
   ctx: MutationCtx,
-  { payment, event }: BandPaymentEmailContext,
+  {
+    payment,
+    event,
+    idempotencySentAt,
+  }: BandPaymentEmailContext & { idempotencySentAt?: number },
 ) {
   const payeeFirstName =
     payment.designatedPayeeName?.split(" ")[0] ?? payment.designatedPayeeName ?? "there";
+  const photoAlbumUrl = await resolveEventAlbumShareUrl(
+    ctx,
+    event._id,
+    payment.photoAlbumUrl,
+  );
+  const sentAtKey = idempotencySentAt ?? payment.confirmationEmailSentAt ?? 0;
   const notificationId = await enqueueEmail(ctx, {
     template: "band_payment_confirmation",
     to: payment.designatedPayeeEmail ?? "",
     cc: [BAND_PAYMENTS_CC_EMAIL],
     subject: subjectForTemplate("band_payment_confirmation", `${event.title} [${payment.confirmationToken}]`),
     eventId: event._id,
-    idempotencyKey: `band-payment-confirmation:${payment._id}:${payment.confirmationEmailSentAt ?? 0}`,
+    idempotencyKey: `band-payment-confirmation:${payment._id}:${sentAtKey}`,
     payload: {
       paymentId: payment._id,
       recipientName: payeeFirstName,
@@ -45,7 +56,7 @@ export async function scheduleBandPaymentConfirmationEmail(
       ratePerMemberPerHourUsd: payment.ratePerMemberPerHourUsd,
       totalUsd: payment.totalUsd,
       designatedPayeeName: payment.designatedPayeeName ?? "Designated payee",
-      photoAlbumUrl: payment.photoAlbumUrl,
+      photoAlbumUrl,
       confirmationToken: payment.confirmationToken,
       signUrl: bandPaymentHistoryUrl(),
     },

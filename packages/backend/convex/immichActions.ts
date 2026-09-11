@@ -10,6 +10,7 @@ import {
   createImmichAlbum,
   createImmichAlbumSharedLink,
   immichAlbumExists,
+  isImmichConfigured,
   listImmichAlbumAssets,
 } from "./lib/immichClient";
 import { albumLinkResultValidator } from "./lib/immichValidators";
@@ -123,6 +124,33 @@ export const ensureAlbum = internalAction({
   },
   returns: albumLinkResultValidator,
   handler: async (ctx, args) => ensureAlbumCore(ctx, args),
+});
+
+/**
+ * Create/link the event Immich album when Immich is configured.
+ * Failures are swallowed so email send paths can continue without a share URL.
+ */
+export const ensureEventAlbumBestEffort = internalAction({
+  args: { eventId: v.id("events") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    if (!isImmichConfigured()) return null;
+    const meta = await ctx.runQuery(internal.immichDb.getEventAlbumEnsureMetaInternal, {
+      eventId: args.eventId,
+    });
+    if (!meta) return null;
+    try {
+      await ensureAlbumCore(ctx, {
+        entityType: "event",
+        entityId: args.eventId,
+        albumName: `Event: ${meta.title}`,
+        description: meta.venueName ? `${meta.title} at ${meta.venueName}` : meta.title,
+      });
+    } catch {
+      // Immich is optional for outbound mail.
+    }
+    return null;
+  },
 });
 
 export const syncAlbumAssets = internalAction({

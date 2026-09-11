@@ -42,7 +42,7 @@ function seedPayment(status: "pending_email" | "confirmed", label: string): Seed
 /** Open a queue tab and return the card for one seeded payment. */
 async function openQueueCard(page: Page, queueLabel: RegExp, eventTitle: string) {
   await page.goto("/dashboard/financial-hub/artist-payouts");
-  await expect(page.getByText("Artist payment defaults")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("button", { name: /All pending/ })).toBeVisible({ timeout: 30_000 });
 
   await page.getByRole("button", { name: queueLabel }).click();
   const card = page.locator('[data-slot="card"]').filter({ hasText: eventTitle }).first();

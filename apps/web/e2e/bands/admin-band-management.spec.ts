@@ -136,7 +136,7 @@ test.describe("Users organizations no longer hosts band details", () => {
     await expect(page.getByText("Artist Organizations").first()).toBeVisible({
       timeout: 30_000,
     });
-    await expect(page.getByText(/Full profile, payee, and riders live under/i)).toBeVisible();
+    await expect(page.getByText(/Profile\/riders under/i)).toBeVisible();
     await expect(page.getByRole("link", { name: "Edit profile" }).first()).toBeVisible();
     await expect(page.getByRole("option", { name: "Show details" })).toHaveCount(0);
     await expect(page.getByText("Advanced fields")).toHaveCount(0);
