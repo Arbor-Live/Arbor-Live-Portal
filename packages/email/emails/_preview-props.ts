@@ -176,7 +176,7 @@ export const bandPaymentConfirmationPreviewProps: BandPaymentConfirmationEmailPr
   designatedPayeeName: "Jules Jackson",
   photoAlbumUrl: "https://photos.arbor.st/share/demo-album",
   confirmationToken: "ALBPAY-4K8Z2NP",
-  signUrl: "https://portal.arbor.st/dashboard/bands-and-performers#payment-history",
+  signUrl: "https://portal.arbor.st/dashboard/artists#payment-history",
 };
 
 export const bandPaymentCompletedPreviewProps: BandPaymentCompletedEmailProps = {
@@ -196,7 +196,7 @@ export const bandPaymentPayeeRequiredPreviewProps: BandPaymentPayeeRequiredEmail
   eventTitle: "Senior Night",
   venueName: "Arbor Stage",
   eventDateLabel: "5/29/26",
-  payeeSettingsUrl: "https://portal.arbor.st/dashboard/bands-and-performers#payment-payee",
+  payeeSettingsUrl: "https://portal.arbor.st/dashboard/artists#payment-payee",
 };
 
 export const bandAssignedPreviewProps: BandAssignedEmailProps = {

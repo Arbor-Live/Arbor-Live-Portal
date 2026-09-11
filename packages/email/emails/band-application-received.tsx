@@ -24,7 +24,7 @@ BandApplicationReceivedEmail.PreviewProps = {
   bandName: "The Redwoods",
   contactName: "Alex Kim",
   contactEmail: "akim@stanford.edu",
-  reviewUrl: "http://localhost:3000/dashboard/users/band-applications",
+  reviewUrl: "http://localhost:3000/dashboard/users/artist-applications",
 } satisfies BandApplicationReceivedEmailProps;
 
 export default BandApplicationReceivedEmail;

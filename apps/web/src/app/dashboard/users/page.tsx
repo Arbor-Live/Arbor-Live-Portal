@@ -54,7 +54,7 @@ export default function UsersPage() {
               </CardHeader>
               <CardContent>
                 <Button asChild>
-                  <Link href="/dashboard/users/band-applications">Open Artist Applications</Link>
+                  <Link href="/dashboard/users/artist-applications">Open Artist Applications</Link>
                 </Button>
               </CardContent>
             </Card>

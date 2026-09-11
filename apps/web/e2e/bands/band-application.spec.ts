@@ -45,7 +45,7 @@ test.describe("public band application", () => {
 
     const adminContext = await browser.newContext({ storageState: adminAuthFile });
     const adminPage = await adminContext.newPage();
-    await adminPage.goto("/dashboard/users/band-applications");
+    await adminPage.goto("/dashboard/users/artist-applications");
     await expect(adminPage.getByRole("button", { name: "Pending" }).first()).toBeVisible({
       timeout: 25_000,
     });

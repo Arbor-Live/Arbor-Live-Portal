@@ -79,7 +79,7 @@ function ShowCard({
         ) : null}
         {show.payment?.needsPayeeSetup ? (
           <Button asChild size="sm" variant="outline">
-            <Link href="/dashboard/bands-and-performers/payments#payee">Set up payee</Link>
+            <Link href="/dashboard/artists/payments#payee">Set up payee</Link>
           </Button>
         ) : null}
         {show.payment?.canDownloadAgreementPdf ? (
@@ -136,7 +136,7 @@ export function BandDashboard() {
         </Button>
         <Button asChild size="sm" variant="outline">
           <Link
-            href="/dashboard/bands-and-performers/payments"
+            href="/dashboard/artists/payments"
             className="inline-flex items-center gap-1.5"
           >
             <CurrencyDollarIcon className="size-4" />

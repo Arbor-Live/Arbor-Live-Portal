@@ -516,7 +516,7 @@ export function UsersManagementClient({
               <CardTitle>Artist Organizations</CardTitle>
               <p className="text-sm font-normal text-muted-foreground">
                 Quick rate and archive controls. Full profile, payee, and riders live under{" "}
-                <Link href="/dashboard/bands-and-performers" className="underline">
+                <Link href="/dashboard/artists" className="underline">
                   Artists
                 </Link>
                 .
@@ -1385,7 +1385,7 @@ function BandOrgAdminRow({
             </Button>
           ) : null}
           <Button type="button" size="sm" variant="outline" asChild>
-            <Link href="/dashboard/bands-and-performers">Edit profile</Link>
+            <Link href="/dashboard/artists">Edit profile</Link>
           </Button>
           {isArchived ? (
             <>

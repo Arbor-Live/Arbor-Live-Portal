@@ -72,7 +72,7 @@ const navItems: NavItem[] = [
   { title: "Users", url: "/dashboard/users", icon: UsersIcon, adminOnly: true },
   {
     title: "Artists",
-    url: "/dashboard/bands-and-performers",
+    url: "/dashboard/artists",
     icon: GuitarIcon,
   },
   { title: "Media", url: "/dashboard/media", icon: ImagesIcon, bandOnly: true },
@@ -96,7 +96,7 @@ const financialHubSubItems: NavSubItem[] = [
   { title: "Insights", url: "/dashboard/financial-hub/insights" },
   { title: "Invoices", url: "/dashboard/financial-hub/invoices" },
   { title: "Payments", url: "/dashboard/financial-hub/payments" },
-  { title: "Artist payouts", url: "/dashboard/financial-hub/band-payouts" },
+  { title: "Artist payouts", url: "/dashboard/financial-hub/artist-payouts" },
   { title: "Crew Timecards", url: "/dashboard/timecards" },
   { title: "My Timecards", url: "/dashboard/timecards/mine" },
   { title: "Host Organizations", url: "/dashboard/financial-hub/organizations" },
@@ -129,11 +129,11 @@ const marketingSubItems: NavSubItem[] = [
 ]
 
 const bandsSubItems: NavSubItem[] = [
-  { title: "Profile", url: "/dashboard/bands-and-performers" },
-  { title: "Technical rider", url: "/dashboard/bands-and-performers/riders" },
-  { title: "Payments", url: "/dashboard/bands-and-performers/payments" },
+  { title: "Profile", url: "/dashboard/artists" },
+  { title: "Technical rider", url: "/dashboard/artists/riders" },
+  { title: "Payments", url: "/dashboard/artists/payments" },
   { title: "Organizations", url: "/dashboard/users/organizations", adminOnly: true },
-  { title: "Artist applications", url: "/dashboard/users/band-applications", adminOnly: true },
+  { title: "Artist applications", url: "/dashboard/users/artist-applications", adminOnly: true },
 ]
 
 const sectionSubItems: Record<string, NavSubItem[]> = {
@@ -142,7 +142,7 @@ const sectionSubItems: Record<string, NavSubItem[]> = {
   "/dashboard/inventory": inventorySubItems,
   "/dashboard/users": usersSubItems,
   "/dashboard/marketing": marketingSubItems,
-  "/dashboard/bands-and-performers": bandsSubItems,
+  "/dashboard/artists": bandsSubItems,
 }
 
 function visibleSubItems(
@@ -171,7 +171,7 @@ function canAccessNavItem(
     // Band orgs keep Home, profile / riders / payments even though the section is
     // admin-facing for Arbor Live.
     if (item.url === "/dashboard") return true
-    if (item.url === "/dashboard/bands-and-performers") return true
+    if (item.url === "/dashboard/artists") return true
     return (
       item.url !== "/dashboard/events" &&
       item.url !== "/dashboard/financial-hub" &&
@@ -184,7 +184,7 @@ function canAccessNavItem(
   if (item.bandOnly) return false
   if (item.url === "/dashboard" && !access.isCrewContext && !access.isAdminHomeContext) return false
   // Portal admins only on the Arbor side; band orgs already returned above.
-  if (item.url === "/dashboard/bands-and-performers") return access.isAdmin
+  if (item.url === "/dashboard/artists") return access.isAdmin
   if (access.isAdmin) return true
   if (item.adminOnly && !access.hasOperationsAccess) return false
   if (item.marketingOnly && !access.hasMarketingAccess) return false
@@ -284,13 +284,13 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
         return pendingBookingRequestsCount ?? 0
       case "/dashboard/events/crew-scheduling":
         return unconfirmedEventCount
-      case "/dashboard/users/band-applications":
+      case "/dashboard/users/artist-applications":
         return pendingBandApplicationsCount ?? 0
       case "/dashboard/users/crew-applications":
         return pendingCrewApplicationsCount ?? 0
       case "/dashboard/inventory/damage":
         return pendingDamageReportsCount ?? 0
-      case "/dashboard/bands-and-performers/payments":
+      case "/dashboard/artists/payments":
         return pendingBandPaymentActionsCount ?? 0
       case "/dashboard/financial-hub/invoices":
         return quoteChangesRequestedCount ?? 0
@@ -366,8 +366,8 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
                 ) &&
                 !(
                   !isBandContext &&
-                  item.url === "/dashboard/bands-and-performers" &&
-                  subItem.url === "/dashboard/bands-and-performers/payments"
+                  item.url === "/dashboard/artists" &&
+                  subItem.url === "/dashboard/artists/payments"
                 ),
             )
             const hasCollapsibleSubItems = Boolean(subItems && subItems.length > 1)

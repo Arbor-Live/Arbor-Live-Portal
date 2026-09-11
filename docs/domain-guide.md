@@ -21,7 +21,7 @@ canonical description of the domain itself.
   (visit that URL directly on a fresh deployment; other routes no longer
   auto-redirect there)
   (see [getting-started.md](getting-started.md)); everyone else is invited
-  (`userInvites.ts`, accept-invite → `/onboarding` or `/onboarding/band`).
+  (`userInvites.ts`, accept-invite → `/onboarding` or `/onboarding/artist`).
 - Crew onboarding progress lives in `userOnboarding`; band org setup in
   `organizationOnboarding`. Incomplete crew get a dashboard banner and weekly
   reminder email; assigned bands that have not finished onboarding get a weekly
@@ -37,10 +37,10 @@ canonical description of the domain itself.
   Sequoia hours; External skips those and uses a contractor pay step (email W9
   + biweekly invoice to `arborlive@stanford.edu`).
 - Public self-serve band applications: `/artists/apply` → `bandApplications`
-  table → admin review at `/dashboard/users/band-applications`. Approval creates
+  table → admin review at `/dashboard/users/artist-applications`. Approval creates
   the band org (no auto public listing), invites the contact/members, and
   pre-stamps identity/members/socials so they only finish rates + payout in
-  `/onboarding/band`. Admin-invite onboarding for existing bands is unchanged.
+  `/onboarding/artist`. Admin-invite onboarding for existing bands is unchanged.
 - Public self-serve crew applications: `/crew/apply` → `crewApplications`
   table → admin queue at `/dashboard/users/crew-applications`. Statuses:
   `submitted` → `closed` (farewell email), `trainee` (no Better Auth user —

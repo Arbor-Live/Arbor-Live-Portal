@@ -50,7 +50,7 @@ BandOnboardingReminderEmail.PreviewProps = {
   eventTitle: "Spring Concert",
   venueName: "White Plaza",
   dateRangeLabel: "Fri, May 2, 2026, 7:00 PM – 10:00 PM",
-  onboardingUrl: "http://localhost:3000/onboarding/band",
+  onboardingUrl: "http://localhost:3000/onboarding/artist",
 } satisfies BandOnboardingReminderEmailProps;
 
 export default BandOnboardingReminderEmail;

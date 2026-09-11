@@ -108,7 +108,7 @@ export function RiderListClient() {
                       <div className="min-w-0 space-y-1">
                         <CardTitle className="truncate text-base">
                           <Link
-                            href={`/dashboard/bands-and-performers/riders/${rider._id}`}
+                            href={`/dashboard/artists/riders/${rider._id}`}
                             className="hover:underline"
                           >
                             {rider.name}
@@ -135,7 +135,7 @@ export function RiderListClient() {
                     </p>
                     <div className="flex flex-wrap gap-2">
                       <Button type="button" size="sm" asChild>
-                        <Link href={`/dashboard/bands-and-performers/riders/${rider._id}`}>
+                        <Link href={`/dashboard/artists/riders/${rider._id}`}>
                           Edit
                         </Link>
                       </Button>

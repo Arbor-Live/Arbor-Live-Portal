@@ -52,7 +52,7 @@ export function OnboardingBanner() {
     ) {
       return {
         key: "band",
-        href: "/onboarding/band",
+        href: "/onboarding/artist",
         message: "Finish setting up your artist profile to get booked and paid.",
       };
     }

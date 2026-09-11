@@ -15,11 +15,11 @@ const arborOnlyRoutes = [
 ] as const;
 
 /** Payments stay band-org-only; profile/riders are shared with portal admins. */
-const bandOnlyRoutes = ["/dashboard/bands-and-performers/payments"] as const;
+const bandOnlyRoutes = ["/dashboard/artists/payments"] as const;
 
 const bandOrAdminRoutes = [
-  "/dashboard/bands-and-performers",
-  "/dashboard/bands-and-performers/riders",
+  "/dashboard/artists",
+  "/dashboard/artists/riders",
 ] as const;
 
 test.describe("band user on Arbor-only routes", () => {

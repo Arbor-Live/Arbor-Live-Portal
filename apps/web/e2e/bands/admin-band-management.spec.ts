@@ -36,7 +36,7 @@ test.describe("admin band profile management", () => {
     await ensureBand();
     const bio = `E2E admin bio ${Date.now()}`;
 
-    await page.goto("/dashboard/bands-and-performers");
+    await page.goto("/dashboard/artists");
     await expect(page.getByText("Manage an artist").first()).toBeVisible({ timeout: 30_000 });
     await pickAdminBand(page, e2eEnv.bandOrgName);
 
@@ -73,7 +73,7 @@ test.describe("admin band rider management", () => {
     runConvex("e2eHelpers:clearBandRiders", { organizationId: band.organizationId });
     const riderName = `E2E Admin Rider ${Date.now()}`;
 
-    await page.goto("/dashboard/bands-and-performers/riders");
+    await page.goto("/dashboard/artists/riders");
     await expect(page.getByText("Manage an artist").first()).toBeVisible({ timeout: 30_000 });
     await pickAdminBand(page, e2eEnv.bandOrgName);
 
@@ -82,7 +82,7 @@ test.describe("admin band rider management", () => {
     await page.locator("#rider-name").fill(riderName);
     await page.getByRole("button", { name: "Create rider" }).click();
 
-    await page.waitForURL(/\/dashboard\/bands-and-performers\/riders\/[^/]+$/, {
+    await page.waitForURL(/\/dashboard\/artists\/riders\/[^/]+$/, {
       timeout: 45_000,
     });
     await expect(page.getByText("Edit technical rider").first()).toBeVisible({
@@ -90,7 +90,7 @@ test.describe("admin band rider management", () => {
     });
     await expect(page.getByText("Something went wrong")).toHaveCount(0);
 
-    await page.goto("/dashboard/bands-and-performers/riders");
+    await page.goto("/dashboard/artists/riders");
     await pickAdminBand(page, e2eEnv.bandOrgName);
     await expect(page.getByRole("link", { name: riderName }).first()).toBeVisible({
       timeout: 20_000,
@@ -106,7 +106,7 @@ test.describe("band self-service riders", () => {
     runConvex("e2eHelpers:clearBandRiders", { organizationId: band.organizationId });
     const riderName = `E2E Band Rider ${Date.now()}`;
 
-    await page.goto("/dashboard/bands-and-performers/riders");
+    await page.goto("/dashboard/artists/riders");
     await expect(page.getByText("Manage an artist")).toHaveCount(0, { timeout: 30_000 });
     await expect(page.getByText("Artist Organization Only")).toHaveCount(0);
 
@@ -119,7 +119,7 @@ test.describe("band self-service riders", () => {
     await page.locator("#rider-name").fill(riderName);
     await page.getByRole("button", { name: "Create rider" }).click();
 
-    await page.waitForURL(/\/dashboard\/bands-and-performers\/riders\/[^/]+$/, {
+    await page.waitForURL(/\/dashboard\/artists\/riders\/[^/]+$/, {
       timeout: 45_000,
     });
     await expect(page.getByText("Edit technical rider").first()).toBeVisible({

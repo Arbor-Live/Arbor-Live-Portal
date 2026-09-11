@@ -123,7 +123,7 @@ development exposes a floating **Dev** menu (bottom-right) that opens:
 |---|---|
 | First-admin setup | `/setup?devPreview=1` |
 | Crew onboarding | `/onboarding?devPreview=1` |
-| Band onboarding | `/onboarding/band?devPreview=1` |
+| Band onboarding | `/onboarding/artist?devPreview=1` |
 
 `?devPreview=1` only works when `NODE_ENV === "development"`. In production
 builds the query param is ignored and the Dev menu is not rendered.

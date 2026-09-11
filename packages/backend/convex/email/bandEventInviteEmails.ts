@@ -30,7 +30,7 @@ export async function scheduleBandEventOnboardingInviteEmail(
   const email = args.contactEmail.trim().toLowerCase();
   if (!email) return;
 
-  const portalUrl = `${SITE_URL}/sign-in?email=${encodeURIComponent(email)}&redirect=${encodeURIComponent("/onboarding/band")}`;
+  const portalUrl = `${SITE_URL}/sign-in?email=${encodeURIComponent(email)}&redirect=${encodeURIComponent("/onboarding/artist")}`;
 
   await enqueueEmail(ctx, {
     template: "band_event_onboarding_invite",

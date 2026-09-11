@@ -149,6 +149,28 @@ const nextConfig: NextConfig = {
       { source: "/public/open-mic", destination: "/open-mic", permanent: true },
       { source: "/public/event/:token", destination: "/event/:token", permanent: true },
       { source: "/public/quote/:token", destination: "/quote/:token", permanent: true },
+      // Artist route renames (old band URLs)
+      {
+        source: "/dashboard/bands-and-performers",
+        destination: "/dashboard/artists",
+        permanent: true,
+      },
+      {
+        source: "/dashboard/bands-and-performers/:path*",
+        destination: "/dashboard/artists/:path*",
+        permanent: true,
+      },
+      {
+        source: "/dashboard/financial-hub/band-payouts",
+        destination: "/dashboard/financial-hub/artist-payouts",
+        permanent: true,
+      },
+      {
+        source: "/dashboard/users/band-applications",
+        destination: "/dashboard/users/artist-applications",
+        permanent: true,
+      },
+      { source: "/onboarding/band", destination: "/onboarding/artist", permanent: true },
     ];
   },
   images: {
