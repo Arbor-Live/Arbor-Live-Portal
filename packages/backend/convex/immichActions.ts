@@ -102,16 +102,29 @@ async function ensureAlbumCore(
     },
   );
 
+  // Concurrent ensures can race on create; insert keeps the first link. Always
+  // attach the share URL to the winning link's Immich album, not our local create.
+  const link: {
+    immichAlbumId: string;
+    albumName: string;
+    shareUrl?: string;
+  } | null = await ctx.runQuery(internal.immichDb.getAlbumLinkByIdInternal, {
+    albumLinkId,
+  });
+  if (!link) {
+    throw new Error("Immich album link missing after insert.");
+  }
+
   await ensureSharedLinkForAlbum(ctx, {
     albumLinkId,
-    immichAlbumId: created.id,
+    immichAlbumId: link.immichAlbumId,
     description: args.description ?? args.albumName,
   });
 
   return {
     albumLinkId,
-    immichAlbumId: created.id,
-    albumName: args.albumName,
+    immichAlbumId: link.immichAlbumId,
+    albumName: link.albumName,
   };
 }
 

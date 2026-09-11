@@ -361,6 +361,7 @@ function EventBandsPerformersPanel({ eventId }: { eventId: Id<"events"> }) {
                     organizationLocked
                     excludedOrganizationIds={[]}
                     invoiceLine={invoiceArtistByOrg.get(performer.organizationId) ?? null}
+                    invoiceDefaultsReady={!invoiceId || invoiceDetail !== undefined}
                     onSaved={() => setEditingPaymentForOrg(null)}
                     onCancel={() => setEditingPaymentForOrg(null)}
                   />
@@ -703,6 +704,7 @@ function EventBandPaymentForm({
   organizationLocked,
   excludedOrganizationIds,
   invoiceLine = null,
+  invoiceDefaultsReady = true,
   onSaved,
   onCancel,
 }: {
@@ -713,6 +715,8 @@ function EventBandPaymentForm({
   organizationLocked?: boolean;
   excludedOrganizationIds: string[];
   invoiceLine?: InvoiceArtistSuggestion | null;
+  /** False while the event invoice query is still loading (so invoice line defaults win). */
+  invoiceDefaultsReady?: boolean;
   onSaved: () => void;
   onCancel: () => void;
 }) {
@@ -757,6 +761,7 @@ function EventBandPaymentForm({
 
   useEffect(() => {
     if (payment || !bands || !resolvedOrgId || defaultsReadyForOrg) return;
+    if (!invoiceDefaultsReady) return;
     const next = applyPayoutDefaultsForOrg(
       bands as BandCatalogRow[] | undefined,
       resolvedOrgId,
@@ -767,7 +772,14 @@ function EventBandPaymentForm({
     setPerformanceHours(next.performanceHours);
     setMemberCount(next.memberCount);
     setDefaultsReadyForOrg(true);
-  }, [payment, bands, resolvedOrgId, invoiceLine, defaultsReadyForOrg]);
+  }, [
+    payment,
+    bands,
+    resolvedOrgId,
+    invoiceLine,
+    invoiceDefaultsReady,
+    defaultsReadyForOrg,
+  ]);
 
   const bandOptions = useMemo(
     () => artistSelectOptions(bands, { excludeOrganizationIds: excludedOrganizationIds }),

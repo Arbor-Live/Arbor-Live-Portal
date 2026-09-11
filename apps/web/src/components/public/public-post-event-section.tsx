@@ -61,6 +61,10 @@ export function PublicPostEventSection({
   });
 
   useEffect(() => {
+    setEnsuredAlbumUrl(undefined);
+  }, [portal, token]);
+
+  useEffect(() => {
     if (status === undefined) return;
     if (window.location.hash === "#feedback") {
       document.getElementById("feedback")?.scrollIntoView({ behavior: "smooth", block: "start" });

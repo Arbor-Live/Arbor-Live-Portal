@@ -718,6 +718,9 @@ export const listByQueue = query({
     const nowMs = Date.now();
     const payments: Doc<"eventBandPayments">[] = [];
     for (const status of statusesForQueue(args.queue)) {
+      // Same take budget as other queue statuses. Concurrent draft payouts stay
+      // well under this for Arbor's volume; if that changes, denormalize
+      // eventStartAt onto payments and index before limiting.
       const rows = await ctx.db
         .query("eventBandPayments")
         .withIndex("by_status", (q) => q.eq("status", status))
@@ -761,6 +764,7 @@ export const syncStalePayeePayments = mutation({
           synced.status !== payment.status ||
           synced.designatedPayeeName !== payment.designatedPayeeName ||
           synced.designatedPayeeEmail !== payment.designatedPayeeEmail ||
+          synced.designatedPayeeUserId !== payment.designatedPayeeUserId ||
           synced.designatedPayeeMailingAddress !== payment.designatedPayeeMailingAddress ||
           synced.designatedPayeePayoutMethod !== payment.designatedPayeePayoutMethod
         ) {
@@ -797,6 +801,7 @@ export const refreshPendingPaymentsForOrganization = mutation({
         synced.status !== payment.status ||
         synced.designatedPayeeName !== payment.designatedPayeeName ||
         synced.designatedPayeeEmail !== payment.designatedPayeeEmail ||
+        synced.designatedPayeeUserId !== payment.designatedPayeeUserId ||
         synced.designatedPayeeMailingAddress !== payment.designatedPayeeMailingAddress ||
         synced.designatedPayeePayoutMethod !== payment.designatedPayeePayoutMethod
       ) {

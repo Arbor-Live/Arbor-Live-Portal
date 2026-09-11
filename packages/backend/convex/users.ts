@@ -1,6 +1,7 @@
 import { hashPassword } from "better-auth/crypto";
 import { v } from "convex/values";
 import { components, internal } from "./_generated/api";
+import type { Doc } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import {
@@ -512,17 +513,32 @@ export const listBandOrganizationsAdmin = query({
     const organizations = await getAllOrganizations(ctx);
     const profiles = await ctx.db.query("organizationProfiles").withIndex("by_organizationType").take(1000);
     const profileByOrgId = new Map(profiles.map((profile) => [profile.organizationId, profile]));
-    // Bounded catalog scan — artist org count stays well under this; if it grows,
-    // switch to per-org indexed lookups or a denormalized onboarding status field.
-    const onboardingRows = await ctx.db.query("organizationOnboarding").take(2000);
-    const onboardingByOrgId = new Map(
-      onboardingRows.map((row) => [row.organizationId, row] as const),
-    );
-    return organizations
+    const bandOrgs = organizations
       .map((organization) => {
         const organizationId = getRecordId(organization);
         const profile = profileByOrgId.get(organizationId);
         const inferredType = resolveOrganizationType(organization, profile);
+        return { organization, organizationId, profile, inferredType };
+      })
+      .filter(
+        (row) => row.inferredType === "band" || row.inferredType === "dj",
+      )
+      .filter((row) => args.includeArchived || row.profile?.status !== "archived");
+
+    const onboardingByOrgId = new Map<
+      string,
+      Doc<"organizationOnboarding">
+    >();
+    for (const row of bandOrgs) {
+      const onboarding = await ctx.db
+        .query("organizationOnboarding")
+        .withIndex("by_organizationId", (q) => q.eq("organizationId", row.organizationId))
+        .unique();
+      if (onboarding) onboardingByOrgId.set(row.organizationId, onboarding);
+    }
+
+    return bandOrgs
+      .map(({ organization, organizationId, profile, inferredType }) => {
         const onboarding = onboardingByOrgId.get(organizationId);
         const onboardingStatus = onboarding?.status ?? null;
         const awaitingOnboarding =
@@ -561,8 +577,6 @@ export const listBandOrganizationsAdmin = query({
           ...serializeBandListingProfileFields(profile),
         };
       })
-      .filter((organization) => organization.organizationType === "band" || organization.organizationType === "dj")
-      .filter((organization) => args.includeArchived || organization.status !== "archived")
       .sort((a, b) => a.name.localeCompare(b.name));
   },
 });
