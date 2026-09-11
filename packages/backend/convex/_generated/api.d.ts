@@ -134,6 +134,7 @@ import type * as lib_marketingContent from "../lib/marketingContent.js";
 import type * as lib_normalizeCrewLineLabel from "../lib/normalizeCrewLineLabel.js";
 import type * as lib_onboardingLinks from "../lib/onboardingLinks.js";
 import type * as lib_openMicAddon from "../lib/openMicAddon.js";
+import type * as lib_orgMembership from "../lib/orgMembership.js";
 import type * as lib_otForecast from "../lib/otForecast.js";
 import type * as lib_packageBom from "../lib/packageBom.js";
 import type * as lib_packageContentMigration from "../lib/packageContentMigration.js";
@@ -324,6 +325,7 @@ declare const fullApi: ApiFromModules<{
   "lib/normalizeCrewLineLabel": typeof lib_normalizeCrewLineLabel;
   "lib/onboardingLinks": typeof lib_onboardingLinks;
   "lib/openMicAddon": typeof lib_openMicAddon;
+  "lib/orgMembership": typeof lib_orgMembership;
   "lib/otForecast": typeof lib_otForecast;
   "lib/packageBom": typeof lib_packageBom;
   "lib/packageContentMigration": typeof lib_packageContentMigration;
