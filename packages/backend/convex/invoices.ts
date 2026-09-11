@@ -1026,7 +1026,7 @@ export const approveByToken = mutation({
     paymentSubmitterEmail: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await enforceRateLimit(ctx, `quoteToken:${args.token}`, { limit: 30, periodMs: HOUR_MS });
+    await enforceRateLimit(ctx, `quoteToken:${args.token}`, { limit: 30, windowMs: HOUR_MS });
     return await withReportableErrors("invoices.approveByToken", async () => {
       const invoice = await ctx.db
         .query("invoices")
@@ -1051,7 +1051,7 @@ export const approveByToken = mutation({
 export const requestChangesByToken = mutation({
   args: { token: v.string(), note: v.string() },
   handler: async (ctx, args) => {
-    await enforceRateLimit(ctx, `quoteToken:${args.token}`, { limit: 30, periodMs: HOUR_MS });
+    await enforceRateLimit(ctx, `quoteToken:${args.token}`, { limit: 30, windowMs: HOUR_MS });
     return await withReportableErrors("invoices.requestChangesByToken", async () => {
       const invoice = await ctx.db
         .query("invoices")
