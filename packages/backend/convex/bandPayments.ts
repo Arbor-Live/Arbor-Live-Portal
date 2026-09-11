@@ -783,30 +783,35 @@ export const refreshPendingPaymentsForOrganization = mutation({
   handler: async (ctx, args) => {
     await requireArborInternalContext(ctx);
     const now = Date.now();
-    const payments = await ctx.db
-      .query("eventBandPayments")
-      .withIndex("by_organizationId", (q) => q.eq("organizationId", args.organizationId))
-      .take(200);
     let updated = 0;
-    for (const payment of payments) {
-      if (
-        payment.status !== "pending_payee" &&
-        payment.status !== "pending_onboarding" &&
-        payment.status !== "draft"
-      ) {
-        continue;
+    let cursor: string | null = null;
+    for (;;) {
+      const page = await ctx.db
+        .query("eventBandPayments")
+        .withIndex("by_organizationId", (q) => q.eq("organizationId", args.organizationId))
+        .paginate({ cursor, numItems: 200 });
+      for (const payment of page.page) {
+        if (
+          payment.status !== "pending_payee" &&
+          payment.status !== "pending_onboarding" &&
+          payment.status !== "draft"
+        ) {
+          continue;
+        }
+        const synced = await syncPayeeFromOrganizationForPayment(ctx, payment, now);
+        if (
+          synced.status !== payment.status ||
+          synced.designatedPayeeName !== payment.designatedPayeeName ||
+          synced.designatedPayeeEmail !== payment.designatedPayeeEmail ||
+          synced.designatedPayeeUserId !== payment.designatedPayeeUserId ||
+          synced.designatedPayeeMailingAddress !== payment.designatedPayeeMailingAddress ||
+          synced.designatedPayeePayoutMethod !== payment.designatedPayeePayoutMethod
+        ) {
+          updated += 1;
+        }
       }
-      const synced = await syncPayeeFromOrganizationForPayment(ctx, payment, now);
-      if (
-        synced.status !== payment.status ||
-        synced.designatedPayeeName !== payment.designatedPayeeName ||
-        synced.designatedPayeeEmail !== payment.designatedPayeeEmail ||
-        synced.designatedPayeeUserId !== payment.designatedPayeeUserId ||
-        synced.designatedPayeeMailingAddress !== payment.designatedPayeeMailingAddress ||
-        synced.designatedPayeePayoutMethod !== payment.designatedPayeePayoutMethod
-      ) {
-        updated += 1;
-      }
+      if (page.isDone) break;
+      cursor = page.continueCursor;
     }
     return { updated };
   },
