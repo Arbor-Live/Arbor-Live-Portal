@@ -5,6 +5,7 @@ import type { Doc } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import {
+  assertAdminMayPreviewOrganization,
   findAuthOrganizationById,
   getActiveOrganizationContextOrNull,
   getCurrentUserOrNull,
@@ -1155,6 +1156,7 @@ export const getSessionShell = query({
           slug: v.string(),
           role: v.string(),
           organizationType: v.optional(v.string()),
+          isAdminPreview: v.optional(v.boolean()),
         }),
         v.null(),
       ),
@@ -1165,6 +1167,7 @@ export const getSessionShell = query({
           slug: v.string(),
           role: v.string(),
           organizationType: v.optional(v.string()),
+          isAdminPreview: v.optional(v.boolean()),
         }),
       ),
     }),
@@ -1211,14 +1214,41 @@ export const getSessionShell = query({
             slug: organization?.slug ?? "",
             role: row.role,
             organizationType: resolveOrganizationType(organization ?? undefined, orgProfile),
+            isAdminPreview: false as boolean | undefined,
           };
         }),
       )
     ).sort((a, b) => a.name.localeCompare(b.name));
 
+    // Surface the admin-preview org in the switcher so they can leave it later.
+    if (
+      orgContext?.isAdminPreview &&
+      !organizations.some((org) => org.organizationId === orgContext.organizationId)
+    ) {
+      organizations.push({
+        organizationId: orgContext.organizationId,
+        name: orgContext.organizationName,
+        slug: orgContext.organizationSlug,
+        role: "admin_preview",
+        organizationType: orgContext.organizationType,
+        isAdminPreview: true,
+      });
+      organizations.sort((a, b) => a.name.localeCompare(b.name));
+    }
+
     const activeOrganization =
       (orgContext
-        ? organizations.find((org) => org.organizationId === orgContext.organizationId)
+        ? organizations.find((org) => org.organizationId === orgContext.organizationId) ??
+          (orgContext.isAdminPreview
+            ? {
+                organizationId: orgContext.organizationId,
+                name: orgContext.organizationName,
+                slug: orgContext.organizationSlug,
+                role: "admin_preview",
+                organizationType: orgContext.organizationType,
+                isAdminPreview: true as boolean | undefined,
+              }
+            : undefined)
         : undefined) ??
       organizations[0] ??
       null;
@@ -1250,44 +1280,34 @@ export const getActiveOrganization = query({
   handler: async (ctx) => {
     const user = await requireAuth(ctx);
     const userId = getUserId(user);
-    const activeRow = await ctx.db
-      .query("userActiveOrganizations")
-      .withIndex("by_userId", (q) => q.eq("userId", userId))
-      .unique();
-    const memberships = await ctx.db
-      .query("userOrganizationMemberships")
-      .withIndex("by_userId", (q) => q.eq("userId", userId))
-      .take(200);
-    const membership = memberships.find((row) => row.active && row.organizationId === activeRow?.organizationId) ??
-      memberships.find((row) => row.active);
-    if (!membership) return null;
+    const context = await getActiveOrganizationContextOrNull(ctx);
+    if (!context) return null;
 
-    // Local profile first — avoids a Better Auth org round-trip for arbor_internal
-    // (same path requireArborInternalContext uses). Previously this also called
-    // getOrganizationType which re-fetched the org a second time.
-    const profile = await ctx.db
-      .query("organizationProfiles")
-      .withIndex("by_organizationId", (q) =>
-        q.eq("organizationId", membership.organizationId),
-      )
-      .unique();
-    if (profile?.organizationType === "arbor_internal") {
+    if (context.isAdminPreview) {
       return {
-        organizationId: membership.organizationId,
-        name: "Arbor Live",
-        slug: "arbor-live",
-        role: membership.role,
-        organizationType: "arbor_internal" as const,
+        organizationId: context.organizationId,
+        name: context.organizationName,
+        slug: context.organizationSlug,
+        role: "admin_preview",
+        organizationType: context.organizationType,
+        isAdminPreview: true,
       };
     }
 
-    const organization = await getOrganizationById(ctx, membership.organizationId);
+    const membership = await ctx.db
+      .query("userOrganizationMemberships")
+      .withIndex("by_userId_and_organizationId", (q) =>
+        q.eq("userId", userId).eq("organizationId", context.organizationId),
+      )
+      .unique();
+
     return {
-      organizationId: membership.organizationId,
-      name: organization?.name ?? "Organization",
-      slug: organization?.slug ?? "",
-      role: membership.role,
-      organizationType: resolveOrganizationType(organization ?? undefined, profile),
+      organizationId: context.organizationId,
+      name: context.organizationName,
+      slug: context.organizationSlug,
+      role: membership?.role ?? "member",
+      organizationType: context.organizationType,
+      isAdminPreview: false,
     };
   },
 });
@@ -1303,7 +1323,11 @@ export const setActiveOrganization = mutation({
         q.eq("userId", userId).eq("organizationId", args.organizationId),
       )
       .unique();
-    if (!membership || !membership.active) {
+    if (membership?.active) {
+      // Real membership — allowed for everyone.
+    } else if (isAdmin(user)) {
+      await assertAdminMayPreviewOrganization(ctx, args.organizationId);
+    } else {
       throw new Error("You are not an active member of this organization.");
     }
     const now = Date.now();

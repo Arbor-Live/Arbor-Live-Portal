@@ -215,6 +215,8 @@ export type ActiveOrganizationContext = {
   organizationSlug: string;
   organizationType: "arbor_internal" | "band" | "dj";//going to have band and dj 
   //basically act as the same
+  /** True when a portal admin is previewing an artist org without membership. */
+  isAdminPreview?: boolean;
 };
 
 function deriveOrganizationType(
@@ -223,6 +225,72 @@ function deriveOrganizationType(
   const name = (org?.name ?? "").trim().toLowerCase();
   const slug = (org?.slug ?? "").trim().toLowerCase();
   return name === "arbor live" || slug === "arbor-live" ? "arbor_internal" : "band";
+}
+
+/**
+ * Resolve org display fields + type for an organization id.
+ * Prefer local organizationProfiles before Better Auth org lookups.
+ */
+export async function resolveOrganizationContext(
+  ctx: AuthCtx,
+  organizationId: string,
+): Promise<ActiveOrganizationContext | null> {
+  const orgProfile = await ctx.db
+    .query("organizationProfiles")
+    .withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId))
+    .unique();
+  if (orgProfile?.organizationType === "arbor_internal") {
+    return {
+      organizationId,
+      organizationName: "Arbor Live",
+      organizationSlug: "arbor-live",
+      organizationType: "arbor_internal",
+    };
+  }
+  if (orgProfile?.organizationType === "band" || orgProfile?.organizationType === "dj") {
+    const org = await findAuthOrganizationById(ctx, organizationId);
+    return {
+      organizationId,
+      organizationName: org?.name ?? "Organization",
+      organizationSlug: org?.slug ?? "",
+      organizationType: orgProfile.organizationType,
+    };
+  }
+
+  const org = await findAuthOrganizationById(ctx, organizationId);
+  if (!org) return null;
+  return {
+    organizationId,
+    organizationName: org.name ?? "Organization",
+    organizationSlug: org.slug ?? "",
+    organizationType:
+      deriveOrganizationType(org) === "arbor_internal" ? "arbor_internal" : "band",
+  };
+}
+
+/**
+ * Admins may temporarily activate a band/dj org without membership so they can
+ * check the artist portal. Arbor internal still requires real membership.
+ */
+export async function assertAdminMayPreviewOrganization(
+  ctx: AuthCtx,
+  organizationId: string,
+): Promise<ActiveOrganizationContext> {
+  const context = await resolveOrganizationContext(ctx, organizationId);
+  if (!context) {
+    throw new Error("Organization not found.");
+  }
+  if (context.organizationType !== "band" && context.organizationType !== "dj") {
+    throw new Error("Admin preview is only available for artist organizations.");
+  }
+  const profile = await ctx.db
+    .query("organizationProfiles")
+    .withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId))
+    .unique();
+  if (profile?.status === "archived") {
+    throw new Error("Cannot preview an archived artist organization.");
+  }
+  return context;
 }
 
 export async function getActiveOrganizationContextOrNull(
@@ -242,52 +310,47 @@ export async function getActiveOrganizationContextOrNull(
       .withIndex("by_userId", (q) => q.eq("userId", userId))
       .take(100);
     const activeMemberships = memberships.filter((membership) => membership.active);
-    if (!activeMemberships.length) return null;
     const activeRow = await ctx.db
       .query("userActiveOrganizations")
       .withIndex("by_userId", (q) => q.eq("userId", userId))
       .unique();
-    const selectedOrganizationId = activeRow?.organizationId ?? activeMemberships[0].organizationId;
+    const selectedOrganizationId =
+      activeRow?.organizationId ?? activeMemberships[0]?.organizationId;
+    if (!selectedOrganizationId) return null;
+
     const selectedMembership = activeMemberships.find(
       (membership) => membership.organizationId === selectedOrganizationId,
     );
-    if (!selectedMembership) return null;
-
-    // Prefer local organizationProfiles before Better Auth org lookups. Auth gates
-    // (requireArborInternalContext) only need organizationType; under anonymous /
-    // constrained Convex the adapter findOne calls were eating most of the ~1s budget.
-    const orgProfile = await ctx.db
-      .query("organizationProfiles")
-      .withIndex("by_organizationId", (q) => q.eq("organizationId", selectedOrganizationId))
-      .unique();
-    if (orgProfile?.organizationType === "arbor_internal") {
-      return {
-        organizationId: selectedOrganizationId,
-        organizationName: "Arbor Live",
-        organizationSlug: "arbor-live",
-        organizationType: "arbor_internal",
-      };
-    }
-    if (orgProfile?.organizationType === "band" || orgProfile?.organizationType === "dj") {
-      // Still need display name/slug from Better Auth for band/dj orgs.
-      const org = await findAuthOrganizationById(ctx, selectedOrganizationId);
-      return {
-        organizationId: selectedOrganizationId,
-        organizationName: org?.name ?? "Organization",
-        organizationSlug: org?.slug ?? "",
-        organizationType: orgProfile.organizationType,
-      };
+    if (selectedMembership) {
+      return await resolveOrganizationContext(ctx, selectedOrganizationId);
     }
 
-    // Legacy rows without a profile: fall back to Better Auth name/slug derivation.
-    const org = await findAuthOrganizationById(ctx, selectedOrganizationId);
-    return {
-      organizationId: selectedOrganizationId,
-      organizationName: org?.name ?? "Organization",
-      organizationSlug: org?.slug ?? "",
-      organizationType:
-        deriveOrganizationType(org) === "arbor_internal" ? "arbor_internal" : "band",
-    };
+    // No membership for the selected active org — allow portal admins to preview
+    // artist orgs (temporary view-as, not a lasting join).
+    if (isAdmin(user)) {
+      const preview = await resolveOrganizationContext(ctx, selectedOrganizationId);
+      if (
+        preview &&
+        (preview.organizationType === "band" || preview.organizationType === "dj")
+      ) {
+        const profile = await ctx.db
+          .query("organizationProfiles")
+          .withIndex("by_organizationId", (q) =>
+            q.eq("organizationId", selectedOrganizationId),
+          )
+          .unique();
+        if (profile?.status !== "archived") {
+          return { ...preview, isAdminPreview: true };
+        }
+      }
+    }
+
+    // Stale preview (archived / invalid): fall back to a real membership.
+    if (!activeMemberships.length) return null;
+    return await resolveOrganizationContext(
+      ctx,
+      activeMemberships[0].organizationId,
+    );
   })();
 
   activeOrgCache.set(ctx, pending);
