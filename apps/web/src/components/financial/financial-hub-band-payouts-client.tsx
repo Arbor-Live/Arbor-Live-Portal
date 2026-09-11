@@ -16,6 +16,7 @@ import { formatBandPayeePayoutMethod } from "@/lib/band-payout-copy";
 import { OnboardingIncompleteStepsList } from "@/components/bands/onboarding-incomplete-steps";
 
 type BandPaymentQueue =
+  | "upcoming"
   | "all_pending"
   | "needs_onboarding"
   | "needs_payee"
@@ -25,6 +26,7 @@ type BandPaymentQueue =
   | "paid";
 
 const QUEUE_LABELS: Record<BandPaymentQueue, string> = {
+  upcoming: "Upcoming payouts",
   all_pending: "All pending",
   needs_onboarding: "Pending onboarding",
   needs_payee: "Needs payee info",
@@ -38,7 +40,6 @@ export function FinancialHubBandPayoutsClient() {
   const [queue, setQueue] = useState<BandPaymentQueue>("all_pending");
   const rows = useQuery(api.bandPayments.listByQueue, { queue });
   const queueCounts = useQuery(api.bandPayments.getQueueCounts, {});
-  const settings = useQuery(api.bandPayments.getSettings, {});
   const sendConfirmation = useMutation(api.bandPayments.sendConfirmationEmail);
   const sendPayeeRequired = useMutation(api.bandPayments.sendPayeeRequiredEmail);
   const sendOnboardingReminder = useMutation(api.bandPayments.sendOnboardingReminder);
@@ -48,7 +49,6 @@ export function FinancialHubBandPayoutsClient() {
   );
   const markPaid = useMutation(api.bandPayments.markPaid);
   const cancelPayment = useMutation(api.bandPayments.cancelPayment);
-  const updateSettings = useMutation(api.bandPayments.updateSettings);
 
   const [busyPaymentId, setBusyPaymentId] = useState<Id<"eventBandPayments"> | null>(null);
   const [servicePaymentNumber, setServicePaymentNumber] = useState("");
@@ -58,9 +58,7 @@ export function FinancialHubBandPayoutsClient() {
     api.bandPayments.buildConfirmationPreview,
     previewTarget ? { paymentId: previewTarget } : "skip",
   );
-  const [settingsDraft, setSettingsDraft] = useState<{ photoAlbumUrl: string } | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const photoAlbumUrl = settingsDraft?.photoAlbumUrl ?? settings?.photoAlbumUrl ?? "";
 
   useEffect(() => {
     void syncStalePayeePayments({});
@@ -135,18 +133,6 @@ export function FinancialHubBandPayoutsClient() {
     }
   }
 
-  async function onSaveSettings() {
-    try {
-      await updateSettings({
-        photoAlbumUrl,
-      });
-      setSettingsDraft(null);
-      notify.success("Settings saved.");
-    } catch (error) {
-      notify.error(getConvexErrorMessage(error));
-    }
-  }
-
   function queueCountFor(key: BandPaymentQueue) {
     if (!queueCounts) return null;
     if (key === "all_pending") {
@@ -163,27 +149,6 @@ export function FinancialHubBandPayoutsClient() {
 
   return (
     <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Artist payment defaults</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-3">
-          <div className="space-y-1">
-            <Label>Default photo album URL</Label>
-            <Input
-              value={photoAlbumUrl}
-              onChange={(e) => setSettingsDraft({ photoAlbumUrl: e.target.value })}
-              placeholder="https://photos.arbor.st/share/..."
-            />
-          </div>
-          <div>
-            <Button type="button" onClick={() => void onSaveSettings()}>
-              Save defaults
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
       {actionError ? (
         <p className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
           {actionError}
@@ -342,6 +307,7 @@ export function FinancialHubBandPayoutsClient() {
                     </>
                   ) : null}
                   {!row.payeeComplete &&
+                  row.status !== "draft" &&
                   row.status !== "pending_payee" &&
                   row.status !== "pending_onboarding" ? (
                     <p className="self-center text-xs text-muted-foreground">

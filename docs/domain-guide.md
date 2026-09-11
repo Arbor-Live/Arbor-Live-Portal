@@ -201,13 +201,15 @@ Event types (drive which editor tabs and quick-add blocks appear):
   same overview row.
 - Each band org has a designated payee (name/email/mailing address + linked
   user id on `organizationProfiles`).
-- After an event ends, payments enter the payout queue. If the artist has not
-  finished (or waived) org onboarding, the payment lands in **Pending
-  onboarding**; once onboarded it moves to needs-payee or needs-signature
-  request based on payee completeness. Completing/waiving artist onboarding
-  refreshes stuck payments immediately. Queue cards and the event Artists
-  panel list which onboarding gates are still missing; staff can **Recheck
-  status** after the artist finishes.
+- After an event ends, payments enter the payout queue. Until then they stay
+  **Upcoming** (internal status `draft`) and appear under **Upcoming payouts**
+  in Financial Hub. If the artist has not finished (or waived) org onboarding,
+  the payment lands in **Pending onboarding**; once onboarded it moves to
+  needs-payee or needs-signature request based on payee completeness.
+  Completing/waiving artist onboarding refreshes stuck payments immediately.
+  Payout queue cards and **Users → Organizations → Artist Organizations** list
+  which onboarding gates are still missing; staff can **Recheck status** from
+  the payout queue after the artist finishes.
 - When assigning artists, empty events with invoice artist lines get an
   accept/confirm prompt (plus **Import from invoice** anytime). Payout
   money defaults prefer the invoice artist line (rate, hours, members), then
@@ -224,12 +226,14 @@ Event types (drive which editor tabs and quick-add blocks appear):
   subtab shows a pending chip when the payee needs to sign or payee setup is
   incomplete.
 - Artist home (`/dashboard`) lists upcoming and recent assigned shows with payout
-  status chips (including draft payments and participation-only bookings). Full
-  payment history and payee settings remain under Payments.
+  status chips (including upcoming/pre-event payments and participation-only
+  bookings). Full payment history and payee settings remain under Payments.
 - Once signed, admins and artist members can download an agreement PDF
   (`bandPaymentPdfDownload.ts` via `@arbor/invoice-document`) showing the
   Arbor sender and the payee signature.
 - A daily cron promotes payments for ended events into the payable queue.
+- Insights upcoming horizons include `upcomingArtistPayoutsUsd` (sum of each
+  event’s `bandsCostUsd`, which already includes scheduled artist payouts).
 
 ## Inventory
 

@@ -19,13 +19,11 @@ import {
   requireBandContext,
 } from "./lib/auth";
 import {
-  BAND_PAYMENT_SETTINGS_KEY,
   bandPaymentHasAgreementPdf,
   bandPaymentStatusLabel,
   computeBandPaymentTotal,
   formatBandPaymentDate,
   formatPerformanceHours,
-  getBandPaymentSettings,
   isBandPayeeComplete,
   isOrganizationBandOnboardingComplete,
   payeeFieldsFromProfile,
@@ -61,6 +59,7 @@ const statusValue = v.union(
   v.literal("cancelled"),
 );
 const queueValue = v.union(
+  v.literal("upcoming"),
   v.literal("needs_onboarding"),
   v.literal("needs_payee"),
   v.literal("needs_email"),
@@ -350,6 +349,7 @@ async function buildBandPaymentRow(
 }
 
 type QueueFilter =
+  | "upcoming"
   | "needs_onboarding"
   | "needs_payee"
   | "needs_email"
@@ -360,6 +360,8 @@ type QueueFilter =
 
 function statusesForQueue(queue: QueueFilter): BandPaymentStatus[] {
   switch (queue) {
+    case "upcoming":
+      return ["draft"];
     case "needs_onboarding":
       return ["pending_onboarding"];
     case "needs_payee":
@@ -431,45 +433,6 @@ export const listBandMemberEmails = internalQuery({
   },
 });
 
-export const getSettings = query({
-  args: {},
-  returns: v.object({
-    photoAlbumUrl: v.string(),
-  }),
-  handler: async (ctx) => {
-    await requireArborInternalContext(ctx);
-    return await getBandPaymentSettings(ctx);
-  },
-});
-
-export const updateSettings = mutation({
-  args: {
-    photoAlbumUrl: v.optional(v.string()),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    await requireArborInternalContext(ctx);
-    const now = Date.now();
-    const existing = await ctx.db
-      .query("bandPaymentSettings")
-      .withIndex("by_key", (q) => q.eq("key", BAND_PAYMENT_SETTINGS_KEY))
-      .unique();
-    if (existing) {
-      await ctx.db.patch(existing._id, {
-        photoAlbumUrl: args.photoAlbumUrl?.trim() || undefined,
-        updatedAt: now,
-      });
-      return null;
-    }
-    await ctx.db.insert("bandPaymentSettings", {
-      key: BAND_PAYMENT_SETTINGS_KEY,
-      photoAlbumUrl: args.photoAlbumUrl?.trim() || undefined,
-      updatedAt: now,
-    });
-    return null;
-  },
-});
-
 export const listByEvent = query({
   args: { eventId: v.id("events") },
   returns: v.array(bandPaymentRowValidator),
@@ -520,6 +483,7 @@ export const getBandPayeeForOrganization = query({
 export const getQueueCounts = query({
   args: {},
   returns: v.object({
+    upcoming: v.number(),
     needs_onboarding: v.number(),
     needs_payee: v.number(),
     needs_email: v.number(),
@@ -530,6 +494,7 @@ export const getQueueCounts = query({
   handler: async (ctx) => {
     await requireArborInternalContext(ctx);
     const counts = {
+      upcoming: 0,
       needs_onboarding: 0,
       needs_payee: 0,
       needs_email: 0,
@@ -538,6 +503,7 @@ export const getQueueCounts = query({
       paid: 0,
     };
     const statusKeys: Array<[BandPaymentStatus, keyof typeof counts]> = [
+      ["draft", "upcoming"],
       ["pending_onboarding", "needs_onboarding"],
       ["pending_payee", "needs_payee"],
       ["pending_email", "needs_email"],
@@ -611,7 +577,6 @@ async function upsertEventBandPayment(
   });
 
   const now = Date.now();
-  const settings = await getBandPaymentSettings(ctx);
 
   let existing: Doc<"eventBandPayments"> | null = null;
   if (args.paymentId) {
@@ -677,7 +642,7 @@ async function upsertEventBandPayment(
     designatedPayeeMailingAddress: payeeSnapshot.designatedPayeeMailingAddress,
     designatedPayeePayoutMethod: payeeSnapshot.designatedPayeePayoutMethod,
     status: nextStatus,
-    photoAlbumUrl: args.photoAlbumUrl?.trim() || settings.photoAlbumUrl || undefined,
+    photoAlbumUrl: args.photoAlbumUrl?.trim() || undefined,
     updatedAt: now,
   };
 
@@ -766,6 +731,11 @@ export const listByQueue = query({
       rows.push(await buildBandPaymentRow(ctx, payment, event, nowMs));
     }
     return rows.sort((a, b) => {
+      // Upcoming: soonest events first; other queues: most recent first.
+      if (args.queue === "upcoming") {
+        if (a.eventStartAt !== b.eventStartAt) return a.eventStartAt - b.eventStartAt;
+        return a.bandName.localeCompare(b.bandName);
+      }
       if (a.eventStartAt !== b.eventStartAt) return b.eventStartAt - a.eventStartAt;
       return a.bandName.localeCompare(b.bandName);
     });

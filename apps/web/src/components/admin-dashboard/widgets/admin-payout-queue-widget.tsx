@@ -43,6 +43,7 @@ export function AdminPayoutQueueWidget() {
         ) : (
           <>
             <div className="grid gap-2 sm:grid-cols-2">
+              <QueueStat label="Upcoming" value={counts.upcoming} />
               <QueueStat label="Pending onboarding" value={counts.needs_onboarding} />
               <QueueStat label="Needs payee" value={counts.needs_payee} />
               <QueueStat label="Needs signature request" value={counts.needs_email} />

@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { UserRatesAdminClient } from "@/components/users/user-rates-admin-client";
+import { OnboardingIncompleteStepsList } from "@/components/bands/onboarding-incomplete-steps";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { useAppDialog } from "@/components/ui/app-dialog";
@@ -276,6 +277,11 @@ export function UsersManagementClient({
           sortFn: "basic",
         }),
         bandOrgColumnHelper.display({
+          id: "onboarding",
+          enableSorting: false,
+          header: "Onboarding",
+        }),
+        bandOrgColumnHelper.display({
           id: "options",
           enableSorting: false,
           header: "Options",
@@ -515,7 +521,7 @@ export function UsersManagementClient({
             <div className="space-y-1">
               <CardTitle>Artist Organizations</CardTitle>
               <p className="text-sm font-normal text-muted-foreground">
-                Quick rate and archive controls. Full profile, payee, and riders live under{" "}
+                Quick rate, archive, and onboarding status. Full profile, payee, and riders live under{" "}
                 <Link href="/dashboard/artists" className="underline">
                   Artists
                 </Link>
@@ -1371,6 +1377,17 @@ function BandOrgAdminRow({
             form.setValue("performerHourlyRateUsd", e.target.value, { shouldDirty: true })
           }
         />
+      </td>
+      <td className="px-3 py-2">
+        {org.awaitingOnboarding ? (
+          <div className="min-w-[12rem]">
+            <OnboardingIncompleteStepsList steps={org.onboardingIncompleteSteps} />
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            {org.onboardingStatus === "waived" ? "Waived" : "Complete"}
+          </p>
+        )}
       </td>
       <td className="px-3 py-2">
         <div className="flex flex-wrap items-center gap-2">

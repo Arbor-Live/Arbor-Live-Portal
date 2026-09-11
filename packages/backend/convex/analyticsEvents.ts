@@ -31,6 +31,7 @@ const horizonSliceValidator = v.object({
   byStatus: v.array(countBucketValidator),
   byEventType: v.array(countBucketValidator),
   bookedRevenueUsd: v.number(),
+  upcomingArtistPayoutsUsd: v.number(),
   missingInvoiceCount: v.number(),
   unconfirmedCrewedCount: v.number(),
   missingLeadCount: v.number(),
@@ -42,6 +43,7 @@ type HorizonSlice = {
   byStatus: Array<{ key: string; count: number }>;
   byEventType: Array<{ key: string; count: number }>;
   bookedRevenueUsd: number;
+  upcomingArtistPayoutsUsd: number;
   missingInvoiceCount: number;
   unconfirmedCrewedCount: number;
   missingLeadCount: number;
@@ -54,6 +56,7 @@ type EventEnrichment = {
   eventType: string;
   isBookedRevenue: boolean;
   bookedUsd: number;
+  artistPayoutsUsd: number;
   missingInvoice: boolean;
   unconfirmedCrewed: boolean;
   missingLead: boolean;
@@ -94,6 +97,7 @@ function buildSlice(rows: EventEnrichment[]): HorizonSlice {
   const byStatus = emptyStatusCounts();
   const byEventType = new Map<string, number>();
   let bookedRevenueUsd = 0;
+  let upcomingArtistPayoutsUsd = 0;
   let missingInvoiceCount = 0;
   let unconfirmedCrewedCount = 0;
   let missingLeadCount = 0;
@@ -103,6 +107,7 @@ function buildSlice(rows: EventEnrichment[]): HorizonSlice {
     byStatus.set(row.status, (byStatus.get(row.status) ?? 0) + 1);
     byEventType.set(row.eventType, (byEventType.get(row.eventType) ?? 0) + 1);
     if (row.isBookedRevenue) bookedRevenueUsd += row.bookedUsd;
+    upcomingArtistPayoutsUsd += row.artistPayoutsUsd;
     if (row.missingInvoice) missingInvoiceCount += 1;
     if (row.unconfirmedCrewed) unconfirmedCrewedCount += 1;
     if (row.missingLead) missingLeadCount += 1;
@@ -117,6 +122,7 @@ function buildSlice(rows: EventEnrichment[]): HorizonSlice {
     })),
     byEventType: toSortedTypeBuckets(byEventType),
     bookedRevenueUsd,
+    upcomingArtistPayoutsUsd,
     missingInvoiceCount,
     unconfirmedCrewedCount,
     missingLeadCount,
@@ -207,6 +213,7 @@ export const getUpcomingEventsInsights = query({
         eventType,
         isBookedRevenue,
         bookedUsd,
+        artistPayoutsUsd: Math.max(0, event.bandsCostUsd ?? 0),
         missingInvoice,
         unconfirmedCrewed,
         missingLead,

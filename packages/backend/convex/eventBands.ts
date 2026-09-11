@@ -12,10 +12,6 @@ import {
   isBandPayeeComplete,
   payeeFieldsFromProfile,
 } from "./lib/bandPayments";
-import {
-  bandOnboardingIncompleteSteps,
-  bandOnboardingIncompleteStepValidator,
-} from "./lib/bandOnboardingSteps";
 import { scheduleBandAssignedEmails } from "./email/bandAssignmentEmails";
 
 const participationRoleValue = v.union(
@@ -202,7 +198,6 @@ export const listPerformersForEvent = query({
         v.null(),
       ),
       awaitingOnboarding: v.boolean(),
-      onboardingIncompleteSteps: v.array(bandOnboardingIncompleteStepValidator),
     }),
   ),
   handler: async (ctx, args) => {
@@ -244,9 +239,6 @@ export const listPerformersForEvent = query({
       const onboardingStatus = onboarding?.status ?? null;
       const awaitingOnboarding =
         onboardingStatus !== "completed" && onboardingStatus !== "waived";
-      const onboardingIncompleteSteps = awaitingOnboarding
-        ? bandOnboardingIncompleteSteps(onboarding)
-        : [];
       result.push({
         participationId: row._id,
         organizationId: row.organizationId,
@@ -254,7 +246,6 @@ export const listPerformersForEvent = query({
         role: row.role,
         onboardingStatus,
         awaitingOnboarding,
-        onboardingIncompleteSteps,
         payment: payment
           ? {
               _id: payment._id,

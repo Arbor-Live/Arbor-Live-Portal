@@ -9,7 +9,6 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ArtistSelect, artistSelectOptions } from "@/components/bands/artist-select";
-import { OnboardingIncompleteStepsList } from "@/components/bands/onboarding-incomplete-steps";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { notify } from "@/lib/notify";
@@ -352,10 +351,6 @@ function EventBandsPerformersPanel({ eventId }: { eventId: Id<"events"> }) {
                   </div>
                 </div>
 
-                {performer.awaitingOnboarding ? (
-                  <OnboardingIncompleteStepsList steps={performer.onboardingIncompleteSteps} />
-                ) : null}
-
                 {editingPaymentForOrg === performer.organizationId ? (
                   <EventBandPaymentForm
                     key={`${performer.organizationId}-payment`}
@@ -366,9 +361,6 @@ function EventBandsPerformersPanel({ eventId }: { eventId: Id<"events"> }) {
                     organizationLocked
                     excludedOrganizationIds={[]}
                     invoiceLine={invoiceArtistByOrg.get(performer.organizationId) ?? null}
-                    onboardingIncompleteSteps={
-                      performer.awaitingOnboarding ? performer.onboardingIncompleteSteps : []
-                    }
                     onSaved={() => setEditingPaymentForOrg(null)}
                     onCancel={() => setEditingPaymentForOrg(null)}
                   />
@@ -711,7 +703,6 @@ function EventBandPaymentForm({
   organizationLocked,
   excludedOrganizationIds,
   invoiceLine = null,
-  onboardingIncompleteSteps = [],
   onSaved,
   onCancel,
 }: {
@@ -722,7 +713,6 @@ function EventBandPaymentForm({
   organizationLocked?: boolean;
   excludedOrganizationIds: string[];
   invoiceLine?: InvoiceArtistSuggestion | null;
-  onboardingIncompleteSteps?: Array<{ id: string; label: string }>;
   onSaved: () => void;
   onCancel: () => void;
 }) {
@@ -865,12 +855,9 @@ function EventBandPaymentForm({
             </p>
           ) : null}
           {payment.status === "pending_onboarding" ? (
-            <div className="space-y-2">
-              <p className="text-amber-700 dark:text-amber-300">
-                Waiting for the artist to finish onboarding before payout can proceed.
-              </p>
-              <OnboardingIncompleteStepsList steps={onboardingIncompleteSteps} />
-            </div>
+            <p className="text-amber-700 dark:text-amber-300">
+              Waiting for the artist to finish onboarding before payout can proceed.
+            </p>
           ) : null}
           {payment.status === "pending_payee" && !payeeComplete ? (
             <p className="text-amber-700 dark:text-amber-300">
@@ -1019,7 +1006,7 @@ function EventBandPaymentForm({
         </div>
 
         <div className="space-y-1 md:col-span-2">
-          <Label>Photo album URL (optional override)</Label>
+          <Label>Photo album URL (optional)</Label>
           <Input
             value={photoAlbumUrl}
             onChange={(e) => setPhotoAlbumUrl(e.target.value)}

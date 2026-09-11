@@ -26,6 +26,10 @@ import {
   resolveBandPublicSlug,
 } from "./lib/publicSlug";
 import { isBandPayeeComplete } from "./lib/bandPayments";
+import {
+  bandOnboardingIncompleteSteps,
+  type BandOnboardingIncompleteStep,
+} from "./lib/bandOnboardingSteps";
 import { normalizeOptionalAssetReference } from "./lib/inventoryUpload";
 import {
   collectKeysFromOrganizationProfile,
@@ -508,11 +512,24 @@ export const listBandOrganizationsAdmin = query({
     const organizations = await getAllOrganizations(ctx);
     const profiles = await ctx.db.query("organizationProfiles").withIndex("by_organizationType").take(1000);
     const profileByOrgId = new Map(profiles.map((profile) => [profile.organizationId, profile]));
+    // Bounded catalog scan — artist org count stays well under this; if it grows,
+    // switch to per-org indexed lookups or a denormalized onboarding status field.
+    const onboardingRows = await ctx.db.query("organizationOnboarding").take(2000);
+    const onboardingByOrgId = new Map(
+      onboardingRows.map((row) => [row.organizationId, row] as const),
+    );
     return organizations
       .map((organization) => {
         const organizationId = getRecordId(organization);
         const profile = profileByOrgId.get(organizationId);
         const inferredType = resolveOrganizationType(organization, profile);
+        const onboarding = onboardingByOrgId.get(organizationId);
+        const onboardingStatus = onboarding?.status ?? null;
+        const awaitingOnboarding =
+          onboardingStatus !== "completed" && onboardingStatus !== "waived";
+        const onboardingIncompleteSteps: BandOnboardingIncompleteStep[] = awaitingOnboarding
+          ? bandOnboardingIncompleteSteps(onboarding)
+          : [];
         return {
           organizationId,
           name: organization.name ?? "Organization",
@@ -538,6 +555,9 @@ export const listBandOrganizationsAdmin = query({
           publicListing: profile?.publicListing ?? false,
           publicSlug: profile?.publicSlug ?? "",
           publicHeroImageUrl: profile?.publicHeroImageUrl ?? "",
+          onboardingStatus,
+          awaitingOnboarding,
+          onboardingIncompleteSteps,
           ...serializeBandListingProfileFields(profile),
         };
       })
