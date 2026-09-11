@@ -50,7 +50,7 @@ export function RiderTemplatePicker({
         ...(organizationId ? { organizationId } : {}),
       });
       onOpenChange(false);
-      router.push(`/dashboard/bands-and-performers/riders/${riderId}`);
+      router.push(`/dashboard/artists/riders/${riderId}`);
     } catch (err) {
       setError(getConvexErrorMessage(err));
       setBusy(false);

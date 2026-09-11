@@ -11,7 +11,7 @@ import { runConvex } from "../helpers/convex";
 const adminRoutes = [
   { path: "/dashboard/users", label: "users" },
   { path: "/dashboard/users/crew-applications", label: "crew applications" },
-  { path: "/dashboard/users/band-applications", label: "band applications" },
+  { path: "/dashboard/users/artist-applications", label: "band applications" },
   { path: "/dashboard/financial-hub", label: "financial hub" },
   { path: "/dashboard/financial-hub/insights", label: "insights" },
   { path: "/dashboard/events/crew-scheduling", label: "crew scheduling" },
@@ -69,7 +69,7 @@ test.describe("admin route guards", () => {
   });
 
   test("non-admin crew is refused on bands and performers", async ({ page }) => {
-    await page.goto("/dashboard/bands-and-performers");
+    await page.goto("/dashboard/artists");
     await expect(page.getByText("Admin access required").first()).toBeVisible({
       timeout: 30_000,
     });

@@ -106,7 +106,7 @@ function EventBandRidersPanel({ eventId }: { eventId: Id<"events"> }) {
                 {row.rider ? (
                   <div className="flex flex-wrap gap-2">
                     <Button type="button" size="sm" asChild>
-                      <Link href={`/dashboard/bands-and-performers/riders/${row.rider._id}`}>
+                      <Link href={`/dashboard/artists/riders/${row.rider._id}`}>
                         Open rider
                       </Link>
                     </Button>

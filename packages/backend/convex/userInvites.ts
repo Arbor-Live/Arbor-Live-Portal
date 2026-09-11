@@ -173,7 +173,7 @@ export const getInviteByToken = query({
     const organizationType = orgProfile?.organizationType ?? "arbor_internal";
     const onboardingPath =
       organizationType === "band" || organizationType === "dj"
-        ? "/onboarding/band"
+        ? "/onboarding/artist"
         : resolveParticipationFlags(resolved.pending).requiresOnboarding
           ? "/onboarding"
           : "/dashboard";
@@ -316,7 +316,7 @@ export const acceptInviteWithPassword = mutation({
 
     const onboardingPath =
       orgType === "band" || orgType === "dj"
-        ? "/onboarding/band"
+        ? "/onboarding/artist"
         : resolveParticipationFlags(pending).requiresOnboarding
           ? "/onboarding"
           : "/dashboard";

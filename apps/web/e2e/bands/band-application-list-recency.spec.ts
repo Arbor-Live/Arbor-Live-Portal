@@ -22,7 +22,7 @@ test.describe("band application list recency", () => {
     const target = newestLabel(stamp, APPLICATION_COUNT);
 
     // The page defaults to the "submitted" filter — the branch under test.
-    await page.goto("/dashboard/users/band-applications");
+    await page.goto("/dashboard/users/artist-applications");
     await expect(page.getByText(target).first()).toBeVisible({ timeout: 40_000 });
   });
 });

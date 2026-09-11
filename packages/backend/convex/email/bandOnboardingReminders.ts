@@ -102,7 +102,7 @@ async function enqueueBandOnboardingRemindersForOrg(
     event.endAt,
     event.timezone || EVENT_TIMEZONE,
   );
-  const bandOnboardingUrl = onboardingUrl("/onboarding/band");
+  const bandOnboardingUrl = onboardingUrl("/onboarding/artist");
   const dayKey = new Date(args.nowMs).toISOString().slice(0, 10);
   let enqueuedCount = 0;
 

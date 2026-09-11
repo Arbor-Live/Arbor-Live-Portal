@@ -17,7 +17,7 @@ const DEV_PREVIEW = "devPreview=1";
 const LINKS = [
   { href: `/setup?${DEV_PREVIEW}`, label: "First-admin setup" },
   { href: `/onboarding?${DEV_PREVIEW}`, label: "Crew onboarding" },
-  { href: `/onboarding/band?${DEV_PREVIEW}`, label: "Artist onboarding" },
+  { href: `/onboarding/artist?${DEV_PREVIEW}`, label: "Artist onboarding" },
 ] as const;
 
 /**

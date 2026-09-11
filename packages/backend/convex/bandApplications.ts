@@ -367,7 +367,7 @@ export const approve = mutation({
       updatedAt: now,
     });
 
-    const acceptInviteUrl = `${SITE_URL}/sign-in?email=${encodeURIComponent(application.contactEmail)}&redirect=${encodeURIComponent("/onboarding/band")}`;
+    const acceptInviteUrl = `${SITE_URL}/sign-in?email=${encodeURIComponent(application.contactEmail)}&redirect=${encodeURIComponent("/onboarding/artist")}`;
 
     await enqueueEmail(ctx, {
       template: "band_application_approved",

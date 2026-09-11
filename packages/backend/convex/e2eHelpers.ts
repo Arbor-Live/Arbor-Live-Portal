@@ -2754,8 +2754,8 @@ export const seedBandPaymentForEsign = mutation({
       confirmationToken,
       status,
       eventTitle,
-      adminPath: "/dashboard/financial-hub/band-payouts",
-      bandPath: "/dashboard/bands-and-performers/payments",
+      adminPath: "/dashboard/financial-hub/artist-payouts",
+      bandPath: "/dashboard/artists/payments",
     };
   },
 });
@@ -3312,7 +3312,7 @@ export const getCrewOnboardingState = query({
 
 /**
  * Test-only: put a band org's onboarding back to not_started and clear the
- * profile fields the wizard fills, so `/onboarding/band` runs from the top.
+ * profile fields the wizard fills, so `/onboarding/artist` runs from the top.
  */
 export const resetBandOnboarding = mutation({
   args: { organizationId: v.string() },

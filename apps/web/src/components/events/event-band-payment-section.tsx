@@ -803,7 +803,7 @@ function EventBandPaymentForm({
                   method. Confirmation emails cannot be sent until payee info is on file.
                 </p>
                 <Button asChild size="sm" variant="outline" className="mt-2">
-                  <Link href="/dashboard/bands-and-performers/payments#payee">
+                  <Link href="/dashboard/artists/payments#payee">
                     Open artist payee settings
                   </Link>
                 </Button>

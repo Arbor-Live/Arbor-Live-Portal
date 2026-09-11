@@ -247,7 +247,7 @@ export function RiderEditorClient({ riderId }: { riderId: Id<"bandRiders"> }) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <Button type="button" variant="ghost" size="sm" asChild>
-          <Link href="/dashboard/bands-and-performers/riders">
+          <Link href="/dashboard/artists/riders">
             <ArrowLeftIcon className="size-4" />
             All riders
           </Link>

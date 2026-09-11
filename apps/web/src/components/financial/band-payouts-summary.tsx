@@ -42,7 +42,7 @@ export function BandPayoutsSummary() {
         {pendingTotal} pending payout{pendingTotal === 1 ? "" : "s"} · {counts.paid} paid
       </p>
       <Button asChild variant="outline" size="sm">
-        <Link href="/dashboard/financial-hub/band-payouts">Open artist payouts</Link>
+        <Link href="/dashboard/financial-hub/artist-payouts">Open artist payouts</Link>
       </Button>
     </div>
   );

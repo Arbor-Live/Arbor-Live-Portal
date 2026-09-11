@@ -8,7 +8,7 @@ const links = [
   { href: "/dashboard/events", label: "Events" },
   { href: "/dashboard/financial-hub", label: "Ops Center" },
   { href: "/dashboard/users", label: "Users" },
-  { href: "/dashboard/bands-and-performers", label: "Artists" },
+  { href: "/dashboard/artists", label: "Artists" },
   { href: "/dashboard/inventory", label: "Inventory" },
 ];
 

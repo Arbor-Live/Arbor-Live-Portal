@@ -102,12 +102,12 @@ export function signInUrl(email?: string, callbackPath?: string) {
   return qs ? `${SITE_URL}/sign-in?${qs}` : `${SITE_URL}/sign-in`;
 }
 
-export function onboardingUrl(path: "/onboarding" | "/onboarding/band" = "/onboarding") {
+export function onboardingUrl(path: "/onboarding" | "/onboarding/artist" = "/onboarding") {
   return `${SITE_URL}${path}`;
 }
 
 export function bandApplicationsAdminUrl() {
-  return `${SITE_URL}/dashboard/users/band-applications`;
+  return `${SITE_URL}/dashboard/users/artist-applications`;
 }
 
 export function crewApplicationsAdminUrl() {
@@ -136,11 +136,11 @@ export function bandDashboardUrl() {
 }
 
 export function bandPaymentHistoryUrl() {
-  return `${SITE_URL}/dashboard/bands-and-performers/payments`;
+  return `${SITE_URL}/dashboard/artists/payments`;
 }
 
 export function bandPayeeSettingsUrl() {
-  return `${SITE_URL}/dashboard/bands-and-performers/payments#payee`;
+  return `${SITE_URL}/dashboard/artists/payments#payee`;
 }
 
 export function subjectForTemplate(template: EmailTemplate, context: string) {

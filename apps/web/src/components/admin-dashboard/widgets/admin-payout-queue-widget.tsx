@@ -34,7 +34,7 @@ export function AdminPayoutQueueWidget() {
           Artist payout queue
         </CardTitle>
         <Button variant="outline" size="sm" asChild>
-          <Link href="/dashboard/financial-hub/band-payouts">Payouts</Link>
+          <Link href="/dashboard/financial-hub/artist-payouts">Payouts</Link>
         </Button>
       </CardHeader>
       <CardContent className="space-y-3">

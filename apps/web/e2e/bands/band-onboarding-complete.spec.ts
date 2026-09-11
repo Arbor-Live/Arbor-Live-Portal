@@ -36,7 +36,7 @@ test.describe("band onboarding wizard", () => {
 
     await signInWithCredentials(page, onboardingBandEmail, e2eEnv.bandPassword);
 
-    await page.goto("/onboarding/band");
+    await page.goto("/onboarding/artist");
     await expect(page.getByText("Welcome to Arbor Live").first()).toBeVisible({
       timeout: 30_000,
     });

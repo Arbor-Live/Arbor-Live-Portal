@@ -144,7 +144,7 @@ export async function scheduleUserInviteEmail(
     .unique();
   const onboardingPath =
     orgProfile?.organizationType === "band" || orgProfile?.organizationType === "dj"
-      ? "/onboarding/band"
+      ? "/onboarding/artist"
       : args.requiresOnboarding === false
         ? "/dashboard"
         : "/onboarding";
