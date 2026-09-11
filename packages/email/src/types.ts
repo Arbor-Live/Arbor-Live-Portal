@@ -173,6 +173,15 @@ export type BandEventOnboardingInviteEmailProps = {
   portalUrl: string;
 };
 
+export type BandOnboardingReminderEmailProps = {
+  recipientName?: string;
+  bandName: string;
+  eventTitle: string;
+  venueName?: string;
+  dateRangeLabel: string;
+  onboardingUrl: string;
+};
+
 export type BandPaymentConfirmationEmailProps = {
   recipientName?: string;
   eventTitle: string;

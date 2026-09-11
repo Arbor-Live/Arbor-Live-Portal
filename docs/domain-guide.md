@@ -24,7 +24,9 @@ canonical description of the domain itself.
   (`userInvites.ts`, accept-invite → `/onboarding` or `/onboarding/band`).
 - Crew onboarding progress lives in `userOnboarding`; band org setup in
   `organizationOnboarding`. Incomplete crew get a dashboard banner and weekly
-  reminder email; admins see status under Users and can waive.
+  reminder email; assigned bands that have not finished onboarding get a weekly
+  reminder that payouts are blocked until they complete it. Admins see status
+  under Users and can waive.
 - Arbor Live crew invites (and convert-to-member) require a **compensation rate
   mode** (`normal` / `lead` / `custom`) and a **payroll method**
   (`stanford` / `external`). Normal/Lead resolve live from
@@ -138,9 +140,9 @@ Event types (drive which editor tabs and quick-add blocks appear):
   their own budgeting and pull lists.
 - Band participation in events is tracked in `eventBandParticipations`
   (headliner/support/other). That row is the canonical **assignment**: staff
-  manage it from the event overview **Bands & Performers** section (not Media).
-  Assigning a band emails members (`band_assigned`), unlocks event media album
-  access, and surfaces the show on the band home dashboard. Optional
+  manage it from the event overview **Artists** section (not Media).
+  Assigning an artist emails members (`band_assigned`), unlocks event media album
+  access, and surfaces the show on the artist home dashboard. Optional
   `eventBandPayments` attach payout details to the same assignment.
 
 ## Booking requests → events → quotes
@@ -176,9 +178,9 @@ Event types (drive which editor tabs and quick-add blocks appear):
   per host organization (`invoiceGroups`). Host orgs support aliases and admin
   merge so duplicate names resolve to one canonical record; booking can search
   existing hosts or create from free text.
-- Artist lines pick a band/DJ (or **Band TBD**) and pull
+- Artist lines pick an artist/DJ (or **Artist TBD**) and pull
   `performerHourlyRateUsd` and member count (`bandMembers.length`) from the org
-  profile when a band is selected. Linked events auto-fill artist rows from
+  profile when an artist is selected. Linked events auto-fill artist rows from
   assigned performers / payout totals when the invoice has no artist lines yet.
   Artist and external-rental amounts are pass-through (excluded from Insights
   earned revenue and from net-profit margin).
@@ -199,17 +201,25 @@ Event types (drive which editor tabs and quick-add blocks appear):
   same overview row.
 - Each band org has a designated payee (name/email/mailing address + linked
   user id on `organizationProfiles`).
+- After an event ends, payments enter the payout queue. If the artist has not
+  finished (or waived) org onboarding, the payment lands in **Pending
+  onboarding**; once onboarded it moves to needs-payee or needs-signature
+  request based on payee completeness. Completing/waiving artist onboarding
+  refreshes stuck payments immediately.
+- Assigned artists with incomplete onboarding get a weekly reminder email
+  (same Monday onboarding cron as crew, ~6-day cooldown) until onboarding is
+  done — staff can also resend from the payout queue.
 - Confirmation loop: admin sends a signature-request email from the payout
-  queue; the designated payee e-signs under **Bands and Performers → Payments**
-  or from the band home show card (typed legal name + amount checkbox). Admin
-  then marks paid with a GrantEd transfer / Service Payment number; all band
+  queue; the designated payee e-signs under **Artists → Payments**
+  or from the artist home show card (typed legal name + amount checkbox). Admin
+  then marks paid with a GrantEd transfer / Service Payment number; all artist
   members are notified that Stanford is processing the payout. The Payments
   subtab shows a pending chip when the payee needs to sign or payee setup is
   incomplete.
-- Band home (`/dashboard`) lists upcoming and recent assigned shows with payout
+- Artist home (`/dashboard`) lists upcoming and recent assigned shows with payout
   status chips (including draft payments and participation-only bookings). Full
   payment history and payee settings remain under Payments.
-- Once signed, admins and band members can download an agreement PDF
+- Once signed, admins and artist members can download an agreement PDF
   (`bandPaymentPdfDownload.ts` via `@arbor/invoice-document`) showing the
   Arbor sender and the payee signature.
 - A daily cron promotes payments for ended events into the payable queue.

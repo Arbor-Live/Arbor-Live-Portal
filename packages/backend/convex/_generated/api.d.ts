@@ -38,6 +38,7 @@ import type * as e2eHelpers from "../e2eHelpers.js";
 import type * as email_authEmails from "../email/authEmails.js";
 import type * as email_bandAssignmentEmails from "../email/bandAssignmentEmails.js";
 import type * as email_bandEventInviteEmails from "../email/bandEventInviteEmails.js";
+import type * as email_bandOnboardingReminders from "../email/bandOnboardingReminders.js";
 import type * as email_bandPaymentEmails from "../email/bandPaymentEmails.js";
 import type * as email_bookingRequestEmails from "../email/bookingRequestEmails.js";
 import type * as email_constants from "../email/constants.js";
@@ -229,6 +230,7 @@ declare const fullApi: ApiFromModules<{
   "email/authEmails": typeof email_authEmails;
   "email/bandAssignmentEmails": typeof email_bandAssignmentEmails;
   "email/bandEventInviteEmails": typeof email_bandEventInviteEmails;
+  "email/bandOnboardingReminders": typeof email_bandOnboardingReminders;
   "email/bandPaymentEmails": typeof email_bandPaymentEmails;
   "email/bookingRequestEmails": typeof email_bookingRequestEmails;
   "email/constants": typeof email_constants;

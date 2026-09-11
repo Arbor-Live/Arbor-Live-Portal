@@ -16,6 +16,7 @@ import { formatBandPayeePayoutMethod } from "@/lib/band-payout-copy";
 
 type BandPaymentQueue =
   | "all_pending"
+  | "needs_onboarding"
   | "needs_payee"
   | "needs_email"
   | "awaiting_reply"
@@ -24,6 +25,7 @@ type BandPaymentQueue =
 
 const QUEUE_LABELS: Record<BandPaymentQueue, string> = {
   all_pending: "All pending",
+  needs_onboarding: "Pending onboarding",
   needs_payee: "Needs payee info",
   needs_email: "Needs signature request",
   awaiting_reply: "Awaiting signature",
@@ -38,6 +40,7 @@ export function FinancialHubBandPayoutsClient() {
   const settings = useQuery(api.bandPayments.getSettings, {});
   const sendConfirmation = useMutation(api.bandPayments.sendConfirmationEmail);
   const sendPayeeRequired = useMutation(api.bandPayments.sendPayeeRequiredEmail);
+  const sendOnboardingReminder = useMutation(api.bandPayments.sendOnboardingReminder);
   const syncStalePayeePayments = useMutation(api.bandPayments.syncStalePayeePayments);
   const markPaid = useMutation(api.bandPayments.markPaid);
   const cancelPayment = useMutation(api.bandPayments.cancelPayment);
@@ -83,6 +86,19 @@ export function FinancialHubBandPayoutsClient() {
     }
   }
 
+  async function onSendOnboardingReminder(paymentId: Id<"eventBandPayments">) {
+    setBusyPaymentId(paymentId);
+    setActionError(null);
+    try {
+      await sendOnboardingReminder({ paymentId });
+      notify.success("Onboarding reminder sent.");
+    } catch (error) {
+      setActionError(getConvexErrorMessage(error));
+    } finally {
+      setBusyPaymentId(null);
+    }
+  }
+
   async function onMarkPaid() {
     if (!payTarget || !servicePaymentNumber.trim()) return;
     setBusyPaymentId(payTarget);
@@ -114,6 +130,7 @@ export function FinancialHubBandPayoutsClient() {
     if (!queueCounts) return null;
     if (key === "all_pending") {
       return (
+        queueCounts.needs_onboarding +
         queueCounts.needs_payee +
         queueCounts.needs_email +
         queueCounts.awaiting_reply +
@@ -127,7 +144,7 @@ export function FinancialHubBandPayoutsClient() {
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Band payment defaults</CardTitle>
+          <CardTitle className="text-base">Artist payment defaults</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-3">
           <div className="space-y-1">
@@ -171,10 +188,10 @@ export function FinancialHubBandPayoutsClient() {
       </div>
 
       {rows === undefined ? (
-        <p className="text-sm text-muted-foreground">Loading band payouts…</p>
+        <p className="text-sm text-muted-foreground">Loading artist payouts…</p>
       ) : rows.length === 0 ? (
         <Card>
-          <CardContent className="py-8 text-sm text-muted-foreground">No band payments in this queue.</CardContent>
+          <CardContent className="py-8 text-sm text-muted-foreground">No artist payments in this queue.</CardContent>
         </Card>
       ) : (
         <div className="space-y-3">
@@ -246,6 +263,16 @@ export function FinancialHubBandPayoutsClient() {
                   <Button asChild size="sm" variant="outline">
                     <Link href={`/dashboard/events/${row.eventId}`}>Open event</Link>
                   </Button>
+                  {row.status === "pending_onboarding" ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={busyPaymentId === row._id}
+                      onClick={() => void onSendOnboardingReminder(row._id)}
+                    >
+                      Send onboarding reminder
+                    </Button>
+                  ) : null}
                   {row.status === "pending_payee" ? (
                     <Button
                       type="button"
@@ -278,7 +305,9 @@ export function FinancialHubBandPayoutsClient() {
                       </Button>
                     </>
                   ) : null}
-                  {!row.payeeComplete && row.status !== "pending_payee" ? (
+                  {!row.payeeComplete &&
+                  row.status !== "pending_payee" &&
+                  row.status !== "pending_onboarding" ? (
                     <p className="self-center text-xs text-muted-foreground">
                       Payee info incomplete — signature request blocked.
                     </p>
@@ -348,11 +377,11 @@ export function FinancialHubBandPayoutsClient() {
             onClick={(event) => event.stopPropagation()}
           >
             <h2 id="mark-paid-title" className="text-base font-semibold">
-              Mark band payment paid
+              Mark artist payment paid
             </h2>
             <p className="text-sm text-muted-foreground">
-              Enter the GrantEd transfer / Service Payment number after submitting evidence. Band
-              members will be notified that Stanford is processing the payment.
+              Enter the GrantEd transfer / Service Payment number after submitting evidence. Members
+              will be notified that Stanford is processing the payment.
             </p>
             <div className="space-y-1">
               <Label>Transfer / Service Payment number</Label>

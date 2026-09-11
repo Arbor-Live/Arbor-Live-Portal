@@ -27,6 +27,7 @@ const bandPricingModeValue = v.union(
 
 const paymentStatusValue = v.union(
   v.literal("draft"),
+  v.literal("pending_onboarding"),
   v.literal("pending_payee"),
   v.literal("pending_email"),
   v.literal("awaiting_confirmation"),
@@ -68,6 +69,7 @@ function paymentChipLabel(args: {
   hasPayment: boolean;
   status?:
     | "draft"
+    | "pending_onboarding"
     | "pending_payee"
     | "pending_email"
     | "awaiting_confirmation"
@@ -79,6 +81,8 @@ function paymentChipLabel(args: {
   switch (args.status) {
     case "draft":
       return "Confirmed";
+    case "pending_onboarding":
+      return "Pending onboarding";
     case "pending_payee":
     case "pending_email":
     case "confirmed":
@@ -526,7 +530,7 @@ export const updateParticipationRole = mutation({
         q.eq("eventId", args.eventId).eq("organizationId", args.organizationId),
       )
       .unique();
-    if (!existing) throw new Error("Band is not linked to this event.");
+    if (!existing) throw new Error("Artist is not linked to this event.");
     await ctx.db.patch(existing._id, { role: args.role, updatedAt: Date.now() });
     return null;
   },
@@ -558,7 +562,7 @@ export const removeParticipation = mutation({
       .unique();
     if (payment && payment.status !== "cancelled") {
       if (payment.status === "paid") {
-        throw new Error("Cannot remove a band with a paid payout.");
+        throw new Error("Cannot remove an artist with a paid payout.");
       }
       await ctx.db.patch(payment._id, {
         status: "cancelled",

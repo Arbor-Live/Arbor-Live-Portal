@@ -22,6 +22,7 @@ const FULFILLMENT_PER_EVENT_LIMIT = 10;
 const UNITS_PER_FULFILLMENT_LIMIT = 200;
 
 const PENDING_BAND_STATUSES = [
+  "pending_onboarding",
   "pending_payee",
   "pending_email",
   "awaiting_confirmation",
