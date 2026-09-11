@@ -191,7 +191,7 @@ Event types (drive which editor tabs and quick-add blocks appear):
 - **Payment proof**: after approval, payers submit payment evidence
   (`paymentProof*.ts`); staff verify, and cron-driven reminder emails nag
   outstanding payers only once fewer than 30 days remain until the invoice due
-  date (approval-day first reminder + Monday follow-ups).
+  date (approval-day first reminder + Monday follow-ups via `weeklyJobs`).
 
 ## Band payments
 
@@ -207,8 +207,9 @@ Event types (drive which editor tabs and quick-add blocks appear):
   request based on payee completeness. Completing/waiving artist onboarding
   refreshes stuck payments immediately.
 - Assigned artists with incomplete onboarding get a weekly reminder email
-  (same Monday `weekly jobs` cron as crew, ~6-day cooldown) until onboarding is
-  done — staff can also resend from the payout queue.
+  (same Monday `weeklyJobs` cron as crew / payment-proof follow-ups, ~6-day
+  cooldown) until onboarding is done — staff can also resend from the payout
+  queue.
 - Confirmation loop: admin sends a signature-request email from the payout
   queue; the designated payee e-signs under **Artists → Payments**
   or from the artist home show card (typed legal name + amount checkbox). Admin

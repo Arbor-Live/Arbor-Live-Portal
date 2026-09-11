@@ -192,6 +192,7 @@ import type * as timecards from "../timecards.js";
 import type * as userInvites from "../userInvites.js";
 import type * as users from "../users.js";
 import type * as venues from "../venues.js";
+import type * as weeklyJobs from "../weeklyJobs.js";
 
 import type {
   ApiFromModules,
@@ -384,6 +385,7 @@ declare const fullApi: ApiFromModules<{
   userInvites: typeof userInvites;
   users: typeof users;
   venues: typeof venues;
+  weeklyJobs: typeof weeklyJobs;
 }>;
 
 /**
