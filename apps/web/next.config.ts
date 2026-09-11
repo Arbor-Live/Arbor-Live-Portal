@@ -1,3 +1,4 @@
+import { withSentryConfig } from "@sentry/nextjs/config";
 import { createRequire } from "node:module";
 import fs from "fs";
 import type { NextConfig } from "next";
@@ -43,6 +44,7 @@ function loadEnvDir(dir: string, files: string[]) {
 loadEnvDir(webDir, [".env", ".env.local", ".env.development", ".env.development.local"]);
 loadEnvDir(backendDir, [".env", ".env.local"]);
 loadEnvFile(path.join(webDir, ".env.production.local"));
+loadEnvFile(path.join(webDir, ".env.sentry-build-plugin"));
 
 /** Convex CLI sets CONVEX_URL during `convex deploy --cmd`; prefer it at build time. */
 const convexCloudUrl =
@@ -183,4 +185,27 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default withSentryConfig(nextConfig, {
+  // https://www.npmjs.com/package/@sentry/webpack-plugin#options
+  org: process.env.SENTRY_ORG ?? "arbor-live-5h",
+  project: process.env.SENTRY_PROJECT ?? "arbor-live-portal",
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+
+  // Only print logs for uploading source maps in CI
+  silent: !process.env.CI,
+
+  // https://docs.sentry.io/platforms/javascript/guides/nextjs/manual-setup/
+  widenClientFileUpload: true,
+
+  // Proxy browser events through Next.js to reduce ad-blocker drops.
+  tunnelRoute: "/monitoring",
+
+  webpack: {
+    // Vercel Cron Monitors (Pages Router / cron config; App Router handlers not yet).
+    automaticVercelMonitors: true,
+    treeshake: {
+      removeDebugLogging: true,
+    },
+  },
+});
+

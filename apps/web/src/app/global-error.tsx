@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import * as Sentry from "@sentry/nextjs";
 import "@/app/globals.css";
 
 const AUTH_REQUIRED_MESSAGE = "You must be signed in.";
@@ -18,11 +19,18 @@ export default function GlobalError({
   const isAuthError = error.message?.trim() === AUTH_REQUIRED_MESSAGE;
 
   useEffect(() => {
+    if (!isAuthError) {
+      Sentry.captureException(error);
+    }
+  }, [error, isAuthError]);
+
+  useEffect(() => {
     if (isAuthError) {
       const redirectUrl = window.location.pathname + window.location.search;
       router.replace(`/sign-in?redirect=${encodeURIComponent(redirectUrl)}`);
     }
   }, [isAuthError, router]);
+
 
   return (
     <html lang="en" className="h-full antialiased">

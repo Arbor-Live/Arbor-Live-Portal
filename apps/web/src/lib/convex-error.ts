@@ -1,18 +1,97 @@
+import * as Sentry from "@sentry/nextjs";
+import { ConvexError } from "convex/values";
+
+export type ConvexAppErrorData = {
+  code?: string;
+  message?: string;
+  report?: boolean;
+  function?: string;
+  causeName?: string;
+};
+
+const reportedErrors = new WeakSet<object>();
+
 /**
  * Extract a user-readable message from Convex mutation/query errors.
  * Strips Convex client wrappers like:
  * `[CONVEX M(...)] [Request ID: ...] Server Error Uncaught Error: … at handler …`
  * `  Called by client`
+ *
+ * When the payload is a reportable `ConvexError` (`data.report === true`), also
+ * sends it to Sentry once per error object.
  */
 export function getConvexErrorMessage(
   error: unknown,
   fallback = "Something went wrong. Please try again.",
 ): string {
+  reportConvexClientError(error);
+
+  const data = getConvexAppErrorData(error);
+  if (typeof data?.message === "string" && data.message.trim()) {
+    return data.message.trim();
+  }
+
   const raw = extractRawMessage(error);
   if (!raw) return fallback;
 
   const cleaned = cleanConvexServerMessage(raw);
   return cleaned || fallback;
+}
+
+export function getConvexAppErrorData(error: unknown): ConvexAppErrorData | null {
+  if (error instanceof ConvexError) {
+    return normalizeAppErrorData(error.data);
+  }
+
+  if (typeof error === "object" && error !== null && "data" in error) {
+    return normalizeAppErrorData((error as { data?: unknown }).data);
+  }
+
+  return null;
+}
+
+export function reportConvexClientError(error: unknown): void {
+  const data = getConvexAppErrorData(error);
+  if (!data?.report) return;
+
+  if (typeof error === "object" && error !== null) {
+    if (reportedErrors.has(error)) return;
+    reportedErrors.add(error);
+  }
+
+  Sentry.captureException(error instanceof Error ? error : new Error(data.message ?? "Convex error"), {
+    tags: {
+      convex_code: data.code ?? "UNEXPECTED",
+      ...(data.function ? { convex_function: data.function } : {}),
+      ...(data.causeName ? { convex_cause: data.causeName } : {}),
+    },
+    extra: {
+      convexErrorData: data,
+    },
+  });
+}
+
+function normalizeAppErrorData(value: unknown): ConvexAppErrorData | null {
+  if (typeof value === "string" && value.trim()) {
+    return { message: value.trim() };
+  }
+
+  if (typeof value !== "object" || value === null) {
+    return null;
+  }
+
+  const data = value as Record<string, unknown>;
+  const message = typeof data.message === "string" ? data.message : undefined;
+  const code = typeof data.code === "string" ? data.code : undefined;
+  if (!message && !code) return null;
+
+  return {
+    ...(code ? { code } : {}),
+    ...(message ? { message } : {}),
+    report: data.report === true,
+    ...(typeof data.function === "string" ? { function: data.function } : {}),
+    ...(typeof data.causeName === "string" ? { causeName: data.causeName } : {}),
+  };
 }
 
 function extractRawMessage(error: unknown): string | null {
@@ -21,11 +100,6 @@ function extractRawMessage(error: unknown): string | null {
   }
 
   if (typeof error === "object" && error !== null) {
-    const withData = error as { data?: { message?: unknown } };
-    if (typeof withData.data?.message === "string" && withData.data.message.trim()) {
-      return withData.data.message;
-    }
-
     const withMessage = error as { message?: unknown };
     if (typeof withMessage.message === "string" && withMessage.message.trim()) {
       return withMessage.message;

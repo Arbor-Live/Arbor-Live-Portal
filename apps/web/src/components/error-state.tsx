@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import * as Sentry from "@sentry/nextjs";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
@@ -25,6 +26,12 @@ export function ErrorState({
   const isAuthError = error.message?.trim() === AUTH_REQUIRED_MESSAGE;
 
   useEffect(() => {
+    if (!isAuthError) {
+      Sentry.captureException(error);
+    }
+  }, [error, isAuthError]);
+
+  useEffect(() => {
     if (isAuthError) {
       const redirectUrl = window.location.pathname + window.location.search;
       const signOutAndRedirect = async () => {
@@ -39,6 +46,7 @@ export function ErrorState({
       void signOutAndRedirect();
     }
   }, [isAuthError, router]);
+
 
   if (isAuthError) {
     return (
