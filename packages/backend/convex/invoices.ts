@@ -3,6 +3,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { components } from "./_generated/api";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { requireArborInternalContext, requireAuth, findAuthUsersByIds } from "./lib/auth";
+import { appError, withReportableErrors } from "./lib/errors";
 import { resolveParticipationFlags } from "./lib/userParticipation";
 import { syncEventStatusForLinkedInvoice, syncLinkedEventStatusFromInvoice } from "./lib/eventStatus";
 import { recordInvoiceStatusTransition } from "./lib/statusTransitions";
@@ -824,6 +825,7 @@ export const createDraft = mutation({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("invoices.createDraft", async () => {
     const publicApprovalToken = await generateUniquePublicApprovalToken(ctx);
     const normalizedTermsIds = normalizeTermsIds(args.termsIds);
     const totals = await computeTotals(
@@ -887,6 +889,7 @@ export const createDraft = mutation({
     if (args.groupId) await ctx.db.patch(args.groupId, { lastUsedAt: now, updatedAt: now });
     if (args.contactId) await ctx.db.patch(args.contactId, { lastUsedAt: now, updatedAt: now });
     return { id, warning: totals.discountWarning, publicApprovalToken };
+    });
   },
 });
 
@@ -922,8 +925,9 @@ export const updateDraft = mutation({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("invoices.updateDraft", async () => {
     const existing = await ctx.db.get(args.id);
-    if (!existing) throw new Error("Invoice not found.");
+    if (!existing) appError("INVOICE_NOT_FOUND", "Invoice not found.");
     const publicApprovalToken = existing.sourceEventRequestId
       ? undefined
       : existing.publicApprovalToken || (await generateUniquePublicApprovalToken(ctx));
@@ -988,6 +992,7 @@ export const updateDraft = mutation({
       await syncLinkedEventsPrimaryHostFromInvoice(ctx, args.id);
     }
     return { id: args.id, warning: totals.discountWarning };
+    });
   },
 });
 
@@ -1021,40 +1026,50 @@ export const approveByToken = mutation({
     paymentSubmitterEmail: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await enforceRateLimit(ctx, `quoteToken:${args.token}`, { limit: 30, windowMs: HOUR_MS });
-    const invoice = await ctx.db
-      .query("invoices")
-      .withIndex("by_publicApprovalToken", (q) => q.eq("publicApprovalToken", args.token))
-      .unique();
-    if (!invoice) throw new Error("Quote not found.");
-    if (invoice.sourceEventRequestId) {
-      throw new Error("Please review this quote from your booking request link.");
-    }
-    if (invoice.publicApprovalTokenExpiresAt && invoice.publicApprovalTokenExpiresAt < Date.now()) {
-      throw new Error("Quote not found.");
-    }
-    await approveInvoiceQuote(ctx, invoice, args);
-    return { ok: true };
+    await enforceRateLimit(ctx, `quoteToken:${args.token}`, { limit: 30, periodMs: HOUR_MS });
+    return await withReportableErrors("invoices.approveByToken", async () => {
+      const invoice = await ctx.db
+        .query("invoices")
+        .withIndex("by_publicApprovalToken", (q) => q.eq("publicApprovalToken", args.token))
+        .unique();
+      if (!invoice) appError("QUOTE_NOT_FOUND", "Quote not found.");
+      if (invoice.sourceEventRequestId) {
+        appError(
+          "QUOTE_USE_BOOKING_LINK",
+          "Please review this quote from your booking request link.",
+        );
+      }
+      if (invoice.publicApprovalTokenExpiresAt && invoice.publicApprovalTokenExpiresAt < Date.now()) {
+        appError("QUOTE_NOT_FOUND", "Quote not found.");
+      }
+      await approveInvoiceQuote(ctx, invoice, args);
+      return { ok: true };
+    });
   },
 });
 
 export const requestChangesByToken = mutation({
   args: { token: v.string(), note: v.string() },
   handler: async (ctx, args) => {
-    await enforceRateLimit(ctx, `quoteToken:${args.token}`, { limit: 30, windowMs: HOUR_MS });
-    const invoice = await ctx.db
-      .query("invoices")
-      .withIndex("by_publicApprovalToken", (q) => q.eq("publicApprovalToken", args.token))
-      .unique();
-    if (!invoice) throw new Error("Quote not found.");
-    if (invoice.sourceEventRequestId) {
-      throw new Error("Please review this quote from your booking request link.");
-    }
-    if (invoice.publicApprovalTokenExpiresAt && invoice.publicApprovalTokenExpiresAt < Date.now()) {
-      throw new Error("Quote not found.");
-    }
-    await requestInvoiceQuoteChanges(ctx, invoice, args.note);
-    return { ok: true };
+    await enforceRateLimit(ctx, `quoteToken:${args.token}`, { limit: 30, periodMs: HOUR_MS });
+    return await withReportableErrors("invoices.requestChangesByToken", async () => {
+      const invoice = await ctx.db
+        .query("invoices")
+        .withIndex("by_publicApprovalToken", (q) => q.eq("publicApprovalToken", args.token))
+        .unique();
+      if (!invoice) appError("QUOTE_NOT_FOUND", "Quote not found.");
+      if (invoice.sourceEventRequestId) {
+        appError(
+          "QUOTE_USE_BOOKING_LINK",
+          "Please review this quote from your booking request link.",
+        );
+      }
+      if (invoice.publicApprovalTokenExpiresAt && invoice.publicApprovalTokenExpiresAt < Date.now()) {
+        appError("QUOTE_NOT_FOUND", "Quote not found.");
+      }
+      await requestInvoiceQuoteChanges(ctx, invoice, args.note);
+      return { ok: true };
+    });
   },
 });
 
@@ -1202,9 +1217,11 @@ export const finalize = mutation({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("invoices.finalize", async () => {
     const invoice = await ctx.db.get(args.id);
-    if (!invoice) throw new Error("Invoice not found.");
+    if (!invoice) appError("INVOICE_NOT_FOUND", "Invoice not found.");
     await ctx.db.patch(args.id, { status: "finalized", updatedAt: Date.now() });
+    });
   },
 });
 
@@ -1214,11 +1231,13 @@ export const voidInvoice = mutation({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("invoices.voidInvoice", async () => {
     const invoice = await ctx.db.get(args.id);
-    if (!invoice) throw new Error("Invoice not found.");
-    if (invoice.status === "void") throw new Error("Invoice is already void.");
+    if (!invoice) appError("INVOICE_NOT_FOUND", "Invoice not found.");
+    if (invoice.status === "void") appError("INVOICE_ALREADY_VOID", "Invoice is already void.");
     await ctx.db.patch(args.id, { status: "void", updatedAt: Date.now() });
     return null;
+    });
   },
 });
 
@@ -1228,9 +1247,10 @@ export const unvoidInvoice = mutation({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("invoices.unvoidInvoice", async () => {
     const invoice = await ctx.db.get(args.id);
-    if (!invoice) throw new Error("Invoice not found.");
-    if (invoice.status !== "void") throw new Error("Invoice is not void.");
+    if (!invoice) appError("INVOICE_NOT_FOUND", "Invoice not found.");
+    if (invoice.status !== "void") appError("INVOICE_NOT_VOID", "Invoice is not void.");
     // Restore published/approved work to finalized; otherwise back to draft.
     const nextStatus =
       invoice.clientReviewReadyAt ||
@@ -1241,6 +1261,7 @@ export const unvoidInvoice = mutation({
         : "draft";
     await ctx.db.patch(args.id, { status: nextStatus, updatedAt: Date.now() });
     return null;
+    });
   },
 });
 
@@ -1586,18 +1607,30 @@ export const markReadyForClientReview = mutation({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("invoices.markReadyForClientReview", async () => {
     const invoice = await ctx.db.get(args.id);
-    if (!invoice) throw new Error("Invoice not found.");
+    if (!invoice) appError("INVOICE_NOT_FOUND", "Invoice not found.");
     if (!invoice.sourceEventRequestId) {
-      throw new Error("Only booking-request quotes can be sent on the request portal.");
+      appError(
+        "QUOTE_NOT_BOOKING_REQUEST",
+        "Only booking-request quotes can be sent on the request portal.",
+      );
     }
-    if (invoice.status === "void") throw new Error("Cannot publish a void quote.");
+    if (invoice.status === "void") {
+      appError("INVOICE_VOID", "Cannot publish a void quote.");
+    }
     const clientReadyMessage = args.clientMessage.trim();
     if (!clientReadyMessage) {
-      throw new Error("A message to the client is required before sending the quote.");
+      appError(
+        "QUOTE_MESSAGE_REQUIRED",
+        "A message to the client is required before sending the quote.",
+      );
     }
     if (resolveInvoiceTermsIds(invoice).length === 0) {
-      throw new Error("Select at least one terms template before sending the quote.");
+      appError(
+        "QUOTE_TERMS_REQUIRED",
+        "Select at least one terms template before sending the quote.",
+      );
     }
     const now = Date.now();
     const fromApprovalStatus = invoice.clientApprovalStatus ?? "pending";
@@ -1640,6 +1673,7 @@ export const markReadyForClientReview = mutation({
     }
 
     return null;
+    });
   },
 });
 
@@ -1649,10 +1683,14 @@ export const withdrawFromClientReview = mutation({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     await requireArborInternalContext(ctx);
+    return await withReportableErrors("invoices.withdrawFromClientReview", async () => {
     const invoice = await ctx.db.get(args.id);
-    if (!invoice) throw new Error("Invoice not found.");
+    if (!invoice) appError("INVOICE_NOT_FOUND", "Invoice not found.");
     if (!invoice.sourceEventRequestId) {
-      throw new Error("Only booking-request quotes use the request portal.");
+      appError(
+        "QUOTE_NOT_BOOKING_REQUEST",
+        "Only booking-request quotes use the request portal.",
+      );
     }
     await ctx.db.patch(args.id, {
       status: "draft",
@@ -1660,5 +1698,6 @@ export const withdrawFromClientReview = mutation({
       updatedAt: Date.now(),
     });
     return null;
+    });
   },
 });

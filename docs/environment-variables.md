@@ -47,6 +47,11 @@ Where variables live:
 | `NEXT_PUBLIC_SITE_URL` | no | Public origin used for absolute links; defaults to localhost in dev |
 | `NEXT_PUBLIC_SHORT_LINK_BASE_URL` | no | Dashboard copy-link base; default `https://arbor.st` |
 | `NEXT_PUBLIC_IMMICH_URL` | no | Allows Immich-hosted images through `next/image` (`next.config.ts`) |
+| `NEXT_PUBLIC_SENTRY_DSN` | no (errors) | Public Sentry DSN for browser init (`instrumentation-client.ts`) |
+| `SENTRY_DSN` | no (errors) | Server/edge Sentry DSN (`sentry.server.config.ts`, `sentry.edge.config.ts`); falls back to `NEXT_PUBLIC_SENTRY_DSN` |
+| `SENTRY_AUTH_TOKEN` | build | Source map upload token (gitignored `apps/web/.env.sentry-build-plugin` locally; set in Vercel/CI for prod builds) |
+| `SENTRY_ORG` | build | Optional override; defaults to `arbor-live-5h` in `next.config.ts` |
+| `SENTRY_PROJECT` | build | Optional override; defaults to `arbor-live-portal` in `next.config.ts` |
 | `CONVEX_URL` | build | Exported by `convex deploy --cmd`; consumed by `scripts/materialize-convex-public-env.mjs` and `next.config.ts` |
 
 ## Vercel project
@@ -54,6 +59,8 @@ Where variables live:
 | Variable | Purpose |
 |---|---|
 | `CONVEX_DEPLOY_KEY` | Production and Preview need **different** keys (same var name, different Vercel env scopes). Prod key: `deployment:deploy` + `runInternalMutations`. Preview key: from project settings. See [deployment.md](deployment.md) |
+| `NEXT_PUBLIC_SENTRY_DSN` / `SENTRY_DSN` | Same DSN as local; required for production error reporting |
+| `SENTRY_AUTH_TOKEN` | Required for readable production stack traces (source map upload on `next build`) |
 
 ## Keeping this file honest
 
