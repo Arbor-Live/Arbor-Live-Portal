@@ -53,7 +53,7 @@ export function InsightsFinancesPanel({ startMs, endMs }: InsightsFinancesPanelP
         </p>
       ) : null}
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <Card>
           <CardHeader>
             <CardTitle>Recognized revenue</CardTitle>
@@ -95,6 +95,21 @@ export function InsightsFinancesPanel({ startMs, endMs }: InsightsFinancesPanelP
             ) : (
               <p className="text-2xl font-semibold tabular-nums">
                 {formatUsd(upcoming.horizons.d90.bookedRevenueUsd)}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Upcoming expenses (90d)</CardTitle>
+            <CardDescription>Artist payouts on upcoming events</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {upcoming === undefined ? (
+              <p className="text-sm text-muted-foreground">Loading…</p>
+            ) : (
+              <p className="text-2xl font-semibold tabular-nums">
+                {formatUsd(upcoming.horizons.d90.upcomingArtistPayoutsUsd)}
               </p>
             )}
           </CardContent>

@@ -19,7 +19,13 @@ import { type DataTableFeatures } from "@/components/ui/data-table-features";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { UserRatesAdminClient } from "@/components/users/user-rates-admin-client";
+import { OnboardingIncompleteStepsList } from "@/components/bands/onboarding-incomplete-steps";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { useAppDialog } from "@/components/ui/app-dialog";
@@ -515,7 +521,7 @@ export function UsersManagementClient({
             <div className="space-y-1">
               <CardTitle>Artist Organizations</CardTitle>
               <p className="text-sm font-normal text-muted-foreground">
-                Quick rate and archive controls. Full profile, payee, and riders live under{" "}
+                Incomplete onboarding: chip on the artist name. Profile/riders under{" "}
                 <Link href="/dashboard/artists" className="underline">
                   Artists
                 </Link>
@@ -1313,6 +1319,9 @@ function BandOrgAdminRow({
 }) {
   const isArchived = org.status === "archived";
   const updateBandOrganizationProfileAdmin = useMutation(api.users.updateBandOrganizationProfileAdmin);
+  const sendOnboardingReminder = useMutation(api.bandPayments.sendOnboardingReminderForOrganization);
+  const refreshPendingPayments = useMutation(api.bandPayments.refreshPendingPaymentsForOrganization);
+  const [onboardingBusy, setOnboardingBusy] = useState(false);
 
   const form = useConvexForm({
     schema: z.object({
@@ -1344,17 +1353,95 @@ function BandOrgAdminRow({
     },
   );
 
+  async function onSendReminder() {
+    setOnboardingBusy(true);
+    try {
+      const result = await sendOnboardingReminder({ organizationId: org.organizationId });
+      notify.success(
+        result.enqueuedCount === 1
+          ? "Onboarding reminder sent."
+          : `Onboarding reminder sent to ${result.enqueuedCount} contacts.`,
+      );
+    } catch (error) {
+      notify.error(getConvexErrorMessage(error));
+    } finally {
+      setOnboardingBusy(false);
+    }
+  }
+
+  async function onRecheckPayouts() {
+    setOnboardingBusy(true);
+    try {
+      const result = await refreshPendingPayments({ organizationId: org.organizationId });
+      if (result.updated > 0) {
+        notify.success("Payout queue updated.");
+      } else {
+        notify.success("Still pending onboarding — see missing steps.");
+      }
+    } catch (error) {
+      notify.error(getConvexErrorMessage(error));
+    } finally {
+      setOnboardingBusy(false);
+    }
+  }
+
+  const missingCount = org.onboardingIncompleteSteps.length;
+
   return (
     <tr className="border-b align-top">
       <td className="px-3 py-2">
-        <p className="font-medium">
-          {org.name}
-          {isArchived ? (
-            <span className="ml-2 rounded-full border border-amber-500/30 bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-700">
-              Archived
-            </span>
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="font-medium">
+            {org.name}
+            {isArchived ? (
+              <span className="ml-2 rounded-full border border-amber-500/30 bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-700">
+                Archived
+              </span>
+            ) : null}
+          </p>
+          {org.awaitingOnboarding ? (
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-6 border-amber-500/40 px-2 text-[11px] text-amber-900 dark:text-amber-200"
+                >
+                  Onboarding · {missingCount || "?"}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="start" className="w-72 space-y-3">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">Missing steps</p>
+                  <OnboardingIncompleteStepsList
+                    steps={org.onboardingIncompleteSteps}
+                    compact
+                  />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={onboardingBusy || isArchived}
+                    onClick={() => void onSendReminder()}
+                  >
+                    Send reminder
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={onboardingBusy || isArchived}
+                    onClick={() => void onRecheckPayouts()}
+                  >
+                    Recheck payouts
+                  </Button>
+                </div>
+              </PopoverContent>
+            </Popover>
           ) : null}
-        </p>
+        </div>
         <p className="text-xs text-muted-foreground">/{org.slug}</p>
       </td>
       <td className="px-3 py-2">

@@ -2825,6 +2825,67 @@ export const seedUpcomingBandShow = mutation({
   },
 });
 
+/** Test-only: attach a draft (upcoming) payout to an existing event + org. */
+export const seedDraftBandPayment = mutation({
+  args: {
+    eventId: v.id("events"),
+    organizationId: v.string(),
+    totalUsd: v.optional(v.number()),
+  },
+  returns: v.object({
+    paymentId: v.id("eventBandPayments"),
+    confirmationToken: v.string(),
+    status: v.literal("draft"),
+  }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const event = await ctx.db.get(args.eventId);
+    if (!event) throw new Error("Event not found.");
+    const now = Date.now();
+    const confirmationToken = await allocateBandPaymentConfirmationToken(ctx);
+    const paymentId = await ctx.db.insert("eventBandPayments", {
+      eventId: args.eventId,
+      organizationId: args.organizationId,
+      pricingMode: "fixed_total",
+      totalUsd: args.totalUsd ?? 400,
+      status: "draft",
+      confirmationToken,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.patch(args.eventId, {
+      bandsCostUsd: (event.bandsCostUsd ?? 0) + (args.totalUsd ?? 400),
+      updatedAt: now,
+    });
+    return { paymentId, confirmationToken, status: "draft" as const };
+  },
+});
+
+/** Test-only: force a payment into a queue status (local smoke). */
+export const setBandPaymentStatus = mutation({
+  args: {
+    paymentId: v.id("eventBandPayments"),
+    status: v.union(
+      v.literal("draft"),
+      v.literal("pending_onboarding"),
+      v.literal("pending_payee"),
+      v.literal("pending_email"),
+      v.literal("awaiting_confirmation"),
+      v.literal("confirmed"),
+      v.literal("paid"),
+      v.literal("cancelled"),
+    ),
+  },
+  returns: v.object({ paymentId: v.id("eventBandPayments"), status: v.string() }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const payment = await ctx.db.get(args.paymentId);
+    if (!payment) throw new Error("Band payment not found.");
+    await ctx.db.patch(payment._id, { status: args.status, updatedAt: Date.now() });
+    return { paymentId: payment._id, status: args.status };
+  },
+});
+
 export const getBandPaymentState = query({
   args: { paymentId: v.id("eventBandPayments") },
   returns: v.union(

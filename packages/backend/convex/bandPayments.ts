@@ -19,13 +19,11 @@ import {
   requireBandContext,
 } from "./lib/auth";
 import {
-  BAND_PAYMENT_SETTINGS_KEY,
   bandPaymentHasAgreementPdf,
   bandPaymentStatusLabel,
   computeBandPaymentTotal,
   formatBandPaymentDate,
   formatPerformanceHours,
-  getBandPaymentSettings,
   isBandPayeeComplete,
   isOrganizationBandOnboardingComplete,
   payeeFieldsFromProfile,
@@ -36,7 +34,12 @@ import {
   type BandPaymentStatus,
 } from "./lib/bandPayments";
 import { resolveBandName } from "./lib/bandIdentity";
+import {
+  bandOnboardingIncompleteSteps,
+  bandOnboardingIncompleteStepValidator,
+} from "./lib/bandOnboardingSteps";
 import { allocateBandPaymentConfirmationToken } from "./lib/publicReferenceIds";
+import { resolveEventAlbumShareUrl } from "./lib/immichAlbumLinks";
 import {
   scheduleBandPaymentCompletedEmails,
   scheduleBandPaymentConfirmationEmail,
@@ -57,6 +60,7 @@ const statusValue = v.union(
   v.literal("cancelled"),
 );
 const queueValue = v.union(
+  v.literal("upcoming"),
   v.literal("needs_onboarding"),
   v.literal("needs_payee"),
   v.literal("needs_email"),
@@ -101,6 +105,14 @@ const bandPaymentRowValidator = v.object({
   photoAlbumUrl: v.optional(v.string()),
   eventEnded: v.boolean(),
   canDownloadAgreementPdf: v.boolean(),
+  onboardingStatus: v.union(
+    v.literal("not_started"),
+    v.literal("in_progress"),
+    v.literal("completed"),
+    v.literal("waived"),
+    v.null(),
+  ),
+  onboardingIncompleteSteps: v.array(bandOnboardingIncompleteStepValidator),
 });
 
 const bandFacingPaymentRowValidator = v.object({
@@ -288,6 +300,15 @@ async function buildBandPaymentRow(
   nowMs: number,
 ) {
   const effectivePayee = await getEffectivePayeeForPayment(ctx, payment);
+  const onboarding = await ctx.db
+    .query("organizationOnboarding")
+    .withIndex("by_organizationId", (q) => q.eq("organizationId", payment.organizationId))
+    .unique();
+  const onboardingStatus = onboarding?.status ?? null;
+  const onboardingIncompleteSteps =
+    payment.status === "pending_onboarding"
+      ? bandOnboardingIncompleteSteps(onboarding)
+      : [];
   return {
     _id: payment._id,
     eventId: payment.eventId,
@@ -323,10 +344,13 @@ async function buildBandPaymentRow(
     photoAlbumUrl: payment.photoAlbumUrl,
     eventEnded: event.endAt <= nowMs,
     canDownloadAgreementPdf: bandPaymentHasAgreementPdf(payment),
+    onboardingStatus,
+    onboardingIncompleteSteps,
   };
 }
 
 type QueueFilter =
+  | "upcoming"
   | "needs_onboarding"
   | "needs_payee"
   | "needs_email"
@@ -337,6 +361,8 @@ type QueueFilter =
 
 function statusesForQueue(queue: QueueFilter): BandPaymentStatus[] {
   switch (queue) {
+    case "upcoming":
+      return ["draft"];
     case "needs_onboarding":
       return ["pending_onboarding"];
     case "needs_payee":
@@ -408,45 +434,6 @@ export const listBandMemberEmails = internalQuery({
   },
 });
 
-export const getSettings = query({
-  args: {},
-  returns: v.object({
-    photoAlbumUrl: v.string(),
-  }),
-  handler: async (ctx) => {
-    await requireArborInternalContext(ctx);
-    return await getBandPaymentSettings(ctx);
-  },
-});
-
-export const updateSettings = mutation({
-  args: {
-    photoAlbumUrl: v.optional(v.string()),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    await requireArborInternalContext(ctx);
-    const now = Date.now();
-    const existing = await ctx.db
-      .query("bandPaymentSettings")
-      .withIndex("by_key", (q) => q.eq("key", BAND_PAYMENT_SETTINGS_KEY))
-      .unique();
-    if (existing) {
-      await ctx.db.patch(existing._id, {
-        photoAlbumUrl: args.photoAlbumUrl?.trim() || undefined,
-        updatedAt: now,
-      });
-      return null;
-    }
-    await ctx.db.insert("bandPaymentSettings", {
-      key: BAND_PAYMENT_SETTINGS_KEY,
-      photoAlbumUrl: args.photoAlbumUrl?.trim() || undefined,
-      updatedAt: now,
-    });
-    return null;
-  },
-});
-
 export const listByEvent = query({
   args: { eventId: v.id("events") },
   returns: v.array(bandPaymentRowValidator),
@@ -497,6 +484,7 @@ export const getBandPayeeForOrganization = query({
 export const getQueueCounts = query({
   args: {},
   returns: v.object({
+    upcoming: v.number(),
     needs_onboarding: v.number(),
     needs_payee: v.number(),
     needs_email: v.number(),
@@ -507,6 +495,7 @@ export const getQueueCounts = query({
   handler: async (ctx) => {
     await requireArborInternalContext(ctx);
     const counts = {
+      upcoming: 0,
       needs_onboarding: 0,
       needs_payee: 0,
       needs_email: 0,
@@ -515,6 +504,7 @@ export const getQueueCounts = query({
       paid: 0,
     };
     const statusKeys: Array<[BandPaymentStatus, keyof typeof counts]> = [
+      ["draft", "upcoming"],
       ["pending_onboarding", "needs_onboarding"],
       ["pending_payee", "needs_payee"],
       ["pending_email", "needs_email"],
@@ -588,7 +578,6 @@ async function upsertEventBandPayment(
   });
 
   const now = Date.now();
-  const settings = await getBandPaymentSettings(ctx);
 
   let existing: Doc<"eventBandPayments"> | null = null;
   if (args.paymentId) {
@@ -654,7 +643,7 @@ async function upsertEventBandPayment(
     designatedPayeeMailingAddress: payeeSnapshot.designatedPayeeMailingAddress,
     designatedPayeePayoutMethod: payeeSnapshot.designatedPayeePayoutMethod,
     status: nextStatus,
-    photoAlbumUrl: args.photoAlbumUrl?.trim() || settings.photoAlbumUrl || undefined,
+    photoAlbumUrl: args.photoAlbumUrl?.trim() || undefined,
     updatedAt: now,
   };
 
@@ -729,6 +718,9 @@ export const listByQueue = query({
     const nowMs = Date.now();
     const payments: Doc<"eventBandPayments">[] = [];
     for (const status of statusesForQueue(args.queue)) {
+      // Same take budget as other queue statuses. Concurrent draft payouts stay
+      // well under this for Arbor's volume; if that changes, denormalize
+      // eventStartAt onto payments and index before limiting.
       const rows = await ctx.db
         .query("eventBandPayments")
         .withIndex("by_status", (q) => q.eq("status", status))
@@ -743,6 +735,11 @@ export const listByQueue = query({
       rows.push(await buildBandPaymentRow(ctx, payment, event, nowMs));
     }
     return rows.sort((a, b) => {
+      // Upcoming: soonest events first; other queues: most recent first.
+      if (args.queue === "upcoming") {
+        if (a.eventStartAt !== b.eventStartAt) return a.eventStartAt - b.eventStartAt;
+        return a.bandName.localeCompare(b.bandName);
+      }
       if (a.eventStartAt !== b.eventStartAt) return b.eventStartAt - a.eventStartAt;
       return a.bandName.localeCompare(b.bandName);
     });
@@ -767,6 +764,7 @@ export const syncStalePayeePayments = mutation({
           synced.status !== payment.status ||
           synced.designatedPayeeName !== payment.designatedPayeeName ||
           synced.designatedPayeeEmail !== payment.designatedPayeeEmail ||
+          synced.designatedPayeeUserId !== payment.designatedPayeeUserId ||
           synced.designatedPayeeMailingAddress !== payment.designatedPayeeMailingAddress ||
           synced.designatedPayeePayoutMethod !== payment.designatedPayeePayoutMethod
         ) {
@@ -775,6 +773,47 @@ export const syncStalePayeePayments = mutation({
       }
     }
     return updated;
+  },
+});
+
+/** Staff: re-evaluate queue status for one org after onboarding/payee changes. */
+export const refreshPendingPaymentsForOrganization = mutation({
+  args: { organizationId: v.string() },
+  returns: v.object({ updated: v.number() }),
+  handler: async (ctx, args) => {
+    await requireArborInternalContext(ctx);
+    const now = Date.now();
+    let updated = 0;
+    let cursor: string | null = null;
+    for (;;) {
+      const page = await ctx.db
+        .query("eventBandPayments")
+        .withIndex("by_organizationId", (q) => q.eq("organizationId", args.organizationId))
+        .paginate({ cursor, numItems: 200 });
+      for (const payment of page.page) {
+        if (
+          payment.status !== "pending_payee" &&
+          payment.status !== "pending_onboarding" &&
+          payment.status !== "draft"
+        ) {
+          continue;
+        }
+        const synced = await syncPayeeFromOrganizationForPayment(ctx, payment, now);
+        if (
+          synced.status !== payment.status ||
+          synced.designatedPayeeName !== payment.designatedPayeeName ||
+          synced.designatedPayeeEmail !== payment.designatedPayeeEmail ||
+          synced.designatedPayeeUserId !== payment.designatedPayeeUserId ||
+          synced.designatedPayeeMailingAddress !== payment.designatedPayeeMailingAddress ||
+          synced.designatedPayeePayoutMethod !== payment.designatedPayeePayoutMethod
+        ) {
+          updated += 1;
+        }
+      }
+      if (page.isDone) break;
+      cursor = page.continueCursor;
+    }
+    return { updated };
   },
 });
 
@@ -815,7 +854,11 @@ export const sendConfirmationEmail = mutation({
       "Arbor staff";
     const senderEmail = senderIdentity?.email || user.email?.trim() || undefined;
 
-    await scheduleBandPaymentConfirmationEmail(ctx, { payment, event });
+    const idempotencySentAt = payment.confirmationEmailSentAt ?? 0;
+    await ctx.scheduler.runAfter(0, internal.bandPaymentConfirmationActions.deliverConfirmationEmail, {
+      paymentId: payment._id,
+      idempotencySentAt,
+    });
 
     await ctx.db.patch(payment._id, {
       designatedPayeeName: effectivePayee.designatedPayeeName,
@@ -829,6 +872,50 @@ export const sendConfirmationEmail = mutation({
       confirmationSentByName: senderName,
       confirmationSentByEmail: senderEmail,
       updatedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
+export const getConfirmationEmailContext = internalQuery({
+  args: { paymentId: v.id("eventBandPayments") },
+  returns: v.union(
+    v.null(),
+    v.object({
+      eventId: v.id("events"),
+      eventTitle: v.string(),
+      venueName: v.optional(v.string()),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const payment = await ctx.db.get(args.paymentId);
+    if (!payment || payment.status === "paid" || payment.status === "cancelled") return null;
+    const event = await ctx.db.get(payment.eventId);
+    if (!event) return null;
+    return {
+      eventId: event._id,
+      eventTitle: event.title,
+      venueName: event.venueName,
+    };
+  },
+});
+
+export const enqueueConfirmationEmailInternal = internalMutation({
+  args: {
+    paymentId: v.id("eventBandPayments"),
+    idempotencySentAt: v.number(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const payment = await ctx.db.get(args.paymentId);
+    if (!payment) return null;
+    if (payment.status === "paid" || payment.status === "cancelled") return null;
+    const event = await ctx.db.get(payment.eventId);
+    if (!event) return null;
+    await scheduleBandPaymentConfirmationEmail(ctx, {
+      payment,
+      event,
+      idempotencySentAt: args.idempotencySentAt,
     });
     return null;
   },
@@ -862,33 +949,50 @@ export const sendOnboardingReminder = mutation({
     if (payment.status !== "pending_onboarding") {
       throw new Error("Onboarding reminders can only be sent for payments pending onboarding.");
     }
-    const result: {
-      enqueuedCount: number;
-      skipped:
-        | null
-        | "onboarding_complete"
-        | "cooldown"
-        | "no_assignment"
-        | "no_recipients";
-    } = await ctx.runMutation(
-      internal.email.bandOnboardingReminders.sendOnboardingReminderForOrgInternal,
-      {
-        organizationId: payment.organizationId,
-        force: true,
-      },
-    );
-    if (result.skipped === "onboarding_complete") {
-      throw new Error("This artist has already completed onboarding.");
-    }
-    if (result.skipped === "no_assignment") {
-      throw new Error("This artist is not assigned to an active event.");
-    }
-    if (result.skipped === "no_recipients") {
-      throw new Error("No artist contact emails found to remind.");
-    }
-    return { enqueuedCount: result.enqueuedCount };
+    return await sendOnboardingReminderForOrganizationHandler(ctx, payment.organizationId);
   },
 });
+
+/** Staff: remind an artist org to finish onboarding (from Organizations admin). */
+export const sendOnboardingReminderForOrganization = mutation({
+  args: { organizationId: v.string() },
+  returns: v.object({ enqueuedCount: v.number() }),
+  handler: async (ctx, args): Promise<{ enqueuedCount: number }> => {
+    await requireArborInternalContext(ctx);
+    return await sendOnboardingReminderForOrganizationHandler(ctx, args.organizationId);
+  },
+});
+
+async function sendOnboardingReminderForOrganizationHandler(
+  ctx: MutationCtx,
+  organizationId: string,
+): Promise<{ enqueuedCount: number }> {
+  const result: {
+    enqueuedCount: number;
+    skipped:
+      | null
+      | "onboarding_complete"
+      | "cooldown"
+      | "no_assignment"
+      | "no_recipients";
+  } = await ctx.runMutation(
+    internal.email.bandOnboardingReminders.sendOnboardingReminderForOrgInternal,
+    {
+      organizationId,
+      force: true,
+    },
+  );
+  if (result.skipped === "onboarding_complete") {
+    throw new Error("This artist has already completed onboarding.");
+  }
+  if (result.skipped === "no_assignment") {
+    throw new Error("This artist is not assigned to an upcoming or recent event.");
+  }
+  if (result.skipped === "no_recipients") {
+    throw new Error("No artist contact emails found to remind.");
+  }
+  return { enqueuedCount: result.enqueuedCount };
+}
 
 export const markPaid = mutation({
   args: {
@@ -1401,11 +1505,16 @@ export const buildConfirmationPreview = query({
       "Sign in to the band portal to review the amount and e-sign your agreement.",
       "",
     );
-    if (payment.photoAlbumUrl) {
+    const photoAlbumUrl = await resolveEventAlbumShareUrl(
+      ctx,
+      event._id,
+      payment.photoAlbumUrl,
+    );
+    if (photoAlbumUrl) {
       lines.push(
         "Additionally, if you have any videos or photos of the event, uploading them to the following photo album would be much appreciated!",
         "",
-        payment.photoAlbumUrl,
+        photoAlbumUrl,
         "",
       );
     }

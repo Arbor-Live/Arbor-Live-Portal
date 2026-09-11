@@ -10,6 +10,7 @@ import {
   createImmichAlbum,
   createImmichAlbumSharedLink,
   immichAlbumExists,
+  isImmichConfigured,
   listImmichAlbumAssets,
 } from "./lib/immichClient";
 import { albumLinkResultValidator } from "./lib/immichValidators";
@@ -101,16 +102,29 @@ async function ensureAlbumCore(
     },
   );
 
+  // Concurrent ensures can race on create; insert keeps the first link. Always
+  // attach the share URL to the winning link's Immich album, not our local create.
+  const link: {
+    immichAlbumId: string;
+    albumName: string;
+    shareUrl?: string;
+  } | null = await ctx.runQuery(internal.immichDb.getAlbumLinkByIdInternal, {
+    albumLinkId,
+  });
+  if (!link) {
+    throw new Error("Immich album link missing after insert.");
+  }
+
   await ensureSharedLinkForAlbum(ctx, {
     albumLinkId,
-    immichAlbumId: created.id,
+    immichAlbumId: link.immichAlbumId,
     description: args.description ?? args.albumName,
   });
 
   return {
     albumLinkId,
-    immichAlbumId: created.id,
-    albumName: args.albumName,
+    immichAlbumId: link.immichAlbumId,
+    albumName: link.albumName,
   };
 }
 
@@ -123,6 +137,44 @@ export const ensureAlbum = internalAction({
   },
   returns: albumLinkResultValidator,
   handler: async (ctx, args) => ensureAlbumCore(ctx, args),
+});
+
+/**
+ * Create/link the event Immich album when Immich is configured.
+ * Failures are swallowed so email / portal paths can continue without a share URL.
+ */
+export const ensureEventAlbumBestEffort = internalAction({
+  args: { eventId: v.id("events") },
+  returns: v.union(
+    v.null(),
+    v.object({
+      shareUrl: v.optional(v.string()),
+    }),
+  ),
+  handler: async (ctx, args): Promise<{ shareUrl?: string } | null> => {
+    if (!isImmichConfigured()) return null;
+    const meta: { title: string; venueName?: string } | null = await ctx.runQuery(
+      internal.immichDb.getEventAlbumEnsureMetaInternal,
+      { eventId: args.eventId },
+    );
+    if (!meta) return null;
+    try {
+      const ensured = await ensureAlbumCore(ctx, {
+        entityType: "event",
+        entityId: args.eventId,
+        albumName: `Event: ${meta.title}`,
+        description: meta.venueName ? `${meta.title} at ${meta.venueName}` : meta.title,
+      });
+      const link: { shareUrl?: string } | null = await ctx.runQuery(
+        internal.immichDb.getAlbumLinkByIdInternal,
+        { albumLinkId: ensured.albumLinkId },
+      );
+      return { shareUrl: link?.shareUrl };
+    } catch {
+      // Immich is optional for outbound mail / public feedback.
+      return null;
+    }
+  },
 });
 
 export const syncAlbumAssets = internalAction({

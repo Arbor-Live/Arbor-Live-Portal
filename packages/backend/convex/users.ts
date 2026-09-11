@@ -1,6 +1,7 @@
 import { hashPassword } from "better-auth/crypto";
 import { v } from "convex/values";
 import { components, internal } from "./_generated/api";
+import type { Doc } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import {
@@ -26,6 +27,10 @@ import {
   resolveBandPublicSlug,
 } from "./lib/publicSlug";
 import { isBandPayeeComplete } from "./lib/bandPayments";
+import {
+  bandOnboardingIncompleteSteps,
+  type BandOnboardingIncompleteStep,
+} from "./lib/bandOnboardingSteps";
 import { normalizeOptionalAssetReference } from "./lib/inventoryUpload";
 import {
   collectKeysFromOrganizationProfile,
@@ -508,11 +513,39 @@ export const listBandOrganizationsAdmin = query({
     const organizations = await getAllOrganizations(ctx);
     const profiles = await ctx.db.query("organizationProfiles").withIndex("by_organizationType").take(1000);
     const profileByOrgId = new Map(profiles.map((profile) => [profile.organizationId, profile]));
-    return organizations
+    const bandOrgs = organizations
       .map((organization) => {
         const organizationId = getRecordId(organization);
         const profile = profileByOrgId.get(organizationId);
         const inferredType = resolveOrganizationType(organization, profile);
+        return { organization, organizationId, profile, inferredType };
+      })
+      .filter(
+        (row) => row.inferredType === "band" || row.inferredType === "dj",
+      )
+      .filter((row) => args.includeArchived || row.profile?.status !== "archived");
+
+    const onboardingByOrgId = new Map<
+      string,
+      Doc<"organizationOnboarding">
+    >();
+    for (const row of bandOrgs) {
+      const onboarding = await ctx.db
+        .query("organizationOnboarding")
+        .withIndex("by_organizationId", (q) => q.eq("organizationId", row.organizationId))
+        .unique();
+      if (onboarding) onboardingByOrgId.set(row.organizationId, onboarding);
+    }
+
+    return bandOrgs
+      .map(({ organization, organizationId, profile, inferredType }) => {
+        const onboarding = onboardingByOrgId.get(organizationId);
+        const onboardingStatus = onboarding?.status ?? null;
+        const awaitingOnboarding =
+          onboardingStatus !== "completed" && onboardingStatus !== "waived";
+        const onboardingIncompleteSteps: BandOnboardingIncompleteStep[] = awaitingOnboarding
+          ? bandOnboardingIncompleteSteps(onboarding)
+          : [];
         return {
           organizationId,
           name: organization.name ?? "Organization",
@@ -538,11 +571,12 @@ export const listBandOrganizationsAdmin = query({
           publicListing: profile?.publicListing ?? false,
           publicSlug: profile?.publicSlug ?? "",
           publicHeroImageUrl: profile?.publicHeroImageUrl ?? "",
+          onboardingStatus,
+          awaitingOnboarding,
+          onboardingIncompleteSteps,
           ...serializeBandListingProfileFields(profile),
         };
       })
-      .filter((organization) => organization.organizationType === "band" || organization.organizationType === "dj")
-      .filter((organization) => args.includeArchived || organization.status !== "archived")
       .sort((a, b) => a.name.localeCompare(b.name));
   },
 });

@@ -2,7 +2,6 @@ import type { Doc } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { EVENT_TIMEZONE } from "../email/constants";
 
-export const BAND_PAYMENT_SETTINGS_KEY = "default";
 export { BAND_PAYMENT_REFERENCE_PREFIX as BAND_PAYMENT_TOKEN_PREFIX } from "./publicReferenceIds";
 
 export type BandPaymentPricingMode = "per_member_hourly" | "fixed_total";
@@ -143,18 +142,10 @@ export function shouldPromoteBandPaymentToQueue(event: Doc<"events">, nowMs: num
   return event.endAt <= nowMs && event.status !== "cancelled";
 }
 
-export async function getBandPaymentSettings(ctx: QueryCtx | MutationCtx) {
-  const row = await ctx.db
-    .query("bandPaymentSettings")
-    .withIndex("by_key", (q) => q.eq("key", BAND_PAYMENT_SETTINGS_KEY))
-    .unique();
-  return {
-    photoAlbumUrl: row?.photoAlbumUrl ?? "",
-  };
-}
-
 export function bandPaymentQueueForStatus(status: BandPaymentStatus) {
   switch (status) {
+    case "draft":
+      return "upcoming" as const;
     case "pending_onboarding":
       return "needs_onboarding" as const;
     case "pending_payee":
@@ -175,7 +166,8 @@ export function bandPaymentQueueForStatus(status: BandPaymentStatus) {
 export function bandPaymentStatusLabel(status: BandPaymentStatus) {
   switch (status) {
     case "draft":
-      return "Draft";
+      // Internal status stays `draft` until the event ends; staff see "Upcoming".
+      return "Upcoming";
     case "pending_onboarding":
       return "Pending onboarding";
     case "pending_payee":

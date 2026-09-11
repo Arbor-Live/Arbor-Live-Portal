@@ -1,7 +1,14 @@
 import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
-import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
+import {
+  internalQuery,
+  mutation,
+  query,
+  type MutationCtx,
+  type QueryCtx,
+} from "./_generated/server";
 import { listEventsByInvoiceId } from "./lib/invoiceEvents";
+import { getCanonicalAlbumLink } from "./lib/immichAlbumLinks";
 import { enforceRateLimit, HOUR_MS } from "./rateLimit";
 
 const portalValue = v.union(v.literal("request"), v.literal("quote"));
@@ -63,12 +70,7 @@ export const getStatusByToken = query({
       .withIndex("by_invoiceId", (q) => q.eq("invoiceId", resolved.invoice._id))
       .first();
 
-    const albumLink = await ctx.db
-      .query("immichAlbumLinks")
-      .withIndex("by_entityType_and_entityId", (q) =>
-        q.eq("entityType", "event").eq("entityId", resolved.event._id),
-      )
-      .unique();
+    const albumLink = await getCanonicalAlbumLink(ctx, "event", resolved.event._id);
 
     return {
       submitted: Boolean(existing),
@@ -76,6 +78,23 @@ export const getStatusByToken = query({
       eventTitle: resolved.event.title,
       albumShareUrl: albumLink?.shareUrl,
     };
+  },
+});
+
+/** Auth-free target for public album ensure-on-view (ended events only). */
+export const resolveAlbumEnsureTargetByToken = internalQuery({
+  args: { portal: portalValue, token: v.string() },
+  returns: v.union(
+    v.null(),
+    v.object({
+      eventId: v.id("events"),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const resolved = await resolveInvoiceAndEvent(ctx, args.portal, args.token);
+    if (!resolved) return null;
+    if (resolved.event.endAt >= Date.now()) return null;
+    return { eventId: resolved.event._id };
   },
 });
 

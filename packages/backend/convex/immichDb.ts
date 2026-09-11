@@ -263,6 +263,26 @@ export const getEventMetaInternal = internalQuery({
   },
 });
 
+/** Auth-free naming meta for cron / email ensure-on-send paths. */
+export const getEventAlbumEnsureMetaInternal = internalQuery({
+  args: { eventId: v.id("events") },
+  returns: v.union(
+    v.object({
+      title: v.string(),
+      venueName: v.optional(v.string()),
+    }),
+    v.null(),
+  ),
+  handler: async (ctx, args) => {
+    const event = await ctx.db.get(args.eventId);
+    if (!event) return null;
+    return {
+      title: `${event.title} — ${formatPacificDate(event.startAt)}`,
+      venueName: event.venueName,
+    };
+  },
+});
+
 export const dedupeAllAlbumLinksInternal = internalMutation({
   args: {},
   returns: v.object({ dedupedEntities: v.number() }),

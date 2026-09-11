@@ -23,6 +23,9 @@ export function BandPayoutsSummary() {
     <div className="space-y-3">
       <div className="grid gap-2 text-sm sm:grid-cols-2">
         <p>
+          <span className="font-medium">Upcoming:</span> {counts.upcoming}
+        </p>
+        <p>
           <span className="font-medium">Pending onboarding:</span> {counts.needs_onboarding}
         </p>
         <p>

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,6 +15,7 @@ import { notify } from "@/lib/notify";
 import { ArborOnlyGuard } from "@/components/org-context-guard";
 import { formatUsd } from "@/lib/format";
 import { formatBandPayeePayoutMethod } from "@/lib/band-payout-copy";
+import { resolvePayoutDefaults } from "@/lib/band-payout-defaults";
 import { eventBandOnboardingInviteSchema, eventBandPayoutFieldsSchema } from "@/lib/validations/bands";
 
 type PricingMode = "per_member_hourly" | "fixed_total";
@@ -25,6 +26,23 @@ type PerformerRow = NonNullable<
 >[number];
 
 type PaymentFields = NonNullable<PerformerRow["payment"]>;
+
+type BandCatalogRow = {
+  organizationId: string;
+  name?: string;
+  displayName?: string;
+  performerHourlyRateUsd?: number;
+  memberCount?: number;
+  bandMembers?: string[];
+};
+
+type InvoiceArtistSuggestion = {
+  organizationId: string;
+  label: string;
+  rateUsd?: number;
+  performanceHours?: number;
+  memberCount?: number;
+};
 
 const PRICING_OPTIONS = [
   { value: "per_member_hourly", label: "Per member per hour" },
@@ -41,15 +59,36 @@ function roleLabel(role: ParticipationRole) {
   return ROLE_OPTIONS.find((row) => row.value === role)?.label ?? role;
 }
 
-function defaultRateForBand(
-  bands: Array<{ organizationId: string; performerHourlyRateUsd: number }> | undefined,
-  organizationId: string,
-) {
+function bandProfileDefaults(bands: BandCatalogRow[] | undefined, organizationId: string) {
   const band = bands?.find((row) => row.organizationId === organizationId);
-  if (band?.performerHourlyRateUsd && band.performerHourlyRateUsd > 0) {
-    return String(band.performerHourlyRateUsd);
-  }
-  return "150";
+  if (!band) return null;
+  const memberCount =
+    typeof band.memberCount === "number" && band.memberCount > 0
+      ? band.memberCount
+      : (band.bandMembers?.length ?? 0);
+  return {
+    organizationId,
+    performerHourlyRateUsd: band.performerHourlyRateUsd ?? 0,
+    memberCount,
+  };
+}
+
+function applyPayoutDefaultsForOrg(
+  bands: BandCatalogRow[] | undefined,
+  organizationId: string,
+  invoiceLine?: InvoiceArtistSuggestion | null,
+) {
+  return resolvePayoutDefaults({
+    invoiceLine: invoiceLine
+      ? {
+          organizationId: invoiceLine.organizationId,
+          rateUsd: invoiceLine.rateUsd,
+          performanceHours: invoiceLine.performanceHours,
+          memberCount: invoiceLine.memberCount,
+        }
+      : null,
+    bandProfile: bandProfileDefaults(bands, organizationId),
+  });
 }
 
 export function EventBandPaymentSection({ eventId }: { eventId: Id<"events"> }) {
@@ -62,12 +101,55 @@ export function EventBandPaymentSection({ eventId }: { eventId: Id<"events"> }) 
 
 function EventBandsPerformersPanel({ eventId }: { eventId: Id<"events"> }) {
   const performers = useQuery(api.eventBands.listPerformersForEvent, { eventId });
+  const eventDetail = useQuery(api.events.get, { id: eventId });
+  const invoiceId = eventDetail?.event.invoiceId ?? eventDetail?.series?.invoiceId;
+  const invoiceDetail = useQuery(
+    api.invoices.get,
+    invoiceId ? { id: invoiceId } : "skip",
+  );
   const removeParticipation = useMutation(api.eventBands.removeParticipation);
   const updateRole = useMutation(api.eventBands.updateParticipationRole);
+  const addParticipation = useMutation(api.eventBands.addParticipation);
   const [editingPaymentForOrg, setEditingPaymentForOrg] = useState<string | null>(null);
   const [addingBand, setAddingBand] = useState(false);
   const [addBandMode, setAddBandMode] = useState<"existing" | "invite">("existing");
   const [busyOrgId, setBusyOrgId] = useState<string | null>(null);
+  const [importBusy, setImportBusy] = useState(false);
+  const [dismissedInvoicePrompt, setDismissedInvoicePrompt] = useState(false);
+
+  const assignedOrgIds = useMemo(
+    () => new Set((performers ?? []).map((row) => row.organizationId)),
+    [performers],
+  );
+
+  const invoiceArtistByOrg = useMemo(() => {
+    const map = new Map<string, InvoiceArtistSuggestion>();
+    for (const line of invoiceDetail?.lineItems ?? []) {
+      if (line.section !== "artist") continue;
+      const organizationId = line.organizationId?.trim();
+      if (!organizationId || map.has(organizationId)) continue;
+      map.set(organizationId, {
+        organizationId,
+        label: line.label?.trim() || "Artist",
+        rateUsd: line.rateUsd,
+        performanceHours: line.performanceHours,
+        memberCount: line.memberCount,
+      });
+    }
+    return map;
+  }, [invoiceDetail?.lineItems]);
+
+  const invoiceArtistSuggestions = useMemo(
+    () =>
+      [...invoiceArtistByOrg.values()].filter((row) => !assignedOrgIds.has(row.organizationId)),
+    [invoiceArtistByOrg, assignedOrgIds],
+  );
+
+  const showInvoiceEmptyPrompt =
+    !dismissedInvoicePrompt &&
+    performers !== undefined &&
+    performers.length === 0 &&
+    invoiceArtistSuggestions.length > 0;
 
   const totalBandsCost = useMemo(
     () =>
@@ -95,6 +177,32 @@ function EventBandsPerformersPanel({ eventId }: { eventId: Id<"events"> }) {
       notify.error(getConvexErrorMessage(error));
     } finally {
       setBusyOrgId(null);
+    }
+  }
+
+  async function onImportFromInvoice() {
+    if (invoiceArtistSuggestions.length === 0) return;
+    setImportBusy(true);
+    try {
+      for (const suggestion of invoiceArtistSuggestions) {
+        await addParticipation({
+          eventId,
+          organizationId: suggestion.organizationId,
+          role: "headliner",
+        });
+      }
+      notify.success(
+        invoiceArtistSuggestions.length === 1
+          ? "Imported artist from invoice — confirm payout details."
+          : `Imported ${invoiceArtistSuggestions.length} artists from invoice — confirm payout details.`,
+      );
+      setEditingPaymentForOrg(invoiceArtistSuggestions[0]?.organizationId ?? null);
+      setDismissedInvoicePrompt(true);
+      setAddingBand(false);
+    } catch (error) {
+      notify.error(getConvexErrorMessage(error));
+    } finally {
+      setImportBusy(false);
     }
   }
 
@@ -126,9 +234,44 @@ function EventBandsPerformersPanel({ eventId }: { eventId: Id<"events"> }) {
         ) : null}
       </CardHeader>
       <CardContent className="space-y-4">
-        {performers.length === 0 ? (
+        {showInvoiceEmptyPrompt ? (
+          <div className="space-y-3 rounded-md border bg-muted/20 p-4">
+            <p className="text-sm font-medium">
+              Invoice lists {invoiceArtistSuggestions.length} artist
+              {invoiceArtistSuggestions.length === 1 ? "" : "s"}
+            </p>
+            <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+              {invoiceArtistSuggestions.map((row) => (
+                <li key={row.organizationId}>{row.label}</li>
+              ))}
+            </ul>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                disabled={importBusy}
+                onClick={() => void onImportFromInvoice()}
+              >
+                {importBusy ? "Importing…" : "Accept and confirm money"}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={importBusy}
+                onClick={() => setDismissedInvoicePrompt(true)}
+              >
+                Not now
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
+        {performers.length === 0 && !showInvoiceEmptyPrompt ? (
           <p className="text-sm text-muted-foreground">No artists assigned yet.</p>
-        ) : (
+        ) : null}
+
+        {performers.length > 0 ? (
           <div className="space-y-2">
             {performers.map((performer) => (
               <div
@@ -217,6 +360,8 @@ function EventBandsPerformersPanel({ eventId }: { eventId: Id<"events"> }) {
                     payment={performer.payment}
                     organizationLocked
                     excludedOrganizationIds={[]}
+                    invoiceLine={invoiceArtistByOrg.get(performer.organizationId) ?? null}
+                    invoiceDefaultsReady={!invoiceId || invoiceDetail !== undefined}
                     onSaved={() => setEditingPaymentForOrg(null)}
                     onCancel={() => setEditingPaymentForOrg(null)}
                   />
@@ -224,7 +369,7 @@ function EventBandsPerformersPanel({ eventId }: { eventId: Id<"events"> }) {
               </div>
             ))}
           </div>
-        )}
+        ) : null}
 
         {addingBand ? (
           <div className="space-y-3">
@@ -280,6 +425,17 @@ function EventBandsPerformersPanel({ eventId }: { eventId: Id<"events"> }) {
             >
               Invite new artist
             </Button>
+            {invoiceArtistSuggestions.length > 0 ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={importBusy}
+                onClick={() => void onImportFromInvoice()}
+              >
+                Import from invoice ({invoiceArtistSuggestions.length})
+              </Button>
+            ) : null}
           </div>
         )}
 
@@ -547,6 +703,8 @@ function EventBandPaymentForm({
   payment,
   organizationLocked,
   excludedOrganizationIds,
+  invoiceLine = null,
+  invoiceDefaultsReady = true,
   onSaved,
   onCancel,
 }: {
@@ -556,6 +714,9 @@ function EventBandPaymentForm({
   payment: PaymentFields | null;
   organizationLocked?: boolean;
   excludedOrganizationIds: string[];
+  invoiceLine?: InvoiceArtistSuggestion | null;
+  /** False while the event invoice query is still loading (so invoice line defaults win). */
+  invoiceDefaultsReady?: boolean;
   onSaved: () => void;
   onCancel: () => void;
 }) {
@@ -572,21 +733,53 @@ function EventBandPaymentForm({
     resolvedOrgId ? { organizationId: resolvedOrgId } : "skip",
   );
 
+  const seedDefaults = applyPayoutDefaultsForOrg(
+    bands as BandCatalogRow[] | undefined,
+    lockedOrganizationId ?? "",
+    invoiceLine,
+  );
+
   const [pricingMode, setPricingMode] = useState<PricingMode>(
-    payment?.pricingMode ?? "per_member_hourly",
+    payment?.pricingMode ?? seedDefaults.pricingMode,
   );
   const [ratePerMemberPerHourUsd, setRatePerMemberPerHourUsd] = useState(
     payment
       ? String(payment.ratePerMemberPerHourUsd ?? 0)
-      : defaultRateForBand(bands, resolvedOrgId),
+      : seedDefaults.ratePerMemberPerHourUsd,
   );
   const [performanceHours, setPerformanceHours] = useState(
-    String(payment?.performanceHours ?? 1),
+    String(payment?.performanceHours ?? seedDefaults.performanceHours),
   );
-  const [memberCount, setMemberCount] = useState(String(payment?.memberCount ?? 4));
+  const [memberCount, setMemberCount] = useState(
+    String(payment?.memberCount ?? seedDefaults.memberCount),
+  );
   const [fixedTotalUsd, setFixedTotalUsd] = useState(String(payment?.totalUsd ?? 0));
-  const [photoAlbumUrl, setPhotoAlbumUrl] = useState(payment?.photoAlbumUrl ?? "");
   const [busy, setBusy] = useState(false);
+  const [defaultsReadyForOrg, setDefaultsReadyForOrg] = useState(
+    Boolean(payment) || !lockedOrganizationId,
+  );
+
+  useEffect(() => {
+    if (payment || !bands || !resolvedOrgId || defaultsReadyForOrg) return;
+    if (!invoiceDefaultsReady) return;
+    const next = applyPayoutDefaultsForOrg(
+      bands as BandCatalogRow[] | undefined,
+      resolvedOrgId,
+      invoiceLine,
+    );
+    setPricingMode(next.pricingMode);
+    setRatePerMemberPerHourUsd(next.ratePerMemberPerHourUsd);
+    setPerformanceHours(next.performanceHours);
+    setMemberCount(next.memberCount);
+    setDefaultsReadyForOrg(true);
+  }, [
+    payment,
+    bands,
+    resolvedOrgId,
+    invoiceLine,
+    invoiceDefaultsReady,
+    defaultsReadyForOrg,
+  ]);
 
   const bandOptions = useMemo(
     () => artistSelectOptions(bands, { excludeOrganizationIds: excludedOrganizationIds }),
@@ -641,7 +834,6 @@ function EventBandPaymentForm({
           payoutParsed.data.pricingMode === "fixed_total"
             ? payoutParsed.data.fixedTotalUsd
             : computedTotal,
-        photoAlbumUrl: photoAlbumUrl.trim() || undefined,
       });
       onSaved();
     } catch (error) {
@@ -701,7 +893,16 @@ function EventBandPaymentForm({
               onChange={(value) => {
                 setOrganizationId(value);
                 if (!payment) {
-                  setRatePerMemberPerHourUsd(defaultRateForBand(bands, value));
+                  const next = applyPayoutDefaultsForOrg(
+                    bands as BandCatalogRow[] | undefined,
+                    value,
+                    invoiceLine?.organizationId === value ? invoiceLine : null,
+                  );
+                  setPricingMode(next.pricingMode);
+                  setRatePerMemberPerHourUsd(next.ratePerMemberPerHourUsd);
+                  setPerformanceHours(next.performanceHours);
+                  setMemberCount(next.memberCount);
+                  setDefaultsReadyForOrg(true);
                 }
               }}
               options={bandOptions}
@@ -812,16 +1013,6 @@ function EventBandPaymentForm({
           ) : (
             <p className="text-sm text-muted-foreground">Select an artist to view payee details.</p>
           )}
-        </div>
-
-        <div className="space-y-1 md:col-span-2">
-          <Label>Photo album URL (optional override)</Label>
-          <Input
-            value={photoAlbumUrl}
-            onChange={(e) => setPhotoAlbumUrl(e.target.value)}
-            placeholder="https://photos.arbor.st/share/..."
-            disabled={payment?.status === "paid"}
-          />
         </div>
       </div>
 

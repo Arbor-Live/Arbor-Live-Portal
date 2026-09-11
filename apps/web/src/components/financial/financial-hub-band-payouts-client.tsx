@@ -10,11 +10,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getConvexErrorMessage } from "@/lib/convex-error";
-import { notify } from "@/lib/notify";
 import { formatDate, formatDateTime, formatUsd } from "@/lib/format";
 import { formatBandPayeePayoutMethod } from "@/lib/band-payout-copy";
 
 type BandPaymentQueue =
+  | "upcoming"
   | "all_pending"
   | "needs_onboarding"
   | "needs_payee"
@@ -24,6 +24,7 @@ type BandPaymentQueue =
   | "paid";
 
 const QUEUE_LABELS: Record<BandPaymentQueue, string> = {
+  upcoming: "Upcoming payouts",
   all_pending: "All pending",
   needs_onboarding: "Pending onboarding",
   needs_payee: "Needs payee info",
@@ -37,14 +38,11 @@ export function FinancialHubBandPayoutsClient() {
   const [queue, setQueue] = useState<BandPaymentQueue>("all_pending");
   const rows = useQuery(api.bandPayments.listByQueue, { queue });
   const queueCounts = useQuery(api.bandPayments.getQueueCounts, {});
-  const settings = useQuery(api.bandPayments.getSettings, {});
   const sendConfirmation = useMutation(api.bandPayments.sendConfirmationEmail);
   const sendPayeeRequired = useMutation(api.bandPayments.sendPayeeRequiredEmail);
-  const sendOnboardingReminder = useMutation(api.bandPayments.sendOnboardingReminder);
   const syncStalePayeePayments = useMutation(api.bandPayments.syncStalePayeePayments);
   const markPaid = useMutation(api.bandPayments.markPaid);
   const cancelPayment = useMutation(api.bandPayments.cancelPayment);
-  const updateSettings = useMutation(api.bandPayments.updateSettings);
 
   const [busyPaymentId, setBusyPaymentId] = useState<Id<"eventBandPayments"> | null>(null);
   const [servicePaymentNumber, setServicePaymentNumber] = useState("");
@@ -54,9 +52,7 @@ export function FinancialHubBandPayoutsClient() {
     api.bandPayments.buildConfirmationPreview,
     previewTarget ? { paymentId: previewTarget } : "skip",
   );
-  const [settingsDraft, setSettingsDraft] = useState<{ photoAlbumUrl: string } | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const photoAlbumUrl = settingsDraft?.photoAlbumUrl ?? settings?.photoAlbumUrl ?? "";
 
   useEffect(() => {
     void syncStalePayeePayments({});
@@ -86,19 +82,6 @@ export function FinancialHubBandPayoutsClient() {
     }
   }
 
-  async function onSendOnboardingReminder(paymentId: Id<"eventBandPayments">) {
-    setBusyPaymentId(paymentId);
-    setActionError(null);
-    try {
-      await sendOnboardingReminder({ paymentId });
-      notify.success("Onboarding reminder sent.");
-    } catch (error) {
-      setActionError(getConvexErrorMessage(error));
-    } finally {
-      setBusyPaymentId(null);
-    }
-  }
-
   async function onMarkPaid() {
     if (!payTarget || !servicePaymentNumber.trim()) return;
     setBusyPaymentId(payTarget);
@@ -111,18 +94,6 @@ export function FinancialHubBandPayoutsClient() {
       setActionError(getConvexErrorMessage(error));
     } finally {
       setBusyPaymentId(null);
-    }
-  }
-
-  async function onSaveSettings() {
-    try {
-      await updateSettings({
-        photoAlbumUrl,
-      });
-      setSettingsDraft(null);
-      notify.success("Settings saved.");
-    } catch (error) {
-      notify.error(getConvexErrorMessage(error));
     }
   }
 
@@ -142,27 +113,6 @@ export function FinancialHubBandPayoutsClient() {
 
   return (
     <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Artist payment defaults</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-3">
-          <div className="space-y-1">
-            <Label>Default photo album URL</Label>
-            <Input
-              value={photoAlbumUrl}
-              onChange={(e) => setSettingsDraft({ photoAlbumUrl: e.target.value })}
-              placeholder="https://photos.arbor.st/share/..."
-            />
-          </div>
-          <div>
-            <Button type="button" onClick={() => void onSaveSettings()}>
-              Save defaults
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
       {actionError ? (
         <p className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
           {actionError}
@@ -264,13 +214,8 @@ export function FinancialHubBandPayoutsClient() {
                     <Link href={`/dashboard/events/${row.eventId}`}>Open event</Link>
                   </Button>
                   {row.status === "pending_onboarding" ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      disabled={busyPaymentId === row._id}
-                      onClick={() => void onSendOnboardingReminder(row._id)}
-                    >
-                      Send onboarding reminder
+                    <Button asChild size="sm" variant="outline">
+                      <Link href="/dashboard/users/organizations">Manage onboarding</Link>
                     </Button>
                   ) : null}
                   {row.status === "pending_payee" ? (
@@ -306,6 +251,7 @@ export function FinancialHubBandPayoutsClient() {
                     </>
                   ) : null}
                   {!row.payeeComplete &&
+                  row.status !== "draft" &&
                   row.status !== "pending_payee" &&
                   row.status !== "pending_onboarding" ? (
                     <p className="self-center text-xs text-muted-foreground">

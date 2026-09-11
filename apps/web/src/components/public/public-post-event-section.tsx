@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { StarIcon } from "@phosphor-icons/react";
 import { api } from "@/lib/convex-api";
 import {
@@ -39,8 +39,10 @@ export function PublicPostEventSection({
   token: string;
 }) {
   const status = useQuery(api.eventFeedback.getStatusByToken, { portal, token });
+  const ensureAlbum = useAction(api.eventFeedbackActions.ensureAlbumShareUrlByToken);
   const submit = useMutation(api.eventFeedback.submitByToken);
   const [hoveredRating, setHoveredRating] = useState(0);
+  const [ensuredAlbumUrl, setEnsuredAlbumUrl] = useState<string | undefined>();
 
   const form = useConvexForm<EventFeedbackFormValues>({
     schema: eventFeedbackSchema,
@@ -59,20 +61,42 @@ export function PublicPostEventSection({
   });
 
   useEffect(() => {
+    setEnsuredAlbumUrl(undefined);
+  }, [portal, token]);
+
+  useEffect(() => {
     if (status === undefined) return;
     if (window.location.hash === "#feedback") {
       document.getElementById("feedback")?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   }, [status]);
 
+  useEffect(() => {
+    if (!status?.eventEnded) return;
+    if (status.albumShareUrl || ensuredAlbumUrl) return;
+    let cancelled = false;
+    void ensureAlbum({ portal, token })
+      .then((result) => {
+        if (cancelled) return;
+        if (result?.albumShareUrl) setEnsuredAlbumUrl(result.albumShareUrl);
+      })
+      .catch(() => {
+        // Immich is optional — leave the album card hidden if ensure fails.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [status?.eventEnded, status?.albumShareUrl, ensuredAlbumUrl, ensureAlbum, portal, token]);
+
   if (status === undefined) return null;
   if (!status || !status.eventEnded) return null;
 
   const rating = form.watch("rating") ?? 0;
+  const albumShareUrl = status.albumShareUrl ?? ensuredAlbumUrl;
 
   return (
     <div className="space-y-4" id="feedback">
-      {status.albumShareUrl ? (
+      {albumShareUrl ? (
         <Card>
           <CardHeader>
             <CardTitle>Photo album</CardTitle>
@@ -82,7 +106,7 @@ export function PublicPostEventSection({
           </CardHeader>
           <CardContent>
             <Button asChild variant="outline">
-              <a href={status.albumShareUrl} target="_blank" rel="noreferrer">
+              <a href={albumShareUrl} target="_blank" rel="noreferrer">
                 View the album
               </a>
             </Button>

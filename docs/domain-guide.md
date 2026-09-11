@@ -201,29 +201,45 @@ Event types (drive which editor tabs and quick-add blocks appear):
   same overview row.
 - Each band org has a designated payee (name/email/mailing address + linked
   user id on `organizationProfiles`).
-- After an event ends, payments enter the payout queue. If the artist has not
-  finished (or waived) org onboarding, the payment lands in **Pending
-  onboarding**; once onboarded it moves to needs-payee or needs-signature
-  request based on payee completeness. Completing/waiving artist onboarding
-  refreshes stuck payments immediately.
+- After an event ends, payments enter the payout queue. Until then they stay
+  **Upcoming** (internal status `draft`) and appear under **Upcoming payouts**
+  in Financial Hub. If the artist has not finished (or waived) org onboarding,
+  the payment lands in **Pending onboarding**; once onboarded it moves to
+  needs-payee or needs-signature request based on payee completeness.
+  Completing/waiving artist onboarding refreshes stuck payments immediately.
+  **Users → Organizations → Artist Organizations** shows an **Onboarding** chip
+  on incomplete orgs (missing steps + send reminder / recheck payouts). Payout
+  queue cards for pending-onboarding link there instead of duplicating the
+  checklist.
+- When assigning artists, empty events with invoice artist lines get an
+  accept/confirm prompt (plus **Import from invoice** anytime). Payout
+  money defaults prefer the invoice artist line (rate, hours, members), then
+  the artist profile hourly rate / member count, then hardcoded fallbacks.
 - Assigned artists with incomplete onboarding get a weekly reminder email
   (same Monday `weeklyJobs` cron as crew / payment-proof follow-ups, ~6-day
   cooldown) until onboarding is done — staff can also resend from the payout
   queue.
 - Confirmation loop: admin sends a signature-request email from the payout
   queue; the designated payee e-signs under **Artists → Payments**
-  or from the artist home show card (typed legal name + amount checkbox). Admin
-  then marks paid with a GrantEd transfer / Service Payment number; all artist
-  members are notified that Stanford is processing the payout. The Payments
-  subtab shows a pending chip when the payee needs to sign or payee setup is
-  incomplete.
+  or from the artist home show card (typed legal name + amount checkbox). The
+  signature email includes the event’s Immich share album URL when one exists
+  (same album as crew/artist media, booking-request/quote feedback, and the
+  post-event album reminder). Outbound emails that include that URL (signature
+  request + post-event album reminder) and the public feedback portal ensure
+  the event album first when Immich is configured (best-effort; Immich failures
+  do not block the email or portal). Admin then marks paid with a GrantEd transfer /
+  Service Payment number; all artist members are notified that Stanford is
+  processing the payout. The Payments subtab shows a pending chip when the
+  payee needs to sign or payee setup is incomplete.
 - Artist home (`/dashboard`) lists upcoming and recent assigned shows with payout
-  status chips (including draft payments and participation-only bookings). Full
-  payment history and payee settings remain under Payments.
+  status chips (including upcoming/pre-event payments and participation-only
+  bookings). Full payment history and payee settings remain under Payments.
 - Once signed, admins and artist members can download an agreement PDF
   (`bandPaymentPdfDownload.ts` via `@arbor/invoice-document`) showing the
   Arbor sender and the payee signature.
 - A daily cron promotes payments for ended events into the payable queue.
+- Insights upcoming horizons include `upcomingArtistPayoutsUsd` (sum of each
+  event’s `bandsCostUsd`, which already includes scheduled artist payouts).
 
 ## Inventory
 
@@ -265,7 +281,13 @@ Event types (drive which editor tabs and quick-add blocks appear):
   creates albums and upload share links (`immichEnsure.ts`,
   `lib/immichClient.ts`); access is scoped by event/band participation
   (`lib/immichAccess.ts`). Marketing can browse/import from a library
-  (`marketingImmich*.ts`).
+  (`marketingImmich*.ts`). Event album share URLs surface for crew/artist
+  media UIs, public booking-request / quote feedback, post-event album
+  reminder emails, and artist payout signature-request emails
+  (`resolveEventAlbumShareUrl`). Emails that attach the share URL, and the
+  public booking-request / quote feedback portal, ensure the event album when
+  Immich is configured (`ensureEventAlbumBestEffort` /
+  `ensureAlbumShareUrlByToken`).
 
 ## Marketing site
 

@@ -47,7 +47,7 @@ export function InsightsEventsPanel({ startMs, endMs }: InsightsEventsPanelProps
         </p>
       ) : null}
 
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         <Card>
           <CardHeader>
             <CardTitle>Next 7 days</CardTitle>
@@ -102,6 +102,21 @@ export function InsightsEventsPanel({ startMs, endMs }: InsightsEventsPanelProps
             ) : (
               <p className="text-2xl font-semibold tabular-nums">
                 {formatUsd(upcoming.horizons.d90.bookedRevenueUsd)}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Upcoming expenses</CardTitle>
+            <CardDescription>Artist payouts on events in next 90 days</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {upcoming === undefined ? (
+              <p className="text-sm text-muted-foreground">Loading…</p>
+            ) : (
+              <p className="text-2xl font-semibold tabular-nums">
+                {formatUsd(upcoming.horizons.d90.upcomingArtistPayoutsUsd)}
               </p>
             )}
           </CardContent>

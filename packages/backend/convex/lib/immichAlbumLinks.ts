@@ -26,6 +26,18 @@ export async function getCanonicalAlbumLink(
   return rows.sort((a, b) => b.updatedAt - a.updatedAt)[0] ?? null;
 }
 
+/** Public share URL for an event album (Immich), with optional legacy override. */
+export async function resolveEventAlbumShareUrl(
+  ctx: QueryCtx | MutationCtx,
+  eventId: Id<"events">,
+  overrideUrl?: string | null,
+) {
+  const override = overrideUrl?.trim();
+  if (override) return override;
+  const link = await getCanonicalAlbumLink(ctx, "event", eventId);
+  return link?.shareUrl ?? undefined;
+}
+
 export async function dedupeAlbumLinksForEntity(
   ctx: MutationCtx,
   entityType: AlbumEntityType,
