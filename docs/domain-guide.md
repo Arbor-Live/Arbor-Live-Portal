@@ -225,9 +225,9 @@ Event types (drive which editor tabs and quick-add blocks appear):
   signature email includes the event’s Immich share album URL when one exists
   (same album as crew/artist media, booking-request/quote feedback, and the
   post-event album reminder). Outbound emails that include that URL (signature
-  request + post-event album reminder) ensure the event album first when Immich
-  is configured (best-effort; Immich failures do not block the email). Admin
-  then marks paid with a GrantEd transfer /
+  request + post-event album reminder) and the public feedback portal ensure
+  the event album first when Immich is configured (best-effort; Immich failures
+  do not block the email or portal). Admin then marks paid with a GrantEd transfer /
   Service Payment number; all artist members are notified that Stanford is
   processing the payout. The Payments subtab shows a pending chip when the
   payee needs to sign or payee setup is incomplete.
@@ -284,8 +284,10 @@ Event types (drive which editor tabs and quick-add blocks appear):
   (`marketingImmich*.ts`). Event album share URLs surface for crew/artist
   media UIs, public booking-request / quote feedback, post-event album
   reminder emails, and artist payout signature-request emails
-  (`resolveEventAlbumShareUrl`). Emails that attach the share URL ensure the
-  event album on send when Immich is configured (`ensureEventAlbumBestEffort`).
+  (`resolveEventAlbumShareUrl`). Emails that attach the share URL, and the
+  public booking-request / quote feedback portal, ensure the event album when
+  Immich is configured (`ensureEventAlbumBestEffort` /
+  `ensureAlbumShareUrlByToken`).
 
 ## Marketing site
 

@@ -128,28 +128,39 @@ export const ensureAlbum = internalAction({
 
 /**
  * Create/link the event Immich album when Immich is configured.
- * Failures are swallowed so email send paths can continue without a share URL.
+ * Failures are swallowed so email / portal paths can continue without a share URL.
  */
 export const ensureEventAlbumBestEffort = internalAction({
   args: { eventId: v.id("events") },
-  returns: v.null(),
-  handler: async (ctx, args) => {
+  returns: v.union(
+    v.null(),
+    v.object({
+      shareUrl: v.optional(v.string()),
+    }),
+  ),
+  handler: async (ctx, args): Promise<{ shareUrl?: string } | null> => {
     if (!isImmichConfigured()) return null;
-    const meta = await ctx.runQuery(internal.immichDb.getEventAlbumEnsureMetaInternal, {
-      eventId: args.eventId,
-    });
+    const meta: { title: string; venueName?: string } | null = await ctx.runQuery(
+      internal.immichDb.getEventAlbumEnsureMetaInternal,
+      { eventId: args.eventId },
+    );
     if (!meta) return null;
     try {
-      await ensureAlbumCore(ctx, {
+      const ensured = await ensureAlbumCore(ctx, {
         entityType: "event",
         entityId: args.eventId,
         albumName: `Event: ${meta.title}`,
         description: meta.venueName ? `${meta.title} at ${meta.venueName}` : meta.title,
       });
+      const link: { shareUrl?: string } | null = await ctx.runQuery(
+        internal.immichDb.getAlbumLinkByIdInternal,
+        { albumLinkId: ensured.albumLinkId },
+      );
+      return { shareUrl: link?.shareUrl };
     } catch {
-      // Immich is optional for outbound mail.
+      // Immich is optional for outbound mail / public feedback.
+      return null;
     }
-    return null;
   },
 });
 
