@@ -8,8 +8,7 @@ import { api, type Id } from "@/lib/convex-api";
 import { EventScheduleCrewAssignPanel } from "@/components/events/event-availability-summary";
 import { EventTimelineScheduler, type TimelineBlockDraft } from "@/components/events/event-timeline-scheduler";
 import { UserSelect, type UserSelectOption } from "@/components/users/user-select";
-import { buildUserSelectDescription } from "@/lib/user-select-description";
-import { pickUserProfileImageUrl } from "@/lib/user-profile-image";
+import { assignableCrewSelectOptions } from "@/lib/user-select-description";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DateTimeRangePicker } from "@/components/ui/date-time-picker";
@@ -137,34 +136,22 @@ export function InvoiceLinkedEventCrewSection({
   const dayCount = eventDayCount(startAt, endAt);
   const showCrewTools = eventTypeHasCrewAssignment(eventType);
 
-  const userOptions = useMemo(() => {
-    const base = (managerList ?? []).map((entry) => ({
-      value: entry.id,
-      label: entry.name,
-      description: buildUserSelectDescription({
-        ...entry,
-        rateMode: entry.rateMode,
-        hourlyRateUsd: entry.hourlyRateUsd,
-      }),
-      avatarUrl: pickUserProfileImageUrl(entry.avatarUrl, entry.image),
-      keywords: `${entry.role ?? ""} ${entry.email ?? ""} ${entry.rateMode ?? ""}`,
-      rateMode: entry.rateMode as "normal" | "lead" | "custom" | undefined,
-      hourlyRateUsd: entry.hourlyRateUsd,
-    }));
-    const currentUserId = viewer?.userId;
-    if (currentUserId && !base.some((entry) => entry.value === currentUserId)) {
-      base.unshift({
-        value: currentUserId,
-        label: account?.name ?? account?.email ?? "Current user",
-        description: account?.email ?? "",
-        avatarUrl: account?.avatarUrl ?? account?.image ?? undefined,
-        keywords: account?.email ?? "",
-        rateMode: undefined,
-        hourlyRateUsd: undefined,
-      });
-    }
-    return base.sort((a, b) => a.label.localeCompare(b.label));
-  }, [account, managerList, viewer?.userId]);
+  const userSelectOptions: UserSelectOption[] = useMemo(
+    () =>
+      assignableCrewSelectOptions(
+        managerList,
+        viewer?.userId
+          ? {
+              id: viewer.userId,
+              name: account?.name ?? account?.email ?? "Current user",
+              email: account?.email,
+              avatarUrl: account?.avatarUrl,
+              image: account?.image,
+            }
+          : null,
+      ),
+    [account, managerList, viewer?.userId],
+  );
 
   const ratesByUserId = useMemo(() => {
     const map = new Map<string, { hourlyRateUsd: number; rateMode: "normal" | "lead" | "custom" }>();
@@ -179,16 +166,6 @@ export function InvoiceLinkedEventCrewSection({
     }
     return map;
   }, [managerList]);
-
-  const userSelectOptions: UserSelectOption[] = useMemo(
-    () =>
-      userOptions.map((option) => ({
-        ...option,
-        role: option.description,
-        email: option.description,
-      })),
-    [userOptions],
-  );
 
   const availabilitySummary = useQuery(
     api.eventCrewAvailability.getSummaryForEvent,
@@ -334,7 +311,7 @@ export function InvoiceLinkedEventCrewSection({
 
   function addPersonnelShift(block: TimelineBlockDraft, options?: { userId?: string }) {
     const blockRef = getBlockRef(block);
-    const selectedUser = options?.userId ? userOptions.find((option) => option.value === options.userId) : undefined;
+    const selectedUser = options?.userId ? userSelectOptions.find((option) => option.value === options.userId) : undefined;
     setShifts((prev) => [
       ...prev,
       {
@@ -413,7 +390,7 @@ export function InvoiceLinkedEventCrewSection({
                       ? {
                           ...shift,
                           userId: value || undefined,
-                          personName: userOptions.find((option) => option.value === value)?.label ?? shift.personName,
+                          personName: userSelectOptions.find((option) => option.value === value)?.label ?? shift.personName,
                           estimatedHourlyRateUsd: value ? shift.estimatedHourlyRateUsd : defaultCrewHourlyRateUsd,
                         }
                       : shift,

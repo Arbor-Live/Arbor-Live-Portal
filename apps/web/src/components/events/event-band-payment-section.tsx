@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { ArtistSelect, artistSelectOptions } from "@/components/bands/artist-select";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { notify } from "@/lib/notify";
@@ -482,13 +483,7 @@ function AddBandForm({
   const [busy, setBusy] = useState(false);
 
   const bandOptions = useMemo(
-    () =>
-      (bands ?? [])
-        .filter((band) => !excludedOrganizationIds.includes(band.organizationId))
-        .map((band) => ({
-          value: band.organizationId,
-          label: band.displayName || band.name,
-        })),
+    () => artistSelectOptions(bands, { excludeOrganizationIds: excludedOrganizationIds }),
     [bands, excludedOrganizationIds],
   );
 
@@ -514,12 +509,12 @@ function AddBandForm({
       <div className="grid gap-3 md:grid-cols-2">
         <div className="space-y-1 md:col-span-2">
           <Label>Band / artist</Label>
-          <SearchableSelect
+          <ArtistSelect
             value={organizationId}
             onChange={setOrganizationId}
             options={bandOptions}
-            placeholder="Search bands..."
-            emptyLabel="Select band"
+            placeholder="Search artists…"
+            emptyLabel="Select artist"
           />
         </div>
         <div className="space-y-1">
@@ -594,13 +589,7 @@ function EventBandPaymentForm({
   const [busy, setBusy] = useState(false);
 
   const bandOptions = useMemo(
-    () =>
-      (bands ?? [])
-        .filter((band) => !excludedOrganizationIds.includes(band.organizationId))
-        .map((band) => ({
-          value: band.organizationId,
-          label: band.displayName || band.name,
-        })),
+    () => artistSelectOptions(bands, { excludeOrganizationIds: excludedOrganizationIds }),
     [bands, excludedOrganizationIds],
   );
 
@@ -702,7 +691,7 @@ function EventBandPaymentForm({
         {!organizationLocked ? (
           <div className="space-y-1 md:col-span-2">
             <Label>Band / artist</Label>
-            <SearchableSelect
+            <ArtistSelect
               value={organizationId}
               onChange={(value) => {
                 setOrganizationId(value);
@@ -711,8 +700,8 @@ function EventBandPaymentForm({
                 }
               }}
               options={bandOptions}
-              placeholder="Search bands..."
-              emptyLabel="Select band"
+              placeholder="Search artists…"
+              emptyLabel="Select artist"
             />
           </div>
         ) : null}

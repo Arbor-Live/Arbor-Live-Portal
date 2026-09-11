@@ -32,6 +32,7 @@ type MentionCandidate = {
   username?: string;
   pronouns?: string;
   gradYear?: number;
+  avatarUrl?: string;
 };
 
 function escapeRegExp(value: string) {
@@ -447,7 +448,7 @@ function CommentsPanel({
           role="listbox"
           aria-label="Mention a teammate"
           data-testid="comment-mention-picker"
-          className="max-h-60 w-(--radix-popover-trigger-width) gap-0 overflow-y-auto p-1 text-sm"
+          className="max-h-60 w-(--radix-popover-trigger-width) min-w-[min(100%,24rem)] gap-0 overflow-x-hidden overflow-y-auto p-1 text-sm"
           onOpenAutoFocus={(event) => event.preventDefault()}
         >
           {filteredMentions.map((candidate, index) => (
@@ -458,7 +459,7 @@ function CommentsPanel({
               role="option"
               aria-selected={index === mentionHighlight}
               data-active={index === mentionHighlight}
-              className={`flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm ${
+              className={`flex w-full min-w-0 items-center gap-2 overflow-hidden rounded-sm px-2 py-1.5 text-left text-sm ${
                 index === mentionHighlight ? "bg-muted" : "hover:bg-muted"
               }`}
               onMouseDown={(event) => {
@@ -467,15 +468,18 @@ function CommentsPanel({
               }}
               onMouseEnter={() => setMentionHighlight(index)}
             >
-              <UserAvatar
-                name={candidate.name}
-                email={candidate.email}
-                userId={candidate.userId}
-                size="sm"
-                pixelSize={24}
-                className="size-6 rounded-md"
-              />
-              <span className="min-w-0">
+              <span className="shrink-0">
+                <UserAvatar
+                  name={candidate.name}
+                  email={candidate.email}
+                  userId={candidate.userId}
+                  imageUrl={candidate.avatarUrl}
+                  size="sm"
+                  pixelSize={24}
+                  className="size-6 rounded-md"
+                />
+              </span>
+              <span className="min-w-0 flex-1 overflow-hidden">
                 <span className="block truncate">{candidate.name}</span>
                 <span className="block truncate text-xs text-muted-foreground">
                   {buildUserSelectDescription({

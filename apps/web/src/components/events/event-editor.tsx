@@ -47,8 +47,7 @@ import { LinkedEventDaySwitcher } from "@/components/events/linked-event-day-swi
 import { EventTimelineScheduler, type TimelineBlockDraft } from "@/components/events/event-timeline-scheduler";
 import { EventScheduleCrewAssignPanel } from "@/components/events/event-availability-summary";
 import { UserSelect, type UserSelectOption } from "@/components/users/user-select";
-import { buildUserSelectDescription } from "@/lib/user-select-description";
-import { pickUserProfileImageUrl } from "@/lib/user-profile-image";
+import { assignableCrewSelectOptions } from "@/lib/user-select-description";
 import {
   EVENT_STATUS_EDITOR_OPTIONS,
   normalizeEventStatus,
@@ -215,6 +214,8 @@ export function EventEditor({
   const account = shell?.account;
   const isCreate = !eventId;
   const loadOverviewLookups = isCreate || activeTab === "overview";
+  // Schedule crew pickers need the same assignable-user list as overview manager fields.
+  const loadCrewUserOptions = loadOverviewLookups || activeTab === "schedule";
   const eventDetail = activeTab === "schedule" ? "schedule" : "full";
   const eventData = useQuery(
     api.events.get,
@@ -222,12 +223,13 @@ export function EventEditor({
   );
   // Billing/host lookups are overview-only — schedule/equipment tabs were fan-out
   // saturating local Convex (and slowing prod) for fields they never render.
+  // listManagers is separate: schedule shift assignment needs it too.
   const invoices = useQuery(api.invoices.list, loadOverviewLookups ? {} : "skip");
   const hostGroups = useQuery(
     api.invoiceGroups.list,
     loadOverviewLookups ? { activeOnly: true } : "skip",
   );
-  const managerList = useQuery(api.invoices.listManagers, loadOverviewLookups ? {} : "skip");
+  const managerList = useQuery(api.invoices.listManagers, loadCrewUserOptions ? {} : "skip");
   const createEvent = useMutation(api.events.create);
   const createEventSeries = useMutation(api.eventSeries.create);
   const reattachOccurrence = useMutation(api.eventSeries.reattachOccurrence);
@@ -589,38 +591,25 @@ export function EventEditor({
     [],
   );
 
-  const userOptions: SearchableSelectOption[] = useMemo(() => {
-    const base = (managerList ?? []).map((entry) => ({
-      value: entry.id,
-      label: entry.name,
-      description: buildUserSelectDescription(entry),
-      avatarUrl: pickUserProfileImageUrl(entry.avatarUrl, entry.image),
-      keywords: `${entry.role ?? ""} ${entry.email ?? ""}`,
-    }));
-    const currentUserId = viewer?.userId;
-    if (currentUserId && !base.some((entry) => entry.value === currentUserId)) {
-      base.unshift({
-        value: currentUserId,
-        label: account?.name ?? account?.email ?? "Current user",
-        description: account?.email ?? "",
-        avatarUrl: account?.avatarUrl ?? account?.image ?? undefined,
-        keywords: account?.email ?? "",
-      });
-    }
-    return base.sort((a, b) => a.label.localeCompare(b.label));
-  }, [account, managerList, viewer?.userId]);
   const userSelectOptions: UserSelectOption[] = useMemo(
     () =>
-      userOptions.map((option) => ({
-        ...option,
-        role: option.description,
-        email: option.description,
-      })),
-    [userOptions],
+      assignableCrewSelectOptions(
+        managerList,
+        viewer?.userId
+          ? {
+              id: viewer.userId,
+              name: account?.name ?? account?.email ?? "Current user",
+              email: account?.email,
+              avatarUrl: account?.avatarUrl,
+              image: account?.image,
+            }
+          : null,
+      ),
+    [account, managerList, viewer?.userId],
   );
   const selectedCrewUserOption = useMemo(
-    () => userOptions.find((option) => option.value === selectedCrewUserId),
-    [selectedCrewUserId, userOptions],
+    () => userSelectOptions.find((option) => option.value === selectedCrewUserId),
+    [selectedCrewUserId, userSelectOptions],
   );
 
   const recurrencePreview = useMemo(() => {
@@ -902,7 +891,7 @@ export function EventEditor({
   function addPersonnelShift(block: TimelineBlockDraft, options?: { userId?: string }) {
     const blockRef = getBlockRef(block);
     const selectedUser =
-      options?.userId ? userOptions.find((option) => option.value === options.userId) : undefined;
+      options?.userId ? userSelectOptions.find((option) => option.value === options.userId) : undefined;
     setShifts((prev) => [
       ...prev,
       {
@@ -1480,7 +1469,7 @@ export function EventEditor({
               </div>
             </div>
             <div className="space-y-1">
-              <Label>Event Manager User ID</Label>
+              <Label>Event Manager</Label>
               <UserSelect
                 value={managerUserId}
                 onChange={setManagerUserId}
@@ -1489,7 +1478,7 @@ export function EventEditor({
               />
             </div>
             <div className="space-y-1">
-              <Label>Day-Of Lead User ID</Label>
+              <Label>Day-Of Lead</Label>
               <UserSelect
                 value={dayOfLeadUserId}
                 onChange={setDayOfLeadUserId}
@@ -1809,7 +1798,7 @@ export function EventEditor({
                                               ...shift,
                                               userId: value || undefined,
                                               personName:
-                                                userOptions.find((option) => option.value === value)?.label ??
+                                                userSelectOptions.find((option) => option.value === value)?.label ??
                                                 shift.personName,
                                             }
                                           : shift,
@@ -1955,7 +1944,7 @@ export function EventEditor({
                                           ...row,
                                           userId: value || undefined,
                                           personName:
-                                            userOptions.find((option) => option.value === value)?.label ?? row.personName,
+                                            userSelectOptions.find((option) => option.value === value)?.label ?? row.personName,
                                         }
                                       : row,
                                   ),

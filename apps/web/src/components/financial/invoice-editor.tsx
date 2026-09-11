@@ -6,7 +6,15 @@ import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type 
 import { useConvex, useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
 import { AdminCascadeDeleteDialog } from "@/components/admin/admin-cascade-delete-dialog";
+import {
+  ArtistSelect,
+  ARTIST_TBD_OPTION,
+  ARTIST_TBD_VALUE,
+  artistSelectOptions,
+} from "@/components/bands/artist-select";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
+import { UserSelect, type UserSelectOption } from "@/components/users/user-select";
+import { assignableCrewSelectOptions } from "@/lib/user-select-description";
 import {
   InventoryPackageSearchSelect,
   InventoryTypeSearchSelect,
@@ -90,8 +98,7 @@ type ArtistRow = {
 type CrewRow = InvoiceCrewRow;
 type FeeRow = { feeDefinitionId: string; label: string; quantity: string; rateUsd: string };
 
-const ARTIST_TBD_VALUE = "__tbd__";
-const ARTIST_TBD_LABEL = "Band TBD";
+const ARTIST_TBD_LABEL = ARTIST_TBD_OPTION.label;
 
 function emptyArtistRow(): ArtistRow {
   return {
@@ -336,14 +343,8 @@ export function InvoiceEditor({
   const [editorBaselineReady, setEditorBaselineReady] = useState(() => !invoiceId);
   const reapprovalDecisionRef = useRef<null | boolean>(null);
 
-  const managerOptions = useMemo(
-    () =>
-      (managerList ?? []).map((entry) => ({
-        value: entry.id,
-        label: entry.name,
-        description: entry.email || undefined,
-        keywords: entry.email || undefined,
-      })),
+  const managerOptions: UserSelectOption[] = useMemo(
+    () => assignableCrewSelectOptions(managerList),
     [managerList],
   );
 
@@ -1958,7 +1959,7 @@ export function InvoiceEditor({
               </div>
               <div className="min-w-0 space-y-2">
                 <Label>Manager</Label>
-                <SearchableSelect
+                <UserSelect
                   value={managerUserId}
                   onChange={onManagerChange}
                   options={managerOptions}
@@ -2832,29 +2833,10 @@ function SectionArtists({
       }>
     | undefined;
 }) {
-  const bandOptions = useMemo(() => {
-    const options = [
-      {
-        value: ARTIST_TBD_VALUE,
-        label: "Band TBD",
-        description: "Need to determine",
-      },
-      ...(bands ?? []).map((band) => {
-        const parts: string[] = [];
-        if (band.memberCount > 0) parts.push(`${band.memberCount} people`);
-        if (band.performerHourlyRateUsd > 0) {
-          parts.push(`${formatUsd(band.performerHourlyRateUsd)}/person/hr`);
-        }
-        return {
-          value: band.organizationId,
-          label: band.name,
-          description: parts.length ? parts.join(" · ") : "No rate on file",
-          keywords: band.name,
-        };
-      }),
-    ];
-    return options;
-  }, [bands]);
+  const bandOptions = useMemo(
+    () => artistSelectOptions(bands, { includeTbd: true }),
+    [bands],
+  );
 
   function onBandChange(idx: number, organizationId: string) {
     setRows((prev) =>
@@ -2909,12 +2891,12 @@ function SectionArtists({
               className={`grid ${ARTIST_ROW_GRID}`}
               data-testid={`invoice-row-artist-${idx}`}
             >
-              <SearchableSelect
+              <ArtistSelect
                 value={isTbd ? ARTIST_TBD_VALUE : row.organizationId}
                 onChange={(value) => onBandChange(idx, value)}
                 options={bandOptions}
-                placeholder={bands === undefined ? "Loading bands…" : "Select band"}
-                emptyLabel="No bands found"
+                placeholder={bands === undefined ? "Loading artists…" : "Search artists…"}
+                emptyLabel="Select artist"
               />
               {isTbd ? (
                 <Input

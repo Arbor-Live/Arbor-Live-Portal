@@ -7,7 +7,7 @@ import { api } from "@/lib/convex-api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { UserSelect, type UserSelectOption } from "@/components/users/user-select";
-import { toUserSelectOption } from "@/lib/user-select-description";
+import { assignableCrewSelectOptions } from "@/lib/user-select-description";
 
 export function BookingRequestSettingsClient() {
   const settings = useQuery(api.eventRequests.getBookingRequestSettings, {});
@@ -22,12 +22,11 @@ export function BookingRequestSettingsClient() {
 
   const options: UserSelectOption[] = useMemo(
     () =>
-      (managers ?? []).map((row) =>
-        toUserSelectOption({
+      assignableCrewSelectOptions(
+        (managers ?? []).map((row) => ({
           ...row,
-          id: row.id,
           name: row.name?.trim() || row.email || row.id,
-        }),
+        })),
       ),
     [managers],
   );

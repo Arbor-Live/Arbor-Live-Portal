@@ -11,7 +11,7 @@ import {
 import { useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
 import { useSessionShell, useSessionViewer } from "@/components/session-shell-provider";
-import { SearchableSelect } from "@/components/inventory/searchable-select";
+import { ArtistSelect, artistSelectOptions } from "@/components/bands/artist-select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 const STORAGE_KEY = "arbor.adminBandOrganizationId";
@@ -119,13 +119,7 @@ export function AdminBandPickerCard() {
   );
 
   const options = useMemo(
-    () =>
-      (bands ?? []).map((band) => ({
-        value: band.organizationId,
-        label: band.displayName || band.name,
-        description: band.displayName && band.displayName !== band.name ? band.name : undefined,
-        keywords: `${band.displayName} ${band.name} ${band.slug}`,
-      })),
+    () => artistSelectOptions(bands),
     [bands],
   );
 
@@ -147,12 +141,12 @@ export function AdminBandPickerCard() {
           <p className="text-sm text-muted-foreground">No band organizations yet.</p>
         ) : (
           <div className="max-w-md" data-testid="admin-band-picker">
-            <SearchableSelect
+            <ArtistSelect
               value={organizationId ?? ""}
               onChange={setOrganizationId}
               options={options}
-              placeholder="Select a band"
-              emptyLabel="No matching bands"
+              placeholder="Search artists…"
+              emptyLabel="No matching artists"
             />
           </div>
         )}
