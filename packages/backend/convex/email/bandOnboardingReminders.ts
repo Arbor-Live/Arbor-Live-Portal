@@ -135,7 +135,7 @@ async function enqueueBandOnboardingRemindersForOrg(
 
 /**
  * Remind assigned bands that still need onboarding before payout.
- * Triggered from the Monday `onboarding.remindIncomplete` cron (not a separate job).
+ * Triggered from the Monday `onboarding.runWeeklyJobs` cron (not a separate job).
  */
 export const remindIncompleteAssignedBands = internalMutation({
   args: {},

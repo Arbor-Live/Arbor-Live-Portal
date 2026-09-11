@@ -34,9 +34,9 @@ crons.daily(
 );
 
 crons.cron(
-  "onboarding incomplete reminders",
+  "weekly jobs",
   "0 17 * * 1",
-  internal.onboarding.remindIncomplete,
+  internal.onboarding.runWeeklyJobs,
 );
 
 crons.cron(

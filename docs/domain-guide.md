@@ -207,7 +207,7 @@ Event types (drive which editor tabs and quick-add blocks appear):
   request based on payee completeness. Completing/waiving artist onboarding
   refreshes stuck payments immediately.
 - Assigned artists with incomplete onboarding get a weekly reminder email
-  (same Monday onboarding cron as crew, ~6-day cooldown) until onboarding is
+  (same Monday `weekly jobs` cron as crew, ~6-day cooldown) until onboarding is
   done — staff can also resend from the payout queue.
 - Confirmation loop: admin sends a signature-request email from the payout
   queue; the designated payee e-signs under **Artists → Payments**

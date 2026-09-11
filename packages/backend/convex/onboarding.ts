@@ -1010,7 +1010,8 @@ export const waiveBandOnboarding = mutation({
   },
 });
 
-export const remindIncomplete = internalMutation({
+/** Monday cron entrypoint: crew onboarding reminders + assigned-artist onboarding nudges. */
+export const runWeeklyJobs = internalMutation({
   args: {},
   returns: v.object({ enqueuedCount: v.number() }),
   handler: async (ctx) => {
@@ -1058,7 +1059,7 @@ export const remindIncomplete = internalMutation({
       enqueuedCount += 1;
     }
 
-    // Same Monday cron: nudge assigned bands that still need org onboarding.
+    // Nudge assigned artists that still need org onboarding.
     await ctx.scheduler.runAfter(
       0,
       internal.email.bandOnboardingReminders.remindIncompleteAssignedBands,
