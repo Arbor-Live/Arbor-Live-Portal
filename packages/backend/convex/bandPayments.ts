@@ -36,6 +36,10 @@ import {
   type BandPaymentStatus,
 } from "./lib/bandPayments";
 import { resolveBandName } from "./lib/bandIdentity";
+import {
+  bandOnboardingIncompleteSteps,
+  bandOnboardingIncompleteStepValidator,
+} from "./lib/bandOnboardingSteps";
 import { allocateBandPaymentConfirmationToken } from "./lib/publicReferenceIds";
 import {
   scheduleBandPaymentCompletedEmails,
@@ -101,6 +105,14 @@ const bandPaymentRowValidator = v.object({
   photoAlbumUrl: v.optional(v.string()),
   eventEnded: v.boolean(),
   canDownloadAgreementPdf: v.boolean(),
+  onboardingStatus: v.union(
+    v.literal("not_started"),
+    v.literal("in_progress"),
+    v.literal("completed"),
+    v.literal("waived"),
+    v.null(),
+  ),
+  onboardingIncompleteSteps: v.array(bandOnboardingIncompleteStepValidator),
 });
 
 const bandFacingPaymentRowValidator = v.object({
@@ -288,6 +300,15 @@ async function buildBandPaymentRow(
   nowMs: number,
 ) {
   const effectivePayee = await getEffectivePayeeForPayment(ctx, payment);
+  const onboarding = await ctx.db
+    .query("organizationOnboarding")
+    .withIndex("by_organizationId", (q) => q.eq("organizationId", payment.organizationId))
+    .unique();
+  const onboardingStatus = onboarding?.status ?? null;
+  const onboardingIncompleteSteps =
+    payment.status === "pending_onboarding"
+      ? bandOnboardingIncompleteSteps(onboarding)
+      : [];
   return {
     _id: payment._id,
     eventId: payment.eventId,
@@ -323,6 +344,8 @@ async function buildBandPaymentRow(
     photoAlbumUrl: payment.photoAlbumUrl,
     eventEnded: event.endAt <= nowMs,
     canDownloadAgreementPdf: bandPaymentHasAgreementPdf(payment),
+    onboardingStatus,
+    onboardingIncompleteSteps,
   };
 }
 
@@ -775,6 +798,41 @@ export const syncStalePayeePayments = mutation({
       }
     }
     return updated;
+  },
+});
+
+/** Staff: re-evaluate queue status for one org after onboarding/payee changes. */
+export const refreshPendingPaymentsForOrganization = mutation({
+  args: { organizationId: v.string() },
+  returns: v.object({ updated: v.number() }),
+  handler: async (ctx, args) => {
+    await requireArborInternalContext(ctx);
+    const now = Date.now();
+    const payments = await ctx.db
+      .query("eventBandPayments")
+      .withIndex("by_organizationId", (q) => q.eq("organizationId", args.organizationId))
+      .take(200);
+    let updated = 0;
+    for (const payment of payments) {
+      if (
+        payment.status !== "pending_payee" &&
+        payment.status !== "pending_onboarding" &&
+        payment.status !== "draft"
+      ) {
+        continue;
+      }
+      const synced = await syncPayeeFromOrganizationForPayment(ctx, payment, now);
+      if (
+        synced.status !== payment.status ||
+        synced.designatedPayeeName !== payment.designatedPayeeName ||
+        synced.designatedPayeeEmail !== payment.designatedPayeeEmail ||
+        synced.designatedPayeeMailingAddress !== payment.designatedPayeeMailingAddress ||
+        synced.designatedPayeePayoutMethod !== payment.designatedPayeePayoutMethod
+      ) {
+        updated += 1;
+      }
+    }
+    return { updated };
   },
 });
 

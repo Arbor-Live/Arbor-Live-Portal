@@ -205,7 +205,13 @@ Event types (drive which editor tabs and quick-add blocks appear):
   finished (or waived) org onboarding, the payment lands in **Pending
   onboarding**; once onboarded it moves to needs-payee or needs-signature
   request based on payee completeness. Completing/waiving artist onboarding
-  refreshes stuck payments immediately.
+  refreshes stuck payments immediately. Queue cards and the event Artists
+  panel list which onboarding gates are still missing; staff can **Recheck
+  status** after the artist finishes.
+- When assigning artists, empty events with invoice artist lines get an
+  accept/confirm prompt (plus **Import from invoice** anytime). Payout
+  money defaults prefer the invoice artist line (rate, hours, members), then
+  the artist profile hourly rate / member count, then hardcoded fallbacks.
 - Assigned artists with incomplete onboarding get a weekly reminder email
   (same Monday `weeklyJobs` cron as crew / payment-proof follow-ups, ~6-day
   cooldown) until onboarding is done — staff can also resend from the payout

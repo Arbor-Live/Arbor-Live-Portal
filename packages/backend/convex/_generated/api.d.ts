@@ -99,6 +99,7 @@ import type * as lib_analyticsTime from "../lib/analyticsTime.js";
 import type * as lib_assetScan from "../lib/assetScan.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_bandIdentity from "../lib/bandIdentity.js";
+import type * as lib_bandOnboardingSteps from "../lib/bandOnboardingSteps.js";
 import type * as lib_bandOrgInvite from "../lib/bandOrgInvite.js";
 import type * as lib_bandPayments from "../lib/bandPayments.js";
 import type * as lib_bookingChainDelete from "../lib/bookingChainDelete.js";
@@ -292,6 +293,7 @@ declare const fullApi: ApiFromModules<{
   "lib/assetScan": typeof lib_assetScan;
   "lib/auth": typeof lib_auth;
   "lib/bandIdentity": typeof lib_bandIdentity;
+  "lib/bandOnboardingSteps": typeof lib_bandOnboardingSteps;
   "lib/bandOrgInvite": typeof lib_bandOrgInvite;
   "lib/bandPayments": typeof lib_bandPayments;
   "lib/bookingChainDelete": typeof lib_bookingChainDelete;
