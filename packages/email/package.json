@@ -9,7 +9,6 @@
     "./types": "./src/types.ts"
   },
   "scripts": {
-    "dev": "email dev --dir emails --port 3001",
     "email:dev": "email dev --dir emails --port 3001",
     "typecheck": "tsc --noEmit"
   },

@@ -4,10 +4,33 @@ How to go from a fresh clone to a working local app with an admin account.
 
 ## Prerequisites
 
-- Node.js 20+ and pnpm 10 (the repo pins `pnpm@10.33.0` via `packageManager`)
-- A [Convex](https://convex.dev) account (the Convex CLI signs you in on first run)
+- Node.js 20+ and pnpm 10 (the repo pins pnpm via `packageManager`)
+- A Convex account only for the shared worktrunk; isolated per-worktree
+  backends run anonymously with no login
 
-## 1. Install dependencies
+## Quick path (any worktree)
+
+```bash
+pnpm install
+pnpm setup:worktree-env    # one time per worktree
+pnpm run dev
+```
+
+`setup:worktree-env` links env files, boots an isolated local Convex for this
+worktree, sets its deployment env, and seeds a loginable admin plus crew/band
+accounts and demo data (an event with a schedule, a quote in the funnel). When
+it finishes it prints this worktree's web port and the seeded credentials —
+all seeded accounts share the printed password. `pnpm run dev` then starts the
+backend and web app on this worktree's own ports, so parallel worktrees never
+collide.
+
+On the main checkout there is nothing to isolate; the script only links env
+files and repairs `packages/backend/.env`, then prints the manual trunk steps
+below.
+
+## Manual trunk setup (main checkout / shared data)
+
+### 1. Install dependencies
 
 ```bash
 pnpm install
@@ -17,20 +40,17 @@ pnpm install
 tries to link env files (it swallows errors on a fresh clone — that's expected
 until step 2 is done).
 
-## 2. Set up env files
+### 2. Set up env files
 
 Env files are not committed. They live once in `.git/arbor-env/` and are
-symlinked into every worktree. Follow the "First-time setup" section of the
-root [README](../README.md), then run:
-
-```bash
-pnpm setup:worktree-env
-```
+symlinked into every worktree. `pnpm setup:worktree-env` seeds them from the
+`.env.example` files, strips placeholder CONVEX URLs, and generates
+`BETTER_AUTH_SECRET` if missing.
 
 See [environment-variables.md](environment-variables.md) for what each
 variable does and where it must be set.
 
-## 3. Start the backend
+### 3. Start the backend
 
 ```bash
 pnpm dev:backend
@@ -46,7 +66,7 @@ Leave this running: it watches `packages/backend/convex/` and pushes changes.
 Set the backend env vars (Better Auth, Resend, R2, Immich) in the Convex
 dashboard for this deployment — see [environment-variables.md](environment-variables.md).
 
-## 4. Create the first admin account
+### 4. Create the first admin account
 
 There is no self-serve sign-up. With the web app running and **no admin** yet,
 open `/setup` directly. Fill in name, email, and password to create the first
@@ -56,7 +76,7 @@ Once any admin exists, `/setup` locks permanently and redirects to sign-in.
 Additional users are invited from the app (Users section) via email invites;
 new crew land on `/onboarding` after accepting.
 
-## 5. Start the web app
+### 5. Start the web app
 
 In another terminal:
 
@@ -88,16 +108,16 @@ pnpm dev:backend             # convex dev against the shared trunk deployment
 
 Each worktree runs its **own anonymous Convex backend** on its own ports
 (`:3210`/`:3211` for the first worktree, then `:3220`/`:3221`, `:3230`/`:3231`,
-…). `.env.local` files become **real per-worktree files**, so schema pushes and
-data never collide with the trunk or another worktree. **All non-trunk feature
-work — a single agent or many, on any feature branch — must use this mode** so
-schema pushes never target the shared trunk deployment.
+…), and gets its **own Next.js port** (from :3000 up). `.env.local` files become
+**real per-worktree files**, so schema pushes and data never collide with the
+trunk or another worktree. **All non-trunk feature work — a single agent or
+many, on any feature branch — must use this mode** so schema pushes never
+target the shared trunk deployment.
 
 ```bash
-pnpm dev:backend:local    # switch to local mode, boot the isolated backend,
-                          # and set BETTER_AUTH_SECRET / SITE_URL / EMAIL_TEST_MODE
-                          # on that deployment (web auth works out of the box)
-pnpm dev:web              # same as always, but pointed at the local backend
+pnpm setup:worktree-env    # switch to local mode, boot, set deployment env,
+                           # seed accounts + demo data (one time per worktree)
+pnpm run dev               # backend + web on this worktree's ports
 ```
 
 | Command | What it does |
@@ -105,14 +125,19 @@ pnpm dev:web              # same as always, but pointed at the local backend
 | `pnpm worktree-convex status` | Show this worktree's mode, ports, and `.env.local` files |
 | `pnpm worktree-convex local` | Switch this worktree to isolated local Convex (no boot) |
 | `pnpm worktree-convex trunk` | Switch back to the shared worktrunk |
-| `pnpm dev:backend:local` | Local mode + boot + bootstrap deployment env |
+| `pnpm setup:worktree-env` | Full local bootstrap: ports + boot + deployment env + seed |
+| `pnpm dev:backend:local` | Local mode + boot + bootstrap deployment env (no seed) |
 | `pnpm dev:backend` | `convex dev` in this worktree's current mode |
 
 Ports are allocated once per worktree and reused, so restarts are stable. Each
 worktree's deployment config lives in its own gitignored
 `packages/backend/.convex/`. A local backend only needs the shared `.env`
-secrets plus the three vars `dev:backend:local` sets; R2 / Immich / Resend
-features degrade gracefully without them.
+secrets plus the three vars the bootstrap sets; R2 / Immich / Resend features
+degrade gracefully without them.
+
+Re-running `pnpm setup:worktree-env` is safe: it re-uses this worktree's ports,
+re-asserts the deployment env, and re-seeds (account upserts; demo data rows
+are appended).
 
 ## Dev preview wizards
 
@@ -154,16 +179,18 @@ Do not rely on this for production testing, and never ship a build with
 
 | Command | What it does |
 |---|---|
-| `pnpm dev:web` | Next.js dev server (apps/web) |
+| `pnpm run dev` | Backend + web dev servers on this worktree's own ports |
+| `pnpm dev:web` | Next.js dev server (apps/web) on the worktree port |
 | `pnpm dev:backend` | Convex dev in this worktree's mode (trunk by default) |
 | `pnpm dev:backend:local` | Switch to isolated local Convex and boot it (parallel agents) |
-| `pnpm dev:email` | react-email preview server on port 3001 |
+| `pnpm setup:worktree-env` | Full local bootstrap: ports + boot + deployment env + seeded accounts/data |
+| `pnpm prune` | Remove worktrees whose PR is merged or that have been idle 7+ days (`--dry-run` to preview, `--force` to include dirty ones) |
+| `pnpm dev:email` | react-email preview server on port 3001 (opt-in, not part of `pnpm run dev`) |
 | `pnpm codegen:backend` | Regenerate Convex bindings after schema/API changes |
 | `pnpm lint` / `pnpm typecheck` | Lint / typecheck all workspace packages |
 | `pnpm --filter web build` | Full Next.js production build (best cross-file type check) |
 | `pnpm test:e2e` | Boot **anonymous** local Convex + Next, then run Playwright. Writes anonymous config to `packages/backend/.env.local` (Convex requires that path); locally stashes any prior cloud `.env.local` and restores it on exit. Opt into shared cloud Dev with `E2E_USE_CLOUD_DEV=1` or `CONVEX_AGENT_MODE=cloud`. `E2E_SKIP_BOOT=1` reuses a running stack (warns if that stack is cloud). |
 
 CI runs the same suite on PRs and pushes to `main` (`.github/workflows/e2e.yml`) with `CONVEX_AGENT_MODE=anonymous` and `E2E_EMAIL_MOCK` so Resend is never called. Local `pnpm test:e2e` defaults to the same anonymous mode (stashes/restores cloud `.env.local`) so personal devices do not burn team-plan Database I/O. Coverage by app section: [e2e-coverage.md](e2e-coverage.md).
-Note: root `pnpm dev` runs *every* package's `dev` script in parallel,
-including the email preview server. Use the targeted `dev:web` / `dev:backend`
-scripts if you only want the app.
+Note: root `pnpm run dev` starts the app (backend + web) on this worktree's own
+ports. The email preview server is opt-in via `pnpm dev:email`.

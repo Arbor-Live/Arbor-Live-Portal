@@ -13,7 +13,9 @@
  *            worktree. This is the mode for parallel agent work.
  *
  * Ports are allocated once per worktree in .git/arbor-env/worktree-convex.json
- * (keyed by absolute worktree path) and reused across runs.
+ * (keyed by absolute worktree path) and reused across runs. Each worktree also
+ * gets its own Next.js web port, so `pnpm run dev` never collides across
+ * worktrees; `scripts/setup-worktree.mjs` layers account + data seeding on top.
  *
  * Usage:
  *   node scripts/worktree-convex.mjs ensure  — restore this worktree's mode
@@ -26,14 +28,16 @@
 import { execFileSync, execSync, spawn } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
-import net from "node:net";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { isPortFree, stopProcessesOnPort, waitForPortListening } from "./lib/ports.mjs";
 
 const BACKEND_ENV_LOCAL = "packages/backend/.env.local";
 const WEB_ENV_LOCAL = "apps/web/.env.local";
 const BASE_PORT = Number(process.env.CONVEX_LOCAL_BASE_PORT ?? 3210);
 const STRIDE = 10;
+/** Next.js dev port pool — scanned upward so worktrees never share one. */
+const WEB_BASE_PORT = Number(process.env.ARBOR_WEB_BASE_PORT ?? 3000);
 const GENERATED_MARKER = "managed by scripts/worktree-convex.mjs";
 
 function git(command, cwd = process.cwd()) {
@@ -49,7 +53,9 @@ const sharedRoot = path.join(gitCommonDir, "arbor-env");
 const registryFile = path.join(sharedRoot, "worktree-convex.json");
 const lockFile = path.join(sharedRoot, ".worktree-convex.lock");
 const backendDir = path.join(repoRoot, "packages/backend");
-const convexBin = path.join(repoRoot, "node_modules", ".bin", "convex");
+// Spawn the real JS entry rather than the .bin sh wrapper — going through the
+// wrapper (libuv's ENOEXEC sh fallback) breaks the CLI's local-backend spawn.
+const convexEntry = path.join(repoRoot, "node_modules", "convex", "bin", "main.js");
 
 function readRegistry() {
   let raw;
@@ -147,29 +153,9 @@ function isTrunkEnvLocal(file) {
   return Boolean(url && url.includes(".convex.cloud"));
 }
 
-function isPortFree(port) {
-  return new Promise((resolve) => {
-    const socket = new net.Socket();
-    socket.setTimeout(300);
-    socket.once("connect", () => {
-      socket.destroy();
-      resolve(false);
-    });
-    socket.once("error", () => {
-      socket.destroy();
-      resolve(true);
-    });
-    socket.once("timeout", () => {
-      socket.destroy();
-      resolve(false);
-    });
-    socket.connect(port, "127.0.0.1");
-  });
-}
-
-async function allocatePorts(registry) {
+async function allocatePortPair(registry) {
   const claimed = new Set(
-    Object.values(registry.worktrees).flatMap((w) => [w.cloudPort, w.sitePort]),
+    Object.values(registry.worktrees).flatMap((w) => [w.cloudPort, w.sitePort, w.webPort]),
   );
   for (let cloud = BASE_PORT; cloud < 65535 - STRIDE; cloud += STRIDE) {
     const site = cloud + 1;
@@ -178,6 +164,45 @@ async function allocatePorts(registry) {
     return { cloudPort: cloud, sitePort: site };
   }
   throw new Error(`no free Convex port pair found starting at ${BASE_PORT}`);
+}
+
+/** Next.js dev port for this worktree — unique across worktrees, stable across restarts. */
+async function allocateWebPort(registry, reservedPorts = []) {
+  // Reserve every registered port plus the current entry's just-allocated
+  // Convex pair (not yet in the registry) so the web scan cannot collide.
+  const claimed = new Set(
+    [
+      ...Object.values(registry.worktrees).flatMap((w) => [w.cloudPort, w.sitePort, w.webPort]),
+      ...reservedPorts,
+    ].filter(Boolean),
+  );
+  for (let port = WEB_BASE_PORT; port < 65535; port += 1) {
+    if (claimed.has(port)) continue;
+    if (await isPortFree(port)) return port;
+  }
+  throw new Error(`no free web port found starting at ${WEB_BASE_PORT}`);
+}
+
+/**
+ * Fill in this worktree's registry entry: mode, Convex port pair, and web port.
+ * Backfills missing pieces (e.g. webPort for entries created before it existed)
+ * without disturbing the ports already allocated.
+ */
+async function ensureEntry(registry, mode) {
+  const entry = registry.worktrees[repoRoot] ?? {};
+  let dirty = false;
+  if (!entry.cloudPort || !entry.sitePort) {
+    Object.assign(entry, await allocatePortPair(registry));
+    dirty = true;
+  }
+  if (!entry.webPort) {
+    entry.webPort = await allocateWebPort(registry, [entry.cloudPort, entry.sitePort]);
+    dirty = true;
+  }
+  entry.mode = mode;
+  registry.worktrees[repoRoot] = entry;
+  if (dirty) writeRegistry(registry);
+  return { cloudPort: entry.cloudPort, sitePort: entry.sitePort, webPort: entry.webPort };
 }
 
 function writeBackendEnvLocal(ports) {
@@ -200,6 +225,8 @@ function writeWebEnvLocal(ports) {
     "# Isolated local Convex backend for this worktree (managed by scripts/worktree-convex.mjs).",
     `NEXT_PUBLIC_CONVEX_URL=http://127.0.0.1:${ports.cloudPort}`,
     `NEXT_PUBLIC_CONVEX_SITE_URL=http://127.0.0.1:${ports.sitePort}`,
+    "# This worktree's web port — next.config loads this file first, so it wins over the shared backend .env.",
+    `SITE_URL=http://localhost:${ports.webPort}`,
     "",
   ].join("\n");
   fs.writeFileSync(path.join(repoRoot, WEB_ENV_LOCAL), contents);
@@ -258,17 +285,11 @@ async function switchLocal() {
   promoteBackendEnvLocalToShared();
   return withLock(async () => {
     const registry = readRegistry();
-    let entry = registry.worktrees[repoRoot];
-    if (!entry?.cloudPort || !entry?.sitePort) {
-      entry = await allocatePorts(registry);
-      registry.worktrees[repoRoot] = { mode: "local", ...entry };
-      writeRegistry(registry);
-    }
-    const ports = { cloudPort: entry.cloudPort, sitePort: entry.sitePort };
+    const ports = await ensureEntry(registry, "local");
     writeBackendEnvLocal(ports);
     writeWebEnvLocal(ports);
     console.log(
-      `worktree-convex: local mode — isolated backend @ http://127.0.0.1:${ports.cloudPort} (HTTP actions http://127.0.0.1:${ports.sitePort})`,
+      `worktree-convex: local mode — isolated backend @ http://127.0.0.1:${ports.cloudPort} (HTTP actions http://127.0.0.1:${ports.sitePort}), web @ http://localhost:${ports.webPort}`,
     );
     return ports;
   });
@@ -297,9 +318,19 @@ async function ensure() {
   const registry = readRegistry();
   const entry = registry.worktrees[repoRoot];
   if (entry?.mode === "local" && entry.cloudPort && entry.sitePort) {
-    writeBackendEnvLocal({ cloudPort: entry.cloudPort, sitePort: entry.sitePort });
-    writeWebEnvLocal({ cloudPort: entry.cloudPort, sitePort: entry.sitePort });
-    console.log(`worktree-convex: restored local mode @ :${entry.cloudPort}`);
+    let ports = { cloudPort: entry.cloudPort, sitePort: entry.sitePort, webPort: entry.webPort };
+    if (!entry.webPort) {
+      // Entries created before web-port allocation — backfill without touching
+      // the Convex ports already recorded.
+      ports = await withLock(async () => {
+        const fresh = readRegistry();
+        const updated = await ensureEntry(fresh, "local");
+        return updated;
+      });
+    }
+    writeBackendEnvLocal(ports);
+    writeWebEnvLocal(ports);
+    console.log(`worktree-convex: restored local mode @ :${ports.cloudPort}, web :${ports.webPort}`);
     return;
   }
 
@@ -321,8 +352,8 @@ async function ensure() {
 }
 
 function runConvexDev({ cloudPort, sitePort, anonymous }) {
-  if (!fs.existsSync(convexBin)) {
-    throw new Error(`Convex CLI not found at ${convexBin} — run \`pnpm install\` first.`);
+  if (!fs.existsSync(convexEntry)) {
+    throw new Error(`Convex CLI not found at ${convexEntry} — run \`pnpm install\` first.`);
   }
   const args =
     anonymous && cloudPort && sitePort
@@ -334,13 +365,23 @@ function runConvexDev({ cloudPort, sitePort, anonymous }) {
           String(sitePort),
         ]
       : ["dev"];
-  return spawn(convexBin, args, {
+  const child = spawn(process.execPath, [convexEntry, ...args], {
     cwd: backendDir,
-    stdio: "inherit",
+    // Piped and forwarded, not `inherit`: with inherited stdio the CLI's
+    // local-backend child can silently fail to start (backend never binds).
+    stdio: ["ignore", "pipe", "pipe"],
     env: anonymous
       ? { ...process.env, CONVEX_AGENT_MODE: "anonymous" }
       : process.env,
   });
+  for (const stream of ["stdout", "stderr"]) {
+    child[stream].on("data", (buf) => {
+      for (const line of buf.toString().split("\n")) {
+        if (line.trim()) (stream === "stdout" ? console.log : console.error)(line);
+      }
+    });
+  }
+  return child;
 }
 
 function forwardSignals(child) {
@@ -353,13 +394,13 @@ function waitForExit(child) {
   return new Promise((resolve) => child.on("exit", resolve));
 }
 
-async function bootstrapDeploymentEnv() {
+async function bootstrapDeploymentEnv(ports = {}) {
   const convexEnv = { ...process.env, CONVEX_AGENT_MODE: "anonymous" };
   const deadline = Date.now() + 240_000;
   let ready = false;
   while (Date.now() < deadline) {
     try {
-      execFileSync(convexBin, ["env", "list"], { cwd: backendDir, env: convexEnv, stdio: "pipe" });
+      execFileSync(process.execPath, [convexEntry, "env", "list"], { cwd: backendDir, env: convexEnv, stdio: "pipe" });
       ready = true;
       break;
     } catch {
@@ -374,13 +415,14 @@ async function bootstrapDeploymentEnv() {
   const secret = readEnvValue(path.join(backendDir, ".env"), "BETTER_AUTH_SECRET");
   const generated = !secret || secret.length < 32;
   const effective = generated ? crypto.randomBytes(32).toString("hex") : secret;
+  const siteUrl = `http://localhost:${ports.webPort ?? 3000}`;
   for (const [key, value] of [
     ["BETTER_AUTH_SECRET", effective],
-    ["SITE_URL", "http://localhost:3000"],
+    ["SITE_URL", siteUrl],
     ["EMAIL_TEST_MODE", "true"],
   ]) {
     try {
-      execFileSync(convexBin, ["env", "set", key, value], {
+      execFileSync(process.execPath, [convexEntry, "env", "set", key, value], {
         cwd: backendDir,
         env: convexEnv,
         stdio: "pipe",
@@ -406,12 +448,30 @@ async function dev() {
   const entry = registry.worktrees[repoRoot];
   if (entry?.mode === "local" && entry.cloudPort && entry.sitePort) {
     console.log(`worktree-convex: local mode — isolated backend @ :${entry.cloudPort}`);
+    // `convex dev` requires BOTH its ports free (it does not reattach), and a
+    // SIGTERMed backend can hold the site port for a few seconds after the
+    // cloud port frees — clear and verify both before booting.
+    for (const port of [entry.cloudPort, entry.sitePort]) {
+      if (!(await stopProcessesOnPort(port))) {
+        fail(new Error(`port ${port} is still in use by another process`));
+      }
+    }
     const child = runConvexDev({
       cloudPort: entry.cloudPort,
       sitePort: entry.sitePort,
       anonymous: true,
     });
     forwardSignals(child);
+    // Wait for the dev backend to bind before any `convex env` probing — an
+    // env command that beats it to the port spawns a second backend and the
+    // loser dies with EADDRINUSE.
+    if (await waitForPortListening(entry.cloudPort)) {
+      // Idempotent: makes `pnpm run dev` self-sufficient on a fresh local
+      // deployment even when setup:worktree-env was skipped or interrupted.
+      await bootstrapDeploymentEnv({ webPort: entry.webPort });
+    } else {
+      console.warn("worktree-convex: backend never bound its port — skipping deployment env bootstrap");
+    }
     process.exit((await waitForExit(child)) ?? 0);
   }
   console.log("worktree-convex: trunk mode — shared cloud dev deployment");
@@ -422,14 +482,14 @@ async function dev() {
 
 async function start() {
   const ports = await switchLocal();
-  if (!(await isPortFree(ports.cloudPort))) {
-    console.log(
-      "worktree-convex: a local backend is already running on this worktree's ports; `convex dev` will restart it",
-    );
+  for (const port of [ports.cloudPort, ports.sitePort]) {
+    await stopProcessesOnPort(port);
   }
   const child = runConvexDev({ ...ports, anonymous: true });
   forwardSignals(child);
-  await bootstrapDeploymentEnv();
+  if (await waitForPortListening(ports.cloudPort)) {
+    await bootstrapDeploymentEnv(ports);
+  }
   process.exit((await waitForExit(child)) ?? 0);
 }
 
@@ -452,6 +512,9 @@ function status() {
   if (entry?.cloudPort) {
     console.log(`  cloud port:         ${entry.cloudPort}`);
     console.log(`  site port:          ${entry.sitePort}`);
+  }
+  if (entry?.webPort) {
+    console.log(`  web port:           ${entry.webPort}`);
   }
   console.log(`  backend .env.local: ${describe(BACKEND_ENV_LOCAL)}`);
   console.log(`  web .env.local:     ${describe(WEB_ENV_LOCAL)}`);
