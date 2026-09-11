@@ -521,7 +521,9 @@ export function UsersManagementClient({
             <div className="space-y-1">
               <CardTitle>Artist Organizations</CardTitle>
               <p className="text-sm font-normal text-muted-foreground">
-                Incomplete onboarding: chip on the artist name. Profile/riders under{" "}
+                Incomplete onboarding: chip on the artist name.{" "}
+                <span className="whitespace-nowrap">View as artist</span> opens their portal
+                without joining. Profile/riders under{" "}
                 <Link href="/dashboard/artists" className="underline">
                   Artists
                 </Link>
@@ -1321,7 +1323,9 @@ function BandOrgAdminRow({
   const updateBandOrganizationProfileAdmin = useMutation(api.users.updateBandOrganizationProfileAdmin);
   const sendOnboardingReminder = useMutation(api.bandPayments.sendOnboardingReminderForOrganization);
   const refreshPendingPayments = useMutation(api.bandPayments.refreshPendingPaymentsForOrganization);
+  const setActiveOrganization = useMutation(api.users.setActiveOrganization);
   const [onboardingBusy, setOnboardingBusy] = useState(false);
+  const [viewAsBusy, setViewAsBusy] = useState(false);
 
   const form = useConvexForm({
     schema: z.object({
@@ -1382,6 +1386,18 @@ function BandOrgAdminRow({
       notify.error(getConvexErrorMessage(error));
     } finally {
       setOnboardingBusy(false);
+    }
+  }
+
+  async function onViewAsArtist() {
+    setViewAsBusy(true);
+    try {
+      await setActiveOrganization({ organizationId: org.organizationId });
+      notify.success(`Viewing as ${org.displayName || org.name}.`);
+      window.location.href = "/dashboard";
+    } catch (error) {
+      notify.error(getConvexErrorMessage(error));
+      setViewAsBusy(false);
     }
   }
 
@@ -1471,6 +1487,15 @@ function BandOrgAdminRow({
               Save
             </Button>
           ) : null}
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={viewAsBusy || isArchived}
+            onClick={() => void onViewAsArtist()}
+          >
+            {viewAsBusy ? "Switching…" : "View as artist"}
+          </Button>
           <Button type="button" size="sm" variant="outline" asChild>
             <Link href="/dashboard/artists">Edit profile</Link>
           </Button>

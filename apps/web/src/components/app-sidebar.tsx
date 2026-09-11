@@ -239,7 +239,9 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
           rangeEnd: adminSchedulingRange.rangeEnd,
           includeArborInternal: activeOrganization?.organizationType === "arbor_internal",
           includeAdmin: effectiveIsAdmin,
-          includeBand: activeOrganization?.organizationType === "band",
+          includeBand:
+            activeOrganization?.organizationType === "band" ||
+            activeOrganization?.organizationType === "dj",
           includeUnconfirmedCrew,
         }
       : "skip",
@@ -256,7 +258,9 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
   const userName = account?.name ?? "Unknown user"
   const userEmail = account?.email ?? "No email"
   const orgName = activeOrganization?.name ?? "No active org"
-  const isBandContext = activeOrganization?.organizationType === "band"
+  const isBandContext =
+    activeOrganization?.organizationType === "band" ||
+    activeOrganization?.organizationType === "dj"
   const isCrewContext =
     activeOrganization?.organizationType === "arbor_internal" &&
     hasCrewAccess &&
@@ -341,7 +345,11 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
                   <span className="flex min-w-0 items-center gap-2">
                     <span className="truncate">{org.name}</span>
                     <span className="shrink-0 text-xs text-muted-foreground">
-                      {org.organizationType === "arbor_internal" ? "Arbor Internal" : "Artist"}
+                      {org.organizationType === "arbor_internal"
+                        ? "Arbor Internal"
+                        : org.isAdminPreview
+                          ? "Artist · preview"
+                          : "Artist"}
                     </span>
                   </span>
                 </SelectItem>
