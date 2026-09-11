@@ -140,7 +140,7 @@ async function resolveRiderOrganizationId(
     if (!isAdmin(user)) {
       const context = await requireBandContext(ctx);
       if (context.organizationId !== organizationId) {
-        throw new Error("You do not have access to this band.");
+        throw new Error("You do not have access to this artist.");
       }
     }
     return organizationId;

@@ -317,7 +317,7 @@ export async function requireBandContext(
 ): Promise<ActiveOrganizationContext> {
   const context = await requireActiveOrganizationContext(ctx);
   if (context.organizationType !== "band" && context.organizationType !== "dj") {
-    throw new Error("This area is only available to bands and DJs.");
+    throw new Error("This area is only available to artists and DJs.");
   }
   return context;
 }

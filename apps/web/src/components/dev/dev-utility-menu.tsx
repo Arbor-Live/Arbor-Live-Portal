@@ -17,7 +17,7 @@ const DEV_PREVIEW = "devPreview=1";
 const LINKS = [
   { href: `/setup?${DEV_PREVIEW}`, label: "First-admin setup" },
   { href: `/onboarding?${DEV_PREVIEW}`, label: "Crew onboarding" },
-  { href: `/onboarding/band?${DEV_PREVIEW}`, label: "Band onboarding" },
+  { href: `/onboarding/band?${DEV_PREVIEW}`, label: "Artist onboarding" },
 ] as const;
 
 /**
@@ -58,7 +58,7 @@ export function DevUtilityMenu() {
           <p className="px-2 py-1.5 text-[11px] leading-snug text-muted-foreground">
             Opens with <code className="text-[10px]">?devPreview=1</code>. Skips
             redirects; walk-through is UI-only when you lack that role&apos;s
-            onboarding row. Sign in required for crew/band routes.
+            onboarding row. Sign in required for crew/artist routes.
           </p>
         </DropdownMenuContent>
       </DropdownMenu>

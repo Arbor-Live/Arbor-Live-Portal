@@ -21,7 +21,7 @@ export function BandEventOnboardingInviteEmail({
     <EmailLayout preview={`Join ${bandName} on the bill for ${eventTitle}`} heading="You're On the Bill">
       <BodyCopy>
         Arbor Live added <strong>{bandName}</strong> to an upcoming event. Check your inbox for a
-        separate portal invite, then finish band onboarding — including payout details — before we
+        separate portal invite, then finish artist onboarding — including payout details — before we
         can pay you for this show.
       </BodyCopy>
       <EventDetailsSection
@@ -32,7 +32,7 @@ export function BandEventOnboardingInviteEmail({
       <DataCard title="Booking">
         <DetailRow label="Your role" value={roleLabel} />
       </DataCard>
-      <CtaButton href={portalUrl} label="Finish band onboarding" />
+      <CtaButton href={portalUrl} label="Finish artist onboarding" />
       <EmailSignOff />
     </EmailLayout>
   );

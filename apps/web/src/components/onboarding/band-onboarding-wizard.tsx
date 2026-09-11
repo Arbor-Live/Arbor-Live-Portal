@@ -73,11 +73,11 @@ const STEP_ORDER: StepId[] = [...QUESTION_STEPS, "thankYou"];
 
 const STEP_HEADLINES: Record<StepId, string> = {
   welcome: "Welcome to Arbor Live",
-  identity: "Tell us about your band",
+  identity: "Tell us about your artist profile",
   passkey: "Secure your account",
   hero: "Add a hero photo",
   socials: "Where can people find you?",
-  members: "Who's in the band?",
+  members: "Who's in the group?",
   rates: "Rates & payout details",
   payment: "How payouts work",
   thankYou: "You're all set!",
@@ -305,7 +305,7 @@ export function BandOnboardingWizard() {
 
       if (currentStep === "identity") {
         if (!form.displayName.trim()) {
-          setFieldError("Enter your band's display name.");
+          setFieldError("Enter your display name.");
           return false;
         }
         if (previewOnly) return true;
@@ -369,7 +369,7 @@ export function BandOnboardingWizard() {
         const sentSet = new Set(sentInviteEmails);
         const hasPendingOrSent = queued.length > 0 || sentSet.size > 0;
         if (!form.isSolo && !hasPendingOrSent) {
-          setFieldError("Add at least one bandmate email, or confirm you're performing solo.");
+          setFieldError("Add at least one member email, or confirm you're performing solo.");
           return false;
         }
         if (previewOnly) return true;
@@ -394,7 +394,7 @@ export function BandOnboardingWizard() {
             setInviteConfirmation(
               toSend.length === 1
                 ? `Invitation sent to ${toSend[0]!.email}.`
-                : `Invitations sent to ${toSend.length} bandmates.`,
+                : `Invitations sent to ${toSend.length} members.`,
             );
           }
           await saveBandOnboardingStep({ membersCompleted: true });
@@ -532,7 +532,7 @@ export function BandOnboardingWizard() {
   if (onboarding === undefined || profile === undefined) {
     return (
       <div className="flex min-h-dvh items-center justify-center">
-        <p className="text-sm text-muted-foreground">Loading your band onboarding…</p>
+        <p className="text-sm text-muted-foreground">Loading your artist onboarding…</p>
       </div>
     );
   }
@@ -590,10 +590,10 @@ export function BandOnboardingWizard() {
         }}
       >
         <RequestWizardShell
-          eyebrow={devPreview ? "Dev preview · Band onboarding" : "Band onboarding"}
+          eyebrow={devPreview ? "Dev preview · Artist onboarding" : "Artist onboarding"}
           meta="Arbor Live"
           progress={
-            <QuestionnaireWizardProgress complete={finished} label="Band onboarding progress" />
+            <QuestionnaireWizardProgress complete={finished} label="Artist onboarding progress" />
           }
           footer={
             finished ? null : (
@@ -625,7 +625,7 @@ export function BandOnboardingWizard() {
                   {STEP_HEADLINES.thankYou}
                 </h1>
                 <div className="space-y-4 text-sm text-foreground/70">
-                  <p>Your band profile is ready. We&apos;ll be in touch about booking!</p>
+                  <p>Your artist profile is ready. We&apos;ll be in touch about booking!</p>
                   <Button onClick={goToDashboard}>Go to dashboard</Button>
                 </div>
               </div>
@@ -641,11 +641,11 @@ export function BandOnboardingWizard() {
                 </QuestionnaireTitle>
                 <div className="space-y-3 text-sm text-foreground/70">
                   <p>
-                    Welcome! Before you get booked, let&apos;s set up your band&apos;s profile:
-                    who you are, where to find you, your bandmates, rates, and who gets paid.
+                    Welcome! Before you get booked, let&apos;s set up your artist profile:
+                    who you are, where to find you, your members, rates, and who gets paid.
                   </p>
                   <p>
-                    Arbor Live pays bands directly through a designated payee — no promoter or
+                    Arbor Live pays artists directly through a designated payee — no promoter or
                     middleman needed.
                   </p>
                 </div>
@@ -663,12 +663,12 @@ export function BandOnboardingWizard() {
                 </QuestionnaireTitle>
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="band-display-name">Band name</Label>
+                    <Label htmlFor="band-display-name">Artist name</Label>
                     <Input
                       id="band-display-name"
                       value={form.displayName}
                       onChange={(event) => patch({ displayName: event.target.value })}
-                      placeholder="Your band's name"
+                      placeholder="Your artist name"
                       autoFocus
                     />
                   </div>
@@ -725,7 +725,7 @@ export function BandOnboardingWizard() {
                     />
                   ) : (
                     <p className="rounded-md border border-dashed border-border/80 px-3 py-6 text-center text-sm text-muted-foreground">
-                      Hero upload needs an active band org — paste a URL below for UI preview.
+                      Hero upload needs an active artist org — paste a URL below for UI preview.
                     </p>
                   )}
                   {!profile ? (
@@ -824,7 +824,7 @@ export function BandOnboardingWizard() {
                         id="band-slug"
                         value={form.publicSlug}
                         onChange={(event) => patch({ publicSlug: event.target.value })}
-                        placeholder="my-band-name"
+                        placeholder="my-artist-name"
                       />
                     </div>
                   ) : null}
@@ -846,7 +846,7 @@ export function BandOnboardingWizard() {
                 </QuestionnaireTitle>
                 <div className="space-y-4">
                   <p className="text-sm text-foreground/70">
-                    Invite bandmates now so you can designate one of them as the payee on the next
+                    Invite members now so you can designate one of them as the payee on the next
                     step. You can invite multiple people.
                   </p>
                   <OnboardingAckCheckbox
@@ -864,7 +864,7 @@ export function BandOnboardingWizard() {
                     <div className="space-y-3">
                       <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
                         <div className="min-w-0 space-y-2">
-                          <Label htmlFor="band-invite-email">Bandmate email</Label>
+                          <Label htmlFor="band-invite-email">Member email</Label>
                           <Input
                             id="band-invite-email"
                             type="email"
@@ -880,7 +880,7 @@ export function BandOnboardingWizard() {
                           />
                         </div>
                         <div className="min-w-0 space-y-2">
-                          <Label htmlFor="band-invite-role">Role in band</Label>
+                          <Label htmlFor="band-invite-role">Role</Label>
                           <Input
                             id="band-invite-role"
                             value={form.inviteRoleDraft}
@@ -949,7 +949,7 @@ export function BandOnboardingWizard() {
                         </ul>
                       ) : (
                         <p className="text-xs text-muted-foreground">
-                          Add each bandmate&apos;s email and role, then continue. Invites send when
+                          Add each member&apos;s email and role, then continue. Invites send when
                           you click Next.
                         </p>
                       )}
@@ -994,7 +994,7 @@ export function BandOnboardingWizard() {
                   <div className="space-y-2 border-t border-border/50 pt-4">
                     <p className="text-sm font-medium text-foreground">Designated payee</p>
                     <p className="text-xs text-muted-foreground">
-                      One person who receives and distributes payment on behalf of the band. You can
+                      One person who receives and distributes payment on behalf of the artist. You can
                       pick a current member or a pending invite — fill in their name and mailing
                       address below if needed.
                     </p>
@@ -1076,18 +1076,18 @@ export function BandOnboardingWizard() {
                   <div className="space-y-3 text-sm text-foreground/70">
                     <p>
                       After your event, Arbor Live pays your designated payee directly by the
-                      performer hourly rate on file, multiplied by the hours your band performed.
+                      performer hourly rate on file, multiplied by the hours you performed.
                     </p>
                     <p>
-                      Your payee is responsible for distributing payment to the rest of the band.
-                      You can update your payee or rate anytime from your band settings.
+                      Your payee is responsible for distributing payment to the rest of the members.
+                      You can update your payee or rate anytime from your artist settings.
                     </p>
                     <p>{BAND_PAYEE_1099_NOTICE}</p>
                   </div>
                   <OnboardingAckCheckbox
                     checked={form.paymentExplainedAck}
                     onChange={(next) => patch({ paymentExplainedAck: next })}
-                    label="I understand how payouts work for this band."
+                    label="I understand how payouts work for this artist."
                   />
                 </div>
                 <MarkStepAnswered />

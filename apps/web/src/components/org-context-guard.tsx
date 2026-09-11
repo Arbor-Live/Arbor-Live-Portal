@@ -89,10 +89,10 @@ export function BandOnlyGuard({ children }: { children: React.ReactNode }) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Band Organization Only</CardTitle>
+          <CardTitle>Artist Organization Only</CardTitle>
         </CardHeader>
         <CardContent className="text-sm text-muted-foreground">
-          Switch to a band organization in the sidebar to access this section.
+          Switch to an artist organization in the sidebar to access this section.
         </CardContent>
       </Card>
     );
@@ -134,7 +134,7 @@ export function BandOrAdminGuard({ children }: { children: React.ReactNode }) {
         <CardTitle>Admin access required</CardTitle>
       </CardHeader>
       <CardContent className="text-sm text-muted-foreground">
-        This section is limited to band organizations and Arbor Live admins.
+        This section is limited to artist organizations and Arbor Live admins.
       </CardContent>
     </Card>
   );

@@ -49,7 +49,7 @@ test.describe("admin on band-only payment routes", () => {
   for (const path of bandOnlyRoutes) {
     test(`Arbor admin is refused on ${path}`, async ({ page }) => {
       await page.goto(path);
-      await expect(page.getByText("Band Organization Only").first()).toBeVisible({
+      await expect(page.getByText("Artist Organization Only").first()).toBeVisible({
         timeout: 30_000,
       });
       await expect(page.getByText("Something went wrong")).toHaveCount(0);
@@ -61,12 +61,12 @@ test.describe("admin reaches shared band routes", () => {
   for (const path of bandOrAdminRoutes) {
     test(`Arbor admin reaches ${path}`, async ({ page }) => {
       await page.goto(path);
-      await expect(page.getByText("Band Organization Only")).toHaveCount(0, {
+      await expect(page.getByText("Artist Organization Only")).toHaveCount(0, {
         timeout: 30_000,
       });
       await expect(page.getByText("Admin access required")).toHaveCount(0);
       await expect(page.getByText("Something went wrong")).toHaveCount(0);
-      await expect(page.getByText("Manage a band").first()).toBeVisible({
+      await expect(page.getByText("Manage an artist").first()).toBeVisible({
         timeout: 30_000,
       });
     });
@@ -80,7 +80,7 @@ test.describe("band user reaches their own routes", () => {
   for (const path of [...bandOnlyRoutes, ...bandOrAdminRoutes]) {
     test(`band org still reaches ${path}`, async ({ page }) => {
       await page.goto(path);
-      await expect(page.getByText("Band Organization Only")).toHaveCount(0, {
+      await expect(page.getByText("Artist Organization Only")).toHaveCount(0, {
         timeout: 30_000,
       });
       await expect(page.getByText("Arbor Internal Only")).toHaveCount(0);

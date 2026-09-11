@@ -27,7 +27,7 @@ export function BandPaymentCompletedEmail({
   return (
     <EmailLayout
       preview={`Payment submitted for processing: ${eventTitle}`}
-      heading="Band Payment Submitted for Processing"
+      heading="Artist Payment Submitted for Processing"
     >
       <BodyCopy>{greeting}</BodyCopy>
       <BodyCopy>
@@ -41,7 +41,7 @@ export function BandPaymentCompletedEmail({
         <DetailRow label="Designated payee" value={designatedPayeeName} />
       </DataCard>
       <AlertBanner>
-        Funds will be sent to your band&apos;s designated payee ({designatedPayeeName}) for distribution
+        Funds will be sent to your designated payee ({designatedPayeeName}) for distribution
         among members once Stanford processing completes.
       </AlertBanner>
       <MutedCopy>You are receiving this because you are a member of {bandName}.</MutedCopy>

@@ -79,7 +79,7 @@ export function EventMediaSection({ eventId }: { eventId: Id<"events"> }) {
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Bands assigned on the event overview can view and upload to this album.
+            Artists assigned on the event overview can view and upload to this album.
           </p>
           {ensuring ? (
             <p className="text-sm text-muted-foreground">Preparing media album…</p>

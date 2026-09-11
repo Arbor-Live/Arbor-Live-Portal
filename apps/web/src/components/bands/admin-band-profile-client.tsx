@@ -138,9 +138,9 @@ export function AdminBandProfileClient() {
 
   const onSave = form.submitMutation(
     async (values) => {
-      if (!organizationId) throw new Error("Select a band first.");
+      if (!organizationId) throw new Error("Select an artist first.");
       if (!org || org.organizationId !== organizationId) {
-        throw new Error("Selected band is still loading. Wait a moment and try again.");
+        throw new Error("Selected artist is still loading. Wait a moment and try again.");
       }
       const payoutMethod =
         values.designatedPayeePayoutMethod === "pickup" ||
@@ -175,14 +175,14 @@ export function AdminBandProfileClient() {
     return (
       <Card>
         <CardContent className="py-8 text-sm text-muted-foreground">
-          Select a band above to edit its profile.
+          Select an artist above to edit their profile.
         </CardContent>
       </Card>
     );
   }
 
   if (bands === undefined || !org) {
-    return <p className="text-sm text-muted-foreground">Loading band profile…</p>;
+    return <p className="text-sm text-muted-foreground">Loading artist profile…</p>;
   }
 
   const payoutMethod =
@@ -235,7 +235,7 @@ export function AdminBandProfileClient() {
                       <TextFormField
                         name="publicSlug"
                         label="Public URL slug"
-                        placeholder="my-band-name"
+                        placeholder="my-artist-name"
                         onValueChange={() => markSlugTouched()}
                       />
                       <BandPublicArtistLinkCopy publicSlug={watched.publicSlug} />
@@ -262,7 +262,7 @@ export function AdminBandProfileClient() {
                     <CardTitle>Payment payee</CardTitle>
                     <BandArborOnlyBadge />
                   </div>
-                  <CardDescription>Bands can also edit this on their Payments tab.</CardDescription>
+                  <CardDescription>Artists can also edit this on their Payments tab.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="grid gap-2 md:grid-cols-2">

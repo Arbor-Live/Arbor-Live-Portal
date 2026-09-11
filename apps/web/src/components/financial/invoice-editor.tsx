@@ -90,7 +90,7 @@ type ArtistRow = {
   label: string;
   /** Hours the group is performing. */
   hours: string;
-  /** Number of people in the band / DJ act. */
+  /** Number of people in the artist / DJ act. */
   people: string;
   /** Hourly rate per person. */
   rateUsd: string;
@@ -99,7 +99,6 @@ type CrewRow = InvoiceCrewRow;
 type FeeRow = { feeDefinitionId: string; label: string; quantity: string; rateUsd: string };
 
 const ARTIST_TBD_LABEL = ARTIST_TBD_OPTION.label;
-
 function emptyArtistRow(): ArtistRow {
   return {
     organizationId: ARTIST_TBD_VALUE,
@@ -2837,7 +2836,6 @@ function SectionArtists({
     () => artistSelectOptions(bands, { includeTbd: true }),
     [bands],
   );
-
   function onBandChange(idx: number, organizationId: string) {
     setRows((prev) =>
       prev.map((row, i) => {
@@ -2876,7 +2874,7 @@ function SectionArtists({
       </CardHeader>
       <CardContent className="space-y-2">
         <div className={`hidden text-xs font-medium text-muted-foreground md:grid md:items-end ${ARTIST_ROW_GRID}`}>
-          <span>Band</span>
+          <span>Artist</span>
           <span>Label</span>
           <span>Hours</span>
           <span>People</span>
@@ -2896,8 +2894,7 @@ function SectionArtists({
                 onChange={(value) => onBandChange(idx, value)}
                 options={bandOptions}
                 placeholder={bands === undefined ? "Loading artists…" : "Search artists…"}
-                emptyLabel="Select artist"
-              />
+                emptyLabel="Select artist"              />
               {isTbd ? (
                 <Input
                   placeholder="Artist / role"

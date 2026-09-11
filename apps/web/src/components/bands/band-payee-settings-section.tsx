@@ -68,7 +68,7 @@ export function BandPayeeSettingsSection() {
 
   const onSave = form.submitMutation(
     async (values) => {
-      if (!profile) throw new Error("Band profile is still loading.");
+      if (!profile) throw new Error("Artist profile is still loading.");
       // Preserve non-payee profile fields — updateActiveBandProfile clears omitted strings.
       await updateProfile({
         displayName: profile.displayName ?? "",
@@ -111,20 +111,20 @@ export function BandPayeeSettingsSection() {
             <CardHeader>
               <CardTitle>Payment payee</CardTitle>
               <CardDescription>
-                Designate who receives Arbor Live payouts. The payee must be a band member account so
+                Designate who receives Arbor Live payouts. The payee must be a member account so
                 they can e-sign payments in the portal.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               {!profile.payeeComplete ? (
                 <p className="rounded-md border border-dashed px-3 py-2 text-sm text-amber-800 dark:text-amber-200">
-                  Required before band payments can be processed. Provide one designated payee who
+                  Required before artist payments can be processed. Provide one designated payee who
                   receives and distributes payment, a mailing address, and pickup or delivery for
                   GrantEd.
                 </p>
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  Payee on file. Update here if your band&apos;s payment contact or address changes.
+                  Payee on file. Update here if your artist&apos;s payment contact or address changes.
                 </p>
               )}
               <div className="space-y-1">
@@ -148,7 +148,7 @@ export function BandPayeeSettingsSection() {
                       image: user.image,
                     }),
                   )}
-                  placeholder="Select band member payee..."
+                  placeholder="Select member payee..."
                   emptyLabel="Select payee"
                 />
               </div>

@@ -51,7 +51,7 @@ export function RiderListClient() {
     return (
       <Card>
         <CardContent className="py-8 text-sm text-muted-foreground">
-          Select a band above to manage its riders.
+          Select an artist above to manage their riders.
         </CardContent>
       </Card>
     );

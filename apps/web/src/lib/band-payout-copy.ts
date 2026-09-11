@@ -34,4 +34,4 @@ export const BAND_PAYEE_MAILING_ADDRESS_PLACEHOLDER =
   "123 Example St\nPalo Alto, CA 94301";
 
 export const BAND_PAYEE_1099_NOTICE =
-  "If your designated payee receives more than $2,000 in total across the calendar year from any Stanford VSO (not just Arbor Live), Stanford will issue them a Form 1099. Consider rotating the designated payee among band members if you expect to exceed that threshold.";
+  "If your designated payee receives more than $2,000 in total across the calendar year from any Stanford VSO (not just Arbor Live), Stanford will issue them a Form 1099. Consider rotating the designated payee among members if you expect to exceed that threshold.";

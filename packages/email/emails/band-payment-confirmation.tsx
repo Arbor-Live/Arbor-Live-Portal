@@ -29,11 +29,11 @@ export function BandPaymentConfirmationEmail({
   return (
     <EmailLayout
       preview={`Payment ready for your signature: ${eventTitle}`}
-      heading="Band Payment Ready for Signature"
+      heading="Artist Payment Ready for Signature"
     >
       <BodyCopy>{greeting}</BodyCopy>
       <BodyCopy>
-        A payment for your band&apos;s performance is ready for your e-signature. Please review the
+        A payment for your performance is ready for your e-signature. Please review the
         details below and sign in the Arbor Live portal to confirm the amount.
       </BodyCopy>
       <EventDetailsSection eventTitle={eventTitle} venueName={venueName} dateRangeLabel={eventDateLabel} />
@@ -43,16 +43,16 @@ export function BandPaymentConfirmationEmail({
           <DetailRow label="Rate per person per hour" value={currency(ratePerMemberPerHourUsd ?? 0)} />
         ) : null}
         <DetailRow
-          label="Total (paid to you to distribute among your band)"
+          label="Total (paid to you to distribute among members)"
           value={currency(totalUsd)}
           emphasis
         />
-        <DetailRow label="Band designated payee" value={designatedPayeeName} />
+        <DetailRow label="Designated payee" value={designatedPayeeName} />
       </DataCard>
       <CtaButton href={signUrl} label="Review and e-sign payment" />
       <BodyCopy>
         Only the designated payee can sign. Once signed, our team will submit the payout and notify
-        your band when it is being processed.
+        your members when it is being processed.
       </BodyCopy>
       {photoAlbumUrl ? (
         <>
@@ -63,7 +63,7 @@ export function BandPaymentConfirmationEmail({
           <BodyCopy>{photoAlbumUrl}</BodyCopy>
         </>
       ) : null}
-      <MutedCopy>You are receiving this because your band performed at an Arbor Live event.</MutedCopy>
+      <MutedCopy>You are receiving this because you performed at an Arbor Live event.</MutedCopy>
     </EmailLayout>
   );
 }

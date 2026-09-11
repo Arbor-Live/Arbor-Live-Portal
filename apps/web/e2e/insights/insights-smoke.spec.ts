@@ -43,7 +43,7 @@ test.describe("insights dashboard", () => {
 
     await insights.getByRole("button", { name: "Ops", exact: true }).click();
     await expect(page.getByTestId("insights-ops-panel")).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText("Band payouts").first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText("Artist payouts").first()).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText("Open damage").first()).toBeVisible();
     await expect(page.getByText("Payout queue aging").first()).toBeVisible();
     await expect(page.getByText("Fulfillment duration").first()).toBeVisible();
@@ -63,7 +63,7 @@ test.describe("insights dashboard", () => {
 
     const expensesCard = page.locator("[data-slot='card']").filter({ hasText: "Expenses" }).first();
     await expect(
-      expensesCard.getByText("Recorded event costs (includes band payouts", { exact: false }),
+      expensesCard.getByText("Recorded event costs (includes artist payouts", { exact: false }),
     ).toBeVisible({ timeout: 30_000 });
 
     await page.getByRole("link", { name: "Insights", exact: true }).first().click();

@@ -37,7 +37,7 @@ test.describe("admin band profile management", () => {
     const bio = `E2E admin bio ${Date.now()}`;
 
     await page.goto("/dashboard/bands-and-performers");
-    await expect(page.getByText("Manage a band").first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText("Manage an artist").first()).toBeVisible({ timeout: 30_000 });
     await pickAdminBand(page, e2eEnv.bandOrgName);
 
     const profileCard = page
@@ -55,7 +55,7 @@ test.describe("admin band profile management", () => {
     await expect(formSaveBar(page).getByText("Saved")).toBeVisible({ timeout: 20_000 });
 
     await page.reload();
-    await expect(page.getByText("Manage a band").first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText("Manage an artist").first()).toBeVisible({ timeout: 30_000 });
     // sessionStorage keeps the selected band across reloads.
     await expect(page.getByTestId("admin-band-picker").getByTestId("searchable-select-trigger")).toContainText(
       e2eEnv.bandOrgName,
@@ -74,7 +74,7 @@ test.describe("admin band rider management", () => {
     const riderName = `E2E Admin Rider ${Date.now()}`;
 
     await page.goto("/dashboard/bands-and-performers/riders");
-    await expect(page.getByText("Manage a band").first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText("Manage an artist").first()).toBeVisible({ timeout: 30_000 });
     await pickAdminBand(page, e2eEnv.bandOrgName);
 
     await page.getByRole("button", { name: "New rider" }).click();
@@ -107,8 +107,8 @@ test.describe("band self-service riders", () => {
     const riderName = `E2E Band Rider ${Date.now()}`;
 
     await page.goto("/dashboard/bands-and-performers/riders");
-    await expect(page.getByText("Manage a band")).toHaveCount(0, { timeout: 30_000 });
-    await expect(page.getByText("Band Organization Only")).toHaveCount(0);
+    await expect(page.getByText("Manage an artist")).toHaveCount(0, { timeout: 30_000 });
+    await expect(page.getByText("Artist Organization Only")).toHaveCount(0);
 
     const createButton = page
       .getByRole("button", { name: /New rider|Create your first rider/ })
@@ -133,7 +133,7 @@ test.describe("Users organizations no longer hosts band details", () => {
     await ensureBand();
 
     await page.goto("/dashboard/users/organizations");
-    await expect(page.getByText("Band Organizations").first()).toBeVisible({
+    await expect(page.getByText("Artist Organizations").first()).toBeVisible({
       timeout: 30_000,
     });
     await expect(page.getByText(/Full profile, payee, and riders live under/i)).toBeVisible();
@@ -143,7 +143,7 @@ test.describe("Users organizations no longer hosts band details", () => {
   });
 });
 
-test.describe("admin sidebar advertises Bands and Performers", () => {
+test.describe("admin sidebar advertises Artists", () => {
   test("admin sees the section; crew does not", async ({ page, browser }) => {
     await page.goto("/dashboard");
     await expect(page.getByRole("heading", { name: "Home" }).first()).toBeVisible({
@@ -154,7 +154,7 @@ test.describe("admin sidebar advertises Bands and Performers", () => {
     const sidebar = page.locator('[data-slot="sidebar"]').first();
     // Regex: the section trigger may carry a pending-count badge (e.g. band applications).
     await expect(
-      sidebar.getByRole("button", { name: /^Bands and Performers/ }),
+      sidebar.getByRole("button", { name: /^Artists/ }),
     ).toBeVisible();
 
     const crewContext = await browser.newContext({ storageState: crewAuthFile });
@@ -163,10 +163,10 @@ test.describe("admin sidebar advertises Bands and Performers", () => {
     await expect(crewPage.getByRole("heading").first()).toBeVisible({ timeout: 30_000 });
     const crewSidebar = crewPage.locator('[data-slot="sidebar"]').first();
     await expect(
-      crewSidebar.getByRole("button", { name: "Bands and Performers", exact: true }),
+      crewSidebar.getByRole("button", { name: "Artists", exact: true }),
     ).toHaveCount(0);
     await expect(
-      crewSidebar.getByRole("link", { name: "Bands and Performers", exact: true }),
+      crewSidebar.getByRole("link", { name: "Artists", exact: true }),
     ).toHaveCount(0);
     await crewContext.close();
   });

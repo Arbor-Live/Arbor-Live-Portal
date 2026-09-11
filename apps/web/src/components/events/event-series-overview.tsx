@@ -395,7 +395,7 @@ export function EventSeriesOverview({ seriesId }: { seriesId: Id<"eventSeries"> 
           <div className="grid gap-2 md:grid-cols-5 text-sm">
             <p>Crew (actual): {formatUsd(costSummary.perOccurrence.crewUsd)}</p>
             <p>Crew (budgeted): {formatUsd(costSummary.occurrenceTemplate.projectedBudgetCrewUsd)}</p>
-            <p>Bands (events): {formatUsd(costSummary.perOccurrence.bandsUsd)}</p>
+            <p>Artists (events): {formatUsd(costSummary.perOccurrence.bandsUsd)}</p>
             <p>External rentals: {formatUsd(costSummary.perOccurrence.externalRentalsUsd)}</p>
             <p>Other: {formatUsd(costSummary.perOccurrence.otherUsd)}</p>
           </div>
@@ -431,8 +431,8 @@ export function EventSeriesOverview({ seriesId }: { seriesId: Id<"eventSeries"> 
                 <TextFormField name="budgetUsd" label="Series budget (USD)" />
               </div>
               <div className="space-y-1">
-                <TextFormField name="occurrenceBandsCostUsd" label="Per-occurrence bands (USD)" />
-                <p className="text-xs text-muted-foreground">Default bands cost applied to each event.</p>
+                <TextFormField name="occurrenceBandsCostUsd" label="Per-occurrence artists (USD)" />
+                <p className="text-xs text-muted-foreground">Default artists cost applied to each event.</p>
               </div>
               <div className="space-y-1">
                 <TextFormField name="occurrenceBudgetCrewCostUsd" label="Per-occurrence budget crew (USD)" />
@@ -451,7 +451,7 @@ export function EventSeriesOverview({ seriesId }: { seriesId: Id<"eventSeries"> 
                 <p className="text-xs text-muted-foreground">Default other costs applied to each event.</p>
               </div>
               <div className="space-y-1">
-                <TextFormField name="seriesBandsCostUsd" label="Series-wide bands (USD)" />
+                <TextFormField name="seriesBandsCostUsd" label="Series-wide artists (USD)" />
                 <p className="text-xs text-muted-foreground">Counted once for the whole series.</p>
               </div>
               <div className="space-y-1">

@@ -25,7 +25,7 @@ async function resolveUploadAlbum(
     const context: { organizationId: string; organizationName: string } | null =
       await ctx.runQuery(internal.immichDb.getActiveBandContextInternal, {});
     if (!context || context.organizationId !== args.targetId) {
-      throw new Error("Band upload target does not match your active organization.");
+      throw new Error("Artist upload target does not match your active organization.");
     }
 
     const displayName: string = await ctx.runQuery(internal.immichDb.getBandDisplayNameInternal, {
@@ -65,7 +65,7 @@ export const ensureBandAlbum = action({
 
     const context: { organizationId: string; organizationName: string } | null =
       await ctx.runQuery(internal.immichDb.getActiveBandContextInternal, {});
-    if (!context) throw new Error("Band organization context required.");
+    if (!context) throw new Error("Artist organization context required.");
 
     const displayName: string = await ctx.runQuery(internal.immichDb.getBandDisplayNameInternal, {
       organizationId: context.organizationId,

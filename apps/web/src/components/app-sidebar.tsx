@@ -71,7 +71,7 @@ const navItems: NavItem[] = [
   { title: "Ops Center", url: "/dashboard/financial-hub", icon: CurrencyDollarIcon, adminOnly: true },
   { title: "Users", url: "/dashboard/users", icon: UsersIcon, adminOnly: true },
   {
-    title: "Bands and Performers",
+    title: "Artists",
     url: "/dashboard/bands-and-performers",
     icon: GuitarIcon,
   },
@@ -96,7 +96,7 @@ const financialHubSubItems: NavSubItem[] = [
   { title: "Insights", url: "/dashboard/financial-hub/insights" },
   { title: "Invoices", url: "/dashboard/financial-hub/invoices" },
   { title: "Payments", url: "/dashboard/financial-hub/payments" },
-  { title: "Band Payouts", url: "/dashboard/financial-hub/band-payouts" },
+  { title: "Artist payouts", url: "/dashboard/financial-hub/band-payouts" },
   { title: "Crew Timecards", url: "/dashboard/timecards" },
   { title: "My Timecards", url: "/dashboard/timecards/mine" },
   { title: "Host Organizations", url: "/dashboard/financial-hub/organizations" },
@@ -133,7 +133,7 @@ const bandsSubItems: NavSubItem[] = [
   { title: "Technical rider", url: "/dashboard/bands-and-performers/riders" },
   { title: "Payments", url: "/dashboard/bands-and-performers/payments" },
   { title: "Organizations", url: "/dashboard/users/organizations", adminOnly: true },
-  { title: "Band applications", url: "/dashboard/users/band-applications", adminOnly: true },
+  { title: "Artist applications", url: "/dashboard/users/band-applications", adminOnly: true },
 ]
 
 const sectionSubItems: Record<string, NavSubItem[]> = {
@@ -341,7 +341,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
                   <span className="flex min-w-0 items-center gap-2">
                     <span className="truncate">{org.name}</span>
                     <span className="shrink-0 text-xs text-muted-foreground">
-                      {org.organizationType === "arbor_internal" ? "Arbor Internal" : "Band"}
+                      {org.organizationType === "arbor_internal" ? "Arbor Internal" : "Artist"}
                     </span>
                   </span>
                 </SelectItem>

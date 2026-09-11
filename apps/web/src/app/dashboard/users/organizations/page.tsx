@@ -15,7 +15,7 @@ export default function UsersOrganizationsPage() {
         <CardHeader>
           <CardTitle>Organization Management</CardTitle>
           <CardDescription>
-            Manage organizations and edit band org profile details from an admin birds-eye view.
+            Manage organizations and edit artist org profile details from an admin birds-eye view.
           </CardDescription>
         </CardHeader>
       </Card>

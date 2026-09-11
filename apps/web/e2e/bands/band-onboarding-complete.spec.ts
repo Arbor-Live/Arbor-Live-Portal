@@ -43,8 +43,8 @@ test.describe("band onboarding wizard", () => {
     await next(page);
 
     // Identity
-    await expect(page.getByLabel("Band name")).toBeVisible({ timeout: 20_000 });
-    await page.getByLabel("Band name").fill(bandDisplayName);
+    await expect(page.getByLabel("Artist name")).toBeVisible({ timeout: 20_000 });
+    await page.getByLabel("Artist name").fill(bandDisplayName);
     await page.getByLabel("Bio").fill("Seeded by the Playwright band onboarding spec.");
     await next(page);
 
@@ -102,6 +102,6 @@ test.describe("band onboarding wizard", () => {
 
     // Completed onboarding sends the wizard back to the dashboard.
     await page.waitForURL(/\/dashboard/, { timeout: 30_000 });
-    await expect(page.getByText(/Finish setting up your band profile/i)).toHaveCount(0);
+    await expect(page.getByText(/Finish setting up your artist profile/i)).toHaveCount(0);
   });
 });

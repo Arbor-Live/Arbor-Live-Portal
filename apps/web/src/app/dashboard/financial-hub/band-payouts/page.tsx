@@ -6,7 +6,7 @@ export default function FinancialHubBandPayoutsPage() {
     <div className="space-y-4 p-4">
       <ArborOnlyGuard>
         <div>
-          <h1 className="text-2xl font-semibold">Band Payouts</h1>
+          <h1 className="text-2xl font-semibold">Artist payouts</h1>
           <p className="text-sm text-muted-foreground">
             Send signature requests, track e-signatures, download agreements, and mark GrantEd payouts
             complete.

@@ -61,10 +61,10 @@ test.describe("admin route guards", () => {
     await expect(sidebar.getByRole("link", { name: "Ops Center", exact: true })).toHaveCount(0);
     await expect(sidebar.getByRole("button", { name: "Ops Center", exact: true })).toHaveCount(0);
     await expect(
-      sidebar.getByRole("button", { name: "Bands and Performers", exact: true }),
+      sidebar.getByRole("button", { name: "Artists", exact: true }),
     ).toHaveCount(0);
     await expect(
-      sidebar.getByRole("link", { name: "Bands and Performers", exact: true }),
+      sidebar.getByRole("link", { name: "Artists", exact: true }),
     ).toHaveCount(0);
   });
 

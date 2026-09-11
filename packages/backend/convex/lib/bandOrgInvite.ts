@@ -118,7 +118,7 @@ export async function provisionBandOrganization(
 ) {
   const displayName = args.displayName.trim();
   const contactEmail = normalizeEmail(args.contactEmail);
-  if (!displayName) throw new Error("Enter an artist or band name.");
+  if (!displayName) throw new Error("Enter an artist name.");
   if (!isValidEmail(contactEmail)) throw new Error("Enter a valid email address.");
 
   if (args.rejectExistingOrganization) {

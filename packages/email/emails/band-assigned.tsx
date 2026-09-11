@@ -26,7 +26,7 @@ export function BandAssignedEmail({
       <BodyCopy>{greeting}</BodyCopy>
       <BodyCopy>
         {bandName} has been added to an Arbor Live event. You can view show details and track
-        payout status from your band dashboard.
+        payout status from your artist dashboard.
       </BodyCopy>
       <EventDetailsSection
         eventTitle={eventTitle}

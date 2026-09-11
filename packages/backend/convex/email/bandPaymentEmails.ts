@@ -106,7 +106,7 @@ export async function scheduleBandPaymentPayeeRequiredEmail(
     organizationId: payment.organizationId,
   });
   if (recipients.length === 0) {
-    throw new Error("No active band members found to notify about payee setup.");
+    throw new Error("No active members found to notify about payee setup.");
   }
 
   for (const recipient of recipients) {

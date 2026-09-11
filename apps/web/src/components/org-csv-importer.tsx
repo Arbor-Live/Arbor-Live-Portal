@@ -182,7 +182,7 @@ export function OrganizationCSVImporter() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2"><FileCsvIcon /> Import organizations</CardTitle>
         <CardDescription>
-          Import bands, DJs, and their profile details from a Notion CSV. Existing organizations are updated by name.
+          Import artists, DJs, and their profile details from a Notion CSV. Existing organizations are updated by name.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">

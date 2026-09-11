@@ -104,7 +104,7 @@ export type EventBandPayoutFieldsFormValues = z.infer<typeof eventBandPayoutFiel
 
 export const eventBandOnboardingInviteSchema = eventBandPayoutFieldsSchema.extend({
   email: z.string().email("Enter a valid email"),
-  artistName: z.string().trim().min(1, "Enter an artist or band name"),
+  artistName: z.string().trim().min(1, "Enter an artist name"),
   role: z.enum(["headliner", "support", "other"]),
 });
 

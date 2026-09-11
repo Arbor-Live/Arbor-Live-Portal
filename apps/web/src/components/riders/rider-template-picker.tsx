@@ -63,7 +63,7 @@ export function RiderTemplatePicker({
         <SheetHeader>
           <SheetTitle>New technical rider</SheetTitle>
           <SheetDescription>
-            Start from a layout that matches your band, then drag to rearrange.
+            Start from a layout that matches your artist, then drag to rearrange.
           </SheetDescription>
         </SheetHeader>
 

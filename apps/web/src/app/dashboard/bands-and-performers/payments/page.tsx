@@ -17,7 +17,7 @@ export default function BandPaymentsPage() {
         <CardHeader>
           <CardTitle>Payments</CardTitle>
           <CardDescription>
-            Manage your band&apos;s payout payee and e-sign payment agreements for performances.
+            Manage your artist&apos;s payout payee and e-sign payment agreements for performances.
           </CardDescription>
         </CardHeader>
       </Card>
