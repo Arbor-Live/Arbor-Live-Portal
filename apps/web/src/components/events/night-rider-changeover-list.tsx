@@ -27,7 +27,7 @@ export function NightRiderChangeoverList({
         style={{ borderColor: HAIRLINE, background: HEADER }}
       >
         <p className="text-sm font-semibold" style={{ color: INK }}>
-          Changes between bands
+          Changes between artists
         </p>
       </div>
 

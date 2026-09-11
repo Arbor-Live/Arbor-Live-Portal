@@ -8,7 +8,7 @@ export function BandApplicationReceivedEmail({
   reviewUrl,
 }: BandApplicationReceivedEmailProps) {
   return (
-    <EmailLayout preview={`New band application: ${bandName}`} heading="New band application">
+    <EmailLayout preview={`New artist application: ${bandName}`} heading="New artist application">
       <BodyCopy>
         <strong>{contactName}</strong> ({contactEmail}) applied for <strong>{bandName}</strong> to
         join Arbor Live.

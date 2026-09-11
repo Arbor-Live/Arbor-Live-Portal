@@ -2137,7 +2137,7 @@ export function EventEditor({
                   . Crew cost remains unique to each occurrence.
                 </p>
                 <div className="grid gap-2 md:grid-cols-4 text-sm">
-                  <p>Template bands / event: {formatUsd(seriesMeta.occurrenceBandsCostUsd ?? 0)}</p>
+                  <p>Template artists / event: {formatUsd(seriesMeta.occurrenceBandsCostUsd ?? 0)}</p>
                   <p>
                     Template external / event: {formatUsd(seriesMeta.occurrenceExternalRentalsCostUsd ?? 0)}
                   </p>
@@ -2194,7 +2194,7 @@ export function EventEditor({
                 <Input value={computedCrewCost ? computedCrewCost.totalOvertimeHours.toFixed(2) : "0.00"} readOnly />
               </div>
               <div className="space-y-1">
-                <Label>Bands Cost (USD)</Label>
+                <Label>Artists Cost (USD)</Label>
                 <Input
                   value={bandsCostUsd}
                   onChange={(e) => setBandsCostUsd(e.target.value)}

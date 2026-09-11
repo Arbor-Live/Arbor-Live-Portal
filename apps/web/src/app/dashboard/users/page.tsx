@@ -37,7 +37,7 @@ export default function UsersPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Organizations</CardTitle>
-                <CardDescription>Create orgs, set active org defaults, and edit band org profiles.</CardDescription>
+                <CardDescription>Create orgs, set active org defaults, and edit artist org profiles.</CardDescription>
               </CardHeader>
               <CardContent>
                 <Button asChild>
@@ -47,14 +47,14 @@ export default function UsersPage() {
             </Card>
             <Card>
               <CardHeader>
-                <CardTitle>Band applications</CardTitle>
+                <CardTitle>Artist applications</CardTitle>
                 <CardDescription>
                   Review public artist applications from the Artists page.
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <Button asChild>
-                  <Link href="/dashboard/users/band-applications">Open Band Applications</Link>
+                  <Link href="/dashboard/users/band-applications">Open Artist Applications</Link>
                 </Button>
               </CardContent>
             </Card>

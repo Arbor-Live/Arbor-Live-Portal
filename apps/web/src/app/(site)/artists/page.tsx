@@ -5,7 +5,7 @@ import { PublicPageHero } from "@/components/public/public-page-hero";
 
 export const metadata = {
   title: "Artists | Arbor Live",
-  description: "Discover bands and performers working with Arbor Live.",
+  description: "Discover artists and performers working with Arbor Live.",
 };
 
 export default function ArtistsPage() {
@@ -13,7 +13,7 @@ export default function ArtistsPage() {
     <PublicMarketingLayout>
       <PublicPageHero
         title="Artists"
-        subtitle="Stanford bands and performers working with Arbor Live — browse profiles and connect."
+        subtitle="Stanford artists and performers working with Arbor Live — browse profiles and connect."
       />
       <PublicArtistsGrid />
       <ArtistsJoinSection />

@@ -106,13 +106,13 @@ export const generateR2UploadUrl = mutation({
     let key: string;
     if (args.scope === "organization") {
       if (!args.organizationId?.trim()) {
-        throw new Error("Organization id is required for band hero uploads.");
+        throw new Error("Organization id is required for artist hero uploads.");
       }
       const user = await requireAuth(ctx);
       if (!isAdmin(user)) {
         const bandContext = await requireBandContext(ctx);
         if (bandContext.organizationId !== args.organizationId.trim()) {
-          throw new Error("You can only upload hero images for your active band.");
+          throw new Error("You can only upload hero images for your active artist.");
         }
       }
       validateMarketingHeroUploadRequest({

@@ -18,7 +18,7 @@ test.describe("public band application", () => {
 
     await publicPage.getByLabel("Full name").fill(contactName);
     await publicPage.getByLabel("Stanford email").fill(email);
-    await publicPage.getByLabel("Band / artist name").fill(bandName);
+    await publicPage.getByLabel("Artist name").fill(bandName);
     await publicPage
       .getByRole("button", {
         name: /I'm performing solo — no other members to list/i,

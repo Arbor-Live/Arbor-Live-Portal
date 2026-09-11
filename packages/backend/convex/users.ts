@@ -627,7 +627,7 @@ export const updateBandOrganizationProfileAdmin = mutation({
     const organization = organizations.find((entry) => getRecordId(entry) === args.organizationId);
     if (!organization) throw new Error("Organization not found.");
     if (isArborOrganization(organization)) {
-      throw new Error("Use band org profile editor only for band organizations.");
+      throw new Error("Use artist org profile editor only for artist organizations.");
     }
     if (args.performerHourlyRateUsd !== undefined && args.performerHourlyRateUsd < 0) {
       throw new Error("Performer hourly rate must be 0 or greater.");
@@ -837,7 +837,7 @@ export const archiveBandOrganizationAdmin = mutation({
       .withIndex("by_organizationId", (q) => q.eq("organizationId", args.organizationId))
       .unique();
     if (!profile || (profile.organizationType !== "band" && profile.organizationType !== "dj")) {
-      throw new Error("Only band/DJ organizations can be archived.");
+      throw new Error("Only artist/DJ organizations can be archived.");
     }
     if (profile.status === "archived") {
       return { ok: true, deactivatedUserIds: [] };
@@ -2544,7 +2544,7 @@ export const updateMemberBandRole = mutation({
       actorMembership?.role === "admin" ||
       isAdmin(actor);
     if (actorId !== targetUserId && !isOrgAdmin) {
-      throw new Error("Only band admins can edit another member's role.");
+      throw new Error("Only artist admins can edit another member's role.");
     }
 
     const membership = await ctx.db
@@ -2554,7 +2554,7 @@ export const updateMemberBandRole = mutation({
       )
       .unique();
     if (!membership || !membership.active) {
-      throw new Error("Member not found in this band.");
+      throw new Error("Member not found in this artist organization.");
     }
     await ctx.db.patch(membership._id, {
       bandRole: args.bandRole.trim() || undefined,

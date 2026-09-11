@@ -12,7 +12,7 @@ export function BandApplicationApprovedEmail({
       <BodyCopy>{greeting}</BodyCopy>
       <BodyCopy>
         Great news — <strong>{bandName}</strong> was approved to work with Arbor Live. Check your
-        inbox for an invite to the band portal, then finish payout details so we can book and pay
+        inbox for an invite to the artist portal, then finish payout details so we can book and pay
         you. Public listing stays off until you enable it.
       </BodyCopy>
       {acceptInviteUrl ? (

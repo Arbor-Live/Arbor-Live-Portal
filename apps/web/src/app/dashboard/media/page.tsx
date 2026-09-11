@@ -13,7 +13,7 @@ export default function BandMediaPage() {
         <CardHeader>
           <CardTitle>Media</CardTitle>
           <CardDescription>
-            Photos and videos for your band and linked events.
+            Photos and videos for your artist profile and linked events.
           </CardDescription>
         </CardHeader>
       </Card>

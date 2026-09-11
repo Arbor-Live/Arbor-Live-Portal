@@ -199,7 +199,7 @@ export function BandSelfServiceClient() {
   }
 
   if (profile === undefined) {
-    return <p className="text-sm text-muted-foreground">Loading band profile…</p>;
+    return <p className="text-sm text-muted-foreground">Loading artist profile…</p>;
   }
 
   return (
@@ -248,7 +248,7 @@ export function BandSelfServiceClient() {
                       <TextFormField
                         name="publicSlug"
                         label="Public URL slug"
-                        placeholder="my-band-name"
+                        placeholder="my-artist-name"
                         onValueChange={() => markSlugTouched()}
                       />
                       <BandPublicArtistLinkCopy publicSlug={watched.publicSlug} />
@@ -274,11 +274,11 @@ export function BandSelfServiceClient() {
           <Card>
             <CardHeader>
               <CardTitle>Your team</CardTitle>
-              <CardDescription>Invite bandmates and manage portal access.</CardDescription>
+              <CardDescription>Invite members and manage portal access.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
               <p className="text-sm text-muted-foreground">
-                Invite bandmates by email. Their instrument or role is how Arbor knows who&apos;s in
+                Invite members by email. Their instrument or role is how Arbor knows who&apos;s in
                 the group — no separate member list to maintain.
               </p>
               <Form {...inviteForm}>
@@ -294,7 +294,7 @@ export function BandSelfServiceClient() {
                   />
                   <TextFormField
                     name="bandRole"
-                    label="Role in band"
+                    label="Role"
                     placeholder="Guitarist, vocals…"
                   />
                   <FormField
@@ -354,7 +354,7 @@ export function BandSelfServiceClient() {
                         </p>
                       </div>
                       <div className="grid max-w-sm gap-2">
-                        <Label htmlFor={`band-role-${member.userId}`}>Role in band</Label>
+                        <Label htmlFor={`band-role-${member.userId}`}>Role</Label>
                         <Input
                           id={`band-role-${member.userId}`}
                           value={bandRoleDrafts[member.userId] ?? member.bandRole ?? ""}

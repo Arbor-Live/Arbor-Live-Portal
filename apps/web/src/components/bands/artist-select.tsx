@@ -15,7 +15,7 @@ export const ARTIST_TBD_VALUE = "__tbd__";
 
 export const ARTIST_TBD_OPTION: ArtistSelectOption = {
   value: ARTIST_TBD_VALUE,
-  label: "Band TBD",
+  label: "Artist TBD",
   description: "Need to determine",
 };
 

@@ -34,9 +34,9 @@ export default function BandsAndPerformersPage() {
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle>Bands and Performers</CardTitle>
+          <CardTitle>Artists</CardTitle>
           <CardDescription>
-            Admins can edit any band&apos;s profile here. Band organizations manage their own
+            Admins can edit any artist&apos;s profile here. Artist organizations manage their own
             profile, technical riders, and payments under this section.
           </CardDescription>
         </CardHeader>

@@ -100,7 +100,7 @@ export const submitPublic = mutation({
     if (!isStanfordEmail(contactEmail)) {
       throw new Error("Use a @stanford.edu email address.");
     }
-    if (!bandDisplayName) throw new Error("Enter your band name.");
+    if (!bandDisplayName) throw new Error("Enter your artist name.");
 
     const members = args.isSolo
       ? []
@@ -112,7 +112,7 @@ export const submitPublic = mutation({
           .filter((member) => member.name.length > 0);
 
     if (!args.isSolo && members.length === 0) {
-      throw new Error("Add at least one bandmate, or mark that you perform solo.");
+      throw new Error("Add at least one member, or mark that you perform solo.");
     }
     for (const member of members) {
       if (!member.email) {

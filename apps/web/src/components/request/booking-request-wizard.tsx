@@ -661,7 +661,7 @@ function StepFields({
           <TextareaField
             name="eventDescription"
             label="Your answer"
-            placeholder="I am running a small party with three bands..."
+            placeholder="I am running a small party with three artists..."
             autoFocus
           />
         </>

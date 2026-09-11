@@ -44,7 +44,7 @@ export default function FinancialHubPage() {
                 <Link href="/dashboard/financial-hub/payments">Client Payments</Link>
               </Button>
               <Button asChild variant="outline">
-                <Link href="/dashboard/financial-hub/band-payouts">Band Payouts</Link>
+                <Link href="/dashboard/financial-hub/band-payouts">Artist payouts</Link>
               </Button>
               <Button asChild variant="outline">
                 <Link href="/dashboard/timecards">Crew Timecards</Link>

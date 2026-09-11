@@ -71,7 +71,7 @@ async function allocateUniqueBandPaymentReferenceId(ctx: MutationCtx) {
       .unique();
     if (!existing) return candidate;
   }
-  throw new Error("Unable to allocate band payment reference id.");
+  throw new Error("Unable to allocate artist payment reference id.");
 }
 
 export async function allocateInvoiceNumber(ctx: MutationCtx) {

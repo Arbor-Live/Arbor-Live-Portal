@@ -51,8 +51,8 @@ export function BandProfileCardPreview({
   className?: string;
 }) {
   const genres = parseCommaList(data.genres);
-  const slug = data.publicSlug?.trim() || "your-band";
-  const displayName = data.displayName.trim() || "Your band name";
+  const slug = data.publicSlug?.trim() || "your-artist";
+  const displayName = data.displayName.trim() || "Your artist name";
 
   return (
     <div className={cn(PREVIEW_SECTION_CLASS, className)}>
@@ -96,7 +96,7 @@ export function BandProfilePagePreview({
   className?: string;
 }) {
   const genres = parseCommaList(data.genres);
-  const displayName = data.displayName.trim() || "Your band name";
+  const displayName = data.displayName.trim() || "Your artist name";
   const links = [
     { label: "Demo", url: data.demoURL },
     { label: "Website", url: data.publicWebsiteUrl },

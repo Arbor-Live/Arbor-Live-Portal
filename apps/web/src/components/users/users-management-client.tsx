@@ -262,7 +262,7 @@ export function UsersManagementClient({
       bandOrgColumnHelper.columns([
         bandOrgColumnHelper.accessor("name", {
           id: "band",
-          header: ({ column }) => <DataTableColumnHeader column={column} title="Band" />,
+          header: ({ column }) => <DataTableColumnHeader column={column} title="Artist" />,
         }),
         bandOrgColumnHelper.accessor((row) => row.displayName ?? "", {
           id: "displayName",
@@ -513,11 +513,11 @@ export function UsersManagementClient({
         <Card>
           <CardHeader className="flex-row flex-wrap items-center justify-between gap-2">
             <div className="space-y-1">
-              <CardTitle>Band Organizations</CardTitle>
+              <CardTitle>Artist Organizations</CardTitle>
               <p className="text-sm font-normal text-muted-foreground">
                 Quick rate and archive controls. Full profile, payee, and riders live under{" "}
                 <Link href="/dashboard/bands-and-performers" className="underline">
-                  Bands and Performers
+                  Artists
                 </Link>
                 .
               </p>

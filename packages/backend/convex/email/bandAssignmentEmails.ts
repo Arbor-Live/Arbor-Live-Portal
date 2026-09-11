@@ -32,7 +32,7 @@ async function resolveBandName(ctx: MutationCtx, organizationId: string) {
     paginationOpts: { cursor: null, numItems: 500 },
   })) as { page?: AuthOrganization[] } | null;
   const org = (orgRows?.page ?? []).find((row) => getRecordId(row) === organizationId);
-  return org?.name ?? "your band";
+  return org?.name ?? "your artist";
 }
 
 export async function scheduleBandAssignedEmails(

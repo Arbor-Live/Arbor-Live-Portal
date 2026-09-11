@@ -100,7 +100,7 @@ export function BandMediaClient() {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              View and upload photos and videos for your band or linked events.
+              View and upload photos and videos for your artist profile or linked events.
             </p>
 
             <div className="space-y-2 max-w-md">
@@ -113,11 +113,11 @@ export function BandMediaClient() {
                 }}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Band album" />
+                  <SelectValue placeholder="Artist album" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="band">
-                    {activeOrg?.name ? `${activeOrg.name} (all band media)` : "Band album"}
+                    {activeOrg?.name ? `${activeOrg.name} (all artist media)` : "Artist album"}
                   </SelectItem>
                   {eventOptions.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
@@ -148,7 +148,7 @@ export function BandMediaClient() {
                 emptyMessage={
                   selectedEventId
                     ? "No event media yet. Upload photos or videos above."
-                    : "No band media yet. Upload photos or videos above."
+                    : "No artist media yet. Upload photos or videos above."
                 }
               />
             )}

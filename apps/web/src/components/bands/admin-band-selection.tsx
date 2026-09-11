@@ -128,17 +128,17 @@ export function AdminBandPickerCard() {
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-base">Manage a band</CardTitle>
+        <CardTitle className="text-base">Manage an artist</CardTitle>
         <CardDescription>
-          Pick any band organization to edit its profile or technical riders. You do not need to
+          Pick any artist organization to edit its profile or technical riders. You do not need to
           join the organization.
         </CardDescription>
       </CardHeader>
       <CardContent>
         {bands === undefined ? (
-          <p className="text-sm text-muted-foreground">Loading bands…</p>
+          <p className="text-sm text-muted-foreground">Loading artists…</p>
         ) : bands.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No band organizations yet.</p>
+          <p className="text-sm text-muted-foreground">No artist organizations yet.</p>
         ) : (
           <div className="max-w-md" data-testid="admin-band-picker">
             <ArtistSelect

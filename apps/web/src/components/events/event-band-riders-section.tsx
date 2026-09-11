@@ -90,7 +90,7 @@ function EventBandRidersPanel({ eventId }: { eventId: Id<"events"> }) {
 
       <Card>
         <CardHeader>
-          <CardTitle>Band riders</CardTitle>
+          <CardTitle>Artist riders</CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
           {rows.map((row) => (
@@ -117,7 +117,7 @@ function EventBandRidersPanel({ eventId }: { eventId: Id<"events"> }) {
 
               {!row.rider ? (
                 <p className="text-sm text-muted-foreground">
-                  No default or published rider yet for this band.
+                  No default or published rider yet for this artist.
                 </p>
               ) : (
                 <div className="space-y-2">

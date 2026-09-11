@@ -27,7 +27,7 @@ export async function requireBandEventAccess(
 ) {
   const allowed = await hasBandEventParticipation(ctx, eventId, organizationId);
   if (!allowed) {
-    throw new Error("Your band is not linked to this event.");
+    throw new Error("Your artist organization is not linked to this event.");
   }
 }
 
@@ -57,7 +57,7 @@ export async function requireBandAlbumAccess(
   if (context.organizationType === "band" && context.organizationId === organizationId) {
     return context;
   }
-  throw new Error("You do not have access to this band album.");
+  throw new Error("You do not have access to this artist album.");
 }
 
 export async function getAlbumLinkForBand(ctx: QueryCtx | MutationCtx, organizationId: string) {

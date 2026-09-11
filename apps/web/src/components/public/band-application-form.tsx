@@ -48,7 +48,7 @@ export function BandApplicationForm() {
     if (!form.isSolo) {
       const namedMembers = form.members.filter((member) => member.name.trim().length > 0);
       if (namedMembers.length === 0) {
-        setError('Add at least one bandmate, or check "I\'m performing solo".');
+        setError('Add at least one member, or check "I\'m performing solo".');
         return;
       }
       for (const member of namedMembers) {
@@ -144,9 +144,9 @@ export function BandApplicationForm() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="font-heading text-lg font-semibold">About the band</h2>
+        <h2 className="font-heading text-lg font-semibold">About the artist</h2>
         <div className="space-y-2">
-          <Label htmlFor="band-name">Band / artist name</Label>
+          <Label htmlFor="band-name">Artist name</Label>
           <Input
             id="band-name"
             required
@@ -235,7 +235,7 @@ export function BandApplicationForm() {
       </section>
 
       <section className="space-y-4">
-        <h2 className="font-heading text-lg font-semibold">Bandmates</h2>
+        <h2 className="font-heading text-lg font-semibold">Members</h2>
         <OnboardingAckCheckbox
           checked={form.isSolo}
           onChange={(next) =>
@@ -249,8 +249,8 @@ export function BandApplicationForm() {
         {!form.isSolo ? (
           <div className="space-y-3">
             <p className="text-xs text-muted-foreground">
-              Add everyone in the band with their email — we&apos;ll invite them to the portal.
-              People can belong to more than one Arbor band.
+              Add everyone in the group with their email — we&apos;ll invite them to the portal.
+              People can belong to more than one Arbor artist.
             </p>
             {form.members.map((member, index) => (
               <div key={index} className="flex flex-col gap-2 sm:flex-row sm:items-end">
