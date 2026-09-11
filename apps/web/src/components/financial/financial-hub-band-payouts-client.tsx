@@ -10,10 +10,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getConvexErrorMessage } from "@/lib/convex-error";
-import { notify } from "@/lib/notify";
 import { formatDate, formatDateTime, formatUsd } from "@/lib/format";
 import { formatBandPayeePayoutMethod } from "@/lib/band-payout-copy";
-import { OnboardingIncompleteStepsList } from "@/components/bands/onboarding-incomplete-steps";
 
 type BandPaymentQueue =
   | "upcoming"
@@ -42,11 +40,7 @@ export function FinancialHubBandPayoutsClient() {
   const queueCounts = useQuery(api.bandPayments.getQueueCounts, {});
   const sendConfirmation = useMutation(api.bandPayments.sendConfirmationEmail);
   const sendPayeeRequired = useMutation(api.bandPayments.sendPayeeRequiredEmail);
-  const sendOnboardingReminder = useMutation(api.bandPayments.sendOnboardingReminder);
   const syncStalePayeePayments = useMutation(api.bandPayments.syncStalePayeePayments);
-  const refreshPendingPaymentsForOrganization = useMutation(
-    api.bandPayments.refreshPendingPaymentsForOrganization,
-  );
   const markPaid = useMutation(api.bandPayments.markPaid);
   const cancelPayment = useMutation(api.bandPayments.cancelPayment);
 
@@ -81,36 +75,6 @@ export function FinancialHubBandPayoutsClient() {
     setActionError(null);
     try {
       await sendPayeeRequired({ paymentId });
-    } catch (error) {
-      setActionError(getConvexErrorMessage(error));
-    } finally {
-      setBusyPaymentId(null);
-    }
-  }
-
-  async function onSendOnboardingReminder(paymentId: Id<"eventBandPayments">) {
-    setBusyPaymentId(paymentId);
-    setActionError(null);
-    try {
-      await sendOnboardingReminder({ paymentId });
-      notify.success("Onboarding reminder sent.");
-    } catch (error) {
-      setActionError(getConvexErrorMessage(error));
-    } finally {
-      setBusyPaymentId(null);
-    }
-  }
-
-  async function onRecheckOnboarding(organizationId: string, paymentId: Id<"eventBandPayments">) {
-    setBusyPaymentId(paymentId);
-    setActionError(null);
-    try {
-      const result = await refreshPendingPaymentsForOrganization({ organizationId });
-      if (result.updated > 0) {
-        notify.success("Payout status updated.");
-      } else {
-        notify.success("Still pending onboarding — see missing steps.");
-      }
     } catch (error) {
       setActionError(getConvexErrorMessage(error));
     } finally {
@@ -245,34 +209,14 @@ export function FinancialHubBandPayoutsClient() {
                   ) : null}
                 </div>
 
-                {row.status === "pending_onboarding" ? (
-                  <OnboardingIncompleteStepsList steps={row.onboardingIncompleteSteps} />
-                ) : null}
-
                 <div className="flex flex-wrap gap-2">
                   <Button asChild size="sm" variant="outline">
                     <Link href={`/dashboard/events/${row.eventId}`}>Open event</Link>
                   </Button>
                   {row.status === "pending_onboarding" ? (
-                    <>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={busyPaymentId === row._id}
-                        onClick={() => void onRecheckOnboarding(row.organizationId, row._id)}
-                      >
-                        Recheck status
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        disabled={busyPaymentId === row._id}
-                        onClick={() => void onSendOnboardingReminder(row._id)}
-                      >
-                        Send onboarding reminder
-                      </Button>
-                    </>
+                    <Button asChild size="sm" variant="outline">
+                      <Link href="/dashboard/users/organizations">Manage onboarding</Link>
+                    </Button>
                   ) : null}
                   {row.status === "pending_payee" ? (
                     <Button

@@ -207,9 +207,10 @@ Event types (drive which editor tabs and quick-add blocks appear):
   the payment lands in **Pending onboarding**; once onboarded it moves to
   needs-payee or needs-signature request based on payee completeness.
   Completing/waiving artist onboarding refreshes stuck payments immediately.
-  Payout queue cards and **Users → Organizations → Artist Organizations** list
-  which onboarding gates are still missing; staff can **Recheck status** from
-  the payout queue after the artist finishes.
+  **Users → Organizations → Artist Organizations** shows an **Onboarding** chip
+  on incomplete orgs (missing steps + send reminder / recheck payouts). Payout
+  queue cards for pending-onboarding link there instead of duplicating the
+  checklist.
 - When assigning artists, empty events with invoice artist lines get an
   accept/confirm prompt (plus **Import from invoice** anytime). Payout
   money defaults prefer the invoice artist line (rate, hours, members), then

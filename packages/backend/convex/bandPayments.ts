@@ -890,33 +890,50 @@ export const sendOnboardingReminder = mutation({
     if (payment.status !== "pending_onboarding") {
       throw new Error("Onboarding reminders can only be sent for payments pending onboarding.");
     }
-    const result: {
-      enqueuedCount: number;
-      skipped:
-        | null
-        | "onboarding_complete"
-        | "cooldown"
-        | "no_assignment"
-        | "no_recipients";
-    } = await ctx.runMutation(
-      internal.email.bandOnboardingReminders.sendOnboardingReminderForOrgInternal,
-      {
-        organizationId: payment.organizationId,
-        force: true,
-      },
-    );
-    if (result.skipped === "onboarding_complete") {
-      throw new Error("This artist has already completed onboarding.");
-    }
-    if (result.skipped === "no_assignment") {
-      throw new Error("This artist is not assigned to an active event.");
-    }
-    if (result.skipped === "no_recipients") {
-      throw new Error("No artist contact emails found to remind.");
-    }
-    return { enqueuedCount: result.enqueuedCount };
+    return await sendOnboardingReminderForOrganizationHandler(ctx, payment.organizationId);
   },
 });
+
+/** Staff: remind an artist org to finish onboarding (from Organizations admin). */
+export const sendOnboardingReminderForOrganization = mutation({
+  args: { organizationId: v.string() },
+  returns: v.object({ enqueuedCount: v.number() }),
+  handler: async (ctx, args): Promise<{ enqueuedCount: number }> => {
+    await requireArborInternalContext(ctx);
+    return await sendOnboardingReminderForOrganizationHandler(ctx, args.organizationId);
+  },
+});
+
+async function sendOnboardingReminderForOrganizationHandler(
+  ctx: MutationCtx,
+  organizationId: string,
+): Promise<{ enqueuedCount: number }> {
+  const result: {
+    enqueuedCount: number;
+    skipped:
+      | null
+      | "onboarding_complete"
+      | "cooldown"
+      | "no_assignment"
+      | "no_recipients";
+  } = await ctx.runMutation(
+    internal.email.bandOnboardingReminders.sendOnboardingReminderForOrgInternal,
+    {
+      organizationId,
+      force: true,
+    },
+  );
+  if (result.skipped === "onboarding_complete") {
+    throw new Error("This artist has already completed onboarding.");
+  }
+  if (result.skipped === "no_assignment") {
+    throw new Error("This artist is not assigned to an upcoming or recent event.");
+  }
+  if (result.skipped === "no_recipients") {
+    throw new Error("No artist contact emails found to remind.");
+  }
+  return { enqueuedCount: result.enqueuedCount };
+}
 
 export const markPaid = mutation({
   args: {
