@@ -939,7 +939,8 @@ export const seedSubmittedBookingRequest = mutation({
     status: v.optional(
       v.union(
         v.literal("submitted"),
-        v.literal("in_review"),
+        v.literal("action_required"),
+        v.literal("pending_client"),
         v.literal("converted"),
         v.literal("declined"),
       ),
@@ -964,14 +965,20 @@ export const seedSubmittedBookingRequest = mutation({
         declineReasonCode?: "capacity";
         reviewedAt?: number;
         reviewedByUserId?: string;
+        convertedAt?: number;
       } = { status: args.status, updatedAt: now };
       if (args.status === "declined") {
         patch.declinedAt = now;
         patch.declineReasonCode = "capacity";
       }
-      if (args.status === "in_review") {
+      if (args.status === "action_required" || args.status === "pending_client") {
         patch.reviewedAt = now;
         patch.reviewedByUserId = "e2e-manager";
+      }
+      if (args.status === "converted") {
+        patch.reviewedAt = now;
+        patch.reviewedByUserId = "e2e-manager";
+        patch.convertedAt = now;
       }
       await ctx.db.patch(seeded.requestId, patch);
     }
@@ -1070,11 +1077,120 @@ export const seedBookingReadyForTrackApprove = mutation({
       updatedAt: now,
     });
     await ctx.db.patch(seeded.requestId, {
+      status: "pending_client",
+      convertedEventId: eventId,
+      convertedEventIds: [eventId],
+      linkedInvoiceId: invoiceId,
+      reviewedByUserId: "e2e-manager",
+      reviewedAt: now,
+      updatedAt: now,
+    });
+    return {
+      requestId: seeded.requestId,
+      invoiceId,
+      eventId,
+      requestNumber: seeded.requestNumber,
+      publicToken: seeded.publicToken,
+      trackPath: `/request/track/${seeded.publicToken}`,
+    };
+  },
+});
+
+/**
+ * Test-only: booking request whose quote the client already approved.
+ * Request status is terminal `converted`.
+ */
+export const seedBookingClientApproved = mutation({
+  args: {
+    eventName: v.optional(v.string()),
+  },
+  returns: v.object({
+    requestId: v.id("eventRequests"),
+    invoiceId: v.id("invoices"),
+    eventId: v.id("events"),
+    requestNumber: v.string(),
+    publicToken: v.string(),
+    trackPath: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const now = Date.now();
+    const seeded = await insertSubmittedBookingRequest(ctx, args.eventName);
+    const invoiceNumber = `ALINV-${makeInvoiceSuffix()}`;
+    const invoiceId = await ctx.db.insert("invoices", {
+      invoiceNumber,
+      status: "finalized",
+      issueDate: new Date(now).toISOString().slice(0, 10),
+      managerUserId: "e2e-manager",
+      managerName: "E2E Admin",
+      managerEmail: "e2e-admin@arborlive.test",
+      clientGroupName: seeded.eventName,
+      clientContactName: "E2E Requester",
+      clientEmail: "e2e.requester@stanford.edu",
+      clientPhone: "6505550100",
+      equipmentPricingMode: "nonSubsidized",
+      crewRateMode: "normal",
+      discountType: "amount",
+      discountValue: 0,
+      discountAmountUsd: 0,
+      equipmentSubtotalUsd: 100,
+      externalRentalsSubtotalUsd: 0,
+      artistsSubtotalUsd: 0,
+      crewSubtotalUsd: 0,
+      feesSubtotalUsd: 0,
+      subtotalUsd: 100,
+      totalUsd: 100,
+      clientApprovalStatus: "approved",
+      approvedAt: now,
+      clientApprovalSignedName: "E2E Approver",
+      clientIsPaymentSubmitter: true,
+      sourceEventRequestId: seeded.requestId,
+      clientReviewReadyAt: now - 60_000,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert("invoiceLineItems", {
+      invoiceId,
+      section: "equipment_type",
+      order: 0,
+      label: "E2E Approved Quote Line",
+      quantity: 1,
+      rateUsd: 100,
+      amountUsd: 100,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const eventId = await ctx.db.insert("events", {
+      title: seeded.eventName,
+      status: "logistics",
+      visibility: "public",
+      publicToken: makeToken(),
+      startAt: seeded.startAt,
+      endAt: seeded.endAt,
+      timezone: "America/Los_Angeles",
+      spansMultipleDays: false,
+      setupOnly: false,
+      strikeOnly: false,
+      requiresShowWindow: true,
+      venueName: "E2E Venue",
+      eventType: "Crewed Event",
+      teamsInterested: ["Sound"],
+      category: "Concert / Showcase",
+      host: "E2E Test Org",
+      expectedTurnout: 80,
+      invoiceId,
+      sourceEventRequestId: seeded.requestId,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.patch(seeded.requestId, {
       status: "converted",
       convertedEventId: eventId,
       convertedEventIds: [eventId],
       linkedInvoiceId: invoiceId,
       reviewedByUserId: "e2e-manager",
+      reviewedAt: now,
+      convertedAt: now,
       updatedAt: now,
     });
     return {
@@ -1227,6 +1343,8 @@ export const seedPastLinkedEventForFeedback = mutation({
       convertedEventIds: [eventId],
       linkedInvoiceId: invoiceId,
       reviewedByUserId: "e2e-manager",
+      reviewedAt: now,
+      convertedAt: now,
       updatedAt: now,
     });
     return {
@@ -4455,11 +4573,12 @@ export const seedRequestLinkedDraftQuote = mutation({
       updatedAt: now,
     });
     await ctx.db.patch(seeded.requestId, {
-      status: "converted",
+      status: "action_required",
       convertedEventId: eventId,
       convertedEventIds: [eventId],
       linkedInvoiceId: invoiceId,
       reviewedByUserId: "e2e-manager",
+      reviewedAt: now,
       updatedAt: now,
     });
     return {

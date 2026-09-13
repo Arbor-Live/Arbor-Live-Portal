@@ -78,9 +78,12 @@ async function assignNextRoundRobinUser(ctx: MutationCtx): Promise<string | unde
 
 const eventRequestStatusValue = v.union(
   v.literal("submitted"),
-  v.literal("in_review"),
+  v.literal("action_required"),
+  v.literal("pending_client"),
   v.literal("converted"),
   v.literal("declined"),
+  /** @deprecated Migrated to action_required. */
+  v.literal("in_review"),
 );
 
 const showSlotValue = v.object({
@@ -843,12 +846,23 @@ export const list = query({
         .withIndex("by_status_and_submittedAt", (q) => q.eq("status", "submitted"))
         .order("asc")
         .take(100);
-      const inReview = await ctx.db
+      const actionRequired = await ctx.db
+        .query("eventRequests")
+        .withIndex("by_status_and_submittedAt", (q) => q.eq("status", "action_required"))
+        .order("asc")
+        .take(100);
+      const pendingClient = await ctx.db
+        .query("eventRequests")
+        .withIndex("by_status_and_submittedAt", (q) => q.eq("status", "pending_client"))
+        .order("asc")
+        .take(100);
+      // Legacy rows may still say in_review until the migration finishes.
+      const legacyInReview = await ctx.db
         .query("eventRequests")
         .withIndex("by_status_and_submittedAt", (q) => q.eq("status", "in_review"))
         .order("asc")
         .take(100);
-      rows = [...submitted, ...inReview]
+      rows = [...submitted, ...actionRequired, ...pendingClient, ...legacyInReview]
         .sort((a, b) => a.submittedAt - b.submittedAt)
         .slice(0, 100);
     } else {
@@ -1116,7 +1130,7 @@ export const getByLinkedInvoiceId = query({
 export const updateStatus = mutation({
   args: {
     id: v.id("eventRequests"),
-    status: v.union(v.literal("in_review"), v.literal("declined")),
+    status: v.union(v.literal("action_required"), v.literal("declined")),
     staffNotes: v.optional(v.string()),
     declineReasonCode: v.optional(bookingDeclineReasonCodeValue),
     declineReasonNote: v.optional(v.string()),
@@ -1130,13 +1144,16 @@ export const updateStatus = mutation({
     if (existing.status === "converted") {
       throw new Error("Converted requests cannot be updated.");
     }
+    if (existing.status === "declined" && args.status !== "declined") {
+      throw new Error("Declined requests cannot be reopened from here.");
+    }
     if (args.status === "declined" && !args.declineReasonCode) {
       throw new Error("Select a decline reason.");
     }
     const now = Date.now();
     const actorUserId = getUserId(user);
     const patch: {
-      status: "in_review" | "declined";
+      status: "action_required" | "declined";
       staffNotes?: string;
       reviewedByUserId: string;
       updatedAt: number;
@@ -1150,7 +1167,7 @@ export const updateStatus = mutation({
       reviewedByUserId: actorUserId,
       updatedAt: now,
     };
-    if (args.status === "in_review") {
+    if (args.status === "action_required") {
       patch.reviewedAt = existing.reviewedAt ?? now;
     }
     if (args.status === "declined") {
@@ -1230,14 +1247,25 @@ export const convertToEvent = mutation({
           updatedAt: now,
         });
       }
+      const nextStatus =
+        request.status === "converted" || request.status === "declined"
+          ? request.status
+          : "action_required";
       await ctx.db.patch(args.id, {
-        status: "converted",
+        status: nextStatus,
         linkedInvoiceId: invoiceId,
         convertedEventIds: existingEvents.map((event) => event._id),
         convertedEventId: existingEvents[0]?._id ?? existingPrimaryEventId,
         reviewedByUserId: managerUserId,
+        reviewedAt: request.reviewedAt ?? now,
         updatedAt: now,
       });
+      if (nextStatus !== request.status) {
+        await recordEventRequestStatusTransition(ctx, args.id, request.status, nextStatus, {
+          actorUserId: managerUserId,
+          at: now,
+        });
+      }
       const eventIds = existingEvents.map((event) => event._id);
       return {
         eventId: eventIds[0] ?? existingPrimaryEventId,
@@ -1291,16 +1319,15 @@ export const convertToEvent = mutation({
     }
 
     await ctx.db.patch(args.id, {
-      status: "converted",
+      status: "action_required",
       convertedEventId: eventIds[0],
       convertedEventIds: eventIds,
       linkedInvoiceId: invoiceId,
       reviewedByUserId: managerUserId,
       reviewedAt: request.reviewedAt ?? now,
-      convertedAt: now,
       updatedAt: now,
     });
-    await recordEventRequestStatusTransition(ctx, args.id, request.status, "converted", {
+    await recordEventRequestStatusTransition(ctx, args.id, request.status, "action_required", {
       actorUserId: managerUserId,
       at: now,
     });

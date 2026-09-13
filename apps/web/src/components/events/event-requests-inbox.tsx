@@ -11,7 +11,8 @@ import { formatDateTime, pacificDateKey } from "@/lib/format";
 const STATUS_OPTIONS = [
   { value: "", label: "Open (hide completed)" },
   { value: "submitted", label: "Submitted" },
-  { value: "in_review", label: "In review" },
+  { value: "action_required", label: "Action required" },
+  { value: "pending_client", label: "Pending" },
   { value: "converted", label: "Converted" },
   { value: "declined", label: "Declined" },
   { value: "all", label: "All statuses" },
@@ -21,8 +22,11 @@ function formatStatusLabel(status: string) {
   switch (status) {
     case "submitted":
       return "Submitted";
+    case "action_required":
     case "in_review":
-      return "In review";
+      return "Action required";
+    case "pending_client":
+      return "Pending";
     case "converted":
       return "Converted";
     case "declined":
@@ -35,8 +39,11 @@ function formatStatusLabel(status: string) {
 function statusBadgeClass(status: string) {
   switch (status) {
     case "submitted":
+    case "action_required":
     case "in_review":
       return "border border-amber-500/30 bg-amber-500/10 text-amber-700";
+    case "pending_client":
+      return "border border-sky-500/30 bg-sky-500/10 text-sky-700";
     case "converted":
       return "border border-emerald-500/30 bg-emerald-500/10 text-emerald-700";
     case "declined":

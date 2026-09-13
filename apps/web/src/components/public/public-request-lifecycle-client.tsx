@@ -30,7 +30,10 @@ import type {
 
 const STATUS_LABELS: Record<string, string> = {
   submitted: "Submitted",
-  converted: "Quote in progress",
+  action_required: "Quote in progress",
+  in_review: "Quote in progress",
+  pending_client: "Awaiting your response",
+  converted: "Converted",
   declined: "Declined",
 };
 
@@ -74,13 +77,17 @@ function buildLifecycleSteps(request: {
       key: "quote",
       label: quoteReady ? "Quote ready for your review" : "Quote being prepared",
       complete: quoteReady || quoteApproved,
-      active: request.status === "converted" && !quoteReady && !quoteApproved,
+      active:
+        (request.status === "action_required" || request.status === "in_review") &&
+        !quoteReady &&
+        !quoteApproved,
     },
     {
       key: "approved",
       label: "Quote approved — logistics planning",
       complete: quoteApproved,
-      active: quoteReady && !quoteApproved,
+      active:
+        (quoteReady || request.status === "pending_client") && !quoteApproved,
     },
   ];
 }

@@ -12,17 +12,18 @@ type Seed = {
 };
 
 /**
- * Once a request is converted it is a terminal record for the inbox: the
- * detail page drops the staff actions panel, and `updateStatus` refuses to
- * move it anywhere else — a guard the UI can't exercise because the buttons
- * are gone, so it is asserted through a direct Convex call.
+ * Once a request is converted (client approved the quote) it is a terminal
+ * record for the inbox: the detail page drops the staff actions panel, and
+ * `updateStatus` refuses to move it anywhere else — a guard the UI can't
+ * exercise because the buttons are gone, so it is asserted through a direct
+ * Convex call.
  */
 test.describe("converted booking request lock", () => {
   const stamp = Date.now();
   let seeded: Seed;
 
   test.beforeAll(() => {
-    seeded = runConvex("e2eHelpers:seedBookingReadyForTrackApprove", {
+    seeded = runConvex("e2eHelpers:seedBookingClientApproved", {
       eventName: `E2E Convert Lock ${stamp}`,
     }) as Seed;
   });
@@ -49,7 +50,7 @@ test.describe("converted booking request lock", () => {
 
     const result = await callConvexAs(page, "mutation", "eventRequests:updateStatus", {
       id: seeded.requestId,
-      status: "in_review",
+      status: "action_required",
     });
     expect(result.status).toBe("error");
     expect(result.errorMessage ?? "").toMatch(/converted requests cannot be updated/i);

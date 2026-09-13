@@ -15,7 +15,7 @@ type Seed = {
  * straight to the detail route, so the inbox's status filter and its default
  * "Open (hide completed)" behaviour had no test of their own.
  *
- * Fixtures are three requests in one seed pass so the assertions observe the
+ * Fixtures are four requests in one seed pass so the assertions observe the
  * *same* rows across filters, and `afterAll` deletes them so the shared
  * deployment's `.take(100)` inbox window never fills with stale rows.
  */
@@ -26,7 +26,8 @@ test.describe("booking request inbox", () => {
   test.beforeAll(() => {
     for (const [key, status] of [
       ["submitted", "submitted"],
-      ["inReview", "in_review"],
+      ["actionRequired", "action_required"],
+      ["pendingClient", "pending_client"],
       ["declined", "declined"],
     ] as const) {
       seeds[key] = runConvex("e2eHelpers:seedSubmittedBookingRequest", {
@@ -42,13 +43,14 @@ test.describe("booking request inbox", () => {
     }
   });
 
-  test("open view lists submitted + in-review and hides completed", async ({ page }) => {
+  test("open view lists open statuses and hides completed", async ({ page }) => {
     await page.goto("/dashboard/events/requests");
 
     await expect(page.getByText(seeds.submitted.requestNumber).first()).toBeVisible({
       timeout: 25_000,
     });
-    await expect(page.getByText(seeds.inReview.requestNumber).first()).toBeVisible();
+    await expect(page.getByText(seeds.actionRequired.requestNumber).first()).toBeVisible();
+    await expect(page.getByText(seeds.pendingClient.requestNumber).first()).toBeVisible();
     await expect(page.getByText(seeds.declined.requestNumber)).toHaveCount(0);
   });
 
@@ -65,7 +67,8 @@ test.describe("booking request inbox", () => {
       timeout: 25_000,
     });
     await expect(page.getByText(seeds.submitted.requestNumber)).toHaveCount(0);
-    await expect(page.getByText(seeds.inReview.requestNumber)).toHaveCount(0);
+    await expect(page.getByText(seeds.actionRequired.requestNumber)).toHaveCount(0);
+    await expect(page.getByText(seeds.pendingClient.requestNumber)).toHaveCount(0);
   });
 
   test("all statuses includes terminal requests", async ({ page }) => {
@@ -81,6 +84,7 @@ test.describe("booking request inbox", () => {
       timeout: 25_000,
     });
     await expect(page.getByText(seeds.submitted.requestNumber).first()).toBeVisible();
-    await expect(page.getByText(seeds.inReview.requestNumber).first()).toBeVisible();
+    await expect(page.getByText(seeds.actionRequired.requestNumber).first()).toBeVisible();
+    await expect(page.getByText(seeds.pendingClient.requestNumber).first()).toBeVisible();
   });
 });

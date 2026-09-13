@@ -108,6 +108,7 @@ import type * as lib_bandPayments from "../lib/bandPayments.js";
 import type * as lib_bookingChainDelete from "../lib/bookingChainDelete.js";
 import type * as lib_bookingDayLoad from "../lib/bookingDayLoad.js";
 import type * as lib_bookingRequestQuote from "../lib/bookingRequestQuote.js";
+import type * as lib_bookingRequestStatus from "../lib/bookingRequestStatus.js";
 import type * as lib_contactName from "../lib/contactName.js";
 import type * as lib_copyDaySetup from "../lib/copyDaySetup.js";
 import type * as lib_crewCompensation from "../lib/crewCompensation.js";
@@ -306,6 +307,7 @@ declare const fullApi: ApiFromModules<{
   "lib/bookingChainDelete": typeof lib_bookingChainDelete;
   "lib/bookingDayLoad": typeof lib_bookingDayLoad;
   "lib/bookingRequestQuote": typeof lib_bookingRequestQuote;
+  "lib/bookingRequestStatus": typeof lib_bookingRequestStatus;
   "lib/contactName": typeof lib_contactName;
   "lib/copyDaySetup": typeof lib_copyDaySetup;
   "lib/crewCompensation": typeof lib_crewCompensation;

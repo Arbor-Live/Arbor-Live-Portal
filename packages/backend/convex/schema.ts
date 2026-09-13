@@ -1403,9 +1403,12 @@ export default defineSchema({
   eventRequests: defineTable({
     status: v.union(
       v.literal("submitted"),
-      v.literal("in_review"),
+      v.literal("action_required"),
+      v.literal("pending_client"),
       v.literal("converted"),
       v.literal("declined"),
+      /** @deprecated Migrated to action_required; kept for widen→migrate→narrow. */
+      v.literal("in_review"),
     ),
     requestNumber: v.optional(v.string()),
     publicToken: v.optional(v.string()),

@@ -21,7 +21,7 @@ test.describe("booking staff convert", () => {
 
     // Leave the invoice editor immediately — assert conversion via helpers + request detail.
     await page.goto(seeded.path);
-    await expect(page.getByText("converted", { exact: true }).first()).toBeVisible({
+    await expect(page.getByText("Action required", { exact: true }).first()).toBeVisible({
       timeout: 25_000,
     });
     await expect(page.getByRole("link", { name: /Open tentative event/i }).first()).toBeVisible();
@@ -40,15 +40,14 @@ test.describe("booking staff convert", () => {
       "e2eHelpers:getBookingRequestState",
       { requestId: seeded.requestId },
       (row) =>
-        row?.status === "converted" &&
+        row?.status === "action_required" &&
         Boolean(row.convertedEventId) &&
-        Boolean(row.linkedInvoiceId) &&
-        row.convertedAt != null,
+        Boolean(row.linkedInvoiceId),
     );
-    expect(state.status).toBe("converted");
+    expect(state.status).toBe("action_required");
     expect(state.convertedEventId).toBeTruthy();
     expect(state.linkedInvoiceId).toBeTruthy();
-    expect(state.convertedAt).toBeTruthy();
+    expect(state.convertedAt).toBeNull();
     expect(state.eventType).toBe("Crewed Event");
     expect(state.startAt).toBe(state.requestStartAt);
     expect(state.endAt).toBe(state.requestEndAt);

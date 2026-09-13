@@ -42,7 +42,11 @@ export function AdminBookingRequestsWidget() {
                   {request.eventName?.trim() || request.organization?.trim() || request.requestNumber}
                 </p>
                 <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                  {request.status === "in_review" ? "In review" : "Submitted"}
+                  {request.status === "pending_client"
+                    ? "Pending"
+                    : request.status === "action_required"
+                      ? "Action required"
+                      : "Submitted"}
                 </span>
               </div>
               <p className="text-xs text-muted-foreground">
