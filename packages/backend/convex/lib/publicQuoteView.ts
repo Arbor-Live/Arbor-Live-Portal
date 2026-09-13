@@ -1,5 +1,6 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
+import { syncBookingRequestStatusFromInvoice } from "./bookingRequestStatus";
 import { syncLinkedEventStatusFromInvoice } from "./eventStatus";
 import { listEventsByInvoiceId } from "./invoiceEvents";
 import { toDocumentLineItem, recomputeInvoiceTotalsFromDocumentLines } from "./invoiceDocumentBuild";
@@ -284,6 +285,10 @@ export async function approveInvoiceQuote(
   });
   await recordInvoiceStatusTransition(ctx, invoice._id, fromStatus, "approved", { at: now });
   await syncLinkedEventStatusFromInvoice(ctx, invoice._id, "approved");
+  const updatedInvoice = await ctx.db.get(invoice._id);
+  if (updatedInvoice) {
+    await syncBookingRequestStatusFromInvoice(ctx, updatedInvoice, { at: now });
+  }
 
   if (!clientIsPaymentSubmitter && paymentSubmitterEmail) {
     await schedulePayingPartyAddedEmail(ctx, {
@@ -398,6 +403,10 @@ export async function requestInvoiceQuoteChanges(
   });
   await recordInvoiceStatusTransition(ctx, invoice._id, fromStatus, "changes_requested", { at: now });
   await syncLinkedEventStatusFromInvoice(ctx, invoice._id, "changes_requested");
+  const updated = await ctx.db.get(invoice._id);
+  if (updated) {
+    await syncBookingRequestStatusFromInvoice(ctx, updated, { at: now });
+  }
   await scheduleQuoteChangesRequestedEmail(ctx, {
     invoice,
     changeNote: trimmed,

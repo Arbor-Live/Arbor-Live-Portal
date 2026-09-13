@@ -169,11 +169,21 @@ async function countOpenBookingRequests(ctx: QueryCtx) {
     .query("eventRequests")
     .withIndex("by_status_and_submittedAt", (q) => q.eq("status", "submitted"))
     .take(BADGE_STATUS_TAKE);
-  const inReview = await ctx.db
+  const actionRequired = await ctx.db
+    .query("eventRequests")
+    .withIndex("by_status_and_submittedAt", (q) => q.eq("status", "action_required"))
+    .take(BADGE_STATUS_TAKE);
+  const pendingClient = await ctx.db
+    .query("eventRequests")
+    .withIndex("by_status_and_submittedAt", (q) => q.eq("status", "pending_client"))
+    .take(BADGE_STATUS_TAKE);
+  const legacyInReview = await ctx.db
     .query("eventRequests")
     .withIndex("by_status_and_submittedAt", (q) => q.eq("status", "in_review"))
     .take(BADGE_STATUS_TAKE);
-  return submitted.length + inReview.length;
+  return (
+    submitted.length + actionRequired.length + pendingClient.length + legacyInReview.length
+  );
 }
 
 async function countSubmittedBandApplications(ctx: QueryCtx) {

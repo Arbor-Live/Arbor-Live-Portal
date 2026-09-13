@@ -5,7 +5,8 @@ import { normalizeEventStatus } from "./lib/eventStatus";
 
 const openRequestStatusValue = v.union(
   v.literal("submitted"),
-  v.literal("in_review"),
+  v.literal("action_required"),
+  v.literal("pending_client"),
 );
 
 export const listUpcomingAdminEvents = query({
@@ -91,19 +92,29 @@ export const listOpenBookingRequests = query({
       .withIndex("by_status_and_submittedAt", (q) => q.eq("status", "submitted"))
       .order("desc")
       .take(limit);
-    const inReview = await ctx.db
+    const actionRequired = await ctx.db
+      .query("eventRequests")
+      .withIndex("by_status_and_submittedAt", (q) => q.eq("status", "action_required"))
+      .order("desc")
+      .take(limit);
+    const pendingClient = await ctx.db
+      .query("eventRequests")
+      .withIndex("by_status_and_submittedAt", (q) => q.eq("status", "pending_client"))
+      .order("desc")
+      .take(limit);
+    const legacyInReview = await ctx.db
       .query("eventRequests")
       .withIndex("by_status_and_submittedAt", (q) => q.eq("status", "in_review"))
       .order("desc")
       .take(limit);
 
-    return [...submitted, ...inReview]
+    return [...submitted, ...actionRequired, ...pendingClient, ...legacyInReview]
       .sort((a, b) => b.submittedAt - a.submittedAt)
       .slice(0, limit)
       .map((request): {
         _id: typeof request._id;
         requestNumber: string;
-        status: "submitted" | "in_review";
+        status: "submitted" | "action_required" | "pending_client";
         eventName: string | undefined;
         organization: string | undefined;
         venueName: string | undefined;
@@ -111,7 +122,12 @@ export const listOpenBookingRequests = query({
       } => ({
         _id: request._id,
         requestNumber: request.requestNumber ?? `LEGACY-${request._id}`,
-        status: request.status === "in_review" ? "in_review" : "submitted",
+        status:
+          request.status === "pending_client"
+            ? "pending_client"
+            : request.status === "submitted"
+              ? "submitted"
+              : "action_required",
         eventName: request.eventName,
         organization: request.organization,
         venueName: request.venueName,

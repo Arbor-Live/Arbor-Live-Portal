@@ -90,13 +90,13 @@ export function EventRequestDetailClient({ requestId }: { requestId: Id<"eventRe
     }
   }
 
-  async function handleMarkInReview() {
+  async function handleMarkActionRequired() {
     setSaving(true);
     setError(null);
     try {
       await updateStatus({
         id: requestId,
-        status: "in_review",
+        status: "action_required",
         staffNotes: staffNotes.trim() || undefined,
       });
     } catch (statusError) {
@@ -164,11 +164,19 @@ export function EventRequestDetailClient({ requestId }: { requestId: Id<"eventRe
         </Alert>
       ) : null}
 
-      {request.status === "converted" ? (
+      {request.status === "action_required" && request.linkedInvoiceId ? (
         <Alert>
           <AlertDescription>
             Build the quote, then use &quot;Send quote to client&quot; in the quote editor. The client
             will review and approve on their request portal link — no separate approval URL is needed.
+            Status becomes Pending once sent, and Converted when they approve.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+      {request.status === "pending_client" ? (
+        <Alert>
+          <AlertDescription>
+            Quote is on the client request portal — waiting for their response.
           </AlertDescription>
         </Alert>
       ) : null}
@@ -177,7 +185,11 @@ export function EventRequestDetailClient({ requestId }: { requestId: Id<"eventRe
         <div className="mb-4 flex flex-wrap gap-2 text-xs">
           <span className="rounded bg-muted px-2 py-0.5">{request.requestNumber ?? request._id}</span>
           <span className="rounded bg-muted px-2 py-0.5 capitalize">
-            {request.status.replace("_", " ")}
+            {request.status === "action_required" || request.status === "in_review"
+              ? "Action required"
+              : request.status === "pending_client"
+                ? "Pending"
+                : request.status.replace("_", " ")}
           </span>
           <span className="rounded bg-muted px-2 py-0.5">
             Submitted {formatDateTime(request.submittedAt)}
@@ -301,16 +313,23 @@ export function EventRequestDetailClient({ requestId }: { requestId: Id<"eventRe
           </div>
           <div className="flex flex-wrap gap-2">
             {request.status === "submitted" ? (
-              <Button type="button" variant="secondary" disabled={saving} onClick={() => void handleMarkInReview()}>
-                Mark in review
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={saving}
+                onClick={() => void handleMarkActionRequired()}
+              >
+                Mark action required
               </Button>
             ) : null}
             <Button type="button" variant="outline" disabled={saving} onClick={() => void handleDecline()}>
               Decline
             </Button>
-            <Button type="button" disabled={saving} onClick={() => void handleConvert()}>
-              Create quote & tentative event
-            </Button>
+            {!request.linkedInvoiceId ? (
+              <Button type="button" disabled={saving} onClick={() => void handleConvert()}>
+                Create quote & tentative event
+              </Button>
+            ) : null}
           </div>
         </div>
       ) : null}

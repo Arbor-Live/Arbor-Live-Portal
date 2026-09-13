@@ -159,7 +159,8 @@ export function InsightsDemandPanel({ startMs, endMs }: InsightsDemandPanelProps
                 <CountBarChart
                   data={[
                     { key: "Submitted", count: funnel.submitted },
-                    { key: "In review", count: funnel.inReview },
+                    { key: "Action required", count: funnel.actionRequired },
+                    { key: "Pending", count: funnel.pendingClient },
                     { key: "Converted", count: funnel.converted },
                     { key: "Declined", count: funnel.declined },
                   ]}

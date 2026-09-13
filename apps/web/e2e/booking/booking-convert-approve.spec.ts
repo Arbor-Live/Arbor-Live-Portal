@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { runConvex } from "../helpers/convex";
+import { pollConvex, runConvex } from "../helpers/convex";
 
 test.describe("booking track approve", () => {
   test.use({ storageState: { cookies: [], origins: [] } });
@@ -8,6 +8,7 @@ test.describe("booking track approve", () => {
     const seeded = runConvex("e2eHelpers:seedBookingReadyForTrackApprove", {
       eventName: `E2E Track Approve ${Date.now()}`,
     }) as {
+      requestId: string;
       trackPath: string;
     };
 
@@ -20,5 +21,13 @@ test.describe("booking track approve", () => {
     await page.getByText("I will be submitting the payment").click();
     await page.getByRole("button", { name: "Approve quote" }).click();
     await expect(page.getByText(/Approved on/i).first()).toBeVisible({ timeout: 20_000 });
+
+    const state = await pollConvex<{ status: string; convertedAt: number | null }>(
+      "e2eHelpers:getBookingRequestState",
+      { requestId: seeded.requestId },
+      (row) => row?.status === "converted" && row.convertedAt != null,
+    );
+    expect(state.status).toBe("converted");
+    expect(state.convertedAt).toBeTruthy();
   });
 });

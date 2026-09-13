@@ -23,7 +23,7 @@ Prefer these patterns over stacking eager list subscriptions.
   event editor and financial-hub). Pending counts should stay visible while editing.
 - Do not reintroduce per-badge `useQuery` stacks on every page for pending counts.
 - Counters currently include: pending availability, unconfirmed crew, open booking
-  requests (`submitted` + `in_review`), band/crew applications, damage reports,
+  requests (`submitted` + `action_required` + `pending_client`), band/crew applications, damage reports,
   and band payment actions.
 - Pass `includeUnconfirmedCrew: true` only on routes where that badge matters
   (dashboard home + crew scheduling). That counter fans out events × shifts and

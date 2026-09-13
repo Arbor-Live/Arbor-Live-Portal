@@ -206,7 +206,10 @@ export const backfillEventRequestMilestoneTimestamps = migrations.define({
       declinedAt?: number;
       updatedAt?: number;
     } = {};
-    if (request.status === "in_review" && !request.reviewedAt) {
+    if (
+      (request.status === "in_review" || request.status === "action_required") &&
+      !request.reviewedAt
+    ) {
       patch.reviewedAt = request.updatedAt;
     }
     if (request.status === "converted" && !request.convertedAt) {
@@ -219,6 +222,125 @@ export const backfillEventRequestMilestoneTimestamps = migrations.define({
     if (Object.keys(patch).length === 0) return;
     patch.updatedAt = request.updatedAt;
     return patch;
+  },
+});
+
+/**
+ * Align booking-request status with quote state:
+ * - in_review → action_required
+ * - converted without client-approved quote → pending_client (sent) or action_required
+ * - converted with approved quote stays converted (and gets convertedAt)
+ * - void quote → declined
+ */
+export const realignBookingRequestStatusesToQuotes = migrations.define({
+  table: "eventRequests",
+  migrateOne: async (ctx, request) => {
+    const now = Date.now();
+
+    if (request.status === "in_review") {
+      return {
+        status: "action_required" as const,
+        reviewedAt: request.reviewedAt ?? request.updatedAt,
+        updatedAt: now,
+      };
+    }
+
+    if (request.status !== "converted" && request.status !== "action_required") return;
+
+    let invoice = request.linkedInvoiceId
+      ? await ctx.db.get(request.linkedInvoiceId)
+      : null;
+    if (!invoice) {
+      invoice = await ctx.db
+        .query("invoices")
+        .withIndex("by_sourceEventRequestId", (q) =>
+          q.eq("sourceEventRequestId", request._id),
+        )
+        .unique();
+    }
+
+    if (invoice?.status === "void") {
+      await ctx.db.patch(request._id, {
+        status: "declined",
+        declinedAt: request.declinedAt ?? request.updatedAt,
+        declineReasonCode: request.declineReasonCode ?? "client_withdrew",
+        convertedAt: undefined,
+        updatedAt: now,
+      });
+      return;
+    }
+
+    if ((invoice?.clientApprovalStatus ?? "pending") === "approved") {
+      if (request.status === "converted" && request.convertedAt) return;
+      await ctx.db.patch(request._id, {
+        status: "converted",
+        convertedAt: request.convertedAt ?? request.updatedAt,
+        reviewedAt: request.reviewedAt ?? request.updatedAt,
+        updatedAt: now,
+      });
+      return;
+    }
+
+    const awaitingClient =
+      Boolean(invoice?.clientReviewReadyAt) &&
+      (invoice?.clientApprovalStatus ?? "pending") === "pending";
+    const nextStatus = awaitingClient ? ("pending_client" as const) : ("action_required" as const);
+    if (request.status === nextStatus && !request.convertedAt) return;
+
+    await ctx.db.patch(request._id, {
+      status: nextStatus,
+      reviewedAt: request.reviewedAt ?? request.updatedAt,
+      convertedAt: undefined,
+      updatedAt: now,
+    });
+  },
+});
+
+/**
+ * Split action_required → pending_client when a quote is already on the portal
+ * awaiting a client decision. Append-only follow-up for deployments that ran the
+ * earlier realign before pending_client existed.
+ */
+export const realignBookingRequestPendingClient = migrations.define({
+  table: "eventRequests",
+  migrateOne: async (ctx, request) => {
+    if (request.status !== "action_required" && request.status !== "converted") return;
+
+    let invoice = request.linkedInvoiceId
+      ? await ctx.db.get(request.linkedInvoiceId)
+      : null;
+    if (!invoice) {
+      invoice = await ctx.db
+        .query("invoices")
+        .withIndex("by_sourceEventRequestId", (q) =>
+          q.eq("sourceEventRequestId", request._id),
+        )
+        .unique();
+    }
+    if (!invoice || invoice.status === "void") return;
+    if ((invoice.clientApprovalStatus ?? "pending") === "approved") {
+      if (request.status === "converted") return;
+      const now = Date.now();
+      await ctx.db.patch(request._id, {
+        status: "converted",
+        convertedAt: request.convertedAt ?? request.updatedAt,
+        reviewedAt: request.reviewedAt ?? request.updatedAt,
+        updatedAt: now,
+      });
+      return;
+    }
+
+    const awaitingClient =
+      Boolean(invoice.clientReviewReadyAt) &&
+      (invoice.clientApprovalStatus ?? "pending") === "pending";
+    if (!awaitingClient) return;
+
+    await ctx.db.patch(request._id, {
+      status: "pending_client",
+      convertedAt: undefined,
+      reviewedAt: request.reviewedAt ?? request.updatedAt,
+      updatedAt: Date.now(),
+    });
   },
 });
 
@@ -328,6 +450,8 @@ const MIGRATION_SERIES = [
   internal.migrations.migrateBandPaymentReferenceIds,
   internal.migrations.migrateConvertedEventLinks,
   internal.migrations.backfillEventRequestMilestoneTimestamps,
+  internal.migrations.realignBookingRequestStatusesToQuotes,
+  internal.migrations.realignBookingRequestPendingClient,
   internal.migrations.migratePackageLegacyItemsToContentUnits,
   internal.migrations.consolidatePackageContentUnits,
   internal.migrations.stripBandRiderInputGroups,

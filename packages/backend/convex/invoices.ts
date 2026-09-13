@@ -7,6 +7,7 @@ import { appError, withReportableErrors } from "./lib/errors";
 import { resolveParticipationFlags } from "./lib/userParticipation";
 import { loadActiveOrgMemberUserIds } from "./lib/orgMembership";
 import { syncEventStatusForLinkedInvoice, syncLinkedEventStatusFromInvoice } from "./lib/eventStatus";
+import { syncBookingRequestStatusFromInvoice } from "./lib/bookingRequestStatus";
 import { recordInvoiceStatusTransition } from "./lib/statusTransitions";
 import { listEventsByInvoiceId } from "./lib/invoiceEvents";
 import { getActivePaymentProofSubmission } from "./lib/paymentProof";
@@ -1219,7 +1220,12 @@ export const voidInvoice = mutation({
     const invoice = await ctx.db.get(args.id);
     if (!invoice) appError("INVOICE_NOT_FOUND", "Invoice not found.");
     if (invoice.status === "void") appError("INVOICE_ALREADY_VOID", "Invoice is already void.");
-    await ctx.db.patch(args.id, { status: "void", updatedAt: Date.now() });
+    const now = Date.now();
+    await ctx.db.patch(args.id, { status: "void", updatedAt: now });
+    const voided = await ctx.db.get(args.id);
+    if (voided) {
+      await syncBookingRequestStatusFromInvoice(ctx, voided, { at: now });
+    }
     return null;
     });
   },
@@ -1243,7 +1249,12 @@ export const unvoidInvoice = mutation({
       invoice.clientApprovalStatus === "approved"
         ? "finalized"
         : "draft";
-    await ctx.db.patch(args.id, { status: nextStatus, updatedAt: Date.now() });
+    const now = Date.now();
+    await ctx.db.patch(args.id, { status: nextStatus, updatedAt: now });
+    const restored = await ctx.db.get(args.id);
+    if (restored) {
+      await syncBookingRequestStatusFromInvoice(ctx, restored, { at: now });
+    }
     return null;
     });
   },
@@ -1639,6 +1650,7 @@ export const markReadyForClientReview = mutation({
 
     const updatedInvoice = await ctx.db.get(args.id);
     if (updatedInvoice?.sourceEventRequestId) {
+      await syncBookingRequestStatusFromInvoice(ctx, updatedInvoice, { at: now });
       const request = await ctx.db.get(updatedInvoice.sourceEventRequestId);
       if (request) {
         await scheduleBookingQuoteReadyEmail(ctx, {
@@ -1676,11 +1688,16 @@ export const withdrawFromClientReview = mutation({
         "Only booking-request quotes use the request portal.",
       );
     }
+    const now = Date.now();
     await ctx.db.patch(args.id, {
       status: "draft",
       clientReviewReadyAt: undefined,
-      updatedAt: Date.now(),
+      updatedAt: now,
     });
+    const withdrawn = await ctx.db.get(args.id);
+    if (withdrawn) {
+      await syncBookingRequestStatusFromInvoice(ctx, withdrawn, { at: now });
+    }
     return null;
     });
   },

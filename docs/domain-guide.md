@@ -114,7 +114,7 @@ Event types (drive which editor tabs and quick-add blocks appear):
   zone names for engineer docs and external emails when needed.
 - **Booking requests** can have an `assigneeUserId` (round-robin pool in
   `bookingRequestSettings`, or manual swap on the request detail). Inbox
-  defaults to open requests (`submitted`/`in_review`), oldest-first, with a
+  defaults to open requests (`submitted`/`action_required`/`pending_client`), oldest-first, with a
   days-since-submitted counter.
 - **Schedule blocks** (`eventScheduleBlocks`) are the planning unit: typed
   (`setup`/`show`/`strike`/`custom`), snapped to 15-minute increments, may
@@ -152,15 +152,20 @@ Event types (drive which editor tabs and quick-add blocks appear):
    `ALREQ-`-numbered record and a public tracking token (`req_` + double
    UUID). Billing records (`invoiceGroups`, `invoiceContacts`) are provisioned
    server-side by email — anonymous callers can never pick contact records.
-2. Staff review requests in the dashboard (`eventRequests.list/get`), can
-   convert them to one or more events (`convertToEvent`), and create a draft
-   quote linked to the request.
+   Initial status is `submitted`.
+2. Staff review requests in the dashboard (`eventRequests.list/get`). Marking
+   work in progress (or creating a draft quote + tentative event via
+   `convertToEvent`) moves the request to `action_required`.
 3. Staff use **Send quote to client** (`markReadyForClientReview`) with a
    required personal message. That finalizes the quote, emails
    `booking_quote_ready` (PDF attached; Reply-To = invoice manager +
-   `arborlive@stanford.edu`), and sets `clientReviewReadyAt`.
+   `arborlive@stanford.edu`), sets `clientReviewReadyAt`, and moves the
+   request to `pending_client`.
 4. The requester tracks status and approves/requests changes on the quote via
-   their token URL — no account needed.
+   their token URL — no account needed. Client approval sets the request to
+   `converted` (event going ahead). Change requests or withdrawing the quote
+   return it to `action_required`. Voiding the linked quote (or a normal staff
+   decline) sets `declined`.
 
 ## Invoices and quotes
 

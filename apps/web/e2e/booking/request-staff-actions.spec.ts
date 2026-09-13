@@ -13,8 +13,8 @@ type Seed = {
 
 /**
  * The request detail's "Staff actions" panel: assignee assignment, staff notes,
- * and the submitted → in_review transition. These are all client-facing staff
- * edits that the convert/decline specs never touch.
+ * and the submitted → action_required transition. These are all client-facing
+ * staff edits that the convert/decline specs never touch.
  */
 test.describe("booking request staff actions", () => {
   const stamp = Date.now();
@@ -51,13 +51,15 @@ test.describe("booking request staff actions", () => {
     expect(state.assigneeName).toBe(e2eEnv.adminName);
   });
 
-  test("staff notes + mark in review persist, and the button leaves after in_review", async ({ page }) => {
+  test("staff notes + mark action required persist, and the button leaves after", async ({
+    page,
+  }) => {
     const notes = `Follow up before Friday ${stamp}`;
     await page.goto(seeded.path);
     await expect(page.getByText(seeded.requestNumber).first()).toBeVisible({ timeout: 25_000 });
 
     await page.getByPlaceholder("Internal notes (optional)").fill(notes);
-    await page.getByRole("button", { name: "Mark in review" }).click();
+    await page.getByRole("button", { name: "Mark action required" }).click();
 
     const state = await pollConvex<{
       status: string;
@@ -67,17 +69,18 @@ test.describe("booking request staff actions", () => {
     }>(
       "e2eHelpers:getBookingRequestState",
       { requestId: seeded.requestId },
-      (row) => row?.status === "in_review" && row.staffNotes === notes && row.reviewedAt != null,
+      (row) =>
+        row?.status === "action_required" && row.staffNotes === notes && row.reviewedAt != null,
     );
-    expect(state.status).toBe("in_review");
+    expect(state.status).toBe("action_required");
     expect(state.reviewedByUserId).toBeTruthy();
 
-    // Reload: the persisted staff notes render in the details, and "Mark in
-    // review" only exists for submitted requests.
+    // Reload: the persisted staff notes render in the details, and "Mark
+    // action required" only exists for submitted requests.
     await page.reload();
     await expect(page.getByText(notes).first()).toBeVisible({ timeout: 25_000 });
-    await expect(page.getByRole("button", { name: "Mark in review" })).toHaveCount(0);
-    // The rest of the panel is still editable while in_review.
+    await expect(page.getByRole("button", { name: "Mark action required" })).toHaveCount(0);
+    // The rest of the panel is still editable while action_required.
     await expect(page.getByPlaceholder("Internal notes (optional)")).toBeVisible();
   });
 });

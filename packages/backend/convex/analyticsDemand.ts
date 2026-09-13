@@ -22,7 +22,13 @@ import { normalizeEventStatus } from "./lib/eventStatus";
 import { classifyPaymentQueue } from "./lib/invoicePaymentStatus";
 import { getActivePaymentProofSubmission } from "./lib/paymentProof";
 
-const REQUEST_STATUSES = ["submitted", "in_review", "converted", "declined"] as const;
+const REQUEST_STATUSES = [
+  "submitted",
+  "action_required",
+  "pending_client",
+  "converted",
+  "declined",
+] as const;
 type RequestStatus = (typeof REQUEST_STATUSES)[number];
 
 const AR_EVENT_LOOKBACK_MS = 90 * 24 * 60 * 60 * 1000;
@@ -87,7 +93,8 @@ export const getBookingFunnel = query({
   args: analyticsRangeArgs,
   returns: v.object({
     submitted: v.number(),
-    inReview: v.number(),
+    actionRequired: v.number(),
+    pendingClient: v.number(),
     converted: v.number(),
     declined: v.number(),
     total: v.number(),
@@ -118,19 +125,29 @@ export const getBookingFunnel = query({
         loadRequestsByStatusInRange(ctx, status, args.startMs, args.endMs),
       ),
     );
+    // Legacy rows may still say in_review until the migration finishes.
+    const legacyRows = await ctx.db
+      .query("eventRequests")
+      .withIndex("by_status_and_submittedAt", (q) => q.eq("status", "in_review"))
+      .take(REQUEST_SCAN_LIMIT);
+    const legacyInRange = legacyRows.filter(
+      (row) => row.submittedAt >= args.startMs && row.submittedAt <= args.endMs,
+    );
 
     const byStatus: Record<RequestStatus, Doc<"eventRequests">[]> = {
       submitted: scans[0]!.rows,
-      in_review: scans[1]!.rows,
-      converted: scans[2]!.rows,
-      declined: scans[3]!.rows,
+      action_required: [...scans[1]!.rows, ...legacyInRange],
+      pending_client: scans[2]!.rows,
+      converted: scans[3]!.rows,
+      declined: scans[4]!.rows,
     };
 
     const submitted = byStatus.submitted.length;
-    const inReview = byStatus.in_review.length;
+    const actionRequired = byStatus.action_required.length;
+    const pendingClient = byStatus.pending_client.length;
     const converted = byStatus.converted.length;
     const declined = byStatus.declined.length;
-    const total = submitted + inReview + converted + declined;
+    const total = submitted + actionRequired + pendingClient + converted + declined;
     const decided = converted + declined;
     const conversionRate = decided > 0 ? converted / decided : null;
 
@@ -145,14 +162,20 @@ export const getBookingFunnel = query({
       toDeclined.push(msToDays(milestoneAt - row.submittedAt));
     }
     const toReview: number[] = [];
-    for (const row of [...byStatus.in_review, ...byStatus.converted, ...byStatus.declined]) {
+    for (const row of [
+      ...byStatus.action_required,
+      ...byStatus.pending_client,
+      ...byStatus.converted,
+      ...byStatus.declined,
+    ]) {
       if (!row.reviewedAt) continue;
       toReview.push(msToDays(row.reviewedAt - row.submittedAt));
     }
 
     return {
       submitted,
-      inReview,
+      actionRequired,
+      pendingClient,
       converted,
       declined,
       total,
@@ -172,7 +195,7 @@ export const getBookingFunnel = query({
         avgDays: average(toReview),
         medianDays: median(toReview),
       },
-      truncated: scans.some((scan) => scan.truncated),
+      truncated: scans.some((scan) => scan.truncated) || legacyRows.length >= REQUEST_SCAN_LIMIT,
     };
   },
 });
