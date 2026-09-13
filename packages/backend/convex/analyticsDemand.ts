@@ -126,13 +126,12 @@ export const getBookingFunnel = query({
       ),
     );
     // Legacy rows may still say in_review until the migration finishes.
-    const legacyRows = await ctx.db
+    const legacyInRange = await ctx.db
       .query("eventRequests")
-      .withIndex("by_status_and_submittedAt", (q) => q.eq("status", "in_review"))
+      .withIndex("by_status_and_submittedAt", (q) =>
+        q.eq("status", "in_review").gte("submittedAt", args.startMs).lte("submittedAt", args.endMs),
+      )
       .take(REQUEST_SCAN_LIMIT);
-    const legacyInRange = legacyRows.filter(
-      (row) => row.submittedAt >= args.startMs && row.submittedAt <= args.endMs,
-    );
 
     const byStatus: Record<RequestStatus, Doc<"eventRequests">[]> = {
       submitted: scans[0]!.rows,
@@ -195,7 +194,7 @@ export const getBookingFunnel = query({
         avgDays: average(toReview),
         medianDays: median(toReview),
       },
-      truncated: scans.some((scan) => scan.truncated) || legacyRows.length >= REQUEST_SCAN_LIMIT,
+      truncated: scans.some((scan) => scan.truncated) || legacyInRange.length >= REQUEST_SCAN_LIMIT,
     };
   },
 });

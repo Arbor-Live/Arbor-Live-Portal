@@ -80,7 +80,7 @@ the URL looks like cloud.
 | Public `/request` wizard submit | Covered | `booking/booking-submit.spec.ts` (Batch 3) |
 | Staff convert → quote + tentative event | Covered | `booking/booking-convert.spec.ts` |
 | Client track approve (`/request/track/[token]`) | Covered | `booking/booking-convert-approve.spec.ts` |
-| Request inbox / status filters | Covered | `booking/request-inbox.spec.ts` (Batch 13) — default open view lists submitted + in-review and hides completed; "Declined" and "All statuses" filters |
+| Request inbox / status filters | Covered | `booking/request-inbox.spec.ts` (Batch 13) — default open view lists submitted + action_required + pending_client and hides completed; "Declined" and "All statuses" filters |
 | Request detail browse | Covered | `booking/request-convert-lock.spec.ts` (Batch 13) — converted row renders the "Open tentative event" link |
 | Assignee, staff notes, mark action required | Covered | `booking/request-staff-actions.spec.ts` (Batch 13) — assignee recorded on the row; submitted → action_required persists notes + `reviewedAt`, and "Mark action required" leaves |
 | Decline reason + declined portal | Covered | `booking/request-decline-guard.spec.ts` (Batch 13) — the no-reason refusals (client-side form and server-side `updateStatus`), then a real decline; staff actions panel leaves; the client track link shows "Status: Declined" |
@@ -326,7 +326,7 @@ their child rows. Batch with `limit` to stay inside mutation limits. Since Batch
 13 the same mutation also prunes stale **converted/declined** booking requests:
 the event pass leaves the request and its draft invoice orphaned, and
 `eventRequests.list` pages with `.take(100)`, so the inbox can overflow the same
-way the event caps do. Requests that are still open (submitted / action_required) are
+way the event caps do. Requests that are still open (submitted / action_required / pending_client) are
 never pruned — a spec that seeds one must clean it up itself
 (`e2eHelpers:deleteBookingRequestFixture`, which Batch 13's specs all call in
 `afterAll`).
