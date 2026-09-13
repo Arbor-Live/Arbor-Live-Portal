@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "node ../../scripts/web-dev.mjs",
     "build": "node ./scripts/materialize-convex-public-env.mjs && next build --webpack",
     "start": "next start",
     "lint": "eslint",
