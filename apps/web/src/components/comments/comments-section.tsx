@@ -459,7 +459,7 @@ function CommentsPanel({
               role="option"
               aria-selected={index === mentionHighlight}
               data-active={index === mentionHighlight}
-              className={`flex w-full min-w-0 items-center gap-2 overflow-hidden rounded-sm px-2 py-1.5 text-left text-sm ${
+              className={`flex w-full min-w-0 shrink-0 items-center gap-2 overflow-hidden rounded-sm px-2 py-1.5 text-left text-sm ${
                 index === mentionHighlight ? "bg-muted" : "hover:bg-muted"
               }`}
               onMouseDown={(event) => {
