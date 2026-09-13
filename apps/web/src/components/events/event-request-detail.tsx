@@ -122,7 +122,7 @@ export function EventRequestDetailClient({ requestId }: { requestId: Id<"eventRe
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <Button asChild variant="outline" size="sm">
-          <Link href="/dashboard/events/requests">Back to requests</Link>
+          <Link href="/dashboard/financial-hub/requests">Back to requests</Link>
         </Button>
         {request.publicToken ? (
           <Button asChild variant="outline" size="sm">
@@ -341,7 +341,7 @@ export function EventRequestDetailClient({ requestId }: { requestId: Id<"eventRe
         preview={deletePreview ?? null}
         onConfirm={async (cascade) => {
           await deleteRequestAdmin({ id: requestId, cascade });
-          router.push("/dashboard/events/requests");
+          router.push("/dashboard/financial-hub/requests");
         }}
       />
     </div>

@@ -1624,7 +1624,7 @@ export function InvoiceEditor({
           <CardHeader className="flex flex-row items-center justify-between gap-2">
             <CardTitle>Booking request {sourceRequest.requestNumber}</CardTitle>
             <Button type="button" variant="outline" size="sm" asChild>
-              <Link href={`/dashboard/events/requests/${sourceRequest._id}`}>Open request</Link>
+              <Link href={`/dashboard/financial-hub/requests/${sourceRequest._id}`}>Open request</Link>
             </Button>
           </CardHeader>
           <CardContent className="grid min-w-0 gap-2 break-words text-sm md:grid-cols-2">

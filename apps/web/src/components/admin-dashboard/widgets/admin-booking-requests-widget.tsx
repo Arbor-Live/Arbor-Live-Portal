@@ -22,7 +22,7 @@ export function AdminBookingRequestsWidget() {
           Booking requests
         </CardTitle>
         <Button variant="outline" size="sm" asChild>
-          <Link href="/dashboard/events/requests">Open queue</Link>
+          <Link href="/dashboard/financial-hub/requests">Open queue</Link>
         </Button>
       </CardHeader>
       <CardContent className="space-y-2">
@@ -34,7 +34,7 @@ export function AdminBookingRequestsWidget() {
           requests.map((request) => (
             <Link
               key={request._id}
-              href={`/dashboard/events/requests/${request._id}`}
+              href={`/dashboard/financial-hub/requests/${request._id}`}
               className="block rounded-md border px-3 py-2 text-sm hover:bg-muted/50"
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -42,11 +42,7 @@ export function AdminBookingRequestsWidget() {
                   {request.eventName?.trim() || request.organization?.trim() || request.requestNumber}
                 </p>
                 <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                  {request.status === "pending_client"
-                    ? "Pending"
-                    : request.status === "action_required"
-                      ? "Action required"
-                      : "Submitted"}
+                  {request.status === "action_required" ? "Action required" : "Submitted"}
                 </span>
               </div>
               <p className="text-xs text-muted-foreground">

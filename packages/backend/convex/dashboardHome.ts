@@ -6,7 +6,6 @@ import { normalizeEventStatus } from "./lib/eventStatus";
 const openRequestStatusValue = v.union(
   v.literal("submitted"),
   v.literal("action_required"),
-  v.literal("pending_client"),
 );
 
 export const listUpcomingAdminEvents = query({
@@ -97,24 +96,19 @@ export const listOpenBookingRequests = query({
       .withIndex("by_status_and_submittedAt", (q) => q.eq("status", "action_required"))
       .order("desc")
       .take(limit);
-    const pendingClient = await ctx.db
-      .query("eventRequests")
-      .withIndex("by_status_and_submittedAt", (q) => q.eq("status", "pending_client"))
-      .order("desc")
-      .take(limit);
     const legacyInReview = await ctx.db
       .query("eventRequests")
       .withIndex("by_status_and_submittedAt", (q) => q.eq("status", "in_review"))
       .order("desc")
       .take(limit);
 
-    return [...submitted, ...actionRequired, ...pendingClient, ...legacyInReview]
+    return [...submitted, ...actionRequired, ...legacyInReview]
       .sort((a, b) => b.submittedAt - a.submittedAt)
       .slice(0, limit)
       .map((request): {
         _id: typeof request._id;
         requestNumber: string;
-        status: "submitted" | "action_required" | "pending_client";
+        status: "submitted" | "action_required";
         eventName: string | undefined;
         organization: string | undefined;
         venueName: string | undefined;
@@ -122,12 +116,7 @@ export const listOpenBookingRequests = query({
       } => ({
         _id: request._id,
         requestNumber: request.requestNumber ?? `LEGACY-${request._id}`,
-        status:
-          request.status === "pending_client"
-            ? "pending_client"
-            : request.status === "submitted"
-              ? "submitted"
-              : "action_required",
+        status: request.status === "submitted" ? "submitted" : "action_required",
         eventName: request.eventName,
         organization: request.organization,
         venueName: request.venueName,

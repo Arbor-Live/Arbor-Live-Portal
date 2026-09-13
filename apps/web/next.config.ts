@@ -173,6 +173,16 @@ const nextConfig: NextConfig = {
         permanent: true,
       },
       { source: "/onboarding/band", destination: "/onboarding/artist", permanent: true },
+      {
+        source: "/dashboard/events/requests",
+        destination: "/dashboard/financial-hub/requests",
+        permanent: true,
+      },
+      {
+        source: "/dashboard/events/requests/:path*",
+        destination: "/dashboard/financial-hub/requests/:path*",
+        permanent: true,
+      },
     ];
   },
   images: {

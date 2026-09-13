@@ -986,7 +986,7 @@ export const seedSubmittedBookingRequest = mutation({
       requestId: seeded.requestId,
       requestNumber: seeded.requestNumber,
       publicToken: seeded.publicToken,
-      path: `/dashboard/events/requests/${seeded.requestId}`,
+      path: `/dashboard/financial-hub/requests/${seeded.requestId}`,
       trackPath: `/request/track/${seeded.publicToken}`,
     };
   },
@@ -3126,7 +3126,7 @@ export const getLatestBookingRequestByEmail = query({
       publicToken: match.publicToken ?? null,
       eventName: match.eventName ?? null,
       email: match.email,
-      path: `/dashboard/events/requests/${match._id}`,
+      path: `/dashboard/financial-hub/requests/${match._id}`,
     };
   },
 });

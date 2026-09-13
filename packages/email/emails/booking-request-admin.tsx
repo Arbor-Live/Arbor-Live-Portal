@@ -45,7 +45,7 @@ BookingRequestAdminEmail.PreviewProps = {
   eventName: "Spring Concert 2026",
   eventDateText: "Saturday, Apr 12, 2026",
   organization: "Stanford Concert Network",
-  reviewUrl: "http://localhost:3000/dashboard/events/requests/demo",
+  reviewUrl: "http://localhost:3000/dashboard/financial-hub/requests/demo",
 } satisfies BookingRequestAdminEmailProps;
 
 export default BookingRequestAdminEmail;
