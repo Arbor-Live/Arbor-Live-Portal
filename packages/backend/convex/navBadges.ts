@@ -165,6 +165,8 @@ async function countUnconfirmedCrew(ctx: QueryCtx, rangeStart: number, rangeEnd:
 }
 
 async function countOpenBookingRequests(ctx: QueryCtx) {
+  // Badge = staff still owes a follow-up (new + action required). Waiting on the
+  // client (`pending_client`) is open but not actionable for the nav chip.
   const submitted = await ctx.db
     .query("eventRequests")
     .withIndex("by_status_and_submittedAt", (q) => q.eq("status", "submitted"))
@@ -173,17 +175,11 @@ async function countOpenBookingRequests(ctx: QueryCtx) {
     .query("eventRequests")
     .withIndex("by_status_and_submittedAt", (q) => q.eq("status", "action_required"))
     .take(BADGE_STATUS_TAKE);
-  const pendingClient = await ctx.db
-    .query("eventRequests")
-    .withIndex("by_status_and_submittedAt", (q) => q.eq("status", "pending_client"))
-    .take(BADGE_STATUS_TAKE);
   const legacyInReview = await ctx.db
     .query("eventRequests")
     .withIndex("by_status_and_submittedAt", (q) => q.eq("status", "in_review"))
     .take(BADGE_STATUS_TAKE);
-  return (
-    submitted.length + actionRequired.length + pendingClient.length + legacyInReview.length
-  );
+  return submitted.length + actionRequired.length + legacyInReview.length;
 }
 
 async function countSubmittedBandApplications(ctx: QueryCtx) {

@@ -32,6 +32,9 @@ export default function FinancialHubPage() {
                 <Link href="/dashboard/financial-hub/invoices">Open Invoices</Link>
               </Button>
               <Button asChild variant="outline">
+                <Link href="/dashboard/financial-hub/requests">Booking Requests</Link>
+              </Button>
+              <Button asChild variant="outline">
                 <Link href="/dashboard/financial-hub/insights">Insights</Link>
               </Button>
               <Button asChild variant="outline">

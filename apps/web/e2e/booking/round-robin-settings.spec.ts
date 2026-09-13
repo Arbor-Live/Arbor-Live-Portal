@@ -4,7 +4,7 @@ import { pollConvex, runConvex } from "../helpers/convex";
 import { pickSearchableOption } from "../helpers/select";
 
 /**
- * Round-robin assignee settings (`/dashboard/events/requests/settings`).
+ * Round-robin assignee settings (`/dashboard/financial-hub/requests/settings`).
  *
  * This writes the shared `default` `bookingRequestSettings` row, so the spec
  * restores it to empty (its seeded default) in `afterEach` — a failed run
@@ -24,7 +24,7 @@ test.describe("booking request round-robin settings", () => {
     }) as { userId: string | null };
     expect(adminUserId).toBeTruthy();
 
-    await page.goto("/dashboard/events/requests/settings");
+    await page.goto("/dashboard/financial-hub/requests/settings");
     await expect(page.getByText("No one in the rotation yet.")).toBeVisible({ timeout: 25_000 });
 
     // Add the admin to the rotation.

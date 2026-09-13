@@ -115,8 +115,8 @@ export function crewApplicationsAdminUrl() {
 }
 
 export function bookingRequestsAdminUrl(requestId?: string) {
-  if (requestId) return `${SITE_URL}/dashboard/events/requests/${requestId}`;
-  return `${SITE_URL}/dashboard/events/requests`;
+  if (requestId) return `${SITE_URL}/dashboard/financial-hub/requests/${requestId}`;
+  return `${SITE_URL}/dashboard/financial-hub/requests`;
 }
 
 export function requestTrackingUrl(token: string) {

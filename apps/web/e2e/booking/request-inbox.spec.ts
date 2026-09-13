@@ -43,19 +43,27 @@ test.describe("booking request inbox", () => {
     }
   });
 
-  test("open view lists open statuses and hides completed", async ({ page }) => {
-    await page.goto("/dashboard/events/requests");
+  test("open view lists follow-up requests, collapses pending client, hides completed", async ({
+    page,
+  }) => {
+    await page.goto("/dashboard/financial-hub/requests");
 
     await expect(page.getByText(seeds.submitted.requestNumber).first()).toBeVisible({
       timeout: 25_000,
     });
     await expect(page.getByText(seeds.actionRequired.requestNumber).first()).toBeVisible();
-    await expect(page.getByText(seeds.pendingClient.requestNumber).first()).toBeVisible();
     await expect(page.getByText(seeds.declined.requestNumber)).toHaveCount(0);
+
+    // Pending client stays in the open list but collapsed by default.
+    await expect(page.getByText(seeds.pendingClient.requestNumber)).toHaveCount(0);
+    const pendingToggle = page.getByRole("button", { name: /Pending client response/i });
+    await expect(pendingToggle).toBeVisible();
+    await pendingToggle.click();
+    await expect(page.getByText(seeds.pendingClient.requestNumber).first()).toBeVisible();
   });
 
   test("declined filter shows only the declined request", async ({ page }) => {
-    await page.goto("/dashboard/events/requests");
+    await page.goto("/dashboard/financial-hub/requests");
     await expect(page.getByText(seeds.submitted.requestNumber).first()).toBeVisible({
       timeout: 25_000,
     });
@@ -72,7 +80,7 @@ test.describe("booking request inbox", () => {
   });
 
   test("all statuses includes terminal requests", async ({ page }) => {
-    await page.goto("/dashboard/events/requests");
+    await page.goto("/dashboard/financial-hub/requests");
     await expect(page.getByText(seeds.submitted.requestNumber).first()).toBeVisible({
       timeout: 25_000,
     });

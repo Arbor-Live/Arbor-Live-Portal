@@ -29,7 +29,7 @@ export function PublicStaffDashboardLinks({
   const links: { href: string; label: string }[] = [];
   if (requestId) {
     links.push({
-      href: `/dashboard/events/requests/${requestId}`,
+      href: `/dashboard/financial-hub/requests/${requestId}`,
       label: "Open booking request",
     });
   }

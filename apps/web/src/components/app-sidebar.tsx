@@ -94,6 +94,7 @@ const inventorySubItems: NavSubItem[] = [
 const financialHubSubItems: NavSubItem[] = [
   { title: "Overview", url: "/dashboard/financial-hub" },
   { title: "Insights", url: "/dashboard/financial-hub/insights" },
+  { title: "Booking Requests", url: "/dashboard/financial-hub/requests" },
   { title: "Invoices", url: "/dashboard/financial-hub/invoices" },
   { title: "Payments", url: "/dashboard/financial-hub/payments" },
   { title: "Artist payouts", url: "/dashboard/financial-hub/artist-payouts" },
@@ -105,7 +106,6 @@ const financialHubSubItems: NavSubItem[] = [
 
 const eventsSubItems: NavSubItem[] = [
   { title: "Overview", url: "/dashboard/events" },
-  { title: "Booking Requests", url: "/dashboard/events/requests" },
   { title: "Venues", url: "/dashboard/events/venues", adminOnly: true },
   { title: "Open Mic", url: "/dashboard/events/open-mic", adminOnly: true },
   { title: "Crew Scheduling", url: "/dashboard/events/crew-scheduling", adminOnly: true },
@@ -284,7 +284,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
     switch (url) {
       case "/dashboard/events/my-availability":
         return pendingAvailabilityCount ?? 0
-      case "/dashboard/events/requests":
+      case "/dashboard/financial-hub/requests":
         return pendingBookingRequestsCount ?? 0
       case "/dashboard/events/crew-scheduling":
         return unconfirmedEventCount
