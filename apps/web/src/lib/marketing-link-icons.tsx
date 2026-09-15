@@ -178,8 +178,10 @@ export async function loadMarketingLinkIcon(
 
   try {
     const mod = await loader();
-    iconComponentCache.set(normalized, mod.default);
-    return mod.default;
+    const Icon = mod[`${normalized}Icon`] ?? mod[normalized];
+    if (!Icon) return LinkSimpleIcon;
+    iconComponentCache.set(normalized, Icon);
+    return Icon;
   } catch {
     return LinkSimpleIcon;
   }
