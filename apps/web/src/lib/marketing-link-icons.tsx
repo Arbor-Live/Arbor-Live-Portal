@@ -1,104 +1,35 @@
 "use client";
 
-import type { ComponentType, SVGProps } from "react";
 import {
-  AppleLogoIcon,
-  ApplePodcastsLogoIcon,
-  ArticleIcon,
-  CalendarBlankIcon,
-  CameraIcon,
-  DiscordLogoIcon,
-  EnvelopeSimpleIcon,
-  FacebookLogoIcon,
-  GlobeIcon,
-  HeartIcon,
-  HouseIcon,
-  InstagramLogoIcon,
-  LinkedinLogoIcon,
-  LinkSimpleIcon,
-  LinktreeLogoIcon,
-  MapPinIcon,
-  MicrophoneIcon,
-  MusicNotesIcon,
-  NewspaperIcon,
-  PatreonLogoIcon,
-  PhoneIcon,
-  PinterestLogoIcon,
-  RedditLogoIcon,
-  ShoppingBagIcon,
-  SlackLogoIcon,
-  SnapchatLogoIcon,
-  SoundcloudLogoIcon,
-  SpotifyLogoIcon,
-  StarIcon,
-  StorefrontIcon,
-  TelegramLogoIcon,
-  ThreadsLogoIcon,
-  TicketIcon,
-  TiktokLogoIcon,
-  TreeIcon,
-  TwitchLogoIcon,
-  WhatsappLogoIcon,
-  XLogoIcon,
-  YoutubeLogoIcon,
-} from "@phosphor-icons/react";
+  useEffect,
+  useState,
+  type ComponentType,
+  type SVGProps,
+} from "react";
+import { LinkSimpleIcon } from "@phosphor-icons/react";
+import { PHOSPHOR_ICON_LOADERS } from "@/lib/phosphor-icon-loaders";
+import { isPhosphorIconName, PHOSPHOR_ICON_NAMES } from "@/lib/phosphor-icon-names";
 
-export type MarketingLinkIconId =
-  | "partiful"
-  | "instagram"
-  | "link"
-  | "ticket"
-  | "calendar"
-  | "map-pin"
-  | "music"
-  | "globe"
-  | "youtube"
-  | "tiktok"
-  | "spotify"
-  | "soundcloud"
-  | "apple-music"
-  | "apple-podcasts"
-  | "discord"
-  | "x"
-  | "threads"
-  | "facebook"
-  | "linkedin"
-  | "whatsapp"
-  | "telegram"
-  | "snapchat"
-  | "twitch"
-  | "pinterest"
-  | "reddit"
-  | "slack"
-  | "linktree"
-  | "patreon"
-  | "email"
-  | "phone"
-  | "mic"
-  | "camera"
-  | "house"
-  | "heart"
-  | "star"
-  | "shop"
-  | "store"
-  | "tree"
-  | "news"
-  | "article";
+export type MarketingLinkIconId = string;
 
-type IconComponent = ComponentType<SVGProps<SVGSVGElement> & { weight?: "regular" | "bold" | "fill" }>;
+type IconComponent = ComponentType<
+  SVGProps<SVGSVGElement> & {
+    weight?: "regular" | "bold" | "fill" | "light" | "thin" | "duotone";
+  }
+>;
 
 export type MarketingLinkIconDef = {
-  id: MarketingLinkIconId;
+  id: string;
   label: string;
   keywords: string;
   featured?: boolean;
-  Icon: IconComponent;
 };
 
+/** Custom Partiful mark — not in Phosphor. */
 function PartifulGlyph({
   weight: _weight,
   ...props
-}: SVGProps<SVGSVGElement> & { weight?: "regular" | "bold" | "fill" }) {
+}: SVGProps<SVGSVGElement> & { weight?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden {...props}>
       <path d="M12 2.2c.5 0 .95.28 1.18.73l1.1 2.14 2.36.34a1.32 1.32 0 0 1 .73 2.25l-1.71 1.67.4 2.35a1.32 1.32 0 0 1-1.91 1.39L12 12.1l-2.15 1.13a1.32 1.32 0 0 1-1.91-1.39l.4-2.35-1.71-1.67a1.32 1.32 0 0 1 .73-2.25l2.36-.34 1.1-2.14c.23-.45.68-.73 1.18-.73Z" />
@@ -107,286 +38,154 @@ function PartifulGlyph({
   );
 }
 
-/** Featured first; order within featured is intentional for the picker. */
-export const MARKETING_LINK_ICONS: MarketingLinkIconDef[] = [
-  {
-    id: "partiful",
-    label: "Partiful",
-    keywords: "partiful party rsvp invite",
-    featured: true,
-    Icon: PartifulGlyph,
-  },
-  {
-    id: "instagram",
-    label: "Instagram",
-    keywords: "instagram ig social photo",
-    featured: true,
-    Icon: InstagramLogoIcon,
-  },
-  {
-    id: "link",
-    label: "Link",
-    keywords: "link url website web",
-    featured: true,
-    Icon: LinkSimpleIcon,
-  },
-  {
-    id: "ticket",
-    label: "Ticket",
-    keywords: "ticket rsvp entry pass eventbrite",
-    featured: true,
-    Icon: TicketIcon,
-  },
-  {
-    id: "calendar",
-    label: "Calendar",
-    keywords: "calendar date schedule event",
-    featured: true,
-    Icon: CalendarBlankIcon,
-  },
-  {
-    id: "map-pin",
-    label: "Map pin",
-    keywords: "map pin location venue place",
-    featured: true,
-    Icon: MapPinIcon,
-  },
-  {
-    id: "music",
-    label: "Music",
-    keywords: "music notes audio song band",
-    featured: true,
-    Icon: MusicNotesIcon,
-  },
-  {
-    id: "globe",
-    label: "Website",
-    keywords: "globe website www site",
-    featured: true,
-    Icon: GlobeIcon,
-  },
-  {
-    id: "linktree",
-    label: "Linktree",
-    keywords: "linktree bio links",
-    featured: true,
-    Icon: LinktreeLogoIcon,
-  },
-  {
-    id: "youtube",
-    label: "YouTube",
-    keywords: "youtube video",
-    Icon: YoutubeLogoIcon,
-  },
-  {
-    id: "tiktok",
-    label: "TikTok",
-    keywords: "tiktok social video",
-    Icon: TiktokLogoIcon,
-  },
-  {
-    id: "spotify",
-    label: "Spotify",
-    keywords: "spotify music playlist",
-    Icon: SpotifyLogoIcon,
-  },
-  {
-    id: "soundcloud",
-    label: "SoundCloud",
-    keywords: "soundcloud music audio",
-    Icon: SoundcloudLogoIcon,
-  },
-  {
-    id: "apple-music",
-    label: "Apple Music",
-    keywords: "apple music itunes",
-    Icon: AppleLogoIcon,
-  },
-  {
-    id: "apple-podcasts",
-    label: "Apple Podcasts",
-    keywords: "apple podcasts podcast",
-    Icon: ApplePodcastsLogoIcon,
-  },
-  {
-    id: "discord",
-    label: "Discord",
-    keywords: "discord chat community",
-    Icon: DiscordLogoIcon,
-  },
-  {
-    id: "x",
-    label: "X",
-    keywords: "x twitter social",
-    Icon: XLogoIcon,
-  },
-  {
-    id: "threads",
-    label: "Threads",
-    keywords: "threads meta social",
-    Icon: ThreadsLogoIcon,
-  },
-  {
-    id: "facebook",
-    label: "Facebook",
-    keywords: "facebook social meta",
-    Icon: FacebookLogoIcon,
-  },
-  {
-    id: "linkedin",
-    label: "LinkedIn",
-    keywords: "linkedin professional social",
-    Icon: LinkedinLogoIcon,
-  },
-  {
-    id: "whatsapp",
-    label: "WhatsApp",
-    keywords: "whatsapp chat message",
-    Icon: WhatsappLogoIcon,
-  },
-  {
-    id: "telegram",
-    label: "Telegram",
-    keywords: "telegram chat message",
-    Icon: TelegramLogoIcon,
-  },
-  {
-    id: "snapchat",
-    label: "Snapchat",
-    keywords: "snapchat social snap",
-    Icon: SnapchatLogoIcon,
-  },
-  {
-    id: "twitch",
-    label: "Twitch",
-    keywords: "twitch stream live",
-    Icon: TwitchLogoIcon,
-  },
-  {
-    id: "pinterest",
-    label: "Pinterest",
-    keywords: "pinterest pins social",
-    Icon: PinterestLogoIcon,
-  },
-  {
-    id: "reddit",
-    label: "Reddit",
-    keywords: "reddit social forum",
-    Icon: RedditLogoIcon,
-  },
-  {
-    id: "slack",
-    label: "Slack",
-    keywords: "slack chat workplace",
-    Icon: SlackLogoIcon,
-  },
-  {
-    id: "patreon",
-    label: "Patreon",
-    keywords: "patreon support membership",
-    Icon: PatreonLogoIcon,
-  },
-  {
-    id: "email",
-    label: "Email",
-    keywords: "email mail envelope contact",
-    Icon: EnvelopeSimpleIcon,
-  },
-  {
-    id: "phone",
-    label: "Phone",
-    keywords: "phone call contact",
-    Icon: PhoneIcon,
-  },
-  {
-    id: "mic",
-    label: "Mic",
-    keywords: "mic microphone audio podcast",
-    Icon: MicrophoneIcon,
-  },
-  {
-    id: "camera",
-    label: "Camera",
-    keywords: "camera photo gallery",
-    Icon: CameraIcon,
-  },
-  {
-    id: "house",
-    label: "Home",
-    keywords: "house home venue",
-    Icon: HouseIcon,
-  },
-  {
-    id: "heart",
-    label: "Heart",
-    keywords: "heart like favorite love",
-    Icon: HeartIcon,
-  },
-  {
-    id: "star",
-    label: "Star",
-    keywords: "star favorite highlight",
-    Icon: StarIcon,
-  },
-  {
-    id: "shop",
-    label: "Shop",
-    keywords: "shop bag merch store buy",
-    Icon: ShoppingBagIcon,
-  },
-  {
-    id: "store",
-    label: "Storefront",
-    keywords: "storefront shop store",
-    Icon: StorefrontIcon,
-  },
-  {
-    id: "tree",
-    label: "Tree",
-    keywords: "tree nature outdoor",
-    Icon: TreeIcon,
-  },
-  {
-    id: "news",
-    label: "News",
-    keywords: "news newspaper press",
-    Icon: NewspaperIcon,
-  },
-  {
-    id: "article",
-    label: "Article",
-    keywords: "article blog post writeup",
-    Icon: ArticleIcon,
-  },
+/** Older kebab-case ids → Phosphor / custom ids. */
+const LEGACY_ICON_ALIASES: Record<string, string> = {
+  partiful: "partiful",
+  instagram: "InstagramLogo",
+  link: "LinkSimple",
+  ticket: "Ticket",
+  calendar: "CalendarBlank",
+  "map-pin": "MapPin",
+  music: "MusicNotes",
+  globe: "Globe",
+  youtube: "YoutubeLogo",
+  tiktok: "TiktokLogo",
+  spotify: "SpotifyLogo",
+  soundcloud: "SoundcloudLogo",
+  "apple-music": "AppleLogo",
+  "apple-podcasts": "ApplePodcastsLogo",
+  discord: "DiscordLogo",
+  x: "XLogo",
+  threads: "ThreadsLogo",
+  facebook: "FacebookLogo",
+  linkedin: "LinkedinLogo",
+  whatsapp: "WhatsappLogo",
+  telegram: "TelegramLogo",
+  snapchat: "SnapchatLogo",
+  twitch: "TwitchLogo",
+  pinterest: "PinterestLogo",
+  reddit: "RedditLogo",
+  slack: "SlackLogo",
+  linktree: "LinktreeLogo",
+  patreon: "PatreonLogo",
+  email: "EnvelopeSimple",
+  phone: "Phone",
+  mic: "Microphone",
+  camera: "Camera",
+  house: "House",
+  heart: "Heart",
+  star: "Star",
+  shop: "ShoppingBag",
+  store: "Storefront",
+  tree: "Tree",
+  news: "Newspaper",
+  article: "Article",
+};
+
+/** Featured / popular row in the picker (shown before search). */
+export const FEATURED_MARKETING_LINK_ICONS: MarketingLinkIconDef[] = [
+  { id: "partiful", label: "Partiful", keywords: "partiful party rsvp invite", featured: true },
+  { id: "InstagramLogo", label: "Instagram", keywords: "instagram ig social photo", featured: true },
+  { id: "LinkSimple", label: "Link", keywords: "link url website web", featured: true },
+  { id: "Ticket", label: "Ticket", keywords: "ticket rsvp entry pass eventbrite", featured: true },
+  { id: "CalendarBlank", label: "Calendar", keywords: "calendar date schedule event", featured: true },
+  { id: "MapPin", label: "Map pin", keywords: "map pin location venue place", featured: true },
+  { id: "MusicNotes", label: "Music", keywords: "music notes audio song band", featured: true },
+  { id: "Globe", label: "Website", keywords: "globe website www site", featured: true },
+  { id: "LinktreeLogo", label: "Linktree", keywords: "linktree bio links", featured: true },
+  { id: "YoutubeLogo", label: "YouTube", keywords: "youtube video", featured: true },
+  { id: "TiktokLogo", label: "TikTok", keywords: "tiktok social video", featured: true },
+  { id: "SpotifyLogo", label: "Spotify", keywords: "spotify music playlist", featured: true },
 ];
 
-const ICON_BY_ID = new Map(MARKETING_LINK_ICONS.map((icon) => [icon.id, icon]));
+const iconComponentCache = new Map<string, IconComponent>();
+iconComponentCache.set("partiful", PartifulGlyph);
+iconComponentCache.set("LinkSimple", LinkSimpleIcon);
 
-export function isMarketingLinkIconId(value: string | undefined | null): value is MarketingLinkIconId {
-  return Boolean(value && ICON_BY_ID.has(value as MarketingLinkIconId));
+export function normalizeMarketingLinkIconId(value: string | undefined | null): string | undefined {
+  const raw = value?.trim();
+  if (!raw) return undefined;
+  if (raw === "partiful") return "partiful";
+  const aliased = LEGACY_ICON_ALIASES[raw] ?? raw;
+  if (aliased === "partiful") return "partiful";
+  if (isPhosphorIconName(aliased)) return aliased;
+  return undefined;
+}
+
+export function marketingLinkIconLabel(id: string | undefined | null): string {
+  const normalized = normalizeMarketingLinkIconId(id);
+  if (!normalized) return "Link";
+  if (normalized === "partiful") return "Partiful";
+  return normalized.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/Logo$/, "").trim() || normalized;
+}
+
+export function isMarketingLinkIconId(value: string | undefined | null): boolean {
+  return Boolean(normalizeMarketingLinkIconId(value));
 }
 
 export function getMarketingLinkIcon(id: string | undefined | null): MarketingLinkIconDef {
-  if (id && ICON_BY_ID.has(id as MarketingLinkIconId)) {
-    return ICON_BY_ID.get(id as MarketingLinkIconId)!;
-  }
-  return ICON_BY_ID.get("link")!;
+  const normalized = normalizeMarketingLinkIconId(id) ?? "LinkSimple";
+  const featured = FEATURED_MARKETING_LINK_ICONS.find((icon) => icon.id === normalized);
+  if (featured) return featured;
+  return {
+    id: normalized,
+    label: marketingLinkIconLabel(normalized),
+    keywords: normalized.toLowerCase(),
+  };
 }
 
 export function featuredMarketingLinkIcons() {
-  return MARKETING_LINK_ICONS.filter((icon) => icon.featured);
+  return FEATURED_MARKETING_LINK_ICONS;
 }
 
-export function filterMarketingLinkIcons(query: string) {
+/** Search across the full Phosphor set (+ Partiful). */
+export function filterMarketingLinkIcons(query: string, limit = 120): MarketingLinkIconDef[] {
   const q = query.trim().toLowerCase();
-  if (!q) return MARKETING_LINK_ICONS;
-  return MARKETING_LINK_ICONS.filter((icon) => {
-    const haystack = `${icon.id} ${icon.label} ${icon.keywords}`.toLowerCase();
-    return haystack.includes(q);
-  });
+  if (!q) return FEATURED_MARKETING_LINK_ICONS;
+
+  const results: MarketingLinkIconDef[] = [];
+  const partiful = FEATURED_MARKETING_LINK_ICONS[0]!;
+  if (`${partiful.id} ${partiful.label} ${partiful.keywords}`.toLowerCase().includes(q)) {
+    results.push(partiful);
+  }
+
+  for (const name of PHOSPHOR_ICON_NAMES) {
+    const label = marketingLinkIconLabel(name);
+    const haystack = `${name} ${label}`.toLowerCase();
+    if (!haystack.includes(q)) continue;
+    results.push({ id: name, label, keywords: haystack });
+    if (results.length >= limit) break;
+  }
+  return results;
 }
 
-export function guessMarketingLinkIcon(url: string): MarketingLinkIconId | undefined {
+export async function loadMarketingLinkIcon(
+  id: string | undefined | null,
+): Promise<IconComponent> {
+  const normalized = normalizeMarketingLinkIconId(id) ?? "LinkSimple";
+  const cached = iconComponentCache.get(normalized);
+  if (cached) return cached;
+
+  if (normalized === "partiful") {
+    iconComponentCache.set(normalized, PartifulGlyph);
+    return PartifulGlyph;
+  }
+
+  const loader = PHOSPHOR_ICON_LOADERS[normalized];
+  if (!loader) {
+    return LinkSimpleIcon;
+  }
+
+  try {
+    const mod = await loader();
+    iconComponentCache.set(normalized, mod.default);
+    return mod.default;
+  } catch {
+    return LinkSimpleIcon;
+  }
+}
+
+export function guessMarketingLinkIcon(url: string): string | undefined {
   const trimmed = url.trim();
   if (!trimmed) return undefined;
   try {
@@ -395,34 +194,35 @@ export function guessMarketingLinkIcon(url: string): MarketingLinkIconId | undef
       : `https://${trimmed}`;
     const host = new URL(withProtocol).hostname.toLowerCase();
     if (host === "partiful.com" || host.endsWith(".partiful.com")) return "partiful";
-    if (host.includes("instagram.com")) return "instagram";
-    if (host.includes("youtube.com") || host === "youtu.be") return "youtube";
-    if (host.includes("tiktok.com")) return "tiktok";
-    if (host.includes("spotify.com")) return "spotify";
-    if (host.includes("soundcloud.com")) return "soundcloud";
-    if (host.includes("music.apple.com")) return "apple-music";
-    if (host.includes("podcasts.apple.com")) return "apple-podcasts";
-    if (host.includes("discord.com") || host.includes("discord.gg")) return "discord";
-    if (host === "x.com" || host.includes("twitter.com")) return "x";
-    if (host.includes("threads.net")) return "threads";
-    if (host.includes("facebook.com") || host.includes("fb.com")) return "facebook";
-    if (host.includes("linkedin.com")) return "linkedin";
-    if (host.includes("wa.me") || host.includes("whatsapp.com")) return "whatsapp";
-    if (host.includes("t.me") || host.includes("telegram.")) return "telegram";
-    if (host.includes("snapchat.com")) return "snapchat";
-    if (host.includes("twitch.tv")) return "twitch";
-    if (host.includes("pinterest.com") || host.includes("pin.it")) return "pinterest";
-    if (host.includes("reddit.com")) return "reddit";
-    if (host.includes("slack.com")) return "slack";
-    if (host.includes("linktr.ee") || host.includes("linktree.com")) return "linktree";
-    if (host.includes("patreon.com")) return "patreon";
-    if (host.includes("eventbrite.")) return "ticket";
+    if (host.includes("instagram.com")) return "InstagramLogo";
+    if (host.includes("youtube.com") || host === "youtu.be") return "YoutubeLogo";
+    if (host.includes("tiktok.com")) return "TiktokLogo";
+    if (host.includes("spotify.com")) return "SpotifyLogo";
+    if (host.includes("soundcloud.com")) return "SoundcloudLogo";
+    if (host.includes("music.apple.com")) return "AppleLogo";
+    if (host.includes("podcasts.apple.com")) return "ApplePodcastsLogo";
+    if (host.includes("discord.com") || host.includes("discord.gg")) return "DiscordLogo";
+    if (host === "x.com" || host.includes("twitter.com")) return "XLogo";
+    if (host.includes("threads.net")) return "ThreadsLogo";
+    if (host.includes("facebook.com") || host.includes("fb.com")) return "FacebookLogo";
+    if (host.includes("linkedin.com")) return "LinkedinLogo";
+    if (host.includes("wa.me") || host.includes("whatsapp.com")) return "WhatsappLogo";
+    if (host.includes("t.me") || host.includes("telegram.")) return "TelegramLogo";
+    if (host.includes("snapchat.com")) return "SnapchatLogo";
+    if (host.includes("twitch.tv")) return "TwitchLogo";
+    if (host.includes("pinterest.com") || host.includes("pin.it")) return "PinterestLogo";
+    if (host.includes("reddit.com")) return "RedditLogo";
+    if (host.includes("slack.com")) return "SlackLogo";
+    if (host.includes("linktr.ee") || host.includes("linktree.com")) return "LinktreeLogo";
+    if (host.includes("patreon.com")) return "PatreonLogo";
+    if (host.includes("eventbrite.")) return "Ticket";
   } catch {
     if (/partiful\.com/i.test(trimmed)) return "partiful";
   }
   return undefined;
 }
 
+/** Renders a marketing-link icon, loading Phosphor glyphs on demand. */
 export function MarketingLinkIcon({
   id,
   className,
@@ -430,6 +230,25 @@ export function MarketingLinkIcon({
   id?: string | null;
   className?: string;
 }) {
-  const { Icon } = getMarketingLinkIcon(id);
+  const normalized = normalizeMarketingLinkIconId(id) ?? "LinkSimple";
+  const [{ Icon }, setIcon] = useState<{ Icon: IconComponent }>({
+    Icon: iconComponentCache.get(normalized) ?? LinkSimpleIcon,
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    const cached = iconComponentCache.get(normalized);
+    if (cached) {
+      setIcon({ Icon: cached });
+      return;
+    }
+    void loadMarketingLinkIcon(normalized).then((loaded) => {
+      if (!cancelled) setIcon({ Icon: loaded });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [normalized]);
+
   return <Icon className={className} weight="regular" />;
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -8,10 +8,21 @@ import {
   featuredMarketingLinkIcons,
   filterMarketingLinkIcons,
   getMarketingLinkIcon,
-  MARKETING_LINK_ICONS,
-  type MarketingLinkIconId,
+  loadMarketingLinkIcon,
+  type MarketingLinkIconDef,
 } from "@/lib/marketing-link-icons";
 import { cn } from "@/lib/utils";
+import { LinkSimpleIcon } from "@phosphor-icons/react";
+import type { ComponentType, SVGProps } from "react";
+
+type IconComponent = ComponentType<
+  SVGProps<SVGSVGElement> & {
+    weight?: "regular" | "bold" | "fill" | "light" | "thin" | "duotone";
+  }
+>;
+
+/** Wrap components so useState doesn't treat them as updater functions. */
+type IconHolder = { Icon: IconComponent };
 
 export function IconPicker({
   value,
@@ -21,7 +32,7 @@ export function IconPicker({
   "aria-label": ariaLabel = "Choose icon",
 }: {
   value?: string | null;
-  onChange: (value: MarketingLinkIconId | undefined) => void;
+  onChange: (value: string | undefined) => void;
   disabled?: boolean;
   className?: string;
   "aria-label"?: string;
@@ -29,14 +40,23 @@ export function IconPicker({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const selected = getMarketingLinkIcon(value);
-  const SelectedIcon = selected.Icon;
+  const [{ Icon: SelectedIcon }, setSelectedIcon] = useState<IconHolder>({
+    Icon: LinkSimpleIcon,
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadMarketingLinkIcon(value).then((Icon) => {
+      if (!cancelled) setSelectedIcon({ Icon });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [value]);
 
   const filtered = useMemo(() => filterMarketingLinkIcons(query), [query]);
   const featured = useMemo(() => featuredMarketingLinkIcons(), []);
   const searching = query.trim().length > 0;
-  const rest = searching
-    ? filtered
-    : MARKETING_LINK_ICONS.filter((icon) => !icon.featured);
 
   return (
     <Popover
@@ -59,11 +79,11 @@ export function IconPicker({
           <SelectedIcon className="size-4" weight="regular" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-72 gap-2 p-2">
+      <PopoverContent align="start" className="w-80 gap-2 p-2">
         <Input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search icons…"
+          placeholder="Search all Phosphor icons…"
           autoFocus
           className="h-8"
         />
@@ -82,25 +102,26 @@ export function IconPicker({
               }}
             />
           </div>
-        ) : null}
-        <div className="space-y-1.5">
-          <p className="px-0.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-            {searching ? "Results" : "More"}
-          </p>
-          {rest.length === 0 ? (
-            <p className="px-0.5 py-2 text-xs text-muted-foreground">No icons match.</p>
-          ) : (
-            <IconGrid
-              icons={rest}
-              value={value}
-              onSelect={(id) => {
-                onChange(id);
-                setOpen(false);
-                setQuery("");
-              }}
-            />
-          )}
-        </div>
+        ) : (
+          <div className="space-y-1.5">
+            <p className="px-0.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+              Results
+            </p>
+            {filtered.length === 0 ? (
+              <p className="px-0.5 py-2 text-xs text-muted-foreground">No icons match.</p>
+            ) : (
+              <IconGrid
+                icons={filtered}
+                value={value}
+                onSelect={(id) => {
+                  onChange(id);
+                  setOpen(false);
+                  setQuery("");
+                }}
+              />
+            )}
+          </div>
+        )}
         {value ? (
           <Button
             type="button"
@@ -126,32 +147,61 @@ function IconGrid({
   value,
   onSelect,
 }: {
-  icons: Array<{ id: MarketingLinkIconId; label: string; Icon: (typeof MARKETING_LINK_ICONS)[number]["Icon"] }>;
+  icons: MarketingLinkIconDef[];
   value?: string | null;
-  onSelect: (id: MarketingLinkIconId) => void;
+  onSelect: (id: string) => void;
 }) {
   return (
-    <div className="grid max-h-40 grid-cols-6 gap-1 overflow-y-auto">
-      {icons.map((icon) => {
-        const selected = value === icon.id;
-        const Glyph = icon.Icon;
-        return (
-          <button
-            key={icon.id}
-            type="button"
-            title={icon.label}
-            aria-label={icon.label}
-            aria-pressed={selected}
-            className={cn(
-              "flex size-9 items-center justify-center rounded-md text-foreground transition-colors hover:bg-accent",
-              selected && "bg-accent ring-1 ring-ring",
-            )}
-            onClick={() => onSelect(icon.id)}
-          >
-            <Glyph className="size-4" weight="regular" />
-          </button>
-        );
-      })}
+    <div className="grid max-h-52 grid-cols-6 gap-1 overflow-y-auto">
+      {icons.map((icon) => (
+        <IconGridButton
+          key={icon.id}
+          id={icon.id}
+          label={icon.label}
+          selected={value === icon.id}
+          onSelect={onSelect}
+        />
+      ))}
     </div>
+  );
+}
+
+function IconGridButton({
+  id,
+  label,
+  selected,
+  onSelect,
+}: {
+  id: string;
+  label: string;
+  selected: boolean;
+  onSelect: (id: string) => void;
+}) {
+  const [{ Icon }, setIcon] = useState<IconHolder>({ Icon: LinkSimpleIcon });
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadMarketingLinkIcon(id).then((loaded) => {
+      if (!cancelled) setIcon({ Icon: loaded });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  return (
+    <button
+      type="button"
+      title={label}
+      aria-label={label}
+      aria-pressed={selected}
+      className={cn(
+        "flex size-9 items-center justify-center rounded-md text-foreground transition-colors hover:bg-accent",
+        selected && "bg-accent ring-1 ring-ring",
+      )}
+      onClick={() => onSelect(id)}
+    >
+      <Icon className="size-4" weight="regular" />
+    </button>
   );
 }

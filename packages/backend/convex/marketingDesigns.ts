@@ -18,11 +18,10 @@ import {
   isWithinDays,
 } from "./lib/publicEvents";
 import {
-  MAX_PARTIFUL_COHOST_URL_CHARS,
   linksIncludePartiful,
   marketingDesignLinkValue,
   normalizeMarketingLinks,
-  normalizeOptionalUrl,
+  normalizePartifulCohostUrl,
 } from "./lib/marketingLinks";
 import {
   canPublishMarketingDesignVisibility,
@@ -378,14 +377,6 @@ export const upsertForEvent = mutation({
 
     const nextCaption = hasCaption ? args.caption!.trim() || undefined : undefined;
     const nextLinks = hasLinks ? normalizeMarketingLinks(args.additionalLinks) : undefined;
-    let nextCohost = hasCohost
-      ? normalizeOptionalUrl(args.partifulCohostUrl, MAX_PARTIFUL_COHOST_URL_CHARS)
-      : undefined;
-    const shouldWriteCohost =
-      hasCohost || (hasLinks && nextLinks !== undefined && !linksIncludePartiful(nextLinks));
-    if (hasLinks && nextLinks && !linksIncludePartiful(nextLinks)) {
-      nextCohost = undefined;
-    }
     const nextAssignee = hasAssignee ? args.assigneeUserId?.trim() || undefined : undefined;
 
     const now = Date.now();
@@ -395,6 +386,17 @@ export const upsertForEvent = mutation({
         .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
         .take(1)
     )[0];
+
+    const effectiveLinks = hasLinks ? (nextLinks ?? []) : (existing?.additionalLinks ?? []);
+    const hasPartiful = linksIncludePartiful(effectiveLinks);
+    let nextCohost: string | undefined;
+    if (!hasPartiful) {
+      nextCohost = undefined;
+    } else if (hasCohost) {
+      nextCohost = normalizePartifulCohostUrl(args.partifulCohostUrl);
+    }
+    // Clear when Partiful is gone; otherwise only write when the client sent cohost.
+    const shouldWriteCohost = !hasPartiful || hasCohost;
 
     const contentPatch = {
       ...(hasImage ? { imageUrl: nextImageUrl } : {}),
@@ -466,10 +468,8 @@ export const create = mutation({
     const now = Date.now();
     const imageUrl = normalizeOptionalAssetReference(args.imageUrl);
     if (!imageUrl) throw new Error("Image is required.");
-    const nextCohost =
-      args.partifulCohostUrl === undefined
-        ? undefined
-        : normalizeOptionalUrl(args.partifulCohostUrl, MAX_PARTIFUL_COHOST_URL_CHARS);
+    const nextLinks = normalizeMarketingLinks(args.additionalLinks);
+    const hasPartiful = linksIncludePartiful(nextLinks);
 
     const existing = await ctx.db
       .query("eventMarketingDesigns")
@@ -477,24 +477,37 @@ export const create = mutation({
       .take(1);
     if (existing[0]) {
       const nextImageUrl = normalizeOptionalAssetReference(args.imageUrl);
+      let nextCohost: string | undefined;
+      if (!hasPartiful) {
+        nextCohost = undefined;
+      } else if (args.partifulCohostUrl !== undefined) {
+        nextCohost = normalizePartifulCohostUrl(args.partifulCohostUrl);
+      } else {
+        nextCohost = existing[0].partifulCohostUrl;
+      }
       await ctx.db.patch(existing[0]._id, {
         assigneeUserId: args.assigneeUserId ?? existing[0].assigneeUserId,
         imageUrl: nextImageUrl,
         caption: args.caption?.trim() || undefined,
-        additionalLinks: normalizeMarketingLinks(args.additionalLinks),
-        ...(args.partifulCohostUrl !== undefined ? { partifulCohostUrl: nextCohost } : {}),
+        additionalLinks: nextLinks,
+        partifulCohostUrl: nextCohost,
         updatedAt: now,
       });
       await releaseReplacedR2Reference(ctx, existing[0].imageUrl, nextImageUrl);
       return existing[0]._id;
     }
 
+    const nextCohost =
+      hasPartiful && args.partifulCohostUrl !== undefined
+        ? normalizePartifulCohostUrl(args.partifulCohostUrl)
+        : undefined;
+
     return await ctx.db.insert("eventMarketingDesigns", {
       eventId: args.eventId,
       assigneeUserId: args.assigneeUserId,
       imageUrl,
       caption: args.caption?.trim() || undefined,
-      additionalLinks: normalizeMarketingLinks(args.additionalLinks),
+      additionalLinks: nextLinks,
       partifulCohostUrl: nextCohost,
       status: "draft",
       createdByUserId: getUserId(user),

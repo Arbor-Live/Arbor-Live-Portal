@@ -12,11 +12,10 @@ import {
 import { listEventsByInvoiceId } from "./lib/invoiceEvents";
 import {
   MAX_ADDITIONAL_LINKS,
-  MAX_PARTIFUL_COHOST_URL_CHARS,
   linksIncludePartiful,
   marketingDesignLinkValue,
   normalizeMarketingLinks,
-  normalizeOptionalUrl,
+  normalizePartifulCohostUrl,
 } from "./lib/marketingLinks";
 import { schedulePublicEventsSiteRevalidation } from "./lib/scheduleSiteRevalidation";
 import { enforceRateLimit, HOUR_MS } from "./rateLimit";
@@ -289,26 +288,26 @@ export const save = mutation({
     const nextLinks = hasLinks
       ? normalizeMarketingLinks(args.additionalLinks, MAX_ADDITIONAL_LINKS)
       : undefined;
-    let nextCohost = hasCohost
-      ? normalizeOptionalUrl(args.partifulCohostUrl, MAX_PARTIFUL_COHOST_URL_CHARS)
-      : undefined;
-    // Drop cohost when the public Partiful RSVP link is gone.
-    if (hasLinks && nextLinks && !linksIncludePartiful(nextLinks)) {
-      nextCohost = undefined;
-      // Ensure we clear a previously stored cohost even if the client omitted the field.
-    }
-    const shouldClearCohost =
-      hasCohost || (hasLinks && nextLinks !== undefined && !linksIncludePartiful(nextLinks));
 
     const now = Date.now();
     const existing = await loadDesignForEvent(ctx, event._id);
+    const effectiveLinks = hasLinks ? (nextLinks ?? []) : (existing?.additionalLinks ?? []);
+    const hasPartiful = linksIncludePartiful(effectiveLinks);
+    let nextCohost: string | undefined;
+    if (!hasPartiful) {
+      nextCohost = undefined;
+    } else if (hasCohost) {
+      nextCohost = normalizePartifulCohostUrl(args.partifulCohostUrl);
+    }
+    const shouldWriteCohost = !hasPartiful || hasCohost;
+
     if (existing) {
       const nextStatus = existing.status === "published" ? "published" : "ready";
       await ctx.db.patch(existing._id, {
         ...(hasImage ? { imageUrl: nextImageUrl } : {}),
         ...(hasCaption ? { caption: nextCaption } : {}),
         ...(hasLinks ? { additionalLinks: nextLinks } : {}),
-        ...(shouldClearCohost || hasCohost ? { partifulCohostUrl: nextCohost } : {}),
+        ...(shouldWriteCohost ? { partifulCohostUrl: nextCohost } : {}),
         status: nextStatus,
         updatedAt: now,
         ...(nextStatus === "ready" ? { lastError: undefined } : {}),

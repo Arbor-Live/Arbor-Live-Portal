@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   emptyMarketingLink,
+  isPartifulCohostInviteUrl,
   linksIncludePartiful,
   type MarketingAdditionalLink,
 } from "@/components/marketing/event-marketing-content-fields";
@@ -206,10 +207,10 @@ export function MarketingLinksEditor({
   );
 }
 
-/** Admin-only: host-submitted Partiful cohost invite (not editable here). */
+/** Host-submitted Partiful cohost invite (not editable in admin marketing UI). */
 export function PartifulCohostAdminLink({ url }: { url?: string | null }) {
   const href = url?.trim();
-  if (!href) return null;
+  if (!href || !isPartifulCohostInviteUrl(href)) return null;
   return (
     <div className="space-y-1 rounded-md border border-dashed p-3">
       <Label>Partiful cohost invite</Label>

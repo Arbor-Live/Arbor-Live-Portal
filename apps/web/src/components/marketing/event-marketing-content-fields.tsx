@@ -60,7 +60,22 @@ export function isPartifulUrl(url: string): boolean {
     const host = new URL(withProtocol).hostname.toLowerCase();
     return host === "partiful.com" || host.endsWith(".partiful.com");
   } catch {
-    return /partiful\.com/i.test(trimmed);
+    return false;
+  }
+}
+
+export function isPartifulCohostInviteUrl(url: string | undefined | null): boolean {
+  const trimmed = url?.trim();
+  if (!trimmed) return false;
+  try {
+    const parsed = new URL(trimmed);
+    const host = parsed.hostname.toLowerCase();
+    return (
+      parsed.protocol === "https:" &&
+      (host === "partiful.com" || host.endsWith(".partiful.com"))
+    );
+  } catch {
+    return false;
   }
 }
 
