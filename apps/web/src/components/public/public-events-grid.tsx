@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Reveal, Stagger, StaggerItem } from "@/components/landing/landing-motion";
 import { PublicEventPoster } from "@/components/public/public-event-poster";
 import { formatDateTime } from "@/lib/format";
+import { MarketingLinkIcon } from "@/lib/marketing-link-icons";
 
 export type PublicEventCard = {
   eventId: string;
@@ -20,7 +21,7 @@ export type PublicEventCard = {
   posterImageUrl?: string;
   caption?: string;
   publicEventUrl: string;
-  additionalLinks: Array<{ label: string; url: string }>;
+  additionalLinks: Array<{ label: string; url: string; icon?: string }>;
 };
 
 function formatEventWhen(startAt: number) {
@@ -98,8 +99,9 @@ function EventCard({ event }: { event: PublicEventCard }) {
               href={link.url}
               target="_blank"
               rel="noreferrer"
-              className="font-medium text-emerald-800 underline-offset-4 hover:underline dark:text-primary"
+              className="inline-flex items-center gap-1 font-medium text-emerald-800 underline-offset-4 hover:underline dark:text-primary"
             >
+              <MarketingLinkIcon id={link.icon} className="size-3.5 shrink-0" />
               {link.label}
             </a>
           ))}

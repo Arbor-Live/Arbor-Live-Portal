@@ -18,6 +18,7 @@ import { loadEventHostDisplay } from "./lib/hostOrgs";
 const publicEventLinkValue = v.object({
   label: v.string(),
   url: v.string(),
+  icon: v.optional(v.string()),
 });
 
 const publicEventCardValue = v.object({

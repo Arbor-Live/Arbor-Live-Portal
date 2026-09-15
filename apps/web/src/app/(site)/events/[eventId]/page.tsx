@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { api } from "@/lib/convex-api";
 import { fetchPublicQuerySafe } from "@/lib/convex-server";
 import { formatDateTime } from "@/lib/format";
+import { MarketingLinkIcon } from "@/lib/marketing-link-icons";
 
 type EventDetailPageProps = {
   params: Promise<{ eventId: string }>;
@@ -95,25 +96,22 @@ export default async function PublicEventDetailPage({ params }: EventDetailPageP
                   </div>
                 ) : null}
 
-                <div className="flex flex-wrap gap-4 text-sm">
-                  <Link
-                    href="/events"
-                    className="text-emerald-800 underline-offset-4 hover:underline dark:text-emerald-400"
-                  >
-                    All events
-                  </Link>
-                  {event.additionalLinks.map((link) => (
-                    <a
-                      key={link.url}
-                      href={link.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-emerald-800 underline-offset-4 hover:underline dark:text-emerald-400"
-                    >
-                      {link.label}
-                    </a>
-                  ))}
-                </div>
+                {event.additionalLinks.length > 0 ? (
+                  <div className="flex flex-wrap gap-4 text-sm">
+                    {event.additionalLinks.map((link) => (
+                      <a
+                        key={link.url}
+                        href={link.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 text-emerald-800 underline-offset-4 hover:underline dark:text-emerald-400"
+                      >
+                        <MarketingLinkIcon id={link.icon} className="size-3.5 shrink-0" />
+                        {link.label}
+                      </a>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             </div>
           </div>

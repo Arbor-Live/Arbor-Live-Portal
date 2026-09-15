@@ -232,6 +232,7 @@ export function MarketingDesignBoard() {
                 onCaptionChange={setCaption}
                 additionalLinks={additionalLinks}
                 onAdditionalLinksChange={setAdditionalLinks}
+                partifulCohostUrl={selectedDesign?.partifulCohostUrl ?? undefined}
                 captionLabel="Caption"
                 captionPlaceholder="Instagram caption and event description"
                 posterUpload={{ type: "event", eventId: selectedEventId }}

@@ -138,6 +138,7 @@ import type * as lib_invoicePeople from "../lib/invoicePeople.js";
 import type * as lib_invoiceProfit from "../lib/invoiceProfit.js";
 import type * as lib_invoiceSeries from "../lib/invoiceSeries.js";
 import type * as lib_marketingContent from "../lib/marketingContent.js";
+import type * as lib_marketingLinks from "../lib/marketingLinks.js";
 import type * as lib_normalizeCrewLineLabel from "../lib/normalizeCrewLineLabel.js";
 import type * as lib_onboardingLinks from "../lib/onboardingLinks.js";
 import type * as lib_openMicAddon from "../lib/openMicAddon.js";
@@ -337,6 +338,7 @@ declare const fullApi: ApiFromModules<{
   "lib/invoiceProfit": typeof lib_invoiceProfit;
   "lib/invoiceSeries": typeof lib_invoiceSeries;
   "lib/marketingContent": typeof lib_marketingContent;
+  "lib/marketingLinks": typeof lib_marketingLinks;
   "lib/normalizeCrewLineLabel": typeof lib_normalizeCrewLineLabel;
   "lib/onboardingLinks": typeof lib_onboardingLinks;
   "lib/openMicAddon": typeof lib_openMicAddon;
