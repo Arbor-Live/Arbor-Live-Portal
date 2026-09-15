@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { DotsSixVerticalIcon } from "@phosphor-icons/react";
+import { CaretDownIcon, CaretUpIcon, DotsSixVerticalIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { IconPicker } from "@/components/ui/icon-picker";
 import { Input } from "@/components/ui/input";
@@ -126,7 +126,7 @@ export function MarketingLinksEditor({
             }}
             onDragEnd={handleDragEnd}
           >
-            <div className="flex shrink-0 items-center gap-1">
+            <div className="flex shrink-0 items-center gap-0.5">
               <span
                 className={cn(
                   "flex size-9 touch-none select-none items-center justify-center text-muted-foreground/60",
@@ -135,7 +135,7 @@ export function MarketingLinksEditor({
                     : "cursor-grab active:cursor-grabbing",
                 )}
                 title="Drag to reorder"
-                aria-label={`Drag to reorder link ${index + 1}`}
+                aria-hidden
                 onPointerDown={() => {
                   if (!disabled) setDragArmedKey(rowKey);
                 }}
@@ -144,6 +144,28 @@ export function MarketingLinksEditor({
               >
                 <DotsSixVerticalIcon className="size-4" weight="bold" />
               </span>
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className="size-9"
+                disabled={disabled || index === 0}
+                aria-label={`Move link ${index + 1} up`}
+                onClick={() => reorderLive(index, index - 1)}
+              >
+                <CaretUpIcon className="size-3.5" />
+              </Button>
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className="size-9"
+                disabled={disabled || index === rows.length - 1}
+                aria-label={`Move link ${index + 1} down`}
+                onClick={() => reorderLive(index, index + 1)}
+              >
+                <CaretDownIcon className="size-3.5" />
+              </Button>
               <IconPicker
                 value={link.icon}
                 disabled={disabled}
