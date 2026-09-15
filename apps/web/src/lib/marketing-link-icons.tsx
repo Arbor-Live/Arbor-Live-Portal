@@ -2,19 +2,43 @@
 
 import type { ComponentType, SVGProps } from "react";
 import {
+  AppleLogoIcon,
+  ApplePodcastsLogoIcon,
+  ArticleIcon,
   CalendarBlankIcon,
+  CameraIcon,
   DiscordLogoIcon,
   EnvelopeSimpleIcon,
   FacebookLogoIcon,
   GlobeIcon,
+  HeartIcon,
+  HouseIcon,
   InstagramLogoIcon,
+  LinkedinLogoIcon,
   LinkSimpleIcon,
+  LinktreeLogoIcon,
   MapPinIcon,
+  MicrophoneIcon,
   MusicNotesIcon,
+  NewspaperIcon,
+  PatreonLogoIcon,
   PhoneIcon,
+  PinterestLogoIcon,
+  RedditLogoIcon,
+  ShoppingBagIcon,
+  SlackLogoIcon,
+  SnapchatLogoIcon,
+  SoundcloudLogoIcon,
   SpotifyLogoIcon,
+  StarIcon,
+  StorefrontIcon,
+  TelegramLogoIcon,
+  ThreadsLogoIcon,
   TicketIcon,
   TiktokLogoIcon,
+  TreeIcon,
+  TwitchLogoIcon,
+  WhatsappLogoIcon,
   XLogoIcon,
   YoutubeLogoIcon,
 } from "@phosphor-icons/react";
@@ -31,11 +55,35 @@ export type MarketingLinkIconId =
   | "youtube"
   | "tiktok"
   | "spotify"
+  | "soundcloud"
+  | "apple-music"
+  | "apple-podcasts"
   | "discord"
   | "x"
+  | "threads"
   | "facebook"
+  | "linkedin"
+  | "whatsapp"
+  | "telegram"
+  | "snapchat"
+  | "twitch"
+  | "pinterest"
+  | "reddit"
+  | "slack"
+  | "linktree"
+  | "patreon"
   | "email"
-  | "phone";
+  | "phone"
+  | "mic"
+  | "camera"
+  | "house"
+  | "heart"
+  | "star"
+  | "shop"
+  | "store"
+  | "tree"
+  | "news"
+  | "article";
 
 type IconComponent = ComponentType<SVGProps<SVGSVGElement> & { weight?: "regular" | "bold" | "fill" }>;
 
@@ -85,7 +133,7 @@ export const MARKETING_LINK_ICONS: MarketingLinkIconDef[] = [
   {
     id: "ticket",
     label: "Ticket",
-    keywords: "ticket rsvp entry pass",
+    keywords: "ticket rsvp entry pass eventbrite",
     featured: true,
     Icon: TicketIcon,
   },
@@ -118,6 +166,13 @@ export const MARKETING_LINK_ICONS: MarketingLinkIconDef[] = [
     Icon: GlobeIcon,
   },
   {
+    id: "linktree",
+    label: "Linktree",
+    keywords: "linktree bio links",
+    featured: true,
+    Icon: LinktreeLogoIcon,
+  },
+  {
     id: "youtube",
     label: "YouTube",
     keywords: "youtube video",
@@ -136,6 +191,24 @@ export const MARKETING_LINK_ICONS: MarketingLinkIconDef[] = [
     Icon: SpotifyLogoIcon,
   },
   {
+    id: "soundcloud",
+    label: "SoundCloud",
+    keywords: "soundcloud music audio",
+    Icon: SoundcloudLogoIcon,
+  },
+  {
+    id: "apple-music",
+    label: "Apple Music",
+    keywords: "apple music itunes",
+    Icon: AppleLogoIcon,
+  },
+  {
+    id: "apple-podcasts",
+    label: "Apple Podcasts",
+    keywords: "apple podcasts podcast",
+    Icon: ApplePodcastsLogoIcon,
+  },
+  {
     id: "discord",
     label: "Discord",
     keywords: "discord chat community",
@@ -148,10 +221,70 @@ export const MARKETING_LINK_ICONS: MarketingLinkIconDef[] = [
     Icon: XLogoIcon,
   },
   {
+    id: "threads",
+    label: "Threads",
+    keywords: "threads meta social",
+    Icon: ThreadsLogoIcon,
+  },
+  {
     id: "facebook",
     label: "Facebook",
     keywords: "facebook social meta",
     Icon: FacebookLogoIcon,
+  },
+  {
+    id: "linkedin",
+    label: "LinkedIn",
+    keywords: "linkedin professional social",
+    Icon: LinkedinLogoIcon,
+  },
+  {
+    id: "whatsapp",
+    label: "WhatsApp",
+    keywords: "whatsapp chat message",
+    Icon: WhatsappLogoIcon,
+  },
+  {
+    id: "telegram",
+    label: "Telegram",
+    keywords: "telegram chat message",
+    Icon: TelegramLogoIcon,
+  },
+  {
+    id: "snapchat",
+    label: "Snapchat",
+    keywords: "snapchat social snap",
+    Icon: SnapchatLogoIcon,
+  },
+  {
+    id: "twitch",
+    label: "Twitch",
+    keywords: "twitch stream live",
+    Icon: TwitchLogoIcon,
+  },
+  {
+    id: "pinterest",
+    label: "Pinterest",
+    keywords: "pinterest pins social",
+    Icon: PinterestLogoIcon,
+  },
+  {
+    id: "reddit",
+    label: "Reddit",
+    keywords: "reddit social forum",
+    Icon: RedditLogoIcon,
+  },
+  {
+    id: "slack",
+    label: "Slack",
+    keywords: "slack chat workplace",
+    Icon: SlackLogoIcon,
+  },
+  {
+    id: "patreon",
+    label: "Patreon",
+    keywords: "patreon support membership",
+    Icon: PatreonLogoIcon,
   },
   {
     id: "email",
@@ -164,6 +297,66 @@ export const MARKETING_LINK_ICONS: MarketingLinkIconDef[] = [
     label: "Phone",
     keywords: "phone call contact",
     Icon: PhoneIcon,
+  },
+  {
+    id: "mic",
+    label: "Mic",
+    keywords: "mic microphone audio podcast",
+    Icon: MicrophoneIcon,
+  },
+  {
+    id: "camera",
+    label: "Camera",
+    keywords: "camera photo gallery",
+    Icon: CameraIcon,
+  },
+  {
+    id: "house",
+    label: "Home",
+    keywords: "house home venue",
+    Icon: HouseIcon,
+  },
+  {
+    id: "heart",
+    label: "Heart",
+    keywords: "heart like favorite love",
+    Icon: HeartIcon,
+  },
+  {
+    id: "star",
+    label: "Star",
+    keywords: "star favorite highlight",
+    Icon: StarIcon,
+  },
+  {
+    id: "shop",
+    label: "Shop",
+    keywords: "shop bag merch store buy",
+    Icon: ShoppingBagIcon,
+  },
+  {
+    id: "store",
+    label: "Storefront",
+    keywords: "storefront shop store",
+    Icon: StorefrontIcon,
+  },
+  {
+    id: "tree",
+    label: "Tree",
+    keywords: "tree nature outdoor",
+    Icon: TreeIcon,
+  },
+  {
+    id: "news",
+    label: "News",
+    keywords: "news newspaper press",
+    Icon: NewspaperIcon,
+  },
+  {
+    id: "article",
+    label: "Article",
+    keywords: "article blog post writeup",
+    Icon: ArticleIcon,
   },
 ];
 
@@ -206,9 +399,24 @@ export function guessMarketingLinkIcon(url: string): MarketingLinkIconId | undef
     if (host.includes("youtube.com") || host === "youtu.be") return "youtube";
     if (host.includes("tiktok.com")) return "tiktok";
     if (host.includes("spotify.com")) return "spotify";
+    if (host.includes("soundcloud.com")) return "soundcloud";
+    if (host.includes("music.apple.com")) return "apple-music";
+    if (host.includes("podcasts.apple.com")) return "apple-podcasts";
     if (host.includes("discord.com") || host.includes("discord.gg")) return "discord";
     if (host === "x.com" || host.includes("twitter.com")) return "x";
+    if (host.includes("threads.net")) return "threads";
     if (host.includes("facebook.com") || host.includes("fb.com")) return "facebook";
+    if (host.includes("linkedin.com")) return "linkedin";
+    if (host.includes("wa.me") || host.includes("whatsapp.com")) return "whatsapp";
+    if (host.includes("t.me") || host.includes("telegram.")) return "telegram";
+    if (host.includes("snapchat.com")) return "snapchat";
+    if (host.includes("twitch.tv")) return "twitch";
+    if (host.includes("pinterest.com") || host.includes("pin.it")) return "pinterest";
+    if (host.includes("reddit.com")) return "reddit";
+    if (host.includes("slack.com")) return "slack";
+    if (host.includes("linktr.ee") || host.includes("linktree.com")) return "linktree";
+    if (host.includes("patreon.com")) return "patreon";
+    if (host.includes("eventbrite.")) return "ticket";
   } catch {
     if (/partiful\.com/i.test(trimmed)) return "partiful";
   }
