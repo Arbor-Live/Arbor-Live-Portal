@@ -35,14 +35,15 @@ async function publishToInstagramViaPostPeer(imageUrl: string, caption: string) 
         {
           platform: "instagram",
           accountId,
-          mediaItems: [
-            {
-              url: imageUrl,
-              type: "image",
-            },
-          ],
         },
       ],
+      mediaItems: [
+        {
+          type: "image",
+          url: imageUrl,
+        },
+      ],
+      publishNow: true,
     }),
   });
 
@@ -51,7 +52,7 @@ async function publishToInstagramViaPostPeer(imageUrl: string, caption: string) 
     throw new Error(body.message ?? body.error ?? `PostPeer publish failed (${response.status}).`);
   }
 
-  const postId = body.id ?? body.postId ?? body.data?.id;
+  const postId = body.postId ?? body.id ?? body.data?.id;
   return postId ?? "postpeer-published";
 }
 
