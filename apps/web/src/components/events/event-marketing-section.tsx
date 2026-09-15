@@ -199,6 +199,7 @@ export function EventMarketingSection({ eventId }: { eventId: Id<"events"> }) {
                 onCaptionChange={setCaption}
                 additionalLinks={additionalLinks}
                 onAdditionalLinksChange={setAdditionalLinks}
+                partifulCohostUrl={design.partifulCohostUrl ?? undefined}
                 disabled={saving || publishing}
                 posterUpload={{ type: "event", eventId }}
               />
@@ -232,6 +233,7 @@ export function EventMarketingSection({ eventId }: { eventId: Id<"events"> }) {
                 onCaptionChange={() => undefined}
                 additionalLinks={design.additionalLinks?.length ? design.additionalLinks : [emptyMarketingLink()]}
                 onAdditionalLinksChange={() => undefined}
+                partifulCohostUrl={design.partifulCohostUrl ?? undefined}
                 readOnly
                 posterUpload={{ type: "event", eventId }}
               />

@@ -10,6 +10,14 @@ import {
   validateMarketingHeroUploadRequest,
 } from "./lib/inventoryUpload";
 import { listEventsByInvoiceId } from "./lib/invoiceEvents";
+import {
+  MAX_ADDITIONAL_LINKS,
+  MAX_PARTIFUL_COHOST_URL_CHARS,
+  linksIncludePartiful,
+  marketingDesignLinkValue,
+  normalizeMarketingLinks,
+  normalizeOptionalUrl,
+} from "./lib/marketingLinks";
 import { schedulePublicEventsSiteRevalidation } from "./lib/scheduleSiteRevalidation";
 import { enforceRateLimit, HOUR_MS } from "./rateLimit";
 import { releaseReplacedR2Reference } from "./lib/r2Lifecycle";
@@ -18,10 +26,7 @@ const PUBLIC_CLIENT_ACTOR = "public-client";
 
 const portalValue = v.union(v.literal("request"), v.literal("quote"));
 
-const designLinkInputValue = v.object({
-  label: v.string(),
-  url: v.string(),
-});
+const designLinkInputValue = marketingDesignLinkValue;
 
 const posterStateValue = v.object({
   eligible: v.boolean(),
@@ -32,6 +37,7 @@ const posterStateValue = v.object({
   posterImageUrl: v.optional(v.string()),
   caption: v.optional(v.string()),
   additionalLinks: v.array(designLinkInputValue),
+  partifulCohostUrl: v.optional(v.string()),
   /** draft | ready (on website) | published (website + Instagram approved) */
   status: v.optional(v.union(v.literal("draft"), v.literal("ready"), v.literal("published"))),
   onWebsite: v.boolean(),
@@ -39,17 +45,6 @@ const posterStateValue = v.object({
 });
 
 const CAPTION_MAX_CHARS = 4000;
-const MAX_ADDITIONAL_LINKS = 10;
-
-function normalizeLinks(links: Array<{ label: string; url: string }> | undefined) {
-  return (links ?? [])
-    .map((link) => ({
-      label: link.label.trim(),
-      url: link.url.trim(),
-    }))
-    .filter((link) => link.label && link.url)
-    .slice(0, MAX_ADDITIONAL_LINKS);
-}
 
 async function loadDesignForEvent(ctx: QueryCtx | MutationCtx, eventId: Id<"events">) {
   return (
@@ -148,7 +143,8 @@ async function serializePosterState(
   venueName?: string;
   posterImageUrl?: string;
   caption?: string;
-  additionalLinks: Array<{ label: string; url: string }>;
+  additionalLinks: Array<{ label: string; url: string; icon?: string }>;
+  partifulCohostUrl?: string;
   status?: "draft" | "ready" | "published";
   onWebsite: boolean;
   instagramPublished: boolean;
@@ -171,6 +167,7 @@ async function serializePosterState(
     posterImageUrl,
     caption: design?.caption?.trim() || undefined,
     additionalLinks: design?.additionalLinks ?? [],
+    partifulCohostUrl: design?.partifulCohostUrl,
     status,
     onWebsite,
     instagramPublished: status === "published",
@@ -256,6 +253,7 @@ export const save = mutation({
     imageUrl: v.optional(v.string()),
     caption: v.optional(v.string()),
     additionalLinks: v.optional(v.array(designLinkInputValue)),
+    partifulCohostUrl: v.optional(v.string()),
   },
   returns: v.object({ ok: v.literal(true) }),
   handler: async (ctx, args) => {
@@ -267,7 +265,8 @@ export const save = mutation({
     const hasImage = args.imageUrl !== undefined;
     const hasCaption = args.caption !== undefined;
     const hasLinks = args.additionalLinks !== undefined;
-    if (!hasImage && !hasCaption && !hasLinks) {
+    const hasCohost = args.partifulCohostUrl !== undefined;
+    if (!hasImage && !hasCaption && !hasLinks && !hasCohost) {
       throw new Error("Provide a poster image, description, and/or links to save.");
     }
 
@@ -287,7 +286,19 @@ export const save = mutation({
       nextCaption = trimmed || undefined;
     }
 
-    const nextLinks = hasLinks ? normalizeLinks(args.additionalLinks) : undefined;
+    const nextLinks = hasLinks
+      ? normalizeMarketingLinks(args.additionalLinks, MAX_ADDITIONAL_LINKS)
+      : undefined;
+    let nextCohost = hasCohost
+      ? normalizeOptionalUrl(args.partifulCohostUrl, MAX_PARTIFUL_COHOST_URL_CHARS)
+      : undefined;
+    // Drop cohost when the public Partiful RSVP link is gone.
+    if (hasLinks && nextLinks && !linksIncludePartiful(nextLinks)) {
+      nextCohost = undefined;
+      // Ensure we clear a previously stored cohost even if the client omitted the field.
+    }
+    const shouldClearCohost =
+      hasCohost || (hasLinks && nextLinks !== undefined && !linksIncludePartiful(nextLinks));
 
     const now = Date.now();
     const existing = await loadDesignForEvent(ctx, event._id);
@@ -297,6 +308,7 @@ export const save = mutation({
         ...(hasImage ? { imageUrl: nextImageUrl } : {}),
         ...(hasCaption ? { caption: nextCaption } : {}),
         ...(hasLinks ? { additionalLinks: nextLinks } : {}),
+        ...(shouldClearCohost || hasCohost ? { partifulCohostUrl: nextCohost } : {}),
         status: nextStatus,
         updatedAt: now,
         ...(nextStatus === "ready" ? { lastError: undefined } : {}),
@@ -310,6 +322,7 @@ export const save = mutation({
         imageUrl: nextImageUrl,
         caption: nextCaption,
         additionalLinks: nextLinks,
+        partifulCohostUrl: nextCohost,
         status: "ready",
         createdByUserId: PUBLIC_CLIENT_ACTOR,
         createdAt: now,

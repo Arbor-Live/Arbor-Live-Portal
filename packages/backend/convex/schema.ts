@@ -125,6 +125,8 @@ const userDisciplineValue = v.union(v.literal("Sound"), v.literal("Lights"), v.l
 const marketingDesignLinkValue = v.object({
   label: v.string(),
   url: v.string(),
+  /** Optional icon id from the marketing link icon registry (e.g. partiful, instagram). */
+  icon: v.optional(v.string()),
 });
 
 const marketingDesignStatusValue = v.union(
@@ -1706,6 +1708,11 @@ export default defineSchema({
     imageUrl: v.optional(v.string()),
     caption: v.optional(v.string()),
     additionalLinks: v.optional(v.array(marketingDesignLinkValue)),
+    /**
+     * Optional Partiful cohost invite URL for Arbor staff. Never exposed on the
+     * public event page — hosts can submit it from the request/quote portal.
+     */
+    partifulCohostUrl: v.optional(v.string()),
     status: marketingDesignStatusValue,
     instagramPostId: v.optional(v.string()),
     publishedAt: v.optional(v.number()),

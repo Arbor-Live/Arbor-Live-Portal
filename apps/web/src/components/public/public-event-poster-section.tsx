@@ -6,7 +6,6 @@ import { ImageIcon } from "@phosphor-icons/react";
 import { api } from "@/lib/convex-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { PublicEventPoster } from "@/components/public/public-event-poster";
@@ -16,6 +15,7 @@ import {
   marketingLinksEqual,
   type MarketingAdditionalLink,
 } from "@/components/marketing/event-marketing-content-fields";
+import { MarketingLinksEditor } from "@/components/marketing/marketing-links-editor";
 import { formatStoredR2Asset } from "@/lib/r2-assets";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { notify } from "@/lib/notify";
@@ -25,7 +25,6 @@ import { fileFromClipboardEvent, normalizeClipboardFile } from "@/hooks/use-r2-f
 
 type Portal = "request" | "quote";
 
-const MAX_ADDITIONAL_LINKS = 10;
 const POSTER_ACCEPT = "image/jpeg,image/png,image/webp,image/gif,image/svg+xml";
 const POSTER_ACCEPT_TYPES = new Set(
   POSTER_ACCEPT.split(",").map((type) => type.trim()).filter(Boolean),
@@ -78,6 +77,7 @@ export function PublicEventPosterSection({
   const [additionalLinks, setAdditionalLinks] = useState<MarketingAdditionalLink[]>([
     emptyMarketingLink(),
   ]);
+  const [partifulCohostUrl, setPartifulCohostUrl] = useState("");
   const [detailsSourceKey, setDetailsSourceKey] = useState<string | null>(null);
 
   const sourceKey = poster?.eligible ? `${token}:${poster.eventId ?? ""}` : null;
@@ -87,6 +87,7 @@ export function PublicEventPosterSection({
     setAdditionalLinks(
       poster?.additionalLinks?.length ? poster.additionalLinks : [emptyMarketingLink()],
     );
+    setPartifulCohostUrl(poster?.partifulCohostUrl ?? "");
   }
 
   const uploadFile = useCallback(
@@ -142,6 +143,7 @@ export function PublicEventPosterSection({
         token,
         caption,
         additionalLinks: filterMarketingLinks(additionalLinks),
+        partifulCohostUrl,
       });
       notify.success("Event page details saved.");
     } catch (saveError) {
@@ -151,15 +153,15 @@ export function PublicEventPosterSection({
     } finally {
       setSavingDetails(false);
     }
-  }, [additionalLinks, caption, portal, savePoster, token]);
+  }, [additionalLinks, caption, partifulCohostUrl, portal, savePoster, token]);
 
   if (poster === undefined) return null;
   if (!poster.eligible || !poster.eventId) return null;
 
   const detailsDirty =
     caption.trim() !== (poster.caption ?? "").trim() ||
-    !marketingLinksEqual(additionalLinks, poster.additionalLinks ?? []);
-  const links = additionalLinks.length > 0 ? additionalLinks : [emptyMarketingLink()];
+    !marketingLinksEqual(additionalLinks, poster.additionalLinks ?? []) ||
+    partifulCohostUrl.trim() !== (poster.partifulCohostUrl ?? "").trim();
   const hasPoster = Boolean(poster.posterImageUrl);
   const uploadDisabled = busy || savingDetails;
 
@@ -319,42 +321,14 @@ export function PublicEventPosterSection({
               />
             </div>
 
-            <div className="space-y-2">
-              <Label>Links</Label>
-              {links.map((link, index) => (
-                <div key={`public-${portal}-link-${index}`} className="grid gap-2 sm:grid-cols-2">
-                  <Input
-                    value={link.label}
-                    placeholder="Label (e.g. Partiful RSVP)"
-                    disabled={savingDetails}
-                    onChange={(event) => {
-                      const next = [...links];
-                      next[index] = { ...next[index], label: event.target.value };
-                      setAdditionalLinks(next);
-                    }}
-                  />
-                  <Input
-                    value={link.url}
-                    placeholder="https://..."
-                    disabled={savingDetails}
-                    onChange={(event) => {
-                      const next = [...links];
-                      next[index] = { ...next[index], url: event.target.value };
-                      setAdditionalLinks(next);
-                    }}
-                  />
-                </div>
-              ))}
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={savingDetails || links.length >= MAX_ADDITIONAL_LINKS}
-                onClick={() => setAdditionalLinks([...links, emptyMarketingLink()])}
-              >
-                Add link
-              </Button>
-            </div>
+            <MarketingLinksEditor
+              idPrefix={`public-${portal}`}
+              links={additionalLinks}
+              onLinksChange={setAdditionalLinks}
+              partifulCohostUrl={partifulCohostUrl}
+              onPartifulCohostUrlChange={setPartifulCohostUrl}
+              disabled={savingDetails}
+            />
 
             <div className="flex flex-wrap items-center gap-2">
               <Button

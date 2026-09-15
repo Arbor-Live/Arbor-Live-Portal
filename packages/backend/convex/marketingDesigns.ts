@@ -18,6 +18,13 @@ import {
   isWithinDays,
 } from "./lib/publicEvents";
 import {
+  MAX_PARTIFUL_COHOST_URL_CHARS,
+  linksIncludePartiful,
+  marketingDesignLinkValue,
+  normalizeMarketingLinks,
+  normalizeOptionalUrl,
+} from "./lib/marketingLinks";
+import {
   canPublishMarketingDesignVisibility,
   eventHasMarketingTeamInterest,
   isMarketingPosterWorkVisibility,
@@ -27,10 +34,7 @@ import { resolveStoredR2AssetUrl } from "./inventoryR2";
 
 const MARKETING_POSTER_WINDOW_DAYS = 28;
 
-const designLinkInputValue = v.object({
-  label: v.string(),
-  url: v.string(),
-});
+const designLinkInputValue = marketingDesignLinkValue;
 
 const posterWorkViewValue = v.union(
   v.literal("unassigned"),
@@ -47,15 +51,6 @@ type AuthUserRecord = {
   email?: string;
   image?: string | null;
 };
-
-function normalizeLinks(links: Array<{ label: string; url: string }> | undefined) {
-  return (links ?? [])
-    .map((link) => ({
-      label: link.label.trim(),
-      url: link.url.trim(),
-    }))
-    .filter((link) => link.label && link.url);
-}
 
 function isMarketingPosterEligible(event: Doc<"events">, now: number): boolean {
   if (!eventHasMarketingTeamInterest(event.teamsInterested)) return false;
@@ -87,6 +82,7 @@ async function serializeDesign(ctx: QueryCtx, design: DesignDoc) {
     imageUrl: await resolveDesignImageUrl(design.imageUrl),
     caption: design.caption ?? "",
     additionalLinks: design.additionalLinks ?? [],
+    partifulCohostUrl: design.partifulCohostUrl ?? null,
     status: design.status,
     instagramPostId: design.instagramPostId ?? null,
     publishedAt: design.publishedAt ?? null,
@@ -233,6 +229,7 @@ export const listUpcomingPosterWork = query({
                 imageUrl: await resolveDesignImageUrl(design.imageUrl),
                 caption: design.caption ?? "",
                 additionalLinks: design.additionalLinks ?? [],
+                partifulCohostUrl: design.partifulCohostUrl ?? null,
                 publishedAt: design.publishedAt ?? null,
                 lastError: design.lastError ?? null,
                 instagramPostId: design.instagramPostId ?? null,
@@ -300,7 +297,8 @@ export const getForEvent = query({
         imageUrl: null as string | null,
         imagePreviewUrl: null as string | null,
         caption: "",
-        additionalLinks: [] as Array<{ label: string; url: string }>,
+        additionalLinks: [] as Array<{ label: string; url: string; icon?: string }>,
+        partifulCohostUrl: null as string | null,
         status: null as "draft" | "ready" | "published" | null,
         instagramPostId: null as string | null,
         publishedAt: null as number | null,
@@ -324,6 +322,7 @@ export const getForEvent = query({
       imagePreviewUrl: await resolveDesignImageUrl(design.imageUrl),
       caption: design.caption ?? "",
       additionalLinks: design.additionalLinks ?? [],
+      partifulCohostUrl: design.partifulCohostUrl ?? null,
       status: design.status,
       instagramPostId: design.instagramPostId ?? null,
       publishedAt: design.publishedAt ?? null,
@@ -356,6 +355,7 @@ export const upsertForEvent = mutation({
     imageUrl: v.optional(v.string()),
     caption: v.optional(v.string()),
     additionalLinks: v.optional(v.array(designLinkInputValue)),
+    partifulCohostUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const user = await requireAnyVerticalOrAdmin(ctx, ["Marketing", "Operations"]);
@@ -365,8 +365,9 @@ export const upsertForEvent = mutation({
     const hasImage = args.imageUrl !== undefined;
     const hasCaption = args.caption !== undefined;
     const hasLinks = args.additionalLinks !== undefined;
+    const hasCohost = args.partifulCohostUrl !== undefined;
     const hasAssignee = args.assigneeUserId !== undefined;
-    if (!hasImage && !hasCaption && !hasLinks && !hasAssignee) {
+    if (!hasImage && !hasCaption && !hasLinks && !hasCohost && !hasAssignee) {
       throw new Error("Nothing to save.");
     }
 
@@ -376,7 +377,15 @@ export const upsertForEvent = mutation({
     }
 
     const nextCaption = hasCaption ? args.caption!.trim() || undefined : undefined;
-    const nextLinks = hasLinks ? normalizeLinks(args.additionalLinks) : undefined;
+    const nextLinks = hasLinks ? normalizeMarketingLinks(args.additionalLinks) : undefined;
+    let nextCohost = hasCohost
+      ? normalizeOptionalUrl(args.partifulCohostUrl, MAX_PARTIFUL_COHOST_URL_CHARS)
+      : undefined;
+    const shouldWriteCohost =
+      hasCohost || (hasLinks && nextLinks !== undefined && !linksIncludePartiful(nextLinks));
+    if (hasLinks && nextLinks && !linksIncludePartiful(nextLinks)) {
+      nextCohost = undefined;
+    }
     const nextAssignee = hasAssignee ? args.assigneeUserId?.trim() || undefined : undefined;
 
     const now = Date.now();
@@ -387,13 +396,19 @@ export const upsertForEvent = mutation({
         .take(1)
     )[0];
 
-    if (existing?.status === "published" && (hasImage || hasCaption || hasLinks)) {
+    const contentPatch = {
+      ...(hasImage ? { imageUrl: nextImageUrl } : {}),
+      ...(hasCaption ? { caption: nextCaption } : {}),
+      ...(hasLinks ? { additionalLinks: nextLinks } : {}),
+      ...(shouldWriteCohost ? { partifulCohostUrl: nextCohost } : {}),
+      ...(hasAssignee ? { assigneeUserId: nextAssignee } : {}),
+    };
+    const contentChanged = hasImage || hasCaption || hasLinks || shouldWriteCohost;
+
+    if (existing?.status === "published" && contentChanged) {
       // Website content can still change after Instagram publish; keep published.
       await ctx.db.patch(existing._id, {
-        ...(hasImage ? { imageUrl: nextImageUrl } : {}),
-        ...(hasCaption ? { caption: nextCaption } : {}),
-        ...(hasLinks ? { additionalLinks: nextLinks } : {}),
-        ...(hasAssignee ? { assigneeUserId: nextAssignee } : {}),
+        ...contentPatch,
         updatedAt: now,
       });
       if (hasImage) {
@@ -406,10 +421,7 @@ export const upsertForEvent = mutation({
     if (existing) {
       const nextStatus = existing.status === "published" ? "published" : "ready";
       await ctx.db.patch(existing._id, {
-        ...(hasImage ? { imageUrl: nextImageUrl } : {}),
-        ...(hasCaption ? { caption: nextCaption } : {}),
-        ...(hasLinks ? { additionalLinks: nextLinks } : {}),
-        ...(hasAssignee ? { assigneeUserId: nextAssignee } : {}),
+        ...contentPatch,
         status: nextStatus,
         updatedAt: now,
         ...(nextStatus === "ready" ? { lastError: undefined } : {}),
@@ -427,6 +439,7 @@ export const upsertForEvent = mutation({
       imageUrl: nextImageUrl,
       caption: nextCaption,
       additionalLinks: nextLinks,
+      partifulCohostUrl: nextCohost,
       status: "ready",
       createdByUserId: getUserId(user),
       createdAt: now,
@@ -444,6 +457,7 @@ export const create = mutation({
     imageUrl: v.string(),
     caption: v.optional(v.string()),
     additionalLinks: v.optional(v.array(designLinkInputValue)),
+    partifulCohostUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const user = await requireVerticalOrAdmin(ctx, "Marketing");
@@ -452,6 +466,10 @@ export const create = mutation({
     const now = Date.now();
     const imageUrl = normalizeOptionalAssetReference(args.imageUrl);
     if (!imageUrl) throw new Error("Image is required.");
+    const nextCohost =
+      args.partifulCohostUrl === undefined
+        ? undefined
+        : normalizeOptionalUrl(args.partifulCohostUrl, MAX_PARTIFUL_COHOST_URL_CHARS);
 
     const existing = await ctx.db
       .query("eventMarketingDesigns")
@@ -463,7 +481,8 @@ export const create = mutation({
         assigneeUserId: args.assigneeUserId ?? existing[0].assigneeUserId,
         imageUrl: nextImageUrl,
         caption: args.caption?.trim() || undefined,
-        additionalLinks: normalizeLinks(args.additionalLinks),
+        additionalLinks: normalizeMarketingLinks(args.additionalLinks),
+        ...(args.partifulCohostUrl !== undefined ? { partifulCohostUrl: nextCohost } : {}),
         updatedAt: now,
       });
       await releaseReplacedR2Reference(ctx, existing[0].imageUrl, nextImageUrl);
@@ -475,7 +494,8 @@ export const create = mutation({
       assigneeUserId: args.assigneeUserId,
       imageUrl,
       caption: args.caption?.trim() || undefined,
-      additionalLinks: normalizeLinks(args.additionalLinks),
+      additionalLinks: normalizeMarketingLinks(args.additionalLinks),
+      partifulCohostUrl: nextCohost,
       status: "draft",
       createdByUserId: getUserId(user),
       createdAt: now,
@@ -510,7 +530,7 @@ export const update = mutation({
       additionalLinks:
         args.additionalLinks === undefined
           ? existing.additionalLinks
-          : normalizeLinks(args.additionalLinks),
+          : normalizeMarketingLinks(args.additionalLinks),
       updatedAt: Date.now(),
     });
     if (args.imageUrl !== undefined) {

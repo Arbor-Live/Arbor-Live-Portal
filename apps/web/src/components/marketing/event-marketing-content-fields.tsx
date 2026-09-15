@@ -2,13 +2,21 @@
 
 import { useRef } from "react";
 import { EventPosterUploadField, MarketingPostHeroUploadField } from "@/components/files/file-upload-field";
+import {
+  MarketingLinksEditor,
+  PartifulCohostAdminLink,
+} from "@/components/marketing/marketing-links-editor";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MarketingLinkIcon } from "@/lib/marketing-link-icons";
 import { cn } from "@/lib/utils";
 import { fileFromClipboardEvent } from "@/hooks/use-r2-file-upload";
 
-export type MarketingAdditionalLink = { label: string; url: string };
+export type MarketingAdditionalLink = {
+  label: string;
+  url: string;
+  icon?: string;
+};
 
 export function emptyMarketingLink(): MarketingAdditionalLink {
   return { label: "", url: "" };
@@ -20,18 +28,45 @@ export function filterMarketingLinks(links: MarketingAdditionalLink[]) {
 
 export function marketingLinksEqual(a: MarketingAdditionalLink[], b: MarketingAdditionalLink[]) {
   const left = filterMarketingLinks(
-    a.map((link) => ({ label: link.label.trim(), url: link.url.trim() })),
+    a.map((link) => ({
+      label: link.label.trim(),
+      url: link.url.trim(),
+      icon: link.icon?.trim() || undefined,
+    })),
   );
   const right = filterMarketingLinks(
-    b.map((link) => ({ label: link.label.trim(), url: link.url.trim() })),
+    b.map((link) => ({
+      label: link.label.trim(),
+      url: link.url.trim(),
+      icon: link.icon?.trim() || undefined,
+    })),
   );
   if (left.length !== right.length) return false;
   return left.every(
-    (link, index) => link.label === right[index]?.label && link.url === right[index]?.url,
+    (link, index) =>
+      link.label === right[index]?.label &&
+      link.url === right[index]?.url &&
+      (link.icon ?? "") === (right[index]?.icon ?? ""),
   );
 }
 
-const MAX_ADDITIONAL_LINKS = 10;
+export function isPartifulUrl(url: string): boolean {
+  const trimmed = url.trim();
+  if (!trimmed) return false;
+  try {
+    const withProtocol = /^[a-z][a-z0-9+.-]*:/i.test(trimmed)
+      ? trimmed
+      : `https://${trimmed}`;
+    const host = new URL(withProtocol).hostname.toLowerCase();
+    return host === "partiful.com" || host.endsWith(".partiful.com");
+  } catch {
+    return /partiful\.com/i.test(trimmed);
+  }
+}
+
+export function linksIncludePartiful(links: Array<{ url: string }> | undefined) {
+  return (links ?? []).some((link) => isPartifulUrl(link.url));
+}
 
 const textareaClassName =
   "flex min-h-[96px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
@@ -54,6 +89,8 @@ export function EventMarketingContentFields({
   onCaptionChange,
   additionalLinks,
   onAdditionalLinksChange,
+  partifulCohostUrl,
+  onPartifulCohostUrlChange,
   posterUpload,
   disabled = false,
   readOnly = false,
@@ -70,6 +107,8 @@ export function EventMarketingContentFields({
   onCaptionChange: (value: string) => void;
   additionalLinks: MarketingAdditionalLink[];
   onAdditionalLinksChange: (links: MarketingAdditionalLink[]) => void;
+  partifulCohostUrl?: string;
+  onPartifulCohostUrlChange?: (value: string) => void;
   posterUpload: PosterUploadProps;
   disabled?: boolean;
   readOnly?: boolean;
@@ -103,7 +142,8 @@ export function EventMarketingContentFields({
             <Label>Additional links</Label>
             <ul className="space-y-1 text-sm">
               {filterMarketingLinks(links).map((link) => (
-                <li key={`${link.label}:${link.url}`}>
+                <li key={`${link.label}:${link.url}`} className="flex items-center gap-2">
+                  <MarketingLinkIcon id={link.icon} className="size-4 shrink-0" />
                   <a href={link.url} target="_blank" rel="noreferrer" className="underline">
                     {link.label}
                   </a>
@@ -112,6 +152,7 @@ export function EventMarketingContentFields({
             </ul>
           </div>
         ) : null}
+        <PartifulCohostAdminLink url={partifulCohostUrl} />
       </div>
     );
   }
@@ -197,42 +238,17 @@ export function EventMarketingContentFields({
         />
       </div>
 
-      <div className="space-y-2">
-        <Label>Additional links</Label>
-        {links.map((link, index) => (
-          <div key={`${idPrefix}-link-${index}`} className="grid gap-2 sm:grid-cols-2">
-            <Input
-              value={link.label}
-              placeholder="Label (e.g. Partiful RSVP)"
-              disabled={disabled}
-              onChange={(event) => {
-                const next = [...links];
-                next[index] = { ...next[index], label: event.target.value };
-                onAdditionalLinksChange(next);
-              }}
-            />
-            <Input
-              value={link.url}
-              placeholder="https://..."
-              disabled={disabled}
-              onChange={(event) => {
-                const next = [...links];
-                next[index] = { ...next[index], url: event.target.value };
-                onAdditionalLinksChange(next);
-              }}
-            />
-          </div>
-        ))}
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={disabled || links.length >= MAX_ADDITIONAL_LINKS}
-          onClick={() => onAdditionalLinksChange([...links, emptyMarketingLink()])}
-        >
-          Add link
-        </Button>
-      </div>
+      <MarketingLinksEditor
+        idPrefix={idPrefix}
+        links={additionalLinks}
+        onLinksChange={onAdditionalLinksChange}
+        partifulCohostUrl={partifulCohostUrl}
+        onPartifulCohostUrlChange={onPartifulCohostUrlChange}
+        showCohost={Boolean(onPartifulCohostUrlChange)}
+        disabled={disabled}
+        label="Additional links"
+      />
+      {!onPartifulCohostUrlChange ? <PartifulCohostAdminLink url={partifulCohostUrl} /> : null}
     </div>
   );
 }
