@@ -125,7 +125,7 @@ const userDisciplineValue = v.union(v.literal("Sound"), v.literal("Lights"), v.l
 const marketingDesignLinkValue = v.object({
   label: v.string(),
   url: v.string(),
-  /** Optional icon id from the marketing link icon registry (e.g. partiful, instagram). */
+  /** Optional icon id: custom `partiful` or a Phosphor name (e.g. InstagramLogo). */
   icon: v.optional(v.string()),
 });
 

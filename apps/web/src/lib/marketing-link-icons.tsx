@@ -38,50 +38,6 @@ function PartifulGlyph({
   );
 }
 
-/** Older kebab-case ids → Phosphor / custom ids. */
-const LEGACY_ICON_ALIASES: Record<string, string> = {
-  partiful: "partiful",
-  instagram: "InstagramLogo",
-  link: "LinkSimple",
-  ticket: "Ticket",
-  calendar: "CalendarBlank",
-  "map-pin": "MapPin",
-  music: "MusicNotes",
-  globe: "Globe",
-  youtube: "YoutubeLogo",
-  tiktok: "TiktokLogo",
-  spotify: "SpotifyLogo",
-  soundcloud: "SoundcloudLogo",
-  "apple-music": "AppleLogo",
-  "apple-podcasts": "ApplePodcastsLogo",
-  discord: "DiscordLogo",
-  x: "XLogo",
-  threads: "ThreadsLogo",
-  facebook: "FacebookLogo",
-  linkedin: "LinkedinLogo",
-  whatsapp: "WhatsappLogo",
-  telegram: "TelegramLogo",
-  snapchat: "SnapchatLogo",
-  twitch: "TwitchLogo",
-  pinterest: "PinterestLogo",
-  reddit: "RedditLogo",
-  slack: "SlackLogo",
-  linktree: "LinktreeLogo",
-  patreon: "PatreonLogo",
-  email: "EnvelopeSimple",
-  phone: "Phone",
-  mic: "Microphone",
-  camera: "Camera",
-  house: "House",
-  heart: "Heart",
-  star: "Star",
-  shop: "ShoppingBag",
-  store: "Storefront",
-  tree: "Tree",
-  news: "Newspaper",
-  article: "Article",
-};
-
 /** Featured / popular row in the picker (shown before search). */
 export const FEATURED_MARKETING_LINK_ICONS: MarketingLinkIconDef[] = [
   { id: "partiful", label: "Partiful", keywords: "partiful party rsvp invite", featured: true },
@@ -102,13 +58,12 @@ const iconComponentCache = new Map<string, IconComponent>();
 iconComponentCache.set("partiful", PartifulGlyph);
 iconComponentCache.set("LinkSimple", LinkSimpleIcon);
 
+/** Accepts custom `partiful` or a Phosphor icon name (e.g. InstagramLogo). */
 export function normalizeMarketingLinkIconId(value: string | undefined | null): string | undefined {
   const raw = value?.trim();
   if (!raw) return undefined;
   if (raw === "partiful") return "partiful";
-  const aliased = LEGACY_ICON_ALIASES[raw] ?? raw;
-  if (aliased === "partiful") return "partiful";
-  if (isPhosphorIconName(aliased)) return aliased;
+  if (isPhosphorIconName(raw)) return raw;
   return undefined;
 }
 
