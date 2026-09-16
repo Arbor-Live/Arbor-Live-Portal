@@ -242,7 +242,10 @@ export const listPublicArtists = query({
         genres: profile.genres?.filter(Boolean) ?? [],
         bioExcerpt: bioExcerpt(profile.bio ?? profile.oneLiner),
         heroImageUrl: await resolvePublicHeroImageUrl(profile.publicHeroImageUrl),
+        websiteUrl: profile.publicWebsiteUrl?.trim() || undefined,
         instagramUrl: profile.publicInstagramUrl?.trim() || undefined,
+        youtubeUrl: profile.publicYoutubeUrl?.trim() || undefined,
+        spotifyUrl: profile.publicSpotifyUrl?.trim() || undefined,
       })),
     );
     return rows.sort((a, b) => a.displayName.localeCompare(b.displayName));

@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Reveal, Stagger, StaggerItem } from "@/components/landing/landing-motion";
 import { PublicArtistPoster } from "@/components/public/public-artist-poster";
+import { MarketingLinkIcon } from "@/lib/marketing-link-icons";
 
 function ArtistCardSkeleton() {
   return (
@@ -55,11 +56,25 @@ export function PublicArtistsGrid() {
 
         {artists && artists.length > 0 ? (
           <Stagger className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {artists.map((artist) => (
-              <StaggerItem key={artist.slug}>
-                <Reveal>
-                  <Link href={`/artists/${artist.slug}`} className="group block h-full">
-                    <Card className="h-full gap-0 overflow-hidden border border-border/50 bg-background/70 py-0 shadow-[0_8px_24px_rgba(0,0,0,0.06)] backdrop-blur-xl ring-0 transition-[border-color,box-shadow] group-hover:border-primary/40 group-hover:shadow-[0_12px_28px_rgba(0,0,0,0.08)]">
+            {artists.map((artist) => {
+              const socialLinks = [
+                artist.websiteUrl
+                  ? { label: "Website", url: artist.websiteUrl, icon: "Globe" }
+                  : null,
+                artist.instagramUrl
+                  ? { label: "Instagram", url: artist.instagramUrl, icon: "InstagramLogo" }
+                  : null,
+                artist.youtubeUrl
+                  ? { label: "YouTube", url: artist.youtubeUrl, icon: "YoutubeLogo" }
+                  : null,
+                artist.spotifyUrl
+                  ? { label: "Spotify", url: artist.spotifyUrl, icon: "SpotifyLogo" }
+                  : null,
+              ].filter((link): link is { label: string; url: string; icon: string } => link !== null);
+              return (
+                <StaggerItem key={artist.slug}>
+                  <Reveal>
+                    <Card className="relative h-full gap-0 overflow-hidden border border-border/50 bg-background/70 py-0 shadow-[0_8px_24px_rgba(0,0,0,0.06)] backdrop-blur-xl ring-0 transition-[border-color,box-shadow] hover:border-primary/40 hover:shadow-[0_12px_28px_rgba(0,0,0,0.08)]">
                       <PublicArtistPoster
                         imageUrl={artist.heroImageUrl}
                         seed={artist.slug}
@@ -84,12 +99,33 @@ export function PublicArtistsGrid() {
                             {artist.genres.join(" · ")}
                           </p>
                         ) : null}
+                        {socialLinks.length > 0 ? (
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-1">
+                            {socialLinks.map((link) => (
+                              <a
+                                key={`${artist.slug}-${link.url}`}
+                                href={link.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="relative z-10 inline-flex items-center gap-1 text-xs font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                              >
+                                <MarketingLinkIcon id={link.icon} className="size-3.5 shrink-0" />
+                                {link.label}
+                              </a>
+                            ))}
+                          </div>
+                        ) : null}
                       </CardContent>
+                      <Link
+                        href={`/artists/${artist.slug}`}
+                        aria-label={`View ${artist.displayName}`}
+                        className="absolute inset-0 z-0 rounded-none"
+                      />
                     </Card>
-                  </Link>
-                </Reveal>
-              </StaggerItem>
-            ))}
+                  </Reveal>
+                </StaggerItem>
+              );
+            })}
           </Stagger>
         ) : null}
       </div>
