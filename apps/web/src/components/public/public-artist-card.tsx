@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/ssr";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { OptimizedRemoteImage } from "@/components/media/optimized-remote-image";
 import { cn } from "@/lib/utils";
 
@@ -21,6 +21,16 @@ const ROLE_LABELS: Record<PublicEventArtist["role"], string> = {
   other: "Performer",
 };
 
+function initials(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]!.toUpperCase())
+    .join("");
+}
+
+/** Compact artist row, sized like a notification card. */
 export function PublicArtistCard({
   artist,
   className,
@@ -29,62 +39,65 @@ export function PublicArtistCard({
   className?: string;
 }) {
   return (
-    <Card className={cn("overflow-hidden", className)}>
-      {artist.imageUrl ? (
-        <div className="relative aspect-[4/3] w-full overflow-hidden">
-          <OptimizedRemoteImage
-            src={artist.imageUrl}
-            alt=""
-            fill
-            sizes="(max-width: 768px) 100vw, 320px"
-            className="object-cover"
-          />
+    <Card className={cn("px-4 py-3", className)}>
+      <div className="flex items-start gap-3">
+        <div className="size-12 shrink-0 overflow-hidden bg-muted">
+          {artist.imageUrl ? (
+            <OptimizedRemoteImage
+              src={artist.imageUrl}
+              alt=""
+              width={96}
+              height={96}
+              className="size-full object-cover"
+            />
+          ) : (
+            <span className="flex size-full items-center justify-center font-heading text-sm font-medium text-muted-foreground">
+              {initials(artist.name)}
+            </span>
+          )}
         </div>
-      ) : null}
-      <CardContent className="flex flex-1 flex-col gap-2 pt-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="font-heading text-sm font-medium">
-            {artist.slug ? (
-              <Link href={`/artists/${artist.slug}`} className="hover:underline">
-                {artist.name}
-              </Link>
-            ) : (
-              artist.name
-            )}
-          </span>
-          <span className="border border-border px-2 py-0.5 text-[11px] uppercase tracking-wide text-muted-foreground">
-            {ROLE_LABELS[artist.role]}
-          </span>
+        <div className="min-w-0 flex-1 space-y-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-heading text-sm font-medium">
+              {artist.slug ? (
+                <Link href={`/artists/${artist.slug}`} className="hover:underline">
+                  {artist.name}
+                </Link>
+              ) : (
+                artist.name
+              )}
+            </span>
+            <span className="border border-border px-2 py-0.5 text-[11px] uppercase tracking-wide text-muted-foreground">
+              {ROLE_LABELS[artist.role]}
+            </span>
+          </div>
+          {artist.genres.length ? (
+            <div className="flex flex-wrap gap-1.5">
+              {artist.genres.map((genre) => (
+                <span key={genre} className="bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                  {genre}
+                </span>
+              ))}
+            </div>
+          ) : null}
+          {artist.links.length ? (
+            <div className="flex flex-wrap gap-3 pt-0.5 text-xs">
+              {artist.links.map((link) => (
+                <a
+                  key={link.url}
+                  href={link.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-primary hover:underline"
+                >
+                  {link.label}
+                  <ArrowSquareOutIcon className="size-3" />
+                </a>
+              ))}
+            </div>
+          ) : null}
         </div>
-        {artist.genres.length ? (
-          <div className="flex flex-wrap gap-1.5">
-            {artist.genres.map((genre) => (
-              <span key={genre} className="bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                {genre}
-              </span>
-            ))}
-          </div>
-        ) : null}
-        {artist.oneLiner ? (
-          <p className="text-sm/relaxed text-muted-foreground">{artist.oneLiner}</p>
-        ) : null}
-        {artist.links.length ? (
-          <div className="mt-auto flex flex-wrap gap-3 pt-1 text-xs">
-            {artist.links.map((link) => (
-              <a
-                key={link.url}
-                href={link.url}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1 text-primary hover:underline"
-              >
-                {link.label}
-                <ArrowSquareOutIcon className="size-3" />
-              </a>
-            ))}
-          </div>
-        ) : null}
-      </CardContent>
+      </div>
     </Card>
   );
 }
@@ -102,7 +115,7 @@ export function PublicEventArtists({
   return (
     <div className={cn("space-y-3", className)}>
       <h2 className="font-heading text-sm font-medium text-muted-foreground">{title}</h2>
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="space-y-3">
         {artists.map((artist) => (
           <PublicArtistCard key={artist.organizationId} artist={artist} />
         ))}
