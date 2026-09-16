@@ -35,7 +35,7 @@ import {
 import { normalizeOptionalAssetReference } from "./lib/inventoryUpload";
 import { marketingDesignLinkValue, normalizeMarketingLinks } from "./lib/marketingLinks";
 import { buildArtistLinks } from "./lib/publicArtistProfile";
-import { artistOrganizationTypeValue } from "./lib/organizationType";
+import { artistOrganizationTypeValue, isArtistOrganizationType } from "./lib/organizationType";
 import {
   collectKeysFromOrganizationProfile,
   releaseReplacedR2Reference,
@@ -535,7 +535,7 @@ export const listBandOrganizationsAdmin = query({
         return { organization, organizationId, profile, inferredType };
       })
       .filter(
-        (row) => row.inferredType === "band" || row.inferredType === "dj",
+        (row) => isArtistOrganizationType(row.inferredType),
       )
       .filter((row) => args.includeArchived || row.profile?.status !== "archived");
 
@@ -634,7 +634,7 @@ export const listBandsForInvoiceLines = query({
       })
       .filter(
         (organization) =>
-          (organization.organizationType === "band" || organization.organizationType === "dj") &&
+          isArtistOrganizationType(organization.organizationType) &&
           organization.status !== "archived",
       )
       .map(({ organizationId, name, performerHourlyRateUsd, memberCount }) => ({
@@ -893,7 +893,7 @@ export const archiveBandOrganizationAdmin = mutation({
       .query("organizationProfiles")
       .withIndex("by_organizationId", (q) => q.eq("organizationId", args.organizationId))
       .unique();
-    if (!profile || (profile.organizationType !== "band" && profile.organizationType !== "dj")) {
+    if (!profile || !isArtistOrganizationType(profile.organizationType)) {
       throw new Error("Only artist/DJ organizations can be archived.");
     }
     if (profile.status === "archived") {
@@ -1013,7 +1013,18 @@ export const deleteArchivedBandOrganizationAdmin = mutation({
 });
 
 export const createOrganizationAdmin = mutation({
-  args: { name: v.string(), organizationType: v.optional(v.union(v.literal("arbor_internal"), v.literal("band"), v.literal("dj"))) },
+  args: {
+    name: v.string(),
+    organizationType: v.optional(
+      v.union(
+        v.literal("arbor_internal"),
+        v.literal("band"),
+        v.literal("dj"),
+        v.literal("singer_songwriter"),
+        v.literal("other"),
+      ),
+    ),
+  },
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
     const orgName = args.name.trim();
@@ -1038,7 +1049,7 @@ export const createOrganizationAdmin = mutation({
         updatedAt: now,
       });
     }
-    if (orgType === "band" || orgType === "dj") {
+    if (isArtistOrganizationType(orgType)) {
       await ensureOrganizationOnboarding(ctx, resolved.id);
     }
     return { ...resolved, organizationType: orgType };
@@ -2686,7 +2697,7 @@ export const backfillUserAdminDefaults = mutation({
         .withIndex("by_organizationId", (q) => q.eq("organizationId", orgId))
         .unique();
       if (existing) {
-        if (existing.organizationType !== "band" && existing.organizationType !== "dj") {
+        if (!isArtistOrganizationType(existing.organizationType)) {
           await ctx.db.patch(existing._id, { organizationType: "band", updatedAt: now });
         }
       } else {

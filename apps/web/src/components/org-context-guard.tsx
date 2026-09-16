@@ -2,6 +2,7 @@
 
 import { useSessionShell, useSessionViewer } from "@/components/session-shell-provider";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { isArtistOrganizationType } from "@/lib/artist-types";
 
 /**
  * Blocks non-admin members of Arbor Live.
@@ -85,7 +86,7 @@ export function BandOnlyGuard({ children }: { children: React.ReactNode }) {
       </Card>
     );
   }
-  if (activeOrg.organizationType !== "band" && activeOrg.organizationType !== "dj") {
+  if (!isArtistOrganizationType(activeOrg.organizationType)) {
     return (
       <Card>
         <CardHeader>
@@ -124,7 +125,7 @@ export function BandOrAdminGuard({ children }: { children: React.ReactNode }) {
       </Card>
     );
   }
-  if (activeOrg.organizationType === "band" || activeOrg.organizationType === "dj") {
+  if (isArtistOrganizationType(activeOrg.organizationType)) {
     return <>{children}</>;
   }
 

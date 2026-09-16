@@ -10,6 +10,7 @@ import {
 } from "react";
 import { useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
+import { isArtistOrganizationType } from "@/lib/artist-types";
 import { useSessionShell, useSessionViewer } from "@/components/session-shell-provider";
 import { ArtistSelect, artistSelectOptions } from "@/components/bands/artist-select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -67,8 +68,7 @@ export function AdminBandSelectionProvider({ children }: { children: ReactNode }
   const shell = useSessionShell();
   const viewer = useSessionViewer();
   const activeOrg = shell?.activeOrganization;
-  const isBandContext =
-    activeOrg?.organizationType === "band" || activeOrg?.organizationType === "dj";
+  const isBandContext = isArtistOrganizationType(activeOrg?.organizationType);
   const isAdminManaging = Boolean(viewer?.isAdmin && !isBandContext);
   const bands = useQuery(
     api.users.listBandOrganizationsAdmin,

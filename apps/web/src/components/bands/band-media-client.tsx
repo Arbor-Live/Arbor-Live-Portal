@@ -19,6 +19,7 @@ import { BandOnlyGuard } from "@/components/org-context-guard";
 import { useSessionShell } from "@/components/session-shell-provider";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { formatDate } from "@/lib/format";
+import { isArtistOrganizationType } from "@/lib/artist-types";
 
 function formatEventLabel(title: string, startAt: number) {
   return `${title} — ${formatDate(startAt)}`;
@@ -35,7 +36,7 @@ export function BandMediaClient() {
   const [error, setError] = useState<string | null>(null);
 
   const ensureAlbumKey =
-    activeOrg?.organizationType === "band"
+    activeOrg && isArtistOrganizationType(activeOrg.organizationType)
       ? selectedEventId
         ? `event:${selectedEventId}`
         : `band:${activeOrg.organizationId}`
@@ -44,7 +45,7 @@ export function BandMediaClient() {
 
   const media = useQuery(
     api.immich.listBandMedia,
-    activeOrg?.organizationType === "band"
+    isArtistOrganizationType(activeOrg?.organizationType)
       ? selectedEventId
         ? { eventId: selectedEventId as Id<"events"> }
         : {}

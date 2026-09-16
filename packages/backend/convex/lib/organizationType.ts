@@ -12,3 +12,10 @@ export const artistOrganizationTypeValue = v.union(
 );
 
 export type ArtistOrganizationType = "band" | "dj" | "singer_songwriter" | "other";
+
+/** True for any artist org type (excludes arbor_internal / unset). */
+export function isArtistOrganizationType(type: string | undefined | null): boolean {
+  return (
+    type === "band" || type === "dj" || type === "singer_songwriter" || type === "other"
+  );
+}
