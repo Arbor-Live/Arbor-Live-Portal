@@ -27,6 +27,7 @@ import { PublicInvoicePdfDownload } from "@/components/public/public-invoice-pdf
 import { PublicPostEventSection } from "@/components/public/public-post-event-section";
 import { PublicStaffDashboardLinks } from "@/components/public/public-staff-dashboard-links";
 import { PublicEventPosterSection } from "@/components/public/public-event-poster-section";
+import { PublicEventArtists } from "@/components/public/public-artist-card";
 import { formatDateTime } from "@/lib/format";
 import { ARBOR_CONTACT_EMAIL } from "@/lib/landing-content";
 import type {
@@ -412,6 +413,10 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
               token={token}
               dayIndex={dayIndex}
               hideDayTabs
+            />
+            <PublicEventArtists
+              artists={selectedEvent.artists}
+              tbdSlots={quoteData?.tbdArtistSlots ?? 0}
             />
             <PublicEventContacts
               manager={selectedEvent.contacts.manager}

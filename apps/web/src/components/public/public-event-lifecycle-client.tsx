@@ -26,6 +26,7 @@ import { PublicInvoicePdfDownload } from "@/components/public/public-invoice-pdf
 import { PublicPostEventSection } from "@/components/public/public-post-event-section";
 import { PublicStaffDashboardLinks } from "@/components/public/public-staff-dashboard-links";
 import { PublicEventPosterSection } from "@/components/public/public-event-poster-section";
+import { PublicEventArtists } from "@/components/public/public-artist-card";
 import type { PublicQuoteApprovalFormValues } from "@/lib/validations/crew-availability";
 import type { PublicPaymentContactsFormValues } from "@/lib/validations/crew-availability";
 
@@ -247,6 +248,10 @@ export function PublicEventLifecycleClient({ token }: { token: string }) {
                 token={token}
                 dayIndex={dayIndex}
                 hideDayTabs
+              />
+              <PublicEventArtists
+                artists={selectedEvent.artists}
+                tbdSlots={data.tbdArtistSlots ?? 0}
               />
               <PublicEventContacts
                 manager={selectedEvent.contacts.manager}
