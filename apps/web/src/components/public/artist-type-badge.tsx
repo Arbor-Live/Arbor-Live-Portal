@@ -19,6 +19,17 @@ function normalize(value: string | undefined): ArtistType {
   return value && value in ARTIST_TYPE_ICONS ? (value as ArtistType) : "other";
 }
 
+export function ArtistTypeIcon({
+  artistType,
+  className,
+}: {
+  artistType: ArtistType;
+  className?: string;
+}) {
+  const Icon = ARTIST_TYPE_ICONS[artistType];
+  return <Icon className={className} aria-hidden />;
+}
+
 export function ArtistTypeBadge({
   artistType,
   showLabel = true,

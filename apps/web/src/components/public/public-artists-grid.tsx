@@ -9,7 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Reveal, Stagger, StaggerItem } from "@/components/landing/landing-motion";
 import { PublicArtistPoster } from "@/components/public/public-artist-poster";
-import { ArtistTypeBadge } from "@/components/public/artist-type-badge";
+import { ArtistTypeBadge, ArtistTypeIcon } from "@/components/public/artist-type-badge";
 import { MarketingLinkIcon } from "@/lib/marketing-link-icons";
 import { ARTIST_TYPES, ARTIST_TYPE_LABELS, type ArtistType } from "@/lib/artist-types";
 
@@ -52,6 +52,9 @@ export function PublicArtistsGrid() {
               aria-selected={artistType === filter.value}
               onClick={() => setArtistType(filter.value)}
             >
+              {filter.value !== "all" ? (
+                <ArtistTypeIcon artistType={filter.value} className="size-3.5" />
+              ) : null}
               {filter.label}
             </Button>
           ))}
