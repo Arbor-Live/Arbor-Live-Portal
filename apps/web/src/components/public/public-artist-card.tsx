@@ -10,7 +10,7 @@ export type PublicEventArtist = {
   name: string;
   role: "headliner" | "support" | "other";
   slug?: string;
-  artistType?: "band" | "dj" | "singer_songwriter" | "other";
+  organizationType?: "band" | "dj" | "singer_songwriter" | "other";
   genres: string[];
   oneLiner?: string;
   imageUrl?: string;
@@ -72,7 +72,7 @@ export function PublicArtistCard({
             <span className="border border-border px-2 py-0.5 text-[11px] uppercase tracking-wide text-muted-foreground">
               {ROLE_LABELS[artist.role]}
             </span>
-            <ArtistTypeBadge artistType={artist.artistType} />
+            <ArtistTypeBadge organizationType={artist.organizationType} />
           </div>
           {artist.genres.length ? (
             <div className="flex flex-wrap gap-1.5">

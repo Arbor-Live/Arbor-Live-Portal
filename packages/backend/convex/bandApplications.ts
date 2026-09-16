@@ -16,7 +16,7 @@ import { ensureOrganizationOnboarding } from "./onboarding";
 import { enforceRateLimit, HOUR_MS } from "./rateLimit";
 import { inviteEmailToBandOrg, isValidEmail } from "./lib/bandOrgInvite";
 import { marketingDesignLinkValue, normalizeMarketingLinks } from "./lib/marketingLinks";
-import { artistTypeValue } from "./lib/artistType";
+import { artistOrganizationTypeValue, isArtistOrganizationType } from "./lib/organizationType";
 import { resolveOrCreateOrganization } from "./users";
 
 const memberValue = v.object({
@@ -88,7 +88,7 @@ export const submitPublic = mutation({
     isSolo: v.boolean(),
     members: v.array(memberValue),
     artistLinks: v.optional(v.array(marketingDesignLinkValue)),
-    artistType: v.optional(artistTypeValue),
+    organizationType: v.optional(artistOrganizationTypeValue),
   },
   returns: v.object({ applicationId: v.id("bandApplications") }),
   handler: async (ctx, args) => {
@@ -148,7 +148,7 @@ export const submitPublic = mutation({
       isSolo: args.isSolo,
       members,
       artistLinks: args.artistLinks ? normalizeMarketingLinks(args.artistLinks) : undefined,
-      artistType: args.artistType,
+      organizationType: args.organizationType,
       submittedAt: now,
       createdAt: now,
       updatedAt: now,
@@ -216,7 +216,7 @@ export const listAdmin = query({
       isSolo: v.boolean(),
       members: v.array(memberValue),
       artistLinks: v.optional(v.array(marketingDesignLinkValue)),
-      artistType: v.optional(artistTypeValue),
+      organizationType: v.optional(artistOrganizationTypeValue),
       submittedAt: v.number(),
       reviewedAt: v.optional(v.number()),
       declineReason: v.optional(v.string()),
@@ -252,7 +252,11 @@ export const listAdmin = query({
         isSolo: row.isSolo,
         members: row.members,
         artistLinks: applicationLinks(row),
-        artistType: row.artistType,
+        organizationType:
+          row.organizationType ??
+          (isArtistOrganizationType(row.artistType)
+            ? (row.artistType as "band" | "dj" | "singer_songwriter" | "other")
+            : undefined),
         submittedAt: row.submittedAt,
         reviewedAt: row.reviewedAt,
         declineReason: row.declineReason,
@@ -304,7 +308,6 @@ export const approve = mutation({
 
     const hasArtistLinks = Boolean(application.artistLinks?.length);
     const profileFields = {
-      organizationType: "band" as const,
       displayName: application.bandDisplayName,
       bio: application.bio,
       oneLiner: application.oneLiner,
@@ -317,7 +320,11 @@ export const approve = mutation({
       demoURL: application.demoURL,
       publicHeroImageUrl: application.publicHeroImageUrl,
       genres: application.genres,
-      artistType: application.artistType,
+      organizationType:
+        application.organizationType ??
+        (isArtistOrganizationType(application.artistType)
+          ? (application.artistType as "band" | "dj" | "singer_songwriter" | "other")
+          : "band"),
       mainContactName: application.contactName,
       mainContactEmail: application.contactEmail,
       mainContactPhone: application.contactPhone,

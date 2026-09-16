@@ -97,7 +97,7 @@ type FormState = {
   bio: string;
   publicHeroImageUrl: string;
   artistLinks: Array<{ label: string; url: string; icon?: string }>;
-  artistType: string;
+  organizationType: string;
   demoURL: string;
   publicListing: boolean;
   publicSlug: string;
@@ -119,7 +119,7 @@ const EMPTY_FORM: FormState = {
   bio: "",
   publicHeroImageUrl: "",
   artistLinks: [],
-  artistType: "",
+  organizationType: "",
   demoURL: "",
   publicListing: false,
   publicSlug: "",
@@ -219,7 +219,7 @@ export function BandOnboardingWizard() {
       bio: profile.bio ?? "",
       publicHeroImageUrl: profile.publicHeroImageUrl ?? "",
       artistLinks: profile.artistLinks ?? [],
-      artistType: profile.artistType ?? "",
+      organizationType: profile.organizationType ?? "",
       demoURL: profile.demoURL ?? "",
       publicListing: profile.publicListing ?? false,
       publicSlug: profile.publicSlug ?? "",
@@ -351,8 +351,8 @@ export function BandOnboardingWizard() {
             }))
             .filter((link) => link.label && link.url),
           demoURL: trimOptional(form.demoURL),
-          artistType: form.artistType
-            ? (form.artistType as "band" | "dj" | "singer_songwriter" | "other")
+          organizationType: form.organizationType
+            ? (form.organizationType as "band" | "dj" | "singer_songwriter" | "other")
             : undefined,
           publicListing: form.publicListing,
           publicSlug: trimOptional(publicSlug),
@@ -775,8 +775,8 @@ export function BandOnboardingWizard() {
                   <div className="space-y-2">
                     <Label>Artist type</Label>
                     <Select
-                      value={form.artistType || undefined}
-                      onValueChange={(value) => patch({ artistType: value })}
+                      value={form.organizationType || undefined}
+                      onValueChange={(value) => patch({ organizationType: value })}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Select a type" />

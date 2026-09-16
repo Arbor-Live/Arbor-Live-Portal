@@ -7,6 +7,7 @@ import { useState, type ComponentProps } from "react"
 import { authClient } from "@/lib/auth-client"
 import { useMutation, useQuery } from "convex/react"
 import { api } from "@/lib/convex-api"
+import { isArtistOrganizationType } from "@/lib/artist-types"
 import { useSessionShell } from "@/components/session-shell-provider"
 import { useViewMode } from "@/components/view-mode-provider"
 import { getDefaultAdminSchedulingRange } from "@/lib/crew-availability"
@@ -239,9 +240,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
           rangeEnd: adminSchedulingRange.rangeEnd,
           includeArborInternal: activeOrganization?.organizationType === "arbor_internal",
           includeAdmin: effectiveIsAdmin,
-          includeBand:
-            activeOrganization?.organizationType === "band" ||
-            activeOrganization?.organizationType === "dj",
+          includeBand: isArtistOrganizationType(activeOrganization?.organizationType),
           includeUnconfirmedCrew,
         }
       : "skip",
@@ -258,9 +257,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
   const userName = account?.name ?? "Unknown user"
   const userEmail = account?.email ?? "No email"
   const orgName = activeOrganization?.name ?? "No active org"
-  const isBandContext =
-    activeOrganization?.organizationType === "band" ||
-    activeOrganization?.organizationType === "dj"
+  const isBandContext = isArtistOrganizationType(activeOrganization?.organizationType)
   const isCrewContext =
     activeOrganization?.organizationType === "arbor_internal" &&
     hasCrewAccess &&

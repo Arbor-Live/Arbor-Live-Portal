@@ -131,7 +131,7 @@ export function BandApplicationsAdminClient() {
               <div>
                 <dt className="font-medium text-foreground/80">Artist type</dt>
                 <dd className="mt-1">
-                  <ArtistTypeBadge artistType={app.artistType} />
+                  <ArtistTypeBadge organizationType={app.organizationType} />
                 </dd>
               </div>
               {app.genres?.length ? (

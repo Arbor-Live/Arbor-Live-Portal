@@ -494,20 +494,32 @@ export const backfillBandApplicationArtistLinks = migrations.define({
   },
 });
 
-/** Default unset artist types to "other". */
-export const backfillArtistType = migrations.define({
+/** Copy the deprecated `artistType` into `organizationType`. */
+export const migrateOrgArtistTypeToOrganizationType = migrations.define({
   table: "organizationProfiles",
   migrateOne: async (_ctx, profile) => {
-    if (profile.artistType) return;
-    return { artistType: "other" as const, updatedAt: Date.now() };
+    const legacy = profile.artistType;
+    if (!legacy || legacy === "band") return;
+    if (profile.organizationType && profile.organizationType !== "band") return;
+    if (legacy !== "dj" && legacy !== "singer_songwriter" && legacy !== "other") return;
+    return {
+      organizationType: legacy as "dj" | "singer_songwriter" | "other",
+      updatedAt: Date.now(),
+    };
   },
 });
 
-export const backfillBandApplicationArtistType = migrations.define({
+export const migrateBandApplicationArtistTypeToOrganizationType = migrations.define({
   table: "bandApplications",
   migrateOne: async (_ctx, application) => {
-    if (application.artistType) return;
-    return { artistType: "other" as const };
+    const legacy = application.artistType;
+    if (!legacy || application.organizationType) return;
+    if (legacy !== "band" && legacy !== "dj" && legacy !== "singer_songwriter" && legacy !== "other") {
+      return;
+    }
+    return {
+      organizationType: legacy as "band" | "dj" | "singer_songwriter" | "other",
+    };
   },
 });
 
@@ -533,8 +545,8 @@ const MIGRATION_SERIES = [
   internal.migrations.normalizeInvoiceCrewLineLabels,
   internal.migrations.backfillOrgArtistLinks,
   internal.migrations.backfillBandApplicationArtistLinks,
-  internal.migrations.backfillArtistType,
-  internal.migrations.backfillBandApplicationArtistType,
+  internal.migrations.migrateOrgArtistTypeToOrganizationType,
+  internal.migrations.migrateBandApplicationArtistTypeToOrganizationType,
 ] as const;
 
 export const runAll = migrations.runner([...MIGRATION_SERIES]);

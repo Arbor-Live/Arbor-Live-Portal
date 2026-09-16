@@ -12,7 +12,7 @@ export type BandApplicationFormValues = {
   bandDisplayName: string;
   oneLiner: string;
   bio: string;
-  artistType: string;
+  organizationType: string;
   artistLinks: Array<{ label: string; url: string; icon?: string }>;
   demoURL: string;
   publicHeroImageUrl: string;
@@ -51,7 +51,7 @@ export async function submitBandApplication(
       demoURL: raw.demoURL || undefined,
       publicHeroImageUrl: raw.publicHeroImageUrl || undefined,
       genres: genres.length ? genres : undefined,
-      artistType: (raw.artistType || undefined) as
+      organizationType: (raw.organizationType || undefined) as
         | "band"
         | "dj"
         | "singer_songwriter"

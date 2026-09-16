@@ -226,7 +226,7 @@ export const listPublicCrew = query({
 
 export const listPublicArtists = query({
   args: {
-    artistType: v.optional(
+    organizationType: v.optional(
       v.union(
         v.literal("band"),
         v.literal("dj"),
@@ -236,10 +236,16 @@ export const listPublicArtists = query({
     ),
   },
   handler: async (ctx, args) => {
-    const profiles = await ctx.db
-      .query("organizationProfiles")
-      .withIndex("by_organizationType", (q) => q.eq("organizationType", "band"))
-      .take(500);
+    const profiles = (
+      await Promise.all(
+        (["band", "dj", "singer_songwriter", "other"] as const).map((type) =>
+          ctx.db
+            .query("organizationProfiles")
+            .withIndex("by_organizationType", (q) => q.eq("organizationType", type))
+            .take(500),
+        ),
+      )
+    ).flat();
 
     const result = await ctx.runQuery(components.betterAuth.adapter.findMany, {
       model: "organization",
@@ -253,7 +259,7 @@ export const listPublicArtists = query({
         profile.publicListing === true &&
         profile.publicSlug?.trim() &&
         profile.status !== "archived" &&
-        (args.artistType === undefined || (profile.artistType ?? "other") === args.artistType),
+        (args.organizationType === undefined || profile.organizationType === args.organizationType),
     );
     const rows = await Promise.all(
       listed.map(async (profile) => ({
@@ -264,7 +270,7 @@ export const listPublicArtists = query({
           "Artist",
         oneLiner: profile.oneLiner?.trim() || undefined,
         genres: profile.genres?.filter(Boolean) ?? [],
-        artistType: profile.artistType ?? "other",
+        organizationType: profile.organizationType,
         bioExcerpt: bioExcerpt(profile.bio ?? profile.oneLiner),
         heroImageUrl: await resolvePublicHeroImageUrl(profile.publicHeroImageUrl),
         links: buildArtistLinks(profile),
@@ -286,7 +292,7 @@ export const getPublicArtistBySlug = query({
       .unique();
     if (
       !profile ||
-      profile.organizationType !== "band" ||
+      profile.organizationType === "arbor_internal" ||
       profile.publicListing !== true ||
       profile.status === "archived"
     ) {
@@ -303,7 +309,7 @@ export const getPublicArtistBySlug = query({
       displayName: displayName || orgResult?.name?.trim() || "Artist",
       oneLiner: profile.oneLiner?.trim() || undefined,
       genres: profile.genres?.filter(Boolean) ?? [],
-      artistType: profile.artistType ?? "other",
+      organizationType: profile.organizationType,
       bio: profile.bio?.trim() || undefined,
       demoURL: publicProfileUrl(profile.demoURL),
       heroImageUrl: await resolvePublicHeroImageUrl(profile.publicHeroImageUrl),

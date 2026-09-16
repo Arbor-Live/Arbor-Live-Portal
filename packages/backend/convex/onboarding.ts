@@ -28,6 +28,7 @@ import {
   type PayrollMethod,
 } from "./lib/crewCompensation";
 import { resolveParticipationFlags } from "./lib/userParticipation";
+import { isArtistOrganizationType } from "./lib/organizationType";
 import { assertUsernameAvailable, normalizeUsername } from "./lib/username";
 
 const onboardingStatusValue = v.union(
@@ -180,7 +181,7 @@ export async function resolveMyOnboardingStatus(
     }
   }
 
-  if (orgContext && (orgContext.organizationType === "band" || orgContext.organizationType === "dj")) {
+  if (orgContext && isArtistOrganizationType(orgContext.organizationType)) {
     const row = await ctx.db
       .query("organizationOnboarding")
       .withIndex("by_organizationId", (q) => q.eq("organizationId", orgContext.organizationId))
@@ -261,7 +262,7 @@ export async function ensureOrganizationOnboarding(
 async function resolveOrgType(
   ctx: QueryCtx | MutationCtx,
   organizationId: string,
-): Promise<"arbor_internal" | "band" | "dj"> {
+): Promise<"arbor_internal" | "band" | "dj" | "singer_songwriter" | "other"> {
   const profile = await ctx.db
     .query("organizationProfiles")
     .withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId))
@@ -871,7 +872,7 @@ export const getMyBandOnboarding = query({
   handler: async (ctx) => {
     await requireAuth(ctx);
     const orgContext = await getActiveOrganizationContextOrNull(ctx);
-    if (!orgContext || (orgContext.organizationType !== "band" && orgContext.organizationType !== "dj")) {
+    if (!orgContext || !isArtistOrganizationType(orgContext.organizationType)) {
       return null;
     }
     const row = await ctx.db
@@ -913,7 +914,7 @@ export const saveBandOnboardingStep = mutation({
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     const orgContext = await getActiveOrganizationContextOrNull(ctx);
-    if (!orgContext || (orgContext.organizationType !== "band" && orgContext.organizationType !== "dj")) {
+    if (!orgContext || !isArtistOrganizationType(orgContext.organizationType)) {
       throw new Error("Artist organization context required.");
     }
     await ensureOrganizationOnboarding(ctx, orgContext.organizationId);
@@ -951,7 +952,7 @@ export const completeBandOnboarding = mutation({
   handler: async (ctx) => {
     await requireAuth(ctx);
     const orgContext = await getActiveOrganizationContextOrNull(ctx);
-    if (!orgContext || (orgContext.organizationType !== "band" && orgContext.organizationType !== "dj")) {
+    if (!orgContext || !isArtistOrganizationType(orgContext.organizationType)) {
       throw new Error("Artist organization context required.");
     }
     const row = await ctx.db

@@ -1,6 +1,7 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import { riderContentFields, riderStatusValue } from "./lib/riderSchema";
+import { artistOrganizationTypeValue } from "./lib/organizationType";
 
 const publicBucketValue = v.union(
   v.literal("lighting"),
@@ -129,14 +130,6 @@ const marketingDesignLinkValue = v.object({
   icon: v.optional(v.string()),
 });
 
-/** Artist type for the public directory filter. */
-const artistTypeValue = v.union(
-  v.literal("band"),
-  v.literal("dj"),
-  v.literal("singer_songwriter"),
-  v.literal("other"),
-);
-
 const marketingDesignStatusValue = v.union(
   v.literal("draft"),
   v.literal("ready"),
@@ -150,7 +143,13 @@ const marketingPublishJobStatusValue = v.union(
   v.literal("failed"),
 );
 
-const organizationTypeValue = v.union(v.literal("arbor_internal"), v.literal("band"), v.literal("dj"));
+const organizationTypeValue = v.union(
+  v.literal("arbor_internal"),
+  v.literal("band"),
+  v.literal("dj"),
+  v.literal("singer_songwriter"),
+  v.literal("other"),
+);
 
 const marketingPostKindValue = v.union(v.literal("case_study"), v.literal("blog"));
 
@@ -995,7 +994,8 @@ export default defineSchema({
     numShowsRan: v.optional(v.number()),
     demoURL: v.optional(v.string()),
     genres: v.optional(v.array(v.string())),
-    artistType: v.optional(artistTypeValue),
+    /** @deprecated Migrated into `organizationType`; kept for the backfill, drop later. */
+    artistType: v.optional(v.string()),
     mainContactName: v.optional(v.string()),
     mainContactEmail: v.optional(v.string()),
     mainContactPhone: v.optional(v.string()),
@@ -1865,7 +1865,9 @@ export default defineSchema({
     artistLinks: v.optional(v.array(marketingDesignLinkValue)),
     publicHeroImageUrl: v.optional(v.string()),
     genres: v.optional(v.array(v.string())),
-    artistType: v.optional(artistTypeValue),
+    organizationType: v.optional(artistOrganizationTypeValue),
+    /** @deprecated Migrated into `organizationType`; kept for the backfill, drop later. */
+    artistType: v.optional(v.string()),
     isSolo: v.boolean(),
     members: v.array(
       v.object({

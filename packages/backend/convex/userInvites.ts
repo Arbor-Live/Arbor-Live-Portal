@@ -14,6 +14,7 @@ import {
   type UserVertical,
 } from "./lib/userVerticals";
 import { resolveParticipationFlags } from "./lib/userParticipation";
+import { isArtistOrganizationType } from "./lib/organizationType";
 import { ensureOnboardingForOrgMembership } from "./onboarding";
 import {
   applyPayrollMethodToProfile,
@@ -154,6 +155,8 @@ export const getInviteByToken = query({
         v.literal("arbor_internal"),
         v.literal("band"),
         v.literal("dj"),
+        v.literal("singer_songwriter"),
+        v.literal("other"),
       ),
       role: v.string(),
       hasAccount: v.boolean(),
@@ -172,7 +175,7 @@ export const getInviteByToken = query({
       .unique();
     const organizationType = orgProfile?.organizationType ?? "arbor_internal";
     const onboardingPath =
-      organizationType === "band" || organizationType === "dj"
+      isArtistOrganizationType(organizationType)
         ? "/onboarding/artist"
         : resolveParticipationFlags(resolved.pending).requiresOnboarding
           ? "/onboarding"
@@ -315,7 +318,7 @@ export const acceptInviteWithPassword = mutation({
     await markInvitationAccepted(ctx, pending.invitationId);
 
     const onboardingPath =
-      orgType === "band" || orgType === "dj"
+      isArtistOrganizationType(orgType)
         ? "/onboarding/artist"
         : resolveParticipationFlags(pending).requiresOnboarding
           ? "/onboarding"
