@@ -100,7 +100,7 @@ test.describe("booking request decline lifecycle", () => {
     const clientContext = await browser.newContext({ storageState: { cookies: [], origins: [] } });
     const clientPage = await clientContext.newPage();
     await clientPage.goto(seeded.trackPath);
-    await expect(clientPage.getByText(/This request was declined/)).toBeVisible({
+    await expect(clientPage.getByText(/This request was declined/).first()).toBeVisible({
       timeout: 25_000,
     });
     await clientContext.close();
