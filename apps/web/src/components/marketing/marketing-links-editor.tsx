@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { CaretDownIcon, CaretUpIcon, DotsSixVerticalIcon } from "@phosphor-icons/react";
+import { DotsSixVerticalIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { IconPicker } from "@/components/ui/icon-picker";
 import { Input } from "@/components/ui/input";
@@ -39,7 +39,6 @@ export function MarketingLinksEditor({
   onPartifulCohostUrlChange,
   disabled = false,
   showCohost = true,
-  hideArrows = false,
   label = "Links",
 }: {
   idPrefix: string;
@@ -50,8 +49,6 @@ export function MarketingLinksEditor({
   disabled?: boolean;
   /** Host portals only — admins see a read-only cohost surface separately. */
   showCohost?: boolean;
-  /** Hide the up/down reorder buttons (drag handle stays). */
-  hideArrows?: boolean;
   label?: string;
 }) {
   const rows = links.length > 0 ? links : [emptyMarketingLink()];
@@ -147,32 +144,6 @@ export function MarketingLinksEditor({
               >
                 <DotsSixVerticalIcon className="size-4" weight="bold" />
               </span>
-              {hideArrows ? null : (
-                <>
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="ghost"
-                    className="size-9"
-                    disabled={disabled || index === 0}
-                    aria-label={`Move link ${index + 1} up`}
-                    onClick={() => reorderLive(index, index - 1)}
-                  >
-                    <CaretUpIcon className="size-3.5" />
-                  </Button>
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="ghost"
-                    className="size-9"
-                    disabled={disabled || index === rows.length - 1}
-                    aria-label={`Move link ${index + 1} down`}
-                    onClick={() => reorderLive(index, index + 1)}
-                  >
-                    <CaretDownIcon className="size-3.5" />
-                  </Button>
-                </>
-              )}
             </div>
             <div className="flex flex-col gap-2 sm:contents">
               <div className="flex items-center gap-2 sm:min-w-0 sm:flex-1">

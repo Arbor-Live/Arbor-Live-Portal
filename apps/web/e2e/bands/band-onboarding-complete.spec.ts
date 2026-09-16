@@ -57,8 +57,10 @@ test.describe("band onboarding wizard", () => {
     await next(page);
 
     // Socials are all optional; leave the public listing off.
-    await expect(page.getByLabel("Instagram URL")).toBeVisible({ timeout: 20_000 });
-    await page.getByLabel("Instagram URL").fill("https://instagram.com/e2e-band");
+    const linkLabel = page.getByPlaceholder("Label (e.g. Partiful RSVP)").first();
+    await expect(linkLabel).toBeVisible({ timeout: 20_000 });
+    await linkLabel.fill("Instagram");
+    await page.getByPlaceholder("https://...").first().fill("https://instagram.com/e2e-band");
     await next(page);
 
     // Members — perform solo so no bandmate invites are sent.

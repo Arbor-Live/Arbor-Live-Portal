@@ -421,7 +421,6 @@ export function PublicEventPosterSection({
               partifulCohostUrl={partifulCohostUrl}
               onPartifulCohostUrlChange={setPartifulCohostUrl}
               disabled={savingDetails}
-              hideArrows
             />
 
             <div className="flex flex-wrap items-center gap-2">
