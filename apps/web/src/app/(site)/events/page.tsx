@@ -12,7 +12,7 @@ export default function EventsPage() {
     <PublicMarketingLayout>
       <PublicPageHero
         title="Upcoming events"
-        subtitle="Confirmed public events from Arbor Live — posters, details, and links."
+        subtitle="Check out what's in store soon at Arbor!"
       />
       <section className="bg-muted/35 pb-16 pt-10">
         <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
