@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { PublicPageHero } from "@/components/public/public-page-hero";
 import { PublicSiteChrome } from "@/components/public/public-site-chrome";
 import { PublicPortalPageSkeleton } from "@/components/public/public-skeletons";
@@ -107,6 +108,7 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
     if (hash === "feedback") return "after";
     return new URLSearchParams(window.location.search).get("tab") ?? "next";
   });
+  const [selectedDay, setSelectedDay] = useState(0);
 
   useEffect(() => {
     if (!quoteData || recordedQuoteView.current) return;
@@ -148,6 +150,9 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
   const isFinalized = isDeclined || isQuoteVoided;
   const quoteLocked = quoteData ? quoteData.invoice.clientApprovalStatus !== "pending" : false;
   const linkedEvent = quoteData?.event ?? null;
+  const events = quoteData?.events ?? [];
+  const dayIndex = Math.min(selectedDay, Math.max(0, events.length - 1));
+  const selectedEvent = events[dayIndex] ?? linkedEvent;
   const showPaymentContacts =
     quoteData?.invoice.clientApprovalStatus === "approved" && !quoteData.paymentProof?.paymentReceived;
 
@@ -365,24 +370,46 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
           </div>
         ) : null}
 
-        {resolvedTab === "event" && linkedEvent ? (
+        {resolvedTab === "event" && selectedEvent ? (
           <>
+            {events.length > 1 ? (
+              <div role="tablist" aria-label="Event day" className="flex flex-wrap gap-2">
+                {events.map((event, index) => (
+                  <Button
+                    key={event.id}
+                    type="button"
+                    role="tab"
+                    size="sm"
+                    variant={index === dayIndex ? "default" : "outline"}
+                    aria-selected={index === dayIndex}
+                    onClick={() => setSelectedDay(index)}
+                  >
+                    Day {index + 1}
+                  </Button>
+                ))}
+              </div>
+            ) : null}
             <PublicEventHeader
-              title={linkedEvent.title}
-              eventType={linkedEvent.eventType ?? undefined}
-              venueName={linkedEvent.venueName ?? undefined}
-              host={linkedEvent.host ?? undefined}
-              startAt={linkedEvent.startAt}
-              endAt={linkedEvent.endAt}
-              status={linkedEvent.status}
+              title={selectedEvent.title}
+              eventType={selectedEvent.eventType ?? undefined}
+              venueName={selectedEvent.venueName ?? undefined}
+              host={selectedEvent.host ?? undefined}
+              startAt={selectedEvent.startAt}
+              endAt={selectedEvent.endAt}
+              status={selectedEvent.status}
             />
-            <PublicEventPosterSection portal="request" token={token} />
+            <PublicEventPosterSection
+              portal="request"
+              token={token}
+              dayIndex={dayIndex}
+              hideDayTabs
+            />
             <PublicEventContacts
-              manager={linkedEvent.contacts.manager}
-              dayOfLead={linkedEvent.contacts.dayOfLead}
+              manager={selectedEvent.contacts.manager}
+              dayOfLead={selectedEvent.contacts.dayOfLead}
             />
-            <PublicEventTimetable blocks={linkedEvent.scheduleBlocks} />
-            <PublicEventCrew crew={linkedEvent.crewRoster} />
+            <PublicEventTimetable blocks={selectedEvent.scheduleBlocks} />
+            <PublicEventCrew crew={selectedEvent.crewRoster} />
           </>
         ) : null}
 

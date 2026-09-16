@@ -56,9 +56,15 @@ function imageFileFromDataTransfer(dataTransfer: DataTransfer): File | null {
 export function PublicEventPosterSection({
   portal,
   token,
+  dayIndex: controlledDayIndex,
+  hideDayTabs = false,
 }: {
   portal: Portal;
   token: string;
+  /** Controlled active day (e.g. from a parent day selector). */
+  dayIndex?: number;
+  /** Hide the section's own day tabs when the parent drives the day. */
+  hideDayTabs?: boolean;
 }) {
   const poster = useQuery(
     portal === "request"
@@ -87,7 +93,10 @@ export function PublicEventPosterSection({
   const [detailsSourceKey, setDetailsSourceKey] = useState<string | null>(null);
 
   const days = poster?.days ?? [];
-  const dayIndex = Math.min(activeDayIndex, Math.max(0, days.length - 1));
+  const dayIndex = Math.min(
+    controlledDayIndex ?? activeDayIndex,
+    Math.max(0, days.length - 1),
+  );
   const activeDay = days[dayIndex];
   const activeEventId = activeDay?.eventId;
 
@@ -211,7 +220,7 @@ export function PublicEventPosterSection({
         <CardTitle>Poster & description</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {days.length > 1 ? (
+        {!hideDayTabs && days.length > 1 ? (
           <div role="tablist" aria-label="Event day" className="flex flex-wrap gap-2">
             {days.map((day, index) => (
               <Button
