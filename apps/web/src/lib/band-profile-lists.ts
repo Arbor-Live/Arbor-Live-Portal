@@ -18,6 +18,7 @@ export function parseCommaList(input: string | undefined): string[] {
 export function bandListingFieldsFromProfile(profile: {
   oneLiner?: string;
   genres?: string[];
+  artistType?: "band" | "dj" | "singer_songwriter" | "other";
   demoURL?: string;
   bandMembers?: string[];
   mainContactName?: string;
@@ -27,6 +28,7 @@ export function bandListingFieldsFromProfile(profile: {
   return {
     oneLiner: profile.oneLiner ?? "",
     genres: formatCommaList(profile.genres),
+    artistType: profile.artistType ?? "",
     demoURL: profile.demoURL ?? "",
     bandMembers: formatCommaList(profile.bandMembers),
     mainContactName: profile.mainContactName ?? "",
@@ -38,6 +40,7 @@ export function bandListingFieldsFromProfile(profile: {
 export function bandListingFieldsToMutation(values: {
   oneLiner?: string;
   genres?: string;
+  artistType?: string;
   demoURL?: string;
   bandMembers?: string;
   mainContactName?: string;
@@ -47,6 +50,9 @@ export function bandListingFieldsToMutation(values: {
   return {
     oneLiner: trimOptional(values.oneLiner),
     genres: parseCommaList(values.genres),
+    artistType: values.artistType
+      ? (values.artistType as "band" | "dj" | "singer_songwriter" | "other")
+      : undefined,
     demoURL: trimOptional(values.demoURL),
     bandMembers: parseCommaList(values.bandMembers),
     mainContactName: trimOptional(values.mainContactName),

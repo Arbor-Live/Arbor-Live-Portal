@@ -11,6 +11,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MarketingLinksEditor } from "@/components/marketing/marketing-links-editor";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { ARTIST_TYPES, ARTIST_TYPE_LABELS } from "@/lib/artist-types";
 import { RequestWizardShell } from "@/components/request/request-wizard-shell";
 import {
   Questionnaire,
@@ -89,6 +97,7 @@ type FormState = {
   bio: string;
   publicHeroImageUrl: string;
   artistLinks: Array<{ label: string; url: string; icon?: string }>;
+  artistType: string;
   demoURL: string;
   publicListing: boolean;
   publicSlug: string;
@@ -110,6 +119,7 @@ const EMPTY_FORM: FormState = {
   bio: "",
   publicHeroImageUrl: "",
   artistLinks: [],
+  artistType: "",
   demoURL: "",
   publicListing: false,
   publicSlug: "",
@@ -209,6 +219,7 @@ export function BandOnboardingWizard() {
       bio: profile.bio ?? "",
       publicHeroImageUrl: profile.publicHeroImageUrl ?? "",
       artistLinks: profile.artistLinks ?? [],
+      artistType: profile.artistType ?? "",
       demoURL: profile.demoURL ?? "",
       publicListing: profile.publicListing ?? false,
       publicSlug: profile.publicSlug ?? "",
@@ -340,6 +351,9 @@ export function BandOnboardingWizard() {
             }))
             .filter((link) => link.label && link.url),
           demoURL: trimOptional(form.demoURL),
+          artistType: form.artistType
+            ? (form.artistType as "band" | "dj" | "singer_songwriter" | "other")
+            : undefined,
           publicListing: form.publicListing,
           publicSlug: trimOptional(publicSlug),
         });
@@ -757,6 +771,25 @@ export function BandOnboardingWizard() {
                     onLinksChange={(links) => patch({ artistLinks: links })}
                     label="Links"
                   />
+
+                  <div className="space-y-2">
+                    <Label>Artist type</Label>
+                    <Select
+                      value={form.artistType || undefined}
+                      onValueChange={(value) => patch({ artistType: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ARTIST_TYPES.map((type) => (
+                          <SelectItem key={type} value={type}>
+                            {ARTIST_TYPE_LABELS[type]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
                   <div className="space-y-2 sm:col-span-2">
                     <Label htmlFor="band-demo">Demo / listening link</Label>

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
 import { Button } from "@/components/ui/button";
@@ -8,7 +9,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Reveal, Stagger, StaggerItem } from "@/components/landing/landing-motion";
 import { PublicArtistPoster } from "@/components/public/public-artist-poster";
+import { ArtistTypeBadge, ArtistTypeIcon } from "@/components/public/artist-type-badge";
 import { MarketingLinkIcon } from "@/lib/marketing-link-icons";
+import { ARTIST_TYPES, ARTIST_TYPE_LABELS, type ArtistType } from "@/lib/artist-types";
 
 function ArtistCardSkeleton() {
   return (
@@ -24,11 +27,38 @@ function ArtistCardSkeleton() {
 }
 
 export function PublicArtistsGrid() {
-  const artists = useQuery(api.publicDirectory.listPublicArtists, {});
+  const [artistType, setArtistType] = useState<ArtistType | "all">("all");
+  const artists = useQuery(
+    api.publicDirectory.listPublicArtists,
+    artistType === "all" ? {} : { artistType },
+  );
+
+  const filters: Array<{ value: ArtistType | "all"; label: string }> = [
+    { value: "all", label: "All" },
+    ...ARTIST_TYPES.map((value) => ({ value, label: ARTIST_TYPE_LABELS[value] })),
+  ];
 
   return (
     <section className="py-12 sm:py-16">
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+        <div role="tablist" aria-label="Artist type" className="mb-8 flex flex-wrap gap-2">
+          {filters.map((filter) => (
+            <Button
+              key={filter.value}
+              type="button"
+              role="tab"
+              size="sm"
+              variant={artistType === filter.value ? "default" : "outline"}
+              aria-selected={artistType === filter.value}
+              onClick={() => setArtistType(filter.value)}
+            >
+              {filter.value !== "all" ? (
+                <ArtistTypeIcon artistType={filter.value} className="size-3.5" />
+              ) : null}
+              {filter.label}
+            </Button>
+          ))}
+        </div>
         {artists === undefined ? (
           <div
             className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3"
@@ -46,7 +76,7 @@ export function PublicArtistsGrid() {
           <div className="mx-auto max-w-xl border border-border/50 bg-background/70 px-6 py-10 text-center shadow-[0_8px_24px_rgba(0,0,0,0.06)] backdrop-blur-xl sm:px-8">
             <p className="font-heading text-xl font-semibold tracking-tight">No public profiles yet</p>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-              Be the first — join the live music community at Stanford!
+              Be the first one on the board.
             </p>
             <Button asChild className="mt-6" size="lg">
               <Link href="/artists/apply">Join the community</Link>
@@ -73,7 +103,10 @@ export function PublicArtistsGrid() {
                         className="w-full"
                       />
                       <CardContent className="space-y-2 p-4">
-                        <h3 className="font-semibold text-foreground">{artist.displayName}</h3>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="font-semibold text-foreground">{artist.displayName}</h3>
+                          <ArtistTypeBadge artistType={artist.artistType} />
+                        </div>
                         {artist.oneLiner ? (
                           <p className="line-clamp-2 text-sm leading-relaxed text-muted-foreground">
                             {artist.oneLiner}

@@ -13,7 +13,7 @@ export default function ArtistsPage() {
     <PublicMarketingLayout>
       <PublicPageHero
         title="Artists"
-        subtitle="Stanford artists and performers working with Arbor Live — browse profiles and connect."
+        subtitle="Stanford is full of creative and talented artists — Arbor is a community where every musician and artist is welcome."
       />
       <PublicArtistsGrid />
       <ArtistsJoinSection />

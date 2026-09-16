@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowSquareOutIcon, MagnifyingGlassIcon } from "@phosphor-icons/react/dist/ssr";
 import { Card } from "@/components/ui/card";
 import { OptimizedRemoteImage } from "@/components/media/optimized-remote-image";
+import { ArtistTypeBadge } from "@/components/public/artist-type-badge";
 import { cn } from "@/lib/utils";
 
 export type PublicEventArtist = {
@@ -9,6 +10,7 @@ export type PublicEventArtist = {
   name: string;
   role: "headliner" | "support" | "other";
   slug?: string;
+  artistType?: "band" | "dj" | "singer_songwriter" | "other";
   genres: string[];
   oneLiner?: string;
   imageUrl?: string;
@@ -39,7 +41,7 @@ export function PublicArtistCard({
   className?: string;
 }) {
   return (
-    <Card className={cn("px-4 py-3", className)}>
+    <Card className={cn("relative px-4 py-3", className)}>
       <div className="flex items-start gap-3">
         <div className="size-12 shrink-0 overflow-hidden bg-muted">
           {artist.imageUrl ? (
@@ -70,6 +72,7 @@ export function PublicArtistCard({
             <span className="border border-border px-2 py-0.5 text-[11px] uppercase tracking-wide text-muted-foreground">
               {ROLE_LABELS[artist.role]}
             </span>
+            <ArtistTypeBadge artistType={artist.artistType} />
           </div>
           {artist.genres.length ? (
             <div className="flex flex-wrap gap-1.5">
@@ -88,7 +91,7 @@ export function PublicArtistCard({
                   href={link.url}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex items-center gap-1 text-primary hover:underline"
+                  className="relative z-10 inline-flex items-center gap-1 text-primary hover:underline"
                 >
                   {link.label}
                   <ArrowSquareOutIcon className="size-3" />
@@ -98,6 +101,13 @@ export function PublicArtistCard({
           ) : null}
         </div>
       </div>
+      {artist.slug ? (
+        <Link
+          href={`/artists/${artist.slug}`}
+          aria-label={`View ${artist.name}`}
+          className="absolute inset-0 z-0"
+        />
+      ) : null}
     </Card>
   );
 }

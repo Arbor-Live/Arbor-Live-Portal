@@ -6,6 +6,7 @@ import { api } from "@/lib/convex-api";
 import { StoredAssetImage } from "@/components/files/stored-asset-image";
 import { Reveal } from "@/components/landing/landing-motion";
 import { PublicArticleSkeleton } from "@/components/public/public-skeletons";
+import { ArtistTypeBadge } from "@/components/public/artist-type-badge";
 import { MarketingLinkIcon } from "@/lib/marketing-link-icons";
 import { cn } from "@/lib/utils";
 
@@ -57,6 +58,12 @@ export function PublicArtistDetail({ slug }: { slug: string }) {
             <h1 className="display-tight mt-6 text-4xl font-semibold tracking-tight sm:text-5xl">
               {artist.displayName}
             </h1>
+            <div className="mt-4">
+              <ArtistTypeBadge
+                artistType={artist.artistType}
+                className="border-zinc-700 text-zinc-300"
+              />
+            </div>
             {artist.oneLiner ? (
               <p className="mt-3 max-w-2xl text-lg text-zinc-200">{artist.oneLiner}</p>
             ) : null}

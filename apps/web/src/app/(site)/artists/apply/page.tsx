@@ -12,7 +12,7 @@ export default function ArtistsApplyPage() {
     <PublicMarketingLayout>
       <PublicPageHero
         title="Join the community"
-        subtitle="Join and become a part of the live music community at Stanford!"
+        subtitle="Play shows, meet musicians, and get paid."
       />
       <section className="mx-auto max-w-2xl px-4 py-10 sm:px-6 sm:py-14 lg:px-8">
         <BandApplicationForm />

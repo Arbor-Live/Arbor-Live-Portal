@@ -35,6 +35,7 @@ import {
 import { normalizeOptionalAssetReference } from "./lib/inventoryUpload";
 import { marketingDesignLinkValue, normalizeMarketingLinks } from "./lib/marketingLinks";
 import { buildArtistLinks } from "./lib/publicArtistProfile";
+import { artistTypeValue } from "./lib/artistType";
 import {
   collectKeysFromOrganizationProfile,
   releaseReplacedR2Reference,
@@ -131,6 +132,7 @@ const bandListingProfilePatchArgs = {
   mainContactEmail: v.optional(v.string()),
   mainContactPhone: v.optional(v.string()),
   artistLinks: v.optional(v.array(marketingDesignLinkValue)),
+  artistType: v.optional(artistTypeValue),
 };
 
 function patchBandListingProfileFields(
@@ -143,6 +145,7 @@ function patchBandListingProfileFields(
     mainContactEmail?: string;
     mainContactPhone?: string;
     artistLinks?: Array<{ label: string; url: string; icon?: string }>;
+    artistType?: "band" | "dj" | "singer_songwriter" | "other";
   },
   args: {
     oneLiner?: string;
@@ -153,6 +156,7 @@ function patchBandListingProfileFields(
     mainContactEmail?: string;
     mainContactPhone?: string;
     artistLinks?: Array<{ label: string; url: string; icon?: string }>;
+    artistType?: "band" | "dj" | "singer_songwriter" | "other";
   },
 ) {
   return {
@@ -162,6 +166,7 @@ function patchBandListingProfileFields(
       args.artistLinks !== undefined
         ? normalizeMarketingLinks(args.artistLinks)
         : existing.artistLinks,
+    artistType: args.artistType !== undefined ? args.artistType : existing.artistType,
     genres: args.genres !== undefined ? normalizeStringList(args.genres) : existing.genres,
     demoURL: args.demoURL !== undefined ? args.demoURL.trim() || undefined : existing.demoURL,
     bandMembers:
@@ -579,6 +584,7 @@ export const listBandOrganizationsAdmin = query({
           publicYoutubeUrl: profile?.publicYoutubeUrl ?? "",
           publicSpotifyUrl: profile?.publicSpotifyUrl ?? "",
           artistLinks: profile ? buildArtistLinks(profile) : [],
+          artistType: profile?.artistType,
           publicListing: profile?.publicListing ?? false,
           publicSlug: profile?.publicSlug ?? "",
           publicHeroImageUrl: profile?.publicHeroImageUrl ?? "",
@@ -2316,6 +2322,7 @@ export const getActiveBandProfile = query({
       publicYoutubeUrl: profile?.publicYoutubeUrl ?? "",
       publicSpotifyUrl: profile?.publicSpotifyUrl ?? "",
       artistLinks: profile ? buildArtistLinks(profile) : [],
+      artistType: profile?.artistType,
       publicListing: profile?.publicListing ?? false,
       publicSlug: profile?.publicSlug ?? "",
       publicHeroImageUrl: profile?.publicHeroImageUrl ?? "",

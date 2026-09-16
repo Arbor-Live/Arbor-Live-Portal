@@ -129,6 +129,14 @@ const marketingDesignLinkValue = v.object({
   icon: v.optional(v.string()),
 });
 
+/** Artist type for the public directory filter. */
+const artistTypeValue = v.union(
+  v.literal("band"),
+  v.literal("dj"),
+  v.literal("singer_songwriter"),
+  v.literal("other"),
+);
+
 const marketingDesignStatusValue = v.union(
   v.literal("draft"),
   v.literal("ready"),
@@ -987,6 +995,7 @@ export default defineSchema({
     numShowsRan: v.optional(v.number()),
     demoURL: v.optional(v.string()),
     genres: v.optional(v.array(v.string())),
+    artistType: v.optional(artistTypeValue),
     mainContactName: v.optional(v.string()),
     mainContactEmail: v.optional(v.string()),
     mainContactPhone: v.optional(v.string()),
@@ -1856,6 +1865,7 @@ export default defineSchema({
     artistLinks: v.optional(v.array(marketingDesignLinkValue)),
     publicHeroImageUrl: v.optional(v.string()),
     genres: v.optional(v.array(v.string())),
+    artistType: v.optional(artistTypeValue),
     isSolo: v.boolean(),
     members: v.array(
       v.object({

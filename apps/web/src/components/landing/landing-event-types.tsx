@@ -15,8 +15,7 @@ export function LandingEventTypes() {
             What we can run
           </h2>
           <p className="mt-4 text-base leading-relaxed text-muted-foreground sm:text-lg">
-            From intimate open mics to full-scale festivals — Arbor Live handles technical production,
-            logistics, and show operations across campus.
+            Open mics, jams, festivals — we run the tech, logistics, and the show.
           </p>
         </Reveal>
 
