@@ -893,6 +893,7 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_visibility", ["visibility"])
     .index("by_invoiceId", ["invoiceId"])
+    .index("by_invoiceId_and_startAt", ["invoiceId", "startAt"])
     .index("by_publicToken", ["publicToken"])
     .index("by_startAt", ["startAt"])
     .index("by_createdAt", ["createdAt"])

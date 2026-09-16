@@ -3,6 +3,7 @@ import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { syncBookingRequestStatusFromInvoice } from "./bookingRequestStatus";
 import { syncLinkedEventStatusFromInvoice } from "./eventStatus";
 import { listEventsByInvoiceId } from "./invoiceEvents";
+import { artistLineAppliesToEvent, isSingleSeriesBooking } from "./invoiceArtistDays";
 import { getEventArtists } from "./eventArtists";
 import { toDocumentLineItem, recomputeInvoiceTotalsFromDocumentLines } from "./invoiceDocumentBuild";
 import { resolveBillableOccurrenceCount } from "./invoiceSeries";
@@ -90,16 +91,20 @@ export async function loadPublicQuoteView(ctx: QueryCtx, invoice: Doc<"invoices"
     };
   });
   const eventIds = linkedEvents.map((event) => event._id);
-  const isSeriesBooking = linkedEvents.some((event) => event.seriesId !== undefined);
+  const isSeriesBooking = isSingleSeriesBooking(linkedEvents);
   const tbdArtistLines = lineItems.filter((row) => row.section === "artist" && !row.organizationId);
   /** TBD artist slots that belong to a given day: explicit `eventId` wins.
    * Unscoped lines fall back to the first day (as the backfill migration does),
    * except on recurring series, where an unscoped line applies to every day. */
   const tbdArtistSlotsForEvent = (eventId: Id<"events">) =>
-    tbdArtistLines.filter((row) => {
-      if (row.eventId) return row.eventId === eventId;
-      return isSeriesBooking || (linkedEvents[0]?._id ?? null) === eventId;
-    }).length;
+    tbdArtistLines.filter((row) =>
+      artistLineAppliesToEvent({
+        lineEventId: row.eventId,
+        eventId,
+        firstLinkedEventId: linkedEvents[0]?._id,
+        isSeriesBooking,
+      }),
+    ).length;
   const eventAssignments = linkedEvent
     ? (
         await Promise.all(

@@ -531,13 +531,10 @@ export const backfillInvoiceArtistLineEvents = migrations.define({
   table: "invoiceLineItems",
   migrateOne: async (ctx, row) => {
     if (row.section !== "artist" || row.eventId) return;
-    const events = await ctx.db
+    const first = await ctx.db
       .query("events")
-      .withIndex("by_invoiceId", (q) => q.eq("invoiceId", row.invoiceId))
-      .take(50);
-    const first = [...events].sort(
-      (a, b) => a.startAt - b.startAt || a._creationTime - b._creationTime,
-    )[0];
+      .withIndex("by_invoiceId_and_startAt", (q) => q.eq("invoiceId", row.invoiceId))
+      .first();
     if (!first) return;
     return { eventId: first._id, updatedAt: Date.now() };
   },

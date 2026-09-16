@@ -132,6 +132,7 @@ import type * as lib_immichAlbumLinks from "../lib/immichAlbumLinks.js";
 import type * as lib_immichClient from "../lib/immichClient.js";
 import type * as lib_immichValidators from "../lib/immichValidators.js";
 import type * as lib_inventoryUpload from "../lib/inventoryUpload.js";
+import type * as lib_invoiceArtistDays from "../lib/invoiceArtistDays.js";
 import type * as lib_invoiceDocumentBuild from "../lib/invoiceDocumentBuild.js";
 import type * as lib_invoiceEvents from "../lib/invoiceEvents.js";
 import type * as lib_invoicePaymentStatus from "../lib/invoicePaymentStatus.js";
@@ -335,6 +336,7 @@ declare const fullApi: ApiFromModules<{
   "lib/immichClient": typeof lib_immichClient;
   "lib/immichValidators": typeof lib_immichValidators;
   "lib/inventoryUpload": typeof lib_inventoryUpload;
+  "lib/invoiceArtistDays": typeof lib_invoiceArtistDays;
   "lib/invoiceDocumentBuild": typeof lib_invoiceDocumentBuild;
   "lib/invoiceEvents": typeof lib_invoiceEvents;
   "lib/invoicePaymentStatus": typeof lib_invoicePaymentStatus;
