@@ -1,14 +1,19 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
 import { PublicPageHero } from "@/components/public/public-page-hero";
 import { PublicSiteChrome } from "@/components/public/public-site-chrome";
 import { PublicPortalPageSkeleton } from "@/components/public/public-skeletons";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PublicPortalTabs, type PublicPortalTab } from "@/components/public/public-portal-tabs";
+import {
+  PublicPortalNextSteps,
+  derivePortalNextSteps,
+} from "@/components/public/public-portal-next-steps";
 import { PublicEventHeader } from "@/components/public/public-event-header";
-import { PublicEventSchedule } from "@/components/public/public-event-schedule";
+import { PublicEventTimetable } from "@/components/public/public-event-timetable";
 import { PublicEventCrew } from "@/components/public/public-event-crew";
 import { PublicEventContacts } from "@/components/public/public-event-contacts";
 import { PublicQuoteFinancials } from "@/components/public/public-quote-financials";
@@ -37,6 +42,10 @@ function quoteStatusLabel(status: "pending" | "approved" | "changes_requested") 
 
 export function PublicEventLifecycleClient({ token }: { token: string }) {
   const data = useQuery(api.invoices.getPublicQuoteByToken, { token });
+  const feedbackStatus = useQuery(api.eventFeedback.getStatusByToken, {
+    portal: "quote",
+    token,
+  });
   const recordQuoteView = useMutation(api.invoices.recordPublicQuoteView);
   const recordedQuoteView = useRef(false);
   const approve = useMutation(api.invoices.approveByToken);
@@ -44,11 +53,28 @@ export function PublicEventLifecycleClient({ token }: { token: string }) {
   const updatePaymentContacts = useMutation(api.invoices.updatePaymentContactsByToken);
   const submitPaymentProof = useMutation(api.paymentProof.submitByQuoteToken);
 
+  const [activeTab, setActiveTab] = useState(() => {
+    if (typeof window === "undefined") return "next";
+    const hash = window.location.hash.replace(/^#/, "");
+    if (hash === "feedback") return "after";
+    return new URLSearchParams(window.location.search).get("tab") ?? "next";
+  });
+
   useEffect(() => {
     if (!data || recordedQuoteView.current) return;
     recordedQuoteView.current = true;
     void recordQuoteView({ token });
   }, [data, recordQuoteView, token]);
+
+  const selectTab = (id: string) => {
+    setActiveTab(id);
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (id === "next") url.searchParams.delete("tab");
+    else url.searchParams.set("tab", id);
+    url.hash = "";
+    window.history.replaceState(null, "", url);
+  };
 
   if (data === undefined) {
     return (
@@ -75,6 +101,38 @@ export function PublicEventLifecycleClient({ token }: { token: string }) {
   const heroSubtitle = linkedEvent
     ? `${linkedEvent.title} · ${quoteStatusLabel(data.invoice.clientApprovalStatus)}`
     : quoteStatusLabel(data.invoice.clientApprovalStatus);
+
+  const payment = data.paymentProof;
+  const eventEnded = feedbackStatus?.eventEnded ?? false;
+  const feedbackSubmitted = feedbackStatus?.submitted ?? false;
+
+  const steps = derivePortalNextSteps({
+    declined: false,
+    finalized: false,
+    quoteReady: true,
+    approvalStatus: data.invoice.clientApprovalStatus,
+    payment: {
+      canSubmit: Boolean(payment?.canSubmit),
+      submitted: Boolean(payment?.submission),
+      received: Boolean(payment?.paymentReceived),
+    },
+    eventEnded,
+    eventTitle: linkedEvent?.title,
+    feedbackSubmitted,
+    albumShareUrl: feedbackStatus?.albumShareUrl,
+  });
+
+  const tabs: PublicPortalTab[] = [{ id: "next", label: "What's next" }];
+  if (linkedEvent) tabs.push({ id: "event", label: "Event" });
+  tabs.push({
+    id: "quote",
+    label: "Quote & payment",
+    attention: data.invoice.clientApprovalStatus === "pending" || Boolean(payment?.canSubmit),
+  });
+  if (eventEnded) {
+    tabs.push({ id: "after", label: "After the event", attention: !feedbackSubmitted });
+  }
+  const resolvedTab = tabs.some((tab) => tab.id === activeTab) ? activeTab : "next";
 
   const handleApprove = async (values: PublicQuoteApprovalFormValues) => {
     await approve({
@@ -109,115 +167,133 @@ export function PublicEventLifecycleClient({ token }: { token: string }) {
         title={`Quote ${data.invoice.invoiceNumber}`}
         subtitle={heroSubtitle}
         shaderBand
-        actions={
-          <PublicStaffDashboardLinks
-            invoiceId={data.invoice._id}
-            eventId={linkedEvent?.id}
-          />
-        }
+        actions={<PublicStaffDashboardLinks invoiceId={data.invoice._id} eventId={linkedEvent?.id} />}
       />
-      <div className="mx-auto w-full min-w-0 max-w-6xl space-y-4 px-4 py-12 sm:px-6 lg:px-8">
-        <PublicPostEventSection portal="quote" token={token} />
-        <Card>
-          <CardHeader>
-            <CardTitle>Quote {data.invoice.invoiceNumber}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <p>Issued: {data.invoice.issueDate}</p>
-            {data.invoice.clientGroupName ? <p>Host: {data.invoice.clientGroupName}</p> : null}
-            {data.invoice.clientContactName ? <p>Contact: {data.invoice.clientContactName}</p> : null}
-            <p className="text-base font-semibold">Total: {formatUsd(data.invoice.totalUsd)}</p>
-            <p className="text-muted-foreground">
-              {quoteStatusLabel(data.invoice.clientApprovalStatus)}
-            </p>
-            <PublicInvoicePdfDownload
-              token={token}
-              portal="quote"
-              invoiceNumber={data.invoice.invoiceNumber}
-            />
-          </CardContent>
-        </Card>
-
-        {linkedEvent ? (
+      <PublicPortalTabs tabs={tabs} activeTab={resolvedTab} onSelect={selectTab}>
+        {resolvedTab === "next" ? (
           <>
-            <PublicEventHeader
-              title={linkedEvent.title}
-              eventType={linkedEvent.eventType ?? undefined}
-              venueName={linkedEvent.venueName ?? undefined}
-              host={linkedEvent.host ?? undefined}
-              startAt={linkedEvent.startAt}
-              endAt={linkedEvent.endAt}
-              status={linkedEvent.status}
-            />
-            <PublicEventPosterSection portal="quote" token={token} />
-            <PublicEventContacts manager={linkedEvent.contacts.manager} dayOfLead={linkedEvent.contacts.dayOfLead} />
-            <PublicEventSchedule blocks={linkedEvent.scheduleBlocks} />
-            <PublicEventCrew crew={linkedEvent.crewRoster} />
+            <PublicPortalNextSteps steps={steps} onNavigate={selectTab} />
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Quote {data.invoice.invoiceNumber}</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                <p>Issued: {data.invoice.issueDate}</p>
+                {data.invoice.clientGroupName ? <p>Host: {data.invoice.clientGroupName}</p> : null}
+                {data.invoice.clientContactName ? (
+                  <p>Contact: {data.invoice.clientContactName}</p>
+                ) : null}
+                <p className="text-base font-semibold">
+                  Total: {formatUsd(data.invoice.totalUsd)}
+                </p>
+                <p className="text-muted-foreground">
+                  {quoteStatusLabel(data.invoice.clientApprovalStatus)}
+                </p>
+                <PublicInvoicePdfDownload
+                  token={token}
+                  portal="quote"
+                  invoiceNumber={data.invoice.invoiceNumber}
+                />
+              </CardContent>
+            </Card>
           </>
-        ) : (
-          <Card>
-            <CardHeader>
-              <CardTitle>Event Details</CardTitle>
-            </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">
-              This quote is not linked to an event yet. Schedule and operations details will appear once linked.
-            </CardContent>
-          </Card>
-        )}
-
-        <PublicQuoteFinancials
-          lineItems={data.lineItems}
-          totals={{
-            equipmentSubtotalUsd: data.invoice.equipmentSubtotalUsd,
-            externalRentalsSubtotalUsd: data.invoice.externalRentalsSubtotalUsd,
-            artistsSubtotalUsd: data.invoice.artistsSubtotalUsd,
-            crewSubtotalUsd: data.invoice.crewSubtotalUsd,
-            feesSubtotalUsd: data.invoice.feesSubtotalUsd,
-            subtotalUsd: data.invoice.subtotalUsd,
-            discountAmountUsd: data.invoice.discountAmountUsd,
-            totalUsd: data.invoice.totalUsd,
-          }}
-        />
-
-        {data.invoice.notes ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>Quote Notes</CardTitle>
-            </CardHeader>
-            <CardContent className="text-sm whitespace-pre-wrap">{data.invoice.notes}</CardContent>
-          </Card>
         ) : null}
 
-        <PublicQuoteApprovalSection
-          invoice={data.invoice}
-          termsAndConditionsMarkdown={data.termsAndConditionsMarkdown}
-          termsVersion={data.termsVersion}
-          onApprove={handleApprove}
-        />
-
-        <PublicQuoteChangeRequestSection
-          disabled={quoteLocked}
-          onRequestChanges={async (note) => {
-            await requestChanges({ token, note });
-          }}
-        />
-
-        {showPaymentContacts ? (
-          <PublicPaymentContactsSection
-            key={data.invoice._id}
-            contacts={data.invoice}
-            onSave={handleSavePaymentContacts}
-          />
+        {resolvedTab === "event" ? (
+          linkedEvent ? (
+            <>
+              <PublicEventHeader
+                title={linkedEvent.title}
+                eventType={linkedEvent.eventType ?? undefined}
+                venueName={linkedEvent.venueName ?? undefined}
+                host={linkedEvent.host ?? undefined}
+                startAt={linkedEvent.startAt}
+                endAt={linkedEvent.endAt}
+                status={linkedEvent.status}
+              />
+              <PublicEventPosterSection portal="quote" token={token} />
+              <PublicEventContacts
+                manager={linkedEvent.contacts.manager}
+                dayOfLead={linkedEvent.contacts.dayOfLead}
+              />
+              <PublicEventTimetable blocks={linkedEvent.scheduleBlocks} />
+              <PublicEventCrew crew={linkedEvent.crewRoster} />
+            </>
+          ) : (
+            <Card>
+              <CardHeader>
+                <CardTitle>Event Details</CardTitle>
+              </CardHeader>
+              <CardContent className="text-sm text-muted-foreground">
+                This quote is not linked to an event yet. Schedule and operations details will
+                appear once linked.
+              </CardContent>
+            </Card>
+          )
         ) : null}
 
-        {data.paymentProof ? (
-          <PublicPaymentProofSection
-            token={token}
-            paymentProof={data.paymentProof}
-            submitMutation={submitPaymentProof}
-          />
+        {resolvedTab === "quote" ? (
+          <>
+            <PublicQuoteFinancials
+              lineItems={data.lineItems}
+              totals={{
+                equipmentSubtotalUsd: data.invoice.equipmentSubtotalUsd,
+                externalRentalsSubtotalUsd: data.invoice.externalRentalsSubtotalUsd,
+                artistsSubtotalUsd: data.invoice.artistsSubtotalUsd,
+                crewSubtotalUsd: data.invoice.crewSubtotalUsd,
+                feesSubtotalUsd: data.invoice.feesSubtotalUsd,
+                subtotalUsd: data.invoice.subtotalUsd,
+                discountAmountUsd: data.invoice.discountAmountUsd,
+                totalUsd: data.invoice.totalUsd,
+              }}
+            />
+
+            {data.invoice.notes ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Quote Notes</CardTitle>
+                </CardHeader>
+                <CardContent className="text-sm whitespace-pre-wrap">
+                  {data.invoice.notes}
+                </CardContent>
+              </Card>
+            ) : null}
+
+            <PublicQuoteApprovalSection
+              invoice={data.invoice}
+              termsAndConditionsMarkdown={data.termsAndConditionsMarkdown}
+              termsVersion={data.termsVersion}
+              onApprove={handleApprove}
+            />
+
+            <PublicQuoteChangeRequestSection
+              disabled={quoteLocked}
+              onRequestChanges={async (note) => {
+                await requestChanges({ token, note });
+              }}
+            />
+
+            {showPaymentContacts ? (
+              <PublicPaymentContactsSection
+                key={data.invoice._id}
+                contacts={data.invoice}
+                onSave={handleSavePaymentContacts}
+              />
+            ) : null}
+
+            {data.paymentProof ? (
+              <PublicPaymentProofSection
+                token={token}
+                paymentProof={data.paymentProof}
+                submitMutation={submitPaymentProof}
+              />
+            ) : null}
+          </>
         ) : null}
-      </div>
+
+        {resolvedTab === "after" ? <PublicPostEventSection portal="quote" token={token} /> : null}
+      </PublicPortalTabs>
     </PublicSiteChrome>
   );
 }
