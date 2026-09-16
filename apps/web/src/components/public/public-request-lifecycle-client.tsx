@@ -416,7 +416,7 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
             />
             <PublicEventArtists
               artists={selectedEvent.artists}
-              tbdSlots={quoteData?.tbdArtistSlots ?? 0}
+              tbdSlots={selectedEvent.tbdArtistSlots ?? 0}
             />
             <PublicEventContacts
               manager={selectedEvent.contacts.manager}

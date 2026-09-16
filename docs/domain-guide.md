@@ -187,6 +187,9 @@ Event types (drive which editor tabs and quick-add blocks appear):
   `performerHourlyRateUsd` and member count (`bandMembers.length`) from the org
   profile when an artist is selected. Linked events auto-fill artist rows from
   assigned performers / payout totals when the invoice has no artist lines yet.
+  On multi-day bookings each artist line is tagged to its day/event (`eventId`),
+  so the client portal shows **Artist TBD** only on days still missing an artist
+  and the invoice↔event import matches lines to the right day.
   Artist and external-rental amounts are pass-through (excluded from Insights
   earned revenue and from net-profit margin).
 - Every invoice carries a `publicApprovalToken` for the client-facing quote

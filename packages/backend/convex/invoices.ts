@@ -10,6 +10,7 @@ import { syncEventStatusForLinkedInvoice, syncLinkedEventStatusFromInvoice } fro
 import { syncBookingRequestStatusFromInvoice } from "./lib/bookingRequestStatus";
 import { recordInvoiceStatusTransition } from "./lib/statusTransitions";
 import { listEventsByInvoiceId } from "./lib/invoiceEvents";
+import { isSingleSeriesBooking } from "./lib/invoiceArtistDays";
 import { getActivePaymentProofSubmission } from "./lib/paymentProof";
 import { invoiceDueEndMs } from "./lib/invoicePaymentStatus";
 import {
@@ -92,6 +93,7 @@ const lineItemInput = v.object({
   excludedTypeIds: v.optional(v.array(v.id("inventoryTypes"))),
   packageExclusionDiscountUsd: v.optional(v.number()),
   organizationId: v.optional(v.string()),
+  eventId: v.optional(v.id("events")),
   memberCount: v.optional(v.number()),
   performanceHours: v.optional(v.number()),
 });
@@ -114,6 +116,8 @@ type LineInput = {
   packageExclusionDiscountUsd?: number;
   /** Artist lines: linked band/DJ org id. */
   organizationId?: string;
+  /** Artist lines: linked day/event on multi-day bookings. */
+  eventId?: Id<"events">;
   /** Artist lines: number of people performing. */
   memberCount?: number;
   /** Artist lines: hours performing. */
@@ -374,6 +378,7 @@ function lineDocToInput(line: Doc<"invoiceLineItems">): LineInput {
     excludedTypeIds: line.excludedTypeIds,
     packageExclusionDiscountUsd: line.packageExclusionDiscountUsd,
     organizationId: line.organizationId,
+    eventId: line.eventId,
     memberCount: line.memberCount,
     performanceHours: line.performanceHours,
   };
@@ -398,6 +403,22 @@ async function replaceLineItems(
     }
   >,
 ) {
+  const artistEventIds = [
+    ...new Set(
+      rows
+        .filter((row) => row.section === "artist" && row.eventId)
+        .map((row) => row.eventId!),
+    ),
+  ];
+  if (artistEventIds.length) {
+    const linkedEventIds = new Set(
+      (await listEventsByInvoiceId(ctx, invoiceId)).map((event) => event._id),
+    );
+    const orphan = artistEventIds.find((eventId) => !linkedEventIds.has(eventId));
+    if (orphan) {
+      throw new Error("Artist line is linked to an event that is not on this invoice.");
+    }
+  }
   const existing = await ctx.db
     .query("invoiceLineItems")
     .withIndex("by_invoiceId", (q) => q.eq("invoiceId", invoiceId))
@@ -425,6 +446,7 @@ async function replaceLineItems(
       feeDefinitionId: row.feeDefinitionId,
       equipmentQuantityBasis: row.equipmentQuantityBasis,
       organizationId: trimOptional(row.organizationId),
+      eventId: row.section === "artist" ? row.eventId : undefined,
       memberCount:
         row.section === "artist" && row.memberCount !== undefined && row.memberCount > 0
           ? row.memberCount
@@ -720,6 +742,27 @@ export const get = query({
       .take(500);
     const series = await resolveSeriesMetadataForInvoice(ctx, args.id);
     return { invoice, lineItems, series };
+  },
+});
+
+/**
+ * How artist lines scope to days on this invoice: the fallback day for unscoped
+ * lines (the first linked event) and whether one recurring series owns every day.
+ */
+export const getArtistLineDayScope = query({
+  args: { invoiceId: v.id("invoices") },
+  returns: v.object({
+    firstEventId: v.union(v.id("events"), v.null()),
+    isSeriesBooking: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    const events = await listEventsByInvoiceId(ctx, args.invoiceId);
+    return {
+      firstEventId: events[0]?._id ?? null,
+      isSeriesBooking: isSingleSeriesBooking(events),
+    };
   },
 });
 

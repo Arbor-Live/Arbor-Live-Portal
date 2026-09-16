@@ -94,18 +94,21 @@ type ArtistRow = {
   people: string;
   /** Hourly rate per person. */
   rateUsd: string;
+  /** Linked day/event this slot belongs to on multi-day bookings. */
+  eventId?: string;
 };
 type CrewRow = InvoiceCrewRow;
 type FeeRow = { feeDefinitionId: string; label: string; quantity: string; rateUsd: string };
 
 const ARTIST_TBD_LABEL = ARTIST_TBD_OPTION.label;
-function emptyArtistRow(): ArtistRow {
+function emptyArtistRow(eventId?: string): ArtistRow {
   return {
     organizationId: ARTIST_TBD_VALUE,
     label: ARTIST_TBD_LABEL,
     hours: "1",
     people: "1",
     rateUsd: "0",
+    eventId,
   };
 }
 
@@ -117,6 +120,7 @@ function artistPersonHours(row: Pick<ArtistRow, "hours" | "people">) {
 
 function artistRowFromLineItem(row: {
   organizationId?: string | null;
+  eventId?: string | null;
   label: string;
   quantity: number;
   rateUsd: number;
@@ -130,6 +134,7 @@ function artistRowFromLineItem(row: {
     row.performanceHours > 0;
   return {
     organizationId: row.organizationId?.trim() || ARTIST_TBD_VALUE,
+    eventId: row.eventId?.trim() || undefined,
     label: row.label,
     hours: hasBreakdown ? String(row.performanceHours) : "1",
     // Legacy lines stored people in quantity with no hours breakdown.
@@ -289,8 +294,10 @@ export function InvoiceEditor({
   );
   const bandsForArtists = useQuery(api.users.listBandsForInvoiceLines, {});
   const eventPerformers = useQuery(
-    api.eventBands.listPerformersForEvent,
-    linkedEvent && !linkedSeries ? { eventId: linkedEvent._id } : "skip",
+    api.eventBands.listPerformersForEvents,
+    linkedEvent && !linkedSeries
+      ? { eventIds: linkedDayEvents.map((day) => day._id) }
+      : "skip",
   );
   const sourceRequest = useQuery(
     api.eventRequests.getByLinkedInvoiceId,
@@ -777,6 +784,7 @@ export function InvoiceEditor({
     setArtists(
       eventPerformers.map((performer) => {
         const payment = performer.payment;
+        const eventId = performer.eventId;
         if (payment && payment.totalUsd > 0) {
           if (payment.pricingMode === "fixed_total") {
             return {
@@ -785,6 +793,7 @@ export function InvoiceEditor({
               hours: "1",
               people: "1",
               rateUsd: payment.totalUsd.toString(),
+              eventId,
             };
           }
           const hours = payment.performanceHours && payment.performanceHours > 0 ? payment.performanceHours : 1;
@@ -796,6 +805,7 @@ export function InvoiceEditor({
             hours: String(hours),
             people: String(members),
             rateUsd: rate.toString(),
+            eventId,
           };
         }
         const profileRate = rateByOrg.get(performer.organizationId) ?? 0;
@@ -806,6 +816,7 @@ export function InvoiceEditor({
           hours: "1",
           people: profileMembers > 0 ? profileMembers.toString() : "1",
           rateUsd: profileRate > 0 ? profileRate.toString() : "0",
+          eventId,
         };
       }),
     );
@@ -924,6 +935,7 @@ export function InvoiceEditor({
       excludedTypeIds?: Id<"inventoryTypes">[];
       packageExclusionDiscountUsd?: number;
       organizationId?: string;
+      eventId?: Id<"events">;
       memberCount?: number;
       performanceHours?: number;
     }> = [];
@@ -984,6 +996,9 @@ export function InvoiceEditor({
           : undefined;
       const people = Math.max(0, Number(row.people || "0"));
       const hours = Math.max(0, Number(row.hours || "0"));
+      const eventId =
+        (row.eventId as Id<"events"> | undefined) ??
+        (linkedDayEvents.length === 1 ? linkedDayEvents[0]._id : undefined);
       rows.push({
         section: "artist",
         order: order++,
@@ -991,6 +1006,7 @@ export function InvoiceEditor({
         quantity: personHours,
         rateUsd: Number(row.rateUsd || "0"),
         organizationId,
+        eventId,
         memberCount: people > 0 ? people : undefined,
         performanceHours: hours > 0 ? hours : undefined,
       });
@@ -1782,6 +1798,15 @@ export function InvoiceEditor({
             rows={artists}
             setRows={setArtists}
             bands={bandsForArtists}
+            days={
+              linkedSeries
+                ? []
+                : linkedDayEvents.map((day, index) => ({
+                    _id: day._id,
+                    label: `Day ${index + 1}`,
+                  }))
+            }
+            defaultEventId={selectedDayEventId}
           />
           </div>
           <div id="section-crew">
@@ -2820,6 +2845,8 @@ function SectionArtists({
   rows,
   setRows,
   bands,
+  days = [],
+  defaultEventId,
 }: {
   rows: ArtistRow[];
   setRows: Dispatch<SetStateAction<ArtistRow[]>>;
@@ -2831,11 +2858,25 @@ function SectionArtists({
         memberCount: number;
       }>
     | undefined;
+  /** Linked days for multi-day bookings; one artist slot per day. */
+  days?: Array<{ _id: string; label: string }>;
+  /** Day new rows default to (the selected linked day). */
+  defaultEventId?: string;
 }) {
   const bandOptions = useMemo(
     () => artistSelectOptions(bands, { includeTbd: true }),
     [bands],
   );
+  const defaultDayId = defaultEventId ?? days[0]?._id;
+  const showDayColumn = days.length > 1;
+  const dayOptions = days.map((day) => ({
+    value: day._id,
+    label: day.label,
+    keywords: day.label,
+  }));
+  const gridClass = showDayColumn
+    ? "min-w-0 gap-2 md:grid-cols-[7rem_minmax(0,1.4fr)_minmax(0,1fr)_5.5rem_5.5rem_7.5rem_5.5rem]"
+    : ARTIST_ROW_GRID;
   function onBandChange(idx: number, organizationId: string) {
     setRows((prev) =>
       prev.map((row, i) => {
@@ -2873,7 +2914,8 @@ function SectionArtists({
         <CardTitle>Artists</CardTitle>
       </CardHeader>
       <CardContent className="space-y-2">
-        <div className={`hidden text-xs font-medium text-muted-foreground md:grid md:items-end ${ARTIST_ROW_GRID}`}>
+        <div className={`hidden text-xs font-medium text-muted-foreground md:grid md:items-end ${gridClass}`}>
+          {showDayColumn ? <span>Day</span> : null}
           <span>Artist</span>
           <span>Label</span>
           <span>Hours</span>
@@ -2886,15 +2928,29 @@ function SectionArtists({
           return (
             <div
               key={`artist-${idx}`}
-              className={`grid ${ARTIST_ROW_GRID}`}
+              className={`grid ${gridClass}`}
               data-testid={`invoice-row-artist-${idx}`}
             >
+              {showDayColumn ? (
+                <SearchableSelect
+                  value={row.eventId ?? defaultDayId ?? ""}
+                  onChange={(value) =>
+                    setRows((prev) =>
+                      prev.map((r, i) => (i === idx ? { ...r, eventId: value } : r)),
+                    )
+                  }
+                  options={dayOptions}
+                  placeholder="Day"
+                  emptyLabel="Day"
+                />
+              ) : null}
               <ArtistSelect
                 value={isTbd ? ARTIST_TBD_VALUE : row.organizationId}
                 onChange={(value) => onBandChange(idx, value)}
                 options={bandOptions}
                 placeholder={bands === undefined ? "Loading artists…" : "Search artists…"}
-                emptyLabel="Select artist"              />
+                emptyLabel="Select artist"
+              />
               {isTbd ? (
                 <Input
                   placeholder="Artist / role"
@@ -2953,7 +3009,7 @@ function SectionArtists({
         <Button
           type="button"
           variant="outline"
-          onClick={() => setRows((prev) => [...prev, emptyArtistRow()])}
+          onClick={() => setRows((prev) => [...prev, emptyArtistRow(defaultDayId)])}
         >
           Add artist row
         </Button>

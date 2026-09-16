@@ -107,6 +107,10 @@ function EventBandsPerformersPanel({ eventId }: { eventId: Id<"events"> }) {
     api.invoices.get,
     invoiceId ? { id: invoiceId } : "skip",
   );
+  const artistDayScope = useQuery(
+    api.invoices.getArtistLineDayScope,
+    invoiceId ? { invoiceId } : "skip",
+  );
   const removeParticipation = useMutation(api.eventBands.removeParticipation);
   const updateRole = useMutation(api.eventBands.updateParticipationRole);
   const addParticipation = useMutation(api.eventBands.addParticipation);
@@ -126,6 +130,15 @@ function EventBandsPerformersPanel({ eventId }: { eventId: Id<"events"> }) {
     const map = new Map<string, InvoiceArtistSuggestion>();
     for (const line of invoiceDetail?.lineItems ?? []) {
       if (line.section !== "artist") continue;
+      // Match loadPublicQuoteView's day scoping: an explicit day wins; an
+      // unscoped line belongs to the first linked day, or every day for a series.
+      if (line.eventId) {
+        if (line.eventId !== eventId) continue;
+      } else if (
+        !(artistDayScope?.isSeriesBooking || artistDayScope?.firstEventId === eventId)
+      ) {
+        continue;
+      }
       const organizationId = line.organizationId?.trim();
       if (!organizationId || map.has(organizationId)) continue;
       map.set(organizationId, {
@@ -137,7 +150,7 @@ function EventBandsPerformersPanel({ eventId }: { eventId: Id<"events"> }) {
       });
     }
     return map;
-  }, [invoiceDetail?.lineItems]);
+  }, [invoiceDetail?.lineItems, eventId, artistDayScope]);
 
   const invoiceArtistSuggestions = useMemo(
     () =>
@@ -361,7 +374,9 @@ function EventBandsPerformersPanel({ eventId }: { eventId: Id<"events"> }) {
                     organizationLocked
                     excludedOrganizationIds={[]}
                     invoiceLine={invoiceArtistByOrg.get(performer.organizationId) ?? null}
-                    invoiceDefaultsReady={!invoiceId || invoiceDetail !== undefined}
+                    invoiceDefaultsReady={
+                      !invoiceId || (invoiceDetail !== undefined && artistDayScope !== undefined)
+                    }
                     onSaved={() => setEditingPaymentForOrg(null)}
                     onCancel={() => setEditingPaymentForOrg(null)}
                   />

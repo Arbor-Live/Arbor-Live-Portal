@@ -718,6 +718,12 @@ export default defineSchema({
     /** Band/DJ org for artist lines — omitted for TBD / undetermined rows. */
     organizationId: v.optional(v.string()),
     /**
+     * Artist lines: the linked day/event this slot belongs to on multi-day
+     * bookings, so TBD slots and band autofill target the right day. Omitted for
+     * invoice-level rows (legacy, series, or a quote with no linked event).
+     */
+    eventId: v.optional(v.id("events")),
+    /**
      * Artist lines: performers in the group. With `performanceHours` and `rateUsd`
      * (per person per hour), `quantity` is person-hours (people × hours).
      */
@@ -887,6 +893,7 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_visibility", ["visibility"])
     .index("by_invoiceId", ["invoiceId"])
+    .index("by_invoiceId_and_startAt", ["invoiceId", "startAt"])
     .index("by_publicToken", ["publicToken"])
     .index("by_startAt", ["startAt"])
     .index("by_createdAt", ["createdAt"])
