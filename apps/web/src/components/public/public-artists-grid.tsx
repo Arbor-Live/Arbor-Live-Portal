@@ -57,20 +57,11 @@ export function PublicArtistsGrid() {
         {artists && artists.length > 0 ? (
           <Stagger className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {artists.map((artist) => {
-              const socialLinks = [
-                artist.websiteUrl
-                  ? { label: "Website", url: artist.websiteUrl, icon: "Globe" }
-                  : null,
-                artist.instagramUrl
-                  ? { label: "Instagram", url: artist.instagramUrl, icon: "InstagramLogo" }
-                  : null,
-                artist.youtubeUrl
-                  ? { label: "YouTube", url: artist.youtubeUrl, icon: "YoutubeLogo" }
-                  : null,
-                artist.spotifyUrl
-                  ? { label: "Spotify", url: artist.spotifyUrl, icon: "SpotifyLogo" }
-                  : null,
-              ].filter((link): link is { label: string; url: string; icon: string } => link !== null);
+              const socialLinks = (artist.links ?? []).map((link) => ({
+                label: link.label,
+                url: link.url,
+                icon: link.icon ?? "LinkSimple",
+              }));
               return (
                 <StaggerItem key={artist.slug}>
                   <Reveal>

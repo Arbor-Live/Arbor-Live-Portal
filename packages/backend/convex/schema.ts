@@ -974,6 +974,8 @@ export default defineSchema({
     publicInstagramUrl: v.optional(v.string()),
     publicYoutubeUrl: v.optional(v.string()),
     publicSpotifyUrl: v.optional(v.string()),
+    /** Flexible artist links (label/url/icon). Supersedes the fixed public*Url fields. */
+    artistLinks: v.optional(v.array(marketingDesignLinkValue)),
     publicListing: v.optional(v.boolean()),
     publicSlug: v.optional(v.string()),
     publicHeroImageUrl: v.optional(v.string()),
@@ -1850,6 +1852,8 @@ export default defineSchema({
     publicInstagramUrl: v.optional(v.string()),
     publicYoutubeUrl: v.optional(v.string()),
     demoURL: v.optional(v.string()),
+    /** Flexible artist links (label/url/icon). Supersedes the fixed public*Url fields. */
+    artistLinks: v.optional(v.array(marketingDesignLinkValue)),
     publicHeroImageUrl: v.optional(v.string()),
     genres: v.optional(v.array(v.string())),
     isSolo: v.boolean(),

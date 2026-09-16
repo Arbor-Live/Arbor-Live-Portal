@@ -148,18 +148,12 @@ export function BandApplicationsAdminClient() {
                   </dd>
                 </div>
               ) : null}
-              {app.publicInstagramUrl ? (
-                <div>
-                  <dt className="font-medium text-foreground/80">Instagram</dt>
-                  <dd className="truncate">{app.publicInstagramUrl}</dd>
+              {(app.artistLinks ?? []).map((link) => (
+                <div key={`${link.label}-${link.url}`}>
+                  <dt className="font-medium text-foreground/80">{link.label}</dt>
+                  <dd className="truncate">{link.url}</dd>
                 </div>
-              ) : null}
-              {app.publicWebsiteUrl ? (
-                <div>
-                  <dt className="font-medium text-foreground/80">Website</dt>
-                  <dd className="truncate">{app.publicWebsiteUrl}</dd>
-                </div>
-              ) : null}
+              ))}
             </dl>
 
             <div className="text-sm">

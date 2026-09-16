@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { OnboardingAckCheckbox, OnboardingTextarea } from "@/components/onboarding/onboarding-ui";
+import { MarketingLinksEditor } from "@/components/marketing/marketing-links-editor";
 import {
   submitBandApplication,
   type BandApplicationFormValues,
@@ -21,9 +22,7 @@ const EMPTY: BandApplicationFormValues = {
   bandDisplayName: "",
   oneLiner: "",
   bio: "",
-  publicWebsiteUrl: "",
-  publicInstagramUrl: "",
-  publicYoutubeUrl: "",
+  artistLinks: [],
   demoURL: "",
   publicHeroImageUrl: "",
   genres: "",
@@ -194,43 +193,19 @@ export function BandApplicationForm() {
 
       <section className="space-y-4">
         <h2 className="font-heading text-lg font-semibold">Links</h2>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="website-url">Website</Label>
-            <Input
-              id="website-url"
-              value={form.publicWebsiteUrl}
-              onChange={(event) => patch({ publicWebsiteUrl: event.target.value })}
-              placeholder="https://…"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="instagram-url">Instagram</Label>
-            <Input
-              id="instagram-url"
-              value={form.publicInstagramUrl}
-              onChange={(event) => patch({ publicInstagramUrl: event.target.value })}
-              placeholder="https://instagram.com/…"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="youtube-url">YouTube</Label>
-            <Input
-              id="youtube-url"
-              value={form.publicYoutubeUrl}
-              onChange={(event) => patch({ publicYoutubeUrl: event.target.value })}
-              placeholder="https://youtube.com/…"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="demo-url">Demo / listening link</Label>
-            <Input
-              id="demo-url"
-              value={form.demoURL}
-              onChange={(event) => patch({ demoURL: event.target.value })}
-              placeholder="Spotify, SoundCloud, Drive…"
-            />
-          </div>
+        <MarketingLinksEditor
+          idPrefix="band-application"
+          links={form.artistLinks}
+          onLinksChange={(links) => patch({ artistLinks: links })}
+        />
+        <div className="space-y-2">
+          <Label htmlFor="demo-url">Demo / listening link</Label>
+          <Input
+            id="demo-url"
+            value={form.demoURL}
+            onChange={(event) => patch({ demoURL: event.target.value })}
+            placeholder="Spotify, SoundCloud, Drive…"
+          />
         </div>
       </section>
 

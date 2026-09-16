@@ -16,10 +16,7 @@ export type BandProfilePreviewData = {
   demoURL?: string;
   publicHeroImageUrl?: string;
   publicSlug?: string;
-  publicWebsiteUrl?: string;
-  publicInstagramUrl?: string;
-  publicYoutubeUrl?: string;
-  publicSpotifyUrl?: string;
+  artistLinks?: Array<{ label: string; url: string; icon?: string }>;
   publicListing?: boolean;
 };
 
@@ -99,10 +96,7 @@ export function BandProfilePagePreview({
   const displayName = data.displayName.trim() || "Your artist name";
   const links = [
     { label: "Demo", url: data.demoURL },
-    { label: "Website", url: data.publicWebsiteUrl },
-    { label: "Instagram", url: data.publicInstagramUrl },
-    { label: "YouTube", url: data.publicYoutubeUrl },
-    { label: "Spotify", url: data.publicSpotifyUrl },
+    ...(data.artistLinks ?? []),
   ].filter((link) => link.url?.trim());
 
   return (

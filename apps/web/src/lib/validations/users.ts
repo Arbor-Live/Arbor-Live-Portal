@@ -77,10 +77,9 @@ export const bandOrgProfileSchema = z
     designatedPayeeEmail: z.string(),
     designatedPayeeMailingAddress: z.string(),
     designatedPayeePayoutMethod: z.enum(["pickup", "delivery"]).or(z.literal("")),
-    publicWebsiteUrl: z.string(),
-    publicInstagramUrl: z.string(),
-    publicYoutubeUrl: z.string(),
-    publicSpotifyUrl: z.string(),
+    artistLinks: z
+      .array(z.object({ label: z.string(), url: z.string(), icon: z.string().optional() }))
+      .optional(),
     publicListing: z.boolean(),
     publicSlug: z.string(),
     publicHeroImageUrl: z.string(),

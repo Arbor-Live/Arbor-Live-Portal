@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { Controller } from "react-hook-form";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
 import { FormSaveBar } from "@/components/forms";
+import { MarketingLinksEditor } from "@/components/marketing/marketing-links-editor";
 import { Form } from "@/components/ui/form";
 import { TextFormField } from "@/components/forms/text-form-field";
 import { TextareaFormField } from "@/components/forms/textarea-form-field";
@@ -56,13 +58,10 @@ function valuesFromOrg(org: {
   designatedPayeeEmail: string;
   designatedPayeeMailingAddress: string;
   designatedPayeePayoutMethod: string;
-  publicWebsiteUrl: string;
-  publicInstagramUrl: string;
-  publicYoutubeUrl: string;
-  publicSpotifyUrl: string;
   publicListing: boolean;
   publicSlug: string;
   publicHeroImageUrl: string;
+  artistLinks?: Array<{ label: string; url: string; icon?: string }>;
 }): BandOrgProfileFormValues {
   return {
     displayName: org.displayName ?? "",
@@ -77,10 +76,7 @@ function valuesFromOrg(org: {
       org.designatedPayeePayoutMethod === "pickup" || org.designatedPayeePayoutMethod === "delivery"
         ? org.designatedPayeePayoutMethod
         : DEFAULT_BAND_PAYEE_PAYOUT_METHOD,
-    publicWebsiteUrl: org.publicWebsiteUrl ?? "",
-    publicInstagramUrl: org.publicInstagramUrl ?? "",
-    publicYoutubeUrl: org.publicYoutubeUrl ?? "",
-    publicSpotifyUrl: org.publicSpotifyUrl ?? "",
+    artistLinks: org.artistLinks ?? [],
     publicListing: org.publicListing ?? false,
     publicSlug: org.publicSlug ?? "",
     publicHeroImageUrl: org.publicHeroImageUrl ?? "",
@@ -112,10 +108,7 @@ export function AdminBandProfileClient() {
       designatedPayeeEmail: "",
       designatedPayeeMailingAddress: "",
       designatedPayeePayoutMethod: DEFAULT_BAND_PAYEE_PAYOUT_METHOD,
-      publicWebsiteUrl: "",
-      publicInstagramUrl: "",
-      publicYoutubeUrl: "",
-      publicSpotifyUrl: "",
+      artistLinks: [],
       publicListing: false,
       publicSlug: "",
       publicHeroImageUrl: "",
@@ -215,12 +208,17 @@ export function AdminBandProfileClient() {
                   <TextFormField name="displayName" label="Display name" />
                   <TextareaFormField name="bio" label="Bio" />
                   <BandPublicListingFields />
-                  <div className="grid gap-2 md:grid-cols-2">
-                    <TextFormField name="publicWebsiteUrl" label="Website" placeholder="https://..." />
-                    <TextFormField name="publicInstagramUrl" label="Instagram URL" />
-                    <TextFormField name="publicYoutubeUrl" label="YouTube URL" />
-                    <TextFormField name="publicSpotifyUrl" label="Spotify URL" />
-                  </div>
+                  <Controller
+                    control={form.control}
+                    name="artistLinks"
+                    render={({ field }) => (
+                      <MarketingLinksEditor
+                        idPrefix="admin-band-artist-links"
+                        links={field.value ?? []}
+                        onLinksChange={field.onChange}
+                      />
+                    )}
+                  />
                   <BandHeroUploadField
                     organizationId={organizationId}
                     currentUrl={form.watch("publicHeroImageUrl")}

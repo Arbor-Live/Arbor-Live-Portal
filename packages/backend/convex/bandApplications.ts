@@ -15,6 +15,7 @@ import { enqueueEmail } from "./email/enqueue";
 import { ensureOrganizationOnboarding } from "./onboarding";
 import { enforceRateLimit, HOUR_MS } from "./rateLimit";
 import { inviteEmailToBandOrg, isValidEmail } from "./lib/bandOrgInvite";
+import { marketingDesignLinkValue, normalizeMarketingLinks } from "./lib/marketingLinks";
 import { resolveOrCreateOrganization } from "./users";
 
 const memberValue = v.object({
@@ -85,6 +86,7 @@ export const submitPublic = mutation({
     genres: v.optional(v.array(v.string())),
     isSolo: v.boolean(),
     members: v.array(memberValue),
+    artistLinks: v.optional(v.array(marketingDesignLinkValue)),
   },
   returns: v.object({ applicationId: v.id("bandApplications") }),
   handler: async (ctx, args) => {
@@ -143,6 +145,7 @@ export const submitPublic = mutation({
       genres: args.genres?.map((g) => g.trim()).filter(Boolean),
       isSolo: args.isSolo,
       members,
+      artistLinks: args.artistLinks ? normalizeMarketingLinks(args.artistLinks) : undefined,
       submittedAt: now,
       createdAt: now,
       updatedAt: now,
@@ -170,6 +173,23 @@ export const submitPublic = mutation({
   },
 });
 
+/**
+ * Application links for the admin view, falling back to the legacy fixed URL
+ * fields for rows the backfill migration hasn't touched yet.
+ */
+function applicationLinks(row: Doc<"bandApplications">) {
+  if (row.artistLinks?.length) return row.artistLinks;
+  const links: Array<{ label: string; url: string; icon?: string }> = [];
+  const push = (label: string, url: string | undefined, icon: string) => {
+    const trimmed = url?.trim();
+    if (trimmed) links.push({ label, url: trimmed, icon });
+  };
+  push("Website", row.publicWebsiteUrl, "Globe");
+  push("Instagram", row.publicInstagramUrl, "InstagramLogo");
+  push("YouTube", row.publicYoutubeUrl, "YoutubeLogo");
+  return links;
+}
+
 export const listAdmin = query({
   args: {
     status: v.optional(applicationStatusValue),
@@ -192,6 +212,7 @@ export const listAdmin = query({
       genres: v.optional(v.array(v.string())),
       isSolo: v.boolean(),
       members: v.array(memberValue),
+      artistLinks: v.optional(v.array(marketingDesignLinkValue)),
       submittedAt: v.number(),
       reviewedAt: v.optional(v.number()),
       declineReason: v.optional(v.string()),
@@ -226,6 +247,7 @@ export const listAdmin = query({
         genres: row.genres,
         isSolo: row.isSolo,
         members: row.members,
+        artistLinks: applicationLinks(row),
         submittedAt: row.submittedAt,
         reviewedAt: row.reviewedAt,
         declineReason: row.declineReason,
@@ -275,14 +297,18 @@ export const approve = mutation({
           ...application.members.map((member) => member.name),
         ].filter(Boolean);
 
+    const hasArtistLinks = Boolean(application.artistLinks?.length);
     const profileFields = {
       organizationType: "band" as const,
       displayName: application.bandDisplayName,
       bio: application.bio,
       oneLiner: application.oneLiner,
-      publicWebsiteUrl: application.publicWebsiteUrl,
-      publicInstagramUrl: application.publicInstagramUrl,
-      publicYoutubeUrl: application.publicYoutubeUrl,
+      // Keep a single source of truth: when the application carries flexible
+      // links, drop the deprecated fixed URL fields.
+      publicWebsiteUrl: hasArtistLinks ? undefined : application.publicWebsiteUrl,
+      publicInstagramUrl: hasArtistLinks ? undefined : application.publicInstagramUrl,
+      publicYoutubeUrl: hasArtistLinks ? undefined : application.publicYoutubeUrl,
+      artistLinks: application.artistLinks,
       demoURL: application.demoURL,
       publicHeroImageUrl: application.publicHeroImageUrl,
       genres: application.genres,
@@ -318,6 +344,7 @@ export const approve = mutation({
       };
       if (application.publicHeroImageUrl) stampPatch.heroCompletedAt = now;
       if (
+        application.artistLinks?.length ||
         application.publicWebsiteUrl ||
         application.publicInstagramUrl ||
         application.publicYoutubeUrl ||
