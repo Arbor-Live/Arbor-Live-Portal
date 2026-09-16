@@ -5,6 +5,7 @@ import {
   ChatCircleTextIcon,
   CheckCircleIcon,
   ClockIcon,
+  ImageSquareIcon,
   ImagesIcon,
   InfoIcon,
   ReceiptIcon,
@@ -38,6 +39,8 @@ export type PortalNextStepInput = {
   eventTitle?: string;
   feedbackSubmitted: boolean;
   albumShareUrl?: string;
+  /** A linked, not-hidden event still needs a poster or description. */
+  needsPoster?: boolean;
 };
 
 const STEP_TONE_ORDER: Record<PortalStepTone, number> = {
@@ -135,6 +138,18 @@ export function derivePortalNextSteps(input: PortalNextStepInput): PortalStep[] 
       icon: ClockIcon,
       title: "Payment pending",
       body: "Payment opens once your quote is approved.",
+    });
+  }
+
+  if (input.needsPoster) {
+    steps.push({
+      key: "poster",
+      tone: "action",
+      icon: ImageSquareIcon,
+      title: "Add your event poster and description",
+      body: "Give your event a poster and a short description for the public page.",
+      ctaLabel: "Add event details",
+      targetTab: "event",
     });
   }
 

@@ -46,6 +46,7 @@ export function PublicEventLifecycleClient({ token }: { token: string }) {
     portal: "quote",
     token,
   });
+  const poster = useQuery(api.publicEventPoster.getByQuoteToken, { token });
   const recordQuoteView = useMutation(api.invoices.recordPublicQuoteView);
   const recordedQuoteView = useRef(false);
   const approve = useMutation(api.invoices.approveByToken);
@@ -109,6 +110,13 @@ export function PublicEventLifecycleClient({ token }: { token: string }) {
   const payment = data.paymentProof;
   const eventEnded = feedbackStatus?.eventEnded ?? false;
   const feedbackSubmitted = feedbackStatus?.submitted ?? false;
+  const needsPoster = Boolean(
+    poster?.eligible &&
+      !eventEnded &&
+      poster.days.some(
+        (day) => day.visibility === "public" && (!day.posterImageUrl || !day.caption?.trim()),
+      ),
+  );
 
   const steps = derivePortalNextSteps({
     declined: false,
@@ -124,6 +132,7 @@ export function PublicEventLifecycleClient({ token }: { token: string }) {
     eventTitle: linkedEvent?.title,
     feedbackSubmitted,
     albumShareUrl: feedbackStatus?.albumShareUrl,
+    needsPoster,
   });
 
   const tabs: PublicPortalTab[] = [{ id: "next", label: "What's next" }];
