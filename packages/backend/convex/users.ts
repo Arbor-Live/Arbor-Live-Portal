@@ -34,6 +34,7 @@ import {
 } from "./lib/bandOnboardingSteps";
 import { normalizeOptionalAssetReference } from "./lib/inventoryUpload";
 import { marketingDesignLinkValue, normalizeMarketingLinks } from "./lib/marketingLinks";
+import { buildArtistLinks } from "./lib/publicArtistProfile";
 import {
   collectKeysFromOrganizationProfile,
   releaseReplacedR2Reference,
@@ -577,7 +578,7 @@ export const listBandOrganizationsAdmin = query({
           publicInstagramUrl: profile?.publicInstagramUrl ?? "",
           publicYoutubeUrl: profile?.publicYoutubeUrl ?? "",
           publicSpotifyUrl: profile?.publicSpotifyUrl ?? "",
-          artistLinks: profile?.artistLinks ?? [],
+          artistLinks: profile ? buildArtistLinks(profile) : [],
           publicListing: profile?.publicListing ?? false,
           publicSlug: profile?.publicSlug ?? "",
           publicHeroImageUrl: profile?.publicHeroImageUrl ?? "",
@@ -2314,7 +2315,7 @@ export const getActiveBandProfile = query({
       publicInstagramUrl: profile?.publicInstagramUrl ?? "",
       publicYoutubeUrl: profile?.publicYoutubeUrl ?? "",
       publicSpotifyUrl: profile?.publicSpotifyUrl ?? "",
-      artistLinks: profile?.artistLinks ?? [],
+      artistLinks: profile ? buildArtistLinks(profile) : [],
       publicListing: profile?.publicListing ?? false,
       publicSlug: profile?.publicSlug ?? "",
       publicHeroImageUrl: profile?.publicHeroImageUrl ?? "",

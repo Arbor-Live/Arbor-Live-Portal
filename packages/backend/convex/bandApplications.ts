@@ -173,6 +173,23 @@ export const submitPublic = mutation({
   },
 });
 
+/**
+ * Application links for the admin view, falling back to the legacy fixed URL
+ * fields for rows the backfill migration hasn't touched yet.
+ */
+function applicationLinks(row: Doc<"bandApplications">) {
+  if (row.artistLinks?.length) return row.artistLinks;
+  const links: Array<{ label: string; url: string; icon?: string }> = [];
+  const push = (label: string, url: string | undefined, icon: string) => {
+    const trimmed = url?.trim();
+    if (trimmed) links.push({ label, url: trimmed, icon });
+  };
+  push("Website", row.publicWebsiteUrl, "Globe");
+  push("Instagram", row.publicInstagramUrl, "InstagramLogo");
+  push("YouTube", row.publicYoutubeUrl, "YoutubeLogo");
+  return links;
+}
+
 export const listAdmin = query({
   args: {
     status: v.optional(applicationStatusValue),
@@ -230,7 +247,7 @@ export const listAdmin = query({
         genres: row.genres,
         isSolo: row.isSolo,
         members: row.members,
-        artistLinks: row.artistLinks,
+        artistLinks: applicationLinks(row),
         submittedAt: row.submittedAt,
         reviewedAt: row.reviewedAt,
         declineReason: row.declineReason,
@@ -280,14 +297,17 @@ export const approve = mutation({
           ...application.members.map((member) => member.name),
         ].filter(Boolean);
 
+    const hasArtistLinks = Boolean(application.artistLinks?.length);
     const profileFields = {
       organizationType: "band" as const,
       displayName: application.bandDisplayName,
       bio: application.bio,
       oneLiner: application.oneLiner,
-      publicWebsiteUrl: application.publicWebsiteUrl,
-      publicInstagramUrl: application.publicInstagramUrl,
-      publicYoutubeUrl: application.publicYoutubeUrl,
+      // Keep a single source of truth: when the application carries flexible
+      // links, drop the deprecated fixed URL fields.
+      publicWebsiteUrl: hasArtistLinks ? undefined : application.publicWebsiteUrl,
+      publicInstagramUrl: hasArtistLinks ? undefined : application.publicInstagramUrl,
+      publicYoutubeUrl: hasArtistLinks ? undefined : application.publicYoutubeUrl,
       artistLinks: application.artistLinks,
       demoURL: application.demoURL,
       publicHeroImageUrl: application.publicHeroImageUrl,
