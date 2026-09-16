@@ -174,7 +174,7 @@ test.describe("invoice terms templates", () => {
       { invoiceId },
       (row) => Boolean(row?.publicApprovalToken),
     );
-    await page.goto(`/event/${review.publicApprovalToken}`);
+    await page.goto(`/event/${review.publicApprovalToken}?tab=quote`);
     await expect(page.getByText(markdown).first()).toBeVisible({ timeout: 25_000 });
   });
 });

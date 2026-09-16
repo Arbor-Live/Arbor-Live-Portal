@@ -44,7 +44,7 @@ test.describe("staff invoice create", () => {
     expect(state.invoiceNumber).toMatch(/^ALINV-/);
     expect(state.publicPath).toBeTruthy();
 
-    await page.goto(state.publicPath!);
+    await page.goto(`${state.publicPath!}?tab=quote`);
     await expect(page.getByText(/Terms & Conditions/i).first()).toBeVisible({ timeout: 25_000 });
   });
 });

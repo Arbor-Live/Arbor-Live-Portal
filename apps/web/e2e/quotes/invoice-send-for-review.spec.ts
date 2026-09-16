@@ -144,7 +144,7 @@ test.describe("invoice send for client review", () => {
     const clientContext = await browser.newContext({ baseURL: e2eEnv.baseURL });
     try {
       const clientPage = await clientContext.newPage();
-      await clientPage.goto(seeded.trackPath);
+      await clientPage.goto(`${seeded.trackPath}?tab=quote`);
       await expect(
         clientPage.getByText(/Terms & Conditions|Approve quote/i).first(),
       ).toBeVisible({ timeout: 25_000 });
@@ -185,7 +185,7 @@ test.describe("invoice send for client review", () => {
     const clientContext = await browser.newContext({ baseURL: e2eEnv.baseURL });
     try {
       const clientPage = await clientContext.newPage();
-      await clientPage.goto(seeded.trackPath);
+      await clientPage.goto(`${seeded.trackPath}?tab=quote`);
       await expect(clientPage.getByText(/Terms & Conditions/i).first()).toBeVisible({
         timeout: 25_000,
       });
@@ -226,11 +226,11 @@ test.describe("invoice send for client review", () => {
     const recheckContext = await browser.newContext({ baseURL: e2eEnv.baseURL });
     try {
       const recheckPage = await recheckContext.newPage();
-      await recheckPage.goto(seeded.trackPath);
+      await recheckPage.goto(`${seeded.trackPath}?tab=quote`);
       await expect(recheckPage.getByRole("button", { name: "Approve quote" })).toBeVisible({
         timeout: 25_000,
       });
-      await expect(recheckPage.getByText(/Awaiting your approval/i)).toBeVisible({
+      await expect(recheckPage.getByText(/Terms & Conditions/i).first()).toBeVisible({
         timeout: 25_000,
       });
     } finally {
