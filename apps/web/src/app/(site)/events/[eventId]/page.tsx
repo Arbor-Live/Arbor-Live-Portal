@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PublicMarketingLayout } from "@/components/public/public-marketing-layout";
 import { PublicEventPoster } from "@/components/public/public-event-poster";
+import { PublicEventArtists } from "@/components/public/public-artist-card";
 import { PublicStaffDashboardLinks } from "@/components/public/public-staff-dashboard-links";
 import { LandingUpcomingEvents } from "@/components/public/public-events-grid";
 import { Button } from "@/components/ui/button";
@@ -117,6 +118,12 @@ export default async function PublicEventDetailPage({ params }: EventDetailPageP
           </div>
         </section>
       </article>
+
+      {event.artists.length > 0 ? (
+        <section className="mx-auto max-w-5xl px-4 py-12 sm:px-6 lg:px-8">
+          <PublicEventArtists artists={event.artists} title="Lineup" />
+        </section>
+      ) : null}
 
       <LandingUpcomingEvents excludeEventId={event.eventId} />
     </PublicMarketingLayout>
