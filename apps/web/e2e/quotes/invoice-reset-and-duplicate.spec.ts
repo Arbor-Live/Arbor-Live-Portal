@@ -56,7 +56,7 @@ test.describe("invoice approval reset and duplicate", () => {
     const clientContext = await browser.newContext({ baseURL: e2eEnv.baseURL });
     try {
       const clientPage = await clientContext.newPage();
-      await clientPage.goto(drafted.publicPath!);
+      await clientPage.goto(`${drafted.publicPath!}?tab=quote`);
       await expect(clientPage.getByText(/Terms & Conditions/i).first()).toBeVisible({
         timeout: 25_000,
       });
@@ -112,7 +112,7 @@ test.describe("invoice approval reset and duplicate", () => {
     const recheckContext = await browser.newContext({ baseURL: e2eEnv.baseURL });
     try {
       const recheckPage = await recheckContext.newPage();
-      await recheckPage.goto(approved.publicPath!);
+      await recheckPage.goto(`${approved.publicPath!}?tab=quote`);
       await expect(recheckPage.getByRole("button", { name: "Approve quote" })).toBeVisible({
         timeout: 25_000,
       });

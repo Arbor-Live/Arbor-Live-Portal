@@ -137,7 +137,54 @@ export async function loadPublicQuoteView(ctx: QueryCtx, invoice: Doc<"invoices"
         )
       ).flat()
     : [];
-  const hostDisplay = linkedEvent ? await loadEventHostDisplay(ctx, linkedEvent) : null;
+  const hostDisplays = await Promise.all(
+    linkedEvents.map((event) => loadEventHostDisplay(ctx, event)),
+  );
+
+  const events = linkedEvents.map((event, index) => {
+    const hostDisplay = hostDisplays[index];
+    const assignments = eventAssignments.filter((row) => row.eventId === event._id);
+    const scheduleBlocks = eventScheduleBlocks.filter((row) => row.eventId === event._id);
+    const shifts = eventShifts.filter((row) => row.eventId === event._id);
+    const artifacts = eventArtifacts.filter((row) => row.eventId === event._id);
+    const eventManagerAssignment = assignments.find((row) => row.assignmentType === "event_manager");
+    const dayOfLeadAssignment = assignments.find((row) => row.assignmentType === "day_of_lead");
+    const crewAssignments = assignments.filter((row) => row.assignmentType === "crew");
+    return {
+      id: event._id,
+      title: event.title,
+      status: event.status,
+      venueName: event.venueName,
+      eventType: event.eventType,
+      host: hostDisplay?.hostLabel,
+      additionalHosts: hostDisplay?.additionalHosts ?? [],
+      startAt: event.startAt,
+      endAt: event.endAt,
+      assignments,
+      scheduleBlocks,
+      contacts: {
+        manager: {
+          name: eventManagerAssignment?.personName ?? invoice.managerName,
+          email: eventManagerAssignment?.contactEmail ?? invoice.managerEmail ?? undefined,
+          phone: eventManagerAssignment?.contactPhone ?? undefined,
+        },
+        dayOfLead: dayOfLeadAssignment
+          ? {
+              name: dayOfLeadAssignment.personName,
+              email: dayOfLeadAssignment.contactEmail ?? undefined,
+              phone: dayOfLeadAssignment.contactPhone ?? undefined,
+            }
+          : null,
+      },
+      crewRoster: crewAssignments.map((row) => ({
+        name: row.personName,
+        role: row.roleLabel ?? undefined,
+        email: row.contactEmail ?? undefined,
+      })),
+      shifts,
+      artifacts,
+    };
+  });
 
   return {
     invoice: {
@@ -173,46 +220,8 @@ export async function loadPublicQuoteView(ctx: QueryCtx, invoice: Doc<"invoices"
     lineItems: displayLineItems,
     termsAndConditionsMarkdown: combinedTermsMarkdown,
     termsVersion: globalTermsVersion,
-    event: linkedEvent
-      ? (() => {
-          const eventManagerAssignment = eventAssignments.find((row) => row.assignmentType === "event_manager");
-          const dayOfLeadAssignment = eventAssignments.find((row) => row.assignmentType === "day_of_lead");
-          const crewAssignments = eventAssignments.filter((row) => row.assignmentType === "crew");
-          return {
-            id: linkedEvent._id,
-            title: linkedEvent.title,
-            status: linkedEvent.status,
-            venueName: linkedEvent.venueName,
-            eventType: linkedEvent.eventType,
-            host: hostDisplay?.hostLabel,
-            startAt: linkedEvent.startAt,
-            endAt: linkedEvent.endAt,
-            assignments: eventAssignments,
-            scheduleBlocks: eventScheduleBlocks,
-            contacts: {
-              manager: {
-                name: eventManagerAssignment?.personName ?? invoice.managerName,
-                email: eventManagerAssignment?.contactEmail ?? invoice.managerEmail ?? undefined,
-                phone: eventManagerAssignment?.contactPhone ?? undefined,
-              },
-              dayOfLead: dayOfLeadAssignment
-                ? {
-                    name: dayOfLeadAssignment.personName,
-                    email: dayOfLeadAssignment.contactEmail ?? undefined,
-                    phone: dayOfLeadAssignment.contactPhone ?? undefined,
-                  }
-                : null,
-            },
-            crewRoster: crewAssignments.map((row) => ({
-              name: row.personName,
-              role: row.roleLabel ?? undefined,
-              email: row.contactEmail ?? undefined,
-            })),
-            shifts: eventShifts,
-            artifacts: eventArtifacts,
-          };
-        })()
-      : null,
+    event: events[0] ?? null,
+    events,
     paymentProof,
   };
 }

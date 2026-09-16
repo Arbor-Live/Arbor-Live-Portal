@@ -14,7 +14,7 @@ test.describe("post-event portal section", () => {
       albumShareUrl: string;
     };
 
-    await page.goto(seeded.path);
+    await page.goto(`${seeded.path}#feedback`);
     await expect(page.getByText("Photo album").first()).toBeVisible({ timeout: 25_000 });
     const albumLink = page.getByRole("link", { name: "View the album" });
     await expect(albumLink).toHaveAttribute("href", seeded.albumShareUrl);
@@ -39,7 +39,7 @@ test.describe("post-event portal section", () => {
       albumShareUrl: string;
     };
 
-    await page.goto(seeded.path);
+    await page.goto(`${seeded.path}#feedback`);
     await expect(page.getByText("Photo album").first()).toBeVisible({ timeout: 25_000 });
     const albumLink = page.getByRole("link", { name: "View the album" });
     await expect(albumLink).toHaveAttribute("href", seeded.albumShareUrl);

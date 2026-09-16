@@ -10,7 +10,7 @@ test.describe("public quote approval", () => {
       publicApprovalToken: string;
     };
 
-    await page.goto(seeded.path);
+    await page.goto(`${seeded.path}?tab=quote`);
     await expect(page.getByText(/Terms & Conditions/i).first()).toBeVisible({ timeout: 20_000 });
 
     await page.getByPlaceholder("Jordan Lee").fill("E2E Approver");
@@ -33,7 +33,7 @@ test.describe("public quote approval", () => {
       publicApprovalToken: string;
     };
 
-    await page.goto(seeded.path);
+    await page.goto(`${seeded.path}?tab=quote`);
     await expect(page.getByText(/Request Changes/i).first()).toBeVisible({ timeout: 20_000 });
 
     await page.getByPlaceholder("Tell us what changes are needed").fill("Please reduce crew hours.");
@@ -54,7 +54,7 @@ test.describe("public quote approval", () => {
       path: string;
     };
 
-    await page.goto(seeded.path);
+    await page.goto(`${seeded.path}?tab=quote`);
     await expect(page.getByText(/Submit Payment Proof/i).first()).toBeVisible({ timeout: 20_000 });
 
     await page.getByPlaceholder("24278").fill("987654");

@@ -12,7 +12,7 @@ test.describe("booking track approve", () => {
       trackPath: string;
     };
 
-    await page.goto(seeded.trackPath);
+    await page.goto(`${seeded.trackPath}?tab=quote`);
     await expect(page.getByText(/Terms & Conditions|Approve quote/i).first()).toBeVisible({
       timeout: 25_000,
     });

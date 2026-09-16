@@ -1,15 +1,21 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { PublicPageHero } from "@/components/public/public-page-hero";
 import { PublicSiteChrome } from "@/components/public/public-site-chrome";
 import { PublicPortalPageSkeleton } from "@/components/public/public-skeletons";
+import { PublicPortalTabs, type PublicPortalTab } from "@/components/public/public-portal-tabs";
+import {
+  PublicPortalNextSteps,
+  derivePortalNextSteps,
+} from "@/components/public/public-portal-next-steps";
 import { PublicEventHeader } from "@/components/public/public-event-header";
-import { PublicEventSchedule } from "@/components/public/public-event-schedule";
+import { PublicEventTimetable } from "@/components/public/public-event-timetable";
 import { PublicEventCrew } from "@/components/public/public-event-crew";
 import { PublicEventContacts } from "@/components/public/public-event-contacts";
 import { PublicQuoteFinancials } from "@/components/public/public-quote-financials";
@@ -21,21 +27,12 @@ import { PublicInvoicePdfDownload } from "@/components/public/public-invoice-pdf
 import { PublicPostEventSection } from "@/components/public/public-post-event-section";
 import { PublicStaffDashboardLinks } from "@/components/public/public-staff-dashboard-links";
 import { PublicEventPosterSection } from "@/components/public/public-event-poster-section";
-import { formatDateTime, formatUsd } from "@/lib/format";
+import { formatDateTime } from "@/lib/format";
 import { ARBOR_CONTACT_EMAIL } from "@/lib/landing-content";
 import type {
   PublicPaymentContactsFormValues,
   PublicQuoteApprovalFormValues,
 } from "@/lib/validations/crew-availability";
-
-const STATUS_LABELS: Record<string, string> = {
-  submitted: "Submitted",
-  action_required: "Quote in progress",
-  in_review: "Quote in progress",
-  pending_client: "Awaiting your response",
-  converted: "Converted",
-  declined: "Declined",
-};
 
 type LifecycleStep = {
   key: string;
@@ -86,26 +83,19 @@ function buildLifecycleSteps(request: {
       key: "approved",
       label: "Quote approved — logistics planning",
       complete: quoteApproved,
-      active:
-        (quoteReady || request.status === "pending_client") && !quoteApproved,
+      active: (quoteReady || request.status === "pending_client") && !quoteApproved,
     },
   ];
-}
-
-function quoteStatusLabel(status: "pending" | "approved" | "changes_requested") {
-  switch (status) {
-    case "approved":
-      return "Approved";
-    case "changes_requested":
-      return "Changes requested";
-    default:
-      return "Awaiting your approval";
-  }
 }
 
 export function PublicRequestLifecycleClient({ token }: { token: string }) {
   const request = useQuery(api.eventRequests.getPublicRequestByToken, { token });
   const quoteData = useQuery(api.eventRequests.getPublicRequestQuoteByToken, { token });
+  const feedbackStatus = useQuery(api.eventFeedback.getStatusByToken, {
+    portal: "request",
+    token,
+  });
+  const poster = useQuery(api.publicEventPoster.getByRequestToken, { token });
   const recordQuoteView = useMutation(api.eventRequests.recordPublicQuoteViewByRequestToken);
   const recordedQuoteView = useRef(false);
   const approve = useMutation(api.eventRequests.approveQuoteByRequestToken);
@@ -113,11 +103,29 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
   const updatePaymentContacts = useMutation(api.eventRequests.updatePaymentContactsByRequestToken);
   const submitPaymentProof = useMutation(api.paymentProof.submitByRequestToken);
 
+  const [activeTab, setActiveTab] = useState(() => {
+    if (typeof window === "undefined") return "next";
+    const hash = window.location.hash.replace(/^#/, "");
+    if (hash === "feedback") return "after";
+    return new URLSearchParams(window.location.search).get("tab") ?? "next";
+  });
+  const [selectedDay, setSelectedDay] = useState(0);
+
   useEffect(() => {
     if (!quoteData || recordedQuoteView.current) return;
     recordedQuoteView.current = true;
     void recordQuoteView({ token });
   }, [quoteData, recordQuoteView, token]);
+
+  const selectTab = (id: string) => {
+    setActiveTab(id);
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (id === "next") url.searchParams.delete("tab");
+    else url.searchParams.set("tab", id);
+    url.hash = "";
+    window.history.replaceState(null, "", url);
+  };
 
   if (request === undefined) {
     return (
@@ -143,8 +151,55 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
   const isFinalized = isDeclined || isQuoteVoided;
   const quoteLocked = quoteData ? quoteData.invoice.clientApprovalStatus !== "pending" : false;
   const linkedEvent = quoteData?.event ?? null;
+  const events = quoteData?.events ?? [];
+  const dayIndex = Math.min(selectedDay, Math.max(0, events.length - 1));
+  const selectedEvent = events[dayIndex] ?? linkedEvent;
   const showPaymentContacts =
     quoteData?.invoice.clientApprovalStatus === "approved" && !quoteData.paymentProof?.paymentReceived;
+
+  const approvalStatus =
+    quoteData?.invoice.clientApprovalStatus ?? request.quote?.clientApprovalStatus ?? "pending";
+  const payment = quoteData?.paymentProof;
+  const eventEnded = feedbackStatus?.eventEnded ?? false;
+  const feedbackSubmitted = feedbackStatus?.submitted ?? false;
+  const needsPoster = Boolean(
+    poster?.eligible &&
+      !eventEnded &&
+      poster.days.some(
+        (day) => day.visibility === "public" && (!day.posterImageUrl || !day.caption?.trim()),
+      ),
+  );
+
+  const steps = derivePortalNextSteps({
+    declined: isDeclined,
+    finalized: isQuoteVoided,
+    quoteReady: Boolean(quoteData),
+    approvalStatus,
+    payment: {
+      canSubmit: Boolean(payment?.canSubmit),
+      submitted: Boolean(payment?.submission),
+      received: Boolean(payment?.paymentReceived),
+    },
+    eventEnded,
+    eventTitle: linkedEvent?.title ?? request.eventName ?? undefined,
+    feedbackSubmitted,
+    albumShareUrl: feedbackStatus?.albumShareUrl,
+    needsPoster,
+  });
+
+  const tabs: PublicPortalTab[] = [{ id: "next", label: "What's next" }];
+  if (linkedEvent) tabs.push({ id: "event", label: "Event" });
+  if (quoteData && !isQuoteVoided) {
+    tabs.push({
+      id: "quote",
+      label: "Quote & payment",
+      attention: approvalStatus === "pending" || Boolean(payment?.canSubmit),
+    });
+  }
+  if (eventEnded) {
+    tabs.push({ id: "after", label: "After the event", attention: !feedbackSubmitted });
+  }
+  const resolvedTab = tabs.some((tab) => tab.id === activeTab) ? activeTab : "next";
 
   const handleApprove = async (values: PublicQuoteApprovalFormValues) => {
     await approve({
@@ -173,10 +228,6 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
     });
   };
 
-  const statusLabel = isQuoteVoided
-    ? "Finalized"
-    : (STATUS_LABELS[request.status] ?? request.status);
-
   const heroSubtitle = isQuoteVoided
     ? "This quote has been voided. This request is finalized."
     : (request.eventName ??
@@ -198,245 +249,273 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
           />
         }
       />
-      <div className="mx-auto w-full min-w-0 max-w-6xl space-y-4 px-4 py-12 sm:px-6 lg:px-8">
-      <PublicPostEventSection portal="request" token={token} />
-      <Card>
-        <CardHeader>
-          <CardTitle>Request {request.requestNumber}</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3 text-sm">
-          <p>
-            Status:{" "}
-            <span className="font-medium">{statusLabel}</span>
-          </p>
-          <p className="text-muted-foreground">
-            Submitted {formatDateTime(request.submittedAt)}
-          </p>
-          <p>
-            {request.firstName} {request.lastName} · {request.email}
-          </p>
-          {request.organization ? <p>Organization: {request.organization}</p> : null}
-          <p>
-            {request.eventName ? (
-              <>
-                <span className="font-medium">{request.eventName}</span>
-                <span className="text-muted-foreground"> · {request.eventCategory}</span>
-              </>
-            ) : (
-              request.eventCategory
-            )}
-            {" · "}
-            {request.eventDateText}
-          </p>
-          {request.eventScheduleText ? (
-            <p className="whitespace-pre-wrap">{request.eventScheduleText}</p>
-          ) : (
-            <p>
-              {request.eventStartTimeText} – {request.eventEndTimeText}
-            </p>
-          )}
-          {request.quote ? (
-            <p>
-              Quote {request.quote.invoiceNumber}
-              {request.quote.status === "void"
-                ? " · Voided"
-                : request.quote.readyForClientReview
-                  ? request.quote.clientApprovalStatus === "approved"
-                    ? " · Approved"
-                    : request.quote.clientApprovalStatus === "changes_requested"
-                      ? " · Changes requested"
-                      : " · Ready for your review"
-                  : " · Being prepared"}
-            </p>
-          ) : null}
-          {request.expectedTurnout >= 200 && !isFinalized ? (
-            <p className="rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-amber-800">
-              Campus sensation ({request.expectedTurnout} guests). Our team will follow up with extra
-              coordination steps.
-            </p>
-          ) : null}
-        </CardContent>
-      </Card>
+      <PublicPortalTabs tabs={tabs} activeTab={resolvedTab} onSelect={selectTab}>
+        {resolvedTab === "next" ? (
+          <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
+            <div className="space-y-4 lg:order-2">
+              <h2 className="font-heading text-sm font-medium text-muted-foreground">
+                Notification center
+              </h2>
+              <PublicPortalNextSteps steps={steps} onNavigate={selectTab} />
+            </div>
+            <div className="space-y-4 lg:order-1">
+            <h2 className="font-heading text-sm font-medium text-muted-foreground">
+              Request details
+            </h2>
+            <Card>
+              <CardContent className="space-y-3 text-sm">
+                <p className="text-muted-foreground">
+                  Submitted {formatDateTime(request.submittedAt)}
+                </p>
+                <p>
+                  {request.firstName} {request.lastName} · {request.email}
+                </p>
+                {request.organization ? <p>Organization: {request.organization}</p> : null}
+                <p>
+                  {request.eventName ? (
+                    <>
+                      <span className="font-medium">{request.eventName}</span>
+                      <span className="text-muted-foreground"> · {request.eventCategory}</span>
+                    </>
+                  ) : (
+                    request.eventCategory
+                  )}
+                  {" · "}
+                  {request.eventDateText}
+                </p>
+                {request.eventScheduleText ? (
+                  <p className="whitespace-pre-wrap">{request.eventScheduleText}</p>
+                ) : (
+                  <p>
+                    {request.eventStartTimeText} – {request.eventEndTimeText}
+                  </p>
+                )}
+                {request.expectedTurnout >= 200 && !isFinalized ? (
+                  <p className="rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-amber-800">
+                    Campus sensation ({request.expectedTurnout} guests). Our team will follow up with
+                    extra coordination steps.
+                  </p>
+                ) : null}
+              </CardContent>
+            </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Request lifecycle</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {isDeclined ? (
-            <p className="text-sm text-muted-foreground">
-              This request was declined. Contact {ARBOR_CONTACT_EMAIL} if you have questions.
-            </p>
-          ) : isQuoteVoided ? (
-            <>
-              <p className="text-sm text-muted-foreground">
-                This quote has been voided and the request is finalized. If you&apos;d like to get
-                in touch or submit a new booking request, email{" "}
-                <a
-                  href={`mailto:${ARBOR_CONTACT_EMAIL}`}
-                  className="font-medium text-foreground underline underline-offset-2"
-                >
-                  {ARBOR_CONTACT_EMAIL}
-                </a>{" "}
-                or{" "}
-                <Link
-                  href="/request"
-                  className="font-medium text-foreground underline underline-offset-2"
-                >
-                  submit a new request
-                </Link>
-                .
-              </p>
-              {lifecycleSteps.map((step, index) => (
-                <div key={step.key} className="flex items-center gap-3 text-sm">
-                  <span
-                    className={`flex size-6 items-center justify-center rounded-full border text-xs ${
-                      step.complete
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "text-muted-foreground"
-                    }`}
-                  >
-                    {index + 1}
-                  </span>
-                  <span className={step.complete || step.active ? "font-medium" : "text-muted-foreground"}>
-                    {step.label}
-                  </span>
-                </div>
-              ))}
-            </>
-          ) : (
-            lifecycleSteps.map((step, index) => (
-              <div key={step.key} className="flex items-center gap-3 text-sm">
-                <span
-                  className={`flex size-6 items-center justify-center rounded-full border text-xs ${
-                    step.complete
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : step.active
-                        ? "border-primary text-primary"
-                        : "text-muted-foreground"
-                  }`}
-                >
-                  {index + 1}
-                </span>
-                <span className={step.complete || step.active ? "font-medium" : "text-muted-foreground"}>
-                  {step.label}
-                </span>
-              </div>
-            ))
-          )}
-        </CardContent>
-      </Card>
-
-      {!isQuoteVoided && !(quoteData && linkedEvent) ? (
-        <PublicEventPosterSection portal="request" token={token} />
-      ) : null}
-
-      {quoteData && !isQuoteVoided ? (
-        <>
-          <Card>
-            <CardHeader>
-              <CardTitle>Quote {quoteData.invoice.invoiceNumber}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              <p>Issued: {quoteData.invoice.issueDate}</p>
-              {quoteData.invoice.clientGroupName ? (
-                <p>Host: {quoteData.invoice.clientGroupName}</p>
-              ) : null}
-              {quoteData.invoice.clientContactName ? <p>Contact: {quoteData.invoice.clientContactName}</p> : null}
-              <p className="text-base font-semibold">Total: {formatUsd(quoteData.invoice.totalUsd)}</p>
-              <p className="text-muted-foreground">
-                {quoteStatusLabel(quoteData.invoice.clientApprovalStatus)}
-              </p>
-              <PublicInvoicePdfDownload
-                token={token}
-                portal="request"
-                invoiceNumber={quoteData.invoice.invoiceNumber}
-              />
-            </CardContent>
-          </Card>
-
-          {linkedEvent ? (
-            <>
-              <PublicEventHeader
-                title={linkedEvent.title}
-                eventType={linkedEvent.eventType ?? undefined}
-                venueName={linkedEvent.venueName ?? undefined}
-                host={linkedEvent.host ?? undefined}
-                startAt={linkedEvent.startAt}
-                endAt={linkedEvent.endAt}
-                status={linkedEvent.status}
-              />
-              <PublicEventPosterSection portal="request" token={token} />
-              <PublicEventContacts
-                manager={linkedEvent.contacts.manager}
-                dayOfLead={linkedEvent.contacts.dayOfLead}
-              />
-              <PublicEventSchedule blocks={linkedEvent.scheduleBlocks} />
-              <PublicEventCrew crew={linkedEvent.crewRoster} />
-            </>
-          ) : null}
-
-          <PublicQuoteFinancials
-            lineItems={quoteData.lineItems}
-            totals={{
-              equipmentSubtotalUsd: quoteData.invoice.equipmentSubtotalUsd,
-              externalRentalsSubtotalUsd: quoteData.invoice.externalRentalsSubtotalUsd,
-              artistsSubtotalUsd: quoteData.invoice.artistsSubtotalUsd,
-              crewSubtotalUsd: quoteData.invoice.crewSubtotalUsd,
-              feesSubtotalUsd: quoteData.invoice.feesSubtotalUsd,
-              subtotalUsd: quoteData.invoice.subtotalUsd,
-              discountAmountUsd: quoteData.invoice.discountAmountUsd,
-              totalUsd: quoteData.invoice.totalUsd,
-            }}
-          />
-
-          {quoteData.invoice.notes ? (
             <Card>
               <CardHeader>
-                <CardTitle>Quote Notes</CardTitle>
+                <CardTitle>Request lifecycle</CardTitle>
               </CardHeader>
-              <CardContent className="text-sm whitespace-pre-wrap">{quoteData.invoice.notes}</CardContent>
+              <CardContent className="space-y-3">
+                {isDeclined ? (
+                  <p className="text-sm text-muted-foreground">
+                    This request was declined. Contact {ARBOR_CONTACT_EMAIL} if you have questions.
+                  </p>
+                ) : isQuoteVoided ? (
+                  <>
+                    <p className="text-sm text-muted-foreground">
+                      This quote has been voided and the request is finalized. If you&apos;d like to
+                      get in touch or submit a new booking request, email{" "}
+                      <a
+                        href={`mailto:${ARBOR_CONTACT_EMAIL}`}
+                        className="font-medium text-foreground underline underline-offset-2"
+                      >
+                        {ARBOR_CONTACT_EMAIL}
+                      </a>{" "}
+                      or{" "}
+                      <Link
+                        href="/request"
+                        className="font-medium text-foreground underline underline-offset-2"
+                      >
+                        submit a new request
+                      </Link>
+                      .
+                    </p>
+                    {lifecycleSteps.map((step, index) => (
+                      <div key={step.key} className="flex items-center gap-3 text-sm">
+                        <span
+                          className={`flex size-6 items-center justify-center rounded-full border text-xs ${
+                            step.complete
+                              ? "border-primary bg-primary text-primary-foreground"
+                              : "text-muted-foreground"
+                          }`}
+                        >
+                          {index + 1}
+                        </span>
+                        <span
+                          className={step.complete || step.active ? "font-medium" : "text-muted-foreground"}
+                        >
+                          {step.label}
+                        </span>
+                      </div>
+                    ))}
+                  </>
+                ) : (
+                  lifecycleSteps.map((step, index) => (
+                    <div key={step.key} className="flex items-center gap-3 text-sm">
+                      <span
+                        className={`flex size-6 items-center justify-center rounded-full border text-xs ${
+                          step.complete
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : step.active
+                              ? "border-primary text-primary"
+                              : "text-muted-foreground"
+                        }`}
+                      >
+                        {index + 1}
+                      </span>
+                      <span
+                        className={step.complete || step.active ? "font-medium" : "text-muted-foreground"}
+                      >
+                        {step.label}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </CardContent>
             </Card>
-          ) : null}
 
-          <PublicQuoteApprovalSection
-            invoice={quoteData.invoice}
-            termsAndConditionsMarkdown={quoteData.termsAndConditionsMarkdown}
-            termsVersion={quoteData.termsVersion}
-            onApprove={handleApprove}
-          />
+            {!isQuoteVoided && !linkedEvent ? (
+              <PublicEventPosterSection portal="request" token={token} />
+            ) : null}
+            </div>
+          </div>
+        ) : null}
 
-          <PublicQuoteChangeRequestSection
-            disabled={quoteLocked}
-            onRequestChanges={async (note) => {
-              await requestChanges({ token, note });
-            }}
-          />
-
-          {showPaymentContacts ? (
-            <PublicPaymentContactsSection
-              key={quoteData.invoice._id}
-              contacts={quoteData.invoice}
-              onSave={handleSavePaymentContacts}
+        {resolvedTab === "event" && selectedEvent ? (
+          <>
+            {events.length > 1 ? (
+              <div role="tablist" aria-label="Event day" className="flex flex-wrap gap-2">
+                {events.map((event, index) => (
+                  <Button
+                    key={event.id}
+                    type="button"
+                    role="tab"
+                    size="sm"
+                    variant={index === dayIndex ? "default" : "outline"}
+                    aria-selected={index === dayIndex}
+                    onClick={() => setSelectedDay(index)}
+                  >
+                    Day {index + 1}
+                  </Button>
+                ))}
+              </div>
+            ) : null}
+            <PublicEventHeader
+              title={selectedEvent.title}
+              eventType={selectedEvent.eventType ?? undefined}
+              venueName={selectedEvent.venueName ?? undefined}
+              host={selectedEvent.host ?? undefined}
+              startAt={selectedEvent.startAt}
+              endAt={selectedEvent.endAt}
+              status={selectedEvent.status}
             />
-          ) : null}
-
-          {quoteData.paymentProof ? (
-            <PublicPaymentProofSection
+            <PublicEventPosterSection
+              portal="request"
               token={token}
-              paymentProof={quoteData.paymentProof}
-              submitMutation={submitPaymentProof}
+              dayIndex={dayIndex}
+              hideDayTabs
             />
-          ) : null}
-        </>
-      ) : !isQuoteVoided && request.quote && !request.quote.readyForClientReview ? (
-        <Card>
-          <CardContent className="py-6 text-sm text-muted-foreground">
-            Your quote is being prepared. You will see the full quote here when it is ready for review.
-          </CardContent>
-        </Card>
-      ) : null}
-      </div>
+            <PublicEventContacts
+              manager={selectedEvent.contacts.manager}
+              dayOfLead={selectedEvent.contacts.dayOfLead}
+            />
+            <PublicEventTimetable blocks={selectedEvent.scheduleBlocks} />
+            <PublicEventCrew crew={selectedEvent.crewRoster} />
+          </>
+        ) : null}
+
+        {resolvedTab === "quote" ? (
+          quoteData && !isQuoteVoided ? (
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
+              <div className="space-y-4 lg:order-2 lg:sticky lg:top-24">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Quote details</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2 text-sm">
+                    <p>Issued: {quoteData.invoice.issueDate}</p>
+                    {quoteData.invoice.clientGroupName ? (
+                      <p>Host: {quoteData.invoice.clientGroupName}</p>
+                    ) : null}
+                    {quoteData.invoice.clientContactName ? (
+                      <p>Contact: {quoteData.invoice.clientContactName}</p>
+                    ) : null}
+                    <PublicInvoicePdfDownload
+                      token={token}
+                      portal="request"
+                      invoiceNumber={quoteData.invoice.invoiceNumber}
+                    />
+                  </CardContent>
+                </Card>
+              </div>
+
+              <div className="space-y-4 lg:order-1">
+                <PublicQuoteFinancials
+                  lineItems={quoteData.lineItems}
+                  totals={{
+                    equipmentSubtotalUsd: quoteData.invoice.equipmentSubtotalUsd,
+                    externalRentalsSubtotalUsd: quoteData.invoice.externalRentalsSubtotalUsd,
+                    artistsSubtotalUsd: quoteData.invoice.artistsSubtotalUsd,
+                    crewSubtotalUsd: quoteData.invoice.crewSubtotalUsd,
+                    feesSubtotalUsd: quoteData.invoice.feesSubtotalUsd,
+                    subtotalUsd: quoteData.invoice.subtotalUsd,
+                    discountAmountUsd: quoteData.invoice.discountAmountUsd,
+                    totalUsd: quoteData.invoice.totalUsd,
+                  }}
+                />
+
+                {quoteData.invoice.notes ? (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Quote Notes</CardTitle>
+                    </CardHeader>
+                    <CardContent className="text-sm whitespace-pre-wrap">
+                      {quoteData.invoice.notes}
+                    </CardContent>
+                  </Card>
+                ) : null}
+
+                <PublicQuoteApprovalSection
+                  invoice={quoteData.invoice}
+                  termsAndConditionsMarkdown={quoteData.termsAndConditionsMarkdown}
+                  termsVersion={quoteData.termsVersion}
+                  onApprove={handleApprove}
+                />
+
+                <PublicQuoteChangeRequestSection
+                  disabled={quoteLocked}
+                  onRequestChanges={async (note) => {
+                    await requestChanges({ token, note });
+                  }}
+                />
+
+                {showPaymentContacts ? (
+                  <PublicPaymentContactsSection
+                    key={quoteData.invoice._id}
+                    contacts={quoteData.invoice}
+                    onSave={handleSavePaymentContacts}
+                  />
+                ) : null}
+
+                {quoteData.paymentProof ? (
+                  <PublicPaymentProofSection
+                    token={token}
+                    paymentProof={quoteData.paymentProof}
+                    submitMutation={submitPaymentProof}
+                  />
+                ) : null}
+              </div>
+            </div>
+          ) : (
+            <Card>
+              <CardContent className="py-6 text-sm text-muted-foreground">
+                Your quote is being prepared. You will see the full quote here when it is ready for
+                review.
+              </CardContent>
+            </Card>
+          )
+        ) : null}
+
+        {resolvedTab === "after" ? <PublicPostEventSection portal="request" token={token} /> : null}
+      </PublicPortalTabs>
     </PublicSiteChrome>
   );
 }

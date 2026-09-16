@@ -45,6 +45,7 @@ const posterDayValue = v.object({
   partifulCohostUrl: v.optional(v.string()),
   /** draft | ready (on website) | published (website + Instagram approved) */
   status: v.optional(marketingDesignStatusValue),
+  visibility: v.union(v.literal("public"), v.literal("internal"), v.literal("informational")),
   onWebsite: v.boolean(),
   instagramPublished: v.boolean(),
 });
@@ -162,6 +163,7 @@ async function serializePosterDay(ctx: QueryCtx, event: Doc<"events">) {
     additionalLinks: design?.additionalLinks ?? [],
     partifulCohostUrl: design?.partifulCohostUrl,
     status,
+    visibility: event.visibility,
     onWebsite,
     instagramPublished: status === "published",
   };
@@ -333,6 +335,37 @@ export const save = mutation({
       });
     }
 
+    await schedulePublicEventsSiteRevalidation(ctx, String(event._id));
+    return { ok: true as const };
+  },
+});
+
+/**
+ * Host-controlled public visibility for a linked event. Only toggles between
+ * `public` and `internal`; the public site lists events whose visibility is
+ * public.
+ */
+export const setVisibility = mutation({
+  args: {
+    portal: portalValue,
+    token: v.string(),
+    eventId: v.id("events"),
+    visibility: v.union(v.literal("public"), v.literal("internal")),
+  },
+  returns: v.object({ ok: v.literal(true) }),
+  handler: async (ctx, args) => {
+    await enforceRateLimit(ctx, `posterVisibility:${args.portal}:${args.token}`, {
+      limit: 30,
+      windowMs: HOUR_MS,
+    });
+    const events = await requirePosterPortalEvents(ctx, args.portal, args.token);
+    const event = events.find((candidate) => candidate._id === args.eventId);
+    if (!event) throw new Error("Event not found for this request.");
+
+    await ctx.db.patch(event._id, {
+      visibility: args.visibility,
+      updatedAt: Date.now(),
+    });
     await schedulePublicEventsSiteRevalidation(ctx, String(event._id));
     return { ok: true as const };
   },

@@ -47,7 +47,7 @@ test.describe("invoice approval token regeneration", () => {
       const clientPage = await clientContext.newPage();
 
       // The original link works.
-      await clientPage.goto(oldPath);
+      await clientPage.goto(`${oldPath}?tab=quote`);
       await expect(clientPage.getByText(/Terms & Conditions/i).first()).toBeVisible({
         timeout: 25_000,
       });
@@ -57,7 +57,7 @@ test.describe("invoice approval token regeneration", () => {
       await expect(page.getByTestId("invoice-approval-link")).toHaveValue(
         new RegExp(`${before.publicApprovalToken}$`),
       );
-      await clientPage.goto(oldPath);
+      await clientPage.goto(`${oldPath}?tab=quote`);
       await expect(clientPage.getByText(/Terms & Conditions/i).first()).toBeVisible({
         timeout: 25_000,
       });
@@ -81,7 +81,7 @@ test.describe("invoice approval token regeneration", () => {
       );
 
       // The old link is dead.
-      await clientPage.goto(oldPath);
+      await clientPage.goto(`${oldPath}?tab=quote`);
       await expect(clientPage.getByText("Quote unavailable").first()).toBeVisible({
         timeout: 25_000,
       });
@@ -90,7 +90,7 @@ test.describe("invoice approval token regeneration", () => {
       });
 
       // The new link works.
-      await clientPage.goto(newPath);
+      await clientPage.goto(`${newPath}?tab=quote`);
       await expect(clientPage.getByText(/Terms & Conditions/i).first()).toBeVisible({
         timeout: 25_000,
       });

@@ -8,6 +8,7 @@ import { useAppDialog } from "@/components/ui/app-dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { PublicEventPoster } from "@/components/public/public-event-poster";
 import {
@@ -55,9 +56,15 @@ function imageFileFromDataTransfer(dataTransfer: DataTransfer): File | null {
 export function PublicEventPosterSection({
   portal,
   token,
+  dayIndex: controlledDayIndex,
+  hideDayTabs = false,
 }: {
   portal: Portal;
   token: string;
+  /** Controlled active day (e.g. from a parent day selector). */
+  dayIndex?: number;
+  /** Hide the section's own day tabs when the parent drives the day. */
+  hideDayTabs?: boolean;
 }) {
   const poster = useQuery(
     portal === "request"
@@ -67,6 +74,7 @@ export function PublicEventPosterSection({
   );
   const generateUploadUrl = useMutation(api.publicEventPoster.generateUploadUrl);
   const savePoster = useMutation(api.publicEventPoster.save);
+  const setVisibilityMutation = useMutation(api.publicEventPoster.setVisibility);
   const dialog = useAppDialog();
 
   const draftUploadIdRef = useRef(createUploadId());
@@ -74,6 +82,7 @@ export function PublicEventPosterSection({
   const [busy, setBusy] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [savingDetails, setSavingDetails] = useState(false);
+  const [savingVisibility, setSavingVisibility] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeDayIndex, setActiveDayIndex] = useState(0);
   const [caption, setCaption] = useState("");
@@ -84,7 +93,10 @@ export function PublicEventPosterSection({
   const [detailsSourceKey, setDetailsSourceKey] = useState<string | null>(null);
 
   const days = poster?.days ?? [];
-  const dayIndex = Math.min(activeDayIndex, Math.max(0, days.length - 1));
+  const dayIndex = Math.min(
+    controlledDayIndex ?? activeDayIndex,
+    Math.max(0, days.length - 1),
+  );
   const activeDay = days[dayIndex];
   const activeEventId = activeDay?.eventId;
 
@@ -168,6 +180,30 @@ export function PublicEventPosterSection({
     }
   }, [activeEventId, additionalLinks, caption, partifulCohostUrl, portal, savePoster, token]);
 
+  const setVisibility = useCallback(
+    async (isPublic: boolean) => {
+      if (!activeEventId) return;
+      setSavingVisibility(true);
+      setError(null);
+      try {
+        await setVisibilityMutation({
+          portal,
+          token,
+          eventId: activeEventId,
+          visibility: isPublic ? "public" : "internal",
+        });
+        notify.success(isPublic ? "Event is now public." : "Event is now private.");
+      } catch (visibilityError) {
+        const message = getConvexErrorMessage(visibilityError);
+        setError(message);
+        notify.error(message);
+      } finally {
+        setSavingVisibility(false);
+      }
+    },
+    [activeEventId, portal, setVisibilityMutation, token],
+  );
+
   if (poster === undefined) return null;
   if (!poster.eligible || !activeDay) return null;
 
@@ -184,7 +220,7 @@ export function PublicEventPosterSection({
         <CardTitle>Poster & description</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {days.length > 1 ? (
+        {!hideDayTabs && days.length > 1 ? (
           <div role="tablist" aria-label="Event day" className="flex flex-wrap gap-2">
             {days.map((day, index) => (
               <Button
@@ -219,6 +255,15 @@ export function PublicEventPosterSection({
             ))}
           </div>
         ) : null}
+        <div className="flex items-center justify-between gap-3 rounded-md border p-3">
+          <p className="text-sm font-medium">Show on the public website</p>
+          <Switch
+            checked={activeDay.visibility === "public"}
+            disabled={savingVisibility}
+            aria-label="Show on the public website"
+            onCheckedChange={(checked) => void setVisibility(Boolean(checked))}
+          />
+        </div>
         {activeDay.onWebsite && !activeDay.instagramPublished ? (
           <p className="text-xs text-muted-foreground">
             This content is on the public event page. Arbor Live still reviews it before Instagram.
@@ -376,6 +421,7 @@ export function PublicEventPosterSection({
               partifulCohostUrl={partifulCohostUrl}
               onPartifulCohostUrlChange={setPartifulCohostUrl}
               disabled={savingDetails}
+              hideArrows
             />
 
             <div className="flex flex-wrap items-center gap-2">
