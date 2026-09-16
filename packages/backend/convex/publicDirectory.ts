@@ -225,8 +225,17 @@ export const listPublicCrew = query({
 });
 
 export const listPublicArtists = query({
-  args: {},
-  handler: async (ctx) => {
+  args: {
+    artistType: v.optional(
+      v.union(
+        v.literal("band"),
+        v.literal("dj"),
+        v.literal("singer_songwriter"),
+        v.literal("other"),
+      ),
+    ),
+  },
+  handler: async (ctx, args) => {
     const profiles = await ctx.db
       .query("organizationProfiles")
       .withIndex("by_organizationType", (q) => q.eq("organizationType", "band"))
@@ -243,7 +252,8 @@ export const listPublicArtists = query({
       (profile) =>
         profile.publicListing === true &&
         profile.publicSlug?.trim() &&
-        profile.status !== "archived",
+        profile.status !== "archived" &&
+        (args.artistType === undefined || (profile.artistType ?? "other") === args.artistType),
     );
     const rows = await Promise.all(
       listed.map(async (profile) => ({
@@ -254,6 +264,7 @@ export const listPublicArtists = query({
           "Artist",
         oneLiner: profile.oneLiner?.trim() || undefined,
         genres: profile.genres?.filter(Boolean) ?? [],
+        artistType: profile.artistType ?? "other",
         bioExcerpt: bioExcerpt(profile.bio ?? profile.oneLiner),
         heroImageUrl: await resolvePublicHeroImageUrl(profile.publicHeroImageUrl),
         links: buildArtistLinks(profile),
@@ -292,6 +303,7 @@ export const getPublicArtistBySlug = query({
         "Artist",
       oneLiner: profile.oneLiner?.trim() || undefined,
       genres: profile.genres?.filter(Boolean) ?? [],
+      artistType: profile.artistType ?? "other",
       bio: profile.bio?.trim() || undefined,
       demoURL: publicProfileUrl(profile.demoURL),
       heroImageUrl: await resolvePublicHeroImageUrl(profile.publicHeroImageUrl),

@@ -10,6 +10,14 @@ import { Label } from "@/components/ui/label";
 import { OnboardingAckCheckbox, OnboardingTextarea } from "@/components/onboarding/onboarding-ui";
 import { MarketingLinksEditor } from "@/components/marketing/marketing-links-editor";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { ARTIST_TYPES, ARTIST_TYPE_LABELS } from "@/lib/artist-types";
+import {
   submitBandApplication,
   type BandApplicationFormValues,
 } from "@/app/(site)/artists/apply/actions";
@@ -22,6 +30,7 @@ const EMPTY: BandApplicationFormValues = {
   bandDisplayName: "",
   oneLiner: "",
   bio: "",
+  artistType: "",
   artistLinks: [],
   demoURL: "",
   publicHeroImageUrl: "",
@@ -179,6 +188,24 @@ export function BandApplicationForm() {
             onChange={(event) => patch({ genres: event.target.value })}
             placeholder="Indie, funk, jazz — comma separated"
           />
+        </div>
+        <div className="space-y-2">
+          <Label>Artist type (optional)</Label>
+          <Select
+            value={form.artistType || undefined}
+            onValueChange={(value) => patch({ artistType: value })}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select a type" />
+            </SelectTrigger>
+            <SelectContent>
+              {ARTIST_TYPES.map((type) => (
+                <SelectItem key={type} value={type}>
+                  {ARTIST_TYPE_LABELS[type]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         <div className="space-y-2">
           <Label htmlFor="hero-url">Hero image URL (optional)</Label>

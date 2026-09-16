@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
 import { Button } from "@/components/ui/button";
@@ -9,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Reveal, Stagger, StaggerItem } from "@/components/landing/landing-motion";
 import { PublicArtistPoster } from "@/components/public/public-artist-poster";
 import { MarketingLinkIcon } from "@/lib/marketing-link-icons";
+import { ARTIST_TYPES, ARTIST_TYPE_LABELS, type ArtistType } from "@/lib/artist-types";
 
 function ArtistCardSkeleton() {
   return (
@@ -24,11 +26,35 @@ function ArtistCardSkeleton() {
 }
 
 export function PublicArtistsGrid() {
-  const artists = useQuery(api.publicDirectory.listPublicArtists, {});
+  const [artistType, setArtistType] = useState<ArtistType | "all">("all");
+  const artists = useQuery(
+    api.publicDirectory.listPublicArtists,
+    artistType === "all" ? {} : { artistType },
+  );
+
+  const filters: Array<{ value: ArtistType | "all"; label: string }> = [
+    { value: "all", label: "All" },
+    ...ARTIST_TYPES.map((value) => ({ value, label: ARTIST_TYPE_LABELS[value] })),
+  ];
 
   return (
     <section className="py-12 sm:py-16">
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+        <div role="tablist" aria-label="Artist type" className="mb-8 flex flex-wrap gap-2">
+          {filters.map((filter) => (
+            <Button
+              key={filter.value}
+              type="button"
+              role="tab"
+              size="sm"
+              variant={artistType === filter.value ? "default" : "outline"}
+              aria-selected={artistType === filter.value}
+              onClick={() => setArtistType(filter.value)}
+            >
+              {filter.label}
+            </Button>
+          ))}
+        </div>
         {artists === undefined ? (
           <div
             className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3"

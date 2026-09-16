@@ -48,11 +48,6 @@ export default async function PublicEventDetailPage({ params }: EventDetailPageP
                     {formatDateTime(event.startAt, "long")}
                   </p>
                   <PublicStaffDashboardLinks className="mt-4" eventId={event.eventId} />
-                  {event.openMicSignupUrl ? (
-                    <Button asChild size="lg" className="mt-4 self-start">
-                      <Link href={event.openMicSignupUrl}>Sign up to perform</Link>
-                    </Button>
-                  ) : null}
                 </div>
 
                 {event.venueName || event.venueAddress ? (
@@ -97,6 +92,14 @@ export default async function PublicEventDetailPage({ params }: EventDetailPageP
                   </div>
                 ) : null}
 
+                <PublicEventArtists artists={event.artists} title="Lineup" />
+
+                {event.openMicSignupUrl ? (
+                  <Button asChild size="lg" className="self-start">
+                    <Link href={event.openMicSignupUrl}>Sign up to perform</Link>
+                  </Button>
+                ) : null}
+
                 {event.additionalLinks.length > 0 ? (
                   <div className="flex flex-wrap gap-4 text-sm">
                     {event.additionalLinks.map((link) => (
@@ -118,12 +121,6 @@ export default async function PublicEventDetailPage({ params }: EventDetailPageP
           </div>
         </section>
       </article>
-
-      {event.artists.length > 0 ? (
-        <section className="mx-auto max-w-5xl px-4 py-12 sm:px-6 lg:px-8">
-          <PublicEventArtists artists={event.artists} title="Lineup" />
-        </section>
-      ) : null}
 
       <LandingUpcomingEvents excludeEventId={event.eventId} />
     </PublicMarketingLayout>

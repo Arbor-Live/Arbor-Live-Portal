@@ -99,6 +99,7 @@ import type * as invoiceTerms from "../invoiceTerms.js";
 import type * as invoices from "../invoices.js";
 import type * as lib_analyticsQuery from "../lib/analyticsQuery.js";
 import type * as lib_analyticsTime from "../lib/analyticsTime.js";
+import type * as lib_artistType from "../lib/artistType.js";
 import type * as lib_assetScan from "../lib/assetScan.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_bandIdentity from "../lib/bandIdentity.js";
@@ -301,6 +302,7 @@ declare const fullApi: ApiFromModules<{
   invoices: typeof invoices;
   "lib/analyticsQuery": typeof lib_analyticsQuery;
   "lib/analyticsTime": typeof lib_analyticsTime;
+  "lib/artistType": typeof lib_artistType;
   "lib/assetScan": typeof lib_assetScan;
   "lib/auth": typeof lib_auth;
   "lib/bandIdentity": typeof lib_bandIdentity;

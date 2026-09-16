@@ -16,6 +16,7 @@ import { ensureOrganizationOnboarding } from "./onboarding";
 import { enforceRateLimit, HOUR_MS } from "./rateLimit";
 import { inviteEmailToBandOrg, isValidEmail } from "./lib/bandOrgInvite";
 import { marketingDesignLinkValue, normalizeMarketingLinks } from "./lib/marketingLinks";
+import { artistTypeValue } from "./lib/artistType";
 import { resolveOrCreateOrganization } from "./users";
 
 const memberValue = v.object({
@@ -87,6 +88,7 @@ export const submitPublic = mutation({
     isSolo: v.boolean(),
     members: v.array(memberValue),
     artistLinks: v.optional(v.array(marketingDesignLinkValue)),
+    artistType: v.optional(artistTypeValue),
   },
   returns: v.object({ applicationId: v.id("bandApplications") }),
   handler: async (ctx, args) => {
@@ -146,6 +148,7 @@ export const submitPublic = mutation({
       isSolo: args.isSolo,
       members,
       artistLinks: args.artistLinks ? normalizeMarketingLinks(args.artistLinks) : undefined,
+      artistType: args.artistType,
       submittedAt: now,
       createdAt: now,
       updatedAt: now,
@@ -213,6 +216,7 @@ export const listAdmin = query({
       isSolo: v.boolean(),
       members: v.array(memberValue),
       artistLinks: v.optional(v.array(marketingDesignLinkValue)),
+      artistType: v.optional(artistTypeValue),
       submittedAt: v.number(),
       reviewedAt: v.optional(v.number()),
       declineReason: v.optional(v.string()),
@@ -248,6 +252,7 @@ export const listAdmin = query({
         isSolo: row.isSolo,
         members: row.members,
         artistLinks: applicationLinks(row),
+        artistType: row.artistType,
         submittedAt: row.submittedAt,
         reviewedAt: row.reviewedAt,
         declineReason: row.declineReason,
@@ -312,6 +317,7 @@ export const approve = mutation({
       demoURL: application.demoURL,
       publicHeroImageUrl: application.publicHeroImageUrl,
       genres: application.genres,
+      artistType: application.artistType,
       mainContactName: application.contactName,
       mainContactEmail: application.contactEmail,
       mainContactPhone: application.contactPhone,
