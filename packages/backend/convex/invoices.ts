@@ -92,6 +92,7 @@ const lineItemInput = v.object({
   excludedTypeIds: v.optional(v.array(v.id("inventoryTypes"))),
   packageExclusionDiscountUsd: v.optional(v.number()),
   organizationId: v.optional(v.string()),
+  eventId: v.optional(v.id("events")),
   memberCount: v.optional(v.number()),
   performanceHours: v.optional(v.number()),
 });
@@ -114,6 +115,8 @@ type LineInput = {
   packageExclusionDiscountUsd?: number;
   /** Artist lines: linked band/DJ org id. */
   organizationId?: string;
+  /** Artist lines: linked day/event on multi-day bookings. */
+  eventId?: Id<"events">;
   /** Artist lines: number of people performing. */
   memberCount?: number;
   /** Artist lines: hours performing. */
@@ -374,6 +377,7 @@ function lineDocToInput(line: Doc<"invoiceLineItems">): LineInput {
     excludedTypeIds: line.excludedTypeIds,
     packageExclusionDiscountUsd: line.packageExclusionDiscountUsd,
     organizationId: line.organizationId,
+    eventId: line.eventId,
     memberCount: line.memberCount,
     performanceHours: line.performanceHours,
   };
@@ -425,6 +429,7 @@ async function replaceLineItems(
       feeDefinitionId: row.feeDefinitionId,
       equipmentQuantityBasis: row.equipmentQuantityBasis,
       organizationId: trimOptional(row.organizationId),
+      eventId: row.section === "artist" ? row.eventId : undefined,
       memberCount:
         row.section === "artist" && row.memberCount !== undefined && row.memberCount > 0
           ? row.memberCount

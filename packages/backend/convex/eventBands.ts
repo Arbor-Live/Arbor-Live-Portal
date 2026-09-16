@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { components, internal } from "./_generated/api";
 import { requireArborInternalContext, requireAuth, requireBandContext, getUserId } from "./lib/auth";
@@ -158,119 +158,141 @@ export const listByEvent = query({
   },
 });
 
-export const listPerformersForEvent = query({
-  args: { eventId: v.id("events") },
-  returns: v.array(
+const performerRowFields = {
+  participationId: v.id("eventBandParticipations"),
+  organizationId: v.string(),
+  bandName: v.string(),
+  role: participationRoleValue,
+  payment: v.union(
+    v.null(),
     v.object({
-      participationId: v.id("eventBandParticipations"),
-      organizationId: v.string(),
-      bandName: v.string(),
-      role: participationRoleValue,
-      payment: v.union(
-        v.null(),
-        v.object({
-          _id: v.id("eventBandPayments"),
-          pricingMode: v.union(v.literal("per_member_hourly"), v.literal("fixed_total")),
-          ratePerMemberPerHourUsd: v.optional(v.number()),
-          performanceHours: v.optional(v.number()),
-          memberCount: v.optional(v.number()),
-          totalUsd: v.number(),
-          status: paymentStatusValue,
-          statusLabel: v.string(),
-          confirmationToken: v.string(),
-          designatedPayeeName: v.optional(v.string()),
-          designatedPayeeEmail: v.optional(v.string()),
-          designatedPayeeUserId: v.optional(v.string()),
-          designatedPayeeMailingAddress: v.optional(v.string()),
-          designatedPayeePayoutMethod: v.optional(
-            v.union(v.literal("pickup"), v.literal("delivery")),
-          ),
-          payeeComplete: v.boolean(),
-          photoAlbumUrl: v.optional(v.string()),
-          eventEnded: v.boolean(),
-        }),
+      _id: v.id("eventBandPayments"),
+      pricingMode: v.union(v.literal("per_member_hourly"), v.literal("fixed_total")),
+      ratePerMemberPerHourUsd: v.optional(v.number()),
+      performanceHours: v.optional(v.number()),
+      memberCount: v.optional(v.number()),
+      totalUsd: v.number(),
+      status: paymentStatusValue,
+      statusLabel: v.string(),
+      confirmationToken: v.string(),
+      designatedPayeeName: v.optional(v.string()),
+      designatedPayeeEmail: v.optional(v.string()),
+      designatedPayeeUserId: v.optional(v.string()),
+      designatedPayeeMailingAddress: v.optional(v.string()),
+      designatedPayeePayoutMethod: v.optional(
+        v.union(v.literal("pickup"), v.literal("delivery")),
       ),
-      onboardingStatus: v.union(
-        v.literal("not_started"),
-        v.literal("in_progress"),
-        v.literal("completed"),
-        v.literal("waived"),
-        v.null(),
-      ),
-      awaitingOnboarding: v.boolean(),
+      payeeComplete: v.boolean(),
+      photoAlbumUrl: v.optional(v.string()),
+      eventEnded: v.boolean(),
     }),
   ),
+  onboardingStatus: v.union(
+    v.literal("not_started"),
+    v.literal("in_progress"),
+    v.literal("completed"),
+    v.literal("waived"),
+    v.null(),
+  ),
+  awaitingOnboarding: v.boolean(),
+};
+
+const performerRowValidator = v.object(performerRowFields);
+
+async function listPerformerRowsForEvent(ctx: QueryCtx, event: Doc<"events">) {
+  const participations = await ctx.db
+    .query("eventBandParticipations")
+    .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
+    .take(50);
+
+  const payments = await ctx.db
+    .query("eventBandPayments")
+    .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
+    .take(50);
+  const paymentByOrg = new Map(
+    payments
+      .filter((row) => row.status !== "cancelled")
+      .map((row) => [row.organizationId, row] as const),
+  );
+
+  const nowMs = Date.now();
+  const result = [];
+  for (const row of participations) {
+    const payment = paymentByOrg.get(row.organizationId) ?? null;
+    const payeeComplete = payment
+      ? isBandPayeeComplete({
+          designatedPayeeName: payment.designatedPayeeName,
+          designatedPayeeEmail: payment.designatedPayeeEmail,
+          designatedPayeeMailingAddress: payment.designatedPayeeMailingAddress,
+          designatedPayeePayoutMethod: payment.designatedPayeePayoutMethod,
+        })
+      : false;
+    const onboarding = await ctx.db
+      .query("organizationOnboarding")
+      .withIndex("by_organizationId", (q) => q.eq("organizationId", row.organizationId))
+      .unique();
+    const onboardingStatus = onboarding?.status ?? null;
+    const awaitingOnboarding =
+      onboardingStatus !== "completed" && onboardingStatus !== "waived";
+    result.push({
+      participationId: row._id,
+      organizationId: row.organizationId,
+      bandName: await getOrganizationName(ctx, row.organizationId),
+      role: row.role,
+      onboardingStatus,
+      awaitingOnboarding,
+      payment: payment
+        ? {
+            _id: payment._id,
+            pricingMode: payment.pricingMode,
+            ratePerMemberPerHourUsd: payment.ratePerMemberPerHourUsd,
+            performanceHours: payment.performanceHours,
+            memberCount: payment.memberCount,
+            totalUsd: payment.totalUsd,
+            status: payment.status,
+            statusLabel: bandPaymentStatusLabel(payment.status),
+            confirmationToken: payment.confirmationToken,
+            designatedPayeeName: payment.designatedPayeeName,
+            designatedPayeeEmail: payment.designatedPayeeEmail,
+            designatedPayeeUserId: payment.designatedPayeeUserId,
+            designatedPayeeMailingAddress: payment.designatedPayeeMailingAddress,
+            designatedPayeePayoutMethod: payment.designatedPayeePayoutMethod,
+            payeeComplete,
+            photoAlbumUrl: payment.photoAlbumUrl,
+            eventEnded: event.endAt <= nowMs,
+          }
+        : null,
+    });
+  }
+
+  return result.sort((a, b) => a.bandName.localeCompare(b.bandName));
+}
+
+export const listPerformersForEvent = query({
+  args: { eventId: v.id("events") },
+  returns: v.array(performerRowValidator),
   handler: async (ctx, args) => {
     await requireArborInternalContext(ctx);
     const event = await ctx.db.get(args.eventId);
     if (!event) return [];
+    return await listPerformerRowsForEvent(ctx, event);
+  },
+});
 
-    const participations = await ctx.db
-      .query("eventBandParticipations")
-      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
-      .take(50);
-
-    const payments = await ctx.db
-      .query("eventBandPayments")
-      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
-      .take(50);
-    const paymentByOrg = new Map(
-      payments
-        .filter((row) => row.status !== "cancelled")
-        .map((row) => [row.organizationId, row] as const),
-    );
-
-    const nowMs = Date.now();
+/** Performers across several events, each tagged with its `eventId` (multi-day bookings). */
+export const listPerformersForEvents = query({
+  args: { eventIds: v.array(v.id("events")) },
+  returns: v.array(v.object({ ...performerRowFields, eventId: v.id("events") })),
+  handler: async (ctx, args) => {
+    await requireArborInternalContext(ctx);
     const result = [];
-    for (const row of participations) {
-      const payment = paymentByOrg.get(row.organizationId) ?? null;
-      const payeeComplete = payment
-        ? isBandPayeeComplete({
-            designatedPayeeName: payment.designatedPayeeName,
-            designatedPayeeEmail: payment.designatedPayeeEmail,
-            designatedPayeeMailingAddress: payment.designatedPayeeMailingAddress,
-            designatedPayeePayoutMethod: payment.designatedPayeePayoutMethod,
-          })
-        : false;
-      const onboarding = await ctx.db
-        .query("organizationOnboarding")
-        .withIndex("by_organizationId", (q) => q.eq("organizationId", row.organizationId))
-        .unique();
-      const onboardingStatus = onboarding?.status ?? null;
-      const awaitingOnboarding =
-        onboardingStatus !== "completed" && onboardingStatus !== "waived";
-      result.push({
-        participationId: row._id,
-        organizationId: row.organizationId,
-        bandName: await getOrganizationName(ctx, row.organizationId),
-        role: row.role,
-        onboardingStatus,
-        awaitingOnboarding,
-        payment: payment
-          ? {
-              _id: payment._id,
-              pricingMode: payment.pricingMode,
-              ratePerMemberPerHourUsd: payment.ratePerMemberPerHourUsd,
-              performanceHours: payment.performanceHours,
-              memberCount: payment.memberCount,
-              totalUsd: payment.totalUsd,
-              status: payment.status,
-              statusLabel: bandPaymentStatusLabel(payment.status),
-              confirmationToken: payment.confirmationToken,
-              designatedPayeeName: payment.designatedPayeeName,
-              designatedPayeeEmail: payment.designatedPayeeEmail,
-              designatedPayeeUserId: payment.designatedPayeeUserId,
-              designatedPayeeMailingAddress: payment.designatedPayeeMailingAddress,
-              designatedPayeePayoutMethod: payment.designatedPayeePayoutMethod,
-              payeeComplete,
-              photoAlbumUrl: payment.photoAlbumUrl,
-              eventEnded: event.endAt <= nowMs,
-            }
-          : null,
-      });
+    for (const eventId of args.eventIds) {
+      const event = await ctx.db.get(eventId);
+      if (!event) continue;
+      const rows = await listPerformerRowsForEvent(ctx, event);
+      result.push(...rows.map((row) => ({ ...row, eventId })));
     }
-
-    return result.sort((a, b) => a.bandName.localeCompare(b.bandName));
+    return result;
   },
 });
 

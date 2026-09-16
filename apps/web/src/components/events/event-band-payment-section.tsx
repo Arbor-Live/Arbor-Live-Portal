@@ -126,6 +126,9 @@ function EventBandsPerformersPanel({ eventId }: { eventId: Id<"events"> }) {
     const map = new Map<string, InvoiceArtistSuggestion>();
     for (const line of invoiceDetail?.lineItems ?? []) {
       if (line.section !== "artist") continue;
+      // Artist lines tagged to another day of a multi-day booking belong to that
+      // day's event, not this one.
+      if (line.eventId && line.eventId !== eventId) continue;
       const organizationId = line.organizationId?.trim();
       if (!organizationId || map.has(organizationId)) continue;
       map.set(organizationId, {
@@ -137,7 +140,7 @@ function EventBandsPerformersPanel({ eventId }: { eventId: Id<"events"> }) {
       });
     }
     return map;
-  }, [invoiceDetail?.lineItems]);
+  }, [invoiceDetail?.lineItems, eventId]);
 
   const invoiceArtistSuggestions = useMemo(
     () =>

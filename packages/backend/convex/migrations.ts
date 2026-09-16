@@ -524,6 +524,26 @@ export const migrateBandApplicationArtistTypeToOrganizationType = migrations.def
 });
 
 /**
+ * Scope existing artist invoice lines to the invoice's first linked event so
+ * per-day TBD slots and band autofill have a day to target (multi-day bookings).
+ */
+export const backfillInvoiceArtistLineEvents = migrations.define({
+  table: "invoiceLineItems",
+  migrateOne: async (ctx, row) => {
+    if (row.section !== "artist" || row.eventId) return;
+    const events = await ctx.db
+      .query("events")
+      .withIndex("by_invoiceId", (q) => q.eq("invoiceId", row.invoiceId))
+      .take(50);
+    const first = [...events].sort(
+      (a, b) => a.startAt - b.startAt || a._creationTime - b._creationTime,
+    )[0];
+    if (!first) return;
+    return { eventId: first._id, updatedAt: Date.now() };
+  },
+});
+
+/**
  * never reorder or remove completed ones (reset requires an explicit reset:true).
  */
 const MIGRATION_SERIES = [
@@ -547,6 +567,7 @@ const MIGRATION_SERIES = [
   internal.migrations.backfillBandApplicationArtistLinks,
   internal.migrations.migrateOrgArtistTypeToOrganizationType,
   internal.migrations.migrateBandApplicationArtistTypeToOrganizationType,
+  internal.migrations.backfillInvoiceArtistLineEvents,
 ] as const;
 
 export const runAll = migrations.runner([...MIGRATION_SERIES]);
