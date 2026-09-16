@@ -7,6 +7,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ArtistTypeBadge } from "@/components/public/artist-type-badge";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { formatDateTime } from "@/lib/format";
 import { optimisticDeclineBandApplication } from "@/lib/band-applications-optimistic";
@@ -127,6 +128,12 @@ export function BandApplicationsAdminClient() {
             {app.bio ? <p className="text-sm text-foreground/70">{app.bio}</p> : null}
 
             <dl className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
+              <div>
+                <dt className="font-medium text-foreground/80">Artist type</dt>
+                <dd className="mt-1">
+                  <ArtistTypeBadge artistType={app.artistType} />
+                </dd>
+              </div>
               {app.genres?.length ? (
                 <div>
                   <dt className="font-medium text-foreground/80">Genres</dt>
