@@ -123,6 +123,7 @@ export const enqueueForEvent = internalMutation({
     }
 
     const leads = await getEventLeadRecipients(ctx, event._id);
+    const leadEmails = new Set(leads.map((lead) => lead.email));
     for (const lead of leads) {
       if (!lead.userId) continue;
       const row = await ensurePostMortemFeedbackRow(ctx, event._id, lead.userId);
@@ -146,9 +147,11 @@ export const enqueueForEvent = internalMutation({
     }
 
     // Rest of the crew: the media email only, no post-mortem or client
-    // feedback form.
+    // feedback form. Exclude leads by email so a lead stored under a different
+    // id format doesn't also get the crew email.
     const crew = await getEventCrewRecipients(ctx, event._id);
     for (const member of crew) {
+      if (leadEmails.has(member.email)) continue;
       await enqueueEmail(ctx, {
         template: "post_event_album",
         to: member.email,
