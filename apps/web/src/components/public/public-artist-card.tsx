@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/ssr";
+import { ArrowSquareOutIcon, MagnifyingGlassIcon } from "@phosphor-icons/react/dist/ssr";
 import { Card } from "@/components/ui/card";
 import { OptimizedRemoteImage } from "@/components/media/optimized-remote-image";
 import { cn } from "@/lib/utils";
@@ -104,14 +104,17 @@ export function PublicArtistCard({
 
 export function PublicEventArtists({
   artists,
+  tbdSlots = 0,
   title = "Artists",
   className,
 }: {
   artists: PublicEventArtist[];
+  /** Count of artist slots still to be assigned (invoice artist lines with no band). */
+  tbdSlots?: number;
   title?: string;
   className?: string;
 }) {
-  if (!artists.length) return null;
+  if (!artists.length && tbdSlots <= 0) return null;
   return (
     <div className={cn("space-y-3", className)}>
       <h2 className="font-heading text-sm font-medium text-muted-foreground">{title}</h2>
@@ -119,7 +122,29 @@ export function PublicEventArtists({
         {artists.map((artist) => (
           <PublicArtistCard key={artist.organizationId} artist={artist} />
         ))}
+        {tbdSlots > 0 ? <PublicArtistTbd /> : null}
       </div>
     </div>
+  );
+}
+
+export function PublicArtistTbd({ className }: { className?: string }) {
+  return (
+    <Card className={cn("px-4 py-3", className)}>
+      <div className="flex items-start gap-3">
+        <span className="flex size-12 shrink-0 items-center justify-center bg-muted text-muted-foreground">
+          <MagnifyingGlassIcon className="size-5" />
+        </span>
+        <div className="min-w-0 flex-1 space-y-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-heading text-sm font-medium">Artist to be determined</span>
+          </div>
+          <p className="text-sm/relaxed text-muted-foreground">
+            We&apos;re currently searching for a band to fill this slot — we&apos;ll keep you
+            updated.
+          </p>
+        </div>
+      </div>
+    </Card>
   );
 }

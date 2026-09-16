@@ -414,7 +414,10 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
               dayIndex={dayIndex}
               hideDayTabs
             />
-            <PublicEventArtists artists={selectedEvent.artists} />
+            <PublicEventArtists
+              artists={selectedEvent.artists}
+              tbdSlots={quoteData?.tbdArtistSlots ?? 0}
+            />
             <PublicEventContacts
               manager={selectedEvent.contacts.manager}
               dayOfLead={selectedEvent.contacts.dayOfLead}

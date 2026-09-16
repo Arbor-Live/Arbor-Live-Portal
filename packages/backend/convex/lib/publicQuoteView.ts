@@ -224,6 +224,9 @@ export async function loadPublicQuoteView(ctx: QueryCtx, invoice: Doc<"invoices"
     lineItems: displayLineItems,
     termsAndConditionsMarkdown: combinedTermsMarkdown,
     termsVersion: globalTermsVersion,
+    /** Artist invoice lines without an assigned band — "Band TBD" slots. */
+    tbdArtistSlots: lineItems.filter((row) => row.section === "artist" && !row.organizationId)
+      .length,
     event: events[0] ?? null,
     events,
     paymentProof,
