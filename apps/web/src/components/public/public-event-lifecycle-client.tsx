@@ -185,7 +185,7 @@ export function PublicEventLifecycleClient({ token }: { token: string }) {
       <PublicPortalTabs tabs={tabs} activeTab={resolvedTab} onSelect={selectTab}>
         {resolvedTab === "next" ? (
           <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
-            <div className="space-y-3 lg:order-2">
+            <div className="space-y-4 lg:order-2">
               <h2 className="font-heading text-sm font-medium text-muted-foreground">
                 Notification center
               </h2>

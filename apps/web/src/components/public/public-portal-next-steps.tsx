@@ -214,7 +214,7 @@ export function PublicPortalNextSteps({
   onNavigate: (tab: string) => void;
 }) {
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       {steps.map((step) => {
         const Icon = step.icon ?? TONE_ICON[step.tone];
         const isAction = step.tone === "action";
