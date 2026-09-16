@@ -3,6 +3,7 @@ import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { syncBookingRequestStatusFromInvoice } from "./bookingRequestStatus";
 import { syncLinkedEventStatusFromInvoice } from "./eventStatus";
 import { listEventsByInvoiceId } from "./invoiceEvents";
+import { getEventArtists } from "./eventArtists";
 import { toDocumentLineItem, recomputeInvoiceTotalsFromDocumentLines } from "./invoiceDocumentBuild";
 import { resolveBillableOccurrenceCount } from "./invoiceSeries";
 import { loadPaymentProofState, normalizeFinanceContactEmail } from "./paymentProof";
@@ -141,50 +142,53 @@ export async function loadPublicQuoteView(ctx: QueryCtx, invoice: Doc<"invoices"
     linkedEvents.map((event) => loadEventHostDisplay(ctx, event)),
   );
 
-  const events = linkedEvents.map((event, index) => {
-    const hostDisplay = hostDisplays[index];
-    const assignments = eventAssignments.filter((row) => row.eventId === event._id);
-    const scheduleBlocks = eventScheduleBlocks.filter((row) => row.eventId === event._id);
-    const shifts = eventShifts.filter((row) => row.eventId === event._id);
-    const artifacts = eventArtifacts.filter((row) => row.eventId === event._id);
-    const eventManagerAssignment = assignments.find((row) => row.assignmentType === "event_manager");
-    const dayOfLeadAssignment = assignments.find((row) => row.assignmentType === "day_of_lead");
-    const crewAssignments = assignments.filter((row) => row.assignmentType === "crew");
-    return {
-      id: event._id,
-      title: event.title,
-      status: event.status,
-      venueName: event.venueName,
-      eventType: event.eventType,
-      host: hostDisplay?.hostLabel,
-      additionalHosts: hostDisplay?.additionalHosts ?? [],
-      startAt: event.startAt,
-      endAt: event.endAt,
-      assignments,
-      scheduleBlocks,
-      contacts: {
-        manager: {
-          name: eventManagerAssignment?.personName ?? invoice.managerName,
-          email: eventManagerAssignment?.contactEmail ?? invoice.managerEmail ?? undefined,
-          phone: eventManagerAssignment?.contactPhone ?? undefined,
+  const events = await Promise.all(
+    linkedEvents.map(async (event, index) => {
+      const hostDisplay = hostDisplays[index];
+      const assignments = eventAssignments.filter((row) => row.eventId === event._id);
+      const scheduleBlocks = eventScheduleBlocks.filter((row) => row.eventId === event._id);
+      const shifts = eventShifts.filter((row) => row.eventId === event._id);
+      const artifacts = eventArtifacts.filter((row) => row.eventId === event._id);
+      const eventManagerAssignment = assignments.find((row) => row.assignmentType === "event_manager");
+      const dayOfLeadAssignment = assignments.find((row) => row.assignmentType === "day_of_lead");
+      const crewAssignments = assignments.filter((row) => row.assignmentType === "crew");
+      return {
+        id: event._id,
+        title: event.title,
+        status: event.status,
+        venueName: event.venueName,
+        eventType: event.eventType,
+        host: hostDisplay?.hostLabel,
+        additionalHosts: hostDisplay?.additionalHosts ?? [],
+        startAt: event.startAt,
+        endAt: event.endAt,
+        assignments,
+        scheduleBlocks,
+        contacts: {
+          manager: {
+            name: eventManagerAssignment?.personName ?? invoice.managerName,
+            email: eventManagerAssignment?.contactEmail ?? invoice.managerEmail ?? undefined,
+            phone: eventManagerAssignment?.contactPhone ?? undefined,
+          },
+          dayOfLead: dayOfLeadAssignment
+            ? {
+                name: dayOfLeadAssignment.personName,
+                email: dayOfLeadAssignment.contactEmail ?? undefined,
+                phone: dayOfLeadAssignment.contactPhone ?? undefined,
+              }
+            : null,
         },
-        dayOfLead: dayOfLeadAssignment
-          ? {
-              name: dayOfLeadAssignment.personName,
-              email: dayOfLeadAssignment.contactEmail ?? undefined,
-              phone: dayOfLeadAssignment.contactPhone ?? undefined,
-            }
-          : null,
-      },
-      crewRoster: crewAssignments.map((row) => ({
-        name: row.personName,
-        role: row.roleLabel ?? undefined,
-        email: row.contactEmail ?? undefined,
-      })),
-      shifts,
-      artifacts,
-    };
-  });
+        crewRoster: crewAssignments.map((row) => ({
+          name: row.personName,
+          role: row.roleLabel ?? undefined,
+          email: row.contactEmail ?? undefined,
+        })),
+        artists: await getEventArtists(ctx, event._id),
+        shifts,
+        artifacts,
+      };
+    }),
+  );
 
   return {
     invoice: {
