@@ -236,10 +236,16 @@ export const listPublicArtists = query({
     ),
   },
   handler: async (ctx, args) => {
-    const profiles = await ctx.db
-      .query("organizationProfiles")
-      .withIndex("by_organizationType", (q) => q.eq("organizationType", "band"))
-      .take(500);
+    const profiles = (
+      await Promise.all(
+        (["band", "dj", "singer_songwriter", "other"] as const).map((type) =>
+          ctx.db
+            .query("organizationProfiles")
+            .withIndex("by_organizationType", (q) => q.eq("organizationType", type))
+            .take(500),
+        ),
+      )
+    ).flat();
 
     const result = await ctx.runQuery(components.betterAuth.adapter.findMany, {
       model: "organization",
@@ -286,7 +292,7 @@ export const getPublicArtistBySlug = query({
       .unique();
     if (
       !profile ||
-      profile.organizationType !== "band" ||
+      profile.organizationType === "arbor_internal" ||
       profile.publicListing !== true ||
       profile.status === "archived"
     ) {

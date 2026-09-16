@@ -80,6 +80,10 @@ export function BandPayeeSettingsSection() {
         designatedPayeeMailingAddress: trimOptional(values.designatedPayeeMailingAddress),
         designatedPayeePayoutMethod: values.designatedPayeePayoutMethod,
         artistLinks: profile.artistLinks,
+        organizationType:
+          profile.organizationType && profile.organizationType !== "arbor_internal"
+            ? profile.organizationType
+            : undefined,
         publicListing: profile.publicListing,
         publicSlug: profile.publicSlug,
         publicHeroImageUrl: profile.publicHeroImageUrl,
