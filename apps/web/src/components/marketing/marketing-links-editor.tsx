@@ -101,7 +101,7 @@ export function MarketingLinksEditor({
           <div
             key={rowKey}
             className={cn(
-              "flex flex-col gap-2 rounded-md border border-transparent px-0 sm:flex-row sm:items-center",
+              "flex flex-col gap-2 rounded-md border border-border/60 p-2 sm:flex-row sm:items-center sm:border-transparent sm:p-0",
               isDragging && "border-border bg-muted/40 opacity-70",
             )}
             draggable={!disabled && dragArmedKey === rowKey}
@@ -166,34 +166,38 @@ export function MarketingLinksEditor({
               >
                 <CaretDownIcon className="size-3.5" />
               </Button>
-              <IconPicker
-                value={link.icon}
+            </div>
+            <div className="flex flex-col gap-2 sm:contents">
+              <div className="flex items-center gap-2 sm:min-w-0 sm:flex-1">
+                <IconPicker
+                  value={link.icon}
+                  disabled={disabled}
+                  aria-label={`Icon for link ${index + 1}`}
+                  onChange={(icon) => updateLink(index, { icon })}
+                />
+                <Input
+                  value={link.label}
+                  placeholder="Label (e.g. Partiful RSVP)"
+                  disabled={disabled}
+                  className="min-w-0 flex-1"
+                  onChange={(event) => updateLink(index, { label: event.target.value })}
+                />
+              </div>
+              <Input
+                value={link.url}
+                placeholder="https://..."
                 disabled={disabled}
-                aria-label={`Icon for link ${index + 1}`}
-                onChange={(icon) => updateLink(index, { icon })}
+                className="min-w-0 sm:flex-1"
+                onChange={(event) => {
+                  const nextUrl = event.target.value;
+                  const guessed = guessMarketingLinkIcon(nextUrl);
+                  updateLink(index, {
+                    url: nextUrl,
+                    ...(guessed && !link.icon ? { icon: guessed } : {}),
+                  });
+                }}
               />
             </div>
-            <Input
-              value={link.label}
-              placeholder="Label (e.g. Partiful RSVP)"
-              disabled={disabled}
-              className="sm:w-[40%]"
-              onChange={(event) => updateLink(index, { label: event.target.value })}
-            />
-            <Input
-              value={link.url}
-              placeholder="https://..."
-              disabled={disabled}
-              className="min-w-0 flex-1"
-              onChange={(event) => {
-                const nextUrl = event.target.value;
-                const guessed = guessMarketingLinkIcon(nextUrl);
-                updateLink(index, {
-                  url: nextUrl,
-                  ...(guessed && !link.icon ? { icon: guessed } : {}),
-                });
-              }}
-            />
           </div>
         );
       })}

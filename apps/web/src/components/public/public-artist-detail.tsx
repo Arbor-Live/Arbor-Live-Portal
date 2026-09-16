@@ -6,6 +6,7 @@ import { api } from "@/lib/convex-api";
 import { StoredAssetImage } from "@/components/files/stored-asset-image";
 import { Reveal } from "@/components/landing/landing-motion";
 import { PublicArticleSkeleton } from "@/components/public/public-skeletons";
+import { MarketingLinkIcon } from "@/lib/marketing-link-icons";
 import { cn } from "@/lib/utils";
 
 export function PublicArtistDetail({ slug }: { slug: string }) {
@@ -93,8 +94,9 @@ export function PublicArtistDetail({ slug }: { slug: string }) {
                   href={artist.demoURL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="rounded-none border px-4 py-2 text-sm font-medium hover:bg-muted"
+                  className="inline-flex items-center gap-2 rounded-none border px-4 py-2 text-sm font-medium hover:bg-muted"
                 >
+                  <MarketingLinkIcon id="PlayCircle" className="size-4 shrink-0" />
                   Demo ↗
                 </a>
               ) : null}
@@ -103,8 +105,9 @@ export function PublicArtistDetail({ slug }: { slug: string }) {
                   href={artist.websiteUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="rounded-none border px-4 py-2 text-sm font-medium hover:bg-muted"
+                  className="inline-flex items-center gap-2 rounded-none border px-4 py-2 text-sm font-medium hover:bg-muted"
                 >
+                  <MarketingLinkIcon id="Globe" className="size-4 shrink-0" />
                   Website ↗
                 </a>
               ) : null}
@@ -113,8 +116,9 @@ export function PublicArtistDetail({ slug }: { slug: string }) {
                   href={artist.instagramUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="rounded-none border px-4 py-2 text-sm font-medium hover:bg-muted"
+                  className="inline-flex items-center gap-2 rounded-none border px-4 py-2 text-sm font-medium hover:bg-muted"
                 >
+                  <MarketingLinkIcon id="InstagramLogo" className="size-4 shrink-0" />
                   Instagram ↗
                 </a>
               ) : null}
@@ -123,8 +127,9 @@ export function PublicArtistDetail({ slug }: { slug: string }) {
                   href={artist.youtubeUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="rounded-none border px-4 py-2 text-sm font-medium hover:bg-muted"
+                  className="inline-flex items-center gap-2 rounded-none border px-4 py-2 text-sm font-medium hover:bg-muted"
                 >
+                  <MarketingLinkIcon id="YoutubeLogo" className="size-4 shrink-0" />
                   YouTube ↗
                 </a>
               ) : null}
@@ -133,8 +138,9 @@ export function PublicArtistDetail({ slug }: { slug: string }) {
                   href={artist.spotifyUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="rounded-none border px-4 py-2 text-sm font-medium hover:bg-muted"
+                  className="inline-flex items-center gap-2 rounded-none border px-4 py-2 text-sm font-medium hover:bg-muted"
                 >
+                  <MarketingLinkIcon id="SpotifyLogo" className="size-4 shrink-0" />
                   Spotify ↗
                 </a>
               ) : null}

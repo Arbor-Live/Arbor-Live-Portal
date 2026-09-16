@@ -10,6 +10,7 @@ import {
   validateMarketingHeroUploadRequest,
 } from "./lib/inventoryUpload";
 import { listEventsByInvoiceId } from "./lib/invoiceEvents";
+import { listEventsLinkedToRequest } from "./lib/bookingDayLoad";
 import {
   MAX_ADDITIONAL_LINKS,
   linksIncludePartiful,
@@ -27,20 +28,31 @@ const portalValue = v.union(v.literal("request"), v.literal("quote"));
 
 const designLinkInputValue = marketingDesignLinkValue;
 
-const posterStateValue = v.object({
-  eligible: v.boolean(),
-  eventId: v.optional(v.id("events")),
-  eventTitle: v.optional(v.string()),
-  startAt: v.optional(v.number()),
+const marketingDesignStatusValue = v.union(
+  v.literal("draft"),
+  v.literal("ready"),
+  v.literal("published"),
+);
+
+const posterDayValue = v.object({
+  eventId: v.id("events"),
+  eventTitle: v.string(),
+  startAt: v.number(),
   venueName: v.optional(v.string()),
   posterImageUrl: v.optional(v.string()),
   caption: v.optional(v.string()),
   additionalLinks: v.array(designLinkInputValue),
   partifulCohostUrl: v.optional(v.string()),
   /** draft | ready (on website) | published (website + Instagram approved) */
-  status: v.optional(v.union(v.literal("draft"), v.literal("ready"), v.literal("published"))),
+  status: v.optional(marketingDesignStatusValue),
   onWebsite: v.boolean(),
   instagramPublished: v.boolean(),
+});
+
+const posterStateValue = v.object({
+  eligible: v.boolean(),
+  /** One entry per linked event day, ordered by start time. */
+  days: v.array(posterDayValue),
 });
 
 const CAPTION_MAX_CHARS = 4000;
@@ -63,33 +75,30 @@ async function isRequestQuoteVoided(
   return invoice?.status === "void";
 }
 
-async function resolveEventByRequestToken(ctx: QueryCtx | MutationCtx, token: string) {
+type PosterPortalTarget = {
+  events: Doc<"events">[];
+  voided: boolean;
+};
+
+async function resolveRequestPosterTarget(
+  ctx: QueryCtx | MutationCtx,
+  token: string,
+): Promise<PosterPortalTarget | null> {
   const request = await ctx.db
     .query("eventRequests")
     .withIndex("by_publicToken", (q) => q.eq("publicToken", token))
     .unique();
   if (!request) return null;
-
   if (await isRequestQuoteVoided(ctx, request)) {
-    return { event: null, request };
+    return { events: [], voided: true };
   }
-
-  const eventId = request.convertedEventId ?? request.convertedEventIds?.[0];
-  if (eventId) {
-    const event = await ctx.db.get(eventId);
-    if (event) return { event, request };
-  }
-
-  if (request.linkedInvoiceId) {
-    const linkedEvents = await listEventsByInvoiceId(ctx, request.linkedInvoiceId);
-    const event = linkedEvents[0];
-    if (event) return { event, request };
-  }
-
-  return { event: null, request };
+  return { events: await listEventsLinkedToRequest(ctx, request), voided: false };
 }
 
-async function resolveEventByQuoteToken(ctx: QueryCtx | MutationCtx, token: string) {
+async function resolveQuotePosterTarget(
+  ctx: QueryCtx | MutationCtx,
+  token: string,
+): Promise<PosterPortalTarget | null> {
   const invoice = await ctx.db
     .query("invoices")
     .withIndex("by_publicApprovalToken", (q) => q.eq("publicApprovalToken", token))
@@ -101,56 +110,42 @@ async function resolveEventByQuoteToken(ctx: QueryCtx | MutationCtx, token: stri
   }
   if (invoice.status === "void") return null;
 
-  const linkedEvents = await listEventsByInvoiceId(ctx, invoice._id);
-  const event = linkedEvents[0] ?? null;
-  return { event, invoice };
+  return { events: await listEventsByInvoiceId(ctx, invoice._id), voided: false };
 }
 
-async function resolveEventForPortal(
+async function resolvePosterPortalTarget(
   ctx: QueryCtx | MutationCtx,
   portal: "request" | "quote",
   token: string,
-) {
-  if (portal === "request") {
-    const resolved = await resolveEventByRequestToken(ctx, token);
-    if (!resolved) throw new Error("Request not found.");
-    if (await isRequestQuoteVoided(ctx, resolved.request)) {
-      throw new Error("Poster upload is unavailable for a voided quote.");
-    }
-    if (!resolved.event) {
-      throw new Error("Poster upload is available once your event has been created.");
-    }
-    return resolved.event;
-  }
-
-  const resolved = await resolveEventByQuoteToken(ctx, token);
-  if (!resolved) throw new Error("Quote not found.");
-  if (!resolved.event) {
-    throw new Error("Poster upload is available once your event has been linked.");
-  }
-  return resolved.event;
+): Promise<PosterPortalTarget | null> {
+  return portal === "request"
+    ? resolveRequestPosterTarget(ctx, token)
+    : resolveQuotePosterTarget(ctx, token);
 }
 
-async function serializePosterState(
-  ctx: QueryCtx,
-  event: Doc<"events"> | null,
-): Promise<{
-  eligible: boolean;
-  eventId?: Id<"events">;
-  eventTitle?: string;
-  startAt?: number;
-  venueName?: string;
-  posterImageUrl?: string;
-  caption?: string;
-  additionalLinks: Array<{ label: string; url: string; icon?: string }>;
-  partifulCohostUrl?: string;
-  status?: "draft" | "ready" | "published";
-  onWebsite: boolean;
-  instagramPublished: boolean;
-}> {
-  if (!event) {
-    return { eligible: false, additionalLinks: [], onWebsite: false, instagramPublished: false };
+async function requirePosterPortalEvents(
+  ctx: QueryCtx | MutationCtx,
+  portal: "request" | "quote",
+  token: string,
+): Promise<Doc<"events">[]> {
+  const target = await resolvePosterPortalTarget(ctx, portal, token);
+  if (!target) {
+    throw new Error(portal === "request" ? "Request not found." : "Quote not found.");
   }
+  if (target.voided) {
+    throw new Error("Poster upload is unavailable for a voided quote.");
+  }
+  if (target.events.length === 0) {
+    throw new Error(
+      portal === "request"
+        ? "Poster upload is available once your event has been created."
+        : "Poster upload is available once your event has been linked.",
+    );
+  }
+  return target.events;
+}
+
+async function serializePosterDay(ctx: QueryCtx, event: Doc<"events">) {
   const design = await loadDesignForEvent(ctx, event._id);
   const status = design?.status;
   const onWebsite = status === "ready" || status === "published";
@@ -158,7 +153,6 @@ async function serializePosterState(
     ? ((await resolveStoredR2AssetUrl(design.imageUrl)) ?? undefined)
     : undefined;
   return {
-    eligible: true,
     eventId: event._id,
     eventTitle: event.title,
     startAt: event.startAt,
@@ -170,6 +164,16 @@ async function serializePosterState(
     status,
     onWebsite,
     instagramPublished: status === "published",
+  };
+}
+
+async function serializePosterState(ctx: QueryCtx, events: Doc<"events">[]) {
+  if (events.length === 0) {
+    return { eligible: false as const, days: [] };
+  }
+  return {
+    eligible: true as const,
+    days: await Promise.all(events.map((event) => serializePosterDay(ctx, event))),
   };
 }
 
@@ -188,11 +192,8 @@ export const getByRequestToken = query({
   args: { token: v.string() },
   returns: posterStateValue,
   handler: async (ctx, args) => {
-    const resolved = await resolveEventByRequestToken(ctx, args.token);
-    if (!resolved) {
-      return { eligible: false, additionalLinks: [], onWebsite: false, instagramPublished: false };
-    }
-    return await serializePosterState(ctx, resolved.event);
+    const target = await resolveRequestPosterTarget(ctx, args.token);
+    return await serializePosterState(ctx, target?.events ?? []);
   },
 });
 
@@ -200,11 +201,8 @@ export const getByQuoteToken = query({
   args: { token: v.string() },
   returns: posterStateValue,
   handler: async (ctx, args) => {
-    const resolved = await resolveEventByQuoteToken(ctx, args.token);
-    if (!resolved) {
-      return { eligible: false, additionalLinks: [], onWebsite: false, instagramPublished: false };
-    }
-    return await serializePosterState(ctx, resolved.event);
+    const target = await resolveQuotePosterTarget(ctx, args.token);
+    return await serializePosterState(ctx, target?.events ?? []);
   },
 });
 
@@ -212,6 +210,7 @@ export const generateUploadUrl = mutation({
   args: {
     portal: portalValue,
     token: v.string(),
+    eventId: v.id("events"),
     fileName: v.string(),
     contentType: v.string(),
     contentLength: v.number(),
@@ -226,7 +225,9 @@ export const generateUploadUrl = mutation({
       limit: 30,
       windowMs: HOUR_MS,
     });
-    const event = await resolveEventForPortal(ctx, args.portal, args.token);
+    const events = await requirePosterPortalEvents(ctx, args.portal, args.token);
+    const event = events.find((candidate) => candidate._id === args.eventId);
+    if (!event) throw new Error("Event not found for this request.");
     const uploadId = args.uploadId.trim();
     if (!uploadId) throw new Error("Upload id is required.");
 
@@ -249,6 +250,7 @@ export const save = mutation({
   args: {
     portal: portalValue,
     token: v.string(),
+    eventId: v.id("events"),
     imageUrl: v.optional(v.string()),
     caption: v.optional(v.string()),
     additionalLinks: v.optional(v.array(designLinkInputValue)),
@@ -260,7 +262,9 @@ export const save = mutation({
       limit: 20,
       windowMs: HOUR_MS,
     });
-    const event = await resolveEventForPortal(ctx, args.portal, args.token);
+    const events = await requirePosterPortalEvents(ctx, args.portal, args.token);
+    const event = events.find((candidate) => candidate._id === args.eventId);
+    if (!event) throw new Error("Event not found for this request.");
     const hasImage = args.imageUrl !== undefined;
     const hasCaption = args.caption !== undefined;
     const hasLinks = args.additionalLinks !== undefined;

@@ -79,11 +79,14 @@ export function IconPicker({
           <SelectedIcon className="size-4" weight="regular" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-80 gap-2 p-2">
+      <PopoverContent
+        align="start"
+        className="w-[min(20rem,calc(100vw-2rem))] gap-2 p-2"
+      >
         <Input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search all Phosphor icons…"
+          placeholder="Search icons…"
           autoFocus
           className="h-8"
         />

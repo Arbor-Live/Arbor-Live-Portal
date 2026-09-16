@@ -4,6 +4,7 @@ import { useCallback, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { ImageIcon } from "@phosphor-icons/react";
 import { api } from "@/lib/convex-api";
+import { useAppDialog } from "@/components/ui/app-dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -66,6 +67,7 @@ export function PublicEventPosterSection({
   );
   const generateUploadUrl = useMutation(api.publicEventPoster.generateUploadUrl);
   const savePoster = useMutation(api.publicEventPoster.save);
+  const dialog = useAppDialog();
 
   const draftUploadIdRef = useRef(createUploadId());
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -73,6 +75,7 @@ export function PublicEventPosterSection({
   const [dragActive, setDragActive] = useState(false);
   const [savingDetails, setSavingDetails] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activeDayIndex, setActiveDayIndex] = useState(0);
   const [caption, setCaption] = useState("");
   const [additionalLinks, setAdditionalLinks] = useState<MarketingAdditionalLink[]>([
     emptyMarketingLink(),
@@ -80,18 +83,24 @@ export function PublicEventPosterSection({
   const [partifulCohostUrl, setPartifulCohostUrl] = useState("");
   const [detailsSourceKey, setDetailsSourceKey] = useState<string | null>(null);
 
-  const sourceKey = poster?.eligible ? `${token}:${poster.eventId ?? ""}` : null;
+  const days = poster?.days ?? [];
+  const dayIndex = Math.min(activeDayIndex, Math.max(0, days.length - 1));
+  const activeDay = days[dayIndex];
+  const activeEventId = activeDay?.eventId;
+
+  const sourceKey = activeEventId ? `${token}:${activeEventId}` : null;
   if (sourceKey && detailsSourceKey !== sourceKey) {
     setDetailsSourceKey(sourceKey);
-    setCaption(poster?.caption ?? "");
+    setCaption(activeDay?.caption ?? "");
     setAdditionalLinks(
-      poster?.additionalLinks?.length ? poster.additionalLinks : [emptyMarketingLink()],
+      activeDay?.additionalLinks?.length ? activeDay.additionalLinks : [emptyMarketingLink()],
     );
-    setPartifulCohostUrl(poster?.partifulCohostUrl ?? "");
+    setPartifulCohostUrl(activeDay?.partifulCohostUrl ?? "");
   }
 
   const uploadFile = useCallback(
     async (file: File) => {
+      if (!activeEventId) return;
       setBusy(true);
       setError(null);
       try {
@@ -99,6 +108,7 @@ export function PublicEventPosterSection({
         const { url, key } = await generateUploadUrl({
           portal,
           token,
+          eventId: activeEventId,
           fileName: normalizedFile.name,
           contentType: normalizedFile.type || "application/octet-stream",
           contentLength: normalizedFile.size,
@@ -119,6 +129,7 @@ export function PublicEventPosterSection({
         await savePoster({
           portal,
           token,
+          eventId: activeEventId,
           imageUrl: formatStoredR2Asset(key),
         });
         draftUploadIdRef.current = createUploadId();
@@ -131,16 +142,18 @@ export function PublicEventPosterSection({
         setBusy(false);
       }
     },
-    [generateUploadUrl, portal, savePoster, token],
+    [activeEventId, generateUploadUrl, portal, savePoster, token],
   );
 
   const saveDetails = useCallback(async () => {
+    if (!activeEventId) return;
     setSavingDetails(true);
     setError(null);
     try {
       await savePoster({
         portal,
         token,
+        eventId: activeEventId,
         caption,
         additionalLinks: filterMarketingLinks(additionalLinks),
         partifulCohostUrl,
@@ -153,16 +166,16 @@ export function PublicEventPosterSection({
     } finally {
       setSavingDetails(false);
     }
-  }, [additionalLinks, caption, partifulCohostUrl, portal, savePoster, token]);
+  }, [activeEventId, additionalLinks, caption, partifulCohostUrl, portal, savePoster, token]);
 
   if (poster === undefined) return null;
-  if (!poster.eligible || !poster.eventId) return null;
+  if (!poster.eligible || !activeDay) return null;
 
   const detailsDirty =
-    caption.trim() !== (poster.caption ?? "").trim() ||
-    !marketingLinksEqual(additionalLinks, poster.additionalLinks ?? []) ||
-    partifulCohostUrl.trim() !== (poster.partifulCohostUrl ?? "").trim();
-  const hasPoster = Boolean(poster.posterImageUrl);
+    caption.trim() !== (activeDay.caption ?? "").trim() ||
+    !marketingLinksEqual(additionalLinks, activeDay.additionalLinks ?? []) ||
+    partifulCohostUrl.trim() !== (activeDay.partifulCohostUrl ?? "").trim();
+  const hasPoster = Boolean(activeDay.posterImageUrl);
   const uploadDisabled = busy || savingDetails;
 
   return (
@@ -171,12 +184,47 @@ export function PublicEventPosterSection({
         <CardTitle>Poster & description</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {poster.onWebsite && !poster.instagramPublished ? (
+        {days.length > 1 ? (
+          <div role="tablist" aria-label="Event day" className="flex flex-wrap gap-2">
+            {days.map((day, index) => (
+              <Button
+                key={day.eventId}
+                type="button"
+                role="tab"
+                size="sm"
+                variant={index === dayIndex ? "default" : "outline"}
+                aria-selected={index === dayIndex}
+                disabled={uploadDisabled}
+                onClick={() => {
+                  if (index === dayIndex) return;
+                  if (!detailsDirty) {
+                    setActiveDayIndex(index);
+                    return;
+                  }
+                  void dialog
+                    .confirm({
+                      title: "Discard unsaved changes?",
+                      description:
+                        "Your description and links for this day haven't been saved yet.",
+                      confirmLabel: "Discard",
+                      destructive: true,
+                    })
+                    .then((discard) => {
+                      if (discard) setActiveDayIndex(index);
+                    });
+                }}
+              >
+                Day {index + 1}
+              </Button>
+            ))}
+          </div>
+        ) : null}
+        {activeDay.onWebsite && !activeDay.instagramPublished ? (
           <p className="text-xs text-muted-foreground">
             This content is on the public event page. Arbor Live still reviews it before Instagram.
           </p>
         ) : null}
-        {poster.instagramPublished ? (
+        {activeDay.instagramPublished ? (
           <p className="text-xs text-muted-foreground">
             This content is live on the public event page and Instagram.
           </p>
@@ -251,8 +299,8 @@ export function PublicEventPosterSection({
             }}
           >
             <PublicEventPoster
-              imageUrl={poster.posterImageUrl}
-              eventId={poster.eventId}
+              imageUrl={activeDay.posterImageUrl}
+              eventId={activeDay.eventId}
               className="w-full rounded-xl object-cover"
             />
             <div
@@ -291,19 +339,19 @@ export function PublicEventPosterSection({
           <div className="flex min-w-0 flex-col gap-6">
             <div>
               <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-                {poster.eventTitle ?? "Your event"}
+                {activeDay.eventTitle ?? "Your event"}
               </h2>
-              {poster.startAt != null ? (
+              {activeDay.startAt != null ? (
                 <p className="mt-2 text-muted-foreground">
-                  {formatDateTime(poster.startAt, "long")}
+                  {formatDateTime(activeDay.startAt, "long")}
                 </p>
               ) : null}
-              {poster.venueName?.trim() ? (
+              {activeDay.venueName?.trim() ? (
                 <div className="mt-4">
                   <p className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                     Venue
                   </p>
-                  <p className="mt-1">{poster.venueName.trim()}</p>
+                  <p className="mt-1">{activeDay.venueName.trim()}</p>
                 </div>
               ) : null}
             </div>
