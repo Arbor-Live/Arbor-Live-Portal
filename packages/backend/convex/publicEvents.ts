@@ -14,11 +14,23 @@ import {
 import { isPublicSiteListableVisibility } from "./lib/eventVisibility";
 import { SITE_URL } from "./email/constants";
 import { loadEventHostDisplay } from "./lib/hostOrgs";
+import { getEventArtists, type EventArtist } from "./lib/eventArtists";
 
 const publicEventLinkValue = v.object({
   label: v.string(),
   url: v.string(),
   icon: v.optional(v.string()),
+});
+
+const publicEventArtistValue = v.object({
+  organizationId: v.string(),
+  name: v.string(),
+  role: v.union(v.literal("headliner"), v.literal("support"), v.literal("other")),
+  slug: v.optional(v.string()),
+  genres: v.array(v.string()),
+  oneLiner: v.optional(v.string()),
+  imageUrl: v.optional(v.string()),
+  links: v.array(publicEventLinkValue),
 });
 
 const publicEventCardValue = v.object({
@@ -37,6 +49,8 @@ const publicEventCardValue = v.object({
   additionalLinks: v.array(publicEventLinkValue),
   /** Present when the event's Open Mic add-on is accepting public sign-ups. */
   openMicSignupUrl: v.optional(v.string()),
+  /** Performers assigned to the event (detail view only). */
+  artists: v.array(publicEventArtistValue),
 });
 
 type DesignDoc = Doc<"eventMarketingDesigns">;
@@ -47,6 +61,7 @@ async function mapPublicEventCard(
   design?: DesignDoc | null,
   venueAddress?: string,
   googleMapsUrl?: string,
+  artists: EventArtist[] = [],
 ) {
   const posterImageUrl = design?.imageUrl
     ? ((await resolveStoredR2AssetUrl(design.imageUrl)) ?? undefined)
@@ -71,6 +86,7 @@ async function mapPublicEventCard(
     publicEventUrl,
     additionalLinks: design?.additionalLinks ?? [],
     openMicSignupUrl,
+    artists,
   };
 }
 
@@ -220,6 +236,13 @@ export const getByEventId = query({
       }
     }
 
-    return mapPublicEventCard(ctx, event, visible ?? null, venueAddress, googleMapsUrl);
+    return mapPublicEventCard(
+      ctx,
+      event,
+      visible ?? null,
+      venueAddress,
+      googleMapsUrl,
+      await getEventArtists(ctx, args.eventId),
+    );
   },
 });
