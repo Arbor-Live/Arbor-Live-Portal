@@ -117,6 +117,7 @@ export function PublicEventLifecycleClient({ token }: { token: string }) {
         }
       />
       <div className="mx-auto w-full min-w-0 max-w-6xl space-y-4 px-4 py-12 sm:px-6 lg:px-8">
+        <PublicPostEventSection portal="quote" token={token} />
         <Card>
           <CardHeader>
             <CardTitle>Quote {data.invoice.invoiceNumber}</CardTitle>
@@ -216,8 +217,6 @@ export function PublicEventLifecycleClient({ token }: { token: string }) {
             submitMutation={submitPaymentProof}
           />
         ) : null}
-
-        <PublicPostEventSection portal="quote" token={token} />
       </div>
     </PublicSiteChrome>
   );

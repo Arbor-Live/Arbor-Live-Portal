@@ -323,8 +323,8 @@ export type PostEventAlbumEmailProps = {
   feedbackFormUrl?: string;
   /** Link to the internal post-mortem form (day-of leads and event managers). */
   postMortemUrl?: string;
-  /** Who the email is for: external client vs internal lead. */
-  audience?: "client" | "lead";
+  /** Who the email is for: external client vs day-of lead vs other crew. */
+  audience?: "client" | "lead" | "crew";
 };
 
 export type EventCommentMentionEmailProps = {

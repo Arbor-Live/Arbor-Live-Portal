@@ -214,7 +214,7 @@ export function subjectForTemplate(template: EmailTemplate, context: string) {
     case "rental_return_processed":
       return `Return processed: ${context}`;
     case "post_event_album":
-      return `Share your event photos: ${context}`;
+      return `Thanks for choosing Arbor Live: ${context}`;
     case "event_comment_mention":
     case "comment_mention":
       return `You were mentioned: ${context}`;
