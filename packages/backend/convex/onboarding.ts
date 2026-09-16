@@ -261,7 +261,7 @@ export async function ensureOrganizationOnboarding(
 async function resolveOrgType(
   ctx: QueryCtx | MutationCtx,
   organizationId: string,
-): Promise<"arbor_internal" | "band" | "dj"> {
+): Promise<"arbor_internal" | "band" | "dj" | "singer_songwriter" | "other"> {
   const profile = await ctx.db
     .query("organizationProfiles")
     .withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId))

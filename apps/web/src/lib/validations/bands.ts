@@ -64,7 +64,7 @@ export const bandProfileSchema = z
     bio: z.string().optional(),
     oneLiner: z.string().optional(),
     genres: z.string().optional(),
-    artistType: z.string().optional(),
+    organizationType: z.string().optional(),
     demoURL: z.string().optional(),
     mainContactName: z.string().optional(),
     mainContactEmail: z.string().optional(),

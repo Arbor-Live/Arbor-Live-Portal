@@ -154,6 +154,8 @@ export const getInviteByToken = query({
         v.literal("arbor_internal"),
         v.literal("band"),
         v.literal("dj"),
+        v.literal("singer_songwriter"),
+        v.literal("other"),
       ),
       role: v.string(),
       hasAccount: v.boolean(),

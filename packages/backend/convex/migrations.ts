@@ -494,23 +494,6 @@ export const backfillBandApplicationArtistLinks = migrations.define({
   },
 });
 
-/** Default unset artist types to "other". */
-export const backfillArtistType = migrations.define({
-  table: "organizationProfiles",
-  migrateOne: async (_ctx, profile) => {
-    if (profile.artistType) return;
-    return { artistType: "other" as const, updatedAt: Date.now() };
-  },
-});
-
-export const backfillBandApplicationArtistType = migrations.define({
-  table: "bandApplications",
-  migrateOne: async (_ctx, application) => {
-    if (application.artistType) return;
-    return { artistType: "other" as const };
-  },
-});
-
 /**
  * never reorder or remove completed ones (reset requires an explicit reset:true).
  */
@@ -533,8 +516,6 @@ const MIGRATION_SERIES = [
   internal.migrations.normalizeInvoiceCrewLineLabels,
   internal.migrations.backfillOrgArtistLinks,
   internal.migrations.backfillBandApplicationArtistLinks,
-  internal.migrations.backfillArtistType,
-  internal.migrations.backfillBandApplicationArtistType,
 ] as const;
 
 export const runAll = migrations.runner([...MIGRATION_SERIES]);

@@ -60,7 +60,7 @@ export function PublicArtistDetail({ slug }: { slug: string }) {
             </h1>
             <div className="mt-4">
               <ArtistTypeBadge
-                artistType={artist.artistType}
+                organizationType={artist.organizationType}
                 className="border-zinc-700 text-zinc-300"
               />
             </div>

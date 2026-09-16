@@ -20,7 +20,7 @@ export function BandPublicListingFields() {
       <TextFormField name="oneLiner" label="Headline" placeholder="Short tagline for your public listing" />
       <Controller
         control={control}
-        name="artistType"
+        name="organizationType"
         render={({ field }) => (
           <div className="space-y-2">
             <Label>Artist type</Label>

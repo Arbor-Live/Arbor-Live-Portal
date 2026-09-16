@@ -20,26 +20,26 @@ function normalize(value: string | undefined): ArtistType {
 }
 
 export function ArtistTypeIcon({
-  artistType,
+  organizationType,
   className,
 }: {
-  artistType: ArtistType;
+  organizationType: ArtistType;
   className?: string;
 }) {
-  const Icon = ARTIST_TYPE_ICONS[artistType];
+  const Icon = ARTIST_TYPE_ICONS[organizationType];
   return <Icon className={className} aria-hidden />;
 }
 
 export function ArtistTypeBadge({
-  artistType,
+  organizationType,
   showLabel = true,
   className,
 }: {
-  artistType: string | undefined;
+  organizationType: string | undefined;
   showLabel?: boolean;
   className?: string;
 }) {
-  const type = normalize(artistType);
+  const type = normalize(organizationType);
   const Icon = ARTIST_TYPE_ICONS[type];
   return (
     <span

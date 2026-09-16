@@ -30,7 +30,7 @@ const EMPTY: BandApplicationFormValues = {
   bandDisplayName: "",
   oneLiner: "",
   bio: "",
-  artistType: "",
+  organizationType: "",
   artistLinks: [],
   demoURL: "",
   publicHeroImageUrl: "",
@@ -192,8 +192,8 @@ export function BandApplicationForm() {
         <div className="space-y-2">
           <Label>Artist type (optional)</Label>
           <Select
-            value={form.artistType || undefined}
-            onValueChange={(value) => patch({ artistType: value })}
+            value={form.organizationType || undefined}
+            onValueChange={(value) => patch({ organizationType: value })}
           >
             <SelectTrigger>
               <SelectValue placeholder="Select a type" />

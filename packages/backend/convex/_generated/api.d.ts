@@ -99,7 +99,6 @@ import type * as invoiceTerms from "../invoiceTerms.js";
 import type * as invoices from "../invoices.js";
 import type * as lib_analyticsQuery from "../lib/analyticsQuery.js";
 import type * as lib_analyticsTime from "../lib/analyticsTime.js";
-import type * as lib_artistType from "../lib/artistType.js";
 import type * as lib_assetScan from "../lib/assetScan.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_bandIdentity from "../lib/bandIdentity.js";
@@ -145,6 +144,7 @@ import type * as lib_normalizeCrewLineLabel from "../lib/normalizeCrewLineLabel.
 import type * as lib_onboardingLinks from "../lib/onboardingLinks.js";
 import type * as lib_openMicAddon from "../lib/openMicAddon.js";
 import type * as lib_orgMembership from "../lib/orgMembership.js";
+import type * as lib_organizationType from "../lib/organizationType.js";
 import type * as lib_otForecast from "../lib/otForecast.js";
 import type * as lib_packageBom from "../lib/packageBom.js";
 import type * as lib_packageContentMigration from "../lib/packageContentMigration.js";
@@ -302,7 +302,6 @@ declare const fullApi: ApiFromModules<{
   invoices: typeof invoices;
   "lib/analyticsQuery": typeof lib_analyticsQuery;
   "lib/analyticsTime": typeof lib_analyticsTime;
-  "lib/artistType": typeof lib_artistType;
   "lib/assetScan": typeof lib_assetScan;
   "lib/auth": typeof lib_auth;
   "lib/bandIdentity": typeof lib_bandIdentity;
@@ -348,6 +347,7 @@ declare const fullApi: ApiFromModules<{
   "lib/onboardingLinks": typeof lib_onboardingLinks;
   "lib/openMicAddon": typeof lib_openMicAddon;
   "lib/orgMembership": typeof lib_orgMembership;
+  "lib/organizationType": typeof lib_organizationType;
   "lib/otForecast": typeof lib_otForecast;
   "lib/packageBom": typeof lib_packageBom;
   "lib/packageContentMigration": typeof lib_packageContentMigration;

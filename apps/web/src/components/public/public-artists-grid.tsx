@@ -27,10 +27,10 @@ function ArtistCardSkeleton() {
 }
 
 export function PublicArtistsGrid() {
-  const [artistType, setArtistType] = useState<ArtistType | "all">("all");
+  const [organizationType, setArtistType] = useState<ArtistType | "all">("all");
   const artists = useQuery(
     api.publicDirectory.listPublicArtists,
-    artistType === "all" ? {} : { artistType },
+    organizationType === "all" ? {} : { organizationType },
   );
 
   const filters: Array<{ value: ArtistType | "all"; label: string }> = [
@@ -48,12 +48,12 @@ export function PublicArtistsGrid() {
               type="button"
               role="tab"
               size="sm"
-              variant={artistType === filter.value ? "default" : "outline"}
-              aria-selected={artistType === filter.value}
+              variant={organizationType === filter.value ? "default" : "outline"}
+              aria-selected={organizationType === filter.value}
               onClick={() => setArtistType(filter.value)}
             >
               {filter.value !== "all" ? (
-                <ArtistTypeIcon artistType={filter.value} className="size-3.5" />
+                <ArtistTypeIcon organizationType={filter.value} className="size-3.5" />
               ) : null}
               {filter.label}
             </Button>
@@ -105,7 +105,7 @@ export function PublicArtistsGrid() {
                       <CardContent className="space-y-2 p-4">
                         <div className="flex flex-wrap items-center gap-2">
                           <h3 className="font-semibold text-foreground">{artist.displayName}</h3>
-                          <ArtistTypeBadge artistType={artist.artistType} />
+                          <ArtistTypeBadge organizationType={artist.organizationType} />
                         </div>
                         {artist.oneLiner ? (
                           <p className="line-clamp-2 text-sm leading-relaxed text-muted-foreground">

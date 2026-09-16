@@ -35,7 +35,7 @@ import {
 import { normalizeOptionalAssetReference } from "./lib/inventoryUpload";
 import { marketingDesignLinkValue, normalizeMarketingLinks } from "./lib/marketingLinks";
 import { buildArtistLinks } from "./lib/publicArtistProfile";
-import { artistTypeValue } from "./lib/artistType";
+import { artistOrganizationTypeValue } from "./lib/organizationType";
 import {
   collectKeysFromOrganizationProfile,
   releaseReplacedR2Reference,
@@ -132,7 +132,7 @@ const bandListingProfilePatchArgs = {
   mainContactEmail: v.optional(v.string()),
   mainContactPhone: v.optional(v.string()),
   artistLinks: v.optional(v.array(marketingDesignLinkValue)),
-  artistType: v.optional(artistTypeValue),
+  organizationType: v.optional(artistOrganizationTypeValue),
 };
 
 function patchBandListingProfileFields(
@@ -145,7 +145,6 @@ function patchBandListingProfileFields(
     mainContactEmail?: string;
     mainContactPhone?: string;
     artistLinks?: Array<{ label: string; url: string; icon?: string }>;
-    artistType?: "band" | "dj" | "singer_songwriter" | "other";
   },
   args: {
     oneLiner?: string;
@@ -156,7 +155,6 @@ function patchBandListingProfileFields(
     mainContactEmail?: string;
     mainContactPhone?: string;
     artistLinks?: Array<{ label: string; url: string; icon?: string }>;
-    artistType?: "band" | "dj" | "singer_songwriter" | "other";
   },
 ) {
   return {
@@ -166,7 +164,6 @@ function patchBandListingProfileFields(
       args.artistLinks !== undefined
         ? normalizeMarketingLinks(args.artistLinks)
         : existing.artistLinks,
-    artistType: args.artistType !== undefined ? args.artistType : existing.artistType,
     genres: args.genres !== undefined ? normalizeStringList(args.genres) : existing.genres,
     demoURL: args.demoURL !== undefined ? args.demoURL.trim() || undefined : existing.demoURL,
     bandMembers:
@@ -278,8 +275,10 @@ export async function resolveOrCreateOrganization(ctx: MutationCtx, name: string
 
 function resolveOrganizationType(
   organization: OrganizationRow | undefined,
-  profile?: { organizationType: "arbor_internal" | "band" | "dj" } | null,
-): "arbor_internal" | "band" | "dj" {
+  profile?: {
+    organizationType: "arbor_internal" | "band" | "dj" | "singer_songwriter" | "other";
+  } | null,
+): "arbor_internal" | "band" | "dj" | "singer_songwriter" | "other" {
   if (isArborOrganization(organization)) return "arbor_internal";
   return profile?.organizationType ?? "band";
 }
@@ -584,7 +583,6 @@ export const listBandOrganizationsAdmin = query({
           publicYoutubeUrl: profile?.publicYoutubeUrl ?? "",
           publicSpotifyUrl: profile?.publicSpotifyUrl ?? "",
           artistLinks: profile ? buildArtistLinks(profile) : [],
-          artistType: profile?.artistType,
           publicListing: profile?.publicListing ?? false,
           publicSlug: profile?.publicSlug ?? "",
           publicHeroImageUrl: profile?.publicHeroImageUrl ?? "",
@@ -711,7 +709,7 @@ export const updateBandOrganizationProfileAdmin = mutation({
           ? normalizeOptionalAssetReference(args.publicHeroImageUrl)
           : existing.publicHeroImageUrl;
       await ctx.db.patch(existing._id, {
-        organizationType: existing.organizationType ?? "band",
+        organizationType: args.organizationType ?? existing.organizationType ?? "band",
         displayName:
           args.displayName !== undefined
             ? args.displayName.trim() || undefined
@@ -778,7 +776,7 @@ export const updateBandOrganizationProfileAdmin = mutation({
     }
     const profileId = await ctx.db.insert("organizationProfiles", {
       organizationId: args.organizationId,
-      organizationType: "band",
+      organizationType: args.organizationType ?? "band",
       displayName: args.displayName?.trim() || organization.name || "Band",
       bio: args.bio?.trim() || undefined,
       performerHourlyRateUsd: args.performerHourlyRateUsd,
@@ -2322,7 +2320,7 @@ export const getActiveBandProfile = query({
       publicYoutubeUrl: profile?.publicYoutubeUrl ?? "",
       publicSpotifyUrl: profile?.publicSpotifyUrl ?? "",
       artistLinks: profile ? buildArtistLinks(profile) : [],
-      artistType: profile?.artistType,
+      organizationType: profile?.organizationType,
       publicListing: profile?.publicListing ?? false,
       publicSlug: profile?.publicSlug ?? "",
       publicHeroImageUrl: profile?.publicHeroImageUrl ?? "",
@@ -2386,7 +2384,7 @@ export const updateActiveBandProfile = mutation({
           ? normalizeOptionalAssetReference(args.publicHeroImageUrl)
           : existing.publicHeroImageUrl;
       await ctx.db.patch(existing._id, {
-        organizationType: existing.organizationType ?? "band",
+        organizationType: args.organizationType ?? existing.organizationType ?? "band",
         // Callers send partial payloads (the onboarding wizard saves one step
         // at a time), so every field here preserves `existing` when omitted.
         displayName:
@@ -2455,7 +2453,7 @@ export const updateActiveBandProfile = mutation({
     }
     const profileId = await ctx.db.insert("organizationProfiles", {
       organizationId: context.organizationId,
-      organizationType: "band",
+      organizationType: args.organizationType ?? "band",
       displayName: args.displayName?.trim() || context.organizationName,
       bio: args.bio?.trim() || undefined,
       performerHourlyRateUsd: args.performerHourlyRateUsd,
