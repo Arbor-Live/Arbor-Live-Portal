@@ -4,6 +4,7 @@ import { useCallback, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { ImageIcon } from "@phosphor-icons/react";
 import { api } from "@/lib/convex-api";
+import { useAppDialog } from "@/components/ui/app-dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -66,6 +67,7 @@ export function PublicEventPosterSection({
   );
   const generateUploadUrl = useMutation(api.publicEventPoster.generateUploadUrl);
   const savePoster = useMutation(api.publicEventPoster.save);
+  const dialog = useAppDialog();
 
   const draftUploadIdRef = useRef(createUploadId());
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -193,7 +195,24 @@ export function PublicEventPosterSection({
                 variant={index === dayIndex ? "default" : "outline"}
                 aria-selected={index === dayIndex}
                 disabled={uploadDisabled}
-                onClick={() => setActiveDayIndex(index)}
+                onClick={() => {
+                  if (index === dayIndex) return;
+                  if (!detailsDirty) {
+                    setActiveDayIndex(index);
+                    return;
+                  }
+                  void dialog
+                    .confirm({
+                      title: "Discard unsaved changes?",
+                      description:
+                        "Your description and links for this day haven't been saved yet.",
+                      confirmLabel: "Discard",
+                      destructive: true,
+                    })
+                    .then((discard) => {
+                      if (discard) setActiveDayIndex(index);
+                    });
+                }}
               >
                 Day {index + 1}
               </Button>

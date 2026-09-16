@@ -64,6 +64,19 @@ async function resolvePublicHeroImageUrl(value: string | undefined) {
   return (await resolveStoredR2AssetUrl(trimmed)) ?? trimmed;
 }
 
+/** Profile links are rendered as public anchors — only publish absolute http(s) URLs. */
+function publicProfileUrl(value: string | undefined) {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return undefined;
+  } catch {
+    return undefined;
+  }
+  return trimmed;
+}
+
 async function resolveCrewMemberImageUrl(
   ctx: QueryCtx,
   profile: {
@@ -242,10 +255,10 @@ export const listPublicArtists = query({
         genres: profile.genres?.filter(Boolean) ?? [],
         bioExcerpt: bioExcerpt(profile.bio ?? profile.oneLiner),
         heroImageUrl: await resolvePublicHeroImageUrl(profile.publicHeroImageUrl),
-        websiteUrl: profile.publicWebsiteUrl?.trim() || undefined,
-        instagramUrl: profile.publicInstagramUrl?.trim() || undefined,
-        youtubeUrl: profile.publicYoutubeUrl?.trim() || undefined,
-        spotifyUrl: profile.publicSpotifyUrl?.trim() || undefined,
+        websiteUrl: publicProfileUrl(profile.publicWebsiteUrl),
+        instagramUrl: publicProfileUrl(profile.publicInstagramUrl),
+        youtubeUrl: publicProfileUrl(profile.publicYoutubeUrl),
+        spotifyUrl: publicProfileUrl(profile.publicSpotifyUrl),
       })),
     );
     return rows.sort((a, b) => a.displayName.localeCompare(b.displayName));
@@ -282,12 +295,12 @@ export const getPublicArtistBySlug = query({
       oneLiner: profile.oneLiner?.trim() || undefined,
       genres: profile.genres?.filter(Boolean) ?? [],
       bio: profile.bio?.trim() || undefined,
-      demoURL: profile.demoURL?.trim() || undefined,
+      demoURL: publicProfileUrl(profile.demoURL),
       heroImageUrl: await resolvePublicHeroImageUrl(profile.publicHeroImageUrl),
-      websiteUrl: profile.publicWebsiteUrl?.trim() || undefined,
-      instagramUrl: profile.publicInstagramUrl?.trim() || undefined,
-      youtubeUrl: profile.publicYoutubeUrl?.trim() || undefined,
-      spotifyUrl: profile.publicSpotifyUrl?.trim() || undefined,
+      websiteUrl: publicProfileUrl(profile.publicWebsiteUrl),
+      instagramUrl: publicProfileUrl(profile.publicInstagramUrl),
+      youtubeUrl: publicProfileUrl(profile.publicYoutubeUrl),
+      spotifyUrl: publicProfileUrl(profile.publicSpotifyUrl),
     };
   },
 });
