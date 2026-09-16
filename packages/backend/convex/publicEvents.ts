@@ -27,6 +27,12 @@ const publicEventArtistValue = v.object({
   name: v.string(),
   role: v.union(v.literal("headliner"), v.literal("support"), v.literal("other")),
   slug: v.optional(v.string()),
+  artistType: v.union(
+    v.literal("band"),
+    v.literal("dj"),
+    v.literal("singer_songwriter"),
+    v.literal("other"),
+  ),
   genres: v.array(v.string()),
   oneLiner: v.optional(v.string()),
   imageUrl: v.optional(v.string()),

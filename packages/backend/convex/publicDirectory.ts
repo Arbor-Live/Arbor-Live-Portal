@@ -293,14 +293,14 @@ export const getPublicArtistBySlug = query({
       return null;
     }
 
-    const orgResult = await findAuthOrganizationById(ctx, profile.organizationId);
+    const displayName = profile.displayName?.trim();
+    const orgResult = displayName
+      ? null
+      : await findAuthOrganizationById(ctx, profile.organizationId);
 
     return {
       slug: profile.publicSlug!,
-      displayName:
-        profile.displayName?.trim() ||
-        orgResult?.name?.trim() ||
-        "Artist",
+      displayName: displayName || orgResult?.name?.trim() || "Artist",
       oneLiner: profile.oneLiner?.trim() || undefined,
       genres: profile.genres?.filter(Boolean) ?? [],
       artistType: profile.artistType ?? "other",

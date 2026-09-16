@@ -13,6 +13,7 @@ export type EventArtist = {
   role: "headliner" | "support" | "other";
   /** Set only when the artist is publicly listed. */
   slug?: string;
+  artistType: "band" | "dj" | "singer_songwriter" | "other";
   genres: string[];
   oneLiner?: string;
   imageUrl?: string;
@@ -62,6 +63,7 @@ export async function getEventArtists(
         name,
         role: row.role,
         slug: isPublic ? profile!.publicSlug!.trim().toLowerCase() : undefined,
+        artistType: profile?.artistType ?? "other",
         genres: profile?.genres?.filter(Boolean) ?? [],
         oneLiner: isPublic ? profile?.oneLiner?.trim() || undefined : undefined,
         imageUrl: isPublic ? await resolvePublicHeroImageUrl(profile?.publicHeroImageUrl) : undefined,

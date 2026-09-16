@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Reveal, Stagger, StaggerItem } from "@/components/landing/landing-motion";
 import { PublicArtistPoster } from "@/components/public/public-artist-poster";
+import { ArtistTypeBadge } from "@/components/public/artist-type-badge";
 import { MarketingLinkIcon } from "@/lib/marketing-link-icons";
 import { ARTIST_TYPES, ARTIST_TYPE_LABELS, type ArtistType } from "@/lib/artist-types";
 
@@ -99,7 +100,10 @@ export function PublicArtistsGrid() {
                         className="w-full"
                       />
                       <CardContent className="space-y-2 p-4">
-                        <h3 className="font-semibold text-foreground">{artist.displayName}</h3>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="font-semibold text-foreground">{artist.displayName}</h3>
+                          <ArtistTypeBadge artistType={artist.artistType} />
+                        </div>
                         {artist.oneLiner ? (
                           <p className="line-clamp-2 text-sm leading-relaxed text-muted-foreground">
                             {artist.oneLiner}
