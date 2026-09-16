@@ -127,3 +127,50 @@ export async function getEventLeadRecipients(
 
   return [...recipients.values()];
 }
+
+/**
+ * Everyone assigned to an event (schedule shifts + people assignments) except
+ * the day-of lead and event manager, who receive the lead variant instead.
+ */
+export async function getEventCrewRecipients(
+  ctx: QueryCtx | MutationCtx,
+  eventId: Id<"events">,
+) {
+  const event = await ctx.db.get(eventId);
+  if (!event) return [] as EmailRecipient[];
+
+  const leadUserIds = new Set(
+    [event.dayOfLeadUserId, event.eventManagerUserId].filter(
+      (value): value is string => Boolean(value?.trim()),
+    ),
+  );
+
+  const crewUserIds: string[] = [];
+  const shifts = await ctx.db
+    .query("eventCrewShifts")
+    .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
+    .take(500);
+  for (const shift of shifts) {
+    if (shift.userId && !leadUserIds.has(shift.userId)) crewUserIds.push(shift.userId);
+  }
+
+  const assignments = await ctx.db
+    .query("eventPeopleAssignments")
+    .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
+    .take(200);
+
+  const userByKey = await findAuthUsersByIds(ctx, [...new Set(crewUserIds)]);
+  const recipients = new Map<string, EmailRecipient>();
+
+  for (const userId of crewUserIds) {
+    const user = userByKey.get(userId);
+    addRecipient(recipients, user?.email, user?.name ?? undefined, userId);
+  }
+
+  for (const assignment of assignments) {
+    if (assignment.userId && leadUserIds.has(assignment.userId)) continue;
+    addRecipient(recipients, assignment.contactEmail, assignment.personName, assignment.userId);
+  }
+
+  return [...recipients.values()];
+}

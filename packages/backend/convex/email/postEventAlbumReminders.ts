@@ -13,11 +13,11 @@ import {
   subjectForTemplate,
 } from "./constants";
 import { enqueueEmail } from "./enqueue";
-import { getEventLeadRecipients } from "./recipients";
+import { getEventCrewRecipients, getEventLeadRecipients } from "./recipients";
 import { getCanonicalAlbumLink } from "../lib/immichAlbumLinks";
 
-/** Days after an event ends before we send the "share your photos" reminder. */
-const DAYS_AFTER_EVENT = 7;
+/** Days after an event ends before we send the post-event emails. */
+const DAYS_AFTER_EVENT = 1;
 /** Safety margin for multi-day events when scanning by startAt. */
 const START_AT_LOOKBACK_DAYS = 30;
 
@@ -27,7 +27,9 @@ function isValidEmail(email: string) {
 
 /**
  * Daily cron: for events whose Pacific end date was exactly `DAYS_AFTER_EVENT`
- * days ago, schedule album-ensure + reminder emails for the client and leads.
+ * days ago, schedule album-ensure + post-event emails. Client, day-of lead /
+ * event manager, and remaining crew recipients are resolved in
+ * `enqueueForEvent`.
  */
 export const run = internalMutation({
   args: {},
@@ -53,17 +55,6 @@ export const run = internalMutation({
       if (pacificDateKey(event.endAt, timezone) !== targetDayKey) continue;
       if (!event.invoiceId) continue;
 
-      const invoice = await ctx.db.get(event.invoiceId);
-      if (!invoice) continue;
-
-      let clientEmail = invoice.clientEmail?.trim().toLowerCase();
-      const requestId = invoice.sourceEventRequestId ?? event.sourceEventRequestId;
-      if (!clientEmail && requestId) {
-        const request = await ctx.db.get(requestId);
-        clientEmail = request?.email?.trim().toLowerCase();
-      }
-      if (!clientEmail || !isValidEmail(clientEmail)) continue;
-
       await ctx.scheduler.runAfter(0, internal.email.postEventAlbumReminderActions.deliverForEvent, {
         eventId: event._id,
         todayKey,
@@ -88,6 +79,13 @@ export const enqueueForEvent = internalMutation({
     const invoice = await ctx.db.get(event.invoiceId);
     if (!invoice) return { enqueuedCount: 0 };
 
+    const timezone = event.timezone || EVENT_TIMEZONE;
+    const albumLink = await getCanonicalAlbumLink(ctx, "event", event._id);
+
+    let enqueuedCount = 0;
+
+    // Client: only when we can resolve an email address. A missing client
+    // email must not block the internal lead/crew emails below.
     let clientEmail = invoice.clientEmail?.trim().toLowerCase();
     let recipientName = invoice.clientContactName ?? undefined;
 
@@ -100,34 +98,32 @@ export const enqueueForEvent = internalMutation({
       }
     }
 
-    if (!clientEmail || !isValidEmail(clientEmail)) return { enqueuedCount: 0 };
+    if (clientEmail && isValidEmail(clientEmail)) {
+      const portal = await resolvePortalTokenForInvoice(ctx, invoice);
+      const feedbackFormUrl = portal
+        ? `${portal.portal === "request" ? requestTrackingUrl(portal.token) : publicQuoteUrl(portal.token)}#feedback`
+        : undefined;
 
-    const timezone = event.timezone || EVENT_TIMEZONE;
-    const albumLink = await getCanonicalAlbumLink(ctx, "event", event._id);
-    const portal = await resolvePortalTokenForInvoice(ctx, invoice);
-    const feedbackFormUrl = portal
-      ? `${portal.portal === "request" ? requestTrackingUrl(portal.token) : publicQuoteUrl(portal.token)}#feedback`
-      : undefined;
-
-    let enqueuedCount = 0;
-    await enqueueEmail(ctx, {
-      template: "post_event_album",
-      to: clientEmail,
-      subject: subjectForTemplate("post_event_album", event.title),
-      eventId: event._id,
-      idempotencyKey: `post_event_album:${event._id}:${args.todayKey}`,
-      payload: {
-        recipientName,
-        eventTitle: event.title,
-        venueName: event.venueName,
-        dateRangeLabel: formatEventDateRange(event.startAt, event.endAt, timezone),
-        albumShareUrl: albumLink?.shareUrl,
-        feedbackFormUrl,
-      },
-    });
-    enqueuedCount += 1;
+      await enqueueEmail(ctx, {
+        template: "post_event_album",
+        to: clientEmail,
+        subject: subjectForTemplate("post_event_album", event.title),
+        eventId: event._id,
+        idempotencyKey: `post_event_album:${event._id}:${args.todayKey}`,
+        payload: {
+          recipientName,
+          eventTitle: event.title,
+          venueName: event.venueName,
+          dateRangeLabel: formatEventDateRange(event.startAt, event.endAt, timezone),
+          albumShareUrl: albumLink?.shareUrl,
+          feedbackFormUrl,
+        },
+      });
+      enqueuedCount += 1;
+    }
 
     const leads = await getEventLeadRecipients(ctx, event._id);
+    const leadEmails = new Set(leads.map((lead) => lead.email));
     for (const lead of leads) {
       if (!lead.userId) continue;
       const row = await ensurePostMortemFeedbackRow(ctx, event._id, lead.userId);
@@ -145,6 +141,30 @@ export const enqueueForEvent = internalMutation({
           albumShareUrl: albumLink?.shareUrl,
           audience: "lead",
           postMortemUrl: postMortemUrl(row.token),
+        },
+      });
+      enqueuedCount += 1;
+    }
+
+    // Rest of the crew: the media email only, no post-mortem or client
+    // feedback form. Exclude leads by email so a lead stored under a different
+    // id format doesn't also get the crew email.
+    const crew = await getEventCrewRecipients(ctx, event._id);
+    for (const member of crew) {
+      if (leadEmails.has(member.email)) continue;
+      await enqueueEmail(ctx, {
+        template: "post_event_album",
+        to: member.email,
+        subject: `Your event media: ${event.title}`,
+        eventId: event._id,
+        idempotencyKey: `post_event_album:crew:${event._id}:${member.email}:${args.todayKey}`,
+        payload: {
+          recipientName: member.name,
+          eventTitle: event.title,
+          venueName: event.venueName,
+          dateRangeLabel: formatEventDateRange(event.startAt, event.endAt, timezone),
+          albumShareUrl: albumLink?.shareUrl,
+          audience: "crew",
         },
       });
       enqueuedCount += 1;
