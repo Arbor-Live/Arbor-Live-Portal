@@ -25,7 +25,6 @@ import { PublicInvoicePdfDownload } from "@/components/public/public-invoice-pdf
 import { PublicPostEventSection } from "@/components/public/public-post-event-section";
 import { PublicStaffDashboardLinks } from "@/components/public/public-staff-dashboard-links";
 import { PublicEventPosterSection } from "@/components/public/public-event-poster-section";
-import { formatUsd } from "@/lib/format";
 import type { PublicQuoteApprovalFormValues } from "@/lib/validations/crew-availability";
 import type { PublicPaymentContactsFormValues } from "@/lib/validations/crew-availability";
 
@@ -172,13 +171,16 @@ export function PublicEventLifecycleClient({ token }: { token: string }) {
       <PublicPortalTabs tabs={tabs} activeTab={resolvedTab} onSelect={selectTab}>
         {resolvedTab === "next" ? (
           <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
-            <div className="space-y-3">
+            <div className="space-y-3 lg:order-2">
+              <h2 className="font-heading text-sm font-medium text-muted-foreground">
+                Notification center
+              </h2>
               <PublicPortalNextSteps steps={steps} onNavigate={selectTab} />
             </div>
-            <div className="space-y-4">
+            <div className="space-y-4 lg:order-1">
               <Card>
                 <CardHeader>
-                  <CardTitle>Quote {data.invoice.invoiceNumber}</CardTitle>
+                  <CardTitle>Quote details</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-2 text-sm">
                   <p>Issued: {data.invoice.issueDate}</p>
@@ -186,12 +188,6 @@ export function PublicEventLifecycleClient({ token }: { token: string }) {
                   {data.invoice.clientContactName ? (
                     <p>Contact: {data.invoice.clientContactName}</p>
                   ) : null}
-                  <p className="text-base font-semibold">
-                    Total: {formatUsd(data.invoice.totalUsd)}
-                  </p>
-                  <p className="text-muted-foreground">
-                    {quoteStatusLabel(data.invoice.clientApprovalStatus)}
-                  </p>
                   <PublicInvoicePdfDownload
                     token={token}
                     portal="quote"
@@ -237,62 +233,84 @@ export function PublicEventLifecycleClient({ token }: { token: string }) {
         ) : null}
 
         {resolvedTab === "quote" ? (
-          <>
-            <PublicQuoteFinancials
-              lineItems={data.lineItems}
-              totals={{
-                equipmentSubtotalUsd: data.invoice.equipmentSubtotalUsd,
-                externalRentalsSubtotalUsd: data.invoice.externalRentalsSubtotalUsd,
-                artistsSubtotalUsd: data.invoice.artistsSubtotalUsd,
-                crewSubtotalUsd: data.invoice.crewSubtotalUsd,
-                feesSubtotalUsd: data.invoice.feesSubtotalUsd,
-                subtotalUsd: data.invoice.subtotalUsd,
-                discountAmountUsd: data.invoice.discountAmountUsd,
-                totalUsd: data.invoice.totalUsd,
-              }}
-            />
-
-            {data.invoice.notes ? (
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
+            <div className="space-y-4 lg:order-2 lg:sticky lg:top-24">
               <Card>
                 <CardHeader>
-                  <CardTitle>Quote Notes</CardTitle>
+                  <CardTitle>Quote details</CardTitle>
                 </CardHeader>
-                <CardContent className="text-sm whitespace-pre-wrap">
-                  {data.invoice.notes}
+                <CardContent className="space-y-2 text-sm">
+                  <p>Issued: {data.invoice.issueDate}</p>
+                  {data.invoice.clientGroupName ? <p>Host: {data.invoice.clientGroupName}</p> : null}
+                  {data.invoice.clientContactName ? (
+                    <p>Contact: {data.invoice.clientContactName}</p>
+                  ) : null}
+                  <PublicInvoicePdfDownload
+                    token={token}
+                    portal="quote"
+                    invoiceNumber={data.invoice.invoiceNumber}
+                  />
                 </CardContent>
               </Card>
-            ) : null}
+            </div>
 
-            <PublicQuoteApprovalSection
-              invoice={data.invoice}
-              termsAndConditionsMarkdown={data.termsAndConditionsMarkdown}
-              termsVersion={data.termsVersion}
-              onApprove={handleApprove}
-            />
-
-            <PublicQuoteChangeRequestSection
-              disabled={quoteLocked}
-              onRequestChanges={async (note) => {
-                await requestChanges({ token, note });
-              }}
-            />
-
-            {showPaymentContacts ? (
-              <PublicPaymentContactsSection
-                key={data.invoice._id}
-                contacts={data.invoice}
-                onSave={handleSavePaymentContacts}
+            <div className="space-y-4 lg:order-1">
+              <PublicQuoteFinancials
+                lineItems={data.lineItems}
+                totals={{
+                  equipmentSubtotalUsd: data.invoice.equipmentSubtotalUsd,
+                  externalRentalsSubtotalUsd: data.invoice.externalRentalsSubtotalUsd,
+                  artistsSubtotalUsd: data.invoice.artistsSubtotalUsd,
+                  crewSubtotalUsd: data.invoice.crewSubtotalUsd,
+                  feesSubtotalUsd: data.invoice.feesSubtotalUsd,
+                  subtotalUsd: data.invoice.subtotalUsd,
+                  discountAmountUsd: data.invoice.discountAmountUsd,
+                  totalUsd: data.invoice.totalUsd,
+                }}
               />
-            ) : null}
 
-            {data.paymentProof ? (
-              <PublicPaymentProofSection
-                token={token}
-                paymentProof={data.paymentProof}
-                submitMutation={submitPaymentProof}
+              {data.invoice.notes ? (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Quote Notes</CardTitle>
+                  </CardHeader>
+                  <CardContent className="text-sm whitespace-pre-wrap">
+                    {data.invoice.notes}
+                  </CardContent>
+                </Card>
+              ) : null}
+
+              <PublicQuoteApprovalSection
+                invoice={data.invoice}
+                termsAndConditionsMarkdown={data.termsAndConditionsMarkdown}
+                termsVersion={data.termsVersion}
+                onApprove={handleApprove}
               />
-            ) : null}
-          </>
+
+              <PublicQuoteChangeRequestSection
+                disabled={quoteLocked}
+                onRequestChanges={async (note) => {
+                  await requestChanges({ token, note });
+                }}
+              />
+
+              {showPaymentContacts ? (
+                <PublicPaymentContactsSection
+                  key={data.invoice._id}
+                  contacts={data.invoice}
+                  onSave={handleSavePaymentContacts}
+                />
+              ) : null}
+
+              {data.paymentProof ? (
+                <PublicPaymentProofSection
+                  token={token}
+                  paymentProof={data.paymentProof}
+                  submitMutation={submitPaymentProof}
+                />
+              ) : null}
+            </div>
+          </div>
         ) : null}
 
         {resolvedTab === "after" ? <PublicPostEventSection portal="quote" token={token} /> : null}
