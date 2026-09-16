@@ -16,7 +16,7 @@ import { ensureOrganizationOnboarding } from "./onboarding";
 import { enforceRateLimit, HOUR_MS } from "./rateLimit";
 import { inviteEmailToBandOrg, isValidEmail } from "./lib/bandOrgInvite";
 import { marketingDesignLinkValue, normalizeMarketingLinks } from "./lib/marketingLinks";
-import { artistOrganizationTypeValue } from "./lib/organizationType";
+import { artistOrganizationTypeValue, isArtistOrganizationType } from "./lib/organizationType";
 import { resolveOrCreateOrganization } from "./users";
 
 const memberValue = v.object({
@@ -252,7 +252,11 @@ export const listAdmin = query({
         isSolo: row.isSolo,
         members: row.members,
         artistLinks: applicationLinks(row),
-        organizationType: row.organizationType,
+        organizationType:
+          row.organizationType ??
+          (isArtistOrganizationType(row.artistType)
+            ? (row.artistType as "band" | "dj" | "singer_songwriter" | "other")
+            : undefined),
         submittedAt: row.submittedAt,
         reviewedAt: row.reviewedAt,
         declineReason: row.declineReason,
@@ -316,7 +320,11 @@ export const approve = mutation({
       demoURL: application.demoURL,
       publicHeroImageUrl: application.publicHeroImageUrl,
       genres: application.genres,
-      organizationType: application.organizationType ?? "band",
+      organizationType:
+        application.organizationType ??
+        (isArtistOrganizationType(application.artistType)
+          ? (application.artistType as "band" | "dj" | "singer_songwriter" | "other")
+          : "band"),
       mainContactName: application.contactName,
       mainContactEmail: application.contactEmail,
       mainContactPhone: application.contactPhone,

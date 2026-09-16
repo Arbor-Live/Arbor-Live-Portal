@@ -994,6 +994,8 @@ export default defineSchema({
     numShowsRan: v.optional(v.number()),
     demoURL: v.optional(v.string()),
     genres: v.optional(v.array(v.string())),
+    /** @deprecated Migrated into `organizationType`; kept for the backfill, drop later. */
+    artistType: v.optional(v.string()),
     mainContactName: v.optional(v.string()),
     mainContactEmail: v.optional(v.string()),
     mainContactPhone: v.optional(v.string()),
@@ -1864,6 +1866,8 @@ export default defineSchema({
     publicHeroImageUrl: v.optional(v.string()),
     genres: v.optional(v.array(v.string())),
     organizationType: v.optional(artistOrganizationTypeValue),
+    /** @deprecated Migrated into `organizationType`; kept for the backfill, drop later. */
+    artistType: v.optional(v.string()),
     isSolo: v.boolean(),
     members: v.array(
       v.object({

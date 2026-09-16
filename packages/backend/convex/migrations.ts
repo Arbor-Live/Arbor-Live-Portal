@@ -494,6 +494,35 @@ export const backfillBandApplicationArtistLinks = migrations.define({
   },
 });
 
+/** Copy the deprecated `artistType` into `organizationType`. */
+export const migrateOrgArtistTypeToOrganizationType = migrations.define({
+  table: "organizationProfiles",
+  migrateOne: async (_ctx, profile) => {
+    const legacy = profile.artistType;
+    if (!legacy || legacy === "band") return;
+    if (profile.organizationType && profile.organizationType !== "band") return;
+    if (legacy !== "dj" && legacy !== "singer_songwriter" && legacy !== "other") return;
+    return {
+      organizationType: legacy as "dj" | "singer_songwriter" | "other",
+      updatedAt: Date.now(),
+    };
+  },
+});
+
+export const migrateBandApplicationArtistTypeToOrganizationType = migrations.define({
+  table: "bandApplications",
+  migrateOne: async (_ctx, application) => {
+    const legacy = application.artistType;
+    if (!legacy || application.organizationType) return;
+    if (legacy !== "band" && legacy !== "dj" && legacy !== "singer_songwriter" && legacy !== "other") {
+      return;
+    }
+    return {
+      organizationType: legacy as "band" | "dj" | "singer_songwriter" | "other",
+    };
+  },
+});
+
 /**
  * never reorder or remove completed ones (reset requires an explicit reset:true).
  */
@@ -516,6 +545,8 @@ const MIGRATION_SERIES = [
   internal.migrations.normalizeInvoiceCrewLineLabels,
   internal.migrations.backfillOrgArtistLinks,
   internal.migrations.backfillBandApplicationArtistLinks,
+  internal.migrations.migrateOrgArtistTypeToOrganizationType,
+  internal.migrations.migrateBandApplicationArtistTypeToOrganizationType,
 ] as const;
 
 export const runAll = migrations.runner([...MIGRATION_SERIES]);
