@@ -12,9 +12,7 @@ export type BandApplicationFormValues = {
   bandDisplayName: string;
   oneLiner: string;
   bio: string;
-  publicWebsiteUrl: string;
-  publicInstagramUrl: string;
-  publicYoutubeUrl: string;
+  artistLinks: Array<{ label: string; url: string; icon?: string }>;
   demoURL: string;
   publicHeroImageUrl: string;
   genres: string;
@@ -42,9 +40,13 @@ export async function submitBandApplication(
       bandDisplayName: raw.bandDisplayName,
       oneLiner: raw.oneLiner || undefined,
       bio: raw.bio || undefined,
-      publicWebsiteUrl: raw.publicWebsiteUrl || undefined,
-      publicInstagramUrl: raw.publicInstagramUrl || undefined,
-      publicYoutubeUrl: raw.publicYoutubeUrl || undefined,
+      artistLinks: raw.artistLinks
+        .map((link) => ({
+          label: link.label.trim(),
+          url: link.url.trim(),
+          icon: link.icon,
+        }))
+        .filter((link) => link.label && link.url),
       demoURL: raw.demoURL || undefined,
       publicHeroImageUrl: raw.publicHeroImageUrl || undefined,
       genres: genres.length ? genres : undefined,

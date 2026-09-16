@@ -1,7 +1,7 @@
 import type { Doc } from "../_generated/dataModel";
 import { resolveStoredR2AssetUrl } from "../inventoryR2";
 
-export type PublicArtistLink = { label: string; url: string };
+export type PublicArtistLink = { label: string; url: string; icon?: string };
 
 export async function resolvePublicHeroImageUrl(value: string | undefined) {
   const trimmed = value?.trim();
@@ -23,25 +23,37 @@ export function publicProfileUrl(value: string | undefined) {
 }
 
 /**
- * The fixed profile link fields, flattened to labeled links. Replaced by the
- * flexible `artistLinks` array in a follow-up migration.
+ * Artist links, preferring the flexible `artistLinks` array and falling back to
+ * the fixed profile link fields for rows the migration hasn't touched yet.
  */
 export function buildArtistLinks(
   profile: Pick<
     Doc<"organizationProfiles">,
-    "publicWebsiteUrl" | "publicInstagramUrl" | "publicYoutubeUrl" | "publicSpotifyUrl"
+    | "artistLinks"
+    | "publicWebsiteUrl"
+    | "publicInstagramUrl"
+    | "publicYoutubeUrl"
+    | "publicSpotifyUrl"
   >,
 ): PublicArtistLink[] {
+  const explicit: PublicArtistLink[] = [];
+  for (const link of profile.artistLinks ?? []) {
+    const label = link.label.trim();
+    const url = publicProfileUrl(link.url);
+    if (label && url) explicit.push({ label, url, icon: link.icon });
+  }
+  if (explicit.length) return explicit;
+
   const links: PublicArtistLink[] = [];
-  const pairs: Array<[string, string | undefined]> = [
-    ["Website", profile.publicWebsiteUrl],
-    ["Instagram", profile.publicInstagramUrl],
-    ["YouTube", profile.publicYoutubeUrl],
-    ["Spotify", profile.publicSpotifyUrl],
+  const pairs: Array<[string, string | undefined, string]> = [
+    ["Website", profile.publicWebsiteUrl, "Globe"],
+    ["Instagram", profile.publicInstagramUrl, "InstagramLogo"],
+    ["YouTube", profile.publicYoutubeUrl, "YoutubeLogo"],
+    ["Spotify", profile.publicSpotifyUrl, "SpotifyLogo"],
   ];
-  for (const [label, raw] of pairs) {
+  for (const [label, raw, icon] of pairs) {
     const url = publicProfileUrl(raw);
-    if (url) links.push({ label, url });
+    if (url) links.push({ label, url, icon });
   }
   return links;
 }

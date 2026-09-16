@@ -33,6 +33,7 @@ import {
   type BandOnboardingIncompleteStep,
 } from "./lib/bandOnboardingSteps";
 import { normalizeOptionalAssetReference } from "./lib/inventoryUpload";
+import { marketingDesignLinkValue, normalizeMarketingLinks } from "./lib/marketingLinks";
 import {
   collectKeysFromOrganizationProfile,
   releaseReplacedR2Reference,
@@ -128,6 +129,7 @@ const bandListingProfilePatchArgs = {
   mainContactName: v.optional(v.string()),
   mainContactEmail: v.optional(v.string()),
   mainContactPhone: v.optional(v.string()),
+  artistLinks: v.optional(v.array(marketingDesignLinkValue)),
 };
 
 function patchBandListingProfileFields(
@@ -139,6 +141,7 @@ function patchBandListingProfileFields(
     mainContactName?: string;
     mainContactEmail?: string;
     mainContactPhone?: string;
+    artistLinks?: Array<{ label: string; url: string; icon?: string }>;
   },
   args: {
     oneLiner?: string;
@@ -148,11 +151,16 @@ function patchBandListingProfileFields(
     mainContactName?: string;
     mainContactEmail?: string;
     mainContactPhone?: string;
+    artistLinks?: Array<{ label: string; url: string; icon?: string }>;
   },
 ) {
   return {
     oneLiner:
       args.oneLiner !== undefined ? args.oneLiner.trim() || undefined : existing.oneLiner,
+    artistLinks:
+      args.artistLinks !== undefined
+        ? normalizeMarketingLinks(args.artistLinks)
+        : existing.artistLinks,
     genres: args.genres !== undefined ? normalizeStringList(args.genres) : existing.genres,
     demoURL: args.demoURL !== undefined ? args.demoURL.trim() || undefined : existing.demoURL,
     bandMembers:
@@ -569,6 +577,7 @@ export const listBandOrganizationsAdmin = query({
           publicInstagramUrl: profile?.publicInstagramUrl ?? "",
           publicYoutubeUrl: profile?.publicYoutubeUrl ?? "",
           publicSpotifyUrl: profile?.publicSpotifyUrl ?? "",
+          artistLinks: profile?.artistLinks ?? [],
           publicListing: profile?.publicListing ?? false,
           publicSlug: profile?.publicSlug ?? "",
           publicHeroImageUrl: profile?.publicHeroImageUrl ?? "",
@@ -723,21 +732,29 @@ export const updateBandOrganizationProfileAdmin = mutation({
             ? args.designatedPayeePayoutMethod
             : existing.designatedPayeePayoutMethod,
         publicWebsiteUrl:
-          args.publicWebsiteUrl !== undefined
-            ? args.publicWebsiteUrl.trim() || undefined
-            : existing.publicWebsiteUrl,
+          args.artistLinks !== undefined
+            ? undefined
+            : args.publicWebsiteUrl !== undefined
+              ? args.publicWebsiteUrl.trim() || undefined
+              : existing.publicWebsiteUrl,
         publicInstagramUrl:
-          args.publicInstagramUrl !== undefined
-            ? args.publicInstagramUrl.trim() || undefined
-            : existing.publicInstagramUrl,
+          args.artistLinks !== undefined
+            ? undefined
+            : args.publicInstagramUrl !== undefined
+              ? args.publicInstagramUrl.trim() || undefined
+              : existing.publicInstagramUrl,
         publicYoutubeUrl:
-          args.publicYoutubeUrl !== undefined
-            ? args.publicYoutubeUrl.trim() || undefined
-            : existing.publicYoutubeUrl,
+          args.artistLinks !== undefined
+            ? undefined
+            : args.publicYoutubeUrl !== undefined
+              ? args.publicYoutubeUrl.trim() || undefined
+              : existing.publicYoutubeUrl,
         publicSpotifyUrl:
-          args.publicSpotifyUrl !== undefined
-            ? args.publicSpotifyUrl.trim() || undefined
-            : existing.publicSpotifyUrl,
+          args.artistLinks !== undefined
+            ? undefined
+            : args.publicSpotifyUrl !== undefined
+              ? args.publicSpotifyUrl.trim() || undefined
+              : existing.publicSpotifyUrl,
         publicListing: publicListing ?? existing.publicListing,
         publicSlug: publicSlug ?? (publicListing === false ? undefined : existing.publicSlug),
         publicHeroImageUrl: nextHeroImageUrl,
@@ -763,10 +780,10 @@ export const updateBandOrganizationProfileAdmin = mutation({
       designatedPayeeEmail: args.designatedPayeeEmail?.trim().toLowerCase() || undefined,
       designatedPayeeMailingAddress: args.designatedPayeeMailingAddress?.trim() || undefined,
       designatedPayeePayoutMethod: args.designatedPayeePayoutMethod,
-      publicWebsiteUrl: args.publicWebsiteUrl?.trim() || undefined,
-      publicInstagramUrl: args.publicInstagramUrl?.trim() || undefined,
-      publicYoutubeUrl: args.publicYoutubeUrl?.trim() || undefined,
-      publicSpotifyUrl: args.publicSpotifyUrl?.trim() || undefined,
+      publicWebsiteUrl: args.artistLinks !== undefined ? undefined : args.publicWebsiteUrl?.trim() || undefined,
+      publicInstagramUrl: args.artistLinks !== undefined ? undefined : args.publicInstagramUrl?.trim() || undefined,
+      publicYoutubeUrl: args.artistLinks !== undefined ? undefined : args.publicYoutubeUrl?.trim() || undefined,
+      publicSpotifyUrl: args.artistLinks !== undefined ? undefined : args.publicSpotifyUrl?.trim() || undefined,
       publicListing: publicListing ?? false,
       publicSlug: publicListing ? publicSlug : undefined,
       publicHeroImageUrl: normalizeOptionalAssetReference(args.publicHeroImageUrl),
@@ -2297,6 +2314,7 @@ export const getActiveBandProfile = query({
       publicInstagramUrl: profile?.publicInstagramUrl ?? "",
       publicYoutubeUrl: profile?.publicYoutubeUrl ?? "",
       publicSpotifyUrl: profile?.publicSpotifyUrl ?? "",
+      artistLinks: profile?.artistLinks ?? [],
       publicListing: profile?.publicListing ?? false,
       publicSlug: profile?.publicSlug ?? "",
       publicHeroImageUrl: profile?.publicHeroImageUrl ?? "",
@@ -2390,21 +2408,29 @@ export const updateActiveBandProfile = mutation({
             ? args.designatedPayeePayoutMethod
             : existing.designatedPayeePayoutMethod,
         publicWebsiteUrl:
-          args.publicWebsiteUrl !== undefined
-            ? args.publicWebsiteUrl.trim() || undefined
-            : existing.publicWebsiteUrl,
+          args.artistLinks !== undefined
+            ? undefined
+            : args.publicWebsiteUrl !== undefined
+              ? args.publicWebsiteUrl.trim() || undefined
+              : existing.publicWebsiteUrl,
         publicInstagramUrl:
-          args.publicInstagramUrl !== undefined
-            ? args.publicInstagramUrl.trim() || undefined
-            : existing.publicInstagramUrl,
+          args.artistLinks !== undefined
+            ? undefined
+            : args.publicInstagramUrl !== undefined
+              ? args.publicInstagramUrl.trim() || undefined
+              : existing.publicInstagramUrl,
         publicYoutubeUrl:
-          args.publicYoutubeUrl !== undefined
-            ? args.publicYoutubeUrl.trim() || undefined
-            : existing.publicYoutubeUrl,
+          args.artistLinks !== undefined
+            ? undefined
+            : args.publicYoutubeUrl !== undefined
+              ? args.publicYoutubeUrl.trim() || undefined
+              : existing.publicYoutubeUrl,
         publicSpotifyUrl:
-          args.publicSpotifyUrl !== undefined
-            ? args.publicSpotifyUrl.trim() || undefined
-            : existing.publicSpotifyUrl,
+          args.artistLinks !== undefined
+            ? undefined
+            : args.publicSpotifyUrl !== undefined
+              ? args.publicSpotifyUrl.trim() || undefined
+              : existing.publicSpotifyUrl,
         publicListing: publicListing ?? existing.publicListing,
         publicSlug: publicSlug ?? (publicListing === false ? undefined : existing.publicSlug),
         publicHeroImageUrl: nextHeroImageUrl,
@@ -2430,10 +2456,10 @@ export const updateActiveBandProfile = mutation({
       designatedPayeeEmail: args.designatedPayeeEmail?.trim().toLowerCase() || undefined,
       designatedPayeeMailingAddress: args.designatedPayeeMailingAddress?.trim() || undefined,
       designatedPayeePayoutMethod: args.designatedPayeePayoutMethod,
-      publicWebsiteUrl: args.publicWebsiteUrl?.trim() || undefined,
-      publicInstagramUrl: args.publicInstagramUrl?.trim() || undefined,
-      publicYoutubeUrl: args.publicYoutubeUrl?.trim() || undefined,
-      publicSpotifyUrl: args.publicSpotifyUrl?.trim() || undefined,
+      publicWebsiteUrl: args.artistLinks !== undefined ? undefined : args.publicWebsiteUrl?.trim() || undefined,
+      publicInstagramUrl: args.artistLinks !== undefined ? undefined : args.publicInstagramUrl?.trim() || undefined,
+      publicYoutubeUrl: args.artistLinks !== undefined ? undefined : args.publicYoutubeUrl?.trim() || undefined,
+      publicSpotifyUrl: args.artistLinks !== undefined ? undefined : args.publicSpotifyUrl?.trim() || undefined,
       publicListing: publicListing ?? false,
       publicSlug: publicListing ? publicSlug : undefined,
       publicHeroImageUrl: normalizeOptionalAssetReference(args.publicHeroImageUrl),

@@ -457,6 +457,43 @@ export const normalizeInvoiceCrewLineLabels = migrations.define({
   },
 });
 
+/** Flatten fixed band profile link fields into the flexible artistLinks array. */
+export const backfillOrgArtistLinks = migrations.define({
+  table: "organizationProfiles",
+  migrateOne: async (_ctx, profile) => {
+    if (profile.artistLinks?.length) return;
+    const links: Array<{ label: string; url: string; icon?: string }> = [];
+    const push = (label: string, url: string | undefined, icon: string) => {
+      const trimmed = url?.trim();
+      if (trimmed) links.push({ label, url: trimmed, icon });
+    };
+    push("Website", profile.publicWebsiteUrl, "Globe");
+    push("Instagram", profile.publicInstagramUrl, "InstagramLogo");
+    push("YouTube", profile.publicYoutubeUrl, "YoutubeLogo");
+    push("Spotify", profile.publicSpotifyUrl, "SpotifyLogo");
+    if (!links.length) return;
+    return { artistLinks: links, updatedAt: Date.now() };
+  },
+});
+
+/** Flatten fixed band application link fields into the flexible artistLinks array. */
+export const backfillBandApplicationArtistLinks = migrations.define({
+  table: "bandApplications",
+  migrateOne: async (_ctx, application) => {
+    if (application.artistLinks?.length) return;
+    const links: Array<{ label: string; url: string; icon?: string }> = [];
+    const push = (label: string, url: string | undefined, icon: string) => {
+      const trimmed = url?.trim();
+      if (trimmed) links.push({ label, url: trimmed, icon });
+    };
+    push("Website", application.publicWebsiteUrl, "Globe");
+    push("Instagram", application.publicInstagramUrl, "InstagramLogo");
+    push("YouTube", application.publicYoutubeUrl, "YoutubeLogo");
+    if (!links.length) return;
+    return { artistLinks: links };
+  },
+});
+
 /**
  * never reorder or remove completed ones (reset requires an explicit reset:true).
  */
@@ -477,6 +514,8 @@ const MIGRATION_SERIES = [
   internal.migrations.stripBandRiderInputGroups,
   internal.migrations.migrateEventCommentsToComments,
   internal.migrations.normalizeInvoiceCrewLineLabels,
+  internal.migrations.backfillOrgArtistLinks,
+  internal.migrations.backfillBandApplicationArtistLinks,
 ] as const;
 
 export const runAll = migrations.runner([...MIGRATION_SERIES]);

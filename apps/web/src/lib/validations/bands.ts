@@ -69,10 +69,9 @@ export const bandProfileSchema = z
     mainContactEmail: z.string().optional(),
     mainContactPhone: z.string().optional(),
     performerHourlyRateUsd: z.coerce.number().min(0, "Rate must be non-negative"),
-    publicWebsiteUrl: z.string().optional(),
-    publicInstagramUrl: z.string().optional(),
-    publicYoutubeUrl: z.string().optional(),
-    publicSpotifyUrl: z.string().optional(),
+    artistLinks: z
+      .array(z.object({ label: z.string(), url: z.string(), icon: z.string().optional() }))
+      .optional(),
     publicListing: z.boolean().optional(),
     publicSlug: z.string().optional(),
     publicHeroImageUrl: z.string().optional(),

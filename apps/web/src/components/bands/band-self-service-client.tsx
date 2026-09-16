@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Controller } from "react-hook-form";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
 import { FormSaveBar } from "@/components/forms";
+import { MarketingLinksEditor } from "@/components/marketing/marketing-links-editor";
 import { Form, FormControl, FormField, FormItem, FormLabel } from "@/components/ui/form";
 import { TextFormField } from "@/components/forms/text-form-field";
 import { TextareaFormField } from "@/components/forms/textarea-form-field";
@@ -72,10 +74,7 @@ export function BandSelfServiceClient() {
       mainContactEmail: "",
       mainContactPhone: "",
       performerHourlyRateUsd: 0,
-      publicWebsiteUrl: "",
-      publicInstagramUrl: "",
-      publicYoutubeUrl: "",
-      publicSpotifyUrl: "",
+      artistLinks: [],
       publicListing: false,
       publicSlug: "",
       publicHeroImageUrl: "",
@@ -101,10 +100,7 @@ export function BandSelfServiceClient() {
       bio: profile.bio ?? "",
       ...bandListingFieldsFromProfile(profile),
       performerHourlyRateUsd: profile.performerHourlyRateUsd ?? 0,
-      publicWebsiteUrl: profile.publicWebsiteUrl ?? "",
-      publicInstagramUrl: profile.publicInstagramUrl ?? "",
-      publicYoutubeUrl: profile.publicYoutubeUrl ?? "",
-      publicSpotifyUrl: profile.publicSpotifyUrl ?? "",
+      artistLinks: profile.artistLinks ?? [],
       publicListing: profile.publicListing ?? false,
       publicSlug: profile.publicSlug ?? "",
       publicHeroImageUrl: profile.publicHeroImageUrl ?? "",
@@ -187,10 +183,7 @@ export function BandSelfServiceClient() {
       bio: profile.bio ?? "",
       ...bandListingFieldsFromProfile(profile),
       performerHourlyRateUsd: profile.performerHourlyRateUsd ?? 0,
-      publicWebsiteUrl: profile.publicWebsiteUrl ?? "",
-      publicInstagramUrl: profile.publicInstagramUrl ?? "",
-      publicYoutubeUrl: profile.publicYoutubeUrl ?? "",
-      publicSpotifyUrl: profile.publicSpotifyUrl ?? "",
+      artistLinks: profile.artistLinks ?? [],
       publicListing: profile.publicListing ?? false,
       publicSlug: profile.publicSlug ?? "",
       publicHeroImageUrl: profile.publicHeroImageUrl ?? "",
@@ -222,12 +215,17 @@ export function BandSelfServiceClient() {
                   <TextFormField name="displayName" label="Display name" />
                   <TextareaFormField name="bio" label="Bio" />
                   <BandPublicListingFields />
-                  <div className="grid gap-2 md:grid-cols-2">
-                    <TextFormField name="publicWebsiteUrl" label="Website" placeholder="https://..." />
-                    <TextFormField name="publicInstagramUrl" label="Instagram URL" />
-                    <TextFormField name="publicYoutubeUrl" label="YouTube URL" />
-                    <TextFormField name="publicSpotifyUrl" label="Spotify URL" />
-                  </div>
+                  <Controller
+                    control={profileForm.control}
+                    name="artistLinks"
+                    render={({ field }) => (
+                      <MarketingLinksEditor
+                        idPrefix="band-artist-links"
+                        links={field.value ?? []}
+                        onLinksChange={field.onChange}
+                      />
+                    )}
+                  />
                   <BandHeroUploadField
                     organizationId={profile.organizationId}
                     currentUrl={profileForm.watch("publicHeroImageUrl")}

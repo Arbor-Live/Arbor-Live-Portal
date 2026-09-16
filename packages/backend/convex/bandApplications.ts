@@ -15,6 +15,7 @@ import { enqueueEmail } from "./email/enqueue";
 import { ensureOrganizationOnboarding } from "./onboarding";
 import { enforceRateLimit, HOUR_MS } from "./rateLimit";
 import { inviteEmailToBandOrg, isValidEmail } from "./lib/bandOrgInvite";
+import { marketingDesignLinkValue, normalizeMarketingLinks } from "./lib/marketingLinks";
 import { resolveOrCreateOrganization } from "./users";
 
 const memberValue = v.object({
@@ -85,6 +86,7 @@ export const submitPublic = mutation({
     genres: v.optional(v.array(v.string())),
     isSolo: v.boolean(),
     members: v.array(memberValue),
+    artistLinks: v.optional(v.array(marketingDesignLinkValue)),
   },
   returns: v.object({ applicationId: v.id("bandApplications") }),
   handler: async (ctx, args) => {
@@ -143,6 +145,7 @@ export const submitPublic = mutation({
       genres: args.genres?.map((g) => g.trim()).filter(Boolean),
       isSolo: args.isSolo,
       members,
+      artistLinks: args.artistLinks ? normalizeMarketingLinks(args.artistLinks) : undefined,
       submittedAt: now,
       createdAt: now,
       updatedAt: now,
@@ -192,6 +195,7 @@ export const listAdmin = query({
       genres: v.optional(v.array(v.string())),
       isSolo: v.boolean(),
       members: v.array(memberValue),
+      artistLinks: v.optional(v.array(marketingDesignLinkValue)),
       submittedAt: v.number(),
       reviewedAt: v.optional(v.number()),
       declineReason: v.optional(v.string()),
@@ -226,6 +230,7 @@ export const listAdmin = query({
         genres: row.genres,
         isSolo: row.isSolo,
         members: row.members,
+        artistLinks: row.artistLinks,
         submittedAt: row.submittedAt,
         reviewedAt: row.reviewedAt,
         declineReason: row.declineReason,
@@ -283,6 +288,7 @@ export const approve = mutation({
       publicWebsiteUrl: application.publicWebsiteUrl,
       publicInstagramUrl: application.publicInstagramUrl,
       publicYoutubeUrl: application.publicYoutubeUrl,
+      artistLinks: application.artistLinks,
       demoURL: application.demoURL,
       publicHeroImageUrl: application.publicHeroImageUrl,
       genres: application.genres,
@@ -318,6 +324,7 @@ export const approve = mutation({
       };
       if (application.publicHeroImageUrl) stampPatch.heroCompletedAt = now;
       if (
+        application.artistLinks?.length ||
         application.publicWebsiteUrl ||
         application.publicInstagramUrl ||
         application.publicYoutubeUrl ||

@@ -10,6 +10,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MarketingLinksEditor } from "@/components/marketing/marketing-links-editor";
 import { RequestWizardShell } from "@/components/request/request-wizard-shell";
 import {
   Questionnaire,
@@ -87,10 +88,7 @@ type FormState = {
   displayName: string;
   bio: string;
   publicHeroImageUrl: string;
-  publicWebsiteUrl: string;
-  publicInstagramUrl: string;
-  publicYoutubeUrl: string;
-  publicSpotifyUrl: string;
+  artistLinks: Array<{ label: string; url: string; icon?: string }>;
   demoURL: string;
   publicListing: boolean;
   publicSlug: string;
@@ -111,10 +109,7 @@ const EMPTY_FORM: FormState = {
   displayName: "",
   bio: "",
   publicHeroImageUrl: "",
-  publicWebsiteUrl: "",
-  publicInstagramUrl: "",
-  publicYoutubeUrl: "",
-  publicSpotifyUrl: "",
+  artistLinks: [],
   demoURL: "",
   publicListing: false,
   publicSlug: "",
@@ -213,10 +208,7 @@ export function BandOnboardingWizard() {
       displayName: profile.displayName ?? "",
       bio: profile.bio ?? "",
       publicHeroImageUrl: profile.publicHeroImageUrl ?? "",
-      publicWebsiteUrl: profile.publicWebsiteUrl ?? "",
-      publicInstagramUrl: profile.publicInstagramUrl ?? "",
-      publicYoutubeUrl: profile.publicYoutubeUrl ?? "",
-      publicSpotifyUrl: profile.publicSpotifyUrl ?? "",
+      artistLinks: profile.artistLinks ?? [],
       demoURL: profile.demoURL ?? "",
       publicListing: profile.publicListing ?? false,
       publicSlug: profile.publicSlug ?? "",
@@ -340,10 +332,13 @@ export function BandOnboardingWizard() {
         if (previewOnly) return true;
         setIsSubmitting(true);
         await updateActiveBandProfile({
-          publicWebsiteUrl: trimOptional(form.publicWebsiteUrl),
-          publicInstagramUrl: trimOptional(form.publicInstagramUrl),
-          publicYoutubeUrl: trimOptional(form.publicYoutubeUrl),
-          publicSpotifyUrl: trimOptional(form.publicSpotifyUrl),
+          artistLinks: form.artistLinks
+            .map((link) => ({
+              label: link.label.trim(),
+              url: link.url.trim(),
+              icon: link.icon,
+            }))
+            .filter((link) => link.label && link.url),
           demoURL: trimOptional(form.demoURL),
           publicListing: form.publicListing,
           publicSlug: trimOptional(publicSlug),
@@ -756,44 +751,13 @@ export function BandOnboardingWizard() {
                   {STEP_HEADLINES.socials}
                 </QuestionnaireTitle>
                 <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="band-website">Website</Label>
-                    <Input
-                      id="band-website"
-                      value={form.publicWebsiteUrl}
-                      onChange={(event) => patch({ publicWebsiteUrl: event.target.value })}
-                      placeholder="https://…"
-                      autoFocus
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="band-instagram">Instagram URL</Label>
-                    <Input
-                      id="band-instagram"
-                      value={form.publicInstagramUrl}
-                      onChange={(event) => patch({ publicInstagramUrl: event.target.value })}
-                      placeholder="https://instagram.com/…"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="band-youtube">YouTube URL</Label>
-                    <Input
-                      id="band-youtube"
-                      value={form.publicYoutubeUrl}
-                      onChange={(event) => patch({ publicYoutubeUrl: event.target.value })}
-                      placeholder="https://youtube.com/…"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="band-spotify">Spotify URL</Label>
-                    <Input
-                      id="band-spotify"
-                      value={form.publicSpotifyUrl}
-                      onChange={(event) => patch({ publicSpotifyUrl: event.target.value })}
-                      placeholder="https://open.spotify.com/…"
-                    />
-                  </div>
-                  
+                  <MarketingLinksEditor
+                    idPrefix="band-onboarding-links"
+                    links={form.artistLinks}
+                    onLinksChange={(links) => patch({ artistLinks: links })}
+                    label="Links"
+                  />
+
                   <div className="space-y-2 sm:col-span-2">
                     <Label htmlFor="band-demo">Demo / listening link</Label>
                     <Input

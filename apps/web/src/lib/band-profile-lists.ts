@@ -56,18 +56,18 @@ export function bandListingFieldsToMutation(values: {
 }
 
 export function bandPublicUrlsToMutation(values: {
-  publicWebsiteUrl?: string;
-  publicInstagramUrl?: string;
-  publicYoutubeUrl?: string;
-  publicSpotifyUrl?: string;
+  artistLinks?: Array<{ label: string; url: string; icon?: string }>;
   publicSlug?: string;
   publicHeroImageUrl?: string;
 }) {
   return {
-    publicWebsiteUrl: trimOptional(values.publicWebsiteUrl),
-    publicInstagramUrl: trimOptional(values.publicInstagramUrl),
-    publicYoutubeUrl: trimOptional(values.publicYoutubeUrl),
-    publicSpotifyUrl: trimOptional(values.publicSpotifyUrl),
+    artistLinks: (values.artistLinks ?? [])
+      .map((link) => ({
+        label: link.label.trim(),
+        url: link.url.trim(),
+        icon: link.icon,
+      }))
+      .filter((link) => link.label && link.url),
     publicSlug: trimOptional(values.publicSlug),
     publicHeroImageUrl: trimOptional(values.publicHeroImageUrl),
   };

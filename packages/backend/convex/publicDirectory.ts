@@ -3,6 +3,7 @@ import { components } from "./_generated/api";
 import { query } from "./_generated/server";
 import type { QueryCtx } from "./_generated/server";
 import { resolveStoredR2AssetUrl } from "./inventoryR2";
+import { buildArtistLinks } from "./lib/publicArtistProfile";
 import { getUserId, findAuthOrganizationById, type AuthUser } from "./lib/auth";
 import { resolveUserProfileImageUrl } from "./lib/userProfileImage";
 import {
@@ -255,10 +256,7 @@ export const listPublicArtists = query({
         genres: profile.genres?.filter(Boolean) ?? [],
         bioExcerpt: bioExcerpt(profile.bio ?? profile.oneLiner),
         heroImageUrl: await resolvePublicHeroImageUrl(profile.publicHeroImageUrl),
-        websiteUrl: publicProfileUrl(profile.publicWebsiteUrl),
-        instagramUrl: publicProfileUrl(profile.publicInstagramUrl),
-        youtubeUrl: publicProfileUrl(profile.publicYoutubeUrl),
-        spotifyUrl: publicProfileUrl(profile.publicSpotifyUrl),
+        links: buildArtistLinks(profile),
       })),
     );
     return rows.sort((a, b) => a.displayName.localeCompare(b.displayName));
@@ -297,10 +295,7 @@ export const getPublicArtistBySlug = query({
       bio: profile.bio?.trim() || undefined,
       demoURL: publicProfileUrl(profile.demoURL),
       heroImageUrl: await resolvePublicHeroImageUrl(profile.publicHeroImageUrl),
-      websiteUrl: publicProfileUrl(profile.publicWebsiteUrl),
-      instagramUrl: publicProfileUrl(profile.publicInstagramUrl),
-      youtubeUrl: publicProfileUrl(profile.publicYoutubeUrl),
-      spotifyUrl: publicProfileUrl(profile.publicSpotifyUrl),
+      links: buildArtistLinks(profile),
     };
   },
 });

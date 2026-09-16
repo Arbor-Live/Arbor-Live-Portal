@@ -100,50 +100,18 @@ export function PublicArtistDetail({ slug }: { slug: string }) {
                   Demo ↗
                 </a>
               ) : null}
-              {artist.websiteUrl ? (
+              {artist.links.map((link) => (
                 <a
-                  href={artist.websiteUrl}
+                  key={link.url}
+                  href={link.url}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-2 rounded-none border px-4 py-2 text-sm font-medium hover:bg-muted"
                 >
-                  <MarketingLinkIcon id="Globe" className="size-4 shrink-0" />
-                  Website ↗
+                  <MarketingLinkIcon id={link.icon ?? "LinkSimple"} className="size-4 shrink-0" />
+                  {link.label} ↗
                 </a>
-              ) : null}
-              {artist.instagramUrl ? (
-                <a
-                  href={artist.instagramUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 rounded-none border px-4 py-2 text-sm font-medium hover:bg-muted"
-                >
-                  <MarketingLinkIcon id="InstagramLogo" className="size-4 shrink-0" />
-                  Instagram ↗
-                </a>
-              ) : null}
-              {artist.youtubeUrl ? (
-                <a
-                  href={artist.youtubeUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 rounded-none border px-4 py-2 text-sm font-medium hover:bg-muted"
-                >
-                  <MarketingLinkIcon id="YoutubeLogo" className="size-4 shrink-0" />
-                  YouTube ↗
-                </a>
-              ) : null}
-              {artist.spotifyUrl ? (
-                <a
-                  href={artist.spotifyUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 rounded-none border px-4 py-2 text-sm font-medium hover:bg-muted"
-                >
-                  <MarketingLinkIcon id="SpotifyLogo" className="size-4 shrink-0" />
-                  Spotify ↗
-                </a>
-              ) : null}
+              ))}
             </div>
           </Reveal>
         </div>
