@@ -171,33 +171,36 @@ export function PublicEventLifecycleClient({ token }: { token: string }) {
       />
       <PublicPortalTabs tabs={tabs} activeTab={resolvedTab} onSelect={selectTab}>
         {resolvedTab === "next" ? (
-          <>
-            <PublicPortalNextSteps steps={steps} onNavigate={selectTab} />
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Quote {data.invoice.invoiceNumber}</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                <p>Issued: {data.invoice.issueDate}</p>
-                {data.invoice.clientGroupName ? <p>Host: {data.invoice.clientGroupName}</p> : null}
-                {data.invoice.clientContactName ? (
-                  <p>Contact: {data.invoice.clientContactName}</p>
-                ) : null}
-                <p className="text-base font-semibold">
-                  Total: {formatUsd(data.invoice.totalUsd)}
-                </p>
-                <p className="text-muted-foreground">
-                  {quoteStatusLabel(data.invoice.clientApprovalStatus)}
-                </p>
-                <PublicInvoicePdfDownload
-                  token={token}
-                  portal="quote"
-                  invoiceNumber={data.invoice.invoiceNumber}
-                />
-              </CardContent>
-            </Card>
-          </>
+          <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
+            <div className="space-y-3">
+              <PublicPortalNextSteps steps={steps} onNavigate={selectTab} />
+            </div>
+            <div className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Quote {data.invoice.invoiceNumber}</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2 text-sm">
+                  <p>Issued: {data.invoice.issueDate}</p>
+                  {data.invoice.clientGroupName ? <p>Host: {data.invoice.clientGroupName}</p> : null}
+                  {data.invoice.clientContactName ? (
+                    <p>Contact: {data.invoice.clientContactName}</p>
+                  ) : null}
+                  <p className="text-base font-semibold">
+                    Total: {formatUsd(data.invoice.totalUsd)}
+                  </p>
+                  <p className="text-muted-foreground">
+                    {quoteStatusLabel(data.invoice.clientApprovalStatus)}
+                  </p>
+                  <PublicInvoicePdfDownload
+                    token={token}
+                    portal="quote"
+                    invoiceNumber={data.invoice.invoiceNumber}
+                  />
+                </CardContent>
+              </Card>
+            </div>
+          </div>
         ) : null}
 
         {resolvedTab === "event" ? (

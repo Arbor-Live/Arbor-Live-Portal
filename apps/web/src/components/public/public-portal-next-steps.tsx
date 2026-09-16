@@ -128,8 +128,8 @@ export function derivePortalNextSteps(input: PortalNextStepInput): PortalStep[] 
       steps.push({
         key: "album",
         tone: "info",
-        title: "Your event photos are ready",
-        ctaLabel: "View the album",
+        title: "Your event album",
+        ctaLabel: "Open the album",
         targetTab: "after",
       });
     }
@@ -167,15 +167,17 @@ export function PublicPortalNextSteps({
       {steps.map((step) => {
         const Icon = TONE_ICON[step.tone];
         const isAction = step.tone === "action";
+        const compact = !step.body && !(isAction && step.ctaLabel);
         return (
           <Card
             key={step.key}
             className={cn("px-4 py-4", isAction && "ring-primary/40")}
           >
-            <div className="flex items-start gap-3">
+            <div className={cn("flex gap-3", compact ? "items-center" : "items-start")}>
               <span
                 className={cn(
-                  "mt-0.5 flex size-8 shrink-0 items-center justify-center",
+                  "flex size-8 shrink-0 items-center justify-center",
+                  !compact && "mt-0.5",
                   isAction ? "bg-primary/10 text-primary" : "text-muted-foreground",
                 )}
               >

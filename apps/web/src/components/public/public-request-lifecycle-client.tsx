@@ -261,9 +261,11 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
       />
       <PublicPortalTabs tabs={tabs} activeTab={resolvedTab} onSelect={selectTab}>
         {resolvedTab === "next" ? (
-          <>
-            <PublicPortalNextSteps steps={steps} onNavigate={selectTab} />
-
+          <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
+            <div className="space-y-3">
+              <PublicPortalNextSteps steps={steps} onNavigate={selectTab} />
+            </div>
+            <div className="space-y-4">
             <Card>
               <CardHeader>
                 <CardTitle>Request {request.requestNumber}</CardTitle>
@@ -397,7 +399,8 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
             {!isQuoteVoided && !linkedEvent ? (
               <PublicEventPosterSection portal="request" token={token} />
             ) : null}
-          </>
+            </div>
+          </div>
         ) : null}
 
         {resolvedTab === "event" && linkedEvent ? (

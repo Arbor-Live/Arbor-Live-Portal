@@ -55,7 +55,7 @@ export function PublicPortalTabs({
               >
                 <span className="flex items-center gap-2">
                   {tab.label}
-                  {tab.attention && !active ? (
+                  {tab.attention ? (
                     <span aria-hidden className="relative flex size-1.5">
                       <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary/70" />
                       <span className="relative inline-flex size-1.5 rounded-full bg-primary" />
@@ -80,7 +80,7 @@ export function PublicPortalTabs({
         </div>
       </div>
 
-      <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+      <div className="mx-auto w-full min-w-0 max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
         <AnimatePresence mode="wait" initial={false}>
           <motion.div
             key={activeTab}
