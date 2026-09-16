@@ -13,7 +13,7 @@ export default function CrewPage() {
     <PublicMarketingLayout>
       <PublicPageHero
         title="The Team"
-        subtitle="Student producers powering live events across Stanford — sound, lights, design, marketing, and operations."
+        subtitle="The students who run sound, lights, and every Arbor show."
       />
       <PublicCrewGrid />
       <CrewJoinSection />

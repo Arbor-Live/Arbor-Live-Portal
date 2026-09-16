@@ -76,7 +76,7 @@ export function PublicArtistsGrid() {
           <div className="mx-auto max-w-xl border border-border/50 bg-background/70 px-6 py-10 text-center shadow-[0_8px_24px_rgba(0,0,0,0.06)] backdrop-blur-xl sm:px-8">
             <p className="font-heading text-xl font-semibold tracking-tight">No public profiles yet</p>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-              Be the first — join the live music community at Stanford!
+              Be the first one on the board.
             </p>
             <Button asChild className="mt-6" size="lg">
               <Link href="/artists/apply">Join the community</Link>

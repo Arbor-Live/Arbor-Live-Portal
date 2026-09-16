@@ -78,7 +78,7 @@ export function PublicCrewGrid() {
               <CardTitle>Coming soon</CardTitle>
             </CardHeader>
             <CardContent className="text-sm text-muted-foreground">
-              Crew profiles will appear here once team members opt in from the portal.
+              Meet the crew soon.
             </CardContent>
           </Card>
         ) : null}
