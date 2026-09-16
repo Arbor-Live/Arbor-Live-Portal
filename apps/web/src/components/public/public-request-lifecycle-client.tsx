@@ -245,6 +245,9 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
               <PublicPortalNextSteps steps={steps} onNavigate={selectTab} />
             </div>
             <div className="space-y-4 lg:order-1">
+            <h2 className="font-heading text-sm font-medium text-muted-foreground">
+              Request details
+            </h2>
             <Card>
               <CardContent className="space-y-3 text-sm">
                 <p className="text-muted-foreground">

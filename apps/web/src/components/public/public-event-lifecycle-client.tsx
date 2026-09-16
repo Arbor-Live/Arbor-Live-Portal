@@ -178,10 +178,10 @@ export function PublicEventLifecycleClient({ token }: { token: string }) {
               <PublicPortalNextSteps steps={steps} onNavigate={selectTab} />
             </div>
             <div className="space-y-4 lg:order-1">
+              <h2 className="font-heading text-sm font-medium text-muted-foreground">
+                Quote details
+              </h2>
               <Card>
-                <CardHeader>
-                  <CardTitle>Quote details</CardTitle>
-                </CardHeader>
                 <CardContent className="space-y-2 text-sm">
                   <p>Issued: {data.invoice.issueDate}</p>
                   {data.invoice.clientGroupName ? <p>Host: {data.invoice.clientGroupName}</p> : null}

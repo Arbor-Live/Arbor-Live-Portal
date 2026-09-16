@@ -91,7 +91,7 @@ export function PublicEventTimetable({
       <CardHeader>
         <CardTitle>{title}</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-8">
+      <CardContent className="space-y-10">
         {days.length === 0 ? (
           <p className="text-sm text-muted-foreground">No schedule blocks added yet.</p>
         ) : null}
@@ -99,7 +99,7 @@ export function PublicEventTimetable({
           const hourCount = day.span / 60;
           const hours = Array.from({ length: hourCount + 1 }, (_, i) => day.windowStart + i * 60);
           return (
-            <div key={day.key} className="space-y-3">
+            <div key={day.key} className="space-y-4">
               <p className="text-sm font-medium">{formatDate(day.placed[0]!.block.startsAt)}</p>
               <div className="relative pl-14" style={{ height: hourCount * HOUR_HEIGHT }}>
                 {hours.map((minutes) => (
