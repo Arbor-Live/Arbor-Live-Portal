@@ -160,8 +160,11 @@ import {
   invoiceDueDateFromFirstEvent,
 } from "@/lib/invoice-due-date";
 
+// Every other column is a fixed width, so the free-text ones only get what is
+// left over — the invoice card is ~700px on lg, which starved Artist to ~85px.
+// Keep a floor on Artist/Label and let the section scroll horizontally.
 const ARTIST_ROW_GRID =
-  "min-w-0 gap-2 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_5.5rem_5.5rem_7.5rem_5.5rem]";
+  "min-w-0 gap-2 md:grid-cols-[minmax(12rem,1.4fr)_minmax(8rem,1fr)_5.5rem_5.5rem_7.5rem_5.5rem] md:min-w-[46.5rem]";
 
 function formatInvoiceDiscountInputValue(value: number, type: "amount" | "percent") {
   if (type === "amount") return Number.isFinite(value) ? value.toFixed(2) : "0.00";
@@ -2875,7 +2878,7 @@ function SectionArtists({
     keywords: day.label,
   }));
   const gridClass = showDayColumn
-    ? "min-w-0 gap-2 md:grid-cols-[7rem_minmax(0,1.4fr)_minmax(0,1fr)_5.5rem_5.5rem_7.5rem_5.5rem]"
+    ? "min-w-0 gap-2 md:grid-cols-[7rem_minmax(12rem,1.4fr)_minmax(8rem,1fr)_5.5rem_5.5rem_7.5rem_5.5rem] md:min-w-[54rem]"
     : ARTIST_ROW_GRID;
   function onBandChange(idx: number, organizationId: string) {
     setRows((prev) =>
@@ -2913,7 +2916,7 @@ function SectionArtists({
       <CardHeader>
         <CardTitle>Artists</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-2">
+      <CardContent className="space-y-2 overflow-x-auto">
         <div className={`hidden text-xs font-medium text-muted-foreground md:grid md:items-end ${gridClass}`}>
           {showDayColumn ? <span>Day</span> : null}
           <span>Artist</span>

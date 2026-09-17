@@ -119,6 +119,9 @@ export function ArtistSelect({
   placeholder?: string;
   emptyLabel?: string;
 }) {
+  // `100%` resolves to the trigger width inside the positioner, so the old
+  // `min(100%, 24rem)` never widened the list. Cap by the real available width
+  // so narrow triggers still open a readable list.
   return (
     <SearchableSelect
       value={value}
@@ -126,7 +129,7 @@ export function ArtistSelect({
       options={options}
       placeholder={placeholder}
       emptyLabel={emptyLabel}
-      contentClassName="min-w-[min(100%,24rem)]"
+      contentClassName="min-w-[min(24rem,var(--available-width))]"
       renderOption={(option) => (
         <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
           <ArtistMark option={option as ArtistSelectOption} />
