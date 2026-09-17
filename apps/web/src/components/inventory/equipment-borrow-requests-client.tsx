@@ -155,6 +155,7 @@ function ReviewCard({ request }: { request: BorrowRequest }) {
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <input
             className="min-w-48 flex-1 rounded-md border bg-background px-3 py-1.5 text-sm"
+            aria-label="Review note"
             placeholder="Optional note for the requester"
             value={note}
             onChange={(event) => setNote(event.target.value)}

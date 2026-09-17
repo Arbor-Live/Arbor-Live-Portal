@@ -1185,7 +1185,7 @@ export const updateStatus = mutation({
       reasonCode: args.declineReasonCode,
       reasonNote: trimOptional(args.declineReasonNote),
     });
-    if (args.status === "declined") {
+    if (args.status === "declined" && existing.status !== "declined") {
       const updated = await ctx.db.get(args.id);
       if (updated) await scheduleBookingRequestDeclinedEmail(ctx, updated);
     }

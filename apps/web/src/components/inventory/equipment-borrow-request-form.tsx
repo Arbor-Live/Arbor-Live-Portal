@@ -98,28 +98,40 @@ export function EquipmentBorrowRequestForm({
       return;
     }
 
-    const payloadLines = lines
-      .map((line) => {
-        const quantity = Math.floor(Number(line.quantity));
-        if (line.lineKind === "package") {
-          return line.packageId
-            ? { lineKind: "package" as const, packageId: line.packageId as Id<"inventoryPackages">, quantity }
-            : null;
-        }
-        return line.typeId
-          ? { lineKind: "type" as const, typeId: line.typeId as Id<"inventoryTypes">, quantity }
-          : null;
-      })
-      .filter((line): line is NonNullable<typeof line> => Boolean(line));
-
-    if (payloadLines.length === 0) {
+    if (lines.length === 0) {
       setError("Add at least one piece of equipment.");
       return;
     }
-    if (payloadLines.some((line) => !Number.isFinite(line.quantity) || line.quantity < 1)) {
-      setError("Each equipment line needs a quantity of at least 1.");
-      return;
+    for (const line of lines) {
+      if (line.lineKind === "package" && !line.packageId) {
+        setError("Select a package for every equipment line.");
+        return;
+      }
+      if (line.lineKind === "type" && !line.typeId) {
+        setError("Select a type for every equipment line.");
+        return;
+      }
+      const quantity = Math.floor(Number(line.quantity));
+      if (!Number.isFinite(quantity) || quantity < 1) {
+        setError("Each equipment line needs a quantity of at least 1.");
+        return;
+      }
     }
+
+    const payloadLines = lines.map((line) => {
+      const quantity = Math.floor(Number(line.quantity));
+      return line.lineKind === "package"
+        ? {
+            lineKind: "package" as const,
+            packageId: line.packageId as Id<"inventoryPackages">,
+            quantity,
+          }
+        : {
+            lineKind: "type" as const,
+            typeId: line.typeId as Id<"inventoryTypes">,
+            quantity,
+          };
+    });
 
     setBusy(true);
     try {
