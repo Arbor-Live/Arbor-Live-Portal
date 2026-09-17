@@ -15,6 +15,7 @@ import {
   shouldNotifyPayingParty,
 } from "../email/payingPartyEmails";
 import { scheduleQuoteChangesRequestedEmail } from "../email/quoteChangesRequestedEmails";
+import { scheduleQuoteApprovedEmail } from "../email/quoteApprovedEmails";
 import { loadEventHostDisplay } from "./hostOrgs";
 
 function resolveInvoiceTermsIds(invoice: Doc<"invoices">): Id<"invoiceTerms">[] {
@@ -331,6 +332,8 @@ export async function approveInvoiceQuote(
     });
     await markPayingPartyNotified(ctx, invoice._id, paymentSubmitterEmail);
   }
+
+  await scheduleQuoteApprovedEmail(ctx, { invoice: updatedInvoice ?? invoice, approvedAt: now });
 }
 
 export async function updateInvoicePaymentContacts(

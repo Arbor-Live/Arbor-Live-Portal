@@ -56,6 +56,7 @@ export const getNavBadges = query({
     pendingDamageReports: v.number(),
     pendingBandPaymentActions: v.number(),
     quoteChangesRequested: v.number(),
+    pendingEquipmentBorrowRequests: v.number(),
   }),
   handler: async (ctx, args) => {
     const user = await requireAuth(ctx);
@@ -78,6 +79,7 @@ export const getNavBadges = query({
       pendingDamageReports,
       pendingBandPaymentActions,
       quoteChangesRequested,
+      pendingEquipmentBorrowRequests,
     ] = await Promise.all([
       args.includeArborInternal
         ? countMyPendingAvailability(ctx, getUserId(user), args.now)
@@ -91,6 +93,7 @@ export const getNavBadges = query({
       args.includeArborInternal ? countPendingDamageReports(ctx) : Promise.resolve(0),
       args.includeBand ? countPendingBandPaymentActions(ctx) : Promise.resolve(0),
       args.includeArborInternal ? countQuoteChangesRequested(ctx) : Promise.resolve(0),
+      args.includeAdmin ? countPendingEquipmentBorrowRequests(ctx) : Promise.resolve(0),
     ]);
 
     return {
@@ -102,6 +105,7 @@ export const getNavBadges = query({
       pendingDamageReports,
       pendingBandPaymentActions,
       quoteChangesRequested,
+      pendingEquipmentBorrowRequests,
     };
   },
 });
@@ -196,6 +200,14 @@ async function countSubmittedCrewApplications(ctx: QueryCtx) {
     .withIndex("by_status", (q) => q.eq("status", "submitted"))
     .take(BADGE_STATUS_TAKE);
   return rows.length;
+}
+
+async function countPendingEquipmentBorrowRequests(ctx: QueryCtx) {
+  const submitted = await ctx.db
+    .query("equipmentBorrowRequests")
+    .withIndex("by_status_and_createdAt", (q) => q.eq("status", "submitted"))
+    .take(BADGE_STATUS_TAKE);
+  return submitted.length;
 }
 
 async function countPendingDamageReports(ctx: QueryCtx) {

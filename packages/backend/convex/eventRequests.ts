@@ -15,7 +15,10 @@ import {
   requestInvoiceQuoteChanges,
   updateInvoicePaymentContacts,
 } from "./lib/publicQuoteView";
-import { scheduleBookingRequestReceivedEmail } from "./email/bookingRequestEmails";
+import {
+  scheduleBookingRequestDeclinedEmail,
+  scheduleBookingRequestReceivedEmail,
+} from "./email/bookingRequestEmails";
 import { enforceRateLimit, HOUR_MS } from "./rateLimit";
 import { allocateRequestNumber } from "./lib/publicReferenceIds";
 import { resolveContactNameParts } from "./lib/contactName";
@@ -1182,6 +1185,10 @@ export const updateStatus = mutation({
       reasonCode: args.declineReasonCode,
       reasonNote: trimOptional(args.declineReasonNote),
     });
+    if (args.status === "declined") {
+      const updated = await ctx.db.get(args.id);
+      if (updated) await scheduleBookingRequestDeclinedEmail(ctx, updated);
+    }
     return null;
   },
 });

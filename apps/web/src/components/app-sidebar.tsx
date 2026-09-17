@@ -84,6 +84,7 @@ const navItems: NavItem[] = [
 const inventorySubItems: NavSubItem[] = [
   { title: "Overview", url: "/dashboard/inventory" },
   { title: "Inventory Items", url: "/dashboard/inventory/items" },
+  { title: "Borrow Requests", url: "/dashboard/inventory/borrow-requests" },
   { title: "Damage & Repair", url: "/dashboard/inventory/damage" },
   { title: "Types", url: "/dashboard/inventory/types", adminOnly: true },
   { title: "Packages", url: "/dashboard/inventory/packages" },
@@ -253,6 +254,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
   const unconfirmedCrewCount = navBadges?.unconfirmedCrew
   const pendingBandPaymentActionsCount = navBadges?.pendingBandPaymentActions
   const quoteChangesRequestedCount = navBadges?.quoteChangesRequested
+  const pendingEquipmentBorrowRequestsCount = navBadges?.pendingEquipmentBorrowRequests
 
   const userName = account?.name ?? "Unknown user"
   const userEmail = account?.email ?? "No email"
@@ -291,6 +293,8 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
         return pendingCrewApplicationsCount ?? 0
       case "/dashboard/inventory/damage":
         return pendingDamageReportsCount ?? 0
+      case "/dashboard/inventory/borrow-requests":
+        return pendingEquipmentBorrowRequestsCount ?? 0
       case "/dashboard/artists/payments":
         return pendingBandPaymentActionsCount ?? 0
       case "/dashboard/financial-hub/invoices":

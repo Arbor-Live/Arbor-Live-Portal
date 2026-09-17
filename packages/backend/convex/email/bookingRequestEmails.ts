@@ -1,5 +1,6 @@
 import type { Doc } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
+import { bookingDeclineReasonLabel } from "@arbor/format";
 import { listAdminEmailsForVertical } from "../lib/auth";
 import {
   ARBOR_CONTACT_EMAIL,
@@ -83,6 +84,44 @@ export async function scheduleBookingRequestReceivedEmail(
       },
     });
   }
+}
+
+export async function scheduleBookingRequestDeclinedEmail(
+  ctx: MutationCtx,
+  request: Pick<
+    Doc<"eventRequests">,
+    | "_id"
+    | "email"
+    | "firstName"
+    | "requestNumber"
+    | "eventName"
+    | "eventDateText"
+    | "publicToken"
+    | "declinedAt"
+    | "declineReasonCode"
+    | "declineReasonNote"
+  >,
+) {
+  const publicToken = request.publicToken;
+  if (!publicToken) return;
+  const requestNumber = request.requestNumber ?? `LEGACY-${request._id}`;
+  const subjectContext = request.eventName?.trim() || requestNumber;
+
+  await enqueueEmail(ctx, {
+    template: "booking_request_declined",
+    to: request.email,
+    subject: subjectForTemplate("booking_request_declined", subjectContext),
+    idempotencyKey: `booking_request_declined:${request._id}:${request.declinedAt ?? "na"}`,
+    payload: {
+      recipientName: request.firstName.trim() || undefined,
+      requestNumber,
+      eventName: request.eventName?.trim() || undefined,
+      eventDateText: request.eventDateText,
+      reasonLabel: bookingDeclineReasonLabel(request.declineReasonCode),
+      reasonNote: request.declineReasonNote?.trim() || undefined,
+      trackingUrl: requestTrackingUrl(publicToken),
+    },
+  });
 }
 
 export async function scheduleBookingQuoteReadyEmail(

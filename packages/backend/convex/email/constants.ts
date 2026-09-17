@@ -67,7 +67,13 @@ export type EmailTemplate =
   | "rental_return_processed"
   | "post_event_album"
   | "event_comment_mention"
-  | "comment_mention";
+  | "comment_mention"
+  | "equipment_borrow_request_admin"
+  | "equipment_borrow_request_decided"
+  | "booking_request_declined"
+  | "quote_approved"
+  | "payment_proof_rejected"
+  | "damage_report_admin";
 
 export function eventDashboardUrl(eventId: string) {
   return `${SITE_URL}/dashboard/events/${eventId}`;
@@ -121,6 +127,10 @@ export function bookingRequestsAdminUrl(requestId?: string) {
 
 export function requestTrackingUrl(token: string) {
   return `${SITE_URL}/request/track/${encodeURIComponent(token)}`;
+}
+
+export function equipmentBorrowRequestsUrl() {
+  return `${SITE_URL}/dashboard/inventory/borrow-requests`;
 }
 
 export function publicQuoteUrl(token: string) {
@@ -218,6 +228,18 @@ export function subjectForTemplate(template: EmailTemplate, context: string) {
     case "event_comment_mention":
     case "comment_mention":
       return `You were mentioned: ${context}`;
+    case "equipment_borrow_request_admin":
+      return `New borrow request: ${context}`;
+    case "equipment_borrow_request_decided":
+      return `Borrow request update: ${context}`;
+    case "booking_request_declined":
+      return `Update on your request: ${context}`;
+    case "quote_approved":
+      return `Quote approved: ${context}`;
+    case "payment_proof_rejected":
+      return `Payment proof needs attention: ${context}`;
+    case "damage_report_admin":
+      return `New damage report: ${context}`;
   }
 }
 

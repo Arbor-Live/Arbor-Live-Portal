@@ -2,6 +2,7 @@ import { PendingAvailabilityWidget } from "@/components/crew-portal/widgets/pend
 import { ScheduledEventsWidget } from "@/components/crew-portal/widgets/scheduled-events-widget";
 import { EventsNeedingPhotosWidget } from "@/components/crew-portal/widgets/events-needing-photos-widget";
 import { PayPeriodSummaryWidget } from "@/components/crew-portal/widgets/pay-period-summary-widget";
+import { BorrowRequestsWidget } from "@/components/crew-portal/widgets/borrow-requests-widget";
 import type { DashboardWidgetDefinition } from "@/components/dashboard/customizable-widget-dashboard";
 
 export type UserDiscipline = "Sound" | "Lights" | "Design";
@@ -30,6 +31,11 @@ export const DEFAULT_CREW_WIDGETS: CrewWidget[] = [
     id: "pay-period-summary",
     title: "Pay periods",
     component: PayPeriodSummaryWidget,
+  },
+  {
+    id: "borrow-requests",
+    title: "Equipment requests",
+    component: BorrowRequestsWidget,
   },
 ];
 

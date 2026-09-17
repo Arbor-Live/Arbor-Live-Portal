@@ -106,6 +106,51 @@ export async function schedulePaymentProofSubmittedEmails(
   }
 }
 
+export async function schedulePaymentProofRejectedEmails(
+  ctx: MutationCtx,
+  args: {
+    invoice: Doc<"invoices">;
+    event: Doc<"events">;
+    note: string;
+    invalidatedAt: number;
+    publicQuoteToken: string;
+    portal: PaymentProofPortal;
+  },
+) {
+  const clientEmail = args.invoice.clientEmail?.trim().toLowerCase();
+  const payingPartyEmail = args.invoice.paymentSubmitterEmail?.trim().toLowerCase();
+  const recipients = new Set<string>();
+  if (clientEmail) recipients.add(clientEmail);
+  if (payingPartyEmail) recipients.add(payingPartyEmail);
+
+  for (const to of recipients) {
+    await enqueueEmail(ctx, {
+      template: "payment_proof_rejected",
+      to,
+      subject: subjectForTemplate("payment_proof_rejected", args.event.title),
+      eventId: args.event._id,
+      idempotencyKey: `payment_proof_rejected:${args.event._id}:${to}:${args.invalidatedAt}`,
+      replyTo: args.invoice.managerEmail ? [args.invoice.managerEmail] : undefined,
+      payload: {
+        recipientName:
+          to === payingPartyEmail
+            ? args.invoice.paymentSubmitterName
+            : (args.invoice.clientContactName ?? undefined),
+        eventTitle: args.event.title,
+        venueName: args.event.venueName,
+        dateRangeLabel: formatEventDateRange(
+          args.event.startAt,
+          args.event.endAt,
+          args.event.timezone || EVENT_TIMEZONE,
+        ),
+        invoiceNumber: args.invoice.invoiceNumber,
+        note: args.note,
+        portalUrl: portalUrl(args.portal, args.publicQuoteToken),
+      },
+    });
+  }
+}
+
 export async function schedulePaymentProofReminderEmail(
   ctx: MutationCtx,
   args: {

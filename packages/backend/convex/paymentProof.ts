@@ -14,7 +14,10 @@ import {
   resolvePortalTokenForInvoice,
   submitPaymentProof,
 } from "./lib/paymentProof";
-import { schedulePaymentProofSubmittedEmails } from "./email/paymentProofEmails";
+import {
+  schedulePaymentProofRejectedEmails,
+  schedulePaymentProofSubmittedEmails,
+} from "./email/paymentProofEmails";
 
 const paymentProofMethodArg = v.union(
   v.literal("assu_epay"),
@@ -487,6 +490,22 @@ export const invalidateSubmission = mutation({
       invalidatedByUserId: getUserId(user),
       invalidationNote: note,
     });
+
+    const invoice = await ctx.db.get(submission.invoiceId);
+    const event = await ctx.db.get(submission.eventId);
+    if (invoice && event) {
+      const portalInfo = await resolvePortalTokenForInvoice(ctx, invoice);
+      if (portalInfo) {
+        await schedulePaymentProofRejectedEmails(ctx, {
+          invoice,
+          event,
+          note,
+          invalidatedAt: now,
+          publicQuoteToken: portalInfo.token,
+          portal: portalInfo.portal,
+        });
+      }
+    }
     return null;
   },
 });

@@ -4,6 +4,7 @@ import type { MutationCtx } from "../_generated/server";
 export const INVOICE_REFERENCE_PREFIX = "ALINV-";
 export const REQUEST_REFERENCE_PREFIX = "ALREQ-";
 export const BAND_PAYMENT_REFERENCE_PREFIX = "ALBPAY-";
+export const BORROW_REQUEST_REFERENCE_PREFIX = "ALBRW-";
 
 const REFERENCE_SUFFIX_LENGTH = 7;
 const referenceSuffix = customAlphabet(
@@ -21,6 +22,10 @@ export function formatRequestReferenceId() {
 
 export function formatBandPaymentReferenceId() {
   return `${BAND_PAYMENT_REFERENCE_PREFIX}${referenceSuffix()}`;
+}
+
+export function formatBorrowRequestReferenceId() {
+  return `${BORROW_REQUEST_REFERENCE_PREFIX}${referenceSuffix()}`;
 }
 
 export function isInvoiceReferenceId(value: string) {
@@ -80,6 +85,22 @@ export async function allocateInvoiceNumber(ctx: MutationCtx) {
 
 export async function allocateRequestNumber(ctx: MutationCtx) {
   return await allocateUniqueRequestReferenceId(ctx);
+}
+
+async function allocateUniqueBorrowRequestReferenceId(ctx: MutationCtx) {
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const candidate = formatBorrowRequestReferenceId();
+    const existing = await ctx.db
+      .query("equipmentBorrowRequests")
+      .withIndex("by_requestNumber", (q) => q.eq("requestNumber", candidate))
+      .unique();
+    if (!existing) return candidate;
+  }
+  throw new Error("Unable to allocate borrow request reference id.");
+}
+
+export async function allocateBorrowRequestNumber(ctx: MutationCtx) {
+  return await allocateUniqueBorrowRequestReferenceId(ctx);
 }
 
 export async function allocateBandPaymentConfirmationToken(ctx: MutationCtx) {

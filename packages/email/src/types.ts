@@ -88,6 +88,49 @@ export type BookingRequestAdminEmailProps = {
   reviewUrl: string;
 };
 
+export type BookingRequestDeclinedEmailProps = {
+  recipientName?: string;
+  requestNumber: string;
+  eventName?: string;
+  eventDateText: string;
+  reasonLabel: string;
+  reasonNote?: string;
+  trackingUrl: string;
+};
+
+export type QuoteApprovedEmailProps = {
+  recipientName?: string;
+  eventTitle: string;
+  venueName?: string;
+  dateRangeLabel: string;
+  invoiceNumber: string;
+  quoteTotalUsd: number;
+  clientContactName?: string;
+  clientGroupName?: string;
+  invoiceUrl: string;
+};
+
+export type PaymentProofRejectedEmailProps = {
+  recipientName?: string;
+  eventTitle: string;
+  venueName?: string;
+  dateRangeLabel: string;
+  invoiceNumber: string;
+  note: string;
+  portalUrl: string;
+};
+
+export type DamageReportAdminEmailProps = {
+  reporterName: string;
+  itemLabel: string;
+  severity: number;
+  operabilityLabel: string;
+  scopeLabel: string;
+  eventTitle?: string;
+  notes?: string;
+  reportUrl: string;
+};
+
 export type BookingQuoteReadyEmailProps = {
   recipientName?: string;
   requestNumber: string;
@@ -348,4 +391,24 @@ export type CommentMentionEmailProps = {
   commentSnippet: string;
   url: string;
   ctaLabel: string;
+};
+
+export type EquipmentBorrowRequestAdminEmailProps = {
+  requesterName: string;
+  requesterEmail: string;
+  requestNumber: string;
+  purpose: string;
+  dateRangeLabel: string;
+  itemSummary: string;
+  reviewUrl: string;
+};
+
+export type EquipmentBorrowRequestDecidedEmailProps = {
+  recipientName?: string;
+  requestNumber: string;
+  purpose: string;
+  dateRangeLabel: string;
+  approved: boolean;
+  reviewNote?: string;
+  requestsUrl: string;
 };
