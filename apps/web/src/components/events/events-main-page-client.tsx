@@ -24,15 +24,17 @@ const EventsCalendarView = dynamic(
 type EventsView = "calendar" | "board" | "upcoming";
 
 export function EventsMainPageClient() {
-  const [view, setView] = useState<EventsView>("calendar");
+  const [view, setView] = useState<EventsView>("board");
   const [status, setStatus] = useState<"" | EventStatus>("");
   const [search, setSearch] = useState("");
   const [linkedOnly, setLinkedOnly] = useState(false);
+  const [showCancelled, setShowCancelled] = useState(false);
 
   const rows = useQuery(api.events.listForDashboard, {
     status: status || undefined,
     query: search || undefined,
     linkedInvoiceOnly: linkedOnly || undefined,
+    includeCancelled: showCancelled || undefined,
   });
 
   return (
@@ -56,6 +58,10 @@ export function EventsMainPageClient() {
         <label className="flex items-center gap-2 rounded-md border px-3 text-sm">
           <input type="checkbox" checked={linkedOnly} onChange={(e) => setLinkedOnly(e.target.checked)} />
           Linked invoice only
+        </label>
+        <label className="flex items-center gap-2 rounded-md border px-3 text-sm">
+          <input type="checkbox" checked={showCancelled} onChange={(e) => setShowCancelled(e.target.checked)} />
+          Show cancelled
         </label>
         <div className="ml-auto flex flex-wrap gap-2">
           <Button type="button" variant={view === "calendar" ? "default" : "outline"} onClick={() => setView("calendar")}>
