@@ -123,6 +123,8 @@ export const listForDashboard = query({
     status: v.optional(eventStatusValue),
     query: v.optional(v.string()),
     linkedInvoiceOnly: v.optional(v.boolean()),
+    /** Cancelled events are hidden unless explicitly requested. */
+    includeCancelled: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     await requireAuth(ctx);
@@ -137,7 +139,11 @@ export const listForDashboard = query({
     const rows = baseRows
       .map((row) => ({ ...row, status: normalizeEventStatus(row.status) }))
       .filter((row) => {
-        if (filterStatus && row.status !== filterStatus) return false;
+        if (filterStatus) {
+          if (row.status !== filterStatus) return false;
+        } else if (!args.includeCancelled && row.status === "cancelled") {
+          return false;
+        }
         if (args.linkedInvoiceOnly && !row.invoiceId) return false;
         if (!q) return true;
         const haystack = [row.title, row.venueName, row.eventType, row.host, ...(row.teamsInterested ?? [])]
