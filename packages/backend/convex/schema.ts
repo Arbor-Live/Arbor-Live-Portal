@@ -1396,6 +1396,12 @@ export default defineSchema({
       v.literal("post_event_album"),
       v.literal("event_comment_mention"),
       v.literal("comment_mention"),
+      v.literal("equipment_borrow_request_admin"),
+      v.literal("equipment_borrow_request_decided"),
+      v.literal("booking_request_declined"),
+      v.literal("quote_approved"),
+      v.literal("payment_proof_rejected"),
+      v.literal("damage_report_admin"),
     ),
     status: v.union(v.literal("queued"), v.literal("sent"), v.literal("failed")),
     to: v.string(),
@@ -1719,6 +1725,52 @@ export default defineSchema({
   })
     .index("by_seriesId", ["seriesId"])
     .index("by_seriesId_and_sortOrder", ["seriesId", "sortOrder"]),
+
+  /**
+   * Crew-initiated equipment borrow. Reviewed by admins; approval spawns an
+   * internal ("private") Dry Rental event whose pull list drives the normal
+   * scan-based checkout/return flow. Deliberately separate from `eventRequests`
+   * — no billing profile, quote, or public client portal.
+   */
+  equipmentBorrowRequests: defineTable({
+    status: v.union(
+      v.literal("submitted"),
+      v.literal("approved"),
+      v.literal("rejected"),
+      v.literal("cancelled"),
+    ),
+    requestNumber: v.string(),
+    requesterUserId: v.string(),
+    requesterName: v.string(),
+    requesterEmail: v.string(),
+    purpose: v.string(),
+    /** Venue where the equipment will be used (snapshot of the venue path). */
+    venueId: v.optional(v.id("venues")),
+    venueName: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    startAt: v.number(),
+    endAt: v.number(),
+    lines: v.array(
+      v.object({
+        lineKind: eventPullListLineKindValue,
+        typeId: v.optional(v.id("inventoryTypes")),
+        packageId: v.optional(v.id("inventoryPackages")),
+        label: v.string(),
+        quantity: v.number(),
+      }),
+    ),
+    reviewedByUserId: v.optional(v.string()),
+    reviewedByUserName: v.optional(v.string()),
+    reviewedAt: v.optional(v.number()),
+    reviewNote: v.optional(v.string()),
+    convertedEventId: v.optional(v.id("events")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_status_and_createdAt", ["status", "createdAt"])
+    .index("by_createdAt", ["createdAt"])
+    .index("by_requestNumber", ["requestNumber"])
+    .index("by_requesterUserId_and_createdAt", ["requesterUserId", "createdAt"]),
 
   eventMarketingDesigns: defineTable({
     eventId: v.id("events"),

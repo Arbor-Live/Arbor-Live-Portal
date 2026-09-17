@@ -2,6 +2,10 @@ import { render } from "@react-email/render";
 import { BookingQuoteReadyEmail } from "../emails/booking-quote-ready";
 import { BookingRequestAdminEmail } from "../emails/booking-request-admin";
 import { BookingRequestReceivedEmail } from "../emails/booking-request-received";
+import { BookingRequestDeclinedEmail } from "../emails/booking-request-declined";
+import { QuoteApprovedEmail } from "../emails/quote-approved";
+import { PaymentProofRejectedEmail } from "../emails/payment-proof-rejected";
+import { DamageReportAdminEmail } from "../emails/damage-report-admin";
 import { EventCancelledEmail } from "../emails/event-cancelled";
 import { PasswordResetEmail } from "../emails/password-reset";
 import { EmailVerificationEmail } from "../emails/email-verification";
@@ -36,10 +40,16 @@ import { RentalReturnProcessedEmail } from "../emails/rental-return-processed";
 import { PostEventAlbumEmail } from "../emails/post-event-album";
 import { EventCommentMentionEmail } from "../emails/event-comment-mention";
 import { CommentMentionEmail } from "../emails/comment-mention";
+import { EquipmentBorrowRequestAdminEmail } from "../emails/equipment-borrow-request-admin";
+import { EquipmentBorrowRequestDecidedEmail } from "../emails/equipment-borrow-request-decided";
 import type {
   BookingQuoteReadyEmailProps,
   BookingRequestAdminEmailProps,
   BookingRequestReceivedEmailProps,
+  BookingRequestDeclinedEmailProps,
+  QuoteApprovedEmailProps,
+  PaymentProofRejectedEmailProps,
+  DamageReportAdminEmailProps,
   EventEmailProps,
   PasswordResetEmailProps,
   EmailVerificationEmailProps,
@@ -73,6 +83,8 @@ import type {
   PostEventAlbumEmailProps,
   EventCommentMentionEmailProps,
   CommentMentionEmailProps,
+  EquipmentBorrowRequestAdminEmailProps,
+  EquipmentBorrowRequestDecidedEmailProps,
 } from "./types";
 
 export async function renderEventCancelledEmail(props: EventEmailProps) {
@@ -237,4 +249,34 @@ export async function renderEventCommentMentionEmail(props: EventCommentMentionE
 
 export async function renderCommentMentionEmail(props: CommentMentionEmailProps) {
   return render(CommentMentionEmail(props));
+}
+
+export async function renderEquipmentBorrowRequestAdminEmail(
+  props: EquipmentBorrowRequestAdminEmailProps,
+) {
+  return render(EquipmentBorrowRequestAdminEmail(props));
+}
+
+export async function renderEquipmentBorrowRequestDecidedEmail(
+  props: EquipmentBorrowRequestDecidedEmailProps,
+) {
+  return render(EquipmentBorrowRequestDecidedEmail(props));
+}
+
+export async function renderBookingRequestDeclinedEmail(
+  props: BookingRequestDeclinedEmailProps,
+) {
+  return render(BookingRequestDeclinedEmail(props));
+}
+
+export async function renderQuoteApprovedEmail(props: QuoteApprovedEmailProps) {
+  return render(QuoteApprovedEmail(props));
+}
+
+export async function renderPaymentProofRejectedEmail(props: PaymentProofRejectedEmailProps) {
+  return render(PaymentProofRejectedEmail(props));
+}
+
+export async function renderDamageReportAdminEmail(props: DamageReportAdminEmailProps) {
+  return render(DamageReportAdminEmail(props));
 }

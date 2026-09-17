@@ -43,7 +43,9 @@ import type * as email_bandOnboardingReminders from "../email/bandOnboardingRemi
 import type * as email_bandPaymentEmails from "../email/bandPaymentEmails.js";
 import type * as email_bookingRequestEmails from "../email/bookingRequestEmails.js";
 import type * as email_constants from "../email/constants.js";
+import type * as email_damageReportEmails from "../email/damageReportEmails.js";
 import type * as email_enqueue from "../email/enqueue.js";
+import type * as email_equipmentBorrowRequestEmails from "../email/equipmentBorrowRequestEmails.js";
 import type * as email_invitations from "../email/invitations.js";
 import type * as email_invoiceEmailData from "../email/invoiceEmailData.js";
 import type * as email_payingPartyEmails from "../email/payingPartyEmails.js";
@@ -52,6 +54,7 @@ import type * as email_paymentProofReminderShared from "../email/paymentProofRem
 import type * as email_paymentProofReminders from "../email/paymentProofReminders.js";
 import type * as email_postEventAlbumReminderActions from "../email/postEventAlbumReminderActions.js";
 import type * as email_postEventAlbumReminders from "../email/postEventAlbumReminders.js";
+import type * as email_quoteApprovedEmails from "../email/quoteApprovedEmails.js";
 import type * as email_quoteChangesRequestedEmails from "../email/quoteChangesRequestedEmails.js";
 import type * as email_recipients from "../email/recipients.js";
 import type * as email_reminders from "../email/reminders.js";
@@ -59,6 +62,7 @@ import type * as email_scheduleEmailData from "../email/scheduleEmailData.js";
 import type * as email_send from "../email/send.js";
 import type * as email_templates from "../email/templates.js";
 import type * as email_triggers from "../email/triggers.js";
+import type * as equipmentBorrowRequests from "../equipmentBorrowRequests.js";
 import type * as eventArtifacts from "../eventArtifacts.js";
 import type * as eventAssignments from "../eventAssignments.js";
 import type * as eventBands from "../eventBands.js";
@@ -247,7 +251,9 @@ declare const fullApi: ApiFromModules<{
   "email/bandPaymentEmails": typeof email_bandPaymentEmails;
   "email/bookingRequestEmails": typeof email_bookingRequestEmails;
   "email/constants": typeof email_constants;
+  "email/damageReportEmails": typeof email_damageReportEmails;
   "email/enqueue": typeof email_enqueue;
+  "email/equipmentBorrowRequestEmails": typeof email_equipmentBorrowRequestEmails;
   "email/invitations": typeof email_invitations;
   "email/invoiceEmailData": typeof email_invoiceEmailData;
   "email/payingPartyEmails": typeof email_payingPartyEmails;
@@ -256,6 +262,7 @@ declare const fullApi: ApiFromModules<{
   "email/paymentProofReminders": typeof email_paymentProofReminders;
   "email/postEventAlbumReminderActions": typeof email_postEventAlbumReminderActions;
   "email/postEventAlbumReminders": typeof email_postEventAlbumReminders;
+  "email/quoteApprovedEmails": typeof email_quoteApprovedEmails;
   "email/quoteChangesRequestedEmails": typeof email_quoteChangesRequestedEmails;
   "email/recipients": typeof email_recipients;
   "email/reminders": typeof email_reminders;
@@ -263,6 +270,7 @@ declare const fullApi: ApiFromModules<{
   "email/send": typeof email_send;
   "email/templates": typeof email_templates;
   "email/triggers": typeof email_triggers;
+  equipmentBorrowRequests: typeof equipmentBorrowRequests;
   eventArtifacts: typeof eventArtifacts;
   eventAssignments: typeof eventAssignments;
   eventBands: typeof eventBands;

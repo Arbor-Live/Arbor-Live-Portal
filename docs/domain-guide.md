@@ -283,6 +283,14 @@ Event types (drive which editor tabs and quick-add blocks appear):
 - Damage reports (`damageReports.ts`): any arbor_internal crew can create
   reports (scope for containers, operability, severity, photo, optional event).
   Operations/admin triage at `/dashboard/inventory/damage`.
+- **Borrow requests** (`equipmentBorrowRequests.ts`): crew submit an
+  `ALBRW-`-numbered request for equipment by type or package + quantity, with a
+  purpose and pickup/return window (`/dashboard/inventory/borrow-requests`).
+  Crew-vertical admins are emailed and see a nav badge. Approval creates an
+  internal (`visibility: internal`) `Dry Rental` event and scaffolds its pull
+  list from the request lines, so the normal scan-based checkout/return flow
+  handles the actual tags. Rejection/cancellation are terminal; requester is
+  emailed on the decision. No invoice, billing profile, or public portal.
 
 ## Media (Immich)
 

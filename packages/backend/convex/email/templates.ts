@@ -36,6 +36,12 @@ import {
   renderPostEventAlbumEmail,
   renderEventCommentMentionEmail,
   renderCommentMentionEmail,
+  renderEquipmentBorrowRequestAdminEmail,
+  renderEquipmentBorrowRequestDecidedEmail,
+  renderBookingRequestDeclinedEmail,
+  renderQuoteApprovedEmail,
+  renderPaymentProofRejectedEmail,
+  renderDamageReportAdminEmail,
 } from "@arbor/email/render";
 import type {
   BookingQuoteReadyEmailProps,
@@ -74,6 +80,12 @@ import type {
   PostEventAlbumEmailProps,
   EventCommentMentionEmailProps,
   CommentMentionEmailProps,
+  EquipmentBorrowRequestAdminEmailProps,
+  EquipmentBorrowRequestDecidedEmailProps,
+  BookingRequestDeclinedEmailProps,
+  QuoteApprovedEmailProps,
+  PaymentProofRejectedEmailProps,
+  DamageReportAdminEmailProps,
 } from "@arbor/email/types";
 import type { EmailTemplate } from "./constants";
 
@@ -159,5 +171,21 @@ export async function renderEmailHtml(template: EmailTemplate, payload: unknown)
       return renderEventCommentMentionEmail(payload as EventCommentMentionEmailProps);
     case "comment_mention":
       return renderCommentMentionEmail(payload as CommentMentionEmailProps);
+    case "equipment_borrow_request_admin":
+      return renderEquipmentBorrowRequestAdminEmail(
+        payload as EquipmentBorrowRequestAdminEmailProps,
+      );
+    case "equipment_borrow_request_decided":
+      return renderEquipmentBorrowRequestDecidedEmail(
+        payload as EquipmentBorrowRequestDecidedEmailProps,
+      );
+    case "booking_request_declined":
+      return renderBookingRequestDeclinedEmail(payload as BookingRequestDeclinedEmailProps);
+    case "quote_approved":
+      return renderQuoteApprovedEmail(payload as QuoteApprovedEmailProps);
+    case "payment_proof_rejected":
+      return renderPaymentProofRejectedEmail(payload as PaymentProofRejectedEmailProps);
+    case "damage_report_admin":
+      return renderDamageReportAdminEmail(payload as DamageReportAdminEmailProps);
   }
 }

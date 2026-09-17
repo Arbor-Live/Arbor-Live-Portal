@@ -236,6 +236,55 @@ async function validatePullListItemInput(
 }
 
 /**
+ * Materialize an approved borrow request's equipment onto an event's pull list.
+ * Rows are `manual` so they survive invoice re-scaffolding, matching how staff
+ * add extras by hand. Tag scanning happens later in rental fulfillment.
+ */
+export async function insertPullListItemsFromLines(
+  ctx: MutationCtx,
+  eventId: Id<"events">,
+  lines: Array<{
+    lineKind: "type" | "package";
+    typeId?: Id<"inventoryTypes">;
+    packageId?: Id<"inventoryPackages">;
+    label?: string;
+    quantity: number;
+  }>,
+) {
+  const existing = await ctx.db
+    .query("eventPullListItems")
+    .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
+    .take(500);
+  const maxSort = existing.reduce((max, row) => Math.max(max, row.sortOrder), -1);
+  const now = Date.now();
+  let sortOrder = maxSort + 1;
+  for (const line of lines) {
+    const validated = await validatePullListItemInput(ctx, {
+      lineKind: line.lineKind,
+      typeId: line.typeId,
+      packageId: line.packageId,
+      label: line.label,
+      quantityRequired: line.quantity,
+    });
+    await ctx.db.insert("eventPullListItems", {
+      eventId,
+      lineKind: validated.lineKind,
+      typeId: validated.typeId,
+      packageId: validated.packageId,
+      label: validated.label,
+      quantityRequired: validated.quantityRequired,
+      quantityPulled: 0,
+      quantityCheckedOut: 0,
+      source: "manual",
+      sortOrder,
+      createdAt: now,
+      updatedAt: now,
+    });
+    sortOrder += 1;
+  }
+}
+
+/**
  * Compares invoice equipment lines vs this event's non-manual pull-list rows
  * (rows scaffolded from the invoice). Manual rows are staff extras and are
  * intentionally excluded from the comparison. Used to surface an out-of-sync

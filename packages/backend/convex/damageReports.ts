@@ -10,6 +10,7 @@ import {
 } from "./lib/auth";
 import { formatStoredR2Asset } from "./lib/inventoryUpload";
 import { resolveStoredR2AssetUrl } from "./inventoryR2";
+import { scheduleDamageReportAdminEmails } from "./email/damageReportEmails";
 
 const scopeValue = v.union(
   v.literal("this_only"),
@@ -355,6 +356,23 @@ export const create = mutation({
     }
 
     if (!reportIds.length) throw new Error("No damage reports were created.");
+
+    const type = await ctx.db.get(root.typeId);
+    const identifier = root.assetId ?? root.serialNumber ?? null;
+    const itemLabel = [type?.name ?? "Asset", identifier ? `(${identifier})` : null]
+      .filter(Boolean)
+      .join(" ");
+    const event = eventId ? await ctx.db.get(eventId) : null;
+    const firstReport = await ctx.db.get(reportIds[0]!);
+    if (firstReport) {
+      await scheduleDamageReportAdminEmails(ctx, {
+        report: firstReport,
+        itemLabel,
+        reporterName: user.name?.trim() || user.email?.trim() || "Crew",
+        eventTitle: event?.title,
+      });
+    }
+
     return { reportIds };
   },
 });
