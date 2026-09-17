@@ -91,6 +91,49 @@ function initials(value: string) {
   );
 }
 
+function CrewBadge({
+  crew,
+  crewCount,
+}: {
+  crew: NonNullable<DashboardEvent["assignedCrew"]>;
+  crewCount: number;
+}) {
+  return (
+    <TooltipProvider delayDuration={120}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className="inline-flex items-center gap-1">
+            <AvatarGroup className="items-center">
+              {crew.slice(0, 3).map((member) => (
+                <Avatar key={member.userId} size="sm">
+                  <AvatarImage src={member.image} alt={member.name} />
+                  <AvatarFallback>{initials(member.name)}</AvatarFallback>
+                </Avatar>
+              ))}
+              {crewCount > 3 ? <AvatarGroupCount>+{crewCount - 3}</AvatarGroupCount> : null}
+            </AvatarGroup>
+            <p className="text-[11px] leading-tight opacity-90">{crewCount} crew</p>
+          </div>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="max-w-sm p-2">
+          <div className="space-y-1">
+            {crew.length ? (
+              crew.map((member) => (
+                <p key={`crew-${member.userId}`} className="text-xs">
+                  {member.name}
+                  {member.email ? ` (${member.email})` : ""}
+                </p>
+              ))
+            ) : (
+              <p className="text-xs">No assigned crew yet.</p>
+            )}
+          </div>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
 export function EventsCalendarView({ events }: { events: DashboardEvent[] }) {
   const router = useRouter();
   const [view, setView] = useState<"timeGridWeek" | "dayGridMonth">("timeGridWeek");
@@ -247,44 +290,21 @@ export function EventsCalendarView({ events }: { events: DashboardEvent[] }) {
                 );
               }
               return (
-                <div className="space-y-0.5 px-1 py-0.5">
+                <div className="@container overflow-hidden space-y-0.5 px-1 py-0.5">
                   <p className="text-xs font-semibold leading-tight break-words whitespace-normal">
                     <span className="opacity-80">{parentTitle}</span> {arg.event.title}
                   </p>
-                  <p className="text-[11px] leading-tight opacity-90">{arg.timeText}</p>
-                  {venueName ? <p className="line-clamp-1 text-[11px] leading-tight opacity-90">{venueName}</p> : null}
-                  <TooltipProvider delayDuration={120}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <div className="inline-flex items-center gap-1">
-                          <AvatarGroup className="items-center">
-                            {crew.slice(0, 3).map((member) => (
-                              <Avatar key={member.userId} size="sm">
-                                <AvatarImage src={member.image} alt={member.name} />
-                                <AvatarFallback>{initials(member.name)}</AvatarFallback>
-                              </Avatar>
-                            ))}
-                            {crewCount > 3 ? <AvatarGroupCount>+{crewCount - 3}</AvatarGroupCount> : null}
-                          </AvatarGroup>
-                          <p className="text-[11px] leading-tight opacity-90">{crewCount} crew</p>
-                        </div>
-                      </TooltipTrigger>
-                      <TooltipContent side="top" className="max-w-sm p-2">
-                        <div className="space-y-1">
-                          {crew.length ? (
-                            crew.map((member) => (
-                              <p key={`crew-${member.userId}`} className="text-xs">
-                                {member.name}
-                                {member.email ? ` (${member.email})` : ""}
-                              </p>
-                            ))
-                          ) : (
-                            <p className="text-xs">No assigned crew yet.</p>
-                          )}
-                        </div>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
+                  <p className="truncate text-[11px] leading-tight opacity-90 @max-[5rem]:hidden">{arg.timeText}</p>
+                  {/* Overlapping events shrink to narrow lanes; drop the
+                      secondary lines rather than let them clip into neighbors. */}
+                  {venueName ? (
+                    <p className="line-clamp-1 text-[11px] leading-tight opacity-90 @max-[7rem]:hidden">{venueName}</p>
+                  ) : null}
+                  {crewCount > 0 ? (
+                    <div className="@max-[7rem]:hidden">
+                      <CrewBadge crew={crew} crewCount={crewCount} />
+                    </div>
+                  ) : null}
                 </div>
               );
             }
@@ -307,17 +327,23 @@ export function EventsCalendarView({ events }: { events: DashboardEvent[] }) {
               );
             }
             return (
-              <div className="space-y-0.5 px-1 py-0.5">
+              <div className="@container overflow-hidden space-y-0.5 px-1 py-0.5">
                 <p className="line-clamp-2 text-xs font-semibold leading-tight">{arg.event.title}</p>
-                <p className="line-clamp-2 text-[11px] leading-tight opacity-90">{arg.timeText}</p>
+                <p className="truncate text-[11px] leading-tight opacity-90 @max-[5rem]:hidden">{arg.timeText}</p>
                 {setup ? (
                   <p className="text-[11px] leading-tight opacity-90">
                     Call {setup}
                     {show ? ` • Show ${show}` : ""}
                   </p>
                 ) : null}
-                {blockLabelLine ? <p className="line-clamp-1 text-[11px] leading-tight opacity-90">{blockLabelLine}</p> : null}
-                <p className="text-[11px] leading-tight opacity-90">Crew {crewCount}</p>
+                {blockLabelLine ? (
+                  <p className="line-clamp-1 text-[11px] leading-tight opacity-90 @max-[7rem]:hidden">{blockLabelLine}</p>
+                ) : null}
+                {crewCount > 0 ? (
+                  <div className="@max-[7rem]:hidden">
+                    <CrewBadge crew={crew} crewCount={crewCount} />
+                  </div>
+                ) : null}
               </div>
             );
           }}
