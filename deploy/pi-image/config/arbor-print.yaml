@@ -1,0 +1,10 @@
+include:
+  file: trixie-minbase.yaml
+
+# The device layer is chosen per build via `IGconf_device_layer=...`; see the
+# pi-image workflow. Trixie's minbase suite already brings systemd + networking.
+image:
+  name: arbor-print-agent
+
+layer:
+  agent: arbor-print-agent
