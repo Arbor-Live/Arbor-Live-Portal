@@ -2,9 +2,9 @@
 # X-Env-Layer-Name: arbor-print-agent
 # X-Env-Layer-Version: 1.0.0
 # X-Env-Layer-Category: app
-# X-Env-Layer-Desc: Warehouse printer: CUPS + ipp-usb and the Arbor event-brief
-#  print agent. The CUPS queue is created by the agent on first run, because the
-#  printer is not attached at image build time.
+# X-Env-Layer-Desc: ArborOS warehouse printer: CUPS + ipp-usb and the Arbor
+#  event-brief print agent. The CUPS queue is created by the agent on first run,
+#  because the printer is not attached at image build time.
 # X-Env-Layer-Requires: systemd-min,
 #  systemd-net-min
 #
