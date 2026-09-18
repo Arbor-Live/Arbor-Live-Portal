@@ -1,6 +1,6 @@
 import { Migrations } from "@convex-dev/migrations";
 import { components, internal } from "./_generated/api";
-import type { DataModel, Id } from "./_generated/dataModel";
+import type { DataModel, Doc, Id } from "./_generated/dataModel";
 import { internalMutation } from "./_generated/server";
 import { resolveContactNameParts } from "./lib/contactName";
 import { normalizeHostOrgName } from "./lib/hostOrgIdentity";
@@ -541,6 +541,27 @@ export const backfillInvoiceArtistLineEvents = migrations.define({
 });
 
 /**
+ * Unset the retired OSE hiring form timestamp on crew onboarding rows.
+ *
+ * Step 1 of a widen/migrate/narrow removal: `oseHiringFormCompletedAt` stays in
+ * the schema until this has run on every deployment, then it can be dropped.
+ * Reads/writes go through a widened type so this keeps compiling once the field
+ * is removed from the schema.
+ */
+export const dropCrewOnboardingOseHiringForm = migrations.define({
+  table: "userOnboarding",
+  migrateOne: async (_ctx, row) => {
+    const legacy = row as Doc<"userOnboarding"> & {
+      oseHiringFormCompletedAt?: number;
+    };
+    if (legacy.oseHiringFormCompletedAt === undefined) return;
+    return {
+      oseHiringFormCompletedAt: undefined,
+    } as unknown as Partial<Doc<"userOnboarding">>;
+  },
+});
+
+/**
  * never reorder or remove completed ones (reset requires an explicit reset:true).
  */
 const MIGRATION_SERIES = [
@@ -565,6 +586,7 @@ const MIGRATION_SERIES = [
   internal.migrations.migrateOrgArtistTypeToOrganizationType,
   internal.migrations.migrateBandApplicationArtistTypeToOrganizationType,
   internal.migrations.backfillInvoiceArtistLineEvents,
+  internal.migrations.dropCrewOnboardingOseHiringForm,
 ] as const;
 
 export const runAll = migrations.runner([...MIGRATION_SERIES]);
