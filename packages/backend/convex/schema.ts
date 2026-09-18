@@ -1054,12 +1054,6 @@ export default defineSchema({
     otherCampusEmploymentHours: v.optional(v.number()),
     /** HR: I-9 appointment scheduled by the first day of employment. */
     i9AcknowledgedAt: v.optional(v.number()),
-    /**
-     * @deprecated OSE hiring form was retired; no longer written or read.
-     * `migrations:dropCrewOnboardingOseHiringForm` unsets it on existing rows;
-     * drop this field once that migration has run on every deployment.
-     */
-    oseHiringFormCompletedAt: v.optional(v.number()),
     timecardAcknowledgedAt: v.optional(v.number()),
     /** External payroll: W9 + biweekly invoice instructions acknowledged. */
     contractorPayAcknowledgedAt: v.optional(v.number()),
