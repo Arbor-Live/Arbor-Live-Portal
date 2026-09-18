@@ -1417,6 +1417,7 @@ export default defineSchema({
       v.literal("payment_proof_rejected"),
       v.literal("damage_report_admin"),
       v.literal("weekly_digest"),
+      v.literal("this_week_at_arbor"),
     ),
     status: v.union(v.literal("queued"), v.literal("sent"), v.literal("failed")),
     to: v.string(),
@@ -1880,6 +1881,42 @@ export default defineSchema({
     openMicMarketingBoost: v.boolean(),
     updatedAt: v.number(),
   }),
+
+  /** Opt-in mailing list for the "This Week at Arbor" newsletter. Convex is the
+   *  source of truth; subscribed rows are mirrored into a Resend segment so the
+   *  actual broadcast send (and its unsubscribe/click metrics) happens there.
+   *  Single opt-in: subscribing adds the address directly. The weekly Broadcast
+   *  carries Resend's own per-recipient unsubscribe link. */
+  newsletterSubscribers: defineTable({
+    /** Normalized lowercase address. Unique per row (indexed). */
+    email: v.string(),
+    name: v.optional(v.string()),
+    status: v.union(
+      v.literal("subscribed"),
+      v.literal("unsubscribed"),
+    ),
+    /** Where the opt-in came from, for reporting and future segmentation. */
+    source: v.union(
+      v.literal("landing"),
+      v.literal("open_mic"),
+      v.literal("events_page"),
+      v.literal("admin"),
+    ),
+    /** Stable token for one-click unsubscribe + preference edits. */
+    unsubscribeToken: v.string(),
+    /** Resend contact id once mirrored into the newsletter segment. */
+    resendContactId: v.optional(v.string()),
+    /** Last mirror failure, surfaced in the admin list instead of swallowed. */
+    syncError: v.optional(v.string()),
+    confirmedAt: v.optional(v.number()),
+    unsubscribedAt: v.optional(v.number()),
+    lastBroadcastAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_email", ["email"])
+    .index("by_status", ["status"])
+    .index("by_unsubscribeToken", ["unsubscribeToken"]),
 
   openMicSignups: defineTable({
     /** Event this sign-up belongs to. Open Mic is an add-on on events, so

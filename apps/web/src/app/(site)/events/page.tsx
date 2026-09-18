@@ -1,6 +1,7 @@
 import { PublicMarketingLayout } from "@/components/public/public-marketing-layout";
 import { PublicPageHero } from "@/components/public/public-page-hero";
 import { PublicUpcomingEventsClient } from "@/components/public/public-upcoming-events-client";
+import { CalendarSubscribe } from "@/components/public/calendar-subscribe";
 
 export const metadata = {
   title: "Upcoming Events | Arbor Live",
@@ -16,6 +17,7 @@ export default function EventsPage() {
       />
       <section className="bg-muted/35 pb-16 pt-10">
         <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+          <CalendarSubscribe className="mb-8" />
           <PublicUpcomingEventsClient />
         </div>
       </section>

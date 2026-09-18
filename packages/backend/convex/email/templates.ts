@@ -43,6 +43,7 @@ import {
   renderPaymentProofRejectedEmail,
   renderDamageReportAdminEmail,
   renderWeeklyDigestEmail,
+  renderThisWeekAtArborEmail,
 } from "@arbor/email/render";
 import type {
   BookingQuoteReadyEmailProps,
@@ -88,6 +89,7 @@ import type {
   PaymentProofRejectedEmailProps,
   DamageReportAdminEmailProps,
   WeeklyDigestEmailProps,
+  ThisWeekAtArborEmailProps,
 } from "@arbor/email/types";
 import type { EmailTemplate } from "./constants";
 
@@ -191,5 +193,7 @@ export async function renderEmailHtml(template: EmailTemplate, payload: unknown)
       return renderDamageReportAdminEmail(payload as DamageReportAdminEmailProps);
     case "weekly_digest":
       return renderWeeklyDigestEmail(payload as WeeklyDigestEmailProps);
+    case "this_week_at_arbor":
+      return renderThisWeekAtArborEmail(payload as ThisWeekAtArborEmailProps);
   }
 }

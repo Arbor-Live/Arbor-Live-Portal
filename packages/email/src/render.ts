@@ -43,6 +43,7 @@ import { CommentMentionEmail } from "../emails/comment-mention";
 import { EquipmentBorrowRequestAdminEmail } from "../emails/equipment-borrow-request-admin";
 import { EquipmentBorrowRequestDecidedEmail } from "../emails/equipment-borrow-request-decided";
 import { WeeklyDigestEmail } from "../emails/weekly-digest";
+import { ThisWeekAtArborEmail } from "../emails/this-week-at-arbor";
 import type {
   BookingQuoteReadyEmailProps,
   BookingRequestAdminEmailProps,
@@ -87,6 +88,7 @@ import type {
   EquipmentBorrowRequestAdminEmailProps,
   EquipmentBorrowRequestDecidedEmailProps,
   WeeklyDigestEmailProps,
+  ThisWeekAtArborEmailProps,
 } from "./types";
 
 export async function renderEventCancelledEmail(props: EventEmailProps) {
@@ -285,4 +287,8 @@ export async function renderDamageReportAdminEmail(props: DamageReportAdminEmail
 
 export async function renderWeeklyDigestEmail(props: WeeklyDigestEmailProps) {
   return render(WeeklyDigestEmail(props));
+}
+
+export async function renderThisWeekAtArborEmail(props: ThisWeekAtArborEmailProps) {
+  return render(ThisWeekAtArborEmail(props));
 }

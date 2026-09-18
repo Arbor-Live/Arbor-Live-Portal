@@ -430,3 +430,27 @@ export type WeeklyDigestEmailProps = {
   sections: WeeklyDigestSection[];
   dashboardUrl: string;
 };
+
+/** One upcoming event in the "This Week at Arbor" newsletter. */
+export type ThisWeekEvent = {
+  title: string;
+  /** e.g. "Fri, May 9 · 7:00 PM" */
+  whenLabel: string;
+  venueName?: string;
+  hostLabel?: string;
+  posterImageUrl?: string;
+  caption?: string;
+  eventUrl: string;
+  /** Present when Open Mic is accepting performers for this event. */
+  openMicSignupUrl?: string;
+};
+
+export type ThisWeekAtArborEmailProps = {
+  recipientName?: string;
+  /** e.g. "May 5 – May 11" */
+  weekLabel: string;
+  events: ThisWeekEvent[];
+  /** Public events page for the "see everything" CTA. */
+  allEventsUrl: string;
+  unsubscribeUrl: string;
+};

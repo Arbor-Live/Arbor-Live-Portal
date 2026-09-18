@@ -55,6 +55,52 @@ Band payouts use outbound-only emails:
 Agreement is recorded in-portal (typed legal name + checkbox), not by email
 reply. There is no Resend inbound webhook.
 
+## This Week at Arbor (newsletter)
+
+The weekly newsletter is the one Arbor send that goes through Resend
+**Broadcasts** rather than the transactional queue. That is deliberate: as a
+marketing send it needs Resend-managed unsubscribe links, open/click metrics,
+and the Broadcasts dashboard, none of which the transactional path provides.
+
+- **Source of truth is Convex.** `newsletterSubscribers` holds the list.
+  Subscribing is **single opt-in**: the public forms add the address as
+  `subscribed` immediately. Deliberately **no transactional confirmation email**
+  is sent — transactional volume is rationed — and the Broadcast carries
+  Resend's own per-recipient unsubscribe link.
+- **Resend is the delivery mirror.** Subscribed addresses are added to a Resend
+  segment. The Monday broadcast targets that segment. Sync failures are stored
+  on the row (`syncError`) and surfaced in
+  **Dashboard → Marketing → Settings** with a retry action — never dropped
+  silently.
+- **Send job.** `email/newsletterBroadcast.run` (a `"use node"` action, Monday
+  via `weeklyJobs.ts`) builds the coming week's public events, **skips the send
+  when nothing is on**, renders `this_week_at_arbor`, and creates+sends the
+  Broadcast. Query/mutation helpers live in `newsletterBroadcastData.ts`
+  because Node-runtime modules may only export actions.
+- **Content.** `lib/newsletterWeek.ts` reuses the same visibility/status filters
+  as `publicEvents.ts`, so the email and `/events` never disagree. Window is 7
+  days; `NEWSLETTER_MAX_EVENTS` (40) is a loud ceiling, not a silent truncation.
+- **Unsubscribe.** Two paths: Resend's own footer link (Broadcasts inject a
+  per-recipient `{{{RESEND_UNSUBSCRIBE_URL}}}`), and the in-app
+  `/newsletter?token=…` page backed by `unsubscribeToken`. Both flip the row and
+  remove the Resend contact from the segment.
+
+### Newsletter environment variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `NEWSLETTER_FROM` | No | From address for the newsletter; defaults to `Arbor Live <newsletter@arbor.st>` |
+| `RESEND_NEWSLETTER_SEGMENT_ID` | Yes (to send) | Resend segment the broadcast targets. Without it the job fails loudly rather than sending nothing |
+
+```bash
+# Create a segment in Resend (Audience → Segments), then:
+npx convex env set RESEND_NEWSLETTER_SEGMENT_ID "seg_xxxxxxxx"
+npx convex env set NEWSLETTER_FROM "Arbor Live <newsletter@arbor.st>"
+```
+
+`RESEND_API_KEY` is shared with transactional mail and must be able to create
+contacts and broadcasts.
+
 ## Local testing checklist
 
 1. Set `RESEND_API_KEY` and `EMAIL_FROM` on the Convex deployment.

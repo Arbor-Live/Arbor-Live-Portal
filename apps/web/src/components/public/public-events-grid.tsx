@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Reveal, Stagger, StaggerItem } from "@/components/landing/landing-motion";
 import { PublicEventPoster } from "@/components/public/public-event-poster";
+import { CalendarSubscribe } from "@/components/public/calendar-subscribe";
 import { formatDateTime } from "@/lib/format";
 import { MarketingLinkIcon } from "@/lib/marketing-link-icons";
 
@@ -217,6 +218,8 @@ export function LandingUpcomingEvents({
             </div>
           )}
         </div>
+
+        <CalendarSubscribe className="mt-6" />
       </div>
     </section>
   );

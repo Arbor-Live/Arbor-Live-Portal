@@ -18,6 +18,7 @@ export const run = internalMutation({
     );
     await ctx.scheduler.runAfter(0, internal.email.paymentProofReminders.runMonday, {});
     await ctx.scheduler.runAfter(0, internal.email.weeklyDigest.run, {});
+    await ctx.scheduler.runAfter(0, internal.email.newsletterBroadcast.run, {});
     return null;
   },
 });
