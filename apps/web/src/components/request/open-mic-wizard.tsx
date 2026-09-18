@@ -499,7 +499,7 @@ function OpenMicNewsletterOptIn({ email }: { email: string }) {
       />
       <span>
         {state === "error"
-          ? "Couldn't subscribe — try again from the events page."
+          ? "Couldn't subscribe — uncheck and check again to retry."
           : "Email me This Week at Arbor, a weekly list of campus shows."}
       </span>
     </label>

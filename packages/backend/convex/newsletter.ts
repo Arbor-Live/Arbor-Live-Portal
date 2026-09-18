@@ -15,11 +15,12 @@ export const NEWSLETTER_SOURCES = [
 
 export type NewsletterSource = (typeof NEWSLETTER_SOURCES)[number];
 
-const sourceValue = v.union(
+/** Sources a public (unauthenticated) caller may claim. `admin` is deliberately
+ *  excluded — only the authenticated `addSubscriber` mutation may set it. */
+const publicSourceValue = v.union(
   v.literal("landing"),
   v.literal("open_mic"),
   v.literal("events_page"),
-  v.literal("admin"),
 );
 
 const subscriberStatusValue = v.union(
@@ -66,10 +67,21 @@ async function subscribeEmail(
     .unique();
 
   const name = args.name?.trim() || undefined;
+  if (name && name.length > 120) {
+    throw new Error("Name must be 120 characters or fewer.");
+  }
 
   if (existing) {
     if (existing.status === "subscribed") {
-      // Already on the list — nothing to do, treat as success.
+      // Already on the list. Still retry the segment mirror when it never
+      // completed, otherwise a previously failed sync is stuck forever.
+      if (existing.syncError || !existing.resendContactId) {
+        await ctx.scheduler.runAfter(
+          0,
+          internal.email.newsletterBroadcast.syncContact,
+          { subscriberId: existing._id },
+        );
+      }
       return { alreadySubscribed: true as const };
     }
     await ctx.db.patch(existing._id, {
@@ -117,7 +129,7 @@ export const subscribePublic = mutation({
     website: v.optional(v.string()),
     email: v.string(),
     name: v.optional(v.string()),
-    source: v.optional(sourceValue),
+    source: v.optional(publicSourceValue),
   },
   returns: v.object({ ok: v.boolean() }),
   handler: async (ctx, args) => {
@@ -183,7 +195,7 @@ export const unsubscribeByToken = mutation({
       await ctx.scheduler.runAfter(
         0,
         internal.email.newsletterBroadcast.removeContactFromSegment,
-        { subscriberId: row._id },
+        { subscriberId: row._id, expectedUpdatedAt: now },
       );
     }
 

@@ -47,7 +47,7 @@ describe("renderThisWeekAtArborEmail", () => {
   it("includes the Open Mic link only for events that accept sign-ups", async () => {
     const html = await renderThisWeekAtArborEmail(props);
     expect(html).toContain(props.events[0].openMicSignupUrl);
-    // One open-mic link total — the second event must not invent one.
-    expect(html.split("/open-mic").length - 1).toBeGreaterThanOrEqual(1);
+    // Exactly one open-mic link total — the second event must not invent one.
+    expect(html.split("/open-mic").length - 1).toBe(1);
   });
 });

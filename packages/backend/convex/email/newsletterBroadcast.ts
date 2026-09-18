@@ -113,25 +113,55 @@ export const run = internalAction({
       );
     }
 
-    const result = await getResendSdk().broadcasts.create({
-      name: `This Week at Arbor — ${week.weekLabel}`,
-      segmentId: id,
-      from: NEWSLETTER_FROM,
-      subject: subjectForTemplate("this_week_at_arbor", week.weekLabel),
-      html,
-      send: true,
-    });
+    // One broadcast per window: claim before the network call so a duplicate
+    // click, a second admin, or the cron racing an admin cannot send twice.
+    const claim = await ctx.runMutation(
+      internal.email.newsletterBroadcastData.claimBroadcast,
+      { windowKey: week.weekLabel },
+    );
+    if (!claim.claimed) {
+      return {
+        sent: false,
+        skippedReason: claim.reason ?? "Newsletter already queued.",
+        eventCount: week.events.length,
+      };
+    }
 
-    if (result.error) {
-      throw new Error(
-        `[Resend] ${result.error.name ?? "broadcast_failed"}: ${result.error.message}`,
+    let broadcastId: string;
+    try {
+      const result = await getResendSdk().broadcasts.create({
+        name: `This Week at Arbor — ${week.weekLabel}`,
+        segmentId: id,
+        from: NEWSLETTER_FROM,
+        subject: subjectForTemplate("this_week_at_arbor", week.weekLabel),
+        html,
+        send: true,
+      });
+
+      if (result.error) {
+        throw new Error(
+          `[Resend] ${result.error.name ?? "broadcast_failed"}: ${result.error.message}`,
+        );
+      }
+      if (!result.data?.id) {
+        throw new Error("Resend did not return a broadcast id.");
+      }
+      broadcastId = result.data.id;
+    } catch (error) {
+      // Free the window so a transient Resend failure can be retried.
+      await ctx.runMutation(
+        internal.email.newsletterBroadcastData.releaseBroadcast,
+        { windowKey: week.weekLabel },
       );
-    }
-    if (!result.data?.id) {
-      throw new Error("Resend did not return a broadcast id.");
+      throw error;
     }
 
-    return { sent: true, eventCount: week.events.length, broadcastId: result.data.id };
+    await ctx.runMutation(
+      internal.email.newsletterBroadcastData.releaseBroadcast,
+      { windowKey: week.weekLabel, broadcastId },
+    );
+
+    return { sent: true, eventCount: week.events.length, broadcastId };
   },
 });
 
@@ -195,9 +225,20 @@ export const syncContact = internalAction({
   },
 });
 
-/** Remove a contact from the segment when someone unsubscribes. */
+/**
+ * Remove a contact from the segment when someone unsubscribes.
+ *
+ * Scheduled from `unsubscribeByToken`, so it can run after the person has
+ * already re-subscribed. Guard on the row still being unsubscribed *and* on the
+ * generation we scheduled against, otherwise a stale job would pull a
+ * re-subscribed contact back out of the segment.
+ */
 export const removeContactFromSegment = internalAction({
-  args: { subscriberId: v.id("newsletterSubscribers") },
+  args: {
+    subscriberId: v.id("newsletterSubscribers"),
+    /** Row `updatedAt` at schedule time; rejects stale removal jobs. */
+    expectedUpdatedAt: v.optional(v.number()),
+  },
   returns: v.null(),
   handler: async (ctx, args) => {
     const subscriber = await ctx.runQuery(
@@ -205,12 +246,21 @@ export const removeContactFromSegment = internalAction({
       { subscriberId: args.subscriberId },
     );
     if (!subscriber) return null;
+    if (subscriber.status !== "unsubscribed") return null;
+    if (
+      args.expectedUpdatedAt !== undefined &&
+      subscriber.updatedAt !== args.expectedUpdatedAt
+    ) {
+      return null;
+    }
 
     const id = segmentId();
     if (!id || isE2eEmailMockEnabled()) return null;
 
     try {
       const result = await getResendSdk().contacts.segments.remove({
+        // The installed SDK names this `contactId`; `email` is the fallback when
+        // the contact never got mirrored.
         segmentId: id,
         ...(subscriber.resendContactId
           ? { contactId: subscriber.resendContactId }

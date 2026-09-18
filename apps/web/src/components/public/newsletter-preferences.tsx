@@ -74,6 +74,7 @@ export function NewsletterPreferences({
       title: "Unsubscribe from This Week at Arbor?",
       description: `${initial!.email} will stop receiving the weekly newsletter.`,
       confirmLabel: "Unsubscribe",
+      destructive: true,
     });
     if (!ok) return;
     setState("working");

@@ -9,14 +9,17 @@ const baseEvent = {
 };
 
 describe("buildPublicCalendar", () => {
-  it("emits a subscribable PUBLISH calendar with a TZID-anchored show window", () => {
+  it("emits a subscribable PUBLISH calendar with a UTC show window", () => {
     const ics = buildPublicCalendar({ events: [baseEvent], calendarName: "Arbor Live Events" });
     expect(ics).toContain("METHOD:PUBLISH");
     expect(ics).toContain("X-WR-CALNAME:Arbor Live Events");
     expect(ics).toContain("REFRESH-INTERVAL;VALUE=DURATION:PT1H");
-    // Wall clock in portal time, not UTC.
-    expect(ics).toContain("DTSTART;TZID=America/Los_Angeles:20250508T190000");
-    expect(ics).toContain("DTEND;TZID=America/Los_Angeles:20250508T220000");
+    // UTC instants with a Z suffix: RFC 5545 requires a VTIMEZONE for every
+    // TZID, and Outlook desktop misreads bare IANA TZIDs as floating time.
+    expect(ics).toContain("DTSTART:20250509T020000Z");
+    expect(ics).toContain("DTEND:20250509T050000Z");
+    expect(ics).not.toContain("TZID=");
+    expect(ics).not.toContain("VTIMEZONE");
     // No attendee/RSVP semantics — this is a feed, not an invite.
     expect(ics).not.toContain("ATTENDEE");
     expect(ics).not.toContain("ORGANIZER");
@@ -67,9 +70,26 @@ describe("buildPublicCalendar", () => {
     });
     const folded = ics.split("\r\n").filter((line) => line.startsWith(" "));
     expect(folded.length).toBeGreaterThan(0);
+    const encoder = new TextEncoder();
     for (const line of ics.split("\r\n")) {
-      expect(line.length).toBeLessThanOrEqual(75);
+      expect(encoder.encode(line).length).toBeLessThanOrEqual(75);
     }
+  });
+
+  it("folds non-ASCII text by UTF-8 octets without splitting code points", () => {
+    // Multi-byte characters must be counted by bytes, not JS code units: a
+    // 74-char line of 3-byte CJK is 222 octets and must be folded.
+    const ics = buildPublicCalendar({
+      events: [{ ...baseEvent, title: "演出".repeat(60) }],
+      calendarName: "Arbor Live Events",
+    });
+    const encoder = new TextEncoder();
+    for (const line of ics.split("\r\n")) {
+      expect(encoder.encode(line).length).toBeLessThanOrEqual(75);
+    }
+    // No lone surrogates: unfolding must round-trip the original text.
+    const unfolded = ics.replace(/\r\n /g, "");
+    expect(unfolded).toContain(`SUMMARY:${"演出".repeat(60)}`);
   });
 });
 

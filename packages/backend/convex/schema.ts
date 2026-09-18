@@ -1918,6 +1918,20 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_unsubscribeToken", ["unsubscribeToken"]),
 
+  /** Singleton guard for the weekly "This Week at Arbor" broadcast. Claimed in
+   *  one atomic mutation before a send so concurrent admin clicks (or a cron and
+   *  an admin) cannot create duplicate Resend broadcasts. */
+  newsletterBroadcastState: defineTable({
+    /** Label of the week the current or last send covers, e.g. "May 5 – May 11". */
+    windowKey: v.string(),
+    status: v.union(v.literal("sending"), v.literal("idle")),
+    /** When the in-flight claim was taken; lets a crashed send expire. */
+    startedAt: v.number(),
+    lastSentAt: v.optional(v.number()),
+    lastBroadcastId: v.optional(v.string()),
+    updatedAt: v.number(),
+  }),
+
   openMicSignups: defineTable({
     /** Event this sign-up belongs to. Open Mic is an add-on on events, so
      *  sign-ups are keyed to the event instead of a standalone night entity. */

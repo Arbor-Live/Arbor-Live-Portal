@@ -38,6 +38,23 @@ export type BuiltWeek = {
   events: WeekEvent[];
 };
 
+/**
+ * Exclusive upper bound of the send window. An event starting exactly 7 days
+ * out belongs to next week's send, so this is never inclusive.
+ */
+export function newsletterWindowEnd(now: number, days = NEWSLETTER_WINDOW_DAYS) {
+  return now + days * 24 * 60 * 60 * 1000;
+}
+
+/** Whether an event's start falls inside `[now, windowEnd)`. */
+export function isEventInNewsletterWindow(
+  startAt: number,
+  now: number,
+  days = NEWSLETTER_WINDOW_DAYS,
+) {
+  return startAt >= now && startAt < newsletterWindowEnd(now, days);
+}
+
 function websiteVisibleDesign(design: Doc<"eventMarketingDesigns">) {
   return design.status === "published" || design.status === "ready";
 }
@@ -64,10 +81,15 @@ async function loadVisibleDesignsByEventId(ctx: QueryCtx) {
   return byEventId;
 }
 
-/** Inclusive "May 5 – May 11" label for the send window in portal time. */
+/**
+ * Inclusive "May 5 – May 11" label for a 7-day send window.
+ *
+ * The window is `[now, now + 7d)`, so the last covered day is `now + 6d`, not
+ * `now + 7d` (which is the following Monday and is deliberately excluded).
+ */
 export function weekLabelFor(now: number, days: number = NEWSLETTER_WINDOW_DAYS) {
   return `${monthDayLabel(now)} – ${monthDayLabel(
-    now + days * 24 * 60 * 60 * 1000,
+    now + (days - 1) * 24 * 60 * 60 * 1000,
   )}`;
 }
 
@@ -104,7 +126,7 @@ export async function buildThisWeekAtArbor(
   ctx: QueryCtx,
   now: number,
 ): Promise<BuiltWeek> {
-  const windowEnd = now + NEWSLETTER_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+  const windowEnd = newsletterWindowEnd(now);
   const scanLimit = 500;
 
   const events = await ctx.db
@@ -113,15 +135,24 @@ export async function buildThisWeekAtArbor(
     .order("asc")
     .take(scanLimit);
 
-  const inWindow = events
-    .filter(
-      (event) =>
-        isPublicSiteListableVisibility(event.visibility) &&
-        isPublicListableEventStatus(event.status) &&
-        isUpcomingEvent(event.startAt, now) &&
-        event.startAt <= windowEnd,
-    )
-    .slice(0, NEWSLETTER_MAX_EVENTS);
+  // Exclusive upper bound: an event exactly 7 days out belongs to next week's
+  // send, not this one.
+  const withinWindow = events.filter(
+    (event) =>
+      isPublicSiteListableVisibility(event.visibility) &&
+      isPublicListableEventStatus(event.status) &&
+      isUpcomingEvent(event.startAt, now) &&
+      event.startAt < windowEnd,
+  );
+  // NEWSLETTER_MAX_EVENTS is a loud ceiling, not a silent truncation.
+  if (withinWindow.length > NEWSLETTER_MAX_EVENTS) {
+    console.warn(
+      `buildThisWeekAtArbor: ${withinWindow.length} events in window, ` +
+        `truncating to ${NEWSLETTER_MAX_EVENTS}`,
+    );
+  }
+
+  const inWindow = withinWindow.slice(0, NEWSLETTER_MAX_EVENTS);
 
   const designsByEventId = await loadVisibleDesignsByEventId(ctx);
 

@@ -3,7 +3,6 @@
 import { useCallback, useState, useSyncExternalStore } from "react";
 import { useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
-import { Button } from "@/components/ui/button";
 import { notify } from "@/lib/notify";
 import {
   CALENDAR_FEED_PATH,
@@ -11,17 +10,23 @@ import {
 } from "@/lib/calendar-links";
 
 /**
- * Shareable subscription link for the public events calendar. The URL is a
- * stable ICS feed served from our own domain, so pasting it into a calendar app
- * keeps a student's calendar in sync as new shows are added.
+ * Shareable subscription options for the public events calendar. The URL is a
+ * stable ICS feed on our own domain, so a student's calendar stays in sync as
+ * new shows are added.
  *
  * Providers differ in how they accept a feed:
  *  - Google / Outlook open a web "add from URL" flow.
  *  - Apple has no web flow; `webcal://` hands off to the native Calendar app,
- *    which is why that button is a direct link rather than a redirect page.
+ *    which is why that link is direct rather than a redirect page.
  */
 
 const emptySubscribe = () => () => {};
+
+const PROVIDERS = [
+  { key: "google", label: "Google" },
+  { key: "apple", label: "Apple" },
+  { key: "outlook", label: "Outlook" },
+] as const;
 
 export function CalendarSubscribe({ className }: { className?: string }) {
   const info = useQuery(api.publicCalendar.getFeedInfo, {});
@@ -38,6 +43,7 @@ export function CalendarSubscribe({ className }: { className?: string }) {
   const path = info?.feedPath ?? CALENDAR_FEED_PATH;
   const feedUrl = origin ? `${origin}${path}` : path;
   const links = buildCalendarProviderLinks(feedUrl);
+  const eventCount = info?.eventCount;
 
   const handleCopy = useCallback(async () => {
     try {
@@ -52,25 +58,30 @@ export function CalendarSubscribe({ className }: { className?: string }) {
 
   return (
     <div className={className}>
-      <div className="flex flex-wrap items-center gap-2">
-        <Button asChild size="sm">
-          <a href={links.google} target="_blank" rel="noreferrer">
-            Google Calendar
-          </a>
-        </Button>
-        <Button asChild size="sm" variant="outline">
-          <a href={links.apple}>Apple Calendar</a>
-        </Button>
-        <Button asChild size="sm" variant="outline">
-          <a href={links.outlook} target="_blank" rel="noreferrer">
-            Outlook
-          </a>
-        </Button>
-        <Button size="sm" variant="ghost" onClick={() => void handleCopy()}>
-          {copied ? "Copied" : "Copy link"}
-        </Button>
-      </div>
-      <p className="mt-2 break-all text-xs text-muted-foreground">{feedUrl}</p>
+      {PROVIDERS.map((provider) => (
+        <a
+          key={provider.key}
+          href={links[provider.key]}
+          {...(provider.key === "apple"
+            ? {}
+            : { target: "_blank", rel: "noreferrer" })}
+          className="text-sm font-medium text-emerald-800 underline-offset-4 hover:underline dark:text-primary"
+        >
+          {provider.label}
+        </a>
+      ))}
+      <button
+        type="button"
+        onClick={() => void handleCopy()}
+        className="text-sm font-medium text-emerald-800 underline-offset-4 hover:underline dark:text-primary"
+      >
+        {copied ? "Link copied" : "Copy link"}
+      </button>
+      {eventCount ? (
+        <span className="text-xs text-muted-foreground">
+          {eventCount} upcoming {eventCount === 1 ? "event" : "events"}
+        </span>
+      ) : null}
     </div>
   );
 }

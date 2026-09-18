@@ -43,7 +43,18 @@ export async function fetchCalendarFeed(convexSiteUrl: string): Promise<Calendar
     return { ok: false, status: 502, message: UNAVAILABLE };
   }
 
-  const body = await upstream.text();
+  let body: string;
+  try {
+    body = await upstream.text();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("[calendar] Failed to read the Convex feed body", {
+      upstreamUrl,
+      error: message,
+    });
+    return { ok: false, status: 502, message: UNAVAILABLE };
+  }
+
   if (!body.trimStart().startsWith("BEGIN:VCALENDAR")) {
     console.error("[calendar] Convex feed returned a non-ICS body", { upstreamUrl });
     return {

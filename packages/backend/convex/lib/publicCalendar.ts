@@ -49,16 +49,34 @@ function escapeIcsText(value: string) {
     .replace(/\r?\n/g, "\\n");
 }
 
-/** RFC 5545 folds lines at 75 octets; continuation lines start with a space. */
+/** RFC 5545 folds lines at 75 octets; continuation lines start with a space.
+ *  Lengths are UTF-8 octets, not JS code units, and splits never land inside a
+ *  surrogate pair. */
 function foldIcsLine(line: string) {
-  if (line.length <= 75) return line;
-  const chunks = [line.slice(0, 75)];
-  let index = 75;
-  while (index < line.length) {
-    chunks.push(` ${line.slice(index, index + 74)}`);
-    index += 74;
+  const encoder = new TextEncoder();
+  if (encoder.encode(line).length <= 75) return line;
+
+  const chunks: string[] = [];
+  let current = "";
+  let currentBytes = 0;
+  // First line has a 75-octet budget; continuations lose one octet to the
+  // leading space. Track separately so we never exceed either.
+  let budget = 75;
+
+  for (const char of line) {
+    const charBytes = encoder.encode(char).length;
+    if (currentBytes + charBytes > budget) {
+      chunks.push(current);
+      current = "";
+      currentBytes = 0;
+      budget = 74; // continuation lines are prefixed with a space
+    }
+    current += char;
+    currentBytes += charBytes;
   }
-  return chunks.join("\r\n");
+  if (current) chunks.push(current);
+
+  return chunks.map((chunk, index) => (index === 0 ? chunk : ` ${chunk}`)).join("\r\n");
 }
 
 function formatIcsUtcDateTime(ms: number) {
@@ -70,39 +88,16 @@ function formatIcsUtcDateTime(ms: number) {
   );
 }
 
-/** Wall-clock in the portal timezone, paired with a TZID reference. */
-function formatIcsLocalDateTime(ms: number, timezone: string) {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: timezone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  }).formatToParts(new Date(ms));
-  const get = (type: Intl.DateTimeFormatPartTypes) =>
-    parts.find((part) => part.type === type)?.value ?? "00";
-  const hour = get("hour") === "24" ? "00" : get("hour");
-  return `${get("year")}${get("month")}${get("day")}T${hour}${get("minute")}${get("second")}`;
-}
-
-function buildVeventLines(
-  event: PublicCalendarEvent,
-  timezone: string,
-  now: number,
-) {
+function buildVeventLines(event: PublicCalendarEvent, now: number) {
   const lines = [
     "BEGIN:VEVENT",
     foldIcsLine(`UID:${escapeIcsText(event.uid)}`),
     foldIcsLine(`DTSTAMP:${formatIcsUtcDateTime(now)}`),
-    foldIcsLine(
-      `DTSTART;TZID=${timezone}:${formatIcsLocalDateTime(event.startAt, timezone)}`,
-    ),
-    foldIcsLine(
-      `DTEND;TZID=${timezone}:${formatIcsLocalDateTime(event.endAt, timezone)}`,
-    ),
+    // UTC instants (Z suffix) rather than TZID: RFC 5545 requires a matching
+    // VTIMEZONE for every TZID, and Outlook desktop misreads bare IANA TZIDs
+    // as floating time. Converting the instant keeps DST correct everywhere.
+    foldIcsLine(`DTSTART:${formatIcsUtcDateTime(event.startAt)}`),
+    foldIcsLine(`DTEND:${formatIcsUtcDateTime(event.endAt)}`),
     foldIcsLine(`SUMMARY:${escapeIcsText(event.title)}`),
     "TRANSP:OPAQUE",
     "STATUS:CONFIRMED",
@@ -157,7 +152,7 @@ export function buildPublicCalendar(input: BuildPublicCalendarInput): string {
     );
   }
 
-  lines.push(...input.events.flatMap((event) => buildVeventLines(event, timezone, now)));
+  lines.push(...input.events.flatMap((event) => buildVeventLines(event, now)));
   lines.push("END:VCALENDAR");
 
   return `${lines.join("\r\n")}\r\n`;

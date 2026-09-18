@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { notify } from "@/lib/notify";
+import { useAppDialog } from "@/components/ui/app-dialog";
 import { formatDate } from "@/lib/format";
 
 type StatusFilter = "all" | "subscribed" | "unsubscribed";
@@ -19,6 +20,8 @@ export function NewsletterSubscribersManager() {
     limit: 200,
   });
   const sendNow = useMutation(api.newsletter.sendNow);
+  const { confirm } = useAppDialog();
+  const [sending, setSending] = useState(false);
 
   const counts = listing?.counts;
 
@@ -26,6 +29,28 @@ export function NewsletterSubscribersManager() {
 
   if (config === undefined || listing === undefined) {
     return <p className="text-sm text-muted-foreground">Loading…</p>;
+  }
+
+  async function handleSendNow() {
+    const ok = await confirm({
+      title: "Send This Week at Arbor now?",
+      description:
+        "This sends the newsletter to every subscriber and cannot be undone.",
+      confirmLabel: "Send newsletter",
+      destructive: true,
+    });
+    if (!ok) return;
+    setSending(true);
+    try {
+      await sendNow();
+      notify.success("Newsletter send queued.");
+    } catch (error) {
+      notify.error(
+        error instanceof Error ? error.message : "Could not queue the send.",
+      );
+    } finally {
+      setSending(false);
+    }
   }
 
   return (
@@ -70,17 +95,10 @@ export function NewsletterSubscribersManager() {
             <Button
               size="sm"
               variant="outline"
-              onClick={() => {
-                void sendNow()
-                  .then(() => notify.success("Newsletter send queued."))
-                  .catch((error: unknown) =>
-                    notify.error(
-                      error instanceof Error ? error.message : "Could not queue the send.",
-                    ),
-                  );
-              }}
+              disabled={sending}
+              onClick={() => void handleSendNow()}
             >
-              Send now
+              {sending ? "Sending…" : "Send now"}
             </Button>
           </div>
 

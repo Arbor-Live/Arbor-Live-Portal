@@ -7,8 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
+import { CalendarSubscribe } from "@/components/public/calendar-subscribe";
 
-type NewsletterSource = "landing" | "open_mic" | "events_page" | "admin";
+/** Public sign-up sources; `admin` is reserved for the authenticated add flow. */
+type NewsletterSource = "landing" | "open_mic" | "events_page";
 
 /**
  * Public "This Week at Arbor" opt-in. Single opt-in: submitting adds the
@@ -18,11 +20,9 @@ type NewsletterSource = "landing" | "open_mic" | "events_page" | "admin";
 export function NewsletterSignupForm({
   source,
   className,
-  variant = "default",
 }: {
   source: NewsletterSource;
   className?: string;
-  variant?: "default" | "compact";
 }) {
   const subscribe = useMutation(api.newsletter.subscribePublic);
   const [email, setEmail] = useState("");
@@ -54,15 +54,7 @@ export function NewsletterSignupForm({
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className={cn(
-        variant === "compact"
-          ? "flex flex-col gap-2 sm:flex-row"
-          : "flex flex-col gap-2 sm:flex-row",
-        className,
-      )}
-    >
+    <form onSubmit={handleSubmit} className={cn("flex flex-col gap-2 sm:flex-row", className)}>
       {/* Honeypot: hidden from people, irresistible to bots. */}
       <input
         type="text"
@@ -94,20 +86,36 @@ export function NewsletterSignupForm({
   );
 }
 
-/** Landing-page section wrapper: sits directly under Upcoming events. */
-export function LandingNewsletterBand() {
+/**
+ * "Stay in the loop" — the two ways to keep up with Arbor: the weekly email and
+ * a calendar subscription. Both are opt-in and live side by side so nobody has
+ * to choose between them.
+ */
+export function LandingStayInTheLoop() {
   return (
     <section className="border-b bg-background py-12 sm:py-14">
-      <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-2xl">
-          <h2 className="text-2xl font-semibold tracking-tight text-foreground">
-            This Week at Arbor
-          </h2>
-          <p className="mt-2 text-sm leading-relaxed text-foreground/70">
-            One short email a week with what&apos;s happening on campus.
-          </p>
+      <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+        <h2 className="text-2xl font-semibold tracking-tight text-foreground">
+          Stay in the loop
+        </h2>
+
+        <div className="mt-8 grid gap-8 sm:grid-cols-2 sm:gap-12">
+          <div>
+            <h3 className="text-sm font-semibold text-foreground">Weekly email</h3>
+            <p className="mt-1 text-sm leading-relaxed text-foreground/70">
+              One short email a week with what&apos;s happening on campus.
+            </p>
+            <NewsletterSignupForm source="landing" className="mt-3" />
+          </div>
+
+          <div>
+            <h3 className="text-sm font-semibold text-foreground">Calendar feed</h3>
+            <p className="mt-1 text-sm leading-relaxed text-foreground/70">
+              Add our shows to your own calendar. Updates automatically.
+            </p>
+            <CalendarSubscribe className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2" />
+          </div>
         </div>
-        <NewsletterSignupForm source="landing" />
       </div>
     </section>
   );

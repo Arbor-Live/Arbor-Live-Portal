@@ -6,7 +6,7 @@ import { LandingLayout } from "@/components/landing/landing-layout";
 import { LandingPrograms } from "@/components/landing/landing-programs";
 import { LandingStats } from "@/components/landing/landing-stats";
 import { LandingUpcomingEvents } from "@/components/public/public-events-grid";
-import { LandingNewsletterBand } from "@/components/public/newsletter-signup-form";
+import { LandingStayInTheLoop } from "@/components/public/newsletter-signup-form";
 import { LandingWorkCarousel } from "@/components/marketing/public-work-carousel";
 import { api } from "@/lib/convex-api";
 import { fetchPublicQuerySafe } from "@/lib/convex-server";
@@ -25,7 +25,7 @@ export default async function Home() {
     <LandingLayout>
       <LandingHero />
       <LandingUpcomingEvents initialEvents={upcomingEvents} />
-      <LandingNewsletterBand />
+      <LandingStayInTheLoop />
       <LandingWorkCarousel posts={featuredPosts} />
       <LandingPrograms />
       <LandingStats />
