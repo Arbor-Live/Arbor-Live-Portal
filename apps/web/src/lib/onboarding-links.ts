@@ -15,8 +15,9 @@ export const ONBOARDING_LINKS = {
     "https://app.notion.com/p/arborlive/Onboarding-228044a285808002ace3c3aff3899dfd?source=copy_link",
   narcanVideo: "https://youtu.be/B9Sv64FJPhg?si=wyW8Bg96VQFI9VyR",
   narcanVideoEmbed: "https://www.youtube.com/embed/B9Sv64FJPhg",
-  oseHiringForm:
-    "https://docs.google.com/forms/d/e/1FAIpQLSffhVkGeZO6evENDxG7YgveTMWFPSRZgPi32v9k6WAcrfptHw/viewform",
+  i9Appointment:
+    "https://cardinalatwork.stanford.edu/onboarding/resources/verify-eligibility-employment-i-9",
+  i9AcceptableDocuments: "https://www.uscis.gov/i-9-central/form-i-9-acceptable-documents",
   starsPortal: "https://axess.sahr.stanford.edu/group/guest/stars",
   sequoiaTimecardHelp:
     "https://fingate.stanford.edu/paying-people/how-to/enter-time-effort-and-absences-sequoia",

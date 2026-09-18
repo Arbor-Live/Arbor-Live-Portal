@@ -3416,7 +3416,11 @@ export const resetCrewOnboarding = mutation({
         liftingCompletedAt: undefined,
         hasValidDriversLicense: undefined,
         cartTrainingCompletedAt: undefined,
-        oseHiringFormCompletedAt: undefined,
+        studentId: undefined,
+        employmentStartDate: undefined,
+        hasOtherCampusEmployment: undefined,
+        otherCampusEmploymentHours: undefined,
+        i9AcknowledgedAt: undefined,
         timecardAcknowledgedAt: undefined,
         contractorPayAcknowledgedAt: undefined,
         agreedToOnboardingDocAt: undefined,
@@ -3468,6 +3472,8 @@ export const getCrewOnboardingState = query({
       hasFederalWorkStudy: v.union(v.boolean(), v.null()),
       timecardAcknowledged: v.boolean(),
       narcanCompleted: v.boolean(),
+      studentId: v.union(v.string(), v.null()),
+      i9Acknowledged: v.boolean(),
     }),
   ),
   handler: async (ctx, args) => {
@@ -3485,6 +3491,8 @@ export const getCrewOnboardingState = query({
       hasFederalWorkStudy: row.hasFederalWorkStudy ?? null,
       timecardAcknowledged: Boolean(row.timecardAcknowledgedAt),
       narcanCompleted: Boolean(row.narcanCompletedAt),
+      studentId: row.studentId ?? null,
+      i9Acknowledged: Boolean(row.i9AcknowledgedAt),
     };
   },
 });

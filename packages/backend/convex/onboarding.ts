@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { formatDate } from "@arbor/format";
 import { components, internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import {
@@ -75,10 +76,21 @@ function crewRequiredStepsComplete(
     row.hasFederalWorkStudy !== undefined &&
     row.hasFederalWorkStudy !== null &&
     Boolean(row.fwsAcknowledgedAt) &&
-    Boolean(row.oseHiringFormCompletedAt) &&
+    Boolean(row.studentId?.trim()) &&
+    row.employmentStartDate !== undefined &&
+    row.hasOtherCampusEmployment !== undefined &&
+    (!row.hasOtherCampusEmployment || Boolean(row.otherCampusEmploymentHours)) &&
+    Boolean(row.i9AcknowledgedAt) &&
     Boolean(row.timecardAcknowledgedAt)
   );
 }
+
+/**
+ * Banner/synthetic counts for a row with no progress. Stanford counts the OSE
+ * hiring fields (student ID, start date, other employment, I-9) individually.
+ */
+const STANFORD_NOT_STARTED_STEP_COUNT = 15;
+const EXTERNAL_NOT_STARTED_STEP_COUNT = 10;
 
 function countIncompleteCrewSteps(
   row: CrewOnboardingDoc,
@@ -113,7 +125,14 @@ function countIncompleteCrewSteps(
     ) {
       missing += 1;
     }
-    if (!row.oseHiringFormCompletedAt) missing += 1;
+    if (!row.studentId?.trim()) missing += 1;
+    if (row.employmentStartDate === undefined) missing += 1;
+    if (row.hasOtherCampusEmployment === undefined) {
+      missing += 1;
+    } else if (row.hasOtherCampusEmployment && !row.otherCampusEmploymentHours) {
+      missing += 1;
+    }
+    if (!row.i9AcknowledgedAt) missing += 1;
     if (!row.timecardAcknowledgedAt) missing += 1;
   }
   return missing;
@@ -175,7 +194,10 @@ export async function resolveMyOnboardingStatus(
         crew = {
           applicable: true,
           status: "not_started",
-          incompleteStepCount: payrollMethod === "external" ? 10 : 12,
+          incompleteStepCount:
+            payrollMethod === "external"
+              ? EXTERNAL_NOT_STARTED_STEP_COUNT
+              : STANFORD_NOT_STARTED_STEP_COUNT,
         };
       }
     }
@@ -317,6 +339,11 @@ async function scheduleOnboardingCompletedEmails(
     hasFederalWorkStudy: boolean | null | undefined;
     hasValidDriversLicense: boolean | undefined;
     signatureLegalName: string;
+    studentId?: string;
+    employmentStartDate?: number;
+    hasOtherCampusEmployment?: boolean;
+    otherCampusEmploymentHours?: number;
+    i9Acknowledged?: boolean;
   },
 ) {
   const admins = await listAdminAuthUsers(ctx);
@@ -334,6 +361,16 @@ async function scheduleOnboardingCompletedEmails(
     hasFederalWorkStudy: args.hasFederalWorkStudy ?? false,
     hasValidDriversLicense: args.hasValidDriversLicense ?? false,
     signatureLegalName: args.signatureLegalName,
+    studentId: args.studentId,
+    employmentStartDateLabel:
+      args.employmentStartDate !== undefined ? formatDate(args.employmentStartDate) : undefined,
+    otherCampusEmploymentLabel:
+      args.hasOtherCampusEmployment === undefined
+        ? undefined
+        : args.hasOtherCampusEmployment
+          ? `Yes — ${args.otherCampusEmploymentHours ?? 0} hrs/week`
+          : "No",
+    i9ScheduledByFirstDay: args.i9Acknowledged ? true : undefined,
     dashboardUsersUrl: `${SITE_URL}/dashboard/users`,
   };
 
@@ -364,7 +401,11 @@ const crewOnboardingReturn = v.object({
   liftingCompletedAt: v.optional(v.number()),
   hasValidDriversLicense: v.optional(v.boolean()),
   cartTrainingCompletedAt: v.optional(v.number()),
-  oseHiringFormCompletedAt: v.optional(v.number()),
+  studentId: v.optional(v.string()),
+  employmentStartDate: v.optional(v.number()),
+  hasOtherCampusEmployment: v.optional(v.boolean()),
+  otherCampusEmploymentHours: v.optional(v.number()),
+  i9AcknowledgedAt: v.optional(v.number()),
   timecardAcknowledgedAt: v.optional(v.number()),
   contractorPayAcknowledgedAt: v.optional(v.number()),
   agreedToOnboardingDocAt: v.optional(v.number()),
@@ -418,7 +459,11 @@ function serializeCrewOnboarding(
     liftingCompletedAt: row.liftingCompletedAt,
     hasValidDriversLicense: row.hasValidDriversLicense,
     cartTrainingCompletedAt: row.cartTrainingCompletedAt,
-    oseHiringFormCompletedAt: row.oseHiringFormCompletedAt,
+    studentId: row.studentId,
+    employmentStartDate: row.employmentStartDate,
+    hasOtherCampusEmployment: row.hasOtherCampusEmployment,
+    otherCampusEmploymentHours: row.otherCampusEmploymentHours,
+    i9AcknowledgedAt: row.i9AcknowledgedAt,
     timecardAcknowledgedAt: row.timecardAcknowledgedAt,
     contractorPayAcknowledgedAt: row.contractorPayAcknowledgedAt,
     agreedToOnboardingDocAt: row.agreedToOnboardingDocAt,
@@ -514,7 +559,10 @@ export const getMyCrewOnboarding = query({
     if (!row) {
       return {
         status: "not_started" as const,
-        incompleteStepCount: payrollMethod === "external" ? 10 : 12,
+        incompleteStepCount:
+          payrollMethod === "external"
+            ? EXTERNAL_NOT_STARTED_STEP_COUNT
+            : STANFORD_NOT_STARTED_STEP_COUNT,
         payrollMethod,
         links: ONBOARDING_LINKS,
         fwsJobInfo: FWS_JOB_INFO,
@@ -658,7 +706,11 @@ export const saveCrewOnboardingStep = mutation({
     liftingCompleted: v.optional(v.boolean()),
     hasValidDriversLicense: v.optional(v.boolean()),
     cartTrainingCompleted: v.optional(v.boolean()),
-    oseHiringFormCompleted: v.optional(v.boolean()),
+    studentId: v.optional(v.string()),
+    employmentStartDate: v.optional(v.number()),
+    hasOtherCampusEmployment: v.optional(v.boolean()),
+    otherCampusEmploymentHours: v.optional(v.number()),
+    i9Acknowledged: v.optional(v.boolean()),
     timecardAcknowledged: v.optional(v.boolean()),
     contractorPayAcknowledged: v.optional(v.boolean()),
   },
@@ -698,7 +750,30 @@ export const saveCrewOnboardingStep = mutation({
       }
     }
     if (args.cartTrainingCompleted) patch.cartTrainingCompletedAt = now;
-    if (args.oseHiringFormCompleted) patch.oseHiringFormCompletedAt = now;
+    if (args.studentId !== undefined) {
+      const studentId = args.studentId.trim();
+      if (studentId && !/^\d{8}$/.test(studentId)) {
+        throw new Error("Enter an 8-digit student ID.");
+      }
+      patch.studentId = studentId || undefined;
+    }
+    if (args.employmentStartDate !== undefined) {
+      if (!Number.isFinite(args.employmentStartDate)) {
+        throw new Error("Enter a valid start date.");
+      }
+      patch.employmentStartDate = args.employmentStartDate;
+    }
+    if (args.otherCampusEmploymentHours !== undefined) {
+      if (args.otherCampusEmploymentHours <= 0) {
+        throw new Error("Enter valid weekly hours.");
+      }
+      patch.otherCampusEmploymentHours = args.otherCampusEmploymentHours;
+    }
+    if (args.hasOtherCampusEmployment !== undefined) {
+      patch.hasOtherCampusEmployment = args.hasOtherCampusEmployment;
+      if (!args.hasOtherCampusEmployment) patch.otherCampusEmploymentHours = undefined;
+    }
+    if (args.i9Acknowledged) patch.i9AcknowledgedAt = now;
     if (args.timecardAcknowledged) patch.timecardAcknowledgedAt = now;
     if (args.contractorPayAcknowledged) patch.contractorPayAcknowledgedAt = now;
 
@@ -759,6 +834,11 @@ export const completeCrewOnboarding = mutation({
       hasFederalWorkStudy: row.hasFederalWorkStudy,
       hasValidDriversLicense: row.hasValidDriversLicense,
       signatureLegalName,
+      studentId: row.studentId,
+      employmentStartDate: row.employmentStartDate,
+      hasOtherCampusEmployment: row.hasOtherCampusEmployment,
+      otherCampusEmploymentHours: row.otherCampusEmploymentHours,
+      i9Acknowledged: Boolean(row.i9AcknowledgedAt),
     });
 
     return { ok: true };
@@ -810,7 +890,11 @@ export const listCrewOnboardingForAdmin = query({
       crewExpectationsAcknowledgedAt: v.optional(v.number()),
       liftingCompletedAt: v.optional(v.number()),
       cartTrainingCompletedAt: v.optional(v.number()),
-      oseHiringFormCompletedAt: v.optional(v.number()),
+      studentId: v.optional(v.string()),
+      employmentStartDate: v.optional(v.number()),
+      hasOtherCampusEmployment: v.optional(v.boolean()),
+      otherCampusEmploymentHours: v.optional(v.number()),
+      i9AcknowledgedAt: v.optional(v.number()),
       timecardAcknowledgedAt: v.optional(v.number()),
       contractorPayAcknowledgedAt: v.optional(v.number()),
       agreedToOnboardingDocAt: v.optional(v.number()),
@@ -844,7 +928,11 @@ export const listCrewOnboardingForAdmin = query({
       crewExpectationsAcknowledgedAt: row.crewExpectationsAcknowledgedAt,
       liftingCompletedAt: row.liftingCompletedAt,
       cartTrainingCompletedAt: row.cartTrainingCompletedAt,
-      oseHiringFormCompletedAt: row.oseHiringFormCompletedAt,
+      studentId: row.studentId,
+      employmentStartDate: row.employmentStartDate,
+      hasOtherCampusEmployment: row.hasOtherCampusEmployment,
+      otherCampusEmploymentHours: row.otherCampusEmploymentHours,
+      i9AcknowledgedAt: row.i9AcknowledgedAt,
       timecardAcknowledgedAt: row.timecardAcknowledgedAt,
       contractorPayAcknowledgedAt: row.contractorPayAcknowledgedAt,
       agreedToOnboardingDocAt: row.agreedToOnboardingDocAt,
