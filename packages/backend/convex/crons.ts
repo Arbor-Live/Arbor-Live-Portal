@@ -22,6 +22,12 @@ crons.daily(
 );
 
 crons.daily(
+  "print event briefs",
+  { hourUTC: 13, minuteUTC: 0 },
+  internal.printJobs.enqueueDue,
+);
+
+crons.daily(
   "promote ended band payments",
   { hourUTC: 18, minuteUTC: 0 },
   internal.bandPayments.promoteEndedPayments,

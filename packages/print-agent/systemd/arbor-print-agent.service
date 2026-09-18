@@ -1,0 +1,15 @@
+[Unit]
+Description=Arbor Live warehouse print agent
+Wants=network-online.target
+After=network-online.target cups.service
+Requires=cups.service
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/arbor-print-agent.env
+ExecStart=/usr/bin/node /opt/arbor-print-agent/agent.mjs
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
