@@ -51,6 +51,7 @@ const emailTemplateValue = v.union(
   v.literal("quote_approved"),
   v.literal("payment_proof_rejected"),
   v.literal("damage_report_admin"),
+  v.literal("weekly_digest"),
 );
 
 const emailStatusValue = v.union(

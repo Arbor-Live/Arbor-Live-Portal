@@ -416,3 +416,15 @@ export type EquipmentBorrowRequestDecidedEmailProps = {
   reviewNote?: string;
   requestsUrl: string;
 };
+
+/** One pending-activity group in the weekly digest; rows render as "label • detail". */
+export type WeeklyDigestSection = {
+  title: string;
+  items: string[];
+};
+
+export type WeeklyDigestEmailProps = {
+  recipientName?: string;
+  sections: WeeklyDigestSection[];
+  dashboardUrl: string;
+};

@@ -34,6 +34,7 @@ export const userAdminRowSchema = z
     requiresOnboarding: z.boolean(),
     includeInTimecards: z.boolean(),
     assignableAsCrew: z.boolean(),
+    weeklyDigest: z.boolean(),
     showOnPublicCrewPage: z.boolean(),
     publicCrewDescription: z.string(),
     title: z.string(),

@@ -945,6 +945,8 @@ export default defineSchema({
     requiresOnboarding: v.optional(v.boolean()),
     includeInTimecards: v.optional(v.boolean()),
     assignableAsCrew: v.optional(v.boolean()),
+    /** When false, user is skipped by the weekly pending-activity digest email. */
+    weeklyDigest: v.optional(v.boolean()),
     calendarInviteEmail: v.optional(v.string()),
     /** Missing/legacy ⇒ stanford payroll. */
     payrollMethod: v.optional(payrollMethodValue),
@@ -1414,6 +1416,7 @@ export default defineSchema({
       v.literal("quote_approved"),
       v.literal("payment_proof_rejected"),
       v.literal("damage_report_admin"),
+      v.literal("weekly_digest"),
     ),
     status: v.union(v.literal("queued"), v.literal("sent"), v.literal("failed")),
     to: v.string(),

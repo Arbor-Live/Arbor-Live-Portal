@@ -60,11 +60,19 @@ canonical description of the domain itself.
   `Marketing` with Crew disciplines `Sound`, `Lights`, `Design`
   (see `userVerticals.ts` and `userAdminProfiles`).
 - **Participation flags** on `userAdminProfiles` (missing ⇒ crew defaults):
-  `requiresOnboarding`, `includeInTimecards`, `assignableAsCrew`, plus existing
+  `requiresOnboarding`, `includeInTimecards`, `assignableAsCrew`,
+  `weeklyDigest`, plus existing
   `showOnPublicCrewPage`. Advisors/supervisors use the **Advisor** invite
   preset (no compensation/payroll required): skips crew onboarding, hides from
   timecard overview and assignable-crew pickers, and stays off the public
   `/crew` page. Flags remain editable per user in Users admin.
+- **Weekly pending-activity digest** (`email/weeklyDigest.ts`, run by the
+  Monday `weeklyJobs` cron): one email per active Arbor user listing their
+  pending availability responses, events that week, timecards, unset media
+  status, and — for admins — open booking requests and artist payouts in
+  progress. Per-user opt-out is the `weeklyDigest` Participation flag; sections
+  with nothing pending are omitted and users with no pending items get no
+  email.
 
 ## Venues
 

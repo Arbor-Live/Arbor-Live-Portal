@@ -159,6 +159,7 @@ function userValuesFromRow(user: AdminUser, resolvedOrgId: string): UserAdminRow
     requiresOnboarding: user.requiresOnboarding ?? true,
     includeInTimecards: user.includeInTimecards ?? true,
     assignableAsCrew: user.assignableAsCrew ?? true,
+    weeklyDigest: user.weeklyDigest ?? true,
     showOnPublicCrewPage: user.showOnPublicCrewPage ?? false,
     publicCrewDescription: user.publicCrewDescription ?? "",
     title: user.title || "",
@@ -872,6 +873,7 @@ function UserAdminRow({
       requiresOnboarding: values.requiresOnboarding,
       includeInTimecards: values.includeInTimecards,
       assignableAsCrew: values.assignableAsCrew,
+      weeklyDigest: values.weeklyDigest,
       showOnPublicCrewPage: values.showOnPublicCrewPage,
       publicCrewDescription: values.publicCrewDescription || undefined,
       title: values.title || undefined,
@@ -1219,6 +1221,16 @@ function UserAdminRow({
                       }
                     />
                     Assignable as crew
+                  </label>
+                  <label className="flex items-center gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={form.watch("weeklyDigest")}
+                      onChange={(e) =>
+                        form.setValue("weeklyDigest", e.target.checked, { shouldDirty: true })
+                      }
+                    />
+                    Weekly pending-activity digest
                   </label>
                 </div>
               </div>

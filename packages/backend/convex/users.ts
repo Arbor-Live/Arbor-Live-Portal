@@ -297,6 +297,7 @@ export async function ensureUserProfileDefaults(
     requiresOnboarding,
     includeInTimecards,
     assignableAsCrew,
+    weeklyDigest,
     payrollMethod,
     defaultOrganizationId,
     gradYear,
@@ -311,6 +312,7 @@ export async function ensureUserProfileDefaults(
     requiresOnboarding?: boolean;
     includeInTimecards?: boolean;
     assignableAsCrew?: boolean;
+    weeklyDigest?: boolean;
     payrollMethod?: PayrollMethod;
     defaultOrganizationId?: string;
     gradYear?: number;
@@ -339,6 +341,8 @@ export async function ensureUserProfileDefaults(
         includeInTimecards !== undefined ? includeInTimecards : existing.includeInTimecards,
       assignableAsCrew:
         assignableAsCrew !== undefined ? assignableAsCrew : existing.assignableAsCrew,
+      weeklyDigest:
+        weeklyDigest !== undefined ? weeklyDigest : existing.weeklyDigest,
       payrollMethod: payrollMethod ?? existing.payrollMethod,
       defaultOrganizationId: defaultOrganizationId ?? existing.defaultOrganizationId,
       gradYear: gradYear ?? existing.gradYear,
@@ -358,6 +362,7 @@ export async function ensureUserProfileDefaults(
     requiresOnboarding,
     includeInTimecards,
     assignableAsCrew,
+    weeklyDigest,
     payrollMethod,
     defaultOrganizationId,
     gradYear,
@@ -1482,6 +1487,7 @@ export const listUsersForAdmin = query({
           requiresOnboarding: participation.requiresOnboarding,
           includeInTimecards: participation.includeInTimecards,
           assignableAsCrew: participation.assignableAsCrew,
+          weeklyDigest: participation.weeklyDigest,
           defaultOrganizationId: profile?.defaultOrganizationId ?? "",
           organizationMemberships: memberships,
           rateMode: rate?.rateMode ?? null,
@@ -2011,6 +2017,7 @@ export const updateUserAdmin = mutation({
     requiresOnboarding: v.optional(v.boolean()),
     includeInTimecards: v.optional(v.boolean()),
     assignableAsCrew: v.optional(v.boolean()),
+    weeklyDigest: v.optional(v.boolean()),
     defaultOrganizationId: v.optional(v.string()),
     rateMode: v.optional(userCompensationRateModeValue),
     customHourlyRateUsd: v.optional(v.number()),
@@ -2083,6 +2090,10 @@ export const updateUserAdmin = mutation({
         args.assignableAsCrew !== undefined
           ? args.assignableAsCrew
           : existingProfile?.assignableAsCrew,
+      weeklyDigest:
+        args.weeklyDigest !== undefined
+          ? args.weeklyDigest
+          : existingProfile?.weeklyDigest,
       payrollMethod: args.payrollMethod ?? existingProfile?.payrollMethod,
       defaultOrganizationId: args.defaultOrganizationId ?? existingProfile?.defaultOrganizationId,
     });
@@ -2104,6 +2115,10 @@ export const updateUserAdmin = mutation({
         args.showOnPublicCrewPage !== undefined
           ? args.showOnPublicCrewPage
           : existingProfile?.showOnPublicCrewPage,
+      weeklyDigest:
+        args.weeklyDigest !== undefined
+          ? args.weeklyDigest
+          : existingProfile?.weeklyDigest,
     });
     if (!nextFlags.requiresOnboarding) {
       const defaultOrgId =
