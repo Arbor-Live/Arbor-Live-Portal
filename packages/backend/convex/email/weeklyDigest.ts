@@ -7,30 +7,45 @@ import { buildWeeklyDigest } from "../lib/weeklyDigest";
 import { SITE_URL, reminderDayKey, subjectForTemplate } from "./constants";
 import { enqueueEmail } from "./enqueue";
 
+/** Profiles per scheduled pass; the page continuation covers the rest. */
+const WEEKLY_DIGEST_PROFILE_PAGE_SIZE = 200;
+
 /**
  * Weekly pending-activity digest: one email per active Arbor user summarizing
  * the availability responses, events, timecards, photos, booking requests, and
  * artist payouts that need them. Opt out per person with the `weeklyDigest`
  * Participation flag; sections with nothing pending are omitted, and a user
  * with no pending items gets no email.
+ *
+ * Pages through active profiles (no fixed cap) and schedules a continuation
+ * with the page cursor until every eligible profile has been visited.
  */
 export const run = internalMutation({
-  args: {},
+  args: { cursor: v.optional(v.union(v.string(), v.null())) },
   returns: v.object({ scheduledCount: v.number() }),
-  handler: async (ctx) => {
-    const profiles = await ctx.db
+  handler: async (ctx, args) => {
+    const page = await ctx.db
       .query("userAdminProfiles")
       .withIndex("by_active", (q) => q.eq("active", true))
-      .take(2000);
+      .paginate({
+        cursor: args.cursor ?? null,
+        numItems: WEEKLY_DIGEST_PROFILE_PAGE_SIZE,
+      });
 
     let scheduledCount = 0;
-    for (const profile of profiles) {
+    for (const profile of page.page) {
       if (!resolveParticipationFlags(profile).weeklyDigest) continue;
       if (!profile.userId.trim()) continue;
       await ctx.scheduler.runAfter(0, internal.email.weeklyDigest.sendForUser, {
         userId: profile.userId,
       });
       scheduledCount += 1;
+    }
+
+    if (!page.isDone) {
+      await ctx.scheduler.runAfter(0, internal.email.weeklyDigest.run, {
+        cursor: page.continueCursor,
+      });
     }
 
     return { scheduledCount };

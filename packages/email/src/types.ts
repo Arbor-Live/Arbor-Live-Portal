@@ -420,6 +420,8 @@ export type EquipmentBorrowRequestDecidedEmailProps = {
 /** One pending-activity group in the weekly digest; rows render as "label • detail". */
 export type WeeklyDigestSection = {
   title: string;
+  /** Full actionable count; `items` may be truncated for display. */
+  totalCount: number;
   items: string[];
 };
 

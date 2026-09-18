@@ -26,6 +26,8 @@ const DIGEST_COUNT_SCAN_CAP = 50;
 
 export type WeeklyDigestSection = {
   title: string;
+  /** Full actionable count; `items` may be truncated to DIGEST_ITEM_CAP. */
+  totalCount: number;
   /** Rendered as "<label> • <detail>" rows. */
   items: string[];
 };
@@ -64,6 +66,7 @@ async function buildAvailabilitySection(
 
   return {
     title: `Availability — ${plural(pending.length, "response")} needed`,
+    totalCount: pending.length,
     items: pending
       .slice(0, DIGEST_ITEM_CAP)
       .map((event) => `${event.title} • ${formatDateTimeRange(event.startAt, event.endAt)}`),
@@ -107,6 +110,7 @@ async function buildScheduledEventsSection(
 
   return {
     title: `Your events this week — ${plural(items.length, "event")}`,
+    totalCount: items.length,
     items: items.slice(0, DIGEST_ITEM_CAP),
   };
 }
@@ -122,6 +126,7 @@ async function buildTimecardsSection(
 
   return {
     title: `Timecards — ${plural(due.length, "period")} to submit`,
+    totalCount: due.length,
     items: due.map(
       (period) => `${period.label} • ${plural(period.daysWorked, "day")} worked · due ${formatDate(period.dueMs)}`,
     ),
@@ -161,6 +166,7 @@ async function buildPhotosSection(
 
   return {
     title: `Photos — ${plural(items.length, "event")} awaiting media`,
+    totalCount: items.length,
     items: items.slice(0, DIGEST_ITEM_CAP),
   };
 }
@@ -193,6 +199,7 @@ async function buildBookingRequestsSection(
 
   return {
     title: `Booking requests — ${plural(count, "open request")}`,
+    totalCount: count,
     items: recent.map(
       (row) => `${row.label} • ${row.requestNumber ?? "Awaiting review"}`,
     ),
@@ -229,6 +236,7 @@ async function buildArtistPayoutsSection(
 
   return {
     title: `Artist payouts — ${plural(count, "payment")} in progress`,
+    totalCount: count,
     items,
   };
 }
@@ -275,6 +283,6 @@ export async function buildWeeklyDigest(
 
   return {
     sections,
-    itemCount: sections.reduce((total, section) => total + section.items.length, 0),
+    itemCount: sections.reduce((total, section) => total + section.totalCount, 0),
   };
 }

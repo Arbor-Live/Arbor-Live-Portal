@@ -14,7 +14,7 @@ export function WeeklyDigestEmail({
   dashboardUrl,
 }: WeeklyDigestEmailProps) {
   const greeting = recipientName ? `Hi ${recipientName},` : "Hi!";
-  const total = sections.reduce((count, section) => count + section.items.length, 0);
+  const total = sections.reduce((count, section) => count + section.totalCount, 0);
 
   return (
     <EmailLayout
@@ -45,13 +45,22 @@ WeeklyDigestEmail.PreviewProps = {
   sections: [
     {
       title: "Availability — 3 responses needed",
+      totalCount: 3,
       items: [
         "Spring Showcase • Fri, May 9, 7:00 PM",
         "Outdoor Concert • Sat, May 10, 5:30 PM",
       ],
     },
-    { title: "Your events this week — 1 event", items: ["Trivia Night • Wed, May 7, 6:00 PM"] },
-    { title: "Booking requests — 2 open requests", items: ["Grad Formal • ALREQ-4K8Z2NP"] },
+    {
+      title: "Your events this week — 1 event",
+      totalCount: 1,
+      items: ["Trivia Night • Wed, May 7, 6:00 PM"],
+    },
+    {
+      title: "Booking requests — 2 open requests",
+      totalCount: 2,
+      items: ["Grad Formal • ALREQ-4K8Z2NP"],
+    },
   ],
   dashboardUrl: "http://localhost:3000/dashboard",
 } satisfies WeeklyDigestEmailProps;
