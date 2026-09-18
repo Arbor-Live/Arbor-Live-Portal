@@ -1,8 +1,9 @@
-name: Build print agent image
+name: Build ArborOS
 
-# Builds a Raspberry Pi OS image with the warehouse print agent baked in, so a
-# fresh SD card boots straight into printing event briefs. The agent token comes
-# from a repository secret (never a workflow input, which would be logged).
+# Builds ArborOS: a Raspberry Pi OS image with the warehouse print agent baked
+# in, so a fresh SD card boots straight into printing event briefs. The agent
+# token comes from a repository secret (never a workflow input, which would be
+# logged).
 on:
   workflow_dispatch:
     inputs:
@@ -64,8 +65,8 @@ jobs:
           fi
           mkdir -p "$BUILD_DIR"
           "$RPI_IMAGE_GEN_DIR/rpi-image-gen" build \
-            -S deploy/pi-image \
-            -c arbor-print.yaml \
+            -S deploy/arboros \
+            -c arboros.yaml \
             -B "$BUILD_DIR" \
             -- \
             "IGconf_device_layer=$ARBOR_DEVICE" \
@@ -78,7 +79,7 @@ jobs:
         id: package
         run: |
           set -euo pipefail
-          IMG=$(find "$BUILD_DIR" -type f -name 'arbor-print-agent*.img' | head -n1)
+          IMG=$(find "$BUILD_DIR" -type f -name 'arboros*.img' | head -n1)
           if [ -z "$IMG" ]; then
             IMG=$(find "$BUILD_DIR" -type f -name '*.img' | head -n1)
           fi
@@ -96,11 +97,11 @@ jobs:
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: print-agent-image
-          name: Print agent image
+          tag_name: arboros
+          name: ArborOS
           make_latest: true
           body: |
-            Raspberry Pi image with the Arbor print agent built in.
+            ArborOS: a Raspberry Pi image with the Arbor print agent built in.
 
             - Device: `${{ inputs.device }}`
             - Convex URL: `${{ inputs.convex_url }}`
