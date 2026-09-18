@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { formatDate } from "@arbor/format";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
+  internalQuery,
   mutation,
   query,
   type MutationCtx,
@@ -54,6 +55,17 @@ const riderDocumentValidator = v.object({
 });
 
 type RiderDoc = Doc<"bandRiders">;
+
+type EventRiderRow = {
+  organizationId: string;
+  bandName: string;
+  role: "headliner" | "support" | "other";
+  rider:
+    | null
+    | ({ _id: Id<"bandRiders">; name: string; status: RiderDoc["status"]; updatedAt: number } & ReturnType<
+        typeof riderContent
+      >);
+};
 
 function riderContent(rider: RiderDoc) {
   return {
@@ -379,6 +391,55 @@ export const getDocumentData = query({
  * Riders for every band on an event — the hand-off point for show-file
  * generation and for crew prepping a patch.
  */
+/** Shared by the internal and public lookups; auth is the caller's job. */
+async function loadEventRiders(
+  ctx: QueryCtx,
+  eventId: Id<"events">,
+): Promise<EventRiderRow[]> {
+  const participations = await ctx.db
+    .query("eventBandParticipations")
+    .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
+    .take(20);
+
+  const rows: EventRiderRow[] = [];
+  for (const participation of participations) {
+    const riders = await ctx.db
+      .query("bandRiders")
+      .withIndex("by_organizationId", (q) =>
+        q.eq("organizationId", participation.organizationId),
+      )
+      .take(50);
+    // Prefer the default rider, then the most recently updated published one.
+    const chosen =
+      riders.find((rider) => rider.isDefault) ??
+      riders
+        .filter((rider) => rider.status === "published")
+        .sort((a, b) => b.updatedAt - a.updatedAt)[0] ??
+      null;
+
+    rows.push({
+      organizationId: participation.organizationId,
+      bandName: await resolveBandName(ctx, participation.organizationId),
+      role: participation.role,
+      rider: chosen
+        ? {
+            _id: chosen._id,
+            name: chosen.name,
+            status: chosen.status,
+            updatedAt: chosen.updatedAt,
+            ...riderContent(chosen),
+          }
+        : null,
+    });
+  }
+  return rows;
+}
+
+export const listForEventInternal = internalQuery({
+  args: { eventId: v.id("events") },
+  handler: async (ctx, args) => await loadEventRiders(ctx, args.eventId),
+});
+
 export const listForEvent = query({
   args: { eventId: v.id("events") },
   returns: v.array(
@@ -400,43 +461,6 @@ export const listForEvent = query({
   ),
   handler: async (ctx, args) => {
     await requireArborInternalContext(ctx);
-
-    const participations = await ctx.db
-      .query("eventBandParticipations")
-      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
-      .take(20);
-
-    const rows = [];
-    for (const participation of participations) {
-      const riders = await ctx.db
-        .query("bandRiders")
-        .withIndex("by_organizationId", (q) =>
-          q.eq("organizationId", participation.organizationId),
-        )
-        .take(50);
-      // Prefer the default rider, then the most recently updated published one.
-      const chosen =
-        riders.find((rider) => rider.isDefault) ??
-        riders
-          .filter((rider) => rider.status === "published")
-          .sort((a, b) => b.updatedAt - a.updatedAt)[0] ??
-        null;
-
-      rows.push({
-        organizationId: participation.organizationId,
-        bandName: await resolveBandName(ctx, participation.organizationId),
-        role: participation.role,
-        rider: chosen
-          ? {
-              _id: chosen._id,
-              name: chosen.name,
-              status: chosen.status,
-              updatedAt: chosen.updatedAt,
-              ...riderContent(chosen),
-            }
-          : null,
-      });
-    }
-    return rows;
+    return await loadEventRiders(ctx, args.eventId);
   },
 });

@@ -145,7 +145,7 @@ const styles = StyleSheet.create({
   summaryValue: { fontSize: 12, fontWeight: 700 },
 });
 
-function Footer() {
+export function RiderPdfFooter() {
   return (
     <View style={styles.footer} fixed>
       <View style={styles.footerBrand}>
@@ -404,7 +404,8 @@ function NotesSection({ title, body }: { title: string; body?: string }) {
   );
 }
 
-export function RiderPdf({ data }: { data: RiderDocumentData }) {
+/** The rider body as standalone pages, so other documents (event briefs) can embed it. */
+export function RiderPages({ data }: { data: RiderDocumentData }) {
   const inputRows = data.inputs.map((input) => [
     input.stereo ? `${input.channel}–${input.channel + 1}` : String(input.channel),
     input.stereo ? `${input.source || "—"} (L/R)` : input.source || "—",
@@ -433,12 +434,12 @@ export function RiderPdf({ data }: { data: RiderDocumentData }) {
   ]);
 
   return (
-    <Document title={`${data.bandName} — technical rider`} author={data.bandName}>
+    <>
       <Page size="LETTER" orientation="landscape" style={styles.page}>
         <Header data={data} />
         <Summary data={data} />
         <StagePlot data={data} width={716} height={380} />
-        <Footer />
+        <RiderPdfFooter />
       </Page>
 
       <Page size="LETTER" style={styles.page}>
@@ -496,8 +497,16 @@ export function RiderPdf({ data }: { data: RiderDocumentData }) {
         <NotesSection title="Power" body={data.powerNotes} />
         <NotesSection title="Notes" body={data.generalNotes} />
         <NotesSection title="Hospitality" body={data.hospitalityNotes} />
-        <Footer />
+        <RiderPdfFooter />
       </Page>
+    </>
+  );
+}
+
+export function RiderPdf({ data }: { data: RiderDocumentData }) {
+  return (
+    <Document title={`${data.bandName} — technical rider`} author={data.bandName}>
+      <RiderPages data={data} />
     </Document>
   );
 }

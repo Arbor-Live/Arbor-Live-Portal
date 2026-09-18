@@ -1,0 +1,15 @@
+{
+  "name": "@arbor/print-agent",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "arbor-print-agent": "./src/agent.mjs"
+  },
+  "scripts": {
+    "start": "node ./src/agent.mjs"
+  },
+  "dependencies": {
+    "convex": "^1.42.3"
+  }
+}

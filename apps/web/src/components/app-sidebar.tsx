@@ -90,6 +90,7 @@ const inventorySubItems: NavSubItem[] = [
   { title: "Packages", url: "/dashboard/inventory/packages" },
   { title: "Storage Locations", url: "/dashboard/inventory/storage-locations" },
   { title: "Lost & Found", url: "/dashboard/inventory/lost-found" },
+  { title: "Print queue", url: "/dashboard/inventory/print-queue", adminOnly: true },
   { title: "Import CSV", url: "/dashboard/inventory/import", adminOnly: true },
 ]
 

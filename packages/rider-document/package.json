@@ -6,6 +6,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./pdf": "./src/render-pdf.tsx",
+    "./brief": "./src/render-brief.tsx",
     "./types": "./src/types.ts"
   },
   "scripts": {
