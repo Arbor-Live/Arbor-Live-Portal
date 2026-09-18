@@ -1,6 +1,6 @@
 import { Migrations } from "@convex-dev/migrations";
 import { components, internal } from "./_generated/api";
-import type { DataModel, Id } from "./_generated/dataModel";
+import type { DataModel, Doc, Id } from "./_generated/dataModel";
 import { internalMutation } from "./_generated/server";
 import { resolveContactNameParts } from "./lib/contactName";
 import { normalizeHostOrgName } from "./lib/hostOrgIdentity";
@@ -545,12 +545,19 @@ export const backfillInvoiceArtistLineEvents = migrations.define({
  *
  * Step 1 of a widen/migrate/narrow removal: `oseHiringFormCompletedAt` stays in
  * the schema until this has run on every deployment, then it can be dropped.
+ * Reads/writes go through a widened type so this keeps compiling once the field
+ * is removed from the schema.
  */
 export const dropCrewOnboardingOseHiringForm = migrations.define({
   table: "userOnboarding",
   migrateOne: async (_ctx, row) => {
-    if (row.oseHiringFormCompletedAt === undefined) return;
-    return { oseHiringFormCompletedAt: undefined, updatedAt: Date.now() };
+    const legacy = row as Doc<"userOnboarding"> & {
+      oseHiringFormCompletedAt?: number;
+    };
+    if (legacy.oseHiringFormCompletedAt === undefined) return;
+    return {
+      oseHiringFormCompletedAt: undefined,
+    } as unknown as Partial<Doc<"userOnboarding">>;
   },
 });
 
