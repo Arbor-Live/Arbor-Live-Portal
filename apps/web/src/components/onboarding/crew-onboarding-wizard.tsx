@@ -34,6 +34,7 @@ import {
   OnboardingYesNoChoice,
 } from "@/components/onboarding/onboarding-ui";
 import { CONTRACTOR_PAY_INFO, FWS_JOB_INFO, ONBOARDING_LINKS } from "@/lib/onboarding-links";
+import { pacificDateAndTimeToMs, pacificDateKey } from "@/lib/format";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { useDevPreviewReady } from "@/hooks/use-dev-preview";
 
@@ -80,7 +81,11 @@ type CrewOnboardingData = {
   liftingCompletedAt?: number;
   hasValidDriversLicense?: boolean;
   cartTrainingCompletedAt?: number;
-  oseHiringFormCompletedAt?: number;
+  studentId?: string;
+  employmentStartDate?: number;
+  hasOtherCampusEmployment?: boolean;
+  otherCampusEmploymentHours?: number;
+  i9AcknowledgedAt?: number;
   timecardAcknowledgedAt?: number;
   contractorPayAcknowledgedAt?: number;
   agreedToOnboardingDocAt?: number;
@@ -138,7 +143,7 @@ const STEP_HEADLINES: Record<StepId, string> = {
   instagram: "Follow us on Instagram",
   fws: "Federal Work Study",
   training: "Required training",
-  gettingPaid: "Getting paid",
+  gettingPaid: "Getting hired",
   hours: "Logging your hours",
   contractorPay: "Getting paid as a contractor",
   signature: "Sign your onboarding agreement",
@@ -167,7 +172,12 @@ type FormState = {
   liftingCompleted: boolean;
   hasValidDriversLicense: boolean;
   cartTrainingCompleted: boolean;
-  oseHiringFormCompleted: boolean;
+  studentId: string;
+  /** Pacific date key (`YYYY-MM-DD`) from the start-date input. */
+  employmentStartDate: string;
+  hasOtherCampusEmployment: boolean | null;
+  otherCampusEmploymentHours: string;
+  i9Acknowledged: boolean;
   timecardAcknowledged: boolean;
   contractorPayAcknowledged: boolean;
   signatureLegalName: string;
@@ -195,7 +205,11 @@ const EMPTY_FORM: FormState = {
   liftingCompleted: false,
   hasValidDriversLicense: false,
   cartTrainingCompleted: false,
-  oseHiringFormCompleted: false,
+  studentId: "",
+  employmentStartDate: "",
+  hasOtherCampusEmployment: null,
+  otherCampusEmploymentHours: "",
+  i9Acknowledged: false,
   timecardAcknowledged: false,
   contractorPayAcknowledged: false,
   signatureLegalName: "",
@@ -260,7 +274,15 @@ export function CrewOnboardingWizard() {
       liftingCompleted: Boolean(onboarding.liftingCompletedAt),
       hasValidDriversLicense: Boolean(onboarding.hasValidDriversLicense),
       cartTrainingCompleted: Boolean(onboarding.cartTrainingCompletedAt),
-      oseHiringFormCompleted: Boolean(onboarding.oseHiringFormCompletedAt),
+      studentId: onboarding.studentId ?? "",
+      employmentStartDate:
+        onboarding.employmentStartDate != null ? pacificDateKey(onboarding.employmentStartDate) : "",
+      hasOtherCampusEmployment: onboarding.hasOtherCampusEmployment ?? null,
+      otherCampusEmploymentHours:
+        onboarding.otherCampusEmploymentHours != null
+          ? String(onboarding.otherCampusEmploymentHours)
+          : "",
+      i9Acknowledged: Boolean(onboarding.i9AcknowledgedAt),
       timecardAcknowledged: Boolean(onboarding.timecardAcknowledgedAt),
       contractorPayAcknowledged: Boolean(onboarding.contractorPayAcknowledgedAt),
       signatureLegalName: onboarding.signatureLegalName ?? "",
@@ -417,13 +439,42 @@ export function CrewOnboardingWizard() {
       }
 
       if (currentStep === "gettingPaid") {
-        if (!form.oseHiringFormCompleted) {
-          setFieldError("Confirm you've submitted the OSE hiring form to continue.");
+        const studentId = form.studentId.trim();
+        if (!/^\d{8}$/.test(studentId)) {
+          setFieldError("Enter your 8-digit student ID.");
+          return false;
+        }
+        if (!form.employmentStartDate) {
+          setFieldError("Pick your start date.");
+          return false;
+        }
+        const startDateMs = pacificDateAndTimeToMs(form.employmentStartDate, "12:00");
+        if (startDateMs == null) {
+          setFieldError("Pick a valid start date.");
+          return false;
+        }
+        if (form.hasOtherCampusEmployment === null) {
+          setFieldError("Select whether you have other campus employment.");
+          return false;
+        }
+        const otherHours = Number(form.otherCampusEmploymentHours);
+        if (form.hasOtherCampusEmployment && !(otherHours > 0)) {
+          setFieldError("Enter your weekly hours for your other campus employment.");
+          return false;
+        }
+        if (!form.i9Acknowledged) {
+          setFieldError("Confirm you'll complete your I-9 with HR to continue.");
           return false;
         }
         if (previewOnly) return true;
         setIsSubmitting(true);
-        await saveOnboardingStep({ oseHiringFormCompleted: true });
+        await saveOnboardingStep({
+          studentId,
+          employmentStartDate: startDateMs,
+          hasOtherCampusEmployment: form.hasOtherCampusEmployment,
+          otherCampusEmploymentHours: form.hasOtherCampusEmployment ? otherHours : undefined,
+          i9Acknowledged: true,
+        });
         return true;
       }
 
@@ -1083,23 +1134,96 @@ function StepBody({
       return (
         <div className="space-y-4">
           <p className="text-sm text-foreground/70">
-            Complete the Office of Student Engagement (OSE) hiring form so we can set you up to get
-            paid. If you have questions, reach out to our Stanford HR contact,{" "}
-            <span className="font-medium">{FWS_JOB_INFO.hrAdminName}</span> (
-            <a
-              className="text-primary underline-offset-4 hover:underline"
-              href={`mailto:${FWS_JOB_INFO.hrAdminEmail}`}
-            >
-              {FWS_JOB_INFO.hrAdminEmail}
-            </a>
-            ).
+            Two offices get you set up: the Office of Student Engagement (OSE) for your hire
+            paperwork, and HR for your I-9. Add the details OSE needs below, and complete your I-9
+            with HR before your first shift.
           </p>
-          <OnboardingLinkCard href={ONBOARDING_LINKS.oseHiringForm} title="Open the OSE hiring form" />
-          <OnboardingAckCheckbox
-            checked={form.oseHiringFormCompleted}
-            onChange={(next) => patch({ oseHiringFormCompleted: next })}
-            label="I've submitted the OSE hiring form."
-          />
+
+          <div className="space-y-3 border border-border/50 bg-background/50 p-3">
+            <p className="text-sm font-medium text-foreground">What OSE needs</p>
+            <ul className="list-disc space-y-1 pl-4 text-sm text-foreground/70">
+              <li>Your student ID number</li>
+              <li>Your full legal name and start date</li>
+              <li>
+                Your FWS Authorization Form, if you said you have Federal Work Study (see the
+                Federal Work Study step)
+              </li>
+              <li>Any other campus employment and how many hours a week</li>
+            </ul>
+
+            <div className="space-y-2">
+              <Label htmlFor="crew-student-id">Student ID number</Label>
+              <Input
+                id="crew-student-id"
+                inputMode="numeric"
+                value={form.studentId}
+                onChange={(event) => patch({ studentId: event.target.value })}
+                placeholder="8 digits"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="crew-start-date">Start date</Label>
+              <Input
+                id="crew-start-date"
+                type="date"
+                value={form.employmentStartDate}
+                onChange={(event) => patch({ employmentStartDate: event.target.value })}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-sm text-foreground/70">Do you have other campus employment?</p>
+              <OnboardingYesNoChoice
+                value={form.hasOtherCampusEmployment}
+                onChange={(next) =>
+                  patch({
+                    hasOtherCampusEmployment: next,
+                    otherCampusEmploymentHours: next ? form.otherCampusEmploymentHours : "",
+                  })
+                }
+              />
+              {form.hasOtherCampusEmployment ? (
+                <div className="space-y-2">
+                  <Label htmlFor="crew-other-hours">Hours per week</Label>
+                  <Input
+                    id="crew-other-hours"
+                    inputMode="numeric"
+                    value={form.otherCampusEmploymentHours}
+                    onChange={(event) => patch({ otherCampusEmploymentHours: event.target.value })}
+                    placeholder="e.g. 10"
+                  />
+                </div>
+              ) : null}
+            </div>
+
+          </div>
+
+          <div className="space-y-3 border border-border/50 bg-background/50 p-3">
+            <p className="text-sm font-medium text-foreground">What HR needs</p>
+            <p className="text-sm text-foreground/70">
+              Schedule an I-9 appointment with HR by your first day of employment. Bring{" "}
+              <span className="font-medium text-foreground">original documents</span> — copies
+              aren&apos;t accepted.
+            </p>
+            <div className="space-y-2">
+              <OnboardingLinkCard
+                href={ONBOARDING_LINKS.i9Appointment}
+                title="Schedule your I-9 appointment"
+              />
+              <OnboardingLinkCard
+                href={ONBOARDING_LINKS.i9AcceptableDocuments}
+                title="See acceptable I-9 documents"
+                description="Original documents only"
+              />
+            </div>
+            <OnboardingAckCheckbox
+              checked={form.i9Acknowledged}
+              onChange={(next) => patch({ i9Acknowledged: next })}
+              label="I'll schedule my I-9 appointment by my first day and bring original documents."
+            />
+          </div>
+
           {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
         </div>
       );

@@ -33,9 +33,11 @@ canonical description of the domain itself.
   `invoiceSettings` (so global rate changes apply automatically); Custom keeps
   a fixed `userCompensationRates.hourlyRateUsd`. Legacy rows without
   `rateMode` behave as Custom. Missing `payrollMethod` defaults to Stanford.
-- Crew onboarding branches on payroll method: Stanford keeps FWS → OSE hiring →
-  Sequoia hours; External skips those and uses a contractor pay step (email W9
-  + biweekly invoice to `arborlive@stanford.edu`).
+- Crew onboarding branches on payroll method: Stanford keeps FWS → OSE hire
+  details (student ID, start date, other campus employment + weekly hours) →
+  HR I-9 acknowledgement → Sequoia hours; External skips those and uses a
+  contractor pay step (email W9 + biweekly invoice to
+  `arborlive@stanford.edu`).
 - Public self-serve band applications: `/artists/apply` → `bandApplications`
   table → admin review at `/dashboard/users/artist-applications`. Approval creates
   the band org (no auto public listing), invites the contact/members, and

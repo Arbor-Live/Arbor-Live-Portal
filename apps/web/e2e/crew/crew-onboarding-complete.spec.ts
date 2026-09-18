@@ -84,8 +84,11 @@ test.describe("crew onboarding wizard", () => {
     await activeStep(page).getByRole("button", { name: "No", exact: true }).click();
     await next(page);
 
-    // Getting paid
-    await acknowledge(page, /submitted the OSE hiring form/i);
+    // Getting hired — OSE details + HR I-9.
+    await page.getByLabel("Student ID number").fill("12345678");
+    await page.getByLabel("Start date").fill("2026-09-01");
+    await activeStep(page).getByRole("button", { name: "No", exact: true }).click();
+    await acknowledge(page, /schedule my I-9 appointment/i);
     await next(page);
 
     // Logging hours
@@ -106,6 +109,8 @@ test.describe("crew onboarding wizard", () => {
       hasFederalWorkStudy: boolean | null;
       timecardAcknowledged: boolean;
       narcanCompleted: boolean;
+      studentId: string | null;
+      i9Acknowledged: boolean;
     }>(
       "e2eHelpers:getCrewOnboardingState",
       { userId: crew.userId },
@@ -115,6 +120,8 @@ test.describe("crew onboarding wizard", () => {
     expect(state.hasFederalWorkStudy).toBe(false);
     expect(state.timecardAcknowledged).toBe(true);
     expect(state.narcanCompleted).toBe(true);
+    expect(state.studentId).toBe("12345678");
+    expect(state.i9Acknowledged).toBe(true);
 
     // Completed onboarding sends the wizard back to the dashboard.
     await page.waitForURL(/\/dashboard/, { timeout: 30_000 });

@@ -28,6 +28,7 @@ import { UserRatesAdminClient } from "@/components/users/user-rates-admin-client
 import { OnboardingIncompleteStepsList } from "@/components/bands/onboarding-incomplete-steps";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import { getConvexErrorMessage } from "@/lib/convex-error";
+import { formatDate } from "@/lib/format";
 import { useAppDialog } from "@/components/ui/app-dialog";
 import { notify } from "@/lib/notify";
 import {
@@ -1151,7 +1152,22 @@ function UserAdminRow({
                     <li>Expectations: {onboarding.crewExpectationsAcknowledgedAt ? "done" : "pending"}</li>
                     <li>Lifting: {onboarding.liftingCompletedAt ? "done" : "pending"}</li>
                     <li>Cart: {onboarding.cartTrainingCompletedAt ? "done" : "n/a or pending"}</li>
-                    <li>OSE hiring: {onboarding.oseHiringFormCompletedAt ? "done" : "pending"}</li>
+                    <li>Student ID: {onboarding.studentId ?? "pending"}</li>
+                    <li>
+                      Start date:{" "}
+                      {onboarding.employmentStartDate
+                        ? formatDate(onboarding.employmentStartDate)
+                        : "pending"}
+                    </li>
+                    <li>
+                      Other employment:{" "}
+                      {onboarding.hasOtherCampusEmployment == null
+                        ? "pending"
+                        : onboarding.hasOtherCampusEmployment
+                          ? `${onboarding.otherCampusEmploymentHours ?? 0} hrs/week`
+                          : "no"}
+                    </li>
+                    <li>I-9: {onboarding.i9AcknowledgedAt ? "done" : "pending"}</li>
                     <li>Timecard: {onboarding.timecardAcknowledgedAt ? "done" : "pending"}</li>
                     <li>Signed: {onboarding.agreedToOnboardingDocAt ? onboarding.signatureLegalName ?? "yes" : "pending"}</li>
                   </ul>

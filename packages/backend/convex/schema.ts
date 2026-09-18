@@ -1047,7 +1047,13 @@ export default defineSchema({
     liftingCompletedAt: v.optional(v.number()),
     hasValidDriversLicense: v.optional(v.boolean()),
     cartTrainingCompletedAt: v.optional(v.number()),
-    oseHiringFormCompletedAt: v.optional(v.number()),
+    /** OSE hiring details. */
+    studentId: v.optional(v.string()),
+    employmentStartDate: v.optional(v.number()),
+    hasOtherCampusEmployment: v.optional(v.boolean()),
+    otherCampusEmploymentHours: v.optional(v.number()),
+    /** HR: I-9 appointment scheduled by the first day of employment. */
+    i9AcknowledgedAt: v.optional(v.number()),
     timecardAcknowledgedAt: v.optional(v.number()),
     /** External payroll: W9 + biweekly invoice instructions acknowledged. */
     contractorPayAcknowledgedAt: v.optional(v.number()),

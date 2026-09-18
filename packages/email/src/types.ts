@@ -266,6 +266,10 @@ export type OnboardingCompletedEmailProps = {
   hasFederalWorkStudy: boolean;
   hasValidDriversLicense: boolean;
   signatureLegalName: string;
+  studentId?: string;
+  employmentStartDateLabel?: string;
+  otherCampusEmploymentLabel?: string;
+  i9ScheduledByFirstDay?: boolean;
   dashboardUsersUrl: string;
 };
 
