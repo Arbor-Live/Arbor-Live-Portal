@@ -73,7 +73,8 @@ export type EmailTemplate =
   | "booking_request_declined"
   | "quote_approved"
   | "payment_proof_rejected"
-  | "damage_report_admin";
+  | "damage_report_admin"
+  | "weekly_digest";
 
 export function eventDashboardUrl(eventId: string) {
   return `${SITE_URL}/dashboard/events/${eventId}`;
@@ -240,6 +241,8 @@ export function subjectForTemplate(template: EmailTemplate, context: string) {
       return `Payment proof needs attention: ${context}`;
     case "damage_report_admin":
       return `New damage report: ${context}`;
+    case "weekly_digest":
+      return `Your Arbor Live week: ${context}`;
   }
 }
 

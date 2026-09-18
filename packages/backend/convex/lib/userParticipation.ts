@@ -9,6 +9,8 @@ export type UserParticipationFlags = {
   includeInTimecards: boolean;
   assignableAsCrew: boolean;
   showOnPublicCrewPage: boolean;
+  /** Receive the weekly email digest of pending activity. */
+  weeklyDigest: boolean;
 };
 
 export type UserInviteKind = "crew" | "advisor";
@@ -20,6 +22,7 @@ export const CREW_PARTICIPATION_DEFAULTS: UserParticipationFlags = {
   includeInTimecards: true,
   assignableAsCrew: true,
   showOnPublicCrewPage: false,
+  weeklyDigest: true,
 };
 
 /** One-click invite preset for advisors / supervisors. */
@@ -28,6 +31,7 @@ export const ADVISOR_PARTICIPATION_PRESET: UserParticipationFlags = {
   includeInTimecards: false,
   assignableAsCrew: false,
   showOnPublicCrewPage: false,
+  weeklyDigest: true,
 };
 
 export function participationForInviteKind(kind: UserInviteKind | undefined): UserParticipationFlags {
@@ -41,6 +45,7 @@ export function resolveParticipationFlags(
         includeInTimecards?: boolean;
         assignableAsCrew?: boolean;
         showOnPublicCrewPage?: boolean;
+        weeklyDigest?: boolean;
       }
     | null
     | undefined,
@@ -50,5 +55,6 @@ export function resolveParticipationFlags(
     includeInTimecards: profile?.includeInTimecards !== false,
     assignableAsCrew: profile?.assignableAsCrew !== false,
     showOnPublicCrewPage: profile?.showOnPublicCrewPage === true,
+    weeklyDigest: profile?.weeklyDigest !== false,
   };
 }
