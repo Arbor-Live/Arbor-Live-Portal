@@ -101,9 +101,17 @@ async function discoverUsbPrinterUri() {
     const port = fields[8];
     // " (USB)" is ipp-usb's suffix for a USB-attached device.
     if (!name.includes("(USB)")) continue;
-    if (address !== "127.0.0.1" && address !== "::1") continue;
     if (!port) continue;
-    return `ipp://${address}:${port}/ipp/print`;
+    // ipp-usb binds both loopback addresses; brackets are required for IPv6.
+    let host;
+    if (address === "127.0.0.1") {
+      host = address;
+    } else if (address === "::1") {
+      host = "[::1]";
+    } else {
+      continue;
+    }
+    return `ipp://${host}:${port}/ipp/print`;
   }
 
   const { stdout: usbOut } = await execFileAsync("sh", [
