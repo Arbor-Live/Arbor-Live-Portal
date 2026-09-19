@@ -34,6 +34,8 @@ mmdebstrap:
     - cups
     - cups-client
     - cups-filters
+    # avahi-browse: locate the ipp-usb loopback endpoint for USB printers
+    - avahi-utils
     - ipp-usb
     - nodejs
   customize-hooks:
