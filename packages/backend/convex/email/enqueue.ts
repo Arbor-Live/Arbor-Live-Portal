@@ -52,6 +52,7 @@ const emailTemplateValue = v.union(
   v.literal("payment_proof_rejected"),
   v.literal("damage_report_admin"),
   v.literal("weekly_digest"),
+  v.literal("this_week_at_arbor"),
 );
 
 const emailStatusValue = v.union(

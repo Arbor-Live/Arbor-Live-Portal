@@ -74,7 +74,8 @@ export type EmailTemplate =
   | "quote_approved"
   | "payment_proof_rejected"
   | "damage_report_admin"
-  | "weekly_digest";
+  | "weekly_digest"
+  | "this_week_at_arbor";
 
 export function eventDashboardUrl(eventId: string) {
   return `${SITE_URL}/dashboard/events/${eventId}`;
@@ -243,6 +244,8 @@ export function subjectForTemplate(template: EmailTemplate, context: string) {
       return `New damage report: ${context}`;
     case "weekly_digest":
       return `Your Arbor Live week: ${context}`;
+    case "this_week_at_arbor":
+      return context ? `This week at Arbor: ${context}` : "This week at Arbor";
   }
 }
 

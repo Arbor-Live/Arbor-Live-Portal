@@ -32,7 +32,8 @@ Dependency direction: `web` depends on `backend` (generated API bindings),
 - `crons.ts` — daily schedule reminders, payment-proof reminders, and band
   payment promotion (see `email/reminders.ts`, `email/paymentProofReminders.ts`,
   `bandPayments.ts`).
-- `http.ts` — HTTP router (short-link lookup for `arbor.st`; Better Auth routes).
+- `http.ts` — HTTP router (short-link lookup for `arbor.st`; public
+  `GET /calendar.ics` events feed; Better Auth routes).
 - `migrations.ts` — `@convex-dev/migrations` runner (`runAll` after deploy).
   Append new jobs to the end of `runAll`; never reorder completed ones.
 - See the convex-migration-helper skill for widen–migrate–narrow.
@@ -47,7 +48,7 @@ Dependency direction: `web` depends on `backend` (generated API bindings),
 | Inventory | `inventoryTypes.ts`, `inventoryItems.ts`, `inventoryCategories.ts`, `inventoryPackages.ts`, `inventoryR2.ts`, `storageLocations.ts`, `lostFoundSettings.ts` |
 | Media (Immich) | `immich.ts`, `immichActions.ts`, `immichDb.ts`, `immichEnsure.ts`, `marketingImmich*.ts` |
 | Marketing | `marketingDesigns.ts`, `marketingPosts.ts`, `marketingSettings.ts`, `shortLinks.ts`, `marketingInstagram*.ts` |
-| Public (unauthenticated) | `publicDirectory.ts`, `publicInventory.ts`, `publicMarketing.ts`, `paymentProofPublic.ts`, `health.ts` |
+| Public (unauthenticated) | `publicDirectory.ts`, `publicInventory.ts`, `publicMarketing.ts`, `publicEvents.ts`, `publicCalendar.ts`, `paymentProofPublic.ts`, `health.ts` |
 | Shared helpers | `lib/` (auth guards, booking-quote provisioning, crew cost, Immich client, public tokens, ...) |
 
 ## Authentication and authorization
