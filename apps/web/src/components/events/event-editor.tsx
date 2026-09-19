@@ -39,7 +39,7 @@ import { VenueDetailsButton } from "@/components/venues/venue-details-sheet";
 import { useSessionShell, useSessionViewer } from "@/components/session-shell-provider";
 import { EventBandPaymentSection } from "@/components/events/event-band-payment-section";
 import { EventBandRidersSection } from "@/components/events/event-band-riders-section";
-import { EventBriefDownloadButton } from "@/components/events/event-brief-download-button";
+import { EventBriefButton } from "@/components/events/event-brief-button";
 import { EventMediaSection } from "@/components/events/event-media-section";
 import { EventMarketingSection } from "@/components/events/event-marketing-section";
 import { CommentsSection } from "@/components/comments/comments-section";
@@ -1262,7 +1262,7 @@ export function EventEditor({
             </Button>
           ))}
           <div className="ml-auto flex flex-wrap gap-2">
-            {!isCreate && eventId ? <EventBriefDownloadButton eventId={eventId} /> : null}
+            {!isCreate && eventId ? <EventBriefButton eventId={eventId} /> : null}
             {isAdmin && eventId ? (
               normalizeEventStatus(eventData?.event.status) === "cancelled" ? (
                 <Button type="button" variant="destructive" onClick={() => void deleteEventPermanently()}>
