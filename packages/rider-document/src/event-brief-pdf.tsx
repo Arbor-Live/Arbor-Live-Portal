@@ -57,7 +57,7 @@ const styles = StyleSheet.create({
 });
 
 const SCHEDULE_COLUMNS = [74, 112, 66, 66, 230];
-const CREW_COLUMNS = [104, 116, 62, 116, 150];
+const CREW_COLUMNS = [130, 150, 150, 118];
 const PEOPLE_COLUMNS = [118, 130, 200, 100];
 
 function Table({
@@ -118,7 +118,6 @@ export function EventBriefPdf({ data }: { data: EventBriefDocumentData }) {
   const crewRows = data.shifts.map((shift) => [
     shift.role,
     shift.person,
-    shift.callLabel ?? "—",
     shift.timeLabel,
     shift.notes ?? "",
   ]);
@@ -173,7 +172,7 @@ export function EventBriefPdf({ data }: { data: EventBriefDocumentData }) {
           <Text style={styles.sectionTitle}>Crew</Text>
           <Table
             columns={CREW_COLUMNS}
-            headers={["Role", "Person", "Call", "Shift", "Notes"]}
+            headers={["Role", "Person", "Shift", "Notes"]}
             rows={crewRows}
             emptyMessage="No crew shifts yet."
           />

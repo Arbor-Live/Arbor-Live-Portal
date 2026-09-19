@@ -9,6 +9,7 @@ import {
   query,
   type MutationCtx,
 } from "./_generated/server";
+import { RENTAL_EVENT_TYPES } from "./eventPullLists";
 import { requireArborInternalContext } from "./lib/auth";
 
 /**
@@ -114,10 +115,20 @@ export const enqueueDue = internalMutation({
       .take(200);
     for (const event of upcoming) {
       if (event.status === "cancelled" || event.status === "completed") continue;
+      // Rentals print when their outbound delivery is processed, not on the
+      // morning sweep, so the brief matches what was actually pulled.
+      if (event.eventType && RENTAL_EVENT_TYPES.has(event.eventType)) continue;
       await ensurePrintJob(ctx, event._id, false);
     }
     return null;
   },
+});
+
+/** Enqueues a brief when a rental's outbound delivery is processed. */
+export const enqueueForEvent = internalMutation({
+  args: { eventId: v.id("events") },
+  returns: v.union(v.id("printJobs"), v.null()),
+  handler: async (ctx, args) => await ensurePrintJob(ctx, args.eventId, false),
 });
 
 export const markReady = internalMutation({

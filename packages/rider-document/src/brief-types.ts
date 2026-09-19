@@ -15,7 +15,6 @@ export type EventBriefBlock = {
 export type EventBriefShift = {
   role: string;
   person: string;
-  callLabel?: string;
   timeLabel: string;
   notes?: string;
 };

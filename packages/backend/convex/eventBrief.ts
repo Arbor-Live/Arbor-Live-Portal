@@ -167,7 +167,6 @@ export const getBriefSource = internalQuery({
       shifts: shifts.map((shift) => ({
         role: shift.role,
         person: shift.personName ?? "Unassigned",
-        callLabel: shift.callTime ? formatDateTime(shift.callTime, "timeOnly") : undefined,
         timeLabel: `${formatDateTime(shift.startsAt, "timeOnly")} – ${formatDateTime(shift.endsAt, "timeOnly")}`,
         notes: shift.notes ?? undefined,
       })),
