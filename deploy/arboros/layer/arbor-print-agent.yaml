@@ -37,6 +37,9 @@ mmdebstrap:
     # avahi-browse: locate the ipp-usb loopback endpoint for USB printers
     - avahi-utils
     - ipp-usb
+    # Driver fallback for USB printers without IPP-over-USB (e.g. HP hpcups)
+    - hplip
+    - printer-driver-hpcups
     - nodejs
   customize-hooks:
     - |

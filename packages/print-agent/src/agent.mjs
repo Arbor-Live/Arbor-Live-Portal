@@ -149,6 +149,51 @@ async function enableDuplexIfSupported() {
   }
 }
 
+/**
+ * Pick a driver PPD for a device that isn't IPP-over-USB (e.g. HP's classic
+ * USB interface). Matches the model tokens from the URI against `lpinfo -m`,
+ * preferring HPLIP's hpcups driver.
+ *
+ * @param {string} uri
+ */
+async function findDriverPpd(uri) {
+  const model = decodeURIComponent(uri.replace(/^usb:\/\//, "").split("?")[0]);
+  const tokens = model
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((token) => token && token !== "hp");
+  if (tokens.length === 0) return null;
+
+  const { stdout } = await execFileAsync("sh", ["-c", "lpinfo -m 2>/dev/null || true"]);
+  let best = null;
+  for (const line of stdout.split("\n")) {
+    if (!line.trim()) continue;
+    const ppd = line.split(/\s+/)[0];
+    const hay = line.toLowerCase();
+    const hits = tokens.filter((token) => hay.includes(token)).length;
+    if (hits < Math.max(2, tokens.length - 1)) continue;
+    const score = hits + (hay.includes("hpcups") ? 1 : 0);
+    if (!best || score > best.score) best = { ppd, score };
+  }
+  return best ? best.ppd : null;
+}
+
+/** Create the queue: driverless when possible, otherwise a matching driver. */
+async function addQueue(uri) {
+  try {
+    await execFileAsync("lpadmin", ["-p", QUEUE, "-E", "-v", uri, "-m", "everywhere"]);
+    return "everywhere";
+  } catch (error) {
+    // "IPP Everywhere driver requires an IPP connection" — a legacy usb://
+    // device needs a real PPD.
+    const ppd = await findDriverPpd(uri);
+    if (!ppd) throw error;
+    await execFileAsync("lpadmin", ["-p", QUEUE, "-E", "-v", uri, "-m", ppd]);
+    log(`created CUPS queue "${QUEUE}" with driver ${ppd}`);
+    return ppd;
+  }
+}
+
 async function ensureQueue() {
   if (await hasQueue()) {
     await enableDuplexIfSupported();
@@ -161,7 +206,7 @@ async function ensureQueue() {
     );
   }
   try {
-    await execFileAsync("lpadmin", ["-p", QUEUE, "-E", "-v", uri, "-m", "everywhere"]);
+    await addQueue(uri);
   } catch (error) {
     // lpadmin can print "lpadmin: Success" and still exit non-zero, so trust the
     // resulting queue state over its exit code.
