@@ -102,7 +102,18 @@ async function ensureQueue() {
       "No IPP printer found. Is the printer plugged in and ipp-usb running? Check `lpinfo -v`.",
     );
   }
-  await execFileAsync("lpadmin", ["-p", QUEUE, "-E", "-v", uri, "-m", "everywhere"]);
+  try {
+    await execFileAsync("lpadmin", ["-p", QUEUE, "-E", "-v", uri, "-m", "everywhere"]);
+  } catch (error) {
+    // lpadmin can print "lpadmin: Success" and still exit non-zero, so trust the
+    // resulting queue state over its exit code.
+    if (!(await hasQueue())) throw error;
+    log(`lpadmin reported an error but the queue exists: ${message(error)}`);
+    return `queue ready (${uri})`;
+  }
+  if (!(await hasQueue())) {
+    throw new Error(`lpadmin finished but lpstat does not see queue "${QUEUE}".`);
+  }
   log(`created CUPS queue "${QUEUE}" → ${uri}`);
   return `queue ready (${uri})`;
 }
