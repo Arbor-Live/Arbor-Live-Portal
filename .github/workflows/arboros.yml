@@ -33,18 +33,15 @@ jobs:
   build:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 120
-    env:
-      RPI_IMAGE_GEN_DIR: ${{ runner.temp }}/rpi-image-gen
-      BUILD_DIR: ${{ runner.temp }}/arbor-build
     steps:
       - uses: actions/checkout@v4
 
       - name: Install rpi-image-gen
         run: |
           set -euo pipefail
-          git clone --depth 1 https://github.com/raspberrypi/rpi-image-gen.git "$RPI_IMAGE_GEN_DIR"
+          git clone --depth 1 https://github.com/raspberrypi/rpi-image-gen.git "$RUNNER_TEMP/rpi-image-gen"
           sudo chmod o+x /home/runner
-          cd "$RPI_IMAGE_GEN_DIR"
+          cd "$RUNNER_TEMP/rpi-image-gen"
           sudo ./install_deps.sh
 
       - name: Install agent dependencies
@@ -63,11 +60,11 @@ jobs:
             echo "PRINT_AGENT_TOKEN secret is not set on this repository" >&2
             exit 1
           fi
-          mkdir -p "$BUILD_DIR"
-          "$RPI_IMAGE_GEN_DIR/rpi-image-gen" build \
+          mkdir -p "$RUNNER_TEMP/arbor-build"
+          "$RUNNER_TEMP/rpi-image-gen/rpi-image-gen" build \
             -S deploy/arboros \
             -c arboros.yaml \
-            -B "$BUILD_DIR" \
+            -B "$RUNNER_TEMP/arbor-build" \
             -- \
             "IGconf_device_layer=$ARBOR_DEVICE" \
             "IGconf_arbor_convex_url=$ARBOR_CONVEX_URL" \
@@ -79,12 +76,12 @@ jobs:
         id: package
         run: |
           set -euo pipefail
-          IMG=$(find "$BUILD_DIR" -type f -name 'arboros*.img' | head -n1)
+          IMG=$(find "$RUNNER_TEMP/arbor-build" -type f -name 'arboros*.img' | head -n1)
           if [ -z "$IMG" ]; then
-            IMG=$(find "$BUILD_DIR" -type f -name '*.img' | head -n1)
+            IMG=$(find "$RUNNER_TEMP/arbor-build" -type f -name '*.img' | head -n1)
           fi
           if [ -z "$IMG" ]; then
-            echo "No image produced under $BUILD_DIR" >&2
+            echo "No image produced under $RUNNER_TEMP/arbor-build" >&2
             exit 1
           fi
           if [ "${IMG##*.}" != "xz" ]; then
