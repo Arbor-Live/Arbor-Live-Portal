@@ -67,7 +67,12 @@ export const heartbeat = mutation({
  * Stale `printing` jobs are returned to the queue first so a reboot can retry.
  */
 export const claimNext = mutation({
-  args: { token: v.string(), queueName: v.string() },
+  args: {
+    token: v.string(),
+    queueName: v.string(),
+    status: v.optional(v.string()),
+    error: v.optional(v.string()),
+  },
   returns: v.union(
     v.null(),
     v.object({
@@ -81,7 +86,14 @@ export const claimNext = mutation({
     assertAgentToken(args.token);
     const now = Date.now();
     const printer = await upsertPrinter(ctx, args.queueName);
-    await ctx.db.patch(printer._id, { lastSeenAt: now, updatedAt: now });
+    // This call doubles as the agent's liveness/status report, so a healthy
+    // agent needs only one Convex call per cycle.
+    await ctx.db.patch(printer._id, {
+      lastSeenAt: now,
+      lastSeenStatus: args.status,
+      lastError: args.error,
+      updatedAt: now,
+    });
     if (!printer.enabled) return null;
 
     const printing = await ctx.db

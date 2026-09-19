@@ -219,44 +219,73 @@ async function printJob(job) {
  * @param {string} status
  * @param {string} [error]
  */
+/** @param {string} status @param {string} [error] */
 async function beat(status, error) {
-  try {
-    await client.mutation(heartbeat, {
-      token: TOKEN,
-      queueName: QUEUE,
-      status,
-      error,
-    });
-  } catch (error) {
-    log(`heartbeat failed: ${message(error)}`);
-  }
+  await client.mutation(heartbeat, {
+    token: TOKEN,
+    queueName: QUEUE,
+    status,
+    error,
+  });
 }
 
 let busy = false;
 
+/**
+ * One cycle is a single Convex call on the healthy path: `claimNext` both
+ * reports liveness/status and returns work, so there is no separate heartbeat.
+ * If the CUPS queue can't be set up we report through `heartbeat` instead and
+ * claim nothing. Returns false only when Convex was unreachable, so the loop
+ * can back off.
+ */
 async function tick() {
-  if (busy) return;
+  if (busy) return true;
   busy = true;
   try {
-    const status = await ensureQueue();
-    await beat(status, undefined);
-    const job = await client.mutation(claimNext, { token: TOKEN, queueName: QUEUE });
+    let status;
+    try {
+      status = await ensureQueue();
+    } catch (error) {
+      const text = message(error);
+      log(`queue error: ${text}`);
+      await beat(`error: ${text}`, text);
+      return true;
+    }
+    const job = await client.mutation(claimNext, {
+      token: TOKEN,
+      queueName: QUEUE,
+      status,
+    });
     if (job) await printJob(job);
+    return true;
   } catch (error) {
     const text = message(error);
     log(`tick error: ${text}`);
-    await beat("error", text);
+    try {
+      await beat("error", text);
+    } catch {
+      // Convex is unreachable; the loop backs off.
+    }
+    return false;
   } finally {
     busy = false;
   }
 }
 
+/** Back off exponentially while Convex is unreachable. */
+const MAX_BACKOFF_MS = 5 * 60_000;
+let failures = 0;
+
+async function loop() {
+  const ok = await tick();
+  failures = ok ? 0 : Math.min(failures + 1, 6);
+  const wait = ok ? POLL_MS : Math.min(POLL_MS * 2 ** failures, MAX_BACKOFF_MS);
+  setTimeout(() => void loop(), wait);
+}
+
 async function main() {
   log(`starting — queue "${QUEUE}" at ${CONVEX_URL}`);
-  // `tick` heartbeats every cycle, so liveness tracks the real queue status
-  // instead of a separate timer overwriting it.
-  await tick();
-  setInterval(() => void tick(), POLL_MS);
+  await loop();
 }
 
 for (const signal of ["SIGINT", "SIGTERM"]) {
