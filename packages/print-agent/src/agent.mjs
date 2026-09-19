@@ -117,8 +117,35 @@ async function discoverUsbPrinterUri() {
  * Creates the CUPS queue on first run so the Pi is plug-and-print: the printer
  * isn't attached at image build time, so the queue can't be baked in.
  */
+let duplexConfigured = false;
+
+/** Enable double-sided (long-edge) printing when the printer advertises it. */
+async function enableDuplexIfSupported() {
+  if (duplexConfigured) return;
+  try {
+    const { stdout } = await execFileAsync("lpoptions", ["-p", QUEUE, "-l"]);
+    // e.g. "Duplex/Duplex: None *DuplexNoTumble DuplexTumble" (* = current).
+    const line = stdout.split("\n").find((entry) => entry.startsWith("Duplex"));
+    if (!line) return; // No PPD option yet, or duplex unsupported — retry next time.
+    if (!line.includes("DuplexNoTumble")) {
+      duplexConfigured = true;
+      return;
+    }
+    if (!line.includes("*DuplexNoTumble")) {
+      await execFileAsync("lpadmin", ["-p", QUEUE, "-o", "Duplex=DuplexNoTumble"]);
+      log(`enabled double-sided printing on "${QUEUE}"`);
+    }
+    duplexConfigured = true;
+  } catch (error) {
+    log(`could not configure duplex: ${message(error)}`);
+  }
+}
+
 async function ensureQueue() {
-  if (await hasQueue()) return "queue ready";
+  if (await hasQueue()) {
+    await enableDuplexIfSupported();
+    return "queue ready";
+  }
   const uri = await discoverUsbPrinterUri();
   if (!uri) {
     throw new Error(
@@ -132,12 +159,14 @@ async function ensureQueue() {
     // resulting queue state over its exit code.
     if (!(await hasQueue())) throw error;
     log(`lpadmin reported an error but the queue exists: ${message(error)}`);
+    await enableDuplexIfSupported();
     return `queue ready (${uri})`;
   }
   if (!(await hasQueue())) {
     throw new Error(`lpadmin finished but lpstat does not see queue "${QUEUE}".`);
   }
   log(`created CUPS queue "${QUEUE}" → ${uri}`);
+  await enableDuplexIfSupported();
   return `queue ready (${uri})`;
 }
 
