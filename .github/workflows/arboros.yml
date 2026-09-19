@@ -51,17 +51,6 @@ jobs:
           cd "$RUNNER_TEMP/rpi-image-gen"
           sudo ./install_deps.sh
 
-      - name: Patch rpi-image-gen boot partition detection
-        run: |
-          set -euo pipefail
-          TAG="$RUNNER_TEMP/rpi-image-gen/layer/rpi/device/storage-binder/bin/rpi-bootdev-tag"
-          # Upstream applies the "partition 0 means the first partition" mapping
-          # only for pre-Pi-4 generations. This Pi 4 reports partition=0, so the
-          # helper dies on /dev/mmcblk0p0, the boot partition never gets tagged,
-          # and root (/dev/disk/by-slot/system) never appears. Apply it for all.
-          sed -i '/^   4|5);;$/d' "$TAG"
-          grep -n 'BOOT_PARTN -eq 0' "$TAG"
-
       - name: Install agent dependencies
         working-directory: packages/print-agent
         run: npm install --omit=dev --no-audit --no-fund
