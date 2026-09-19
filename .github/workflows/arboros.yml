@@ -1,0 +1,130 @@
+name: Build ArborOS
+
+# Builds ArborOS: a Raspberry Pi OS image with the warehouse print agent baked
+# in, so a fresh SD card boots straight into printing event briefs. The agent
+# token comes from a repository secret (never a workflow input, which would be
+# logged).
+on:
+  workflow_dispatch:
+    inputs:
+      device:
+        description: Raspberry Pi model
+        type: choice
+        options:
+          - pi5
+          - pi4
+          - pi3
+          - zero2w
+        default: pi5
+      convex_url:
+        description: Convex deployment URL the agent connects to
+        type: string
+        required: true
+      printer_queue:
+        description: CUPS queue name
+        type: string
+        required: true
+        default: ou-wh1
+
+permissions:
+  contents: write
+
+# One release tag, so serialize runs instead of racing the same assets.
+concurrency:
+  group: arboros-image
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install rpi-image-gen
+        run: |
+          set -euo pipefail
+          git clone --depth 1 https://github.com/raspberrypi/rpi-image-gen.git "$RUNNER_TEMP/rpi-image-gen"
+          sudo chmod o+x /home/runner
+          cd "$RUNNER_TEMP/rpi-image-gen"
+          sudo ./install_deps.sh
+
+      - name: Install agent dependencies
+        working-directory: packages/print-agent
+        run: npm install --omit=dev --no-audit --no-fund
+
+      - name: Assert agent dependencies are architecture-pure
+        working-directory: packages/print-agent
+        run: |
+          set -euo pipefail
+          natives=$(find node_modules -name '*.node' -print -quit)
+          if [ -n "$natives" ]; then
+            echo "The agent's dependencies include native modules. They would be copied from the amd64 runner into an arm64 image; install them for arm64 instead." >&2
+            find node_modules -name '*.node' >&2
+            exit 1
+          fi
+
+      - name: Build image
+        env:
+          ARBOR_CONVEX_URL: ${{ inputs.convex_url }}
+          ARBOR_AGENT_TOKEN: ${{ secrets.PRINT_AGENT_TOKEN }}
+          ARBOR_QUEUE: ${{ inputs.printer_queue }}
+          ARBOR_DEVICE: ${{ inputs.device }}
+        run: |
+          set -euo pipefail
+          if [ -z "${ARBOR_AGENT_TOKEN:-}" ]; then
+            echo "PRINT_AGENT_TOKEN secret is not set on this repository" >&2
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/arbor-build"
+          SOURCE_DATE_EPOCH="$(date -u -d 'today 00:00:00' +%s)" \
+          "$RUNNER_TEMP/rpi-image-gen/rpi-image-gen" build \
+            -S deploy/arboros \
+            -c arboros.yaml \
+            -B "$RUNNER_TEMP/arbor-build" \
+            -- \
+            "IGconf_device_layer=$ARBOR_DEVICE" \
+            "IGconf_arbor_convex_url=$ARBOR_CONVEX_URL" \
+            "IGconf_arbor_agent_token=$ARBOR_AGENT_TOKEN" \
+            "IGconf_arbor_queue=$ARBOR_QUEUE" \
+            "IGconf_arbor_agent_src=$GITHUB_WORKSPACE/packages/print-agent"
+
+      - name: Compress and checksum
+        id: package
+        run: |
+          set -euo pipefail
+          IMG=$(find "$RUNNER_TEMP/arbor-build" -type f -name 'arboros*.img' | head -n1)
+          if [ -z "$IMG" ]; then
+            IMG=$(find "$RUNNER_TEMP/arbor-build" -type f -name '*.img' | head -n1)
+          fi
+          if [ -z "$IMG" ]; then
+            echo "No image produced under $RUNNER_TEMP/arbor-build" >&2
+            exit 1
+          fi
+          if [ "${IMG##*.}" != "xz" ]; then
+            xz -T0 -6 "$IMG"
+            IMG="$IMG.xz"
+          fi
+          sha256sum "$IMG" > "$IMG.sha256"
+          echo "image_path=$IMG" >> "$GITHUB_OUTPUT"
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: arboros
+          name: ArborOS
+          make_latest: true
+          body: |
+            ArborOS: a Raspberry Pi image with the Arbor print agent built in.
+
+            - Device: `${{ inputs.device }}`
+            - Convex URL: `${{ inputs.convex_url }}`
+            - CUPS queue: `${{ inputs.printer_queue }}`
+            - Commit: `${{ github.sha }}`
+
+            Flash the `.img.xz` to an SD card (Raspberry Pi Imager → Use custom image),
+            plug the printer into the Pi over USB, and it will create the CUPS queue
+            and start printing briefs on first boot.
+          files: |
+            ${{ steps.package.outputs.image_path }}
+            ${{ steps.package.outputs.image_path }}.sha256

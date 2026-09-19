@@ -1,0 +1,63 @@
+# METABEGIN
+# X-Env-Layer-Name: arbor-print-agent
+# X-Env-Layer-Version: 1.0.0
+# X-Env-Layer-Category: app
+# X-Env-Layer-Desc: ArborOS warehouse printer: CUPS + ipp-usb and the Arbor
+#  event-brief print agent. The CUPS queue is created by the agent on first run,
+#  because the printer is not attached at image build time.
+# X-Env-Layer-Requires: systemd-min,
+#  systemd-net-min
+#
+# X-Env-VarPrefix: arbor
+#
+# X-Env-Var-convex_url:
+# X-Env-Var-convex_url-Desc: Convex deployment URL the agent connects to.
+# X-Env-Var-convex_url-Required: y
+#
+# X-Env-Var-agent_token:
+# X-Env-Var-agent_token-Desc: Shared secret the agent authenticates with.
+# X-Env-Var-agent_token-Required: y
+#
+# X-Env-Var-queue: ou-wh1
+# X-Env-Var-queue-Desc: CUPS queue name the agent creates and prints to.
+# X-Env-Var-queue-Required: n
+#
+# X-Env-Var-agent_src:
+# X-Env-Var-agent_src-Desc: Absolute path to packages/print-agent on the build
+#  host, with its production node_modules already installed.
+# X-Env-Var-agent_src-Required: y
+# METAEND
+---
+mmdebstrap:
+  packages:
+    - ca-certificates
+    - cups
+    - cups-client
+    - cups-filters
+    - ipp-usb
+    - nodejs
+  customize-hooks:
+    - |
+      set -eu
+      AGENT_SRC="$IGconf_arbor_agent_src"
+      if [ ! -d "$AGENT_SRC/node_modules" ]; then
+        echo "arbor-print-agent: missing node_modules in $AGENT_SRC; run 'npm install --omit=dev' there first" >&2
+        exit 1
+      fi
+
+      install -d "$1/opt/arbor-print-agent"
+      install -m 0644 "$AGENT_SRC/package.json" "$1/opt/arbor-print-agent/package.json"
+      install -m 0755 "$AGENT_SRC/src/agent.mjs" "$1/opt/arbor-print-agent/agent.mjs"
+      cp -a "$AGENT_SRC/node_modules" "$1/opt/arbor-print-agent/node_modules"
+
+      install -m 0644 "$AGENT_SRC/systemd/arbor-print-agent.service" \
+        "$1/etc/systemd/system/arbor-print-agent.service"
+
+      cat > "$1/etc/arbor-print-agent.env" <<EOF
+      CONVEX_URL=$IGconf_arbor_convex_url
+      PRINT_AGENT_TOKEN=$IGconf_arbor_agent_token
+      PRINTER_QUEUE=$IGconf_arbor_queue
+      EOF
+      chmod 600 "$1/etc/arbor-print-agent.env"
+
+      $BDEBSTRAP_HOOKS/enable-units "$1" arbor-print-agent
