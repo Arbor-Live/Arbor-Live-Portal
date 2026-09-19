@@ -51,6 +51,9 @@ jobs:
           cd "$RUNNER_TEMP/rpi-image-gen"
           sudo ./install_deps.sh
 
+      - name: Patch rpi-image-gen for USB boot
+        run: ./deploy/arboros/patch-usb-boot.sh "$RUNNER_TEMP/rpi-image-gen"
+
       - name: Install agent dependencies
         working-directory: packages/print-agent
         run: npm install --omit=dev --no-audit --no-fund
