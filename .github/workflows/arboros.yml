@@ -56,7 +56,7 @@ jobs:
 
       - name: Install agent dependencies
         working-directory: packages/print-agent
-        run: npm install --omit=dev --no-audit --no-fund
+        run: npm install --omit=dev --omit=optional --no-audit --no-fund
 
       - name: Assert agent dependencies are architecture-pure
         working-directory: packages/print-agent

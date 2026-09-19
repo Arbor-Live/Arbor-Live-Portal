@@ -8,8 +8,9 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { ConvexHttpClient } from "convex/browser";
+import { ConvexClient } from "convex/browser";
 import { makeFunctionReference } from "convex/server";
+import WebSocket from "ws";
 
 const execFileAsync = promisify(execFile);
 
@@ -23,7 +24,10 @@ function requireEnv(name) {
 const CONVEX_URL = requireEnv("CONVEX_URL");
 const TOKEN = requireEnv("PRINT_AGENT_TOKEN");
 const QUEUE = process.env.PRINTER_QUEUE ?? "ou-wh1";
-const POLL_MS = Number(process.env.PRINT_POLL_MS ?? 15_000);
+/** Idle liveness only; work is delivered by subscription, not a timer. */
+const HEARTBEAT_MS = 10 * 60_000;
+/** Retry CUPS queue setup this often while it is unavailable. */
+const QUEUE_RETRY_MS = 60_000;
 /** Keep the Convex claim warm while a job downloads and prints. */
 const CLAIM_RENEW_MS = 60_000;
 const DOWNLOAD_TIMEOUT_MS = 60_000;
@@ -44,8 +48,15 @@ const fail = /** @type {import("convex/server").FunctionReference<"mutation">} *
 const renewClaim = /** @type {import("convex/server").FunctionReference<"mutation">} */ (
   makeFunctionReference("printAgent:renewClaim")
 );
+const pending = /** @type {import("convex/server").FunctionReference<"query">} */ (
+  makeFunctionReference("printAgent:pending")
+);
 
-const client = new ConvexHttpClient(CONVEX_URL);
+// A websocket subscription drives work; `ws` provides the constructor on Node
+// versions without a global WebSocket.
+const client = new ConvexClient(CONVEX_URL, {
+  webSocketConstructor: /** @type {any} */ (WebSocket),
+});
 
 /** @param {unknown} error */
 function message(error) {
@@ -215,12 +226,10 @@ async function printJob(job) {
   }
 }
 
-/**
- * @param {string} status
- * @param {string} [error]
- */
-/** @param {string} status @param {string} [error] */
-async function beat(status, error) {
+let queueStatus = "starting";
+
+/** @param {string} [status] @param {string} [error] */
+async function reportHeartbeat(status = queueStatus, error) {
   await client.mutation(heartbeat, {
     token: TOKEN,
     queueName: QUEUE,
@@ -229,73 +238,99 @@ async function beat(status, error) {
   });
 }
 
-let busy = false;
+let draining = false;
 
 /**
- * One cycle is a single Convex call on the healthy path: `claimNext` both
- * reports liveness/status and returns work, so there is no separate heartbeat.
- * If the CUPS queue can't be set up we report through `heartbeat` instead and
- * claim nothing. Returns false only when Convex was unreachable, so the loop
- * can back off.
+ * Claims and prints until the queue is empty. A job insert pushes to the
+ * subscription, so this runs on demand rather than on a timer.
  */
-async function tick() {
-  if (busy) return true;
-  busy = true;
+async function drain() {
+  if (draining) return;
+  draining = true;
   try {
-    let status;
-    try {
-      status = await ensureQueue();
-    } catch (error) {
-      const text = message(error);
-      log(`queue error: ${text}`);
-      await beat(`error: ${text}`, text);
-      return true;
+    for (;;) {
+      try {
+        queueStatus = await ensureQueue();
+      } catch (error) {
+        const text = message(error);
+        queueStatus = `error: ${text}`;
+        log(`queue error: ${text}`);
+        try {
+          await reportHeartbeat(queueStatus, text);
+        } catch (reportError) {
+          log(`heartbeat failed: ${message(reportError)}`);
+        }
+        // Retry while the queue is broken; nothing can be claimed until it works.
+        setTimeout(() => void drain(), QUEUE_RETRY_MS);
+        return;
+      }
+      const job = await client.mutation(claimNext, {
+        token: TOKEN,
+        queueName: QUEUE,
+        status: queueStatus,
+      });
+      if (!job) return;
+      await printJob(job);
     }
-    const job = await client.mutation(claimNext, {
-      token: TOKEN,
-      queueName: QUEUE,
-      status,
-    });
-    if (job) await printJob(job);
-    return true;
   } catch (error) {
-    const text = message(error);
-    log(`tick error: ${text}`);
-    try {
-      await beat("error", text);
-    } catch {
-      // Convex is unreachable; the loop backs off.
-    }
-    return false;
+    log(`drain error: ${message(error)}`);
   } finally {
-    busy = false;
+    draining = false;
   }
 }
 
-/** Back off exponentially while Convex is unreachable. */
-const MAX_BACKOFF_MS = 5 * 60_000;
-let failures = 0;
-
-async function loop() {
-  const ok = await tick();
-  failures = ok ? 0 : Math.min(failures + 1, 6);
-  const wait = ok ? POLL_MS : Math.min(POLL_MS * 2 ** failures, MAX_BACKOFF_MS);
-  setTimeout(() => void loop(), wait);
-}
-
-async function main() {
+function main() {
   log(`starting — queue "${QUEUE}" at ${CONVEX_URL}`);
-  await loop();
+
+  // Work arrives by subscription: while idle the device makes no calls at all,
+  // and an inserted job is pushed immediately rather than waiting for a poll.
+  client.onUpdate(
+    pending,
+    { token: TOKEN, queueName: QUEUE },
+    (value) => {
+      if (value) void drain();
+    },
+    (error) => log(`subscription error: ${message(error)}`),
+  );
+
+  // Liveness only: a slow, jittered heartbeat so offline detection still works
+  // when the device is idle. Decoupled from printing, so it can't add latency.
+  const scheduleHeartbeat = () => {
+    const wait = HEARTBEAT_MS * (0.85 + Math.random() * 0.3);
+    setTimeout(() => {
+      reportHeartbeat()
+        .catch((error) => log(`heartbeat failed: ${message(error)}`))
+        .finally(scheduleHeartbeat);
+    }, wait);
+  };
+  scheduleHeartbeat();
+
+  // Report online when the socket comes up and nudge a drain on (re)connect, in
+  // case work landed while we were disconnected.
+  let connected = false;
+  client.subscribeToConnectionState((state) => {
+    if (state.isWebSocketConnected && !connected) {
+      connected = true;
+      void drain();
+      reportHeartbeat().catch((error) => log(`heartbeat failed: ${message(error)}`));
+    } else if (!state.isWebSocketConnected) {
+      connected = false;
+    }
+  });
+
+  void drain();
 }
 
 for (const signal of ["SIGINT", "SIGTERM"]) {
   process.on(signal, () => {
     log(`received ${signal}, exiting`);
-    process.exit(0);
+    void client.close().finally(() => process.exit(0));
   });
 }
 
-main().catch((error) => {
+try {
+  main();
+} catch (error) {
   log(`fatal: ${message(error)}`);
   process.exit(1);
-});
+}

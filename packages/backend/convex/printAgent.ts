@@ -176,6 +176,37 @@ export const renewClaim = mutation({
   },
 });
 
+/**
+ * Work signal for the agent's subscription: the oldest ready job for this
+ * printer, or null. Reactive, so an inserted job is pushed to the device
+ * without polling.
+ */
+export const pending = query({
+  args: { token: v.string(), queueName: v.string() },
+  returns: v.union(
+    v.null(),
+    v.object({ jobId: v.id("printJobs"), fileName: v.string() }),
+  ),
+  handler: async (ctx, args) => {
+    assertAgentToken(args.token);
+    const printer = await ctx.db
+      .query("printers")
+      .withIndex("by_queueName", (q) => q.eq("queueName", args.queueName))
+      .unique();
+    if (!printer || !printer.enabled) return null;
+    const ready = (
+      await ctx.db
+        .query("printJobs")
+        .withIndex("by_printerId_and_status", (q) =>
+          q.eq("printerId", printer._id).eq("status", "ready"),
+        )
+        .order("asc")
+        .take(1)
+    )[0];
+    return ready ? { jobId: ready._id, fileName: ready.fileName } : null;
+  },
+});
+
 export const complete = mutation({
   args: {
     token: v.string(),
