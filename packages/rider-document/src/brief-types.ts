@@ -31,6 +31,20 @@ export type EventBriefInstruction = {
   body: string;
 };
 
+/** A one-off contact row (venue, host billing, band) shown in People & contacts. */
+export type EventBriefContact = {
+  roleLabel: string;
+  person: string;
+  contact?: string;
+  notes?: string;
+};
+
+export type EventBriefPullItem = {
+  label: string;
+  quantity: number;
+  notes?: string;
+};
+
 export type EventBriefDocumentData = {
   title: string;
   generatedAtLabel: string;
@@ -41,9 +55,19 @@ export type EventBriefDocumentData = {
   venueName?: string;
   venueAddress?: string;
   notes?: string;
+  /** Authenticated event page, encoded as a QR code on the printed brief. */
+  briefUrl?: string;
   blocks: EventBriefBlock[];
   shifts: EventBriefShift[];
   assignments: EventBriefAssignment[];
+  /** Venue contact for on-site questions, walked up ancestor venues. */
+  venueContact?: EventBriefContact;
+  /** Primary billing contact for the host organization. */
+  hostContact?: EventBriefContact;
+  /** One row per band on the event that has contact info on its rider. */
+  bandContacts: EventBriefContact[];
+  /** Equipment required for the event, sized to the event's pull list. */
+  pullList: EventBriefPullItem[];
   instructions: EventBriefInstruction[];
   /**
    * Input list + changeover (and monitor/backline) pages, present only when the

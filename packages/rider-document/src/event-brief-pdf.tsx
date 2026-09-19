@@ -1,4 +1,4 @@
-import { Document, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
+import { Document, Image, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
 import { RiderPages, RiderPdfFooter } from "./rider-pdf";
 import type { EventBriefDocumentData } from "./brief-types";
 
@@ -30,6 +30,9 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 9.5, color: muted, marginTop: 2 },
   headerMeta: { alignItems: "flex-end", gap: 1, flexShrink: 0 },
   metaLine: { fontSize: 8.5, color: muted },
+  headerQr: { alignItems: "center", gap: 2, flexShrink: 0 },
+  qrImage: { width: 58, height: 58 },
+  qrCaption: { fontSize: 6.5, color: muted },
   section: { marginBottom: 14 },
   sectionTitle: { fontSize: 11, fontWeight: 700, marginBottom: 5 },
   facts: { flexDirection: "row", flexWrap: "wrap", gap: 18, marginBottom: 12 },
@@ -59,6 +62,7 @@ const styles = StyleSheet.create({
 const SCHEDULE_COLUMNS = [74, 112, 66, 66, 230];
 const CREW_COLUMNS = [130, 150, 150, 118];
 const PEOPLE_COLUMNS = [118, 130, 200, 100];
+const PULL_LIST_COLUMNS = [330, 60, 158];
 
 function Table({
   columns,
@@ -106,7 +110,13 @@ function Fact({ label, value }: { label: string; value?: string }) {
   );
 }
 
-export function EventBriefPdf({ data }: { data: EventBriefDocumentData }) {
+export function EventBriefPdf({
+  data,
+  qrDataUri,
+}: {
+  data: EventBriefDocumentData;
+  qrDataUri?: string;
+}) {
   const scheduleRows = data.blocks.map((block) => [
     block.dayLabel,
     block.label,
@@ -129,6 +139,22 @@ export function EventBriefPdf({ data }: { data: EventBriefDocumentData }) {
     assignment.notes ?? "",
   ]);
 
+  for (const contact of [data.venueContact, data.hostContact, ...data.bandContacts]) {
+    if (!contact) continue;
+    peopleRows.push([
+      contact.roleLabel,
+      contact.person,
+      contact.contact ?? "",
+      contact.notes ?? "",
+    ]);
+  }
+
+  const pullListRows = data.pullList.map((item) => [
+    item.label,
+    String(item.quantity),
+    item.notes ?? "",
+  ]);
+
   return (
     <Document title={`${data.title} — event brief`} author="Arbor Live">
       <Page size="LETTER" style={styles.page}>
@@ -143,6 +169,12 @@ export function EventBriefPdf({ data }: { data: EventBriefDocumentData }) {
             <Text style={styles.metaLine}>Generated {data.generatedAtLabel}</Text>
             <Text style={styles.metaLine}>{data.statusLabel}</Text>
           </View>
+          {qrDataUri ? (
+            <View style={styles.headerQr}>
+              <Image style={styles.qrImage} src={qrDataUri} />
+              <Text style={styles.qrCaption}>Scan to open</Text>
+            </View>
+          ) : null}
         </View>
 
         <View style={styles.facts}>
@@ -187,6 +219,18 @@ export function EventBriefPdf({ data }: { data: EventBriefDocumentData }) {
             emptyMessage="No assignments yet."
           />
         </View>
+
+        {data.pullList.length ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Pull list</Text>
+            <Table
+              columns={PULL_LIST_COLUMNS}
+              headers={["Item", "Qty", "Notes"]}
+              rows={pullListRows}
+              emptyMessage="No equipment on the pull list yet."
+            />
+          </View>
+        ) : null}
 
         {data.instructions.length ? (
           <View style={styles.section}>

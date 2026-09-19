@@ -25,7 +25,7 @@ async function briefSourceUpdatedAt(
 ): Promise<number> {
   const event = await ctx.db.get(eventId);
   let max = event?.updatedAt ?? 0;
-  const [blocks, shifts, assignments, artifacts] = await Promise.all([
+  const [blocks, shifts, assignments, artifacts, pullListItems] = await Promise.all([
     ctx.db
       .query("eventScheduleBlocks")
       .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
@@ -42,9 +42,24 @@ async function briefSourceUpdatedAt(
       .query("eventArtifacts")
       .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
       .take(500),
+    ctx.db
+      .query("eventPullListItems")
+      .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
+      .take(500),
   ]);
-  for (const row of [...blocks, ...shifts, ...assignments, ...artifacts]) {
+  for (const row of [...blocks, ...shifts, ...assignments, ...artifacts, ...pullListItems]) {
     if (row.updatedAt > max) max = row.updatedAt;
+  }
+
+  // Host billing contacts print on the brief, so their edits refresh it too.
+  if (event?.hostGroupId) {
+    const contacts = await ctx.db
+      .query("invoiceContacts")
+      .withIndex("by_groupId", (q) => q.eq("groupId", event.hostGroupId))
+      .take(200);
+    for (const contact of contacts) {
+      if (contact.updatedAt > max) max = contact.updatedAt;
+    }
   }
 
   // Rider content and the venue address also feed the brief. A rider edit or a
