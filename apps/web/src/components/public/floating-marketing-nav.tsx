@@ -73,8 +73,9 @@ export function FloatingMarketingNav() {
     // iOS Safari often drops taps on dialog content nested under pointer-events-none.
     <>
       <header className="fixed inset-x-0 top-0 z-40">
-        {/* When the banner shows it becomes the chrome's bottom edge, so the
-            page keeps its original top spacing and nothing shifts underneath. */}
+        {/* When the banner shows it becomes the chrome's bottom edge (the nav
+            cluster drops its bottom padding). Pages that reserve space under
+            the header add the banner height via --happening-banner-height. */}
         <div
           className={cn(
             "flex flex-col items-center px-3 pt-3 sm:px-4 sm:pt-4",

@@ -110,3 +110,11 @@ export type {
   RiderStageItem,
   RiderStandType,
 } from "./types";
+
+export type {
+  EventBriefAssignment,
+  EventBriefBlock,
+  EventBriefDocumentData,
+  EventBriefInstruction,
+  EventBriefShift,
+} from "./brief-types";

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "convex/react";
 import { CaretDownIcon } from "@phosphor-icons/react";
 import type { FunctionReturnType } from "convex/server";
@@ -37,6 +37,27 @@ export function useHappeningNowEvents(): HappeningNowEvent[] {
 
 export function HappeningNowBar({ events }: { events: HappeningNowEvent[] }) {
   const [expanded, setExpanded] = useState(false);
+  const barRef = useRef<HTMLDivElement>(null);
+
+  // The banner lives in the fixed marketing header, so it can't push page
+  // content on its own. Publish its height for pages that reserve space under
+  // the header (RequestWizardShell) to add to their top padding.
+  useEffect(() => {
+    const node = barRef.current;
+    if (!node) return;
+    const root = document.documentElement;
+    const apply = () => {
+      root.style.setProperty("--happening-banner-height", `${node.offsetHeight}px`);
+    };
+    apply();
+    const observer = new ResizeObserver(apply);
+    observer.observe(node);
+    return () => {
+      observer.disconnect();
+      root.style.removeProperty("--happening-banner-height");
+    };
+  }, [events.length]);
+
   if (events.length === 0) return null;
   const shown = events.slice(0, MAX_SHOWN);
   const expandable = events.length > 1;
@@ -56,7 +77,10 @@ export function HappeningNowBar({ events }: { events: HappeningNowEvent[] }) {
 
   return (
     <div>
-      <div className="flex h-8 items-center gap-x-2 overflow-hidden bg-emerald-600 px-3 text-white sm:h-9 sm:gap-x-3 sm:px-4">
+      <div
+        ref={barRef}
+        className="flex h-8 items-center gap-x-2 overflow-hidden bg-emerald-600 px-3 text-white sm:h-9 sm:gap-x-3 sm:px-4"
+      >
         {expandable ? (
           <>
             <button

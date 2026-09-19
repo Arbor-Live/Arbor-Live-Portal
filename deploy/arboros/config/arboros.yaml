@@ -1,0 +1,19 @@
+include:
+  file: trixie-minbase.yaml
+
+# ArborOS: the warehouse Raspberry Pi image. The device layer is chosen per build
+# via `IGconf_device_layer=...`; see the ArborOS workflow. Trixie's minbase suite
+# already brings systemd + networking.
+device:
+  hostname: arboros
+
+image:
+  name: arboros
+
+# Ship a raw image; the workflow xz-compresses it, because Raspberry Pi Imager
+# reads .img.xz and the deploy step otherwise defaults to zstd.
+deploy:
+  compression: none
+
+layer:
+  agent: arbor-print-agent

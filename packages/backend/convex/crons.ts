@@ -22,6 +22,12 @@ crons.daily(
 );
 
 crons.daily(
+  "print event briefs",
+  { hourUTC: 13, minuteUTC: 0 },
+  internal.printJobs.enqueueDue,
+);
+
+crons.daily(
   "promote ended band payments",
   { hourUTC: 18, minuteUTC: 0 },
   internal.bandPayments.promoteEndedPayments,
@@ -51,6 +57,13 @@ crons.cron(
   "prune orphaned r2 assets",
   "0 5 * * *",
   internal.r2Assets.pruneOrphans,
+  {},
+);
+
+crons.cron(
+  "prune old print jobs",
+  "0 6 * * *",
+  internal.printJobs.pruneOldJobs,
   {},
 );
 

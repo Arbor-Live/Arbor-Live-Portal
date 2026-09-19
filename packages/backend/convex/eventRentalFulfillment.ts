@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
@@ -700,6 +701,12 @@ export const completeOutbound = mutation({
       completedByUserId: getUserId(user),
     });
     await syncPullListProgressFromUnits(ctx, args.eventId, units);
+
+    // Rentals print after the delivery is processed, so the brief reflects what
+    // was actually pulled/scanned rather than the planned pull list.
+    await ctx.scheduler.runAfter(0, internal.printJobs.enqueueForEvent, {
+      eventId: args.eventId,
+    });
 
     const rented = units.filter((unit) => isActiveRentedOutbound(unit.outboundStatus));
     const emailResult = await enqueueOutboundPackedEmail(ctx, event, fulfillment, units);
