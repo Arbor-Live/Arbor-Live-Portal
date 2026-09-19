@@ -62,13 +62,35 @@ test.describe("print queue", () => {
     }) as { eventId: string; path: string };
 
     await page.goto(seeded.path);
-    const downloadButton = page.getByRole("button", { name: "Download brief" });
-    await expect(downloadButton).toBeVisible({ timeout: 30_000 });
+    const briefButton = page.getByRole("button", { name: "Brief" });
+    await expect(briefButton).toBeVisible({ timeout: 30_000 });
+    await briefButton.click();
 
     const [download] = await Promise.all([
       page.waitForEvent("download", { timeout: 60_000 }),
-      downloadButton.click(),
+      page.getByRole("menuitem", { name: "View" }).click(),
     ]);
     expect(download.suggestedFilename()).toMatch(/-brief\.pdf$/);
+  });
+
+  test("queues a print from the event editor", async ({ page }) => {
+    test.setTimeout(120_000);
+    runConvex("e2eHelpers:seedPrinter", { queueName: "e2e-wh1" });
+    const seeded = runConvex("e2eHelpers:seedCrewedEventWithSchedule", {
+      title: `E2E Brief Print ${Date.now()}`,
+    }) as { eventId: string; path: string };
+
+    await page.goto(seeded.path);
+    const briefButton = page.getByRole("button", { name: "Brief" });
+    await expect(briefButton).toBeVisible({ timeout: 30_000 });
+    await briefButton.click();
+    await page.getByRole("menuitem", { name: "Print" }).click();
+
+    const state = await pollConvex<PrintQueueState>(
+      "e2eHelpers:getPrintQueueState",
+      { eventId: seeded.eventId },
+      (row) => Boolean(row && row.jobs.length > 0),
+    );
+    expect(state.jobs.length).toBeGreaterThan(0);
   });
 });
