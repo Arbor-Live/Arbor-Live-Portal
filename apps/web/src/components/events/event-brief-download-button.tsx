@@ -37,6 +37,8 @@ export function EventBriefDownloadButton({
       <Button
         type="button"
         variant="outline"
+        // The brief is built from saved data. Gating on unsaved edits needs the
+        // editor's dirty tracking fixed first — see issue #252.
         disabled={status === "loading"}
         onClick={() => void onDownload()}
       >

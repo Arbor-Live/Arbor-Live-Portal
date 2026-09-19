@@ -45,13 +45,13 @@ function stripMarkdown(markdown: string): string {
     .trim();
 }
 
-function whenLabel(startAt: number, endAt: number): string {
-  const start = formatTime(startAt);
-  const end = formatTime(endAt);
-  if (pacificDateKey(startAt) === pacificDateKey(endAt)) {
-    return `${formatDate(startAt)} · ${start} – ${end}`;
+function whenLabel(startAt: number, endAt: number, timezone: string): string {
+  const start = formatTime(startAt, timezone);
+  const end = formatTime(endAt, timezone);
+  if (pacificDateKey(startAt, timezone) === pacificDateKey(endAt, timezone)) {
+    return `${formatDate(startAt, timezone)} · ${start} – ${end}`;
   }
-  return `${formatDate(startAt)} ${start} – ${formatDate(endAt)} ${end}`;
+  return `${formatDate(startAt, timezone)} ${start} – ${formatDate(endAt, timezone)} ${end}`;
 }
 
 /** Walks ancestors so a room without its own address prints the building's. */
@@ -154,20 +154,20 @@ export const getBriefSource = internalQuery({
       statusLabel: STATUS_LABELS[event.status] ?? event.status,
       eventTypeLabel: event.eventType ?? undefined,
       hostLabel: event.host ?? undefined,
-      whenLabel: whenLabel(event.startAt, event.endAt),
+      whenLabel: whenLabel(event.startAt, event.endAt, event.timezone),
       venueName: event.venueName ?? venue?.name,
       venueAddress: await effectiveAddress(ctx, venue),
       notes: event.notes ?? undefined,
       blocks: blocks.map((block) => ({
         dayLabel: `Day ${block.dayIndex + 1}`,
         label: block.label,
-        timeLabel: `${formatTime(block.startsAt)} – ${formatTime(block.endsAt)}`,
+        timeLabel: `${formatTime(block.startsAt, event.timezone)} – ${formatTime(block.endsAt, event.timezone)}`,
         notes: block.notes ?? undefined,
       })),
       shifts: shifts.map((shift) => ({
         role: shift.role,
         person: shift.personName ?? "Unassigned",
-        timeLabel: `${formatTime(shift.startsAt)} – ${formatTime(shift.endsAt)}`,
+        timeLabel: `${formatTime(shift.startsAt, event.timezone)} – ${formatTime(shift.endsAt, event.timezone)}`,
         notes: shift.notes ?? undefined,
       })),
       assignments: assignments.map((assignment) => ({

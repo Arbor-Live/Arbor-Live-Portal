@@ -85,7 +85,52 @@ async function ensureQueue() {
   return `queue ready (${uri})`;
 }
 
-/** @param {{ jobId: string, url: string, fileName?: string }} job */
+/** @param {number} ms */
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** @param {{ jobId: string, fileName?: string, claimToken: string }} job @param {string} text */
+async function reportFailure(job, text) {
+  try {
+    await client.mutation(fail, {
+      token: TOKEN,
+      jobId: job.jobId,
+      claimToken: job.claimToken,
+      error: text,
+    });
+  } catch (error) {
+    log(`could not report failure for ${job.jobId}: ${message(error)}`);
+  }
+}
+
+/**
+ * `lp` has already submitted the job, so a transient reporting blip must not
+ * read as a failed print (that would cause a duplicate on the next claim).
+ * Retry the report, then leave the job to the lease rather than failing it.
+ *
+ * @param {{ jobId: string, fileName?: string, claimToken: string }} job
+ */
+async function reportComplete(job) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await client.mutation(complete, {
+        token: TOKEN,
+        jobId: job.jobId,
+        claimToken: job.claimToken,
+      });
+      return;
+    } catch (error) {
+      if (attempt === 2) {
+        log(`printed ${job.fileName} but could not report completion: ${message(error)}`);
+        return;
+      }
+      await delay(1_000 * (attempt + 1));
+    }
+  }
+}
+
+/** @param {{ jobId: string, url: string, fileName?: string, claimToken: string }} job */
 async function printJob(job) {
   const dir = await mkdtemp(join(tmpdir(), "arbor-brief-"));
   const file = join(dir, job.fileName || `${job.jobId}.pdf`);
@@ -95,13 +140,21 @@ async function printJob(job) {
       throw new Error(`Brief download failed with HTTP ${response.status}.`);
     }
     await writeFile(file, Buffer.from(await response.arrayBuffer()));
-    await execFileAsync("lp", ["-d", QUEUE, file]);
-    await client.mutation(complete, { token: TOKEN, jobId: job.jobId });
+    try {
+      // Title the CUPS job so a duplicate submission is identifiable at the sink.
+      await execFileAsync("lp", ["-d", QUEUE, "-t", `arbor-${job.jobId}`, file]);
+    } catch (error) {
+      const text = message(error);
+      log(`failed job ${job.jobId}: ${text}`);
+      await reportFailure(job, text);
+      return;
+    }
+    await reportComplete(job);
     log(`printed ${job.fileName} (job ${job.jobId})`);
   } catch (error) {
     const text = message(error);
     log(`failed job ${job.jobId}: ${text}`);
-    await client.mutation(fail, { token: TOKEN, jobId: job.jobId, error: text });
+    await reportFailure(job, text);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

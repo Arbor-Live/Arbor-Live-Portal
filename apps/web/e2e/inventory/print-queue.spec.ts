@@ -26,12 +26,14 @@ test.describe("print queue", () => {
     await pollConvex<PrintQueueState>(
       "e2eHelpers:getPrintQueueState",
       { eventId: seeded.eventId },
-      (row) => row.jobs.some((job) => job.status === "ready" || job.status === "printed"),
+      (row) => Boolean(row?.jobs.some((job) => job.status === "ready" || job.status === "printed")),
     );
 
     await page.goto("/dashboard/inventory/print-queue");
-    await expect(page.getByText(queueName, { exact: true })).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText("Online", { exact: true })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(`Queue: ${queueName}`)).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText("Online", { exact: true }).first()).toBeVisible({
+      timeout: 15_000,
+    });
 
     const row = page.getByRole("row").filter({ hasText: title });
     await expect(row).toBeVisible({ timeout: 20_000 });
@@ -41,7 +43,7 @@ test.describe("print queue", () => {
     await pollConvex<PrintQueueState>(
       "e2eHelpers:getPrintQueueState",
       { eventId: seeded.eventId },
-      (state) => state.jobs.length >= 2,
+      (state) => Boolean(state && state.jobs.length >= 2),
     );
     await expect(page.getByRole("row").filter({ hasText: title })).toHaveCount(2, {
       timeout: 20_000,

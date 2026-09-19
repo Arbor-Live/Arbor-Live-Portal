@@ -395,6 +395,7 @@ export const getDocumentData = query({
 async function loadEventRiders(
   ctx: QueryCtx,
   eventId: Id<"events">,
+  options?: { publishedOnly?: boolean },
 ): Promise<EventRiderRow[]> {
   const participations = await ctx.db
     .query("eventBandParticipations")
@@ -409,13 +410,15 @@ async function loadEventRiders(
         q.eq("organizationId", participation.organizationId),
       )
       .take(50);
-    // Prefer the default rider, then the most recently updated published one.
-    const chosen =
-      riders.find((rider) => rider.isDefault) ??
-      riders
-        .filter((rider) => rider.status === "published")
-        .sort((a, b) => b.updatedAt - a.updatedAt)[0] ??
-      null;
+    // Public surfaces show the default rider even if it is a draft. The brief
+    // only prints published content, so it takes the published default next,
+    // then the latest published rider.
+    const published = riders
+      .filter((rider) => rider.status === "published")
+      .sort((a, b) => b.updatedAt - a.updatedAt);
+    const chosen = options?.publishedOnly
+      ? (published.find((rider) => rider.isDefault) ?? published[0] ?? null)
+      : (riders.find((rider) => rider.isDefault) ?? published[0] ?? null);
 
     rows.push({
       organizationId: participation.organizationId,
@@ -437,7 +440,8 @@ async function loadEventRiders(
 
 export const listForEventInternal = internalQuery({
   args: { eventId: v.id("events") },
-  handler: async (ctx, args) => await loadEventRiders(ctx, args.eventId),
+  handler: async (ctx, args) =>
+    await loadEventRiders(ctx, args.eventId, { publishedOnly: true }),
 });
 
 export const listForEvent = query({

@@ -46,6 +46,34 @@ async function briefSourceUpdatedAt(
   for (const row of [...blocks, ...shifts, ...assignments, ...artifacts]) {
     if (row.updatedAt > max) max = row.updatedAt;
   }
+
+  // Rider content and the venue address also feed the brief. A rider edit or a
+  // venue/ancestor address edit must refresh the printed brief even though the
+  // event itself did not change, so fold both into the freshness stamp.
+  const participations = await ctx.db
+    .query("eventBandParticipations")
+    .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
+    .take(50);
+  for (const participation of participations) {
+    if (participation.updatedAt > max) max = participation.updatedAt;
+    const riders = await ctx.db
+      .query("bandRiders")
+      .withIndex("by_organizationId", (q) =>
+        q.eq("organizationId", participation.organizationId),
+      )
+      .take(50);
+    for (const rider of riders) {
+      if (rider.updatedAt > max) max = rider.updatedAt;
+    }
+  }
+
+  let venueId = event?.venueId;
+  for (let hop = 0; venueId && hop < 20; hop += 1) {
+    const venue = await ctx.db.get(venueId);
+    if (!venue) break;
+    if (venue.updatedAt > max) max = venue.updatedAt;
+    venueId = venue.parentId;
+  }
   return max;
 }
 

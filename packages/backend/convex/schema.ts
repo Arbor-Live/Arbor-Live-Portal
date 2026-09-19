@@ -2050,6 +2050,8 @@ export default defineSchema({
     storageId: v.optional(v.id("_storage")),
     attempts: v.number(),
     claimedAt: v.optional(v.number()),
+    /** Fences a claim: only the agent holding this token may complete/fail it. */
+    claimToken: v.optional(v.string()),
     printedAt: v.optional(v.number()),
     error: v.optional(v.string()),
     createdAt: v.number(),
