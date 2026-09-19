@@ -34,6 +34,8 @@ mmdebstrap:
     - cups
     - cups-client
     - cups-filters
+    # Resolve mDNS (.local) printer names, e.g. ipp://EPSON...._ipp._tcp.local/
+    - libnss-mdns
     - ipp-usb
     - nodejs
   customize-hooks:

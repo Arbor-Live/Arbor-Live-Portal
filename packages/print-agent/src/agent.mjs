@@ -83,9 +83,14 @@ async function hasQueue() {
 async function discoverIppUri() {
   const { stdout } = await execFileAsync("sh", [
     "-c",
-    // Match a real device URI, not the bare backend schemes (`network ipps`)
-    // that lpinfo also prints.
-    "lpinfo -v 2>/dev/null | awk '$1==\"network\" || $1==\"direct\" {print $2}' | grep -iE '^ipps?://' | head -n1",
+    // Real device URIs only (not lpinfo's bare backend schemes). Prefer a URI
+    // that doesn't need mDNS: an IP/localhost endpoint resolves without
+    // libnss-mdns, which not every image has. Fall back to a .local name.
+    [
+      "list=$(lpinfo -v 2>/dev/null | awk '$1==\"network\" || $1==\"direct\" {print $2}' | grep -iE '^ipps?://')",
+      "preferred=$(printf '%s\\n' \"$list\" | grep -v '\\.local' | head -n1)",
+      "if [ -n \"$preferred\" ]; then printf '%s\\n' \"$preferred\"; else printf '%s\\n' \"$list\" | head -n1; fi",
+    ].join("; "),
   ]);
   return stdout.trim() || null;
 }
