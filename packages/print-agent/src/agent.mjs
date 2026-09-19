@@ -70,7 +70,9 @@ async function hasQueue() {
 async function discoverIppUri() {
   const { stdout } = await execFileAsync("sh", [
     "-c",
-    "lpinfo -v 2>/dev/null | awk '$1==\"network\" || $1==\"direct\" {print $2}' | grep -i '^ipp' | head -n1",
+    // Match a real device URI, not the bare backend schemes (`network ipps`)
+    // that lpinfo also prints.
+    "lpinfo -v 2>/dev/null | awk '$1==\"network\" || $1==\"direct\" {print $2}' | grep -iE '^ipps?://' | head -n1",
   ]);
   return stdout.trim() || null;
 }
