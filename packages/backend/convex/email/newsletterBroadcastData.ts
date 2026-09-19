@@ -64,13 +64,29 @@ export const getSubscriber = internalQuery({
   },
 });
 
+/**
+ * Whether the row is still the subscribed generation the sync read before it
+ * awaited Resend. If it changed (e.g. the person unsubscribed), the completion
+ * must not patch — bumping `updatedAt` would invalidate the scheduled segment
+ * removal's `expectedUpdatedAt` and leave them in the segment.
+ */
+function isCurrentSubscribed(
+  row: { status: string; updatedAt: number } | null,
+  expectedUpdatedAt: number,
+) {
+  return row?.status === "subscribed" && row.updatedAt === expectedUpdatedAt;
+}
+
 export const recordSynced = internalMutation({
   args: {
     subscriberId: v.id("newsletterSubscribers"),
+    expectedUpdatedAt: v.number(),
     resendContactId: v.string(),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
+    const row = await ctx.db.get(args.subscriberId);
+    if (!isCurrentSubscribed(row, args.expectedUpdatedAt)) return null;
     await ctx.db.patch(args.subscriberId, {
       resendContactId: args.resendContactId,
       syncError: undefined,
@@ -83,10 +99,13 @@ export const recordSynced = internalMutation({
 export const recordSyncError = internalMutation({
   args: {
     subscriberId: v.id("newsletterSubscribers"),
+    expectedUpdatedAt: v.number(),
     error: v.string(),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
+    const row = await ctx.db.get(args.subscriberId);
+    if (!isCurrentSubscribed(row, args.expectedUpdatedAt)) return null;
     await ctx.db.patch(args.subscriberId, {
       syncError: args.error,
       updatedAt: Date.now(),
@@ -132,14 +151,16 @@ export const claimBroadcast = internalMutation({
         return { claimed: false, reason: `Already sent for ${args.windowKey}.` };
       }
       if (state.status === "sending") {
-        const sameWindow = state.windowKey === args.windowKey;
-        if (sameWindow && now - state.startedAt < CLAIM_STALE_MS) {
+        // Never replace a live claim, even for a different window: the action
+        // holding it may still be awaiting Resend.
+        if (now - state.startedAt < CLAIM_STALE_MS) {
           return {
             claimed: false,
             reason: "A newsletter send is already in progress.",
           };
         }
-        if (sameWindow) {
+        // A stale same-window claim needs provider reconciliation first.
+        if (state.windowKey === args.windowKey) {
           return {
             claimed: false,
             reason: "Reconciling a previous send attempt.",
@@ -147,7 +168,7 @@ export const claimBroadcast = internalMutation({
             startedAtMs: state.startedAt,
           };
         }
-        // A stuck send from an earlier window is stale by definition.
+        // A stale claim from an earlier window can be replaced.
       }
       await ctx.db.patch(state._id, {
         windowKey: args.windowKey,

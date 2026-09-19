@@ -245,6 +245,7 @@ export const syncContact = internalAction({
         internal.email.newsletterBroadcastData.recordSyncError,
         {
           subscriberId: args.subscriberId,
+          expectedUpdatedAt: subscriber.updatedAt,
           error: "RESEND_NEWSLETTER_SEGMENT_ID is not configured on this deployment.",
         },
       );
@@ -271,12 +272,17 @@ export const syncContact = internalAction({
 
       await ctx.runMutation(internal.email.newsletterBroadcastData.recordSynced, {
         subscriberId: args.subscriberId,
+        expectedUpdatedAt: subscriber.updatedAt,
         resendContactId: created.data.id,
       });
     } catch (error) {
       await ctx.runMutation(
         internal.email.newsletterBroadcastData.recordSyncError,
-        { subscriberId: args.subscriberId, error: formatError(error) },
+        {
+          subscriberId: args.subscriberId,
+          expectedUpdatedAt: subscriber.updatedAt,
+          error: formatError(error),
+        },
       );
     }
 
