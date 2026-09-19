@@ -10,5 +10,10 @@ device:
 image:
   name: arboros
 
+# Ship a raw image; the workflow xz-compresses it, because Raspberry Pi Imager
+# reads .img.xz and the deploy step otherwise defaults to zstd.
+deploy:
+  compression: none
+
 layer:
   agent: arbor-print-agent
