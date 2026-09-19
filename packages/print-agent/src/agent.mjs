@@ -28,6 +28,8 @@ const QUEUE = process.env.PRINTER_QUEUE ?? "ou-wh1";
 const HEARTBEAT_MS = 10 * 60_000;
 /** Retry CUPS queue setup this often while it is unavailable. */
 const QUEUE_RETRY_MS = 60_000;
+/** Resubscribe this soon after a subscription error. */
+const SUBSCRIBE_RETRY_MS = 5_000;
 /** Keep the Convex claim warm while a job downloads and prints. */
 const CLAIM_RENEW_MS = 60_000;
 const DOWNLOAD_TIMEOUT_MS = 60_000;
@@ -230,7 +232,7 @@ let queueStatus = "starting";
 
 /** @param {string} [status] @param {string} [error] */
 async function reportHeartbeat(status = queueStatus, error) {
-  await client.mutation(heartbeat, {
+  return await client.mutation(heartbeat, {
     token: TOKEN,
     queueName: QUEUE,
     status,
@@ -279,19 +281,58 @@ async function drain() {
   }
 }
 
-function main() {
-  log(`starting — queue "${QUEUE}" at ${CONVEX_URL}`);
+/** @type {string | null} */
+let printerId = null;
+/** @type {null | (() => void)} */
+let unsubscribePending = null;
+/** @type {string | null} */
+let subscribedPrinterId = null;
 
-  // Work arrives by subscription: while idle the device makes no calls at all,
-  // and an inserted job is pushed immediately rather than waiting for a poll.
-  client.onUpdate(
+/**
+ * Subscribe once the agent knows which printer row it maps to. Subscribing by
+ * printerId (not queueName) keeps the query reading only the jobs table, so the
+ * periodic heartbeat writing the printer row doesn't re-run it.
+ */
+function ensureSubscription() {
+  if (!printerId) return;
+  if (unsubscribePending && subscribedPrinterId === printerId) return;
+  if (unsubscribePending) {
+    unsubscribePending();
+    unsubscribePending = null;
+  }
+  subscribedPrinterId = printerId;
+  unsubscribePending = client.onUpdate(
     pending,
-    { token: TOKEN, queueName: QUEUE },
+    { token: TOKEN, printerId },
     (value) => {
       if (value) void drain();
     },
-    (error) => log(`subscription error: ${message(error)}`),
+    (error) => {
+      log(`subscription error: ${message(error)}`);
+      // A failed subscription stops delivering; reset so we resubscribe, and
+      // retry soon so we don't silently wait for the next heartbeat.
+      unsubscribePending = null;
+      subscribedPrinterId = null;
+      setTimeout(() => {
+        ensureSubscription();
+        void drain();
+      }, SUBSCRIBE_RETRY_MS);
+    },
   );
+}
+
+/** Heartbeat to learn/refresh the printer row, then ensure the subscription. */
+async function register() {
+  const result = await reportHeartbeat();
+  if (result && result.printerId) {
+    printerId = result.printerId;
+    ensureSubscription();
+    void drain();
+  }
+}
+
+function main() {
+  log(`starting — queue "${QUEUE}" at ${CONVEX_URL}`);
 
   // Liveness only: a slow, jittered heartbeat so offline detection still works
   // when the device is idle. Decoupled from printing, so it can't add latency.
@@ -299,26 +340,35 @@ function main() {
     const wait = HEARTBEAT_MS * (0.85 + Math.random() * 0.3);
     setTimeout(() => {
       reportHeartbeat()
+        .then((result) => {
+          if (result && result.printerId) {
+            printerId = result.printerId;
+            ensureSubscription();
+          }
+        })
         .catch((error) => log(`heartbeat failed: ${message(error)}`))
         .finally(scheduleHeartbeat);
     }, wait);
   };
   scheduleHeartbeat();
 
-  // Report online when the socket comes up and nudge a drain on (re)connect, in
-  // case work landed while we were disconnected.
+  // Report online when the socket comes up and drain on (re)connect, in case
+  // work landed while we were disconnected.
   let connected = false;
   client.subscribeToConnectionState((state) => {
     if (state.isWebSocketConnected && !connected) {
       connected = true;
-      void drain();
-      reportHeartbeat().catch((error) => log(`heartbeat failed: ${message(error)}`));
+      if (printerId) {
+        void drain();
+      } else {
+        void register().catch((error) => log(`register failed: ${message(error)}`));
+      }
     } else if (!state.isWebSocketConnected) {
       connected = false;
     }
   });
 
-  void drain();
+  void register().catch((error) => log(`register failed: ${message(error)}`));
 }
 
 for (const signal of ["SIGINT", "SIGTERM"]) {

@@ -179,26 +179,22 @@ export const renewClaim = mutation({
 /**
  * Work signal for the agent's subscription: the oldest ready job for this
  * printer, or null. Reactive, so an inserted job is pushed to the device
- * without polling.
+ * without polling. Keyed on `printerId` (not queueName) so it reads only the
+ * jobs table — a heartbeat writing the printer row does not re-run it.
  */
 export const pending = query({
-  args: { token: v.string(), queueName: v.string() },
+  args: { token: v.string(), printerId: v.id("printers") },
   returns: v.union(
     v.null(),
     v.object({ jobId: v.id("printJobs"), fileName: v.string() }),
   ),
   handler: async (ctx, args) => {
     assertAgentToken(args.token);
-    const printer = await ctx.db
-      .query("printers")
-      .withIndex("by_queueName", (q) => q.eq("queueName", args.queueName))
-      .unique();
-    if (!printer || !printer.enabled) return null;
     const ready = (
       await ctx.db
         .query("printJobs")
         .withIndex("by_printerId_and_status", (q) =>
-          q.eq("printerId", printer._id).eq("status", "ready"),
+          q.eq("printerId", args.printerId).eq("status", "ready"),
         )
         .order("asc")
         .take(1)
