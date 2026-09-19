@@ -7,9 +7,14 @@
     "arbor-print-agent": "./src/agent.mjs"
   },
   "scripts": {
-    "start": "node ./src/agent.mjs"
+    "start": "node ./src/agent.mjs",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "convex": "^1.42.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.2",
+    "typescript": "^6.0.3"
   }
 }

@@ -60,4 +60,11 @@ crons.cron(
   {},
 );
 
+crons.cron(
+  "prune old print jobs",
+  "0 6 * * *",
+  internal.printJobs.pruneOldJobs,
+  {},
+);
+
 export default crons;

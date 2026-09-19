@@ -352,6 +352,13 @@ importers:
       convex:
         specifier: ^1.42.3
         version: 1.42.3(react@19.2.8)
+    devDependencies:
+      '@types/node':
+        specifier: ^26.1.2
+        version: 26.1.2
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
 
   packages/rider-document:
     dependencies:

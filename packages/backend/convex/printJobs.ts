@@ -67,7 +67,10 @@ async function ensurePrintJob(
       .withIndex("by_enabled", (q) => q.eq("enabled", true))
       .take(1)
   )[0];
-  if (!printer) return null;
+  if (!printer) {
+    console.warn(`[printJobs] no enabled printer; skipped brief for event ${eventId}`);
+    return null;
+  }
 
   const sourceUpdatedAt = await briefSourceUpdatedAt(ctx, eventId);
   const latest = (
@@ -101,12 +104,14 @@ async function ensurePrintJob(
   return jobId;
 }
 
-/** Daily sweep: enqueue briefs for events coming up in the print window. */
+/** Daily sweep: schedule a brief check for events coming up in the print window. */
 export const enqueueDue = internalMutation({
   args: {},
   returns: v.null(),
   handler: async (ctx) => {
     const now = Date.now();
+    // A day's events sit far below this cap; it is a safety valve so a
+    // pathological backlog can never fan out without bound.
     const upcoming = await ctx.db
       .query("events")
       .withIndex("by_startAt", (q) =>
@@ -118,13 +123,20 @@ export const enqueueDue = internalMutation({
       // Rentals print when their outbound delivery is processed, not on the
       // morning sweep, so the brief matches what was actually pulled.
       if (event.eventType && RENTAL_EVENT_TYPES.has(event.eventType)) continue;
-      await ensurePrintJob(ctx, event._id, false);
+      // Each event is handled in its own mutation: reading its brief source is
+      // heavier than this sweep's transaction should carry.
+      await ctx.scheduler.runAfter(0, internal.printJobs.enqueueForEvent, {
+        eventId: event._id,
+      });
     }
     return null;
   },
 });
 
-/** Enqueues a brief when a rental's outbound delivery is processed. */
+/**
+ * Enqueues a brief for one event if it is new or changed. Called per event by
+ * the daily sweep, and directly when a rental's outbound delivery is processed.
+ */
 export const enqueueForEvent = internalMutation({
   args: { eventId: v.id("events") },
   returns: v.union(v.id("printJobs"), v.null()),
@@ -205,5 +217,33 @@ export const listRecent = query({
       });
     }
     return rows;
+  },
+});
+
+/**
+ * Finished jobs hold a rendered PDF in storage. Keep a month of history, then
+ * drop the job (and its blob); the daily cron drains any backlog over a few
+ * runs at 200 jobs each.
+ */
+const JOB_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+
+export const pruneOldJobs = internalMutation({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    const cutoff = Date.now() - JOB_RETENTION_MS;
+    for (const status of ["printed", "failed"] as const) {
+      const stale = await ctx.db
+        .query("printJobs")
+        .withIndex("by_status_and_createdAt", (q) =>
+          q.eq("status", status).lt("createdAt", cutoff),
+        )
+        .take(200);
+      for (const job of stale) {
+        if (job.storageId) await ctx.storage.delete(job.storageId);
+        await ctx.db.delete(job._id);
+      }
+    }
+    return null;
   },
 });

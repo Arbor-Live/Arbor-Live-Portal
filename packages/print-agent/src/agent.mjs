@@ -13,6 +13,7 @@ import { makeFunctionReference } from "convex/server";
 
 const execFileAsync = promisify(execFile);
 
+/** @param {string} name */
 function requireEnv(name) {
   const value = process.env[name];
   if (!value) throw new Error(`${name} is not set.`);
@@ -23,19 +24,28 @@ const CONVEX_URL = requireEnv("CONVEX_URL");
 const TOKEN = requireEnv("PRINT_AGENT_TOKEN");
 const QUEUE = process.env.PRINTER_QUEUE ?? "ou-wh1";
 const POLL_MS = Number(process.env.PRINT_POLL_MS ?? 15_000);
-const HEARTBEAT_MS = Number(process.env.PRINT_HEARTBEAT_MS ?? 60_000);
 
-const heartbeat = makeFunctionReference("printAgent:heartbeat");
-const claimNext = makeFunctionReference("printAgent:claimNext");
-const complete = makeFunctionReference("printAgent:complete");
-const fail = makeFunctionReference("printAgent:fail");
+const heartbeat = /** @type {import("convex/server").FunctionReference<"mutation">} */ (
+  makeFunctionReference("printAgent:heartbeat")
+);
+const claimNext = /** @type {import("convex/server").FunctionReference<"mutation">} */ (
+  makeFunctionReference("printAgent:claimNext")
+);
+const complete = /** @type {import("convex/server").FunctionReference<"mutation">} */ (
+  makeFunctionReference("printAgent:complete")
+);
+const fail = /** @type {import("convex/server").FunctionReference<"mutation">} */ (
+  makeFunctionReference("printAgent:fail")
+);
 
 const client = new ConvexHttpClient(CONVEX_URL);
 
+/** @param {unknown} error */
 function message(error) {
   return error instanceof Error ? error.message : String(error);
 }
 
+/** @param {string} line */
 function log(line) {
   console.log(`[arbor-print-agent] ${new Date().toISOString()} ${line}`);
 }
@@ -75,6 +85,7 @@ async function ensureQueue() {
   return `queue ready (${uri})`;
 }
 
+/** @param {{ jobId: string, url: string, fileName?: string }} job */
 async function printJob(job) {
   const dir = await mkdtemp(join(tmpdir(), "arbor-brief-"));
   const file = join(dir, job.fileName || `${job.jobId}.pdf`);
@@ -96,6 +107,10 @@ async function printJob(job) {
   }
 }
 
+/**
+ * @param {string} status
+ * @param {string} [error]
+ */
 async function beat(status, error) {
   try {
     await client.mutation(heartbeat, {
@@ -130,9 +145,10 @@ async function tick() {
 
 async function main() {
   log(`starting — queue "${QUEUE}" at ${CONVEX_URL}`);
+  // `tick` heartbeats every cycle, so liveness tracks the real queue status
+  // instead of a separate timer overwriting it.
   await tick();
   setInterval(() => void tick(), POLL_MS);
-  setInterval(() => void beat("idle"), HEARTBEAT_MS);
 }
 
 for (const signal of ["SIGINT", "SIGTERM"]) {

@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import type { FunctionReturnType } from "convex/server";
-import { formatDate, formatDateTime, pacificDateKey } from "@arbor/format";
+import { formatDate, formatDateTime, formatTime, pacificDateKey } from "@arbor/format";
 import {
   allocateEventPatch,
   buildNightRiderDocument,
@@ -46,8 +46,8 @@ function stripMarkdown(markdown: string): string {
 }
 
 function whenLabel(startAt: number, endAt: number): string {
-  const start = formatDateTime(startAt, "timeOnly");
-  const end = formatDateTime(endAt, "timeOnly");
+  const start = formatTime(startAt);
+  const end = formatTime(endAt);
   if (pacificDateKey(startAt) === pacificDateKey(endAt)) {
     return `${formatDate(startAt)} · ${start} – ${end}`;
   }
@@ -161,13 +161,13 @@ export const getBriefSource = internalQuery({
       blocks: blocks.map((block) => ({
         dayLabel: `Day ${block.dayIndex + 1}`,
         label: block.label,
-        timeLabel: `${formatDateTime(block.startsAt, "timeOnly")} – ${formatDateTime(block.endsAt, "timeOnly")}`,
+        timeLabel: `${formatTime(block.startsAt)} – ${formatTime(block.endsAt)}`,
         notes: block.notes ?? undefined,
       })),
       shifts: shifts.map((shift) => ({
         role: shift.role,
         person: shift.personName ?? "Unassigned",
-        timeLabel: `${formatDateTime(shift.startsAt, "timeOnly")} – ${formatDateTime(shift.endsAt, "timeOnly")}`,
+        timeLabel: `${formatTime(shift.startsAt)} – ${formatTime(shift.endsAt)}`,
         notes: shift.notes ?? undefined,
       })),
       assignments: assignments.map((assignment) => ({

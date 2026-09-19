@@ -17,7 +17,7 @@ plan. Opt into shared cloud Dev with `E2E_USE_CLOUD_DEV=1` or
 `CONVEX_AGENT_MODE=cloud`. `E2E_SKIP_BOOT=1` reuses a running stack and warns if
 the URL looks like cloud.
 
-**Last updated:** 2026-07-31 (Batches 1–12 on `main`, Batches 13–14 on `t3code/next-e2e-tests`)
+**Last updated:** 2026-09-19 (Batches 1–12 on `main`, Batches 13–14 on `t3code/next-e2e-tests`, Batch 15 on `t3code/auto-print-event-briefs`)
 
 ## Batch history
 
@@ -38,6 +38,7 @@ the URL looks like cloud.
 | **12** | — | Band org profile admin birdseye edit; inventory CSV import (types + assets from fixture files) |
 | **13** | on branch | Booking request lifecycle: inbox status filters (open view hides completed), staff actions (assignee, staff notes, mark action required), decline guards (client + server) + the declined client portal, the converted-request lock (UI + backend `updateStatus` refusal after client approval), round-robin settings, admin cascade delete. Replaced `booking-decline-reason.spec.ts` with a superset spec. Also: `pruneE2eSeedData` now prunes stale converted/declined requests, and a new run-start `pruneStaleE2eUsers` removes invite-created accounts — see “Keeping the shared deployment usable” |
 | **14** | on branch | Money long tail: fee definitions and terms templates — the two settings cards on `/dashboard/financial-hub` that feed the invoice editor and the public quote. The fee spec drives CRUD (add/edit default amount/disable/enable/delete) and then the editor: a definition pre-fills the fee-row rate from `defaultAmountUsd` and the persisted line carries `feeDefinitionId`. The terms spec drives CRUD and then attaches a template to a draft invoice, asserting `termsIds` persisted *and* the public quote page renders the combined markdown. (The invoice managers roster spec shipped with this batch was removed — the roster page it covered was deleted as part of the sidebar cleanup that also removed the Managers nav entry.) |
+| **15** | [#248](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/248) | Warehouse print queue: `print-queue.spec.ts` seeds a printer and an event, drives the real enqueue→render path to `ready`, asserts the queue page shows the printer and job and that Reprint queues a second copy, then downloads the brief from the event editor. New seeds: `seedPrinter`, `enqueueBriefForEvent`, `getPrintQueueState`. |
 
 ## Status legend
 
