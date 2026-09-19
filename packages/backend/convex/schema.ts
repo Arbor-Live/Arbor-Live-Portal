@@ -178,6 +178,15 @@ const eventExpenseStatusValue = v.union(
   v.literal("paid"),
 );
 
+/** Rendered-PDF lifecycle for a warehouse print job. */
+const printJobStatusValue = v.union(
+  v.literal("pending"),
+  v.literal("ready"),
+  v.literal("printing"),
+  v.literal("printed"),
+  v.literal("failed"),
+);
+
 const rentalFulfillmentModeValue = v.union(v.literal("delivery"), v.literal("will_call"));
 
 /** Stage box an instrument group plugs into (AES50 A / B). */
@@ -2011,4 +2020,44 @@ export default defineSchema({
     .index("by_status_and_submittedAt", ["status", "submittedAt"])
     .index("by_email", ["email"])
     .index("by_submittedAt", ["submittedAt"]),
+
+  /**
+   * A warehouse printer/agent pair. The Pi reports its CUPS queue name; one row
+   * per queue. `lastSeenAt` is written by the agent's heartbeat every minute, so
+   * edits to config should stay rare (there is normally a single printer).
+   */
+  printers: defineTable({
+    queueName: v.string(),
+    name: v.string(),
+    enabled: v.boolean(),
+    lastSeenAt: v.optional(v.number()),
+    lastSeenStatus: v.optional(v.string()),
+    lastError: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_queueName", ["queueName"])
+    .index("by_enabled", ["enabled"]),
+
+  /** One print of one event brief. Re-enqueued when the brief source changes. */
+  printJobs: defineTable({
+    eventId: v.id("events"),
+    printerId: v.id("printers"),
+    status: printJobStatusValue,
+    /** Max updatedAt across the event + brief-relevant children. */
+    sourceUpdatedAt: v.number(),
+    fileName: v.string(),
+    storageId: v.optional(v.id("_storage")),
+    attempts: v.number(),
+    claimedAt: v.optional(v.number()),
+    /** Fences a claim: only the agent holding this token may complete/fail it. */
+    claimToken: v.optional(v.string()),
+    printedAt: v.optional(v.number()),
+    error: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_eventId", ["eventId"])
+    .index("by_printerId_and_status", ["printerId", "status"])
+    .index("by_status_and_createdAt", ["status", "createdAt"]),
 });

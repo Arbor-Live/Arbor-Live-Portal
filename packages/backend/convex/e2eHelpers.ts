@@ -2,7 +2,7 @@ import { payPeriodForDate, addPacificCalendarDays, pacificDateAndTimeToMs, pacif
 import { v } from "convex/values";
 import { customAlphabet } from "nanoid";
 import { hashPassword } from "better-auth/crypto";
-import { api, components } from "./_generated/api";
+import { api, components, internal } from "./_generated/api";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import {
@@ -6181,5 +6181,98 @@ export const deleteInvoiceSettingsFixtures = mutation({
       }
     }
     return { deletedInvoices, deletedFees, deletedTerms };
+  },
+});
+
+/** Test-only: register an enabled printer so print jobs can be enqueued. */
+export const seedPrinter = mutation({
+  args: { queueName: v.optional(v.string()) },
+  returns: v.object({ printerId: v.id("printers"), queueName: v.string() }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const queueName = args.queueName?.trim() || "e2e-wh1";
+    const now = Date.now();
+    const existing = await ctx.db
+      .query("printers")
+      .withIndex("by_queueName", (q) => q.eq("queueName", queueName))
+      .unique();
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        enabled: true,
+        lastSeenAt: now,
+        lastSeenStatus: "idle",
+        updatedAt: now,
+      });
+      return { printerId: existing._id, queueName };
+    }
+    const printerId = await ctx.db.insert("printers", {
+      queueName,
+      name: queueName,
+      enabled: true,
+      lastSeenAt: now,
+      lastSeenStatus: "idle",
+      createdAt: now,
+      updatedAt: now,
+    });
+    return { printerId, queueName };
+  },
+});
+
+/** Test-only: exercise the real enqueue path for one event. */
+export const enqueueBriefForEvent = mutation({
+  args: { eventId: v.id("events") },
+  returns: v.object({ jobId: v.union(v.id("printJobs"), v.null()) }),
+  handler: async (ctx, args): Promise<{ jobId: Id<"printJobs"> | null }> => {
+    assertE2eHelpersEnabled();
+    const jobId = await ctx.runMutation(internal.printJobs.enqueueForEvent, {
+      eventId: args.eventId,
+    });
+    return { jobId };
+  },
+});
+
+/** Test-only: printers and jobs for print-queue assertions. */
+export const getPrintQueueState = query({
+  args: { eventId: v.optional(v.id("events")) },
+  returns: v.object({
+    printers: v.array(
+      v.object({
+        queueName: v.string(),
+        enabled: v.boolean(),
+        lastSeenAt: v.optional(v.number()),
+      }),
+    ),
+    jobs: v.array(
+      v.object({
+        _id: v.id("printJobs"),
+        eventId: v.id("events"),
+        status: v.string(),
+        error: v.optional(v.string()),
+      }),
+    ),
+  }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const printers = await ctx.db.query("printers").take(50);
+    const eventId = args.eventId;
+    const jobs = eventId
+      ? await ctx.db
+          .query("printJobs")
+          .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
+          .take(50)
+      : await ctx.db.query("printJobs").take(50);
+    return {
+      printers: printers.map((printer) => ({
+        queueName: printer.queueName,
+        enabled: printer.enabled,
+        lastSeenAt: printer.lastSeenAt,
+      })),
+      jobs: jobs.map((job) => ({
+        _id: job._id,
+        eventId: job.eventId,
+        status: job.status,
+        error: job.error,
+      })),
+    };
   },
 });

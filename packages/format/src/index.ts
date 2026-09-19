@@ -63,6 +63,19 @@ export function formatDate(ms: number, timezone: string = PORTAL_TIMEZONE) {
   return new Intl.DateTimeFormat("en-US", { ...datePreset, timeZone: timezone }).format(new Date(ms));
 }
 
+/**
+ * Time of day with no timezone suffix, for dense tables and ranges where the
+ * portal timezone is assumed (e.g. printed briefs). Prefer `formatDateTime`
+ * when the zone should be stated.
+ */
+export function formatTime(ms: number, timezone: string = PORTAL_TIMEZONE) {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(ms));
+}
+
 export function pacificDateKey(ms: number, timezone: string = PORTAL_TIMEZONE) {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: timezone,
