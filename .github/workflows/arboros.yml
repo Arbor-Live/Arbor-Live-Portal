@@ -11,11 +11,13 @@ on:
         description: Raspberry Pi model
         type: choice
         options:
-          - pi5
-          - pi4
-          - pi3
-          - zero2w
-        default: pi5
+          - rpi5
+          - rpi4
+          - rpi3
+          - rpizero2w
+          - rpi-cm4
+          - rpi-cm5
+        default: rpi5
       convex_url:
         description: Convex deployment URL the agent connects to
         type: string
