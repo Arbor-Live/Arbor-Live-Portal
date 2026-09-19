@@ -141,23 +141,27 @@ export const run = internalAction({
     const windowKey = week.weekLabel;
     const name = broadcastNameFor(windowKey);
 
-    let claim = await ctx.runMutation(
+    const claim = await ctx.runMutation(
       internal.email.newsletterBroadcastData.claimBroadcast,
       { windowKey },
     );
+    let claimed = claim.claimed;
+    let claimReason = claim.reason;
+    let claimToken = claim.claimToken;
 
     if (
-      !claim.claimed &&
+      !claimed &&
       claim.needsReconcile &&
       claim.startedAtMs !== undefined
     ) {
       // A previous attempt may have reached Resend without recording its id.
       // Check the provider before allowing a retry, or we could send twice.
-      const existing = await findBroadcastByName(name, claim.startedAtMs);
+      const staleToken = claim.startedAtMs;
+      const existing = await findBroadcastByName(name, staleToken);
       if (existing) {
         await ctx.runMutation(
           internal.email.newsletterBroadcastData.markBroadcastSent,
-          { windowKey, broadcastId: existing.id },
+          { windowKey, claimToken: staleToken, broadcastId: existing.id },
         );
         return {
           sent: false,
@@ -166,18 +170,24 @@ export const run = internalAction({
           broadcastId: existing.id,
         };
       }
-      claim = await ctx.runMutation(
+      const reclaimed = await ctx.runMutation(
         internal.email.newsletterBroadcastData.reclaimStaleBroadcast,
         { windowKey },
       );
+      claimed = reclaimed.claimed;
+      claimToken = reclaimed.claimToken;
+      claimReason = undefined;
     }
 
-    if (!claim.claimed) {
+    if (!claimed) {
       return {
         sent: false,
-        skippedReason: claim.reason ?? "Newsletter already queued.",
+        skippedReason: claimReason ?? "Newsletter already queued.",
         eventCount: week.events.length,
       };
+    }
+    if (claimToken === undefined) {
+      throw new Error("Newsletter claim is missing its ownership token.");
     }
 
     const result = await getResendSdk().broadcasts.create({
@@ -193,7 +203,7 @@ export const run = internalAction({
       // A provider rejection means nothing was accepted: free the window.
       await ctx.runMutation(
         internal.email.newsletterBroadcastData.releaseBroadcast,
-        { windowKey },
+        { windowKey, claimToken },
       );
       throw new Error(
         `[Resend] ${result.error.name ?? "broadcast_failed"}: ${result.error.message}`,
@@ -207,7 +217,7 @@ export const run = internalAction({
 
     await ctx.runMutation(
       internal.email.newsletterBroadcastData.markBroadcastSent,
-      { windowKey, broadcastId: result.data.id },
+      { windowKey, claimToken, broadcastId: result.data.id },
     );
 
     return { sent: true, eventCount: week.events.length, broadcastId: result.data.id };
