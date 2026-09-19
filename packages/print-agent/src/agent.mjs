@@ -178,7 +178,7 @@ async function findDriverPpd(uri) {
   return best ? best.ppd : null;
 }
 
-/** Create the queue: driverless when possible, otherwise a matching driver. */
+/** Create the queue: driverless when possible, otherwise a matching driver. @param {string} uri */
 async function addQueue(uri) {
   try {
     await execFileAsync("lpadmin", ["-p", QUEUE, "-E", "-v", uri, "-m", "everywhere"]);
