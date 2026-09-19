@@ -275,6 +275,21 @@ export const syncContact = internalAction({
         expectedUpdatedAt: subscriber.updatedAt,
         resendContactId: created.data.id,
       });
+
+      // `contacts.create` can outlive an unsubscribe whose removal already ran
+      // (and found no contact yet). If the row is now unsubscribed, take the
+      // contact we just added back out of the segment.
+      const after = await ctx.runQuery(
+        internal.email.newsletterBroadcastData.getSubscriber,
+        { subscriberId: args.subscriberId },
+      );
+      if (after?.status === "unsubscribed") {
+        await ctx.scheduler.runAfter(
+          0,
+          internal.email.newsletterBroadcast.removeContactFromSegment,
+          { subscriberId: args.subscriberId, expectedUpdatedAt: after.updatedAt },
+        );
+      }
     } catch (error) {
       await ctx.runMutation(
         internal.email.newsletterBroadcastData.recordSyncError,
