@@ -43,7 +43,7 @@ export function PublicPageHero({
   return (
     <section
       className={cn(
-        "relative overflow-hidden border-b pt-24 pb-14 sm:pt-28 sm:pb-20",
+        "relative overflow-hidden border-b pt-[calc(6rem_+_var(--happening-banner-height,0px))] pb-14 sm:pt-[calc(7rem_+_var(--happening-banner-height,0px))] sm:pb-20",
         dark
           ? "bg-zinc-950 text-zinc-50"
           : cn(
@@ -51,7 +51,8 @@ export function PublicPageHero({
               // Shader band fades to `--background`; match that base in light mode.
               shaderBand ? "bg-background" : "bg-muted/40",
             ),
-        hasImage && "pt-28 pb-16 sm:pt-32 sm:pb-24",
+        hasImage &&
+          "pt-[calc(7rem_+_var(--happening-banner-height,0px))] pb-16 sm:pt-[calc(8rem_+_var(--happening-banner-height,0px))] sm:pb-24",
         className,
       )}
     >

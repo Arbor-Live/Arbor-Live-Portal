@@ -93,7 +93,7 @@ export function RequestWizardShell({
         </>
       )}
 
-      <div className="relative z-10 flex min-h-0 flex-1 flex-col pt-[5.5rem] sm:pt-24">
+      <div className="relative z-10 flex min-h-0 flex-1 flex-col pt-[calc(5.5rem_+_var(--happening-banner-height,0px))] sm:pt-[calc(6rem_+_var(--happening-banner-height,0px))]">
         <div className="px-4 sm:px-5">
           <div className="mx-auto max-w-2xl border border-border/40 bg-background/75 px-4 py-2.5 shadow-[0_4px_16px_rgba(0,0,0,0.06)] backdrop-blur-md sm:px-5">
             <p className="text-center text-[11px] font-medium uppercase tracking-[0.14em] text-foreground/65">

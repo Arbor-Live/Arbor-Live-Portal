@@ -31,7 +31,7 @@ export function PublicWorkDetailContent({ post }: { post: PublicWorkPostDetail }
             className="absolute inset-0 size-full object-cover opacity-50"
           />
         ) : null}
-        <div className="relative mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24 lg:px-8">
+        <div className="relative mx-auto max-w-6xl px-4 pb-16 pt-[calc(4rem_+_var(--happening-banner-height,0px))] sm:px-6 sm:pb-24 sm:pt-[calc(6rem_+_var(--happening-banner-height,0px))] lg:px-8">
           <Reveal>
             <Link
               href="/work"

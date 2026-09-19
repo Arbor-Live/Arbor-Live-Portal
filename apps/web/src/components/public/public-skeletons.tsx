@@ -7,7 +7,7 @@ export function PublicHeroSkeleton({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        "relative overflow-hidden border-b bg-zinc-950 px-4 py-16 sm:px-6 sm:py-24 lg:px-8",
+        "relative overflow-hidden border-b bg-zinc-950 px-4 pb-16 pt-[calc(4rem_+_var(--happening-banner-height,0px))] sm:px-6 sm:pb-24 sm:pt-[calc(6rem_+_var(--happening-banner-height,0px))] lg:px-8",
         className,
       )}
       role="status"
@@ -32,7 +32,7 @@ export function PublicPortalPageSkeleton({
 }) {
   return (
     <div role="status" aria-label="Loading">
-      <div className="relative overflow-hidden border-b bg-muted/40 px-4 pt-24 pb-14 sm:px-6 sm:pt-28 sm:pb-20 lg:px-8 dark:bg-zinc-950">
+      <div className="relative overflow-hidden border-b bg-muted/40 px-4 pb-14 pt-[calc(6rem_+_var(--happening-banner-height,0px))] sm:px-6 sm:pb-20 sm:pt-[calc(7rem_+_var(--happening-banner-height,0px))] lg:px-8 dark:bg-zinc-950">
         <div className="relative mx-auto max-w-6xl space-y-4">
           <Skeleton className={cn("h-10 sm:h-12", titleWidth)} />
           <Skeleton className="h-5 w-full max-w-xl" />
