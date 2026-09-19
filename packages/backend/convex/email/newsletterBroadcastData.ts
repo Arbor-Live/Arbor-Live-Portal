@@ -106,10 +106,22 @@ const CLAIM_STALE_MS = 15 * 60 * 1000;
  * mutation, so two concurrent `sendNow` calls (or the Monday cron and an admin)
  * cannot both reach Resend. Refuses when this week already sent, or while a
  * fresh send is in flight.
+ *
+ * A stale in-flight claim is *not* reclaimed here: Resend has no idempotency key
+ * for broadcasts, so the caller must first check Resend for a broadcast that
+ * the dead attempt may have accepted (`needsReconcile`), then call
+ * `reclaimStaleBroadcast`.
  */
 export const claimBroadcast = internalMutation({
   args: { windowKey: v.string() },
-  returns: v.object({ claimed: v.boolean(), reason: v.optional(v.string()) }),
+  returns: v.object({
+    claimed: v.boolean(),
+    reason: v.optional(v.string()),
+    /** Set when a stale same-window claim must be reconciled with Resend. */
+    needsReconcile: v.optional(v.boolean()),
+    /** When the stale claim started, so reconciliation only trusts newer sends. */
+    startedAtMs: v.optional(v.number()),
+  }),
   handler: async (ctx, args) => {
     const now = Date.now();
     const state = await ctx.db.query("newsletterBroadcastState").first();
@@ -117,11 +129,23 @@ export const claimBroadcast = internalMutation({
       if (state.lastSentAt !== undefined && state.windowKey === args.windowKey) {
         return { claimed: false, reason: `Already sent for ${args.windowKey}.` };
       }
-      if (state.status === "sending" && now - state.startedAt < CLAIM_STALE_MS) {
-        return {
-          claimed: false,
-          reason: "A newsletter send is already in progress.",
-        };
+      if (state.status === "sending") {
+        const sameWindow = state.windowKey === args.windowKey;
+        if (sameWindow && now - state.startedAt < CLAIM_STALE_MS) {
+          return {
+            claimed: false,
+            reason: "A newsletter send is already in progress.",
+          };
+        }
+        if (sameWindow) {
+          return {
+            claimed: false,
+            reason: "Reconciling a previous send attempt.",
+            needsReconcile: true,
+            startedAtMs: state.startedAt,
+          };
+        }
+        // A stuck send from an earlier window is stale by definition.
       }
       await ctx.db.patch(state._id, {
         windowKey: args.windowKey,
@@ -143,29 +167,92 @@ export const claimBroadcast = internalMutation({
   },
 });
 
-/** Release a claim. With a `broadcastId` the window is marked sent; without
- *  one the attempt failed, so it is freed for a retry. */
-export const releaseBroadcast = internalMutation({
-  args: {
-    windowKey: v.string(),
-    broadcastId: v.optional(v.string()),
+/**
+ * Reclaim a stale claim for `windowKey` after the caller verified Resend did
+ * not accept the previous attempt. Only the claim this window is re-opened; a
+ * fresh claim is left alone.
+ */
+export const reclaimStaleBroadcast = internalMutation({
+  args: { windowKey: v.string() },
+  returns: v.object({ claimed: v.boolean() }),
+  handler: async (ctx, args) => {
+    const state = await ctx.db.query("newsletterBroadcastState").first();
+    if (!state) return { claimed: false };
+    if (state.windowKey !== args.windowKey || state.status !== "sending") {
+      return { claimed: false };
+    }
+    const now = Date.now();
+    if (now - state.startedAt < CLAIM_STALE_MS) return { claimed: false };
+    await ctx.db.patch(state._id, { startedAt: now, updatedAt: now });
+    return { claimed: true };
   },
+});
+
+/** Mark a window sent after Resend confirmed the broadcast id. */
+export const markBroadcastSent = internalMutation({
+  args: { windowKey: v.string(), broadcastId: v.string() },
   returns: v.null(),
   handler: async (ctx, args) => {
     const state = await ctx.db.query("newsletterBroadcastState").first();
     if (!state) return null;
-    // Only release the claim this run took; a stale reclaim of a newer window
-    // must not be clobbered by the late finish of an old one.
+    const now = Date.now();
+    await ctx.db.patch(state._id, {
+      windowKey: args.windowKey,
+      status: "idle",
+      lastSentAt: now,
+      lastBroadcastId: args.broadcastId,
+      updatedAt: now,
+    });
+    return null;
+  },
+});
+
+/**
+ * Free the window after a *confirmed* rejection (Resend returned an error), so
+ * a retry can send. Ambiguous outcomes keep the claim and are reconciled.
+ */
+export const releaseBroadcast = internalMutation({
+  args: { windowKey: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const state = await ctx.db.query("newsletterBroadcastState").first();
+    if (!state) return null;
+    // Only release the claim this run took.
     if (state.windowKey !== args.windowKey || state.status !== "sending") {
       return null;
     }
     const now = Date.now();
     await ctx.db.patch(state._id, {
       status: "idle",
-      lastSentAt: args.broadcastId ? now : undefined,
-      lastBroadcastId: args.broadcastId,
+      lastSentAt: undefined,
+      lastBroadcastId: undefined,
       updatedAt: now,
     });
+    return null;
+  },
+});
+
+/**
+ * Record a segment-removal failure only if the row is still the unsubscribe we
+ * acted on — never attach a stale unsubscribe error to a reactivated row.
+ */
+export const recordUnsubscribeErrorIfCurrent = internalMutation({
+  args: {
+    subscriberId: v.id("newsletterSubscribers"),
+    expectedUpdatedAt: v.optional(v.number()),
+    error: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get(args.subscriberId);
+    if (!row || row.status !== "unsubscribed") return null;
+    if (
+      args.expectedUpdatedAt !== undefined &&
+      row.updatedAt !== args.expectedUpdatedAt
+    ) {
+      return null;
+    }
+    await ctx.db.patch(row._id, { syncError: args.error, updatedAt: Date.now() });
     return null;
   },
 });

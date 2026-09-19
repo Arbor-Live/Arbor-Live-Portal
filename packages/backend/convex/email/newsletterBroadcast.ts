@@ -41,6 +41,29 @@ function formatError(error: unknown) {
   return "Unknown newsletter error";
 }
 
+/** Deterministic broadcast name for a send window, used for reconciliation. */
+function broadcastNameFor(windowKey: string) {
+  return `This Week at Arbor — ${windowKey}`;
+}
+
+/**
+ * Resend has no idempotency key for broadcasts, so an attempt whose response was
+ * lost is reconciled by its deterministic name before we retry. Only a send
+ * created at/after the attempt we are reconciling counts — the same date label
+ * recurs yearly, so name alone is not enough.
+ */
+async function findBroadcastByName(name: string, sinceMs: number) {
+  const listed = await getResendSdk().broadcasts.list({ limit: 100 });
+  if (listed.error) throw new Error(`[Resend] ${listed.error.message}`);
+  return (
+    listed.data?.data.find(
+      (broadcast) =>
+        broadcast.name === name &&
+        new Date(broadcast.created_at).getTime() >= sinceMs - 5 * 60 * 1000,
+    ) ?? null
+  );
+}
+
 export type BroadcastRunResult = {
   sent: boolean;
   skippedReason?: string;
@@ -115,10 +138,40 @@ export const run = internalAction({
 
     // One broadcast per window: claim before the network call so a duplicate
     // click, a second admin, or the cron racing an admin cannot send twice.
-    const claim = await ctx.runMutation(
+    const windowKey = week.weekLabel;
+    const name = broadcastNameFor(windowKey);
+
+    let claim = await ctx.runMutation(
       internal.email.newsletterBroadcastData.claimBroadcast,
-      { windowKey: week.weekLabel },
+      { windowKey },
     );
+
+    if (
+      !claim.claimed &&
+      claim.needsReconcile &&
+      claim.startedAtMs !== undefined
+    ) {
+      // A previous attempt may have reached Resend without recording its id.
+      // Check the provider before allowing a retry, or we could send twice.
+      const existing = await findBroadcastByName(name, claim.startedAtMs);
+      if (existing) {
+        await ctx.runMutation(
+          internal.email.newsletterBroadcastData.markBroadcastSent,
+          { windowKey, broadcastId: existing.id },
+        );
+        return {
+          sent: false,
+          skippedReason: `Already sent for ${windowKey}.`,
+          eventCount: week.events.length,
+          broadcastId: existing.id,
+        };
+      }
+      claim = await ctx.runMutation(
+        internal.email.newsletterBroadcastData.reclaimStaleBroadcast,
+        { windowKey },
+      );
+    }
+
     if (!claim.claimed) {
       return {
         sent: false,
@@ -127,41 +180,37 @@ export const run = internalAction({
       };
     }
 
-    let broadcastId: string;
-    try {
-      const result = await getResendSdk().broadcasts.create({
-        name: `This Week at Arbor — ${week.weekLabel}`,
-        segmentId: id,
-        from: NEWSLETTER_FROM,
-        subject: subjectForTemplate("this_week_at_arbor", week.weekLabel),
-        html,
-        send: true,
-      });
+    const result = await getResendSdk().broadcasts.create({
+      name,
+      segmentId: id,
+      from: NEWSLETTER_FROM,
+      subject: subjectForTemplate("this_week_at_arbor", windowKey),
+      html,
+      send: true,
+    });
 
-      if (result.error) {
-        throw new Error(
-          `[Resend] ${result.error.name ?? "broadcast_failed"}: ${result.error.message}`,
-        );
-      }
-      if (!result.data?.id) {
-        throw new Error("Resend did not return a broadcast id.");
-      }
-      broadcastId = result.data.id;
-    } catch (error) {
-      // Free the window so a transient Resend failure can be retried.
+    if (result.error) {
+      // A provider rejection means nothing was accepted: free the window.
       await ctx.runMutation(
         internal.email.newsletterBroadcastData.releaseBroadcast,
-        { windowKey: week.weekLabel },
+        { windowKey },
       );
-      throw error;
+      throw new Error(
+        `[Resend] ${result.error.name ?? "broadcast_failed"}: ${result.error.message}`,
+      );
+    }
+    if (!result.data?.id) {
+      // Ambiguous — keep the claim so a retry cannot duplicate; the next run
+      // reconciles by name.
+      throw new Error("Resend did not return a broadcast id.");
     }
 
     await ctx.runMutation(
-      internal.email.newsletterBroadcastData.releaseBroadcast,
-      { windowKey: week.weekLabel, broadcastId },
+      internal.email.newsletterBroadcastData.markBroadcastSent,
+      { windowKey, broadcastId: result.data.id },
     );
 
-    return { sent: true, eventCount: week.events.length, broadcastId };
+    return { sent: true, eventCount: week.events.length, broadcastId: result.data.id };
   },
 });
 
@@ -268,12 +317,29 @@ export const removeContactFromSegment = internalAction({
       });
       if (result.error) throw new Error(result.error.message);
     } catch (error) {
+      // Only record while the row is still the unsubscribe we acted on.
       await ctx.runMutation(
-        internal.email.newsletterBroadcastData.recordSyncError,
+        internal.email.newsletterBroadcastData.recordUnsubscribeErrorIfCurrent,
         {
           subscriberId: args.subscriberId,
+          expectedUpdatedAt: args.expectedUpdatedAt,
           error: `unsubscribe sync: ${formatError(error)}`,
         },
+      );
+    }
+
+    // The removal awaited a network call, so the person may have re-subscribed
+    // while it ran. If so, re-mirror them — their own sync may have completed
+    // before this removal pulled them back out.
+    const after = await ctx.runQuery(
+      internal.email.newsletterBroadcastData.getSubscriber,
+      { subscriberId: args.subscriberId },
+    );
+    if (after?.status === "subscribed") {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.email.newsletterBroadcast.syncContact,
+        { subscriberId: args.subscriberId },
       );
     }
 

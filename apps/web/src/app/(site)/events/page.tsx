@@ -20,7 +20,7 @@ export default function EventsPage() {
           <PublicUpcomingEventsClient />
         </div>
       </section>
-      <LandingStayInTheLoop />
+      <LandingStayInTheLoop source="events_page" />
     </PublicMarketingLayout>
   );
 }

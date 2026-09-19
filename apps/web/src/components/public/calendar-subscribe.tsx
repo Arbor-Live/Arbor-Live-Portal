@@ -44,6 +44,10 @@ export function CalendarSubscribe({ className }: { className?: string }) {
   const feedUrl = origin ? `${origin}${path}` : path;
   const links = buildCalendarProviderLinks(feedUrl);
   const eventCount = info?.eventCount;
+  // Server-rendered HTML has no origin, so a link built from the relative path
+  // would be actionable-but-wrong before hydration. Defer the links until the
+  // client origin is known.
+  const ready = Boolean(origin);
 
   const handleCopy = useCallback(async () => {
     try {
@@ -58,22 +62,29 @@ export function CalendarSubscribe({ className }: { className?: string }) {
 
   return (
     <div className={className}>
-      {PROVIDERS.map((provider) => (
-        <a
-          key={provider.key}
-          href={links[provider.key]}
-          {...(provider.key === "apple"
-            ? {}
-            : { target: "_blank", rel: "noreferrer" })}
-          className="text-sm font-medium text-emerald-800 underline-offset-4 hover:underline dark:text-primary"
-        >
-          {provider.label}
-        </a>
-      ))}
+      {PROVIDERS.map((provider) =>
+        ready ? (
+          <a
+            key={provider.key}
+            href={links[provider.key]}
+            {...(provider.key === "apple"
+              ? {}
+              : { target: "_blank", rel: "noreferrer" })}
+            className="text-sm font-medium text-emerald-800 underline-offset-4 hover:underline dark:text-primary"
+          >
+            {provider.label}
+          </a>
+        ) : (
+          <span key={provider.key} className="text-sm font-medium text-muted-foreground">
+            {provider.label}
+          </span>
+        ),
+      )}
       <button
         type="button"
         onClick={() => void handleCopy()}
-        className="text-sm font-medium text-emerald-800 underline-offset-4 hover:underline dark:text-primary"
+        disabled={!ready}
+        className="text-sm font-medium text-emerald-800 underline-offset-4 hover:underline disabled:text-muted-foreground disabled:no-underline dark:text-primary"
       >
         {copied ? "Link copied" : "Copy link"}
       </button>

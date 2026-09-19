@@ -91,7 +91,11 @@ export function NewsletterSignupForm({
  * a calendar subscription. Both are opt-in and live side by side so nobody has
  * to choose between them.
  */
-export function LandingStayInTheLoop() {
+export function LandingStayInTheLoop({
+  source = "landing",
+}: {
+  source?: NewsletterSource;
+}) {
   return (
     <section className="border-b bg-background py-12 sm:py-14">
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
@@ -105,7 +109,7 @@ export function LandingStayInTheLoop() {
             <p className="mt-1 text-sm leading-relaxed text-foreground/70">
               One short email a week with what&apos;s happening on campus.
             </p>
-            <NewsletterSignupForm source="landing" className="mt-3" />
+            <NewsletterSignupForm source={source} className="mt-3" />
           </div>
 
           <div>
