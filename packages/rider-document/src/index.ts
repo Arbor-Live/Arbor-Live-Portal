@@ -114,7 +114,9 @@ export type {
 export type {
   EventBriefAssignment,
   EventBriefBlock,
+  EventBriefContact,
   EventBriefDocumentData,
   EventBriefInstruction,
+  EventBriefPullItem,
   EventBriefShift,
 } from "./brief-types";

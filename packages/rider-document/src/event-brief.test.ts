@@ -13,6 +13,8 @@ function baseBrief(overrides: Partial<EventBriefDocumentData> = {}): EventBriefD
     blocks: [{ dayLabel: "Day 1", label: "Setup", timeLabel: "3:00 PM – 5:00 PM" }],
     shifts: [{ role: "Sound", person: "Alex", timeLabel: "3:00 PM – 11:00 PM" }],
     assignments: [{ roleLabel: "Day-of lead", person: "Sam" }],
+    bandContacts: [],
+    pullList: [],
     instructions: [{ title: "Load-in", body: "Use the rear dock." }],
     ...overrides,
   };
@@ -41,5 +43,31 @@ describe("event brief PDF", () => {
     const withBands = await renderEventBriefPdfBuffer(baseBrief({ nightRider }));
     expect(isPdf(withBands)).toBe(true);
     expect(withBands.byteLength).toBeGreaterThan(withoutBands.byteLength);
+  });
+
+  it("renders contacts, a pull list, and a scannable brief QR", async () => {
+    const buffer = await renderEventBriefPdfBuffer(
+      baseBrief({
+        briefUrl: "https://arborlive.stanford.edu/dashboard/events/abc123",
+        venueContact: {
+          roleLabel: "Venue contact",
+          person: "Dana",
+          contact: "dana@example.edu",
+        },
+        hostContact: {
+          roleLabel: "Host contact",
+          person: "Rae Lee",
+          contact: "rae@example.edu · 555-0100",
+        },
+        bandContacts: [
+          { roleLabel: "Band contact", person: "Jo", contact: "jo@band.test", notes: "The Larks" },
+        ],
+        pullList: [
+          { label: "XLR cable", quantity: 12 },
+          { label: "SM58", quantity: 4, notes: "windscreens" },
+        ],
+      }),
+    );
+    expect(isPdf(buffer)).toBe(true);
   });
 });
