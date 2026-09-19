@@ -36,7 +36,6 @@ export function EventBriefDownloadButton({
     <div className={cn("inline-flex flex-col gap-1", className)}>
       <Button
         type="button"
-        size="sm"
         variant="outline"
         disabled={status === "loading"}
         onClick={() => void onDownload()}
