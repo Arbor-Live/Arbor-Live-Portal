@@ -30,10 +30,15 @@ test.describe("print queue", () => {
     );
 
     await page.goto("/dashboard/inventory/print-queue");
-    await expect(page.getByText(`Queue: ${queueName}`)).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText("Online", { exact: true }).first()).toBeVisible({
-      timeout: 15_000,
-    });
+    // The printer cards are nested inside the "Printers" card, so the queue-name
+    // filter matches both the wrapper and the card itself; drop the wrapper.
+    const printerCard = page
+      .locator('[data-slot="card"]')
+      .filter({ hasText: `Queue: ${queueName}` })
+      .filter({ hasNot: page.locator('[data-slot="card"]') });
+    await expect(printerCard).toBeVisible({ timeout: 30_000 });
+    await expect(printerCard.getByText(queueName, { exact: true })).toBeVisible();
+    await expect(printerCard.getByText("Online", { exact: true })).toBeVisible();
 
     const row = page.getByRole("row").filter({ hasText: title });
     await expect(row).toBeVisible({ timeout: 20_000 });

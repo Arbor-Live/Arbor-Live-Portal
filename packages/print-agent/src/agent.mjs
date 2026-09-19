@@ -140,13 +140,14 @@ async function reportComplete(job) {
 /** True when this job was already submitted to CUPS (e.g. a retry after a crash). */
 /** @param {{ jobId: string }} job */
 async function alreadyQueued(job) {
-  try {
-    const { stdout } = await execFileAsync("lpstat", ["-W", "not-completed", "-o", QUEUE]);
-    return stdout.includes(`arbor-${job.jobId}`);
-  } catch {
-    // No queue yet, or lpstat unavailable — treat as not queued.
-    return false;
-  }
+  // Bounded so a hung CUPS tool can't stall the agent. Throws on failure; the
+  // caller treats that as "cannot confirm" and submits nothing.
+  const { stdout } = await execFileAsync(
+    "lpstat",
+    ["-W", "not-completed", "-o", QUEUE],
+    { timeout: DOWNLOAD_TIMEOUT_MS },
+  );
+  return stdout.includes(`arbor-${job.jobId}`);
 }
 
 /** @param {{ jobId: string, url: string, fileName?: string, claimToken: string }} job */
@@ -172,8 +173,19 @@ async function printJob(job) {
     await writeFile(file, Buffer.from(await response.arrayBuffer()));
 
     // The PDF may already be at CUPS if an earlier claim submitted it and then
-    // died before reporting. Don't submit it twice.
-    if (await alreadyQueued(job)) {
+    // died before reporting. Don't submit it twice; if we cannot confirm, leave
+    // the job for the lease to reclaim rather than risk a duplicate print.
+    let queued;
+    try {
+      queued = await alreadyQueued(job);
+    } catch (error) {
+      log(
+        `could not check CUPS for ${job.jobId}: ${message(error)}; leaving it for the next claim`,
+      );
+      return;
+    }
+
+    if (queued) {
       log(`job ${job.jobId} is already queued at CUPS; skipping submission`);
     } else {
       try {
