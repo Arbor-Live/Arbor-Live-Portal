@@ -11,11 +11,13 @@ on:
         description: Raspberry Pi model
         type: choice
         options:
-          - pi5
-          - pi4
-          - pi3
-          - zero2w
-        default: pi5
+          - rpi5
+          - rpi4
+          - rpi3
+          - rpizero2w
+          - rpi-cm4
+          - rpi-cm5
+        default: rpi5
       convex_url:
         description: Convex deployment URL the agent connects to
         type: string
@@ -93,9 +95,14 @@ jobs:
         id: package
         run: |
           set -euo pipefail
-          IMG=$(find "$RUNNER_TEMP/arbor-build" -type f -name 'arboros*.img' | head -n1)
+          # Skip the root-owned mmdebstrap chroot, which find cannot read.
+          find_img() {
+            find "$RUNNER_TEMP/arbor-build" -path '*/chroot-*' -prune -o \
+              -type f -name "$1" -print 2>/dev/null | head -n1
+          }
+          IMG=$(find_img 'arboros.img')
           if [ -z "$IMG" ]; then
-            IMG=$(find "$RUNNER_TEMP/arbor-build" -type f -name '*.img' | head -n1)
+            IMG=$(find_img '*.img')
           fi
           if [ -z "$IMG" ]; then
             echo "No image produced under $RUNNER_TEMP/arbor-build" >&2
