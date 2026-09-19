@@ -80,19 +80,37 @@ async function hasQueue() {
 }
 
 /** First driverless IPP printer CUPS can see (network or USB via ipp-usb). */
-async function discoverIppUri() {
+/**
+ * USB printers only — network printers are intentionally ignored.
+ *
+ * Prefer the ipp-usb loopback endpoint (IPP-over-USB). Avahi advertises the USB
+ * device with the host's `.local` name (unresolvable without nss-mdns), so read
+ * the advertised loopback address/port and talk to localhost directly. Fall
+ * back to the legacy usb:// device if IPP-over-USB isn't in play.
+ */
+async function discoverUsbPrinterUri() {
   const { stdout } = await execFileAsync("sh", [
     "-c",
-    // Real device URIs only (not lpinfo's bare backend schemes). Prefer a URI
-    // that doesn't need mDNS: an IP/localhost endpoint resolves without
-    // libnss-mdns, which not every image has. Fall back to a .local name.
-    [
-      "list=$(lpinfo -v 2>/dev/null | awk '$1==\"network\" || $1==\"direct\" {print $2}' | grep -iE '^ipps?://')",
-      "preferred=$(printf '%s\\n' \"$list\" | grep -v '\\.local' | head -n1)",
-      "if [ -n \"$preferred\" ]; then printf '%s\\n' \"$preferred\"; else printf '%s\\n' \"$list\" | head -n1; fi",
-    ].join("; "),
+    "avahi-browse -ptr _ipp._tcp 2>/dev/null || true",
   ]);
-  return stdout.trim() || null;
+  for (const line of stdout.split("\n")) {
+    if (!line.startsWith("=")) continue;
+    const fields = line.split(";");
+    const name = fields[3] ?? "";
+    const address = fields[7];
+    const port = fields[8];
+    // " (USB)" is ipp-usb's suffix for a USB-attached device.
+    if (!name.includes("(USB)")) continue;
+    if (address !== "127.0.0.1" && address !== "::1") continue;
+    if (!port) continue;
+    return `ipp://${address}:${port}/ipp/print`;
+  }
+
+  const { stdout: usbOut } = await execFileAsync("sh", [
+    "-c",
+    "lpinfo -v 2>/dev/null | awk '$1==\"direct\" && $2 ~ /^usb:\\/\\// {print $2; exit}' || true",
+  ]);
+  return usbOut.trim() || null;
 }
 
 /**
@@ -101,10 +119,10 @@ async function discoverIppUri() {
  */
 async function ensureQueue() {
   if (await hasQueue()) return "queue ready";
-  const uri = await discoverIppUri();
+  const uri = await discoverUsbPrinterUri();
   if (!uri) {
     throw new Error(
-      "No IPP printer found. Is the printer plugged in and ipp-usb running? Check `lpinfo -v`.",
+      "No USB printer found. Is the printer plugged in? Check `ipp-usb check` and `lpinfo -v`.",
     );
   }
   try {

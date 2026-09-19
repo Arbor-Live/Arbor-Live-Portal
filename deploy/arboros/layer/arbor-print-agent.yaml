@@ -34,8 +34,8 @@ mmdebstrap:
     - cups
     - cups-client
     - cups-filters
-    # Resolve mDNS (.local) printer names, e.g. ipp://EPSON...._ipp._tcp.local/
-    - libnss-mdns
+    # avahi-browse: locate the ipp-usb loopback endpoint for USB printers
+    - avahi-utils
     - ipp-usb
     - nodejs
   customize-hooks:
