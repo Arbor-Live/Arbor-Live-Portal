@@ -25,9 +25,10 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
     marginBottom: 10,
   },
+  headerLeft: { flexGrow: 1, flexShrink: 1, flexBasis: 0, paddingRight: 12 },
   title: { fontSize: 17, fontWeight: 700 },
   subtitle: { fontSize: 9.5, color: muted, marginTop: 2 },
-  headerMeta: { alignItems: "flex-end", gap: 1 },
+  headerMeta: { alignItems: "flex-end", gap: 1, flexShrink: 0 },
   metaLine: { fontSize: 8.5, color: muted },
   section: { marginBottom: 14 },
   sectionTitle: { fontSize: 11, fontWeight: 700, marginBottom: 5 },
@@ -133,7 +134,7 @@ export function EventBriefPdf({ data }: { data: EventBriefDocumentData }) {
     <Document title={`${data.title} — event brief`} author="Arbor Live">
       <Page size="LETTER" style={styles.page}>
         <View style={styles.header}>
-          <View>
+          <View style={styles.headerLeft}>
             <Text style={styles.title}>{data.title}</Text>
             <Text style={styles.subtitle}>
               Event brief{data.eventTypeLabel ? ` · ${data.eventTypeLabel}` : ""}

@@ -67,9 +67,10 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
     marginBottom: 10,
   },
+  headerLeft: { flexGrow: 1, flexShrink: 1, flexBasis: 0, paddingRight: 12 },
   title: { fontSize: 17, fontWeight: 700 },
   subtitle: { fontSize: 9.5, color: muted, marginTop: 2 },
-  headerMeta: { alignItems: "flex-end", gap: 1 },
+  headerMeta: { alignItems: "flex-end", gap: 1, flexShrink: 0 },
   metaLine: { fontSize: 8.5, color: muted },
   sectionTitle: {
     fontSize: 11,
@@ -336,7 +337,7 @@ function Header({ data }: { data: RiderDocumentData }) {
   const contact = [data.contactName, data.contactEmail, data.contactPhone].filter(Boolean);
   return (
     <View style={styles.header}>
-      <View>
+      <View style={styles.headerLeft}>
         <Text style={styles.title}>{data.bandName}</Text>
         <Text style={styles.subtitle}>
           Technical rider{data.riderName ? ` · ${data.riderName}` : ""}
