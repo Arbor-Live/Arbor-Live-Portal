@@ -11,10 +11,12 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "convex": "^1.42.3"
+    "convex": "^1.42.3",
+    "ws": "^8.18.0"
   },
   "devDependencies": {
     "@types/node": "^26.1.2",
+    "@types/ws": "^8.18.1",
     "typescript": "^6.0.3"
   }
 }

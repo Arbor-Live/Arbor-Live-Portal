@@ -67,7 +67,12 @@ export const heartbeat = mutation({
  * Stale `printing` jobs are returned to the queue first so a reboot can retry.
  */
 export const claimNext = mutation({
-  args: { token: v.string(), queueName: v.string() },
+  args: {
+    token: v.string(),
+    queueName: v.string(),
+    status: v.optional(v.string()),
+    error: v.optional(v.string()),
+  },
   returns: v.union(
     v.null(),
     v.object({
@@ -81,7 +86,14 @@ export const claimNext = mutation({
     assertAgentToken(args.token);
     const now = Date.now();
     const printer = await upsertPrinter(ctx, args.queueName);
-    await ctx.db.patch(printer._id, { lastSeenAt: now, updatedAt: now });
+    // This call doubles as the agent's liveness/status report, so a healthy
+    // agent needs only one Convex call per cycle.
+    await ctx.db.patch(printer._id, {
+      lastSeenAt: now,
+      lastSeenStatus: args.status,
+      lastError: args.error,
+      updatedAt: now,
+    });
     if (!printer.enabled) return null;
 
     const printing = await ctx.db
@@ -161,6 +173,33 @@ export const renewClaim = mutation({
     }
     await ctx.db.patch(args.jobId, { claimedAt: Date.now(), updatedAt: Date.now() });
     return null;
+  },
+});
+
+/**
+ * Work signal for the agent's subscription: the oldest ready job for this
+ * printer, or null. Reactive, so an inserted job is pushed to the device
+ * without polling. Keyed on `printerId` (not queueName) so it reads only the
+ * jobs table — a heartbeat writing the printer row does not re-run it.
+ */
+export const pending = query({
+  args: { token: v.string(), printerId: v.id("printers") },
+  returns: v.union(
+    v.null(),
+    v.object({ jobId: v.id("printJobs"), fileName: v.string() }),
+  ),
+  handler: async (ctx, args) => {
+    assertAgentToken(args.token);
+    const ready = (
+      await ctx.db
+        .query("printJobs")
+        .withIndex("by_printerId_and_status", (q) =>
+          q.eq("printerId", args.printerId).eq("status", "ready"),
+        )
+        .order("asc")
+        .take(1)
+    )[0];
+    return ready ? { jobId: ready._id, fileName: ready.fileName } : null;
   },
 });
 
