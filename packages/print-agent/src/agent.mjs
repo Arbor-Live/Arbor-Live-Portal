@@ -24,6 +24,10 @@ const CONVEX_URL = requireEnv("CONVEX_URL");
 const TOKEN = requireEnv("PRINT_AGENT_TOKEN");
 const QUEUE = process.env.PRINTER_QUEUE ?? "ou-wh1";
 const POLL_MS = Number(process.env.PRINT_POLL_MS ?? 15_000);
+/** Keep the Convex claim warm while a job downloads and prints. */
+const CLAIM_RENEW_MS = 60_000;
+const DOWNLOAD_TIMEOUT_MS = 60_000;
+const LP_TIMEOUT_MS = 120_000;
 
 const heartbeat = /** @type {import("convex/server").FunctionReference<"mutation">} */ (
   makeFunctionReference("printAgent:heartbeat")
@@ -36,6 +40,9 @@ const complete = /** @type {import("convex/server").FunctionReference<"mutation"
 );
 const fail = /** @type {import("convex/server").FunctionReference<"mutation">} */ (
   makeFunctionReference("printAgent:fail")
+);
+const renewClaim = /** @type {import("convex/server").FunctionReference<"mutation">} */ (
+  makeFunctionReference("printAgent:renewClaim")
 );
 
 const client = new ConvexHttpClient(CONVEX_URL);
@@ -130,25 +137,58 @@ async function reportComplete(job) {
   }
 }
 
+/** True when this job was already submitted to CUPS (e.g. a retry after a crash). */
+/** @param {{ jobId: string }} job */
+async function alreadyQueued(job) {
+  try {
+    const { stdout } = await execFileAsync("lpstat", ["-W", "not-completed", "-o", QUEUE]);
+    return stdout.includes(`arbor-${job.jobId}`);
+  } catch {
+    // No queue yet, or lpstat unavailable — treat as not queued.
+    return false;
+  }
+}
+
 /** @param {{ jobId: string, url: string, fileName?: string, claimToken: string }} job */
 async function printJob(job) {
   const dir = await mkdtemp(join(tmpdir(), "arbor-brief-"));
   const file = join(dir, job.fileName || `${job.jobId}.pdf`);
+  const renewTimer = setInterval(() => {
+    client
+      .mutation(renewClaim, {
+        token: TOKEN,
+        jobId: job.jobId,
+        claimToken: job.claimToken,
+      })
+      .catch((error) => log(`could not renew claim for ${job.jobId}: ${message(error)}`));
+  }, CLAIM_RENEW_MS);
   try {
-    const response = await fetch(job.url);
+    const response = await fetch(job.url, {
+      signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
+    });
     if (!response.ok) {
       throw new Error(`Brief download failed with HTTP ${response.status}.`);
     }
     await writeFile(file, Buffer.from(await response.arrayBuffer()));
-    try {
-      // Title the CUPS job so a duplicate submission is identifiable at the sink.
-      await execFileAsync("lp", ["-d", QUEUE, "-t", `arbor-${job.jobId}`, file]);
-    } catch (error) {
-      const text = message(error);
-      log(`failed job ${job.jobId}: ${text}`);
-      await reportFailure(job, text);
-      return;
+
+    // The PDF may already be at CUPS if an earlier claim submitted it and then
+    // died before reporting. Don't submit it twice.
+    if (await alreadyQueued(job)) {
+      log(`job ${job.jobId} is already queued at CUPS; skipping submission`);
+    } else {
+      try {
+        // Title the CUPS job so a duplicate submission is identifiable at the sink.
+        await execFileAsync("lp", ["-d", QUEUE, "-t", `arbor-${job.jobId}`, file], {
+          timeout: LP_TIMEOUT_MS,
+        });
+      } catch (error) {
+        const text = message(error);
+        log(`failed job ${job.jobId}: ${text}`);
+        await reportFailure(job, text);
+        return;
+      }
     }
+
     await reportComplete(job);
     log(`printed ${job.fileName} (job ${job.jobId})`);
   } catch (error) {
@@ -156,6 +196,7 @@ async function printJob(job) {
     log(`failed job ${job.jobId}: ${text}`);
     await reportFailure(job, text);
   } finally {
+    clearInterval(renewTimer);
     await rm(dir, { recursive: true, force: true });
   }
 }

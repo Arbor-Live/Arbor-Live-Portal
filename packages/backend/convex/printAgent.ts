@@ -142,6 +142,28 @@ export const claimNext = mutation({
   },
 });
 
+/**
+ * Extends the claim while the agent works, so a slow download or print does not
+ * let the lease expire and hand the job to a second agent.
+ */
+export const renewClaim = mutation({
+  args: {
+    token: v.string(),
+    jobId: v.id("printJobs"),
+    claimToken: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    assertAgentToken(args.token);
+    const job = await ctx.db.get(args.jobId);
+    if (!job || job.status !== "printing" || job.claimToken !== args.claimToken) {
+      throw new Error("This print job is no longer claimed by this agent.");
+    }
+    await ctx.db.patch(args.jobId, { claimedAt: Date.now(), updatedAt: Date.now() });
+    return null;
+  },
+});
+
 export const complete = mutation({
   args: {
     token: v.string(),
