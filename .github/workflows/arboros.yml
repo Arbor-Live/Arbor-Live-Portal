@@ -29,6 +29,11 @@ on:
 permissions:
   contents: write
 
+# One release tag, so serialize runs instead of racing the same assets.
+concurrency:
+  group: arboros-image
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-24.04-arm
@@ -48,6 +53,17 @@ jobs:
         working-directory: packages/print-agent
         run: npm install --omit=dev --no-audit --no-fund
 
+      - name: Assert agent dependencies are architecture-pure
+        working-directory: packages/print-agent
+        run: |
+          set -euo pipefail
+          natives=$(find node_modules -name '*.node' -print -quit)
+          if [ -n "$natives" ]; then
+            echo "The agent's dependencies include native modules. They would be copied from the amd64 runner into an arm64 image; install them for arm64 instead." >&2
+            find node_modules -name '*.node' >&2
+            exit 1
+          fi
+
       - name: Build image
         env:
           ARBOR_CONVEX_URL: ${{ inputs.convex_url }}
@@ -61,6 +77,7 @@ jobs:
             exit 1
           fi
           mkdir -p "$RUNNER_TEMP/arbor-build"
+          SOURCE_DATE_EPOCH="$(date -u -d 'today 00:00:00' +%s)" \
           "$RUNNER_TEMP/rpi-image-gen/rpi-image-gen" build \
             -S deploy/arboros \
             -c arboros.yaml \
