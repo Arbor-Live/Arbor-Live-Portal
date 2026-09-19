@@ -19,18 +19,22 @@ import sys
 
 root = pathlib.Path(sys.argv[1])
 
+# 1. udev: invoke the tag helper for USB partitions too. `sd[a-z]*[0-9]` also
+#    matches multi-letter disks such as sdaa1.
 rules = root / "layer/rpi/device/storage-binder/udev/rules.d/storage-binder.rules"
 text = rules.read_text()
-if 'KERNEL=="sd[a-z][0-9]*"' not in text:
-    usb_rule = (
-        "# Non-DM partitions: USB mass storage (sdX)\n"
-        'SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", ACTION=="add|change", \\\n'
-        '  IMPORT{program}="/usr/bin/rpi-bootdev-tag -u -d $env{DEVNAME}"\n\n'
-    )
+usb_glob = 'KERNEL=="sd[a-z]*[0-9]"'
+if usb_glob not in text:
     if "# DM devices" not in text:
         raise SystemExit("patch-usb-boot: storage-binder.rules marker not found")
+    usb_rule = (
+        "# Non-DM partitions: USB mass storage (sdX)\n"
+        f'SUBSYSTEM=="block", {usb_glob}, ACTION=="add|change", \\\n'
+        '  IMPORT{program}="/usr/bin/rpi-bootdev-tag -u -d $env{DEVNAME}"\n\n'
+    )
     rules.write_text(text.replace("# DM devices", usb_rule + "# DM devices", 1))
 
+# 2. Helper: map USB boot modes to the sdX disk backing the udev device.
 tag = root / "layer/rpi/device/storage-binder/bin/rpi-bootdev-tag"
 text = tag.read_text()
 
@@ -52,22 +56,24 @@ new_case = (
     "      esac;;\n"
     "esac"
 )
-if old_case not in text:
-    raise SystemExit("patch-usb-boot: boot-mode case not found in rpi-bootdev-tag")
-text = text.replace(old_case, new_case, 1)
+if old_case in text:
+    text = text.replace(old_case, new_case, 1)
+elif "USB mass storage: derive the disk" not in text:
+    raise SystemExit("patch-usb-boot: boot-mode case not found and not already patched")
 
+# 3. Apply the 0 -> 1 partition mapping for every generation, not just pre-Pi-4.
 old_compat = (
     "case $GEN in\n"
     "   4|5);;\n"
     "   *) [ $BOOT_PARTN -eq 0 ] && BOOT_PARTN=1;; # legacy compat\n"
     "esac"
 )
+new_compat = '[ "$BOOT_PARTN" -eq 0 ] && BOOT_PARTN=1 # partition indexes can be 0-based'
 if old_compat in text:
-    text = text.replace(
-        old_compat,
-        '[ "$BOOT_PARTN" -eq 0 ] && BOOT_PARTN=1 # partition indexes can be 0-based',
-        1,
-    )
+    text = text.replace(old_compat, new_compat, 1)
+elif new_compat not in text:
+    raise SystemExit("patch-usb-boot: partition-0 mapping not found and not already applied")
+
 tag.write_text(text)
 print("patched rpi-image-gen for USB boot")
 PY
