@@ -43,7 +43,6 @@ export function CalendarSubscribe({ className }: { className?: string }) {
   const path = info?.feedPath ?? CALENDAR_FEED_PATH;
   const feedUrl = origin ? `${origin}${path}` : path;
   const links = buildCalendarProviderLinks(feedUrl);
-  const eventCount = info?.eventCount;
   // Server-rendered HTML has no origin, so a link built from the relative path
   // would be actionable-but-wrong before hydration. Defer the links until the
   // client origin is known.
@@ -88,11 +87,6 @@ export function CalendarSubscribe({ className }: { className?: string }) {
       >
         {copied ? "Link copied" : "Copy link"}
       </button>
-      {eventCount ? (
-        <span className="text-xs text-muted-foreground">
-          {eventCount} upcoming {eventCount === 1 ? "event" : "events"}
-        </span>
-      ) : null}
     </div>
   );
 }

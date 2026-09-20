@@ -5,7 +5,8 @@ import { buildPublicCalendar } from "../lib/publicCalendar";
 const CALENDAR_NAME = "Arbor Live Events";
 
 /**
- * Public, subscribable ICS feed of upcoming public events.
+ * Public, subscribable ICS feed of public events in the current feed window
+ * (recent through upcoming).
  *
  * One stable URL that Google/Apple Calendar poll on their own schedule, so
  * students get every Arbor show without re-adding anything as the season moves.
