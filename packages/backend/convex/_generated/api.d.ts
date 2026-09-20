@@ -70,6 +70,7 @@ import type * as eventArtifacts from "../eventArtifacts.js";
 import type * as eventBands from "../eventBands.js";
 import type * as eventBrief from "../eventBrief.js";
 import type * as eventBriefDownload from "../eventBriefDownload.js";
+import type * as eventContacts from "../eventContacts.js";
 import type * as eventCrew from "../eventCrew.js";
 import type * as eventCrewAvailability from "../eventCrewAvailability.js";
 import type * as eventExpenses from "../eventExpenses.js";
@@ -130,6 +131,7 @@ import type * as lib_errors from "../lib/errors.js";
 import type * as lib_eventAccess from "../lib/eventAccess.js";
 import type * as lib_eventArtists from "../lib/eventArtists.js";
 import type * as lib_eventBandAccess from "../lib/eventBandAccess.js";
+import type * as lib_eventContacts from "../lib/eventContacts.js";
 import type * as lib_eventSeriesCosts from "../lib/eventSeriesCosts.js";
 import type * as lib_eventSeriesGeneration from "../lib/eventSeriesGeneration.js";
 import type * as lib_eventStatus from "../lib/eventStatus.js";
@@ -163,6 +165,7 @@ import type * as lib_packageContentMigration from "../lib/packageContentMigratio
 import type * as lib_paymentProof from "../lib/paymentProof.js";
 import type * as lib_publicArtistProfile from "../lib/publicArtistProfile.js";
 import type * as lib_publicCalendar from "../lib/publicCalendar.js";
+import type * as lib_publicEventContacts from "../lib/publicEventContacts.js";
 import type * as lib_publicEvents from "../lib/publicEvents.js";
 import type * as lib_publicQuoteView from "../lib/publicQuoteView.js";
 import type * as lib_publicReferenceIds from "../lib/publicReferenceIds.js";
@@ -293,6 +296,7 @@ declare const fullApi: ApiFromModules<{
   eventBands: typeof eventBands;
   eventBrief: typeof eventBrief;
   eventBriefDownload: typeof eventBriefDownload;
+  eventContacts: typeof eventContacts;
   eventCrew: typeof eventCrew;
   eventCrewAvailability: typeof eventCrewAvailability;
   eventExpenses: typeof eventExpenses;
@@ -353,6 +357,7 @@ declare const fullApi: ApiFromModules<{
   "lib/eventAccess": typeof lib_eventAccess;
   "lib/eventArtists": typeof lib_eventArtists;
   "lib/eventBandAccess": typeof lib_eventBandAccess;
+  "lib/eventContacts": typeof lib_eventContacts;
   "lib/eventSeriesCosts": typeof lib_eventSeriesCosts;
   "lib/eventSeriesGeneration": typeof lib_eventSeriesGeneration;
   "lib/eventStatus": typeof lib_eventStatus;
@@ -386,6 +391,7 @@ declare const fullApi: ApiFromModules<{
   "lib/paymentProof": typeof lib_paymentProof;
   "lib/publicArtistProfile": typeof lib_publicArtistProfile;
   "lib/publicCalendar": typeof lib_publicCalendar;
+  "lib/publicEventContacts": typeof lib_publicEventContacts;
   "lib/publicEvents": typeof lib_publicEvents;
   "lib/publicQuoteView": typeof lib_publicQuoteView;
   "lib/publicReferenceIds": typeof lib_publicReferenceIds;

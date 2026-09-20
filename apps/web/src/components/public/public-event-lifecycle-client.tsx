@@ -16,7 +16,7 @@ import {
 import { PublicEventHeader } from "@/components/public/public-event-header";
 import { PublicEventTimetable } from "@/components/public/public-event-timetable";
 import { PublicEventCrew } from "@/components/public/public-event-crew";
-import { PublicEventContacts } from "@/components/public/public-event-contacts";
+import { PublicEventContacts, buildInheritedContactRows } from "@/components/public/public-event-contacts";
 import { PublicQuoteFinancials } from "@/components/public/public-quote-financials";
 import { PublicPaymentProofSection } from "@/components/public/public-payment-proof-section";
 import { PublicPaymentContactsSection } from "@/components/public/public-payment-contacts-section";
@@ -53,6 +53,8 @@ export function PublicEventLifecycleClient({ token }: { token: string }) {
   const approve = useMutation(api.invoices.approveByToken);
   const requestChanges = useMutation(api.invoices.requestChangesByToken);
   const updatePaymentContacts = useMutation(api.invoices.updatePaymentContactsByToken);
+  const addEventContact = useMutation(api.invoices.addEventContactByToken);
+  const deleteEventContact = useMutation(api.invoices.deleteEventContactByToken);
   const submitPaymentProof = useMutation(api.paymentProof.submitByQuoteToken);
 
   const [activeTab, setActiveTab] = useState(() => {
@@ -256,6 +258,15 @@ export function PublicEventLifecycleClient({ token }: { token: string }) {
               <PublicEventContacts
                 manager={selectedEvent.contacts.manager}
                 dayOfLead={selectedEvent.contacts.dayOfLead}
+                inherited={buildInheritedContactRows(selectedEvent.contacts)}
+                manual={selectedEvent.contacts.manual}
+                canEdit={data.invoice.clientApprovalStatus === "approved"}
+                onAdd={async (input) => {
+                  await addEventContact({ token, eventId: selectedEvent.id, ...input });
+                }}
+                onDelete={async (contactId) => {
+                  await deleteEventContact({ token, eventId: selectedEvent.id, contactId });
+                }}
               />
               <PublicEventTimetable blocks={selectedEvent.scheduleBlocks} />
               <PublicEventCrew crew={selectedEvent.crewRoster} />

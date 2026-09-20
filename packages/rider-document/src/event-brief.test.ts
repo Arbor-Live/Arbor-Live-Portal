@@ -13,7 +13,7 @@ function baseBrief(overrides: Partial<EventBriefDocumentData> = {}): EventBriefD
     blocks: [{ dayLabel: "Day 1", label: "Setup", timeLabel: "3:00 PM – 5:00 PM" }],
     shifts: [{ role: "Sound", person: "Alex", timeLabel: "3:00 PM – 11:00 PM" }],
     assignments: [{ roleLabel: "Day-of lead", person: "Sam" }],
-    bandContacts: [],
+    contacts: [],
     pullList: [],
     instructions: [{ title: "Load-in", body: "Use the rear dock." }],
     ...overrides,
@@ -49,18 +49,11 @@ describe("event brief PDF", () => {
     const buffer = await renderEventBriefPdfBuffer(
       baseBrief({
         briefUrl: "https://arborlive.stanford.edu/dashboard/events/abc123",
-        venueContact: {
-          roleLabel: "Venue contact",
-          person: "Dana",
-          contact: "dana@example.edu",
-        },
-        hostContact: {
-          roleLabel: "Host contact",
-          person: "Rae Lee",
-          contact: "rae@example.edu · 555-0100",
-        },
-        bandContacts: [
+        contacts: [
+          { roleLabel: "Venue contact", person: "Dana", contact: "dana@example.edu" },
+          { roleLabel: "Host contact", person: "Rae Lee", contact: "rae@example.edu · 555-0100" },
           { roleLabel: "Band contact", person: "Jo", contact: "jo@band.test", notes: "The Larks" },
+          { roleLabel: "Stage manager", person: "Mina", contact: "mina@example.edu" },
         ],
         pullList: [
           { label: "XLR cable", quantity: 12 },

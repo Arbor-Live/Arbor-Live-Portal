@@ -887,6 +887,13 @@ export default defineSchema({
     /** Snake choices behind the generated Wing show file. Unset = one snake. */
     patchPlan: v.optional(patchPlanValue),
 
+    /**
+     * Revision stamp for the event's contact list. Contact rows carry their own
+     * updatedAt, but deleting the last one leaves no row to read, so brief print
+     * freshness folds this in too.
+     */
+    eventContactsUpdatedAt: v.optional(v.number()),
+
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -1210,6 +1217,24 @@ export default defineSchema({
     .index("by_eventId", ["eventId"])
     .index("by_userId", ["userId"])
     .index("by_eventId_and_userId", ["eventId", "userId"]),
+
+  /**
+   * Event-level contacts that are not staff and not host-org billing people
+   * (e.g. venue A/V, stage manager, vendor). Shown in the event editor and
+   * printed on the event brief alongside inherited venue/invoice/band contacts.
+   */
+  eventContacts: defineTable({
+    eventId: v.id("events"),
+    name: v.string(),
+    position: v.optional(v.string()),
+    email: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    sortOrder: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_eventId", ["eventId"])
+    .index("by_eventId_and_sortOrder", ["eventId", "sortOrder"]),
 
   eventArtifacts: defineTable({
     eventId: v.id("events"),

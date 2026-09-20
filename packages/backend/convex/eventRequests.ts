@@ -16,6 +16,11 @@ import {
   updateInvoicePaymentContacts,
 } from "./lib/publicQuoteView";
 import {
+  addPublicEventContact,
+  deletePublicEventContact,
+  requirePublicEditableEvent,
+} from "./lib/publicEventContacts";
+import {
   scheduleBookingRequestDeclinedEmail,
   scheduleBookingRequestReceivedEmail,
 } from "./email/bookingRequestEmails";
@@ -658,6 +663,63 @@ export const updatePaymentContactsByRequestToken = mutation({
     }
     const { token: _token, ...contactArgs } = args;
     await updateInvoicePaymentContacts(ctx, invoice, contactArgs);
+    return { ok: true as const };
+  },
+});
+
+/** Client-facing event contacts: view any time, add/delete once the quote is approved. */
+export const addEventContactByRequestToken = mutation({
+  args: {
+    token: v.string(),
+    eventId: v.id("events"),
+    name: v.string(),
+    position: v.optional(v.string()),
+    email: v.optional(v.string()),
+    phone: v.optional(v.string()),
+  },
+  returns: v.object({ ok: v.literal(true) }),
+  handler: async (ctx, args) => {
+    await enforceRateLimit(ctx, `requestToken:${args.token}`, { limit: 60, windowMs: HOUR_MS });
+    const request = await ctx.db
+      .query("eventRequests")
+      .withIndex("by_publicToken", (q) => q.eq("publicToken", args.token))
+      .unique();
+    if (!request?.linkedInvoiceId) throw new Error("Quote not found.");
+    const invoice = await ctx.db.get(request.linkedInvoiceId);
+    if (!invoice || invoice.status === "void" || !invoice.clientReviewReadyAt) {
+      throw new Error("Quote is not ready for review yet.");
+    }
+    await requirePublicEditableEvent(ctx, invoice, args.eventId);
+    await addPublicEventContact(ctx, args.eventId, {
+      name: args.name,
+      position: args.position,
+      email: args.email,
+      phone: args.phone,
+    });
+    return { ok: true as const };
+  },
+});
+
+export const deleteEventContactByRequestToken = mutation({
+  args: {
+    token: v.string(),
+    eventId: v.id("events"),
+    contactId: v.id("eventContacts"),
+  },
+  returns: v.object({ ok: v.literal(true) }),
+  handler: async (ctx, args) => {
+    await enforceRateLimit(ctx, `requestToken:${args.token}`, { limit: 60, windowMs: HOUR_MS });
+    const request = await ctx.db
+      .query("eventRequests")
+      .withIndex("by_publicToken", (q) => q.eq("publicToken", args.token))
+      .unique();
+    if (!request?.linkedInvoiceId) throw new Error("Quote not found.");
+    const invoice = await ctx.db.get(request.linkedInvoiceId);
+    if (!invoice || invoice.status === "void" || !invoice.clientReviewReadyAt) {
+      throw new Error("Quote is not ready for review yet.");
+    }
+    await requirePublicEditableEvent(ctx, invoice, args.eventId);
+    await deletePublicEventContact(ctx, args.eventId, args.contactId);
     return { ok: true as const };
   },
 });

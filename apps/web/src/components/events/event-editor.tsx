@@ -40,6 +40,7 @@ import { useSessionShell, useSessionViewer } from "@/components/session-shell-pr
 import { EventBandPaymentSection } from "@/components/events/event-band-payment-section";
 import { EventBandRidersSection } from "@/components/events/event-band-riders-section";
 import { EventBriefButton } from "@/components/events/event-brief-button";
+import { EventContactsSection } from "@/components/events/event-contacts-section";
 import { EventMediaSection } from "@/components/events/event-media-section";
 import {
   EventPostMortemSection,
@@ -1595,6 +1596,10 @@ export function EventEditor({
           </CardContent>
         </Card>
         </fieldset>
+      ) : null}
+
+      {resolvedActiveTab === "overview" && eventId ? (
+        <EventContactsSection eventId={eventId} canEdit={canEdit} />
       ) : null}
 
       {resolvedActiveTab === "overview" && eventId ? <EventBandRidersSection eventId={eventId} /> : null}
