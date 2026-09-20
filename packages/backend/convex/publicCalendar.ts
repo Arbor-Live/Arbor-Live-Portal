@@ -3,11 +3,7 @@ import { internalQuery, query } from "./_generated/server";
 import type { QueryCtx } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import { resolveStoredR2AssetUrl } from "./inventoryR2";
-import {
-  buildPublicEventUrl,
-  isPublicListableEventStatus,
-  isUpcomingEvent,
-} from "./lib/publicEvents";
+import { buildPublicEventUrl, isPublicListableEventStatus } from "./lib/publicEvents";
 import { isPublicSiteListableVisibility } from "./lib/eventVisibility";
 import { loadEventHostDisplay } from "./lib/hostOrgs";
 import {
@@ -18,13 +14,21 @@ import { SITE_URL } from "./email/constants";
 
 /**
  * Upper bound on feed size. Arbor runs ~300 events/year but only a subset is
- * public and upcoming; a full public season is well under this. If it is ever
+ * public and in-window; a full public season is well under this. If it is ever
  * hit, the feed is still correct — this only caps unbounded growth.
  */
 const CALENDAR_EVENT_LIMIT = 500;
 
 /** How far ahead the subscribable feed looks. */
 const CALENDAR_HORIZON_DAYS = 180;
+
+/**
+ * How far back the feed looks. Clients cache events they have already seen, but
+ * a freshly added (or late-polling) subscription should still pick up a show
+ * that just happened, and a multi-day event stays visible through its run. One
+ * week comfortably covers a show plus its load-out.
+ */
+const CALENDAR_LOOKBACK_DAYS = 7;
 
 type CalendarFeedEvent = PublicCalendarEvent & {
   posterImageUrl?: string;
@@ -55,19 +59,21 @@ async function loadVisibleDesignsByEventId(ctx: QueryCtx) {
 }
 
 /**
- * Public, upcoming events shaped for the calendar feed: show window, venue,
- * address, maps link, event page, and a plain-text description. Mirrors the
- * visibility rules in `publicEvents.ts` so the calendar never lists something
- * the website hides.
+ * Public events in the feed window (the last `CALENDAR_LOOKBACK_DAYS` through
+ * the next `CALENDAR_HORIZON_DAYS`), shaped for the calendar feed: show window,
+ * venue, address, maps link, event page, and a plain-text description. Mirrors
+ * the visibility rules in `publicEvents.ts` so the calendar never lists
+ * something the website hides.
  */
 export async function loadPublicCalendarEvents(
   ctx: QueryCtx,
   now: number,
 ): Promise<CalendarFeedEvent[]> {
+  const windowStart = now - CALENDAR_LOOKBACK_DAYS * 24 * 60 * 60 * 1000;
   const horizon = now + CALENDAR_HORIZON_DAYS * 24 * 60 * 60 * 1000;
   const events = await ctx.db
     .query("events")
-    .withIndex("by_startAt", (q) => q.gte("startAt", now))
+    .withIndex("by_startAt", (q) => q.gte("startAt", windowStart))
     .order("asc")
     .take(CALENDAR_EVENT_LIMIT);
 
@@ -76,7 +82,6 @@ export async function loadPublicCalendarEvents(
       (event) =>
         isPublicSiteListableVisibility(event.visibility) &&
         isPublicListableEventStatus(event.status) &&
-        isUpcomingEvent(event.startAt, now) &&
         event.startAt <= horizon,
     )
     .slice(0, CALENDAR_EVENT_LIMIT);
@@ -168,19 +173,10 @@ export const getFeedInfo = query({
   returns: v.object({
     /** Site-relative feed path; the web app owns the public URL. */
     feedPath: v.string(),
-    /** Number of upcoming public events currently in the feed. */
-    eventCount: v.number(),
-    /** Shown so the UI can say how far ahead the feed looks. */
-    horizonDays: v.number(),
   }),
-  handler: async (ctx) => {
-    const events = await loadPublicCalendarEvents(ctx, Date.now());
-    return {
-      // Served by the Next app, which proxies the Convex HTTP feed so the
-      // shareable link is on our own domain.
-      feedPath: "/events/calendar.ics",
-      eventCount: events.length,
-      horizonDays: CALENDAR_HORIZON_DAYS,
-    };
-  },
+  handler: async () => ({
+    // Served by the Next app, which proxies the Convex HTTP feed so the
+    // shareable link is on our own domain.
+    feedPath: "/events/calendar.ics",
+  }),
 });
