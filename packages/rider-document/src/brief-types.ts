@@ -31,7 +31,7 @@ export type EventBriefInstruction = {
   body: string;
 };
 
-/** A one-off contact row (venue, host billing, band) shown in People & contacts. */
+/** A contact row (venue, host billing, band, or a manually added event contact). */
 export type EventBriefContact = {
   roleLabel: string;
   person: string;
@@ -60,12 +60,11 @@ export type EventBriefDocumentData = {
   blocks: EventBriefBlock[];
   shifts: EventBriefShift[];
   assignments: EventBriefAssignment[];
-  /** Venue contact for on-site questions, walked up ancestor venues. */
-  venueContact?: EventBriefContact;
-  /** Primary billing contact for the host organization. */
-  hostContact?: EventBriefContact;
-  /** One row per band on the event that has contact info on its rider. */
-  bandContacts: EventBriefContact[];
+  /**
+   * Venue, host billing, band, and manually added event contacts, merged into
+   * one section on the printed brief.
+   */
+  contacts: EventBriefContact[];
   /** Equipment required for the event, sized to the event's pull list. */
   pullList: EventBriefPullItem[];
   instructions: EventBriefInstruction[];

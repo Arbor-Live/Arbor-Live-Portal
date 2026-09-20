@@ -80,6 +80,14 @@ export async function deleteEventRecord(ctx: MutationCtx, eventId: Id<"events">)
     await ctx.db.delete(row._id);
   }
 
+  const contacts = await ctx.db
+    .query("eventContacts")
+    .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
+    .take(TAKE);
+  for (const row of contacts) {
+    await ctx.db.delete(row._id);
+  }
+
   const availability = await ctx.db
     .query("eventCrewAvailabilityResponses")
     .withIndex("by_eventId", (q) => q.eq("eventId", eventId))

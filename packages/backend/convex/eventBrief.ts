@@ -12,7 +12,14 @@ import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import { internalQuery, query, type QueryCtx } from "./_generated/server";
 import { findAuthUsersByIds, requireArborInternalContext, requireAuth } from "./lib/auth";
-import { contactDisplayName } from "./lib/contactName";
+import {
+  buildBandContacts,
+  listManualEventContacts,
+  manualContactToBriefContact,
+  resolveInvoiceContact,
+  resolveVenueContact,
+} from "./lib/eventContacts";
+import { loadEventHostDisplay } from "./lib/hostOrgs";
 import { eventDashboardUrl } from "./email/constants";
 
 const STATUS_LABELS: Record<string, string> = {
@@ -67,55 +74,6 @@ async function effectiveAddress(
     current = current.parentId ? await ctx.db.get(current.parentId) : null;
   }
   return undefined;
-}
-
-function joinContact(email?: string, phone?: string): string | undefined {
-  const value = [email, phone]
-    .filter((entry): entry is string => Boolean(entry?.trim()))
-    .join(" · ");
-  return value || undefined;
-}
-
-/** On-site venue contact, preferring the room's own contact and falling back to
- * the nearest ancestor that has one (same walk as the address). */
-async function venueContact(
-  ctx: QueryCtx,
-  venue: Doc<"venues"> | null,
-): Promise<EventBriefDocumentData["venueContact"]> {
-  let current = venue;
-  while (current) {
-    const name = current.contactName?.trim();
-    const contact = joinContact(current.contactEmail, current.contactPhone);
-    if (name || contact) {
-      return {
-        roleLabel: "Venue contact",
-        person: name || current.path || current.name,
-        contact,
-      };
-    }
-    current = current.parentId ? await ctx.db.get(current.parentId) : null;
-  }
-  return undefined;
-}
-
-/** Primary billing contact for the host org — active, most recently used first. */
-async function hostContact(
-  ctx: QueryCtx,
-  hostGroupId: Doc<"events">["hostGroupId"],
-): Promise<EventBriefDocumentData["hostContact"]> {
-  if (!hostGroupId) return undefined;
-  const contacts = await ctx.db
-    .query("invoiceContacts")
-    .withIndex("by_groupId", (q) => q.eq("groupId", hostGroupId))
-    .take(200);
-  const primary = contacts
-    .filter((contact) => contact.active)
-    .sort((a, b) => (b.lastUsedAt ?? 0) - (a.lastUsedAt ?? 0))[0];
-  if (!primary) return undefined;
-  const person = contactDisplayName(primary);
-  const contact = joinContact(primary.email, primary.phone);
-  if (!person && !contact) return undefined;
-  return { roleLabel: "Host contact", person: person || "Host", contact };
 }
 
 /**
@@ -207,21 +165,16 @@ export const getBriefSource = internalQuery({
         eventId: args.eventId,
       });
 
-    const bandContacts: EventBriefDocumentData["bandContacts"] = rows.flatMap((row) => {
-      const rider = row.rider;
-      if (!rider) return [];
-      const name = rider.contactName?.trim();
-      const contact = joinContact(rider.contactEmail, rider.contactPhone);
-      if (!name && !contact) return [];
-      return [
-        {
-          roleLabel: "Band contact",
-          person: name || row.bandName,
-          contact,
-          notes: row.bandName,
-        },
-      ];
-    });
+    const venueContact = await resolveVenueContact(ctx, venue);
+    const invoiceContact = await resolveInvoiceContact(ctx, event.hostGroupId);
+    const manualContacts = await listManualEventContacts(ctx, args.eventId);
+    const hostDisplay = await loadEventHostDisplay(ctx, event);
+    const contacts: EventBriefDocumentData["contacts"] = [
+      ...(venueContact ? [venueContact] : []),
+      ...(invoiceContact ? [invoiceContact] : []),
+      ...buildBandContacts(rows),
+      ...manualContacts.map(manualContactToBriefContact),
+    ];
 
     const bands: ShowBandInput[] = rows
       .filter((row) => row.rider && row.rider.inputs.length > 0)
@@ -263,7 +216,7 @@ export const getBriefSource = internalQuery({
       generatedAtLabel: formatDateTime(Date.now()),
       statusLabel: STATUS_LABELS[event.status] ?? event.status,
       eventTypeLabel: event.eventType ?? undefined,
-      hostLabel: event.host ?? undefined,
+      hostLabel: hostDisplay.hostLabel,
       whenLabel: whenLabel(event.startAt, event.endAt, event.timezone),
       venueName: event.venueName ?? venue?.name,
       venueAddress: await effectiveAddress(ctx, venue),
@@ -297,9 +250,7 @@ export const getBriefSource = internalQuery({
             notes: assignment.notes ?? undefined,
           })),
       ],
-      venueContact: await venueContact(ctx, venue),
-      hostContact: await hostContact(ctx, event.hostGroupId),
-      bandContacts,
+      contacts,
       pullList: pullListItems.map((item) => ({
         label: item.label,
         quantity: item.quantityRequired,

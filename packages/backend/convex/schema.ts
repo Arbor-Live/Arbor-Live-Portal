@@ -1234,6 +1234,24 @@ export default defineSchema({
     .index("by_assignmentType", ["assignmentType"])
     .index("by_eventId_and_assignmentType", ["eventId", "assignmentType"]),
 
+  /**
+   * Event-level contacts that are not staff and not host-org billing people
+   * (e.g. venue A/V, stage manager, vendor). Shown in the event editor and
+   * printed on the event brief alongside inherited venue/invoice/band contacts.
+   */
+  eventContacts: defineTable({
+    eventId: v.id("events"),
+    name: v.string(),
+    position: v.optional(v.string()),
+    email: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    sortOrder: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_eventId", ["eventId"])
+    .index("by_eventId_and_sortOrder", ["eventId", "sortOrder"]),
+
   eventArtifacts: defineTable({
     eventId: v.id("events"),
     artifactType: eventArtifactTypeValue,
