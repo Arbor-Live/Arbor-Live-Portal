@@ -88,6 +88,11 @@ export function EventContactsSection({
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const isDirty = signatureOf(drafts) !== savedSignature;
+  const isSaving = saveStatus === "saving";
+  const dirtyRef = useRef(false);
+  useEffect(() => {
+    dirtyRef.current = isDirty;
+  }, [isDirty]);
 
   const serverSignature = board ? signatureOf(board.manual.map(toDraft)) : null;
   const lastServerSignatureRef = useRef<string | null>(null);
@@ -96,6 +101,8 @@ export function EventContactsSection({
     if (board === undefined || serverSignature === null) return;
     if (lastServerSignatureRef.current === serverSignature) return;
     lastServerSignatureRef.current = serverSignature;
+    // Preserve unsaved edits if the server list changed underneath them.
+    if (dirtyRef.current) return;
     const next = board.manual.map(toDraft);
     setDrafts(next);
     setSavedSignature(signatureOf(next));
@@ -187,11 +194,11 @@ export function EventContactsSection({
               <ContactInputFields
                 value={draft}
                 onChange={(patch) => updateDraft(draft.key, patch)}
-                disabled={!canEdit}
+                disabled={!canEdit || isSaving}
               />
               <RemoveContactButton
                 label="Remove contact"
-                disabled={!canEdit}
+                disabled={!canEdit || isSaving}
                 onClick={() => removeDraft(draft.key)}
               />
             </div>
@@ -201,6 +208,7 @@ export function EventContactsSection({
               type="button"
               variant="outline"
               size="sm"
+              disabled={isSaving}
               onClick={() => setDrafts((prev) => [...prev, newDraft()])}
             >
               <PlusIcon className="size-4" /> Add contact
