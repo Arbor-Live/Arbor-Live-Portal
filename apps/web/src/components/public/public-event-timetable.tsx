@@ -36,9 +36,9 @@ function hourLabel(minutes: number) {
 }
 
 const BLOCK_STYLES: Record<string, string> = {
-  setup: "border-amber-500/40 bg-amber-500/10",
+  setup: "border-status-amber-500/40 bg-status-amber-500/10",
   show: "border-primary/40 bg-primary/10",
-  strike: "border-zinc-400/40 bg-zinc-500/10",
+  strike: "border-status-zinc-400/40 bg-status-zinc-500/10",
   custom: "border-border bg-muted",
 };
 

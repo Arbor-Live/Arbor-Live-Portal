@@ -168,7 +168,7 @@ export function InvoicePaymentStatusSection({ invoiceId }: { invoiceId: Id<"invo
                 details.status === "overdue"
                   ? "rounded-full bg-destructive/10 px-2.5 py-0.5 text-xs font-medium text-destructive"
                   : details.status === "payment_received"
-                    ? "rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-400"
+                    ? "rounded-full bg-status-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-status-emerald-700 dark:text-status-emerald-400"
                     : "rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium"
               }
             >

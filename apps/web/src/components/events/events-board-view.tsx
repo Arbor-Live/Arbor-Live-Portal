@@ -141,40 +141,40 @@ function formatBoardRange(startAt: number, endAt: number) {
 
 function eventTypeAccent(eventType?: string) {
   if (eventType === "Dry Hire" || eventType === "Dry Rental") {
-    return "border-l-amber-600 bg-amber-500/10";
+    return "border-l-amber-600 bg-status-amber-500/10";
   }
   if (eventType === "Rental with Crew") {
-    return "border-l-sky-600 bg-sky-500/10";
+    return "border-l-sky-600 bg-status-sky-500/10";
   }
   if (eventType === "Services Only") {
-    return "border-l-violet-600 bg-violet-500/10";
+    return "border-l-violet-600 bg-status-violet-500/10";
   }
   if (eventType === "Crewed Event") {
-    return "border-l-emerald-600 bg-emerald-500/10";
+    return "border-l-emerald-600 bg-status-emerald-500/10";
   }
   return "border-l-primary bg-muted/40";
 }
 
 function eventTypeDot(eventType?: string) {
-  if (eventType === "Dry Hire" || eventType === "Dry Rental") return "bg-amber-600";
-  if (eventType === "Rental with Crew") return "bg-sky-600";
-  if (eventType === "Services Only") return "bg-violet-600";
-  if (eventType === "Crewed Event") return "bg-emerald-600";
+  if (eventType === "Dry Hire" || eventType === "Dry Rental") return "bg-status-amber-600";
+  if (eventType === "Rental with Crew") return "bg-status-sky-600";
+  if (eventType === "Services Only") return "bg-status-violet-600";
+  if (eventType === "Crewed Event") return "bg-status-emerald-600";
   return "bg-primary";
 }
 
 function teamTagClass(team: string) {
   switch (team) {
     case "Lighting":
-      return "bg-slate-500/15 text-slate-700 dark:text-slate-200";
+      return "bg-status-slate-500/15 text-status-slate-700 dark:text-status-slate-200";
     case "Sound":
-      return "bg-emerald-500/15 text-emerald-800 dark:text-emerald-200";
+      return "bg-status-emerald-500/15 text-status-emerald-800 dark:text-status-emerald-200";
     case "Design":
-      return "bg-rose-500/15 text-rose-800 dark:text-rose-200";
+      return "bg-status-rose-500/15 text-status-rose-800 dark:text-status-rose-200";
     case "Marketing":
-      return "bg-orange-500/15 text-orange-800 dark:text-orange-200";
+      return "bg-status-orange-500/15 text-status-orange-800 dark:text-status-orange-200";
     case "Operations":
-      return "bg-blue-500/15 text-blue-800 dark:text-blue-200";
+      return "bg-status-blue-500/15 text-status-blue-800 dark:text-status-blue-200";
     default:
       return "bg-muted text-muted-foreground";
   }

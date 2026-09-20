@@ -183,8 +183,8 @@ function formatTypeDisplay(type: {
 
 function visibilityBadgeClass(row: { publicListing?: boolean; publicProfile?: boolean }) {
   if (!row.publicListing) return "border-muted-foreground/30 text-muted-foreground";
-  if (row.publicProfile) return "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
-  return "border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-300";
+  if (row.publicProfile) return "border-status-emerald-500/40 bg-status-emerald-500/10 text-status-emerald-700 dark:text-status-emerald-300";
+  return "border-status-sky-500/40 bg-status-sky-500/10 text-status-sky-700 dark:text-status-sky-300";
 }
 
 export function TypesManager() {

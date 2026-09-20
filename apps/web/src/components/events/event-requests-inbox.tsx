@@ -70,13 +70,13 @@ function statusBadgeClass(status: string) {
     case "submitted":
     case "action_required":
     case "in_review":
-      return "border border-amber-500/30 bg-amber-500/10 text-amber-700";
+      return "border border-status-amber-500/30 bg-status-amber-500/10 text-status-amber-700";
     case "pending_client":
-      return "border border-sky-500/30 bg-sky-500/10 text-sky-700";
+      return "border border-status-sky-500/30 bg-status-sky-500/10 text-status-sky-700";
     case "converted":
-      return "border border-emerald-500/30 bg-emerald-500/10 text-emerald-700";
+      return "border border-status-emerald-500/30 bg-status-emerald-500/10 text-status-emerald-700";
     case "declined":
-      return "border border-rose-500/30 bg-rose-500/10 text-rose-700";
+      return "border border-status-rose-500/30 bg-status-rose-500/10 text-status-rose-700";
     default:
       return "bg-muted text-muted-foreground";
   }

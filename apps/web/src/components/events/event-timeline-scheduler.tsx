@@ -74,9 +74,9 @@ function startMinutesFromTrackClientX(clientX: number, trackWidth: number, track
 }
 
 function blockColor(type: TimelineBlockDraft["blockType"]) {
-  if (type === "setup") return "bg-blue-500/30 border-blue-500";
-  if (type === "show") return "bg-emerald-500/30 border-emerald-500";
-  if (type === "strike") return "bg-amber-500/30 border-amber-500";
+  if (type === "setup") return "bg-status-blue-500/30 border-status-blue-500";
+  if (type === "show") return "bg-status-emerald-500/30 border-status-emerald-500";
+  if (type === "strike") return "bg-status-amber-500/30 border-status-amber-500";
   return "bg-muted border-border";
 }
 

@@ -27,11 +27,11 @@ type TimecardPeriod = {
 function statusBadgeClass(status: "open" | "due" | "past_due") {
   switch (status) {
     case "open":
-      return "bg-emerald-500/10 text-emerald-700";
+      return "bg-status-emerald-500/10 text-status-emerald-700";
     case "due":
-      return "bg-amber-500/10 text-amber-700";
+      return "bg-status-amber-500/10 text-status-amber-700";
     case "past_due":
-      return "bg-red-500/10 text-red-700";
+      return "bg-status-red-500/10 text-status-red-700";
   }
 }
 

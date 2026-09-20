@@ -250,7 +250,7 @@ export function EventScheduleField() {
       </div>
 
       {activeDayLevel === "unavailable" && activeSlot.date ? (
-        <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-950 dark:text-amber-100">
+        <p className="rounded-md border border-status-amber-500/30 bg-status-amber-500/10 px-3 py-2 text-sm text-status-amber-950 dark:text-status-amber-100">
           {UNAVAILABLE_DAY_WARNING}
         </p>
       ) : null}

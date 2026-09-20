@@ -8,11 +8,11 @@ import {
 
 export function LandingFooter() {
   return (
-    <footer className="bg-zinc-950 text-zinc-300">
+    <footer className="bg-status-zinc-950 text-status-zinc-300">
       <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6 lg:px-8">
         <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-3">
           <div>
-            <p className="text-lg font-semibold text-zinc-50">Arbor Live</p>
+            <p className="text-lg font-semibold text-status-zinc-50">Arbor Live</p>
             <p className="mt-2 text-sm leading-relaxed">
               Stanford&apos;s student-run live event production company.
             </p>
@@ -25,7 +25,7 @@ export function LandingFooter() {
           </div>
 
           <div>
-            <p className="text-sm font-semibold text-zinc-50">Explore</p>
+            <p className="text-sm font-semibold text-status-zinc-50">Explore</p>
             <ul className="mt-3 space-y-2 text-sm">
               {landingFooterLinks.map((link) => (
                 <li key={link.label}>
@@ -43,7 +43,7 @@ export function LandingFooter() {
           </div>
 
           <div>
-            <p className="text-sm font-semibold text-zinc-50">Portal</p>
+            <p className="text-sm font-semibold text-status-zinc-50">Portal</p>
             <ul className="mt-3 space-y-2 text-sm">
               {landingPortalLinks.map((link) => (
                 <li key={link.label}>
@@ -57,7 +57,7 @@ export function LandingFooter() {
           </div>
         </div>
 
-        <p className="mt-12 border-t border-zinc-800 pt-6 text-xs text-zinc-500">
+        <p className="mt-12 border-t border-status-zinc-800 pt-6 text-xs text-status-zinc-500">
           © {new Date().getFullYear()} Arbor Live · Office of Student Engagement, Stanford University
         </p>
       </div>

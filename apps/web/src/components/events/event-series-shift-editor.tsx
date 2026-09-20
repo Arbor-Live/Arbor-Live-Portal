@@ -345,7 +345,7 @@ export function EventSeriesShiftEditor({
           </Form>
 
           {blockOptions.length === 0 ? (
-            <p className="text-sm text-amber-700">
+            <p className="text-sm text-status-amber-700">
               Add schedule block templates first — crew shifts link to those blocks.
             </p>
           ) : (

@@ -390,7 +390,7 @@ export function EventPullList({
             </p>
           ) : null}
           {syncStatus?.hasInvoice && !syncStatus.inSync ? (
-            <p className="mt-1 inline-flex items-center rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs text-amber-800">
+            <p className="mt-1 inline-flex items-center rounded-md border border-status-amber-500/40 bg-status-amber-500/10 px-2 py-1 text-xs text-status-amber-800">
               Out of sync with the linked invoice&apos;s equipment lines.
             </p>
           ) : null}

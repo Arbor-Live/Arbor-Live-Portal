@@ -7,17 +7,17 @@ export function PublicHeroSkeleton({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        "relative overflow-hidden border-b bg-zinc-950 px-4 pb-16 pt-[calc(4rem_+_var(--happening-banner-height,0px))] sm:px-6 sm:pb-24 sm:pt-[calc(6rem_+_var(--happening-banner-height,0px))] lg:px-8",
+        "relative overflow-hidden border-b bg-status-zinc-950 px-4 pb-16 pt-[calc(4rem_+_var(--happening-banner-height,0px))] sm:px-6 sm:pb-24 sm:pt-[calc(6rem_+_var(--happening-banner-height,0px))] lg:px-8",
         className,
       )}
       role="status"
       aria-label="Loading"
     >
       <div className="relative mx-auto max-w-6xl space-y-4">
-        <Skeleton className="h-4 w-28 bg-zinc-800" />
-        <Skeleton className="h-10 w-2/3 max-w-md bg-zinc-800 sm:h-12" />
-        <Skeleton className="h-5 w-full max-w-xl bg-zinc-800" />
-        <Skeleton className="h-5 w-4/5 max-w-lg bg-zinc-800" />
+        <Skeleton className="h-4 w-28 bg-status-zinc-800" />
+        <Skeleton className="h-10 w-2/3 max-w-md bg-status-zinc-800 sm:h-12" />
+        <Skeleton className="h-5 w-full max-w-xl bg-status-zinc-800" />
+        <Skeleton className="h-5 w-4/5 max-w-lg bg-status-zinc-800" />
       </div>
       <span className="sr-only">Loading…</span>
     </div>
@@ -32,7 +32,7 @@ export function PublicPortalPageSkeleton({
 }) {
   return (
     <div role="status" aria-label="Loading">
-      <div className="relative overflow-hidden border-b bg-muted/40 px-4 pb-14 pt-[calc(6rem_+_var(--happening-banner-height,0px))] sm:px-6 sm:pb-20 sm:pt-[calc(7rem_+_var(--happening-banner-height,0px))] lg:px-8 dark:bg-zinc-950">
+      <div className="relative overflow-hidden border-b bg-muted/40 px-4 pb-14 pt-[calc(6rem_+_var(--happening-banner-height,0px))] sm:px-6 sm:pb-20 sm:pt-[calc(7rem_+_var(--happening-banner-height,0px))] lg:px-8 dark:bg-status-zinc-950">
         <div className="relative mx-auto max-w-6xl space-y-4">
           <Skeleton className={cn("h-10 sm:h-12", titleWidth)} />
           <Skeleton className="h-5 w-full max-w-xl" />

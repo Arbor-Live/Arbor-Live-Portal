@@ -192,7 +192,7 @@ export function RiderSourcePicker({
           className={cn(
             "h-8 w-full min-w-0 rounded-none border border-input bg-transparent py-1 pl-2 pr-12 text-sm outline-none",
             "focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50 disabled:opacity-50",
-            unmapped && value.trim() && "border-amber-500/70",
+            unmapped && value.trim() && "border-status-amber-500/70",
           )}
           disabled={disabled}
           value={display}
@@ -221,7 +221,7 @@ export function RiderSourcePicker({
           ) : null}
           {unmapped && value.trim() ? (
             <WarningCircleIcon
-              className="size-3.5 text-amber-600"
+              className="size-3.5 text-status-amber-600"
               aria-label="Not matched to a source type"
             />
           ) : null}

@@ -89,7 +89,7 @@ function EventCard({ event }: { event: PublicEventCard }) {
         <div className="flex flex-wrap gap-2 text-sm">
           <Link
             href={event.publicEventUrl}
-            className="font-medium text-emerald-800 underline-offset-4 hover:underline dark:text-primary"
+            className="font-medium text-status-emerald-800 underline-offset-4 hover:underline dark:text-primary"
           >
             Event details
           </Link>
@@ -99,7 +99,7 @@ function EventCard({ event }: { event: PublicEventCard }) {
               href={link.url}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-1 font-medium text-emerald-800 underline-offset-4 hover:underline dark:text-primary"
+              className="inline-flex items-center gap-1 font-medium text-status-emerald-800 underline-offset-4 hover:underline dark:text-primary"
             >
               <MarketingLinkIcon id={link.icon} className="size-3.5 shrink-0" />
               {link.label}
@@ -177,7 +177,7 @@ export function LandingUpcomingEvents({
           </div>
           <Link
             href="/events"
-            className="text-sm font-medium text-emerald-800 underline-offset-4 hover:underline dark:text-primary"
+            className="text-sm font-medium text-status-emerald-800 underline-offset-4 hover:underline dark:text-primary"
           >
             View all →
           </Link>

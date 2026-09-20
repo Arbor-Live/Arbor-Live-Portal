@@ -141,7 +141,7 @@ export function InventoryItemDetails({
             <p className="text-xs text-destructive">{errors.assetId}</p>
           ) : null}
           {assetLooksLikeSerial ? (
-            <p className="text-xs text-amber-700">
+            <p className="text-xs text-status-amber-700">
               This looks like a serial number — did you mean the Serial field?
             </p>
           ) : null}
@@ -159,7 +159,7 @@ export function InventoryItemDetails({
             ariaLabel="Serial Number"
           />
           {serialLooksLikeAssetTag ? (
-            <p className="text-xs text-amber-700">
+            <p className="text-xs text-status-amber-700">
               This looks like an asset tag — did you mean the Asset ID field?
             </p>
           ) : null}

@@ -79,7 +79,7 @@ export function HappeningNowBar({ events }: { events: HappeningNowEvent[] }) {
     <div>
       <div
         ref={barRef}
-        className="flex h-8 items-center gap-x-2 overflow-hidden bg-emerald-600 px-3 text-white sm:h-9 sm:gap-x-3 sm:px-4"
+        className="flex h-8 items-center gap-x-2 overflow-hidden bg-status-emerald-600 px-3 text-white sm:h-9 sm:gap-x-3 sm:px-4"
       >
         {expandable ? (
           <>
@@ -141,7 +141,7 @@ export function HappeningNowBar({ events }: { events: HappeningNowEvent[] }) {
       {expanded && expandable ? (
         <ul
           id="happening-now-list"
-          className="border-t border-white/25 bg-emerald-600 text-white sm:hidden"
+          className="border-t border-white/25 bg-status-emerald-600 text-white sm:hidden"
         >
           {events.map((event) => (
             <li key={event.eventId}>

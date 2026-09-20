@@ -140,7 +140,7 @@ function CrewAvailabilityEventHeader({
         <p className="font-medium">{event.title}</p>
         <EventStateBadges status={event.status} startAt={event.startAt} endAt={event.endAt} />
         {event.needsResponse ? (
-          <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-700">
+          <span className="rounded-full border border-status-amber-500/30 bg-status-amber-500/10 px-2 py-0.5 text-xs text-status-amber-700">
             Needs response
           </span>
         ) : showResponseBadge && event.myResponse ? (
@@ -270,7 +270,7 @@ export function CrewAvailabilityInbox() {
           {showExtended ? "Show default window" : "Show more events"}
         </Button>
         {pendingCount > 0 ? (
-          <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-700">
+          <span className="rounded-full border border-status-amber-500/30 bg-status-amber-500/10 px-2 py-0.5 text-xs text-status-amber-700">
             {pendingCount} need{pendingCount === 1 ? "s" : ""} your response
           </span>
         ) : null}

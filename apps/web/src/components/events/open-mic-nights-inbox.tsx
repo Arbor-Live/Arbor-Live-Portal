@@ -66,7 +66,7 @@ export function OpenMicEventsInbox() {
                       </span>
                     ) : null}
                     <span
-                      className={`rounded px-2 py-0.5 ${event.runnerWindowOpen ? "bg-emerald-500/15 text-emerald-700" : "bg-muted text-muted-foreground"}`}
+                      className={`rounded px-2 py-0.5 ${event.runnerWindowOpen ? "bg-status-emerald-500/15 text-status-emerald-700" : "bg-muted text-muted-foreground"}`}
                     >
                       Runner: {event.runnerWindowOpen ? "Open" : "Closed"}
                     </span>
@@ -75,7 +75,7 @@ export function OpenMicEventsInbox() {
                       Performed: {event.performedCount}
                     </span>
                     {event.hasCurrent ? (
-                      <span className="rounded bg-emerald-500/15 px-2 py-0.5 text-emerald-700">
+                      <span className="rounded bg-status-emerald-500/15 px-2 py-0.5 text-status-emerald-700">
                         Performer on stage
                       </span>
                     ) : null}

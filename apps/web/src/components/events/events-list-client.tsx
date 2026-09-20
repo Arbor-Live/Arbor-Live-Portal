@@ -70,7 +70,7 @@ export function EventsListClient() {
                       </span>
                     ))}
                     {row.venueName ? <span className="rounded bg-muted px-2 py-0.5">{row.venueName}</span> : null}
-                    {row.invoiceId ? <span className="rounded bg-emerald-500/15 px-2 py-0.5 text-emerald-700">linked invoice</span> : null}
+                    {row.invoiceId ? <span className="rounded bg-status-emerald-500/15 px-2 py-0.5 text-status-emerald-700">linked invoice</span> : null}
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">

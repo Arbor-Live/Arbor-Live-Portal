@@ -411,7 +411,7 @@ export function InvoiceLinkedEventCrewSection({
                 className={cn(
                   "shrink-0",
                   row.timesOverridden &&
-                    "border-amber-500/50 bg-amber-500/15 text-amber-800 hover:bg-amber-500/25 hover:text-amber-900",
+                    "border-status-amber-500/50 bg-status-amber-500/15 text-status-amber-800 hover:bg-status-amber-500/25 hover:text-status-amber-900",
                 )}
                 aria-label={row.timesOverridden ? "Edit custom shift time" : "Edit shift time"}
                 title={row.timesOverridden ? "Custom shift time" : "Edit shift time"}
@@ -449,7 +449,7 @@ export function InvoiceLinkedEventCrewSection({
                   />
                 </div>
               ) : row.timesOverridden ? (
-                <span className="shrink-0 self-center text-xs text-amber-800 tabular-nums">
+                <span className="shrink-0 self-center text-xs text-status-amber-800 tabular-nums">
                   {formatDateTimeRange(
                     localDateTimeInputToMs(row.startsAt) ?? 0,
                     localDateTimeInputToMs(row.endsAt) ?? 0,
@@ -663,14 +663,14 @@ export function InvoiceLinkedEventCrewSection({
                 );
               })}
               {orphanedShifts.length > 0 ? (
-                <div className="space-y-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-2">
+                <div className="space-y-2 rounded-md border border-status-amber-500/30 bg-status-amber-500/10 p-2">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-sm font-medium text-amber-800">Unlinked crew shifts</p>
+                    <p className="text-sm font-medium text-status-amber-800">Unlinked crew shifts</p>
                     <Button type="button" variant="outline" size="sm" onClick={() => void removeLegacyUnassignedShifts()}>
                       Delete Unlinked Shifts
                     </Button>
                   </div>
-                  <p className="text-xs text-amber-700">
+                  <p className="text-xs text-status-amber-700">
                     These shifts are saved on the event but not attached to a current schedule block. Re-add them to a
                     block or delete them.
                   </p>

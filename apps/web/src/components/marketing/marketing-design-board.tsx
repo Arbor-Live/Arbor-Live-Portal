@@ -174,15 +174,15 @@ export function MarketingDesignBoard() {
                 <div className="flex items-start justify-between gap-2">
                   <p className="font-medium">{event.title}</p>
                   {event.design?.status === "published" ? (
-                    <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-800">
+                    <span className="shrink-0 rounded-full bg-status-emerald-100 px-2 py-0.5 text-[10px] font-medium text-status-emerald-800">
                       Published
                     </span>
                   ) : event.design?.status === "ready" ? (
-                    <span className="shrink-0 rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-medium text-sky-800">
+                    <span className="shrink-0 rounded-full bg-status-sky-100 px-2 py-0.5 text-[10px] font-medium text-status-sky-800">
                       On website
                     </span>
                   ) : event.design?.imageUrl ? (
-                    <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
+                    <span className="shrink-0 rounded-full bg-status-amber-100 px-2 py-0.5 text-[10px] font-medium text-status-amber-800">
                       Draft
                     </span>
                   ) : null}

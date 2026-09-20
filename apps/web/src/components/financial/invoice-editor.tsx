@@ -1717,13 +1717,13 @@ export function InvoiceEditor({
       ) : null}
 
       {invoiceData?.invoice?.clientApprovalStatus === "approved" && isDraftDirty ? (
-        <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+        <div className="rounded-md border border-status-amber-300 bg-status-amber-50 px-3 py-2 text-sm text-status-amber-900">
           This quote is approved. Saving changes may require client re-approval.
         </div>
       ) : null}
 
       {seriesOccurrenceStale ? (
-        <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+        <div className="rounded-md border border-status-amber-300 bg-status-amber-50 px-3 py-2 text-sm text-status-amber-900">
           Billable occurrence count changed (
           {invoiceData?.invoice?.billableOccurrenceCountAtSave} → {billableOccurrenceCount}). Recalculate
           equipment totals to refresh billed amounts.
@@ -1742,7 +1742,7 @@ export function InvoiceEditor({
       ) : null}
 
       {isDraftDirty && divisionWarnings.length ? (
-        <ul className="space-y-1 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+        <ul className="space-y-1 rounded-md border border-status-amber-300 bg-status-amber-50 px-3 py-2 text-sm text-status-amber-900">
           {divisionWarnings.map((warning) => (
             <li key={warning}>{warning}</li>
           ))}
@@ -2116,7 +2116,7 @@ export function InvoiceEditor({
               <p data-testid="invoice-total-crew">Crew: {formatUsd(draftTotals.crewSubtotalUsd)}</p>
               {defaultCrewHourlyRateUsd <= 0 &&
               crewRows.some((row) => Number(row.quantity) > 0) ? (
-                <p className="text-xs text-amber-700" data-testid="invoice-crew-rate-warning">
+                <p className="text-xs text-status-amber-700" data-testid="invoice-crew-rate-warning">
                   Crew hours are on the quote but the global crew rate is $0. Set Normal/Lead rates under{" "}
                   <Link href="/dashboard/users/crew-rates" className="underline underline-offset-2">
                     Users → Crew rates
@@ -2129,11 +2129,11 @@ export function InvoiceEditor({
               <p data-testid="invoice-total-discount">Discount: -{formatUsd(draftTotals.discountAmountUsd)}</p>
               <p className="border-t pt-2 font-semibold" data-testid="invoice-total-grand">{formatUsd(draftTotals.totalUsd)}</p>
               {pricingUnsaved && isDraftDirty ? (
-                <p className="text-xs text-amber-700">Pricing differs from last saved total.</p>
+                <p className="text-xs text-status-amber-700">Pricing differs from last saved total.</p>
               ) : null}
               {(draftTotals.discountAmountUsd > draftTotals.equipmentSubtotalUsd ||
                 invoiceData?.invoice?.discountWarning) ? (
-                <p className="text-xs text-amber-700" data-testid="invoice-discount-warning">
+                <p className="text-xs text-status-amber-700" data-testid="invoice-discount-warning">
                   {invoiceData?.invoice?.discountWarning ?? "Discount exceeds equipment rental subtotal."}
                 </p>
               ) : null}
@@ -2187,8 +2187,8 @@ export function InvoiceEditor({
                 <p
                   className={
                     projectedNetProfitUsd >= 0
-                      ? "font-medium text-emerald-700"
-                      : "font-medium text-rose-700"
+                      ? "font-medium text-status-emerald-700"
+                      : "font-medium text-status-rose-700"
                   }
                 >
                   Net profit: {formatUsd(projectedNetProfitUsd)}
@@ -2366,7 +2366,7 @@ export function InvoiceEditor({
                 <Input value={newGroupName} onChange={(e) => setNewGroupName(e.target.value)} />
               </div>
               {groupNameSuggestion ? (
-                <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
+                <div className="rounded-md border border-status-amber-500/40 bg-status-amber-500/10 px-3 py-2 text-sm">
                   <p>
                     Did you mean <span className="font-medium">{groupNameSuggestion.name}</span>
                     {groupNameSuggestion.matchKind === "alias" ? " (alias match)" : ""}?
