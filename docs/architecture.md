@@ -43,7 +43,7 @@ Dependency direction: `web` depends on `backend` (generated API bindings),
 | Area | Modules |
 |---|---|
 | Auth & users | `auth.ts`, `auth.config.ts`, `betterAuth/`, `users.ts`, `userInvites.ts`, `account.ts`, `bootstrap.ts`, `capabilityDefinitions.ts` |
-| Events | `events.ts`, `eventSchedule.ts`, `eventCrew.ts`, `eventCrewAvailability.ts`, `eventAssignments.ts`, `eventArtifacts.ts`, `eventExpenses.ts`, `eventPullLists.ts`, `eventSeries.ts`, `eventSeriesPullLists.ts`, `eventBands.ts`, `eventRequests.ts` |
+| Events | `events.ts`, `eventSchedule.ts`, `eventCrew.ts`, `eventCrewAvailability.ts`, `eventArtifacts.ts`, `eventExpenses.ts`, `eventPullLists.ts`, `eventSeries.ts`, `eventSeriesPullLists.ts`, `eventBands.ts`, `eventRequests.ts` |
 | Invoicing | `invoices.ts`, `invoiceGroups.ts`, `invoiceContacts.ts`, `invoiceTerms.ts`, `invoiceFeeDefinitions.ts`, `invoiceSettings.ts`, `invoicePdf.ts`, `invoicePdfDownload.ts`, `paymentProof*.ts`, `bandPayments.ts`, `bandPaymentPdfDownload.ts` |
 | Inventory | `inventoryTypes.ts`, `inventoryItems.ts`, `inventoryCategories.ts`, `inventoryPackages.ts`, `inventoryR2.ts`, `storageLocations.ts`, `lostFoundSettings.ts` |
 | Media (Immich) | `immich.ts`, `immichActions.ts`, `immichDb.ts`, `immichEnsure.ts`, `marketingImmich*.ts` |

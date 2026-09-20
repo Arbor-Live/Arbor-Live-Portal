@@ -67,7 +67,6 @@ import type * as email_triggers from "../email/triggers.js";
 import type * as email_weeklyDigest from "../email/weeklyDigest.js";
 import type * as equipmentBorrowRequests from "../equipmentBorrowRequests.js";
 import type * as eventArtifacts from "../eventArtifacts.js";
-import type * as eventAssignments from "../eventAssignments.js";
 import type * as eventBands from "../eventBands.js";
 import type * as eventBrief from "../eventBrief.js";
 import type * as eventBriefDownload from "../eventBriefDownload.js";
@@ -178,6 +177,7 @@ import type * as lib_siteRevalidationPaths from "../lib/siteRevalidationPaths.js
 import type * as lib_stanfordHours from "../lib/stanfordHours.js";
 import type * as lib_statusTransitions from "../lib/statusTransitions.js";
 import type * as lib_trustedOrigins from "../lib/trustedOrigins.js";
+import type * as lib_userContact from "../lib/userContact.js";
 import type * as lib_userParticipation from "../lib/userParticipation.js";
 import type * as lib_userProfileImage from "../lib/userProfileImage.js";
 import type * as lib_userTimecards from "../lib/userTimecards.js";
@@ -289,7 +289,6 @@ declare const fullApi: ApiFromModules<{
   "email/weeklyDigest": typeof email_weeklyDigest;
   equipmentBorrowRequests: typeof equipmentBorrowRequests;
   eventArtifacts: typeof eventArtifacts;
-  eventAssignments: typeof eventAssignments;
   eventBands: typeof eventBands;
   eventBrief: typeof eventBrief;
   eventBriefDownload: typeof eventBriefDownload;
@@ -400,6 +399,7 @@ declare const fullApi: ApiFromModules<{
   "lib/stanfordHours": typeof lib_stanfordHours;
   "lib/statusTransitions": typeof lib_statusTransitions;
   "lib/trustedOrigins": typeof lib_trustedOrigins;
+  "lib/userContact": typeof lib_userContact;
   "lib/userParticipation": typeof lib_userParticipation;
   "lib/userProfileImage": typeof lib_userProfileImage;
   "lib/userTimecards": typeof lib_userTimecards;

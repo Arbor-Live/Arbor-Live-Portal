@@ -17,6 +17,8 @@ import {
 import { scheduleQuoteChangesRequestedEmail } from "../email/quoteChangesRequestedEmails";
 import { scheduleQuoteApprovedEmail } from "../email/quoteApprovedEmails";
 import { loadEventHostDisplay } from "./hostOrgs";
+import { findAuthUsersByIds } from "./auth";
+import { resolveUserContact } from "./userContact";
 
 function resolveInvoiceTermsIds(invoice: Doc<"invoices">): Id<"invoiceTerms">[] {
   if (invoice.termsIds && invoice.termsIds.length > 0) return invoice.termsIds;
@@ -106,18 +108,6 @@ export async function loadPublicQuoteView(ctx: QueryCtx, invoice: Doc<"invoices"
         isSeriesBooking,
       }),
     ).length;
-  const eventAssignments = linkedEvent
-    ? (
-        await Promise.all(
-          eventIds.map((eventId) =>
-            ctx.db
-              .query("eventPeopleAssignments")
-              .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
-              .take(500),
-          ),
-        )
-      ).flat()
-    : [];
   const eventScheduleBlocks = linkedEvent
     ? (
         await Promise.all(
@@ -157,17 +147,42 @@ export async function loadPublicQuoteView(ctx: QueryCtx, invoice: Doc<"invoices"
   const hostDisplays = await Promise.all(
     linkedEvents.map((event) => loadEventHostDisplay(ctx, event)),
   );
+  const shiftUserByKey = await findAuthUsersByIds(
+    ctx,
+    eventShifts
+      .map((shift) => shift.userId)
+      .filter((value): value is string => Boolean(value?.trim())),
+  );
 
   const events = await Promise.all(
     linkedEvents.map(async (event, index) => {
       const hostDisplay = hostDisplays[index];
-      const assignments = eventAssignments.filter((row) => row.eventId === event._id);
       const scheduleBlocks = eventScheduleBlocks.filter((row) => row.eventId === event._id);
       const shifts = eventShifts.filter((row) => row.eventId === event._id);
       const artifacts = eventArtifacts.filter((row) => row.eventId === event._id);
-      const eventManagerAssignment = assignments.find((row) => row.assignmentType === "event_manager");
-      const dayOfLeadAssignment = assignments.find((row) => row.assignmentType === "day_of_lead");
-      const crewAssignments = assignments.filter((row) => row.assignmentType === "crew");
+      const managerContact = event.eventManagerUserId
+        ? await resolveUserContact(ctx, event.eventManagerUserId)
+        : null;
+      const dayOfLeadContact = event.dayOfLeadUserId
+        ? await resolveUserContact(ctx, event.dayOfLeadUserId)
+        : null;
+
+      const crewRoster: Array<{ name: string; role?: string; email?: string }> = [];
+      const seenCrew = new Set<string>();
+      for (const shift of shifts) {
+        const user = shift.userId ? shiftUserByKey.get(shift.userId) : undefined;
+        const name = shift.personName?.trim() || user?.name?.trim();
+        if (!name) continue;
+        const key = shift.userId?.trim() || name.toLowerCase();
+        if (seenCrew.has(key)) continue;
+        seenCrew.add(key);
+        crewRoster.push({
+          name,
+          role: shift.role || undefined,
+          email: user?.email?.trim().toLowerCase() || undefined,
+        });
+      }
+
       return {
         id: event._id,
         title: event.title,
@@ -178,27 +193,22 @@ export async function loadPublicQuoteView(ctx: QueryCtx, invoice: Doc<"invoices"
         additionalHosts: hostDisplay?.additionalHosts ?? [],
         startAt: event.startAt,
         endAt: event.endAt,
-        assignments,
         scheduleBlocks,
         contacts: {
           manager: {
-            name: eventManagerAssignment?.personName ?? invoice.managerName,
-            email: eventManagerAssignment?.contactEmail ?? invoice.managerEmail ?? undefined,
-            phone: eventManagerAssignment?.contactPhone ?? undefined,
+            name: managerContact?.name ?? invoice.managerName,
+            email: managerContact?.email ?? invoice.managerEmail ?? undefined,
+            phone: managerContact?.phone ?? undefined,
           },
-          dayOfLead: dayOfLeadAssignment
+          dayOfLead: dayOfLeadContact
             ? {
-                name: dayOfLeadAssignment.personName,
-                email: dayOfLeadAssignment.contactEmail ?? undefined,
-                phone: dayOfLeadAssignment.contactPhone ?? undefined,
+                name: dayOfLeadContact.name ?? "Assigned",
+                email: dayOfLeadContact.email,
+                phone: dayOfLeadContact.phone,
               }
             : null,
         },
-        crewRoster: crewAssignments.map((row) => ({
-          name: row.personName,
-          role: row.roleLabel ?? undefined,
-          email: row.contactEmail ?? undefined,
-        })),
+        crewRoster,
         artists: await getEventArtists(ctx, event._id),
         shifts,
         artifacts,
