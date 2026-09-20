@@ -113,6 +113,8 @@ const eventsSubItems: NavSubItem[] = [
   { title: "Open Mic", url: "/dashboard/events/open-mic", adminOnly: true },
   { title: "Crew Scheduling", url: "/dashboard/events/crew-scheduling", adminOnly: true },
   { title: "My Availability", url: "/dashboard/events/my-availability" },
+  { title: "My Post-mortems", url: "/dashboard/events/post-mortems" },
+  { title: "My Photos", url: "/dashboard/events/photos" },
   { title: "My Timecards", url: "/dashboard/timecards/mine" },
   { title: "Create Event", url: "/dashboard/events/new", adminOnly: true },
 ]
@@ -233,6 +235,11 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
   const includeUnconfirmedCrew =
     effectiveIsAdmin &&
     (pathname === "/dashboard" || pathname.startsWith("/dashboard/events/crew-scheduling"))
+  // Post-mortem / photo counts fan out over the user's ended events — subscribe
+  // only where those chips are actionable (home + event routes), not every page.
+  const includeMyEventActions =
+    activeOrganization?.organizationType === "arbor_internal" &&
+    (pathname === "/dashboard" || pathname.startsWith("/dashboard/events"))
   const navBadges = useQuery(
     api.navBadges.getNavBadges,
     shell
@@ -244,6 +251,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
           includeAdmin: effectiveIsAdmin,
           includeBand: isArtistOrganizationType(activeOrganization?.organizationType),
           includeUnconfirmedCrew,
+          includeMyEventActions,
         }
       : "skip",
   )
@@ -256,6 +264,8 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
   const pendingBandPaymentActionsCount = navBadges?.pendingBandPaymentActions
   const quoteChangesRequestedCount = navBadges?.quoteChangesRequested
   const pendingEquipmentBorrowRequestsCount = navBadges?.pendingEquipmentBorrowRequests
+  const pendingPostMortemsCount = navBadges?.pendingPostMortems
+  const pendingEventPhotosCount = navBadges?.pendingEventPhotos
 
   const userName = account?.name ?? "Unknown user"
   const userEmail = account?.email ?? "No email"
@@ -284,6 +294,10 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
     switch (url) {
       case "/dashboard/events/my-availability":
         return pendingAvailabilityCount ?? 0
+      case "/dashboard/events/post-mortems":
+        return pendingPostMortemsCount ?? 0
+      case "/dashboard/events/photos":
+        return pendingEventPhotosCount ?? 0
       case "/dashboard/financial-hub/requests":
         return pendingBookingRequestsCount ?? 0
       case "/dashboard/events/crew-scheduling":

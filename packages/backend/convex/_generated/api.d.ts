@@ -151,6 +151,7 @@ import type * as lib_invoiceProfit from "../lib/invoiceProfit.js";
 import type * as lib_invoiceSeries from "../lib/invoiceSeries.js";
 import type * as lib_marketingContent from "../lib/marketingContent.js";
 import type * as lib_marketingLinks from "../lib/marketingLinks.js";
+import type * as lib_myEventActions from "../lib/myEventActions.js";
 import type * as lib_newsletterWeek from "../lib/newsletterWeek.js";
 import type * as lib_normalizeCrewLineLabel from "../lib/normalizeCrewLineLabel.js";
 import type * as lib_onboardingLinks from "../lib/onboardingLinks.js";
@@ -373,6 +374,7 @@ declare const fullApi: ApiFromModules<{
   "lib/invoiceSeries": typeof lib_invoiceSeries;
   "lib/marketingContent": typeof lib_marketingContent;
   "lib/marketingLinks": typeof lib_marketingLinks;
+  "lib/myEventActions": typeof lib_myEventActions;
   "lib/newsletterWeek": typeof lib_newsletterWeek;
   "lib/normalizeCrewLineLabel": typeof lib_normalizeCrewLineLabel;
   "lib/onboardingLinks": typeof lib_onboardingLinks;

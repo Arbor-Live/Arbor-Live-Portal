@@ -12,6 +12,7 @@ import {
   resolveProfileMembership,
 } from "./userVerticals";
 import { buildUserTimecards } from "./userTimecards";
+import { listMyEventsNeedingPhotos, listMyPostMortems } from "./myEventActions";
 
 /** Availability window for the digest (mirrors "next two weeks"). */
 const DIGEST_AVAILABILITY_WEEKS = 2;
@@ -23,6 +24,8 @@ const DIGEST_ITEM_CAP = 6;
 const DIGEST_SCAN_CAP = 500;
 /** Bound on status rows scanned when counting admin work queues. */
 const DIGEST_COUNT_SCAN_CAP = 50;
+/** Bound on post-mortem rows scanned for the admin queue (mirrors Insights). */
+const DIGEST_POST_MORTEM_SCAN_CAP = 300;
 
 export type WeeklyDigestSection = {
   title: string;
@@ -138,36 +141,61 @@ async function buildPhotosSection(
   userId: string,
   now: number,
 ): Promise<WeeklyDigestSection | null> {
-  const shifts = await ctx.db
-    .query("eventCrewShifts")
-    .withIndex("by_userId_and_startsAt", (q) => q.eq("userId", userId))
-    .take(DIGEST_SCAN_CAP);
-  const endedEventIds = new Set<Doc<"eventCrewShifts">["eventId"]>();
-  for (const shift of shifts) {
-    if (shift.endsAt <= now) endedEventIds.add(shift.eventId);
-  }
-  if (endedEventIds.size === 0) return null;
-
-  const items: string[] = [];
-  for (const eventId of endedEventIds) {
-    const resolved = await ctx.db
-      .query("eventCrewMediaStatus")
-      .withIndex("by_eventId_and_userId", (q) =>
-        q.eq("eventId", eventId).eq("userId", userId),
-      )
-      .unique();
-    if (resolved) continue;
-
-    const event = await ctx.db.get(eventId);
-    if (!event || normalizeEventStatus(event.status) === "cancelled") continue;
-    items.push(`${event.title} • ${formatDate(event.endAt)}`);
-  }
-  if (items.length === 0) return null;
+  // Crew shifts and lead/manager assignments both owe photos after an event.
+  const pending = await listMyEventsNeedingPhotos(ctx, userId, now);
+  if (pending.length === 0) return null;
 
   return {
-    title: `Photos — ${plural(items.length, "event")} awaiting media`,
-    totalCount: items.length,
-    items: items.slice(0, DIGEST_ITEM_CAP),
+    title: `Photos — ${plural(pending.length, "event")} awaiting media`,
+    totalCount: pending.length,
+    items: pending
+      .slice(0, DIGEST_ITEM_CAP)
+      .map((event) => `${event.title} • ${formatDate(event.endAt)}`),
+  };
+}
+
+async function buildPostMortemsSection(
+  ctx: QueryCtx,
+  userId: string,
+  now: number,
+): Promise<WeeklyDigestSection | null> {
+  const pending = (await listMyPostMortems(ctx, userId, now)).filter(
+    (row) => !row.submitted,
+  );
+  if (pending.length === 0) return null;
+
+  return {
+    title: `Post-mortems — ${plural(pending.length, "review")} needed`,
+    totalCount: pending.length,
+    items: pending
+      .slice(0, DIGEST_ITEM_CAP)
+      .map((row) => `${row.title} • ${formatDate(row.endAt)}`),
+  };
+}
+
+/**
+ * Admin view of every post-mortem we asked for but never got back. Rows are
+ * minted for a lead when the post-event email goes out, so an unsubmitted row
+ * is exactly an outstanding review. Bounded like the Insights panel.
+ */
+async function buildPostMortemQueueSection(
+  ctx: QueryCtx,
+): Promise<WeeklyDigestSection | null> {
+  const rows = await ctx.db.query("postMortemFeedback").take(DIGEST_POST_MORTEM_SCAN_CAP);
+  const pending = rows.filter((row) => !row.submittedAt);
+  if (pending.length === 0) return null;
+
+  const items: string[] = [];
+  for (const row of pending) {
+    if (items.length >= DIGEST_ITEM_CAP) break;
+    const event = await ctx.db.get(row.eventId);
+    items.push(`${event?.title ?? "Event"} • awaiting review`);
+  }
+
+  return {
+    title: `Post-mortem queue — ${plural(pending.length, "review")} outstanding`,
+    totalCount: pending.length,
+    items,
   };
 }
 
@@ -258,27 +286,39 @@ export async function buildWeeklyDigest(
   const membership = resolveProfileMembership(args.profile ?? {});
   const isCrew = isStaffMember(membership);
 
-  const [availability, scheduled, timecards, photos, bookingRequests, artistPayouts] =
-    await Promise.all([
-      isCrew && flags.assignableAsCrew
-        ? buildAvailabilitySection(ctx, args.userId, args.profile, args.now)
-        : Promise.resolve(null),
-      buildScheduledEventsSection(ctx, args.userId, args.now),
-      isCrew && flags.includeInTimecards
-        ? buildTimecardsSection(ctx, args.userId, args.now)
-        : Promise.resolve(null),
-      buildPhotosSection(ctx, args.userId, args.now),
-      args.isAdmin ? buildBookingRequestsSection(ctx) : Promise.resolve(null),
-      args.isAdmin ? buildArtistPayoutsSection(ctx) : Promise.resolve(null),
-    ]);
+  const [
+    availability,
+    scheduled,
+    timecards,
+    postMortems,
+    photos,
+    bookingRequests,
+    artistPayouts,
+    postMortemQueue,
+  ] = await Promise.all([
+    isCrew && flags.assignableAsCrew
+      ? buildAvailabilitySection(ctx, args.userId, args.profile, args.now)
+      : Promise.resolve(null),
+    buildScheduledEventsSection(ctx, args.userId, args.now),
+    isCrew && flags.includeInTimecards
+      ? buildTimecardsSection(ctx, args.userId, args.now)
+      : Promise.resolve(null),
+    buildPostMortemsSection(ctx, args.userId, args.now),
+    buildPhotosSection(ctx, args.userId, args.now),
+    args.isAdmin ? buildBookingRequestsSection(ctx) : Promise.resolve(null),
+    args.isAdmin ? buildArtistPayoutsSection(ctx) : Promise.resolve(null),
+    args.isAdmin ? buildPostMortemQueueSection(ctx) : Promise.resolve(null),
+  ]);
 
   const sections = [
     availability,
     scheduled,
     timecards,
+    postMortems,
     photos,
     bookingRequests,
     artistPayouts,
+    postMortemQueue,
   ].filter((section): section is WeeklyDigestSection => section !== null);
 
   return {

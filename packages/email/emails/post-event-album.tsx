@@ -14,6 +14,7 @@ export function PostEventAlbumEmail({
   venueName,
   dateRangeLabel,
   albumShareUrl,
+  eventMediaUrl,
   feedbackFormUrl,
   postMortemUrl,
   audience = "client",
@@ -74,12 +75,20 @@ export function PostEventAlbumEmail({
             : "Our crew is uploading photos and videos from the event to a shared album. If you or your team captured any of your own, we would love for you to add them too — it helps us document and prove the impact these events have on campus."}
         </BodyCopy>
       )}
-      {albumShareUrl ? (
-        <CtaButton
-          href={albumShareUrl}
-          label="View & add to the album"
-          variant={isClient ? "secondary" : "primary"}
-        />
+      {isClient ? (
+        albumShareUrl ? (
+          <CtaButton
+            href={albumShareUrl}
+            label="View & add to the album"
+            variant="secondary"
+          />
+        ) : (
+          <MutedCopy>
+            We will follow up with the shared album link as soon as it is ready.
+          </MutedCopy>
+        )
+      ) : eventMediaUrl ? (
+        <CtaButton href={eventMediaUrl} label="Upload & view photos" />
       ) : (
         <MutedCopy>
           We will follow up with the shared album link as soon as it is ready.
