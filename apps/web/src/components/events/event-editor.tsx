@@ -604,13 +604,14 @@ export function EventEditor({
     [],
   );
 
+  const viewerUserId = viewer?.userId;
   const userSelectOptions: UserSelectOption[] = useMemo(
     () =>
       assignableCrewSelectOptions(
         managerList,
-        viewer?.userId
+        viewerUserId
           ? {
-              id: viewer.userId,
+              id: viewerUserId,
               name: account?.name ?? account?.email ?? "Current user",
               email: account?.email,
               avatarUrl: account?.avatarUrl,
@@ -618,7 +619,7 @@ export function EventEditor({
             }
           : null,
       ),
-    [account, managerList, viewer?.userId],
+    [account, managerList, viewerUserId],
   );
   const selectedCrewUserOption = useMemo(
     () => userSelectOptions.find((option) => option.value === selectedCrewUserId),
