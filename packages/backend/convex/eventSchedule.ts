@@ -68,11 +68,23 @@ export const upsertBlocks = mutation({
       }
     }
     const keepIds = new Set(args.blocks.map((b) => b.id).filter(Boolean));
+    const now = Date.now();
     for (const row of existing) {
-      if (!keepIds.has(row._id)) await ctx.db.delete(row._id);
+      if (keepIds.has(row._id)) continue;
+      // Detach shifts from a deleted block instead of leaving a dangling
+      // `scheduleBlockId`: the schedule tab only renders shifts it can match to
+      // a block, so an orphaned reference makes the shift invisible while it
+      // still counts as an open slot. Detached shifts surface as unlinked.
+      const linkedShifts = await ctx.db
+        .query("eventCrewShifts")
+        .withIndex("by_scheduleBlockId", (q) => q.eq("scheduleBlockId", row._id))
+        .take(500);
+      for (const shift of linkedShifts) {
+        await ctx.db.patch(shift._id, { scheduleBlockId: undefined, updatedAt: now });
+      }
+      await ctx.db.delete(row._id);
     }
 
-    const now = Date.now();
     const savedBlocks: Array<{
       id: string;
       clientId?: string;

@@ -208,8 +208,17 @@ export const deleteUnassignedShifts = mutation({
       .query("eventCrewShifts")
       .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
       .take(500);
-    const legacy = existing.filter((row) => !row.scheduleBlockId);
-    for (const row of legacy) {
+    const blocks = await ctx.db
+      .query("eventScheduleBlocks")
+      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+      .take(500);
+    const blockIds = new Set(blocks.map((block) => block._id));
+    // Unlinked includes shifts with no block and shifts whose block was deleted
+    // (dangling `scheduleBlockId`) — both are invisible on the timeline.
+    const unlinked = existing.filter(
+      (row) => !row.scheduleBlockId || !blockIds.has(row.scheduleBlockId),
+    );
+    for (const row of unlinked) {
       await ctx.db.delete(row._id);
     }
 
@@ -232,7 +241,7 @@ export const deleteUnassignedShifts = mutation({
 
     await syncEventCrewCostUsd(ctx, args.eventId, now);
 
-    return { deletedCount: legacy.length };
+    return { deletedCount: unlinked.length };
   },
 });
 
