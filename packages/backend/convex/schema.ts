@@ -901,7 +901,9 @@ export default defineSchema({
     .index("by_sourceEventRequestId", ["sourceEventRequestId"])
     .index("by_openMicEnabled_and_startAt", ["openMicEnabled", "startAt"])
     .index("by_venueId", ["venueId"])
-    .index("by_hostGroupId", ["hostGroupId"]),
+    .index("by_hostGroupId", ["hostGroupId"])
+    .index("by_dayOfLeadUserId", ["dayOfLeadUserId"])
+    .index("by_eventManagerUserId", ["eventManagerUserId"]),
 
   userCompensationRates: defineTable({
     userId: v.string(),

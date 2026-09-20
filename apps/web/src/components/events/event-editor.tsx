@@ -41,6 +41,7 @@ import { EventBandPaymentSection } from "@/components/events/event-band-payment-
 import { EventBandRidersSection } from "@/components/events/event-band-riders-section";
 import { EventBriefButton } from "@/components/events/event-brief-button";
 import { EventMediaSection } from "@/components/events/event-media-section";
+import { EventPostMortemSection } from "@/components/events/event-post-mortem-section";
 import { EventMarketingSection } from "@/components/events/event-marketing-section";
 import { CommentsSection } from "@/components/comments/comments-section";
 import { EventPullList, mapPullListRow, type PullListItemDraft } from "@/components/events/event-pull-list";
@@ -1594,6 +1595,7 @@ export function EventEditor({
 
       {resolvedActiveTab === "overview" && eventId ? <EventBandRidersSection eventId={eventId} /> : null}
       {resolvedActiveTab === "overview" && eventId ? <EventBandPaymentSection eventId={eventId} /> : null}
+      {resolvedActiveTab === "overview" && eventId ? <EventPostMortemSection eventId={eventId} /> : null}
 
       {resolvedActiveTab === "overview" && isAdmin && eventId ? (
         <Card>

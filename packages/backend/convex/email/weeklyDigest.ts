@@ -12,8 +12,8 @@ const WEEKLY_DIGEST_PROFILE_PAGE_SIZE = 200;
 
 /**
  * Weekly pending-activity digest: one email per active Arbor user summarizing
- * the availability responses, events, timecards, photos, booking requests, and
- * artist payouts that need them. Opt out per person with the `weeklyDigest`
+ * the availability responses, events, timecards, post-mortems, photos, booking
+ * requests, and artist payouts that need them. Opt out per person with the `weeklyDigest`
  * Participation flag; sections with nothing pending are omitted, and a user
  * with no pending items gets no email.
  *

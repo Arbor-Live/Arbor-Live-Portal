@@ -68,11 +68,19 @@ canonical description of the domain itself.
   `/crew` page. Flags remain editable per user in Users admin.
 - **Weekly pending-activity digest** (`email/weeklyDigest.ts`, run by the
   Monday `weeklyJobs` cron): one email per active Arbor user listing their
-  pending availability responses, events that week, timecards, unset media
-  status, and — for admins — open booking requests and artist payouts in
-  progress. Per-user opt-out is the `weeklyDigest` Participation flag; sections
-  with nothing pending are omitted and users with no pending items get no
-  email.
+  pending availability responses, events that week, timecards, post-mortems,
+  unset media status (crew **and** day-of leads / event managers), and — for
+  admins — open booking requests, artist payouts in progress, and outstanding
+  post-mortem reviews. Per-user opt-out is the `weeklyDigest` Participation
+  flag; sections with nothing pending are omitted and users with no pending
+  items get no email.
+- **Post-event action items** (`postMortemFeedback.ts`, `lib/myEventActions.ts`):
+  day-of leads / event managers complete their post-mortem inline on the event
+  **Overview** once the event has ended (the emailed `/postmortem/[token]` form
+  remains a fallback), and everyone assigned or leading an ended event can
+  resolve their photos/videos status. Both surface as amber sidebar badges on
+  **Events → My Post-mortems** and **My Photos** (counts are only subscribed on
+  home/event routes to avoid per-event fan-out on every dashboard page).
 
 ## Venues
 
@@ -309,11 +317,13 @@ Event types (drive which editor tabs and quick-add blocks appear):
   `lib/immichClient.ts`); access is scoped by event/band participation
   (`lib/immichAccess.ts`). Marketing can browse/import from a library
   (`marketingImmich*.ts`). Event album share URLs surface for crew/artist
-  media UIs, public booking-request / quote feedback, post-event album
-  reminder emails, and artist payout signature-request emails
-  (`resolveEventAlbumShareUrl`). Emails that attach the share URL, and the
-  public booking-request / quote feedback portal, ensure the event album when
-  Immich is configured (`ensureEventAlbumBestEffort` /
+  media UIs, public booking-request / quote feedback, and artist payout
+  signature-request emails (`resolveEventAlbumShareUrl`). The post-event album
+  reminder points internal recipients (lead/crew, who have dashboard accounts)
+  at the event **Media** tab so uploads go through the portal, and only sends
+  the raw Immich share URL to external clients. Emails that attach the share
+  URL, and the public booking-request / quote feedback portal, ensure the event
+  album when Immich is configured (`ensureEventAlbumBestEffort` /
   `ensureAlbumShareUrlByToken`).
 
 ## Marketing site
