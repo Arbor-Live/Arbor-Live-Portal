@@ -1,4 +1,5 @@
 import { MarketingSettingsManager } from "@/components/marketing/marketing-settings-manager";
+import { NewsletterSubscribersManager } from "@/components/marketing/newsletter-subscribers-manager";
 
 export default function MarketingSettingsPage() {
   return (
@@ -10,6 +11,7 @@ export default function MarketingSettingsPage() {
         </p>
       </div>
       <MarketingSettingsManager />
+      <NewsletterSubscribersManager />
     </div>
   );
 }

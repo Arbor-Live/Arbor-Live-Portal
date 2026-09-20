@@ -1,6 +1,7 @@
 import { PublicMarketingLayout } from "@/components/public/public-marketing-layout";
 import { PublicPageHero } from "@/components/public/public-page-hero";
 import { PublicUpcomingEventsClient } from "@/components/public/public-upcoming-events-client";
+import { LandingStayInTheLoop } from "@/components/public/newsletter-signup-form";
 
 export const metadata = {
   title: "Upcoming Events | Arbor Live",
@@ -19,6 +20,7 @@ export default function EventsPage() {
           <PublicUpcomingEventsClient />
         </div>
       </section>
+      <LandingStayInTheLoop source="events_page" />
     </PublicMarketingLayout>
   );
 }

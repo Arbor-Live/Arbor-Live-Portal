@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery } from "convex/react";
+import { useMutation } from "convex/react";
 import { FormProvider, useForm, useFormContext, useWatch, type FieldErrors, type Resolver } from "react-hook-form";
 import type { QuestionnaireItemDefinition } from "@shadcn/react/questionnaire";
 import { api } from "@/lib/convex-api";
@@ -339,6 +340,7 @@ export function OpenMicWizard() {
                       Bring friends, show up on time, and check in with the crew when you arrive so we
                       know you&apos;re here.
                     </p>
+                    <OpenMicNewsletterOptIn email={form.getValues("email")} />
                   </div>
                 </div>
               ) : (
@@ -454,4 +456,52 @@ function StepBody({ stepId }: { stepId: OpenMicStepId }) {
     default:
       return null;
   }
+}
+
+/**
+ * Post-signup newsletter opt-in. Opt-in means unchecked by default and never
+ * blocked behind the sign-up itself — the performer can skip it entirely.
+ */
+function OpenMicNewsletterOptIn({ email }: { email: string }) {
+  const subscribe = useMutation(api.newsletter.subscribePublic);
+  const [state, setState] = useState<"idle" | "submitting" | "done" | "error">("idle");
+
+  async function handleChange(checked: boolean) {
+    if (!checked || !email.trim()) return;
+    setState("submitting");
+    try {
+      await subscribe({ email, source: "open_mic" });
+      setState("done");
+    } catch {
+      setState("error");
+    }
+  }
+
+  if (!email.trim()) return null;
+
+  if (state === "done") {
+    return (
+      <label className="flex items-start gap-2 text-sm text-foreground/70">
+        <input type="checkbox" checked disabled className="mt-1 size-4" />
+        <span>You&apos;re on the This Week at Arbor list.</span>
+      </label>
+    );
+  }
+
+  return (
+    <label className="flex items-start gap-2 text-sm text-foreground/70">
+      <input
+        type="checkbox"
+        defaultChecked={false}
+        disabled={state === "submitting"}
+        onChange={(event) => void handleChange(event.currentTarget.checked)}
+        className="mt-1 size-4"
+      />
+      <span>
+        {state === "error"
+          ? "Couldn't subscribe — uncheck and check again to retry."
+          : "Email me This Week at Arbor, a weekly list of campus shows."}
+      </span>
+    </label>
+  );
 }
