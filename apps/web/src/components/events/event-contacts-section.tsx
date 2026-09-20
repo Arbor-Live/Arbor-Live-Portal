@@ -2,11 +2,16 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
-import { PlusIcon, TrashIcon } from "@phosphor-icons/react";
+import { PlusIcon } from "@phosphor-icons/react";
 import { api, type Id } from "@/lib/convex-api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import {
+  ContactInputFields,
+  InheritedContactRow,
+  RemoveContactButton,
+  type InheritedContactRowData,
+} from "@/components/contacts/event-contact-ui";
 import { FormSaveBar } from "@/components/forms";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import type { SaveStatus } from "@/hooks/use-convex-form";
@@ -20,14 +25,7 @@ type ContactDraft = {
   phone: string;
 };
 
-type InheritedContactRow = {
-  key: string;
-  source: string;
-  roleLabel: string;
-  person: string;
-  contact?: string;
-  notes?: string;
-};
+type InheritedRow = InheritedContactRowData & { key: string };
 
 let draftCounter = 0;
 
@@ -109,10 +107,10 @@ export function EventContactsSection({
     return () => clearTimeout(timer);
   }, [saveStatus]);
 
-  const inherited = useMemo<InheritedContactRow[]>(() => {
-    const rows: InheritedContactRow[] = [];
-    if (board?.venue) rows.push({ key: "venue", source: "Venue", ...board.venue });
-    if (board?.invoice) rows.push({ key: "invoice", source: "Invoice", ...board.invoice });
+  const inherited = useMemo<InheritedRow[]>(() => {
+    const rows: InheritedRow[] = [];
+    if (board?.venue) rows.push({ key: "venue", ...board.venue });
+    if (board?.invoice) rows.push({ key: "invoice", ...board.invoice });
     for (const [index, row] of (bandRows ?? []).entries()) {
       const rider = row.rider;
       if (!rider) continue;
@@ -121,7 +119,6 @@ export function EventContactsSection({
       if (!name && !contact) continue;
       rows.push({
         key: `band-${index}`,
-        source: "Band",
         roleLabel: "Band contact",
         person: name || row.bandName,
         contact,
@@ -175,22 +172,8 @@ export function EventContactsSection({
       <CardContent className="space-y-4">
         {inherited.length ? (
           <div className="divide-y rounded-md border" data-testid="event-contacts-inherited">
-            {inherited.map((row) => (
-              <div
-                key={row.key}
-                className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-3 py-2 text-sm"
-              >
-                <span className="w-24 shrink-0 text-xs uppercase tracking-wide text-muted-foreground">
-                  {row.source}
-                </span>
-                <span className="font-medium">{row.person}</span>
-                {row.contact ? (
-                  <span className="text-muted-foreground">{row.contact}</span>
-                ) : null}
-                <span className="text-xs text-muted-foreground">
-                  {row.notes ?? row.roleLabel}
-                </span>
-              </div>
+            {inherited.map(({ key, ...row }) => (
+              <InheritedContactRow key={key} {...row} />
             ))}
           </div>
         ) : null}
@@ -201,45 +184,16 @@ export function EventContactsSection({
               key={draft.key}
               className="grid gap-2 sm:grid-cols-[1fr_1fr_1fr_1fr_auto]"
             >
-              <Input
-                aria-label="Position"
-                placeholder="Position"
-                value={draft.position}
+              <ContactInputFields
+                value={draft}
+                onChange={(patch) => updateDraft(draft.key, patch)}
                 disabled={!canEdit}
-                onChange={(event) => updateDraft(draft.key, { position: event.target.value })}
               />
-              <Input
-                aria-label="Name"
-                placeholder="Name"
-                value={draft.name}
-                disabled={!canEdit}
-                onChange={(event) => updateDraft(draft.key, { name: event.target.value })}
-              />
-              <Input
-                aria-label="Email"
-                placeholder="Email"
-                type="email"
-                value={draft.email}
-                disabled={!canEdit}
-                onChange={(event) => updateDraft(draft.key, { email: event.target.value })}
-              />
-              <Input
-                aria-label="Phone"
-                placeholder="Phone"
-                value={draft.phone}
-                disabled={!canEdit}
-                onChange={(event) => updateDraft(draft.key, { phone: event.target.value })}
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                aria-label="Remove contact"
+              <RemoveContactButton
+                label="Remove contact"
                 disabled={!canEdit}
                 onClick={() => removeDraft(draft.key)}
-              >
-                <TrashIcon className="size-4" />
-              </Button>
+              />
             </div>
           ))}
           {canEdit ? (
