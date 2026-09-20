@@ -67,6 +67,7 @@ import {
   eventTypeHasCrewAssignment,
   reconcileShiftsForReplacedBlocks,
   resolveShiftScheduleBlockId,
+  shiftBelongsToBlock,
   shiftRowKey,
   shiftTimesMatchBlock,
   sortScheduleBlocksByTime,
@@ -348,6 +349,13 @@ export function EventEditor({
 
   function getBlockRef(block: TimelineBlockDraft) {
     return block.id ?? block.clientId;
+  }
+
+  // A shift is unlinked when it matches no current schedule block — including a
+  // stale `scheduleBlockId` left behind when its block was deleted by a backend
+  // path that does not relink shifts (e.g. series block regeneration).
+  function isShiftUnlinked(shift: ShiftDraft) {
+    return !blocks.some((block) => shiftBelongsToBlock(shift, block));
   }
 
   /**
@@ -965,7 +973,7 @@ export function EventEditor({
     if (!shouldDelete) return;
     try {
       const result = await deleteUnassignedShifts({ eventId });
-      setShifts((prev) => prev.filter((shift) => shift.scheduleBlockRef));
+      setShifts((prev) => prev.filter((shift) => !isShiftUnlinked(shift)));
       flash("success", `Deleted ${result.deletedCount} legacy unassigned shift${result.deletedCount === 1 ? "" : "s"}.`);
     } catch (error) {
       flash("error", getConvexErrorMessage(error));
@@ -1728,7 +1736,7 @@ export function EventEditor({
               <p className="text-sm font-medium">Assigned Personnel by Block</p>
               {blocks.map((block, blockIndex) => {
                 const blockRef = getBlockRef(block);
-                const blockShifts = shifts.filter((shift) => shift.scheduleBlockRef === blockRef);
+                const blockShifts = shifts.filter((shift) => shiftBelongsToBlock(shift, block));
                 return (
                   <div key={blockRef ?? `block-assignment-${blockIndex}`} className="space-y-2 rounded-md border p-2">
                     <div className="flex items-center justify-between gap-2">
@@ -1899,7 +1907,7 @@ export function EventEditor({
                   </div>
                 );
               })}
-              {shifts.some((shift) => !shift.scheduleBlockRef) ? (
+              {shifts.some((shift) => isShiftUnlinked(shift)) ? (
                 <div className="space-y-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-2">
                   <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-amber-700">
                     <span>
@@ -1912,7 +1920,7 @@ export function EventEditor({
                   </div>
                   {shifts
                     .map((shift, shiftIndex) => ({ shift, shiftIndex }))
-                    .filter(({ shift }) => !shift.scheduleBlockRef)
+                    .filter(({ shift }) => isShiftUnlinked(shift))
                     .map(({ shift, shiftIndex }) => (
                       <div
                         key={shift.id ?? `unassigned-${shiftIndex}`}

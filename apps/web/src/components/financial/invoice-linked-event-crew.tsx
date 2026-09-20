@@ -342,7 +342,7 @@ export function InvoiceLinkedEventCrewSection({
     if (!shouldDelete) return;
     try {
       const result = await deleteUnassignedShifts({ eventId });
-      setShifts((prev) => prev.filter((shift) => shift.scheduleBlockId || shift.scheduleBlockRef));
+      setShifts((prev) => prev.filter((shift) => blocks.some((block) => shiftBelongsToBlock(shift, block))));
       onMessage?.(`Deleted ${result.deletedCount} unlinked shift${result.deletedCount === 1 ? "" : "s"}.`);
     } catch (error) {
       notify.error(getConvexErrorMessage(error));

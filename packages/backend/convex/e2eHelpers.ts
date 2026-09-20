@@ -1919,6 +1919,58 @@ export const seedAssignCrewToAllBlocks = mutation({
   },
 });
 
+/**
+ * Test-only: reproduce the "blocks gone, shifts remain" state that left shifts
+ * with a dangling `scheduleBlockId` invisible on the schedule tab. Seeds one
+ * open (unassigned) shift per schedule block, then deletes every block without
+ * touching the shifts.
+ */
+export const seedOrphanedOpenShifts = mutation({
+  args: { eventId: v.id("events") },
+  returns: v.object({
+    shiftCount: v.number(),
+    deletedBlockCount: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const now = Date.now();
+    const blocks = await ctx.db
+      .query("eventScheduleBlocks")
+      .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", args.eventId))
+      .take(50);
+
+    const existing = await ctx.db
+      .query("eventCrewShifts")
+      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+      .take(200);
+    for (const row of existing) {
+      await ctx.db.delete(row._id);
+    }
+
+    for (const block of blocks) {
+      const hours = Number(((block.endsAt - block.startsAt) / 3_600_000).toFixed(2));
+      await ctx.db.insert("eventCrewShifts", {
+        eventId: args.eventId,
+        scheduleBlockId: block._id,
+        role: block.label || block.blockType || "Crew",
+        startsAt: block.startsAt,
+        endsAt: block.endsAt,
+        hours,
+        postedToExpense: false,
+        notes: "E2E seeded orphaned open shift",
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    for (const block of blocks) {
+      await ctx.db.delete(block._id);
+    }
+
+    return { shiftCount: blocks.length, deletedBlockCount: blocks.length };
+  },
+});
+
 export const getEventCrewAssignmentState = query({
   args: { eventId: v.id("events") },
   returns: v.object({
