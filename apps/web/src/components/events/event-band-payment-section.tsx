@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -774,9 +774,7 @@ function EventBandPaymentForm({
     Boolean(payment) || !lockedOrganizationId,
   );
 
-  useEffect(() => {
-    if (payment || !bands || !resolvedOrgId || defaultsReadyForOrg) return;
-    if (!invoiceDefaultsReady) return;
+  if (payment === null && bands && resolvedOrgId && !defaultsReadyForOrg && invoiceDefaultsReady) {
     const next = applyPayoutDefaultsForOrg(
       bands as BandCatalogRow[] | undefined,
       resolvedOrgId,
@@ -787,14 +785,7 @@ function EventBandPaymentForm({
     setPerformanceHours(next.performanceHours);
     setMemberCount(next.memberCount);
     setDefaultsReadyForOrg(true);
-  }, [
-    payment,
-    bands,
-    resolvedOrgId,
-    invoiceLine,
-    invoiceDefaultsReady,
-    defaultsReadyForOrg,
-  ]);
+  }
 
   const bandOptions = useMemo(
     () => artistSelectOptions(bands, { excludeOrganizationIds: excludedOrganizationIds }),
