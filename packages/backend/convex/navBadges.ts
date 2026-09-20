@@ -18,6 +18,7 @@ import {
   getDisciplinesForEventMatching,
   resolveProfileMembership,
 } from "./lib/userVerticals";
+import { countPendingPostEventWork, listMyPostEventWork } from "./lib/myEventActions";
 
 /** Cap events scanned for the unconfirmed-crew badge (full board uses its own query). */
 const UNCONFIRMED_CREW_EVENT_CAP = 40;
@@ -46,6 +47,7 @@ export const getNavBadges = query({
     includeAdmin: v.boolean(),
     includeBand: v.boolean(),
     includeUnconfirmedCrew: v.optional(v.boolean()),
+    includeMyEventActions: v.optional(v.boolean()),
   },
   returns: v.object({
     pendingAvailability: v.number(),
@@ -57,6 +59,7 @@ export const getNavBadges = query({
     pendingBandPaymentActions: v.number(),
     quoteChangesRequested: v.number(),
     pendingEquipmentBorrowRequests: v.number(),
+    pendingPostEventWork: v.number(),
   }),
   handler: async (ctx, args) => {
     const user = await requireAuth(ctx);
@@ -80,6 +83,7 @@ export const getNavBadges = query({
       pendingBandPaymentActions,
       quoteChangesRequested,
       pendingEquipmentBorrowRequests,
+      pendingPostEventWork,
     ] = await Promise.all([
       args.includeArborInternal
         ? countMyPendingAvailability(ctx, getUserId(user), args.now)
@@ -94,6 +98,9 @@ export const getNavBadges = query({
       args.includeBand ? countPendingBandPaymentActions(ctx) : Promise.resolve(0),
       args.includeArborInternal ? countQuoteChangesRequested(ctx) : Promise.resolve(0),
       args.includeAdmin ? countPendingEquipmentBorrowRequests(ctx) : Promise.resolve(0),
+      args.includeArborInternal && args.includeMyEventActions
+        ? countMyPendingPostEventWork(ctx, getUserId(user), args.now)
+        : Promise.resolve(0),
     ]);
 
     return {
@@ -106,6 +113,7 @@ export const getNavBadges = query({
       pendingBandPaymentActions,
       quoteChangesRequested,
       pendingEquipmentBorrowRequests,
+      pendingPostEventWork,
     };
   },
 });
@@ -184,6 +192,10 @@ async function countOpenBookingRequests(ctx: QueryCtx) {
     .withIndex("by_status_and_submittedAt", (q) => q.eq("status", "in_review"))
     .take(BADGE_STATUS_TAKE);
   return submitted.length + actionRequired.length + legacyInReview.length;
+}
+
+async function countMyPendingPostEventWork(ctx: QueryCtx, userId: string, now: number) {
+  return countPendingPostEventWork(await listMyPostEventWork(ctx, userId, now));
 }
 
 async function countSubmittedBandApplications(ctx: QueryCtx) {

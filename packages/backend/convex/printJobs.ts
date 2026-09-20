@@ -27,17 +27,13 @@ async function briefSourceUpdatedAt(
   // eventContactsUpdatedAt covers deletions: removing the last contact leaves no
   // row whose updatedAt the loop below could pick up.
   let max = Math.max(event?.updatedAt ?? 0, event?.eventContactsUpdatedAt ?? 0);
-  const [blocks, shifts, assignments, artifacts, pullListItems, eventContacts] = await Promise.all([
+  const [blocks, shifts, artifacts, pullListItems, eventContacts] = await Promise.all([
     ctx.db
       .query("eventScheduleBlocks")
       .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
       .take(500),
     ctx.db
       .query("eventCrewShifts")
-      .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
-      .take(500),
-    ctx.db
-      .query("eventPeopleAssignments")
       .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
       .take(500),
     ctx.db
@@ -53,7 +49,7 @@ async function briefSourceUpdatedAt(
       .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
       .take(200),
   ]);
-  for (const row of [...blocks, ...shifts, ...assignments, ...artifacts, ...pullListItems, ...eventContacts]) {
+  for (const row of [...blocks, ...shifts, ...artifacts, ...pullListItems, ...eventContacts]) {
     if (row.updatedAt > max) max = row.updatedAt;
   }
 

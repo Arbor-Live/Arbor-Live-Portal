@@ -6,6 +6,7 @@ import { ensurePostMortemFeedbackRow, postMortemUrl } from "../postMortemFeedbac
 import { resolvePortalTokenForInvoice } from "../lib/paymentProof";
 import {
   EVENT_TIMEZONE,
+  SITE_URL,
   formatEventDateRange,
   publicQuoteUrl,
   reminderDayKey,
@@ -81,6 +82,9 @@ export const enqueueForEvent = internalMutation({
 
     const timezone = event.timezone || EVENT_TIMEZONE;
     const albumLink = await getCanonicalAlbumLink(ctx, "event", event._id);
+    // Internal recipients complete their review + photos in the portal; only
+    // clients get the raw Immich share link (they have no dashboard account).
+    const eventUrl = `${SITE_URL}/dashboard/events/${event._id}`;
 
     let enqueuedCount = 0;
 
@@ -138,7 +142,7 @@ export const enqueueForEvent = internalMutation({
           eventTitle: event.title,
           venueName: event.venueName,
           dateRangeLabel: formatEventDateRange(event.startAt, event.endAt, timezone),
-          albumShareUrl: albumLink?.shareUrl,
+          eventUrl,
           audience: "lead",
           postMortemUrl: postMortemUrl(row.token),
         },
@@ -163,7 +167,7 @@ export const enqueueForEvent = internalMutation({
           eventTitle: event.title,
           venueName: event.venueName,
           dateRangeLabel: formatEventDateRange(event.startAt, event.endAt, timezone),
-          albumShareUrl: albumLink?.shareUrl,
+          eventUrl,
           audience: "crew",
         },
       });

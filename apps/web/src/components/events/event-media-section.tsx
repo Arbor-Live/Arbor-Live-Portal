@@ -14,6 +14,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { MediaGallery } from "@/components/media/media-gallery";
 import { MediaAlbumLink } from "@/components/media/media-album-link";
 import { MediaUploadDropzone } from "@/components/media/media-upload-dropzone";
+import { useSessionViewer } from "@/components/session-shell-provider";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { notify } from "@/lib/notify";
 
@@ -44,6 +45,7 @@ function StatusIcon({ status }: { status: CrewMediaStatus }) {
 }
 
 export function EventMediaSection({ eventId }: { eventId: Id<"events"> }) {
+  const viewer = useSessionViewer();
   const media = useQuery(api.immich.listEventMedia, { eventId });
   const ensureUploadAlbum = useAction(api.immichEnsure.ensureUploadAlbum);
 
@@ -71,7 +73,7 @@ export function EventMediaSection({ eventId }: { eventId: Id<"events"> }) {
 
   return (
     <div className="space-y-4">
-      <CrewMediaStatusCard eventId={eventId} />
+      {viewer?.isAdmin ? <CrewMediaStatusCard eventId={eventId} /> : null}
 
       <Card>
         <CardHeader>

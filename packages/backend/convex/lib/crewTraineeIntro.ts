@@ -1,7 +1,7 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
-import { findAuthUserById } from "./auth";
 import { resolveInheritedVenueFields } from "./venues";
+import { resolveUserContact } from "./userContact";
 
 export const CREW_STORAGE_CLOSET_MAPS_URL = "https://maps.app.goo.gl/8d2dQF96sLV2QrBk7";
 export const CREW_STORAGE_CLOSET_LABEL = "Old Union storage closet";
@@ -72,27 +72,9 @@ async function resolveVenueLocation(
   };
 }
 
-async function resolveUserContact(
-  ctx: QueryCtx | MutationCtx,
-  userId: string,
-): Promise<{ name?: string; email?: string; phone?: string } | null> {
-  const user = await findAuthUserById(ctx, userId);
-  if (!user) return null;
-  const profile = await ctx.db
-    .query("userAdminProfiles")
-    .withIndex("by_userId", (q) => q.eq("userId", userId))
-    .unique();
-  return {
-    name: user.name?.trim() || undefined,
-    email: user.email?.trim().toLowerCase() || undefined,
-    phone: profile?.phone?.trim() || undefined,
-  };
-}
-
 async function resolveRoleContact(
   ctx: QueryCtx | MutationCtx,
   args: {
-    eventId: Id<"events">;
     role: "event_manager" | "day_of_lead";
     userId?: string;
   },
@@ -100,61 +82,25 @@ async function resolveRoleContact(
   const missing: string[] = [];
   const roleLabel = args.role === "event_manager" ? "Event manager" : "Event lead";
 
-  if (args.userId?.trim()) {
-    const userContact = await resolveUserContact(ctx, args.userId.trim());
-    if (!userContact) {
-      missing.push(`${roleLabel}: user not found`);
-      return { missing };
-    }
-    if (!userContact.name) missing.push(`${roleLabel}: name`);
-    if (!userContact.email || !isValidEmail(userContact.email)) missing.push(`${roleLabel}: email`);
-    if (!userContact.phone) missing.push(`${roleLabel}: phone`);
-    if (missing.length > 0) return { missing };
-    return {
-      contact: {
-        role: args.role,
-        name: userContact.name!,
-        email: userContact.email!,
-        phone: userContact.phone!,
-        userId: args.userId.trim(),
-      },
-      missing: [],
-    };
+  const userId = args.userId?.trim();
+  if (!userId) return { missing: [] };
+
+  const userContact = await resolveUserContact(ctx, userId);
+  if (!userContact) {
+    missing.push(`${roleLabel}: user not found`);
+    return { missing };
   }
-
-  const assignmentType = args.role === "event_manager" ? "event_manager" : "day_of_lead";
-  const assignment = await ctx.db
-    .query("eventPeopleAssignments")
-    .withIndex("by_eventId_and_assignmentType", (q) =>
-      q.eq("eventId", args.eventId).eq("assignmentType", assignmentType),
-    )
-    .first();
-
-  if (!assignment) {
-    return { missing: [] };
-  }
-
-  if (assignment.userId?.trim()) {
-    return resolveRoleContact(ctx, {
-      eventId: args.eventId,
-      role: args.role,
-      userId: assignment.userId,
-    });
-  }
-
-  const name = assignment.personName?.trim();
-  const email = assignment.contactEmail?.trim().toLowerCase();
-  const phone = assignment.contactPhone?.trim();
-  if (!name) missing.push(`${roleLabel}: name`);
-  if (!email || !isValidEmail(email)) missing.push(`${roleLabel}: email`);
-  if (!phone) missing.push(`${roleLabel}: phone`);
+  if (!userContact.name) missing.push(`${roleLabel}: name`);
+  if (!userContact.email || !isValidEmail(userContact.email)) missing.push(`${roleLabel}: email`);
+  if (!userContact.phone) missing.push(`${roleLabel}: phone`);
   if (missing.length > 0) return { missing };
   return {
     contact: {
       role: args.role,
-      name: name!,
-      email: email!,
-      phone: phone!,
+      name: userContact.name!,
+      email: userContact.email!,
+      phone: userContact.phone!,
+      userId,
     },
     missing: [],
   };
@@ -236,12 +182,10 @@ export async function assertTraineeIntroReady(
   if (!venue.address) missing.push("Venue address");
 
   const managerResult = await resolveRoleContact(ctx, {
-    eventId: args.eventId,
     role: "event_manager",
     userId: event.eventManagerUserId,
   });
   const leadResult = await resolveRoleContact(ctx, {
-    eventId: args.eventId,
     role: "day_of_lead",
     userId: event.dayOfLeadUserId,
   });

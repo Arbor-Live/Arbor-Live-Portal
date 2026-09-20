@@ -33,15 +33,6 @@ const STATUS_LABELS: Record<string, string> = {
   completed: "Completed",
 };
 
-const ASSIGNMENT_LABELS: Record<string, string> = {
-  event_manager: "Event manager",
-  day_of_lead: "Day-of lead",
-  crew: "Crew",
-  performer: "Performer",
-  support: "Support",
-  contact: "Contact",
-};
-
 /** Markdown is authored for the web; the brief prints plain text. */
 function stripMarkdown(markdown: string): string {
   return markdown
@@ -105,16 +96,6 @@ async function leadAssignments(
   });
 }
 
-/** Legacy `eventPeopleAssignments` rows mirror leads; the event fields win. */
-function isLegacyLeadRow(
-  assignmentType: string,
-  event: Doc<"events">,
-): boolean {
-  if (assignmentType === "event_manager") return Boolean(event.eventManagerUserId?.trim());
-  if (assignmentType === "day_of_lead") return Boolean(event.dayOfLeadUserId?.trim());
-  return false;
-}
-
 /** Gate for the public brief download (any Arbor staff, incl. crew). */
 export const checkAccess = query({
   args: {},
@@ -137,7 +118,7 @@ export const getBriefSource = internalQuery({
     if (!event) return null;
 
     const venue = event.venueId ? await ctx.db.get(event.venueId) : null;
-    const [blocks, shifts, assignments, artifacts, pullListItems] = await Promise.all([
+    const [blocks, shifts, artifacts, pullListItems] = await Promise.all([
       ctx.db
         .query("eventScheduleBlocks")
         .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", args.eventId))
@@ -145,10 +126,6 @@ export const getBriefSource = internalQuery({
       ctx.db
         .query("eventCrewShifts")
         .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", args.eventId))
-        .take(500),
-      ctx.db
-        .query("eventPeopleAssignments")
-        .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
         .take(500),
       ctx.db
         .query("eventArtifacts")
@@ -234,22 +211,7 @@ export const getBriefSource = internalQuery({
         timeLabel: `${formatTime(shift.startsAt, event.timezone)} – ${formatTime(shift.endsAt, event.timezone)}`,
         notes: shift.notes ?? undefined,
       })),
-      assignments: [
-        ...(await leadAssignments(ctx, event)),
-        ...assignments
-          .filter((assignment) => !isLegacyLeadRow(assignment.assignmentType, event))
-          .map((assignment) => ({
-            roleLabel:
-              assignment.roleLabel?.trim() ||
-              ASSIGNMENT_LABELS[assignment.assignmentType] ||
-              assignment.assignmentType,
-            person: assignment.personName,
-            contact: [assignment.contactEmail, assignment.contactPhone]
-              .filter((value): value is string => Boolean(value?.trim()))
-              .join(" · "),
-            notes: assignment.notes ?? undefined,
-          })),
-      ],
+      assignments: await leadAssignments(ctx, event),
       contacts,
       pullList: pullListItems.map((item) => ({
         label: item.label,

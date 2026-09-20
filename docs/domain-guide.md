@@ -68,11 +68,23 @@ canonical description of the domain itself.
   `/crew` page. Flags remain editable per user in Users admin.
 - **Weekly pending-activity digest** (`email/weeklyDigest.ts`, run by the
   Monday `weeklyJobs` cron): one email per active Arbor user listing their
-  pending availability responses, events that week, timecards, unset media
-  status, and — for admins — open booking requests and artist payouts in
-  progress. Per-user opt-out is the `weeklyDigest` Participation flag; sections
-  with nothing pending are omitted and users with no pending items get no
-  email.
+  pending availability responses, events that week, timecards, post-event work
+  (review + photos, crew **and** day-of leads / event managers), and — for
+  admins — open booking requests, artist payouts in progress, and outstanding
+  post-mortem reviews. Per-user opt-out is the `weeklyDigest` Participation
+  flag; sections with nothing pending are omitted and users with no pending
+  items get no email.
+- **Post-event work** (`postMortemFeedback.ts`, `lib/myEventActions.ts`): every
+  assigned crew member *and* the day-of lead / event manager reviews each ended
+  event — 5⭐ rating + what went well / what could improve + resolving their
+  photos/videos. It appears inline on the event **Overview** and as one combined
+  **Events → My Post-event work** page (plus the crew Home widget); the email
+  link points internal recipients at the event page. The emailed
+  `/postmortem/[token]` form remains a fallback. One amber nav badge counts
+  events still needing review or photos (subscribed only on home/event routes to
+  avoid per-event fan-out on every dashboard page). Leads/admins see an
+  attributed per-event average + all responses on the event Overview, and
+  Insights rolls up per-event averages alongside every crew/lead review.
 
 ## Venues
 
@@ -309,11 +321,13 @@ Event types (drive which editor tabs and quick-add blocks appear):
   `lib/immichClient.ts`); access is scoped by event/band participation
   (`lib/immichAccess.ts`). Marketing can browse/import from a library
   (`marketingImmich*.ts`). Event album share URLs surface for crew/artist
-  media UIs, public booking-request / quote feedback, post-event album
-  reminder emails, and artist payout signature-request emails
-  (`resolveEventAlbumShareUrl`). Emails that attach the share URL, and the
-  public booking-request / quote feedback portal, ensure the event album when
-  Immich is configured (`ensureEventAlbumBestEffort` /
+  media UIs, public booking-request / quote feedback, and artist payout
+  signature-request emails (`resolveEventAlbumShareUrl`). The post-event album
+  reminder points internal recipients (lead/crew, who have dashboard accounts)
+  at the event **Media** tab so uploads go through the portal, and only sends
+  the raw Immich share URL to external clients. Emails that attach the share
+  URL, and the public booking-request / quote feedback portal, ensure the event
+  album when Immich is configured (`ensureEventAlbumBestEffort` /
   `ensureAlbumShareUrlByToken`).
 
 ## Marketing site

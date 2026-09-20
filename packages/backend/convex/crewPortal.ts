@@ -17,6 +17,7 @@ import {
 import { getDisciplinesForEventMatching, resolveProfileMembership } from "./lib/userVerticals";
 import { buildUserProfileImageByUserId } from "./lib/userProfileImage";
 import { normalizeEventStatus } from "./lib/eventStatus";
+import { listMyPostEventWork as listMyPostEventWorkForUser } from "./lib/myEventActions";
 
 const scheduleBlockSummaryValue = v.object({
   _id: v.id("eventScheduleBlocks"),
@@ -47,11 +48,16 @@ const scheduledEventValue = v.object({
   shiftCount: v.number(),
 });
 
-const needsPhotosEventValue = v.object({
+const postEventWorkValue = v.object({
   eventId: v.id("events"),
   title: v.string(),
   venueName: v.optional(v.string()),
   endAt: v.number(),
+  feedbackSubmitted: v.boolean(),
+  rating: v.optional(v.number()),
+  whatWentWell: v.optional(v.string()),
+  whatCouldImprove: v.optional(v.string()),
+  mediaResolved: v.boolean(),
 });
 
 const payPeriodSummaryValue = v.object({
@@ -189,46 +195,16 @@ export const listMyScheduledEvents = query({
   },
 });
 
-export const listMyEventsNeedingPhotos = query({
+/** One combined feed of the user's ended events and their outstanding work. */
+export const listMyPostEventWork = query({
   args: {
     now: v.number(),
   },
-  returns: v.array(needsPhotosEventValue),
+  returns: v.array(postEventWorkValue),
   handler: async (ctx, args) => {
     const user = await requireAuth(ctx);
     await requireArborInternalContext(ctx);
-    const userId = getUserId(user);
-
-    const shifts = await ctx.db
-      .query("eventCrewShifts")
-      .withIndex("by_userId_and_startsAt", (q) => q.eq("userId", userId))
-      .take(500);
-    const endedEventIds = new Set<Id<"events">>();
-    for (const shift of shifts) {
-      if (shift.endsAt <= args.now) endedEventIds.add(shift.eventId);
-    }
-
-    const results = [];
-    for (const eventId of endedEventIds) {
-      const resolved = await ctx.db
-        .query("eventCrewMediaStatus")
-        .withIndex("by_eventId_and_userId", (q) =>
-          q.eq("eventId", eventId).eq("userId", userId),
-        )
-        .unique();
-      if (resolved) continue;
-
-      const event = await ctx.db.get(eventId);
-      if (!event) continue;
-      if (normalizeEventStatus(event.status) === "cancelled") continue;
-      results.push({
-        eventId,
-        title: event.title,
-        venueName: event.venueName,
-        endAt: event.endAt,
-      });
-    }
-    return results.sort((a, b) => b.endAt - a.endAt);
+    return await listMyPostEventWorkForUser(ctx, getUserId(user), args.now);
   },
 });
 
@@ -279,12 +255,20 @@ export const resolveMyEventMedia = mutation({
     const userId = getUserId(user);
     const now = Date.now();
 
-    const myShifts = await ctx.db
-      .query("eventCrewShifts")
-      .withIndex("by_userId_and_startsAt", (q) => q.eq("userId", userId))
-      .take(500);
-    const hasShift = myShifts.some((shift) => shift.eventId === args.eventId);
-    if (!hasShift) throw new Error("You are not assigned to this event.");
+    const event = await ctx.db.get(args.eventId);
+    if (!event) throw new Error("Event not found.");
+
+    // Leads / managers can resolve media even without a crew shift.
+    const isLead =
+      event.dayOfLeadUserId === userId || event.eventManagerUserId === userId;
+    if (!isLead) {
+      const myShifts = await ctx.db
+        .query("eventCrewShifts")
+        .withIndex("by_userId_and_startsAt", (q) => q.eq("userId", userId))
+        .take(500);
+      const hasShift = myShifts.some((shift) => shift.eventId === args.eventId);
+      if (!hasShift) throw new Error("You are not assigned to this event.");
+    }
 
     const existing = await ctx.db
       .query("eventCrewMediaStatus")

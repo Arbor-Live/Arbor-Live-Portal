@@ -725,6 +725,58 @@ export const enqueueSmokeEmail = mutation({
   },
 });
 
+/**
+ * Test-only: ensure a Better Auth user plus a profile phone so contact surfaces
+ * that resolve leads by `events.eventManagerUserId` / `dayOfLeadUserId` find a
+ * complete name/email/phone. Emails follow the prunable `e2e.*` pattern.
+ */
+async function ensureE2eContactUser(
+  ctx: MutationCtx,
+  args: { name: string; email: string; phone: string },
+): Promise<string> {
+  const email = args.email.trim().toLowerCase();
+  const now = Date.now();
+  const existingUser = await ctx.runQuery(components.betterAuth.adapter.findOne, {
+    model: "user",
+    where: [{ field: "email", value: email }],
+  });
+  let userId = getId(existingUser);
+  if (!existingUser) {
+    const created = await ctx.runMutation(components.betterAuth.adapter.create, {
+      input: {
+        model: "user",
+        data: {
+          name: args.name,
+          email,
+          emailVerified: true,
+          createdAt: now,
+          updatedAt: now,
+          role: "user",
+        },
+      },
+    });
+    userId = getId(created);
+  }
+  if (!userId) throw new Error("Unable to resolve e2e contact user id.");
+
+  const existingProfile = await ctx.db
+    .query("userAdminProfiles")
+    .withIndex("by_userId", (q) => q.eq("userId", userId!))
+    .unique();
+  if (existingProfile) {
+    await ctx.db.patch(existingProfile._id, { phone: args.phone, updatedAt: now });
+  } else {
+    await ctx.db.insert("userAdminProfiles", {
+      userId,
+      active: true,
+      phone: args.phone,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+  return userId;
+}
+
 export const seedCrewedEventWithSchedule = mutation({
   args: {
     title: v.optional(v.string()),
@@ -802,14 +854,15 @@ export const seedCrewedEventWithSchedule = mutation({
         createdAt: now,
         updatedAt: now,
       });
-      await ctx.db.patch(eventId, { venueId, venueName, updatedAt: now });
-      await ctx.db.insert("eventPeopleAssignments", {
-        eventId,
-        assignmentType: "event_manager",
-        personName: "E2E Event Manager",
-        contactEmail: "e2e-manager@arborlive.test",
-        contactPhone: "6505550100",
-        createdAt: now,
+      const managerUserId = await ensureE2eContactUser(ctx, {
+        name: "E2E Event Manager",
+        email: `e2e.manager.${now}@arborlive.test`,
+        phone: "6505550100",
+      });
+      await ctx.db.patch(eventId, {
+        venueId,
+        venueName,
+        eventManagerUserId: managerUserId,
         updatedAt: now,
       });
     }
@@ -1916,6 +1969,58 @@ export const seedAssignCrewToAllBlocks = mutation({
       shiftIds.push(shiftId);
     }
     return { shiftIds, blockCount: blocks.length };
+  },
+});
+
+/**
+ * Test-only: reproduce the "blocks gone, shifts remain" state that left shifts
+ * with a dangling `scheduleBlockId` invisible on the schedule tab. Seeds one
+ * open (unassigned) shift per schedule block, then deletes every block without
+ * touching the shifts.
+ */
+export const seedOrphanedOpenShifts = mutation({
+  args: { eventId: v.id("events") },
+  returns: v.object({
+    shiftCount: v.number(),
+    deletedBlockCount: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const now = Date.now();
+    const blocks = await ctx.db
+      .query("eventScheduleBlocks")
+      .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", args.eventId))
+      .take(50);
+
+    const existing = await ctx.db
+      .query("eventCrewShifts")
+      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+      .take(200);
+    for (const row of existing) {
+      await ctx.db.delete(row._id);
+    }
+
+    for (const block of blocks) {
+      const hours = Number(((block.endsAt - block.startsAt) / 3_600_000).toFixed(2));
+      await ctx.db.insert("eventCrewShifts", {
+        eventId: args.eventId,
+        scheduleBlockId: block._id,
+        role: block.label || block.blockType || "Crew",
+        startsAt: block.startsAt,
+        endsAt: block.endsAt,
+        hours,
+        postedToExpense: false,
+        notes: "E2E seeded orphaned open shift",
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    for (const block of blocks) {
+      await ctx.db.delete(block._id);
+    }
+
+    return { shiftCount: blocks.length, deletedBlockCount: blocks.length };
   },
 });
 
@@ -4046,13 +4151,6 @@ export const pruneE2eSeedData = mutation({
       }
       for (const row of await ctx.db
         .query("eventCrewAvailabilityResponses")
-        .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
-        .take(500)) {
-        await ctx.db.delete(row._id);
-        deletedChildren += 1;
-      }
-      for (const row of await ctx.db
-        .query("eventPeopleAssignments")
         .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
         .take(500)) {
         await ctx.db.delete(row._id);

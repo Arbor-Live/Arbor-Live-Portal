@@ -122,6 +122,7 @@ the URL looks like cloud.
 | Dry Rental create + Delivery/Return quick-add | Covered | `events/event-edit-dry-hire.spec.ts` |
 | Event title edit persist | Covered | `events/event-edit-dry-hire.spec.ts` |
 | Crew availability Yes + admin assign | Covered | `crew/crew-availability-assign.spec.ts` |
+| Orphaned shifts (deleted blocks) surface as unlinked | Covered | `events/event-schedule-unlinked-shifts.spec.ts` |
 | Venue create + pick on event | Covered | `events/venue-create-pick.spec.ts` (Batch 3) |
 | Event series create/generate | Covered | `events/event-series-smoke.spec.ts` (Batch 5) |
 | Event series editors ("this occurrence" scope) | Covered | `events/event-series-edit-scope.spec.ts` (Batch 11 — pins the applyScope reset guard) |

@@ -98,15 +98,6 @@ const eventTimelineBlockTypeValue = v.union(
   v.literal("custom"),
 );
 
-const eventAssignmentTypeValue = v.union(
-  v.literal("event_manager"),
-  v.literal("day_of_lead"),
-  v.literal("crew"),
-  v.literal("performer"),
-  v.literal("support"),
-  v.literal("contact"),
-);
-
 const userTeamValue = v.union(
   v.literal("Sound"),
   v.literal("Lights"),
@@ -917,7 +908,9 @@ export default defineSchema({
     .index("by_sourceEventRequestId", ["sourceEventRequestId"])
     .index("by_openMicEnabled_and_startAt", ["openMicEnabled", "startAt"])
     .index("by_venueId", ["venueId"])
-    .index("by_hostGroupId", ["hostGroupId"]),
+    .index("by_hostGroupId", ["hostGroupId"])
+    .index("by_dayOfLeadUserId", ["dayOfLeadUserId"])
+    .index("by_eventManagerUserId", ["eventManagerUserId"]),
 
   userCompensationRates: defineTable({
     userId: v.string(),
@@ -1224,22 +1217,6 @@ export default defineSchema({
     .index("by_eventId", ["eventId"])
     .index("by_userId", ["userId"])
     .index("by_eventId_and_userId", ["eventId", "userId"]),
-
-  eventPeopleAssignments: defineTable({
-    eventId: v.id("events"),
-    assignmentType: eventAssignmentTypeValue,
-    roleLabel: v.optional(v.string()),
-    personName: v.string(),
-    userId: v.optional(v.string()),
-    contactEmail: v.optional(v.string()),
-    contactPhone: v.optional(v.string()),
-    notes: v.optional(v.string()),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index("by_eventId", ["eventId"])
-    .index("by_assignmentType", ["assignmentType"])
-    .index("by_eventId_and_assignmentType", ["eventId", "assignmentType"]),
 
   /**
    * Event-level contacts that are not staff and not host-org billing people

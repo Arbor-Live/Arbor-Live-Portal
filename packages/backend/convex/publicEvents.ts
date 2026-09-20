@@ -8,7 +8,6 @@ import {
   isOpenMicSignupOpen,
   isPublicListableEventStatus,
   isPubliclyListableEvent,
-  isUpcomingEvent,
   isWithinDays,
 } from "./lib/publicEvents";
 import { isPublicSiteListableVisibility } from "./lib/eventVisibility";
@@ -122,17 +121,30 @@ async function loadWebsiteVisibleDesignsByEventId(ctx: QueryCtx) {
   return byEventId;
 }
 
-async function listPublicUpcomingEvents(ctx: QueryCtx, now: number) {
+/**
+ * How far back to look for events that are still running. A multi-day event's
+ * `startAt` is in the past while it is live, so the lower bound must precede
+ * "now". One week matches the "Happening right now" lookback below and covers
+ * any show Arbor runs.
+ */
+const LIVE_EVENT_LOOKBACK_DAYS = 7;
+
+/**
+ * Public events that are live or upcoming — anything that has not ended yet.
+ * Ordered by `startAt`, so a running event sorts above future ones.
+ */
+async function listPublicLiveOrUpcomingEvents(ctx: QueryCtx, now: number) {
+  const lookback = now - LIVE_EVENT_LOOKBACK_DAYS * 24 * 60 * 60 * 1000;
   const events = await ctx.db
     .query("events")
-    .withIndex("by_startAt", (q) => q.gte("startAt", now))
+    .withIndex("by_startAt", (q) => q.gte("startAt", lookback))
     .order("asc")
     .take(500);
   return events.filter(
     (event) =>
       isPublicSiteListableVisibility(event.visibility) &&
       isPublicListableEventStatus(event.status) &&
-      isUpcomingEvent(event.startAt, now),
+      event.endAt >= now,
   );
 }
 
@@ -143,7 +155,7 @@ export const listUpcoming = query({
   },
   returns: v.array(publicEventCardValue),
   handler: async (ctx, args) => {
-    const events = await listPublicUpcomingEvents(ctx, args.now);
+    const events = await listPublicLiveOrUpcomingEvents(ctx, args.now);
     const limited =
       args.limit !== undefined ? events.slice(0, Math.max(0, args.limit)) : events;
     const designsByEventId = await loadWebsiteVisibleDesignsByEventId(ctx);
@@ -159,7 +171,7 @@ export const listUpcomingTwoWeeks = query({
   args: { now: v.number() },
   returns: v.array(publicEventCardValue),
   handler: async (ctx, args) => {
-    const events = (await listPublicUpcomingEvents(ctx, args.now)).filter((event) =>
+    const events = (await listPublicLiveOrUpcomingEvents(ctx, args.now)).filter((event) =>
       isWithinDays(event.startAt, args.now, 14),
     );
     const designsByEventId = await loadWebsiteVisibleDesignsByEventId(ctx);
