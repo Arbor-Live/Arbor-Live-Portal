@@ -24,7 +24,9 @@ async function briefSourceUpdatedAt(
   eventId: Id<"events">,
 ): Promise<number> {
   const event = await ctx.db.get(eventId);
-  let max = event?.updatedAt ?? 0;
+  // eventContactsUpdatedAt covers deletions: removing the last contact leaves no
+  // row whose updatedAt the loop below could pick up.
+  let max = Math.max(event?.updatedAt ?? 0, event?.eventContactsUpdatedAt ?? 0);
   const [blocks, shifts, assignments, artifacts, pullListItems, eventContacts] = await Promise.all([
     ctx.db
       .query("eventScheduleBlocks")

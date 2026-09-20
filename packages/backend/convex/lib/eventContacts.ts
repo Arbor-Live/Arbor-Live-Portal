@@ -10,6 +10,13 @@ export type EventContact = {
   notes?: string;
 };
 
+/**
+ * Hard cap on contacts per event. Matches the read limit used by the editor,
+ * brief, and print freshness so a save can never persist rows the UI cannot
+ * load back (which would orphan them).
+ */
+export const MAX_EVENT_CONTACTS = 200;
+
 /** Provenance of an inherited contact, surfaced as a tag in the editor. */
 export type EventContactSource = "venue" | "invoice" | "band";
 
@@ -107,7 +114,7 @@ export async function listManualEventContacts(
   const rows = await ctx.db
     .query("eventContacts")
     .withIndex("by_eventId_and_sortOrder", (q) => q.eq("eventId", eventId))
-    .take(200);
+    .take(MAX_EVENT_CONTACTS);
   return rows.map((row) => ({
     _id: row._id,
     name: row.name,

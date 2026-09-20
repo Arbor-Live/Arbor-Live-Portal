@@ -896,6 +896,13 @@ export default defineSchema({
     /** Snake choices behind the generated Wing show file. Unset = one snake. */
     patchPlan: v.optional(patchPlanValue),
 
+    /**
+     * Revision stamp for the event's contact list. Contact rows carry their own
+     * updatedAt, but deleting the last one leaves no row to read, so brief print
+     * freshness folds this in too.
+     */
+    eventContactsUpdatedAt: v.optional(v.number()),
+
     createdAt: v.number(),
     updatedAt: v.number(),
   })

@@ -3,6 +3,7 @@ import { mutation, query } from "./_generated/server";
 import { requireArborInternalContext, requireAuth } from "./lib/auth";
 import { requireEventEditAccess } from "./lib/eventAccess";
 import {
+  MAX_EVENT_CONTACTS,
   listManualEventContacts,
   resolveInvoiceContact,
   resolveVenueContact,
@@ -75,10 +76,16 @@ export const upsertForEvent = mutation({
     await requireArborInternalContext(ctx);
     await requireEventEditAccess(ctx, args.eventId);
 
+    if (args.contacts.length > MAX_EVENT_CONTACTS) {
+      throw new Error(
+        `An event can have at most ${MAX_EVENT_CONTACTS} contacts (got ${args.contacts.length}).`,
+      );
+    }
+
     const existing = await ctx.db
       .query("eventContacts")
       .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
-      .take(200);
+      .take(MAX_EVENT_CONTACTS);
     const existingById = new Map(existing.map((row) => [row._id, row]));
     const keepIds = new Set(
       args.contacts
@@ -116,6 +123,9 @@ export const upsertForEvent = mutation({
         });
       }
     }
+    // Bump an event-level revision so a deletion of the last contact still
+    // invalidates a cached brief (which reads contact rows, not the event).
+    await ctx.db.patch(args.eventId, { eventContactsUpdatedAt: now });
     return await listManualEventContacts(ctx, args.eventId);
   },
 });

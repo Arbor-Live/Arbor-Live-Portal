@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useAppDialog } from "@/components/ui/app-dialog";
 import {
   ContactInputFields,
   InheritedContactRow,
@@ -102,6 +103,7 @@ export function PublicEventContacts({
   const [adding, setAdding] = useState(false);
   const [deletingId, setDeletingId] = useState<Id<"eventContacts"> | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { confirm } = useAppDialog();
 
   const canManage = canEdit && Boolean(onAdd) && Boolean(onDelete);
 
@@ -129,12 +131,19 @@ export function PublicEventContacts({
     }
   }
 
-  async function handleDelete(contactId: Id<"eventContacts">) {
+  async function handleDelete(contact: ManualContact) {
     if (!onDelete) return;
-    setDeletingId(contactId);
+    const shouldDelete = await confirm({
+      title: `Remove ${contact.name}?`,
+      description: "This removes the contact from the event.",
+      destructive: true,
+      confirmLabel: "Remove contact",
+    });
+    if (!shouldDelete) return;
+    setDeletingId(contact._id);
     setError(null);
     try {
-      await onDelete(contactId);
+      await onDelete(contact._id);
     } catch (deleteError) {
       setError(getConvexErrorMessage(deleteError, "Couldn’t remove the contact."));
     } finally {
@@ -183,7 +192,7 @@ export function PublicEventContacts({
                   <RemoveContactButton
                     label={`Remove ${contact.name}`}
                     disabled={deletingId === contact._id}
-                    onClick={() => void handleDelete(contact._id)}
+                    onClick={() => void handleDelete(contact)}
                   />
                 ) : null}
               </div>

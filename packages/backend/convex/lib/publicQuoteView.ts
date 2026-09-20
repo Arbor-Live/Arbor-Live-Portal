@@ -176,7 +176,7 @@ export async function loadPublicQuoteView(ctx: QueryCtx, invoice: Doc<"invoices"
       const dayOfLeadAssignment = assignments.find((row) => row.assignmentType === "day_of_lead");
       const crewAssignments = assignments.filter((row) => row.assignmentType === "crew");
       const venue = event.venueId ? await ctx.db.get(event.venueId) : null;
-      const bandRows = await loadEventRiders(ctx, event._id, { publishedOnly: true });
+      const bandRows = await loadEventRiders(ctx, event._id);
       return {
         id: event._id,
         title: event.title,

@@ -1,5 +1,6 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
+import { isValidEmail } from "./bandOrgInvite";
 import { listEventsByInvoiceId } from "./invoiceEvents";
 
 /**
@@ -36,6 +37,10 @@ export async function addPublicEventContact(
 ): Promise<Id<"eventContacts">> {
   const name = input.name.trim();
   if (!name) throw new Error("Contact name is required.");
+  const email = input.email?.trim() || undefined;
+  if (email && !isValidEmail(email)) {
+    throw new Error("Enter a valid email address.");
+  }
 
   const existing = await ctx.db
     .query("eventContacts")
@@ -47,16 +52,18 @@ export async function addPublicEventContact(
   const maxSortOrder = existing.reduce((max, row) => Math.max(max, row.sortOrder), -1);
 
   const now = Date.now();
-  return await ctx.db.insert("eventContacts", {
+  const contactId = await ctx.db.insert("eventContacts", {
     eventId,
     name,
     position: input.position?.trim() || undefined,
-    email: input.email?.trim() || undefined,
+    email,
     phone: input.phone?.trim() || undefined,
     sortOrder: maxSortOrder + 1,
     createdAt: now,
     updatedAt: now,
   });
+  await ctx.db.patch(eventId, { eventContactsUpdatedAt: now });
+  return contactId;
 }
 
 export async function deletePublicEventContact(
@@ -69,4 +76,5 @@ export async function deletePublicEventContact(
     throw new Error("Contact not found.");
   }
   await ctx.db.delete(contactId);
+  await ctx.db.patch(eventId, { eventContactsUpdatedAt: Date.now() });
 }
