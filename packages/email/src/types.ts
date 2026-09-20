@@ -366,8 +366,8 @@ export type PostEventAlbumEmailProps = {
   dateRangeLabel: string;
   /** Immich shared-album link. Omitted when no album could be resolved yet. */
   albumShareUrl?: string;
-  /** In-app event Media tab where internal recipients upload photos. */
-  eventMediaUrl?: string;
+  /** In-app event page where internal recipients complete post-event work. */
+  eventUrl?: string;
   /** Link to the feedback form on the client's booking request or event portal. */
   feedbackFormUrl?: string;
   /** Link to the internal post-mortem form (day-of leads and event managers). */

@@ -12,7 +12,7 @@ import {
   resolveProfileMembership,
 } from "./userVerticals";
 import { buildUserTimecards } from "./userTimecards";
-import { listMyEventsNeedingPhotos, listMyPostMortems } from "./myEventActions";
+import { countPendingPostEventWork, listMyPostEventWork } from "./myEventActions";
 
 /** Availability window for the digest (mirrors "next two weeks"). */
 const DIGEST_AVAILABILITY_WEEKS = 2;
@@ -136,40 +136,28 @@ async function buildTimecardsSection(
   };
 }
 
-async function buildPhotosSection(
+async function buildPostEventWorkSection(
   ctx: QueryCtx,
   userId: string,
   now: number,
 ): Promise<WeeklyDigestSection | null> {
-  // Crew shifts and lead/manager assignments both owe photos after an event.
-  const pending = await listMyEventsNeedingPhotos(ctx, userId, now);
+  // Crew shifts and lead/manager assignments both owe a review + photos.
+  const items = await listMyPostEventWork(ctx, userId, now);
+  const pending = items.filter((item) => !item.feedbackSubmitted || !item.mediaResolved);
   if (pending.length === 0) return null;
 
   return {
-    title: `Photos — ${plural(pending.length, "event")} awaiting media`,
+    title: `Post-event work — ${plural(pending.length, "event")} to finish`,
     totalCount: pending.length,
     items: pending
       .slice(0, DIGEST_ITEM_CAP)
-      .map((event) => `${event.title} • ${formatDate(event.endAt)}`),
-  };
-}
-
-async function buildPostMortemsSection(
-  ctx: QueryCtx,
-  userId: string,
-  now: number,
-): Promise<WeeklyDigestSection | null> {
-  const pending = (await listMyPostMortems(ctx, userId, now)).filter(
-    (row) => !row.submitted,
-  );
-  if (pending.length === 0) return null;
-
-  return {
-    title: `Post-mortems — ${plural(pending.length, "review")} needed`,
-    totalCount: pending.length,
-    items: pending
-      .slice(0, DIGEST_ITEM_CAP)
-      .map((row) => `${row.title} • ${formatDate(row.endAt)}`),
+      .map((item) => {
+        const missing = [
+          item.feedbackSubmitted ? null : "review",
+          item.mediaResolved ? null : "photos",
+        ].filter(Boolean);
+        return `${item.title} • ${formatDate(item.endAt)} · ${missing.join(" + ")}`;
+      }),
   };
 }
 
@@ -290,8 +278,7 @@ export async function buildWeeklyDigest(
     availability,
     scheduled,
     timecards,
-    postMortems,
-    photos,
+    postEventWork,
     bookingRequests,
     artistPayouts,
     postMortemQueue,
@@ -303,8 +290,7 @@ export async function buildWeeklyDigest(
     isCrew && flags.includeInTimecards
       ? buildTimecardsSection(ctx, args.userId, args.now)
       : Promise.resolve(null),
-    buildPostMortemsSection(ctx, args.userId, args.now),
-    buildPhotosSection(ctx, args.userId, args.now),
+    buildPostEventWorkSection(ctx, args.userId, args.now),
     args.isAdmin ? buildBookingRequestsSection(ctx) : Promise.resolve(null),
     args.isAdmin ? buildArtistPayoutsSection(ctx) : Promise.resolve(null),
     args.isAdmin ? buildPostMortemQueueSection(ctx) : Promise.resolve(null),
@@ -314,8 +300,7 @@ export async function buildWeeklyDigest(
     availability,
     scheduled,
     timecards,
-    postMortems,
-    photos,
+    postEventWork,
     bookingRequests,
     artistPayouts,
     postMortemQueue,

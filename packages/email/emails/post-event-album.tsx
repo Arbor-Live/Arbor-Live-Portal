@@ -14,7 +14,7 @@ export function PostEventAlbumEmail({
   venueName,
   dateRangeLabel,
   albumShareUrl,
-  eventMediaUrl,
+  eventUrl,
   feedbackFormUrl,
   postMortemUrl,
   audience = "client",
@@ -87,8 +87,8 @@ export function PostEventAlbumEmail({
             We will follow up with the shared album link as soon as it is ready.
           </MutedCopy>
         )
-      ) : eventMediaUrl ? (
-        <CtaButton href={eventMediaUrl} label="Upload & view photos" />
+      ) : eventUrl ? (
+        <CtaButton href={eventUrl} label="Complete post-event work" />
       ) : (
         <MutedCopy>
           We will follow up with the shared album link as soon as it is ready.

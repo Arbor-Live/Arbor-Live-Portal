@@ -7,21 +7,17 @@ const LEAD_EVENT_CAP = 200;
 /** Bound on shifts scanned to find a user's ended events (mirrors crewPortal). */
 const SHIFT_SCAN_CAP = 500;
 
-export type PendingPhotoEvent = {
+/** One ended event's outstanding/completed post-event work for a single user. */
+export type PostEventWorkItem = {
   eventId: Id<"events">;
   title: string;
   venueName?: string;
   endAt: number;
-};
-
-export type MyPostMortem = {
-  eventId: Id<"events">;
-  title: string;
-  venueName?: string;
-  endAt: number;
-  submitted: boolean;
-  submittedAt?: number;
+  feedbackSubmitted: boolean;
   rating?: number;
+  whatWentWell?: string;
+  whatCouldImprove?: string;
+  mediaResolved: boolean;
 };
 
 /** Events the user is the day-of lead or event manager for. */
@@ -44,24 +40,38 @@ export async function listLeadEventsForUser(
   return [...byId.values()];
 }
 
-/** Events where the user still owes a photos/videos upload outcome. */
-export async function listMyEventsNeedingPhotos(
+/**
+ * Whether a user is expected to do post-event work for an event: any assigned
+ * shift, or the day-of lead / event manager.
+ */
+export async function isAssignedToEvent(
+  ctx: QueryCtx,
+  eventId: Id<"events">,
+  userId: string,
+): Promise<boolean> {
+  const event = await ctx.db.get(eventId);
+  if (!event) return false;
+  if (event.dayOfLeadUserId === userId || event.eventManagerUserId === userId) return true;
+  const shifts = await ctx.db
+    .query("eventCrewShifts")
+    .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
+    .take(SHIFT_SCAN_CAP);
+  return shifts.some((shift) => shift.userId === userId);
+}
+
+/** Ended, non-cancelled events the user crewed (any shift) or led / managed. */
+async function listMyEndedEventDocs(
   ctx: QueryCtx,
   userId: string,
   now: number,
-): Promise<PendingPhotoEvent[]> {
-  const [shifts, leadEvents, resolvedRows] = await Promise.all([
+): Promise<Doc<"events">[]> {
+  const [shifts, leadEvents] = await Promise.all([
     ctx.db
       .query("eventCrewShifts")
       .withIndex("by_userId_and_startsAt", (q) => q.eq("userId", userId))
       .take(SHIFT_SCAN_CAP),
     listLeadEventsForUser(ctx, userId),
-    ctx.db
-      .query("eventCrewMediaStatus")
-      .withIndex("by_userId", (q) => q.eq("userId", userId))
-      .take(SHIFT_SCAN_CAP),
   ]);
-  const resolved = new Set(resolvedRows.map((row) => row.eventId));
 
   const endedIds = new Set<Id<"events">>();
   for (const shift of shifts) {
@@ -72,55 +82,66 @@ export async function listMyEventsNeedingPhotos(
   }
 
   const leadById = new Map(leadEvents.map((event) => [event._id, event]));
-  const results: PendingPhotoEvent[] = [];
+  const events: Doc<"events">[] = [];
   for (const eventId of endedIds) {
-    if (resolved.has(eventId)) continue;
     const event = leadById.get(eventId) ?? (await ctx.db.get(eventId));
     if (!event) continue;
     if (normalizeEventStatus(event.status) === "cancelled") continue;
-    results.push({
-      eventId: event._id,
-      title: event.title,
-      venueName: event.venueName,
-      endAt: event.endAt,
-    });
+    events.push(event);
   }
-  return results.sort((a, b) => b.endAt - a.endAt);
+  return events;
 }
 
 /**
- * Post-mortems for events the user led or managed. Pending reviews first, then
- * most-recently ended.
+ * Combined post-event work for the user: one row per ended event they crewed or
+ * led, carrying the feedback they filed and whether media was resolved. Pending
+ * events first, then most-recently ended.
  */
-export async function listMyPostMortems(
+export async function listMyPostEventWork(
   ctx: QueryCtx,
   userId: string,
   now: number,
-): Promise<MyPostMortem[]> {
-  const leadEvents = await listLeadEventsForUser(ctx, userId);
+): Promise<PostEventWorkItem[]> {
+  const [events, mediaRows] = await Promise.all([
+    listMyEndedEventDocs(ctx, userId, now),
+    ctx.db
+      .query("eventCrewMediaStatus")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .take(SHIFT_SCAN_CAP),
+  ]);
+  const mediaResolved = new Set(mediaRows.map((row) => row.eventId));
 
-  const rows: MyPostMortem[] = [];
-  for (const event of leadEvents) {
-    if (event.endAt > now) continue;
+  const rows: PostEventWorkItem[] = [];
+  for (const event of events) {
     const feedback = await ctx.db
       .query("postMortemFeedback")
       .withIndex("by_eventId_and_userId", (q) =>
         q.eq("eventId", event._id).eq("userId", userId),
       )
       .first();
+    const submitted = Boolean(feedback?.submittedAt);
     rows.push({
       eventId: event._id,
       title: event.title,
       venueName: event.venueName,
       endAt: event.endAt,
-      submitted: Boolean(feedback?.submittedAt),
-      submittedAt: feedback?.submittedAt,
+      feedbackSubmitted: submitted,
       rating: feedback?.rating,
+      whatWentWell: feedback?.whatWentWell,
+      whatCouldImprove: feedback?.whatCouldImprove,
+      mediaResolved: mediaResolved.has(event._id),
     });
   }
 
   return rows.sort((a, b) => {
-    if (a.submitted !== b.submitted) return a.submitted ? 1 : -1;
+    const aDone = a.feedbackSubmitted && a.mediaResolved;
+    const bDone = b.feedbackSubmitted && b.mediaResolved;
+    if (aDone !== bDone) return aDone ? 1 : -1;
     return b.endAt - a.endAt;
   });
+}
+
+/** Events in `listMyPostEventWork` that still need the user's feedback or media. */
+export function countPendingPostEventWork(items: PostEventWorkItem[]): number {
+  return items.filter((item) => !item.feedbackSubmitted || !item.mediaResolved).length;
 }

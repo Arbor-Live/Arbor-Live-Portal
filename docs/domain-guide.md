@@ -68,19 +68,23 @@ canonical description of the domain itself.
   `/crew` page. Flags remain editable per user in Users admin.
 - **Weekly pending-activity digest** (`email/weeklyDigest.ts`, run by the
   Monday `weeklyJobs` cron): one email per active Arbor user listing their
-  pending availability responses, events that week, timecards, post-mortems,
-  unset media status (crew **and** day-of leads / event managers), and — for
+  pending availability responses, events that week, timecards, post-event work
+  (review + photos, crew **and** day-of leads / event managers), and — for
   admins — open booking requests, artist payouts in progress, and outstanding
   post-mortem reviews. Per-user opt-out is the `weeklyDigest` Participation
   flag; sections with nothing pending are omitted and users with no pending
   items get no email.
-- **Post-event action items** (`postMortemFeedback.ts`, `lib/myEventActions.ts`):
-  day-of leads / event managers complete their post-mortem inline on the event
-  **Overview** once the event has ended (the emailed `/postmortem/[token]` form
-  remains a fallback), and everyone assigned or leading an ended event can
-  resolve their photos/videos status. Both surface as amber sidebar badges on
-  **Events → My Post-mortems** and **My Photos** (counts are only subscribed on
-  home/event routes to avoid per-event fan-out on every dashboard page).
+- **Post-event work** (`postMortemFeedback.ts`, `lib/myEventActions.ts`): every
+  assigned crew member *and* the day-of lead / event manager reviews each ended
+  event — 5⭐ rating + what went well / what could improve + resolving their
+  photos/videos. It appears inline on the event **Overview** and as one combined
+  **Events → My Post-event work** page (plus the crew Home widget); the email
+  link points internal recipients at the event page. The emailed
+  `/postmortem/[token]` form remains a fallback. One amber nav badge counts
+  events still needing review or photos (subscribed only on home/event routes to
+  avoid per-event fan-out on every dashboard page). Leads/admins see an
+  attributed per-event average + all responses on the event Overview, and
+  Insights rolls up per-event averages alongside every crew/lead review.
 
 ## Venues
 
