@@ -9,12 +9,6 @@ export const ARTIST_TYPE_LABELS: Record<ArtistType, string> = {
   other: "Other",
 };
 
-export function artistTypeLabel(value: string | undefined): string {
-  return value && value in ARTIST_TYPE_LABELS
-    ? ARTIST_TYPE_LABELS[value as ArtistType]
-    : ARTIST_TYPE_LABELS.other;
-}
-
 /** True for any artist org type (excludes arbor_internal / unset). */
 export function isArtistOrganizationType(type: string | undefined | null): boolean {
   return (

@@ -1,7 +1,6 @@
 import {
   addPacificCalendarDays,
   pacificDateAndTimeToMs,
-  pacificDateKey,
   PORTAL_TIMEZONE,
 } from "@/lib/format";
 
@@ -161,12 +160,6 @@ export function getEarliestShowSlot(slots: ShowSlotInput[]): ShowSlotInput | nul
     startTime: earliest.startTime,
     endTime: earliest.endTime,
   };
-}
-
-export function addDaysToDateInput(date: string, days: number) {
-  const ms = pacificDateAndTimeToMs(date, "12:00");
-  if (ms == null) return date;
-  return pacificDateKey(addPacificCalendarDays(ms, days));
 }
 
 export function createDefaultShowSlot(): ShowSlotInput {

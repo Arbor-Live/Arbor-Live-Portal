@@ -430,30 +430,6 @@ export function canvasRaster(canvas: HTMLCanvasElement): LogoRaster {
   };
 }
 
-export function rgbaRaster(
-  data: Uint8Array<ArrayBuffer>,
-  width: number,
-  height: number
-): LogoRaster {
-  return {
-    width,
-    height,
-    upload(gpu, texture) {
-      const bytesPerRow = Math.ceil((width * 4) / 256) * 256;
-      const upload =
-        bytesPerRow === width * 4
-          ? data
-          : padTextureRows(data, width * 4, bytesPerRow, height);
-      gpu.gpu.queue.writeTexture(
-        { texture },
-        upload,
-        { bytesPerRow, rowsPerImage: height },
-        [width, height]
-      );
-    },
-  };
-}
-
 function createTargets(
   gpu: Gpu,
   size: Point,

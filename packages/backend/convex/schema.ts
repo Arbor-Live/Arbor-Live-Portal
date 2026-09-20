@@ -359,7 +359,6 @@ export default defineSchema({
   })
     .index("by_name", ["name"])
     .index("by_category", ["category"])
-    .index("by_category_and_name", ["category", "name"])
     .index("by_publicSlug", ["publicSlug"])
     .index("by_publicListing", ["publicListing"]),
 
@@ -418,8 +417,7 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_parentId", ["parentId"])
-    .index("by_path", ["path"])
-    .index("by_kind", ["kind"]),
+    .index("by_path", ["path"]),
 
   /** Singleton row: global copy for public /e/[assetId] Lost & Found (staff-edited). */
   lostFoundSettings: defineTable({
@@ -444,8 +442,7 @@ export default defineSchema({
     .index("by_assetId", ["assetId"])
     .index("by_typeId", ["typeId"])
     .index("by_storageLocationId", ["storageLocationId"])
-    .index("by_containedInAssetId", ["containedInAssetId"])
-    .index("by_serialNumber", ["serialNumber"]),
+    .index("by_containedInAssetId", ["containedInAssetId"]),
 
   inventoryPackages: defineTable({
     name: v.string(),
@@ -483,9 +480,7 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_packageId", ["packageId"])
-    .index("by_typeId", ["typeId"])
-    .index("by_package_and_type", ["packageId", "typeId"])
-    .index("by_optionId", ["optionId"]),
+    .index("by_typeId", ["typeId"]),
 
   /**
    * Unnamed content unit within a package.
@@ -525,9 +520,7 @@ export default defineSchema({
   })
     .index("by_name", ["name"])
     .index("by_normalizedName", ["normalizedName"])
-    .index("by_active", ["active"])
-    .index("by_lastUsedAt", ["lastUsedAt"])
-    .index("by_type_and_name", ["type", "name"]),
+    .index("by_active", ["active"]),
 
   /** Alternate names for a host org (e.g. "OSE" → "Office of Student Engagement"). */
   invoiceGroupAliases: defineTable({
@@ -568,9 +561,7 @@ export default defineSchema({
     .index("by_email", ["email"])
     .index("by_groupId", ["groupId"])
     .index("by_personId", ["personId"])
-    .index("by_active", ["active"])
-    .index("by_lastUsedAt", ["lastUsedAt"])
-    .index("by_groupId_and_lastName", ["groupId", "lastName"]),
+    .index("by_active", ["active"]),
 
   invoiceSettings: defineTable({
     key: v.string(),
@@ -594,8 +585,7 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_key", ["key"])
-    .index("by_active", ["active"])
-    .index("by_sortOrder", ["sortOrder"]),
+    .index("by_active", ["active"]),
 
   invoiceTerms: defineTable({
     label: v.string(),
@@ -688,8 +678,6 @@ export default defineSchema({
     .index("by_clientApprovalStatus", ["clientApprovalStatus"])
     .index("by_publicApprovalToken", ["publicApprovalToken"])
     .index("by_sourceEventRequestId", ["sourceEventRequestId"])
-    .index("by_managerUserId", ["managerUserId"])
-    .index("by_issueDate", ["issueDate"])
     .index("by_createdAt", ["createdAt"])
     .index("by_groupId", ["groupId"])
     .index("by_paymentReceivedAt", ["paymentReceivedAt"])
@@ -734,8 +722,7 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_invoiceId", ["invoiceId"])
-    .index("by_invoiceId_and_order", ["invoiceId", "order"])
-    .index("by_invoiceId_and_section", ["invoiceId", "section"]),
+    .index("by_invoiceId_and_order", ["invoiceId", "order"]),
 
   invoiceExports: defineTable({
     invoiceId: v.id("invoices"),
@@ -891,7 +878,6 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_status", ["status"])
-    .index("by_visibility", ["visibility"])
     .index("by_invoiceId", ["invoiceId"])
     .index("by_invoiceId_and_startAt", ["invoiceId", "startAt"])
     .index("by_publicToken", ["publicToken"])
@@ -958,7 +944,6 @@ export default defineSchema({
   })
     .index("by_userId", ["userId"])
     .index("by_active", ["active"])
-    .index("by_defaultOrganizationId", ["defaultOrganizationId"])
     .index("by_username", ["username"]),
 
   userOrganizationMemberships: defineTable({
@@ -1140,7 +1125,6 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_eventId", ["eventId"])
-    .index("by_eventId_and_dayIndex", ["eventId", "dayIndex"])
     .index("by_eventId_and_startsAt", ["eventId", "startsAt"]),
 
   eventExpenseReports: defineTable({
@@ -1225,7 +1209,6 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_eventId", ["eventId"])
-    .index("by_artifactType", ["artifactType"])
     .index("by_eventId_and_artifactType", ["eventId", "artifactType"]),
 
   immichAlbumLinks: defineTable({
@@ -1239,8 +1222,7 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   })
-    .index("by_entityType_and_entityId", ["entityType", "entityId"])
-    .index("by_immichAlbumId", ["immichAlbumId"]),
+    .index("by_entityType_and_entityId", ["entityType", "entityId"]),
 
   immichAssetRecords: defineTable({
     albumLinkId: v.id("immichAlbumLinks"),
@@ -1513,8 +1495,7 @@ export default defineSchema({
     .index("by_requestNumber", ["requestNumber"])
     .index("by_linkedInvoiceId", ["linkedInvoiceId"])
     .index("by_venueId", ["venueId"])
-    .index("by_invoiceGroupId", ["invoiceGroupId"])
-    .index("by_assigneeUserId_and_submittedAt", ["assigneeUserId", "submittedAt"]),
+    .index("by_invoiceGroupId", ["invoiceGroupId"]),
 
   bookingRequestSettings: defineTable({
     key: v.string(),
@@ -1538,7 +1519,6 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   })
-    .index("by_eventId_and_createdAt", ["eventId", "createdAt"])
     .index("by_eventId", ["eventId"]),
 
   /**
@@ -1572,7 +1552,6 @@ export default defineSchema({
   })
     .index("by_invoiceId", ["invoiceId"])
     .index("by_eventId", ["eventId"])
-    .index("by_sourceToken", ["sourceToken"])
     .index("by_createdAt", ["createdAt"]),
 
   /**
@@ -1656,14 +1635,6 @@ export default defineSchema({
     .index("by_confirmationToken", ["confirmationToken"])
     .index("by_paidAt", ["paidAt"]),
 
-  bandPaymentSettings: defineTable({
-    key: v.string(),
-    photoAlbumUrl: v.optional(v.string()),
-    financialManagerName: v.optional(v.string()),
-    financialManagerPronouns: v.optional(v.string()),
-    updatedAt: v.number(),
-  }).index("by_key", ["key"]),
-
   eventPaymentProofSubmissions: defineTable({
     eventId: v.id("events"),
     invoiceId: v.id("invoices"),
@@ -1721,8 +1692,7 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   })
-    .index("by_seriesId", ["seriesId"])
-    .index("by_seriesId_and_sortOrder", ["seriesId", "sortOrder"]),
+    .index("by_seriesId", ["seriesId"]),
 
   /**
    * Crew-initiated equipment borrow. Reviewed by admins; approval spawns an
@@ -1791,7 +1761,6 @@ export default defineSchema({
   })
     .index("by_eventId", ["eventId"])
     .index("by_updatedAt", ["updatedAt"])
-    .index("by_assigneeUserId_and_status", ["assigneeUserId", "status"])
     .index("by_assigneeUserId_and_updatedAt", ["assigneeUserId", "updatedAt"])
     .index("by_status", ["status"]),
 
@@ -1803,7 +1772,6 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   })
-    .index("by_designId", ["designId"])
     .index("by_status", ["status"]),
 
   marketingPosts: defineTable({

@@ -45,11 +45,6 @@ function resolveLineKind(item: {
   return "type";
 }
 
-function clampQuantity(value: number, max: number) {
-  if (!Number.isFinite(value)) return 0;
-  return Math.max(0, Math.min(max, Math.floor(value)));
-}
-
 function summarizePullList(items: Doc<"eventPullListItems">[]) {
   const totalLines = items.length;
   const totalPieces = items.reduce((sum, item) => sum + item.quantityRequired, 0);
@@ -453,113 +448,6 @@ export const upsertItems = mutation({
           .take(500)
       ),
     );
-  },
-});
-
-export const updateItemProgress = mutation({
-  args: {
-    id: v.id("eventPullListItems"),
-    quantityPulled: v.optional(v.number()),
-    quantityCheckedOut: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    await requireAuth(ctx);
-    await requireArborInternalContext(ctx);
-    const existing = await ctx.db.get(args.id);
-    if (!existing) throw new Error("Pull list item not found.");
-    await ctx.db.patch(args.id, {
-      quantityPulled:
-        args.quantityPulled !== undefined
-          ? clampQuantity(args.quantityPulled, existing.quantityRequired)
-          : existing.quantityPulled,
-      quantityCheckedOut:
-        args.quantityCheckedOut !== undefined
-          ? clampQuantity(args.quantityCheckedOut, existing.quantityRequired)
-          : existing.quantityCheckedOut,
-      updatedAt: Date.now(),
-    });
-  },
-});
-
-export const addManualItem = mutation({
-  args: {
-    eventId: v.id("events"),
-    typeId: v.id("inventoryTypes"),
-    quantityRequired: v.number(),
-    notes: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    await requireAuth(ctx);
-    await requireArborInternalContext(ctx);
-    const event = await ctx.db.get(args.eventId);
-    if (!event) throw new Error("Event not found.");
-    const validated = await validatePullListItemInput(ctx, {
-      lineKind: "type",
-      typeId: args.typeId,
-      quantityRequired: args.quantityRequired,
-    });
-    const existing = await ctx.db
-      .query("eventPullListItems")
-      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
-      .take(500);
-    const maxSort = existing.reduce((max, row) => Math.max(max, row.sortOrder), -1);
-    const now = Date.now();
-    return await ctx.db.insert("eventPullListItems", {
-      eventId: args.eventId,
-      lineKind: validated.lineKind,
-      typeId: validated.typeId,
-      packageId: validated.packageId,
-      label: validated.label,
-      quantityRequired: validated.quantityRequired,
-      quantityPulled: 0,
-      quantityCheckedOut: 0,
-      source: "manual",
-      sortOrder: maxSort + 1,
-      notes: args.notes?.trim() || undefined,
-      createdAt: now,
-      updatedAt: now,
-    });
-  },
-});
-
-export const addManualPackage = mutation({
-  args: {
-    eventId: v.id("events"),
-    packageId: v.id("inventoryPackages"),
-    quantityRequired: v.number(),
-    notes: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    await requireAuth(ctx);
-    await requireArborInternalContext(ctx);
-    const event = await ctx.db.get(args.eventId);
-    if (!event) throw new Error("Event not found.");
-    const validated = await validatePullListItemInput(ctx, {
-      lineKind: "package",
-      packageId: args.packageId,
-      quantityRequired: args.quantityRequired,
-    });
-    const existing = await ctx.db
-      .query("eventPullListItems")
-      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
-      .take(500);
-    const maxSort = existing.reduce((max, row) => Math.max(max, row.sortOrder), -1);
-    const now = Date.now();
-    return await ctx.db.insert("eventPullListItems", {
-      eventId: args.eventId,
-      lineKind: validated.lineKind,
-      typeId: validated.typeId,
-      packageId: validated.packageId,
-      label: validated.label,
-      quantityRequired: validated.quantityRequired,
-      quantityPulled: 0,
-      quantityCheckedOut: 0,
-      source: "manual",
-      sortOrder: maxSort + 1,
-      notes: args.notes?.trim() || undefined,
-      createdAt: now,
-      updatedAt: now,
-    });
   },
 });
 

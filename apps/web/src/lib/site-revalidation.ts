@@ -9,8 +9,6 @@ export const PUBLIC_PACKAGE_BUCKETS = [
 
 export type PublicPackageBucket = (typeof PUBLIC_PACKAGE_BUCKETS)[number];
 
-export const SITE_REVALIDATE_SECONDS = 3600;
-
 export const siteRevalidateTags = {
   marketing: "site-marketing",
   inventoryPackages: "site-inventory-packages",
