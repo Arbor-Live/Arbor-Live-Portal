@@ -1218,6 +1218,11 @@ export default defineSchema({
     .index("by_userId", ["userId"])
     .index("by_eventId_and_userId", ["eventId", "userId"]),
 
+  /**
+   * Legacy lead mirror. No code reads this table anymore; `events.*UserId` is
+   * authoritative. `backfillEventLeadsFromAssignments` copies any remaining
+   * rows onto the event fields, after which this table is dropped.
+   */
   eventPeopleAssignments: defineTable({
     eventId: v.id("events"),
     assignmentType: eventAssignmentTypeValue,

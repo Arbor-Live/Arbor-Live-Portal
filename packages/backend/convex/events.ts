@@ -297,11 +297,7 @@ export const get = query({
       .query("eventCrewShifts")
       .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", args.id))
       .take(500);
-    const assignments = await ctx.db
-      .query("eventPeopleAssignments")
-      .withIndex("by_eventId", (q) => q.eq("eventId", args.id))
-      .take(500);
-    const canEdit = canEditEventForUser(user, event, assignments);
+    const canEdit = canEditEventForUser(user, event);
 
     if (detail === "schedule") {
       return {
@@ -310,7 +306,6 @@ export const get = query({
         series: null,
         blocks,
         shifts,
-        assignments,
         artifacts: [],
         expenseReports: [],
         pullListItems: [],
@@ -372,7 +367,6 @@ export const get = query({
           : null,
       blocks,
       shifts,
-      assignments,
       artifacts: enrichedArtifacts,
       expenseReports,
       pullListItems: enrichedPullList,
@@ -400,16 +394,6 @@ export const getByInvoiceId = query({
         ),
       )
     ).flat();
-    const assignments = (
-      await Promise.all(
-        eventIds.map((eventId) =>
-          ctx.db
-            .query("eventPeopleAssignments")
-            .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
-            .take(500),
-        ),
-      )
-    ).flat();
     const shifts = (
       await Promise.all(
         eventIds.map((eventId) =>
@@ -428,7 +412,6 @@ export const getByInvoiceId = query({
       startAt: event.startAt,
       endAt: linkedEvents[linkedEvents.length - 1]?.endAt ?? event.endAt,
       blocks,
-      assignments,
       shifts,
       linkedEvents: linkedEvents.map((row) => ({
         _id: row._id,

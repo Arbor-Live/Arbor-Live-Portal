@@ -57,21 +57,12 @@ export async function getEventStakeholderEmails(
     if (shift.userId) userIds.push(shift.userId);
   }
 
-  const assignments = await ctx.db
-    .query("eventPeopleAssignments")
-    .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
-    .take(200);
-
   const userByKey = await findAuthUsersByIds(ctx, [...new Set(userIds)]);
   const recipients = new Map<string, EmailRecipient>();
 
   for (const userId of userIds) {
     const user = userByKey.get(userId);
     addRecipient(recipients, user?.email, user?.name ?? undefined, userId);
-  }
-
-  for (const assignment of assignments) {
-    addRecipient(recipients, assignment.contactEmail, assignment.personName, assignment.userId);
   }
 
   return [...recipients.values()];
@@ -154,22 +145,12 @@ export async function getEventCrewRecipients(
     if (shift.userId && !leadUserIds.has(shift.userId)) crewUserIds.push(shift.userId);
   }
 
-  const assignments = await ctx.db
-    .query("eventPeopleAssignments")
-    .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
-    .take(200);
-
   const userByKey = await findAuthUsersByIds(ctx, [...new Set(crewUserIds)]);
   const recipients = new Map<string, EmailRecipient>();
 
   for (const userId of crewUserIds) {
     const user = userByKey.get(userId);
     addRecipient(recipients, user?.email, user?.name ?? undefined, userId);
-  }
-
-  for (const assignment of assignments) {
-    if (assignment.userId && leadUserIds.has(assignment.userId)) continue;
-    addRecipient(recipients, assignment.contactEmail, assignment.personName, assignment.userId);
   }
 
   return [...recipients.values()];

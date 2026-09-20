@@ -25,17 +25,13 @@ async function briefSourceUpdatedAt(
 ): Promise<number> {
   const event = await ctx.db.get(eventId);
   let max = event?.updatedAt ?? 0;
-  const [blocks, shifts, assignments, artifacts, pullListItems] = await Promise.all([
+  const [blocks, shifts, artifacts, pullListItems] = await Promise.all([
     ctx.db
       .query("eventScheduleBlocks")
       .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
       .take(500),
     ctx.db
       .query("eventCrewShifts")
-      .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
-      .take(500),
-    ctx.db
-      .query("eventPeopleAssignments")
       .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
       .take(500),
     ctx.db
@@ -47,7 +43,7 @@ async function briefSourceUpdatedAt(
       .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
       .take(500),
   ]);
-  for (const row of [...blocks, ...shifts, ...assignments, ...artifacts, ...pullListItems]) {
+  for (const row of [...blocks, ...shifts, ...artifacts, ...pullListItems]) {
     if (row.updatedAt > max) max = row.updatedAt;
   }
 

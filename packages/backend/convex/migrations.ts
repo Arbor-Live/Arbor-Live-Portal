@@ -562,6 +562,47 @@ export const dropCrewOnboardingOseHiringForm = migrations.define({
 });
 
 /**
+ * Copy lead assignment rows onto `events.eventManagerUserId` /
+ * `dayOfLeadUserId` where the event field is still empty.
+ *
+ * The event fields are authoritative; this only fills the gap for rows created
+ * before the editor wrote them. Rows whose `userId` is missing carry no portal
+ * user and are skipped. Idempotent. The table is dropped in a follow-up once
+ * this has run on every deployment.
+ */
+export const backfillEventLeadsFromAssignments = migrations.define({
+  table: "events",
+  migrateOne: async (ctx, event) => {
+    if (event.eventManagerUserId?.trim() && event.dayOfLeadUserId?.trim()) return;
+    const assignments = await ctx.db
+      .query("eventPeopleAssignments")
+      .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
+      .take(500);
+
+    const patch: {
+      eventManagerUserId?: string;
+      dayOfLeadUserId?: string;
+      updatedAt?: number;
+    } = {};
+    if (!event.eventManagerUserId?.trim()) {
+      const manager = assignments.find(
+        (row) => row.assignmentType === "event_manager" && row.userId?.trim(),
+      );
+      if (manager?.userId?.trim()) patch.eventManagerUserId = manager.userId.trim();
+    }
+    if (!event.dayOfLeadUserId?.trim()) {
+      const lead = assignments.find(
+        (row) => row.assignmentType === "day_of_lead" && row.userId?.trim(),
+      );
+      if (lead?.userId?.trim()) patch.dayOfLeadUserId = lead.userId.trim();
+    }
+    if (!patch.eventManagerUserId && !patch.dayOfLeadUserId) return;
+    patch.updatedAt = Date.now();
+    return patch;
+  },
+});
+
+/**
  * never reorder or remove completed ones (reset requires an explicit reset:true).
  */
 const MIGRATION_SERIES = [
@@ -587,6 +628,7 @@ const MIGRATION_SERIES = [
   internal.migrations.migrateBandApplicationArtistTypeToOrganizationType,
   internal.migrations.backfillInvoiceArtistLineEvents,
   internal.migrations.dropCrewOnboardingOseHiringForm,
+  internal.migrations.backfillEventLeadsFromAssignments,
 ] as const;
 
 export const runAll = migrations.runner([...MIGRATION_SERIES]);
