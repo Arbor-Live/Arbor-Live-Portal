@@ -80,30 +80,146 @@ async function hasQueue() {
 }
 
 /** First driverless IPP printer CUPS can see (network or USB via ipp-usb). */
-async function discoverIppUri() {
+/**
+ * USB printers only — network printers are intentionally ignored.
+ *
+ * Prefer the ipp-usb loopback endpoint (IPP-over-USB). Avahi advertises the USB
+ * device with the host's `.local` name (unresolvable without nss-mdns), so read
+ * the advertised loopback address/port and talk to localhost directly. Fall
+ * back to the legacy usb:// device if IPP-over-USB isn't in play.
+ */
+async function discoverUsbPrinterUri() {
   const { stdout } = await execFileAsync("sh", [
     "-c",
-    // Match a real device URI, not the bare backend schemes (`network ipps`)
-    // that lpinfo also prints.
-    "lpinfo -v 2>/dev/null | awk '$1==\"network\" || $1==\"direct\" {print $2}' | grep -iE '^ipps?://' | head -n1",
+    "avahi-browse -ptr _ipp._tcp 2>/dev/null || true",
   ]);
-  return stdout.trim() || null;
+  for (const line of stdout.split("\n")) {
+    if (!line.startsWith("=")) continue;
+    const fields = line.split(";");
+    const name = fields[3] ?? "";
+    const address = fields[7];
+    const port = fields[8];
+    // " (USB)" is ipp-usb's suffix for a USB-attached device.
+    if (!name.includes("(USB)")) continue;
+    if (!port) continue;
+    // ipp-usb binds both loopback addresses; brackets are required for IPv6.
+    let host;
+    if (address === "127.0.0.1") {
+      host = address;
+    } else if (address === "::1") {
+      host = "[::1]";
+    } else {
+      continue;
+    }
+    return `ipp://${host}:${port}/ipp/print`;
+  }
+
+  const { stdout: usbOut } = await execFileAsync("sh", [
+    "-c",
+    "lpinfo -v 2>/dev/null | awk '$1==\"direct\" && $2 ~ /^usb:\\/\\// {print $2; exit}' || true",
+  ]);
+  return usbOut.trim() || null;
 }
 
 /**
  * Creates the CUPS queue on first run so the Pi is plug-and-print: the printer
  * isn't attached at image build time, so the queue can't be baked in.
  */
+let duplexConfigured = false;
+
+/** Enable double-sided (long-edge) printing when the printer advertises it. */
+async function enableDuplexIfSupported() {
+  if (duplexConfigured) return;
+  try {
+    const { stdout } = await execFileAsync("lpoptions", ["-p", QUEUE, "-l"]);
+    // e.g. "Duplex/Duplex: None *DuplexNoTumble DuplexTumble" (* = current).
+    const line = stdout.split("\n").find((entry) => entry.startsWith("Duplex"));
+    if (!line) return; // No PPD option yet, or duplex unsupported — retry next time.
+    if (!line.includes("DuplexNoTumble")) {
+      duplexConfigured = true;
+      return;
+    }
+    if (!line.includes("*DuplexNoTumble")) {
+      await execFileAsync("lpadmin", ["-p", QUEUE, "-o", "Duplex=DuplexNoTumble"]);
+      log(`enabled double-sided printing on "${QUEUE}"`);
+    }
+    duplexConfigured = true;
+  } catch (error) {
+    log(`could not configure duplex: ${message(error)}`);
+  }
+}
+
+/**
+ * Pick a driver PPD for a device that isn't IPP-over-USB (e.g. HP's classic
+ * USB interface). Matches the model tokens from the URI against `lpinfo -m`,
+ * preferring HPLIP's hpcups driver.
+ *
+ * @param {string} uri
+ */
+async function findDriverPpd(uri) {
+  const model = decodeURIComponent(uri.replace(/^usb:\/\//, "").split("?")[0]);
+  const tokens = model
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((token) => token && token !== "hp");
+  if (tokens.length === 0) return null;
+
+  const { stdout } = await execFileAsync("sh", ["-c", "lpinfo -m 2>/dev/null || true"]);
+  let best = null;
+  for (const line of stdout.split("\n")) {
+    if (!line.trim()) continue;
+    const ppd = line.split(/\s+/)[0];
+    const hay = line.toLowerCase();
+    const hits = tokens.filter((token) => hay.includes(token)).length;
+    if (hits < Math.max(2, tokens.length - 1)) continue;
+    const score = hits + (hay.includes("hpcups") ? 1 : 0);
+    if (!best || score > best.score) best = { ppd, score };
+  }
+  return best ? best.ppd : null;
+}
+
+/** Create the queue: driverless when possible, otherwise a matching driver. @param {string} uri */
+async function addQueue(uri) {
+  try {
+    await execFileAsync("lpadmin", ["-p", QUEUE, "-E", "-v", uri, "-m", "everywhere"]);
+    return "everywhere";
+  } catch (error) {
+    // "IPP Everywhere driver requires an IPP connection" — a legacy usb://
+    // device needs a real PPD.
+    const ppd = await findDriverPpd(uri);
+    if (!ppd) throw error;
+    await execFileAsync("lpadmin", ["-p", QUEUE, "-E", "-v", uri, "-m", ppd]);
+    log(`created CUPS queue "${QUEUE}" with driver ${ppd}`);
+    return ppd;
+  }
+}
+
 async function ensureQueue() {
-  if (await hasQueue()) return "queue ready";
-  const uri = await discoverIppUri();
+  if (await hasQueue()) {
+    await enableDuplexIfSupported();
+    return "queue ready";
+  }
+  const uri = await discoverUsbPrinterUri();
   if (!uri) {
     throw new Error(
-      "No IPP printer found. Is the printer plugged in and ipp-usb running? Check `lpinfo -v`.",
+      "No USB printer found. Is the printer plugged in? Check `ipp-usb check` and `lpinfo -v`.",
     );
   }
-  await execFileAsync("lpadmin", ["-p", QUEUE, "-E", "-v", uri, "-m", "everywhere"]);
+  try {
+    await addQueue(uri);
+  } catch (error) {
+    // lpadmin can print "lpadmin: Success" and still exit non-zero, so trust the
+    // resulting queue state over its exit code.
+    if (!(await hasQueue())) throw error;
+    log(`lpadmin reported an error but the queue exists: ${message(error)}`);
+    await enableDuplexIfSupported();
+    return `queue ready (${uri})`;
+  }
+  if (!(await hasQueue())) {
+    throw new Error(`lpadmin finished but lpstat does not see queue "${QUEUE}".`);
+  }
   log(`created CUPS queue "${QUEUE}" → ${uri}`);
+  await enableDuplexIfSupported();
   return `queue ready (${uri})`;
 }
 
