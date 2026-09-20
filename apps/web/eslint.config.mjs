@@ -20,6 +20,8 @@ const eslintConfig = defineConfig([
       },
     },
     rules: {
+      // Unknown classes silently generate no CSS; catching them is always safe.
+      "shadcn/no-unknown-classes": "error",
       // Underscore-prefixed bindings are intentional throwaways (e.g. pulling a
       // prop out of a destructure so it is not forwarded to the DOM).
       "@typescript-eslint/no-unused-vars": [
