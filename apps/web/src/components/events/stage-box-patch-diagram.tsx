@@ -2,14 +2,8 @@
 
 import type { SnakeId, StageBoxDiagramModel, StageBoxPort } from "@arbor/show-file";
 import { SNAKE_LABEL, aes50PortFor, regionForPort } from "@arbor/show-file";
+import { cn } from "@/lib/utils";
 
-const INK = "#0f172a";
-const MUTED = "#64748b";
-const HAIRLINE = "#e2e8f0";
-const HEADER = "#f1f5f9";
-const SAME_BG = "#ecfdf5";
-const PHYSICAL_BG = "#fffbeb";
-const MUTE_BG = "#f8fafc";
 
 const REGION_PORTS: Record<"vox" | "mid" | "drums", [string, number, number]> = {
   vox: ["Vox", 1, 4],
@@ -45,48 +39,40 @@ export function StageBoxPatchDiagram({
 
   return (
     <div
-      className="overflow-hidden rounded-md border"
-      style={{ borderColor: HAIRLINE, background: "#fff" }}
+      className="overflow-hidden rounded-md border border-zinc/20 bg-background"
       data-testid="stage-box-patch"
     >
-      <div
-        className="flex flex-wrap items-baseline justify-between gap-2 border-b px-3 py-2"
-        style={{ borderColor: HAIRLINE, background: HEADER }}
+      <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-zinc/20 bg-muted px-3 py-2"
       >
         <div>
-          <p className="text-sm font-semibold" style={{ color: INK }}>
+          <p className="text-sm font-semibold text-foreground">
             {model.title}
           </p>
-          <p className="text-xs" style={{ color: MUTED }}>
+          <p className="text-xs text-muted-foreground">
             {model.subtitle}
           </p>
         </div>
-        <p className="text-[10px] uppercase tracking-wide" style={{ color: MUTED }}>
+        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
           Plug on SD16 / XR18
         </p>
       </div>
 
       {colored ? (
-        <div
-          className="flex flex-wrap gap-3 border-b px-3 py-1.5 text-[10px]"
-          style={{ borderColor: HAIRLINE, color: MUTED }}
-        >
+        <div className="flex flex-wrap gap-3 border-b border-zinc/20 px-3 py-1.5 text-[10px] text-muted-foreground">
           <span>
             <span
-              className="mr-1 inline-block h-2 w-2 rounded-sm"
-              style={{ background: SAME_BG, border: "1px solid #a7f3d0" }}
+              className="mr-1 inline-block h-2 w-2 rounded-sm border border-emerald/30 bg-emerald/10"
             />
             Same
           </span>
           <span>
             <span
-              className="mr-1 inline-block h-2 w-2 rounded-sm"
-              style={{ background: PHYSICAL_BG, border: "1px solid #fde68a" }}
+              className="mr-1 inline-block h-2 w-2 rounded-sm border border-amber/30 bg-amber/10"
             />
             Swap on stage
           </span>
           <span>
-            <span className="mr-1 text-[11px] line-through" style={{ color: "#334155" }}>
+            <span className="mr-1 text-[11px] text-zinc line-through">
               Mute
             </span>
           </span>
@@ -99,10 +85,7 @@ export function StageBoxPatchDiagram({
         return (
           <div key={snake}>
             {model.snakes.length > 1 ? (
-              <div
-                className="border-b px-3 py-1.5 text-[11px] font-semibold"
-                style={{ borderColor: HAIRLINE, background: "#fff", color: INK }}
-              >
+              <div className="border-b border-zinc/20 bg-background px-3 py-1.5 text-[11px] font-semibold text-foreground">
                 {SNAKE_LABEL[snake]}
               </div>
             ) : null}
@@ -113,16 +96,10 @@ export function StageBoxPatchDiagram({
               if (regionPorts.length === 0) return null;
               return (
                 <div key={region}>
-                  <div
-                    className="border-b px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide"
-                    style={{ borderColor: HAIRLINE, background: HEADER, color: MUTED }}
-                  >
+                  <div className="border-b border-zinc/20 bg-muted px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                     {regionLabel(region, snake)}
                   </div>
-                  <div
-                    className="grid grid-cols-2 gap-px sm:grid-cols-4"
-                    style={{ background: HAIRLINE }}
-                  >
+                  <div className="grid grid-cols-2 gap-px bg-zinc/20 sm:grid-cols-4">
                     {regionPorts.map((port) => (
                       <PortCell
                         key={`${port.snake}.${port.port}`}
@@ -139,10 +116,7 @@ export function StageBoxPatchDiagram({
       })}
 
       {model.spare.length > 0 ? (
-        <p
-          className="border-t px-3 py-2 text-[11px]"
-          style={{ borderColor: HAIRLINE, color: MUTED }}
-        >
+        <p className="border-t border-zinc/20 px-3 py-2 text-[11px] text-muted-foreground">
           <span className="font-semibold uppercase tracking-wide">Leave empty</span>
           {" · "}
           {model.spare.join(" · ")}
@@ -150,10 +124,7 @@ export function StageBoxPatchDiagram({
       ) : null}
 
       {model.warnings.length > 0 ? (
-        <ul
-          className="space-y-1 border-t px-3 py-2 text-xs"
-          style={{ borderColor: HAIRLINE, color: MUTED }}
-        >
+        <ul className="space-y-1 border-t border-zinc/20 px-3 py-2 text-xs text-muted-foreground">
           {model.warnings.slice(0, 6).map((warning) => (
             <li key={warning}>{warning}</li>
           ))}
@@ -169,63 +140,58 @@ function PortCell({ port, colored }: { port: StageBoxPort; colored: boolean }) {
   const physical = change === "physical";
   const bg =
     change === "same"
-      ? SAME_BG
+      ? "bg-emerald/10"
       : physical
-        ? PHYSICAL_BG
+        ? "bg-amber/10"
         : muted
-          ? MUTE_BG
-          : "#fff";
+          ? "bg-muted"
+          : "bg-background";
 
   return (
-    <div
-      className="flex min-h-[4.5rem] flex-col gap-1 px-2.5 py-2"
-      style={{ background: bg }}
-    >
+    <div className={cn("flex min-h-[4.5rem] flex-col gap-1 px-2.5 py-2", bg)}>
       <div className="flex items-center justify-between gap-1">
         <span
-          className="font-mono text-[11px] font-semibold tabular-nums"
-          style={{ color: muted ? "#64748b" : INK }}
+          className={cn(
+            "font-mono text-[11px] font-semibold tabular-nums",
+            muted ? "text-muted-foreground" : "text-foreground",
+          )}
         >
           {port.portLabel}
         </span>
-        <span className="font-mono text-[10px]" style={{ color: MUTED }}>
+        <span className="font-mono text-[10px] text-muted-foreground">
           {port.strip === null ? "—" : `Ch ${port.strip}`}
         </span>
       </div>
 
       {physical && port.previousLabel ? (
         <>
-          <p className="text-sm font-medium leading-tight" style={{ color: INK }}>
+          <p className="text-sm font-medium leading-tight text-foreground">
             {port.previousLabel}
-            <span style={{ color: MUTED }}> → </span>
+            <span className="text-muted-foreground"> → </span>
             {port.label}
           </p>
-          <p className="text-[10px]" style={{ color: MUTED }}>
+          <p className="text-[10px] text-muted-foreground">
             {port.templateLabel} · {port.aes50}
           </p>
         </>
       ) : (
         <p
-          className="text-sm font-medium leading-tight"
-          style={{
-            color: muted ? "#334155" : INK,
-            textDecoration: muted ? "line-through" : undefined,
-            textDecorationColor: muted ? "#0f172a" : undefined,
-            textDecorationThickness: muted ? "2px" : undefined,
-            opacity: muted ? 0.75 : 1,
-          }}
+          className={cn(
+            "text-sm font-medium leading-tight",
+            muted ? "text-zinc/75 line-through" : "text-foreground",
+          )}
         >
           {port.label}
         </p>
       )}
 
       {muted ? (
-        <p className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: "#334155" }}>
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc">
           Mute
         </p>
       ) : null}
       {physical ? (
-        <p className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: "#92400e" }}>
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-amber/90">
           Swap on stage
         </p>
       ) : null}
@@ -243,10 +209,7 @@ function PortCell({ port, colored }: { port: StageBoxPort; colored: boolean }) {
 
 function Tag({ children }: { children: string }) {
   return (
-    <span
-      className="rounded px-1 py-0.5 text-[9px] font-medium uppercase"
-      style={{ background: HEADER, color: MUTED }}
-    >
+    <span className="rounded bg-muted px-1 py-0.5 text-[9px] font-medium uppercase text-muted-foreground">
       {children}
     </span>
   );
