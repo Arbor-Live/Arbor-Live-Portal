@@ -17,7 +17,7 @@ import {
 import { PublicEventHeader } from "@/components/public/public-event-header";
 import { PublicEventTimetable } from "@/components/public/public-event-timetable";
 import { PublicEventCrew } from "@/components/public/public-event-crew";
-import { PublicEventContacts } from "@/components/public/public-event-contacts";
+import { PublicEventContacts, buildInheritedContactRows } from "@/components/public/public-event-contacts";
 import { PublicQuoteFinancials } from "@/components/public/public-quote-financials";
 import { PublicPaymentProofSection } from "@/components/public/public-payment-proof-section";
 import { PublicPaymentContactsSection } from "@/components/public/public-payment-contacts-section";
@@ -102,6 +102,8 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
   const approve = useMutation(api.eventRequests.approveQuoteByRequestToken);
   const requestChanges = useMutation(api.eventRequests.requestQuoteChangesByRequestToken);
   const updatePaymentContacts = useMutation(api.eventRequests.updatePaymentContactsByRequestToken);
+  const addEventContact = useMutation(api.eventRequests.addEventContactByRequestToken);
+  const deleteEventContact = useMutation(api.eventRequests.deleteEventContactByRequestToken);
   const submitPaymentProof = useMutation(api.paymentProof.submitByRequestToken);
 
   const [activeTab, setActiveTab] = useState(() => {
@@ -421,6 +423,15 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
             <PublicEventContacts
               manager={selectedEvent.contacts.manager}
               dayOfLead={selectedEvent.contacts.dayOfLead}
+              inherited={buildInheritedContactRows(selectedEvent.contacts)}
+              manual={selectedEvent.contacts.manual}
+              canEdit={quoteData?.invoice.clientApprovalStatus === "approved"}
+              onAdd={async (input) => {
+                await addEventContact({ token, eventId: selectedEvent.id, ...input });
+              }}
+              onDelete={async (contactId) => {
+                await deleteEventContact({ token, eventId: selectedEvent.id, contactId });
+              }}
             />
             <PublicEventTimetable blocks={selectedEvent.scheduleBlocks} />
             <PublicEventCrew crew={selectedEvent.crewRoster} />

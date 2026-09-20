@@ -202,18 +202,18 @@ export function EventContactsSection({
               className="grid gap-2 sm:grid-cols-[1fr_1fr_1fr_1fr_auto]"
             >
               <Input
-                aria-label="Name"
-                placeholder="Name"
-                value={draft.name}
-                disabled={!canEdit}
-                onChange={(event) => updateDraft(draft.key, { name: event.target.value })}
-              />
-              <Input
                 aria-label="Position"
                 placeholder="Position"
                 value={draft.position}
                 disabled={!canEdit}
                 onChange={(event) => updateDraft(draft.key, { position: event.target.value })}
+              />
+              <Input
+                aria-label="Name"
+                placeholder="Name"
+                value={draft.name}
+                disabled={!canEdit}
+                onChange={(event) => updateDraft(draft.key, { name: event.target.value })}
               />
               <Input
                 aria-label="Email"

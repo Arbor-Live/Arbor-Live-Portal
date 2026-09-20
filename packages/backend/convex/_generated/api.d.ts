@@ -165,6 +165,7 @@ import type * as lib_packageContentMigration from "../lib/packageContentMigratio
 import type * as lib_paymentProof from "../lib/paymentProof.js";
 import type * as lib_publicArtistProfile from "../lib/publicArtistProfile.js";
 import type * as lib_publicCalendar from "../lib/publicCalendar.js";
+import type * as lib_publicEventContacts from "../lib/publicEventContacts.js";
 import type * as lib_publicEvents from "../lib/publicEvents.js";
 import type * as lib_publicQuoteView from "../lib/publicQuoteView.js";
 import type * as lib_publicReferenceIds from "../lib/publicReferenceIds.js";
@@ -389,6 +390,7 @@ declare const fullApi: ApiFromModules<{
   "lib/paymentProof": typeof lib_paymentProof;
   "lib/publicArtistProfile": typeof lib_publicArtistProfile;
   "lib/publicCalendar": typeof lib_publicCalendar;
+  "lib/publicEventContacts": typeof lib_publicEventContacts;
   "lib/publicEvents": typeof lib_publicEvents;
   "lib/publicQuoteView": typeof lib_publicQuoteView;
   "lib/publicReferenceIds": typeof lib_publicReferenceIds;
