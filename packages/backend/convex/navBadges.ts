@@ -18,7 +18,7 @@ import {
   getDisciplinesForEventMatching,
   resolveProfileMembership,
 } from "./lib/userVerticals";
-import { listMyEventsNeedingPhotos, listMyPostMortems } from "./lib/myEventActions";
+import { countPendingPostEventWork, listMyPostEventWork } from "./lib/myEventActions";
 
 /** Cap events scanned for the unconfirmed-crew badge (full board uses its own query). */
 const UNCONFIRMED_CREW_EVENT_CAP = 40;
@@ -59,8 +59,7 @@ export const getNavBadges = query({
     pendingBandPaymentActions: v.number(),
     quoteChangesRequested: v.number(),
     pendingEquipmentBorrowRequests: v.number(),
-    pendingPostMortems: v.number(),
-    pendingEventPhotos: v.number(),
+    pendingPostEventWork: v.number(),
   }),
   handler: async (ctx, args) => {
     const user = await requireAuth(ctx);
@@ -84,8 +83,7 @@ export const getNavBadges = query({
       pendingBandPaymentActions,
       quoteChangesRequested,
       pendingEquipmentBorrowRequests,
-      pendingPostMortems,
-      pendingEventPhotos,
+      pendingPostEventWork,
     ] = await Promise.all([
       args.includeArborInternal
         ? countMyPendingAvailability(ctx, getUserId(user), args.now)
@@ -101,10 +99,7 @@ export const getNavBadges = query({
       args.includeArborInternal ? countQuoteChangesRequested(ctx) : Promise.resolve(0),
       args.includeAdmin ? countPendingEquipmentBorrowRequests(ctx) : Promise.resolve(0),
       args.includeArborInternal && args.includeMyEventActions
-        ? countMyPendingPostMortems(ctx, getUserId(user), args.now)
-        : Promise.resolve(0),
-      args.includeArborInternal && args.includeMyEventActions
-        ? countMyPendingEventPhotos(ctx, getUserId(user), args.now)
+        ? countMyPendingPostEventWork(ctx, getUserId(user), args.now)
         : Promise.resolve(0),
     ]);
 
@@ -118,8 +113,7 @@ export const getNavBadges = query({
       pendingBandPaymentActions,
       quoteChangesRequested,
       pendingEquipmentBorrowRequests,
-      pendingPostMortems,
-      pendingEventPhotos,
+      pendingPostEventWork,
     };
   },
 });
@@ -200,13 +194,8 @@ async function countOpenBookingRequests(ctx: QueryCtx) {
   return submitted.length + actionRequired.length + legacyInReview.length;
 }
 
-async function countMyPendingPostMortems(ctx: QueryCtx, userId: string, now: number) {
-  const rows = await listMyPostMortems(ctx, userId, now);
-  return rows.filter((row) => !row.submitted).length;
-}
-
-async function countMyPendingEventPhotos(ctx: QueryCtx, userId: string, now: number) {
-  return (await listMyEventsNeedingPhotos(ctx, userId, now)).length;
+async function countMyPendingPostEventWork(ctx: QueryCtx, userId: string, now: number) {
+  return countPendingPostEventWork(await listMyPostEventWork(ctx, userId, now));
 }
 
 async function countSubmittedBandApplications(ctx: QueryCtx) {

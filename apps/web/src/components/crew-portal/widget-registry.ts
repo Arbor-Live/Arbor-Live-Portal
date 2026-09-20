@@ -1,6 +1,6 @@
 import { PendingAvailabilityWidget } from "@/components/crew-portal/widgets/pending-availability-widget";
 import { ScheduledEventsWidget } from "@/components/crew-portal/widgets/scheduled-events-widget";
-import { EventsNeedingPhotosWidget } from "@/components/crew-portal/widgets/events-needing-photos-widget";
+import { PostEventWorkWidget } from "@/components/crew-portal/widgets/post-event-work-widget";
 import { PayPeriodSummaryWidget } from "@/components/crew-portal/widgets/pay-period-summary-widget";
 import { BorrowRequestsWidget } from "@/components/crew-portal/widgets/borrow-requests-widget";
 import type { DashboardWidgetDefinition } from "@/components/dashboard/customizable-widget-dashboard";
@@ -23,9 +23,9 @@ export const DEFAULT_CREW_WIDGETS: CrewWidget[] = [
     component: ScheduledEventsWidget,
   },
   {
-    id: "needs-photos",
-    title: "Event photos",
-    component: EventsNeedingPhotosWidget,
+    id: "post-event-work",
+    title: "Post-event work",
+    component: PostEventWorkWidget,
   },
   {
     id: "pay-period-summary",

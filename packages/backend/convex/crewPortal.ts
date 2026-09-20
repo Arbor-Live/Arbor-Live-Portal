@@ -17,7 +17,7 @@ import {
 import { getDisciplinesForEventMatching, resolveProfileMembership } from "./lib/userVerticals";
 import { buildUserProfileImageByUserId } from "./lib/userProfileImage";
 import { normalizeEventStatus } from "./lib/eventStatus";
-import { listMyEventsNeedingPhotos as listMyEventsNeedingPhotosForUser } from "./lib/myEventActions";
+import { listMyPostEventWork as listMyPostEventWorkForUser } from "./lib/myEventActions";
 
 const scheduleBlockSummaryValue = v.object({
   _id: v.id("eventScheduleBlocks"),
@@ -48,11 +48,16 @@ const scheduledEventValue = v.object({
   shiftCount: v.number(),
 });
 
-const needsPhotosEventValue = v.object({
+const postEventWorkValue = v.object({
   eventId: v.id("events"),
   title: v.string(),
   venueName: v.optional(v.string()),
   endAt: v.number(),
+  feedbackSubmitted: v.boolean(),
+  rating: v.optional(v.number()),
+  whatWentWell: v.optional(v.string()),
+  whatCouldImprove: v.optional(v.string()),
+  mediaResolved: v.boolean(),
 });
 
 const payPeriodSummaryValue = v.object({
@@ -190,15 +195,16 @@ export const listMyScheduledEvents = query({
   },
 });
 
-export const listMyEventsNeedingPhotos = query({
+/** One combined feed of the user's ended events and their outstanding work. */
+export const listMyPostEventWork = query({
   args: {
     now: v.number(),
   },
-  returns: v.array(needsPhotosEventValue),
+  returns: v.array(postEventWorkValue),
   handler: async (ctx, args) => {
     const user = await requireAuth(ctx);
     await requireArborInternalContext(ctx);
-    return await listMyEventsNeedingPhotosForUser(ctx, getUserId(user), args.now);
+    return await listMyPostEventWorkForUser(ctx, getUserId(user), args.now);
   },
 });
 

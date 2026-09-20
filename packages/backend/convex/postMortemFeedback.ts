@@ -3,8 +3,9 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import { SITE_URL } from "./email/constants";
-import { getUserId, requireAuth } from "./lib/auth";
-import { listMyPostMortems as listMyPostMortemRows } from "./lib/myEventActions";
+import { findAuthUsersByIds, getUserId, requireAuth } from "./lib/auth";
+import { canEditEvent } from "./lib/eventAccess";
+import { isAssignedToEvent } from "./lib/myEventActions";
 import { enforceRateLimit, HOUR_MS } from "./rateLimit";
 
 const POST_MORTEM_TOKEN_ALPHABET = "0123456789ABCDEFGHJKLMNPQRSTUVWXYZ";
@@ -134,7 +135,7 @@ export const submitByToken = mutation({
   },
 });
 
-/** Whether the signed-in lead still owes a post-mortem for this event. */
+/** Whether the signed-in crew member / lead still owes a review for this event. */
 export const getMyPostMortemForEvent = query({
   args: { eventId: v.id("events") },
   returns: v.union(
@@ -153,7 +154,7 @@ export const getMyPostMortemForEvent = query({
     const userId = getUserId(user);
     const event = await ctx.db.get(args.eventId);
     if (!event) return null;
-    if (event.dayOfLeadUserId !== userId && event.eventManagerUserId !== userId) return null;
+    if (!(await isAssignedToEvent(ctx, args.eventId, userId))) return null;
 
     const row = await ctx.db
       .query("postMortemFeedback")
@@ -173,7 +174,7 @@ export const getMyPostMortemForEvent = query({
   },
 });
 
-/** Submit the in-app post-mortem as the signed-in day-of lead / manager. */
+/** Submit the in-app post-event review as a signed-in crew member or lead. */
 export const submitForEvent = mutation({
   args: {
     eventId: v.id("events"),
@@ -187,8 +188,8 @@ export const submitForEvent = mutation({
     const userId = getUserId(user);
     const event = await ctx.db.get(args.eventId);
     if (!event) throw new Error("Event not found.");
-    if (event.dayOfLeadUserId !== userId && event.eventManagerUserId !== userId) {
-      throw new Error("Only the day-of lead or event manager can submit this post-mortem.");
+    if (!(await isAssignedToEvent(ctx, args.eventId, userId))) {
+      throw new Error("You are not assigned to this event.");
     }
     if (event.endAt >= Date.now()) {
       throw new Error("The post-mortem opens once the event has ended.");
@@ -214,22 +215,95 @@ export const submitForEvent = mutation({
   },
 });
 
-/** Post-mortems the signed-in user owes (and has already filed). */
-export const listMyPostMortems = query({
-  args: { now: v.number() },
-  returns: v.array(
-    v.object({
-      eventId: v.id("events"),
-      title: v.string(),
-      venueName: v.optional(v.string()),
-      endAt: v.number(),
-      submitted: v.boolean(),
-      submittedAt: v.optional(v.number()),
-      rating: v.optional(v.number()),
-    }),
-  ),
+const postMortemSummaryEntryValue = v.object({
+  id: v.id("postMortemFeedback"),
+  personName: v.optional(v.string()),
+  role: v.optional(v.string()),
+  rating: v.number(),
+  whatWentWell: v.string(),
+  whatCouldImprove: v.string(),
+  submittedAt: v.number(),
+});
+
+/**
+ * Every review filed for an event (crew + lead), with the rollup. Leads and
+ * admins only.
+ */
+export const getEventPostMortemSummary = query({
+  args: { eventId: v.id("events") },
+  returns: v.object({
+    count: v.number(),
+    averageRating: v.union(v.number(), v.null()),
+    entries: v.array(postMortemSummaryEntryValue),
+  }),
   handler: async (ctx, args) => {
-    const user = await requireAuth(ctx);
-    return await listMyPostMortemRows(ctx, getUserId(user), args.now);
+    const event = await ctx.db.get(args.eventId);
+    if (!event) throw new Error("Event not found.");
+    if (!(await canEditEvent(ctx, event))) {
+      throw new Error("You do not have permission to view this event's reviews.");
+    }
+
+    const rows = await ctx.db
+      .query("postMortemFeedback")
+      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+      .take(500);
+    const submitted = rows.filter(
+      (
+        row,
+      ): row is typeof row & {
+        submittedAt: number;
+        rating: number;
+        whatWentWell: string;
+        whatCouldImprove: string;
+      } =>
+        row.submittedAt != null &&
+        row.rating != null &&
+        row.whatWentWell != null &&
+        row.whatCouldImprove != null,
+    );
+
+    const shifts = await ctx.db
+      .query("eventCrewShifts")
+      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+      .take(500);
+    const roleByUser = new Map<string, string>();
+    for (const shift of shifts) {
+      const uid = shift.userId?.trim();
+      if (!uid || roleByUser.has(uid)) continue;
+      roleByUser.set(uid, shift.role);
+    }
+
+    const userByKey = await findAuthUsersByIds(
+      ctx,
+      submitted.map((row) => row.userId),
+    );
+
+    const entries = submitted
+      .map((row) => {
+        const user = userByKey.get(row.userId);
+        const leadRole =
+          event.dayOfLeadUserId === row.userId
+            ? "Day-of lead"
+            : event.eventManagerUserId === row.userId
+              ? "Event manager"
+              : undefined;
+        return {
+          id: row._id,
+          personName: user?.name ?? user?.email ?? undefined,
+          role: roleByUser.get(row.userId) ?? leadRole,
+          rating: row.rating,
+          whatWentWell: row.whatWentWell,
+          whatCouldImprove: row.whatCouldImprove,
+          submittedAt: row.submittedAt,
+        };
+      })
+      .sort((a, b) => b.submittedAt - a.submittedAt);
+
+    const sum = entries.reduce((total, entry) => total + entry.rating, 0);
+    return {
+      count: entries.length,
+      averageRating: entries.length > 0 ? sum / entries.length : null,
+      entries,
+    };
   },
 });
