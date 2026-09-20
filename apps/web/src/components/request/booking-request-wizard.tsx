@@ -99,15 +99,9 @@ type ContactLookup =
   | {
       found: true;
       firstName: string;
-      lastName: string;
-      phone: string;
       groups: ReturningGroup[];
     }
   | { found: false };
-
-function contactDetailsComplete(lookup: Extract<ContactLookup, { found: true }>) {
-  return Boolean(lookup.firstName.trim() && lookup.lastName.trim() && lookup.phone.trim());
-}
 
 const choiceClassName = QUESTIONNAIRE_CHOICE_CLASSNAME;
 
@@ -159,18 +153,17 @@ export function BookingRequestWizard() {
   const servicesNeeded = form.watch("servicesNeeded");
   const skipSponsor = requestContext === "group" || requestContext === "personal";
   const showReturningUser = contactLookup?.found === true;
-  const skipContact = contactLookup?.found === true && contactDetailsComplete(contactLookup);
   const includeLighting = servicesNeeded.includes("Lighting");
 
   const activeSteps = useMemo(
     () =>
       getActiveSteps({
         showReturningUser,
-        skipContact,
+        skipContact: false,
         skipSponsor,
         includeLighting,
       }).filter((step) => step.id !== "thankYou"),
-    [showReturningUser, skipContact, skipSponsor, includeLighting],
+    [showReturningUser, skipSponsor, includeLighting],
   );
 
   const items = useMemo<QuestionnaireItemDefinition[]>(
@@ -241,12 +234,8 @@ export function BookingRequestWizard() {
     setContactLookup(lookup);
     if (lookup.found) {
       form.setValue("firstName", lookup.firstName, { shouldDirty: true });
-      form.setValue("lastName", lookup.lastName, { shouldDirty: true });
-      form.setValue("phone", lookup.phone, { shouldDirty: true });
     } else if (contactLookup?.found) {
       form.setValue("firstName", "", { shouldDirty: true });
-      form.setValue("lastName", "", { shouldDirty: true });
-      form.setValue("phone", "", { shouldDirty: true });
     }
     return lookup;
   }, [contactLookup, convex, form]);
@@ -274,7 +263,7 @@ export function BookingRequestWizard() {
           const lookup = await lookupEmail();
           const nextSteps = getActiveSteps({
             showReturningUser: lookup.found,
-            skipContact: lookup.found && contactDetailsComplete(lookup),
+            skipContact: false,
             skipSponsor,
             includeLighting,
           }).filter((entry) => entry.id !== "thankYou");

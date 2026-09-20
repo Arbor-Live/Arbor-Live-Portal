@@ -1195,6 +1195,7 @@ export default defineSchema({
     resolvedAt: v.number(),
   })
     .index("by_userId", ["userId"])
+    .index("by_eventId", ["eventId"])
     .index("by_eventId_and_userId", ["eventId", "userId"]),
 
   eventCrewAvailabilityResponses: defineTable({
@@ -1349,7 +1350,8 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_token", ["token"])
-    .index("by_invitationId", ["invitationId"]),
+    .index("by_invitationId", ["invitationId"])
+    .index("by_createdAt", ["createdAt"]),
 
   emailNotifications: defineTable({
     template: v.union(
@@ -1850,6 +1852,7 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_slug", ["slug"])
+    .index("by_eventId", ["eventId"])
     .index("by_updatedAt", ["updatedAt"])
     .index("by_expiresAt", ["expiresAt"]),
 
@@ -1944,6 +1947,7 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   })
+    .index("by_eventId", ["eventId"])
     .index("by_eventId_and_position", ["eventId", "position"])
     .index("by_eventId_and_status", ["eventId", "status"])
     .index("by_status_and_performedAt", ["status", "performedAt"])

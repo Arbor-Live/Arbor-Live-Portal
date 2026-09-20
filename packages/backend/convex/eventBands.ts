@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
-import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
+import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { components, internal } from "./_generated/api";
 import { requireArborInternalContext, requireAuth, requireBandContext, getUserId } from "./lib/auth";
 import { inviteEmailToBandOrg, provisionBandOrganization } from "./lib/bandOrgInvite";
@@ -419,22 +419,89 @@ export const listShowsForActiveBand = query({
   },
 });
 
+const syncParticipationStatusValue = v.union(
+  v.literal("draft"),
+  v.literal("pending_onboarding"),
+  v.literal("pending_payee"),
+  v.literal("pending_email"),
+  v.literal("awaiting_confirmation"),
+  v.literal("confirmed"),
+  v.literal("paid"),
+);
+
+type SyncParticipationStatus =
+  | "draft"
+  | "pending_onboarding"
+  | "pending_payee"
+  | "pending_email"
+  | "awaiting_confirmation"
+  | "confirmed"
+  | "paid";
+
+const SYNC_PARTICIPATION_STATUSES: SyncParticipationStatus[] = [
+  "draft",
+  "pending_onboarding",
+  "pending_payee",
+  "pending_email",
+  "awaiting_confirmation",
+  "confirmed",
+  "paid",
+];
+
+const SYNC_PARTICIPATIONS_BATCH = 200;
+
+async function runSyncParticipationsPage(
+  ctx: MutationCtx,
+  status: SyncParticipationStatus,
+  cursor: string | null,
+): Promise<number> {
+  const page = await ctx.db
+    .query("eventBandPayments")
+    .withIndex("by_status", (q) => q.eq("status", status))
+    .paginate({ cursor, numItems: SYNC_PARTICIPATIONS_BATCH });
+
+  let synced = 0;
+  for (const payment of page.page) {
+    await upsertEventBandParticipation(ctx, {
+      eventId: payment.eventId,
+      organizationId: payment.organizationId,
+      role: "headliner",
+    });
+    synced += 1;
+  }
+
+  const nextStatus = page.isDone
+    ? SYNC_PARTICIPATION_STATUSES[SYNC_PARTICIPATION_STATUSES.indexOf(status) + 1]
+    : status;
+  if (nextStatus) {
+    await ctx.scheduler.runAfter(0, internal.eventBands.syncParticipationsPage, {
+      status: nextStatus,
+      cursor: page.isDone ? null : page.continueCursor,
+    });
+  }
+  return synced;
+}
+
+export const syncParticipationsPage = internalMutation({
+  args: {
+    status: syncParticipationStatusValue,
+    cursor: v.union(v.string(), v.null()),
+  },
+  returns: v.object({ synced: v.number() }),
+  handler: async (ctx, args) => {
+    const synced = await runSyncParticipationsPage(ctx, args.status, args.cursor);
+    return { synced };
+  },
+});
+
 export const syncParticipationsFromPayments = mutation({
   args: {},
   returns: v.object({ synced: v.number() }),
   handler: async (ctx) => {
     await requireArborInternalContext(ctx);
-    const payments = await ctx.db.query("eventBandPayments").take(500);
-    let synced = 0;
-    for (const payment of payments) {
-      if (payment.status === "cancelled") continue;
-      await upsertEventBandParticipation(ctx, {
-        eventId: payment.eventId,
-        organizationId: payment.organizationId,
-        role: "headliner",
-      });
-      synced += 1;
-    }
+    // Cancelled payments are skipped by only walking the non-cancelled statuses
+    // on `by_status`, so the full backlog drains instead of truncating at 500.
+    const synced = await runSyncParticipationsPage(ctx, "draft", null);
     return { synced };
   },
 });

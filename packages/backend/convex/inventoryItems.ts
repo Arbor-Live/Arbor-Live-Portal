@@ -9,6 +9,7 @@ import { resolveInventoryItemByScan } from "./lib/rentalFulfillment";
 const MAX_LIST_LIMIT = 2000;
 const MAX_ASSET_ID_LIMIT = 5000;
 const MAX_BATCH_ITEMS = 200;
+const MAX_CONTAINMENT_DESCENDANTS = 5000;
 
 /** Items without a tag sort/display by serial. */
 function itemSortKey(item: { assetId?: string; serialNumber?: string }): string {
@@ -20,6 +21,7 @@ async function cascadeLocationToDescendants(
   rootItemId: Id<"inventoryItems">,
   storageLocationId: Id<"storageLocations"> | undefined,
 ) {
+  const visited = new Set<string>([rootItemId]);
   const queue: Id<"inventoryItems">[] = [rootItemId];
   while (queue.length > 0) {
     const currentId = queue.shift()!;
@@ -29,6 +31,14 @@ async function cascadeLocationToDescendants(
       .collect();
 
     for (const child of children) {
+      // A containment cycle (A in B, B in A) would otherwise loop forever.
+      if (visited.has(child._id)) continue;
+      visited.add(child._id);
+      if (visited.size > MAX_CONTAINMENT_DESCENDANTS) {
+        throw new Error(
+          `Containment cascade exceeded ${MAX_CONTAINMENT_DESCENDANTS} items (possible cycle) at ${child._id}.`,
+        );
+      }
       await ctx.db.patch(child._id, {
         storageLocationId,
         updatedAt: Date.now(),

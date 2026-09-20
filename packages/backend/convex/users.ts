@@ -17,6 +17,7 @@ import {
   requireBandContext,
   type AuthUser,
 } from "./lib/auth";
+import { resolveGlobalRoleForOrganization } from "./lib/globalRole";
 import {
   markInvitationAccepted,
   markInvitationCancelled,
@@ -222,7 +223,7 @@ function toSlug(input: string): string {
  */
 async function fetchAllBetterAuthRows<T>(
   ctx: QueryCtx | MutationCtx,
-  model: "user" | "organization",
+  model: "user" | "organization" | "invitation",
   pageSize: number,
   maxPages = 50,
 ): Promise<T[]> {
@@ -246,6 +247,32 @@ async function getAllAuthUsers(ctx: QueryCtx | MutationCtx) {
 
 async function getAllOrganizations(ctx: QueryCtx | MutationCtx) {
   return await fetchAllBetterAuthRows<OrganizationRow>(ctx, "organization", 500);
+}
+
+async function getAllInvitations(ctx: QueryCtx | MutationCtx) {
+  return await fetchAllBetterAuthRows<InvitationRow>(ctx, "invitation", 500);
+}
+
+/**
+ * Drain `pendingUserInvites` newest-first through the `by_createdAt` index.
+ * A fixed `.take(2000)` silently dropped older rows (taking their teams/
+ * verticals metadata with them) once the table outgrew the cap. Bounded by
+ * `maxPages` as a runaway guard.
+ */
+async function getAllPendingInvites(ctx: QueryCtx | MutationCtx) {
+  const rows: Doc<"pendingUserInvites">[] = [];
+  let cursor: string | null = null;
+  for (let page = 0; page < 50; page += 1) {
+    const result = await ctx.db
+      .query("pendingUserInvites")
+      .withIndex("by_createdAt")
+      .order("desc")
+      .paginate({ cursor, numItems: 500 });
+    rows.push(...result.page);
+    if (result.isDone) break;
+    cursor = result.continueCursor;
+  }
+  return rows;
 }
 
 async function getOrganizationById(ctx: QueryCtx | MutationCtx, organizationId: string) {
@@ -949,6 +976,34 @@ export const deleteArchivedBandOrganizationAdmin = mutation({
       throw new Error("Only archived organizations can be deleted. Archive it first.");
     }
 
+    // Delete the auth-side records first. These run in the same transaction as
+    // the Convex deletes below, so aborting here leaves the organization fully
+    // intact rather than half-deleted.
+    try {
+      await ctx.runMutation(components.betterAuth.adapter.deleteMany as any, {
+        input: {
+          model: "member",
+          where: [{ field: "organizationId", value: args.organizationId }],
+        },
+      });
+      await ctx.runMutation(components.betterAuth.adapter.deleteMany as any, {
+        input: {
+          model: "invitation",
+          where: [{ field: "organizationId", value: args.organizationId }],
+        },
+      });
+      await ctx.runMutation(components.betterAuth.adapter.deleteOne, {
+        input: {
+          model: "organization",
+          where: [{ field: "_id", value: args.organizationId }],
+        },
+      });
+    } catch {
+      throw new Error(
+        "Could not delete the organization's auth records; nothing was deleted. Please retry.",
+      );
+    }
+
     // Safety net in case memberships were added back after archiving.
     await deactivateOrgMembers(ctx, args.organizationId, now);
 
@@ -976,42 +1031,26 @@ export const deleteArchivedBandOrganizationAdmin = mutation({
       await ctx.db.delete(row._id);
     }
 
+    const bandPayments = await ctx.db
+      .query("eventBandPayments")
+      .withIndex("by_organizationId", (q) => q.eq("organizationId", args.organizationId))
+      .take(1000);
+    for (const row of bandPayments) {
+      await ctx.db.delete(row._id);
+    }
+
+    const bandRiders = await ctx.db
+      .query("bandRiders")
+      .withIndex("by_organizationId", (q) => q.eq("organizationId", args.organizationId))
+      .take(1000);
+    for (const row of bandRiders) {
+      await ctx.db.delete(row._id);
+    }
+
     await clearActiveOrgSelections(ctx, args.organizationId);
     const keysToRelease = collectKeysFromOrganizationProfile(profile);
     await ctx.db.delete(profile._id);
     await releaseR2KeysIfUnreferenced(ctx, keysToRelease);
-
-    // Best-effort Better Auth cascade — never block the Convex-side delete on it.
-    try {
-      await ctx.runMutation(components.betterAuth.adapter.deleteMany as any, {
-        input: {
-          model: "member",
-          where: [{ field: "organizationId", value: args.organizationId }],
-        },
-      });
-    } catch {
-      // ignore
-    }
-    try {
-      await ctx.runMutation(components.betterAuth.adapter.deleteMany as any, {
-        input: {
-          model: "invitation",
-          where: [{ field: "organizationId", value: args.organizationId }],
-        },
-      });
-    } catch {
-      // ignore
-    }
-    try {
-      await ctx.runMutation(components.betterAuth.adapter.deleteOne, {
-        input: {
-          model: "organization",
-          where: [{ field: "_id", value: args.organizationId }],
-        },
-      });
-    } catch {
-      // ignore
-    }
 
     return { ok: true };
   },
@@ -1531,12 +1570,8 @@ export const listInvitationsAdmin = query({
     const orgById = new Map(orgs.map((org) => [getRecordId(org), org]));
     const inviterUsers = await getAllAuthUsers(ctx);
     const inviterById = new Map(inviterUsers.map((user) => [getUserId(user), user]));
-    const result = await ctx.runQuery(components.betterAuth.adapter.findMany, {
-      model: "invitation",
-      paginationOpts: { cursor: null, numItems: 2000 },
-    });
-    const invites = (result?.page ?? []) as InvitationRow[];
-    const pendingInvites = await ctx.db.query("pendingUserInvites").take(2000);
+    const invites = await getAllInvitations(ctx);
+    const pendingInvites = await getAllPendingInvites(ctx);
     const pendingByInvitationId = new Map(
       pendingInvites.map((row) => [row.invitationId, row]),
     );
@@ -1697,11 +1732,7 @@ export const resendInviteAdmin = mutation({
   args: { invitationId: v.string() },
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
-    const invitesResult = await ctx.runQuery(components.betterAuth.adapter.findMany, {
-      model: "invitation",
-      paginationOpts: { cursor: null, numItems: 2000 },
-    });
-    const invite = ((invitesResult?.page ?? []) as InvitationRow[]).find(
+    const invite = (await getAllInvitations(ctx)).find(
       (row) => getRecordId(row) === args.invitationId,
     );
     if (!invite) throw new Error("Invitation not found.");
@@ -1756,11 +1787,7 @@ async function userExistsForInvite(ctx: MutationCtx | QueryCtx, email: string) {
 }
 
 async function getInvitationById(ctx: MutationCtx | QueryCtx, invitationId: string) {
-  const invitesResult = await ctx.runQuery(components.betterAuth.adapter.findMany, {
-    model: "invitation",
-    paginationOpts: { cursor: null, numItems: 2000 },
-  });
-  const invite = ((invitesResult?.page ?? []) as InvitationRow[]).find(
+  const invite = (await getAllInvitations(ctx)).find(
     (row) => getRecordId(row) === invitationId,
   );
   if (!invite) throw new Error("Invitation not found.");
@@ -1843,6 +1870,11 @@ export const createUserAdmin = mutation({
   },
   handler: async (ctx, args) => {
     const membershipRole = await normalizeMembershipRole(ctx, args.organizationId, args.role);
+    const globalRole = await resolveGlobalRoleForOrganization(
+      ctx,
+      args.organizationId,
+      membershipRole,
+    );
     const adminUser = await requireAdmin(ctx);
     const adminId = getUserId(adminUser) || undefined;
     const email = args.email.trim().toLowerCase();
@@ -1878,7 +1910,7 @@ export const createUserAdmin = mutation({
             name: args.name.trim() || email,
             email,
             emailVerified: true,
-            role: membershipRole === "org_admin" ? "admin" : membershipRole === "org_member" ? "member" : membershipRole,
+            role: globalRole,
             createdAt: now,
             updatedAt: now,
           },
@@ -1905,7 +1937,7 @@ export const createUserAdmin = mutation({
           where: [{ field: "email", value: email }],
           update: {
             name: args.name.trim() || existing.name || email,
-            role: membershipRole === "org_admin" ? "admin" : membershipRole === "org_member" ? "member" : membershipRole,
+            role: globalRole,
             updatedAt: now,
           },
         },
@@ -2547,15 +2579,12 @@ export const listPendingInvitesForActiveOrganization = query({
   args: {},
   handler: async (ctx) => {
     const context = await requireBandContext(ctx);
-    const result = await ctx.runQuery(components.betterAuth.adapter.findMany, {
-      model: "invitation",
-      paginationOpts: { cursor: null, numItems: 500 },
-    });
-    const pendingMeta = await ctx.db.query("pendingUserInvites").take(2000);
+    const invites = await getAllInvitations(ctx);
+    const pendingMeta = await getAllPendingInvites(ctx);
     const metaByInvitationId = new Map(
       pendingMeta.map((row) => [row.invitationId, row]),
     );
-    return ((result?.page ?? []) as InvitationRow[])
+    return invites
       .filter((invite) => invite.organizationId === context.organizationId && invite.status === "pending")
       .map((invite) => {
         const invitationId = getRecordId(invite);
@@ -2583,6 +2612,17 @@ export const inviteMemberToActiveOrganization = mutation({
     const context = await requireBandContext(ctx);
     const admin = await requireAuth(ctx);
     const adminId = getUserId(admin);
+    if (!isAdmin(admin)) {
+      const callerMembership = await ctx.db
+        .query("userOrganizationMemberships")
+        .withIndex("by_userId_and_organizationId", (q) =>
+          q.eq("userId", adminId).eq("organizationId", context.organizationId),
+        )
+        .unique();
+      if (!callerMembership?.active || callerMembership.role !== "org_admin") {
+        throw new Error("Only band admins can invite members.");
+      }
+    }
     const now = Date.now();
     const email = args.email.trim().toLowerCase();
     if (!email) throw new Error("Email is required.");

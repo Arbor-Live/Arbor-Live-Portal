@@ -6,6 +6,7 @@ import {
   getPaymentDueAt,
   isSubmissionActive,
 } from "./invoicePaymentStatus";
+import { isRequestPublicTokenExpired } from "./requestToken";
 
 export const PAYMENT_PROOF_REMINDER_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -272,6 +273,7 @@ export async function resolvePortalTokenForInvoice(
   if (invoice.sourceEventRequestId) {
     const request = await ctx.db.get(invoice.sourceEventRequestId);
     if (request?.publicToken) {
+      if (isRequestPublicTokenExpired(request)) return null;
       return { token: request.publicToken, portal: "request" as const };
     }
   }

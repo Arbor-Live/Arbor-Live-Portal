@@ -264,7 +264,7 @@ export function EventPullList({
       await persistItems(nextItems, "Pull list updated");
       if (eventId && invoiceId && !seriesLinked) {
         const status = await convex.query(api.eventPullLists.getInvoiceSyncStatus, { eventId });
-        if (status.hasInvoice && !status.inSync) {
+        if (status.hasInvoice && status.inSync === false) {
           const shouldResync = await confirm({
             title: "Update the invoice to match?",
             description:
@@ -389,9 +389,15 @@ export function EventPullList({
               list template for per-show quantities. Load from invoice uses per-occurrence qty when series-linked.
             </p>
           ) : null}
-          {syncStatus?.hasInvoice && !syncStatus.inSync ? (
+          {syncStatus?.hasInvoice && syncStatus.inSync === false ? (
             <p className="mt-1 inline-flex items-center rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs text-amber-800">
               Out of sync with the linked invoice&apos;s equipment lines.
+            </p>
+          ) : null}
+          {syncStatus?.hasInvoice && syncStatus.inSync === null ? (
+            <p className="mt-1 inline-flex items-center rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs text-amber-800">
+              Couldn&apos;t verify against the linked invoice
+              {syncStatus.verifyError ? `: ${syncStatus.verifyError}` : "."}
             </p>
           ) : null}
         </div>

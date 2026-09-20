@@ -1150,7 +1150,7 @@ export function InvoiceEditor({
         const status = await convex.query(api.eventPullLists.getInvoiceSyncStatus, {
           eventId: linkedEvent._id,
         });
-        if (status.hasInvoice && !status.inSync) {
+        if (status.hasInvoice && status.inSync === false) {
           const shouldResync = await confirm({
             title: "Update the pull list?",
             description:
@@ -1586,11 +1586,16 @@ export function InvoiceEditor({
               variant="outline"
               title="Duplicate"
               aria-label="Duplicate"
-              onClick={() =>
-                void duplicateInvoice({ id: activeInvoiceId }).then((result) => {
-                  router.push(`/dashboard/financial-hub/invoices/${result.id}`);
-                })
-              }
+              onClick={() => {
+                void (async () => {
+                  try {
+                    const result = await duplicateInvoice({ id: activeInvoiceId });
+                    router.push(`/dashboard/financial-hub/invoices/${result.id}`);
+                  } catch (error) {
+                    notify.error(getConvexErrorMessage(error, "Could not duplicate the invoice."));
+                  }
+                })();
+              }}
             >
               <CopyIcon className="size-3.5" />
             </Button>
@@ -1601,7 +1606,14 @@ export function InvoiceEditor({
               size="sm"
               variant="outline"
               onClick={() => {
-                void unvoidInvoice({ id: activeInvoiceId });
+                void (async () => {
+                  try {
+                    await unvoidInvoice({ id: activeInvoiceId });
+                    notify.success("Invoice restored.");
+                  } catch (error) {
+                    notify.error(getConvexErrorMessage(error, "Could not unvoid the invoice."));
+                  }
+                })();
               }}
             >
               <ArrowCounterClockwiseIcon className="size-3.5" />
@@ -1778,7 +1790,7 @@ export function InvoiceEditor({
             packageById={packageById}
             equipmentPricingMode={equipmentPricingMode}
             defaultBasis={defaultEquipmentBasis}
-            pullListOutOfSync={Boolean(pullListSyncStatus?.hasInvoice && !pullListSyncStatus.inSync)}
+            pullListOutOfSync={Boolean(pullListSyncStatus?.hasInvoice && pullListSyncStatus.inSync === false)}
             syncingPullList={syncingPullList}
             onSyncPullList={() => void handleSyncPullList()}
           />

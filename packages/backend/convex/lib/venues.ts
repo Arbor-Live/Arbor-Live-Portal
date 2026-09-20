@@ -1,5 +1,7 @@
+import { v } from "convex/values";
+import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
-import type { MutationCtx, QueryCtx } from "../_generated/server";
+import { internalMutation, type MutationCtx, type QueryCtx } from "../_generated/server";
 
 type DbCtx = MutationCtx | QueryCtx;
 
@@ -182,40 +184,107 @@ export async function isVenueDescendant(
   return false;
 }
 
+const VENUE_NAME_SYNC_BATCH = 200;
+
+const venueNameSyncTableValue = v.union(
+  v.literal("events"),
+  v.literal("eventSeries"),
+  v.literal("eventRequests"),
+);
+
+type VenueNameSyncTable = "events" | "eventSeries" | "eventRequests";
+
+async function syncVenueNamePage(
+  ctx: MutationCtx,
+  venueId: Id<"venues">,
+  venueName: string,
+  table: VenueNameSyncTable,
+  cursor: string | null,
+): Promise<{ isDone: boolean; continueCursor: string }> {
+  const now = Date.now();
+
+  if (table === "eventRequests") {
+    const page = await ctx.db
+      .query("eventRequests")
+      .withIndex("by_venueId", (q) => q.eq("venueId", venueId))
+      .paginate({ cursor, numItems: VENUE_NAME_SYNC_BATCH });
+    if (page.page.length > 0) {
+      const venue = await ctx.db.get(venueId);
+      const venueAddress = venue ? await resolveEffectiveVenueAddress(ctx, venue) : undefined;
+      for (const request of page.page) {
+        if (request.venueName === venueName && request.venueAddress === venueAddress) continue;
+        await ctx.db.patch(request._id, { venueName, venueAddress, updatedAt: now });
+      }
+    }
+    return { isDone: page.isDone, continueCursor: page.continueCursor };
+  }
+
+  if (table === "events") {
+    const page = await ctx.db
+      .query("events")
+      .withIndex("by_venueId", (q) => q.eq("venueId", venueId))
+      .paginate({ cursor, numItems: VENUE_NAME_SYNC_BATCH });
+    for (const event of page.page) {
+      if (event.venueName === venueName) continue;
+      await ctx.db.patch(event._id, { venueName, updatedAt: now });
+    }
+    return { isDone: page.isDone, continueCursor: page.continueCursor };
+  }
+
+  const page = await ctx.db
+    .query("eventSeries")
+    .withIndex("by_venueId", (q) => q.eq("venueId", venueId))
+    .paginate({ cursor, numItems: VENUE_NAME_SYNC_BATCH });
+  for (const series of page.page) {
+    if (series.venueName === venueName) continue;
+    await ctx.db.patch(series._id, { venueName, updatedAt: now });
+  }
+  return { isDone: page.isDone, continueCursor: page.continueCursor };
+}
+
+/** Drains one venue's denormalized `venueName` refresh across pages. */
+export const syncVenueNameBatch = internalMutation({
+  args: {
+    venueId: v.id("venues"),
+    venueName: v.string(),
+    table: venueNameSyncTableValue,
+    cursor: v.optional(v.union(v.string(), v.null())),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const result = await syncVenueNamePage(
+      ctx,
+      args.venueId,
+      args.venueName,
+      args.table,
+      args.cursor ?? null,
+    );
+    if (!result.isDone) {
+      await ctx.scheduler.runAfter(0, internal.lib.venues.syncVenueNameBatch, {
+        venueId: args.venueId,
+        venueName: args.venueName,
+        table: args.table,
+        cursor: result.continueCursor,
+      });
+    }
+    return null;
+  },
+});
+
 export async function syncDenormalizedVenueName(
   ctx: MutationCtx,
   venueId: Id<"venues">,
   venueName: string,
 ): Promise<void> {
-  const events = await ctx.db
-    .query("events")
-    .withIndex("by_venueId", (q) => q.eq("venueId", venueId))
-    .take(500);
-  for (const event of events) {
-    if (event.venueName === venueName) continue;
-    await ctx.db.patch(event._id, { venueName, updatedAt: Date.now() });
-  }
-
-  const seriesRows = await ctx.db
-    .query("eventSeries")
-    .withIndex("by_venueId", (q) => q.eq("venueId", venueId))
-    .take(500);
-  for (const series of seriesRows) {
-    if (series.venueName === venueName) continue;
-    await ctx.db.patch(series._id, { venueName, updatedAt: Date.now() });
-  }
-
-  const requests = await ctx.db
-    .query("eventRequests")
-    .withIndex("by_venueId", (q) => q.eq("venueId", venueId))
-    .take(500);
-  for (const request of requests) {
-    const venue = await ctx.db.get(venueId);
-    const venueAddress = venue ? await resolveEffectiveVenueAddress(ctx, venue) : undefined;
-    await ctx.db.patch(request._id, {
-      venueName,
-      venueAddress,
-      updatedAt: Date.now(),
-    });
+  for (const table of ["events", "eventSeries", "eventRequests"] as const) {
+    const result = await syncVenueNamePage(ctx, venueId, venueName, table, null);
+    if (!result.isDone) {
+      await ctx.scheduler.runAfter(0, internal.lib.venues.syncVenueNameBatch, {
+        venueId,
+        venueName,
+        table,
+        cursor: result.continueCursor,
+      });
+    }
   }
 }

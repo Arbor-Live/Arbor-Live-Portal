@@ -15,6 +15,7 @@ import {
 } from "./lib/userVerticals";
 import { resolveParticipationFlags } from "./lib/userParticipation";
 import { isArtistOrganizationType } from "./lib/organizationType";
+import { resolveGlobalRoleForOrganization } from "./lib/globalRole";
 import { ensureOnboardingForOrgMembership } from "./onboarding";
 import {
   applyPayrollMethodToProfile,
@@ -235,6 +236,11 @@ export const acceptInviteWithPassword = mutation({
     const now = Date.now();
     const displayName = args.name?.trim() || email;
     const membership = pendingMembership(pending);
+    const globalRole = await resolveGlobalRoleForOrganization(
+      ctx,
+      pending.organizationId,
+      pending.role,
+    );
 
     const created = (await ctx.runMutation(components.betterAuth.adapter.create, {
       input: {
@@ -243,7 +249,7 @@ export const acceptInviteWithPassword = mutation({
           name: displayName,
           email,
           emailVerified: true,
-          role: pending.role === "org_admin" ? "admin" : "member",
+          role: globalRole,
           createdAt: now,
           updatedAt: now,
         },
