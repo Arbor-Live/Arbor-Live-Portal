@@ -139,15 +139,12 @@ export function EventBriefPdf({
     assignment.notes ?? "",
   ]);
 
-  for (const contact of [data.venueContact, data.hostContact, ...data.bandContacts]) {
-    if (!contact) continue;
-    peopleRows.push([
-      contact.roleLabel,
-      contact.person,
-      contact.contact ?? "",
-      contact.notes ?? "",
-    ]);
-  }
+  const contactRows = data.contacts.map((contact) => [
+    contact.roleLabel,
+    contact.person,
+    contact.contact ?? "",
+    contact.notes ?? "",
+  ]);
 
   const pullListRows = data.pullList.map((item) => [
     item.label,
@@ -211,12 +208,22 @@ export function EventBriefPdf({
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>People &amp; contacts</Text>
+          <Text style={styles.sectionTitle}>People</Text>
           <Table
             columns={PEOPLE_COLUMNS}
             headers={["Role", "Name", "Contact", "Notes"]}
             rows={peopleRows}
             emptyMessage="No assignments yet."
+          />
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Contacts</Text>
+          <Table
+            columns={PEOPLE_COLUMNS}
+            headers={["Position", "Name", "Contact", "Notes"]}
+            rows={contactRows}
+            emptyMessage="No contacts yet."
           />
         </View>
 

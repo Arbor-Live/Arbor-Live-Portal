@@ -55,6 +55,7 @@ export function DashboardSleepGate({ children }: { children: React.ReactNode }) 
       if (state.isWebSocketConnected) {
         hadConnectedRef.current = true;
         clearDisconnectTimer();
+        setAsleep(false);
         return;
       }
       if (!hadConnectedRef.current && !state.hasEverConnected) return;
@@ -86,13 +87,6 @@ export function DashboardSleepGate({ children }: { children: React.ReactNode }) 
 
     return () => window.clearTimeout(timer);
   }, [shell]);
-
-  useEffect(() => {
-    if (!asleep) return;
-    if (shell === undefined) return;
-    if (!convex.connectionState().isWebSocketConnected) return;
-    setAsleep(false);
-  }, [asleep, shell, convex]);
 
   useEffect(() => {
     function onVisibilityChange() {

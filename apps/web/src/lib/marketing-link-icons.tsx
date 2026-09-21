@@ -190,11 +190,6 @@ export function MarketingLinkIcon({
 
   useEffect(() => {
     let cancelled = false;
-    const cached = iconComponentCache.get(normalized);
-    if (cached) {
-      setIcon({ Icon: cached });
-      return;
-    }
     void loadMarketingLinkIcon(normalized).then((loaded) => {
       if (!cancelled) setIcon({ Icon: loaded });
     });

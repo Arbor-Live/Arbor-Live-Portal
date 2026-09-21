@@ -19,6 +19,13 @@ import { scheduleQuoteApprovedEmail } from "../email/quoteApprovedEmails";
 import { loadEventHostDisplay } from "./hostOrgs";
 import { findAuthUsersByIds } from "./auth";
 import { resolveUserContact } from "./userContact";
+import { loadEventRiders } from "../bandRiders";
+import {
+  buildBandContacts,
+  listManualEventContacts,
+  resolveInvoiceContact,
+  resolveVenueContact,
+} from "./eventContacts";
 
 function resolveInvoiceTermsIds(invoice: Doc<"invoices">): Id<"invoiceTerms">[] {
   if (invoice.termsIds && invoice.termsIds.length > 0) return invoice.termsIds;
@@ -183,6 +190,8 @@ export async function loadPublicQuoteView(ctx: QueryCtx, invoice: Doc<"invoices"
         });
       }
 
+      const venue = event.venueId ? await ctx.db.get(event.venueId) : null;
+      const bandRows = await loadEventRiders(ctx, event._id);
       return {
         id: event._id,
         title: event.title,
@@ -207,6 +216,12 @@ export async function loadPublicQuoteView(ctx: QueryCtx, invoice: Doc<"invoices"
                 phone: dayOfLeadContact.phone,
               }
             : null,
+          /** Venue / host billing / band contacts the client can view but not edit. */
+          venue: (await resolveVenueContact(ctx, venue)) ?? null,
+          invoice: (await resolveInvoiceContact(ctx, event.hostGroupId)) ?? null,
+          bands: buildBandContacts(bandRows),
+          /** Additional contacts the client (or staff) can add and remove. */
+          manual: await listManualEventContacts(ctx, event._id),
         },
         crewRoster,
         artists: await getEventArtists(ctx, event._id),

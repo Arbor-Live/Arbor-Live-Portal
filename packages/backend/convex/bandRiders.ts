@@ -56,7 +56,7 @@ const riderDocumentValidator = v.object({
 
 type RiderDoc = Doc<"bandRiders">;
 
-type EventRiderRow = {
+export type EventRiderRow = {
   organizationId: string;
   bandName: string;
   role: "headliner" | "support" | "other";
@@ -392,7 +392,7 @@ export const getDocumentData = query({
  * generation and for crew prepping a patch.
  */
 /** Shared by the internal and public lookups; auth is the caller's job. */
-async function loadEventRiders(
+export async function loadEventRiders(
   ctx: QueryCtx,
   eventId: Id<"events">,
   options?: { publishedOnly?: boolean },
