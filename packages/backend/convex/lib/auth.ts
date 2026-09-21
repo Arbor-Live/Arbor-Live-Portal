@@ -14,6 +14,10 @@
 import { components } from "../_generated/api";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import {
+  isArtistOrganizationType,
+  type ArtistOrganizationType,
+} from "./organizationType";
+import {
   hasAnyVertical,
   hasVertical,
   resolveProfileMembership,
@@ -213,8 +217,7 @@ export type ActiveOrganizationContext = {
   organizationId: string;
   organizationName: string;
   organizationSlug: string;
-  organizationType: "arbor_internal" | "band" | "dj";//going to have band and dj 
-  //basically act as the same
+  organizationType: "arbor_internal" | ArtistOrganizationType;
   /** True when a portal admin is previewing an artist org without membership. */
   isAdminPreview?: boolean;
 };
@@ -247,7 +250,7 @@ export async function resolveOrganizationContext(
       organizationType: "arbor_internal",
     };
   }
-  if (orgProfile?.organizationType === "band" || orgProfile?.organizationType === "dj") {
+  if (orgProfile?.organizationType && isArtistOrganizationType(orgProfile.organizationType)) {
     const org = await findAuthOrganizationById(ctx, organizationId);
     return {
       organizationId,
@@ -280,7 +283,7 @@ export async function assertAdminMayPreviewOrganization(
   if (!context) {
     throw new Error("Organization not found.");
   }
-  if (context.organizationType !== "band" && context.organizationType !== "dj") {
+  if (!isArtistOrganizationType(context.organizationType)) {
     throw new Error("Admin preview is only available for artist organizations.");
   }
   const profile = await ctx.db
@@ -329,10 +332,7 @@ export async function getActiveOrganizationContextOrNull(
     // artist orgs (temporary view-as, not a lasting join).
     if (isAdmin(user)) {
       const preview = await resolveOrganizationContext(ctx, selectedOrganizationId);
-      if (
-        preview &&
-        (preview.organizationType === "band" || preview.organizationType === "dj")
-      ) {
+      if (preview && isArtistOrganizationType(preview.organizationType)) {
         const profile = await ctx.db
           .query("organizationProfiles")
           .withIndex("by_organizationId", (q) =>
@@ -379,7 +379,7 @@ export async function requireBandContext(
   ctx: AuthCtx,
 ): Promise<ActiveOrganizationContext> {
   const context = await requireActiveOrganizationContext(ctx);
-  if (context.organizationType !== "band" && context.organizationType !== "dj") {
+  if (!isArtistOrganizationType(context.organizationType)) {
     throw new Error("This area is only available to artists and DJs.");
   }
   return context;
