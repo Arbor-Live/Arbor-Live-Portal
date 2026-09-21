@@ -9,6 +9,7 @@ import { loadActiveOrgMemberUserIds } from "./lib/orgMembership";
 import { syncEventStatusForLinkedInvoice, syncLinkedEventStatusFromInvoice } from "./lib/eventStatus";
 import { syncBookingRequestStatusFromInvoice } from "./lib/bookingRequestStatus";
 import { recordInvoiceStatusTransition } from "./lib/statusTransitions";
+import { listAdditionallyLinkedEvents } from "./lib/eventInvoiceLinks";
 import { listEventsByInvoiceId } from "./lib/invoiceEvents";
 import {
   addPublicEventContact,
@@ -746,7 +747,15 @@ export const get = query({
       .withIndex("by_invoiceId_and_order", (q) => q.eq("invoiceId", args.id))
       .take(500);
     const series = await resolveSeriesMetadataForInvoice(ctx, args.id);
-    return { invoice, lineItems, series };
+    const additionallyLinkedEvents = (await listAdditionallyLinkedEvents(ctx, args.id)).map(
+      (event) => ({
+        _id: event._id,
+        title: event.title,
+        startAt: event.startAt,
+        endAt: event.endAt,
+      }),
+    );
+    return { invoice, lineItems, series, additionallyLinkedEvents };
   },
 });
 

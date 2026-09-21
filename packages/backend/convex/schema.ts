@@ -820,6 +820,7 @@ export default defineSchema({
     title: v.string(),
     status: eventStatusValue,
     visibility: eventVisibilityValue,
+    /** Primary invoice. Further invoices for this event live in `eventInvoiceLinks`. */
     invoiceId: v.optional(v.id("invoices")),
     publicToken: v.optional(v.string()),
     seriesId: v.optional(v.id("eventSeries")),
@@ -911,6 +912,20 @@ export default defineSchema({
     .index("by_hostGroupId", ["hostGroupId"])
     .index("by_dayOfLeadUserId", ["dayOfLeadUserId"])
     .index("by_eventManagerUserId", ["eventManagerUserId"]),
+
+  /**
+   * Invoices linked to an event besides `events.invoiceId`. The primary still
+   * drives status, the pull list, the host, and payment reminders. These rows
+   * are the other bills (deposit + balance, a second host, and so on).
+   */
+  eventInvoiceLinks: defineTable({
+    eventId: v.id("events"),
+    invoiceId: v.id("invoices"),
+    createdAt: v.number(),
+  })
+    .index("by_eventId", ["eventId"])
+    .index("by_invoiceId", ["invoiceId"])
+    .index("by_eventId_and_invoiceId", ["eventId", "invoiceId"]),
 
   userCompensationRates: defineTable({
     userId: v.string(),

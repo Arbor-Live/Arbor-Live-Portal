@@ -8,6 +8,7 @@ import {
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { syncEventCrewCostUsd } from "./crewCost";
+import { detachInvoiceFromAdditionalLinks } from "./eventInvoiceLinks";
 import { syncEventStatusForLinkedInvoice, type EventStatus } from "./eventStatus";
 
 export const EVENT_TIMEZONE = PORTAL_TIMEZONE;
@@ -470,6 +471,7 @@ export async function propagateInvoiceIdToSeriesOccurrences(
 
     await ctx.db.patch(occurrence._id, { invoiceId, updatedAt: now });
     if (invoiceId) {
+      await detachInvoiceFromAdditionalLinks(ctx, occurrence._id, invoiceId);
       await syncEventStatusForLinkedInvoice(ctx, occurrence._id, invoiceId, occurrence.status);
     }
   }

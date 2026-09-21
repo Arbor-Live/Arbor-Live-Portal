@@ -1,5 +1,9 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
+import {
+  deleteEventInvoiceLinksForEvent,
+  deleteEventInvoiceLinksForInvoice,
+} from "./eventInvoiceLinks";
 import { listEventsByInvoiceId } from "./invoiceEvents";
 
 const TAKE = 500;
@@ -20,6 +24,8 @@ export async function findRequestForInvoice(
 }
 
 export async function deleteInvoiceRecord(ctx: MutationCtx, invoiceId: Id<"invoices">) {
+  await deleteEventInvoiceLinksForInvoice(ctx, invoiceId);
+
   const lineItems = await ctx.db
     .query("invoiceLineItems")
     .withIndex("by_invoiceId", (q) => q.eq("invoiceId", invoiceId))
@@ -40,6 +46,8 @@ export async function deleteInvoiceRecord(ctx: MutationCtx, invoiceId: Id<"invoi
 }
 
 export async function deleteEventRecord(ctx: MutationCtx, eventId: Id<"events">) {
+  await deleteEventInvoiceLinksForEvent(ctx, eventId);
+
   const shifts = await ctx.db
     .query("eventCrewShifts")
     .withIndex("by_eventId", (q) => q.eq("eventId", eventId))

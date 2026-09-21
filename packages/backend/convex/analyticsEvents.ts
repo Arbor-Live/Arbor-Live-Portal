@@ -19,6 +19,7 @@ import {
   normalizeEventStatus,
   type EventPipelineStatus,
 } from "./lib/eventStatus";
+import { listAdditionalInvoiceIds } from "./lib/eventInvoiceLinks";
 import { arborEarnedRevenueUsd, invoicePassThroughUsd } from "./lib/invoiceProfit";
 
 const countBucketValidator = v.object({
@@ -192,20 +193,25 @@ export const getUpcomingEventsInsights = query({
 
       let isBookedRevenue = false;
       let bookedUsd = 0;
-      const missingInvoice = !event.invoiceId;
-      if (event.invoiceId) {
-        const invoice = await ctx.db.get(event.invoiceId);
-        if (isBookedInvoice(invoice)) {
-          isBookedRevenue = true;
-          bookedUsd = arborEarnedRevenueUsd(
-            invoice!.totalUsd,
-            invoicePassThroughUsd(
-              invoice!.artistsSubtotalUsd,
-              invoice!.externalRentalsSubtotalUsd,
-            ),
-          );
-        }
+      const additionalInvoiceIds = await listAdditionalInvoiceIds(ctx, event._id);
+      const missingInvoice = !event.invoiceId && additionalInvoiceIds.length === 0;
+      const invoiceIds = [
+        ...(event.invoiceId ? [event.invoiceId] : []),
+        ...additionalInvoiceIds.filter((invoiceId) => invoiceId !== event.invoiceId),
+      ];
+      for (const invoiceId of invoiceIds) {
+        const invoice = await ctx.db.get(invoiceId);
+        if (!isBookedInvoice(invoice)) continue;
+        isBookedRevenue = true;
+        bookedUsd += arborEarnedRevenueUsd(
+          invoice!.totalUsd,
+          invoicePassThroughUsd(
+            invoice!.artistsSubtotalUsd,
+            invoice!.externalRentalsSubtotalUsd,
+          ),
+        );
       }
+      bookedUsd = Number(bookedUsd.toFixed(2));
 
       enriched.push({
         event,
