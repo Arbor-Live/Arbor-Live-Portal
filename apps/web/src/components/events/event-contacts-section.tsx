@@ -120,9 +120,10 @@ export function EventContactsSection({
     if (board?.invoice) rows.push({ key: "invoice", ...board.invoice });
     for (const [index, row] of (bandRows ?? []).entries()) {
       const rider = row.rider;
-      if (!rider) continue;
-      const name = rider.contactName?.trim();
-      const contact = joinContact(rider.contactEmail, rider.contactPhone);
+      const name = rider?.contactName?.trim() || row.contact?.name?.trim();
+      const contact =
+        (rider ? joinContact(rider.contactEmail, rider.contactPhone) : undefined) ||
+        joinContact(row.contact?.email, row.contact?.phone);
       if (!name && !contact) continue;
       rows.push({
         key: `band-${index}`,

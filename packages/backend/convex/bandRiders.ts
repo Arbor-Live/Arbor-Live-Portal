@@ -16,7 +16,7 @@ import {
   requireAuth,
   requireBandContext,
 } from "./lib/auth";
-import { resolveBandName } from "./lib/bandIdentity";
+import { loadBandIdentity, resolveBandName, type BandIdentityContact } from "./lib/bandIdentity";
 import {
   RIDER_LIMITS,
   riderContentFields,
@@ -59,6 +59,8 @@ type RiderDoc = Doc<"bandRiders">;
 export type EventRiderRow = {
   organizationId: string;
   bandName: string;
+  /** Band profile main contact, used when the rider has no contact of its own. */
+  contact?: BandIdentityContact;
   role: "headliner" | "support" | "other";
   rider:
     | null
@@ -420,9 +422,11 @@ export async function loadEventRiders(
       ? (published.find((rider) => rider.isDefault) ?? published[0] ?? null)
       : (riders.find((rider) => rider.isDefault) ?? published[0] ?? null);
 
+    const identity = await loadBandIdentity(ctx, participation.organizationId);
     rows.push({
       organizationId: participation.organizationId,
-      bandName: await resolveBandName(ctx, participation.organizationId),
+      bandName: identity.name,
+      contact: identity.contact,
       role: participation.role,
       rider: chosen
         ? {
@@ -450,6 +454,13 @@ export const listForEvent = query({
     v.object({
       organizationId: v.string(),
       bandName: v.string(),
+      contact: v.optional(
+        v.object({
+          name: v.optional(v.string()),
+          email: v.optional(v.string()),
+          phone: v.optional(v.string()),
+        }),
+      ),
       role: v.union(v.literal("headliner"), v.literal("support"), v.literal("other")),
       rider: v.union(
         v.null(),
