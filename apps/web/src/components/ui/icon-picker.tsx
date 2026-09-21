@@ -92,7 +92,7 @@ export function IconPicker({
         />
         {!searching ? (
           <div className="space-y-1.5">
-            <p className="px-0.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+            <p className="px-0.5 text-3xs font-medium uppercase tracking-wider text-muted-foreground">
               Popular
             </p>
             <IconGrid
@@ -107,7 +107,7 @@ export function IconPicker({
           </div>
         ) : (
           <div className="space-y-1.5">
-            <p className="px-0.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+            <p className="px-0.5 text-3xs font-medium uppercase tracking-wider text-muted-foreground">
               Results
             </p>
             {filtered.length === 0 ? (

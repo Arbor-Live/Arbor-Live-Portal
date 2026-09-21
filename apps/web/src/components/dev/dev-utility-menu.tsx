@@ -55,8 +55,8 @@ export function DevUtilityMenu() {
             </DropdownMenuItem>
           ))}
           <DropdownMenuSeparator />
-          <p className="px-2 py-1.5 text-[11px] leading-snug text-muted-foreground">
-            Opens with <code className="text-[10px]">?devPreview=1</code>. Skips
+          <p className="px-2 py-1.5 text-2xs leading-snug text-muted-foreground">
+            Opens with <code className="text-3xs">?devPreview=1</code>. Skips
             redirects; walk-through is UI-only when you lack that role&apos;s
             onboarding row. Sign in required for crew/artist routes.
           </p>

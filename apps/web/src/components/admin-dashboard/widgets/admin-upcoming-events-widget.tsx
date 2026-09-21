@@ -42,7 +42,7 @@ export function AdminUpcomingEventsWidget() {
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="font-medium">{event.title}</p>
-                <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                <span className="text-3xs uppercase tracking-wide text-muted-foreground">
                   {event.status}
                 </span>
               </div>

@@ -16,6 +16,36 @@
   --font-mono: var(--font-jetbrains-mono);
   --font-sans: var(--font-inter);
   --font-heading: var(--font-space-grotesk);
+  /* Compact text sizes. The dense admin surfaces (status chips, metadata rows,
+     board cards) use 11px/10px/9px below Tailwind's text-xs. Naming them keeps
+     the design but moves it onto the type scale so it is one place to change. */
+  --text-2xs: 0.6875rem; /* 11px */
+  --text-2xs--line-height: 1rem;
+  --text-3xs: 0.625rem; /* 10px */
+  --text-3xs--line-height: 0.875rem;
+  --text-4xs: 0.5625rem; /* 9px */
+  --text-4xs--line-height: 0.75rem;
+  /* Uppercase eyebrow letter-spacing, used with the small sizes above. */
+  --tracking-eyebrow: 0.14em;
+  --tracking-eyebrow-tight: 0.12em;
+  /* Horizontal-scroll floors for data tables. Tables set a min-width so their
+     columns keep their proportions on narrow screens; these are the widths the
+     app has settled on, named so they stay consistent across tables. */
+  --container-table-sm: 34rem;
+  --container-table-md: 44rem;
+  --container-table-lg: 54rem;
+  --container-table-xl: 70rem;
+  /* Media aspect ratios and the focus-ring width, which the UI repeats. */
+  --aspect-poster: 4 / 5;
+  --aspect-photo: 4 / 3;
+  --aspect-logo: 307 / 408;
+  --focus-ring-width: 3px;
+  /* The 3px radius on small status dots, and the 3px board-card accent bar. */
+  --radius-dot: 3px;
+  --accent-bar-width: 3px;
+  /* Pale green behind the booking wizard's WebGPU ocean, visible before the
+     canvas paints and on browsers without WebGPU. */
+  --ocean-surface: oklch(0.93 0.02 160);
   --color-sidebar-ring: var(--sidebar-ring);  --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-accent: var(--sidebar-accent);
@@ -245,13 +275,122 @@
   }
 }
 
+/* Top padding for page content that sits under the floating marketing nav.
+   The nav is fixed, and the optional "happening now" banner adds to its
+   height at runtime via --happening-banner-height, so the offset is the base
+   nav clearance plus that variable. */
+@utility pt-banner-sm {
+  padding-top: calc(4rem + var(--happening-banner-height, 0px));
+}
+@utility pt-banner-md {
+  padding-top: calc(5.5rem + var(--happening-banner-height, 0px));
+}
+@utility pt-banner-lg {
+  padding-top: calc(6rem + var(--happening-banner-height, 0px));
+}
+@utility pt-banner-xl {
+  padding-top: calc(7rem + var(--happening-banner-height, 0px));
+}
+@utility pt-banner-2xl {
+  padding-top: calc(8rem + var(--happening-banner-height, 0px));
+}
+
+/* Larger day cells for the public booking calendar, which lays out full width
+   rather than inside a popover. */
+@utility calendar-cell-lg {
+  --cell-size: --spacing(11);
+}
+
+/* Decorative glows behind hero and marketing sections. Each is a soft radial
+   in the primary (or white) hue; they are named so the rule can tell them from
+   a stray off-token length. */
+@utility glow-primary-top {
+  background-image: radial-gradient(
+    ellipse 80% 60% at 50% -10%,
+    color-mix(in oklch, var(--color-primary) 22%, transparent),
+    transparent
+  );
+}
+@utility glow-primary-top-strong {
+  background-image: radial-gradient(
+    ellipse 80% 60% at 50% -10%,
+    color-mix(in oklch, var(--color-primary) 35%, transparent),
+    transparent
+  );
+}
+@utility glow-primary-top-inner {
+  background-image: radial-gradient(
+    ellipse 70% 50% at 50% -10%,
+    color-mix(in oklch, var(--color-primary) 16%, transparent),
+    transparent
+  );
+}
+@utility glow-primary-left {
+  background-image: radial-gradient(
+    ellipse 70% 50% at 10% 0%,
+    color-mix(in oklch, var(--color-primary) 14%, transparent),
+    transparent
+  );
+}
+@utility glow-primary-right {
+  background-image: radial-gradient(
+    ellipse 70% 50% at 90% 0%,
+    color-mix(in oklch, var(--color-primary) 14%, transparent),
+    transparent
+  );
+}
+@utility glow-center {
+  background-image: radial-gradient(
+    ellipse at center,
+    color-mix(in oklch, white 12%, transparent),
+    transparent
+  );
+}
+@utility glow-white-corner {
+  background-image: radial-gradient(
+    circle at 30% 20%,
+    color-mix(in oklch, white 18%, transparent),
+    transparent 55%
+  );
+}
+@utility glow-ocean-haze {
+  background-image: radial-gradient(
+    ellipse 80% 60% at 50% 20%,
+    transparent 20%,
+    rgba(255, 255, 255, 0.5) 100%
+  );
+}
+.dark .glow-ocean-haze {
+  background-image: radial-gradient(
+    ellipse 80% 60% at 50% 20%,
+    transparent 20%,
+    rgba(0, 0, 0, 0.55) 100%
+  );
+}
+
 @layer utilities {
   .display-tight {
     letter-spacing: -0.04em;
   }
-
   .happening-now-drop {
     animation: happening-now-drop 320ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* Faint 4rem grid behind the landing hero, drawn with two 1px lines so it
+     fades with the section rather than sitting on its own layer. */
+  .landing-grid-backdrop {
+    background-image:
+      linear-gradient(
+        to right,
+        color-mix(in oklch, white 6%, transparent) 1px,
+        transparent 1px
+      ),
+      linear-gradient(
+        to bottom,
+        color-mix(in oklch, white 6%, transparent) 1px,
+        transparent 1px
+      );
+    background-size: 4rem 4rem;
   }
 
   .hero-slot-word {

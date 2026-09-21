@@ -78,7 +78,7 @@ export function CrewSchedulingDashboard() {
               type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              className="w-[160px]"
+              className="w-40"
             />
           </div>
           <div className="space-y-1">
@@ -87,7 +87,7 @@ export function CrewSchedulingDashboard() {
               type="date"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
-              className="w-[160px]"
+              className="w-40"
             />
           </div>
           <Button type="button" variant="outline" size="sm" onClick={resetToDefaultRange}>

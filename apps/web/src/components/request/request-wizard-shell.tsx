@@ -59,7 +59,7 @@ export function RequestWizardShell({
     <div
       className={cn(
         "relative flex min-h-dvh flex-1 flex-col overflow-hidden",
-        ocean && "bg-[oklch(0.93_0.02_160)] dark:bg-black",
+        ocean && "bg-(--ocean-surface) dark:bg-black",
         className,
       )}
     >
@@ -70,17 +70,17 @@ export function RequestWizardShell({
             className="pointer-events-none absolute inset-0 z-0 opacity-40"
             style={GRID_STYLE}
           />
-          <FftOceanBackground className="pointer-events-none absolute inset-0 z-[1]" />
+          <FftOceanBackground className="pointer-events-none absolute inset-0 z-1" />
           <div
             aria-hidden
-            className="pointer-events-none absolute inset-0 z-[2] bg-[radial-gradient(ellipse_80%_60%_at_50%_20%,transparent_20%,rgba(255,255,255,0.5)_100%)] dark:bg-[radial-gradient(ellipse_80%_60%_at_50%_20%,transparent_20%,rgba(0,0,0,0.55)_100%)]"
+            className="pointer-events-none absolute inset-0 z-2 glow-ocean-haze glow-ocean-haze"
           />
         </>
       ) : (
         <>
           <div
             aria-hidden
-            className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(ellipse_70%_50%_at_50%_-10%,color-mix(in_oklch,var(--color-primary)_16%,transparent),transparent)]"
+            className="pointer-events-none absolute inset-0 z-0 glow-primary-top-inner"
           />
           <div
             aria-hidden
@@ -88,19 +88,19 @@ export function RequestWizardShell({
             style={GRID_STYLE}
           />
           {panes ? (
-            <PanesCafeBackground className="pointer-events-none absolute inset-0 z-[1]" />
+            <PanesCafeBackground className="pointer-events-none absolute inset-0 z-1" />
           ) : null}
         </>
       )}
 
-      <div className="relative z-10 flex min-h-0 flex-1 flex-col pt-[calc(5.5rem_+_var(--happening-banner-height,0px))] sm:pt-[calc(6rem_+_var(--happening-banner-height,0px))]">
+      <div className="relative z-10 flex min-h-0 flex-1 flex-col pt-banner-md sm:pt-banner-lg">
         <div className="px-4 sm:px-5">
           <div className="mx-auto max-w-2xl border border-border/40 bg-background/75 px-4 py-2.5 shadow-[0_4px_16px_rgba(0,0,0,0.06)] backdrop-blur-md sm:px-5">
-            <p className="text-center text-[11px] font-medium uppercase tracking-[0.14em] text-foreground/65">
+            <p className="text-center text-2xs font-medium uppercase tracking-eyebrow text-foreground/65">
               {eyebrow}
             </p>
             {meta ? (
-              <p className="mt-0.5 text-center text-[11px] text-foreground/50">{meta}</p>
+              <p className="mt-0.5 text-center text-2xs text-foreground/50">{meta}</p>
             ) : null}
             {progress ?? (
               <div className="mt-2 h-0.5 overflow-hidden bg-foreground/10">

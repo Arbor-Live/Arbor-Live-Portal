@@ -84,7 +84,7 @@ export function linksIncludePartiful(links: Array<{ url: string }> | undefined) 
 }
 
 const textareaClassName =
-  "flex min-h-[96px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
+  "flex min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
 
 type PosterUploadProps =
   | { type: "event"; eventId: string }
@@ -141,7 +141,7 @@ export function EventMarketingContentFields({
         {previewSrc ? (
           <div className="mx-auto w-full max-w-xs overflow-hidden rounded-xl border bg-muted/20">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={previewSrc} alt="" className="aspect-[4/5] w-full object-cover" />
+            <img src={previewSrc} alt="" className="aspect-(--aspect-poster) w-full object-cover" />
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">No poster uploaded yet.</p>
@@ -220,7 +220,7 @@ export function EventMarketingContentFields({
           {previewSrc ? (
             <div className="mx-auto w-full max-w-xs overflow-hidden rounded-xl border bg-muted/20">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={previewSrc} alt="" className="aspect-[4/5] w-full object-cover" />
+              <img src={previewSrc} alt="" className="aspect-(--aspect-poster) w-full object-cover" />
             </div>
           ) : null}
           <div className="flex flex-wrap gap-2">

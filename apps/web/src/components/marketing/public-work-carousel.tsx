@@ -33,7 +33,7 @@ export function LandingWorkCarousel({ posts }: { posts: PublicWorkPostCard[] }) 
               <Link
                 key={post.slug}
                 href={`/work/${post.slug}`}
-                className="group w-[min(100%,320px)] shrink-0 snap-start sm:w-[340px]"
+                className="group w-[min(100%,320px)] shrink-0 snap-start sm:w-85"
               >
                 <article className="h-full overflow-hidden border border-border bg-card shadow-sm transition-[border-color,box-shadow] group-hover:border-primary/40 group-hover:shadow-md">
                   <div

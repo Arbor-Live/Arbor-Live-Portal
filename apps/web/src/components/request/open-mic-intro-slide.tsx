@@ -24,7 +24,7 @@ export function OpenMicIntroSlide({ onContinue }: { onContinue: () => void }) {
     <div className="space-y-6">
       <div className="space-y-3">
         <motion.p
-          className="text-[11px] font-medium uppercase tracking-[0.14em] text-foreground/65"
+          className="text-2xs font-medium uppercase tracking-eyebrow text-foreground/65"
           initial={reduceMotion ? false : { opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.05, ...spring }}

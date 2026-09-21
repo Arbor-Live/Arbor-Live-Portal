@@ -476,7 +476,7 @@ export function EventPullList({
                       key={item.id ?? `${item.lineKind}-${item.typeId ?? item.packageId}-${globalIndex}`}
                       className="flex items-start gap-4 border-b px-4 py-3 last:border-b-0"
                     >
-                      <div className="flex min-w-[3.5rem] shrink-0 justify-center rounded-md bg-primary/10 px-2 py-1 text-lg font-bold tabular-nums text-primary">
+                      <div className="flex min-w-14 shrink-0 justify-center rounded-md bg-primary/10 px-2 py-1 text-lg font-bold tabular-nums text-primary">
                         {formatQty(item.quantityRequired)}
                       </div>
                       <div className="min-w-0 flex-1">
@@ -486,7 +486,7 @@ export function EventPullList({
                           ) : null}
                           <p className="text-base font-medium leading-tight">{name}</p>
                           {item.lineKind === "package" ? (
-                            <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                            <span className="rounded bg-muted px-1.5 py-0.5 text-3xs font-medium uppercase tracking-wide text-muted-foreground">
                               Package
                             </span>
                           ) : null}

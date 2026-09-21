@@ -328,7 +328,7 @@ export function EventSeriesOverview({ seriesId }: { seriesId: Id<"eventSeries"> 
               >
                 Create invoice for series
               </Button>
-              <div className="min-w-[16rem] flex-1 space-y-2">
+              <div className="min-w-64 flex-1 space-y-2">
                 <Label>Link draft invoice</Label>
                 <SearchableSelect
                   value={invoiceLinkId}
@@ -513,7 +513,7 @@ export function EventSeriesOverview({ seriesId }: { seriesId: Id<"eventSeries"> 
           <CardTitle>Occurrences</CardTitle>
         </CardHeader>
         <CardContent className="overflow-x-auto">
-          <table className="w-full min-w-[860px] text-sm">
+          <table className="w-full min-w-table-lg text-sm">
             <thead>
               <tr className="border-b text-left">
                 <th className="px-2 py-2">#</th>

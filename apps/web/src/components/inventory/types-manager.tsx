@@ -766,7 +766,7 @@ export function TypesManager() {
                     <div key={`manual-${index}`} className="flex flex-wrap items-center gap-2">
                       <Input
                         placeholder="Title"
-                        className="w-full max-w-[220px]"
+                        className="w-full max-w-55"
                         value={resourceRow.title}
                         onChange={(event) =>
                           setTypeField(
@@ -852,7 +852,7 @@ export function TypesManager() {
                       <div key={`gdtf-${index}`} className="flex flex-wrap items-center gap-2">
                         <Input
                           placeholder="Title"
-                          className="w-full max-w-[220px]"
+                          className="w-full max-w-55"
                           value={resourceRow.title}
                           onChange={(event) =>
                             setTypeField(

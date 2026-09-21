@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 
 /** Same footprint as the static `/icon.svg` in the hero. */
 export const LOGO_MARK_CLASSNAME =
-  "h-24 w-auto aspect-[307/408] sm:h-28 md:h-32 lg:h-36";
+  "h-24 w-auto aspect-(--aspect-logo) sm:h-28 md:h-32 lg:h-36";
 
 type LogoFlareMarkProps = {
   className?: string;

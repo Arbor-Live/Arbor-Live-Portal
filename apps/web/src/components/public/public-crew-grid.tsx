@@ -24,7 +24,7 @@ function CrewCard({
 
   return (
     <Card className="h-full gap-0 overflow-hidden border border-border py-0 shadow-sm ring-0">
-      <div className="aspect-[4/5] w-full overflow-hidden bg-muted">
+      <div className="aspect-(--aspect-poster) w-full overflow-hidden bg-muted">
         {resolvedImageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={resolvedImageUrl} alt="" className="size-full object-cover" />
@@ -46,7 +46,7 @@ function CrewCard({
             {member.secondaryTags.map((tag) => (
               <span
                 key={`${member.id}-${tag}`}
-                className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground"
+                className="rounded-full bg-muted px-2 py-0.5 text-2xs text-muted-foreground"
               >
                 {tag}
               </span>

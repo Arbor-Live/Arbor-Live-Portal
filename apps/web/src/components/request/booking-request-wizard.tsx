@@ -602,7 +602,7 @@ function StepFields({
               type="text"
               placeholder="What type of event are you running?"
               aria-label="Other event type"
-              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-(--focus-ring-width) focus-visible:ring-ring/50"
               value={values.eventCategoryOther ?? ""}
               onChange={(event) =>
                 form.setValue("eventCategoryOther", event.currentTarget.value, { shouldDirty: true })
@@ -789,7 +789,7 @@ function SponsorTypeChoices() {
             type="text"
             placeholder="Who is sponsoring this event?"
             aria-label="Other sponsor type"
-            className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-(--focus-ring-width) focus-visible:ring-ring/50"
             value={sponsorTypeOther ?? ""}
             onChange={(event) =>
               form.setValue("sponsorTypeOther", event.currentTarget.value, { shouldDirty: true })

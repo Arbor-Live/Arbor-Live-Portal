@@ -150,7 +150,7 @@ function TypeLine({
             fallbackClassName="h-10 w-10 shrink-0 rounded"
           />
         ) : (
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-muted text-[10px] text-muted-foreground">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-muted text-3xs text-muted-foreground">
             —
           </div>
         )}
@@ -229,7 +229,7 @@ function OptionEditor({
               Option {optionIndex + 1}
             </span>
             <Input
-              className="h-8 max-w-[14rem]"
+              className="h-8 max-w-56"
               value={option.name}
               placeholder="Optional label"
               onChange={(event) => onChange({ name: event.target.value })}

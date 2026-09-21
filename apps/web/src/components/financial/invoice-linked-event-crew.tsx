@@ -370,7 +370,7 @@ export function InvoiceLinkedEventCrewSection({
     return (
       <div key={rowKey} className="space-y-1">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <div className="min-w-0 flex-1 basis-[6rem]">
+          <div className="min-w-0 flex-1 basis-24">
             <Input
               placeholder="Role"
               value={row.role}
@@ -381,7 +381,7 @@ export function InvoiceLinkedEventCrewSection({
               }
             />
           </div>
-          <div className="min-w-0 flex-1 basis-[10rem]">
+          <div className="min-w-0 flex-1 basis-40">
             <UserSelect
               value={row.userId ?? ""}
               onChange={(value) =>
@@ -420,7 +420,7 @@ export function InvoiceLinkedEventCrewSection({
                 <ClockIcon className="size-4" weight={row.timesOverridden ? "fill" : "regular"} />
               </Button>
               {editingTime ? (
-                <div className="min-w-0 flex-1 basis-[12rem]">
+                <div className="min-w-0 flex-1 basis-48">
                   <DateTimeRangePicker
                     startValue={row.startsAt}
                     endValue={row.endsAt}
@@ -458,7 +458,7 @@ export function InvoiceLinkedEventCrewSection({
               ) : null}
             </>
           ) : (
-            <div className="min-w-0 flex-1 basis-[12rem]">
+            <div className="min-w-0 flex-1 basis-48">
               <DateTimeRangePicker
                 startValue={row.startsAt}
                 endValue={row.endsAt}
@@ -494,7 +494,7 @@ export function InvoiceLinkedEventCrewSection({
         ) : null}
         {availabilityNotes.length > 0 ? (
           <div className="rounded-md border border-dashed bg-muted/30 px-2 py-1.5">
-            <p className="text-[11px] font-medium text-muted-foreground">Availability note</p>
+            <p className="text-2xs font-medium text-muted-foreground">Availability note</p>
             {availabilityNotes.map((line, noteIndex) => (
               <p key={noteIndex} className="text-xs text-muted-foreground italic whitespace-pre-wrap">
                 {line}
@@ -590,7 +590,7 @@ export function InvoiceLinkedEventCrewSection({
             <div className="space-y-2 rounded-md border p-3">
               <p className="text-sm font-medium">Quick assign</p>
               <div className="flex min-w-0 flex-wrap items-center gap-2">
-                <div className="min-w-0 flex-1 basis-[12rem]">
+                <div className="min-w-0 flex-1 basis-48">
                   <UserSelect
                     value={selectedCrewUserId}
                     onChange={(value) => setSelectedCrewUserId(value)}

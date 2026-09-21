@@ -25,6 +25,46 @@ const eslintConfig = defineConfig([
       // Colors must come from the theme. The status palette lives under
       // `status-<hue>-<shade>` in globals.css; legacy utility colors are tokens.
       "shadcn/no-raw-colors": "error",
+      // Disallow off-token values. The allow list is deliberately narrow: it
+      // covers only families where a one-off value is the design —
+      //   - grid templates and spans for the many bespoke data tables,
+      //   - decorative background gradients / custom shadows ("color" category:
+      //     arbitrary *color values*, which shadcn/no-raw-colors governs
+      //     separately — this rule is about lengths),
+      //   - multi-property transitions and their easing/duration,
+      //   - viewport-relative and composite sizes (min-h-[80vh],
+      //     min-w-[min(100%,24rem)], w-[calc(100%-0.5rem)]) that express a
+      //     responsive relationship rather than a fixed length,
+      //   - values derived from a CSS variable (left-[var(--sidebar-width)]).
+      // Everything else has a token in globals.css: status colors, the compact
+      // text sizes, tracking, aspect ratios, radius, the focus-ring width, the
+      // table min-widths, the nav banner padding, and z-index.
+      "shadcn/no-arbitrary-values": [
+        "error",
+        {
+          allow: [
+            "color",
+            "grid-cols",
+            "grid-rows",
+            "shadow",
+            "transition",
+            "duration",
+            "ease",
+            "blur",
+            "scale",
+            "rotate",
+            "min-h",
+            "max-h",
+            "min-w",
+            "max-w",
+            "w",
+            "left",
+            "right",
+            "top",
+            "bottom",
+          ],
+        },
+      ],
       // Underscore-prefixed bindings are intentional throwaways (e.g. pulling a
       // prop out of a destructure so it is not forwarded to the DOM).
       "@typescript-eslint/no-unused-vars": [

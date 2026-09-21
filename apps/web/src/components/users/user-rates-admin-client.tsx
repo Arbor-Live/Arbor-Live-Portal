@@ -220,7 +220,7 @@ function UserRateRow({
           onSubmit={form.handleSubmit(onSave)}
           className="flex flex-wrap items-end gap-2"
         >
-          <div className="min-w-[140px] space-y-1">
+          <div className="min-w-35 space-y-1">
             <Label className="text-xs">Mode</Label>
             <Select
               value={form.watch("rateMode")}

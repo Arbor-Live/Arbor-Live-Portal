@@ -197,38 +197,38 @@ function EventBoardCard({
     <Link
       href={`/dashboard/events/${event._id}`}
       className={cn(
-        "block rounded-md border border-border border-l-[3px] p-2.5 shadow-sm transition-colors hover:bg-accent/40",
+        "block rounded-md border border-border border-l-(--accent-bar-width) p-2.5 shadow-sm transition-colors hover:bg-accent/40",
         eventTypeAccent(event.eventType),
-        compact ? "min-h-[4.5rem]" : "min-h-[5.5rem]",
+        compact ? "min-h-18" : "min-h-22",
       )}
     >
       <div className="flex items-start gap-2">
-        <span className={cn("mt-1 size-2.5 shrink-0 rounded-[3px]", eventTypeDot(event.eventType))} />
+        <span className={cn("mt-1 size-2.5 shrink-0 rounded-(--radius-dot)", eventTypeDot(event.eventType))} />
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex items-start justify-between gap-2">
             <p className="text-sm font-medium leading-snug text-foreground">{event.title}</p>
-            <p className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+            <p className="shrink-0 text-2xs tabular-nums text-muted-foreground">
               {formatBoardTime(event.scheduleSummary?.showAt ?? event.startAt)}
             </p>
           </div>
-          <p className="text-[11px] leading-snug text-muted-foreground">
+          <p className="text-2xs leading-snug text-muted-foreground">
             {formatBoardRange(event.startAt, event.endAt)}
           </p>
           {event.venueName ? (
-            <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
+            <p className="flex items-center gap-1 text-2xs text-muted-foreground">
               <MapPinIcon className="size-3 shrink-0" />
               <span className="truncate">{event.venueName}</span>
             </p>
           ) : null}
           <div className="flex flex-wrap gap-1 pt-0.5">
-            <span className="rounded px-1.5 py-0.5 text-[10px] font-medium bg-muted text-muted-foreground">
+            <span className="rounded px-1.5 py-0.5 text-3xs font-medium bg-muted text-muted-foreground">
               {formatEventStatusLabel(status)}
             </span>
             {tags.map((tag) => (
               <span
                 key={`${event._id}-${tag}`}
                 className={cn(
-                  "rounded px-1.5 py-0.5 text-[10px] font-medium",
+                  "rounded px-1.5 py-0.5 text-3xs font-medium",
                   event.eventType === tag
                     ? "bg-background/80 text-foreground ring-1 ring-border"
                     : teamTagClass(tag),
@@ -238,7 +238,7 @@ function EventBoardCard({
               </span>
             ))}
             {(event.assignedCrewCount ?? 0) > 0 ? (
-              <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+              <span className="rounded bg-muted px-1.5 py-0.5 text-3xs text-muted-foreground">
                 {event.assignedCrewCount} crew
               </span>
             ) : null}
@@ -432,7 +432,7 @@ export function EventsBoardView({ events }: { events: DashboardEvent[] }) {
               </p>
             </div>
 
-            <div className="min-w-[980px]" style={weekGridStyle}>
+            <div className="min-w-table-lg" style={weekGridStyle}>
               {weekDayKeys.map((key) => {
                 const header = dayHeaderLabel(key, todayKey);
                 return (
@@ -445,7 +445,7 @@ export function EventsBoardView({ events }: { events: DashboardEvent[] }) {
                     title={header.title}
                   >
                     <div className="min-w-0">
-                      <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                      <p className="text-2xs uppercase tracking-wide text-muted-foreground">
                         {header.weekday}
                         {header.monthLabel ? ` · ${header.monthLabel}` : ""}
                       </p>
@@ -475,7 +475,7 @@ export function EventsBoardView({ events }: { events: DashboardEvent[] }) {
             </div>
 
             {spanLanes.length > 0 ? (
-              <div className="min-w-[980px] space-y-1 border-b px-1 py-2">
+              <div className="min-w-table-lg space-y-1 border-b px-1 py-2">
                 {spanLanes.map((lane, laneIndex) => (
                   <div key={`lane-${weekDayKeys[0]}-${laneIndex}`} style={weekGridStyle} className="gap-x-2">
                     {lane.map(({ event, startCol, endCol }) => (
@@ -491,7 +491,7 @@ export function EventsBoardView({ events }: { events: DashboardEvent[] }) {
               </div>
             ) : null}
 
-            <div className="min-w-[980px]" style={weekGridStyle}>
+            <div className="min-w-table-lg" style={weekGridStyle}>
               {weekDayKeys.map((key) => {
                 const dayEvents = byDay.get(key) ?? [];
                 const header = dayHeaderLabel(key, todayKey);
@@ -499,12 +499,12 @@ export function EventsBoardView({ events }: { events: DashboardEvent[] }) {
                   <div
                     key={`col-${key}`}
                     className={cn(
-                      "min-h-[14rem] space-y-2 border-r p-2 last:border-r-0",
+                      "min-h-56 space-y-2 border-r p-2 last:border-r-0",
                       header.isToday && "bg-primary/[0.03]",
                     )}
                   >
                     {dayEvents.length === 0 ? (
-                      <p className="px-1 pt-2 text-[11px] text-muted-foreground">No events</p>
+                      <p className="px-1 pt-2 text-2xs text-muted-foreground">No events</p>
                     ) : (
                       dayEvents.map((event) => (
                         <EventBoardCard key={event._id} event={event} compact />

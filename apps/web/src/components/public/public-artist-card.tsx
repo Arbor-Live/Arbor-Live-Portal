@@ -69,7 +69,7 @@ export function PublicArtistCard({
                 artist.name
               )}
             </span>
-            <span className="border border-border px-2 py-0.5 text-[11px] uppercase tracking-wide text-muted-foreground">
+            <span className="border border-border px-2 py-0.5 text-2xs uppercase tracking-wide text-muted-foreground">
               {ROLE_LABELS[artist.role]}
             </span>
             <ArtistTypeBadge organizationType={artist.organizationType} />

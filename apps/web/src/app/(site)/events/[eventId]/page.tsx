@@ -27,10 +27,10 @@ export default async function PublicEventDetailPage({ params }: EventDetailPageP
   return (
     <PublicMarketingLayout>
       <article>
-        <section className="relative overflow-hidden border-b bg-muted/40 pt-[calc(6rem_+_var(--happening-banner-height,0px))] pb-12 text-foreground sm:pt-[calc(7rem_+_var(--happening-banner-height,0px))] sm:pb-16 dark:bg-status-zinc-950 dark:text-status-zinc-50">
+        <section className="relative overflow-hidden border-b bg-muted/40 pt-banner-lg pb-12 text-foreground sm:pt-banner-xl sm:pb-16 dark:bg-status-zinc-950 dark:text-status-zinc-50">
           <div
             aria-hidden
-            className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_-10%,color-mix(in_oklch,var(--color-primary)_22%,transparent),transparent)] dark:bg-[radial-gradient(ellipse_80%_60%_at_50%_-10%,color-mix(in_oklch,var(--color-primary)_30%,transparent),transparent)]"
+            className="pointer-events-none absolute inset-0 glow-primary-top"
           />
           <div className="relative mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
             <div className="grid gap-8 md:grid-cols-2">

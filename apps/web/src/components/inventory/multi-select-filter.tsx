@@ -138,7 +138,7 @@ export function MultiSelectFilter({
         ? createPortal(
             <div
               ref={menuRef}
-              className="z-[200] rounded-none border border-input bg-popover p-2 shadow-md"
+              className="z-200 rounded-none border border-input bg-popover p-2 shadow-md"
               style={{
                 position: "fixed",
                 top: menuPosition.top,

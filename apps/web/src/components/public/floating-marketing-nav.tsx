@@ -135,7 +135,7 @@ export function FloatingMarketingNav() {
                   </SheetTrigger>
                   <SheetContent
                     side="right"
-                    className="z-[60] w-[min(100%,20rem)] gap-0 p-0 pointer-events-auto"
+                    className="z-60 w-[min(100%,20rem)] gap-0 p-0 pointer-events-auto"
                   >
                     <SheetHeader className="border-b px-5 py-4 text-left">
                       <SheetTitle className="font-heading text-base">Menu</SheetTitle>

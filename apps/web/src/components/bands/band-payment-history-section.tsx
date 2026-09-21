@@ -173,7 +173,7 @@ export function BandPaymentHistorySection() {
         ) : (
           <>
             <div className="overflow-x-auto rounded-md border">
-              <table className="w-full min-w-[720px] text-sm">
+              <table className="w-full min-w-table-md text-sm">
                 <thead className="bg-muted/40">
                   <tr className="border-b text-left">
                     <th className="px-3 py-2 font-medium">Event</th>

@@ -170,7 +170,7 @@ function Speaker({
       aria-hidden
     >
       <div className="relative">
-        <div className="relative z-10 size-2.5 shrink-0 rounded-[3px] border border-primary/30 bg-primary/75 shadow-sm" />
+        <div className="relative z-10 size-2.5 shrink-0 rounded-(--radius-dot) border border-primary/30 bg-primary/75 shadow-sm" />
         <div className="pointer-events-none absolute left-1/2 top-1/2 z-0 size-0">
           {Array.from({ length: rippleCount }).map((_, index) => (
             <SoundRipple

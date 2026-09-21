@@ -31,7 +31,7 @@ function formatEventWhen(startAt: number) {
 function EventCardSkeleton() {
   return (
     <Card className="h-full gap-0 overflow-hidden border border-border py-0 shadow-sm ring-0">
-      <Skeleton className="aspect-[4/5] w-full rounded-none" />
+      <Skeleton className="aspect-(--aspect-poster) w-full rounded-none" />
       <CardContent className="space-y-3 p-4">
         <div className="space-y-2">
           <Skeleton className="h-5 w-3/4" />
@@ -46,9 +46,9 @@ function EventCardSkeleton() {
 
 function EventCarouselCardSkeleton() {
   return (
-    <div className="w-[168px] shrink-0 sm:w-[196px]" aria-hidden>
+    <div className="w-42 shrink-0 sm:w-49" aria-hidden>
       <div className="overflow-hidden border border-border bg-card shadow-sm">
-        <Skeleton className="aspect-[4/5] w-full rounded-none" />
+        <Skeleton className="aspect-(--aspect-poster) w-full rounded-none" />
         <div className="space-y-2 p-3">
           <Skeleton className="h-4 w-4/5" />
           <Skeleton className="h-3 w-3/5" />
@@ -194,7 +194,7 @@ export function LandingUpcomingEvents({
                 <Link
                   key={event.eventId}
                   href={event.publicEventUrl}
-                  className="group w-[168px] shrink-0 snap-start sm:w-[196px]"
+                  className="group w-42 shrink-0 snap-start sm:w-49"
                 >
                   <article className="h-full overflow-hidden border border-border bg-card shadow-sm transition-[border-color,box-shadow] group-hover:border-primary/40 group-hover:shadow-md">
                     <PublicEventPoster

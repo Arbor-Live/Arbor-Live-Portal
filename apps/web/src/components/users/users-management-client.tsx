@@ -615,7 +615,7 @@ export function UsersManagementClient({
           </CardHeader>
           <CardContent className="space-y-2">
             <div className="flex flex-wrap items-end gap-3">
-              <div className="min-w-[220px] flex-1 space-y-1">
+              <div className="min-w-55 flex-1 space-y-1">
                 <Label>Organization</Label>
                 <Select value={resolvedOrgId} onValueChange={setSelectedOrganizationId}>
                   <SelectTrigger>
@@ -638,7 +638,7 @@ export function UsersManagementClient({
               </Button>
             </div>
             <div className="flex flex-wrap gap-3">
-              <div className="max-w-[240px] space-y-1">
+              <div className="max-w-60 space-y-1">
                 <Label>Access</Label>
                 <Select
                   value={accessFilter}
@@ -654,7 +654,7 @@ export function UsersManagementClient({
                   </SelectContent>
                 </Select>
               </div>
-              <div className="max-w-[240px] space-y-1">
+              <div className="max-w-60 space-y-1">
                 <Label>Onboarding</Label>
                 <Select
                   value={onboardingFilter}
@@ -714,7 +714,7 @@ export function UsersManagementClient({
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex flex-wrap items-end gap-3">
-              <div className="max-w-[240px] space-y-1">
+              <div className="max-w-60 space-y-1">
                 <Label>Status Filter</Label>
                 <Select
                   value={inviteStatus}
@@ -1017,7 +1017,7 @@ function UserAdminRow({
                 if (action === "reactivate") onSetAccess(false);
               }}
             >
-              <SelectTrigger className="min-w-[140px]">
+              <SelectTrigger className="min-w-35">
                 <SelectValue placeholder="Select..." />
               </SelectTrigger>
               <SelectContent>
@@ -1259,7 +1259,7 @@ function UserAdminRow({
                         form.setValue("publicCrewDescription", e.target.value, { shouldDirty: true })
                       }
                       placeholder="Short bio shown on the public crew page."
-                      className="flex min-h-[72px] w-full rounded-md border border-input bg-background px-3 py-2 text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      className="flex min-h-18 w-full rounded-md border border-input bg-background px-3 py-2 text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     />
                   </div>
                 </div>
@@ -1438,7 +1438,7 @@ function BandOrgAdminRow({
           <p className="font-medium">
             {org.name}
             {isArchived ? (
-              <span className="ml-2 rounded-full border border-status-amber-500/30 bg-status-amber-500/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-status-amber-700">
+              <span className="ml-2 rounded-full border border-status-amber-500/30 bg-status-amber-500/15 px-2 py-0.5 text-3xs font-medium uppercase tracking-wide text-status-amber-700">
                 Archived
               </span>
             ) : null}
@@ -1450,7 +1450,7 @@ function BandOrgAdminRow({
                   type="button"
                   size="sm"
                   variant="outline"
-                  className="h-6 border-status-amber-500/40 px-2 text-[11px] text-status-amber-900 dark:text-status-amber-200"
+                  className="h-6 border-status-amber-500/40 px-2 text-2xs text-status-amber-900 dark:text-status-amber-200"
                 >
                   Onboarding · {missingCount || "?"}
                 </Button>
