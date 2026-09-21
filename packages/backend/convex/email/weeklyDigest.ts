@@ -13,8 +13,9 @@ const WEEKLY_DIGEST_PROFILE_PAGE_SIZE = 200;
 /**
  * Weekly pending-activity digest. Arbor staff get availability, shifts,
  * timecards, and post-event work they are actually assigned to; portal admins
- * also get booking, payout, and post-mortem queues. Artist-only members (bands,
- * DJs, and the other artist org types) get the email only when their org has a
+ * also get booking and payout queues. Other people's unsubmitted reviews are
+ * not included. Artist-only members (bands, DJs, and the other artist org
+ * types) get the email only when their org has a
  * show this week or onboarding still open — not crew post-event work, and not
  * the admin queues. Band org admins share Better Auth `role: "admin"` with
  * portal admins; that role alone does not make them a portal admin.

@@ -34,8 +34,6 @@ const DIGEST_ITEM_CAP = 6;
 const DIGEST_SCAN_CAP = 500;
 /** Bound on status rows scanned when counting admin work queues. */
 const DIGEST_COUNT_SCAN_CAP = 50;
-/** Bound on post-mortem rows scanned for the admin queue (mirrors Insights). */
-const DIGEST_POST_MORTEM_SCAN_CAP = 300;
 /**
  * Orgs one person belongs to. Arbor plus a handful of bands is the real case;
  * 20 is past that. Hitting it means classification may be incomplete.
@@ -326,32 +324,6 @@ async function buildPostEventWorkSection(
   };
 }
 
-/**
- * Admin view of every post-mortem we asked for but never got back. Rows are
- * minted for a lead when the post-event email goes out, so an unsubmitted row
- * is exactly an outstanding review. Bounded like the Insights panel.
- */
-async function buildPostMortemQueueSection(
-  ctx: QueryCtx,
-): Promise<WeeklyDigestSection | null> {
-  const rows = await ctx.db.query("postMortemFeedback").take(DIGEST_POST_MORTEM_SCAN_CAP);
-  const pending = rows.filter((row) => !row.submittedAt);
-  if (pending.length === 0) return null;
-
-  const items: string[] = [];
-  for (const row of pending) {
-    if (items.length >= DIGEST_ITEM_CAP) break;
-    const event = await ctx.db.get(row.eventId);
-    items.push(`${event?.title ?? "Event"} • awaiting review`);
-  }
-
-  return {
-    title: `Post-mortem queue — ${plural(pending.length, "review")} outstanding`,
-    totalCount: pending.length,
-    items,
-  };
-}
-
 async function buildBookingRequestsSection(
   ctx: QueryCtx,
 ): Promise<WeeklyDigestSection | null> {
@@ -426,7 +398,9 @@ async function buildArtistPayoutsSection(
  * Assemble the pending-activity digest for one user. Sections only appear when
  * they have something actionable, so an empty result means "send nothing".
  *
- * Arbor staff get crew sections (and portal admins get the work queues).
+ * Arbor staff get crew sections (and portal admins get booking and payout queues).
+ * Outstanding reviews for other people stay off this email — the digest only
+ * lists a review when the recipient still owes it on an event they worked.
  * Artist-only members get a show this week and unfinished onboarding — not
  * crew post-event work or the admin queues. Band org admins are Better Auth
  * `role: "admin"`, which is not a portal admin.
@@ -459,7 +433,6 @@ export async function buildWeeklyDigest(
     artistOnboarding,
     bookingRequests,
     artistPayouts,
-    postMortemQueue,
   ] = await Promise.all([
     audience.staffSections && isCrew && flags.assignableAsCrew
       ? buildAvailabilitySection(ctx, args.userId, args.profile, args.now)
@@ -477,7 +450,6 @@ export async function buildWeeklyDigest(
     buildArtistOnboardingSection(ctx, audience.artistOrganizationIds),
     audience.adminQueues ? buildBookingRequestsSection(ctx) : Promise.resolve(null),
     audience.adminQueues ? buildArtistPayoutsSection(ctx) : Promise.resolve(null),
-    audience.adminQueues ? buildPostMortemQueueSection(ctx) : Promise.resolve(null),
   ]);
 
   const sections = [
@@ -489,7 +461,6 @@ export async function buildWeeklyDigest(
     artistOnboarding,
     bookingRequests,
     artistPayouts,
-    postMortemQueue,
   ].filter((section): section is WeeklyDigestSection => section !== null);
 
   return {

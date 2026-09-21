@@ -18,7 +18,8 @@ export type WeeklyDigestAudience = {
   /** Availability, crew shifts, timecards, and assigned post-event work. */
   staffSections: boolean;
   /**
-   * Booking requests, artist payouts, and the global post-mortem queue.
+   * Booking requests and artist payouts. Other people's unsubmitted reviews
+   * are not a personal to-do and stay off the digest.
    * Band org admins share Better Auth `role: "admin"` with portal admins;
    * that role alone must not open these queues.
    */

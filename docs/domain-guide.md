@@ -70,8 +70,9 @@ canonical description of the domain itself.
   Monday `weeklyJobs` cron): Arbor staff get pending availability, shifts that
   week, timecards, and post-event work for events they crewed or led (review +
   photos, and only after the event itself has ended). Portal admins also get
-  open booking requests, artist payouts in progress, and the outstanding
-  post-mortem queue. Artist-only members get the email only when one of their
+  open booking requests and artist payouts in progress. Unsubmitted reviews
+  for other people are not listed — a review shows up only when the recipient
+  still owes it. Artist-only members get the email only when one of their
   bands has a show that week or onboarding still open — not crew post-event
   work and not the admin queues. Band org admins are Better Auth
   `role: "admin"`; that is not a portal admin. Per-user opt-out is the
