@@ -27,8 +27,6 @@ import {
   QuestionnaireTitle,
 } from "@/components/ui/questionnaire";
 import {
-  QUESTIONNAIRE_ITEM_CLASSNAME,
-  QUESTIONNAIRE_TITLE_CLASSNAME,
   handleQuestionnaireEnter,
   MarkStepAnswered,
   QuestionnaireWizardFooter,
@@ -629,7 +627,7 @@ export function BandOnboardingWizard() {
             ) : null}
 
             {finished ? (
-              <div className={QUESTIONNAIRE_ITEM_CLASSNAME}>
+              <div>
                 <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
                   {STEP_HEADLINES.thankYou}
                 </h1>
@@ -643,9 +641,8 @@ export function BandOnboardingWizard() {
               <QuestionnaireItem
                 name="welcome"
                 required
-                className={QUESTIONNAIRE_ITEM_CLASSNAME}
               >
-                <QuestionnaireTitle className={QUESTIONNAIRE_TITLE_CLASSNAME}>
+                <QuestionnaireTitle>
                   {STEP_HEADLINES.welcome}
                 </QuestionnaireTitle>
                 <div className="space-y-3 text-sm text-foreground/70">
@@ -665,9 +662,8 @@ export function BandOnboardingWizard() {
                 name="identity"
                 required
                 invalid={currentStep === "identity" && Boolean(fieldError)}
-                className={QUESTIONNAIRE_ITEM_CLASSNAME}
               >
-                <QuestionnaireTitle className={QUESTIONNAIRE_TITLE_CLASSNAME}>
+                <QuestionnaireTitle>
                   {STEP_HEADLINES.identity}
                 </QuestionnaireTitle>
                 <div className="space-y-4">
@@ -700,9 +696,8 @@ export function BandOnboardingWizard() {
               <QuestionnaireItem
                 name="passkey"
                 required
-                className={QUESTIONNAIRE_ITEM_CLASSNAME}
               >
-                <QuestionnaireTitle className={QUESTIONNAIRE_TITLE_CLASSNAME}>
+                <QuestionnaireTitle>
                   {STEP_HEADLINES.passkey}
                 </QuestionnaireTitle>
                 <OnboardingPasskeyStep onAdded={() => setHasAddedPasskey(true)} />
@@ -713,9 +708,8 @@ export function BandOnboardingWizard() {
                 name="hero"
                 required
                 invalid={currentStep === "hero" && Boolean(fieldError)}
-                className={QUESTIONNAIRE_ITEM_CLASSNAME}
               >
-                <QuestionnaireTitle className={QUESTIONNAIRE_TITLE_CLASSNAME}>
+                <QuestionnaireTitle>
                   {STEP_HEADLINES.hero}
                 </QuestionnaireTitle>
                 <div className="space-y-4">
@@ -759,9 +753,8 @@ export function BandOnboardingWizard() {
                 name="socials"
                 required
                 invalid={currentStep === "socials" && Boolean(fieldError)}
-                className={QUESTIONNAIRE_ITEM_CLASSNAME}
               >
-                <QuestionnaireTitle className={QUESTIONNAIRE_TITLE_CLASSNAME}>
+                <QuestionnaireTitle>
                   {STEP_HEADLINES.socials}
                 </QuestionnaireTitle>
                 <div className="space-y-4">
@@ -836,9 +829,8 @@ export function BandOnboardingWizard() {
                 name="members"
                 required
                 invalid={currentStep === "members" && Boolean(fieldError)}
-                className={QUESTIONNAIRE_ITEM_CLASSNAME}
               >
-                <QuestionnaireTitle className={QUESTIONNAIRE_TITLE_CLASSNAME}>
+                <QuestionnaireTitle>
                   {STEP_HEADLINES.members}
                 </QuestionnaireTitle>
                 <div className="space-y-4">
@@ -968,9 +960,8 @@ export function BandOnboardingWizard() {
                 name="rates"
                 required
                 invalid={currentStep === "rates" && Boolean(fieldError)}
-                className={QUESTIONNAIRE_ITEM_CLASSNAME}
               >
-                <QuestionnaireTitle className={QUESTIONNAIRE_TITLE_CLASSNAME}>
+                <QuestionnaireTitle>
                   {STEP_HEADLINES.rates}
                 </QuestionnaireTitle>
                 <div className="space-y-4">
@@ -1064,9 +1055,8 @@ export function BandOnboardingWizard() {
                 name="payment"
                 required
                 invalid={currentStep === "payment" && Boolean(fieldError)}
-                className={QUESTIONNAIRE_ITEM_CLASSNAME}
               >
-                <QuestionnaireTitle className={QUESTIONNAIRE_TITLE_CLASSNAME}>
+                <QuestionnaireTitle>
                   {STEP_HEADLINES.payment}
                 </QuestionnaireTitle>
                 <div className="space-y-4">

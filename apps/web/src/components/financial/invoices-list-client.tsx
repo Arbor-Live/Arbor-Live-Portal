@@ -360,6 +360,7 @@ export function InvoicesListClient() {
         getRowId={(row) => row._id}
         enableColumnVisibility
         emptyMessage="No invoices match your filters."
+        // eslint-disable-next-line shadcn/require-static-classes -- DataTable rows take a className callback; both the value and the forwarded className are the table api.
         getRowClassName={() => "cursor-pointer"}
         getRowProps={(row) => ({
           onClick: () => router.push(`/dashboard/financial-hub/invoices/${row.original._id}`),

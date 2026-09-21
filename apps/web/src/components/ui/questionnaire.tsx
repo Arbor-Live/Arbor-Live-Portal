@@ -44,7 +44,7 @@ function QuestionnaireItem({
     <QuestionnairePrimitive.Item
       data-slot="questionnaire-item"
       className={cn(
-        "flex min-w-0 flex-col gap-4 border-0 p-0 outline-none [&[hidden]]:hidden [&[data-hidden]]:hidden",
+        "flex min-w-0 flex-col gap-4 space-y-6 border border-border/50 bg-background/70 p-5 shadow-[0_8px_24px_rgba(0,0,0,0.06)] backdrop-blur-xl outline-none data-active:animate-in data-active:fade-in-0 data-active:slide-in-from-bottom-2 data-active:duration-300 motion-reduce:animate-none sm:p-6 [&[hidden]]:hidden [&[data-hidden]]:hidden",
         className
       )}
       {...props}
@@ -60,7 +60,7 @@ function QuestionnaireTitle({
     <QuestionnairePrimitive.Title
       data-slot="questionnaire-title"
       className={cn(
-        "font-heading text-sm font-medium text-pretty [&:not(:has(~[data-slot=questionnaire-description]))]:mb-4",
+        "font-heading text-2xl font-semibold tracking-tight text-pretty sm:text-3xl [&:not(:has(~[data-slot=questionnaire-description]))]:mb-4",
         className
       )}
       {...props}
@@ -109,7 +109,7 @@ function QuestionnaireChoice({
     <QuestionnairePrimitive.Choice
       data-slot="questionnaire-choice"
       className={cn(
-        "group/questionnaire-choice relative flex min-h-11 cursor-pointer items-start gap-2.5 rounded-none border border-input bg-transparent px-3 py-2.5 text-start text-xs transition-colors outline-none select-none hover:bg-muted/50 has-[>input:focus-visible]:border-ring has-[>input:focus-visible]:ring-1 has-[>input:focus-visible]:ring-ring/50 data-invalid:border-destructive data-checked:border-foreground/30 data-checked:bg-muted",
+        "group/questionnaire-choice relative flex min-h-11 cursor-pointer items-start gap-3 rounded-md border border-input bg-transparent p-3 text-start text-sm transition-colors outline-none select-none hover:bg-muted/40 has-[>input:focus-visible]:border-ring has-[>input:focus-visible]:ring-1 has-[>input:focus-visible]:ring-ring/50 data-invalid:border-destructive data-checked:border-primary data-checked:bg-primary/5",
         "data-disabled:pointer-events-none data-disabled:cursor-not-allowed data-disabled:opacity-50",
         className
       )}

@@ -34,6 +34,7 @@ export function PublicPortalPageSkeleton({
     <div role="status" aria-label="Loading">
       <div className="relative overflow-hidden border-b bg-muted/40 px-4 pb-14 pt-banner-lg sm:px-6 sm:pb-20 sm:pt-banner-xl lg:px-8 dark:bg-status-zinc-950">
         <div className="relative mx-auto max-w-6xl space-y-4">
+          {/* eslint-disable-next-line shadcn/require-static-classes -- Skeleton takes a per-usage width override by design. */}
           <Skeleton className={cn("h-10 sm:h-12", titleWidth)} />
           <Skeleton className="h-5 w-full max-w-xl" />
           <Skeleton className="h-5 w-3/5 max-w-md" />

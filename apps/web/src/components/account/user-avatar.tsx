@@ -102,6 +102,7 @@ export function UserAvatar({
 
   if (imageUrl) {
     return (
+      // eslint-disable-next-line shadcn/require-static-classes -- UserAvatar defines its own size scale on top of the Avatar primitive; className is forwarded by design.
       <Avatar className={cn(sizeClasses[size], className)} size={size}>
         <AvatarImage src={imageUrl} alt={name} />
         <AvatarFallback>{initials || "?"}</AvatarFallback>
