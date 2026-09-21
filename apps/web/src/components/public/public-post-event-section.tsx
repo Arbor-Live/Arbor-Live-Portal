@@ -42,7 +42,15 @@ export function PublicPostEventSection({
   const ensureAlbum = useAction(api.eventFeedbackActions.ensureAlbumShareUrlByToken);
   const submit = useMutation(api.eventFeedback.submitByToken);
   const [hoveredRating, setHoveredRating] = useState(0);
-  const [ensuredAlbumUrl, setEnsuredAlbumUrl] = useState<string | undefined>();
+  const [ensuredAlbum, setEnsuredAlbum] = useState<{
+    portal: FeedbackPortal;
+    token: string;
+    albumShareUrl: string;
+  } | null>(null);
+  const ensuredAlbumUrl =
+    ensuredAlbum && ensuredAlbum.portal === portal && ensuredAlbum.token === token
+      ? ensuredAlbum.albumShareUrl
+      : undefined;
 
   const form = useConvexForm<EventFeedbackFormValues>({
     schema: eventFeedbackSchema,
@@ -61,10 +69,6 @@ export function PublicPostEventSection({
   });
 
   useEffect(() => {
-    setEnsuredAlbumUrl(undefined);
-  }, [portal, token]);
-
-  useEffect(() => {
     if (status === undefined) return;
     if (window.location.hash === "#feedback") {
       document.getElementById("feedback")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -78,7 +82,9 @@ export function PublicPostEventSection({
     void ensureAlbum({ portal, token })
       .then((result) => {
         if (cancelled) return;
-        if (result?.albumShareUrl) setEnsuredAlbumUrl(result.albumShareUrl);
+        if (result?.albumShareUrl) {
+          setEnsuredAlbum({ portal, token, albumShareUrl: result.albumShareUrl });
+        }
       })
       .catch(() => {
         // Immich is optional — leave the album card hidden if ensure fails.

@@ -10,6 +10,11 @@ import { syncEventStatusForLinkedInvoice, syncLinkedEventStatusFromInvoice } fro
 import { syncBookingRequestStatusFromInvoice } from "./lib/bookingRequestStatus";
 import { recordInvoiceStatusTransition } from "./lib/statusTransitions";
 import { listEventsByInvoiceId } from "./lib/invoiceEvents";
+import {
+  addPublicEventContact,
+  deletePublicEventContact,
+  requirePublicEditableEvent,
+} from "./lib/publicEventContacts";
 import { isSingleSeriesBooking } from "./lib/invoiceArtistDays";
 import { getActivePaymentProofSubmission } from "./lib/paymentProof";
 import { invoiceDueEndMs } from "./lib/invoicePaymentStatus";
@@ -1124,6 +1129,67 @@ export const updatePaymentContactsByToken = mutation({
     }
     const { token: _token, ...contactArgs } = args;
     await updateInvoicePaymentContacts(ctx, invoice, contactArgs);
+    return { ok: true as const };
+  },
+});
+
+/** Client-facing event contacts: view any time, add/delete once the quote is approved. */
+export const addEventContactByToken = mutation({
+  args: {
+    token: v.string(),
+    eventId: v.id("events"),
+    name: v.string(),
+    position: v.optional(v.string()),
+    email: v.optional(v.string()),
+    phone: v.optional(v.string()),
+  },
+  returns: v.object({ ok: v.literal(true) }),
+  handler: async (ctx, args) => {
+    await enforceRateLimit(ctx, `publicEventContacts:${args.token}`, { limit: 60, windowMs: HOUR_MS });
+    const invoice = await ctx.db
+      .query("invoices")
+      .withIndex("by_publicApprovalToken", (q) => q.eq("publicApprovalToken", args.token))
+      .unique();
+    if (!invoice || invoice.status === "void") throw new Error("Quote not found.");
+    if (invoice.sourceEventRequestId) {
+      throw new Error("Please review this quote from your booking request link.");
+    }
+    if (invoice.publicApprovalTokenExpiresAt && invoice.publicApprovalTokenExpiresAt < Date.now()) {
+      throw new Error("Quote not found.");
+    }
+    await requirePublicEditableEvent(ctx, invoice, args.eventId);
+    await addPublicEventContact(ctx, args.eventId, {
+      name: args.name,
+      position: args.position,
+      email: args.email,
+      phone: args.phone,
+    });
+    return { ok: true as const };
+  },
+});
+
+export const deleteEventContactByToken = mutation({
+  args: {
+    token: v.string(),
+    eventId: v.id("events"),
+    contactId: v.id("eventContacts"),
+  },
+  returns: v.object({ ok: v.literal(true) }),
+  handler: async (ctx, args) => {
+    await enforceRateLimit(ctx, `publicEventContacts:${args.token}`, { limit: 60, windowMs: HOUR_MS });
+    const invoice = await ctx.db
+      .query("invoices")
+      .withIndex("by_publicApprovalToken", (q) => q.eq("publicApprovalToken", args.token))
+      .unique();
+    if (!invoice || invoice.status === "void") throw new Error("Quote not found.");
+    if (invoice.sourceEventRequestId) {
+      throw new Error("Please review this quote from your booking request link.");
+    }
+    if (invoice.publicApprovalTokenExpiresAt && invoice.publicApprovalTokenExpiresAt < Date.now()) {
+      throw new Error("Quote not found.");
+    }
+    await requirePublicEditableEvent(ctx, invoice, args.eventId);
+    await deletePublicEventContact(ctx, args.eventId, args.contactId);
     return { ok: true as const };
   },
 });

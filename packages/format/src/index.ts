@@ -13,7 +13,6 @@ const dateTimePresets = {
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
-    timeZoneName: "short",
   },
   long: {
     timeZone: PORTAL_TIMEZONE,
@@ -23,13 +22,11 @@ const dateTimePresets = {
     year: "numeric",
     hour: "numeric",
     minute: "2-digit",
-    timeZoneName: "short",
   },
   timeOnly: {
     timeZone: PORTAL_TIMEZONE,
     hour: "numeric",
     minute: "2-digit",
-    timeZoneName: "short",
   },
 } satisfies Record<string, Intl.DateTimeFormatOptions>;
 
@@ -50,6 +47,10 @@ export function formatUsdOptional(value?: number | null) {
   return formatUsd(value);
 }
 
+/**
+ * Portal-local date and time. The portal timezone is assumed everywhere,
+ * including external emails, so no zone abbreviation is appended.
+ */
 export function formatDateTime(
   ms: number,
   style: keyof typeof dateTimePresets = "short",
@@ -65,8 +66,7 @@ export function formatDate(ms: number, timezone: string = PORTAL_TIMEZONE) {
 
 /**
  * Time of day with no timezone suffix, for dense tables and ranges where the
- * portal timezone is assumed (e.g. printed briefs). Prefer `formatDateTime`
- * when the zone should be stated.
+ * portal timezone is assumed (e.g. printed briefs).
  */
 export function formatTime(ms: number, timezone: string = PORTAL_TIMEZONE) {
   return new Intl.DateTimeFormat("en-US", {

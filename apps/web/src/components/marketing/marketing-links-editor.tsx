@@ -55,12 +55,20 @@ export function MarketingLinksEditor({
   const showPartifulCohost =
     showCohost && Boolean(onPartifulCohostUrlChange) && linksIncludePartiful(rows);
 
-  const rowKeysRef = useRef<string[]>([]);
-  while (rowKeysRef.current.length < rows.length) {
-    rowKeysRef.current.push(newRowKey());
-  }
-  if (rowKeysRef.current.length > rows.length) {
-    rowKeysRef.current = rowKeysRef.current.slice(0, rows.length);
+  const [rowKeys, setRowKeys] = useState<string[]>([]);
+  const [rowKeysLength, setRowKeysLength] = useState(0);
+  if (rows.length !== rowKeysLength) {
+    setRowKeysLength(rows.length);
+    setRowKeys((keys) => {
+      if (keys.length === rows.length) return keys;
+      if (keys.length < rows.length) {
+        return [
+          ...keys,
+          ...Array.from({ length: rows.length - keys.length }, () => newRowKey()),
+        ];
+      }
+      return keys.slice(0, rows.length);
+    });
   }
 
   /**
@@ -81,7 +89,7 @@ export function MarketingLinksEditor({
   function reorderLive(from: number, to: number) {
     if (from === to || from < 0 || to < 0) return;
     onLinksChange(moveInArray(rows, from, to));
-    rowKeysRef.current = moveInArray(rowKeysRef.current, from, to);
+    setRowKeys((keys) => moveInArray(keys, from, to));
     dragIndexRef.current = to;
   }
 
@@ -95,7 +103,7 @@ export function MarketingLinksEditor({
     <div className="space-y-2">
       <Label>{label}</Label>
       {rows.map((link, index) => {
-        const rowKey = rowKeysRef.current[index] ?? `${idPrefix}-link-${index}`;
+        const rowKey = rowKeys[index] ?? `${idPrefix}-link-${index}`;
         const isDragging = draggingKey === rowKey;
         return (
           <div
@@ -185,7 +193,6 @@ export function MarketingLinksEditor({
         size="sm"
         disabled={disabled || rows.length >= MAX_ADDITIONAL_LINKS}
         onClick={() => {
-          rowKeysRef.current = [...rowKeysRef.current, newRowKey()];
           onLinksChange([...rows, emptyMarketingLink()]);
         }}
       >

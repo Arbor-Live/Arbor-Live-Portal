@@ -331,7 +331,8 @@ export function StagePlotCanvas({
                       width={rect.width + 8}
                       height={rect.height + 8}
                       fill="none"
-                      stroke="#2563eb"
+                      stroke="currentColor"
+                      className="text-primary"
                       strokeWidth={1.5}
                       strokeDasharray="5 4"
                     />
@@ -440,7 +441,7 @@ function SelectionControls({
         aria-label={`Rotate ${item.label}`}
         title="Drag to rotate"
         onPointerDown={onRotateStart}
-        className="absolute flex size-6 cursor-grab items-center justify-center rounded-full border border-blue-600 bg-white text-blue-700 shadow-sm"
+        className="absolute flex size-6 cursor-grab items-center justify-center rounded-full border border-primary bg-background text-primary shadow-sm"
         style={{ left: rect.cx - 12, top: rect.y - 30 }}
       >
         <ArrowsClockwiseIcon className="size-3.5" />

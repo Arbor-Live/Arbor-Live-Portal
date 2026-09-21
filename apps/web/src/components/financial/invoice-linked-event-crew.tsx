@@ -136,13 +136,14 @@ export function InvoiceLinkedEventCrewSection({
   const dayCount = eventDayCount(startAt, endAt);
   const showCrewTools = eventTypeHasCrewAssignment(eventType);
 
+  const viewerUserId = viewer?.userId;
   const userSelectOptions: UserSelectOption[] = useMemo(
     () =>
       assignableCrewSelectOptions(
         managerList,
-        viewer?.userId
+        viewerUserId
           ? {
-              id: viewer.userId,
+              id: viewerUserId,
               name: account?.name ?? account?.email ?? "Current user",
               email: account?.email,
               avatarUrl: account?.avatarUrl,
@@ -150,7 +151,7 @@ export function InvoiceLinkedEventCrewSection({
             }
           : null,
       ),
-    [account, managerList, viewer?.userId],
+    [account, managerList, viewerUserId],
   );
 
   const ratesByUserId = useMemo(() => {
