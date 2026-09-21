@@ -22,6 +22,10 @@ const eslintConfig = defineConfig([
     rules: {
       // Unknown classes silently generate no CSS; catching them is always safe.
       "shadcn/no-unknown-classes": "error",
+      // className values on design-system components must be statically
+      // readable, so the other rules can actually check them. The primitive
+      // styling lives in the components; call sites pass plain strings.
+      "shadcn/require-static-classes": "error",
       // Colors must come from the theme. The status palette lives under
       // `status-<hue>-<shade>` in globals.css; legacy utility colors are tokens.
       "shadcn/no-raw-colors": "error",

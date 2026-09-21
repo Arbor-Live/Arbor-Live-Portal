@@ -25,9 +25,6 @@ import {
   QuestionnaireTitle,
 } from "@/components/ui/questionnaire";
 import {
-  QUESTIONNAIRE_CHOICE_CLASSNAME,
-  QUESTIONNAIRE_ITEM_CLASSNAME,
-  QUESTIONNAIRE_TITLE_CLASSNAME,
   handleQuestionnaireEnter,
   MarkStepAnswered,
   QuestionnaireWizardFooter,
@@ -324,7 +321,7 @@ export function OpenMicWizard() {
               ) : null}
 
               {confirmation ? (
-                <div className={QUESTIONNAIRE_ITEM_CLASSNAME}>
+                <div>
                   <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
                     You&apos;re on the list!
                   </h1>
@@ -351,7 +348,6 @@ export function OpenMicWizard() {
                   disabled={renderedDisabled}
                   multiple={resolvedItem === "equipment"}
                   invalid={Boolean(renderedFieldError)}
-                  className={QUESTIONNAIRE_ITEM_CLASSNAME}
                 >
                   {resolvedItem === "intro" ? (
                     <>
@@ -361,7 +357,7 @@ export function OpenMicWizard() {
                   ) : (
                     <>
                       <div className="space-y-3">
-                        <QuestionnaireTitle className={QUESTIONNAIRE_TITLE_CLASSNAME}>
+                        <QuestionnaireTitle>
                           {renderedStep && "headline" in renderedStep ? renderedStep.headline : ""}
                         </QuestionnaireTitle>
                         {renderedStep && "subheader" in renderedStep && renderedStep.subheader ? (
@@ -392,7 +388,6 @@ function EquipmentChoices() {
         <QuestionnaireChoice
           key={option}
           value={option}
-          className={QUESTIONNAIRE_CHOICE_CLASSNAME}
           checked={equipment.includes(option)}
           onChange={(event) => {
             const selected = event.currentTarget.checked;

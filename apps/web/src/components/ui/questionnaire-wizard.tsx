@@ -12,15 +12,6 @@ import {
   QuestionnaireSubmit,
 } from "@/components/ui/questionnaire";
 
-export const QUESTIONNAIRE_ITEM_CLASSNAME =
-  "space-y-6 border border-border/50 bg-background/70 p-5 shadow-[0_8px_24px_rgba(0,0,0,0.06)] backdrop-blur-xl data-active:animate-in data-active:fade-in-0 data-active:slide-in-from-bottom-2 data-active:duration-300 motion-reduce:animate-none sm:p-6";
-
-export const QUESTIONNAIRE_CHOICE_CLASSNAME =
-  "gap-3 rounded-md p-3 text-sm hover:bg-muted/40 data-checked:border-primary data-checked:bg-primary/5";
-
-export const QUESTIONNAIRE_TITLE_CLASSNAME =
-  "text-2xl font-semibold tracking-tight sm:text-3xl";
-
 const progressSpring = { type: "spring" as const, stiffness: 380, damping: 36 };
 
 function isTextEntryTarget(target: EventTarget | null) {

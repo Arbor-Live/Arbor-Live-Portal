@@ -17,8 +17,6 @@ import {
   QuestionnaireTitle,
 } from "@/components/ui/questionnaire";
 import {
-  QUESTIONNAIRE_ITEM_CLASSNAME,
-  QUESTIONNAIRE_TITLE_CLASSNAME,
   handleQuestionnaireEnter,
   MarkStepAnswered,
   QuestionnaireWizardFooter,
@@ -644,7 +642,7 @@ export function CrewOnboardingWizard() {
             ) : null}
 
             {done ? (
-              <div className={QUESTIONNAIRE_ITEM_CLASSNAME}>
+              <div>
                 <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
                   {STEP_HEADLINES.thankYou}
                 </h1>
@@ -669,9 +667,8 @@ export function CrewOnboardingWizard() {
                   required
                   disabled={!stepOrder.includes(stepId)}
                   invalid={stepId === item && Boolean(fieldError)}
-                  className={QUESTIONNAIRE_ITEM_CLASSNAME}
                 >
-                  <QuestionnaireTitle className={QUESTIONNAIRE_TITLE_CLASSNAME}>
+                  <QuestionnaireTitle>
                     {STEP_HEADLINES[stepId]}
                   </QuestionnaireTitle>
                   <StepBody
