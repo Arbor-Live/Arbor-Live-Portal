@@ -363,15 +363,20 @@ async function seedScheduleBlocksForConvertedEvent(
   }
 }
 
-// Public (unauthenticated) lookup used by the booking wizard. Deliberately
-// returns no PII beyond first name + group names: last name, phone, and
-// contact IDs must never be exposed here.
+// Public (unauthenticated) lookup used by the booking wizard to autofill a
+// returning requester's contact details. Returning last name and phone here is
+// deliberate and accepted: the query only runs for a verified Stanford email,
+// and that person's name/phone are already discoverable in the public Stanford
+// directory. Contact IDs and group billing details beyond name/type are still
+// not exposed.
 export const lookupContactByEmail = query({
   args: { email: v.string() },
   returns: v.union(
     v.object({
       found: v.literal(true),
       firstName: v.string(),
+      lastName: v.string(),
+      phone: v.string(),
       groups: v.array(
         v.object({
           groupId: v.id("invoiceGroups"),
@@ -412,20 +417,30 @@ export const lookupContactByEmail = query({
       return {
         found: true as const,
         firstName: person.firstName?.trim() ?? "",
+        lastName: person.lastName?.trim() ?? "",
+        phone: person.phone?.trim() ?? "",
         groups: [],
       };
     }
 
-    // Prefer a contact record that actually has a first name for autofill.
+    // Prefer the contact record with the most complete details for autofill.
     const primary = [...activeContacts].sort((a, b) => {
-      const score = (row: (typeof activeContacts)[number]) =>
-        resolveContactNameParts(row).firstName ? 1 : 0;
+      const score = (row: (typeof activeContacts)[number]) => {
+        const { firstName, lastName } = resolveContactNameParts(row);
+        return (
+          (firstName ? 1 : 0) + (lastName ? 1 : 0) + (row.phone?.trim() ? 1 : 0)
+        );
+      };
       return score(b) - score(a);
     })[0]!;
     const fromPerson = person
-      ? { firstName: person.firstName?.trim() ?? "" }
+      ? {
+          firstName: person.firstName?.trim() ?? "",
+          lastName: person.lastName?.trim() ?? "",
+          phone: person.phone?.trim() ?? "",
+        }
       : null;
-    const { firstName } = resolveContactNameParts(primary);
+    const { firstName, lastName } = resolveContactNameParts(primary);
     const groups = (
       await Promise.all(
         activeContacts.map(async (contact) => {
@@ -447,6 +462,8 @@ export const lookupContactByEmail = query({
     return {
       found: true as const,
       firstName: fromPerson?.firstName || firstName,
+      lastName: fromPerson?.lastName || lastName,
+      phone: fromPerson?.phone || primary.phone?.trim() || "",
       groups: uniqueGroups,
     };
   },
