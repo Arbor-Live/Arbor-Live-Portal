@@ -34,7 +34,8 @@ async function cascadeLocationToDescendants(
       // A containment cycle (A in B, B in A) would otherwise loop forever.
       if (visited.has(child._id)) continue;
       visited.add(child._id);
-      if (visited.size > MAX_CONTAINMENT_DESCENDANTS) {
+      // `visited` is seeded with the root, so subtract it before comparing.
+      if (visited.size - 1 > MAX_CONTAINMENT_DESCENDANTS) {
         throw new Error(
           `Containment cascade exceeded ${MAX_CONTAINMENT_DESCENDANTS} items (possible cycle) at ${child._id}.`,
         );
