@@ -69,7 +69,7 @@ export function StoredAssetImage({
   return (
     <div
       className={cn(
-        "flex items-center justify-center bg-muted text-[10px] text-muted-foreground",
+        "flex items-center justify-center bg-muted text-3xs text-muted-foreground",
         fallbackClassName ?? className,
       )}
       aria-hidden={!alt}

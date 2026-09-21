@@ -46,7 +46,7 @@ export function EventsMainPageClient() {
           onChange={(e) => setSearch(e.target.value)}
           className="max-w-sm"
         />
-        <div className="w-[220px]">
+        <div className="w-55">
           <SearchableSelect
             value={status}
             onChange={(value) => setStatus(value as "" | EventStatus)}

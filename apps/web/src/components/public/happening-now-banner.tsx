@@ -62,7 +62,7 @@ export function HappeningNowBar({ events }: { events: HappeningNowEvent[] }) {
   const shown = events.slice(0, MAX_SHOWN);
   const expandable = events.length > 1;
   const labelClassName =
-    "flex shrink-0 items-center gap-2 text-[11px] font-bold uppercase tracking-[0.14em]";
+    "flex shrink-0 items-center gap-2 text-2xs font-bold uppercase tracking-eyebrow";
 
   // Visible slots are breakpoint-based (1 mobile / 2 sm / 3 lg) — the "+N more"
   // counts reflect what each breakpoint hides. On mobile the inline links are

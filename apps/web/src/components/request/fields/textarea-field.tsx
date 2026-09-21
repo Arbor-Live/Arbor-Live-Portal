@@ -27,7 +27,7 @@ export function TextareaField<T extends FieldValues>({
         placeholder={placeholder}
         autoFocus={autoFocus}
         aria-invalid={Boolean(error)}
-        className="min-h-32 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive"
+        className="min-h-32 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-(--focus-ring-width) focus-visible:ring-ring/50 aria-invalid:border-destructive"
         {...register(name)}
       />
       {error ? <p className="text-sm text-destructive">{error}</p> : null}

@@ -325,7 +325,7 @@ export function FinancialHubOrganizationsClient() {
               </p>
               <div className="flex flex-wrap gap-2">
                 <input
-                  className="h-9 min-w-[12rem] flex-1 rounded-md border bg-background px-3 text-sm"
+                  className="h-9 min-w-48 flex-1 rounded-md border bg-background px-3 text-sm"
                   placeholder="Add alias"
                   value={aliasDraft}
                   onChange={(e) => setAliasDraft(e.target.value)}

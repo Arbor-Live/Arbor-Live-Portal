@@ -253,12 +253,12 @@ export function RiderEditorClient({ riderId }: { riderId: Id<"bandRiders"> }) {
           </Link>
         </Button>
         {rider.isDefault ? (
-          <span className="rounded-md bg-status-amber-500/15 px-2 py-0.5 text-[11px] font-medium text-status-amber-800">
+          <span className="rounded-md bg-status-amber-500/15 px-2 py-0.5 text-2xs font-medium text-status-amber-800">
             Default for show files
           </span>
         ) : null}
         {readOnly ? (
-          <span className="rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+          <span className="rounded-md bg-muted px-2 py-0.5 text-2xs font-medium text-muted-foreground">
             View only
           </span>
         ) : null}
@@ -329,7 +329,7 @@ export function RiderEditorClient({ riderId }: { riderId: Id<"bandRiders"> }) {
       ) : null}
 
       <div className="grid gap-4 xl:grid-cols-[220px_minmax(0,1fr)_240px]">
-        <Card className="xl:max-h-[720px] xl:overflow-y-auto">
+        <Card className="xl:max-h-180 xl:overflow-y-auto">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">Symbol palette</CardTitle>
             <p className="text-xs text-muted-foreground">
@@ -381,7 +381,7 @@ export function RiderEditorClient({ riderId }: { riderId: Id<"bandRiders"> }) {
                   }));
                 }}
               >
-                <SelectTrigger id="stage-preset" className="h-8 w-[200px]">
+                <SelectTrigger id="stage-preset" className="h-8 w-50">
                   <SelectValue placeholder="Stage size" />
                 </SelectTrigger>
                 <SelectContent>
@@ -410,7 +410,7 @@ export function RiderEditorClient({ riderId }: { riderId: Id<"bandRiders"> }) {
                 >
                   <SelectTrigger
                     aria-label="Stage width in feet"
-                    className="h-8 w-[72px]"
+                    className="h-8 w-18"
                   >
                     <SelectValue />
                   </SelectTrigger>
@@ -436,7 +436,7 @@ export function RiderEditorClient({ riderId }: { riderId: Id<"bandRiders"> }) {
                 >
                   <SelectTrigger
                     aria-label="Stage depth in feet"
-                    className="h-8 w-[72px]"
+                    className="h-8 w-18"
                   >
                     <SelectValue />
                   </SelectTrigger>
@@ -475,7 +475,7 @@ export function RiderEditorClient({ riderId }: { riderId: Id<"bandRiders"> }) {
           </CardContent>
         </Card>
 
-        <Card className="xl:max-h-[720px] xl:overflow-y-auto">
+        <Card className="xl:max-h-180 xl:overflow-y-auto">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">Selection</CardTitle>
           </CardHeader>
@@ -507,7 +507,7 @@ export function RiderEditorClient({ riderId }: { riderId: Id<"bandRiders"> }) {
                     id="item-notes"
                     rows={3}
                     disabled={readOnly}
-                    className={cn(fieldClass, "h-auto min-h-[72px] py-2")}
+                    className={cn(fieldClass, "h-auto min-h-18 py-2")}
                     value={selectedItem.notes ?? ""}
                     onChange={(event) =>
                       patchContent((content) =>
@@ -809,11 +809,11 @@ function InputsSection({
         ) : (
           // Every other column is a fixed width, so the free-text ones only get
           // what is left over — 860px starved Source and Notes to ~75px each.
-          <table className="w-full min-w-[1120px] border-collapse text-sm">
+          <table className="w-full min-w-table-xl border-collapse text-sm">
             <thead>
               <tr className="border-b text-left text-xs text-muted-foreground">
                 <th className="w-10 py-2 pr-2 font-medium">Ch</th>
-                <th className="min-w-[220px] py-2 pr-2 font-medium">Source</th>
+                <th className="min-w-55 py-2 pr-2 font-medium">Source</th>
                 <th className="w-12 py-2 pr-2 font-medium">L/R</th>
                 <th className="w-28 py-2 pr-2 font-medium">Type</th>
                 <th className="w-32 py-2 pr-2 font-medium">Mic / DI</th>
@@ -1059,7 +1059,7 @@ function MixesSection({
             Drop wedges or in-ears on the plot to create mixes automatically.
           </p>
         ) : (
-          <table className="w-full min-w-[640px] border-collapse text-sm">
+          <table className="w-full min-w-table-md border-collapse text-sm">
             <thead>
               <tr className="border-b text-left text-xs text-muted-foreground">
                 <th className="w-12 py-2 pr-2 font-medium">Mix</th>
@@ -1214,7 +1214,7 @@ function BacklineSection({
             List amps, stands, and other gear you need on stage.
           </p>
         ) : (
-          <table className="w-full min-w-[560px] border-collapse text-sm">
+          <table className="w-full min-w-table-sm border-collapse text-sm">
             <thead>
               <tr className="border-b text-left text-xs text-muted-foreground">
                 <th className="py-2 pr-2 font-medium">Item</th>
@@ -1407,7 +1407,7 @@ function DetailsSection({
             id="power-notes"
             rows={2}
             disabled={readOnly}
-            className={cn(fieldClass, "h-auto min-h-[64px] py-2")}
+            className={cn(fieldClass, "h-auto min-h-16 py-2")}
             value={content.powerNotes ?? ""}
             onChange={(event) =>
               onChange({ powerNotes: event.target.value || undefined })
@@ -1420,7 +1420,7 @@ function DetailsSection({
             id="general-notes"
             rows={3}
             disabled={readOnly}
-            className={cn(fieldClass, "h-auto min-h-[80px] py-2")}
+            className={cn(fieldClass, "h-auto min-h-20 py-2")}
             value={content.generalNotes ?? ""}
             onChange={(event) =>
               onChange({ generalNotes: event.target.value || undefined })
@@ -1433,7 +1433,7 @@ function DetailsSection({
             id="hospitality-notes"
             rows={2}
             disabled={readOnly}
-            className={cn(fieldClass, "h-auto min-h-[64px] py-2")}
+            className={cn(fieldClass, "h-auto min-h-16 py-2")}
             value={content.hospitalityNotes ?? ""}
             onChange={(event) =>
               onChange({ hospitalityNotes: event.target.value || undefined })

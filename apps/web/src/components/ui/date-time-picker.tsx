@@ -186,7 +186,7 @@ export function DateTimePicker({
           </span>
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="z-[80] w-[19.5rem] max-w-[calc(100vw-2rem)] p-0" align="start">
+      <PopoverContent className="z-80 w-78 max-w-[calc(100vw-2rem)] p-0" align="start">
         <div className="flex flex-col gap-2 border-b p-3">
           <Label htmlFor={timeFieldId}>Time</Label>
           <TimeInput
@@ -310,7 +310,7 @@ export function DateTimeRangePicker({
           </span>
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="z-[80] w-[19.5rem] max-w-[calc(100vw-2rem)] p-0" align="start">
+      <PopoverContent className="z-80 w-78 max-w-[calc(100vw-2rem)] p-0" align="start">
         <div className="space-y-2 border-b p-3">
           <Label>Time</Label>
           <div className="flex items-center gap-2">

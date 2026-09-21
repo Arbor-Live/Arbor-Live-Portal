@@ -47,7 +47,7 @@ export function MultiSelect({
           <Button
             type="button"
             variant="outline"
-            className="h-9 min-w-[140px] justify-between gap-2 font-normal"
+            className="h-9 min-w-35 justify-between gap-2 font-normal"
           >
             <span className="truncate">{triggerLabel}</span>
             <CaretDownIcon className="size-3.5 shrink-0 opacity-50" />

@@ -282,7 +282,7 @@ export function EventTimelineScheduler({
             {timeMarks.map((mark) => (
               <div
                 key={`time-${mark}`}
-                className="absolute top-0 -translate-x-1/2 text-[10px] text-muted-foreground"
+                className="absolute top-0 -translate-x-1/2 text-3xs text-muted-foreground"
                 style={{ left: `${(mark / MINUTES_PER_DAY) * 100}%` }}
               >
                 {String(Math.floor(mark / 60)).padStart(2, "0")}:00
@@ -389,7 +389,7 @@ export function EventTimelineScheduler({
                           className="absolute left-0 top-0 z-10 h-full w-1.5 cursor-ew-resize bg-foreground/20"
                         />
                       ) : null}
-                      <span className="truncate leading-[30px]">{block.label}</span>
+                      <span className="truncate leading-7.5">{block.label}</span>
                       {!readOnly ? (
                         <div
                           data-drag-handle="end"
@@ -432,7 +432,7 @@ export function EventTimelineScheduler({
                 emptyLabel="Select block type"
               />
             </div>
-            <div className="min-w-0 flex-1 basis-[7rem]">
+            <div className="min-w-0 flex-1 basis-28">
               <Input
                 value={block.label}
                 onChange={(e) =>
@@ -441,7 +441,7 @@ export function EventTimelineScheduler({
                 placeholder="Label"
               />
             </div>
-            <div className="min-w-0 flex-1 basis-[12rem]">
+            <div className="min-w-0 flex-1 basis-48">
               <DateTimeRangePicker
                 startValue={block.startsAt}
                 endValue={block.endsAt}
@@ -463,7 +463,7 @@ export function EventTimelineScheduler({
                 placeholder="Block start and end"
               />
             </div>
-            <div className="min-w-0 flex-1 basis-[8rem]">
+            <div className="min-w-0 flex-1 basis-32">
               <Input
                 placeholder="Notes"
                 value={block.notes}

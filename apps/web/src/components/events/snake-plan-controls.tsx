@@ -82,7 +82,7 @@ export function SnakePlanControls({
                       onClick={() => setSide(group, snake)}
                       aria-pressed={active}
                       className={cn(
-                        "rounded px-2 py-0.5 text-[11px] font-medium transition-colors",
+                        "rounded px-2 py-0.5 text-2xs font-medium transition-colors",
                         active
                           ? "bg-foreground text-background"
                           : "bg-background text-muted-foreground hover:text-foreground",

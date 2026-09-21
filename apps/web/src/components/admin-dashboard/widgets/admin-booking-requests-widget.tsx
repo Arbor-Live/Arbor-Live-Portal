@@ -41,7 +41,7 @@ export function AdminBookingRequestsWidget() {
                 <p className="font-medium">
                   {request.eventName?.trim() || request.organization?.trim() || request.requestNumber}
                 </p>
-                <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                <span className="text-3xs uppercase tracking-wide text-muted-foreground">
                   {request.status === "action_required" ? "Action required" : "Submitted"}
                 </span>
               </div>

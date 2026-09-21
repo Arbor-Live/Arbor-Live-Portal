@@ -1715,7 +1715,7 @@ export function EventEditor({
             <div className="space-y-2 rounded-md border p-3">
               <p className="text-sm font-medium">Quick assign crew user</p>
               <div className="flex flex-wrap items-center gap-2">
-                <div className="min-w-[260px] flex-1">
+                <div className="min-w-65 flex-1">
                   <UserSelect
                     value={selectedCrewUserId}
                     onChange={(value) => setSelectedCrewUserId(value)}
@@ -1794,7 +1794,7 @@ export function EventEditor({
                         return (
                           <div key={rowKey} className="space-y-1">
                           <div className="flex min-w-0 flex-wrap items-center gap-2">
-                            <div className="min-w-0 flex-1 basis-[6rem]">
+                            <div className="min-w-0 flex-1 basis-24">
                               <Input
                                 placeholder="Role"
                                 value={row.role}
@@ -1806,12 +1806,12 @@ export function EventEditor({
                               />
                             </div>
                             {row.crewApplicationId ? (
-                              <div className="flex h-9 min-w-0 flex-1 basis-[10rem] items-center rounded-md border bg-muted/40 px-3 text-sm">
+                              <div className="flex h-9 min-w-0 flex-1 basis-40 items-center rounded-md border bg-muted/40 px-3 text-sm">
                                 <span className="truncate font-medium">{row.personName || "Trainee"}</span>
                                 <span className="ml-1.5 shrink-0 text-xs text-muted-foreground">trainee</span>
                               </div>
                             ) : (
-                              <div className="min-w-0 flex-1 basis-[10rem]">
+                              <div className="min-w-0 flex-1 basis-40">
                                 <UserSelect
                                   value={row.userId ?? ""}
                                   onChange={(value) =>
@@ -1850,7 +1850,7 @@ export function EventEditor({
                               <ClockIcon className="size-4" weight={row.timesOverridden ? "fill" : "regular"} />
                             </Button>
                             {editingTime ? (
-                              <div className="min-w-0 flex-1 basis-[12rem]">
+                              <div className="min-w-0 flex-1 basis-48">
                                 <DateTimeRangePicker
                                   startValue={row.startsAt}
                                   endValue={row.endsAt}
@@ -1901,7 +1901,7 @@ export function EventEditor({
                           </div>
                           {availabilityNotes.length > 0 ? (
                             <div className="rounded-md border border-dashed bg-muted/30 px-2 py-1.5">
-                              <p className="text-[11px] font-medium text-muted-foreground">Availability note</p>
+                              <p className="text-2xs font-medium text-muted-foreground">Availability note</p>
                               {availabilityNotes.map((line, noteIndex) => (
                                 <p
                                   key={noteIndex}
@@ -1940,7 +1940,7 @@ export function EventEditor({
                         key={shift.id ?? `unassigned-${shiftIndex}`}
                         className="flex min-w-0 flex-wrap items-center gap-2 rounded-md border border-status-amber-500/20 bg-background/80 p-2"
                       >
-                        <div className="min-w-0 flex-1 basis-[6rem]">
+                        <div className="min-w-0 flex-1 basis-24">
                           <Input
                             placeholder="Role"
                             value={shift.role}
@@ -1952,12 +1952,12 @@ export function EventEditor({
                           />
                         </div>
                         {shift.crewApplicationId ? (
-                          <div className="flex h-9 min-w-0 flex-1 basis-[10rem] items-center rounded-md border bg-muted/40 px-3 text-sm">
+                          <div className="flex h-9 min-w-0 flex-1 basis-40 items-center rounded-md border bg-muted/40 px-3 text-sm">
                             <span className="truncate font-medium">{shift.personName || "Trainee"}</span>
                             <span className="ml-1.5 shrink-0 text-xs text-muted-foreground">trainee</span>
                           </div>
                         ) : (
-                          <div className="min-w-0 flex-1 basis-[10rem]">
+                          <div className="min-w-0 flex-1 basis-40">
                             <UserSelect
                               value={shift.userId ?? ""}
                               onChange={(value) =>
@@ -1979,7 +1979,7 @@ export function EventEditor({
                             />
                           </div>
                         )}
-                        <div className="min-w-0 flex-1 basis-[12rem]">
+                        <div className="min-w-0 flex-1 basis-48">
                           <DateTimeRangePicker
                             startValue={shift.startsAt}
                             endValue={shift.endsAt}
@@ -2343,7 +2343,7 @@ export function EventEditor({
                                   <td className="px-3 py-2">
                                     <p>{row.name}</p>
                                     {row.missingRate ? (
-                                      <p className="text-[11px] text-status-amber-700">Missing base rate</p>
+                                      <p className="text-2xs text-status-amber-700">Missing base rate</p>
                                     ) : null}
                                   </td>
                                   <td className="px-3 py-2">{row.role || "—"}</td>

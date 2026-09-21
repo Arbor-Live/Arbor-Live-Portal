@@ -43,7 +43,7 @@ export function PublicPageHero({
   return (
     <section
       className={cn(
-        "relative overflow-hidden border-b pt-[calc(6rem_+_var(--happening-banner-height,0px))] pb-14 sm:pt-[calc(7rem_+_var(--happening-banner-height,0px))] sm:pb-20",
+        "relative overflow-hidden border-b pt-banner-lg pb-14 sm:pt-banner-xl sm:pb-20",
         dark
           ? "bg-status-zinc-950 text-status-zinc-50"
           : cn(
@@ -52,7 +52,7 @@ export function PublicPageHero({
               shaderBand ? "bg-background" : "bg-muted/40",
             ),
         hasImage &&
-          "pt-[calc(7rem_+_var(--happening-banner-height,0px))] pb-16 sm:pt-[calc(8rem_+_var(--happening-banner-height,0px))] sm:pb-24",
+          "pt-banner-xl pb-16 sm:pt-banner-2xl sm:pb-24",
         className,
       )}
     >
@@ -90,12 +90,12 @@ export function PublicPageHero({
         <div
           aria-hidden
           className={cn(
-            "pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_-10%,color-mix(in_oklch,var(--color-primary)_22%,transparent),transparent)] dark:bg-[radial-gradient(ellipse_80%_60%_at_50%_-10%,color-mix(in_oklch,var(--color-primary)_30%,transparent),transparent)]",
+            "pointer-events-none absolute inset-0 glow-primary-top",
             shaderBand && "opacity-60",
           )}
         />
       )}
-      <div className="relative z-[1] mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+      <div className="relative z-1 mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
         <Reveal>
           {backLink ? (
             <Link
@@ -113,7 +113,7 @@ export function PublicPageHero({
           {eyebrow ? (
             <p
               className={cn(
-                "text-xs font-medium uppercase tracking-[0.14em]",
+                "text-xs font-medium uppercase tracking-eyebrow",
                 dark
                   ? "text-status-zinc-400"
                   : "text-muted-foreground dark:text-status-zinc-400",

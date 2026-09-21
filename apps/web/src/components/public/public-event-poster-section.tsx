@@ -34,7 +34,7 @@ const POSTER_ACCEPT_TYPES = new Set(
 const POSTER_ACCEPT_EXT = /\.(jpe?g|png|webp|gif|svg)$/i;
 
 const textareaClassName =
-  "flex min-h-[96px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
+  "flex min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
 
 function createUploadId() {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -366,7 +366,7 @@ export function PublicEventPosterSection({
                       ? "Replace poster"
                       : "Upload poster"}
               </p>
-              <p className="flex max-w-[16rem] flex-wrap items-center justify-center gap-x-1 gap-y-1 text-xs text-muted-foreground">
+              <p className="flex max-w-64 flex-wrap items-center justify-center gap-x-1 gap-y-1 text-xs text-muted-foreground">
                 <span>Drag an image here, click to choose, or paste with</span>
                 <KbdGroup>
                   <Kbd>Ctrl</Kbd>

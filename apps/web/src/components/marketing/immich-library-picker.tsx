@@ -436,7 +436,7 @@ export function ImmichLibraryPicker({
                           className="object-cover transition-transform group-hover:scale-105"
                           sizes="160px"
                         />
-                        <span className="absolute inset-x-0 bottom-0 bg-black/60 px-1.5 py-1 text-[10px] text-white">
+                        <span className="absolute inset-x-0 bottom-0 bg-black/60 px-1.5 py-1 text-3xs text-white">
                           {importingId === asset.id
                             ? "Importing…"
                             : formatAssetDate(asset.createdAt)}

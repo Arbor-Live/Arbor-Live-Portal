@@ -55,7 +55,7 @@ export function DatePickerField({
           {label || placeholder || "Pick a date"}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="z-[80] w-auto overflow-hidden p-0" align="start">
+      <PopoverContent className="z-80 w-auto overflow-hidden p-0" align="start">
         <Calendar
           mode="single"
           timeZone={PORTAL_TIMEZONE}

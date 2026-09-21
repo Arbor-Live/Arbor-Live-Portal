@@ -223,7 +223,7 @@ export function EventScheduleField() {
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-        <div className="w-full shrink-0 lg:w-[340px]">
+        <div className="w-full shrink-0 lg:w-85">
           <BookingAvailabilityCalendar
             selectedDate={activeSlot.date}
             highlightedDates={highlightedDates}
@@ -232,7 +232,7 @@ export function EventScheduleField() {
           />
         </div>
 
-        <div className="booking-show-slots-scroll min-h-0 w-full flex-1 space-y-3 lg:max-h-[25.5rem] lg:overflow-y-auto lg:overscroll-y-contain lg:pr-1">
+        <div className="booking-show-slots-scroll min-h-0 w-full flex-1 space-y-3 lg:max-h-102 lg:overflow-y-auto lg:overscroll-y-contain lg:pr-1">
           {showSlots.map((slot, index) => (
             <ShowSlotPanel
               key={`show-slot-${index}`}

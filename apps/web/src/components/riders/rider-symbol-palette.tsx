@@ -28,7 +28,7 @@ export function RiderSymbolPalette({
         return (
           <section key={category} className="space-y-2">
             <h3
-              className="text-[11px] font-semibold tracking-wide uppercase"
+              className="text-2xs font-semibold tracking-wide uppercase"
               style={{ color: palette.accent }}
             >
               {palette.label}
@@ -62,7 +62,7 @@ export function RiderSymbolPalette({
                   }}
                 >
                   <RiderSymbolGlyph symbolKey={symbol.key} size={28} />
-                  <span className="line-clamp-2 text-[10px] leading-tight font-medium text-status-slate-800">
+                  <span className="line-clamp-2 text-3xs leading-tight font-medium text-status-slate-800">
                     {symbol.label}
                   </span>
                 </button>

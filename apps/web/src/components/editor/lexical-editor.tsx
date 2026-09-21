@@ -159,7 +159,7 @@ function EditorToolbar({ postId }: { postId?: string }) {
         1. List
       </ToolbarButton>
       <InsertImageButton postId={postId} />
-      <div className="flex min-w-[220px] flex-1 items-center gap-1">
+      <div className="flex min-w-55 flex-1 items-center gap-1">
         <Input
           value={linkUrl}
           onChange={(event) => setLinkUrl(event.target.value)}

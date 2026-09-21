@@ -215,7 +215,7 @@ export function RiderSourcePicker({
         />
         <span className="pointer-events-none absolute inset-y-0 right-1 flex items-center gap-1">
           {ordinal ? (
-            <span className="rounded bg-muted px-1 text-[10px] font-medium text-muted-foreground">
+            <span className="rounded bg-muted px-1 text-3xs font-medium text-muted-foreground">
               {ordinal}
             </span>
           ) : null}
@@ -311,7 +311,7 @@ function Option({
       }}
     >
       <span className="truncate">{source.label}</span>
-      <span className="flex shrink-0 items-center gap-1 text-[10px] text-muted-foreground">
+      <span className="flex shrink-0 items-center gap-1 text-3xs text-muted-foreground">
         {source.captures.length > 1 ? (
           <span>{source.captures.map((capture) => capture.inputType).join(" / ")}</span>
         ) : null}
@@ -337,7 +337,7 @@ function BrowseList({
 
   return (
     <>
-      <p className="px-2 pb-1 pt-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+      <p className="px-2 pb-1 pt-1.5 text-3xs font-medium uppercase tracking-wide text-muted-foreground">
         Common
       </p>
       {common.map((source) => (
@@ -352,7 +352,7 @@ function BrowseList({
       {showAll ? (
         riderSourcesByFamily().map((group) => (
           <div key={group.family}>
-            <p className="px-2 pb-1 pt-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            <p className="px-2 pb-1 pt-2 text-3xs font-medium uppercase tracking-wide text-muted-foreground">
               {group.label}
             </p>
             {group.sources.map((source) => (

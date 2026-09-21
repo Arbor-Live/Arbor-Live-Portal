@@ -184,7 +184,7 @@ export function EventRequestsInbox() {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="w-[260px]">
+        <div className="w-65">
           <SearchableSelect
             value={status}
             onChange={(value) => setStatus(value as (typeof STATUS_OPTIONS)[number]["value"])}

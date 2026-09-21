@@ -70,12 +70,12 @@ export function CrewJoinSection() {
     <section className="relative overflow-hidden border-t bg-muted/35 py-16 sm:py-20">
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_50%_at_90%_0%,color-mix(in_oklch,var(--color-primary)_14%,transparent),transparent)]"
+        className="pointer-events-none absolute inset-0 glow-primary-right"
       />
       <div className="relative mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
         <Reveal className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
           <div className="max-w-xl">
-            <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+            <p className="text-xs font-medium uppercase tracking-eyebrow text-muted-foreground">
               Crew with Arbor
             </p>
             <h2 className="display-tight mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">

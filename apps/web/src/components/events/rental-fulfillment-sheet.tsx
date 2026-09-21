@@ -484,11 +484,11 @@ export function RentalFulfillmentSheet({
                           </p>
                         </div>
                         {clientNotify && !clientNotify.canNotify ? (
-                          <p className="max-w-[12rem] text-right text-[11px] leading-snug text-status-amber-700 dark:text-status-amber-300">
+                          <p className="max-w-48 text-right text-2xs leading-snug text-status-amber-700 dark:text-status-amber-300">
                             No invoice client email — won’t notify on complete
                           </p>
                         ) : clientNotify?.email ? (
-                          <p className="max-w-[12rem] truncate text-right text-[11px] text-muted-foreground">
+                          <p className="max-w-48 truncate text-right text-2xs text-muted-foreground">
                             Notify {clientNotify.email}
                           </p>
                         ) : null}
