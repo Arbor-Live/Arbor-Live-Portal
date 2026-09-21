@@ -11,11 +11,16 @@ import { enqueueEmail } from "./enqueue";
 const WEEKLY_DIGEST_PROFILE_PAGE_SIZE = 200;
 
 /**
- * Weekly pending-activity digest: one email per active Arbor user summarizing
- * the availability responses, events, timecards, post-mortems, photos, booking
- * requests, and artist payouts that need them. Opt out per person with the `weeklyDigest`
- * Participation flag; sections with nothing pending are omitted, and a user
- * with no pending items gets no email.
+ * Weekly pending-activity digest. Arbor staff get availability, shifts,
+ * timecards, and post-event work they are actually assigned to; portal admins
+ * also get booking, payout, and post-mortem queues. Artist-only members (bands,
+ * DJs, and the other artist org types) get the email only when their org has a
+ * show this week or onboarding still open — not crew post-event work, and not
+ * the admin queues. Band org admins share Better Auth `role: "admin"` with
+ * portal admins; that role alone does not make them a portal admin.
+ *
+ * Opt out per person with the `weeklyDigest` Participation flag. Sections with
+ * nothing pending are omitted, and a user with no pending items gets no email.
  *
  * Pages through active profiles (no fixed cap) and schedules a continuation
  * with the page cursor until every eligible profile has been visited.
@@ -73,7 +78,7 @@ export const sendForUser = internalMutation({
     const digest = await buildWeeklyDigest(ctx, {
       userId: args.userId,
       profile,
-      isAdmin: user.role === "admin",
+      authRole: user.role,
       now,
     });
     if (digest.sections.length === 0) return null;
