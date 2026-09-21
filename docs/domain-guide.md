@@ -25,8 +25,10 @@ canonical description of the domain itself.
 - Crew onboarding progress lives in `userOnboarding`; band org setup in
   `organizationOnboarding`. Incomplete crew get a dashboard banner and weekly
   reminder email; assigned bands that have not finished onboarding get a weekly
-  reminder that payouts are blocked until they complete it. Admins see status
-  under Users and can waive.
+  reminder that payouts are blocked until they complete it. When crew finish,
+  admins and HR leadership get an email that includes the effective hourly rate
+  (Normal, Lead, or Custom, resolved the same way as invoice crew pricing).
+  Admins see status under Users and can waive.
 - Arbor Live crew invites (and convert-to-member) require a **compensation rate
   mode** (`normal` / `lead` / `custom`) and a **payroll method**
   (`stanford` / `external`). Normal/Lead resolve live from

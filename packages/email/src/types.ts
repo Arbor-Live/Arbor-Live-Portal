@@ -270,6 +270,7 @@ export type OnboardingCompletedEmailProps = {
   employmentStartDateLabel?: string;
   otherCampusEmploymentLabel?: string;
   i9ScheduledByFirstDay?: boolean;
+  hourlyRateLabel: string;
   dashboardUsersUrl: string;
 };
 
