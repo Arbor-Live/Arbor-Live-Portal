@@ -50,11 +50,11 @@ function formatStatusLabel(status: string) {
 function statusBadgeClass(status: string) {
   switch (status) {
     case "submitted":
-      return "border border-amber-500/30 bg-amber-500/10 text-amber-700";
+      return "border border-status-amber-500/30 bg-status-amber-500/10 text-status-amber-700";
     case "approved":
-      return "border border-emerald-500/30 bg-emerald-500/10 text-emerald-700";
+      return "border border-status-emerald-500/30 bg-status-emerald-500/10 text-status-emerald-700";
     case "rejected":
-      return "border border-rose-500/30 bg-rose-500/10 text-rose-700";
+      return "border border-status-rose-500/30 bg-status-rose-500/10 text-status-rose-700";
     default:
       return "bg-muted text-muted-foreground";
   }

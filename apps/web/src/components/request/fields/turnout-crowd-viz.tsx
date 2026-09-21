@@ -30,7 +30,7 @@ function dotOffset(count: number) {
 
 function dotColorClass(index: number, energy: number) {
   if (energy >= 4) {
-    return index % 3 === 0 ? "bg-amber-500" : index % 3 === 1 ? "bg-primary" : "bg-orange-400";
+    return index % 3 === 0 ? "bg-status-amber-500" : index % 3 === 1 ? "bg-primary" : "bg-status-orange-400";
   }
   if (energy >= 3) {
     return index % 2 === 0 ? "bg-primary" : "bg-primary/70";

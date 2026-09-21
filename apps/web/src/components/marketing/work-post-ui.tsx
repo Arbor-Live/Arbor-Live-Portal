@@ -9,17 +9,17 @@ export function formatWorkPostDate(timestamp: number) {
 
 export function WorkPostKindBadge({ kind }: { kind: MarketingPostKind }) {
   return (
-    <span className="border border-white/35 bg-zinc-950/80 px-2 py-0.5 text-xs font-medium text-zinc-50">
+    <span className="border border-white/35 bg-status-zinc-950/80 px-2 py-0.5 text-xs font-medium text-status-zinc-50">
       {marketingPostKindLabels[kind]}
     </span>
   );
 }
 
 const gradients = [
-  "from-emerald-900/80 via-primary/40 to-zinc-900",
-  "from-violet-950/80 via-primary/25 to-zinc-900",
-  "from-amber-900/70 via-primary/35 to-zinc-900",
-  "from-zinc-900 via-primary/30 to-emerald-950",
+  "from-status-emerald-900/80 via-primary/40 to-status-zinc-900",
+  "from-status-violet-950/80 via-primary/25 to-status-zinc-900",
+  "from-status-amber-900/70 via-primary/35 to-status-zinc-900",
+  "from-status-zinc-900 via-primary/30 to-status-emerald-950",
 ];
 
 export function workPostGradient(index: number) {

@@ -62,7 +62,7 @@ export function RiderSymbolPalette({
                   }}
                 >
                   <RiderSymbolGlyph symbolKey={symbol.key} size={28} />
-                  <span className="line-clamp-2 text-[10px] leading-tight font-medium text-slate-800">
+                  <span className="line-clamp-2 text-[10px] leading-tight font-medium text-status-slate-800">
                     {symbol.label}
                   </span>
                 </button>

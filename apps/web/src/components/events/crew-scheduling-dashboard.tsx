@@ -196,9 +196,9 @@ export function CrewSchedulingDashboard() {
                   {row.filledShifts} / {row.totalShifts} filled
                 </p>
                 {row.unfilledShifts > 0 ? (
-                  <p className="text-xs text-amber-700">{row.unfilledShifts} open slot(s)</p>
+                  <p className="text-xs text-status-amber-700">{row.unfilledShifts} open slot(s)</p>
                 ) : row.totalShifts > 0 ? (
-                  <p className="text-xs text-emerald-700">All slots assigned</p>
+                  <p className="text-xs text-status-emerald-700">All slots assigned</p>
                 ) : (
                   <p className="text-xs text-muted-foreground">No shift slots defined yet</p>
                 )}

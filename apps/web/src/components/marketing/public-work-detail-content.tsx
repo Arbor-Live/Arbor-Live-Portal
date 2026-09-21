@@ -13,11 +13,11 @@ import type { PublicWorkPostDetail } from "@/lib/public-marketing-types";
 export function PublicWorkDetailContent({ post }: { post: PublicWorkPostDetail }) {
   return (
     <article>
-      <section className="relative overflow-hidden border-b bg-zinc-950 text-zinc-50">
+      <section className="relative overflow-hidden border-b bg-status-zinc-950 text-status-zinc-50">
         <div
           aria-hidden
           className={cn(
-            "absolute inset-0 bg-gradient-to-br from-emerald-900/80 via-primary/40 to-zinc-900",
+            "absolute inset-0 bg-gradient-to-br from-status-emerald-900/80 via-primary/40 to-status-zinc-900",
             post.heroImageUrl && "opacity-40",
           )}
         />
@@ -35,13 +35,13 @@ export function PublicWorkDetailContent({ post }: { post: PublicWorkPostDetail }
           <Reveal>
             <Link
               href="/work"
-              className="text-sm text-zinc-300 hover:text-white hover:underline"
+              className="text-sm text-status-zinc-300 hover:text-white hover:underline"
             >
               ← All work
             </Link>
             <div className="mt-6 flex flex-wrap items-center gap-3">
               <WorkPostKindBadge kind={post.kind} />
-              <span className="text-sm text-zinc-300">
+              <span className="text-sm text-status-zinc-300">
                 {formatWorkPostDate(post.publishedAt)}
               </span>
             </div>
@@ -49,7 +49,7 @@ export function PublicWorkDetailContent({ post }: { post: PublicWorkPostDetail }
               {post.title}
             </h1>
             {post.excerpt ? (
-              <p className="mt-4 max-w-3xl text-base leading-relaxed text-zinc-200 sm:text-lg">
+              <p className="mt-4 max-w-3xl text-base leading-relaxed text-status-zinc-200 sm:text-lg">
                 {post.excerpt}
               </p>
             ) : null}

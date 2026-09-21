@@ -27,7 +27,7 @@ export function WorkFeaturedStats({
           <p className={isDark ? "text-2xl font-semibold text-white" : "text-2xl font-semibold tracking-tight"}>
             {stat.value}
           </p>
-          <p className={isDark ? "mt-1 text-sm text-zinc-300" : "mt-1 text-sm text-muted-foreground"}>
+          <p className={isDark ? "mt-1 text-sm text-status-zinc-300" : "mt-1 text-sm text-muted-foreground"}>
             {stat.label}
           </p>
         </div>

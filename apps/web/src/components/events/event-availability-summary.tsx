@@ -148,7 +148,7 @@ export function EventScheduleCrewAssignPanel({
                 {formatCrewResponseLabel(responder.responseStatus)}
               </span>
               {responder.isAssigned ? (
-                <span className="text-xs text-emerald-700">On schedule</span>
+                <span className="text-xs text-status-emerald-700">On schedule</span>
               ) : null}
               <div className="ml-auto flex flex-wrap gap-1">
                 {unfilledShifts > 0 ? (
@@ -205,7 +205,7 @@ export function EventScheduleCrewAssignPanel({
       )}
 
       {summary.isCrewConfirmed ? (
-        <p className="text-xs text-emerald-700">All saved shift slots are assigned.</p>
+        <p className="text-xs text-status-emerald-700">All saved shift slots are assigned.</p>
       ) : summary.totalShifts === 0 && unfilledShifts === 0 ? (
         <p className="text-xs text-muted-foreground">
           Add shift slots below, or use auto-assign to create shifts from yes responses.

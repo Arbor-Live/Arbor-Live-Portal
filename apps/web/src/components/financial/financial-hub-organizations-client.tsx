@@ -567,7 +567,7 @@ function EditGroupForm({
                   aria-label={form.saveError ?? "Save failed"}
                 />
               ) : form.saveStatus === "saved" ? (
-                <CheckIcon className="size-4 text-emerald-600" weight="bold" />
+                <CheckIcon className="size-4 text-status-emerald-600" weight="bold" />
               ) : null}
             </span>
           </div>
@@ -678,7 +678,7 @@ function ContactRow({
               aria-label={form.saveError ?? "Save failed"}
             />
           ) : form.saveStatus === "saved" ? (
-            <CheckIcon className="size-4 text-emerald-600" weight="bold" />
+            <CheckIcon className="size-4 text-status-emerald-600" weight="bold" />
           ) : null}
         </span>
         {contact.active ? (

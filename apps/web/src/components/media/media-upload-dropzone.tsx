@@ -293,7 +293,7 @@ export function MediaUploadDropzone({
               >
                 <span className="mt-0.5 shrink-0">
                   {item.phase === "done" ? (
-                    <CheckCircleIcon className="size-4 text-emerald-600" aria-hidden />
+                    <CheckCircleIcon className="size-4 text-status-emerald-600" aria-hidden />
                   ) : item.phase === "failed" ? (
                     <WarningCircleIcon className="size-4 text-destructive" aria-hidden />
                   ) : (

@@ -98,7 +98,7 @@ export function OpenMicRunner({ eventId }: { eventId: Id<"events"> }) {
       </div>
 
       {windowClosed ? (
-        <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-800">
+        <p className="rounded-md border border-status-amber-500/40 bg-status-amber-500/10 px-3 py-2 text-sm text-status-amber-800">
           Runner is currently closed. It opens 1h before the event start and closes 1h after the event end.
         </p>
       ) : null}
@@ -129,7 +129,7 @@ export function OpenMicRunner({ eventId }: { eventId: Id<"events"> }) {
                   <p className="text-sm text-muted-foreground">Notes: {current.notes}</p>
                 ) : null}
                 {current.skipsCount > 0 ? (
-                  <p className="text-xs text-amber-700">
+                  <p className="text-xs text-status-amber-700">
                     Strikes: {current.skipsCount}
                   </p>
                 ) : null}
@@ -223,7 +223,7 @@ export function OpenMicRunner({ eventId }: { eventId: Id<"events"> }) {
                       <p className="text-xs text-muted-foreground">{signup.whatTheyreDoing}</p>
                       <EquipmentChips equipment={signup.equipment} />
                       {signup.skipsCount > 0 ? (
-                        <p className="mt-1 text-xs text-amber-700">
+                        <p className="mt-1 text-xs text-status-amber-700">
                           Strikes: {signup.skipsCount}
                         </p>
                       ) : null}

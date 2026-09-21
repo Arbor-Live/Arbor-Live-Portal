@@ -75,7 +75,7 @@ export function LandingHero() {
   }, [prefersReducedMotion]);
 
   return (
-    <section ref={sectionRef} className="relative overflow-hidden bg-zinc-950 text-zinc-50">
+    <section ref={sectionRef} className="relative overflow-hidden bg-status-zinc-950 text-status-zinc-50">
       {!prefersReducedMotion ? (
         <div aria-hidden className="pointer-events-none absolute inset-0 z-0">
           <video
@@ -93,7 +93,7 @@ export function LandingHero() {
       ) : null}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 z-[1] bg-zinc-950/35"
+        className="pointer-events-none absolute inset-0 z-[1] bg-status-zinc-950/35"
       />
       <div
         aria-hidden
@@ -133,7 +133,7 @@ export function LandingHero() {
 
             <div className="min-w-0 max-w-2xl">
               <motion.h1
-                className="display-tight text-3xl font-semibold tracking-tight text-zinc-50 sm:text-4xl lg:text-5xl"
+                className="display-tight text-3xl font-semibold tracking-tight text-status-zinc-50 sm:text-4xl lg:text-5xl"
                 variants={heroItem}
                 transition={landingSpring}
               >
@@ -143,7 +143,7 @@ export function LandingHero() {
               </motion.h1>
 
               <motion.p
-                className="mx-auto mt-5 text-base leading-relaxed text-zinc-300 sm:text-lg"
+                className="mx-auto mt-5 text-base leading-relaxed text-status-zinc-300 sm:text-lg"
                 variants={heroItem}
                 transition={landingSpring}
               >
@@ -173,7 +173,7 @@ export function LandingHero() {
                     asChild
                     variant="outline"
                     size="lg"
-                    className="h-11 border-zinc-700 bg-transparent px-6 text-zinc-100 hover:bg-zinc-900 hover:text-white"
+                    className="h-11 border-status-zinc-700 bg-transparent px-6 text-status-zinc-100 hover:bg-status-zinc-900 hover:text-white"
                   >
                     <Link href={landingHero.secondaryCta.href}>
                       {landingHero.secondaryCta.label}
@@ -186,13 +186,13 @@ export function LandingHero() {
         </motion.div>
       </div>
 
-      <p className="absolute right-4 bottom-4 z-[2] text-[10px] tracking-wide text-zinc-400/80 sm:right-6 sm:bottom-6 sm:text-xs">
+      <p className="absolute right-4 bottom-4 z-[2] text-[10px] tracking-wide text-status-zinc-400/80 sm:right-6 sm:bottom-6 sm:text-xs">
         Video by{" "}
         <a
           href={landingHero.backgroundVideoCredit.href}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-zinc-300/90 underline-offset-2 hover:text-white hover:underline"
+          className="text-status-zinc-300/90 underline-offset-2 hover:text-white hover:underline"
         >
           {landingHero.backgroundVideoCredit.label}
         </a>

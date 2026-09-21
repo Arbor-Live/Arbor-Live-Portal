@@ -22,7 +22,7 @@ export function LandingWorkCarousel({ posts }: { posts: PublicWorkPostCard[] }) 
               Whether it&apos;s a small house event or a full production, we are ready to help you every step of the way.
             </p>
           </div>
-          <Link href="/work" className="text-sm font-medium text-emerald-800 underline-offset-4 hover:underline dark:text-primary">
+          <Link href="/work" className="text-sm font-medium text-status-emerald-800 underline-offset-4 hover:underline dark:text-primary">
             View all work →
           </Link>
         </Reveal>
@@ -51,7 +51,7 @@ export function LandingWorkCarousel({ posts }: { posts: PublicWorkPostCard[] }) 
                         className="absolute inset-0 size-full object-cover"
                       />
                     ) : null}
-                    <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/75 to-transparent" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-status-zinc-950/75 to-transparent" />
                     <div className="absolute bottom-3 left-3">
                       <WorkPostKindBadge kind={post.kind} />
                     </div>

@@ -22,6 +22,9 @@ const eslintConfig = defineConfig([
     rules: {
       // Unknown classes silently generate no CSS; catching them is always safe.
       "shadcn/no-unknown-classes": "error",
+      // Colors must come from the theme. The status palette lives under
+      // `status-<hue>-<shade>` in globals.css; legacy utility colors are tokens.
+      "shadcn/no-raw-colors": "error",
       // Underscore-prefixed bindings are intentional throwaways (e.g. pulling a
       // prop out of a destructure so it is not forwarded to the DOM).
       "@typescript-eslint/no-unused-vars": [

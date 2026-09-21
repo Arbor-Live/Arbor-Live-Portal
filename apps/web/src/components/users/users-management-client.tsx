@@ -812,7 +812,7 @@ function SaveStatusIcon({ saveStatus, saveError }: { saveStatus: string; saveErr
     );
   }
   if (saveStatus === "saved") {
-    return <CheckIcon className="size-4 text-emerald-600" weight="bold" />;
+    return <CheckIcon className="size-4 text-status-emerald-600" weight="bold" />;
   }
   return null;
 }
@@ -1438,7 +1438,7 @@ function BandOrgAdminRow({
           <p className="font-medium">
             {org.name}
             {isArchived ? (
-              <span className="ml-2 rounded-full border border-amber-500/30 bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-700">
+              <span className="ml-2 rounded-full border border-status-amber-500/30 bg-status-amber-500/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-status-amber-700">
                 Archived
               </span>
             ) : null}
@@ -1450,7 +1450,7 @@ function BandOrgAdminRow({
                   type="button"
                   size="sm"
                   variant="outline"
-                  className="h-6 border-amber-500/40 px-2 text-[11px] text-amber-900 dark:text-amber-200"
+                  className="h-6 border-status-amber-500/40 px-2 text-[11px] text-status-amber-900 dark:text-status-amber-200"
                 >
                   Onboarding · {missingCount || "?"}
                 </Button>

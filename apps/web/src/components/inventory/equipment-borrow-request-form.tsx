@@ -285,7 +285,7 @@ export function EquipmentBorrowRequestForm({
             </Button>
           </div>
 
-          {error ? <p className="text-sm text-rose-600">{error}</p> : null}
+          {error ? <p className="text-sm text-status-rose-600">{error}</p> : null}
         </div>
 
         <SheetFooter className="mt-auto flex-row justify-end gap-2">

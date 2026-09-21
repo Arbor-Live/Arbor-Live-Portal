@@ -166,7 +166,7 @@ function renderBodyWithMentions(
     const start = match.index ?? 0;
     if (start > lastIndex) nodes.push(body.slice(lastIndex, start));
     nodes.push(
-      <span key={`${start}-${match[0]}`} className="font-medium text-sky-700 dark:text-sky-300">
+      <span key={`${start}-${match[0]}`} className="font-medium text-status-sky-700 dark:text-status-sky-300">
         {match[0]}
       </span>,
     );

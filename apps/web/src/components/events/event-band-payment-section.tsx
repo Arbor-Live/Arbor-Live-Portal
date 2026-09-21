@@ -312,7 +312,7 @@ function EventBandsPerformersPanel({ eventId }: { eventId: Id<"events"> }) {
                         <p className="text-muted-foreground">No payout set</p>
                       )}
                       {performer.awaitingOnboarding ? (
-                        <p className="text-amber-700 dark:text-amber-300">Onboarding pending</p>
+                        <p className="text-status-amber-700 dark:text-status-amber-300">Onboarding pending</p>
                       ) : null}
                     </div>
                     {performer.payment ? (
@@ -871,12 +871,12 @@ function EventBandPaymentForm({
             </p>
           ) : null}
           {payment.status === "pending_onboarding" ? (
-            <p className="text-amber-700 dark:text-amber-300">
+            <p className="text-status-amber-700 dark:text-status-amber-300">
               Waiting for the artist to finish onboarding before payout can proceed.
             </p>
           ) : null}
           {payment.status === "pending_payee" && !payeeComplete ? (
-            <p className="text-amber-700 dark:text-amber-300">
+            <p className="text-status-amber-700 dark:text-status-amber-300">
               Waiting for the artist to configure their designated payee before confirmation can be
               sent.
             </p>

@@ -1575,7 +1575,7 @@ export function EventEditor({
                     <div className="md:col-span-3 space-y-2">
                       <Label>Preview ({recurrencePreview.starts.length} occurrences)</Label>
                       {recurrencePreview.error ? (
-                        <p className="text-sm text-rose-700">{recurrencePreview.error}</p>
+                        <p className="text-sm text-status-rose-700">{recurrencePreview.error}</p>
                       ) : (
                         <ul className="max-h-40 overflow-y-auto rounded-md border divide-y text-sm">
                           {recurrencePreview.starts.map((occurrenceStart, index) => (
@@ -1739,7 +1739,7 @@ export function EventEditor({
                   : "Select a crew user, then use Add Shift for Selected User on each block."}
               </p>
               {otForecast?.hasOt || otForecast?.hasDt ? (
-                <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-xs text-amber-800">
+                <p className="rounded-md border border-status-amber-500/30 bg-status-amber-500/10 px-2 py-1 text-xs text-status-amber-800">
                   OT warning: this crew member may exceed pay-period limits
                   {otForecast.hasDt ? " (including double-time days >12h)" : ""}
                   {otForecast.otWeeks.length > 0 ? " or weekly hours >40" : ""}.
@@ -1841,7 +1841,7 @@ export function EventEditor({
                               className={cn(
                                 "shrink-0",
                                 row.timesOverridden &&
-                                  "border-amber-500/50 bg-amber-500/15 text-amber-800 hover:bg-amber-500/25 hover:text-amber-900",
+                                  "border-status-amber-500/50 bg-status-amber-500/15 text-status-amber-800 hover:bg-status-amber-500/25 hover:text-status-amber-900",
                               )}
                               aria-label={row.timesOverridden ? "Edit custom shift time" : "Edit shift time"}
                               title={row.timesOverridden ? "Custom shift time" : "Edit shift time"}
@@ -1878,7 +1878,7 @@ export function EventEditor({
                                 />
                               </div>
                             ) : row.timesOverridden ? (
-                              <span className="shrink-0 self-center text-xs text-amber-800 tabular-nums">
+                              <span className="shrink-0 self-center text-xs text-status-amber-800 tabular-nums">
                                 {formatDateTimeRange(
                                   localDateTimeInputToMs(row.startsAt) ?? 0,
                                   localDateTimeInputToMs(row.endsAt) ?? 0,
@@ -1922,8 +1922,8 @@ export function EventEditor({
                 );
               })}
               {shifts.some((shift) => isShiftUnlinked(shift)) ? (
-                <div className="space-y-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-2">
-                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-amber-700">
+                <div className="space-y-2 rounded-md border border-status-amber-500/30 bg-status-amber-500/10 p-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-status-amber-700">
                     <span>
                       Some shifts are not linked to a schedule block (common for trainees assigned as entire event /
                       first 8 hours). They still count as scheduled.
@@ -1938,7 +1938,7 @@ export function EventEditor({
                     .map(({ shift, shiftIndex }) => (
                       <div
                         key={shift.id ?? `unassigned-${shiftIndex}`}
-                        className="flex min-w-0 flex-wrap items-center gap-2 rounded-md border border-amber-500/20 bg-background/80 p-2"
+                        className="flex min-w-0 flex-wrap items-center gap-2 rounded-md border border-status-amber-500/20 bg-background/80 p-2"
                       >
                         <div className="min-w-0 flex-1 basis-[6rem]">
                           <Input
@@ -2262,8 +2262,8 @@ export function EventEditor({
                   <div
                     className={`rounded-md border px-3 py-2 text-sm ${
                       (profitLossUsd ?? 0) >= 0
-                        ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-800"
-                        : "border-rose-500/40 bg-rose-500/10 text-rose-800"
+                        ? "border-status-emerald-500/40 bg-status-emerald-500/10 text-status-emerald-800"
+                        : "border-status-rose-500/40 bg-status-rose-500/10 text-status-rose-800"
                     }`}
                   >
                     <p className="text-xs">Net profit</p>
@@ -2281,7 +2281,7 @@ export function EventEditor({
               </p>
             )}
             {computedCrewCost?.missingRateUsers?.length || computedCrewCost?.missingRateOpenSlotCount ? (
-              <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-xs text-amber-800">
+              <div className="rounded-md border border-status-amber-500/40 bg-status-amber-500/10 p-2 text-xs text-status-amber-800">
                 {computedCrewCost.missingRateUsers?.length ? (
                   <>
                     Missing hourly rates for: {computedCrewCost.missingRateUsers.join(", ")}. These rows are included at
@@ -2343,7 +2343,7 @@ export function EventEditor({
                                   <td className="px-3 py-2">
                                     <p>{row.name}</p>
                                     {row.missingRate ? (
-                                      <p className="text-[11px] text-amber-700">Missing base rate</p>
+                                      <p className="text-[11px] text-status-amber-700">Missing base rate</p>
                                     ) : null}
                                   </td>
                                   <td className="px-3 py-2">{row.role || "—"}</td>
@@ -2416,7 +2416,7 @@ export function EventEditor({
                 <Input value={newHostName} onChange={(e) => setNewHostName(e.target.value)} />
               </div>
               {hostNameSuggestion ? (
-                <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
+                <div className="rounded-md border border-status-amber-500/40 bg-status-amber-500/10 px-3 py-2 text-sm">
                   <p>
                     Did you mean{" "}
                     <span className="font-medium">{hostNameSuggestion.name}</span>

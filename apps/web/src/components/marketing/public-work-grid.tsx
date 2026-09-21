@@ -84,7 +84,7 @@ export function PublicWorkGrid({ posts }: { posts: PublicWorkPostCard[] }) {
                           className="absolute inset-0 size-full object-cover"
                         />
                       ) : null}
-                      <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/70 to-transparent" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-status-zinc-950/70 to-transparent" />
                       <div className="absolute bottom-3 left-3">
                         <WorkPostKindBadge kind={post.kind} />
                       </div>

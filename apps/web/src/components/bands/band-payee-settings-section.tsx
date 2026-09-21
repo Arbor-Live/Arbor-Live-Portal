@@ -118,7 +118,7 @@ export function BandPayeeSettingsSection() {
             </CardHeader>
             <CardContent className="space-y-3">
               {!profile.payeeComplete ? (
-                <p className="rounded-md border border-dashed px-3 py-2 text-sm text-amber-800 dark:text-amber-200">
+                <p className="rounded-md border border-dashed px-3 py-2 text-sm text-status-amber-800 dark:text-status-amber-200">
                   Required before artist payments can be processed. Provide one designated payee who
                   receives and distributes payment, a mailing address, and pickup or delivery for
                   GrantEd.

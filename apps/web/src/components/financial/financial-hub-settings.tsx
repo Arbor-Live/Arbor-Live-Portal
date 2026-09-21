@@ -373,7 +373,7 @@ function RowSaveIndicator({
     );
   }
   if (status === "saved") {
-    return <CheckIcon className="size-4 self-center text-emerald-600" weight="bold" />;
+    return <CheckIcon className="size-4 self-center text-status-emerald-600" weight="bold" />;
   }
   return null;
 }

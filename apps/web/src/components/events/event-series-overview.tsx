@@ -174,7 +174,7 @@ export function EventSeriesOverview({ seriesId }: { seriesId: Id<"eventSeries"> 
   }
 
   if (!data || !data.series) {
-    return <p className="text-sm text-rose-700">Event series not found.</p>;
+    return <p className="text-sm text-status-rose-700">Event series not found.</p>;
   }
 
   const occurrences = data.occurrences;
@@ -405,7 +405,7 @@ export function EventSeriesOverview({ seriesId }: { seriesId: Id<"eventSeries"> 
               {costSummary.projectedBudgetRemainingUsd !== undefined ? (
                 <span
                   className={
-                    costSummary.projectedBudgetRemainingUsd >= 0 ? " text-emerald-700" : " text-rose-700"
+                    costSummary.projectedBudgetRemainingUsd >= 0 ? " text-status-emerald-700" : " text-status-rose-700"
                   }
                 >
                   {" "}

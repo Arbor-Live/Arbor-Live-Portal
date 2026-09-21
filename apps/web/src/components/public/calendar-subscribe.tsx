@@ -69,7 +69,7 @@ export function CalendarSubscribe({ className }: { className?: string }) {
             {...(provider.key === "apple"
               ? {}
               : { target: "_blank", rel: "noreferrer" })}
-            className="text-sm font-medium text-emerald-800 underline-offset-4 hover:underline dark:text-primary"
+            className="text-sm font-medium text-status-emerald-800 underline-offset-4 hover:underline dark:text-primary"
           >
             {provider.label}
           </a>
@@ -83,7 +83,7 @@ export function CalendarSubscribe({ className }: { className?: string }) {
         type="button"
         onClick={() => void handleCopy()}
         disabled={!ready}
-        className="text-sm font-medium text-emerald-800 underline-offset-4 hover:underline disabled:text-muted-foreground disabled:no-underline dark:text-primary"
+        className="text-sm font-medium text-status-emerald-800 underline-offset-4 hover:underline disabled:text-muted-foreground disabled:no-underline dark:text-primary"
       >
         {copied ? "Link copied" : "Copy link"}
       </button>

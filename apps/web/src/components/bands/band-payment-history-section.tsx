@@ -28,15 +28,15 @@ type StatusFilter = "all" | "action_needed" | "awaiting_confirmation" | "confirm
 function statusBadgeClass(status: string) {
   switch (status) {
     case "awaiting_confirmation":
-      return "bg-amber-100 text-amber-900 dark:bg-amber-500/15 dark:text-amber-200";
+      return "bg-status-amber-100 text-status-amber-900 dark:bg-status-amber-500/15 dark:text-status-amber-200";
     case "confirmed":
-      return "bg-blue-100 text-blue-900 dark:bg-blue-500/15 dark:text-blue-200";
+      return "bg-status-blue-100 text-status-blue-900 dark:bg-status-blue-500/15 dark:text-status-blue-200";
     case "paid":
-      return "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300";
+      return "bg-status-emerald-100 text-status-emerald-800 dark:bg-status-emerald-500/15 dark:text-status-emerald-300";
     case "pending_onboarding":
     case "pending_payee":
     case "pending_email":
-      return "bg-slate-100 text-slate-800 dark:bg-slate-500/15 dark:text-slate-200";
+      return "bg-status-slate-100 text-status-slate-800 dark:bg-status-slate-500/15 dark:text-status-slate-200";
     default:
       return "bg-muted text-muted-foreground";
   }
@@ -117,7 +117,7 @@ export function BandPaymentHistorySection() {
           </CardDescription>
         </div>
         {actionNeededCount > 0 ? (
-          <span className="inline-flex shrink-0 items-center rounded-full bg-amber-500/15 px-2.5 py-1 text-xs font-medium text-amber-800 dark:text-amber-200">
+          <span className="inline-flex shrink-0 items-center rounded-full bg-status-amber-500/15 px-2.5 py-1 text-xs font-medium text-status-amber-800 dark:text-status-amber-200">
             {actionNeededCount} need{actionNeededCount === 1 ? "s" : ""} your signature
           </span>
         ) : null}

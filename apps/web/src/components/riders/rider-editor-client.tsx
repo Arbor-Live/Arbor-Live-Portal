@@ -253,7 +253,7 @@ export function RiderEditorClient({ riderId }: { riderId: Id<"bandRiders"> }) {
           </Link>
         </Button>
         {rider.isDefault ? (
-          <span className="rounded-md bg-amber-500/15 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+          <span className="rounded-md bg-status-amber-500/15 px-2 py-0.5 text-[11px] font-medium text-status-amber-800">
             Default for show files
           </span>
         ) : null}
@@ -452,7 +452,7 @@ export function RiderEditorClient({ riderId }: { riderId: Id<"bandRiders"> }) {
               </div>
             </div>
           </CardHeader>
-          <CardContent className="overflow-x-auto bg-slate-50 p-3 dark:bg-slate-950/40">
+          <CardContent className="overflow-x-auto bg-status-slate-50 p-3 dark:bg-status-slate-950/40">
             <StagePlotCanvas
               content={draft.content}
               selectedId={selectedId}

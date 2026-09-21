@@ -62,7 +62,7 @@ export function PostMortemForm({
                         key={value}
                         type="button"
                         aria-label={`${value} star${value > 1 ? "s" : ""}`}
-                        className="rounded-sm p-1 transition-colors hover:text-amber-500"
+                        className="rounded-sm p-1 transition-colors hover:text-status-amber-500"
                         onMouseEnter={() => setHoveredRating(value)}
                         onClick={() => {
                           field.onChange(value);
@@ -72,7 +72,7 @@ export function PostMortemForm({
                         <StarIcon
                           className={cn(
                             "size-7",
-                            filled ? "text-amber-500" : "text-muted-foreground/40",
+                            filled ? "text-status-amber-500" : "text-muted-foreground/40",
                           )}
                           weight={filled ? "fill" : "regular"}
                         />

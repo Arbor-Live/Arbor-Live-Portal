@@ -33,7 +33,7 @@ function RatingStars({ rating }: { rating: number }) {
           key={value}
           className={cn(
             "size-4",
-            value <= rating ? "text-amber-500" : "text-muted-foreground/30",
+            value <= rating ? "text-status-amber-500" : "text-muted-foreground/30",
           )}
           weight={value <= rating ? "fill" : "regular"}
         />
@@ -98,7 +98,7 @@ export function PostEventWorkCard({ row }: { row: PostEventWorkRow }) {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-sm font-medium">Photos &amp; videos</p>
             {row.mediaResolved ? (
-              <span className="flex items-center gap-1.5 text-xs font-medium text-emerald-700">
+              <span className="flex items-center gap-1.5 text-xs font-medium text-status-emerald-700">
                 <CheckCircleIcon className="size-4" weight="fill" />
                 Media resolved
               </span>
