@@ -16,7 +16,7 @@ import { ARTIST_TYPES, ARTIST_TYPE_LABELS, type ArtistType } from "@/lib/artist-
 function ArtistCardSkeleton() {
   return (
     <Card className="h-full gap-0 overflow-hidden border border-border/50 bg-background/70 py-0 shadow-[0_8px_24px_rgba(0,0,0,0.06)] backdrop-blur-xl ring-0">
-      <Skeleton className="aspect-[4/5] w-full rounded-none" />
+      <Skeleton className="aspect-(--aspect-poster) w-full rounded-none" />
       <CardContent className="space-y-2 p-4">
         <Skeleton className="h-5 w-3/4" />
         <Skeleton className="h-4 w-full" />

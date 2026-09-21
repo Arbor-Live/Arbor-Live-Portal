@@ -390,12 +390,12 @@ export function EventPullList({
             </p>
           ) : null}
           {syncStatus?.hasInvoice && syncStatus.inSync === false ? (
-            <p className="mt-1 inline-flex items-center rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs text-amber-800">
+            <p className="mt-1 inline-flex items-center rounded-md border border-status-amber-500/40 bg-status-amber-500/10 px-2 py-1 text-xs text-status-amber-800">
               Out of sync with the linked invoice&apos;s equipment lines.
             </p>
           ) : null}
           {syncStatus?.hasInvoice && syncStatus.inSync === null ? (
-            <p className="mt-1 inline-flex items-center rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs text-amber-800">
+            <p className="mt-1 inline-flex items-center rounded-md border border-status-amber-500/40 bg-status-amber-500/10 px-2 py-1 text-xs text-status-amber-800">
               Couldn&apos;t verify against the linked invoice
               {syncStatus.verifyError ? `: ${syncStatus.verifyError}` : "."}
             </p>
@@ -482,7 +482,7 @@ export function EventPullList({
                       key={item.id ?? `${item.lineKind}-${item.typeId ?? item.packageId}-${globalIndex}`}
                       className="flex items-start gap-4 border-b px-4 py-3 last:border-b-0"
                     >
-                      <div className="flex min-w-[3.5rem] shrink-0 justify-center rounded-md bg-primary/10 px-2 py-1 text-lg font-bold tabular-nums text-primary">
+                      <div className="flex min-w-14 shrink-0 justify-center rounded-md bg-primary/10 px-2 py-1 text-lg font-bold tabular-nums text-primary">
                         {formatQty(item.quantityRequired)}
                       </div>
                       <div className="min-w-0 flex-1">
@@ -492,7 +492,7 @@ export function EventPullList({
                           ) : null}
                           <p className="text-base font-medium leading-tight">{name}</p>
                           {item.lineKind === "package" ? (
-                            <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                            <span className="rounded bg-muted px-1.5 py-0.5 text-3xs font-medium uppercase tracking-wide text-muted-foreground">
                               Package
                             </span>
                           ) : null}

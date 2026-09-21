@@ -36,14 +36,14 @@ function ProgramCard({ program }: { program: (typeof landingPrograms)[number] })
             className="object-cover"
           />
         ) : null}
-        <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/85 via-zinc-950/25 to-zinc-950/10" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,color-mix(in_oklch,white_18%,transparent),transparent_55%)]" />
+        <div className="absolute inset-0 bg-gradient-to-t from-status-zinc-950/85 via-status-zinc-950/25 to-status-zinc-950/10" />
+        <div className="absolute inset-0 glow-white-corner" />
         {program.schedule ? (
           <div className="absolute bottom-3 left-3 right-3 flex flex-wrap gap-2">
-            <span className="bg-zinc-950/70 px-2 py-1 text-xs font-medium text-zinc-100 backdrop-blur-sm">
+            <span className="bg-status-zinc-950/70 px-2 py-1 text-xs font-medium text-status-zinc-100 backdrop-blur-sm">
               {program.schedule.when}
             </span>
-            <span className="bg-zinc-950/70 px-2 py-1 text-xs font-medium text-zinc-100 backdrop-blur-sm">
+            <span className="bg-status-zinc-950/70 px-2 py-1 text-xs font-medium text-status-zinc-100 backdrop-blur-sm">
               {program.schedule.where}
             </span>
           </div>

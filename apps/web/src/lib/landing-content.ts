@@ -69,7 +69,7 @@ export const landingPrograms: LandingProgram[] = [
       external: true,
     },
     imageSrc: "/promo/trivia.jpeg",
-    imageGradient: "from-amber-900/70 via-primary/35 to-zinc-900",
+    imageGradient: "from-status-amber-900/70 via-primary/35 to-status-zinc-900",
   },
   {
     id: "jams",
@@ -83,7 +83,7 @@ export const landingPrograms: LandingProgram[] = [
       external: true,
     },
     imageSrc: "/promo/jam.jpeg",
-    imageGradient: "from-zinc-900 via-primary/30 to-emerald-950",
+    imageGradient: "from-status-zinc-900 via-primary/30 to-status-emerald-950",
   },
   {
     id: "open-mic",
@@ -96,7 +96,7 @@ export const landingPrograms: LandingProgram[] = [
       href: "/open-mic",
     },
     imageSrc: "/promo/coho.jpg",
-    imageGradient: "from-violet-950/80 via-primary/25 to-zinc-900",
+    imageGradient: "from-status-violet-950/80 via-primary/25 to-status-zinc-900",
   },
   {
     id: "singer-songwriter",
@@ -110,7 +110,7 @@ export const landingPrograms: LandingProgram[] = [
       external: true,
     },
     imageSrc: "/promo/oncall.jpeg",
-    imageGradient: "from-emerald-950/90 via-primary/20 to-zinc-900",
+    imageGradient: "from-status-emerald-950/90 via-primary/20 to-status-zinc-900",
   },
   {
     id: "stage",
@@ -123,7 +123,7 @@ export const landingPrograms: LandingProgram[] = [
       external: true,
     },
     imageSrc: "/promo/arbor-stage.jpeg",
-    imageGradient: "from-emerald-900/80 via-primary/40 to-zinc-900",
+    imageGradient: "from-status-emerald-900/80 via-primary/40 to-status-zinc-900",
   },
   {
     id: "your-event",
@@ -132,7 +132,7 @@ export const landingPrograms: LandingProgram[] = [
       "Ask Arbor Live to run your event. Tell us when and where — we'll handle logistics, booking, and running the show so you can focus on your community.",
     cta: { label: "Book us", href: "/request" },
     imageSrc: "/promo/your-event.jpeg",
-    imageGradient: "from-primary/50 via-zinc-900 to-emerald-950/90",
+    imageGradient: "from-primary/50 via-status-zinc-900 to-status-emerald-950/90",
     featured: true,
   },
 ];

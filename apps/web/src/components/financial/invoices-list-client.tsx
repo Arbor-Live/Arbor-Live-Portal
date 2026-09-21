@@ -78,17 +78,17 @@ function lifecycleLabel(lifecycle: InvoiceLifecycle) {
 function lifecycleBadgeClass(lifecycle: InvoiceLifecycle) {
   switch (lifecycle) {
     case "paid":
-      return "border-emerald-500/30 bg-emerald-500/10 text-emerald-700";
+      return "border-status-emerald-500/30 bg-status-emerald-500/10 text-status-emerald-700";
     case "payment_pending":
-      return "border-sky-500/30 bg-sky-500/10 text-sky-700";
+      return "border-status-sky-500/30 bg-status-sky-500/10 text-status-sky-700";
     case "proof_received":
-      return "border-violet-500/30 bg-violet-500/10 text-violet-700";
+      return "border-status-violet-500/30 bg-status-violet-500/10 text-status-violet-700";
     case "overdue":
-      return "border-red-500/30 bg-red-500/10 text-red-700";
+      return "border-status-red-500/30 bg-status-red-500/10 text-status-red-700";
     case "changes_requested":
-      return "border-amber-500/30 bg-amber-500/10 text-amber-800";
+      return "border-status-amber-500/30 bg-status-amber-500/10 text-status-amber-800";
     case "awaiting_approval":
-      return "border-blue-500/30 bg-blue-500/10 text-blue-700";
+      return "border-status-blue-500/30 bg-status-blue-500/10 text-status-blue-700";
     case "void":
     case "draft":
     default:
@@ -365,6 +365,7 @@ export function InvoicesListClient() {
         getRowId={(row) => row._id}
         enableColumnVisibility
         emptyMessage="No invoices match your filters."
+        // eslint-disable-next-line shadcn/require-static-classes -- DataTable rows take a className callback; both the value and the forwarded className are the table api.
         getRowClassName={() => "cursor-pointer"}
         getRowProps={(row) => ({
           onClick: () => router.push(`/dashboard/financial-hub/invoices/${row.original._id}`),

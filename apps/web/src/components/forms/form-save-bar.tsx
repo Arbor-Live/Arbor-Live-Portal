@@ -94,8 +94,8 @@ export function FormSaveBar({
 
           {isSaved && !isError && !isSaving ? (
             <>
-              <CheckIcon className="size-4 shrink-0 text-emerald-600" weight="bold" />
-              <span className="text-emerald-700 dark:text-emerald-400">Saved</span>
+              <CheckIcon className="size-4 shrink-0 text-status-emerald-600" weight="bold" />
+              <span className="text-status-emerald-700 dark:text-status-emerald-400">Saved</span>
             </>
           ) : null}
 

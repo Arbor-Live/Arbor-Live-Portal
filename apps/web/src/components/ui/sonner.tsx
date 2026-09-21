@@ -66,7 +66,7 @@ function DismissAllButton({ visible }: { visible: boolean }) {
 
   return (
     <div
-      className="pointer-events-none fixed z-[1000000000]"
+      className="pointer-events-none fixed z-1000000000"
       style={{ top: anchor.top, right: anchor.right, width: anchor.width }}
     >
       <Button

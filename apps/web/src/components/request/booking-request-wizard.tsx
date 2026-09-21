@@ -32,9 +32,6 @@ import {
   QuestionnaireTitle,
 } from "@/components/ui/questionnaire";
 import {
-  QUESTIONNAIRE_CHOICE_CLASSNAME,
-  QUESTIONNAIRE_ITEM_CLASSNAME,
-  QUESTIONNAIRE_TITLE_CLASSNAME,
   handleQuestionnaireEnter,
   MarkStepAnswered,
   QuestionnaireWizardFooter,
@@ -108,8 +105,6 @@ type ContactLookup =
 function contactDetailsComplete(lookup: Extract<ContactLookup, { found: true }>) {
   return Boolean(lookup.firstName.trim() && lookup.lastName.trim() && lookup.phone.trim());
 }
-
-const choiceClassName = QUESTIONNAIRE_CHOICE_CLASSNAME;
 
 function itemChoices(
   name: BookingRequestStepId,
@@ -432,10 +427,9 @@ export function BookingRequestWizard() {
                   required={renderedRequired}
                   disabled={!renderedStep}
                   invalid={Boolean(renderedFieldError)}
-                  className={QUESTIONNAIRE_ITEM_CLASSNAME}
                 >
                   <div className="space-y-3">
-                    <QuestionnaireTitle className={QUESTIONNAIRE_TITLE_CLASSNAME}>
+                    <QuestionnaireTitle>
                       {renderedHeadline}
                     </QuestionnaireTitle>
                     {renderedStep?.subheader ? (
@@ -588,7 +582,6 @@ function StepFields({
             <QuestionnaireChoice
               key={option}
               value={option}
-              className={choiceClassName}
               checked={values.eventCategory === option}
               onChange={() =>
                 form.setValue("eventCategory", option, { shouldDirty: true, shouldValidate: true })
@@ -602,7 +595,7 @@ function StepFields({
               type="text"
               placeholder="What type of event are you running?"
               aria-label="Other event type"
-              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-(--focus-ring-width) focus-visible:ring-ring/50"
               value={values.eventCategoryOther ?? ""}
               onChange={(event) =>
                 form.setValue("eventCategoryOther", event.currentTarget.value, { shouldDirty: true })
@@ -625,7 +618,6 @@ function StepFields({
             <QuestionnaireChoice
               key={option}
               value={option}
-              className={choiceClassName}
               checked={values.productionTier === option}
               onChange={() =>
                 form.setValue("productionTier", option, { shouldDirty: true, shouldValidate: true })
@@ -643,7 +635,6 @@ function StepFields({
             <QuestionnaireChoice
               key={option}
               value={option}
-              className={choiceClassName}
               checked={values.lightingPreference === option}
               onChange={() =>
                 form.setValue("lightingPreference", option, { shouldDirty: true, shouldValidate: true })
@@ -723,7 +714,6 @@ function ReturningUserChoices({
         <QuestionnaireChoice
           key={group.groupId}
           value={`group:${group.groupId}`}
-          className={choiceClassName}
           checked={requestContext === "group" && selectedGroupId === group.groupId}
           onChange={() => onApplyGroup(group)}
         >
@@ -733,7 +723,6 @@ function ReturningUserChoices({
       ))}
       <QuestionnaireChoice
         value="personal"
-        className={choiceClassName}
         checked={requestContext === "personal"}
         onChange={onApplyPersonal}
       >
@@ -741,7 +730,6 @@ function ReturningUserChoices({
       </QuestionnaireChoice>
       <QuestionnaireChoice
         value="new_group"
-        className={choiceClassName}
         checked={requestContext === "new_group"}
         onChange={onApplyNewGroup}
       >
@@ -768,7 +756,6 @@ function SponsorTypeChoices() {
           <QuestionnaireChoice
             key={option}
             value={option}
-            className={choiceClassName}
             checked={sponsorType === option}
             onChange={() => {
               form.setValue("sponsorType", option, { shouldDirty: true, shouldValidate: true });
@@ -789,7 +776,7 @@ function SponsorTypeChoices() {
             type="text"
             placeholder="Who is sponsoring this event?"
             aria-label="Other sponsor type"
-            className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-(--focus-ring-width) focus-visible:ring-ring/50"
             value={sponsorTypeOther ?? ""}
             onChange={(event) =>
               form.setValue("sponsorTypeOther", event.currentTarget.value, { shouldDirty: true })

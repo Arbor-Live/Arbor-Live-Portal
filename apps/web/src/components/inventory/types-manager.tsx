@@ -183,8 +183,8 @@ function formatTypeDisplay(type: {
 
 function visibilityBadgeClass(row: { publicListing?: boolean; publicProfile?: boolean }) {
   if (!row.publicListing) return "border-muted-foreground/30 text-muted-foreground";
-  if (row.publicProfile) return "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
-  return "border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-300";
+  if (row.publicProfile) return "border-status-emerald-500/40 bg-status-emerald-500/10 text-status-emerald-700 dark:text-status-emerald-300";
+  return "border-status-sky-500/40 bg-status-sky-500/10 text-status-sky-700 dark:text-status-sky-300";
 }
 
 export function TypesManager() {
@@ -766,7 +766,7 @@ export function TypesManager() {
                     <div key={`manual-${index}`} className="flex flex-wrap items-center gap-2">
                       <Input
                         placeholder="Title"
-                        className="w-full max-w-[220px]"
+                        className="w-full max-w-55"
                         value={resourceRow.title}
                         onChange={(event) =>
                           setTypeField(
@@ -852,7 +852,7 @@ export function TypesManager() {
                       <div key={`gdtf-${index}`} className="flex flex-wrap items-center gap-2">
                         <Input
                           placeholder="Title"
-                          className="w-full max-w-[220px]"
+                          className="w-full max-w-55"
                           value={resourceRow.title}
                           onChange={(event) =>
                             setTypeField(

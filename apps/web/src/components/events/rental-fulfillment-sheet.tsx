@@ -484,11 +484,11 @@ export function RentalFulfillmentSheet({
                           </p>
                         </div>
                         {clientNotify && !clientNotify.canNotify ? (
-                          <p className="max-w-[12rem] text-right text-[11px] leading-snug text-amber-700 dark:text-amber-300">
+                          <p className="max-w-48 text-right text-2xs leading-snug text-status-amber-700 dark:text-status-amber-300">
                             No invoice client email — won’t notify on complete
                           </p>
                         ) : clientNotify?.email ? (
-                          <p className="max-w-[12rem] truncate text-right text-[11px] text-muted-foreground">
+                          <p className="max-w-48 truncate text-right text-2xs text-muted-foreground">
                             Notify {clientNotify.email}
                           </p>
                         ) : null}
@@ -502,7 +502,7 @@ export function RentalFulfillmentSheet({
                           doneCount={doneCount}
                         />
                       ) : (
-                        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-900 dark:text-amber-200">
+                        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-status-amber-500/40 bg-status-amber-500/10 px-3 py-2 text-sm text-status-amber-900 dark:text-status-amber-200">
                           <span>
                             {pendingCount} leftover{pendingCount === 1 ? "" : "s"} need a disposition
                           </span>
@@ -525,7 +525,7 @@ export function RentalFulfillmentSheet({
 
                   {localError ? <p className="text-sm text-destructive">{localError}</p> : null}
                   {completeWarning ? (
-                    <p className="rounded border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-900 dark:text-amber-200">
+                    <p className="rounded border border-status-amber-500/40 bg-status-amber-500/10 px-3 py-2 text-sm text-status-amber-900 dark:text-status-amber-200">
                       {completeWarning}
                     </p>
                   ) : null}

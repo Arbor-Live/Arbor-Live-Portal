@@ -131,6 +131,7 @@ export function SearchableSelect({
         aria-label={emptyLabel ?? placeholder}
         data-testid="searchable-select-trigger"
         className={cn(
+// eslint-disable-next-line shadcn/require-static-classes -- SearchableSelect forwards a caller-supplied className by design.
           filterControlClassName,
           "flex w-full min-w-0 items-center justify-between gap-2 text-left",
         )}
@@ -149,6 +150,7 @@ export function SearchableSelect({
       </ComboboxTrigger>
       <ComboboxContent
         data-testid="searchable-select-menu"
+        // eslint-disable-next-line shadcn/require-static-classes -- SearchableSelect forwards a caller-supplied className by design.
         className={cn("min-w-[min(100%,20rem)]", contentClassName)}
       >
         <ComboboxInput showTrigger={false} placeholder={placeholder} />

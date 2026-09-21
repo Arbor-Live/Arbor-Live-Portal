@@ -33,11 +33,11 @@ export function PublicArtistDetail({ slug }: { slug: string }) {
 
   return (
     <article>
-      <section className="relative overflow-hidden border-b bg-zinc-950 text-zinc-50">
+      <section className="relative overflow-hidden border-b bg-status-zinc-950 text-status-zinc-50">
         <div
           aria-hidden
           className={cn(
-            "absolute inset-0 bg-gradient-to-br from-emerald-900/80 via-primary/40 to-zinc-900",
+            "absolute inset-0 bg-gradient-to-br from-status-emerald-900/80 via-primary/40 to-status-zinc-900",
             artist.heroImageUrl && "opacity-40",
           )}
         />
@@ -47,11 +47,11 @@ export function PublicArtistDetail({ slug }: { slug: string }) {
             className="absolute inset-0 size-full object-cover opacity-50"
           />
         ) : null}
-        <div className="relative mx-auto max-w-6xl px-4 pb-16 pt-[calc(4rem_+_var(--happening-banner-height,0px))] sm:px-6 sm:pb-24 sm:pt-[calc(6rem_+_var(--happening-banner-height,0px))] lg:px-8">
+        <div className="relative mx-auto max-w-6xl px-4 pb-16 pt-banner-sm sm:px-6 sm:pb-24 sm:pt-banner-lg lg:px-8">
           <Reveal>
             <Link
               href="/artists"
-              className="text-sm text-zinc-300 hover:text-white hover:underline"
+              className="text-sm text-status-zinc-300 hover:text-white hover:underline"
             >
               ← All artists
             </Link>
@@ -61,11 +61,11 @@ export function PublicArtistDetail({ slug }: { slug: string }) {
             <div className="mt-4">
               <ArtistTypeBadge
                 organizationType={artist.organizationType}
-                className="border-zinc-700 text-zinc-300"
+                className="border-status-zinc-700 text-status-zinc-300"
               />
             </div>
             {artist.oneLiner ? (
-              <p className="mt-3 max-w-2xl text-lg text-zinc-200">{artist.oneLiner}</p>
+              <p className="mt-3 max-w-2xl text-lg text-status-zinc-200">{artist.oneLiner}</p>
             ) : null}
           </Reveal>
         </div>

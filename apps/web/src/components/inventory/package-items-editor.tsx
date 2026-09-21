@@ -332,7 +332,7 @@ export function PackageItemsEditor({
             />
           </div>
 
-          <div className="max-h-[28rem] space-y-4 overflow-y-auto rounded-md border p-3">
+          <div className="max-h-112 space-y-4 overflow-y-auto rounded-md border p-3">
             {catalogSections.map((group) => (
               <section key={group.section} className="space-y-2">
                 <h4 className="text-sm font-semibold">{publicBucketLabels[group.section]}</h4>
@@ -355,7 +355,7 @@ export function PackageItemsEditor({
                               fallbackClassName="h-12 w-12 shrink-0 rounded"
                             />
                           ) : (
-                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded bg-muted text-[10px] text-muted-foreground">
+                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded bg-muted text-3xs text-muted-foreground">
                               No image
                             </div>
                           )}

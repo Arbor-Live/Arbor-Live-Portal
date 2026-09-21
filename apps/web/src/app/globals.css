@@ -16,6 +16,36 @@
   --font-mono: var(--font-jetbrains-mono);
   --font-sans: var(--font-inter);
   --font-heading: var(--font-space-grotesk);
+  /* Compact text sizes. The dense admin surfaces (status chips, metadata rows,
+     board cards) use 11px/10px/9px below Tailwind's text-xs. Naming them keeps
+     the design but moves it onto the type scale so it is one place to change. */
+  --text-2xs: 0.6875rem; /* 11px */
+  --text-2xs--line-height: 1rem;
+  --text-3xs: 0.625rem; /* 10px */
+  --text-3xs--line-height: 0.875rem;
+  --text-4xs: 0.5625rem; /* 9px */
+  --text-4xs--line-height: 0.75rem;
+  /* Uppercase eyebrow letter-spacing, used with the small sizes above. */
+  --tracking-eyebrow: 0.14em;
+  --tracking-eyebrow-tight: 0.12em;
+  /* Horizontal-scroll floors for data tables. Tables set a min-width so their
+     columns keep their proportions on narrow screens; these are the widths the
+     app has settled on, named so they stay consistent across tables. */
+  --container-table-sm: 34rem;
+  --container-table-md: 44rem;
+  --container-table-lg: 54rem;
+  --container-table-xl: 70rem;
+  /* Media aspect ratios and the focus-ring width, which the UI repeats. */
+  --aspect-poster: 4 / 5;
+  --aspect-photo: 4 / 3;
+  --aspect-logo: 307 / 408;
+  --focus-ring-width: 3px;
+  /* The 3px radius on small status dots, and the 3px board-card accent bar. */
+  --radius-dot: 3px;
+  --accent-bar-width: 3px;
+  /* Pale green behind the booking wizard's WebGPU ocean, visible before the
+     canvas paints and on browsers without WebGPU. */
+  --ocean-surface: oklch(0.93 0.02 160);
   --color-sidebar-ring: var(--sidebar-ring);  --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-accent: var(--sidebar-accent);
@@ -32,16 +62,82 @@
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
-  /* Status / diagram tokens. These were previously raw Tailwind palette
-     classes (amber-*, emerald-*, rose-*, sky-*, zinc-*) sprinkled across the
-     UI. They are now first-class theme colors so @shadcn/lint can tell a
-     meaningful color choice from an arbitrary one, and so the status hues
-     have one place to change. */
-  --color-amber: var(--amber);
-  --color-emerald: var(--emerald);
-  --color-rose: var(--rose);
-  --color-sky: var(--sky);
-  --color-zinc: var(--zinc);
+  /* Status colors. The UI was reaching for the raw Tailwind palette
+     (amber-700, emerald-800, zinc-950, ...) in ~290 places. Those are now
+     declared tokens under a `status-` namespace, keeping the exact shade
+     values so nothing shifts visually, while giving the status hues one place
+     to change and letting @shadcn/lint tell a token from an arbitrary color. */
+  --color-status-amber-100: oklch(0.962 0.059 95.617);
+  --color-status-amber-200: oklch(0.924 0.12 95.746);
+  --color-status-amber-300: oklch(0.879 0.169 91.605);
+  --color-status-amber-50: oklch(0.987 0.022 95.277);
+  --color-status-amber-500: oklch(0.769 0.188 70.08);
+  --color-status-amber-600: oklch(0.666 0.179 58.318);
+  --color-status-amber-700: oklch(0.555 0.163 48.998);
+  --color-status-amber-800: oklch(0.473 0.137 46.201);
+  --color-status-amber-900: oklch(0.414 0.112 45.904);
+  --color-status-amber-950: oklch(0.279 0.077 45.635);
+  --color-status-blue-100: oklch(0.932 0.032 255.585);
+  --color-status-blue-200: oklch(0.882 0.059 254.128);
+  --color-status-blue-500: oklch(0.623 0.214 259.815);
+  --color-status-blue-700: oklch(0.488 0.243 264.376);
+  --color-status-blue-800: oklch(0.424 0.199 265.638);
+  --color-status-blue-900: oklch(0.379 0.146 265.522);
+  --color-status-emerald-100: oklch(0.95 0.052 163.051);
+  --color-status-emerald-200: oklch(0.905 0.093 164.15);
+  --color-status-emerald-300: oklch(0.845 0.143 164.978);
+  --color-status-emerald-400: oklch(0.765 0.177 163.223);
+  --color-status-emerald-500: oklch(0.696 0.17 162.48);
+  --color-status-emerald-600: oklch(0.596 0.145 163.225);
+  --color-status-emerald-700: oklch(0.508 0.118 165.612);
+  --color-status-emerald-800: oklch(0.432 0.095 166.913);
+  --color-status-emerald-900: oklch(0.378 0.077 168.94);
+  --color-status-emerald-950: oklch(0.262 0.051 172.552);
+  --color-status-orange-200: oklch(0.901 0.076 70.697);
+  --color-status-orange-400: oklch(0.75 0.183 55.934);
+  --color-status-orange-500: oklch(0.705 0.213 47.604);
+  --color-status-orange-800: oklch(0.47 0.157 37.304);
+  --color-status-red-500: oklch(0.637 0.237 25.331);
+  --color-status-red-700: oklch(0.505 0.213 27.518);
+  --color-status-rose-200: oklch(0.892 0.058 10.001);
+  --color-status-rose-500: oklch(0.645 0.246 16.439);
+  --color-status-rose-600: oklch(0.586 0.253 17.585);
+  --color-status-rose-700: oklch(0.514 0.222 16.935);
+  --color-status-rose-800: oklch(0.455 0.188 13.697);
+  --color-status-sky-100: oklch(0.951 0.026 236.824);
+  --color-status-sky-300: oklch(0.828 0.111 230.318);
+  --color-status-sky-500: oklch(0.685 0.169 237.323);
+  --color-status-sky-600: oklch(0.588 0.158 241.966);
+  --color-status-sky-700: oklch(0.5 0.134 242.749);
+  --color-status-sky-800: oklch(0.443 0.11 240.79);
+  --color-status-slate-100: oklch(0.968 0.007 247.896);
+  --color-status-slate-200: oklch(0.929 0.013 255.508);
+  --color-status-slate-50: oklch(0.984 0.003 247.858);
+  --color-status-slate-500: oklch(0.554 0.046 257.417);
+  --color-status-slate-700: oklch(0.372 0.044 257.287);
+  --color-status-slate-800: oklch(0.279 0.041 260.031);
+  --color-status-slate-900: oklch(0.208 0.042 265.755);
+  --color-status-slate-950: oklch(0.129 0.042 264.695);
+  --color-status-violet-500: oklch(0.606 0.25 292.717);
+  --color-status-violet-600: oklch(0.541 0.281 293.009);
+  --color-status-violet-700: oklch(0.491 0.27 292.581);
+  --color-status-violet-950: oklch(0.283 0.141 291.089);
+  --color-status-zinc-100: oklch(0.967 0.001 286.375);
+  --color-status-zinc-200: oklch(0.92 0.004 286.32);
+  --color-status-zinc-300: oklch(0.871 0.006 286.286);
+  --color-status-zinc-400: oklch(0.705 0.015 286.067);
+  --color-status-zinc-50: oklch(0.985 0 0);
+  --color-status-zinc-500: oklch(0.552 0.016 285.938);
+  --color-status-zinc-700: oklch(0.37 0.013 285.805);
+  --color-status-zinc-800: oklch(0.274 0.006 286.033);
+  --color-status-zinc-900: oklch(0.21 0.006 285.885);
+  --color-status-zinc-950: oklch(0.141 0.005 285.823);
+
+  --color-amber: var(--color-status-amber-700);
+  --color-emerald: var(--color-status-emerald-700);
+  --color-rose: var(--color-status-rose-600);
+  --color-sky: var(--color-status-sky-700);
+  --color-zinc: var(--color-status-zinc-500);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -97,12 +193,6 @@
   --sidebar-border: oklch(0.93 0.007 106.5);
   --sidebar-ring: oklch(0.737 0.021 106.9);
 
-  /* Status hues matched to the Tailwind palette values they replace. */
-  --amber: oklch(0.769 0.188 70.08);
-  --emerald: oklch(0.645 0.153 163.223);
-  --rose: oklch(0.645 0.246 16.439);
-  --sky: oklch(0.685 0.169 237.323);
-  --zinc: oklch(0.552 0.016 285.938);
 }
 
 .dark {
@@ -138,12 +228,6 @@
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.58 0.031 107.3);
 
-  /* Status hues matched to the Tailwind palette values they replace. */
-  --amber: oklch(0.769 0.188 70.08);
-  --emerald: oklch(0.696 0.17 162.48);
-  --rose: oklch(0.712 0.194 13.428);
-  --sky: oklch(0.746 0.16 232.661);
-  --zinc: oklch(0.705 0.015 286.067);
 }
 
 @layer base {
@@ -191,13 +275,122 @@
   }
 }
 
+/* Top padding for page content that sits under the floating marketing nav.
+   The nav is fixed, and the optional "happening now" banner adds to its
+   height at runtime via --happening-banner-height, so the offset is the base
+   nav clearance plus that variable. */
+@utility pt-banner-sm {
+  padding-top: calc(4rem + var(--happening-banner-height, 0px));
+}
+@utility pt-banner-md {
+  padding-top: calc(5.5rem + var(--happening-banner-height, 0px));
+}
+@utility pt-banner-lg {
+  padding-top: calc(6rem + var(--happening-banner-height, 0px));
+}
+@utility pt-banner-xl {
+  padding-top: calc(7rem + var(--happening-banner-height, 0px));
+}
+@utility pt-banner-2xl {
+  padding-top: calc(8rem + var(--happening-banner-height, 0px));
+}
+
+/* Larger day cells for the public booking calendar, which lays out full width
+   rather than inside a popover. */
+@utility calendar-cell-lg {
+  --cell-size: --spacing(11);
+}
+
+/* Decorative glows behind hero and marketing sections. Each is a soft radial
+   in the primary (or white) hue; they are named so the rule can tell them from
+   a stray off-token length. */
+@utility glow-primary-top {
+  background-image: radial-gradient(
+    ellipse 80% 60% at 50% -10%,
+    color-mix(in oklch, var(--color-primary) 22%, transparent),
+    transparent
+  );
+}
+@utility glow-primary-top-strong {
+  background-image: radial-gradient(
+    ellipse 80% 60% at 50% -10%,
+    color-mix(in oklch, var(--color-primary) 35%, transparent),
+    transparent
+  );
+}
+@utility glow-primary-top-inner {
+  background-image: radial-gradient(
+    ellipse 70% 50% at 50% -10%,
+    color-mix(in oklch, var(--color-primary) 16%, transparent),
+    transparent
+  );
+}
+@utility glow-primary-left {
+  background-image: radial-gradient(
+    ellipse 70% 50% at 10% 0%,
+    color-mix(in oklch, var(--color-primary) 14%, transparent),
+    transparent
+  );
+}
+@utility glow-primary-right {
+  background-image: radial-gradient(
+    ellipse 70% 50% at 90% 0%,
+    color-mix(in oklch, var(--color-primary) 14%, transparent),
+    transparent
+  );
+}
+@utility glow-center {
+  background-image: radial-gradient(
+    ellipse at center,
+    color-mix(in oklch, white 12%, transparent),
+    transparent
+  );
+}
+@utility glow-white-corner {
+  background-image: radial-gradient(
+    circle at 30% 20%,
+    color-mix(in oklch, white 18%, transparent),
+    transparent 55%
+  );
+}
+@utility glow-ocean-haze {
+  background-image: radial-gradient(
+    ellipse 80% 60% at 50% 20%,
+    transparent 20%,
+    rgba(255, 255, 255, 0.5) 100%
+  );
+}
+.dark .glow-ocean-haze {
+  background-image: radial-gradient(
+    ellipse 80% 60% at 50% 20%,
+    transparent 20%,
+    rgba(0, 0, 0, 0.55) 100%
+  );
+}
+
 @layer utilities {
   .display-tight {
     letter-spacing: -0.04em;
   }
-
   .happening-now-drop {
     animation: happening-now-drop 320ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* Faint 4rem grid behind the landing hero, drawn with two 1px lines so it
+     fades with the section rather than sitting on its own layer. */
+  .landing-grid-backdrop {
+    background-image:
+      linear-gradient(
+        to right,
+        color-mix(in oklch, white 6%, transparent) 1px,
+        transparent 1px
+      ),
+      linear-gradient(
+        to bottom,
+        color-mix(in oklch, white 6%, transparent) 1px,
+        transparent 1px
+      );
+    background-size: 4rem 4rem;
   }
 
   .hero-slot-word {

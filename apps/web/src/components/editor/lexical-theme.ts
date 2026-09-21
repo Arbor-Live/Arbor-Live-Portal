@@ -40,7 +40,7 @@ export const lexicalTheme = {
 };
 
 export const lexicalEditorClassName =
-  "min-h-[220px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
+  "min-h-55 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
 
 export const lexicalViewerClassName =
   "min-w-0 break-words text-base leading-relaxed [&_a]:text-primary [&_a]:underline";

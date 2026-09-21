@@ -32,7 +32,7 @@ export function EventsListClient() {
     <div className="space-y-3">
       <div className="flex flex-wrap gap-2">
         <Input placeholder="Search title, venue, type, host..." value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-sm" />
-        <div className="w-[220px]">
+        <div className="w-55">
           <SearchableSelect
             value={status}
             onChange={(value) => setStatus(value as "" | EventStatus)}
@@ -70,7 +70,7 @@ export function EventsListClient() {
                       </span>
                     ))}
                     {row.venueName ? <span className="rounded bg-muted px-2 py-0.5">{row.venueName}</span> : null}
-                    {row.invoiceId ? <span className="rounded bg-emerald-500/15 px-2 py-0.5 text-emerald-700">linked invoice</span> : null}
+                    {row.invoiceId ? <span className="rounded bg-status-emerald-500/15 px-2 py-0.5 text-status-emerald-700">linked invoice</span> : null}
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">

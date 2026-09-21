@@ -26,7 +26,7 @@ const LogoFlareMark = dynamic(
         alt=""
         width={307}
         height={408}
-        className="h-24 w-auto aspect-[307/408] sm:h-28 md:h-32 lg:h-36"
+        className="h-24 w-auto aspect-(--aspect-logo) sm:h-28 md:h-32 lg:h-36"
         priority
       />
     ),
@@ -75,7 +75,7 @@ export function LandingHero() {
   }, [prefersReducedMotion]);
 
   return (
-    <section ref={sectionRef} className="relative overflow-hidden bg-zinc-950 text-zinc-50">
+    <section ref={sectionRef} className="relative overflow-hidden bg-status-zinc-950 text-status-zinc-50">
       {!prefersReducedMotion ? (
         <div aria-hidden className="pointer-events-none absolute inset-0 z-0">
           <video
@@ -93,18 +93,18 @@ export function LandingHero() {
       ) : null}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 z-[1] bg-zinc-950/35"
+        className="pointer-events-none absolute inset-0 z-1 bg-status-zinc-950/35"
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 z-[1] bg-[radial-gradient(ellipse_80%_60%_at_50%_-10%,color-mix(in_oklch,var(--color-primary)_35%,transparent),transparent)]"
+        className="pointer-events-none absolute inset-0 z-1 glow-primary-top-strong"
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 z-[1] opacity-30 [background-image:linear-gradient(to_right,color-mix(in_oklch,white_6%,transparent)_1px,transparent_1px),linear-gradient(to_bottom,color-mix(in_oklch,white_6%,transparent)_1px,transparent_1px)] [background-size:4rem_4rem]"
+        className="landing-grid-backdrop pointer-events-none absolute inset-0 z-1 opacity-30"
       />
 
-      <div className="relative z-[2] px-4 sm:px-5">
+      <div className="relative z-2 px-4 sm:px-5">
         <motion.div
           className="mx-auto flex min-h-[min(92vh,56rem)] max-w-6xl flex-col justify-center px-5 py-28 sm:px-6 sm:py-32"
           initial={reduceMotion ? false : "hidden"}
@@ -123,7 +123,7 @@ export function LandingHero() {
                   alt=""
                   width={307}
                   height={408}
-                  className="h-24 w-auto aspect-[307/408] sm:h-28 md:h-32 lg:h-36"
+                  className="h-24 w-auto aspect-(--aspect-logo) sm:h-28 md:h-32 lg:h-36"
                   priority
                 />
               ) : (
@@ -133,7 +133,7 @@ export function LandingHero() {
 
             <div className="min-w-0 max-w-2xl">
               <motion.h1
-                className="display-tight text-3xl font-semibold tracking-tight text-zinc-50 sm:text-4xl lg:text-5xl"
+                className="display-tight text-3xl font-semibold tracking-tight text-status-zinc-50 sm:text-4xl lg:text-5xl"
                 variants={heroItem}
                 transition={landingSpring}
               >
@@ -143,7 +143,7 @@ export function LandingHero() {
               </motion.h1>
 
               <motion.p
-                className="mx-auto mt-5 text-base leading-relaxed text-zinc-300 sm:text-lg"
+                className="mx-auto mt-5 text-base leading-relaxed text-status-zinc-300 sm:text-lg"
                 variants={heroItem}
                 transition={landingSpring}
               >
@@ -173,7 +173,7 @@ export function LandingHero() {
                     asChild
                     variant="outline"
                     size="lg"
-                    className="h-11 border-zinc-700 bg-transparent px-6 text-zinc-100 hover:bg-zinc-900 hover:text-white"
+                    className="h-11 border-status-zinc-700 bg-transparent px-6 text-status-zinc-100 hover:bg-status-zinc-900 hover:text-white"
                   >
                     <Link href={landingHero.secondaryCta.href}>
                       {landingHero.secondaryCta.label}
@@ -186,13 +186,13 @@ export function LandingHero() {
         </motion.div>
       </div>
 
-      <p className="absolute right-4 bottom-4 z-[2] text-[10px] tracking-wide text-zinc-400/80 sm:right-6 sm:bottom-6 sm:text-xs">
+      <p className="absolute right-4 bottom-4 z-2 text-3xs tracking-wide text-status-zinc-400/80 sm:right-6 sm:bottom-6 sm:text-xs">
         Video by{" "}
         <a
           href={landingHero.backgroundVideoCredit.href}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-zinc-300/90 underline-offset-2 hover:text-white hover:underline"
+          className="text-status-zinc-300/90 underline-offset-2 hover:text-white hover:underline"
         >
           {landingHero.backgroundVideoCredit.label}
         </a>

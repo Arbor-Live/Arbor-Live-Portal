@@ -62,7 +62,7 @@ export function HappeningNowBar({ events }: { events: HappeningNowEvent[] }) {
   const shown = events.slice(0, MAX_SHOWN);
   const expandable = events.length > 1;
   const labelClassName =
-    "flex shrink-0 items-center gap-2 text-[11px] font-bold uppercase tracking-[0.14em]";
+    "flex shrink-0 items-center gap-2 text-2xs font-bold uppercase tracking-eyebrow";
 
   // Visible slots are breakpoint-based (1 mobile / 2 sm / 3 lg) — the "+N more"
   // counts reflect what each breakpoint hides. On mobile the inline links are
@@ -79,7 +79,7 @@ export function HappeningNowBar({ events }: { events: HappeningNowEvent[] }) {
     <div>
       <div
         ref={barRef}
-        className="flex h-8 items-center gap-x-2 overflow-hidden bg-emerald-600 px-3 text-white sm:h-9 sm:gap-x-3 sm:px-4"
+        className="flex h-8 items-center gap-x-2 overflow-hidden bg-status-emerald-600 px-3 text-white sm:h-9 sm:gap-x-3 sm:px-4"
       >
         {expandable ? (
           <>
@@ -141,7 +141,7 @@ export function HappeningNowBar({ events }: { events: HappeningNowEvent[] }) {
       {expanded && expandable ? (
         <ul
           id="happening-now-list"
-          className="border-t border-white/25 bg-emerald-600 text-white sm:hidden"
+          className="border-t border-white/25 bg-status-emerald-600 text-white sm:hidden"
         >
           {events.map((event) => (
             <li key={event.eventId}>

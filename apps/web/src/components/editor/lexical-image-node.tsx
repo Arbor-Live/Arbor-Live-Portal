@@ -345,7 +345,7 @@ export function InsertImageButton({
           }}
         />
       </div>
-      {error ? <p className="max-w-xs text-[11px] text-destructive">{error}</p> : null}
+      {error ? <p className="max-w-xs text-2xs text-destructive">{error}</p> : null}
     </div>
   );
 }

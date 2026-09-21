@@ -41,7 +41,7 @@ export function NewsletterPreferences({
         </p>
         <Link
           href="/events"
-          className="mt-6 inline-block text-sm font-medium text-emerald-800 underline-offset-4 hover:underline dark:text-primary"
+          className="mt-6 inline-block text-sm font-medium text-status-emerald-800 underline-offset-4 hover:underline dark:text-primary"
         >
           See upcoming events →
         </Link>
@@ -61,7 +61,7 @@ export function NewsletterPreferences({
         </p>
         <Link
           href="/events"
-          className="mt-6 inline-block text-sm font-medium text-emerald-800 underline-offset-4 hover:underline dark:text-primary"
+          className="mt-6 inline-block text-sm font-medium text-status-emerald-800 underline-offset-4 hover:underline dark:text-primary"
         >
           See upcoming events →
         </Link>

@@ -383,7 +383,7 @@ export function BandSelfServiceClient() {
                       <span
                         className={
                           member.active
-                            ? "text-xs text-emerald-700 dark:text-emerald-400"
+                            ? "text-xs text-status-emerald-700 dark:text-status-emerald-400"
                             : "text-xs text-muted-foreground"
                         }
                       >

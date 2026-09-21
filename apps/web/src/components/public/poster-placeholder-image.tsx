@@ -25,7 +25,7 @@ export function PosterPlaceholderImage({
   const alt = title || "";
 
   return (
-    <span className={cn("relative block aspect-[4/5] overflow-hidden", className)}>
+    <span className={cn("relative block aspect-(--aspect-poster) overflow-hidden", className)}>
       {/* eslint-disable-next-line @next/next/no-img-element -- cached SVG route */}
       <img
         src={lightSrc}

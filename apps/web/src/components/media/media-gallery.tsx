@@ -50,7 +50,7 @@ export function MediaGallery({
               sizes="(max-width: 768px) 50vw, 20vw"
             />
             {asset.type === "VIDEO" ? (
-              <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] text-white">
+              <span className="absolute bottom-1 right-1 rounded bg-black/70 px-1.5 py-0.5 text-3xs text-white">
                 Video
               </span>
             ) : null}

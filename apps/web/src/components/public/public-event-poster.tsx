@@ -15,7 +15,7 @@ export function PublicEventPoster({ imageUrl, eventId, className = "" }: PublicE
         alt=""
         loading="lazy"
         decoding="async"
-        className={`aspect-[4/5] object-cover ${className}`}
+        className={`aspect-(--aspect-poster) object-cover ${className}`}
       />
     );
   }

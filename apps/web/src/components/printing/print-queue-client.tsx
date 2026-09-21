@@ -34,11 +34,11 @@ const JOB_STATUS_LABELS: Record<JobRow["status"], string> = {
 function jobStatusBadgeClass(status: JobRow["status"]): string {
   switch (status) {
     case "printed":
-      return "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
+      return "border-status-emerald-500/40 bg-status-emerald-500/10 text-status-emerald-700 dark:text-status-emerald-300";
     case "printing":
-      return "border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-300";
+      return "border-status-sky-500/40 bg-status-sky-500/10 text-status-sky-700 dark:text-status-sky-300";
     case "ready":
-      return "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300";
+      return "border-status-amber-500/40 bg-status-amber-500/10 text-status-amber-700 dark:text-status-amber-300";
     case "failed":
       return "border-destructive/40 bg-destructive/10 text-destructive";
     default:
@@ -72,7 +72,7 @@ function PrinterCard({ printer, now }: { printer: PrinterRow; now: number }) {
         <span
           className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-medium ${
             online
-              ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+              ? "border-status-emerald-500/40 bg-status-emerald-500/10 text-status-emerald-700 dark:text-status-emerald-300"
               : "border-destructive/40 bg-destructive/10 text-destructive"
           }`}
         >
