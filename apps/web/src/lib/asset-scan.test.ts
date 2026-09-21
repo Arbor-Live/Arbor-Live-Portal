@@ -29,6 +29,13 @@ describe("client asset-scan twin", () => {
     });
   });
 
+  it("keeps malformed percent-encoded short-link slugs instead of throwing", () => {
+    expect(parseAssetScanInput("https://arbor.st/%E0%A4%A")).toEqual({
+      assetId: null,
+      shortLinkSlug: "%E0%A4%A",
+    });
+  });
+
   it("lookup candidates stay on the canonical form", () => {
     expect(assetIdLookupCandidates("ALE-0123")).toEqual(["123"]);
     expect(assetIdLookupCandidates("123").some((c) => c.startsWith("ALE-"))).toBe(false);

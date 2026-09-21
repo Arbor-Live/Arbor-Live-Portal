@@ -90,7 +90,11 @@ export function parseAssetScanInput(raw: string): ParsedAssetScan {
     if (ARBOR_ST_HOST_RE.test(url.hostname)) {
       const slug = url.pathname.replace(/^\/+|\/+$/g, "").split("/")[0] ?? "";
       if (slug && !slug.includes(".")) {
-        return { assetId: null, shortLinkSlug: decodeURIComponent(slug) };
+        try {
+          return { assetId: null, shortLinkSlug: decodeURIComponent(slug) };
+        } catch {
+          return { assetId: null, shortLinkSlug: slug };
+        }
       }
     }
 
