@@ -122,7 +122,7 @@ export function RiderListClient() {
                         </CardDescription>
                       </div>
                       {rider.isDefault ? (
-                        <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-amber-500/15 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+                        <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-status-amber-500/15 px-2 py-0.5 text-2xs font-medium text-status-amber-800">
                           <StarIcon className="size-3" weight="fill" />
                           Default
                         </span>

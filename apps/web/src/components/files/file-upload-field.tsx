@@ -298,7 +298,7 @@ export function EventPosterUploadField({
       uploadArgs={{ scope: "event", eventId, purpose: "poster" }}
       accept="image/jpeg,image/png,image/webp,image/gif,image/svg+xml"
       helperText={helperText}
-      previewFrameClassName="relative aspect-[4/5] w-full max-w-xs rounded-xl"
+      previewFrameClassName="relative aspect-(--aspect-poster) w-full max-w-xs rounded-xl"
       {...rest}
     />
   );

@@ -21,8 +21,8 @@ import { notify } from "@/lib/notify";
 type CrewMediaStatus = "pending" | "uploaded" | "no_media";
 
 function statusBadgeClass(status: CrewMediaStatus) {
-  if (status === "pending") return "bg-amber-500/15 text-amber-700 border-amber-500/30";
-  if (status === "uploaded") return "bg-emerald-500/15 text-emerald-700 border-emerald-500/30";
+  if (status === "pending") return "bg-status-amber-500/15 text-status-amber-700 border-status-amber-500/30";
+  if (status === "uploaded") return "bg-status-emerald-500/15 text-status-emerald-700 border-status-emerald-500/30";
   return "bg-muted text-muted-foreground border-border";
 }
 
@@ -33,8 +33,8 @@ function statusLabel(status: CrewMediaStatus) {
 }
 
 function statusIconClass(status: CrewMediaStatus) {
-  if (status === "pending") return "text-amber-600";
-  if (status === "uploaded") return "text-emerald-600";
+  if (status === "pending") return "text-status-amber-600";
+  if (status === "uploaded") return "text-status-emerald-600";
   return "text-muted-foreground";
 }
 
@@ -147,13 +147,13 @@ function CrewMediaStatusCard({ eventId }: { eventId: Id<"events"> }) {
         </p>
 
         <div className="flex flex-wrap gap-2 text-xs">
-          <span className="rounded-full border border-amber-500/30 bg-amber-500/15 px-2 py-0.5 font-medium text-amber-700">
+          <span className="rounded-full border border-status-amber-500/30 bg-status-amber-500/15 px-2 py-0.5 font-medium text-status-amber-700">
             {pendingCount} pending
           </span>
           <span className="rounded-full border bg-muted px-2 py-0.5 text-muted-foreground">
             {noMediaCount} no photos/videos
           </span>
-          <span className="rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2 py-0.5 font-medium text-emerald-700">
+          <span className="rounded-full border border-status-emerald-500/30 bg-status-emerald-500/15 px-2 py-0.5 font-medium text-status-emerald-700">
             {uploadedCount} uploaded
           </span>
         </div>

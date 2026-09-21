@@ -100,16 +100,16 @@ export function PublicEquipmentClient({ assetId }: { assetId: string }) {
         <Card className="overflow-hidden border-primary/20">
           <CardContent className="grid gap-6 p-6 sm:grid-cols-[1fr_auto] sm:items-end">
             <div className="space-y-2">
-              <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Asset Record</p>
+              <p className="text-xs uppercase tracking-eyebrow text-muted-foreground">Asset Record</p>
               <p className="text-2xl font-semibold tracking-tight sm:text-3xl">{displayModelName}</p>
               <p className="text-sm text-muted-foreground">Category: {type.category}</p>
             </div>
             <div className="rounded-lg border bg-muted/30 px-4 py-3 text-right">
-              <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Asset ID</p>
+              <p className="text-xs uppercase tracking-eyebrow-tight text-muted-foreground">Asset ID</p>
               <p className="font-mono text-base font-semibold">{data.assetId}</p>
               {data.serialNumber ? (
                 <>
-                  <p className="mt-2 text-xs uppercase tracking-[0.12em] text-muted-foreground">Serial</p>
+                  <p className="mt-2 text-xs uppercase tracking-eyebrow-tight text-muted-foreground">Serial</p>
                   <p className="font-mono text-sm">{data.serialNumber}</p>
                 </>
               ) : null}

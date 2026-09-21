@@ -104,7 +104,7 @@ export const BookingAvailabilityCalendar = memo(function BookingAvailabilityCale
           modifiersClassNames={{
             highlighted: "ring-1 ring-primary/50",
           }}
-          className="w-full bg-transparent p-3 [--cell-size:--spacing(11)]"
+          className="calendar-cell-lg w-full bg-transparent p-3"
           classNames={{
             root: "w-full",
             months: "w-full",

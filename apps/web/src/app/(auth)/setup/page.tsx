@@ -18,8 +18,6 @@ import {
   QuestionnaireTitle,
 } from "@/components/ui/questionnaire";
 import {
-  QUESTIONNAIRE_ITEM_CLASSNAME,
-  QUESTIONNAIRE_TITLE_CLASSNAME,
   handleQuestionnaireEnter,
   MarkStepAnswered,
   QuestionnaireWizardFooter,
@@ -198,7 +196,7 @@ export default function SetupPage() {
           ) : null}
 
           {done ? (
-            <div className={QUESTIONNAIRE_ITEM_CLASSNAME}>
+            <div>
               <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
                 {STEP_HEADLINES.thankYou}
               </h1>
@@ -217,9 +215,8 @@ export default function SetupPage() {
                 name={stepId}
                 required
                 invalid={stepId !== "welcome" && Boolean(fieldError)}
-                className={QUESTIONNAIRE_ITEM_CLASSNAME}
               >
-                <QuestionnaireTitle className={QUESTIONNAIRE_TITLE_CLASSNAME}>
+                <QuestionnaireTitle>
                   {STEP_HEADLINES[stepId]}
                 </QuestionnaireTitle>
                 {stepId === "welcome" ? (

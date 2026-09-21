@@ -294,7 +294,7 @@ export function PublicRequestLifecycleClient({ token }: { token: string }) {
                   </p>
                 )}
                 {request.expectedTurnout >= 200 && !isFinalized ? (
-                  <p className="rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-amber-800">
+                  <p className="rounded-md border border-status-amber-500/30 bg-status-amber-500/10 p-2 text-status-amber-800">
                     Campus sensation ({request.expectedTurnout} guests). Our team will follow up with
                     extra coordination steps.
                   </p>

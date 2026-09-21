@@ -15,7 +15,7 @@ function RatingStars({ rating }: { rating: number }) {
           key={value}
           className={cn(
             "size-4",
-            value <= rating ? "text-amber-500" : "text-muted-foreground/30",
+            value <= rating ? "text-status-amber-500" : "text-muted-foreground/30",
           )}
           weight={value <= rating ? "fill" : "regular"}
         />

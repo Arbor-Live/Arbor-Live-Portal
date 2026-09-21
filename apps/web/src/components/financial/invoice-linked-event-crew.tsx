@@ -370,7 +370,7 @@ export function InvoiceLinkedEventCrewSection({
     return (
       <div key={rowKey} className="space-y-1">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <div className="min-w-0 flex-1 basis-[6rem]">
+          <div className="min-w-0 flex-1 basis-24">
             <Input
               placeholder="Role"
               value={row.role}
@@ -381,7 +381,7 @@ export function InvoiceLinkedEventCrewSection({
               }
             />
           </div>
-          <div className="min-w-0 flex-1 basis-[10rem]">
+          <div className="min-w-0 flex-1 basis-40">
             <UserSelect
               value={row.userId ?? ""}
               onChange={(value) =>
@@ -411,7 +411,7 @@ export function InvoiceLinkedEventCrewSection({
                 className={cn(
                   "shrink-0",
                   row.timesOverridden &&
-                    "border-amber-500/50 bg-amber-500/15 text-amber-800 hover:bg-amber-500/25 hover:text-amber-900",
+                    "border-status-amber-500/50 bg-status-amber-500/15 text-status-amber-800 hover:bg-status-amber-500/25 hover:text-status-amber-900",
                 )}
                 aria-label={row.timesOverridden ? "Edit custom shift time" : "Edit shift time"}
                 title={row.timesOverridden ? "Custom shift time" : "Edit shift time"}
@@ -420,7 +420,7 @@ export function InvoiceLinkedEventCrewSection({
                 <ClockIcon className="size-4" weight={row.timesOverridden ? "fill" : "regular"} />
               </Button>
               {editingTime ? (
-                <div className="min-w-0 flex-1 basis-[12rem]">
+                <div className="min-w-0 flex-1 basis-48">
                   <DateTimeRangePicker
                     startValue={row.startsAt}
                     endValue={row.endsAt}
@@ -449,7 +449,7 @@ export function InvoiceLinkedEventCrewSection({
                   />
                 </div>
               ) : row.timesOverridden ? (
-                <span className="shrink-0 self-center text-xs text-amber-800 tabular-nums">
+                <span className="shrink-0 self-center text-xs text-status-amber-800 tabular-nums">
                   {formatDateTimeRange(
                     localDateTimeInputToMs(row.startsAt) ?? 0,
                     localDateTimeInputToMs(row.endsAt) ?? 0,
@@ -458,7 +458,7 @@ export function InvoiceLinkedEventCrewSection({
               ) : null}
             </>
           ) : (
-            <div className="min-w-0 flex-1 basis-[12rem]">
+            <div className="min-w-0 flex-1 basis-48">
               <DateTimeRangePicker
                 startValue={row.startsAt}
                 endValue={row.endsAt}
@@ -494,7 +494,7 @@ export function InvoiceLinkedEventCrewSection({
         ) : null}
         {availabilityNotes.length > 0 ? (
           <div className="rounded-md border border-dashed bg-muted/30 px-2 py-1.5">
-            <p className="text-[11px] font-medium text-muted-foreground">Availability note</p>
+            <p className="text-2xs font-medium text-muted-foreground">Availability note</p>
             {availabilityNotes.map((line, noteIndex) => (
               <p key={noteIndex} className="text-xs text-muted-foreground italic whitespace-pre-wrap">
                 {line}
@@ -590,7 +590,7 @@ export function InvoiceLinkedEventCrewSection({
             <div className="space-y-2 rounded-md border p-3">
               <p className="text-sm font-medium">Quick assign</p>
               <div className="flex min-w-0 flex-wrap items-center gap-2">
-                <div className="min-w-0 flex-1 basis-[12rem]">
+                <div className="min-w-0 flex-1 basis-48">
                   <UserSelect
                     value={selectedCrewUserId}
                     onChange={(value) => setSelectedCrewUserId(value)}
@@ -663,14 +663,14 @@ export function InvoiceLinkedEventCrewSection({
                 );
               })}
               {orphanedShifts.length > 0 ? (
-                <div className="space-y-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-2">
+                <div className="space-y-2 rounded-md border border-status-amber-500/30 bg-status-amber-500/10 p-2">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-sm font-medium text-amber-800">Unlinked crew shifts</p>
+                    <p className="text-sm font-medium text-status-amber-800">Unlinked crew shifts</p>
                     <Button type="button" variant="outline" size="sm" onClick={() => void removeLegacyUnassignedShifts()}>
                       Delete Unlinked Shifts
                     </Button>
                   </div>
-                  <p className="text-xs text-amber-700">
+                  <p className="text-xs text-status-amber-700">
                     These shifts are saved on the event but not attached to a current schedule block. Re-add them to a
                     block or delete them.
                   </p>

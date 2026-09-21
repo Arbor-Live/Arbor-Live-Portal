@@ -98,7 +98,7 @@ export function BookingRequestSettingsClient() {
           disabled={!settingsReady}
           className="flex flex-wrap items-end gap-2 border-0 p-0 m-0 min-w-0"
         >
-          <div className="min-w-[240px] flex-1">
+          <div className="min-w-60 flex-1">
             <UserSelect
               value={pickerValue}
               onChange={setPickerValue}

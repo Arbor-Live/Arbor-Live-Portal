@@ -431,7 +431,7 @@ export function PackagesManager() {
                 </p>
               </span>
             </label>
-            <span className="shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium">
+            <span className="shrink-0 rounded-full border px-2 py-0.5 text-2xs font-medium">
               {publicBucketLabels[section]}
             </span>
           </div>

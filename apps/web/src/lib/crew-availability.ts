@@ -86,13 +86,13 @@ export function formatCrewResponseLabel(status: CrewAvailabilityResponseStatus):
 export function crewResponseBadgeClass(status: CrewAvailabilityResponseStatus): string {
   switch (status) {
     case "yes":
-      return "bg-emerald-500/15 text-emerald-700 border-emerald-500/30";
+      return "bg-status-emerald-500/15 text-status-emerald-700 border-status-emerald-500/30";
     case "partial":
-      return "bg-blue-500/15 text-blue-700 border-blue-500/30";
+      return "bg-status-blue-500/15 text-status-blue-700 border-status-blue-500/30";
     case "only_if_necessary":
-      return "bg-amber-500/15 text-amber-700 border-amber-500/30";
+      return "bg-status-amber-500/15 text-status-amber-700 border-status-amber-500/30";
     case "no":
-      return "bg-rose-500/15 text-rose-700 border-rose-500/30";
+      return "bg-status-rose-500/15 text-status-rose-700 border-status-rose-500/30";
   }
 }
 

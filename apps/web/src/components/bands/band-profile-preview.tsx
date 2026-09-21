@@ -103,11 +103,11 @@ export function BandProfilePagePreview({
     <div className={cn(PREVIEW_SECTION_CLASS, className)}>
       <PreviewLabel>Profile page</PreviewLabel>
       <div className="overflow-hidden border bg-background shadow-sm">
-        <div className="relative h-40 overflow-hidden bg-zinc-950 text-zinc-50">
+        <div className="relative h-40 overflow-hidden bg-status-zinc-950 text-status-zinc-50">
           <div
             aria-hidden
             className={cn(
-              "absolute inset-0 bg-gradient-to-br from-emerald-900/80 via-primary/40 to-zinc-900",
+              "absolute inset-0 bg-gradient-to-br from-status-emerald-900/80 via-primary/40 to-status-zinc-900",
               heroUrl && "opacity-40",
             )}
           />
@@ -120,10 +120,10 @@ export function BandProfilePagePreview({
             />
           ) : null}
           <div className="relative flex h-full flex-col justify-end px-4 py-4">
-            <p className="truncate text-xs text-zinc-400">← All artists</p>
+            <p className="truncate text-xs text-status-zinc-400">← All artists</p>
             <h2 className="truncate text-lg font-semibold tracking-tight">{displayName}</h2>
             {data.oneLiner?.trim() ? (
-              <p className="line-clamp-2 text-sm text-zinc-200">{data.oneLiner.trim()}</p>
+              <p className="line-clamp-2 text-sm text-status-zinc-200">{data.oneLiner.trim()}</p>
             ) : null}
           </div>
         </div>

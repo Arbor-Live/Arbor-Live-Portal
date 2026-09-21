@@ -325,7 +325,7 @@ export function FinancialHubOrganizationsClient() {
               </p>
               <div className="flex flex-wrap gap-2">
                 <input
-                  className="h-9 min-w-[12rem] flex-1 rounded-md border bg-background px-3 text-sm"
+                  className="h-9 min-w-48 flex-1 rounded-md border bg-background px-3 text-sm"
                   placeholder="Add alias"
                   value={aliasDraft}
                   onChange={(e) => setAliasDraft(e.target.value)}
@@ -567,7 +567,7 @@ function EditGroupForm({
                   aria-label={form.saveError ?? "Save failed"}
                 />
               ) : form.saveStatus === "saved" ? (
-                <CheckIcon className="size-4 text-emerald-600" weight="bold" />
+                <CheckIcon className="size-4 text-status-emerald-600" weight="bold" />
               ) : null}
             </span>
           </div>
@@ -678,7 +678,7 @@ function ContactRow({
               aria-label={form.saveError ?? "Save failed"}
             />
           ) : form.saveStatus === "saved" ? (
-            <CheckIcon className="size-4 text-emerald-600" weight="bold" />
+            <CheckIcon className="size-4 text-status-emerald-600" weight="bold" />
           ) : null}
         </span>
         {contact.active ? (

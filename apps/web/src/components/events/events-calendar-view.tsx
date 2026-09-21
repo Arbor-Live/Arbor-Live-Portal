@@ -112,7 +112,7 @@ function CrewBadge({
               ))}
               {crewCount > 3 ? <AvatarGroupCount>+{crewCount - 3}</AvatarGroupCount> : null}
             </AvatarGroup>
-            <p className="text-[11px] leading-tight opacity-90">{crewCount} crew</p>
+            <p className="text-2xs leading-tight opacity-90">{crewCount} crew</p>
           </div>
         </TooltipTrigger>
         <TooltipContent side="top" className="max-w-sm p-2">
@@ -254,7 +254,7 @@ export function EventsCalendarView({ events }: { events: DashboardEvent[] }) {
           // the v6 stylesheet used to restyle is reapplied through these hooks.
           tableClass="rounded-xl overflow-hidden"
           toolbarTitleClass="text-base font-semibold"
-          buttonClass="rounded-lg shadow-none text-[0.8rem] font-semibold"
+          buttonClass="rounded-lg shadow-none text-sm font-semibold"
           eventClass="rounded-lg border shadow-none"
           eventInnerClass="whitespace-normal"
           eventTitleClass="font-semibold"
@@ -294,11 +294,11 @@ export function EventsCalendarView({ events }: { events: DashboardEvent[] }) {
                   <p className="text-xs font-semibold leading-tight break-words whitespace-normal">
                     <span className="opacity-80">{parentTitle}</span> {arg.event.title}
                   </p>
-                  <p className="truncate text-[11px] leading-tight opacity-90 @max-[5rem]:hidden">{arg.timeText}</p>
+                  <p className="truncate text-2xs leading-tight opacity-90 @max-[5rem]:hidden">{arg.timeText}</p>
                   {/* Overlapping events shrink to narrow lanes; drop the
                       secondary lines rather than let them clip into neighbors. */}
                   {venueName ? (
-                    <p className="line-clamp-1 text-[11px] leading-tight opacity-90 @max-[7rem]:hidden">{venueName}</p>
+                    <p className="line-clamp-1 text-2xs leading-tight opacity-90 @max-[7rem]:hidden">{venueName}</p>
                   ) : null}
                   {crewCount > 0 ? (
                     <div className="@max-[7rem]:hidden">
@@ -329,15 +329,15 @@ export function EventsCalendarView({ events }: { events: DashboardEvent[] }) {
             return (
               <div className="@container overflow-hidden space-y-0.5 px-1 py-0.5">
                 <p className="line-clamp-2 text-xs font-semibold leading-tight">{arg.event.title}</p>
-                <p className="truncate text-[11px] leading-tight opacity-90 @max-[5rem]:hidden">{arg.timeText}</p>
+                <p className="truncate text-2xs leading-tight opacity-90 @max-[5rem]:hidden">{arg.timeText}</p>
                 {setup ? (
-                  <p className="text-[11px] leading-tight opacity-90">
+                  <p className="text-2xs leading-tight opacity-90">
                     Call {setup}
                     {show ? ` • Show ${show}` : ""}
                   </p>
                 ) : null}
                 {blockLabelLine ? (
-                  <p className="line-clamp-1 text-[11px] leading-tight opacity-90 @max-[7rem]:hidden">{blockLabelLine}</p>
+                  <p className="line-clamp-1 text-2xs leading-tight opacity-90 @max-[7rem]:hidden">{blockLabelLine}</p>
                 ) : null}
                 {crewCount > 0 ? (
                   <div className="@max-[7rem]:hidden">

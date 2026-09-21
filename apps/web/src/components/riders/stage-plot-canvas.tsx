@@ -367,7 +367,7 @@ export function StagePlotCanvas({
           return (
             <div
               key={`label-${item.id}`}
-              className="pointer-events-none absolute truncate text-center text-[10px] leading-tight font-medium text-slate-900"
+              className="pointer-events-none absolute truncate text-center text-3xs leading-tight font-medium text-status-slate-900"
               style={{ left: label.left, top: label.top, width: label.width }}
             >
               {item.label}
@@ -376,25 +376,25 @@ export function StagePlotCanvas({
         })}
 
         <span
-          className="pointer-events-none absolute text-[9px] tracking-widest text-slate-500"
+          className="pointer-events-none absolute text-4xs tracking-widest text-status-slate-500"
           style={{ left: stage.left + 6, top: stage.top + 5 }}
         >
           STAGE RIGHT
         </span>
         <span
-          className="pointer-events-none absolute text-right text-[9px] tracking-widest text-slate-500"
+          className="pointer-events-none absolute text-right text-4xs tracking-widest text-status-slate-500"
           style={{ left: stage.left, top: stage.top + 5, width: stage.width - 6 }}
         >
           STAGE LEFT
         </span>
         <span
-          className="pointer-events-none absolute text-center text-[9px] tracking-widest text-slate-500"
+          className="pointer-events-none absolute text-center text-4xs tracking-widest text-status-slate-500"
           style={{ left: stage.left, top: stage.top + 5, width: stage.width }}
         >
           UPSTAGE · {content.stage.widthFt} × {content.stage.depthFt} FT
         </span>
         <span
-          className="pointer-events-none absolute text-center text-[10px] font-semibold tracking-[0.2em] text-slate-900"
+          className="pointer-events-none absolute text-center text-3xs font-semibold tracking-eyebrow text-status-slate-900"
           style={{ left: stage.left, top: stage.top + stage.height + 5, width: stage.width }}
         >
           AUDIENCE
@@ -411,7 +411,7 @@ export function StagePlotCanvas({
 
         {!readOnly && content.items.length === 0 ? (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-            <p className="max-w-xs text-center text-sm text-slate-500">
+            <p className="max-w-xs text-center text-sm text-status-slate-500">
               Drag symbols from the palette onto the stage, or pick a starter layout.
             </p>
           </div>

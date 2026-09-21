@@ -89,7 +89,7 @@ export function PortalShaderBand({ className }: PortalShaderBandProps) {
       )}
     >
       <canvas ref={canvasRef} className="block h-full w-full" />
-      <div className="absolute inset-0 bg-gradient-to-b from-transparent to-background dark:to-zinc-950" />
+      <div className="absolute inset-0 bg-gradient-to-b from-transparent to-background dark:to-status-zinc-950" />
     </div>
   );
 }

@@ -67,7 +67,7 @@ function StatusBadge({ status }: { status: "active" | "disabled" | "expired" }) 
   }
   if (status === "expired") {
     return (
-      <span className="rounded-none border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-700 dark:text-amber-300">
+      <span className="rounded-none border border-status-amber-500/30 bg-status-amber-500/10 px-2 py-0.5 text-xs text-status-amber-700 dark:text-status-amber-300">
         Expired
       </span>
     );

@@ -7,17 +7,17 @@ export function PublicHeroSkeleton({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        "relative overflow-hidden border-b bg-zinc-950 px-4 pb-16 pt-[calc(4rem_+_var(--happening-banner-height,0px))] sm:px-6 sm:pb-24 sm:pt-[calc(6rem_+_var(--happening-banner-height,0px))] lg:px-8",
+        "relative overflow-hidden border-b bg-status-zinc-950 px-4 pb-16 pt-banner-sm sm:px-6 sm:pb-24 sm:pt-banner-lg lg:px-8",
         className,
       )}
       role="status"
       aria-label="Loading"
     >
       <div className="relative mx-auto max-w-6xl space-y-4">
-        <Skeleton className="h-4 w-28 bg-zinc-800" />
-        <Skeleton className="h-10 w-2/3 max-w-md bg-zinc-800 sm:h-12" />
-        <Skeleton className="h-5 w-full max-w-xl bg-zinc-800" />
-        <Skeleton className="h-5 w-4/5 max-w-lg bg-zinc-800" />
+        <Skeleton className="h-4 w-28 bg-status-zinc-800" />
+        <Skeleton className="h-10 w-2/3 max-w-md bg-status-zinc-800 sm:h-12" />
+        <Skeleton className="h-5 w-full max-w-xl bg-status-zinc-800" />
+        <Skeleton className="h-5 w-4/5 max-w-lg bg-status-zinc-800" />
       </div>
       <span className="sr-only">Loading…</span>
     </div>
@@ -32,8 +32,9 @@ export function PublicPortalPageSkeleton({
 }) {
   return (
     <div role="status" aria-label="Loading">
-      <div className="relative overflow-hidden border-b bg-muted/40 px-4 pb-14 pt-[calc(6rem_+_var(--happening-banner-height,0px))] sm:px-6 sm:pb-20 sm:pt-[calc(7rem_+_var(--happening-banner-height,0px))] lg:px-8 dark:bg-zinc-950">
+      <div className="relative overflow-hidden border-b bg-muted/40 px-4 pb-14 pt-banner-lg sm:px-6 sm:pb-20 sm:pt-banner-xl lg:px-8 dark:bg-status-zinc-950">
         <div className="relative mx-auto max-w-6xl space-y-4">
+          {/* eslint-disable-next-line shadcn/require-static-classes -- Skeleton takes a per-usage width override by design. */}
           <Skeleton className={cn("h-10 sm:h-12", titleWidth)} />
           <Skeleton className="h-5 w-full max-w-xl" />
           <Skeleton className="h-5 w-3/5 max-w-md" />
@@ -101,7 +102,7 @@ export function PublicCardGridSkeleton({
           key={index}
           className="h-full gap-0 overflow-hidden border border-border py-0 shadow-sm ring-0"
         >
-          <Skeleton className="aspect-[4/5] w-full rounded-none" />
+          <Skeleton className="aspect-(--aspect-poster) w-full rounded-none" />
           <CardContent className="space-y-2 p-4">
             <Skeleton className="h-5 w-3/4" />
             <Skeleton className="h-4 w-1/2" />
@@ -122,7 +123,7 @@ export function PublicEquipmentSkeleton() {
       aria-label="Loading equipment"
     >
       <div className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
-        <Skeleton className="aspect-[4/3] w-full" />
+        <Skeleton className="aspect-(--aspect-photo) w-full" />
         <div className="space-y-4">
           <Skeleton className="h-7 w-2/3" />
           <Skeleton className="h-4 w-full" />

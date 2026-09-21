@@ -71,7 +71,11 @@ export async function resolveInvoiceContact(
   return { roleLabel: "Host contact", person: person || "Host", contact };
 }
 
-/** One row per band on the event that carries contact info on its rider. */
+/**
+ * One row per band on the event. Prefers the rider's contact and falls back to
+ * the band profile's main contact so an assigned artist always has a contact
+ * when one exists anywhere.
+ */
 export function buildBandContacts(
   rows: Array<{
     bandName: string;
@@ -80,13 +84,19 @@ export function buildBandContacts(
       contactEmail?: string;
       contactPhone?: string;
     } | null;
+    contact?: {
+      name?: string;
+      email?: string;
+      phone?: string;
+    };
   }>,
 ): EventContact[] {
   return rows.flatMap((row) => {
     const rider = row.rider;
-    if (!rider) return [];
-    const name = rider.contactName?.trim();
-    const contact = joinContact(rider.contactEmail, rider.contactPhone);
+    const name = rider?.contactName?.trim() || row.contact?.name?.trim();
+    const contact =
+      (rider ? joinContact(rider.contactEmail, rider.contactPhone) : undefined) ||
+      joinContact(row.contact?.email, row.contact?.phone);
     if (!name && !contact) return [];
     return [
       {

@@ -12,7 +12,7 @@ export function LandingCtaBand() {
     <section className="relative overflow-hidden bg-primary py-14 text-primary-foreground sm:py-16">
       <motion.div
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 h-32 bg-[radial-gradient(ellipse_at_center,color-mix(in_oklch,white_12%,transparent),transparent)]"
+        className="pointer-events-none absolute inset-x-0 h-32 glow-center"
         animate={reduceMotion ? undefined : { opacity: [0.4, 0.8, 0.4] }}
         transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
       />

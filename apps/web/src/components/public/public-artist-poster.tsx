@@ -15,7 +15,7 @@ export function PublicArtistPoster({
 }: PublicArtistPosterProps) {
   if (imageUrl) {
     // eslint-disable-next-line @next/next/no-img-element
-    return <img src={imageUrl} alt="" className={`aspect-[4/5] object-cover ${className}`} />;
+    return <img src={imageUrl} alt="" className={`aspect-(--aspect-poster) object-cover ${className}`} />;
   }
 
   return (

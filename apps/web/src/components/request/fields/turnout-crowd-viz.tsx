@@ -30,7 +30,7 @@ function dotOffset(count: number) {
 
 function dotColorClass(index: number, energy: number) {
   if (energy >= 4) {
-    return index % 3 === 0 ? "bg-amber-500" : index % 3 === 1 ? "bg-primary" : "bg-orange-400";
+    return index % 3 === 0 ? "bg-status-amber-500" : index % 3 === 1 ? "bg-primary" : "bg-status-orange-400";
   }
   if (energy >= 3) {
     return index % 2 === 0 ? "bg-primary" : "bg-primary/70";
@@ -170,7 +170,7 @@ function Speaker({
       aria-hidden
     >
       <div className="relative">
-        <div className="relative z-10 size-2.5 shrink-0 rounded-[3px] border border-primary/30 bg-primary/75 shadow-sm" />
+        <div className="relative z-10 size-2.5 shrink-0 rounded-(--radius-dot) border border-primary/30 bg-primary/75 shadow-sm" />
         <div className="pointer-events-none absolute left-1/2 top-1/2 z-0 size-0">
           {Array.from({ length: rippleCount }).map((_, index) => (
             <SoundRipple
