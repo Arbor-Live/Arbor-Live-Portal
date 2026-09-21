@@ -23,20 +23,24 @@ export const pruneEmailNotifications = internalMutation({
     const cutoff = Date.now() - RETENTION_MS;
     const statuses = ["queued", "sent", "failed"] as const;
     let deleted = 0;
+    let anyFullBatch = false;
     for (const status of statuses) {
       const rows = await ctx.db
         .query("emailNotifications")
         .withIndex("by_status", (q) => q.eq("status", status))
         .take(BATCH);
+      let statusDeleted = 0;
       for (const row of rows) {
         if (row.createdAt >= cutoff) break;
         await ctx.db.delete(row._id);
-        deleted += 1;
+        statusDeleted += 1;
       }
+      deleted += statusDeleted;
+      if (statusDeleted >= BATCH) anyFullBatch = true;
     }
-    // A full batch per status means there is likely more than a year of history
-    // left; keep draining rather than letting the backlog outrun the daily cron.
-    if (deleted >= BATCH * statuses.length) {
+    // A full batch in any status means more than a year of history remains;
+    // keep draining rather than letting the backlog outrun the daily cron.
+    if (anyFullBatch) {
       await ctx.scheduler.runAfter(0, internal.retention.pruneEmailNotifications, {});
     }
     return deleted;
@@ -51,6 +55,7 @@ export const pruneStatusTransitions = internalMutation({
     const cutoff = Date.now() - RETENTION_MS;
     const entityTypes = ["eventRequest", "event", "invoice"] as const;
     let deleted = 0;
+    let anyFullBatch = false;
     for (const entityType of entityTypes) {
       const rows = await ctx.db
         .query("statusTransitions")
@@ -60,8 +65,9 @@ export const pruneStatusTransitions = internalMutation({
         await ctx.db.delete(row._id);
         deleted += 1;
       }
+      if (rows.length >= BATCH) anyFullBatch = true;
     }
-    if (deleted >= BATCH * entityTypes.length) {
+    if (anyFullBatch) {
       await ctx.scheduler.runAfter(0, internal.retention.pruneStatusTransitions, {});
     }
     return deleted;
