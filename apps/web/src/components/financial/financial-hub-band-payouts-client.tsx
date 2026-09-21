@@ -284,27 +284,44 @@ export function FinancialHubBandPayoutsClient() {
         </div>
       )}
 
-      {previewTarget && preview ? (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Signature request email preview</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="space-y-1">
-              <Label>Subject</Label>
-              <p className="rounded-md border bg-muted/20 px-3 py-2 text-sm">{preview.subject}</p>
+      {previewTarget ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="email-preview-title"
+          onClick={() => setPreviewTarget(null)}
+        >
+          <div
+            className="flex max-h-[85vh] w-full max-w-2xl flex-col gap-4 overflow-y-auto border border-border bg-background p-5 shadow-lg"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 id="email-preview-title" className="text-base font-semibold">
+              Signature request email preview
+            </h2>
+            {preview ? (
+              <>
+                <div className="space-y-1">
+                  <Label>Subject</Label>
+                  <p className="rounded-md border bg-muted/20 px-3 py-2 text-sm">{preview.subject}</p>
+                </div>
+                <div className="space-y-1">
+                  <Label>Body</Label>
+                  <pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded-md border bg-muted/20 px-3 py-2 text-sm">
+                    {preview.body}
+                  </pre>
+                </div>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">Loading preview…</p>
+            )}
+            <div className="flex justify-end">
+              <Button type="button" size="sm" variant="outline" onClick={() => setPreviewTarget(null)}>
+                Close preview
+              </Button>
             </div>
-            <div className="space-y-1">
-              <Label>Body</Label>
-              <pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded-md border bg-muted/20 px-3 py-2 text-sm">
-                {preview.body}
-              </pre>
-            </div>
-            <Button type="button" size="sm" variant="outline" onClick={() => setPreviewTarget(null)}>
-              Close preview
-            </Button>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       ) : null}
 
       {payTarget ? (
