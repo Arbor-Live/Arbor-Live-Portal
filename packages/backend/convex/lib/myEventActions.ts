@@ -59,7 +59,11 @@ export async function isAssignedToEvent(
   return shifts.some((shift) => shift.userId === userId);
 }
 
-/** Ended, non-cancelled events the user crewed (any shift) or led / managed. */
+/**
+ * Ended, non-cancelled events the user crewed or led / managed.
+ * A shift only counts once it has started, and the event itself must have
+ * ended — a finished call on a show that is still ahead is not post-event work.
+ */
 async function listMyEndedEventDocs(
   ctx: QueryCtx,
   userId: string,
@@ -75,7 +79,7 @@ async function listMyEndedEventDocs(
 
   const endedIds = new Set<Id<"events">>();
   for (const shift of shifts) {
-    if (shift.endsAt <= now) endedIds.add(shift.eventId);
+    if (shift.startsAt <= now) endedIds.add(shift.eventId);
   }
   for (const event of leadEvents) {
     if (event.endAt <= now) endedIds.add(event._id);
@@ -86,6 +90,7 @@ async function listMyEndedEventDocs(
   for (const eventId of endedIds) {
     const event = leadById.get(eventId) ?? (await ctx.db.get(eventId));
     if (!event) continue;
+    if (event.endAt > now) continue;
     if (normalizeEventStatus(event.status) === "cancelled") continue;
     events.push(event);
   }

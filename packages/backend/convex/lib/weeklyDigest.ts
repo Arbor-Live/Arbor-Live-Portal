@@ -1,10 +1,13 @@
 import { formatDate, formatDateTimeRange } from "@arbor/format";
 import type { Doc } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
+import { findAuthOrganizationById } from "./auth";
 import { listCrewedEventsInRange } from "./crewedEvents";
 import { eventMatchesUserTeams } from "./crewTeams";
 import { normalizeEventStatus } from "./eventStatus";
 import { bandPaymentStatusLabel } from "./bandPayments";
+import { bandOnboardingIncompleteSteps } from "./bandOnboardingSteps";
+import { resolveBandName } from "./bandIdentity";
 import { resolveParticipationFlags } from "./userParticipation";
 import {
   getDisciplinesForEventMatching,
@@ -12,7 +15,14 @@ import {
   resolveProfileMembership,
 } from "./userVerticals";
 import { buildUserTimecards } from "./userTimecards";
-import { countPendingPostEventWork, listMyPostEventWork } from "./myEventActions";
+import { listMyPostEventWork } from "./myEventActions";
+import {
+  artistDigestIncluded,
+  classifyDigestOrganization,
+  resolveWeeklyDigestAudience,
+  type DigestOrganization,
+  type WeeklyDigestAudience,
+} from "./weeklyDigestAudience";
 
 /** Availability window for the digest (mirrors "next two weeks"). */
 const DIGEST_AVAILABILITY_WEEKS = 2;
@@ -24,8 +34,21 @@ const DIGEST_ITEM_CAP = 6;
 const DIGEST_SCAN_CAP = 500;
 /** Bound on status rows scanned when counting admin work queues. */
 const DIGEST_COUNT_SCAN_CAP = 50;
-/** Bound on post-mortem rows scanned for the admin queue (mirrors Insights). */
-const DIGEST_POST_MORTEM_SCAN_CAP = 300;
+/**
+ * Orgs one person belongs to. Arbor plus a handful of bands is the real case;
+ * 20 is past that. Hitting it means classification may be incomplete.
+ */
+const DIGEST_MEMBERSHIP_CAP = 20;
+/**
+ * Events whose start falls in the digest week, plus a lookback for shows
+ * already underway. A campus week is a handful of events; 200 is the ceiling
+ * where we warn instead of silently dropping the rest.
+ */
+const DIGEST_EVENT_WINDOW_SCAN_CAP = 200;
+/** Multi-day shows can start before the Monday send and still be "this week". */
+const DIGEST_IN_PROGRESS_LOOKBACK_MS = 14 * 24 * 60 * 60 * 1000;
+/** Bands on a single event. Well past a normal bill. */
+const DIGEST_EVENT_BAND_CAP = 30;
 
 export type WeeklyDigestSection = {
   title: string;
@@ -136,6 +159,146 @@ async function buildTimecardsSection(
   };
 }
 
+async function loadDigestOrganizations(
+  ctx: QueryCtx,
+  userId: string,
+): Promise<DigestOrganization[]> {
+  const memberships = await ctx.db
+    .query("userOrganizationMemberships")
+    .withIndex("by_userId", (q) => q.eq("userId", userId))
+    .take(DIGEST_MEMBERSHIP_CAP);
+  if (memberships.length === DIGEST_MEMBERSHIP_CAP) {
+    console.warn(
+      `weekly digest: membership scan hit ${DIGEST_MEMBERSHIP_CAP} for user ${userId}`,
+    );
+  }
+
+  const organizations: DigestOrganization[] = [];
+  for (const membership of memberships) {
+    if (!membership.active) continue;
+    const profile = await ctx.db
+      .query("organizationProfiles")
+      .withIndex("by_organizationId", (q) => q.eq("organizationId", membership.organizationId))
+      .unique();
+    let name: string | undefined;
+    let slug: string | undefined;
+    if (!profile?.organizationType) {
+      const org = await findAuthOrganizationById(ctx, membership.organizationId);
+      name = org?.name ?? undefined;
+      slug = org?.slug ?? undefined;
+    }
+    const kind = classifyDigestOrganization({
+      organizationType: profile?.organizationType,
+      name,
+      slug,
+    });
+    if (kind === "unknown") continue;
+    organizations.push({
+      organizationId: membership.organizationId,
+      kind,
+      includeInArtistDigest:
+        kind === "artist" && artistDigestIncluded(profile?.status),
+    });
+  }
+  return organizations;
+}
+
+async function buildArtistShowsSection(
+  ctx: QueryCtx,
+  organizationIds: readonly string[],
+  now: number,
+): Promise<WeeklyDigestSection | null> {
+  if (organizationIds.length === 0) return null;
+  const orgIds = new Set(organizationIds);
+  const windowEnd = now + DIGEST_SCHEDULED_WINDOW_MS;
+  const lookbackStart = now - DIGEST_IN_PROGRESS_LOOKBACK_MS;
+
+  const [starting, alreadyStarted] = await Promise.all([
+    ctx.db
+      .query("events")
+      .withIndex("by_startAt", (q) => q.gte("startAt", now).lte("startAt", windowEnd))
+      .take(DIGEST_EVENT_WINDOW_SCAN_CAP),
+    ctx.db
+      .query("events")
+      .withIndex("by_startAt", (q) => q.gte("startAt", lookbackStart).lt("startAt", now))
+      .take(DIGEST_EVENT_WINDOW_SCAN_CAP),
+  ]);
+  if (
+    starting.length === DIGEST_EVENT_WINDOW_SCAN_CAP ||
+    alreadyStarted.length === DIGEST_EVENT_WINDOW_SCAN_CAP
+  ) {
+    console.warn(
+      `weekly digest: event window scan hit ${DIGEST_EVENT_WINDOW_SCAN_CAP} ` +
+        `(starting ${starting.length}, already started ${alreadyStarted.length})`,
+    );
+  }
+
+  const candidates = new Map<Doc<"events">["_id"], Doc<"events">>();
+  for (const event of starting) candidates.set(event._id, event);
+  for (const event of alreadyStarted) {
+    if (event.endAt >= now) candidates.set(event._id, event);
+  }
+
+  const shows: Array<{ event: Doc<"events">; bandName: string }> = [];
+  for (const event of candidates.values()) {
+    if (normalizeEventStatus(event.status) === "cancelled") continue;
+    const participations = await ctx.db
+      .query("eventBandParticipations")
+      .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
+      .take(DIGEST_EVENT_BAND_CAP);
+    const match = participations.find((row) => orgIds.has(row.organizationId));
+    if (!match) continue;
+    shows.push({
+      event,
+      bandName: await resolveBandName(ctx, match.organizationId),
+    });
+  }
+  if (shows.length === 0) return null;
+
+  shows.sort((a, b) => a.event.startAt - b.event.startAt);
+  return {
+    title: `Your shows this week — ${plural(shows.length, "event")}`,
+    totalCount: shows.length,
+    items: shows.slice(0, DIGEST_ITEM_CAP).map((show) => {
+      const when = formatDateTimeRange(show.event.startAt, show.event.endAt);
+      const detail = organizationIds.length > 1 ? `${show.bandName} · ${when}` : when;
+      return `${show.event.title} • ${detail}`;
+    }),
+  };
+}
+
+async function buildArtistOnboardingSection(
+  ctx: QueryCtx,
+  organizationIds: readonly string[],
+): Promise<WeeklyDigestSection | null> {
+  if (organizationIds.length === 0) return null;
+
+  const pending: Array<{ name: string; detail: string }> = [];
+  for (const organizationId of organizationIds) {
+    const row = await ctx.db
+      .query("organizationOnboarding")
+      .withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId))
+      .unique();
+    const steps = bandOnboardingIncompleteSteps(row);
+    if (steps.length === 0) continue;
+    const labels = steps.slice(0, 3).map((step) => step.label);
+    const extra = steps.length > 3 ? ` + ${steps.length - 3} more` : "";
+    pending.push({
+      name: await resolveBandName(ctx, organizationId),
+      detail: `${labels.join(", ")}${extra}`,
+    });
+  }
+  if (pending.length === 0) return null;
+
+  return {
+    title: `Onboarding — ${plural(pending.length, "band")} to finish`,
+    totalCount: pending.length,
+    items: pending
+      .slice(0, DIGEST_ITEM_CAP)
+      .map((row) => `${row.name} • ${row.detail}`),
+  };
+}
+
 async function buildPostEventWorkSection(
   ctx: QueryCtx,
   userId: string,
@@ -158,32 +321,6 @@ async function buildPostEventWorkSection(
         ].filter(Boolean);
         return `${item.title} • ${formatDate(item.endAt)} · ${missing.join(" + ")}`;
       }),
-  };
-}
-
-/**
- * Admin view of every post-mortem we asked for but never got back. Rows are
- * minted for a lead when the post-event email goes out, so an unsubmitted row
- * is exactly an outstanding review. Bounded like the Insights panel.
- */
-async function buildPostMortemQueueSection(
-  ctx: QueryCtx,
-): Promise<WeeklyDigestSection | null> {
-  const rows = await ctx.db.query("postMortemFeedback").take(DIGEST_POST_MORTEM_SCAN_CAP);
-  const pending = rows.filter((row) => !row.submittedAt);
-  if (pending.length === 0) return null;
-
-  const items: string[] = [];
-  for (const row of pending) {
-    if (items.length >= DIGEST_ITEM_CAP) break;
-    const event = await ctx.db.get(row.eventId);
-    items.push(`${event?.title ?? "Event"} • awaiting review`);
-  }
-
-  return {
-    title: `Post-mortem queue — ${plural(pending.length, "review")} outstanding`,
-    totalCount: pending.length,
-    items,
   };
 }
 
@@ -260,50 +397,70 @@ async function buildArtistPayoutsSection(
 /**
  * Assemble the pending-activity digest for one user. Sections only appear when
  * they have something actionable, so an empty result means "send nothing".
+ *
+ * Arbor staff get crew sections (and portal admins get booking and payout queues).
+ * Outstanding reviews for other people stay off this email — the digest only
+ * lists a review when the recipient still owes it on an event they worked.
+ * Artist-only members get a show this week and unfinished onboarding — not
+ * crew post-event work or the admin queues. Band org admins are Better Auth
+ * `role: "admin"`, which is not a portal admin.
  */
 export async function buildWeeklyDigest(
   ctx: QueryCtx,
   args: {
     userId: string;
     profile: Doc<"userAdminProfiles"> | null;
-    isAdmin: boolean;
+    authRole: string | null | undefined;
     now: number;
   },
 ): Promise<WeeklyDigest> {
   const flags = resolveParticipationFlags(args.profile);
   const membership = resolveProfileMembership(args.profile ?? {});
   const isCrew = isStaffMember(membership);
+  const organizations = await loadDigestOrganizations(ctx, args.userId);
+  const audience: WeeklyDigestAudience = resolveWeeklyDigestAudience({
+    authRole: args.authRole,
+    organizations,
+    isStaff: isCrew,
+  });
 
   const [
     availability,
     scheduled,
+    artistShows,
     timecards,
     postEventWork,
+    artistOnboarding,
     bookingRequests,
     artistPayouts,
-    postMortemQueue,
   ] = await Promise.all([
-    isCrew && flags.assignableAsCrew
+    audience.staffSections && isCrew && flags.assignableAsCrew
       ? buildAvailabilitySection(ctx, args.userId, args.profile, args.now)
       : Promise.resolve(null),
-    buildScheduledEventsSection(ctx, args.userId, args.now),
-    isCrew && flags.includeInTimecards
+    audience.staffSections
+      ? buildScheduledEventsSection(ctx, args.userId, args.now)
+      : Promise.resolve(null),
+    buildArtistShowsSection(ctx, audience.artistOrganizationIds, args.now),
+    audience.staffSections && isCrew && flags.includeInTimecards
       ? buildTimecardsSection(ctx, args.userId, args.now)
       : Promise.resolve(null),
-    buildPostEventWorkSection(ctx, args.userId, args.now),
-    args.isAdmin ? buildBookingRequestsSection(ctx) : Promise.resolve(null),
-    args.isAdmin ? buildArtistPayoutsSection(ctx) : Promise.resolve(null),
-    args.isAdmin ? buildPostMortemQueueSection(ctx) : Promise.resolve(null),
+    audience.staffSections
+      ? buildPostEventWorkSection(ctx, args.userId, args.now)
+      : Promise.resolve(null),
+    buildArtistOnboardingSection(ctx, audience.artistOrganizationIds),
+    audience.adminQueues ? buildBookingRequestsSection(ctx) : Promise.resolve(null),
+    audience.adminQueues ? buildArtistPayoutsSection(ctx) : Promise.resolve(null),
   ]);
 
   const sections = [
     availability,
     scheduled,
+    artistShows,
     timecards,
     postEventWork,
+    artistOnboarding,
     bookingRequests,
     artistPayouts,
-    postMortemQueue,
   ].filter((section): section is WeeklyDigestSection => section !== null);
 
   return {
