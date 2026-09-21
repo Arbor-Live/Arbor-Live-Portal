@@ -25,6 +25,14 @@ type StatusFilter = "submitted" | "trainee" | "converted" | "closed" | "all";
 
 type PresenceMode = "entire_event" | "first_8_hours" | "schedule_block";
 
+function earliestBlockStartMs(blocks: Array<{ startsAt: number }>): number | undefined {
+  let earliest: number | undefined;
+  for (const block of blocks) {
+    if (earliest === undefined || block.startsAt < earliest) earliest = block.startsAt;
+  }
+  return earliest;
+}
+
 type ApplicationRow = {
   _id: Id<"crewApplications">;
   status: StatusFilter | "submitted" | "trainee" | "converted" | "closed";
@@ -63,7 +71,8 @@ function TraineeAssignPanel({
   const [scheduleBlockId, setScheduleBlockId] = useState("");
   const [startsAtInput, setStartsAtInput] = useState("");
   const [endsAtInput, setEndsAtInput] = useState("");
-  // null = not yet manually set; defaults to the event's start time once loaded.
+  // null = not yet manually set. Entire event defaults to the first schedule
+  // block (setup), which is before the show stored on event.startAt.
   const [callTimeOverride, setCallTimeOverride] = useState<string | null>(null);
 
   const eventDetails = useQuery(
@@ -73,9 +82,14 @@ function TraineeAssignPanel({
 
   const scheduleBlocks = eventDetails?.blocks ?? [];
 
+  const defaultCallTimeMs =
+    presenceMode === "entire_event"
+      ? (earliestBlockStartMs(scheduleBlocks) ?? eventDetails?.event?.startAt)
+      : eventDetails?.event?.startAt;
+
   const callTimeInput =
     callTimeOverride ??
-    (eventDetails?.event ? toLocalDateTimeInput(new Date(eventDetails.event.startAt)) : "");
+    (defaultCallTimeMs != null ? toLocalDateTimeInput(new Date(defaultCallTimeMs)) : "");
 
   return (
     <div className="space-y-3 border-t border-border/50 pt-3">
