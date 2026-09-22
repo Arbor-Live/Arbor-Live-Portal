@@ -1,7 +1,7 @@
 import { hashPassword } from "better-auth/crypto";
 import { v } from "convex/values";
 import { components, internal } from "./_generated/api";
-import type { Doc } from "./_generated/dataModel";
+import type { Doc, Id, TableNames } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import {
@@ -17,7 +17,10 @@ import {
   requireBandContext,
   type AuthUser,
 } from "./lib/auth";
-import { resolveGlobalRoleForOrganization } from "./lib/globalRole";
+import {
+  resolveGlobalRoleForExistingUser,
+  resolveGlobalRoleForOrganization,
+} from "./lib/globalRole";
 import {
   markInvitationAccepted,
   markInvitationCancelled,
@@ -218,8 +221,9 @@ function toSlug(input: string): string {
  * Drain every page of a Better Auth model rather than reading a single fixed
  * page. The previous single-page reads silently truncated once an org grew past
  * the page size (e.g. users beyond 1000 vanished from admin lists); looping the
- * cursor keeps these admin-only reads complete. Bounded by `maxPages` as a
- * runaway guard.
+ * cursor keeps these admin-only reads complete. `maxPages` is a runaway
+ * guard: past it we throw instead of returning a partial list as if it
+ * were complete.
  */
 async function fetchAllBetterAuthRows<T>(
   ctx: QueryCtx | MutationCtx,
@@ -235,10 +239,12 @@ async function fetchAllBetterAuthRows<T>(
       paginationOpts: { cursor, numItems: pageSize },
     });
     rows.push(...((result?.page ?? []) as T[]));
-    if (result?.isDone || !result?.continueCursor) break;
+    if (result?.isDone || !result?.continueCursor) return rows;
     cursor = result.continueCursor as string;
   }
-  return rows;
+  throw new Error(
+    `Better Auth ${model} list exceeded ${maxPages} pages of ${pageSize} (got ${rows.length} rows). Refusing a partial result.`,
+  );
 }
 
 async function getAllAuthUsers(ctx: QueryCtx | MutationCtx) {
@@ -256,23 +262,55 @@ async function getAllInvitations(ctx: QueryCtx | MutationCtx) {
 /**
  * Drain `pendingUserInvites` newest-first through the `by_createdAt` index.
  * A fixed `.take(2000)` silently dropped older rows (taking their teams/
- * verticals metadata with them) once the table outgrew the cap. Bounded by
- * `maxPages` as a runaway guard.
+ * verticals metadata with them) once the table outgrew the cap. Past
+ * `maxPages` we throw instead of returning a partial list as complete.
  */
 async function getAllPendingInvites(ctx: QueryCtx | MutationCtx) {
   const rows: Doc<"pendingUserInvites">[] = [];
+  const maxPages = 50;
+  const pageSize = 500;
   let cursor: string | null = null;
-  for (let page = 0; page < 50; page += 1) {
+  for (let page = 0; page < maxPages; page += 1) {
     const result = await ctx.db
       .query("pendingUserInvites")
       .withIndex("by_createdAt")
       .order("desc")
-      .paginate({ cursor, numItems: 500 });
+      .paginate({ cursor, numItems: pageSize });
     rows.push(...result.page);
-    if (result.isDone) break;
+    if (result.isDone) return rows;
     cursor = result.continueCursor;
   }
-  return rows;
+  throw new Error(
+    `pendingUserInvites exceeded ${maxPages} pages of ${pageSize} (got ${rows.length} rows). Refusing a partial result.`,
+  );
+}
+
+const ORG_CHILD_PAGE = 500;
+/**
+ * Shared across every child table in one organization delete. Convex
+ * mutations can write at most 16,000 documents; 5,000 stays under that.
+ * Past it, throw so the transaction rolls back instead of orphaning rows.
+ */
+const ORG_CHILD_MAX = 5000;
+
+async function deleteEveryOrgChild<T extends { _id: Id<TableNames> }>(
+  budget: { total: number },
+  fetchPage: () => Promise<T[]>,
+  remove: (id: T["_id"]) => Promise<void>,
+) {
+  for (;;) {
+    const rows = await fetchPage();
+    for (const row of rows) {
+      await remove(row._id);
+    }
+    budget.total += rows.length;
+    if (budget.total > ORG_CHILD_MAX) {
+      throw new Error(
+        `Organization delete exceeded ${ORG_CHILD_MAX} related rows (got ${budget.total}); aborting before removing the profile.`,
+      );
+    }
+    if (rows.length < ORG_CHILD_PAGE) return;
+  }
 }
 
 async function getOrganizationById(ctx: QueryCtx | MutationCtx, organizationId: string) {
@@ -1007,45 +1045,52 @@ export const deleteArchivedBandOrganizationAdmin = mutation({
     // Safety net in case memberships were added back after archiving.
     await deactivateOrgMembers(ctx, args.organizationId, now);
 
-    const memberships = await ctx.db
-      .query("userOrganizationMemberships")
-      .withIndex("by_organizationId", (q) => q.eq("organizationId", args.organizationId))
-      .take(1000);
-    for (const membership of memberships) {
-      await ctx.db.delete(membership._id);
-    }
-
-    const onboardingRows = await ctx.db
-      .query("organizationOnboarding")
-      .withIndex("by_organizationId", (q) => q.eq("organizationId", args.organizationId))
-      .take(10);
-    for (const row of onboardingRows) {
-      await ctx.db.delete(row._id);
-    }
-
-    const participations = await ctx.db
-      .query("eventBandParticipations")
-      .withIndex("by_organizationId", (q) => q.eq("organizationId", args.organizationId))
-      .take(1000);
-    for (const row of participations) {
-      await ctx.db.delete(row._id);
-    }
-
-    const bandPayments = await ctx.db
-      .query("eventBandPayments")
-      .withIndex("by_organizationId", (q) => q.eq("organizationId", args.organizationId))
-      .take(1000);
-    for (const row of bandPayments) {
-      await ctx.db.delete(row._id);
-    }
-
-    const bandRiders = await ctx.db
-      .query("bandRiders")
-      .withIndex("by_organizationId", (q) => q.eq("organizationId", args.organizationId))
-      .take(1000);
-    for (const row of bandRiders) {
-      await ctx.db.delete(row._id);
-    }
+    const childBudget = { total: 0 };
+    await deleteEveryOrgChild(
+      childBudget,
+      () =>
+        ctx.db
+          .query("userOrganizationMemberships")
+          .withIndex("by_organizationId", (q) => q.eq("organizationId", args.organizationId))
+          .take(ORG_CHILD_PAGE),
+      (id) => ctx.db.delete(id),
+    );
+    await deleteEveryOrgChild(
+      childBudget,
+      () =>
+        ctx.db
+          .query("organizationOnboarding")
+          .withIndex("by_organizationId", (q) => q.eq("organizationId", args.organizationId))
+          .take(ORG_CHILD_PAGE),
+      (id) => ctx.db.delete(id),
+    );
+    await deleteEveryOrgChild(
+      childBudget,
+      () =>
+        ctx.db
+          .query("eventBandParticipations")
+          .withIndex("by_organizationId", (q) => q.eq("organizationId", args.organizationId))
+          .take(ORG_CHILD_PAGE),
+      (id) => ctx.db.delete(id),
+    );
+    await deleteEveryOrgChild(
+      childBudget,
+      () =>
+        ctx.db
+          .query("eventBandPayments")
+          .withIndex("by_organizationId", (q) => q.eq("organizationId", args.organizationId))
+          .take(ORG_CHILD_PAGE),
+      (id) => ctx.db.delete(id),
+    );
+    await deleteEveryOrgChild(
+      childBudget,
+      () =>
+        ctx.db
+          .query("bandRiders")
+          .withIndex("by_organizationId", (q) => q.eq("organizationId", args.organizationId))
+          .take(ORG_CHILD_PAGE),
+      (id) => ctx.db.delete(id),
+    );
 
     await clearActiveOrgSelections(ctx, args.organizationId);
     const keysToRelease = collectKeysFromOrganizationProfile(profile);
@@ -1870,11 +1915,6 @@ export const createUserAdmin = mutation({
   },
   handler: async (ctx, args) => {
     const membershipRole = await normalizeMembershipRole(ctx, args.organizationId, args.role);
-    const globalRole = await resolveGlobalRoleForOrganization(
-      ctx,
-      args.organizationId,
-      membershipRole,
-    );
     const adminUser = await requireAdmin(ctx);
     const adminId = getUserId(adminUser) || undefined;
     const email = args.email.trim().toLowerCase();
@@ -1901,6 +1941,12 @@ export const createUserAdmin = mutation({
       where: [{ field: "email", value: email }],
     })) as AuthUser | null;
     let userId = existing ? getUserId(existing) : "";
+    const globalRole = existing
+      ? await resolveGlobalRoleForExistingUser(ctx, userId, {
+          organizationId: args.organizationId,
+          role: membershipRole,
+        })
+      : await resolveGlobalRoleForOrganization(ctx, args.organizationId, membershipRole);
 
     if (!existing) {
       const created = (await ctx.runMutation(components.betterAuth.adapter.create, {

@@ -4,35 +4,45 @@ import { listEventsByInvoiceId } from "./invoiceEvents";
 
 const TAKE = 500;
 /**
- * Upper bound for a single cascade. Hitting it means the data is pathological
- * (or a containment cycle); fail loudly — the mutation rolls back — rather than
+ * Upper bound for one cascade, shared across every relation it drains.
+ * Convex mutations can write at most 16,000 documents; 5,000 stays under that
+ * even after the parent row and the surrounding reads. Hitting it means the
+ * data is pathological — fail loudly so the mutation rolls back rather than
  * delete a parent while children remain.
  */
 const MAX_CASCADE_ROWS = 5000;
 
-/**
- * Apply `mutate` to every row a bounded query returns, paging until the query
- * is exhausted. `mutate` must remove each row from `fetchPage`'s index (delete
- * it, or patch the indexed field) so the next page advances.
- */
-async function drainRows<D extends { _id: Id<TableNames> }>(
-  fetchPage: () => Promise<D[]>,
-  mutate: (id: D["_id"]) => Promise<void>,
-): Promise<void> {
-  let total = 0;
-  for (;;) {
-    const rows = await fetchPage();
-    for (const row of rows) {
-      await mutate(row._id);
-    }
-    total += rows.length;
-    if (total > MAX_CASCADE_ROWS) {
-      throw new Error(
-        `Cascade exceeded ${MAX_CASCADE_ROWS} rows; aborting before deleting the parent.`,
-      );
-    }
-    if (rows.length < TAKE) return;
+export function recordCascadeRows(budget: { total: number }, rowCount: number): void {
+  budget.total += rowCount;
+  if (budget.total > MAX_CASCADE_ROWS) {
+    throw new Error(
+      `Cascade exceeded ${MAX_CASCADE_ROWS} rows (got ${budget.total}); aborting before deleting the parent.`,
+    );
   }
+}
+
+/**
+ * One budget per cascade. `drainRows` pages until each query is exhausted and
+ * counts every relation against the same limit — a per-call counter would let
+ * several full relations blow past the mutation write limit.
+ * `mutate` must remove each row from `fetchPage`'s index (delete it, or patch
+ * the indexed field) so the next page advances.
+ */
+function withCascadeBudget() {
+  const budget = { total: 0 };
+  return async function drainRows<D extends { _id: Id<TableNames> }>(
+    fetchPage: () => Promise<D[]>,
+    mutate: (id: D["_id"]) => Promise<void>,
+  ): Promise<void> {
+    for (;;) {
+      const rows = await fetchPage();
+      for (const row of rows) {
+        await mutate(row._id);
+      }
+      recordCascadeRows(budget, rows.length);
+      if (rows.length < TAKE) return;
+    }
+  };
 }
 
 export async function findRequestForInvoice(
@@ -51,6 +61,7 @@ export async function findRequestForInvoice(
 }
 
 export async function deleteInvoiceRecord(ctx: MutationCtx, invoiceId: Id<"invoices">) {
+  const drainRows = withCascadeBudget();
   await drainRows(
     () =>
       ctx.db
@@ -93,6 +104,7 @@ export async function deleteInvoiceRecord(ctx: MutationCtx, invoiceId: Id<"invoi
 }
 
 export async function deleteEventRecord(ctx: MutationCtx, eventId: Id<"events">) {
+  const drainRows = withCascadeBudget();
   await drainRows(
     () =>
       ctx.db
@@ -312,6 +324,7 @@ export async function deleteEventRecord(ctx: MutationCtx, eventId: Id<"events">)
 }
 
 export async function unlinkInvoicePeers(ctx: MutationCtx, invoiceId: Id<"invoices">) {
+  const drainRows = withCascadeBudget();
   const request = await findRequestForInvoice(ctx, invoiceId);
   if (request?.linkedInvoiceId === invoiceId) {
     await ctx.db.patch(request._id, {
@@ -337,6 +350,7 @@ export async function unlinkInvoicePeers(ctx: MutationCtx, invoiceId: Id<"invoic
 }
 
 export async function unlinkRequestPeers(ctx: MutationCtx, request: Doc<"eventRequests">) {
+  const drainRows = withCascadeBudget();
   const now = Date.now();
   if (request.linkedInvoiceId) {
     const invoice = await ctx.db.get(request.linkedInvoiceId);
