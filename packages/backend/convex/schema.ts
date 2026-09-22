@@ -1703,7 +1703,8 @@ export default defineSchema({
   }).index("by_key", ["key"]),
 
   eventPaymentProofSubmissions: defineTable({
-    eventId: v.id("events"),
+    /** Absent when the quote is not the event's primary invoice (follow-up quotes). */
+    eventId: v.optional(v.id("events")),
     invoiceId: v.id("invoices"),
     paymentMethod: paymentProofMethodValue,
     paymentReference: v.string(),

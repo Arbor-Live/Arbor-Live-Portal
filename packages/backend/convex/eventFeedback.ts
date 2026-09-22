@@ -7,7 +7,7 @@ import {
   type MutationCtx,
   type QueryCtx,
 } from "./_generated/server";
-import { listEventsByInvoiceId } from "./lib/invoiceEvents";
+import { listEventsLinkedToInvoice } from "./lib/invoiceEvents";
 import { getCanonicalAlbumLink } from "./lib/immichAlbumLinks";
 import { enforceRateLimit, HOUR_MS } from "./rateLimit";
 
@@ -42,7 +42,7 @@ async function resolveInvoiceAndEvent(
     }
   }
 
-  const linkedEvents = await listEventsByInvoiceId(ctx, invoice._id);
+  const linkedEvents = await listEventsLinkedToInvoice(ctx, invoice._id);
   const linkedEvent = linkedEvents[0];
   if (!linkedEvent) return null;
 
