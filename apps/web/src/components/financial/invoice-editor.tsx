@@ -266,6 +266,11 @@ export function InvoiceEditor({
     () => linkedEvent?.linkedEvents ?? [],
     [linkedEvent?.linkedEvents],
   );
+  const primaryLinkedEventIds = new Set<string>(linkedDayEvents.map((day) => day._id));
+  if (linkedEvent?._id) primaryLinkedEventIds.add(linkedEvent._id);
+  const otherLinkedEvents = (invoiceData?.additionallyLinkedEvents ?? []).filter(
+    (event) => !primaryLinkedEventIds.has(event._id),
+  );
   const [selectedDayEventIdOverride, setSelectedDayEventIdOverride] = useState<
     Id<"events"> | undefined
   >(undefined);
@@ -1558,6 +1563,43 @@ export function InvoiceEditor({
                 {linkedDayEvents.map((event) => (
                   <DropdownMenuItem key={event._id} asChild>
                     <Link href={`/dashboard/events/${event._id}`} className="flex flex-col items-start gap-0.5">
+                      <span className="font-medium">{event.title}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {formatDateTimeRange(event.startAt, event.endAt)}
+                      </span>
+                    </Link>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : null}
+          {otherLinkedEvents.length === 1 ? (
+            <Button type="button" variant="outline" size="sm" asChild>
+              <Link
+                href={`/dashboard/events/${otherLinkedEvents[0]._id}`}
+                data-testid="invoice-additional-event-link"
+              >
+                {linkedDayEvents.length === 0 && !linkedEvent ? "Event" : otherLinkedEvents[0].title}
+              </Link>
+            </Button>
+          ) : otherLinkedEvents.length > 1 ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button type="button" variant="outline" size="sm">
+                  {linkedDayEvents.length === 0 && !linkedEvent
+                    ? `Events (${otherLinkedEvents.length})`
+                    : `Also linked (${otherLinkedEvents.length})`}
+                  <CaretDownIcon className="size-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-72">
+                {otherLinkedEvents.map((event) => (
+                  <DropdownMenuItem key={event._id} asChild>
+                    <Link
+                      href={`/dashboard/events/${event._id}`}
+                      data-testid="invoice-additional-event-link"
+                      className="flex flex-col items-start gap-0.5"
+                    >
                       <span className="font-medium">{event.title}</span>
                       <span className="text-xs text-muted-foreground">
                         {formatDateTimeRange(event.startAt, event.endAt)}

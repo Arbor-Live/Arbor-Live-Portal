@@ -104,6 +104,10 @@ Human-readable docs live in `docs/` (`getting-started.md`, `architecture.md`, `d
 - Quote approval status is unified for table display.
 - Default invoice due date is the **first** linked event’s start calendar day + 30
   days (not the last day of a multi-day event or the last series occurrence).
+- An event may link multiple invoices. `events.invoiceId` is the primary
+  (status, pull list, host, payment reminders). Further links are
+  `eventInvoiceLinks` (max 12). Event margin and pipeline booked revenue sum
+  them. Extra invoices are per occurrence; a series still shares one primary.
 
 ## Timezone (Pacific)
 
