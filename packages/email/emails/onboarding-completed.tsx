@@ -18,6 +18,7 @@ export function OnboardingCompletedEmail({
   employmentStartDateLabel,
   otherCampusEmploymentLabel,
   i9ScheduledByFirstDay,
+  hourlyRateLabel,
   dashboardUsersUrl,
 }: OnboardingCompletedEmailProps) {
   return (
@@ -32,6 +33,7 @@ export function OnboardingCompletedEmail({
       </BodyCopy>
       <DataCard title="Details">
         <DetailRow label="Legal signature" value={signatureLegalName} />
+        <DetailRow label="Rate" value={hourlyRateLabel} />
         {studentId ? <DetailRow label="Student ID" value={studentId} /> : null}
         {employmentStartDateLabel ? (
           <DetailRow label="Start date" value={employmentStartDateLabel} />
@@ -64,6 +66,7 @@ OnboardingCompletedEmail.PreviewProps = {
   employmentStartDateLabel: "Sep 1, 2026",
   otherCampusEmploymentLabel: "No",
   i9ScheduledByFirstDay: true,
+  hourlyRateLabel: "$20.00/hr · Normal",
   dashboardUsersUrl: "http://localhost:3000/dashboard/users",
 } satisfies OnboardingCompletedEmailProps;
 

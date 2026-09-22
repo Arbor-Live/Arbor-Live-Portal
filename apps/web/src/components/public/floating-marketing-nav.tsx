@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { ListIcon } from "@phosphor-icons/react";
 import { useLandingMotion } from "@/components/landing/landing-motion";
 import { Button } from "@/components/ui/button";
-import { DashboardNavLink } from "@/components/public/dashboard-nav-link";
+import { DashboardNavLink, SignInNavLink } from "@/components/public/dashboard-nav-link";
 import {
   Sheet,
   SheetContent,
@@ -116,6 +116,7 @@ export function FloatingMarketingNav() {
               </nav>
 
               <div className="flex items-center gap-2">
+                <SignInNavLink />
                 <DashboardNavLink className="hidden sm:inline-flex" />
                 <Button asChild size="sm" className="hidden sm:inline-flex">
                   <Link href="/request">Book us</Link>
@@ -156,8 +157,15 @@ export function FloatingMarketingNav() {
                       <DashboardNavLink
                         className="justify-start sm:hidden"
                         linkClassName="w-full justify-start"
+                        onNavigate={() => setMobileOpen(false)}
                       />
-                      <div className="mt-2 border-t pt-3">
+                      <div className="mt-2 flex flex-col gap-2 border-t pt-3">
+                        <SignInNavLink
+                          size="default"
+                          className="w-full"
+                          linkClassName="w-full"
+                          onNavigate={() => setMobileOpen(false)}
+                        />
                         <Button asChild className="w-full">
                           <Link href="/request" onClick={() => setMobileOpen(false)}>
                             Book us

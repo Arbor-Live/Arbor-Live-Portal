@@ -25,8 +25,10 @@ canonical description of the domain itself.
 - Crew onboarding progress lives in `userOnboarding`; band org setup in
   `organizationOnboarding`. Incomplete crew get a dashboard banner and weekly
   reminder email; assigned bands that have not finished onboarding get a weekly
-  reminder that payouts are blocked until they complete it. Admins see status
-  under Users and can waive.
+  reminder that payouts are blocked until they complete it. When crew finish,
+  admins and HR leadership get an email that includes the effective hourly rate
+  (Normal, Lead, or Custom, resolved the same way as invoice crew pricing).
+  Admins see status under Users and can waive.
 - Arbor Live crew invites (and convert-to-member) require a **compensation rate
   mode** (`normal` / `lead` / `custom`) and a **payroll method**
   (`stanford` / `external`). Normal/Lead resolve live from
@@ -67,13 +69,17 @@ canonical description of the domain itself.
   timecard overview and assignable-crew pickers, and stays off the public
   `/crew` page. Flags remain editable per user in Users admin.
 - **Weekly pending-activity digest** (`email/weeklyDigest.ts`, run by the
-  Monday `weeklyJobs` cron): one email per active Arbor user listing their
-  pending availability responses, events that week, timecards, post-event work
-  (review + photos, crew **and** day-of leads / event managers), and — for
-  admins — open booking requests, artist payouts in progress, and outstanding
-  post-mortem reviews. Per-user opt-out is the `weeklyDigest` Participation
-  flag; sections with nothing pending are omitted and users with no pending
-  items get no email.
+  Monday `weeklyJobs` cron): Arbor staff get pending availability, shifts that
+  week, timecards, and post-event work for events they crewed or led (review +
+  photos, and only after the event itself has ended). Portal admins also get
+  open booking requests and artist payouts in progress. Unsubmitted reviews
+  for other people are not listed — a review shows up only when the recipient
+  still owes it. Artist-only members get the email only when one of their
+  bands has a show that week or onboarding still open — not crew post-event
+  work and not the admin queues. Band org admins are Better Auth
+  `role: "admin"`; that is not a portal admin. Per-user opt-out is the
+  `weeklyDigest` Participation flag; empty sections are omitted and users with
+  nothing pending get no email.
 - **Post-event work** (`postMortemFeedback.ts`, `lib/myEventActions.ts`): every
   assigned crew member *and* the day-of lead / event manager reviews each ended
   event — 5⭐ rating + what went well / what could improve + resolving their
