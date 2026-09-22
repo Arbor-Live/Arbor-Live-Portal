@@ -343,7 +343,10 @@ Event types (drive which editor tabs and quick-add blocks appear):
   the raw Immich share URL to external clients. Emails that attach the share
   URL, and the public booking-request / quote feedback portal, ensure the event
   album when Immich is configured (`ensureEventAlbumBestEffort` /
-  `ensureAlbumShareUrlByToken`).
+  `ensureAlbumShareUrlByToken`). On multi-day bookings the public **After the
+  event** tab uses the same Day 1 / Day 2 switcher as the Event tab: each linked
+  day has its own album and feedback form, and the tab appears once any linked
+  day has ended.
 
 ## Marketing site
 

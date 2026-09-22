@@ -97,6 +97,7 @@ the URL looks like cloud.
 | Public quote page render | Covered | `smoke/public-quote.spec.ts` |
 | Client approve / request changes | Covered | `quotes/public-quote-flows.spec.ts` |
 | Client submit payment proof | Covered | `quotes/public-quote-flows.spec.ts` |
+| Client post-event album + feedback | Covered | `quotes/public-post-event-feedback.spec.ts` — single-day and multi-day (Day 1 / Day 2 albums + per-day submit) on quote and booking-request portals |
 | Staff draft create → public link | Covered | `quotes/invoice-finalize.spec.ts` (Batch 3; no separate Finalize UI — draft + `/event/{token}`) |
 | Staff mark payment received | Covered | `quotes/payment-proof-verify.spec.ts` (Batch 3) |
 | Line item add / edit / remove + totals | Covered | `quotes/invoice-line-items.spec.ts` (Batch 8) — asserts the browser's `computeInvoiceDraftTotals` and the server's `computeTotals` agree |
@@ -199,6 +200,7 @@ the URL looks like cloud.
 | `smoke/event-create.spec.ts` | Crewed event + schedule |
 | `smoke/public-quote.spec.ts` | Quote page render |
 | `quotes/public-quote-flows.spec.ts` | Approve / changes / payment proof |
+| `quotes/public-post-event-feedback.spec.ts` | Public After-the-event album + feedback, including multi-day |
 | `booking/booking-convert.spec.ts` | Staff convert |
 | `booking/booking-convert-approve.spec.ts` | Track approve |
 | `events/event-edit-dry-hire.spec.ts` | Edit + dry hire schedule |

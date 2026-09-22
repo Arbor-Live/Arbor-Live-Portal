@@ -1410,6 +1410,184 @@ export const seedPastLinkedEventForFeedback = mutation({
   },
 });
 
+const feedbackDaySeedValue = v.object({
+  eventId: v.id("events"),
+  title: v.string(),
+  albumShareUrl: v.string(),
+});
+
+/**
+ * Test-only: two completed sibling day-events on one invoice, each with its
+ * own public album, for the multi-day post-event portal section.
+ */
+export const seedPastMultiDayEventsForFeedback = mutation({
+  args: {
+    portal: v.optional(v.union(v.literal("quote"), v.literal("request"))),
+  },
+  returns: v.object({
+    invoiceId: v.id("invoices"),
+    invoiceNumber: v.string(),
+    path: v.string(),
+    days: v.array(feedbackDaySeedValue),
+  }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const portal = args.portal ?? "quote";
+    const now = Date.now();
+    const day1 = futureEventWindow(-3);
+    const day2 = futureEventWindow(-2);
+
+    const insertDay = async (
+      invoiceId: Id<"invoices">,
+      title: string,
+      startAt: number,
+      endAt: number,
+    ) => {
+      const albumShareUrl = `https://photos.arbor.st/share/e2e-${makeInvoiceSuffix()}`;
+      const eventId = await ctx.db.insert("events", {
+        title,
+        status: "completed",
+        visibility: "public",
+        publicToken: makeToken(),
+        invoiceId,
+        startAt,
+        endAt,
+        timezone: "America/Los_Angeles",
+        spansMultipleDays: false,
+        setupOnly: false,
+        strikeOnly: false,
+        requiresShowWindow: true,
+        venueName: "E2E Past Venue",
+        eventType: "Crewed Event",
+        teamsInterested: ["Sound"],
+        createdAt: now,
+        updatedAt: now,
+      });
+      await ctx.db.insert("immichAlbumLinks", {
+        entityType: "event",
+        entityId: eventId,
+        immichAlbumId: `e2e-album-${eventId}`,
+        albumName: `${title} Album`,
+        shareUrl: albumShareUrl,
+        createdAt: now,
+        updatedAt: now,
+      });
+      return { eventId, title, albumShareUrl };
+    };
+
+    const insertDays = async (invoiceId: Id<"invoices">, eventName: string) => {
+      const first = await insertDay(
+        invoiceId,
+        `${eventName} — Day 1`,
+        day1.startAt,
+        day1.endAt,
+      );
+      const second = await insertDay(
+        invoiceId,
+        `${eventName} — Day 2`,
+        day2.startAt,
+        day2.endAt,
+      );
+      return [first, second];
+    };
+
+    if (portal === "quote") {
+      const publicApprovalToken = makeToken();
+      const invoiceNumber = `ALINV-${makeInvoiceSuffix()}`;
+      const invoiceId = await ctx.db.insert("invoices", {
+        invoiceNumber,
+        status: "finalized",
+        issueDate: new Date(now).toISOString().slice(0, 10),
+        managerUserId: "e2e-manager",
+        managerName: "E2E Admin",
+        managerEmail: "e2e-admin@arborlive.test",
+        clientGroupName: "E2E Past Client",
+        clientContactName: "E2E Contact",
+        clientEmail: "e2e-client@example.com",
+        equipmentPricingMode: "nonSubsidized",
+        crewRateMode: "normal",
+        discountType: "amount",
+        discountValue: 0,
+        discountAmountUsd: 0,
+        equipmentSubtotalUsd: 100,
+        externalRentalsSubtotalUsd: 0,
+        artistsSubtotalUsd: 0,
+        crewSubtotalUsd: 0,
+        feesSubtotalUsd: 0,
+        subtotalUsd: 100,
+        totalUsd: 100,
+        clientApprovalStatus: "approved",
+        approvedAt: now - 60_000,
+        clientApprovalSignedName: "E2E Signer",
+        clientIsPaymentSubmitter: true,
+        publicApprovalToken,
+        publicApprovalTokenExpiresAt: now + 14 * 24 * 60 * 60 * 1000,
+        clientReviewReadyAt: now - 24 * 60 * 60 * 1000,
+        createdAt: now,
+        updatedAt: now,
+      });
+      const days = await insertDays(invoiceId, `E2E Past Event ${now}`);
+      return {
+        invoiceId,
+        invoiceNumber,
+        path: `/event/${publicApprovalToken}`,
+        days,
+      };
+    }
+
+    const seeded = await insertSubmittedBookingRequest(ctx);
+    const invoiceNumber = `ALINV-${makeInvoiceSuffix()}`;
+    const invoiceId = await ctx.db.insert("invoices", {
+      invoiceNumber,
+      status: "finalized",
+      issueDate: new Date(now).toISOString().slice(0, 10),
+      managerUserId: "e2e-manager",
+      managerName: "E2E Admin",
+      managerEmail: "e2e-admin@arborlive.test",
+      clientGroupName: seeded.eventName,
+      clientContactName: "E2E Requester",
+      clientEmail: "e2e.requester@stanford.edu",
+      equipmentPricingMode: "nonSubsidized",
+      crewRateMode: "normal",
+      discountType: "amount",
+      discountValue: 0,
+      discountAmountUsd: 0,
+      equipmentSubtotalUsd: 100,
+      externalRentalsSubtotalUsd: 0,
+      artistsSubtotalUsd: 0,
+      crewSubtotalUsd: 0,
+      feesSubtotalUsd: 0,
+      subtotalUsd: 100,
+      totalUsd: 100,
+      clientApprovalStatus: "approved",
+      approvedAt: now - 60_000,
+      clientApprovalSignedName: "E2E Signer",
+      clientIsPaymentSubmitter: true,
+      sourceEventRequestId: seeded.requestId,
+      clientReviewReadyAt: now - 24 * 60 * 60 * 1000,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const days = await insertDays(invoiceId, seeded.eventName);
+    await ctx.db.patch(seeded.requestId, {
+      status: "converted",
+      convertedEventId: days[0]!.eventId,
+      convertedEventIds: days.map((day) => day.eventId),
+      linkedInvoiceId: invoiceId,
+      reviewedByUserId: "e2e-manager",
+      reviewedAt: now,
+      convertedAt: now,
+      updatedAt: now,
+    });
+    return {
+      invoiceId,
+      invoiceNumber,
+      path: `/request/track/${seeded.publicToken}`,
+      days,
+    };
+  },
+});
+
 /**
  * Test-only: a completed event with a submitted feedback row in range, for the
  * Insights Feedback tab. Returns the values the UI should surface verbatim.
