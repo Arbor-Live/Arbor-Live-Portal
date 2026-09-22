@@ -21,6 +21,11 @@ import {
   type SeriesEditScope,
 } from "./lib/eventSeriesGeneration";
 import { syncEventCrewCostUsd } from "./lib/crewCost";
+import {
+  detachInvoiceFromAdditionalLinks,
+  replaceAdditionalInvoiceLinks,
+  splitPrimaryAndAdditional,
+} from "./lib/eventInvoiceLinks";
 import { syncEventStatusForLinkedInvoice } from "./lib/eventStatus";
 import { computeSeriesCostSummary, effectiveCrewUsd } from "./lib/eventSeriesCosts";
 import { resolveVenueLink } from "./lib/venues";
@@ -202,6 +207,7 @@ export const create = mutation({
     blockTemplates: v.optional(v.array(blockTemplateValue)),
     shiftTemplates: v.optional(v.array(shiftTemplateValue)),
     invoiceId: v.optional(v.id("invoices")),
+    additionalInvoiceIds: v.optional(v.array(v.id("invoices"))),
   },
   handler: async (ctx, args) => {
     await requireAuth(ctx);
@@ -215,8 +221,12 @@ export const create = mutation({
     });
     const now = Date.now();
     const venueLink = await resolveVenueLink(ctx, args.venueId);
+    const invoiceSplit =
+      args.additionalInvoiceIds !== undefined
+        ? splitPrimaryAndAdditional(args.invoiceId, args.additionalInvoiceIds)
+        : { primary: args.invoiceId, additional: [] as Id<"invoices">[] };
     const hostLink = await resolveEventPrimaryHostLink(ctx, {
-      invoiceId: args.invoiceId,
+      invoiceId: invoiceSplit.primary,
       hostGroupId: args.hostGroupId,
     });
     const additionalHostGroupIds = await resolveAdditionalHostGroupIds(
@@ -258,7 +268,7 @@ export const create = mutation({
       blockTemplates: args.blockTemplates,
       shiftTemplates: args.shiftTemplates,
       budgetCrewHourlyRateUsd: args.budgetCrewHourlyRateUsd,
-      invoiceId: args.invoiceId,
+      invoiceId: invoiceSplit.primary,
       createdAt: now,
       updatedAt: now,
     });
@@ -269,7 +279,11 @@ export const create = mutation({
       const eventId = await materializeOccurrence(ctx, series, index, occurrenceStarts[index]!, now);
       eventIds.push(eventId);
     }
-    return { seriesId, firstEventId: eventIds[0]!, eventIds };
+    const firstEventId = eventIds[0];
+    if (firstEventId && invoiceSplit.additional.length > 0) {
+      await replaceAdditionalInvoiceLinks(ctx, firstEventId, invoiceSplit.additional);
+    }
+    return { seriesId, firstEventId: firstEventId!, eventIds };
   },
 });
 
@@ -292,6 +306,7 @@ export const linkInvoice = mutation({
     for (const occurrence of occurrences) {
       if (occurrence.seriesDetached || occurrence.status === "cancelled") continue;
       await ctx.db.patch(occurrence._id, { invoiceId: args.invoiceId, updatedAt: now });
+      await detachInvoiceFromAdditionalLinks(ctx, occurrence._id, args.invoiceId);
       await syncEventStatusForLinkedInvoice(ctx, occurrence._id, args.invoiceId, occurrence.status);
     }
     await syncLinkedEventsPrimaryHostFromInvoice(ctx, args.invoiceId);

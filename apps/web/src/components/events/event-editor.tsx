@@ -38,6 +38,7 @@ import { VenuePicker } from "@/components/venues/venue-picker";
 import { VenueDetailsButton } from "@/components/venues/venue-details-sheet";
 import { useSessionShell, useSessionViewer } from "@/components/session-shell-provider";
 import { EventBandPaymentSection } from "@/components/events/event-band-payment-section";
+import { EventLinkedInvoicesField } from "@/components/events/event-linked-invoices-field";
 import { EventBandRidersSection } from "@/components/events/event-band-riders-section";
 import { EventBriefButton } from "@/components/events/event-brief-button";
 import { EventContactsSection } from "@/components/events/event-contacts-section";
@@ -260,6 +261,7 @@ export function EventEditor({
   const [status, setStatus] = useState<EventStatus>("tentative");
   const [visibility, setVisibility] = useState<EventVisibility>(DEFAULT_EVENT_VISIBILITY);
   const [invoiceId, setInvoiceId] = useState("");
+  const [additionalInvoiceIds, setAdditionalInvoiceIds] = useState<string[]>([]);
   const [startAt, setStartAt] = useState("");
   const [endAt, setEndAt] = useState("");
   const [venueId, setVenueId] = useState("");
@@ -395,6 +397,11 @@ export function EventEditor({
     setStatus(normalizeEventStatus(eventData.event.status));
     setVisibility(normalizeEventVisibility(eventData.event.visibility));
     setInvoiceId(eventData.event.invoiceId ?? "");
+    setAdditionalInvoiceIds(
+      (eventData.linkedInvoices ?? [])
+        .filter((row) => !row.isPrimary)
+        .map((row) => row._id),
+    );
     setStartAt(toLocalDateTimeInput(eventData.event.startAt));
     setEndAt(toLocalDateTimeInput(eventData.event.endAt));
     setVenueId(eventData.event.venueId ?? "");
@@ -475,13 +482,21 @@ export function EventEditor({
       status: normalizeEventStatus(eventData.event.status),
       visibility: normalizeEventVisibility(eventData.event.visibility),
       invoiceId: eventData.event.invoiceId ?? undefined,
+      additionalInvoiceIds: (eventData.linkedInvoices ?? [])
+        .filter((row) => !row.isPrimary)
+        .map((row) => row._id),
       startAt: eventData.event.startAt,
       endAt: eventData.event.endAt,
-      venueId: eventData.event.venueId || undefined,
+      venueId: eventData.event.venueId ? eventData.event.venueId : null,
       eventType: hydratedEventType || undefined,
       rentalFulfillmentMode: rentalTypes.includes(hydratedEventType) ? hydratedFulfillment : undefined,
       teamsInterested: hydratedTeams.length > 0 ? hydratedTeams : undefined,
-      hostGroupId: eventData.event.hostGroupId || undefined,
+      ...(eventData.event.invoiceId
+        ? {}
+        : { hostGroupId: linkedHostGroupId ? linkedHostGroupId : null }),
+      additionalHostGroupIds: (eventData.event.additionalHostGroupIds ?? [])
+        .map((id) => String(id))
+        .filter((id) => id && id !== (eventData.event.invoiceId ? "" : linkedHostGroupId)),
       eventManagerUserId: eventData.event.eventManagerUserId || undefined,
       dayOfLeadUserId: eventData.event.dayOfLeadUserId || undefined,
       bandsCostUsd: Number(eventData.event.bandsCostUsd ?? 0),
@@ -571,17 +586,24 @@ export function EventEditor({
     [],
   );
 
-  const invoiceOptions: SearchableSelectOption[] = useMemo(
-    () => [
-      { value: "", label: "No linked invoice" },
-      ...((invoices ?? []).map((row) => ({
+  const invoiceOptions: SearchableSelectOption[] = useMemo(() => {
+    const byId = new Map<string, SearchableSelectOption>();
+    for (const row of eventData?.linkedInvoices ?? []) {
+      byId.set(row._id, {
+        value: row._id,
+        label: row.invoiceNumber,
+        description: row.clientGroupName,
+      });
+    }
+    for (const row of invoices ?? []) {
+      byId.set(row._id, {
         value: row._id,
         label: row.invoiceNumber,
         description: row.clientGroupName ?? row.managerName,
-      })) satisfies SearchableSelectOption[]),
-    ],
-    [invoices],
-  );
+      });
+    }
+    return [...byId.values()];
+  }, [eventData?.linkedInvoices, invoices]);
 
   const hostGroupOptions: SearchableSelectOption[] = useMemo(
     () => [
@@ -709,6 +731,7 @@ export function EventEditor({
       status,
       visibility,
       invoiceId: invoiceId ? (invoiceId as Id<"invoices">) : undefined,
+      additionalInvoiceIds: additionalInvoiceIds.map((id) => id as Id<"invoices">),
       startAt: startAtMs ?? Number.NaN,
       endAt: endAtMs ?? Number.NaN,
       venueId: venueId ? (venueId as Id<"venues">) : null,
@@ -779,6 +802,7 @@ export function EventEditor({
           dayOfLeadUserId: payload.dayOfLeadUserId,
           notes: payload.notes,
           invoiceId: payload.invoiceId,
+          additionalInvoiceIds: payload.additionalInvoiceIds,
         });
         router.replace(getEventEditorTabPath(String(result.firstEventId), resolvedActiveTab));
         return;
@@ -795,6 +819,7 @@ export function EventEditor({
     await updateEvent({
       id: eventId!,
       ...payload,
+      invoiceId: payload.invoiceId ?? null,
       editScope: seriesMeta && editScope ? editScope : undefined,
     });
     setLastSavedOverviewSignature(JSON.stringify(payload));
@@ -1071,31 +1096,47 @@ export function EventEditor({
       : eventPassThroughCostUsd(bandsCostTotal, externalRentalsCostTotal) +
         (seriesMeta?.seriesBandsCostUsd ?? 0) +
         (seriesMeta?.seriesExternalRentalsCostUsd ?? 0);
-  const invoicePassThroughSubtotalUsd = invoicePassThroughUsd(
-    linkedInvoice?.artistsSubtotalUsd ?? 0,
-    linkedInvoice?.externalRentalsSubtotalUsd ?? 0,
-  );
-  const billedTotalUsd =
-    linkedInvoice != null
-      ? arborEarnedRevenueUsd(linkedInvoice.totalUsd, invoicePassThroughSubtotalUsd)
-      : null;
-  const marginCostUsd =
-    linkedInvoice != null
-      ? netProfitCostUsd(
-          marginEventCostUsd,
-          invoicePassThroughSubtotalUsd,
-          eventPassThroughCostsUsd,
-        )
-      : marginEventCostUsd;
-  const profitLossUsd =
-    linkedInvoice != null
-      ? netProfitFromInvoiceUsd(
-          linkedInvoice.totalUsd,
-          invoicePassThroughSubtotalUsd,
-          marginEventCostUsd,
-          eventPassThroughCostsUsd,
-        )
-      : null;
+  const linkedBilling = useMemo(() => {
+    const ids = [
+      ...(invoiceId ? [invoiceId] : []),
+      ...additionalInvoiceIds.filter((id) => id && id !== invoiceId),
+    ];
+    if (ids.length === 0) return null;
+    let totalUsd = 0;
+    let passThroughUsd = 0;
+    for (const id of ids) {
+      const detail = linkedInvoiceDetail?.invoice?._id === id ? linkedInvoiceDetail.invoice : null;
+      const fromList = (invoices ?? []).find((row) => row._id === id);
+      const fromEvent = (eventData?.linkedInvoices ?? []).find((row) => row._id === id);
+      const source = detail ?? fromList ?? fromEvent;
+      if (!source) return null;
+      totalUsd += source.totalUsd;
+      passThroughUsd += invoicePassThroughUsd(
+        source.artistsSubtotalUsd,
+        source.externalRentalsSubtotalUsd,
+      );
+    }
+    return { totalUsd, passThroughUsd, count: ids.length };
+  }, [additionalInvoiceIds, eventData?.linkedInvoices, invoiceId, invoices, linkedInvoiceDetail]);
+  const invoicePassThroughSubtotalUsd = linkedBilling?.passThroughUsd ?? 0;
+  const billedTotalUsd = linkedBilling
+    ? arborEarnedRevenueUsd(linkedBilling.totalUsd, invoicePassThroughSubtotalUsd)
+    : null;
+  const marginCostUsd = linkedBilling
+    ? netProfitCostUsd(
+        marginEventCostUsd,
+        invoicePassThroughSubtotalUsd,
+        eventPassThroughCostsUsd,
+      )
+    : marginEventCostUsd;
+  const profitLossUsd = linkedBilling
+    ? netProfitFromInvoiceUsd(
+        linkedBilling.totalUsd,
+        invoicePassThroughSubtotalUsd,
+        marginEventCostUsd,
+        eventPassThroughCostsUsd,
+      )
+    : null;
   const quickAddDisabled = !startAt || !endAt;
   const quickAddDisabledReason = quickAddDisabled ? "Set event start and end first." : undefined;
   const quickAddLabel =
@@ -1128,6 +1169,7 @@ export function EventEditor({
       status,
       visibility,
       invoiceId,
+      additionalInvoiceIds,
       startAt,
       endAt,
       venueId,
@@ -1333,20 +1375,17 @@ export function EventEditor({
                 staff-only.
               </p>
             </div>
-            <div className="space-y-1">
-              <Label>Linked Invoice (optional)</Label>
-              <SearchableSelect
-                value={invoiceId}
-                onChange={setInvoiceId}
+            <div className="space-y-1 md:col-span-3">
+              <Label>Linked invoices</Label>
+              <EventLinkedInvoicesField
+                primaryInvoiceId={invoiceId}
+                additionalInvoiceIds={additionalInvoiceIds}
                 options={invoiceOptions}
-                placeholder="Search invoice..."
-                emptyLabel="No linked invoice"
+                onChange={({ primaryInvoiceId, additionalInvoiceIds: nextAdditional }) => {
+                  setInvoiceId(primaryInvoiceId);
+                  setAdditionalInvoiceIds(nextAdditional);
+                }}
               />
-              {invoiceId ? (
-                <Button asChild type="button" variant="outline" size="sm" className="mt-2">
-                  <Link href={`/dashboard/financial-hub/invoices/${invoiceId}`}>Open Linked Invoice</Link>
-                </Button>
-              ) : null}
             </div>
             <div className="space-y-1">
               <Label>Start</Label>
@@ -2245,9 +2284,11 @@ export function EventEditor({
                 />
               </div>
             </div>
-            {linkedInvoice ? (
+            {linkedBilling ? (
               <div className="rounded-md border p-3" data-testid="event-linked-invoice-margin">
-                <p className="text-sm font-medium">Linked Invoice Margin</p>
+                <p className="text-sm font-medium">
+                  {linkedBilling.count > 1 ? "Linked Invoices Margin" : "Linked Invoice Margin"}
+                </p>
                 <div className="mt-2 grid gap-2 md:grid-cols-3">
                   <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
                     <p className="text-xs text-muted-foreground">Total Billed</p>
@@ -2271,7 +2312,7 @@ export function EventEditor({
                   </div>
                 </div>
               </div>
-            ) : invoiceId ? (
+            ) : invoiceId || additionalInvoiceIds.length > 0 ? (
               <p className="text-xs text-muted-foreground" data-testid="event-linked-invoice-loading">
                 Linked invoice not loaded yet. Margin will appear once invoice data is available.
               </p>

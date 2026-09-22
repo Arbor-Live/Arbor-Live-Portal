@@ -205,6 +205,13 @@ Event types (drive which editor tabs and quick-add blocks appear):
   from the invoice list or editor (e.g. cancelled events).
   Default due date is first linked event start (Day 1) + 30 days; staff can
   override, then resync.
+- An event can link more than one invoice. `events.invoiceId` is the primary:
+  it drives status, the pull list, the host, and payment reminders. Other
+  invoices are rows in `eventInvoiceLinks` (max 12 per event). The event margin
+  and pipeline booked revenue add those invoices in. An invoice with no primary
+  events still links back to events that list it as additional, and does not
+  own their pull list. Extra invoices stay on the occurrence you edit; a series
+  still shares one primary invoice.
 - Line items live in a child table, sectioned as equipment package/type,
   external rental, artist, crew, fee. Totals are recomputed server-side
   (`recalculateTotals`); equipment pricing is `subsidized`/`nonSubsidized`

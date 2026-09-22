@@ -1,5 +1,9 @@
 import type { Doc, Id, TableNames } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
+import {
+  deleteEventInvoiceLinksForEvent,
+  deleteEventInvoiceLinksForInvoice,
+} from "./eventInvoiceLinks";
 import { listEventsByInvoiceId } from "./invoiceEvents";
 
 const TAKE = 500;
@@ -62,6 +66,8 @@ export async function findRequestForInvoice(
 
 export async function deleteInvoiceRecord(ctx: MutationCtx, invoiceId: Id<"invoices">) {
   const drainRows = withCascadeBudget();
+  await deleteEventInvoiceLinksForInvoice(ctx, invoiceId);
+
   await drainRows(
     () =>
       ctx.db
@@ -105,6 +111,8 @@ export async function deleteInvoiceRecord(ctx: MutationCtx, invoiceId: Id<"invoi
 
 export async function deleteEventRecord(ctx: MutationCtx, eventId: Id<"events">) {
   const drainRows = withCascadeBudget();
+  await deleteEventInvoiceLinksForEvent(ctx, eventId);
+
   await drainRows(
     () =>
       ctx.db
