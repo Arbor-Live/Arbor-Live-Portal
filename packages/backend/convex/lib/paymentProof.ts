@@ -170,6 +170,38 @@ export async function getActivePaymentProofSubmission(
   return legacy.find((row) => isSubmissionActive(row)) ?? null;
 }
 
+/** Proof belongs to the invoice, so a follow-up quote does not collide with the original event's submission. */
+export async function getActivePaymentProofSubmissionForInvoice(
+  ctx: QueryCtx | MutationCtx,
+  invoiceId: Id<"invoices">,
+) {
+  const rows = await ctx.db
+    .query("eventPaymentProofSubmissions")
+    .withIndex("by_invoiceId", (q) => q.eq("invoiceId", invoiceId))
+    .take(20);
+  let active: (typeof rows)[number] | null = null;
+  for (const row of rows) {
+    if (!isSubmissionActive(row)) continue;
+    if (!active || row.submittedAt > active.submittedAt) active = row;
+  }
+  return active;
+}
+
+export function resolvePaymentProofFlags(args: {
+  invoice: PaymentProofInvoice;
+  nowMs: number;
+  hasActiveSubmission: boolean;
+  paymentReceived: boolean;
+}) {
+  const approved = (args.invoice.clientApprovalStatus ?? "pending") === "approved";
+  const open = isPaymentProofOpen(args.nowMs, args.invoice);
+  return {
+    eligible: approved,
+    canSubmit: open && !args.hasActiveSubmission && !args.paymentReceived,
+    opensAt: getPaymentProofOpensAt(args.invoice),
+  };
+}
+
 /** @deprecated Use getActivePaymentProofSubmission */
 export async function getPaymentProofSubmissionForEvent(
   ctx: QueryCtx | MutationCtx,
@@ -183,30 +215,22 @@ export async function loadPaymentProofState(
   invoice: Doc<"invoices">,
   linkedEvent: Doc<"events"> | null,
 ) {
-  if (!linkedEvent) {
-    return {
-      eligible: false,
-      canSubmit: false,
-      opensAt: null,
-      submission: null,
-      paymentReceived: false,
-      lateFee: null,
-    };
-  }
-
-  const approved = (invoice.clientApprovalStatus ?? "pending") === "approved";
-  const opensAt = getPaymentProofOpensAt(invoice);
   const now = Date.now();
-  const activeSubmission = await getActivePaymentProofSubmission(ctx, linkedEvent._id);
-  const open = isPaymentProofOpen(now, invoice);
-  const dueAt = getPaymentDueAt(invoice, linkedEvent);
-  const lateFee = approved ? computeLateFeeSummary(dueAt, now) : null;
+  const activeSubmission = await getActivePaymentProofSubmissionForInvoice(ctx, invoice._id);
   const paymentReceived = Boolean(invoice.paymentReceivedAt);
+  const flags = resolvePaymentProofFlags({
+    invoice,
+    nowMs: now,
+    hasActiveSubmission: Boolean(activeSubmission),
+    paymentReceived,
+  });
+  const dueAt = getPaymentDueAt(invoice, linkedEvent);
+  const lateFee = flags.eligible ? computeLateFeeSummary(dueAt, now) : null;
 
   return {
-    eligible: approved,
-    canSubmit: open && !activeSubmission && !paymentReceived,
-    opensAt,
+    eligible: flags.eligible,
+    canSubmit: flags.canSubmit,
+    opensAt: flags.opensAt,
     paymentReceived,
     lateFee: lateFee
       ? {
@@ -230,7 +254,7 @@ export async function loadPaymentProofState(
 export async function submitPaymentProof(
   ctx: MutationCtx,
   invoice: Doc<"invoices">,
-  linkedEvent: Doc<"events">,
+  linkedEvent: Doc<"events"> | null,
   args: {
     paymentMethod: PaymentProofMethod;
     paymentReference: string;
@@ -244,15 +268,15 @@ export async function submitPaymentProof(
     throw new Error("Payment has already been marked as received.");
   }
 
-  const existing = await getActivePaymentProofSubmission(ctx, linkedEvent._id);
-  if (existing) throw new Error("Payment proof has already been submitted for this event.");
+  const existing = await getActivePaymentProofSubmissionForInvoice(ctx, invoice._id);
+  if (existing) throw new Error("Payment proof has already been submitted for this invoice.");
 
   const paymentReference = normalizePaymentReference(args.paymentMethod, args.paymentReference);
   const financeContactEmail = resolvePaymentSubmitterEmail(invoice);
   const now = Date.now();
 
   const submissionId = await ctx.db.insert("eventPaymentProofSubmissions", {
-    eventId: linkedEvent._id,
+    ...(linkedEvent ? { eventId: linkedEvent._id } : {}),
     invoiceId: invoice._id,
     paymentMethod: args.paymentMethod,
     paymentReference,

@@ -232,7 +232,9 @@ Event types (drive which editor tabs and quick-add blocks appear):
   contacts, download PDF — all token-gated, no login.
 - PDFs are rendered from `@arbor/invoice-document` (`./pdf` export).
 - **Payment proof**: after approval, payers submit payment evidence
-  (`paymentProof*.ts`); staff verify, and cron-driven reminder emails nag
+  (`paymentProof*.ts`). A quote linked as an additional invoice on an event
+  (not only the primary `events.invoiceId`) opens payment the same way, and
+  proof is stored per invoice. Staff verify, and cron-driven reminder emails nag
   outstanding payers only once fewer than 30 days remain until the invoice due
   date (approval-day first reminder + Monday follow-ups via `weeklyJobs`).
 
