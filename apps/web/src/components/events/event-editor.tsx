@@ -482,13 +482,21 @@ export function EventEditor({
       status: normalizeEventStatus(eventData.event.status),
       visibility: normalizeEventVisibility(eventData.event.visibility),
       invoiceId: eventData.event.invoiceId ?? undefined,
+      additionalInvoiceIds: (eventData.linkedInvoices ?? [])
+        .filter((row) => !row.isPrimary)
+        .map((row) => row._id),
       startAt: eventData.event.startAt,
       endAt: eventData.event.endAt,
-      venueId: eventData.event.venueId || undefined,
+      venueId: eventData.event.venueId ? eventData.event.venueId : null,
       eventType: hydratedEventType || undefined,
       rentalFulfillmentMode: rentalTypes.includes(hydratedEventType) ? hydratedFulfillment : undefined,
       teamsInterested: hydratedTeams.length > 0 ? hydratedTeams : undefined,
-      hostGroupId: eventData.event.hostGroupId || undefined,
+      ...(eventData.event.invoiceId
+        ? {}
+        : { hostGroupId: linkedHostGroupId ? linkedHostGroupId : null }),
+      additionalHostGroupIds: (eventData.event.additionalHostGroupIds ?? [])
+        .map((id) => String(id))
+        .filter((id) => id && id !== (eventData.event.invoiceId ? "" : linkedHostGroupId)),
       eventManagerUserId: eventData.event.eventManagerUserId || undefined,
       dayOfLeadUserId: eventData.event.dayOfLeadUserId || undefined,
       bandsCostUsd: Number(eventData.event.bandsCostUsd ?? 0),

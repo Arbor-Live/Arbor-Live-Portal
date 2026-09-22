@@ -662,6 +662,11 @@ export const update = mutation({
       const split = splitPrimaryAndAdditional(nextInvoiceId, args.additionalInvoiceIds);
       nextInvoiceId = split.primary;
       nextAdditionalInvoiceIds = split.additional;
+    } else if (args.invoiceId === null) {
+      // A clear with no replacement list still needs one primary when extras exist.
+      const split = splitPrimaryAndAdditional(undefined, await listAdditionalInvoiceIds(ctx, args.id));
+      nextInvoiceId = split.primary;
+      nextAdditionalInvoiceIds = split.additional;
     }
     const nextStatus = normalizeEventStatus(args.status ?? existing.status);
     const prevStatus = normalizeEventStatus(existing.status);
@@ -690,7 +695,8 @@ export const update = mutation({
         ? await resolveVenueLink(ctx, args.venueId)
         : { venueId: existing.venueId, venueName: existing.venueName, venueAddress: undefined };
     const hostLink = await resolveEventPrimaryHostLink(ctx, {
-      invoiceId: nextInvoiceId,
+      // null means the primary was cleared. undefined would fall back to the old invoice.
+      invoiceId: nextInvoiceId ?? (args.invoiceId === null ? null : undefined),
       hostGroupId: args.hostGroupId,
       existingInvoiceId: existing.invoiceId,
       existingHostGroupId: existing.hostGroupId,

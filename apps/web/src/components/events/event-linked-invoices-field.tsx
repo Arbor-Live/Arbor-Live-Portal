@@ -8,6 +8,9 @@ import {
   type SearchableSelectOption,
 } from "@/components/inventory/searchable-select";
 
+/** Matches `MAX_ADDITIONAL_INVOICES_PER_EVENT` in `eventInvoiceLinks.ts`. */
+const MAX_ADDITIONAL_INVOICES = 12;
+
 export function EventLinkedInvoicesField({
   primaryInvoiceId,
   additionalInvoiceIds,
@@ -26,9 +29,10 @@ export function EventLinkedInvoicesField({
   const optionById = new Map(options.map((option) => [option.value, option]));
   const addOptions = options.filter((option) => option.value && !linkedIds.includes(option.value));
   const showPrimary = linkedIds.length > 1;
+  const atAdditionalLimit = additionalInvoiceIds.length >= MAX_ADDITIONAL_INVOICES;
 
   function addInvoice(invoiceId: string) {
-    if (!invoiceId || linkedIds.includes(invoiceId)) return;
+    if (!invoiceId || linkedIds.includes(invoiceId) || atAdditionalLimit) return;
     if (!primaryInvoiceId) {
       onChange({ primaryInvoiceId: invoiceId, additionalInvoiceIds });
       return;
@@ -64,13 +68,17 @@ export function EventLinkedInvoicesField({
 
   return (
     <div className="space-y-2" data-testid="event-linked-invoices">
-      <SearchableSelect
-        value=""
-        onChange={addInvoice}
-        options={addOptions}
-        placeholder="Search invoices…"
-        emptyLabel="Add invoice"
-      />
+      {atAdditionalLimit ? (
+        <p className="text-sm text-muted-foreground">Additional invoices max {MAX_ADDITIONAL_INVOICES}.</p>
+      ) : (
+        <SearchableSelect
+          value=""
+          onChange={addInvoice}
+          options={addOptions}
+          placeholder="Search invoices…"
+          emptyLabel="Add invoice"
+        />
+      )}
       {linkedIds.length > 0 ? (
         <ul className="space-y-1">
           {linkedIds.map((invoiceId) => {
