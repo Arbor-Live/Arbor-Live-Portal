@@ -725,7 +725,6 @@ function StepBody({
   onPasskeyAdded: () => void;
 }) {
   const patch = (next: Partial<FormState>) => {
-    setFieldError(null);
     setForm((prev) => ({ ...prev, ...next }));
   };
 
