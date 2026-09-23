@@ -1608,20 +1608,55 @@ export const inviteUserAdmin = mutation({
       : undefined;
 
     const membershipRole = await normalizeMembershipRole(ctx, args.organizationId, args.role ?? "member");
-    const created = (await ctx.runMutation(components.betterAuth.adapter.create, {
-      input: {
-        model: "invitation",
-        data: {
-          organizationId: args.organizationId,
-          email,
-          role: membershipRole,
-          status: "pending",
-          expiresAt,
-          createdAt: now,
-          inviterId: adminId,
+
+    // Re-inviting an address that already has a pending invitation in this
+    // organization must reuse that row, not mint a second one: the invite list
+    // keys off `invitation`, and `resendInviteAdmin` resolves by email, so a
+    // duplicate leaves stale accept links and an ambiguous resend target.
+    const existingInvites = (await ctx.runQuery(components.betterAuth.adapter.findMany, {
+      model: "invitation",
+      where: [
+        { field: "email", value: email },
+        { connector: "AND", field: "organizationId", value: args.organizationId },
+      ],
+      paginationOpts: { cursor: null, numItems: 50 },
+    })) as { page?: InvitationRow[] } | null;
+    const pendingInvite = (existingInvites?.page ?? []).find((row) => row.status === "pending");
+
+    let invitationId: string;
+    if (pendingInvite) {
+      invitationId = getRecordId(pendingInvite);
+      if (!invitationId) throw new Error("Existing pending invitation is missing an id.");
+      await ctx.runMutation(components.betterAuth.adapter.updateOne, {
+        input: {
+          model: "invitation",
+          where: [{ field: "_id", value: invitationId }],
+          update: {
+            role: membershipRole,
+            status: "pending",
+            expiresAt,
+            createdAt: now,
+          },
         },
-      },
-    })) as InvitationRow;
+      });
+    } else {
+      const created = (await ctx.runMutation(components.betterAuth.adapter.create, {
+        input: {
+          model: "invitation",
+          data: {
+            organizationId: args.organizationId,
+            email,
+            role: membershipRole,
+            status: "pending",
+            expiresAt,
+            createdAt: now,
+            inviterId: adminId,
+          },
+        },
+      })) as InvitationRow;
+      invitationId = getRecordId(created);
+      if (!invitationId) throw new Error("Failed to create invitation.");
+    }
 
     const existingUser = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
       model: "user",
@@ -1666,7 +1701,6 @@ export const inviteUserAdmin = mutation({
       });
     }
 
-    const invitationId = getRecordId(created);
     if (existingUserId) {
       await markInvitationAccepted(ctx, invitationId);
     }
@@ -1720,7 +1754,7 @@ export const resendInviteAdmin = mutation({
     await ctx.runMutation(components.betterAuth.adapter.updateOne, {
       input: {
         model: "invitation",
-        where: [{ field: "email", value: invite.email }],
+        where: [{ field: "_id", value: args.invitationId }],
         update: {
           status: "pending",
           createdAt: now,
