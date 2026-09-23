@@ -8,15 +8,18 @@ import { EventArtifactUploadField } from "@/components/files/file-upload-field";
 import {
   FilmSlateIcon,
   GearIcon,
+  CameraIcon,
   ClockIcon,
   MegaphoneIcon,
   PackageIcon,
   PaintBrushIcon,
   PlusIcon,
+  QuestionIcon,
   SpeakerHighIcon,
   TrashIcon,
   TruckIcon,
   UserPlusIcon,
+  VideoCameraIcon,
   WrenchIcon,
   type Icon,
 } from "@phosphor-icons/react";
@@ -153,7 +156,15 @@ function EventArtifactAttachment({
 type EventType = "Crewed Event" | "Rental with Crew" | "Dry Hire" | "Services Only";
 type StoredEventType = EventType | "Dry Rental";
 type RentalFulfillmentMode = "delivery" | "will_call";
-type EventTeam = "Design" | "Marketing" | "Lighting" | "Sound" | "Operations";
+type EventTeam =
+  | "Design"
+  | "Photography"
+  | "Videography"
+  | "Sound"
+  | "Lighting"
+  | "Promotion"
+  | "Trivia"
+  | "Operations";
 type ShiftDraft = {
   id?: Id<"eventCrewShifts">;
   scheduleBlockId?: Id<"eventScheduleBlocks">;
@@ -171,7 +182,16 @@ type ShiftDraft = {
 };
 
 const EVENT_TYPES: EventType[] = ["Crewed Event", "Rental with Crew", "Dry Hire", "Services Only"];
-const EVENT_TEAMS: EventTeam[] = ["Design", "Marketing", "Lighting", "Sound", "Operations"];
+const EVENT_TEAMS: EventTeam[] = [
+  "Design",
+  "Photography",
+  "Videography",
+  "Sound",
+  "Lighting",
+  "Promotion",
+  "Trivia",
+  "Operations",
+];
 const EVENT_TYPE_ICONS: Record<EventType, Icon> = {
   "Crewed Event": FilmSlateIcon,
   "Rental with Crew": TruckIcon,
@@ -180,9 +200,12 @@ const EVENT_TYPE_ICONS: Record<EventType, Icon> = {
 };
 const TEAM_ICONS: Record<EventTeam, Icon> = {
   Design: PaintBrushIcon,
-  Marketing: MegaphoneIcon,
-  Lighting: GearIcon,
+  Photography: CameraIcon,
+  Videography: VideoCameraIcon,
   Sound: SpeakerHighIcon,
+  Lighting: GearIcon,
+  Promotion: MegaphoneIcon,
+  Trivia: QuestionIcon,
   Operations: WrenchIcon,
 };
 

@@ -42,6 +42,7 @@ import {
   bookingDeclineReasonCodeValue,
   recordEventRequestStatusTransition,
 } from "./lib/statusTransitions";
+import type { EventTeam } from "./lib/eventTeams";
 
 const BOOKING_REQUEST_SETTINGS_KEY = "default";
 
@@ -225,8 +226,8 @@ async function generateUniquePublicToken(ctx: MutationCtx) {
 function mapServicesToTeams(
   crewOrRental: string | undefined,
   servicesNeeded: string[],
-): Array<"Design" | "Marketing" | "Lighting" | "Sound" | "Operations"> {
-  const teams = new Set<"Design" | "Marketing" | "Lighting" | "Sound" | "Operations">();
+): EventTeam[] {
+  const teams = new Set<EventTeam>();
   const normalizedCrewOrRental = (crewOrRental ?? "").trim();
   if (normalizedCrewOrRental === "Crewed") teams.add("Operations");
   for (const service of servicesNeeded) {
@@ -235,7 +236,7 @@ function mapServicesToTeams(
     if (service === "Sound") teams.add("Sound");
     if (service === "Lighting") teams.add("Lighting");
     if (service === "Staging") teams.add("Operations");
-    if (service === "Collaboration") teams.add("Marketing");
+    if (service === "Collaboration") teams.add("Design");
     if (service === "Scheduling") teams.add("Operations");
   }
   return Array.from(teams);

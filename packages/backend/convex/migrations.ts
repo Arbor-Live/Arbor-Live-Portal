@@ -14,6 +14,11 @@ import {
   isRequestReferenceId,
 } from "./lib/publicReferenceIds";
 import { legacyTeamsToMembership } from "./lib/userVerticals";
+import {
+  LEGACY_MARKETING_EVENT_TEAM,
+  eventTeamsAreCurrent,
+  migrateEventTeams,
+} from "./lib/eventTeams";
 import { consolidatePackageIntoOneIncludedUnit } from "./lib/packageContentMigration";
 import { normalizeCrewLineLabel } from "./lib/normalizeCrewLineLabel";
 
@@ -561,6 +566,40 @@ export const dropCrewOnboardingOseHiringForm = migrations.define({
   },
 });
 
+/** Rename the retired "Marketing" event team to "Promotion" on events. */
+export const migrateEventTeamsMarketingToPromotionOnEvents = migrations.define({
+  table: "events",
+  migrateOne: async (ctx, event) => {
+    if (!event.teamsInterested?.length) return;
+    let teamsInterested = migrateEventTeams(event.teamsInterested) ?? [];
+    // Legacy "Marketing" also gated poster work; keep events that already have a
+    // poster design on the design board by tagging them "Design" too.
+    if (
+      event.teamsInterested.includes(LEGACY_MARKETING_EVENT_TEAM) &&
+      !teamsInterested.includes("Design")
+    ) {
+      const design = await ctx.db
+        .query("eventMarketingDesigns")
+        .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
+        .first();
+      if (design) teamsInterested = [...teamsInterested, "Design"];
+    }
+    if (eventTeamsAreCurrent(event.teamsInterested, teamsInterested)) return;
+    return { teamsInterested, updatedAt: Date.now() };
+  },
+});
+
+/** Rename the retired "Marketing" event team to "Promotion" on event series. */
+export const migrateEventTeamsMarketingToPromotionOnEventSeries = migrations.define({
+  table: "eventSeries",
+  migrateOne: async (_ctx, series) => {
+    if (!series.teamsInterested?.length) return;
+    const teamsInterested = migrateEventTeams(series.teamsInterested) ?? [];
+    if (eventTeamsAreCurrent(series.teamsInterested, teamsInterested)) return;
+    return { teamsInterested, updatedAt: Date.now() };
+  },
+});
+
 /**
  * never reorder or remove completed ones (reset requires an explicit reset:true).
  */
@@ -587,6 +626,8 @@ const MIGRATION_SERIES = [
   internal.migrations.migrateBandApplicationArtistTypeToOrganizationType,
   internal.migrations.backfillInvoiceArtistLineEvents,
   internal.migrations.dropCrewOnboardingOseHiringForm,
+  internal.migrations.migrateEventTeamsMarketingToPromotionOnEvents,
+  internal.migrations.migrateEventTeamsMarketingToPromotionOnEventSeries,
 ] as const;
 
 export const runAll = migrations.runner([...MIGRATION_SERIES]);
