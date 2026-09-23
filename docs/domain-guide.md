@@ -63,11 +63,12 @@ canonical description of the domain itself.
   (see `userVerticals.ts` and `userAdminProfiles`).
 - **Participation flags** on `userAdminProfiles` (missing ⇒ crew defaults):
   `requiresOnboarding`, `includeInTimecards`, `assignableAsCrew`,
-  `weeklyDigest`, plus existing
+  `weeklyDigest`, `damageReportEmails`, plus existing
   `showOnPublicCrewPage`. Advisors/supervisors use the **Advisor** invite
   preset (no compensation/payroll required): skips crew onboarding, hides from
-  timecard overview and assignable-crew pickers, and stays off the public
-  `/crew` page. Flags remain editable per user in Users admin.
+  timecard overview and assignable-crew pickers, stays off the public
+  `/crew` page, and is omitted from Operations damage-report emails. Flags
+  remain editable per user in Users admin.
 - **Weekly pending-activity digest** (`email/weeklyDigest.ts`, run by the
   Monday `weeklyJobs` cron): Arbor staff get pending availability, shifts that
   week, timecards, and post-event work for events they crewed or led (review +

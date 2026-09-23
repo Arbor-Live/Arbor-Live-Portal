@@ -160,6 +160,7 @@ function userValuesFromRow(user: AdminUser, resolvedOrgId: string): UserAdminRow
     includeInTimecards: user.includeInTimecards ?? true,
     assignableAsCrew: user.assignableAsCrew ?? true,
     weeklyDigest: user.weeklyDigest ?? true,
+    damageReportEmails: user.damageReportEmails ?? true,
     showOnPublicCrewPage: user.showOnPublicCrewPage ?? false,
     publicCrewDescription: user.publicCrewDescription ?? "",
     title: user.title || "",
@@ -874,6 +875,7 @@ function UserAdminRow({
       includeInTimecards: values.includeInTimecards,
       assignableAsCrew: values.assignableAsCrew,
       weeklyDigest: values.weeklyDigest,
+      damageReportEmails: values.damageReportEmails,
       showOnPublicCrewPage: values.showOnPublicCrewPage,
       publicCrewDescription: values.publicCrewDescription || undefined,
       title: values.title || undefined,
@@ -1231,6 +1233,16 @@ function UserAdminRow({
                       }
                     />
                     Weekly pending-activity digest
+                  </label>
+                  <label className="flex items-center gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={form.watch("damageReportEmails")}
+                      onChange={(e) =>
+                        form.setValue("damageReportEmails", e.target.checked, { shouldDirty: true })
+                      }
+                    />
+                    Damage report emails
                   </label>
                 </div>
               </div>

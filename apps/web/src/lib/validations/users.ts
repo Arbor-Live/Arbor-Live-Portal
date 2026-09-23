@@ -35,6 +35,7 @@ export const userAdminRowSchema = z
     includeInTimecards: z.boolean(),
     assignableAsCrew: z.boolean(),
     weeklyDigest: z.boolean(),
+    damageReportEmails: z.boolean(),
     showOnPublicCrewPage: z.boolean(),
     publicCrewDescription: z.string(),
     title: z.string(),
