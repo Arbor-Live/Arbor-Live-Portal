@@ -52,15 +52,22 @@ canonical description of the domain itself.
   application email once every required field passes the send gate), or
   `converted` (invite into Arbor Live via the normal member invite path →
   `/accept-invite` → crew onboarding). Crew applicants pick a vertical
-  (`Operations` / `Crew` / `Trivia` / `Marketing`); Crew also picks specialty
-  (`Sound` / `Lights` / `Design` / unsure) and Fri/Sat standing availability
-  (5pm–midnight PT) as a scheduling preference only — not auto-matched to shifts.
+  (`Operations` / `Crew` / `Trivia` / `Marketing`); Crew and Marketing also pick
+  a specialty — Crew: `Sound` / `Lights` / `Photography` / `Videography`,
+  Marketing: `Design` / `Photography` / `Videography` (each with unsure) — and
+  Crew picks Fri/Sat standing availability (5pm–midnight PT) as a scheduling
+  preference only — not auto-matched to shifts.
 - Local UI iteration: `?devPreview=1` (Dev menu) re-opens setup/onboarding
   wizards without redirect — development builds only; see
   [getting-started.md](getting-started.md#dev-preview-wizards).
 - Staff capabilities/teams: verticals `Operations`, `Crew`, `Trivia`,
-  `Marketing` with Crew disciplines `Sound`, `Lights`, `Design`
-  (see `userVerticals.ts` and `userAdminProfiles`).
+  `Marketing`. Specialties are scoped per vertical (`DISCIPLINES_BY_VERTICAL`):
+  Crew — `Sound`, `Lights`, `Photography`, `Videography`; Marketing — `Design`,
+  `Photography`, `Videography`; Operations and Trivia have none. Only **crew
+  specialties** (`CREW_DISCIPLINES`: Sound/Lights/Photography/Videography) fill
+  event availability and appear as eligible crew; Design (Marketing-only) and
+  the specialty-less verticals are excluded (see `userVerticals.ts` and
+  `userAdminProfiles`).
 - **Participation flags** on `userAdminProfiles` (missing ⇒ crew defaults):
   `requiresOnboarding`, `includeInTimecards`, `assignableAsCrew`,
   `weeklyDigest`, `damageReportEmails`, plus existing

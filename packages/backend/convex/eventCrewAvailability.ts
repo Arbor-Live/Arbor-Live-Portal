@@ -17,7 +17,8 @@ import {
 import { normalizeEventStatus } from "./lib/eventStatus";
 import {
   getDisciplinesForEventMatching,
-  isStaffMember,
+  hasCrewSpecialty,
+  profileHasCrewSpecialty,
   resolveProfileMembership,
 } from "./lib/userVerticals";
 import { resolveParticipationFlags } from "./lib/userParticipation";
@@ -93,7 +94,7 @@ async function getActiveCrewProfiles(ctx: QueryCtx) {
     .take(500);
   return profiles.filter((profile) => {
     if (!resolveParticipationFlags(profile).assignableAsCrew) return false;
-    return isStaffMember(resolveProfileMembership(profile));
+    return hasCrewSpecialty(resolveProfileMembership(profile).disciplines);
   });
 }
 
@@ -401,6 +402,7 @@ export const listForCrewMember = query({
     const userId = getUserId(user);
 
     const profile = await getCurrentUserProfile(ctx, userId);
+    if (!profileHasCrewSpecialty(profile ?? {})) return [];
     const userDisciplines = getDisciplinesForEventMatching(
       resolveProfileMembership(profile ?? {}).disciplines,
     );
@@ -518,6 +520,7 @@ export const getMyPendingAvailabilityCount = query({
     const userId = getUserId(user);
 
     const profile = await getCurrentUserProfile(ctx, userId);
+    if (!profileHasCrewSpecialty(profile ?? {})) return 0;
     const userDisciplines = getDisciplinesForEventMatching(
       resolveProfileMembership(profile ?? {}).disciplines,
     );
@@ -584,6 +587,9 @@ export const getEventForCrewResponse = query({
     if (!bundle) return null;
 
     const profile = await getCurrentUserProfile(ctx, userId);
+    if (!profileHasCrewSpecialty(profile ?? {})) {
+      throw new Error("Availability is limited to crew specialties.");
+    }
     const userDisciplines = getDisciplinesForEventMatching(
       resolveProfileMembership(profile ?? {}).disciplines,
     );
@@ -775,6 +781,9 @@ export const submitResponse = mutation({
     }
 
     const profile = await getCurrentUserProfile(ctx, userId);
+    if (!profileHasCrewSpecialty(profile ?? {})) {
+      throw new Error("Availability is limited to crew specialties.");
+    }
     const userDisciplines = getDisciplinesForEventMatching(
       resolveProfileMembership(profile ?? {}).disciplines,
     );

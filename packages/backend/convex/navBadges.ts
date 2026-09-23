@@ -17,6 +17,7 @@ import {
 } from "./lib/crewTeams";
 import {
   getDisciplinesForEventMatching,
+  profileHasCrewSpecialty,
   resolveProfileMembership,
 } from "./lib/userVerticals";
 import { countPendingPostEventWork, listMyPostEventWork } from "./lib/myEventActions";
@@ -145,6 +146,7 @@ async function getCurrentUserProfile(ctx: QueryCtx, userId: string) {
 
 async function countMyPendingAvailability(ctx: QueryCtx, userId: string, now: number) {
   const profile = await getCurrentUserProfile(ctx, userId);
+  if (!profileHasCrewSpecialty(profile ?? {})) return 0;
   const userDisciplines = getDisciplinesForEventMatching(
     resolveProfileMembership(profile ?? {}).disciplines,
   );

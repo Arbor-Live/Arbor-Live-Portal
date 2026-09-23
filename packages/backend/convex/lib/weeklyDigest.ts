@@ -12,6 +12,7 @@ import { resolveParticipationFlags } from "./userParticipation";
 import {
   getDisciplinesForEventMatching,
   isStaffMember,
+  profileHasCrewSpecialty,
   resolveProfileMembership,
 } from "./userVerticals";
 import { buildUserTimecards } from "./userTimecards";
@@ -73,6 +74,7 @@ async function buildAvailabilitySection(
   profile: Doc<"userAdminProfiles"> | null,
   now: number,
 ): Promise<WeeklyDigestSection | null> {
+  if (!profileHasCrewSpecialty(profile ?? {})) return null;
   const disciplines = getDisciplinesForEventMatching(
     resolveProfileMembership(profile ?? {}).disciplines,
   );

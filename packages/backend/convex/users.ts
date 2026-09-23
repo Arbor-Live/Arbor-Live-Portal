@@ -42,6 +42,7 @@ import {
   releaseR2KeysIfUnreferenced,
 } from "./lib/r2Lifecycle";
 import {
+  assertDisciplinesMatchVerticals,
   resolveProfileMembership,
   userDisciplineValue,
   userVerticalValue,
@@ -1594,6 +1595,9 @@ export const inviteUserAdmin = mutation({
     if (!adminId) throw new Error("Unable to resolve current admin user.");
     const email = args.email.trim().toLowerCase();
     if (!email) throw new Error("Email is required.");
+    if (args.verticals !== undefined || args.disciplines !== undefined) {
+      assertDisciplinesMatchVerticals(args.verticals ?? [], args.disciplines ?? []);
+    }
     const now = Date.now();
     const expiresAt = now + 14 * 24 * 60 * 60 * 1000;
 
@@ -1921,6 +1925,10 @@ export const updateInviteAdmin = mutation({
       throw new Error("Invitation is missing required details.");
     }
 
+    if (args.verticals !== undefined || args.disciplines !== undefined) {
+      assertDisciplinesMatchVerticals(args.verticals ?? [], args.disciplines ?? []);
+    }
+
     const nextRole = await normalizeMembershipRole(
       ctx,
       invite.organizationId,
@@ -1984,6 +1992,9 @@ export const createUserAdmin = mutation({
     const email = args.email.trim().toLowerCase();
     if (!email) throw new Error("Email is required.");
     if (args.tempPassword.length < 8) throw new Error("Temporary password must be at least 8 characters.");
+    if (args.verticals !== undefined || args.disciplines !== undefined) {
+      assertDisciplinesMatchVerticals(args.verticals ?? [], args.disciplines ?? []);
+    }
     const now = Date.now();
 
     const crewInvite = await assertArborCrewInviteCompensation(ctx, args.organizationId, {
@@ -2203,6 +2214,12 @@ export const updateUserAdmin = mutation({
     const existingMembership = existingProfile
       ? resolveProfileMembership(existingProfile)
       : { verticals: [], disciplines: [] };
+    if (args.verticals !== undefined || args.disciplines !== undefined) {
+      assertDisciplinesMatchVerticals(
+        args.verticals ?? existingMembership.verticals,
+        args.disciplines ?? existingMembership.disciplines,
+      );
+    }
     await ensureUserProfileDefaults(ctx, args.userId, {
       title: args.title?.trim() ?? existingProfile?.title,
       phone: args.phone ?? existingProfile?.phone,

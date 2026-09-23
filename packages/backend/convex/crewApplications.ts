@@ -16,6 +16,8 @@ import {
   type TraineePresenceMode,
 } from "./lib/crewTraineeIntro";
 import {
+  DISCIPLINES_BY_VERTICAL,
+  assertDisciplinesMatchVerticals,
   userDisciplineValue,
   userVerticalValue,
   type UserDiscipline,
@@ -64,8 +66,17 @@ const crewDisciplineValue = v.union(
   v.literal("Sound"),
   v.literal("Lights"),
   v.literal("Design"),
+  v.literal("Photography"),
+  v.literal("Videography"),
   v.literal("unsure"),
 );
+
+type CrewApplicationDiscipline = UserDiscipline | "unsure";
+
+/** Verticals whose applicants pick a specialty. */
+function verticalRequiresDiscipline(vertical: UserVertical): boolean {
+  return DISCIPLINES_BY_VERTICAL[vertical].length > 0;
+}
 
 const availabilityDayValue = v.union(v.literal("friday"), v.literal("saturday"));
 
@@ -122,11 +133,14 @@ async function scheduleApplicationReceivedEmails(
 
 function defaultVerticalsAndDisciplines(application: {
   vertical: UserVertical;
-  discipline?: "Sound" | "Lights" | "Design" | "unsure";
+  discipline?: CrewApplicationDiscipline;
 }): { verticals: UserVertical[]; disciplines: UserDiscipline[] } {
   const verticals: UserVertical[] = [application.vertical];
+  const allowed = DISCIPLINES_BY_VERTICAL[application.vertical] as readonly string[];
   const disciplines: UserDiscipline[] =
-    application.discipline && application.discipline !== "unsure"
+    application.discipline &&
+    application.discipline !== "unsure" &&
+    allowed.includes(application.discipline)
       ? [application.discipline]
       : [];
   return { verticals, disciplines };
@@ -160,16 +174,24 @@ export const submitPublic = mutation({
       throw new Error("Use a @stanford.edu email address.");
     }
 
-    if (args.vertical === "Crew") {
+    const specialtyRequired = verticalRequiresDiscipline(args.vertical);
+    if (specialtyRequired) {
       if (!args.discipline) {
-        throw new Error("Select a crew specialty, or “I’m not sure”.");
+        throw new Error("Select a specialty, or “I’m not sure”.");
       }
+      const allowed = DISCIPLINES_BY_VERTICAL[args.vertical] as readonly string[];
+      if (args.discipline !== "unsure" && !allowed.includes(args.discipline)) {
+        throw new Error(`Specialty ${args.discipline} is not available for ${args.vertical}.`);
+      }
+    } else if (args.discipline) {
+      throw new Error("Specialty applies only when the vertical has specialties.");
+    }
+
+    if (args.vertical === "Crew") {
       const days = [...new Set(args.crewAvailabilityDays ?? [])];
       if (days.length === 0) {
         throw new Error("Select at least one availability day (Friday and/or Saturday).");
       }
-    } else if (args.discipline) {
-      throw new Error("Specialty applies only when vertical is Crew.");
     }
 
     if (args.stanfordPosition !== "other") {
@@ -189,7 +211,7 @@ export const submitPublic = mutation({
       phone,
       heardAboutUs,
       vertical: args.vertical,
-      discipline: args.vertical === "Crew" ? args.discipline : undefined,
+      discipline: specialtyRequired ? args.discipline : undefined,
       crewAvailabilityDays:
         args.vertical === "Crew"
           ? [...new Set(args.crewAvailabilityDays ?? [])]
@@ -535,6 +557,7 @@ export const convertToMember = mutation({
     const defaults = defaultVerticalsAndDisciplines(application);
     const verticals = args.verticals ?? defaults.verticals;
     const disciplines = args.disciplines ?? defaults.disciplines;
+    assertDisciplinesMatchVerticals(verticals, disciplines);
 
     const arborOrg = await resolveOrCreateOrganization(ctx, "Arbor Live");
     const email = normalizeEmail(application.email);
