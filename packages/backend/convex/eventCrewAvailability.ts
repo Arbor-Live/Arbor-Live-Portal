@@ -97,7 +97,7 @@ async function getActiveCrewProfiles(ctx: QueryCtx) {
   });
 }
 
-function countEligibleCrewForEvent(
+function eligibleCrewProfilesForEvent(
   eventTeams: string[] | undefined,
   profiles: Doc<"userAdminProfiles">[],
 ) {
@@ -106,7 +106,7 @@ function countEligibleCrewForEvent(
       eventTeams,
       getDisciplinesForEventMatching(resolveProfileMembership(profile).disciplines),
     ),
-  ).length;
+  );
 }
 
 function computeShiftStats(shifts: Doc<"eventCrewShifts">[]) {
@@ -252,6 +252,7 @@ export const listForAdminOverview = query({
       }),
       responders: v.array(responsePersonValue),
       assignedCrew: v.array(userSummaryValue),
+      pendingCrew: v.array(userSummaryValue),
     }),
   ),
   handler: async (ctx, args) => {
@@ -275,16 +276,21 @@ export const listForAdminOverview = query({
           .query("eventCrewAvailabilityResponses")
           .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
           .take(500);
-        return { event, shifts, responses };
+        const eligibleProfiles = eligibleCrewProfilesForEvent(
+          event.teamsInterested,
+          crewProfiles,
+        );
+        return { event, shifts, responses, eligibleProfiles };
       }),
     );
 
     const allUserIds = Array.from(
       new Set(
         bundles
-          .flatMap(({ shifts, responses }) => [
+          .flatMap(({ shifts, responses, eligibleProfiles }) => [
             ...shifts.map((shift) => shift.userId?.trim()).filter(Boolean),
             ...responses.map((response) => response.userId),
+            ...eligibleProfiles.map((profile) => profile.userId),
           ])
           .filter((userId): userId is string => Boolean(userId)),
       ),
@@ -293,11 +299,19 @@ export const listForAdminOverview = query({
     const imageByUserId = await buildUserProfileImageByUserId(ctx, allUserIds, userByKey);
 
     const rows = await Promise.all(
-      bundles.map(async ({ event, shifts, responses }) => {
+      bundles.map(async ({ event, shifts, responses, eligibleProfiles }) => {
       const shiftStats = computeShiftStats(shifts);
       const responseCounts = aggregateResponses(responses);
-      const eligibleCrew = countEligibleCrewForEvent(event.teamsInterested, crewProfiles);
-      const pending = Math.max(0, eligibleCrew - responseCounts.responded);
+      const eligibleCrew = eligibleProfiles.length;
+      const respondedUserIds = new Set(responses.map((response) => response.userId));
+      const pendingUserIds = Array.from(
+        new Set(
+          eligibleProfiles
+            .map((profile) => profile.userId?.trim())
+            .filter((userId): userId is string => Boolean(userId) && !respondedUserIds.has(userId)),
+        ),
+      );
+      const pending = pendingUserIds.length;
 
       const assignedUserIds = Array.from(
         new Set(
@@ -329,6 +343,9 @@ export const listForAdminOverview = query({
           includePrivateStatuses: true,
         }),
         assignedCrew: assignedUserIds.map((userId) =>
+          toUserSummary(userId, userByKey, imageByUserId),
+        ),
+        pendingCrew: pendingUserIds.map((userId) =>
           toUserSummary(userId, userByKey, imageByUserId),
         ),
       };

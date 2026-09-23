@@ -33,6 +33,7 @@ test.describe("crew scheduling board", () => {
 
     await page.goto("/dashboard/events/crew-scheduling");
     await expect(page.getByText("Date range").first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText("Pending by crew")).toBeVisible({ timeout: 30_000 });
 
     // `seedCrewedEventWithSchedule` lands exactly 16 days out, past the default
     // 2-week window. Bracket that single day so the board stays short even as
