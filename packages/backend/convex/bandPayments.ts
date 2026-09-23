@@ -1055,51 +1055,76 @@ export const cancelPayment = mutation({
   },
 });
 
+const PROMOTE_ENDED_PAYMENTS_BATCH = 200;
+const promotionStatusValue = v.union(
+  v.literal("draft"),
+  v.literal("pending_onboarding"),
+  v.literal("pending_payee"),
+);
+
 export const promoteEndedPayments = internalMutation({
   args: {},
   returns: v.number(),
-  handler: async (ctx) => {
-    const now = Date.now();
-    const drafts = await ctx.db
-      .query("eventBandPayments")
-      .withIndex("by_status", (q) => q.eq("status", "draft"))
-      .take(500);
-    let promoted = 0;
-    for (const payment of drafts) {
-      const event = await ctx.db.get(payment.eventId);
-      if (!event || !shouldPromoteBandPaymentToQueue(event, now)) continue;
-      const onboardingComplete = await isOrganizationBandOnboardingComplete(
-        ctx,
-        payment.organizationId,
-      );
-      const payeeSnapshot = await refreshPayeeSnapshot(ctx, payment.organizationId);
-      const nextStatus = queueStatusForEndedEvent({
-        onboardingComplete,
-        payeeComplete: payeeSnapshot.payeeComplete,
-      });
-      await ctx.db.patch(payment._id, {
-        designatedPayeeName: payeeSnapshot.designatedPayeeName,
-        designatedPayeeEmail: payeeSnapshot.designatedPayeeEmail,
-        designatedPayeeUserId: payeeSnapshot.designatedPayeeUserId,
-        designatedPayeeMailingAddress: payeeSnapshot.designatedPayeeMailingAddress,
-        designatedPayeePayoutMethod: payeeSnapshot.designatedPayeePayoutMethod,
-        status: nextStatus,
-        updatedAt: now,
-      });
-      if (nextStatus === "pending_payee") {
-        await ctx.scheduler.runAfter(0, internal.bandPayments.sendPayeeRequiredEmailInternal, {
-          paymentId: payment._id,
-        });
-      }
-      promoted += 1;
-    }
+  handler: async (ctx): Promise<number> => {
+    const promoted: number = await ctx.runMutation(
+      internal.bandPayments.promoteEndedPaymentsBatch,
+      {
+        status: "draft",
+        cursor: null,
+      },
+    );
+    return promoted;
+  },
+});
 
-    for (const status of ["pending_onboarding", "pending_payee"] as const) {
-      const rows = await ctx.db
-        .query("eventBandPayments")
-        .withIndex("by_status", (q) => q.eq("status", status))
-        .take(500);
-      for (const payment of rows) {
+export const promoteEndedPaymentsBatch = internalMutation({
+  args: {
+    status: promotionStatusValue,
+    cursor: v.union(v.string(), v.null()),
+  },
+  returns: v.number(),
+  handler: async (ctx, args): Promise<number> => {
+    const status = args.status;
+    const now = Date.now();
+    const page = await ctx.db
+      .query("eventBandPayments")
+      .withIndex("by_status", (q) => q.eq("status", status))
+      .paginate({
+        cursor: args.cursor ?? null,
+        numItems: PROMOTE_ENDED_PAYMENTS_BATCH,
+      });
+    let promoted = 0;
+    for (const payment of page.page) {
+      if (status === "draft") {
+        const event = await ctx.db.get(payment.eventId);
+        if (!event || !shouldPromoteBandPaymentToQueue(event, now)) continue;
+        const onboardingComplete = await isOrganizationBandOnboardingComplete(
+          ctx,
+          payment.organizationId,
+        );
+        const payeeSnapshot = await refreshPayeeSnapshot(ctx, payment.organizationId);
+        const nextStatus = queueStatusForEndedEvent({
+          onboardingComplete,
+          payeeComplete: payeeSnapshot.payeeComplete,
+        });
+        await ctx.db.patch(payment._id, {
+          designatedPayeeName: payeeSnapshot.designatedPayeeName,
+          designatedPayeeEmail: payeeSnapshot.designatedPayeeEmail,
+          designatedPayeeUserId: payeeSnapshot.designatedPayeeUserId,
+          designatedPayeeMailingAddress: payeeSnapshot.designatedPayeeMailingAddress,
+          designatedPayeePayoutMethod: payeeSnapshot.designatedPayeePayoutMethod,
+          status: nextStatus,
+          updatedAt: now,
+        });
+        if (nextStatus === "pending_payee") {
+          await ctx.scheduler.runAfter(0, internal.bandPayments.sendPayeeRequiredEmailInternal, {
+            paymentId: payment._id,
+          });
+        }
+        promoted += 1;
+        continue;
+      }
+      {
         const onboardingComplete = await isOrganizationBandOnboardingComplete(
           ctx,
           payment.organizationId,
@@ -1144,6 +1169,24 @@ export const promoteEndedPayments = internalMutation({
           });
         }
       }
+    }
+
+    const nextStatus =
+      status === "draft"
+        ? "pending_onboarding"
+        : status === "pending_onboarding"
+          ? "pending_payee"
+          : null;
+    if (!page.isDone) {
+      await ctx.scheduler.runAfter(0, internal.bandPayments.promoteEndedPaymentsBatch, {
+        status,
+        cursor: page.continueCursor,
+      });
+    } else if (nextStatus) {
+      await ctx.scheduler.runAfter(0, internal.bandPayments.promoteEndedPaymentsBatch, {
+        status: nextStatus,
+        cursor: null,
+      });
     }
 
     return promoted;

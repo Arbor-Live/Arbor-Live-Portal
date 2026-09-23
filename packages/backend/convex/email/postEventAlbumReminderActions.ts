@@ -17,10 +17,16 @@ export const deliverForEvent = internalAction({
     await ctx.runAction(internal.immichActions.ensureEventAlbumBestEffort, {
       eventId: args.eventId,
     });
-    await ctx.runMutation(internal.email.postEventAlbumReminders.enqueueForEvent, {
-      eventId: args.eventId,
-      todayKey: args.todayKey,
-    });
+    const result: { enqueuedCount: number; skippedClientAlbumCount: number } =
+      await ctx.runMutation(internal.email.postEventAlbumReminders.enqueueForEvent, {
+        eventId: args.eventId,
+        todayKey: args.todayKey,
+      });
+    if (result.skippedClientAlbumCount > 0) {
+      console.error(
+        `[postEventAlbumReminders] skipped ${result.skippedClientAlbumCount} client album email(s) for event ${args.eventId}: no album share URL resolved.`,
+      );
+    }
     return null;
   },
 });
