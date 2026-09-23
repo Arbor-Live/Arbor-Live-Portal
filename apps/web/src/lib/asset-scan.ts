@@ -8,6 +8,14 @@
  */
 
 const EQUIPMENT_PATH_RE = /(?:^|\/)e\/([^/?#\s]+)/i;
+const ARBOR_ST_HOST_RE = /^(?:www\.)?arbor\.st$/i;
+
+export type ParsedAssetScan = {
+  /** Best-effort asset id extracted from the scan (may still need DB lookup). */
+  assetId: string | null;
+  /** Short-link slug when the input was arbor.st/{slug} without an /e/ path. */
+  shortLinkSlug: string | null;
+};
 
 function stripNoise(value: string): string {
   return value
@@ -37,6 +45,16 @@ export function canonicalizeAssetIdTag(tag: string): string {
   return trimmed;
 }
 
+function extractEquipmentIdFromPath(pathname: string): string | null {
+  const match = pathname.match(EQUIPMENT_PATH_RE);
+  if (!match?.[1]) return null;
+  try {
+    return decodeURIComponent(match[1]).trim() || null;
+  } catch {
+    return match[1].trim() || null;
+  }
+}
+
 function tryParseUrl(raw: string): URL | null {
   const trimmed = raw.trim();
   try {
@@ -52,31 +70,54 @@ function tryParseUrl(raw: string): URL | null {
   return null;
 }
 
-/** Best-effort bare assetId from any scan input (URL, /e/{id}, bare tag). */
-export function normalizeAssetScanInput(raw: string): string | null {
+/** Parses any scan input into a bare assetId and/or an arbor.st short-link slug. */
+export function parseAssetScanInput(raw: string): ParsedAssetScan {
   const trimmed = stripNoise(raw);
-  if (!trimmed) return null;
+  if (!trimmed) {
+    return { assetId: null, shortLinkSlug: null };
+  }
 
   const url = tryParseUrl(trimmed);
   if (url) {
-    const match = url.pathname.match(EQUIPMENT_PATH_RE);
-    const fromPath = match?.[1];
+    const fromPath = extractEquipmentIdFromPath(url.pathname);
     if (fromPath) {
-      try {
-        return canonicalizeAssetIdTag(stripNoise(decodeURIComponent(fromPath))) || null;
-      } catch {
-        return canonicalizeAssetIdTag(stripNoise(fromPath)) || null;
+      return {
+        assetId: canonicalizeAssetIdTag(stripNoise(fromPath)),
+        shortLinkSlug: null,
+      };
+    }
+
+    if (ARBOR_ST_HOST_RE.test(url.hostname)) {
+      const slug = url.pathname.replace(/^\/+|\/+$/g, "").split("/")[0] ?? "";
+      if (slug && !slug.includes(".")) {
+        try {
+          return { assetId: null, shortLinkSlug: decodeURIComponent(slug) };
+        } catch {
+          return { assetId: null, shortLinkSlug: slug };
+        }
       }
     }
-    return null;
+
+    return { assetId: null, shortLinkSlug: null };
   }
 
-  const pathOnly = trimmed.match(EQUIPMENT_PATH_RE);
-  if (pathOnly?.[1]) {
-    return canonicalizeAssetIdTag(stripNoise(pathOnly[1])) || null;
+  const pathOnly = extractEquipmentIdFromPath(trimmed);
+  if (pathOnly) {
+    return {
+      assetId: canonicalizeAssetIdTag(stripNoise(pathOnly)),
+      shortLinkSlug: null,
+    };
   }
 
-  return canonicalizeAssetIdTag(stripNoise(trimmed)) || null;
+  return {
+    assetId: canonicalizeAssetIdTag(stripNoise(trimmed)),
+    shortLinkSlug: null,
+  };
+}
+
+/** Best-effort bare assetId from any scan input (URL, /e/{id}, bare tag). */
+export function normalizeAssetScanInput(raw: string): string | null {
+  return parseAssetScanInput(raw).assetId;
 }
 
 /** Candidate bare assetIds to try (canonical form + case variants). */

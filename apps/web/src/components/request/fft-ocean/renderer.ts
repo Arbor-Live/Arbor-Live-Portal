@@ -2,7 +2,6 @@ import {
   clock,
   draw,
   effect,
-  frame,
   frameLoop,
   sampler,
   surface,
@@ -522,16 +521,6 @@ function setParticleConstants(
       gain: colors.gain,
     },
   });
-}
-
-export function renderAt(
-  gpu: Gpu,
-  graph: OceanGraph,
-  output: Target,
-  time: number
-): void {
-  setDynamics(graph, time);
-  frame(gpu, (currentFrame) => renderGraph(currentFrame, graph, output));
 }
 
 export function renderGraph(

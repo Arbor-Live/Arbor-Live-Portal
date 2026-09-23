@@ -2317,35 +2317,6 @@ export const setCompensationRate = mutation({
   },
 });
 
-/** @deprecated Prefer setCompensationRate with rateMode. */
-export const setHourlyRate = mutation({
-  args: {
-    userId: v.string(),
-    hourlyRateUsd: v.number(),
-  },
-  handler: async (ctx, args) => {
-    const adminUser = await requireAdmin(ctx);
-    return await upsertUserCompensationRate(ctx, {
-      userId: args.userId,
-      rateMode: "custom",
-      hourlyRateUsd: args.hourlyRateUsd,
-      updatedByUserId: getUserId(adminUser) || undefined,
-    });
-  },
-});
-
-export const setPayrollMethod = mutation({
-  args: {
-    userId: v.string(),
-    payrollMethod: payrollMethodValue,
-  },
-  handler: async (ctx, args) => {
-    await requireAdmin(ctx);
-    await applyPayrollMethodToProfile(ctx, args.userId, args.payrollMethod);
-    return { ok: true };
-  },
-});
-
 export const addUserOrganizationMembershipAdmin = mutation({
   args: {
     userId: v.string(),

@@ -74,10 +74,6 @@ export function marketingLinkIconLabel(id: string | undefined | null): string {
   return normalized.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/Logo$/, "").trim() || normalized;
 }
 
-export function isMarketingLinkIconId(value: string | undefined | null): boolean {
-  return Boolean(normalizeMarketingLinkIconId(value));
-}
-
 export function getMarketingLinkIcon(id: string | undefined | null): MarketingLinkIconDef {
   const normalized = normalizeMarketingLinkIconId(id) ?? "LinkSimple";
   const featured = FEATURED_MARKETING_LINK_ICONS.find((icon) => icon.id === normalized);

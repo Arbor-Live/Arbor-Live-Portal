@@ -45,11 +45,3 @@ export function getWidgetsForDisciplines(disciplines: UserDiscipline[]): CrewWid
     return widget.disciplines.some((discipline) => disciplines.includes(discipline));
   });
 }
-
-/** @deprecated Use getWidgetsForDisciplines */
-export function getWidgetsForTeams(teams: string[]): CrewWidget[] {
-  const disciplines = teams.filter((team): team is UserDiscipline =>
-    team === "Sound" || team === "Lights" || team === "Design",
-  );
-  return getWidgetsForDisciplines(disciplines);
-}

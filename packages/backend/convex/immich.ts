@@ -7,12 +7,11 @@ import {
   getAlbumLinkForBand,
   getAlbumLinkForEvent,
   getAlbumLinkIdsForEntity,
-  requireAssetAccess,
   requireBandAlbumAccess,
   requireEventMediaAccess,
 } from "./lib/immichAccess";
 import { buildImmichAlbumUrl, buildSharedAssetUrl, getImmichPublicBaseUrl } from "./lib/immichClient";
-import { requireArborInternalContext, requireAuth, requireBandContext } from "./lib/auth";
+import { requireBandContext } from "./lib/auth";
 
 const entityTypeValue = v.union(v.literal("band"), v.literal("event"));
 const assetTypeValue = v.union(v.literal("IMAGE"), v.literal("VIDEO"));
@@ -149,42 +148,6 @@ export const listEventMedia = query({
   },
 });
 
-export const verifyAssetAccess = query({
-  args: { immichAssetId: v.string() },
-  returns: v.boolean(),
-  handler: async (ctx, args) => {
-    try {
-      await requireAssetAccess(ctx, args.immichAssetId);
-      return true;
-    } catch {
-      return false;
-    }
-  },
-});
-
-export const getUploadTarget = query({
-  args: {
-    targetType: entityTypeValue,
-    targetId: v.string(),
-  },
-  returns: v.union(albumLinkValidator, v.null()),
-  handler: async (ctx, args) => {
-    await requireAuth(ctx);
-    const albumLink =
-      args.targetType === "band"
-        ? await getAlbumLinkForBand(ctx, args.targetId)
-        : await getAlbumLinkForEvent(ctx, args.targetId as Id<"events">);
-    if (!albumLink) return null;
-    await canUploadToAlbum(ctx, albumLink);
-    return {
-      albumLinkId: albumLink._id,
-      immichAlbumId: albumLink.immichAlbumId,
-      albumName: albumLink.albumName,
-      albumUrl: buildImmichAlbumUrl(albumLink.immichAlbumId),
-    };
-  },
-});
-
 export const getUploadConfig = query({
   args: {
     targetType: entityTypeValue,
@@ -221,20 +184,6 @@ export const getUploadConfig = query({
   },
 });
 
-export const refreshAlbumMedia = mutation({
-  args: { albumLinkId: v.id("immichAlbumLinks") },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    const albumLink = await ctx.db.get(args.albumLinkId);
-    if (!albumLink) throw new Error("Album not found.");
-    await canUploadToAlbum(ctx, albumLink);
-    await ctx.scheduler.runAfter(0, internal.immichActions.syncAlbumAssets, {
-      albumLinkId: args.albumLinkId,
-    });
-    return null;
-  },
-});
-
 export const recordUploadedAsset = mutation({
   args: {
     albumLinkId: v.id("immichAlbumLinks"),
@@ -265,17 +214,6 @@ export const recordUploadedAsset = mutation({
       originalFileName: args.originalFileName,
       type: args.type,
     });
-    return null;
-  },
-});
-
-export const runBackfillAlbums = mutation({
-  args: {},
-  returns: v.null(),
-  handler: async (ctx) => {
-    await requireArborInternalContext(ctx);
-    await ctx.scheduler.runAfter(0, internal.immichActions.backfillAllAlbums, {});
-    await ctx.scheduler.runAfter(0, internal.immichDb.dedupeAllAlbumLinksInternal, {});
     return null;
   },
 });

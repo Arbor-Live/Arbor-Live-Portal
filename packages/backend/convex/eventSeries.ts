@@ -333,125 +333,6 @@ export const unlinkInvoice = mutation({
   },
 });
 
-export const updateTemplate = mutation({
-  args: {
-    id: v.id("eventSeries"),
-    scope: seriesEditScopeValue,
-    fromOccurrenceIndex: v.optional(v.number()),
-    title: v.optional(v.string()),
-    anchorStartAt: v.optional(v.number()),
-    anchorEndAt: v.optional(v.number()),
-    requiresShowWindow: v.optional(v.boolean()),
-    venueId: v.optional(v.union(v.id("venues"), v.null())),
-    venueName: v.optional(v.string()),
-    eventType: v.optional(eventTypeValue),
-    teamsInterested: v.optional(v.array(eventTeamValue)),
-    category: v.optional(v.string()),
-    hostGroupId: v.optional(v.union(v.id("invoiceGroups"), v.null())),
-    host: v.optional(v.string()),
-    additionalHostGroupIds: v.optional(v.union(v.array(v.id("invoiceGroups")), v.null())),
-    expectedTurnout: v.optional(v.number()),
-    budgetUsd: v.optional(v.number()),
-    dayOfLeadUserId: v.optional(v.string()),
-    eventManagerUserId: v.optional(v.string()),
-    rentalFulfillmentMode: v.optional(rentalFulfillmentModeValue),
-    notes: v.optional(v.string()),
-    blockTemplates: v.optional(v.array(blockTemplateValue)),
-  },
-  handler: async (ctx, args) => {
-    await requireAuth(ctx);
-    await requireArborInternalContext(ctx);
-    const series = await ctx.db.get(args.id);
-    if (!series) throw new Error("Event series not found.");
-    const now = Date.now();
-    const nextAnchorStartAt = args.anchorStartAt ?? series.anchorStartAt;
-    const nextAnchorEndAt = args.anchorEndAt ?? series.anchorEndAt;
-    if (nextAnchorEndAt <= nextAnchorStartAt) {
-      throw new Error("Event end time must be after start time.");
-    }
-    const nextEventType = args.eventType ?? series.eventType;
-    const nextRentalFulfillmentMode =
-      args.rentalFulfillmentMode !== undefined
-        ? resolveRentalFulfillmentMode(nextEventType, args.rentalFulfillmentMode)
-        : resolveRentalFulfillmentMode(nextEventType, series.rentalFulfillmentMode);
-    const venueLink =
-      args.venueId !== undefined
-        ? await resolveVenueLink(ctx, args.venueId)
-        : { venueId: series.venueId, venueName: series.venueName, venueAddress: undefined };
-    const hostLink = await resolveEventPrimaryHostLink(ctx, {
-      invoiceId: series.invoiceId,
-      hostGroupId: args.hostGroupId,
-      existingInvoiceId: series.invoiceId,
-      existingHostGroupId: series.hostGroupId,
-      existingHost: series.host,
-    });
-    const additionalHostGroupIds =
-      args.additionalHostGroupIds !== undefined
-        ? await resolveAdditionalHostGroupIds(
-            ctx,
-            hostLink.hostGroupId,
-            args.additionalHostGroupIds ?? [],
-          )
-        : await resolveAdditionalHostGroupIds(
-            ctx,
-            hostLink.hostGroupId,
-            series.additionalHostGroupIds,
-          );
-
-    await ctx.db.patch(args.id, {
-      title: args.title?.trim() ?? series.title,
-      anchorStartAt: nextAnchorStartAt,
-      anchorEndAt: nextAnchorEndAt,
-      requiresShowWindow: args.requiresShowWindow ?? series.requiresShowWindow,
-      venueId: venueLink.venueId,
-      venueName: venueLink.venueName,
-      eventType: nextEventType,
-      teamsInterested: args.teamsInterested ?? series.teamsInterested,
-      category: args.category?.trim() ?? series.category,
-      hostGroupId: hostLink.hostGroupId,
-      host: hostLink.host,
-      additionalHostGroupIds,
-      expectedTurnout: args.expectedTurnout ?? series.expectedTurnout,
-      budgetUsd: args.budgetUsd ?? series.budgetUsd,
-      dayOfLeadUserId: args.dayOfLeadUserId?.trim() ?? series.dayOfLeadUserId,
-      eventManagerUserId: args.eventManagerUserId?.trim() ?? series.eventManagerUserId,
-      rentalFulfillmentMode: nextRentalFulfillmentMode,
-      notes: args.notes?.trim() ?? series.notes,
-      blockTemplates: args.blockTemplates ?? series.blockTemplates,
-      updatedAt: now,
-    });
-
-    const updatedSeries = await ctx.db.get(args.id);
-    if (!updatedSeries) throw new Error("Event series not found.");
-
-    const referenceIndex = args.fromOccurrenceIndex ?? 0;
-    const scope = args.scope as SeriesEditScope;
-    const occurrences = await listOccurrencesForSeries(ctx, args.id);
-
-    for (const occurrence of occurrences) {
-      if (scope === "this") {
-        if (occurrence.occurrenceIndex !== referenceIndex) continue;
-      } else if (!shouldApplySeriesUpdate(occurrence, scope, referenceIndex, now)) {
-        continue;
-      }
-
-      const occurrenceIndex = occurrence.occurrenceIndex ?? 0;
-      const startAt =
-        scope === "this"
-          ? occurrence.startAt
-          : occurrenceStartAt(
-              updatedSeries.anchorStartAt,
-              occurrenceIndex,
-              updatedSeries.intervalWeeks,
-            );
-      const patch = buildEventPatchFromSeriesTemplate(updatedSeries, startAt);
-      await ctx.db.patch(occurrence._id, { ...patch, updatedAt: now });
-    }
-
-    return args.id;
-  },
-});
-
 export const regenerateFutureBlocks = mutation({
   args: {
     id: v.id("eventSeries"),
@@ -722,21 +603,6 @@ export const cancelFuture = mutation({
   },
 });
 
-export const detachOccurrence = mutation({
-  args: { eventId: v.id("events") },
-  handler: async (ctx, args) => {
-    await requireAuth(ctx);
-    await requireArborInternalContext(ctx);
-    const event = await ctx.db.get(args.eventId);
-    if (!event) throw new Error("Event not found.");
-    if (!event.seriesId) throw new Error("Event is not part of a series.");
-    await ctx.db.patch(args.eventId, {
-      seriesDetached: true,
-      updatedAt: Date.now(),
-    });
-  },
-});
-
 export const reattachOccurrence = mutation({
   args: { eventId: v.id("events") },
   handler: async (ctx, args) => {
@@ -892,36 +758,5 @@ export const updateSeriesCosts = mutation({
       }
     }
     return args.id;
-  },
-});
-
-export const previewOccurrenceDates = query({
-  args: {
-    startAt: v.number(),
-    intervalWeeks: v.number(),
-    occurrenceCount: v.optional(v.number()),
-    seriesEndAt: v.optional(v.number()),
-  },
-  handler: async (_ctx, args) => {
-    await requireAuth(_ctx);
-    await requireArborInternalContext(_ctx);
-    try {
-      const starts = computeOccurrenceStarts({
-        anchorStartAt: args.startAt,
-        intervalWeeks: args.intervalWeeks,
-        occurrenceCount: args.occurrenceCount,
-        seriesEndAt: args.seriesEndAt,
-      });
-      return {
-        starts,
-        count: starts.length,
-      };
-    } catch (error) {
-      return {
-        starts: [] as number[],
-        count: 0,
-        error: error instanceof Error ? error.message : "Invalid recurrence settings.",
-      };
-    }
   },
 });
