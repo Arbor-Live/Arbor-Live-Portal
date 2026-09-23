@@ -14,7 +14,11 @@ import {
   isRequestReferenceId,
 } from "./lib/publicReferenceIds";
 import { legacyTeamsToMembership } from "./lib/userVerticals";
-import { eventTeamsAreCurrent, migrateEventTeams } from "./lib/eventTeams";
+import {
+  LEGACY_MARKETING_EVENT_TEAM,
+  eventTeamsAreCurrent,
+  migrateEventTeams,
+} from "./lib/eventTeams";
 import { consolidatePackageIntoOneIncludedUnit } from "./lib/packageContentMigration";
 import { normalizeCrewLineLabel } from "./lib/normalizeCrewLineLabel";
 
@@ -565,10 +569,21 @@ export const dropCrewOnboardingOseHiringForm = migrations.define({
 /** Rename the retired "Marketing" event team to "Promotion" on events. */
 export const migrateEventTeamsMarketingToPromotionOnEvents = migrations.define({
   table: "events",
-  migrateOne: async (_ctx, event) => {
+  migrateOne: async (ctx, event) => {
     if (!event.teamsInterested?.length) return;
-    const teamsInterested = migrateEventTeams(event.teamsInterested);
-    if (!teamsInterested) return;
+    let teamsInterested = migrateEventTeams(event.teamsInterested) ?? [];
+    // Legacy "Marketing" also gated poster work; keep events that already have a
+    // poster design on the design board by tagging them "Design" too.
+    if (
+      event.teamsInterested.includes(LEGACY_MARKETING_EVENT_TEAM) &&
+      !teamsInterested.includes("Design")
+    ) {
+      const design = await ctx.db
+        .query("eventMarketingDesigns")
+        .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
+        .first();
+      if (design) teamsInterested = [...teamsInterested, "Design"];
+    }
     if (eventTeamsAreCurrent(event.teamsInterested, teamsInterested)) return;
     return { teamsInterested, updatedAt: Date.now() };
   },
@@ -579,8 +594,7 @@ export const migrateEventTeamsMarketingToPromotionOnEventSeries = migrations.def
   table: "eventSeries",
   migrateOne: async (_ctx, series) => {
     if (!series.teamsInterested?.length) return;
-    const teamsInterested = migrateEventTeams(series.teamsInterested);
-    if (!teamsInterested) return;
+    const teamsInterested = migrateEventTeams(series.teamsInterested) ?? [];
     if (eventTeamsAreCurrent(series.teamsInterested, teamsInterested)) return;
     return { teamsInterested, updatedAt: Date.now() };
   },
