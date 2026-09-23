@@ -153,6 +153,7 @@ export const submitPublic = mutation({
     email: v.string(),
     phone: v.string(),
     heardAboutUs: v.string(),
+    experience: v.string(),
     vertical: userVerticalValue,
     discipline: v.optional(crewDisciplineValue),
     crewAvailabilityDays: v.optional(v.array(availabilityDayValue)),
@@ -169,6 +170,7 @@ export const submitPublic = mutation({
     const email = normalizeEmail(args.email);
     const phone = trimRequired(args.phone, "Phone");
     const heardAboutUs = trimRequired(args.heardAboutUs, "How you heard about us");
+    const experience = trimRequired(args.experience, "Experience or interest");
 
     if (!isStanfordEmail(email)) {
       throw new Error("Use a @stanford.edu email address.");
@@ -210,6 +212,7 @@ export const submitPublic = mutation({
       email,
       phone,
       heardAboutUs,
+      experience,
       vertical: args.vertical,
       discipline: specialtyRequired ? args.discipline : undefined,
       crewAvailabilityDays:
@@ -257,6 +260,7 @@ export const listAdmin = query({
       email: v.string(),
       phone: v.string(),
       heardAboutUs: v.string(),
+      experience: v.optional(v.string()),
       vertical: userVerticalValue,
       discipline: v.optional(crewDisciplineValue),
       crewAvailabilityDays: v.optional(v.array(availabilityDayValue)),
@@ -285,6 +289,7 @@ export const listAdmin = query({
         email: row.email,
         phone: row.phone,
         heardAboutUs: row.heardAboutUs,
+        experience: row.experience,
         vertical: row.vertical,
         discipline: row.discipline,
         crewAvailabilityDays: row.crewAvailabilityDays,

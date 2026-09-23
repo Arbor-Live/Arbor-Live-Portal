@@ -9,6 +9,7 @@ export type CrewApplicationFormValues = {
   email: string;
   phone: string;
   heardAboutUs: string;
+  experience: string;
   vertical: "Operations" | "Crew" | "Trivia" | "Marketing";
   discipline:
     | ""
@@ -44,6 +45,7 @@ export async function submitCrewApplication(
       email: raw.email,
       phone: raw.phone,
       heardAboutUs: raw.heardAboutUs,
+      experience: raw.experience,
       vertical: raw.vertical,
       discipline:
         (raw.vertical === "Crew" || raw.vertical === "Marketing") && raw.discipline
