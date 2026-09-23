@@ -17,7 +17,7 @@ plan. Opt into shared cloud Dev with `E2E_USE_CLOUD_DEV=1` or
 `CONVEX_AGENT_MODE=cloud`. `E2E_SKIP_BOOT=1` reuses a running stack and warns if
 the URL looks like cloud.
 
-**Last updated:** 2026-09-19 (Batches 1–12 on `main`, Batches 13–14 on `t3code/next-e2e-tests`, Batch 15 on `t3code/auto-print-event-briefs`, Batch 16 in [#255](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/255))
+**Last updated:** 2026-09-23 (artist-org invite resend/remove on `/dashboard/artists`)
 
 ## Batch history
 
@@ -168,7 +168,8 @@ the URL looks like cloud.
 | Band shows home + assignment | Covered | `bands/band-shows-home.spec.ts` — `/dashboard` Your shows, upcoming chip, e-sign from recent card, staff Assign band → `band_assigned` email |
 | Public `/artists/apply` → admin approve | Covered | `bands/band-application.spec.ts` (Batch 3) |
 | Band payouts admin queue UI | Covered | `bands/band-payouts-queue.spec.ts` — send signature request + mark paid |
-| Band portal beyond e-sign | Partial | Onboarding (Batch 4) + shows home; payee settings still light |
+| Band portal beyond e-sign | Partial | Onboarding (Batch 4) + shows home + artist-page invite resend/remove; payee settings still light |
+| Artist org invite resend / remove (`/dashboard/artists`) | Covered | `bands/artist-invite-lifecycle.spec.ts` — invite → resend same row → remove, dismissed confirm, and refused access-level mismatch |
 | Band org profile admin birdseye (`/users/organizations`) | Covered | `users/band-org-profile.spec.ts` (Batch 12) — admin edits the display name, asserts via `getBandOrganizationProfileByDisplayName` |
 
 ### Marketing and public site
@@ -213,6 +214,7 @@ the URL looks like cloud.
 | `bands/band-payment-esign.spec.ts` | Band e-sign + helper mark paid |
 | `bands/band-shows-home.spec.ts` | Band Your shows home, assign → email, e-sign from card |
 | `bands/band-application.spec.ts` | Band apply + admin approve (Batch 3) |
+| `bands/artist-invite-lifecycle.spec.ts` | Artist-page pending invite resend + remove, including access-level mismatch |
 | `booking/booking-submit.spec.ts` | Public `/request` wizard submit (Batch 3) |
 | `booking/request-inbox.spec.ts` | Inbox list UX: open view, status filter, all statuses (Batch 13) |
 | `booking/request-staff-actions.spec.ts` | Assignee + staff notes + mark in review (Batch 13) |
