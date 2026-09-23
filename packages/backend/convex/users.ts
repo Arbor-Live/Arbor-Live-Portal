@@ -1767,6 +1767,84 @@ async function getInvitationById(ctx: MutationCtx | QueryCtx, invitationId: stri
   return invite;
 }
 
+const ORGANIZATION_INVITE_EXPIRY_MS = 14 * 24 * 60 * 60 * 1000;
+
+async function listInvitationRows(ctx: MutationCtx | QueryCtx) {
+  const invitesResult = await ctx.runQuery(components.betterAuth.adapter.findMany, {
+    model: "invitation",
+    paginationOpts: { cursor: null, numItems: 2000 },
+  });
+  return (invitesResult?.page ?? []) as InvitationRow[];
+}
+
+async function findPendingInvitationForOrg(
+  ctx: MutationCtx | QueryCtx,
+  args: { organizationId: string; email: string },
+) {
+  const email = args.email.trim().toLowerCase();
+  const invites = await listInvitationRows(ctx);
+  return (
+    invites.find(
+      (invite) =>
+        invite.organizationId === args.organizationId &&
+        invite.status === "pending" &&
+        (invite.email ?? "").trim().toLowerCase() === email,
+    ) ?? null
+  );
+}
+
+async function requirePendingInviteForActiveOrg(
+  ctx: MutationCtx,
+  invitationId: string,
+) {
+  const context = await requireBandContext(ctx);
+  const invite = await getInvitationById(ctx, invitationId);
+  if (invite.organizationId !== context.organizationId) {
+    throw new Error("Invitation not found.");
+  }
+  if (invite.status !== "pending") {
+    throw new Error("Only pending invitations can be updated.");
+  }
+  return invite;
+}
+
+async function resendPendingInvitation(ctx: MutationCtx, invite: InvitationRow) {
+  const invitationId = getRecordId(invite);
+  const email = (invite.email ?? "").trim().toLowerCase();
+  if (!invitationId) throw new Error("Invitation not found.");
+  if (!email) throw new Error("Invitation is missing email.");
+
+  const now = Date.now();
+  const expiresAt = now + ORGANIZATION_INVITE_EXPIRY_MS;
+  await ctx.runMutation(components.betterAuth.adapter.updateOne, {
+    input: {
+      model: "invitation",
+      where: [{ field: "_id", value: invitationId }],
+      update: {
+        status: "pending",
+        createdAt: now,
+        expiresAt,
+      },
+    },
+  });
+  const pending = await ctx.db
+    .query("pendingUserInvites")
+    .withIndex("by_invitationId", (q) => q.eq("invitationId", invitationId))
+    .unique();
+  await scheduleUserInviteEmail(ctx, {
+    invitationId,
+    email,
+    organizationId: invite.organizationId ?? "",
+    role: invite.role ?? "org_member",
+    bandRole: pending?.bandRole,
+    inviterId: invite.inviterId ?? "",
+    expiresAt,
+    isExistingUser: await userExistsForInvite(ctx, email),
+    resendKey: String(now),
+  });
+  return { invitationId, email, expiresAt };
+}
+
 export const updateInviteAdmin = mutation({
   args: {
     invitationId: v.string(),
@@ -2579,6 +2657,10 @@ export const inviteMemberToActiveOrganization = mutation({
     role: externalOrgRoleValue,
     bandRole: v.optional(v.string()),
   },
+  returns: v.object({
+    invitationId: v.string(),
+    resent: v.boolean(),
+  }),
   handler: async (ctx, args) => {
     const context = await requireBandContext(ctx);
     const admin = await requireAuth(ctx);
@@ -2586,8 +2668,16 @@ export const inviteMemberToActiveOrganization = mutation({
     const now = Date.now();
     const email = args.email.trim().toLowerCase();
     if (!email) throw new Error("Email is required.");
+    const existingPending = await findPendingInvitationForOrg(ctx, {
+      organizationId: context.organizationId,
+      email,
+    });
+    if (existingPending) {
+      const resent = await resendPendingInvitation(ctx, existingPending);
+      return { invitationId: resent.invitationId, resent: true };
+    }
     const bandRole = args.bandRole?.trim() || undefined;
-    const expiresAt = now + 14 * 24 * 60 * 60 * 1000;
+    const expiresAt = now + ORGANIZATION_INVITE_EXPIRY_MS;
     const created = await ctx.runMutation(components.betterAuth.adapter.create, {
       input: {
         model: "invitation",
@@ -2632,7 +2722,30 @@ export const inviteMemberToActiveOrganization = mutation({
       expiresAt,
       isExistingUser: Boolean(existingUserId),
     });
-    return { invitationId };
+    return { invitationId, resent: false };
+  },
+});
+
+export const resendInviteForActiveOrganization = mutation({
+  args: { invitationId: v.string() },
+  returns: v.object({
+    invitationId: v.string(),
+    email: v.string(),
+    expiresAt: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const invite = await requirePendingInviteForActiveOrg(ctx, args.invitationId);
+    return await resendPendingInvitation(ctx, invite);
+  },
+});
+
+export const cancelInviteForActiveOrganization = mutation({
+  args: { invitationId: v.string() },
+  returns: v.object({ ok: v.boolean() }),
+  handler: async (ctx, args) => {
+    await requirePendingInviteForActiveOrg(ctx, args.invitationId);
+    await markInvitationCancelled(ctx, args.invitationId);
+    return { ok: true };
   },
 });
 
