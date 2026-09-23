@@ -141,6 +141,14 @@ Event types (drive which editor tabs and quick-add blocks appear):
 | `Dry Rental` | Equipment only | Delivery + Return |
 | `Services Only` | No schedule/crew tabs | — |
 
+- **Teams of interest** (`teamsInterested`) are event *needs*, distinct from user
+  verticals/specialties (`userVerticals.ts`): `Design` (poster designer +
+  uploaded poster), `Photography` / `Videography` / `Sound` / `Lighting` (crew
+  shifts), `Promotion` (flyering / outreach), `Trivia`, and `Operations`
+  (coordination / artist sourcing). Availability matching (`lib/crewTeams.ts`)
+  maps crew specialties onto these needs; events with no needs set are visible
+  to all crew. The retired umbrella need `Marketing` was migrated to
+  `Promotion`, and poster work now keys off `Design`.
 - **Timezone:** the whole portal uses Pacific Time (`America/Los_Angeles` /
   `PORTAL_TIMEZONE` in `@arbor/format`). Display, input hydration/save, day
   keys, and FullCalendar grids must go through that package (or
@@ -360,8 +368,8 @@ Event types (drive which editor tabs and quick-add blocks appear):
 
 - `marketingDesigns.ts` — event poster assignments and publishing. Upcoming
   poster work covers public/internal events in the next four weeks that have
-  **Marketing** selected under Teams Interested (booking conversions only add
-  Marketing when the client chose the Collaboration production area). Operations
+  **Design** selected under Teams Interested (booking conversions add Design
+  when the client chose the Collaboration production area). Operations
   or Marketing can assign a poster designer from the event editor or design board;
   assignments appear immediately on the board (including internal events). The
   design board filters: assigned to me, unassigned, and all upcoming. Design statuses:

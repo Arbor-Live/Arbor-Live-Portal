@@ -47,6 +47,7 @@ import {
   eventCancelReasonCodeValue,
   recordEventStatusTransition,
 } from "./lib/statusTransitions";
+import { eventTeamValue } from "./lib/eventTeams";
 
 const eventTypeValue = v.union(
   v.literal("Crewed Event"),
@@ -56,13 +57,6 @@ const eventTypeValue = v.union(
   v.literal("Services Only"),
 );
 
-const eventTeamValue = v.union(
-  v.literal("Design"),
-  v.literal("Marketing"),
-  v.literal("Lighting"),
-  v.literal("Sound"),
-  v.literal("Operations"),
-);
 const rentalFulfillmentModeValue = v.union(v.literal("delivery"), v.literal("will_call"));
 
 const seriesEditScopeValue = v.union(v.literal("this"), v.literal("future"), v.literal("all"));

@@ -54,8 +54,8 @@ Human-readable docs live in `docs/` (`getting-started.md`, `architecture.md`, `d
   - `Rental with Crew`
   - `Dry Rental`
   - `Services Only`
-- Teams of interest:
-  - `Design`, `Marketing`, `Lighting`, `Sound`, `Operations`
+- Teams of interest (event needs):
+  - `Design`, `Photography`, `Videography`, `Sound`, `Lighting`, `Promotion`, `Trivia`, `Operations`
 - Event timezone is fixed to `America/Los_Angeles` (**entire portal**, not only events). See **Timezone (Pacific)** below.
 
 ### Scheduling

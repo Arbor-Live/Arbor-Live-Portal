@@ -14,6 +14,7 @@ import {
   isRequestReferenceId,
 } from "./lib/publicReferenceIds";
 import { legacyTeamsToMembership } from "./lib/userVerticals";
+import { eventTeamsAreCurrent, migrateEventTeams } from "./lib/eventTeams";
 import { consolidatePackageIntoOneIncludedUnit } from "./lib/packageContentMigration";
 import { normalizeCrewLineLabel } from "./lib/normalizeCrewLineLabel";
 
@@ -561,6 +562,30 @@ export const dropCrewOnboardingOseHiringForm = migrations.define({
   },
 });
 
+/** Rename the retired "Marketing" event team to "Promotion" on events. */
+export const migrateEventTeamsMarketingToPromotionOnEvents = migrations.define({
+  table: "events",
+  migrateOne: async (_ctx, event) => {
+    if (!event.teamsInterested?.length) return;
+    const teamsInterested = migrateEventTeams(event.teamsInterested);
+    if (!teamsInterested) return;
+    if (eventTeamsAreCurrent(event.teamsInterested, teamsInterested)) return;
+    return { teamsInterested, updatedAt: Date.now() };
+  },
+});
+
+/** Rename the retired "Marketing" event team to "Promotion" on event series. */
+export const migrateEventTeamsMarketingToPromotionOnEventSeries = migrations.define({
+  table: "eventSeries",
+  migrateOne: async (_ctx, series) => {
+    if (!series.teamsInterested?.length) return;
+    const teamsInterested = migrateEventTeams(series.teamsInterested);
+    if (!teamsInterested) return;
+    if (eventTeamsAreCurrent(series.teamsInterested, teamsInterested)) return;
+    return { teamsInterested, updatedAt: Date.now() };
+  },
+});
+
 /**
  * never reorder or remove completed ones (reset requires an explicit reset:true).
  */
@@ -587,6 +612,8 @@ const MIGRATION_SERIES = [
   internal.migrations.migrateBandApplicationArtistTypeToOrganizationType,
   internal.migrations.backfillInvoiceArtistLineEvents,
   internal.migrations.dropCrewOnboardingOseHiringForm,
+  internal.migrations.migrateEventTeamsMarketingToPromotionOnEvents,
+  internal.migrations.migrateEventTeamsMarketingToPromotionOnEventSeries,
 ] as const;
 
 export const runAll = migrations.runner([...MIGRATION_SERIES]);

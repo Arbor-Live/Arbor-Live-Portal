@@ -136,6 +136,7 @@ import type * as lib_eventInvoiceLinks from "../lib/eventInvoiceLinks.js";
 import type * as lib_eventSeriesCosts from "../lib/eventSeriesCosts.js";
 import type * as lib_eventSeriesGeneration from "../lib/eventSeriesGeneration.js";
 import type * as lib_eventStatus from "../lib/eventStatus.js";
+import type * as lib_eventTeams from "../lib/eventTeams.js";
 import type * as lib_eventVisibility from "../lib/eventVisibility.js";
 import type * as lib_hostOrgIdentity from "../lib/hostOrgIdentity.js";
 import type * as lib_hostOrgs from "../lib/hostOrgs.js";
@@ -364,6 +365,7 @@ declare const fullApi: ApiFromModules<{
   "lib/eventSeriesCosts": typeof lib_eventSeriesCosts;
   "lib/eventSeriesGeneration": typeof lib_eventSeriesGeneration;
   "lib/eventStatus": typeof lib_eventStatus;
+  "lib/eventTeams": typeof lib_eventTeams;
   "lib/eventVisibility": typeof lib_eventVisibility;
   "lib/hostOrgIdentity": typeof lib_hostOrgIdentity;
   "lib/hostOrgs": typeof lib_hostOrgs;
