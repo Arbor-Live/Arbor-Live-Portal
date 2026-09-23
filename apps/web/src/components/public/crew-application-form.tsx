@@ -173,9 +173,10 @@ export function CrewApplicationForm() {
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="experience">
-            Explain your experience if you have any, or why you are interested
-          </Label>
+          <Label htmlFor="experience">What excites you about joining?</Label>
+          <p className="text-xs text-muted-foreground">
+            Experience is welcome but never required.
+          </p>
           <OnboardingTextarea
             id="experience"
             required

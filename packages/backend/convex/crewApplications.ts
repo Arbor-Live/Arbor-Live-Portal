@@ -170,7 +170,7 @@ export const submitPublic = mutation({
     const email = normalizeEmail(args.email);
     const phone = trimRequired(args.phone, "Phone");
     const heardAboutUs = trimRequired(args.heardAboutUs, "How you heard about us");
-    const experience = trimRequired(args.experience, "Experience or interest");
+    const experience = trimRequired(args.experience, "What excites you about joining");
 
     if (!isStanfordEmail(email)) {
       throw new Error("Use a @stanford.edu email address.");

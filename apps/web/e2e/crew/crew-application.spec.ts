@@ -19,9 +19,7 @@ test.describe("public crew application", () => {
     await publicPage.getByLabel("Stanford email").fill(email);
     await publicPage.getByLabel("Phone").fill("6505550199");
     await publicPage.getByLabel("How did you hear about us?").fill("E2E test suite");
-    await publicPage
-      .getByLabel("Explain your experience if you have any, or why you are interested")
-      .fill("E2E test suite");
+    await publicPage.getByLabel("What excites you about joining?").fill("E2E test suite");
     // Specialties are scoped per vertical: Marketing offers Design /
     // Photography / Videography, and one is required.
     await publicPage.locator("#vertical").selectOption("Marketing");

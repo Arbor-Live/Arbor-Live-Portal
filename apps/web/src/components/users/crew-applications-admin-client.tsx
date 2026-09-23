@@ -418,7 +418,7 @@ export function CrewApplicationsAdminClient() {
                 </div>
                 {app.experience ? (
                   <div className="sm:col-span-2">
-                    <dt className="font-medium text-foreground/80">Experience or interest</dt>
+                    <dt className="font-medium text-foreground/80">What excites them about joining</dt>
                     <dd className="whitespace-pre-wrap">{app.experience}</dd>
                   </div>
                 ) : null}
