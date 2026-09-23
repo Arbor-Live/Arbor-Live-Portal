@@ -1926,7 +1926,16 @@ export const updateInviteAdmin = mutation({
     }
 
     if (args.verticals !== undefined || args.disciplines !== undefined) {
-      assertDisciplinesMatchVerticals(args.verticals ?? [], args.disciplines ?? []);
+      // Partial updates preserve the stored value for the omitted field, so
+      // validate against it rather than an empty list.
+      const pending = await ctx.db
+        .query("pendingUserInvites")
+        .withIndex("by_invitationId", (q) => q.eq("invitationId", args.invitationId))
+        .unique();
+      assertDisciplinesMatchVerticals(
+        args.verticals ?? ((pending?.verticals ?? []) as UserVertical[]),
+        args.disciplines ?? ((pending?.disciplines ?? []) as UserDiscipline[]),
+      );
     }
 
     const nextRole = await normalizeMembershipRole(

@@ -323,10 +323,15 @@ export function CrewApplicationsAdminClient() {
       <div className="space-y-4">
         {(applications ?? []).map((app) => {
           const verticals: UserVerticalOption[] = convertVerticals[app._id] ?? [app.vertical];
-          const disciplines: UserDisciplineOption[] =
-            convertDisciplines[app._id] ??
-            (app.discipline && app.discipline !== "unsure" ? [app.discipline] : []);
           const disciplineOptions = disciplinesForVerticals(verticals);
+          const storedDisciplines: UserDisciplineOption[] =
+            app.discipline &&
+            app.discipline !== "unsure" &&
+            disciplineOptions.includes(app.discipline)
+              ? [app.discipline]
+              : [];
+          const disciplines: UserDisciplineOption[] =
+            convertDisciplines[app._id] ?? storedDisciplines;
 
           return (
             <article

@@ -454,13 +454,17 @@ export function UsersManagementClient({
   }
 
   function openEditInvite(invite: NonNullable<typeof invitations>[number]) {
+    const verticals = (invite.verticals ?? []) as UserVerticalOption[];
     setEditingInvite({
       id: invite.id,
       email: invite.email,
       organizationId: invite.organizationId,
       role: invite.role,
-      verticals: (invite.verticals ?? []) as UserVerticalOption[],
-      disciplines: (invite.disciplines ?? []) as UserDisciplineOption[],
+      verticals,
+      disciplines: pruneDisciplinesForVerticals(
+        verticals,
+        (invite.disciplines ?? []) as UserDisciplineOption[],
+      ),
     });
   }
 
