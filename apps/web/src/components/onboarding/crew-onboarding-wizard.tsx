@@ -12,13 +12,13 @@ import { Label } from "@/components/ui/label";
 import { RequestWizardShell } from "@/components/request/request-wizard-shell";
 import {
   Questionnaire,
-  QuestionnaireError,
   QuestionnaireItem,
   QuestionnaireTitle,
 } from "@/components/ui/questionnaire";
 import {
   handleQuestionnaireEnter,
   MarkStepAnswered,
+  QuestionnaireFieldError,
   QuestionnaireWizardFooter,
   QuestionnaireWizardProgress,
 } from "@/components/ui/questionnaire-wizard";
@@ -599,6 +599,11 @@ export function CrewOnboardingWizard() {
     return null;
   }
 
+  const setFormAndClearStepError: typeof setForm = (next) => {
+    setFieldError(null);
+    setForm(next);
+  };
+
   return (
     <>
       {done ? null : <OnboardingSkipButton onSkip={goToDashboard} />}
@@ -649,7 +654,7 @@ export function CrewOnboardingWizard() {
                 <StepBody
                   stepId="thankYou"
                   form={form}
-                  setForm={setForm}
+                  setForm={setFormAndClearStepError}
                   fieldError={null}
                   avatarBusy={avatarBusy}
                   avatarUrl={avatarUrl}
@@ -666,7 +671,6 @@ export function CrewOnboardingWizard() {
                   name={stepId}
                   required
                   disabled={!stepOrder.includes(stepId)}
-                  invalid={stepId === item && Boolean(fieldError)}
                 >
                   <QuestionnaireTitle>
                     {STEP_HEADLINES[stepId]}
@@ -674,7 +678,7 @@ export function CrewOnboardingWizard() {
                   <StepBody
                     stepId={stepId}
                     form={form}
-                    setForm={setForm}
+                    setForm={setFormAndClearStepError}
                     fieldError={null}
                     avatarBusy={avatarBusy}
                     avatarUrl={avatarUrl}
@@ -684,9 +688,9 @@ export function CrewOnboardingWizard() {
                     onPasskeyAdded={() => setHasAddedPasskey(true)}
                   />
                   <MarkStepAnswered />
-                  <QuestionnaireError className="text-sm">
+                  <QuestionnaireFieldError className="text-sm">
                     {stepId === item ? fieldError : null}
-                  </QuestionnaireError>
+                  </QuestionnaireFieldError>
                 </QuestionnaireItem>
               ))
             )}
@@ -720,7 +724,10 @@ function StepBody({
   onGoToDashboard: () => void;
   onPasskeyAdded: () => void;
 }) {
-  const patch = (next: Partial<FormState>) => setForm((prev) => ({ ...prev, ...next }));
+  const patch = (next: Partial<FormState>) => {
+    setFieldError(null);
+    setForm((prev) => ({ ...prev, ...next }));
+  };
 
   switch (stepId) {
     case "welcome":
