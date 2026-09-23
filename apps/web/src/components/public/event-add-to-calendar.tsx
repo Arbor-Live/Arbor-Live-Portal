@@ -1,23 +1,26 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import { CalendarPlusIcon, CaretDownIcon } from "@phosphor-icons/react";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   buildEventCalendarProviderLinks,
   eventCalendarIcsPath,
   type EventCalendarInput,
 } from "@/lib/event-calendar";
+import { cn } from "@/lib/utils";
 
 const emptySubscribe = () => () => {};
 
-const PROVIDERS = [
-  { key: "google", label: "Google" },
-  { key: "apple", label: "Apple" },
-  { key: "outlook", label: "Outlook" },
-] as const;
-
 /**
- * Add-this-show links. Google opens a template; Apple uses webcal against the
- * per-event ICS; Outlook opens the same ICS over https.
+ * Add-this-show menu. Google opens a template; Apple uses webcal against the
+ * per-event ICS; Outlook and the download both use the https ICS.
  */
 export function EventAddToCalendar({
   event,
@@ -33,30 +36,42 @@ export function EventAddToCalendar({
   );
 
   const path = eventCalendarIcsPath(event.eventId);
-  const icsUrl = origin ? `${origin}${path}` : path;
-  const links = buildEventCalendarProviderLinks(event, icsUrl);
-  const ready = Boolean(origin);
+  const links = buildEventCalendarProviderLinks(event, `${origin}${path}`);
 
   return (
-    <div className={className}>
-      {PROVIDERS.map((provider) =>
-        ready ? (
-          <a
-            key={provider.key}
-            href={links[provider.key]}
-            {...(provider.key === "apple"
-              ? {}
-              : { target: "_blank", rel: "noreferrer" })}
-            className="text-sm font-medium text-status-emerald-800 underline-offset-4 hover:underline dark:text-primary"
-          >
-            {provider.label}
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="outline"
+          size="lg"
+          className={cn("border-foreground/20 px-4 shadow-xs", className)}
+          disabled={!origin}
+        >
+          <CalendarPlusIcon />
+          Add to calendar
+          <CaretDownIcon className="opacity-60" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-48">
+        <DropdownMenuItem asChild>
+          <a href={links.google} target="_blank" rel="noreferrer">
+            Google Calendar
           </a>
-        ) : (
-          <span key={provider.key} className="text-sm font-medium text-muted-foreground">
-            {provider.label}
-          </span>
-        ),
-      )}
-    </div>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <a href={links.apple}>Apple Calendar</a>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <a href={links.outlook} target="_blank" rel="noreferrer">
+            Outlook
+          </a>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <a href={path} download>
+            Download .ics
+          </a>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

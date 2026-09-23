@@ -179,7 +179,7 @@ the URL looks like cloud.
 | Short links CRUD | Covered | `marketing/short-link-crud.spec.ts` (Batch 6); Worker redirect still out of suite |
 | Work/stories publish | Deferred | — |
 | Public directories (`/crew`, `/artists`, `/events`) | Covered | `smoke/public-directories.spec.ts` (Batch 6) |
-| Public event show page (`/events/:id`) newsletter + calendar | Covered | `smoke/public-directories.spec.ts` — Stay in the loop, this-show ICS |
+| Public event show page (`/events/:id`) newsletter + calendar | Covered | `smoke/public-directories.spec.ts` — Add to calendar menu, Stay in the loop, this-show ICS |
 
 ### Other
 

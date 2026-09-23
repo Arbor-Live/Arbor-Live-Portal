@@ -32,8 +32,12 @@ test.describe("public directories", () => {
     await expect(page.getByRole("heading", { name: seeded.title, level: 1 })).toBeVisible({
       timeout: 30_000,
     });
+    await page.getByRole("button", { name: "Add to calendar" }).click();
+    await expect(page.getByRole("menuitem", { name: "Google Calendar" })).toBeVisible();
+    await expect(page.getByRole("menuitem", { name: "Apple Calendar" })).toBeVisible();
+    await page.keyboard.press("Escape");
+
     await expect(page.getByRole("heading", { name: "Stay in the loop" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "This show" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Weekly email" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Calendar feed" })).toBeVisible();
 
