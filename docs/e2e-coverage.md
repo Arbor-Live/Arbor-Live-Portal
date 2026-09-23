@@ -227,7 +227,7 @@ the URL looks like cloud.
 | `events/venue-create-pick.spec.ts` | Venue create + pick on event (Batch 3) |
 | `crew/crew-application-triage.spec.ts` | Turn away / convert / trainee assign (Batch 4) |
 | `crew/crew-onboarding-complete.spec.ts` | Crew onboarding wizard end-to-end (Batch 4) |
-| `bands/band-onboarding-complete.spec.ts` | Band onboarding wizard end-to-end (Batch 4) |
+| `bands/band-onboarding-complete.spec.ts` | Band onboarding wizard end-to-end, including mailing-address Next after the empty-address prompt (Batch 4) |
 | `inventory/pull-list-edit.spec.ts` | Pull-list qty edit + add type (Batch 5) |
 | `inventory/damage-create.spec.ts` | Damage report create from queue (Batch 5) |
 | `crew/crew-scheduling-board.spec.ts` | Scheduling board range/filter + assign link (Batch 5) |
