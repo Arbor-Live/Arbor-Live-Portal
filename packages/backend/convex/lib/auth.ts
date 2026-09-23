@@ -23,6 +23,10 @@ import {
   resolveProfileMembership,
   type UserVertical,
 } from "./userVerticals";
+import {
+  resolveParticipationFlags,
+  type UserParticipationFlags,
+} from "./userParticipation";
 
 export type AuthUser = {
   _id?: string;
@@ -433,6 +437,9 @@ export async function requireAnyVerticalOrAdmin(
 export async function listAdminEmailsForVertical(
   ctx: AuthCtx,
   vertical: UserVertical,
+  options?: {
+    participation?: (flags: UserParticipationFlags) => boolean;
+  },
 ): Promise<string[]> {
   const result = await ctx.runQuery(components.betterAuth.adapter.findMany, {
     model: "user",
@@ -448,6 +455,9 @@ export async function listAdminEmailsForVertical(
     const profile = await getUserAdminProfile(ctx, userId);
     const { verticals } = resolveProfileMembership(profile ?? {});
     if (!hasVertical(verticals, vertical)) continue;
+    if (options?.participation && !options.participation(resolveParticipationFlags(profile))) {
+      continue;
+    }
     emails.add(user.email.trim().toLowerCase());
   }
 

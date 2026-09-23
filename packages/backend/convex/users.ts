@@ -298,6 +298,7 @@ export async function ensureUserProfileDefaults(
     includeInTimecards,
     assignableAsCrew,
     weeklyDigest,
+    damageReportEmails,
     payrollMethod,
     defaultOrganizationId,
     gradYear,
@@ -313,6 +314,7 @@ export async function ensureUserProfileDefaults(
     includeInTimecards?: boolean;
     assignableAsCrew?: boolean;
     weeklyDigest?: boolean;
+    damageReportEmails?: boolean;
     payrollMethod?: PayrollMethod;
     defaultOrganizationId?: string;
     gradYear?: number;
@@ -343,6 +345,8 @@ export async function ensureUserProfileDefaults(
         assignableAsCrew !== undefined ? assignableAsCrew : existing.assignableAsCrew,
       weeklyDigest:
         weeklyDigest !== undefined ? weeklyDigest : existing.weeklyDigest,
+      damageReportEmails:
+        damageReportEmails !== undefined ? damageReportEmails : existing.damageReportEmails,
       payrollMethod: payrollMethod ?? existing.payrollMethod,
       defaultOrganizationId: defaultOrganizationId ?? existing.defaultOrganizationId,
       gradYear: gradYear ?? existing.gradYear,
@@ -363,6 +367,7 @@ export async function ensureUserProfileDefaults(
     includeInTimecards,
     assignableAsCrew,
     weeklyDigest,
+    damageReportEmails,
     payrollMethod,
     defaultOrganizationId,
     gradYear,
@@ -1488,6 +1493,7 @@ export const listUsersForAdmin = query({
           includeInTimecards: participation.includeInTimecards,
           assignableAsCrew: participation.assignableAsCrew,
           weeklyDigest: participation.weeklyDigest,
+          damageReportEmails: participation.damageReportEmails,
           defaultOrganizationId: profile?.defaultOrganizationId ?? "",
           organizationMemberships: memberships,
           rateMode: rate?.rateMode ?? null,
@@ -1636,6 +1642,8 @@ export const inviteUserAdmin = mutation({
         includeInTimecards: participation?.includeInTimecards,
         assignableAsCrew: participation?.assignableAsCrew,
         showOnPublicCrewPage: participation?.showOnPublicCrewPage,
+        weeklyDigest: participation?.weeklyDigest,
+        damageReportEmails: participation?.damageReportEmails,
       });
       await upsertOrgMembership(ctx, {
         userId: existingUserId,
@@ -1686,6 +1694,7 @@ export const inviteUserAdmin = mutation({
       includeInTimecards: participation?.includeInTimecards,
       assignableAsCrew: participation?.assignableAsCrew,
       showOnPublicCrewPage: participation?.showOnPublicCrewPage,
+      damageReportEmails: participation?.damageReportEmails,
       isExistingUser: Boolean(existingUserId),
     });
 
@@ -1740,6 +1749,7 @@ export const resendInviteAdmin = mutation({
       includeInTimecards: pending?.includeInTimecards,
       assignableAsCrew: pending?.assignableAsCrew,
       showOnPublicCrewPage: pending?.showOnPublicCrewPage,
+      damageReportEmails: pending?.damageReportEmails,
       isExistingUser: await userExistsForInvite(ctx, invite.email),
       resendKey: String(now),
     });
@@ -1927,6 +1937,8 @@ export const createUserAdmin = mutation({
       includeInTimecards: participation?.includeInTimecards,
       assignableAsCrew: participation?.assignableAsCrew,
       showOnPublicCrewPage: participation?.showOnPublicCrewPage,
+      weeklyDigest: participation?.weeklyDigest,
+      damageReportEmails: participation?.damageReportEmails,
     });
     await upsertOrgMembership(ctx, {
       userId,
@@ -2018,6 +2030,7 @@ export const updateUserAdmin = mutation({
     includeInTimecards: v.optional(v.boolean()),
     assignableAsCrew: v.optional(v.boolean()),
     weeklyDigest: v.optional(v.boolean()),
+    damageReportEmails: v.optional(v.boolean()),
     defaultOrganizationId: v.optional(v.string()),
     rateMode: v.optional(userCompensationRateModeValue),
     customHourlyRateUsd: v.optional(v.number()),
@@ -2094,6 +2107,10 @@ export const updateUserAdmin = mutation({
         args.weeklyDigest !== undefined
           ? args.weeklyDigest
           : existingProfile?.weeklyDigest,
+      damageReportEmails:
+        args.damageReportEmails !== undefined
+          ? args.damageReportEmails
+          : existingProfile?.damageReportEmails,
       payrollMethod: args.payrollMethod ?? existingProfile?.payrollMethod,
       defaultOrganizationId: args.defaultOrganizationId ?? existingProfile?.defaultOrganizationId,
     });
@@ -2119,6 +2136,10 @@ export const updateUserAdmin = mutation({
         args.weeklyDigest !== undefined
           ? args.weeklyDigest
           : existingProfile?.weeklyDigest,
+      damageReportEmails:
+        args.damageReportEmails !== undefined
+          ? args.damageReportEmails
+          : existingProfile?.damageReportEmails,
     });
     if (!nextFlags.requiresOnboarding) {
       const defaultOrgId =
