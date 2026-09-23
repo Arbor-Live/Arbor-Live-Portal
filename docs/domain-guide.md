@@ -63,11 +63,12 @@ canonical description of the domain itself.
   (see `userVerticals.ts` and `userAdminProfiles`).
 - **Participation flags** on `userAdminProfiles` (missing ⇒ crew defaults):
   `requiresOnboarding`, `includeInTimecards`, `assignableAsCrew`,
-  `weeklyDigest`, plus existing
+  `weeklyDigest`, `damageReportEmails`, plus existing
   `showOnPublicCrewPage`. Advisors/supervisors use the **Advisor** invite
   preset (no compensation/payroll required): skips crew onboarding, hides from
-  timecard overview and assignable-crew pickers, and stays off the public
-  `/crew` page. Flags remain editable per user in Users admin.
+  timecard overview and assignable-crew pickers, stays off the public
+  `/crew` page, and is omitted from Operations damage-report emails. Flags
+  remain editable per user in Users admin.
 - **Weekly pending-activity digest** (`email/weeklyDigest.ts`, run by the
   Monday `weeklyJobs` cron): Arbor staff get pending availability, shifts that
   week, timecards, and post-event work for events they crewed or led (review +
@@ -232,7 +233,9 @@ Event types (drive which editor tabs and quick-add blocks appear):
   contacts, download PDF — all token-gated, no login.
 - PDFs are rendered from `@arbor/invoice-document` (`./pdf` export).
 - **Payment proof**: after approval, payers submit payment evidence
-  (`paymentProof*.ts`); staff verify, and cron-driven reminder emails nag
+  (`paymentProof*.ts`). A quote linked as an additional invoice on an event
+  (not only the primary `events.invoiceId`) opens payment the same way, and
+  proof is stored per invoice. Staff verify, and cron-driven reminder emails nag
   outstanding payers only once fewer than 30 days remain until the invoice due
   date (approval-day first reminder + Monday follow-ups via `weeklyJobs`).
 
@@ -341,7 +344,10 @@ Event types (drive which editor tabs and quick-add blocks appear):
   the raw Immich share URL to external clients. Emails that attach the share
   URL, and the public booking-request / quote feedback portal, ensure the event
   album when Immich is configured (`ensureEventAlbumBestEffort` /
-  `ensureAlbumShareUrlByToken`).
+  `ensureAlbumShareUrlByToken`). On multi-day bookings the public **After the
+  event** tab uses the same Day 1 / Day 2 switcher as the Event tab: each linked
+  day has its own album and feedback form, and the tab appears once any linked
+  day has ended.
 
 ## Marketing site
 

@@ -8,10 +8,11 @@ import {
   isSubmissionActive,
   paymentMethodLabelForQueue,
 } from "./lib/invoicePaymentStatus";
-import { listEventsByInvoiceId } from "./lib/invoiceEvents";
+import { listAdditionalInvoiceIds } from "./lib/eventInvoiceLinks";
+import { listApprovedInvoicesWithoutEvent, listEventsLinkedToInvoice } from "./lib/invoiceEvents";
 import { isRequestPublicTokenExpired } from "./lib/requestToken";
 import {
-  getActivePaymentProofSubmission,
+  getActivePaymentProofSubmissionForInvoice,
   resolvePortalTokenForInvoice,
   submitPaymentProof,
 } from "./lib/paymentProof";
@@ -36,7 +37,7 @@ const paymentQueueValue = v.union(
 
 const paymentQueueRowValidator = v.object({
   invoiceId: v.id("invoices"),
-  eventId: v.id("events"),
+  eventId: v.optional(v.id("events")),
   invoiceNumber: v.string(),
   eventTitle: v.string(),
   clientContactName: v.optional(v.string()),
@@ -116,11 +117,8 @@ async function resolveInvoiceAndEventByQuoteToken(ctx: MutationCtx, token: strin
   }
   if (invoice.status === "void") throw new Error("Quote not found.");
 
-  const linkedEvents = await listEventsByInvoiceId(ctx, invoice._id);
-  const linkedEvent = linkedEvents[0];
-  if (!linkedEvent) throw new Error("This quote is not linked to an event yet.");
-
-  return { invoice, linkedEvent };
+  const linkedEvents = await listEventsLinkedToInvoice(ctx, invoice._id);
+  return { invoice, linkedEvent: linkedEvents[0] ?? null };
 }
 
 async function resolveInvoiceAndEventByRequestToken(ctx: MutationCtx, token: string) {
@@ -136,27 +134,38 @@ async function resolveInvoiceAndEventByRequestToken(ctx: MutationCtx, token: str
     throw new Error("Quote is not ready for review yet.");
   }
 
-  const linkedEvents = await listEventsByInvoiceId(ctx, invoice._id);
-  const linkedEvent = linkedEvents[0];
-  if (!linkedEvent) throw new Error("This quote is not linked to an event yet.");
+  const linkedEvents = await listEventsLinkedToInvoice(ctx, invoice._id);
+  return { invoice, linkedEvent: linkedEvents[0] ?? null };
+}
 
-  return { invoice, linkedEvent };
+function includeInPaymentQueue(
+  queue: "payment_received" | "proof_no_receipt" | "payment_pending" | "overdue",
+  row: {
+    isOverdue: boolean;
+    paymentReceivedAt?: number;
+    submission?: unknown;
+  },
+) {
+  if (queue === "overdue") return row.isOverdue && !row.paymentReceivedAt;
+  if (queue === "payment_received") return Boolean(row.paymentReceivedAt);
+  if (queue === "proof_no_receipt") return Boolean(row.submission) && !row.paymentReceivedAt;
+  return !row.submission && !row.paymentReceivedAt && !row.isOverdue;
 }
 
 async function buildPaymentQueueRow(
   ctx: QueryCtx | MutationCtx,
   invoice: Doc<"invoices">,
-  event: Doc<"events">,
+  event: Doc<"events"> | null,
   nowMs: number,
 ) {
   const details = await buildInvoicePaymentDetails(ctx, invoice, event, nowMs);
-  if (!details.eligible || !details.eventId) return null;
+  if (!details.eligible) return null;
 
   return {
     invoiceId: invoice._id,
-    eventId: details.eventId,
+    ...(details.eventId ? { eventId: details.eventId } : {}),
     invoiceNumber: invoice.invoiceNumber,
-    eventTitle: details.eventTitle ?? event.title,
+    eventTitle: details.eventTitle ?? (invoice.clientGroupName?.trim() || invoice.invoiceNumber),
     clientContactName: invoice.clientContactName,
     clientEmail: invoice.clientEmail,
     totalUsd: details.totalUsd,
@@ -226,8 +235,8 @@ async function buildInvoicePaymentDetails(
     };
   }
 
-  const activeSubmission = event ? await getActivePaymentProofSubmission(ctx, event._id) : null;
-  const dueAt = event ? getPaymentDueAt(invoice, event) : undefined;
+  const activeSubmission = await getActivePaymentProofSubmissionForInvoice(ctx, invoice._id);
+  const dueAt = getPaymentDueAt(invoice, event);
   const late = dueAt ? computeLateFeeSummary(dueAt, nowMs) : { lateFeeUsd: 0, isOverdue: false };
 
   let status: "payment_received" | "proof_submitted" | "payment_pending" | "overdue";
@@ -252,7 +261,7 @@ async function buildInvoicePaymentDetails(
     isOverdue: late.isOverdue,
     paymentReceivedAt: invoice.paymentReceivedAt,
     hasReceipt: Boolean(invoice.paymentReceiptStorageFileId),
-    canRecordProof: Boolean(event) && !invoice.paymentReceivedAt && !activeSubmission,
+    canRecordProof: !invoice.paymentReceivedAt && !activeSubmission,
     submission: activeSubmission
       ? {
           id: activeSubmission._id,
@@ -281,23 +290,31 @@ export const listByQueue = query({
       .take(500);
 
     const rows = [];
+    const consideredInvoiceIds = new Set<Doc<"invoices">["_id"]>();
     for (const event of candidates) {
-      if (!event.invoiceId) continue;
-      const invoice = await ctx.db.get(event.invoiceId);
-      if (!invoice) continue;
-
-      const row = await buildPaymentQueueRow(ctx, invoice, event, now);
-      if (!row) continue;
-
-      if (args.queue === "overdue") {
-        if (!row.isOverdue || row.paymentReceivedAt) continue;
-      } else if (args.queue === "payment_received") {
-        if (!row.paymentReceivedAt) continue;
-      } else if (args.queue === "proof_no_receipt") {
-        if (!row.submission || row.paymentReceivedAt) continue;
-      } else if (args.queue === "payment_pending") {
-        if (row.submission || row.paymentReceivedAt || row.isOverdue) continue;
+      const invoiceIds: Doc<"invoices">["_id"][] = [];
+      if (event.invoiceId) invoiceIds.push(event.invoiceId);
+      for (const invoiceId of await listAdditionalInvoiceIds(ctx, event._id)) {
+        if (!invoiceIds.includes(invoiceId)) invoiceIds.push(invoiceId);
       }
+      for (const invoiceId of invoiceIds) {
+        if (consideredInvoiceIds.has(invoiceId)) continue;
+        consideredInvoiceIds.add(invoiceId);
+        const invoice = await ctx.db.get(invoiceId);
+        if (!invoice) continue;
+
+        const row = await buildPaymentQueueRow(ctx, invoice, event, now);
+        if (!row || !includeInPaymentQueue(args.queue, row)) continue;
+
+        const { queue: _queue, ...publicRow } = row;
+        rows.push(publicRow);
+      }
+    }
+
+    const unlinked = await listApprovedInvoicesWithoutEvent(ctx, windowStart, consideredInvoiceIds);
+    for (const invoice of unlinked) {
+      const row = await buildPaymentQueueRow(ctx, invoice, null, now);
+      if (!row || !includeInPaymentQueue(args.queue, row)) continue;
 
       const { queue: _queue, ...publicRow } = row;
       rows.push(publicRow);
@@ -315,7 +332,7 @@ export const getByInvoiceId = query({
     await requireArborInternalContext(ctx);
     const invoice = await ctx.db.get(args.invoiceId);
     if (!invoice) return null;
-    const events = await listEventsByInvoiceId(ctx, args.invoiceId);
+    const events = await listEventsLinkedToInvoice(ctx, args.invoiceId);
     const event = events[0] ?? null;
     return await buildInvoicePaymentDetails(ctx, invoice, event, Date.now());
   },
@@ -401,11 +418,8 @@ export const submitByInvoiceId = mutation({
     const invoice = await ctx.db.get(args.invoiceId);
     if (!invoice) throw new Error("Invoice not found.");
 
-    const linkedEvents = await listEventsByInvoiceId(ctx, args.invoiceId);
-    const linkedEvent = linkedEvents[0];
-    if (!linkedEvent) {
-      throw new Error("Link an event to this invoice before recording payment proof.");
-    }
+    const linkedEvents = await listEventsLinkedToInvoice(ctx, args.invoiceId);
+    const linkedEvent = linkedEvents[0] ?? null;
 
     const result = await submitPaymentProof(ctx, invoice, linkedEvent, {
       paymentMethod: args.paymentMethod,
@@ -505,8 +519,8 @@ export const invalidateSubmission = mutation({
     });
 
     const invoice = await ctx.db.get(submission.invoiceId);
-    const event = await ctx.db.get(submission.eventId);
-    if (invoice && event) {
+    const event = submission.eventId ? await ctx.db.get(submission.eventId) : null;
+    if (invoice) {
       const portalInfo = await resolvePortalTokenForInvoice(ctx, invoice);
       if (portalInfo) {
         await schedulePaymentProofRejectedEmails(ctx, {

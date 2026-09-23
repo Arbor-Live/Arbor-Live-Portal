@@ -2,7 +2,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { syncBookingRequestStatusFromInvoice } from "./bookingRequestStatus";
 import { syncLinkedEventStatusFromInvoice } from "./eventStatus";
-import { listEventsByInvoiceId } from "./invoiceEvents";
+import { listEventsLinkedToInvoice } from "./invoiceEvents";
 import { artistLineAppliesToEvent, isSingleSeriesBooking } from "./invoiceArtistDays";
 import { getEventArtists } from "./eventArtists";
 import { toDocumentLineItem, recomputeInvoiceTotalsFromDocumentLines } from "./invoiceDocumentBuild";
@@ -78,7 +78,7 @@ export async function loadPublicQuoteView(ctx: QueryCtx, invoice: Doc<"invoices"
   const combinedTermsMarkdown = invoice.additionalTermsMarkdown
     ? `${globalTermsMarkdown}\n\n---\n\n## Additional Terms\n\n${invoice.additionalTermsMarkdown}`
     : globalTermsMarkdown;
-  const linkedEvents = await listEventsByInvoiceId(ctx, invoice._id);
+  const linkedEvents = await listEventsLinkedToInvoice(ctx, invoice._id);
   const linkedEvent = linkedEvents[0] ?? null;
   const paymentProof = await loadPaymentProofState(ctx, invoice, linkedEvent);
   const billableOccurrenceCount = await resolveBillableOccurrenceCount(ctx, invoice._id);

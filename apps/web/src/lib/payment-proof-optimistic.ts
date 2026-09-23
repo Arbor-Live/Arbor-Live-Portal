@@ -47,7 +47,9 @@ export function optimisticMarkPaymentReceived(
   const details = localStore.getQuery(api.paymentProof.getByInvoiceId, {
     invoiceId: args.invoiceId,
   });
-  if (details) {
+  // Unapproved quotes have no due date. Spreading that branch while forcing
+  // status to payment_received fails the return type (dueAt must be a number).
+  if (details && details.status !== "not_applicable") {
     localStore.setQuery(
       api.paymentProof.getByInvoiceId,
       { invoiceId: args.invoiceId },

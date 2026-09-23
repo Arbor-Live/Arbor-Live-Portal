@@ -97,6 +97,7 @@ the URL looks like cloud.
 | Public quote page render | Covered | `smoke/public-quote.spec.ts` |
 | Client approve / request changes | Covered | `quotes/public-quote-flows.spec.ts` |
 | Client submit payment proof | Covered | `quotes/public-quote-flows.spec.ts` |
+| Client post-event album + feedback | Covered | `quotes/public-post-event-feedback.spec.ts` — single-day and multi-day (Day 1 / Day 2 albums + per-day submit) on quote and booking-request portals |
 | Staff draft create → public link | Covered | `quotes/invoice-finalize.spec.ts` (Batch 3; no separate Finalize UI — draft + `/event/{token}`) |
 | Staff mark payment received | Covered | `quotes/payment-proof-verify.spec.ts` (Batch 3) |
 | Line item add / edit / remove + totals | Covered | `quotes/invoice-line-items.spec.ts` (Batch 8) — asserts the browser's `computeInvoiceDraftTotals` and the server's `computeTotals` agree |
@@ -199,6 +200,7 @@ the URL looks like cloud.
 | `smoke/event-create.spec.ts` | Crewed event + schedule |
 | `smoke/public-quote.spec.ts` | Quote page render |
 | `quotes/public-quote-flows.spec.ts` | Approve / changes / payment proof |
+| `quotes/public-post-event-feedback.spec.ts` | Public After-the-event album + feedback, including multi-day |
 | `booking/booking-convert.spec.ts` | Staff convert |
 | `booking/booking-convert-approve.spec.ts` | Track approve |
 | `events/event-edit-dry-hire.spec.ts` | Edit + dry hire schedule |
@@ -223,7 +225,7 @@ the URL looks like cloud.
 | `events/venue-create-pick.spec.ts` | Venue create + pick on event (Batch 3) |
 | `crew/crew-application-triage.spec.ts` | Turn away / convert / trainee assign (Batch 4) |
 | `crew/crew-onboarding-complete.spec.ts` | Crew onboarding wizard end-to-end (Batch 4) |
-| `bands/band-onboarding-complete.spec.ts` | Band onboarding wizard end-to-end (Batch 4) |
+| `bands/band-onboarding-complete.spec.ts` | Band onboarding wizard end-to-end, including mailing-address Next after the empty-address prompt (Batch 4) |
 | `inventory/pull-list-edit.spec.ts` | Pull-list qty edit + add type (Batch 5) |
 | `inventory/damage-create.spec.ts` | Damage report create from queue (Batch 5) |
 | `crew/crew-scheduling-board.spec.ts` | Scheduling board range/filter + assign link (Batch 5) |

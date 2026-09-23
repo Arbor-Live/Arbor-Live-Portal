@@ -10,14 +10,14 @@ import { syncEventStatusForLinkedInvoice, syncLinkedEventStatusFromInvoice } fro
 import { syncBookingRequestStatusFromInvoice } from "./lib/bookingRequestStatus";
 import { recordInvoiceStatusTransition } from "./lib/statusTransitions";
 import { listAdditionallyLinkedEvents } from "./lib/eventInvoiceLinks";
-import { listEventsByInvoiceId } from "./lib/invoiceEvents";
+import { listEventsByInvoiceId, listEventsLinkedToInvoice } from "./lib/invoiceEvents";
 import {
   addPublicEventContact,
   deletePublicEventContact,
   requirePublicEditableEvent,
 } from "./lib/publicEventContacts";
 import { isSingleSeriesBooking } from "./lib/invoiceArtistDays";
-import { getActivePaymentProofSubmission } from "./lib/paymentProof";
+import { getActivePaymentProofSubmissionForInvoice } from "./lib/paymentProof";
 import { invoiceDueEndMs } from "./lib/invoicePaymentStatus";
 import {
   billingQuantityForEquipmentLine,
@@ -582,7 +582,7 @@ async function recentInvoices(
  */
 async function resolveInvoiceListLabels(ctx: QueryCtx, invoiceId: Id<"invoices">) {
   const series = await findSeriesByInvoiceId(ctx, invoiceId);
-  const linkedEvents = await listEventsByInvoiceId(ctx, invoiceId);
+  const linkedEvents = await listEventsLinkedToInvoice(ctx, invoiceId);
   const primaryEvent = linkedEvents[0];
   const eventCostsUsd = primaryEvent
     ? (primaryEvent.crewCostUsd ?? 0) +
@@ -656,9 +656,7 @@ async function resolveInvoiceListPaymentStatus(
     return { paymentStatus: "paid", daysOverdue: 0 };
   }
   const now = Date.now();
-  const activeSubmission = primaryEvent
-    ? await getActivePaymentProofSubmission(ctx, primaryEvent._id)
-    : null;
+  const activeSubmission = await getActivePaymentProofSubmissionForInvoice(ctx, invoice._id);
   const dueEndMs = invoiceDueEndMs(invoice, primaryEvent?.timezone);
   if (dueEndMs != null && now > dueEndMs) {
     return {

@@ -49,6 +49,7 @@ async function ensureUserProfileDefaults(
     includeInTimecards?: boolean;
     assignableAsCrew?: boolean;
     showOnPublicCrewPage?: boolean;
+    damageReportEmails?: boolean;
   },
 ) {
   const now = Date.now();
@@ -78,6 +79,10 @@ async function ensureUserProfileDefaults(
         args.showOnPublicCrewPage !== undefined
           ? args.showOnPublicCrewPage
           : existing.showOnPublicCrewPage,
+      damageReportEmails:
+        args.damageReportEmails !== undefined
+          ? args.damageReportEmails
+          : existing.damageReportEmails,
       updatedAt: now,
     });
     return;
@@ -94,6 +99,7 @@ async function ensureUserProfileDefaults(
     includeInTimecards: args.includeInTimecards,
     assignableAsCrew: args.assignableAsCrew,
     showOnPublicCrewPage: args.showOnPublicCrewPage,
+    damageReportEmails: args.damageReportEmails,
     createdAt: now,
     updatedAt: now,
   });
@@ -281,6 +287,7 @@ export const acceptInviteWithPassword = mutation({
       includeInTimecards: pending.includeInTimecards,
       assignableAsCrew: pending.assignableAsCrew,
       showOnPublicCrewPage: pending.showOnPublicCrewPage,
+      damageReportEmails: pending.damageReportEmails,
     });
     await upsertOrgMembership(ctx, {
       userId,
