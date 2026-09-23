@@ -877,6 +877,49 @@ export const seedCrewedEventWithSchedule = mutation({
   },
 });
 
+/**
+ * Test-only: a public, listable show so Playwright can hit `/events/:id`
+ * (newsletter + calendar section, per-event ICS).
+ */
+export const seedPublicShowPage = mutation({
+  args: {
+    title: v.optional(v.string()),
+  },
+  returns: v.object({
+    eventId: v.id("events"),
+    title: v.string(),
+    path: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const now = Date.now();
+    const { startAt, endAt } = futureEventWindow(21);
+    const title = args.title?.trim() || `E2E Public Show ${now}`;
+    const eventId = await ctx.db.insert("events", {
+      title,
+      status: "ready",
+      visibility: "public",
+      publicToken: makeToken(),
+      startAt,
+      endAt,
+      timezone: "America/Los_Angeles",
+      spansMultipleDays: false,
+      setupOnly: false,
+      strikeOnly: false,
+      requiresShowWindow: true,
+      venueName: "E2E Memorial Church",
+      eventType: "Crewed Event",
+      createdAt: now,
+      updatedAt: now,
+    });
+    return {
+      eventId,
+      title,
+      path: `/events/${eventId}`,
+    };
+  },
+});
+
 export const seedApprovablePublicQuote = mutation({
   args: {
     clientGroupName: v.optional(v.string()),

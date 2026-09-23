@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import { CalendarSubscribe } from "@/components/public/calendar-subscribe";
+import { EventAddToCalendar } from "@/components/public/event-add-to-calendar";
+import type { EventCalendarInput } from "@/lib/event-calendar";
 
 /** Public sign-up sources; `admin` is reserved for the authenticated add flow. */
 type NewsletterSource = "landing" | "open_mic" | "events_page";
@@ -87,14 +89,16 @@ export function NewsletterSignupForm({
 }
 
 /**
- * "Stay in the loop" — the two ways to keep up with Arbor: the weekly email and
- * a calendar subscription. Both are opt-in and live side by side so nobody has
- * to choose between them.
+ * "Stay in the loop" — the weekly email and a calendar subscription, plus
+ * add-this-show links when rendered on an event page. All opt-in.
  */
 export function LandingStayInTheLoop({
   source = "landing",
+  event,
 }: {
   source?: NewsletterSource;
+  /** When set, a third column adds this show to Google / Apple / Outlook. */
+  event?: EventCalendarInput;
 }) {
   return (
     <section className="border-b bg-background py-12 sm:py-14">
@@ -103,7 +107,26 @@ export function LandingStayInTheLoop({
           Stay in the loop
         </h2>
 
-        <div className="mt-8 grid gap-8 sm:grid-cols-2 sm:gap-12">
+        <div
+          className={
+            event
+              ? "mt-8 grid gap-8 sm:grid-cols-2 sm:gap-12 lg:grid-cols-3"
+              : "mt-8 grid gap-8 sm:grid-cols-2 sm:gap-12"
+          }
+        >
+          {event ? (
+            <div>
+              <h3 className="text-sm font-semibold text-foreground">This show</h3>
+              <p className="mt-1 text-sm leading-relaxed text-foreground/70">
+                Save the date on your calendar.
+              </p>
+              <EventAddToCalendar
+                event={event}
+                className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2"
+              />
+            </div>
+          ) : null}
+
           <div>
             <h3 className="text-sm font-semibold text-foreground">Weekly email</h3>
             <p className="mt-1 text-sm leading-relaxed text-foreground/70">

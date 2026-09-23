@@ -5,6 +5,7 @@ import { PublicEventPoster } from "@/components/public/public-event-poster";
 import { PublicEventArtists } from "@/components/public/public-artist-card";
 import { PublicStaffDashboardLinks } from "@/components/public/public-staff-dashboard-links";
 import { LandingUpcomingEvents } from "@/components/public/public-events-grid";
+import { LandingStayInTheLoop } from "@/components/public/newsletter-signup-form";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/convex-api";
 import { fetchPublicQuerySafe } from "@/lib/convex-server";
@@ -122,6 +123,18 @@ export default async function PublicEventDetailPage({ params }: EventDetailPageP
         </section>
       </article>
 
+      <LandingStayInTheLoop
+        source="events_page"
+        event={{
+          eventId: event.eventId,
+          title: event.title,
+          startAt: event.startAt,
+          endAt: event.endAt,
+          location: [event.venueName, event.venueAddress].filter(Boolean).join(", ") || undefined,
+          description: event.caption,
+          url: event.publicEventUrl,
+        }}
+      />
       <LandingUpcomingEvents excludeEventId={event.eventId} />
     </PublicMarketingLayout>
   );
