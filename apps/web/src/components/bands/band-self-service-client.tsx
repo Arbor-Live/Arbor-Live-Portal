@@ -326,7 +326,7 @@ export function BandSelfServiceClient() {
               <Form {...inviteForm}>
                 <form
                   onSubmit={inviteForm.handleSubmit(onInvite)}
-                  className="grid gap-3 border p-3 md:grid-cols-[1fr_1fr_180px_auto] md:items-end"
+                  className="grid gap-3 border p-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto] md:items-end"
                 >
                   <TextFormField
                     name="email"
@@ -343,17 +343,17 @@ export function BandSelfServiceClient() {
                     control={inviteForm.control}
                     name="role"
                     render={({ field }) => (
-                      <FormItem>
+                      <FormItem className="min-w-0">
                         <FormLabel>Access level</FormLabel>
                         <Select value={field.value} onValueChange={field.onChange}>
                           <FormControl>
-                            <SelectTrigger>
+                            <SelectTrigger className="min-w-0 [&>span]:min-w-0 [&>span]:truncate">
                               <SelectValue />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="org_member">Member — edit profile & riders</SelectItem>
-                            <SelectItem value="org_admin">Admin — manage team & access</SelectItem>
+                            <SelectItem value="org_member">Member</SelectItem>
+                            <SelectItem value="org_admin">Admin</SelectItem>
                           </SelectContent>
                         </Select>
                       </FormItem>
