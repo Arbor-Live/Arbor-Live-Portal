@@ -17,10 +17,12 @@ test.describe("artist page invite lifecycle", () => {
   const stamp = Date.now();
   const inviteEmail = `e2e-artist-invite-${stamp}@arborlive.test`;
   const dismissEmail = `e2e-artist-invite-dismiss-${stamp}@arborlive.test`;
+  const mismatchEmail = `e2e-artist-invite-mismatch-${stamp}@arborlive.test`;
 
   test.afterAll(() => {
     runConvex("e2eHelpers:deleteInvitationsByEmail", { email: inviteEmail });
     runConvex("e2eHelpers:deleteInvitationsByEmail", { email: dismissEmail });
+    runConvex("e2eHelpers:deleteInvitationsByEmail", { email: mismatchEmail });
   });
 
   test("artist invites, resends, then removes a pending teammate", async ({ page }) => {
@@ -99,6 +101,39 @@ test.describe("artist page invite lifecycle", () => {
     expect(after.status).toBe("pending");
     expect(after.hasPendingToken).toBe(true);
     await expect(inviteRow).toBeVisible();
+  });
+
+  test("retyping a pending email with a different access level is refused", async ({ page }) => {
+    await page.goto("/dashboard/artists");
+    const teamCard = page.getByTestId("artist-team-card");
+    await expect(teamCard).toBeVisible({ timeout: 30_000 });
+
+    await formField(teamCard, "Email address").fill(mismatchEmail);
+    await teamCard.getByRole("button", { name: "Send invitation" }).click();
+    await expect(teamCard.getByText(`Invitation sent to ${mismatchEmail}.`)).toBeVisible({
+      timeout: 30_000,
+    });
+    const seeded = await waitForInvitationState(
+      mismatchEmail,
+      (state) => state?.status === "pending",
+    );
+    expect(seeded.role).toBe("org_member");
+
+    await formField(teamCard, "Email address").fill(mismatchEmail);
+    await teamCard.getByRole("combobox").click();
+    await page.getByRole("option", { name: "Admin", exact: true }).click();
+    await teamCard.getByRole("button", { name: "Send invitation" }).click();
+    await expect(teamCard.getByText("Invitation not sent")).toBeVisible({ timeout: 30_000 });
+    await expect(
+      teamCard.getByText("Remove it before sending a different access level."),
+    ).toBeVisible();
+
+    const after = await waitForInvitationState(
+      mismatchEmail,
+      (state) => state?.status === "pending",
+    );
+    expect(after.invitationId).toBe(seeded.invitationId);
+    expect(after.role).toBe("org_member");
   });
 });
 

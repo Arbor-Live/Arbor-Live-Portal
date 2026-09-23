@@ -1766,40 +1766,38 @@ async function userExistsForInvite(ctx: MutationCtx | QueryCtx, email: string) {
 }
 
 async function getInvitationById(ctx: MutationCtx | QueryCtx, invitationId: string) {
-  const invitesResult = await ctx.runQuery(components.betterAuth.adapter.findMany, {
+  // Adapter `_id` lookups call `db.get` and throw on anything that is not a
+  // Convex document id. Invitation ids from this app are Convex `_id`s.
+  if (!/^[0-9a-z]{32}$/.test(invitationId)) {
+    throw new Error("Invitation not found.");
+  }
+  const invite = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
     model: "invitation",
-    paginationOpts: { cursor: null, numItems: 2000 },
-  });
-  const invite = ((invitesResult?.page ?? []) as InvitationRow[]).find(
-    (row) => getRecordId(row) === invitationId,
-  );
+    where: [{ field: "_id", value: invitationId }],
+  })) as InvitationRow | null;
   if (!invite) throw new Error("Invitation not found.");
   return invite;
 }
 
 const ORGANIZATION_INVITE_EXPIRY_MS = 14 * 24 * 60 * 60 * 1000;
 
-async function listInvitationRows(ctx: MutationCtx | QueryCtx) {
-  const invitesResult = await ctx.runQuery(components.betterAuth.adapter.findMany, {
-    model: "invitation",
-    paginationOpts: { cursor: null, numItems: 2000 },
-  });
-  return (invitesResult?.page ?? []) as InvitationRow[];
-}
-
 async function findPendingInvitationForOrg(
   ctx: MutationCtx | QueryCtx,
   args: { organizationId: string; email: string },
 ) {
   const email = args.email.trim().toLowerCase();
-  const invites = await listInvitationRows(ctx);
+  // Indexed by email + organizationId. Status is filtered in TS so a cancelled
+  // row for the same address cannot hide a still-pending invitation.
+  const result = await ctx.runQuery(components.betterAuth.adapter.findMany, {
+    model: "invitation",
+    where: [
+      { field: "email", value: email },
+      { connector: "AND", field: "organizationId", value: args.organizationId },
+    ],
+    paginationOpts: { cursor: null, numItems: 50 },
+  });
   return (
-    invites.find(
-      (invite) =>
-        invite.organizationId === args.organizationId &&
-        invite.status === "pending" &&
-        (invite.email ?? "").trim().toLowerCase() === email,
-    ) ?? null
+    ((result?.page ?? []) as InvitationRow[]).find((invite) => invite.status === "pending") ?? null
   );
 }
 
@@ -1818,7 +1816,11 @@ async function requirePendingInviteForActiveOrg(
   return invite;
 }
 
-async function resendPendingInvitation(ctx: MutationCtx, invite: InvitationRow) {
+async function resendPendingInvitation(
+  ctx: MutationCtx,
+  invite: InvitationRow,
+  updates?: { bandRole?: string },
+) {
   const invitationId = getRecordId(invite);
   const email = (invite.email ?? "").trim().toLowerCase();
   if (!invitationId) throw new Error("Invitation not found.");
@@ -1846,9 +1848,21 @@ async function resendPendingInvitation(ctx: MutationCtx, invite: InvitationRow) 
     email,
     organizationId: invite.organizationId ?? "",
     role: invite.role ?? "org_member",
-    bandRole: pending?.bandRole,
+    bandRole: updates?.bandRole ?? pending?.bandRole,
     inviterId: invite.inviterId ?? "",
     expiresAt,
+    teams: pending?.teams,
+    verticals: pending?.verticals as UserVertical[] | undefined,
+    disciplines: pending?.disciplines as UserDiscipline[] | undefined,
+    rateMode: pending?.rateMode,
+    customHourlyRateUsd: pending?.customHourlyRateUsd,
+    payrollMethod: pending?.payrollMethod,
+    inviteKind: pending?.inviteKind,
+    requiresOnboarding: pending?.requiresOnboarding,
+    includeInTimecards: pending?.includeInTimecards,
+    assignableAsCrew: pending?.assignableAsCrew,
+    showOnPublicCrewPage: pending?.showOnPublicCrewPage,
+    gradYear: pending?.gradYear,
     isExistingUser: await userExistsForInvite(ctx, email),
     resendKey: String(now),
   });
@@ -2694,7 +2708,18 @@ export const inviteMemberToActiveOrganization = mutation({
       email,
     });
     if (existingPending) {
-      const resent = await resendPendingInvitation(ctx, existingPending);
+      const existingRole = existingPending.role ?? "org_member";
+      if (args.role !== existingRole) {
+        throw new Error(
+          "This email already has a pending invitation. Remove it before sending a different access level.",
+        );
+      }
+      const submittedBandRole = args.bandRole?.trim();
+      const resent = await resendPendingInvitation(
+        ctx,
+        existingPending,
+        submittedBandRole ? { bandRole: submittedBandRole } : undefined,
+      );
       return { invitationId: resent.invitationId, resent: true };
     }
     const bandRole = args.bandRole?.trim() || undefined;

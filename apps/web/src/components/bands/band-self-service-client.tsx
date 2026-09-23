@@ -170,6 +170,7 @@ export function BandSelfServiceClient() {
   );
 
   async function onResendInvite(invite: { invitationId: string; email: string }) {
+    if (inviteBusyId) return;
     setInviteBusyId(invite.invitationId);
     try {
       await resendInvite({ invitationId: invite.invitationId });
@@ -177,28 +178,29 @@ export function BandSelfServiceClient() {
     } catch (error) {
       notify.error(getConvexErrorMessage(error));
     } finally {
-      setInviteBusyId(null);
+      setInviteBusyId((current) => (current === invite.invitationId ? null : current));
     }
   }
 
   async function onRemoveInvite(invite: { invitationId: string; email: string }) {
-    if (
-      !(await confirm({
-        title: `Remove the invitation for ${invite.email}?`,
-        confirmLabel: "Remove",
-        destructive: true,
-      }))
-    ) {
-      return;
-    }
+    if (inviteBusyId) return;
     setInviteBusyId(invite.invitationId);
     try {
+      if (
+        !(await confirm({
+          title: `Remove the invitation for ${invite.email}?`,
+          confirmLabel: "Remove",
+          destructive: true,
+        }))
+      ) {
+        return;
+      }
       await cancelInvite({ invitationId: invite.invitationId });
       notify.success(`Invitation removed for ${invite.email}.`);
     } catch (error) {
       notify.error(getConvexErrorMessage(error));
     } finally {
-      setInviteBusyId(null);
+      setInviteBusyId((current) => (current === invite.invitationId ? null : current));
     }
   }
 
@@ -468,7 +470,7 @@ export function BandSelfServiceClient() {
                         type="button"
                         size="sm"
                         variant="outline"
-                        disabled={inviteBusyId === invite.invitationId}
+                        disabled={inviteBusyId !== null}
                         onClick={() => void onResendInvite(invite)}
                       >
                         Resend
@@ -477,7 +479,7 @@ export function BandSelfServiceClient() {
                         type="button"
                         size="sm"
                         variant="outline"
-                        disabled={inviteBusyId === invite.invitationId}
+                        disabled={inviteBusyId !== null}
                         onClick={() => void onRemoveInvite(invite)}
                       >
                         Remove

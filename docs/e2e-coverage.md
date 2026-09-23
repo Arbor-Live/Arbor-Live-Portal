@@ -169,7 +169,7 @@ the URL looks like cloud.
 | Public `/artists/apply` → admin approve | Covered | `bands/band-application.spec.ts` (Batch 3) |
 | Band payouts admin queue UI | Covered | `bands/band-payouts-queue.spec.ts` — send signature request + mark paid |
 | Band portal beyond e-sign | Partial | Onboarding (Batch 4) + shows home + artist-page invite resend/remove; payee settings still light |
-| Artist org invite resend / remove (`/dashboard/artists`) | Covered | `bands/artist-invite-lifecycle.spec.ts` — invite → resend same row → remove, plus dismissed confirm |
+| Artist org invite resend / remove (`/dashboard/artists`) | Covered | `bands/artist-invite-lifecycle.spec.ts` — invite → resend same row → remove, dismissed confirm, and refused access-level mismatch |
 | Band org profile admin birdseye (`/users/organizations`) | Covered | `users/band-org-profile.spec.ts` (Batch 12) — admin edits the display name, asserts via `getBandOrganizationProfileByDisplayName` |
 
 ### Marketing and public site
@@ -214,7 +214,7 @@ the URL looks like cloud.
 | `bands/band-payment-esign.spec.ts` | Band e-sign + helper mark paid |
 | `bands/band-shows-home.spec.ts` | Band Your shows home, assign → email, e-sign from card |
 | `bands/band-application.spec.ts` | Band apply + admin approve (Batch 3) |
-| `bands/artist-invite-lifecycle.spec.ts` | Artist-page pending invite resend + remove |
+| `bands/artist-invite-lifecycle.spec.ts` | Artist-page pending invite resend + remove, including access-level mismatch |
 | `booking/booking-submit.spec.ts` | Public `/request` wizard submit (Batch 3) |
 | `booking/request-inbox.spec.ts` | Inbox list UX: open view, status filter, all statuses (Batch 13) |
 | `booking/request-staff-actions.spec.ts` | Assignee + staff notes + mark in review (Batch 13) |
