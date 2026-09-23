@@ -18,6 +18,7 @@ const EMPTY: CrewApplicationFormValues = {
   email: "",
   phone: "",
   heardAboutUs: "",
+  experience: "",
   vertical: "Crew",
   discipline: "",
   friday: false,
@@ -169,6 +170,19 @@ export function CrewApplicationForm() {
             value={form.heardAboutUs}
             onChange={(event) => patch({ heardAboutUs: event.target.value })}
             rows={3}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="experience">What excites you about joining?</Label>
+          <p className="text-xs text-muted-foreground">
+            Experience is welcome but never required.
+          </p>
+          <OnboardingTextarea
+            id="experience"
+            required
+            value={form.experience}
+            onChange={(event) => patch({ experience: event.target.value })}
+            rows={4}
           />
         </div>
       </section>

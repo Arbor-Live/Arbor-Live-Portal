@@ -43,6 +43,7 @@ type ApplicationRow = {
   email: string;
   phone: string;
   heardAboutUs: string;
+  experience?: string;
   vertical: UserVerticalOption;
   discipline?: UserDisciplineOption | "unsure";
   crewAvailabilityDays?: Array<"friday" | "saturday">;
@@ -415,6 +416,12 @@ export function CrewApplicationsAdminClient() {
                   <dt className="font-medium text-foreground/80">Heard about us</dt>
                   <dd>{app.heardAboutUs}</dd>
                 </div>
+                {app.experience ? (
+                  <div className="sm:col-span-2">
+                    <dt className="font-medium text-foreground/80">What excites them about joining</dt>
+                    <dd className="whitespace-pre-wrap">{app.experience}</dd>
+                  </div>
+                ) : null}
               </dl>
 
               {app.status === "submitted" || app.status === "trainee" ? (

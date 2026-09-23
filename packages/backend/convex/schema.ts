@@ -2055,6 +2055,8 @@ export default defineSchema({
     email: v.string(),
     phone: v.string(),
     heardAboutUs: v.string(),
+    /** Free response: relevant experience, or why they are interested. */
+    experience: v.optional(v.string()),
     vertical: v.union(
       v.literal("Operations"),
       v.literal("Crew"),

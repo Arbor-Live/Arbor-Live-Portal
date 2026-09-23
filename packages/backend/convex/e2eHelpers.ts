@@ -3654,6 +3654,7 @@ export const seedSubmittedCrewApplication = mutation({
       email,
       phone: "6505550199",
       heardAboutUs: "E2E test suite",
+      experience: "E2E test suite",
       vertical: "Crew",
       discipline: "Sound",
       crewAvailabilityDays: ["friday"],
