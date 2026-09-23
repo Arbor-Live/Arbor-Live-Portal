@@ -11,6 +11,7 @@ import {
   QuestionnaireSkip,
   QuestionnaireSubmit,
 } from "@/components/ui/questionnaire";
+import { cn } from "@/lib/utils";
 
 const progressSpring = { type: "spring" as const, stiffness: 380, damping: 36 };
 
@@ -41,6 +42,28 @@ export function MarkStepAnswered() {
     <QuestionnaireChoices className="sr-only">
       <QuestionnaireInput aria-label="Continue" readOnly tabIndex={-1} value="answered" />
     </QuestionnaireChoices>
+  );
+}
+
+/**
+ * Step-level validation message for custom (non-questionnaire) checks.
+ *
+ * Do not drive this with `QuestionnaireItem invalid`. That prop also blocks
+ * Next until it is cleared, so a sticky error after the first failed Next
+ * leaves the button dead until the user goes Back.
+ */
+export function QuestionnaireFieldError({
+  children,
+  className,
+}: {
+  children?: React.ReactNode;
+  className?: string;
+}) {
+  if (!children) return null;
+  return (
+    <p role="alert" className={cn("mt-2 text-xs text-destructive", className)}>
+      {children}
+    </p>
   );
 }
 
