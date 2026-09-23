@@ -20,15 +20,30 @@ export function normalizeMarketingLinks(
   links: Array<{ label: string; url: string; icon?: string }> | undefined,
   max = MAX_ADDITIONAL_LINKS,
 ): MarketingDesignLink[] {
-  return (links ?? [])
-    .map((link) => {
-      const label = link.label.trim();
-      const url = link.url.trim();
-      const icon = link.icon?.trim().slice(0, MAX_LINK_ICON_CHARS) || undefined;
-      return icon ? { label, url, icon } : { label, url };
-    })
-    .filter((link) => link.label && link.url)
-    .slice(0, max);
+  const normalized: MarketingDesignLink[] = [];
+  for (const link of links ?? []) {
+    const label = link.label.trim();
+    const url = normalizeHttpUrl(link.url);
+    if (!label || !url) continue;
+    const icon = link.icon?.trim().slice(0, MAX_LINK_ICON_CHARS) || undefined;
+    normalized.push(icon ? { label, url, icon } : { label, url });
+    if (normalized.length >= max) break;
+  }
+  return normalized;
+}
+
+/** Accept only http(s) URLs; bare hosts are normalized to https://. */
+function normalizeHttpUrl(raw: string): string | undefined {
+  const trimmed = raw.trim();
+  if (!trimmed) return undefined;
+  const candidate = /^[a-z][a-z0-9+.-]*:/i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  try {
+    const parsed = new URL(candidate);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return undefined;
+  } catch {
+    return undefined;
+  }
+  return candidate;
 }
 
 export function normalizeOptionalUrl(url: string | undefined, maxChars?: number) {

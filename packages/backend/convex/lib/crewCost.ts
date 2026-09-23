@@ -1,6 +1,6 @@
-import { components } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
+import { findAuthUsersByIds } from "./auth";
 import {
   resolveOpenSlotHourlyRateUsd,
   resolveUserCompensationHourlyRateUsd,
@@ -33,12 +33,16 @@ export async function calculateCrewCost(ctx: QueryCtx | MutationCtx, eventId: Id
     .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", eventId))
     .take(500);
   const userIds = Array.from(new Set(shifts.map((shift) => shift.userId).filter(Boolean) as string[]));
-  const rates = await ctx.db.query("userCompensationRates").withIndex("by_updatedAt").take(1000);
-  const rateByUserId = new Map(
-    rates.map((rate) => [
-      rate.userId,
-      resolveUserCompensationHourlyRateUsd(rate, settings),
-    ]),
+  const rateByUserId = new Map<string, number>(
+    await Promise.all(
+      userIds.map(async (userId) => {
+        const rate = await ctx.db
+          .query("userCompensationRates")
+          .withIndex("by_userId", (q) => q.eq("userId", userId))
+          .take(1);
+        return [userId, resolveUserCompensationHourlyRateUsd(rate[0], settings)] as const;
+      }),
+    ),
   );
 
   const scheduleBlocks = await ctx.db
@@ -46,24 +50,7 @@ export async function calculateCrewCost(ctx: QueryCtx | MutationCtx, eventId: Id
     .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", eventId))
     .take(500);
   const scheduleBlockById = new Map(scheduleBlocks.map((block) => [block._id, block]));
-  const userRecords = new Map<string, { name?: string; email?: string }>();
-  if (userIds.length > 0) {
-    const usersResult = await ctx.runQuery(components.betterAuth.adapter.findMany, {
-      model: "user",
-      paginationOpts: { cursor: null, numItems: 500 },
-    });
-    const users = (usersResult?.page ?? []) as Array<{
-      _id?: string;
-      id?: string;
-      name?: string;
-      email?: string;
-    }>;
-    for (const user of users) {
-      const key = user.id ?? user._id ?? "";
-      if (!key || !userIds.includes(key)) continue;
-      userRecords.set(key, { name: user.name, email: user.email });
-    }
-  }
+  const userById = await findAuthUsersByIds(ctx, userIds);
 
   const userTotals = new Map<string, { regularHours: number; overtimeHours: number; rate: number; costUsd: number }>();
   const byBlock = new Map<
@@ -121,7 +108,7 @@ export async function calculateCrewCost(ctx: QueryCtx | MutationCtx, eventId: Id
     const estimatedRate = resolveOpenSlotHourlyRateUsd(shift.estimatedHourlyRateUsd, settings);
     const rate = shift.userId ? assignedRate : estimatedRate;
     const userName = shift.userId
-      ? (userRecords.get(shift.userId)?.name ?? userRecords.get(shift.userId)?.email ?? shift.userId)
+      ? (userById.get(shift.userId)?.name ?? userById.get(shift.userId)?.email ?? shift.userId)
       : shift.personName?.trim() || "Unassigned";
     const allocationKey = shift.userId ? `${shift.userId}:${dayKey}` : undefined;
     const alreadyAllocated = allocationKey ? (userDayAllocatedHours.get(allocationKey) ?? 0) : 0;
@@ -176,7 +163,7 @@ export async function calculateCrewCost(ctx: QueryCtx | MutationCtx, eventId: Id
   const byUser = Array.from(userTotals.entries())
     .map(([userId, totals]) => ({
       userId,
-      name: userRecords.get(userId)?.name ?? userRecords.get(userId)?.email ?? userId,
+      name: userById.get(userId)?.name ?? userById.get(userId)?.email ?? userId,
       rateUsd: totals.rate,
       regularHours: totals.regularHours,
       overtimeHours: totals.overtimeHours,

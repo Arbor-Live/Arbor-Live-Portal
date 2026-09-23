@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import type { Doc } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import { requireAdmin, requireArborInternalContext, requireAuth } from "./lib/auth";
 import {
@@ -431,16 +431,25 @@ export const update = mutation({
 
     const oldPrefix = existing.path;
     if (oldPrefix !== path) {
-      const allVenues = await ctx.db.query("venues").withIndex("by_path").collect();
-      for (const descendant of allVenues) {
-        if (descendant._id === args.id) continue;
-        if (!descendant.path.startsWith(`${oldPrefix} > `)) continue;
-        const nextPath = descendant.path.replace(oldPrefix, path);
-        await ctx.db.patch(descendant._id, {
-          path: nextPath,
-          updatedAt: now,
-        });
-        await syncDenormalizedVenueName(ctx, descendant._id, nextPath);
+      const queue: Id<"venues">[] = [args.id];
+      const visited = new Set<string>([args.id]);
+      while (queue.length > 0) {
+        const parentId = queue.shift()!;
+        const children = await ctx.db
+          .query("venues")
+          .withIndex("by_parentId", (q) => q.eq("parentId", parentId))
+          .collect();
+        for (const child of children) {
+          if (visited.has(child._id)) continue;
+          visited.add(child._id);
+          const nextPath = child.path.replace(oldPrefix, path);
+          await ctx.db.patch(child._id, {
+            path: nextPath,
+            updatedAt: now,
+          });
+          await syncDenormalizedVenueName(ctx, child._id, nextPath);
+          queue.push(child._id);
+        }
       }
       await syncDenormalizedVenueName(ctx, args.id, path);
     } else if (existing.name !== name) {

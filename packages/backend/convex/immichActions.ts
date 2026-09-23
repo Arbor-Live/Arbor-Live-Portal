@@ -149,9 +149,10 @@ export const ensureEventAlbumBestEffort = internalAction({
     v.null(),
     v.object({
       shareUrl: v.optional(v.string()),
+      error: v.optional(v.string()),
     }),
   ),
-  handler: async (ctx, args): Promise<{ shareUrl?: string } | null> => {
+  handler: async (ctx, args): Promise<{ shareUrl?: string; error?: string } | null> => {
     if (!isImmichConfigured()) return null;
     const meta: { title: string; venueName?: string } | null = await ctx.runQuery(
       internal.immichDb.getEventAlbumEnsureMetaInternal,
@@ -170,9 +171,13 @@ export const ensureEventAlbumBestEffort = internalAction({
         { albumLinkId: ensured.albumLinkId },
       );
       return { shareUrl: link?.shareUrl };
-    } catch {
-      // Immich is optional for outbound mail / public feedback.
-      return null;
+    } catch (error) {
+      // Immich is optional, but callers still need to know the album is missing.
+      const message = error instanceof Error ? error.message : "Immich album ensure failed.";
+      console.error(
+        `[immichActions] ensureEventAlbumBestEffort failed for event ${args.eventId}: ${message}`,
+      );
+      return { error: message };
     }
   },
 });

@@ -10,6 +10,7 @@ import {
 } from "./lib/invoicePaymentStatus";
 import { listAdditionalInvoiceIds } from "./lib/eventInvoiceLinks";
 import { listApprovedInvoicesWithoutEvent, listEventsLinkedToInvoice } from "./lib/invoiceEvents";
+import { isRequestPublicTokenExpired } from "./lib/requestToken";
 import {
   getActivePaymentProofSubmissionForInvoice,
   resolvePortalTokenForInvoice,
@@ -19,6 +20,7 @@ import {
   schedulePaymentProofRejectedEmails,
   schedulePaymentProofSubmittedEmails,
 } from "./email/paymentProofEmails";
+import { enforceRateLimit, HOUR_MS } from "./rateLimit";
 
 const paymentProofMethodArg = v.union(
   v.literal("assu_epay"),
@@ -125,6 +127,7 @@ async function resolveInvoiceAndEventByRequestToken(ctx: MutationCtx, token: str
     .withIndex("by_publicToken", (q) => q.eq("publicToken", token))
     .unique();
   if (!request?.linkedInvoiceId) throw new Error("Quote not found.");
+  if (isRequestPublicTokenExpired(request)) throw new Error("This request link has expired.");
 
   const invoice = await ctx.db.get(request.linkedInvoiceId);
   if (!invoice || invoice.status === "void" || !invoice.clientReviewReadyAt) {
@@ -343,6 +346,11 @@ export const submitByQuoteToken = mutation({
   },
   returns: v.object({ ok: v.literal(true) }),
   handler: async (ctx, args) => {
+    await enforceRateLimit(ctx, `paymentProofQuoteToken:${args.token}`, {
+      limit: 10,
+      windowMs: HOUR_MS,
+    });
+    await enforceRateLimit(ctx, "paymentProofSubmit:global", { limit: 120, windowMs: HOUR_MS });
     const { invoice, linkedEvent } = await resolveInvoiceAndEventByQuoteToken(ctx, args.token);
     const result = await submitPaymentProof(ctx, invoice, linkedEvent, {
       paymentMethod: args.paymentMethod,
@@ -371,6 +379,11 @@ export const submitByRequestToken = mutation({
   },
   returns: v.object({ ok: v.literal(true) }),
   handler: async (ctx, args) => {
+    await enforceRateLimit(ctx, `paymentProofRequestToken:${args.token}`, {
+      limit: 10,
+      windowMs: HOUR_MS,
+    });
+    await enforceRateLimit(ctx, "paymentProofSubmit:global", { limit: 120, windowMs: HOUR_MS });
     const { invoice, linkedEvent } = await resolveInvoiceAndEventByRequestToken(ctx, args.token);
     const result = await submitPaymentProof(ctx, invoice, linkedEvent, {
       paymentMethod: args.paymentMethod,
