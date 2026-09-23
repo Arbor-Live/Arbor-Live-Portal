@@ -6,7 +6,7 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
 import { FormSaveBar } from "@/components/forms";
 import { MarketingLinksEditor } from "@/components/marketing/marketing-links-editor";
-import { Form, FormControl, FormField, FormItem, FormLabel } from "@/components/ui/form";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { TextFormField } from "@/components/forms/text-form-field";
 import { TextareaFormField } from "@/components/forms/textarea-form-field";
 import { Button } from "@/components/ui/button";
@@ -326,7 +326,7 @@ export function BandSelfServiceClient() {
               <Form {...inviteForm}>
                 <form
                   onSubmit={inviteForm.handleSubmit(onInvite)}
-                  className="grid gap-3 border p-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto] md:items-end"
+                  className="grid gap-3 border p-3 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_9.5rem_auto]"
                 >
                   <TextFormField
                     name="email"
@@ -346,8 +346,8 @@ export function BandSelfServiceClient() {
                       <FormItem className="min-w-0">
                         <FormLabel>Access level</FormLabel>
                         <Select value={field.value} onValueChange={field.onChange}>
-                          <FormControl>
-                            <SelectTrigger className="min-w-0 [&>span]:min-w-0 [&>span]:truncate">
+                          <FormControl className="w-full">
+                            <SelectTrigger className="w-full shadow-none">
                               <SelectValue />
                             </SelectTrigger>
                           </FormControl>
@@ -356,10 +356,11 @@ export function BandSelfServiceClient() {
                             <SelectItem value="org_admin">Admin</SelectItem>
                           </SelectContent>
                         </Select>
+                        <FormMessage />
                       </FormItem>
                     )}
                   />
-                  <Button type="submit" disabled={inviteForm.saveStatus === "saving"}>
+                  <Button type="submit" className="md:self-end" disabled={inviteForm.saveStatus === "saving"}>
                     {inviteForm.saveStatus === "saving" ? "Sending…" : "Send invitation"}
                   </Button>
                 </form>
