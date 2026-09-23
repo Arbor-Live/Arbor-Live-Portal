@@ -180,6 +180,7 @@ the URL looks like cloud.
 | Short links CRUD | Covered | `marketing/short-link-crud.spec.ts` (Batch 6); Worker redirect still out of suite |
 | Work/stories publish | Deferred | — |
 | Public directories (`/crew`, `/artists`, `/events`) | Covered | `smoke/public-directories.spec.ts` (Batch 6) |
+| Public event show page (`/events/:id`) newsletter + calendar | Covered | `smoke/public-directories.spec.ts` — Add to calendar menu, Stay in the loop, this-show ICS |
 
 ### Other
 
@@ -236,7 +237,7 @@ the URL looks like cloud.
 | `timecards/timecard-view.spec.ts` | Crew + admin timecard read path (Batch 6) |
 | `marketing/short-link-crud.spec.ts` | Short link create → delete (Batch 6) |
 | `inventory/lost-found-public.spec.ts` | Public `/e/{assetId}` found + not-found (Batch 6) |
-| `smoke/public-directories.spec.ts` | `/crew`, `/artists`, `/events` render (Batch 6) |
+| `smoke/public-directories.spec.ts` | `/crew`, `/artists`, `/events` render (Batch 6); public event show page newsletter + calendar |
 | `bands/band-payouts-queue.spec.ts` | Send signature request + mark paid from the queue (Batch 6) |
 | `auth/admin-route-guards.spec.ts` | Non-admin refused on the 9 sidebar `adminOnly` routes (Batch 7) |
 | `auth/backend-enforcement.spec.ts` | Convex refuses privileged query/mutation from a crew JWT (Batch 7) |
