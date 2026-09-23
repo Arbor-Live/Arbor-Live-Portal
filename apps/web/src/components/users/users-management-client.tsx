@@ -1591,6 +1591,7 @@ function InviteUserModal({
   const arborInvite = isArborOrg(orgOptions, orgId);
   const inviteKind = form.watch("inviteKind");
   const isAdvisorInvite = arborInvite && inviteKind === "advisor";
+  const isSubmitting = form.saveStatus === "saving" || form.formState.isSubmitting;
 
   const onSubmit = form.submitMutation(async (values) => {
     if (!orgId) throw new Error("Create or select an organization first.");
@@ -1752,7 +1753,7 @@ function InviteUserModal({
                 </div>
               ) : null}
               <div className="flex gap-2">
-                <Button type="submit" disabled={form.saveStatus === "saving"}>
+                <Button type="submit" disabled={isSubmitting}>
                   Send Invite
                 </Button>
                 <Button type="button" variant="outline" onClick={onClose}>
@@ -1768,6 +1769,7 @@ function InviteUserModal({
         saveStatus={form.saveStatus}
         saveError={form.saveError}
         isDirty={form.formState.isDirty}
+        isSubmitting={isSubmitting}
         saveLabel="Send Invite"
         onSave={() => void form.handleSubmit(onSubmit)()}
         onDiscard={() => {

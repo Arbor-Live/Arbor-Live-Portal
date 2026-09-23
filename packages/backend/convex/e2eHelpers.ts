@@ -5346,6 +5346,63 @@ export const getInvitationStateByEmail = query({
 });
 
 /**
+ * Test-only: every invitation row for an email, newest first.
+ *
+ * `getInvitationStateByEmail` returns only the latest match, so it cannot see a
+ * duplicate. `inviteUserAdmin` must reuse one pending row per
+ * (email, organization) — this is what asserts that.
+ */
+export const listInvitationsByEmail = query({
+  args: { email: v.string() },
+  returns: v.array(
+    v.object({
+      invitationId: v.string(),
+      status: v.string(),
+      role: v.string(),
+      organizationId: v.string(),
+      createdAt: v.number(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const email = args.email.trim().toLowerCase();
+    const result = await ctx.runQuery(components.betterAuth.adapter.findMany, {
+      model: "invitation",
+      paginationOpts: { cursor: null, numItems: 2000 },
+    });
+    const rows = (result?.page ?? []) as Array<{
+      id?: string;
+      _id?: string;
+      email?: string;
+      status?: string;
+      role?: string;
+      organizationId?: string;
+      createdAt?: number;
+    }>;
+    const matches: Array<{
+      invitationId: string;
+      status: string;
+      role: string;
+      organizationId: string;
+      createdAt: number;
+    }> = [];
+    for (const row of rows) {
+      if ((row.email ?? "").toLowerCase() !== email) continue;
+      const invitationId = getId(row);
+      if (!invitationId) continue;
+      matches.push({
+        invitationId,
+        status: row.status ?? "",
+        role: row.role ?? "",
+        organizationId: row.organizationId ?? "",
+        createdAt: row.createdAt ?? 0,
+      });
+    }
+    return matches.sort((a, b) => b.createdAt - a.createdAt);
+  },
+});
+
+/**
  * Test-only: read the global crew rates without writing them.
  *
  * `invoiceSettings.update` writes these globally, which on the shared e2e

@@ -4,7 +4,7 @@ import { runConvex } from "../helpers/convex";
 import { getLatestEmailNotification } from "../helpers/email";
 import { checkboxByLabel, formField, selectByLabel } from "../helpers/form";
 import { pickSelectOption } from "../helpers/select";
-import { waitForInvitationState } from "../helpers/users";
+import { listInvitationsByEmail, waitForInvitationState } from "../helpers/users";
 
 /**
  * The Users invite UI, end to end.
@@ -29,12 +29,14 @@ test.describe("user invite lifecycle", () => {
   const stamp = Date.now();
   const inviteEmail = `e2e-invite-${stamp}@arborlive.test`;
   const declineEmail = `e2e-invite-decline-${stamp}@arborlive.test`;
+  const reinviteEmail = `e2e-reinvite-${stamp}@arborlive.test`;
 
   test.afterAll(() => {
     // Invitations are not events, so `pruneE2eSeedData` never reclaims them,
     // and `listInvitationsAdmin` pages with `.take(2000)`.
     runConvex("e2eHelpers:deleteInvitationsByEmail", { email: inviteEmail });
     runConvex("e2eHelpers:deleteInvitationsByEmail", { email: declineEmail });
+    runConvex("e2eHelpers:deleteInvitationsByEmail", { email: reinviteEmail });
   });
 
   test("admin invites, edits, resends, then cancels", async ({ page }) => {
@@ -142,6 +144,53 @@ test.describe("user invite lifecycle", () => {
     await expect(cancelledInviteRow).toContainText("cancelled", { timeout: 30_000 });
     await expect(cancelledInviteRow.getByRole("button", { name: "Resend" })).toHaveCount(0);
     await expect(cancelledInviteRow.getByRole("button", { name: "Edit" })).toHaveCount(0);
+  });
+
+  test("re-inviting the same address reuses one pending invitation", async ({ page }) => {
+    await page.goto("/dashboard/users/access");
+    await expect(page.getByText("User Access & Invitations")).toBeVisible({ timeout: 30_000 });
+
+    const usersCard = page
+      .locator("[data-slot='card']")
+      .filter({ has: page.getByText("Users", { exact: true }) });
+    // The invite is scoped to the organization filter, and `resolvedOrgId` is
+    // empty until the org list resolves — submit before then and the mutation
+    // rejects with "Create or select an organization first."
+    await expect(usersCard.locator("[data-slot='select-trigger']").first()).toHaveText(
+      "Arbor Live",
+      { timeout: 30_000 },
+    );
+
+    const openInviteModal = async () => {
+      await usersCard.getByRole("button", { name: "Invite User" }).click();
+      const modal = page.getByTestId("invite-user-modal");
+      await expect(modal).toBeVisible({ timeout: 20_000 });
+      return modal;
+    };
+
+    let modal = await openInviteModal();
+    await formField(modal, "Email").fill(reinviteEmail);
+    await modal.getByRole("button", { name: "Send Invite" }).click();
+
+    const first = await waitForInvitationState(reinviteEmail, (state) => state?.status === "pending");
+
+    // A second send to the same address refreshes that invitation instead of
+    // minting a second one. Reuse is what keeps the invite list unambiguous:
+    // `resendInviteAdmin` resolves a row by id, and duplicates leave stale
+    // accept links behind. `expiresAt` moving is the signal the second send ran.
+    modal = await openInviteModal();
+    await formField(modal, "Email").fill(reinviteEmail);
+    await modal.getByRole("button", { name: "Send Invite" }).click();
+
+    const second = await waitForInvitationState(
+      reinviteEmail,
+      (state) => (state?.expiresAt ?? 0) > first.expiresAt,
+    );
+    expect(second.invitationId).toBe(first.invitationId);
+
+    const rows = listInvitationsByEmail(reinviteEmail);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].status).toBe("pending");
   });
 
   test("dismissing the cancel confirm leaves the invite pending", async ({ page }) => {
