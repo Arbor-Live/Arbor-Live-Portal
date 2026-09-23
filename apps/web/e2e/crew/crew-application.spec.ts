@@ -19,7 +19,10 @@ test.describe("public crew application", () => {
     await publicPage.getByLabel("Stanford email").fill(email);
     await publicPage.getByLabel("Phone").fill("6505550199");
     await publicPage.getByLabel("How did you hear about us?").fill("E2E test suite");
+    // Specialties are scoped per vertical: Marketing offers Design /
+    // Photography / Videography, and one is required.
     await publicPage.locator("#vertical").selectOption("Marketing");
+    await publicPage.locator("#discipline").selectOption("Photography");
     await publicPage.locator("#position").selectOption("undergrad");
     await publicPage.getByLabel("Graduation year").fill("2028");
     await publicPage.getByRole("button", { name: "Submit application" }).click();
@@ -34,6 +37,7 @@ test.describe("public crew application", () => {
       name: string;
       email: string;
       vertical: string;
+      discipline?: string;
     }>(
       "e2eHelpers:getLatestCrewApplicationByEmail",
       { email },
@@ -41,6 +45,7 @@ test.describe("public crew application", () => {
     );
     expect(app.name).toBe(name);
     expect(app.vertical).toBe("Marketing");
+    expect(app.discipline).toBe("Photography");
 
     const adminContext = await browser.newContext({
       storageState: adminAuthFile,
@@ -54,5 +59,37 @@ test.describe("public crew application", () => {
     await expect(adminPage.getByText(name).first()).toBeVisible({ timeout: 20_000 });
     await expect(adminPage.getByText(email).first()).toBeVisible();
     await adminContext.close();
+  });
+
+  test("specialty options are scoped to the selected vertical", async ({ browser }) => {
+    const publicContext = await browser.newContext();
+    const publicPage = await publicContext.newPage();
+    await publicPage.goto("/crew/apply");
+    await expect(publicPage.getByLabel("Full name")).toBeVisible({ timeout: 20_000 });
+
+    const specialty = publicPage.locator("#discipline");
+    const specialtyOptionValues = () =>
+      specialty.locator("option").evaluateAll((options) =>
+        options.map((option) => (option as HTMLOptionElement).value).filter(Boolean),
+      );
+
+    await publicPage.locator("#vertical").selectOption("Crew");
+    expect(await specialtyOptionValues()).toEqual([
+      "Sound",
+      "Lights",
+      "Photography",
+      "Videography",
+      "unsure",
+    ]);
+
+    await publicPage.locator("#vertical").selectOption("Marketing");
+    expect(await specialtyOptionValues()).toEqual(["Design", "Photography", "Videography", "unsure"]);
+
+    // Operations and Trivia have no specialties, so the picker disappears.
+    await publicPage.locator("#vertical").selectOption("Operations");
+    await expect(specialty).toHaveCount(0);
+    await expect(publicPage.getByText("Standing availability", { exact: false })).toHaveCount(0);
+
+    await publicContext.close();
   });
 });

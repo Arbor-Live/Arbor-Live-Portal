@@ -3400,6 +3400,7 @@ export const getLatestCrewApplicationByEmail = query({
       name: v.string(),
       email: v.string(),
       vertical: v.string(),
+      discipline: v.optional(v.string()),
     }),
   ),
   handler: async (ctx, args) => {
@@ -3414,6 +3415,7 @@ export const getLatestCrewApplicationByEmail = query({
       name: match.name,
       email: match.email,
       vertical: match.vertical,
+      discipline: match.discipline,
     };
   },
 });

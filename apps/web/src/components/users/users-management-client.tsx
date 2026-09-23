@@ -34,10 +34,10 @@ import { notify } from "@/lib/notify";
 import {
   CREW_RATE_MODE_OPTIONS,
   PAYROLL_METHOD_OPTIONS,
-  USER_DISCIPLINE_OPTIONS,
   USER_INVITE_KIND_OPTIONS,
   USER_VERTICAL_OPTIONS,
   createUserAdminSchema,
+  disciplinesForVerticals,
   editInviteSchema,
   inviteUserSchema,
   userAdminRowSchema,
@@ -87,6 +87,15 @@ function toggleOption<T extends string>(values: T[], value: T) {
   return values.includes(value) ? values.filter((entry) => entry !== value) : [...values, value];
 }
 
+/** Drop disciplines that are no longer available once verticals change. */
+function pruneDisciplinesForVerticals(
+  verticals: UserVerticalOption[],
+  disciplines: UserDisciplineOption[],
+): UserDisciplineOption[] {
+  const allowed = new Set(disciplinesForVerticals(verticals));
+  return disciplines.filter((discipline) => allowed.has(discipline));
+}
+
 function MembershipCheckboxes<T extends string>({
   label,
   options,
@@ -116,6 +125,49 @@ function MembershipCheckboxes<T extends string>({
         ))}
       </div>
     </div>
+  );
+}
+
+/**
+ * Verticals plus the disciplines they unlock. Disciplines are scoped to the
+ * selected verticals, so changing verticals drops any now-invalid specialty.
+ */
+function MembershipVerticalsAndDisciplines({
+  verticals,
+  disciplines,
+  onVerticalsChange,
+  onDisciplinesChange,
+  idPrefix,
+}: {
+  verticals: UserVerticalOption[];
+  disciplines: UserDisciplineOption[];
+  onVerticalsChange: (next: UserVerticalOption[]) => void;
+  onDisciplinesChange: (next: UserDisciplineOption[]) => void;
+  idPrefix: string;
+}) {
+  const disciplineOptions = disciplinesForVerticals(verticals);
+  return (
+    <>
+      <MembershipCheckboxes
+        label="Verticals"
+        options={USER_VERTICAL_OPTIONS}
+        values={verticals}
+        onChange={(next) => {
+          onVerticalsChange(next);
+          onDisciplinesChange(pruneDisciplinesForVerticals(next, disciplines));
+        }}
+        idPrefix={`${idPrefix}-vertical`}
+      />
+      {disciplineOptions.length > 0 ? (
+        <MembershipCheckboxes
+          label="Disciplines"
+          options={disciplineOptions}
+          values={disciplines}
+          onChange={onDisciplinesChange}
+          idPrefix={`${idPrefix}-discipline`}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -169,7 +221,10 @@ function userValuesFromRow(user: AdminUser, resolvedOrgId: string): UserAdminRow
     hourlyRateUsd: (user.customHourlyRateUsd ?? user.hourlyRateUsd ?? 0).toString(),
     payrollMethod: (user.payrollMethod ?? "stanford") as UserAdminRowFormValues["payrollMethod"],
     verticals: (user.verticals ?? []) as UserVerticalOption[],
-    disciplines: (user.disciplines ?? []) as UserDisciplineOption[],
+    disciplines: pruneDisciplinesForVerticals(
+      (user.verticals ?? []) as UserVerticalOption[],
+      (user.disciplines ?? []) as UserDisciplineOption[],
+    ),
     defaultOrganizationId: user.defaultOrganizationId || resolvedOrgId,
   };
 }
@@ -399,13 +454,17 @@ export function UsersManagementClient({
   }
 
   function openEditInvite(invite: NonNullable<typeof invitations>[number]) {
+    const verticals = (invite.verticals ?? []) as UserVerticalOption[];
     setEditingInvite({
       id: invite.id,
       email: invite.email,
       organizationId: invite.organizationId,
       role: invite.role,
-      verticals: (invite.verticals ?? []) as UserVerticalOption[],
-      disciplines: (invite.disciplines ?? []) as UserDisciplineOption[],
+      verticals,
+      disciplines: pruneDisciplinesForVerticals(
+        verticals,
+        (invite.disciplines ?? []) as UserDisciplineOption[],
+      ),
     });
   }
 
@@ -1177,19 +1236,16 @@ function UserAdminRow({
                   </ul>
                 </div>
               ) : null}
-              <MembershipCheckboxes
-                label="Verticals"
-                options={USER_VERTICAL_OPTIONS}
-                values={form.watch("verticals")}
-                onChange={(next) => form.setValue("verticals", next, { shouldDirty: true })}
-                idPrefix={`user-${user.id}-vertical`}
-              />
-              <MembershipCheckboxes
-                label="Disciplines"
-                options={USER_DISCIPLINE_OPTIONS}
-                values={form.watch("disciplines")}
-                onChange={(next) => form.setValue("disciplines", next, { shouldDirty: true })}
-                idPrefix={`user-${user.id}-discipline`}
+              <MembershipVerticalsAndDisciplines
+                verticals={form.watch("verticals")}
+                disciplines={form.watch("disciplines")}
+                onVerticalsChange={(next) =>
+                  form.setValue("verticals", next, { shouldDirty: true })
+                }
+                onDisciplinesChange={(next) =>
+                  form.setValue("disciplines", next, { shouldDirty: true })
+                }
+                idPrefix={`user-${user.id}`}
               />
               <div className="rounded-md border p-2 md:col-span-2">
                 <p className="mb-2 text-xs font-medium">Participation</p>
@@ -1687,19 +1743,16 @@ function InviteUserModal({
                 </div>
               ) : null}
               <div className="grid gap-2 md:grid-cols-2">
-                <MembershipCheckboxes
-                  label="Verticals"
-                  options={USER_VERTICAL_OPTIONS}
-                  values={form.watch("verticals")}
-                  onChange={(next) => form.setValue("verticals", next, { shouldDirty: true })}
-                  idPrefix="invite-vertical"
-                />
-                <MembershipCheckboxes
-                  label="Disciplines"
-                  options={USER_DISCIPLINE_OPTIONS}
-                  values={form.watch("disciplines")}
-                  onChange={(next) => form.setValue("disciplines", next, { shouldDirty: true })}
-                  idPrefix="invite-discipline"
+                <MembershipVerticalsAndDisciplines
+                  verticals={form.watch("verticals")}
+                  disciplines={form.watch("disciplines")}
+                  onVerticalsChange={(next) =>
+                    form.setValue("verticals", next, { shouldDirty: true })
+                  }
+                  onDisciplinesChange={(next) =>
+                    form.setValue("disciplines", next, { shouldDirty: true })
+                  }
+                  idPrefix="invite"
                 />
               </div>
               {arborInvite && !isAdvisorInvite ? (
@@ -1865,19 +1918,16 @@ function EditInviteModal({
               </div>
               {isArborOrg(orgOptions, invite.organizationId) ? (
                 <div className="grid gap-2 md:grid-cols-2">
-                  <MembershipCheckboxes
-                    label="Verticals"
-                    options={USER_VERTICAL_OPTIONS}
-                    values={form.watch("verticals")}
-                    onChange={(next) => form.setValue("verticals", next, { shouldDirty: true })}
-                    idPrefix="edit-invite-vertical"
-                  />
-                  <MembershipCheckboxes
-                    label="Disciplines"
-                    options={USER_DISCIPLINE_OPTIONS}
-                    values={form.watch("disciplines")}
-                    onChange={(next) => form.setValue("disciplines", next, { shouldDirty: true })}
-                    idPrefix="edit-invite-discipline"
+                  <MembershipVerticalsAndDisciplines
+                    verticals={form.watch("verticals")}
+                    disciplines={form.watch("disciplines")}
+                    onVerticalsChange={(next) =>
+                      form.setValue("verticals", next, { shouldDirty: true })
+                    }
+                    onDisciplinesChange={(next) =>
+                      form.setValue("disciplines", next, { shouldDirty: true })
+                    }
+                    idPrefix="edit-invite"
                   />
                 </div>
               ) : null}
@@ -2099,19 +2149,16 @@ function CreateUserModal({
                 ) : null}
               </div>
               <div className="grid gap-2 md:grid-cols-2">
-                <MembershipCheckboxes
-                  label="Verticals"
-                  options={USER_VERTICAL_OPTIONS}
-                  values={form.watch("verticals")}
-                  onChange={(next) => form.setValue("verticals", next, { shouldDirty: true })}
-                  idPrefix="create-vertical"
-                />
-                <MembershipCheckboxes
-                  label="Disciplines"
-                  options={USER_DISCIPLINE_OPTIONS}
-                  values={form.watch("disciplines")}
-                  onChange={(next) => form.setValue("disciplines", next, { shouldDirty: true })}
-                  idPrefix="create-discipline"
+                <MembershipVerticalsAndDisciplines
+                  verticals={form.watch("verticals")}
+                  disciplines={form.watch("disciplines")}
+                  onVerticalsChange={(next) =>
+                    form.setValue("verticals", next, { shouldDirty: true })
+                  }
+                  onDisciplinesChange={(next) =>
+                    form.setValue("disciplines", next, { shouldDirty: true })
+                  }
+                  idPrefix="create"
                 />
               </div>
               <div className="flex gap-2">

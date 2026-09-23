@@ -112,7 +112,13 @@ const userVerticalValue = v.union(
   v.literal("Marketing"),
 );
 
-const userDisciplineValue = v.union(v.literal("Sound"), v.literal("Lights"), v.literal("Design"));
+const userDisciplineValue = v.union(
+  v.literal("Sound"),
+  v.literal("Lights"),
+  v.literal("Design"),
+  v.literal("Photography"),
+  v.literal("Videography"),
+);
 
 const marketingDesignLinkValue = v.object({
   label: v.string(),
@@ -2060,6 +2066,8 @@ export default defineSchema({
         v.literal("Sound"),
         v.literal("Lights"),
         v.literal("Design"),
+        v.literal("Photography"),
+        v.literal("Videography"),
         v.literal("unsure"),
       ),
     ),
