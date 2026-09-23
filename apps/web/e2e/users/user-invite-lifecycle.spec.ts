@@ -65,6 +65,10 @@ test.describe("user invite lifecycle", () => {
 
     await formField(modal, "Email").fill(inviteEmail);
     await checkboxByLabel(modal, "Crew").check();
+    // Specialties are scoped to the selected vertical; Design is Marketing-only,
+    // so it must not be offered for a Crew member.
+    await expect(checkboxByLabel(modal, "Design")).toHaveCount(0);
+    await expect(checkboxByLabel(modal, "Sound")).toHaveCount(1);
     await checkboxByLabel(modal, "Sound").check();
 
     // Custom is the only rate mode that carries a number onto the pending
