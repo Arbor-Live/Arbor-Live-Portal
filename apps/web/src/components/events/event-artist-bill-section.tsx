@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { DotsSixVerticalIcon } from "@phosphor-icons/react";
 import { ArtistSelect, artistSelectOptions } from "@/components/bands/artist-select";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
 import { DateTimeRangePicker } from "@/components/ui/date-time-picker";
@@ -173,10 +174,6 @@ const ROLE_OPTIONS = [
   { value: "other", label: "Other" },
 ];
 
-function roleLabel(role: ParticipationRole) {
-  return ROLE_OPTIONS.find((row) => row.value === role)?.label ?? role;
-}
-
 function bandProfileDefaults(bands: BandCatalogRow[] | undefined, organizationId: string) {
   const band = bands?.find((row) => row.organizationId === organizationId);
   if (!band) return null;
@@ -230,7 +227,6 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
     invoiceId ? { invoiceId } : "skip",
   );
   const removeParticipation = useMutation(api.eventBands.removeParticipation);
-  const updateRole = useMutation(api.eventBands.updateParticipationRole);
   const addParticipation = useMutation(api.eventBands.addParticipation);
   const bill = useQuery(api.eventArtistNeeds.getForEvent, { eventId });
   const upsertSlot = useMutation(api.eventArtistNeeds.upsertSlot);
@@ -244,6 +240,8 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
   const [lineupDrafts, setLineupDrafts] = useState<Record<string, LineupDraft>>({});
   const [placementNames, setPlacementNames] = useState<Record<string, string>>({});
   const [dragKey, setDragKey] = useState<string | null>(null);
+  // React state is stale inside drag events, so the dragged row lives in a ref.
+  const dragKeyRef = useRef<string | null>(null);
   const [savingSlotId, setSavingSlotId] = useState<string | null>(null);
   const [savingLineupId, setSavingLineupId] = useState<string | null>(null);
   const [addingSlot, setAddingSlot] = useState(false);
@@ -307,17 +305,6 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
     try {
       await removeParticipation({ eventId, organizationId });
       if (editingPaymentForOrg === organizationId) setEditingPaymentForOrg(null);
-    } catch (error) {
-      notify.error(getConvexErrorMessage(error));
-    } finally {
-      setBusyOrgId(null);
-    }
-  }
-
-  async function onRoleChange(organizationId: string, role: ParticipationRole) {
-    setBusyOrgId(organizationId);
-    try {
-      await updateRole({ eventId, organizationId, role });
     } catch (error) {
       notify.error(getConvexErrorMessage(error));
     } finally {
@@ -474,10 +461,12 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
   }
 
   function handleDrop(targetKey: string) {
-    const from = rows.findIndex((row) => row.key === dragKey);
-    const to = rows.findIndex((row) => row.key === targetKey);
+    const fromKey = dragKeyRef.current;
+    dragKeyRef.current = null;
     setDragKey(null);
-    if (!dragKey || from < 0 || to < 0 || from === to) return;
+    const from = rows.findIndex((row) => row.key === fromKey);
+    const to = rows.findIndex((row) => row.key === targetKey);
+    if (!fromKey || from < 0 || to < 0 || from === to) return;
     const next = [...rows];
     const [moved] = next.splice(from, 1);
     if (moved) next.splice(to, 0, moved);
@@ -629,30 +618,49 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
                 <div
                   key={row.key}
                   data-testid="bill-card"
-                  draggable
-                  onDragStart={() => setDragKey(row.key)}
                   onDragOver={(event) => event.preventDefault()}
                   onDrop={() => handleDrop(row.key)}
-                  className={`cursor-grab space-y-3 rounded-md border px-3 py-3 text-sm active:cursor-grabbing ${
+                  className={`space-y-3 rounded-md border px-3 py-3 text-sm ${
                     dragKey === row.key ? "opacity-50" : ""
                   } ${slot && !performer ? "border-dashed" : ""}`}
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    {slot && slotDraft ? (
-                      <Input
-                        className="h-8 max-w-56 font-medium"
-                        value={slotDraft.label}
-                        placeholder="Name this position"
-                        onChange={(event) =>
-                          patchSlotDraft(slot.needId, { label: event.target.value })
-                        }
-                        onBlur={() => {
-                          if (slotDirty) void onSaveSlot(slot);
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                      {/*
+                        Only the grip is draggable — making the card itself
+                        draggable swallows clicks in its inputs and popovers.
+                      */}
+                      <span
+                        draggable
+                        onDragStart={() => {
+                          dragKeyRef.current = row.key;
+                          setDragKey(row.key);
                         }}
-                      />
-                    ) : (
-                      <p className="font-medium">{performer?.bandName ?? ""}</p>
-                    )}
+                        onDragEnd={() => {
+                          dragKeyRef.current = null;
+                          setDragKey(null);
+                        }}
+                        className="cursor-grab text-muted-foreground active:cursor-grabbing"
+                        title="Drag to reorder"
+                      >
+                        <DotsSixVerticalIcon className="size-4" />
+                      </span>
+                      {slot && slotDraft ? (
+                        <Input
+                          className="h-8 max-w-56 font-medium"
+                          value={slotDraft.label}
+                          placeholder="Name this position"
+                          onChange={(event) =>
+                            patchSlotDraft(slot.needId, { label: event.target.value })
+                          }
+                          onBlur={() => {
+                            if (slotDirty) void onSaveSlot(slot);
+                          }}
+                        />
+                      ) : (
+                        <p className="truncate font-medium">{performer?.bandName ?? ""}</p>
+                      )}
+                    </div>
                     <span
                       data-testid="artist-need-status"
                       className={`rounded-md px-2 py-1 text-xs font-medium ${effectiveStatusClass(
@@ -666,15 +674,6 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
                   {performer ? (
                     <>
                       <div className="flex flex-wrap items-center gap-2">
-                        <SearchableSelect
-                          value={performer.role}
-                          onChange={(value) =>
-                            void onRoleChange(performer.organizationId, value as ParticipationRole)
-                          }
-                          options={ROLE_OPTIONS}
-                          placeholder="Role"
-                          emptyLabel="Role"
-                        />
                         {performer.payment ? (
                           <p className="text-muted-foreground">
                             {formatUsd(performer.payment.totalUsd)} ·{" "}
@@ -789,9 +788,7 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
                             </Button>
                           </>
                         ) : (
-                          <span className="text-xs text-muted-foreground">
-                            {roleLabel(performer.role)} · Paid
-                          </span>
+                          <span className="text-xs text-muted-foreground">Paid</span>
                         )}
                         {lineupDirty ? (
                           <Button
