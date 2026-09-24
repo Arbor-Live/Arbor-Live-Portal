@@ -12,9 +12,9 @@ test.describe("event artist needed", () => {
 
     const seeded = runConvex("e2eHelpers:seedCrewedEventWithSchedule", {
       title: `E2E Artist Need ${Date.now()}`,
-    }) as { eventPath: string; eventTitle: string };
+    }) as { path: string; title: string };
 
-    await page.goto(`${seeded.eventPath}/artists`);
+    await page.goto(`${seeded.path}/artists`);
     await expect(page.getByText("Edit Event").first()).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText("No positions on the bill yet")).toBeVisible({ timeout: 20_000 });
 
@@ -28,7 +28,7 @@ test.describe("event artist needed", () => {
     await bandPage.goto("/dashboard/opportunities");
     await expect(bandPage.getByText("Open artist needs")).toBeVisible({ timeout: 30_000 });
 
-    const row = bandPage.locator("li").filter({ hasText: seeded.eventTitle }).first();
+    const row = bandPage.locator("li").filter({ hasText: seeded.title }).first();
     await expect(row).toBeVisible({ timeout: 20_000 });
     await row.getByRole("button", { name: "Request to perform" }).click();
     await bandPage.locator("textarea").fill("We would love to play this show.");
