@@ -68,7 +68,9 @@ function EventArtistNeededPanel({ eventId }: { eventId: Id<"events"> }) {
 
   useEffect(() => {
     if (!data) return;
-    const key = data.need?._id ?? "none";
+    // Include `updatedAt` so background changes (e.g. an inquiry flipping the
+    // need to inquiring) rehydrate the local form, not just a new need id.
+    const key = data.need ? `${data.need._id}:${data.need.updatedAt}` : "none";
     if (hydratedRef.current === key) return;
     hydratedRef.current = key;
     setArtistType(data.need?.artistType ?? "no_preference");
@@ -128,6 +130,7 @@ function EventArtistNeededPanel({ eventId }: { eventId: Id<"events"> }) {
       <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
         <CardTitle>Artist Needed</CardTitle>
         <span
+          data-testid="artist-need-status"
           className={`rounded-md px-2 py-1 text-xs font-medium ${effectiveStatusClass(currentStatus)}`}
         >
           {effectiveStatusLabel(currentStatus)}

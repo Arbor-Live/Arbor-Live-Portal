@@ -114,7 +114,7 @@ export function ArtistOpportunitiesClient() {
                     <div className="min-w-0">
                       <p className="font-medium">{need.title}</p>
                       <p className="text-sm text-muted-foreground">
-                        {formatDateTimeRange(need.startAt, need.endAt)}
+                        {formatDateTimeRange(need.startAt, need.endAt, need.timezone)}
                         {need.venueName ? ` · ${need.venueName}` : ""}
                       </p>
                       <p className="mt-1 text-sm">
@@ -172,7 +172,7 @@ export function ArtistOpportunitiesClient() {
                   <div className="min-w-0">
                     <p className="text-sm font-medium">{inquiry.title}</p>
                     <p className="text-xs text-muted-foreground">
-                      {formatDateTime(inquiry.startAt)}
+                      {formatDateTime(inquiry.startAt, "short", inquiry.timezone ?? undefined)}
                       {inquiry.genres ? ` · ${inquiry.genres}` : ""}
                     </p>
                   </div>

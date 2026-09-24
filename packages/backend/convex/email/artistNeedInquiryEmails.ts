@@ -19,6 +19,8 @@ export async function scheduleArtistNeedInquiryEmail(
     event: Doc<"events">;
     organizationId: string;
     message?: string;
+    /** Unique per submission so re-inquiries are not deduped away. */
+    submissionId: string;
   },
 ) {
   const artistName = await resolveBandName(ctx, args.organizationId);
@@ -36,7 +38,7 @@ export async function scheduleArtistNeedInquiryEmail(
       to,
       subject,
       eventId: args.event._id,
-      idempotencyKey: `artist_need_inquiry:${args.need._id}:${args.organizationId}:${to}`,
+      idempotencyKey: `artist_need_inquiry:${args.need._id}:${args.organizationId}:${args.submissionId}:${to}`,
       payload: {
         artistName,
         eventTitle: args.event.title,

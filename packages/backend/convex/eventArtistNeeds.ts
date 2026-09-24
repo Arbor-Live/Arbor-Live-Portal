@@ -184,10 +184,13 @@ export const submitInquiry = mutation({
     const need = await ctx.db.get(args.needId);
     if (!need) throw new Error("This need is no longer available.");
     const event = await ctx.db.get(need.eventId);
-    if (!event) throw new Error("This event is no longer available.");
-    if (event.startAt < Date.now()) throw new Error("This event has already passed.");
-    if (normalizeEventStatus(event.status) === "cancelled") {
-      throw new Error("This event was cancelled.");
+    // Same gate as `listOpenNeedsForArtist`: only public, upcoming, uncancelled
+    // events that match this artist's type are inquirable.
+    if (!isArtistListableEvent(event, Date.now())) {
+      throw new Error("This need is no longer available.");
+    }
+    if (!artistTypeMatchesNeed(need.artistType, context.organizationType)) {
+      throw new Error("This need is not looking for your kind of act.");
     }
     if ((await resolveEventBookedArtistIds(ctx, need.eventId)).length > 0) {
       throw new Error("This event already has an artist booked.");
@@ -231,6 +234,9 @@ export const submitInquiry = mutation({
       event,
       organizationId: context.organizationId,
       message: trimOptional(args.message),
+      // Each submission is its own notification, so re-inquiring after a
+      // dismissal is not swallowed by the previous send's idempotency key.
+      submissionId: `${inquiryId}:${now}`,
     });
 
     return { inquiryId };
@@ -259,9 +265,12 @@ export const listOpenNeedsForArtist = query({
 
     const candidates: Doc<"eventArtistNeeds">[] = [];
     for (const status of ["open", "inquiring"] as const) {
+      // Newest first so a long tail of old needs cannot crowd newer ones out of
+      // the bounded window below.
       const rows = await ctx.db
         .query("eventArtistNeeds")
         .withIndex("by_status", (q) => q.eq("status", status))
+        .order("desc")
         .take(MAX_NEED_CANDIDATES);
       candidates.push(...rows);
     }
@@ -272,6 +281,7 @@ export const listOpenNeedsForArtist = query({
       title: string;
       startAt: number;
       endAt: number;
+      timezone: string;
       venueName: string;
       artistType: ArtistNeedType;
       genres: string;
@@ -312,6 +322,7 @@ export const listOpenNeedsForArtist = query({
         title: event.title,
         startAt: event.startAt,
         endAt: event.endAt,
+        timezone: event.timezone,
         venueName: event.venueName ?? "",
         artistType: need.artistType,
         genres: need.genres ?? "",
@@ -342,6 +353,9 @@ export const listMyInquiries = query({
           eventId: inquiry.eventId,
           title: event?.title ?? "Event",
           startAt: event?.startAt ?? 0,
+          // Undefined for a deleted event so the client falls back to the
+          // portal default rather than formatting with a bogus zone.
+          timezone: event?.timezone,
           venueName: event?.venueName ?? "",
           artistType: need?.artistType ?? ("no_preference" as const),
           genres: need?.genres ?? "",

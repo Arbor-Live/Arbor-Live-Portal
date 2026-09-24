@@ -194,7 +194,7 @@ Event types (drive which editor tabs and quick-add blocks appear):
   their own budgeting and pull lists.
 - Band participation in events is tracked in `eventBandParticipations`
   (headliner/support/other). That row is the canonical **assignment**: staff
-  manage it from the event overview **Artists** section (not Media).
+  manage it from the event editor **Artists** tab (not Media).
   Assigning an artist emails members (`band_assigned`), unlocks event media album
   access, and surfaces the show on the artist home dashboard. Optional
   `eventBandPayments` attach payout details to the same assignment.

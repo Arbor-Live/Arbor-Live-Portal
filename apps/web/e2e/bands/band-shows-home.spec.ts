@@ -100,7 +100,7 @@ test.describe("staff band assignment on event", () => {
     }) as { eventPath: string; eventTitle: string };
 
     const afterCreatedAt = Date.now() - 1_000;
-    await page.goto(seeded.eventPath);
+    await page.goto(`${seeded.eventPath}/artists`);
     await expect(page.getByText("Edit Event").first()).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText("Artists").first()).toBeVisible({ timeout: 20_000 });
 
@@ -149,7 +149,7 @@ test.describe("staff band assignment on event", () => {
     }) as { eventPath: string; eventTitle: string };
 
     const afterCreatedAt = Date.now() - 1_000;
-    await page.goto(seeded.eventPath);
+    await page.goto(`${seeded.eventPath}/artists`);
     await expect(page.getByText("Edit Event").first()).toBeVisible({ timeout: 30_000 });
     const bandsCard = page.locator('[data-slot="card"]').filter({
       has: page.getByText("Artists"),
