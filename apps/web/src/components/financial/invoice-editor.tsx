@@ -319,6 +319,10 @@ export function InvoiceEditor({
       { artistType: "band" | "dj" | "no_preference"; status: "open" | "inquiring" | "booked"; genres: string }
     >();
     for (const row of artistNeedStatuses ?? []) {
+      // One row per slot: an open slot must stay visible even if a later
+      // booked slot for the same event lands in the map.
+      const existing = map.get(row.eventId);
+      if (existing && existing.status !== "booked" && row.status === "booked") continue;
       map.set(row.eventId, {
         artistType: row.artistType,
         status: row.status,
