@@ -592,6 +592,26 @@ function EventArtistBillPanel({
     }
   }
 
+  /** Take the act out of its position without dropping it from the bill. */
+  async function onUnassign(performer: PerformerRow) {
+    setSavingLineupId(performer.participationId);
+    try {
+      await updateLineup({
+        participationId: performer.participationId,
+        needId: null,
+        setStartsAt: performer.setStartsAt ?? null,
+        setEndsAt: performer.setEndsAt ?? null,
+        soundcheckStartsAt: performer.soundcheckStartsAt ?? null,
+        soundcheckEndsAt: performer.soundcheckEndsAt ?? null,
+      });
+      notify.success("Position reopened.");
+    } catch (error) {
+      notify.error(getConvexErrorMessage(error));
+    } finally {
+      setSavingLineupId(null);
+    }
+  }
+
   async function onSaveLineup(performer: PerformerRow, needId: Id<"eventArtistNeeds"> | null) {
     const draft = lineupDrafts[performer.participationId] ?? toLineupDraft(performer);
     setSavingLineupId(performer.participationId);
@@ -1041,6 +1061,17 @@ function EventArtistBillPanel({
                         ) : (
                           <span className="text-xs text-muted-foreground">Paid</span>
                         )}
+                        {placed ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            disabled={savingLineupId === performer.participationId}
+                            onClick={() => void onUnassign(performer)}
+                          >
+                            Unassign
+                          </Button>
+                        ) : null}
                         {lineupDirty ? (
                           <Button
                             type="button"
