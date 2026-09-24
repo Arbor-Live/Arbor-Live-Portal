@@ -1,7 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -251,14 +257,18 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
   const [slotDrafts, setSlotDrafts] = useState<Record<string, SlotDraft>>({});
   const [lineupDrafts, setLineupDrafts] = useState<Record<string, LineupDraft>>({});
   const [placementNames, setPlacementNames] = useState<Record<string, string>>({});
-  // Same drag pattern as the marketing links list: rows are only `draggable`
-  // once a pointer goes down on a non-interactive part of the card, so inputs
-  // and popovers keep the mouse. Order shuffles live while dragging.
-  const [dragArmedKey, setDragArmedKey] = useState<string | null>(null);
+  // Pointer-driven reordering. Native HTML5 drag thrashes when the list
+  // reorders mid-drag, so the whole gesture is ours: pointerdown on a
+  // non-interactive part of a card starts it, moves shuffle live, and the
+  // release persists once.
   const [draggingKey, setDraggingKey] = useState<string | null>(null);
-  const dragIndexRef = useRef(-1);
   const [orderKeys, setOrderKeys] = useState<string[] | null>(null);
   const orderKeysRef = useRef<string[] | null>(null);
+  const dragKeyRef = useRef<string | null>(null);
+  const rowRefs = useRef(new Map<string, HTMLDivElement>());
+  const rowsRef = useRef<BillRow[]>([]);
+  const orderedKeysRef = useRef<string[]>([]);
+  const endDragRef = useRef<() => void>(() => {});
   const [savingSlotId, setSavingSlotId] = useState<string | null>(null);
   const [savingLineupId, setSavingLineupId] = useState<string | null>(null);
   const [addingSlot, setAddingSlot] = useState(false);
@@ -488,34 +498,88 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
     }
   }
 
-  function reorderLive(from: number, to: number) {
-    if (from === to || from < 0 || to < 0) return;
-    const keys = orderKeysRef.current ?? visibleRows.map((row) => row.key);
-    const next = moveInArray(keys, from, to);
-    orderKeysRef.current = next;
-    setOrderKeys(next);
-    dragIndexRef.current = to;
+  /** Index of the card nearest a viewport Y, so gaps still pick a target. */
+  function rowIndexAtPoint(clientY: number) {
+    let best = -1;
+    let bestDistance = Number.POSITIVE_INFINITY;
+    orderedKeysRef.current.forEach((key, index) => {
+      const element = rowRefs.current.get(key);
+      if (!element) return;
+      const rect = element.getBoundingClientRect();
+      const distance = Math.abs(clientY - (rect.top + rect.height / 2));
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = index;
+      }
+    });
+    return best;
   }
 
-  async function handleDragEnd() {
-    const keys = orderKeysRef.current;
-    dragIndexRef.current = -1;
-    setDragArmedKey(null);
+  function startDrag(event: ReactPointerEvent<HTMLDivElement>, rowKey: string) {
+    // Mouse only — touch dragging would fight page scrolling.
+    if (event.pointerType !== "mouse" || event.button !== 0) return;
+    if ((event.target as HTMLElement).closest(INTERACTIVE_SELECTOR)) return;
+    dragKeyRef.current = rowKey;
+    setDraggingKey(rowKey);
+  }
+  function endDrag() {
+    const dragKey = dragKeyRef.current;
+    dragKeyRef.current = null;
     setDraggingKey(null);
+    const keys = orderKeysRef.current;
     orderKeysRef.current = null;
     setOrderKeys(null);
-    if (!keys) return;
-    const byKey = new Map(rows.map((row) => [row.key, row]));
+    if (!dragKey || !keys) return;
+    const byKey = new Map(rowsRef.current.map((row) => [row.key, row]));
     const needIds = keys.flatMap((key) => {
       const row = byKey.get(key);
       return row?.slot ? [row.slot.needId] : [];
     });
-    try {
-      await reorderSlots({ eventId, needIds });
-    } catch (error) {
-      notify.error(getConvexErrorMessage(error));
-    }
+    void (async () => {
+      try {
+        await reorderSlots({ eventId, needIds });
+      } catch (error) {
+        notify.error(getConvexErrorMessage(error));
+      }
+    })();
   }
+
+  // The gesture runs on window listeners so it keeps tracking outside the card,
+  // and reads live values through refs rather than a stale render closure.
+  useEffect(() => {
+    rowsRef.current = rows;
+    orderedKeysRef.current = visibleRows.map((row) => row.key);
+  }, [rows, visibleRows]);
+
+  useEffect(() => {
+    endDragRef.current = endDrag;
+  });
+
+  useEffect(() => {
+    function onMove(event: PointerEvent) {
+      const dragKey = dragKeyRef.current;
+      if (!dragKey) return;
+      const to = rowIndexAtPoint(event.clientY);
+      if (to < 0) return;
+      const keys = orderKeysRef.current ?? orderedKeysRef.current;
+      const from = keys.indexOf(dragKey);
+      if (from < 0 || from === to) return;
+      const next = moveInArray(keys, from, to);
+      orderKeysRef.current = next;
+      setOrderKeys(next);
+    }
+    function onUp() {
+      endDragRef.current();
+    }
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+  }, []);
 
   /** Give a stray act a named place on the bill. */
   async function onPlaceAct(performer: PerformerRow) {
@@ -628,7 +692,7 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
 
         {visibleRows.length > 0 ? (
           <div className="flex flex-col gap-2">
-            {visibleRows.map((row, index) => {
+            {visibleRows.map((row) => {
               const { slot, performer } = row;
               const serverSlot = slot ? toSlotDraft(slot) : null;
               const slotDraft = slot ? (slotDrafts[slot.needId] ?? serverSlot) : null;
@@ -649,32 +713,12 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
               return (
                 <div
                   key={row.key}
+                  ref={(element) => {
+                    if (element) rowRefs.current.set(row.key, element);
+                    else rowRefs.current.delete(row.key);
+                  }}
                   data-testid="bill-card"
-                  draggable={dragArmedKey === row.key}
-                  onPointerDown={(event) => {
-                    if ((event.target as HTMLElement).closest(INTERACTIVE_SELECTOR)) return;
-                    setDragArmedKey(row.key);
-                  }}
-                  onPointerUp={() => setDragArmedKey(null)}
-                  onPointerCancel={() => setDragArmedKey(null)}
-                  onDragStart={(event) => {
-                    dragIndexRef.current = index;
-                    setDraggingKey(row.key);
-                    event.dataTransfer.effectAllowed = "move";
-                    event.dataTransfer.setData("text/plain", row.key);
-                  }}
-                  onDragOver={(event) => {
-                    if (dragIndexRef.current < 0) return;
-                    event.preventDefault();
-                    event.dataTransfer.dropEffect = "move";
-                    // Shuffle as you hover so rows move while dragging.
-                    reorderLive(dragIndexRef.current, index);
-                  }}
-                  onDrop={(event) => {
-                    event.preventDefault();
-                    void handleDragEnd();
-                  }}
-                  onDragEnd={() => void handleDragEnd()}
+                  onPointerDown={(event) => startDrag(event, row.key)}
                   className={`space-y-3 rounded-md border px-3 py-3 text-sm ${
                     draggingKey === row.key ? "border-border bg-muted/40 opacity-70" : ""
                   } ${slot && !performer ? "border-dashed" : ""}`}
@@ -717,6 +761,7 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
                   {performer ? (
                     <>
                       <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-medium">{performer.bandName}</p>
                         {performer.payment ? (
                           <p className="text-muted-foreground">
                             {formatUsd(performer.payment.totalUsd)} ·{" "}
