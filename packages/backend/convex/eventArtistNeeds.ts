@@ -54,6 +54,14 @@ async function nameMap(ctx: QueryCtx, organizationIds: readonly string[]) {
   return new Map(entries);
 }
 
+/** One indexed read answers "is this slot filled" — do not resolve the whole booking. */
+async function findActForSlot(ctx: QueryCtx, needId: Id<"eventArtistNeeds">) {
+  return await ctx.db
+    .query("eventBandParticipations")
+    .withIndex("by_needId", (q) => q.eq("needId", needId))
+    .first();
+}
+
 export const getForEvent = query({
   args: { eventId: v.id("events") },
   handler: async (ctx, args) => {
@@ -61,10 +69,7 @@ export const getForEvent = query({
     const slots = await loadSlotsForEvent(ctx, args.eventId);
     const booking = await resolveEventArtistBooking(ctx, args.eventId);
 
-    const names = await nameMap(ctx, [
-      ...booking.lineup.map((row) => row.organizationId),
-      ...booking.invoiceArtistIds,
-    ]);
+    const names = await nameMap(ctx, booking.lineup.map((row) => row.organizationId));
 
     const inquiries = await ctx.db
       .query("eventArtistInquiries")
@@ -75,21 +80,24 @@ export const getForEvent = query({
       inquiries.map((row) => row.organizationId),
     );
 
+    const describe = (row: (typeof booking.lineup)[number]) => ({
+      participationId: row.participationId,
+      organizationId: row.organizationId,
+      name: names.get(row.organizationId) ?? "Artist",
+      role: row.role,
+    });
+
     return {
       slots: slots.map((slot) => {
         const filledBy = booking.lineup.filter((row) => row.needId === slot._id);
-        const booked = filledBy.length > 0;
         return {
           needId: slot._id,
           label: slot.label ?? "",
           artistType: slot.artistType,
           genres: slot.genres ?? "",
           status: slot.status,
-          effectiveStatus: effectiveArtistNeedStatus(slot.status, booked),
-          bookedBy: filledBy.map((row) => ({
-            organizationId: row.organizationId,
-            name: names.get(row.organizationId) ?? "Artist",
-          })),
+          effectiveStatus: effectiveArtistNeedStatus(slot.status, filledBy.length > 0),
+          filledBy: filledBy.map(describe),
           inquiries: inquiries
             .filter((row) => row.needId === slot._id)
             .sort((a, b) => b.createdAt - a.createdAt)
@@ -103,14 +111,8 @@ export const getForEvent = query({
             })),
         };
       }),
-      lineup: booking.lineup.map((row) => ({
-        ...row,
-        name: names.get(row.organizationId) ?? "Artist",
-      })),
-      invoiceArtists: booking.invoiceArtistIds.map((organizationId) => ({
-        organizationId,
-        name: names.get(organizationId) ?? "Artist",
-      })),
+      /** Acts on the bill that were not booked against a slot. */
+      unslotted: booking.lineup.filter((row) => !row.needId).map(describe),
     };
   },
 });
@@ -231,8 +233,8 @@ export const submitInquiry = mutation({
     if (!artistTypeMatchesNeed(need.artistType, context.organizationType)) {
       throw new Error("This slot is not looking for your kind of act.");
     }
-    const { filledSlotIds } = await resolveEventArtistBooking(ctx, need.eventId);
-    if (filledSlotIds.has(need._id)) {
+    const filledBy = await findActForSlot(ctx, need._id);
+    if (filledBy) {
       throw new Error("This slot is already filled.");
     }
 
@@ -335,8 +337,7 @@ export const listOpenNeedsForArtist = query({
       if (!artistTypeMatchesNeed(need.artistType, context.organizationType)) continue;
       const event = await ctx.db.get(need.eventId);
       if (!isArtistListableEvent(event, now)) continue;
-      const { filledSlotIds } = await resolveEventArtistBooking(ctx, need.eventId);
-      if (filledSlotIds.has(need._id)) continue;
+      if (await findActForSlot(ctx, need._id)) continue;
 
       const typeLabel = ARTIST_NEED_TYPE_LABELS[need.artistType];
       const slotLabel = need.label?.trim();

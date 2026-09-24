@@ -11,14 +11,14 @@ test.describe("event artist needed", () => {
     test.setTimeout(120_000);
 
     const seeded = runConvex("e2eHelpers:seedCrewedEventWithSchedule", {
-      eventTitle: `E2E Artist Need ${Date.now()}`,
+      title: `E2E Artist Need ${Date.now()}`,
     }) as { eventPath: string; eventTitle: string };
 
     await page.goto(`${seeded.eventPath}/artists`);
     await expect(page.getByText("Edit Event").first()).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText("No open slots")).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText("No positions on the bill yet")).toBeVisible({ timeout: 20_000 });
 
-    await page.getByRole("button", { name: "Add slot" }).click();
+    await page.getByRole("button", { name: "Add position" }).click();
     const slot = page.getByTestId("artist-need-slot").first();
     await expect(slot).toBeVisible({ timeout: 20_000 });
     await expect(page.getByTestId("artist-need-status")).toHaveText("Open");

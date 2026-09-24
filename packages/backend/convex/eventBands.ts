@@ -113,6 +113,32 @@ export async function unclaimSlot(
   await ctx.db.replace(participationId, next);
 }
 
+/**
+ * Give `participationId` the slot, checking it belongs to the event and taking
+ * it from anyone else. A slot holds exactly one act.
+ */
+async function claimSlot(
+  ctx: MutationCtx,
+  args: {
+    needId: Id<"eventArtistNeeds">;
+    eventId: Id<"events">;
+    participationId?: Id<"eventBandParticipations">;
+  },
+) {
+  const slot = await ctx.db.get(args.needId);
+  if (!slot || slot.eventId !== args.eventId) {
+    throw new Error("Slot not found on this event.");
+  }
+  const rivals = await ctx.db
+    .query("eventBandParticipations")
+    .withIndex("by_needId", (q) => q.eq("needId", args.needId))
+    .take(100);
+  for (const rival of rivals) {
+    if (rival._id === args.participationId) continue;
+    await unclaimSlot(ctx, rival._id);
+  }
+}
+
 export async function upsertEventBandParticipation(
   ctx: MutationCtx,
   args: {
@@ -130,6 +156,13 @@ export async function upsertEventBandParticipation(
       q.eq("eventId", args.eventId).eq("organizationId", args.organizationId),
     )
     .unique();
+  if (args.needId) {
+    await claimSlot(ctx, {
+      needId: args.needId,
+      eventId: args.eventId,
+      participationId: existing?._id,
+    });
+  }
   if (existing) {
     await ctx.db.patch(existing._id, {
       role: args.role,
@@ -534,19 +567,11 @@ export const updateParticipationLineup = mutation({
       throw new Error("Soundcheck end time must be after the start time.");
     }
     if (args.needId) {
-      const slot = await ctx.db.get(args.needId);
-      if (!slot || slot.eventId !== existing.eventId) {
-        throw new Error("Slot not found on this event.");
-      }
-      // A slot holds exactly one act: drop the claim from anyone else holding it.
-      const rivals = await ctx.db
-        .query("eventBandParticipations")
-        .withIndex("by_needId", (q) => q.eq("needId", args.needId!))
-        .take(100);
-      for (const rival of rivals) {
-        if (rival._id === existing._id) continue;
-        await unclaimSlot(ctx, rival._id);
-      }
+      await claimSlot(ctx, {
+        needId: args.needId,
+        eventId: existing.eventId,
+        participationId: existing._id,
+      });
     }
 
     const next: Doc<"eventBandParticipations"> = { ...existing, updatedAt: Date.now() };
