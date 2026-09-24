@@ -15,7 +15,10 @@ import {
   PlusIcon,
 } from "@phosphor-icons/react";
 import { ArtistSelect, artistSelectOptions } from "@/components/bands/artist-select";
-import { SearchableSelect } from "@/components/inventory/searchable-select";
+import {
+  SearchableSelect,
+  type SearchableSelectOption,
+} from "@/components/inventory/searchable-select";
 import { SortableList } from "@/components/ui/sortable-list";
 import {
   DropdownMenu,
@@ -650,6 +653,17 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
     }
   }
 
+  /** Positions nobody fills yet — what a new act can be booked into. */
+  const openPositionOptions = useMemo(
+    () =>
+      rows.flatMap((row) =>
+        row.slot && row.slot.filledBy.length === 0 && !row.slot.externalArtistName.trim()
+          ? [{ value: row.slot.needId, label: slotTitle(row.slot) }]
+          : [],
+      ),
+    [rows],
+  );
+
   /** Cards in bill order; only positions are persisted, stray acts trail. */
   function handleReorder(orderedRows: BillRow[]) {
     void persistOrder(orderedRows.flatMap((row) => (row.slot ? [row.slot.needId] : [])));
@@ -1209,6 +1223,7 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
         {addMode === "existing" ? (
           <AddBandForm
             eventId={eventId}
+            positionOptions={openPositionOptions}
             excludedOrganizationIds={performers.map((row) => row.organizationId)}
             onSaved={() => setAddMode(null)}
             onCancel={() => setAddMode(null)}
@@ -1434,14 +1449,14 @@ function InviteBandForm({
 
 function AddBandForm({
   eventId,
-  needId,
+  positionOptions,
   excludedOrganizationIds,
   onSaved,
   onCancel,
 }: {
   eventId: Id<"events">;
-  /** Position to fill, when this was started from an open slot. */
-  needId?: Id<"eventArtistNeeds">;
+  /** Open positions this artist can be booked into. */
+  positionOptions: SearchableSelectOption[];
   excludedOrganizationIds: string[];
   onSaved: () => void;
   onCancel: () => void;
@@ -1450,6 +1465,7 @@ function AddBandForm({
   const addParticipation = useMutation(api.eventBands.addParticipation);
   const [organizationId, setOrganizationId] = useState("");
   const [role, setRole] = useState<ParticipationRole>("headliner");
+  const [needId, setNeedId] = useState("");
   const [busy, setBusy] = useState(false);
 
   const bandOptions = useMemo(
@@ -1464,7 +1480,12 @@ function AddBandForm({
     }
     setBusy(true);
     try {
-      await addParticipation({ eventId, organizationId, role, needId });
+      await addParticipation({
+        eventId,
+        organizationId,
+        role,
+        needId: (needId || undefined) as Id<"eventArtistNeeds"> | undefined,
+      });
       onSaved();
     } catch (error) {
       notify.error(getConvexErrorMessage(error));
@@ -1496,6 +1517,19 @@ function AddBandForm({
             options={ROLE_OPTIONS}
             placeholder="Role"
             emptyLabel="Role"
+          />
+        </div>
+        <div className="space-y-1">
+          <Label>Position</Label>
+          <SearchableSelect
+            value={needId}
+            onChange={setNeedId}
+            options={[
+              { value: "", label: "No position" },
+              ...positionOptions,
+            ]}
+            placeholder="Position"
+            emptyLabel="No position"
           />
         </div>
       </div>
