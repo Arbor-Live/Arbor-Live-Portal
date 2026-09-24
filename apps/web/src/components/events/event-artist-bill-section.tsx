@@ -299,6 +299,7 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
   const [savingLineupId, setSavingLineupId] = useState<string | null>(null);
   const [addingSlot, setAddingSlot] = useState(false);
   const [addMode, setAddMode] = useState<"existing" | "invite" | "outside" | null>(null);
+  const [addTargetNeedId, setAddTargetNeedId] = useState<string | null>(null);
   const [outsideName, setOutsideName] = useState("");
   const [addingOutside, setAddingOutside] = useState(false);
   const [busyOrgId, setBusyOrgId] = useState<string | null>(null);
@@ -427,6 +428,11 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
       if (!current) return prev;
       return { ...prev, [participationId]: { ...current, ...values } };
     });
+  }
+
+  function closeAdd() {
+    setAddMode(null);
+    setAddTargetNeedId(null);
   }
 
   async function onAddOutside() {
@@ -736,7 +742,12 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onSelect={() => void onAddSlot()}>Position</DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => setAddMode("existing")}>
+              <DropdownMenuItem
+                onSelect={() => {
+                  setAddTargetNeedId(null);
+                  setAddMode("existing");
+                }}
+              >
                 Existing artist
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setAddMode("invite")}>
@@ -1187,9 +1198,30 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
                           disabled={savingSlotId === slot.needId}
                           onClick={() => void onSaveExternal(slot)}
                         >
-                          Fill position
+                          Fill with this name
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => {
+                            setAddTargetNeedId(slot.needId);
+                            setAddMode("existing");
+                          }}
+                        >
+                          Book an artist
                         </Button>
                       </div>
+
+                      {addMode === "existing" && addTargetNeedId === slot.needId ? (
+                        <AddBandForm
+                          eventId={eventId}
+                          positionOptions={openPositionOptions}
+                          defaultNeedId={slot.needId}
+                          excludedOrganizationIds={performers.map((row) => row.organizationId)}
+                          onSaved={closeAdd}
+                          onCancel={closeAdd}
+                        />
+                      ) : null}
 
                       <div className="flex flex-wrap gap-2">
                         {slotDirty ? (
@@ -1220,19 +1252,19 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
           />
         ) : null}
 
-        {addMode === "existing" ? (
+        {addMode === "existing" && !addTargetNeedId ? (
           <AddBandForm
             eventId={eventId}
             positionOptions={openPositionOptions}
             excludedOrganizationIds={performers.map((row) => row.organizationId)}
-            onSaved={() => setAddMode(null)}
-            onCancel={() => setAddMode(null)}
+            onSaved={closeAdd}
+            onCancel={closeAdd}
           />
         ) : addMode === "invite" ? (
           <InviteBandForm
             eventId={eventId}
-            onSaved={() => setAddMode(null)}
-            onCancel={() => setAddMode(null)}
+            onSaved={closeAdd}
+            onCancel={closeAdd}
           />
         ) : addMode === "outside" ? (
           <div className="space-y-3 rounded-md border bg-muted/10 p-4">
@@ -1450,6 +1482,7 @@ function InviteBandForm({
 function AddBandForm({
   eventId,
   positionOptions,
+  defaultNeedId,
   excludedOrganizationIds,
   onSaved,
   onCancel,
@@ -1457,6 +1490,8 @@ function AddBandForm({
   eventId: Id<"events">;
   /** Open positions this artist can be booked into. */
   positionOptions: SearchableSelectOption[];
+  /** Preselected when launched from a position's "Book an artist". */
+  defaultNeedId?: string;
   excludedOrganizationIds: string[];
   onSaved: () => void;
   onCancel: () => void;
@@ -1465,7 +1500,7 @@ function AddBandForm({
   const addParticipation = useMutation(api.eventBands.addParticipation);
   const [organizationId, setOrganizationId] = useState("");
   const [role, setRole] = useState<ParticipationRole>("headliner");
-  const [needId, setNeedId] = useState("");
+  const [needId, setNeedId] = useState(defaultNeedId ?? "");
   const [busy, setBusy] = useState(false);
 
   const bandOptions = useMemo(
