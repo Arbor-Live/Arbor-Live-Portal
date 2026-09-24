@@ -1,5 +1,6 @@
 "use client";
 
+import { XIcon } from "@phosphor-icons/react";
 import { UserAvatar } from "@/components/account/user-avatar";
 import { SearchableSelect, type SearchableSelectOption } from "@/components/inventory/searchable-select";
 
@@ -9,6 +10,14 @@ export type UserSelectOption = SearchableSelectOption & {
 };
 
 function OptionAvatar({ option }: { option: UserSelectOption }) {
+  // The clear entry has no person behind it — an avatar would be nonsense.
+  if (!option.value) {
+    return (
+      <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+        <XIcon className="size-3.5" />
+      </span>
+    );
+  }
   return (
     <UserAvatar
       name={option.label}

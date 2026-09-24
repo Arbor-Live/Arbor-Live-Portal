@@ -1,5 +1,6 @@
 "use client";
 
+import { XIcon } from "@phosphor-icons/react";
 import { BoringUserAvatar } from "@/components/account/user-avatar";
 import { StoredAssetImage } from "@/components/files/stored-asset-image";
 import { SearchableSelect, type SearchableSelectOption } from "@/components/inventory/searchable-select";
@@ -81,6 +82,15 @@ export function artistSelectOptions(
 }
 
 function ArtistMark({ option }: { option: ArtistSelectOption }) {
+  // The clear entry is not an artist — show an icon, not a generated avatar.
+  if (!option.value) {
+    return (
+      <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+        <XIcon className="size-3.5" />
+      </span>
+    );
+  }
+
   if (option.avatarUrl) {
     return (
       <StoredAssetImage
