@@ -1329,6 +1329,8 @@ export default defineSchema({
    */
   eventArtistNeeds: defineTable({
     eventId: v.id("events"),
+    /** Bill order; staff drag cards to set it. */
+    sortOrder: v.optional(v.number()),
     /** Optional slot name, e.g. "Headliner", "Opener", "Late set". */
     label: v.optional(v.string()),
     artistType: v.union(v.literal("band"), v.literal("dj"), v.literal("no_preference")),

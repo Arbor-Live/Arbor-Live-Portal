@@ -81,8 +81,14 @@ type SlotDraft = {
   status: ArtistNeedStatus;
 };
 
+/** One card on the bill: a position, with the act that fills it if any. */
+type BillRow = {
+  key: string;
+  slot?: SlotRow;
+  performer?: PerformerRow;
+};
+
 type LineupDraft = {
-  needId: string;
   setStart: string;
   setEnd: string;
   soundcheckStart: string;
@@ -102,7 +108,6 @@ function toSlotDraft(slot: SlotRow): SlotDraft {
 
 function toLineupDraft(performer: PerformerRow): LineupDraft {
   return {
-    needId: performer.needId ?? UNSET,
     setStart: performer.setStartsAt != null ? toLocalDateTimeInput(performer.setStartsAt) : UNSET,
     setEnd: performer.setEndsAt != null ? toLocalDateTimeInput(performer.setEndsAt) : UNSET,
     soundcheckStart:
@@ -127,7 +132,6 @@ function slotDraftsEqual(a: SlotDraft, b: SlotDraft) {
 
 function lineupDraftsEqual(a: LineupDraft, b: LineupDraft) {
   return (
-    a.needId === b.needId &&
     a.setStart === b.setStart &&
     a.setEnd === b.setEnd &&
     a.soundcheckStart === b.soundcheckStart &&
@@ -233,10 +237,13 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
   const removeSlot = useMutation(api.eventArtistNeeds.removeSlot);
   const dismissInquiry = useMutation(api.eventArtistNeeds.dismissInquiry);
   const updateLineup = useMutation(api.eventBands.updateParticipationLineup);
+  const reorderSlots = useMutation(api.eventArtistNeeds.reorderSlots);
   const { confirm } = useAppDialog();
   const [editingPaymentForOrg, setEditingPaymentForOrg] = useState<string | null>(null);
   const [slotDrafts, setSlotDrafts] = useState<Record<string, SlotDraft>>({});
   const [lineupDrafts, setLineupDrafts] = useState<Record<string, LineupDraft>>({});
+  const [placementNames, setPlacementNames] = useState<Record<string, string>>({});
+  const [dragKey, setDragKey] = useState<string | null>(null);
   const [savingSlotId, setSavingSlotId] = useState<string | null>(null);
   const [savingLineupId, setSavingLineupId] = useState<string | null>(null);
   const [addingSlot, setAddingSlot] = useState(false);
@@ -344,23 +351,24 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
     }
   }
 
-  /** Positions nobody has been booked into yet. */
-  const openSlots = useMemo(
-    () => (bill?.slots ?? []).filter((slot) => slot.filledBy.length === 0),
-    [bill?.slots],
-  );
-
-  const positionOptions = useMemo(
-    () => [
-      { value: UNSET, label: "No position" },
-      ...(bill?.slots ?? []).map((slot) => ({
-        value: slot.needId,
-        label: slotTitle(slot),
-        description: slot.genres || undefined,
-      })),
-    ],
-    [bill?.slots],
-  );
+  /** One card per position, in bill order; acts nobody placed trail at the end. */
+  const rows = useMemo(() => {
+    const byParticipation = new Map<string, PerformerRow>();
+    for (const row of performers ?? []) byParticipation.set(row.participationId, row);
+    const placed = new Set<string>();
+    const list: BillRow[] = (bill?.slots ?? []).map((slot) => {
+      const performer = slot.filledBy[0]
+        ? byParticipation.get(slot.filledBy[0].participationId)
+        : undefined;
+      if (performer) placed.add(performer.participationId);
+      return { key: `slot-${slot.needId}`, slot, performer };
+    });
+    for (const performer of performers ?? []) {
+      if (placed.has(performer.participationId)) continue;
+      list.push({ key: `act-${performer.participationId}`, performer });
+    }
+    return list;
+  }, [bill?.slots, performers]);
 
   function patchSlotDraft(needId: string, values: Partial<SlotDraft>) {
     setSlotDrafts((prev) => {
@@ -436,13 +444,13 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
     }
   }
 
-  async function onSaveLineup(performer: PerformerRow) {
+  async function onSaveLineup(performer: PerformerRow, needId: Id<"eventArtistNeeds"> | null) {
     const draft = lineupDrafts[performer.participationId] ?? toLineupDraft(performer);
     setSavingLineupId(performer.participationId);
     try {
       await updateLineup({
         participationId: performer.participationId,
-        needId: (draft.needId || null) as Id<"eventArtistNeeds"> | null,
+        needId,
         setStartsAt: toMs(draft.setStart),
         setEndsAt: toMs(draft.setEnd),
         soundcheckStartsAt: toMs(draft.soundcheckStart),
@@ -462,6 +470,57 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
       notify.success("Inquiry dismissed.");
     } catch (error) {
       notify.error(getConvexErrorMessage(error));
+    }
+  }
+
+  function handleDrop(targetKey: string) {
+    const from = rows.findIndex((row) => row.key === dragKey);
+    const to = rows.findIndex((row) => row.key === targetKey);
+    setDragKey(null);
+    if (!dragKey || from < 0 || to < 0 || from === to) return;
+    const next = [...rows];
+    const [moved] = next.splice(from, 1);
+    if (moved) next.splice(to, 0, moved);
+    void (async () => {
+      try {
+        await reorderSlots({
+          eventId,
+          needIds: next.flatMap((row) => (row.slot ? [row.slot.needId] : [])),
+        });
+      } catch (error) {
+        notify.error(getConvexErrorMessage(error));
+      }
+    })();
+  }
+
+  /** Give a stray act a named place on the bill. */
+  async function onPlaceAct(performer: PerformerRow) {
+    const name = (placementNames[performer.participationId] ?? "").trim();
+    if (!name) {
+      notify.error("Name this position.");
+      return;
+    }
+    setSavingLineupId(performer.participationId);
+    try {
+      const { needId } = await upsertSlot({
+        eventId,
+        label: name,
+        artistType: "no_preference",
+        status: "open",
+      });
+      await updateLineup({
+        participationId: performer.participationId,
+        needId,
+        setStartsAt: performer.setStartsAt ?? null,
+        setEndsAt: performer.setEndsAt ?? null,
+        soundcheckStartsAt: performer.soundcheckStartsAt ?? null,
+        soundcheckEndsAt: performer.soundcheckEndsAt ?? null,
+      });
+      notify.success("Added to the bill.");
+    } catch (error) {
+      notify.error(getConvexErrorMessage(error));
+    } finally {
+      setSavingLineupId(null);
     }
   }
 
@@ -537,310 +596,345 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
           </div>
         ) : null}
 
-        {performers.length === 0 && openSlots.length === 0 && !showInvoiceEmptyPrompt ? (
+        {rows.length === 0 && !showInvoiceEmptyPrompt ? (
           <p className="text-sm text-muted-foreground">
             No positions on the bill yet. Add one per act you are looking for.
           </p>
         ) : null}
 
-        {openSlots.length > 0 ? (
-          <div className="space-y-2">
-            {openSlots.map((slot) => {
-              const server = toSlotDraft(slot);
-              const draft = slotDrafts[slot.needId] ?? server;
-              const dirty = !slotDraftsEqual(draft, server);
+        {rows.length > 0 ? (
+          <div
+            className="flex flex-col gap-2"
+            onDragEnd={() => setDragKey(null)}
+          >
+            {rows.map((row) => {
+              const { slot, performer } = row;
+              const serverSlot = slot ? toSlotDraft(slot) : null;
+              const slotDraft = slot ? (slotDrafts[slot.needId] ?? serverSlot) : null;
+              const slotDirty = Boolean(
+                slot && serverSlot && slotDraft && !slotDraftsEqual(slotDraft, serverSlot),
+              );
+              const serverLineup = performer ? toLineupDraft(performer) : null;
+              const lineupDraft = performer
+                ? (lineupDrafts[performer.participationId] ?? serverLineup)
+                : null;
+              const lineupDirty = Boolean(
+                performer &&
+                  serverLineup &&
+                  lineupDraft &&
+                  !lineupDraftsEqual(lineupDraft, serverLineup),
+              );
+              const placed = Boolean(slot && performer);
               return (
                 <div
-                  key={slot.needId}
-                  className="space-y-3 rounded-md border border-dashed px-3 py-3 text-sm"
-                  data-testid="artist-need-slot"
+                  key={row.key}
+                  data-testid="bill-card"
+                  draggable
+                  onDragStart={() => setDragKey(row.key)}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={() => handleDrop(row.key)}
+                  className={`cursor-grab space-y-3 rounded-md border px-3 py-3 text-sm active:cursor-grabbing ${
+                    dragKey === row.key ? "opacity-50" : ""
+                  } ${slot && !performer ? "border-dashed" : ""}`}
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="font-medium">{slotTitle(slot)}</p>
-                    <span
-                      data-testid="artist-need-status"
-                      className={`rounded-md px-2 py-1 text-xs font-medium ${effectiveStatusClass(slot.effectiveStatus)}`}
-                    >
-                      {effectiveStatusLabel(slot.effectiveStatus)}
-                    </span>
-                  </div>
-                  <div className="grid gap-2 md:grid-cols-4">
-                    <div className="space-y-1">
-                      <Label>Name</Label>
+                    {slot && slotDraft ? (
                       <Input
-                        value={draft.label}
+                        className="h-8 max-w-56 font-medium"
+                        value={slotDraft.label}
+                        placeholder="Name this position"
                         onChange={(event) =>
                           patchSlotDraft(slot.needId, { label: event.target.value })
                         }
-                        placeholder="Headliner"
+                        onBlur={() => {
+                          if (slotDirty) void onSaveSlot(slot);
+                        }}
                       />
-                    </div>
-                    <div className="space-y-1">
-                      <Label>Looking for</Label>
-                      <SearchableSelect
-                        value={draft.artistType}
-                        onChange={(value) =>
-                          patchSlotDraft(slot.needId, { artistType: value as ArtistNeedType })
-                        }
-                        options={TYPE_OPTIONS}
-                        placeholder="Select type"
-                        emptyLabel="Select type"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label>Genres / vibes</Label>
-                      <Input
-                        value={draft.genres}
-                        onChange={(event) =>
-                          patchSlotDraft(slot.needId, { genres: event.target.value })
-                        }
-                        placeholder="e.g. indie, jazz, house"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label>Status</Label>
-                      <SearchableSelect
-                        value={draft.status}
-                        onChange={(value) =>
-                          patchSlotDraft(slot.needId, { status: value as ArtistNeedStatus })
-                        }
-                        options={SLOT_STATUS_OPTIONS}
-                        placeholder="Select status"
-                        emptyLabel="Select status"
-                      />
-                    </div>
-                  </div>
-
-                  {slot.inquiries.length > 0 ? (
-                    <div className="space-y-2 border-t pt-2">
-                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                        Inquiries
-                      </p>
-                      <ul className="space-y-2">
-                        {slot.inquiries.map((inquiry) => (
-                          <li
-                            key={inquiry._id}
-                            className="flex items-start justify-between gap-3 rounded-md border px-3 py-2"
-                          >
-                            <div className="min-w-0">
-                              <p className="font-medium">
-                                {inquiry.name}
-                                {inquiry.status === "dismissed" ? (
-                                  <span className="ml-2 text-xs font-normal text-muted-foreground">
-                                    Dismissed
-                                  </span>
-                                ) : null}
-                              </p>
-                              {inquiry.message ? (
-                                <p className="mt-0.5 text-muted-foreground">{inquiry.message}</p>
-                              ) : null}
-                            </div>
-                            {inquiry.status === "submitted" ? (
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => void onDismissInquiry(inquiry._id)}
-                              >
-                                Dismiss
-                              </Button>
-                            ) : null}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
-
-                  <div className="flex flex-wrap gap-2">
-                    {dirty ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        disabled={savingSlotId === slot.needId}
-                        onClick={() => void onSaveSlot(slot)}
-                      >
-                        {savingSlotId === slot.needId ? "Saving…" : "Save position"}
-                      </Button>
-                    ) : null}
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      disabled={savingSlotId === slot.needId}
-                      onClick={() => void onRemoveSlot(slot)}
-                    >
-                      Remove
-                    </Button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        ) : null}
-
-        {performers.length > 0 ? (
-          <div className="space-y-2">
-            {performers.map((performer) => (
-              <div
-                key={performer.participationId}
-                className="space-y-2 rounded-md border px-3 py-2 text-sm"
-              >
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="min-w-0 space-y-1">
-                    <p className="font-medium">{performer.bandName}</p>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <SearchableSelect
-                        value={performer.role}
-                        onChange={(value) =>
-                          void onRoleChange(performer.organizationId, value as ParticipationRole)
-                        }
-                        options={ROLE_OPTIONS}
-                        placeholder="Role"
-                        emptyLabel="Role"
-                      />
-                      {performer.payment ? (
-                        <p className="text-muted-foreground">
-                          {formatUsd(performer.payment.totalUsd)} · {performer.payment.statusLabel}
-                        </p>
-                      ) : (
-                        <p className="text-muted-foreground">No payout set</p>
-                      )}
-                      {performer.awaitingOnboarding ? (
-                        <p className="text-status-amber-700 dark:text-status-amber-300">Onboarding pending</p>
-                      ) : null}
-                    </div>
-                    {performer.payment ? (
-                      <p className="text-xs text-muted-foreground">
-                        Payment ID: {performer.payment.confirmationToken}
-                      </p>
-                    ) : null}
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {performer.payment?.status !== "paid" ? (
-                      <>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant={
-                            editingPaymentForOrg === performer.organizationId
-                              ? "default"
-                              : "outline"
-                          }
-                          onClick={() =>
-                            setEditingPaymentForOrg(
-                              editingPaymentForOrg === performer.organizationId
-                                ? null
-                                : performer.organizationId,
-                            )
-                          }
-                        >
-                          {editingPaymentForOrg === performer.organizationId
-                            ? "Close"
-                            : performer.payment
-                              ? "Edit payout"
-                              : "Add payout"}
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          disabled={busyOrgId === performer.organizationId}
-                          onClick={() => void onRemove(performer.organizationId)}
-                        >
-                          Remove
-                        </Button>
-                      </>
                     ) : (
-                      <span className="text-xs text-muted-foreground">
-                        {roleLabel(performer.role)} · Paid
-                      </span>
+                      <p className="font-medium">{performer?.bandName ?? ""}</p>
                     )}
+                    <span
+                      data-testid="artist-need-status"
+                      className={`rounded-md px-2 py-1 text-xs font-medium ${effectiveStatusClass(
+                        slot ? slot.effectiveStatus : "booked",
+                      )}`}
+                    >
+                      {effectiveStatusLabel(slot ? slot.effectiveStatus : "booked")}
+                    </span>
                   </div>
-                </div>
 
-                {(() => {
-                  const server = toLineupDraft(performer);
-                  const draft = lineupDrafts[performer.participationId] ?? server;
-                  const dirty = !lineupDraftsEqual(draft, server);
-                  return (
+                  {performer ? (
                     <>
-                      <div className="grid gap-2 md:grid-cols-3">
-                        <div className="space-y-1">
-                          <Label>Set</Label>
-                          <DateTimeRangePicker
-                            startValue={draft.setStart}
-                            endValue={draft.setEnd}
-                            onChange={(next) =>
-                              patchLineupDraft(performer.participationId, {
-                                setStart: next.start,
-                                setEnd: next.end,
-                              })
-                            }
-                            placeholder="When they play"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label>Soundcheck</Label>
-                          <DateTimeRangePicker
-                            startValue={draft.soundcheckStart}
-                            endValue={draft.soundcheckEnd}
-                            onChange={(next) =>
-                              patchLineupDraft(performer.participationId, {
-                                soundcheckStart: next.start,
-                                soundcheckEnd: next.end,
-                              })
-                            }
-                            placeholder="When to arrive"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label>Fills</Label>
-                          <SearchableSelect
-                            value={draft.needId}
-                            onChange={(value) =>
-                              patchLineupDraft(performer.participationId, { needId: value })
-                            }
-                            options={positionOptions}
-                            placeholder="Position"
-                            emptyLabel="No position"
-                          />
-                        </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <SearchableSelect
+                          value={performer.role}
+                          onChange={(value) =>
+                            void onRoleChange(performer.organizationId, value as ParticipationRole)
+                          }
+                          options={ROLE_OPTIONS}
+                          placeholder="Role"
+                          emptyLabel="Role"
+                        />
+                        {performer.payment ? (
+                          <p className="text-muted-foreground">
+                            {formatUsd(performer.payment.totalUsd)} ·{" "}
+                            {performer.payment.statusLabel}
+                          </p>
+                        ) : (
+                          <p className="text-muted-foreground">No payout set</p>
+                        )}
+                        {performer.awaitingOnboarding ? (
+                          <p className="text-status-amber-700 dark:text-status-amber-300">
+                            Onboarding pending
+                          </p>
+                        ) : null}
                       </div>
-                      {dirty ? (
-                        <div className="flex justify-end">
+
+                      {lineupDraft ? (
+                        <div className="grid gap-2 md:grid-cols-2">
+                          <div className="space-y-1">
+                            <Label>Set</Label>
+                            <DateTimeRangePicker
+                              startValue={lineupDraft.setStart}
+                              endValue={lineupDraft.setEnd}
+                              onChange={(next) =>
+                                patchLineupDraft(performer.participationId, {
+                                  setStart: next.start,
+                                  setEnd: next.end,
+                                })
+                              }
+                              placeholder="When they play"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label>Soundcheck</Label>
+                            <DateTimeRangePicker
+                              startValue={lineupDraft.soundcheckStart}
+                              endValue={lineupDraft.soundcheckEnd}
+                              onChange={(next) =>
+                                patchLineupDraft(performer.participationId, {
+                                  soundcheckStart: next.start,
+                                  soundcheckEnd: next.end,
+                                })
+                              }
+                              placeholder="When to arrive"
+                            />
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {performer.payment ? (
+                        <p className="text-xs text-muted-foreground">
+                          Payment ID: {performer.payment.confirmationToken}
+                        </p>
+                      ) : null}
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        {!placed ? (
+                          <>
+                            <Input
+                              className="h-8 w-48"
+                              placeholder="Name this position"
+                              value={placementNames[performer.participationId] ?? ""}
+                              onChange={(event) =>
+                                setPlacementNames((prev) => ({
+                                  ...prev,
+                                  [performer.participationId]: event.target.value,
+                                }))
+                              }
+                            />
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              disabled={savingLineupId === performer.participationId}
+                              onClick={() => void onPlaceAct(performer)}
+                            >
+                              Add to bill
+                            </Button>
+                          </>
+                        ) : null}
+                        {performer.payment?.status !== "paid" ? (
+                          <>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant={
+                                editingPaymentForOrg === performer.organizationId
+                                  ? "default"
+                                  : "outline"
+                              }
+                              onClick={() =>
+                                setEditingPaymentForOrg(
+                                  editingPaymentForOrg === performer.organizationId
+                                    ? null
+                                    : performer.organizationId,
+                                )
+                              }
+                            >
+                              {editingPaymentForOrg === performer.organizationId
+                                ? "Close"
+                                : performer.payment
+                                  ? "Edit payout"
+                                  : "Add payout"}
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              disabled={busyOrgId === performer.organizationId}
+                              onClick={() => void onRemove(performer.organizationId)}
+                            >
+                              Remove
+                            </Button>
+                          </>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">
+                            {roleLabel(performer.role)} · Paid
+                          </span>
+                        )}
+                        {lineupDirty ? (
                           <Button
                             type="button"
                             size="sm"
                             disabled={savingLineupId === performer.participationId}
-                            onClick={() => void onSaveLineup(performer)}
+                            onClick={() =>
+                              void onSaveLineup(performer, slot?.needId ?? null)
+                            }
                           >
                             {savingLineupId === performer.participationId ? "Saving…" : "Save"}
                           </Button>
-                        </div>
+                        ) : null}
+                      </div>
+
+                      {editingPaymentForOrg === performer.organizationId ? (
+                        <EventBandPaymentForm
+                          key={`${performer.organizationId}-payment`}
+                          eventId={eventId}
+                          organizationId={performer.organizationId}
+                          role={performer.role}
+                          payment={performer.payment}
+                          organizationLocked
+                          excludedOrganizationIds={[]}
+                          invoiceLine={invoiceArtistByOrg.get(performer.organizationId) ?? null}
+                          invoiceDefaultsReady={
+                            !invoiceId ||
+                            (invoiceDetail !== undefined && artistDayScope !== undefined)
+                          }
+                          onSaved={() => setEditingPaymentForOrg(null)}
+                          onCancel={() => setEditingPaymentForOrg(null)}
+                        />
                       ) : null}
                     </>
-                  );
-                })()}
+                  ) : slot && slotDraft ? (
+                    <>
+                      <div className="grid gap-2 md:grid-cols-3">
+                        <div className="space-y-1">
+                          <Label>Looking for</Label>
+                          <SearchableSelect
+                            value={slotDraft.artistType}
+                            onChange={(value) =>
+                              patchSlotDraft(slot.needId, {
+                                artistType: value as ArtistNeedType,
+                              })
+                            }
+                            options={TYPE_OPTIONS}
+                            placeholder="Select type"
+                            emptyLabel="Select type"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label>Genres / vibes</Label>
+                          <Input
+                            value={slotDraft.genres}
+                            onChange={(event) =>
+                              patchSlotDraft(slot.needId, { genres: event.target.value })
+                            }
+                            placeholder="e.g. indie, jazz, house"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label>Status</Label>
+                          <SearchableSelect
+                            value={slotDraft.status}
+                            onChange={(value) =>
+                              patchSlotDraft(slot.needId, { status: value as ArtistNeedStatus })
+                            }
+                            options={SLOT_STATUS_OPTIONS}
+                            placeholder="Select status"
+                            emptyLabel="Select status"
+                          />
+                        </div>
+                      </div>
 
-                {editingPaymentForOrg === performer.organizationId ? (
-                  <EventBandPaymentForm
-                    key={`${performer.organizationId}-payment`}
-                    eventId={eventId}
-                    organizationId={performer.organizationId}
-                    role={performer.role}
-                    payment={performer.payment}
-                    organizationLocked
-                    excludedOrganizationIds={[]}
-                    invoiceLine={invoiceArtistByOrg.get(performer.organizationId) ?? null}
-                    invoiceDefaultsReady={
-                      !invoiceId || (invoiceDetail !== undefined && artistDayScope !== undefined)
-                    }
-                    onSaved={() => setEditingPaymentForOrg(null)}
-                    onCancel={() => setEditingPaymentForOrg(null)}
-                  />
-                ) : null}
-              </div>
-            ))}
+                      {slot.inquiries.length > 0 ? (
+                        <div className="space-y-2 border-t pt-2">
+                          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                            Inquiries
+                          </p>
+                          <ul className="space-y-2">
+                            {slot.inquiries.map((inquiry) => (
+                              <li
+                                key={inquiry._id}
+                                className="flex items-start justify-between gap-3 rounded-md border px-3 py-2"
+                              >
+                                <div className="min-w-0">
+                                  <p className="font-medium">
+                                    {inquiry.name}
+                                    {inquiry.status === "dismissed" ? (
+                                      <span className="ml-2 text-xs font-normal text-muted-foreground">
+                                        Dismissed
+                                      </span>
+                                    ) : null}
+                                  </p>
+                                  {inquiry.message ? (
+                                    <p className="mt-0.5 text-muted-foreground">
+                                      {inquiry.message}
+                                    </p>
+                                  ) : null}
+                                </div>
+                                {inquiry.status === "submitted" ? (
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => void onDismissInquiry(inquiry._id)}
+                                  >
+                                    Dismiss
+                                  </Button>
+                                ) : null}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+
+                      <div className="flex flex-wrap gap-2">
+                        {slotDirty ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            disabled={savingSlotId === slot.needId}
+                            onClick={() => void onSaveSlot(slot)}
+                          >
+                            {savingSlotId === slot.needId ? "Saving…" : "Save position"}
+                          </Button>
+                        ) : null}
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          disabled={savingSlotId === slot.needId}
+                          onClick={() => void onRemoveSlot(slot)}
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    </>
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
         ) : null}
 

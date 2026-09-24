@@ -160,8 +160,9 @@ Event types (drive which editor tabs and quick-add blocks appear):
   `bookingRequestSettings`, or manual swap on the request detail). Inbox
   defaults to open requests (`submitted`/`action_required`/`pending_client`), oldest-first, with a
   days-since-submitted counter.
-- **The bill** (event editor **Artists** tab) is one card of *positions*, each
-  either filled or still needed:
+- **The bill** (event editor **Artists** tab) is one drag-orderable list of
+  *positions* (`eventArtistNeeds.sortOrder`), each with a freeform `label` and
+  either filled by an act or still needed:
   - **Artist Needed** (`eventArtistNeeds`) — one open **slot** per row, so "two
     bands and a DJ" is three slots: a `label` (e.g. "Headliner"), `artistType`
     (`band` / `dj` / `no_preference`), freeform `genres`, and a staff-driven

@@ -36,10 +36,15 @@ function isArtistListableEvent(event: Doc<"events"> | null, now: number): event 
 }
 
 async function loadSlotsForEvent(ctx: QueryCtx, eventId: Id<"events">) {
-  return await ctx.db
+  const rows = await ctx.db
     .query("eventArtistNeeds")
     .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
     .take(100);
+  // Bill order; rows created before ordering existed fall back to creation order.
+  return rows.sort(
+    (a, b) =>
+      (a.sortOrder ?? a.createdAt) - (b.sortOrder ?? b.createdAt) || a.createdAt - b.createdAt,
+  );
 }
 
 async function nameFor(ctx: QueryCtx, organizationId: string) {
@@ -92,6 +97,7 @@ export const getForEvent = query({
         const filledBy = booking.lineup.filter((row) => row.needId === slot._id);
         return {
           needId: slot._id,
+          sortOrder: slot.sortOrder ?? slot.createdAt,
           label: slot.label ?? "",
           artistType: slot.artistType,
           genres: slot.genres ?? "",
@@ -179,8 +185,10 @@ export const upsertSlot = mutation({
       return { needId: existing._id };
     }
 
+    const existingRows = await loadSlotsForEvent(ctx, args.eventId);
     const needId = await ctx.db.insert("eventArtistNeeds", {
       eventId: args.eventId,
+      sortOrder: (existingRows.at(-1)?.sortOrder ?? existingRows.at(-1)?.createdAt ?? now) + 1,
       label,
       artistType: args.artistType,
       genres,
@@ -190,6 +198,25 @@ export const upsertSlot = mutation({
       updatedAt: now,
     });
     return { needId };
+  },
+});
+
+/** Staff drag cards to set the bill order. */
+export const reorderSlots = mutation({
+  args: {
+    eventId: v.id("events"),
+    needIds: v.array(v.id("eventArtistNeeds")),
+  },
+  handler: async (ctx, args) => {
+    await requireArborInternalContext(ctx);
+    const now = Date.now();
+    for (const [index, needId] of args.needIds.entries()) {
+      const slot = await ctx.db.get(needId);
+      if (!slot || slot.eventId !== args.eventId) continue;
+      if (slot.sortOrder === index) continue;
+      await ctx.db.patch(needId, { sortOrder: index, updatedAt: now });
+    }
+    return null;
   },
 });
 
