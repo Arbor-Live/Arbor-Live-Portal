@@ -23,21 +23,35 @@ export async function hasBandEventParticipation(
   return Boolean(payment && payment.status !== "cancelled");
 }
 
+export type BandLinkedEventRow = {
+  eventId: Id<"events">;
+  role: "headliner" | "support" | "other";
+  /** Run-of-show windows, when staff have set them. */
+  setStartsAt?: number;
+  setEndsAt?: number;
+  soundcheckStartsAt?: number;
+  soundcheckEndsAt?: number;
+};
+
 export async function listBandLinkedEvents(
   ctx: QueryCtx | MutationCtx,
   organizationId: string,
 ) {
-  const linkedEvents = new Map<
-    Id<"events">,
-    { eventId: Id<"events">; role: "headliner" | "support" | "other" }
-  >();
+  const linkedEvents = new Map<Id<"events">, BandLinkedEventRow>();
 
   const participations = await ctx.db
     .query("eventBandParticipations")
     .withIndex("by_organizationId", (q) => q.eq("organizationId", organizationId))
     .take(100);
   for (const row of participations) {
-    linkedEvents.set(row.eventId, { eventId: row.eventId, role: row.role });
+    linkedEvents.set(row.eventId, {
+      eventId: row.eventId,
+      role: row.role,
+      setStartsAt: row.setStartsAt,
+      setEndsAt: row.setEndsAt,
+      soundcheckStartsAt: row.soundcheckStartsAt,
+      soundcheckEndsAt: row.soundcheckEndsAt,
+    });
   }
 
   const payments = await ctx.db

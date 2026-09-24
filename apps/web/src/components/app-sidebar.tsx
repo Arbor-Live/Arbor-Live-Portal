@@ -48,6 +48,7 @@ import {
   PackageIcon,
   LifebuoyIcon,
   MegaphoneIcon,
+  MusicNotesIcon,
   ImagesIcon,
 } from "@phosphor-icons/react"
 
@@ -76,6 +77,7 @@ const navItems: NavItem[] = [
     url: "/dashboard/artists",
     icon: GuitarIcon,
   },
+  { title: "Opportunities", url: "/dashboard/opportunities", icon: MusicNotesIcon, bandOnly: true },
   { title: "Media", url: "/dashboard/media", icon: ImagesIcon, bandOnly: true },
   { title: "Inventory", url: "/dashboard/inventory", icon: PackageIcon },
   { title: "Marketing", url: "/dashboard/marketing", icon: MegaphoneIcon, marketingOnly: true },

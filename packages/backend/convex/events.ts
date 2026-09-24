@@ -622,8 +622,8 @@ export const update = mutation({
     expectedTurnout: v.optional(v.number()),
     actualTurnout: v.optional(v.number()),
     budgetUsd: v.optional(v.number()),
-    dayOfLeadUserId: v.optional(v.string()),
-    eventManagerUserId: v.optional(v.string()),
+    dayOfLeadUserId: v.optional(v.union(v.string(), v.null())),
+    eventManagerUserId: v.optional(v.union(v.string(), v.null())),
     crewCostUsd: v.optional(v.number()),
     bandsCostUsd: v.optional(v.number()),
     externalRentalsCostUsd: v.optional(v.number()),
@@ -757,6 +757,11 @@ export const update = mutation({
 
     let affectedOccurrences: SeriesOverviewAffectedOccurrence[] = [{ id: args.id, prevStatus: existing.status, invoiceId: nextInvoiceId }];
 
+    // An explicit clear must drop the field outright: `patch` ignores
+    // `undefined`, and a retained value would propagate to occurrences.
+    const clearDayOfLead = args.dayOfLeadUserId === null || args.dayOfLeadUserId === "";
+    const clearManager = args.eventManagerUserId === null || args.eventManagerUserId === "";
+
     if (hasSeries && existing.seriesId && scope !== "this") {
       const series = await ctx.db.get(existing.seriesId);
       if (!series) throw new Error("Linked event series not found.");
@@ -800,6 +805,15 @@ export const update = mutation({
         ...(args.invoiceId !== undefined ? { invoiceId: nextInvoiceId } : {}),
         updatedAt: now,
       });
+      if (clearDayOfLead || clearManager) {
+        const cleared = await ctx.db.get(existing.seriesId);
+        if (cleared) {
+          const next = { ...cleared };
+          if (clearDayOfLead) delete next.dayOfLeadUserId;
+          if (clearManager) delete next.eventManagerUserId;
+          await ctx.db.replace(existing.seriesId, next);
+        }
+      }
       const updatedSeries = await ctx.db.get(existing.seriesId);
       if (!updatedSeries) throw new Error("Linked event series not found.");
       const overrides: SeriesOverviewOverride = {
@@ -849,6 +863,16 @@ export const update = mutation({
         ...patch,
         seriesDetached: hasSeries && scope === "this" ? true : existing.seriesDetached,
       });
+    }
+
+    if (clearDayOfLead || clearManager) {
+      const updated = await ctx.db.get(args.id);
+      if (updated) {
+        const next = { ...updated };
+        if (clearDayOfLead) delete next.dayOfLeadUserId;
+        if (clearManager) delete next.eventManagerUserId;
+        await ctx.db.replace(args.id, next);
+      }
     }
 
     // Additional invoices stay on this occurrence. The primary still propagates

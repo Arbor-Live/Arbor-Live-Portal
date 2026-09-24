@@ -457,3 +457,14 @@ export type ThisWeekAtArborEmailProps = {
   allEventsUrl: string;
   unsubscribeUrl: string;
 };
+
+export type ArtistNeedInquiryEmailProps = {
+  artistName: string;
+  eventTitle: string;
+  dateRangeLabel: string;
+  venueName?: string;
+  artistTypeLabel: string;
+  genres?: string;
+  message?: string;
+  reviewUrl: string;
+};

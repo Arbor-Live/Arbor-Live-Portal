@@ -3215,6 +3215,11 @@ export const seedUpcomingBandShow = mutation({
     role: v.optional(
       v.union(v.literal("headliner"), v.literal("support"), v.literal("other")),
     ),
+    /** Run-of-show windows, so artist-facing display can be asserted. */
+    setStartsAt: v.optional(v.number()),
+    setEndsAt: v.optional(v.number()),
+    soundcheckStartsAt: v.optional(v.number()),
+    soundcheckEndsAt: v.optional(v.number()),
   },
   returns: v.object({
     eventId: v.id("events"),
@@ -3254,6 +3259,10 @@ export const seedUpcomingBandShow = mutation({
         eventId,
         organizationId,
         role: args.role ?? "headliner",
+        setStartsAt: args.setStartsAt,
+        setEndsAt: args.setEndsAt,
+        soundcheckStartsAt: args.soundcheckStartsAt,
+        soundcheckEndsAt: args.soundcheckEndsAt,
         createdAt: now,
         updatedAt: now,
       });
