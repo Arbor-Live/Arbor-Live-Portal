@@ -586,6 +586,7 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
             getId={(row) => row.key}
             onReorder={handleReorder}
             rowTestId="bill-card"
+            canDrag={(row) => Boolean(row.slot)}
             rowClassName="space-y-3 rounded-md border px-3 py-3 text-sm"
             renderItem={(row, index, controls) => {
               const { slot, performer } = row;

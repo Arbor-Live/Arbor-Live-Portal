@@ -56,6 +56,7 @@ export function SortableList<T>({
   rowClassName,
   rowTestId,
   disabled = false,
+  canDrag,
 }: {
   items: T[];
   getId: (item: T, index: number) => string;
@@ -64,6 +65,8 @@ export function SortableList<T>({
   rowClassName?: string | ((item: T, index: number) => string);
   rowTestId?: string;
   disabled?: boolean;
+  /** Rows this returns false for cannot be dragged or moved. */
+  canDrag?: (item: T, index: number) => boolean;
 }) {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
@@ -122,16 +125,25 @@ export function SortableList<T>({
     setDropIndex(dropIndexRef.current);
   }, []);
 
-  const endDrag = useCallback(() => {
-    const id = draggingIdRef.current;
-    const to = dropIndexRef.current;
-    draggingIdRef.current = null;
-    dropIndexRef.current = -1;
-    setDraggingId(null);
-    setDropIndex(null);
-    if (!id) return;
-    commit(idsRef.current.indexOf(id), to);
-  }, [commit]);
+  const endDrag = useCallback(
+    (dropped: boolean) => {
+      const id = draggingIdRef.current;
+      const to = dropIndexRef.current;
+      draggingIdRef.current = null;
+      dropIndexRef.current = -1;
+      setDraggingId(null);
+      setDropIndex(null);
+      // A cancelled pointer is not a drop: reset without reordering.
+      if (!dropped || !id) return;
+      commit(idsRef.current.indexOf(id), to);
+    },
+    [commit],
+  );
+
+  const draggable = useCallback(
+    (item: T, index: number) => !disabled && (canDrag?.(item, index) ?? true),
+    [disabled, canDrag],
+  );
 
   const move = useCallback(
     (id: string, delta: number) => {
@@ -151,15 +163,18 @@ export function SortableList<T>({
       setDropIndex(to);
     }
     function onUp() {
-      endDrag();
+      endDrag(true);
+    }
+    function onCancel() {
+      endDrag(false);
     }
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
-    window.addEventListener("pointercancel", onUp);
+    window.addEventListener("pointercancel", onCancel);
     return () => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
-      window.removeEventListener("pointercancel", onUp);
+      window.removeEventListener("pointercancel", onCancel);
     };
   }, [endDrag, indexAtPoint]);
 
@@ -177,7 +192,7 @@ export function SortableList<T>({
             ref={(element) => setRowRef(id, element)}
             data-testid={rowTestId}
             onPointerDown={(event) => {
-              if (disabled || event.button !== 0) return;
+              if (!draggable(item, index) || event.button !== 0) return;
               if ((event.target as HTMLElement).closest(INTERACTIVE_SELECTOR)) return;
               event.preventDefault();
               begin(id);
@@ -191,15 +206,21 @@ export function SortableList<T>({
             {renderItem(item, index, {
               handleProps: {
                 onPointerDown: (event) => {
-                  if (disabled) return;
+                  if (!draggable(item, index)) return;
                   event.preventDefault();
                   begin(id);
                 },
               },
               moveUp: () => move(id, -1),
               moveDown: () => move(id, 1),
-              canMoveUp: index > 0,
-              canMoveDown: index < items.length - 1,
+              // Only swap with another sortable row, so unplaced acts stay put
+              // and a position cannot move into their area.
+              canMoveUp:
+                index > 0 && draggable(item, index) && draggable(items[index - 1]!, index - 1),
+              canMoveDown:
+                index < items.length - 1 &&
+                draggable(item, index) &&
+                draggable(items[index + 1]!, index + 1),
               isDragging,
               isDropTarget,
             })}
