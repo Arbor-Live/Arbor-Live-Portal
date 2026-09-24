@@ -520,8 +520,9 @@ export function EventEditor({
       additionalHostGroupIds: (eventData.event.additionalHostGroupIds ?? [])
         .map((id) => String(id))
         .filter((id) => id && id !== (eventData.event.invoiceId ? "" : linkedHostGroupId)),
-      eventManagerUserId: eventData.event.eventManagerUserId || undefined,
-      dayOfLeadUserId: eventData.event.dayOfLeadUserId || undefined,
+      // "" matches buildOverviewPayload for an empty selection.
+      eventManagerUserId: eventData.event.eventManagerUserId || "",
+      dayOfLeadUserId: eventData.event.dayOfLeadUserId || "",
       bandsCostUsd: Number(eventData.event.bandsCostUsd ?? 0),
       externalRentalsCostUsd: Number(eventData.event.externalRentalsCostUsd ?? 0),
       otherCostUsd: Number(eventData.event.otherCostUsd ?? 0),
@@ -1733,7 +1734,7 @@ export function EventEditor({
 
       {resolvedActiveTab === "artists" && eventId ? (
         <div className="space-y-4">
-          <EventArtistBillSection eventId={eventId} />
+          <EventArtistBillSection eventId={eventId} canEdit={canEdit} />
           <EventBandRidersSection eventId={eventId} />
         </div>
       ) : null}

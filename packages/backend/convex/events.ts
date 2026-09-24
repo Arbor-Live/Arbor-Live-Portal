@@ -757,6 +757,11 @@ export const update = mutation({
 
     let affectedOccurrences: SeriesOverviewAffectedOccurrence[] = [{ id: args.id, prevStatus: existing.status, invoiceId: nextInvoiceId }];
 
+    // An explicit clear must drop the field outright: `patch` ignores
+    // `undefined`, and a retained value would propagate to occurrences.
+    const clearDayOfLead = args.dayOfLeadUserId === null || args.dayOfLeadUserId === "";
+    const clearManager = args.eventManagerUserId === null || args.eventManagerUserId === "";
+
     if (hasSeries && existing.seriesId && scope !== "this") {
       const series = await ctx.db.get(existing.seriesId);
       if (!series) throw new Error("Linked event series not found.");
@@ -800,6 +805,15 @@ export const update = mutation({
         ...(args.invoiceId !== undefined ? { invoiceId: nextInvoiceId } : {}),
         updatedAt: now,
       });
+      if (clearDayOfLead || clearManager) {
+        const cleared = await ctx.db.get(existing.seriesId);
+        if (cleared) {
+          const next = { ...cleared };
+          if (clearDayOfLead) delete next.dayOfLeadUserId;
+          if (clearManager) delete next.eventManagerUserId;
+          await ctx.db.replace(existing.seriesId, next);
+        }
+      }
       const updatedSeries = await ctx.db.get(existing.seriesId);
       if (!updatedSeries) throw new Error("Linked event series not found.");
       const overrides: SeriesOverviewOverride = {
@@ -851,10 +865,6 @@ export const update = mutation({
       });
     }
 
-    // `patch` ignores `undefined`, so an explicit clear must go through
-    // `replace` to actually drop the field.
-    const clearDayOfLead = args.dayOfLeadUserId === null || args.dayOfLeadUserId === "";
-    const clearManager = args.eventManagerUserId === null || args.eventManagerUserId === "";
     if (clearDayOfLead || clearManager) {
       const updated = await ctx.db.get(args.id);
       if (updated) {

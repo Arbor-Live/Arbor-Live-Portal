@@ -260,15 +260,30 @@ function applyPayoutDefaultsForOrg(
   });
 }
 
-export function EventArtistBillSection({ eventId }: { eventId: Id<"events"> }) {
+export function EventArtistBillSection({
+  eventId,
+  canEdit = true,
+}: {
+  eventId: Id<"events">;
+  /** Viewers without edit access see the bill but cannot change it. */
+  canEdit?: boolean;
+}) {
   return (
     <ArborOnlyGuard>
-      <EventArtistBillPanel eventId={eventId} />
+      <fieldset disabled={!canEdit} className="contents">
+        <EventArtistBillPanel eventId={eventId} canEdit={canEdit} />
+      </fieldset>
     </ArborOnlyGuard>
   );
 }
 
-function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
+function EventArtistBillPanel({
+  eventId,
+  canEdit,
+}: {
+  eventId: Id<"events">;
+  canEdit: boolean;
+}) {
   const performers = useQuery(api.eventBands.listPerformersForEvent, { eventId });
   const eventDetail = useQuery(api.events.get, { id: eventId });
   const invoiceId = eventDetail?.event.invoiceId ?? eventDetail?.series?.invoiceId;
@@ -811,6 +826,7 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
         {rows.length > 0 ? (
           <SortableList
             items={rows}
+            disabled={!canEdit}
             getId={(row) => row.key}
             onReorder={handleReorder}
             rowTestId="bill-card"
