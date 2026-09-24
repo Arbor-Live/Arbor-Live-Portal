@@ -8,10 +8,22 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { CaretDownIcon, CaretUpIcon, DotsSixVerticalIcon } from "@phosphor-icons/react";
+import {
+  CaretDownIcon,
+  CaretUpIcon,
+  DotsSixVerticalIcon,
+  PlusIcon,
+} from "@phosphor-icons/react";
 import { ArtistSelect, artistSelectOptions } from "@/components/bands/artist-select";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
 import { SortableList } from "@/components/ui/sortable-list";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { DateTimeRangePicker } from "@/components/ui/date-time-picker";
 import { useAppDialog } from "@/components/ui/app-dialog";
 import { getConvexErrorMessage } from "@/lib/convex-error";
@@ -78,9 +90,11 @@ function slotTitle(slot: { label: string; artistType: ArtistNeedType }) {
 
 type SlotDraft = {
   label: string;
-  artistType: ArtistNeedType;
+  /** Empty means "unset" — saved as `no_preference`. */
+  artistType: ArtistNeedType | "";
   genres: string;
-  status: ArtistNeedStatus;
+  /** Empty means "unset" — saved as `open`. */
+  status: ArtistNeedStatus | "";
 };
 
 /** One card on the bill: a position, with the act that fills it if any. */
@@ -281,8 +295,9 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
   const [savingSlotId, setSavingSlotId] = useState<string | null>(null);
   const [savingLineupId, setSavingLineupId] = useState<string | null>(null);
   const [addingSlot, setAddingSlot] = useState(false);
-  const [addingBand, setAddingBand] = useState(false);
-  const [addBandMode, setAddBandMode] = useState<"existing" | "invite">("existing");
+  const [addMode, setAddMode] = useState<"existing" | "invite" | "outside" | null>(null);
+  const [outsideName, setOutsideName] = useState("");
+  const [addingOutside, setAddingOutside] = useState(false);
   const [busyOrgId, setBusyOrgId] = useState<string | null>(null);
   const [importBusy, setImportBusy] = useState(false);
   const [dismissedInvoicePrompt, setDismissedInvoicePrompt] = useState(false);
@@ -366,7 +381,7 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
       );
       setEditingPaymentForOrg(invoiceArtistSuggestions[0]?.organizationId ?? null);
       setDismissedInvoicePrompt(true);
-      setAddingBand(false);
+      setAddMode(null);
     } catch (error) {
       notify.error(getConvexErrorMessage(error));
     } finally {
@@ -411,6 +426,30 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
     });
   }
 
+  async function onAddOutside() {
+    const name = outsideName.trim();
+    if (!name) {
+      notify.error("Name the artist.");
+      return;
+    }
+    setAddingOutside(true);
+    try {
+      await upsertSlot({
+        eventId,
+        artistType: "no_preference",
+        status: "open",
+        externalArtistName: name,
+      });
+      notify.success("Outside artist added.");
+      setOutsideName("");
+      setAddMode(null);
+    } catch (error) {
+      notify.error(getConvexErrorMessage(error));
+    } finally {
+      setAddingOutside(false);
+    }
+  }
+
   async function onAddSlot() {
     setAddingSlot(true);
     try {
@@ -431,9 +470,9 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
         eventId,
         needId: slot.needId,
         label: draft.label.trim() || undefined,
-        artistType: draft.artistType,
+        artistType: draft.artistType || "no_preference",
         genres: draft.genres.trim() || undefined,
-        status: draft.status,
+        status: draft.status || "open",
       });
       notify.success("Position saved.");
     } catch (error) {
@@ -624,15 +663,34 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
               <span className="font-medium">Payout total:</span> {formatUsd(totalBandsCost)}
             </p>
           ) : null}
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={addingSlot}
-            onClick={() => void onAddSlot()}
-          >
-            Add position
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button type="button" size="sm" variant="outline" disabled={addingSlot}>
+                <PlusIcon className="size-4" />
+                Add
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={() => void onAddSlot()}>Position</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setAddMode("existing")}>
+                Existing artist
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setAddMode("invite")}>
+                Invite new artist
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setAddMode("outside")}>
+                Outside artist
+              </DropdownMenuItem>
+              {invoiceArtistSuggestions.length > 0 ? (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onSelect={() => void onImportFromInvoice()}>
+                    Import from invoice ({invoiceArtistSuggestions.length})
+                  </DropdownMenuItem>
+                </>
+              ) : null}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -1005,6 +1063,8 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
                             options={TYPE_OPTIONS}
                             placeholder="Select type"
                             emptyLabel="Select type"
+                            clearable
+                            clearLabel="Clear"
                           />
                         </div>
                         <div className="space-y-1">
@@ -1027,6 +1087,8 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
                             options={SLOT_STATUS_OPTIONS}
                             placeholder="Select status"
                             emptyLabel="Select status"
+                            clearable
+                            clearLabel="Clear"
                           />
                         </div>
                       </div>
@@ -1124,73 +1186,45 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
           />
         ) : null}
 
-        {addingBand ? (
-          <div className="space-y-3">
-            <div className="flex flex-wrap gap-2">
+        {addMode === "existing" ? (
+          <AddBandForm
+            eventId={eventId}
+            excludedOrganizationIds={performers.map((row) => row.organizationId)}
+            onSaved={() => setAddMode(null)}
+            onCancel={() => setAddMode(null)}
+          />
+        ) : addMode === "invite" ? (
+          <InviteBandForm
+            eventId={eventId}
+            onSaved={() => setAddMode(null)}
+            onCancel={() => setAddMode(null)}
+          />
+        ) : addMode === "outside" ? (
+          <div className="space-y-3 rounded-md border bg-muted/10 p-4">
+            <p className="text-sm font-medium">Outside artist</p>
+            <div className="space-y-1">
+              <Label>Artist</Label>
+              <Input
+                value={outsideName}
+                placeholder="Artist name"
+                onChange={(event) => setOutsideName(event.target.value)}
+              />
+            </div>
+            <div className="flex gap-2">
               <Button
                 type="button"
                 size="sm"
-                variant={addBandMode === "existing" ? "default" : "outline"}
-                onClick={() => setAddBandMode("existing")}
+                disabled={addingOutside}
+                onClick={() => void onAddOutside()}
               >
-                Existing artist
+                Add
               </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant={addBandMode === "invite" ? "default" : "outline"}
-                onClick={() => setAddBandMode("invite")}
-              >
-                Invite new artist
+              <Button type="button" size="sm" variant="ghost" onClick={() => setAddMode(null)}>
+                Cancel
               </Button>
             </div>
-            {addBandMode === "invite" ? (
-              <InviteBandForm
-                eventId={eventId}
-                onSaved={() => setAddingBand(false)}
-                onCancel={() => setAddingBand(false)}
-              />
-            ) : (
-              <AddBandForm
-                eventId={eventId}
-                excludedOrganizationIds={performers.map((row) => row.organizationId)}
-                onSaved={() => setAddingBand(false)}
-                onCancel={() => setAddingBand(false)}
-              />
-            )}
           </div>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" size="sm" onClick={() => {
-              setAddBandMode("existing");
-              setAddingBand(true);
-            }}>
-              Add artist
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                setAddBandMode("invite");
-                setAddingBand(true);
-              }}
-            >
-              Invite new artist
-            </Button>
-            {invoiceArtistSuggestions.length > 0 ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={importBusy}
-                onClick={() => void onImportFromInvoice()}
-              >
-                Import from invoice ({invoiceArtistSuggestions.length})
-              </Button>
-            ) : null}
-          </div>
-        )}
+        ) : null}
 
       </CardContent>
     </Card>

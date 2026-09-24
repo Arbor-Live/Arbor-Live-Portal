@@ -47,6 +47,8 @@ export function SearchableSelect({
   searchHint,
   searching = false,
   contentClassName,
+  clearable = false,
+  clearLabel = "None",
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -63,6 +65,9 @@ export function SearchableSelect({
   searchHint?: string;
   searching?: boolean;
   contentClassName?: string;
+  /** Offer an entry that clears the value, leaving the field empty. */
+  clearable?: boolean;
+  clearLabel?: string;
 }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -74,12 +79,19 @@ export function SearchableSelect({
   );
 
   const listOptions = useMemo(() => {
-    if (!serverBacked) return options;
-    if (query.trim().length < minQueryLength) {
-      return selected ? [selected] : [];
-    }
-    return options;
-  }, [minQueryLength, options, query, selected, serverBacked]);
+    const base = (() => {
+      if (!serverBacked) return options;
+      if (query.trim().length < minQueryLength) {
+        return selected ? [selected] : [];
+      }
+      return options;
+    })();
+    if (!clearable) return base;
+    return [
+      { value: "", label: clearLabel, keywords: "none clear unset empty" },
+      ...base.filter((option) => option.value !== ""),
+    ];
+  }, [clearable, clearLabel, minQueryLength, options, query, selected, serverBacked]);
 
   const normalizedQuery = query.trim().toLowerCase();
   const canCreate =

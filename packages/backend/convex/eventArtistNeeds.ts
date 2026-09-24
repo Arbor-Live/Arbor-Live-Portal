@@ -169,6 +169,8 @@ export const upsertSlot = mutation({
     artistType: artistNeedTypeValue,
     genres: v.optional(v.string()),
     status: artistNeedStatusValue,
+    /** Set to create the position already filled by an outside act. */
+    externalArtistName: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     await requireArborInternalContext(ctx);
@@ -189,6 +191,7 @@ export const upsertSlot = mutation({
         artistType: args.artistType,
         genres,
         status: args.status,
+        externalArtistName: trimOptional(args.externalArtistName),
         updatedAt: now,
       });
       return { needId: existing._id };
@@ -202,6 +205,7 @@ export const upsertSlot = mutation({
       artistType: args.artistType,
       genres,
       status: args.status,
+      externalArtistName: trimOptional(args.externalArtistName),
       createdByUserId: getUserId(author),
       createdAt: now,
       updatedAt: now,
