@@ -1,11 +1,12 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { DotsSixVerticalIcon } from "@phosphor-icons/react";
+import { useState } from "react";
+import { CaretDownIcon, CaretUpIcon, DotsSixVerticalIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { IconPicker } from "@/components/ui/icon-picker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SortableList } from "@/components/ui/sortable-list";
 import {
   emptyMarketingLink,
   isPartifulCohostInviteUrl,
@@ -21,15 +22,6 @@ function newRowKey() {
   return crypto.randomUUID();
 }
 
-function moveInArray<T>(items: T[], from: number, to: number): T[] {
-  if (from === to || from < 0 || to < 0 || from >= items.length || to >= items.length) {
-    return items;
-  }
-  const next = [...items];
-  const [item] = next.splice(from, 1);
-  next.splice(to, 0, item);
-  return next;
-}
 
 export function MarketingLinksEditor({
   idPrefix,
@@ -71,88 +63,63 @@ export function MarketingLinksEditor({
     });
   }
 
-  /**
-   * Rows are only `draggable` once a pointer goes down on their grip handle —
-   * a permanently draggable row steals text selection / focus in the inputs.
-   * Same pattern as the rider input list / dashboard widgets.
-   */
-  const [dragArmedKey, setDragArmedKey] = useState<string | null>(null);
-  const [draggingKey, setDraggingKey] = useState<string | null>(null);
-  const dragIndexRef = useRef(-1);
-
   function updateLink(index: number, patch: Partial<MarketingAdditionalLink>) {
     const next = [...rows];
     next[index] = { ...next[index], ...patch };
     onLinksChange(next);
   }
 
-  function reorderLive(from: number, to: number) {
-    if (from === to || from < 0 || to < 0) return;
-    onLinksChange(moveInArray(rows, from, to));
-    setRowKeys((keys) => moveInArray(keys, from, to));
-    dragIndexRef.current = to;
-  }
-
-  function handleDragEnd() {
-    dragIndexRef.current = -1;
-    setDragArmedKey(null);
-    setDraggingKey(null);
-  }
-
   return (
     <div className="space-y-2">
       <Label>{label}</Label>
-      {rows.map((link, index) => {
-        const rowKey = rowKeys[index] ?? `${idPrefix}-link-${index}`;
-        const isDragging = draggingKey === rowKey;
-        return (
-          <div
-            key={rowKey}
-            className={cn(
-              "flex flex-col gap-2 rounded-md border border-border/60 p-2 sm:flex-row sm:items-center sm:border-transparent sm:p-0",
-              isDragging && "border-border bg-muted/40 opacity-70",
-            )}
-            draggable={!disabled && dragArmedKey === rowKey}
-            onDragStart={(event) => {
-              dragIndexRef.current = index;
-              setDraggingKey(rowKey);
-              event.dataTransfer.effectAllowed = "move";
-              event.dataTransfer.setData("text/plain", rowKey);
-            }}
-            onDragOver={(event) => {
-              if (disabled || dragIndexRef.current < 0) return;
-              event.preventDefault();
-              event.dataTransfer.dropEffect = "move";
-              // Shuffle as you hover so rows physically move while dragging.
-              // If the browser cancels the drag after the DOM moves, order is
-              // already updated — matching the "live reorder" feel.
-              reorderLive(dragIndexRef.current, index);
-            }}
-            onDrop={(event) => {
-              event.preventDefault();
-              handleDragEnd();
-            }}
-            onDragEnd={handleDragEnd}
-          >
-            <div className="flex shrink-0 items-center gap-0.5">
-              <span
-                className={cn(
-                  "flex size-9 touch-none select-none items-center justify-center text-muted-foreground/60",
-                  disabled
-                    ? "cursor-default opacity-40"
-                    : "cursor-grab active:cursor-grabbing",
-                )}
-                title="Drag to reorder"
-                aria-hidden
-                onPointerDown={() => {
-                  if (!disabled) setDragArmedKey(rowKey);
-                }}
-                onPointerUp={() => setDragArmedKey(null)}
-                onPointerCancel={() => setDragArmedKey(null)}
-              >
-                <DotsSixVerticalIcon className="size-4" weight="bold" />
-              </span>
-            </div>
+      {rows.length > 0 ? (
+        <SortableList
+          items={rows}
+          getId={(_, index) => rowKeys[index] ?? `${idPrefix}-link-${index}`}
+          disabled={disabled}
+          onReorder={(orderedRows, orderedIds) => {
+            onLinksChange(orderedRows);
+            setRowKeys(orderedIds);
+          }}
+          rowClassName="flex flex-col gap-2 rounded-md border border-border/60 p-2 sm:flex-row sm:items-center sm:border-transparent sm:p-0"
+          renderItem={(link, index, controls) => (
+            <>
+              <div className="flex shrink-0 items-center gap-0.5">
+                <span
+                  {...controls.handleProps}
+                  className={cn(
+                    "flex size-9 touch-none select-none items-center justify-center text-muted-foreground/60",
+                    disabled
+                      ? "cursor-default opacity-40"
+                      : "cursor-grab active:cursor-grabbing",
+                  )}
+                  title="Drag to reorder"
+                >
+                  <DotsSixVerticalIcon className="size-4" weight="bold" />
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="size-7 p-0"
+                  disabled={disabled || !controls.canMoveUp}
+                  title="Move up"
+                  onClick={controls.moveUp}
+                >
+                  <CaretUpIcon className="size-4" />
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="size-7 p-0"
+                  disabled={disabled || !controls.canMoveDown}
+                  title="Move down"
+                  onClick={controls.moveDown}
+                >
+                  <CaretDownIcon className="size-4" />
+                </Button>
+              </div>
             <div className="flex flex-col gap-2 sm:contents">
               <div className="flex items-center gap-2 sm:min-w-0 sm:flex-1">
                 <IconPicker
@@ -184,9 +151,10 @@ export function MarketingLinksEditor({
                 }}
               />
             </div>
-          </div>
-        );
-      })}
+            </>
+          )}
+        />
+      ) : null}
       <Button
         type="button"
         variant="outline"

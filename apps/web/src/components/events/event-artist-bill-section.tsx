@@ -1,13 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type PointerEvent as ReactPointerEvent,
-} from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { CaretDownIcon, CaretUpIcon, DotsSixVerticalIcon } from "@phosphor-icons/react";
 import { ArtistSelect, artistSelectOptions } from "@/components/bands/artist-select";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
+import { SortableList } from "@/components/ui/sortable-list";
 import { DateTimeRangePicker } from "@/components/ui/date-time-picker";
 import { useAppDialog } from "@/components/ui/app-dialog";
 import { getConvexErrorMessage } from "@/lib/convex-error";
@@ -152,18 +147,6 @@ function toMs(value: string) {
   return localDateTimeInputToMs(value);
 }
 
-function moveInArray<T>(items: T[], from: number, to: number): T[] {
-  const next = [...items];
-  const [moved] = next.splice(from, 1);
-  if (moved === undefined) return next;
-  next.splice(to, 0, moved);
-  return next;
-}
-
-/** Controls that must keep the mouse instead of starting a card drag. */
-const INTERACTIVE_SELECTOR =
-  'input, textarea, select, button, a, [contenteditable="true"], [role="combobox"], [role="dialog"], [role="listbox"], [data-slot="popover-trigger"]';
-
 type BandCatalogRow = {
   organizationId: string;
   name?: string;
@@ -257,17 +240,6 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
   const [slotDrafts, setSlotDrafts] = useState<Record<string, SlotDraft>>({});
   const [lineupDrafts, setLineupDrafts] = useState<Record<string, LineupDraft>>({});
   const [placementNames, setPlacementNames] = useState<Record<string, string>>({});
-  // Pointer-driven reordering. Native HTML5 drag kept half-working, and
-  // shuffling rows mid-gesture makes the target jump under the cursor, so the
-  // drag only highlights a target and moves once on release.
-  const [draggingKey, setDraggingKey] = useState<string | null>(null);
-  const [dropIndex, setDropIndex] = useState<number | null>(null);
-  const dragKeyRef = useRef<string | null>(null);
-  const dropIndexRef = useRef(-1);
-  const rowRefs = useRef(new Map<string, HTMLDivElement>());
-  const rowsRef = useRef<BillRow[]>([]);
-  const orderedKeysRef = useRef<string[]>([]);
-  const endDragRef = useRef<() => void>(() => {});
   const [savingSlotId, setSavingSlotId] = useState<string | null>(null);
   const [savingLineupId, setSavingLineupId] = useState<string | null>(null);
   const [addingSlot, setAddingSlot] = useState(false);
@@ -486,42 +458,6 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
     }
   }
 
-  /** Index of the card nearest a viewport Y, so gaps still pick a target. */
-  function rowIndexAtPoint(clientY: number) {
-    let best = -1;
-    let bestDistance = Number.POSITIVE_INFINITY;
-    orderedKeysRef.current.forEach((key, index) => {
-      const element = rowRefs.current.get(key);
-      if (!element) return;
-      const rect = element.getBoundingClientRect();
-      const distance = Math.abs(clientY - (rect.top + rect.height / 2));
-      if (distance < bestDistance) {
-        bestDistance = distance;
-        best = index;
-      }
-    });
-    return best;
-  }
-
-  function startDrag(event: ReactPointerEvent<HTMLDivElement>, rowKey: string) {
-    // Any pointer type: embedded browsers do not always report "mouse".
-    if (event.button !== 0) return;
-    if ((event.target as HTMLElement).closest(INTERACTIVE_SELECTOR)) return;
-    event.preventDefault();
-    dragKeyRef.current = rowKey;
-    dropIndexRef.current = orderedKeysRef.current.indexOf(rowKey);
-    setDraggingKey(rowKey);
-    setDropIndex(dropIndexRef.current);
-  }
-
-  function needIdsFor(keys: string[]) {
-    const byKey = new Map(rowsRef.current.map((row) => [row.key, row]));
-    return keys.flatMap((key) => {
-      const row = byKey.get(key);
-      return row?.slot ? [row.slot.needId] : [];
-    });
-  }
-
   async function persistOrder(needIds: Id<"eventArtistNeeds">[]) {
     try {
       await reorderSlots({ eventId, needIds });
@@ -530,60 +466,10 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
     }
   }
 
-  /** Keyboard-free fallback for moving a card, next to the drag. */
-  async function moveRow(rowKey: string, delta: number) {
-    const keys = orderedKeysRef.current;
-    const from = keys.indexOf(rowKey);
-    const to = from + delta;
-    if (from < 0 || to < 0 || to >= keys.length) return;
-    await persistOrder(needIdsFor(moveInArray(keys, from, to)));
+  /** Cards in bill order; only positions are persisted, stray acts trail. */
+  function handleReorder(orderedRows: BillRow[]) {
+    void persistOrder(orderedRows.flatMap((row) => (row.slot ? [row.slot.needId] : [])));
   }
-
-  function endDrag() {
-    const dragKey = dragKeyRef.current;
-    const to = dropIndexRef.current;
-    dragKeyRef.current = null;
-    dropIndexRef.current = -1;
-    setDraggingKey(null);
-    setDropIndex(null);
-    if (!dragKey || to < 0) return;
-    const keys = orderedKeysRef.current;
-    const from = keys.indexOf(dragKey);
-    if (from < 0 || from === to) return;
-    void persistOrder(needIdsFor(moveInArray(keys, from, to)));
-  }
-
-  useEffect(() => {
-    rowsRef.current = rows;
-    orderedKeysRef.current = rows.map((row) => row.key);
-  }, [rows]);
-
-  useEffect(() => {
-    endDragRef.current = endDrag;
-  });
-
-  // The gesture runs on window listeners so it keeps tracking outside the card,
-  // and reads live values through refs rather than a stale render closure.
-  useEffect(() => {
-    function onMove(event: PointerEvent) {
-      if (!dragKeyRef.current) return;
-      const to = rowIndexAtPoint(event.clientY);
-      if (to < 0 || to === dropIndexRef.current) return;
-      dropIndexRef.current = to;
-      setDropIndex(to);
-    }
-    function onUp() {
-      endDragRef.current();
-    }
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-    window.addEventListener("pointercancel", onUp);
-    return () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-      window.removeEventListener("pointercancel", onUp);
-    };
-  }, []);
 
   /** Give a stray act a named place on the bill. */
   async function onPlaceAct(performer: PerformerRow) {
@@ -695,8 +581,13 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
         ) : null}
 
         {rows.length > 0 ? (
-          <div className={`flex flex-col gap-2 ${draggingKey ? "select-none" : ""}`}>
-            {rows.map((row, index) => {
+          <SortableList
+            items={rows}
+            getId={(row) => row.key}
+            onReorder={handleReorder}
+            rowTestId="bill-card"
+            rowClassName="space-y-3 rounded-md border px-3 py-3 text-sm"
+            renderItem={(row, index, controls) => {
               const { slot, performer } = row;
               const serverSlot = slot ? toSlotDraft(slot) : null;
               const slotDraft = slot ? (slotDrafts[slot.needId] ?? serverSlot) : null;
@@ -715,28 +606,13 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
               );
               const placed = Boolean(slot && performer);
               return (
-                <div
-                  key={row.key}
-                  ref={(element) => {
-                    if (element) rowRefs.current.set(row.key, element);
-                    else rowRefs.current.delete(row.key);
-                  }}
-                  data-testid="bill-card"
-                  onPointerDown={(event) => startDrag(event, row.key)}
-                  className={`space-y-3 rounded-md border px-3 py-3 text-sm ${
-                    draggingKey === row.key
-                      ? "border-primary/60 bg-muted/40 opacity-70"
-                      : dropIndex === index
-                        ? "border-primary/60 bg-primary/5"
-                        : ""
-                  } ${slot && !performer ? "border-dashed" : ""}`}
-                >
+                <>
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex min-w-0 flex-1 items-center gap-2">
                       <span
-                        className="flex size-6 shrink-0 touch-none select-none items-center justify-center text-muted-foreground/60"
+                        {...controls.handleProps}
+                        className="flex size-6 shrink-0 cursor-grab touch-none select-none items-center justify-center text-muted-foreground/60 active:cursor-grabbing"
                         title="Drag to reorder"
-                        aria-hidden
                       >
                         <DotsSixVerticalIcon className="size-4" weight="bold" />
                       </span>
@@ -770,9 +646,9 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
                         size="sm"
                         variant="ghost"
                         className="size-7 p-0"
-                        disabled={index === 0}
+                        disabled={!controls.canMoveUp}
                         title="Move up"
-                        onClick={() => void moveRow(row.key, -1)}
+                        onClick={controls.moveUp}
                       >
                         <CaretUpIcon className="size-4" />
                       </Button>
@@ -781,9 +657,9 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
                         size="sm"
                         variant="ghost"
                         className="size-7 p-0"
-                        disabled={index === rows.length - 1}
+                        disabled={!controls.canMoveDown}
                         title="Move down"
-                        onClick={() => void moveRow(row.key, 1)}
+                        onClick={controls.moveDown}
                       >
                         <CaretDownIcon className="size-4" />
                       </Button>
@@ -1049,10 +925,10 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
                       </div>
                     </>
                   ) : null}
-                </div>
+                </>
               );
-            })}
-          </div>
+            }}
+          />
         ) : null}
 
         {addingBand ? (
