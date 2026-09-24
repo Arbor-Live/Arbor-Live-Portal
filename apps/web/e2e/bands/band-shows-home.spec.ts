@@ -152,7 +152,7 @@ test.describe("staff band assignment on event", () => {
     await page.goto(`${seeded.eventPath}/artists`);
     await expect(page.getByText("Edit Event").first()).toBeVisible({ timeout: 30_000 });
     const bandsCard = page.locator('[data-slot="card"]').filter({
-      has: page.getByText("Artists"),
+      has: page.getByRole("button", { name: "Invite new artist" }),
     });
     await expect(bandsCard).toBeVisible({ timeout: 20_000 });
     await expect(bandsCard.getByRole("button", { name: "Invite new artist" })).toBeVisible({

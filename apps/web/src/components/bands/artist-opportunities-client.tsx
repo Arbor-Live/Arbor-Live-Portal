@@ -118,6 +118,7 @@ export function ArtistOpportunitiesClient() {
                         {need.venueName ? ` · ${need.venueName}` : ""}
                       </p>
                       <p className="mt-1 text-sm">
+                        {need.label.trim() ? `${need.label.trim()} · ` : ""}
                         {TYPE_LABELS[need.artistType]}
                         {need.genres ? ` · ${need.genres}` : ""}
                       </p>

@@ -44,6 +44,7 @@ import { EventBandPaymentSection } from "@/components/events/event-band-payment-
 import { EventLinkedInvoicesField } from "@/components/events/event-linked-invoices-field";
 import { EventBandRidersSection } from "@/components/events/event-band-riders-section";
 import { EventArtistNeededSection } from "@/components/events/event-artist-needed-section";
+import { EventArtistLineupSection } from "@/components/events/event-artist-lineup-section";
 import { EventBriefButton } from "@/components/events/event-brief-button";
 import { EventContactsSection } from "@/components/events/event-contacts-section";
 import { EventMediaSection } from "@/components/events/event-media-section";
@@ -1732,6 +1733,7 @@ export function EventEditor({
       {resolvedActiveTab === "artists" && eventId ? (
         <div className="space-y-4">
           <EventArtistNeededSection eventId={eventId} />
+          <EventArtistLineupSection eventId={eventId} />
           <EventBandPaymentSection eventId={eventId} />
           <EventBandRidersSection eventId={eventId} />
         </div>

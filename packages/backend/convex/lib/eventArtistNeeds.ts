@@ -61,16 +61,64 @@ export async function resolveEventBookedArtistIds(
   ctx: QueryCtx,
   eventId: Id<"events">,
 ): Promise<string[]> {
-  const event = await ctx.db.get(eventId);
-  if (!event) return [];
+  const { lineup, invoiceArtistIds } = await resolveEventArtistBooking(ctx, eventId);
+  return [...new Set([...lineup.map((row) => row.organizationId), ...invoiceArtistIds])];
+}
 
-  const ids = new Set<string>();
+/** One act on an event's bill. Times are the "run of show" windows. */
+export type EventArtistLineupEntry = {
+  participationId: Id<"eventBandParticipations">;
+  organizationId: string;
+  role: "headliner" | "support" | "other";
+  /** Slot this act fills, when it was booked against one. */
+  needId: Id<"eventArtistNeeds"> | undefined;
+  setStartsAt: number | undefined;
+  setEndsAt: number | undefined;
+  soundcheckStartsAt: number | undefined;
+  soundcheckEndsAt: number | undefined;
+};
+
+export type EventArtistBooking = {
+  lineup: EventArtistLineupEntry[];
+  /** Slot ids already filled by a lineup entry. */
+  filledSlotIds: Set<Id<"eventArtistNeeds">>;
+  /** Non-TBD invoice artist orgs not (yet) on the lineup. */
+  invoiceArtistIds: string[];
+};
+
+/**
+ * Everything booked against an event. Slot fill is explicit — a slot is booked
+ * when a `eventBandParticipations` row points at it — so "two bands and a DJ"
+ * stays three independently fillable slots. Invoice artist lines are reported
+ * separately because a TBD/undetermined line belongs to no particular slot.
+ */
+export async function resolveEventArtistBooking(
+  ctx: QueryCtx,
+  eventId: Id<"events">,
+): Promise<EventArtistBooking> {
+  const event = await ctx.db.get(eventId);
+  const lineup: EventArtistLineupEntry[] = [];
+  const filledSlotIds = new Set<Id<"eventArtistNeeds">>();
+  const invoiceArtistIds: string[] = [];
+  if (!event) return { lineup, filledSlotIds, invoiceArtistIds };
 
   const participations = await ctx.db
     .query("eventBandParticipations")
     .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
     .take(100);
-  for (const row of participations) ids.add(row.organizationId);
+  for (const row of participations) {
+    lineup.push({
+      participationId: row._id,
+      organizationId: row.organizationId,
+      role: row.role,
+      needId: row.needId,
+      setStartsAt: row.setStartsAt,
+      setEndsAt: row.setEndsAt,
+      soundcheckStartsAt: row.soundcheckStartsAt,
+      soundcheckEndsAt: row.soundcheckEndsAt,
+    });
+    if (row.needId) filledSlotIds.add(row.needId);
+  }
 
   if (event.invoiceId) {
     const linkedEvents = await ctx.db
@@ -85,8 +133,10 @@ export async function resolveEventBookedArtistIds(
         q.eq("invoiceId", event.invoiceId!).eq("section", "artist"),
       )
       .take(200);
+    const onLineup = new Set(lineup.map((row) => row.organizationId));
     for (const line of lines) {
       if (!line.organizationId) continue;
+      if (onLineup.has(line.organizationId)) continue;
       if (
         artistLineAppliesToEvent({
           lineEventId: line.eventId,
@@ -95,10 +145,10 @@ export async function resolveEventBookedArtistIds(
           isSeriesBooking,
         })
       ) {
-        ids.add(line.organizationId);
+        invoiceArtistIds.push(line.organizationId);
       }
     }
   }
 
-  return [...ids];
+  return { lineup, filledSlotIds, invoiceArtistIds };
 }

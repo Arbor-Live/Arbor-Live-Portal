@@ -1303,21 +1303,34 @@ export default defineSchema({
     eventId: v.id("events"),
     organizationId: v.string(),
     role: eventBandParticipationRoleValue,
+    /**
+     * The `eventArtistNeeds` slot this act fills, when it was booked against one.
+     * Unset for acts added straight to the lineup (e.g. imported from an invoice).
+     */
+    needId: v.optional(v.id("eventArtistNeeds")),
+    /** Lineup ("run of show") windows — plain fields until a Run of Show model lands. */
+    setStartsAt: v.optional(v.number()),
+    setEndsAt: v.optional(v.number()),
+    soundcheckStartsAt: v.optional(v.number()),
+    soundcheckEndsAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_eventId", ["eventId"])
     .index("by_organizationId", ["organizationId"])
-    .index("by_eventId_and_organizationId", ["eventId", "organizationId"]),
+    .index("by_eventId_and_organizationId", ["eventId", "organizationId"])
+    .index("by_needId", ["needId"]),
 
   /**
-   * "Artist Needed" — an event's open request for a DJ/band. One row per event.
-   * `status` only stores the staff-driven open/inquiring states; "booked" is
-   * derived from a non-TBD invoice artist line or an `eventBandParticipations`
-   * row (see `lib/eventArtistNeeds.ts`).
+   * "Artist Needed" — one open slot on an event's bill (e.g. "two bands and a
+   * DJ" is three rows). `status` only stores the staff-driven open/inquiring
+   * states; "booked" is derived from an `eventBandParticipations` row pointing
+   * at the slot (see `lib/eventArtistNeeds.ts`).
    */
   eventArtistNeeds: defineTable({
     eventId: v.id("events"),
+    /** Optional slot name, e.g. "Headliner", "Opener", "Late set". */
+    label: v.optional(v.string()),
     artistType: v.union(v.literal("band"), v.literal("dj"), v.literal("no_preference")),
     genres: v.optional(v.string()),
     status: v.union(v.literal("open"), v.literal("inquiring")),

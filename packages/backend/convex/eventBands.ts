@@ -98,12 +98,29 @@ function paymentChipLabel(args: {
   }
 }
 
+/**
+ * Drop an act's claim on a slot. Uses `replace` because Convex `patch` ignores
+ * `undefined` and would leave `needId` in place.
+ */
+export async function unclaimSlot(
+  ctx: MutationCtx,
+  participationId: Id<"eventBandParticipations">,
+) {
+  const row = await ctx.db.get(participationId);
+  if (!row || !row.needId) return;
+  const next: Doc<"eventBandParticipations"> = { ...row, updatedAt: Date.now() };
+  delete next.needId;
+  await ctx.db.replace(participationId, next);
+}
+
 export async function upsertEventBandParticipation(
   ctx: MutationCtx,
   args: {
     eventId: Id<"events">;
     organizationId: string;
     role: "headliner" | "support" | "other";
+    /** Slot this act fills, when booked from an `eventArtistNeeds` row. */
+    needId?: Id<"eventArtistNeeds">;
   },
 ) {
   const now = Date.now();
@@ -114,13 +131,18 @@ export async function upsertEventBandParticipation(
     )
     .unique();
   if (existing) {
-    await ctx.db.patch(existing._id, { role: args.role, updatedAt: now });
+    await ctx.db.patch(existing._id, {
+      role: args.role,
+      ...(args.needId ? { needId: args.needId } : {}),
+      updatedAt: now,
+    });
     return existing._id;
   }
   const participationId = await ctx.db.insert("eventBandParticipations", {
     eventId: args.eventId,
     organizationId: args.organizationId,
     role: args.role,
+    needId: args.needId,
     createdAt: now,
     updatedAt: now,
   });
@@ -163,6 +185,12 @@ const performerRowFields = {
   organizationId: v.string(),
   bandName: v.string(),
   role: participationRoleValue,
+  /** Slot this act fills, when it was booked against one. */
+  needId: v.union(v.id("eventArtistNeeds"), v.null()),
+  setStartsAt: v.union(v.number(), v.null()),
+  setEndsAt: v.union(v.number(), v.null()),
+  soundcheckStartsAt: v.union(v.number(), v.null()),
+  soundcheckEndsAt: v.union(v.number(), v.null()),
   payment: v.union(
     v.null(),
     v.object({
@@ -239,6 +267,11 @@ async function listPerformerRowsForEvent(ctx: QueryCtx, event: Doc<"events">) {
       organizationId: row.organizationId,
       bandName: await getOrganizationName(ctx, row.organizationId),
       role: row.role,
+      needId: row.needId ?? null,
+      setStartsAt: row.setStartsAt ?? null,
+      setEndsAt: row.setEndsAt ?? null,
+      soundcheckStartsAt: row.soundcheckStartsAt ?? null,
+      soundcheckEndsAt: row.soundcheckEndsAt ?? null,
       onboardingStatus,
       awaitingOnboarding,
       payment: payment
@@ -336,8 +369,14 @@ export const listShowsForActiveBand = query({
       title: v.string(),
       startAt: v.number(),
       endAt: v.number(),
+      timezone: v.optional(v.string()),
       venueName: v.optional(v.string()),
       role: participationRoleValue,
+      /** Run-of-show windows, when staff have set them. */
+      setStartsAt: v.union(v.number(), v.null()),
+      setEndsAt: v.union(v.number(), v.null()),
+      soundcheckStartsAt: v.union(v.number(), v.null()),
+      soundcheckEndsAt: v.union(v.number(), v.null()),
       paymentChipLabel: v.string(),
       payment: v.union(
         v.null(),
@@ -394,8 +433,13 @@ export const listShowsForActiveBand = query({
         title: event.title,
         startAt: event.startAt,
         endAt: event.endAt,
+        timezone: event.timezone,
         venueName: event.venueName,
         role: row.role,
+        setStartsAt: row.setStartsAt ?? null,
+        setEndsAt: row.setEndsAt ?? null,
+        soundcheckStartsAt: row.soundcheckStartsAt ?? null,
+        soundcheckEndsAt: row.soundcheckEndsAt ?? null,
         paymentChipLabel: paymentChipLabel({
           hasPayment: Boolean(payment),
           status: payment?.status,
@@ -444,6 +488,7 @@ export const addParticipation = mutation({
     eventId: v.id("events"),
     organizationId: v.string(),
     role: participationRoleValue,
+    needId: v.optional(v.id("eventArtistNeeds")),
   },
   returns: v.id("eventBandParticipations"),
   handler: async (ctx, args) => {
@@ -454,7 +499,69 @@ export const addParticipation = mutation({
       eventId: args.eventId,
       organizationId: args.organizationId,
       role: args.role,
+      needId: args.needId,
     });
+  },
+});
+
+/**
+ * Set an act's run-of-show windows (set + soundcheck) and which slot it fills.
+ * Plain fields until a Run of Show model lands. Uses `replace` because Convex
+ * `patch` ignores `undefined` and would never clear a field.
+ */
+export const updateParticipationLineup = mutation({
+  args: {
+    participationId: v.id("eventBandParticipations"),
+    needId: v.union(v.id("eventArtistNeeds"), v.null()),
+    setStartsAt: v.union(v.number(), v.null()),
+    setEndsAt: v.union(v.number(), v.null()),
+    soundcheckStartsAt: v.union(v.number(), v.null()),
+    soundcheckEndsAt: v.union(v.number(), v.null()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requireArborInternalContext(ctx);
+    const existing = await ctx.db.get(args.participationId);
+    if (!existing) throw new Error("Artist is not linked to this event.");
+    if (args.setStartsAt != null && args.setEndsAt != null && args.setEndsAt <= args.setStartsAt) {
+      throw new Error("Set end time must be after the start time.");
+    }
+    if (
+      args.soundcheckStartsAt != null &&
+      args.soundcheckEndsAt != null &&
+      args.soundcheckEndsAt <= args.soundcheckStartsAt
+    ) {
+      throw new Error("Soundcheck end time must be after the start time.");
+    }
+    if (args.needId) {
+      const slot = await ctx.db.get(args.needId);
+      if (!slot || slot.eventId !== existing.eventId) {
+        throw new Error("Slot not found on this event.");
+      }
+      // A slot holds exactly one act: drop the claim from anyone else holding it.
+      const rivals = await ctx.db
+        .query("eventBandParticipations")
+        .withIndex("by_needId", (q) => q.eq("needId", args.needId!))
+        .take(100);
+      for (const rival of rivals) {
+        if (rival._id === existing._id) continue;
+        await unclaimSlot(ctx, rival._id);
+      }
+    }
+
+    const next: Doc<"eventBandParticipations"> = { ...existing, updatedAt: Date.now() };
+    if (args.needId) next.needId = args.needId;
+    else delete next.needId;
+    if (args.setStartsAt != null) next.setStartsAt = args.setStartsAt;
+    else delete next.setStartsAt;
+    if (args.setEndsAt != null) next.setEndsAt = args.setEndsAt;
+    else delete next.setEndsAt;
+    if (args.soundcheckStartsAt != null) next.soundcheckStartsAt = args.soundcheckStartsAt;
+    else delete next.soundcheckStartsAt;
+    if (args.soundcheckEndsAt != null) next.soundcheckEndsAt = args.soundcheckEndsAt;
+    else delete next.soundcheckEndsAt;
+    await ctx.db.replace(args.participationId, next);
+    return null;
   },
 });
 
@@ -464,6 +571,7 @@ export const inviteBandFromEvent = mutation({
     email: v.string(),
     artistName: v.string(),
     role: participationRoleValue,
+    needId: v.optional(v.id("eventArtistNeeds")),
     pricingMode: bandPricingModeValue,
     ratePerMemberPerHourUsd: v.optional(v.number()),
     performanceHours: v.optional(v.number()),
@@ -512,6 +620,7 @@ export const inviteBandFromEvent = mutation({
       eventId: args.eventId,
       organizationId,
       role: args.role,
+      needId: args.needId,
     });
 
     await ctx.runMutation(internal.bandPayments.upsertForEventInternal, {

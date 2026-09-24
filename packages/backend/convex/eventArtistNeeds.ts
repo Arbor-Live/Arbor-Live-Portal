@@ -9,12 +9,13 @@ import {
   ARTIST_NEED_TYPE_LABELS,
   artistTypeMatchesNeed,
   effectiveArtistNeedStatus,
-  resolveEventBookedArtistIds,
+  resolveEventArtistBooking,
   type ArtistNeedStatus,
   type ArtistNeedType,
   type EffectiveArtistNeedStatus,
 } from "./lib/eventArtistNeeds";
 import { scheduleArtistNeedInquiryEmail } from "./email/artistNeedInquiryEmails";
+import { unclaimSlot } from "./eventBands";
 import { normalizeEventStatus } from "./lib/eventStatus";
 
 const MAX_NEED_CANDIDATES = 60;
@@ -34,70 +35,87 @@ function isArtistListableEvent(event: Doc<"events"> | null, now: number): event 
   );
 }
 
-async function loadNeedForEvent(ctx: QueryCtx, eventId: Id<"events">) {
+async function loadSlotsForEvent(ctx: QueryCtx, eventId: Id<"events">) {
   return await ctx.db
     .query("eventArtistNeeds")
     .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
-    .unique();
+    .take(100);
 }
 
-async function findAuthName(ctx: QueryCtx, organizationId: string) {
+async function nameFor(ctx: QueryCtx, organizationId: string) {
   return await resolveBandName(ctx, organizationId);
+}
+
+async function nameMap(ctx: QueryCtx, organizationIds: readonly string[]) {
+  const unique = [...new Set(organizationIds)];
+  const entries = await Promise.all(
+    unique.map(async (id) => [id, await nameFor(ctx, id)] as const),
+  );
+  return new Map(entries);
 }
 
 export const getForEvent = query({
   args: { eventId: v.id("events") },
   handler: async (ctx, args) => {
     await requireArborInternalContext(ctx);
-    const need = await loadNeedForEvent(ctx, args.eventId);
-    const bookedArtistIds = await resolveEventBookedArtistIds(ctx, args.eventId);
-    const bookedArtists = await Promise.all(
-      bookedArtistIds.map(async (organizationId) => ({
-        organizationId,
-        name: await findAuthName(ctx, organizationId),
-      })),
+    const slots = await loadSlotsForEvent(ctx, args.eventId);
+    const booking = await resolveEventArtistBooking(ctx, args.eventId);
+
+    const names = await nameMap(ctx, [
+      ...booking.lineup.map((row) => row.organizationId),
+      ...booking.invoiceArtistIds,
+    ]);
+
+    const inquiries = await ctx.db
+      .query("eventArtistInquiries")
+      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+      .take(200);
+    const inquiryNames = await nameMap(
+      ctx,
+      inquiries.map((row) => row.organizationId),
     );
 
-    const inquiries = need
-      ? await ctx.db
-          .query("eventArtistInquiries")
-          .withIndex("by_needId", (q) => q.eq("needId", need._id))
-          .take(100)
-      : [];
-    const serializedInquiries = (
-      await Promise.all(
-        inquiries
-          .sort((a, b) => b.createdAt - a.createdAt)
-          .map(async (inquiry) => ({
-            _id: inquiry._id,
-            organizationId: inquiry.organizationId,
-            name: await findAuthName(ctx, inquiry.organizationId),
-            message: inquiry.message ?? "",
-            status: inquiry.status,
-            createdAt: inquiry.createdAt,
-          })),
-      )
-    );
-
-    const booked = bookedArtists.length > 0;
     return {
-      need: need
-        ? {
-            _id: need._id,
-            artistType: need.artistType,
-            genres: need.genres ?? "",
-            status: need.status,
-            effectiveStatus: effectiveArtistNeedStatus(need.status, booked),
-            updatedAt: need.updatedAt,
-          }
-        : null,
-      bookedArtists,
-      inquiries: serializedInquiries,
+      slots: slots.map((slot) => {
+        const filledBy = booking.lineup.filter((row) => row.needId === slot._id);
+        const booked = filledBy.length > 0;
+        return {
+          needId: slot._id,
+          label: slot.label ?? "",
+          artistType: slot.artistType,
+          genres: slot.genres ?? "",
+          status: slot.status,
+          effectiveStatus: effectiveArtistNeedStatus(slot.status, booked),
+          bookedBy: filledBy.map((row) => ({
+            organizationId: row.organizationId,
+            name: names.get(row.organizationId) ?? "Artist",
+          })),
+          inquiries: inquiries
+            .filter((row) => row.needId === slot._id)
+            .sort((a, b) => b.createdAt - a.createdAt)
+            .map((row) => ({
+              _id: row._id,
+              organizationId: row.organizationId,
+              name: inquiryNames.get(row.organizationId) ?? "Artist",
+              message: row.message ?? "",
+              status: row.status,
+              createdAt: row.createdAt,
+            })),
+        };
+      }),
+      lineup: booking.lineup.map((row) => ({
+        ...row,
+        name: names.get(row.organizationId) ?? "Artist",
+      })),
+      invoiceArtists: booking.invoiceArtistIds.map((organizationId) => ({
+        organizationId,
+        name: names.get(organizationId) ?? "Artist",
+      })),
     };
   },
 });
 
-/** Effective need status per event, for annotating invoice artist rows. */
+/** Open slot counts per event, for annotating invoice artist rows. */
 export const listNeedStatusForEvents = query({
   args: { eventIds: v.array(v.id("events")) },
   handler: async (ctx, args) => {
@@ -109,23 +127,28 @@ export const listNeedStatusForEvents = query({
       genres: string;
     }> = [];
     for (const eventId of args.eventIds.slice(0, MAX_NEED_CANDIDATES)) {
-      const need = await loadNeedForEvent(ctx, eventId);
-      if (!need) continue;
-      const booked = (await resolveEventBookedArtistIds(ctx, eventId)).length > 0;
-      out.push({
-        eventId,
-        artistType: need.artistType,
-        status: effectiveArtistNeedStatus(need.status, booked),
-        genres: need.genres ?? "",
-      });
+      const slots = await loadSlotsForEvent(ctx, eventId);
+      if (slots.length === 0) continue;
+      const { filledSlotIds } = await resolveEventArtistBooking(ctx, eventId);
+      for (const slot of slots) {
+        const booked = filledSlotIds.has(slot._id);
+        out.push({
+          eventId,
+          artistType: slot.artistType,
+          status: effectiveArtistNeedStatus(slot.status, booked),
+          genres: slot.genres ?? "",
+        });
+      }
     }
     return out;
   },
 });
 
-export const upsertForEvent = mutation({
+export const upsertSlot = mutation({
   args: {
     eventId: v.id("events"),
+    needId: v.optional(v.id("eventArtistNeeds")),
+    label: v.optional(v.string()),
     artistType: artistNeedTypeValue,
     genres: v.optional(v.string()),
     status: artistNeedStatusValue,
@@ -136,10 +159,16 @@ export const upsertForEvent = mutation({
     const event = await ctx.db.get(args.eventId);
     if (!event) throw new Error("Event not found.");
     const now = Date.now();
+    const label = trimOptional(args.label);
     const genres = trimOptional(args.genres);
-    const existing = await loadNeedForEvent(ctx, args.eventId);
-    if (existing) {
+
+    if (args.needId) {
+      const existing = await ctx.db.get(args.needId);
+      if (!existing || existing.eventId !== args.eventId) {
+        throw new Error("Slot not found on this event.");
+      }
       await ctx.db.patch(existing._id, {
+        label,
         artistType: args.artistType,
         genres,
         status: args.status,
@@ -147,8 +176,10 @@ export const upsertForEvent = mutation({
       });
       return { needId: existing._id };
     }
+
     const needId = await ctx.db.insert("eventArtistNeeds", {
       eventId: args.eventId,
+      label,
       artistType: args.artistType,
       genres,
       status: args.status,
@@ -160,20 +191,28 @@ export const upsertForEvent = mutation({
   },
 });
 
-export const removeForEvent = mutation({
-  args: { eventId: v.id("events") },
+export const removeSlot = mutation({
+  args: { needId: v.id("eventArtistNeeds") },
   handler: async (ctx, args) => {
     await requireArborInternalContext(ctx);
-    const need = await loadNeedForEvent(ctx, args.eventId);
-    if (!need) return;
+    const slot = await ctx.db.get(args.needId);
+    if (!slot) return;
     const inquiries = await ctx.db
       .query("eventArtistInquiries")
-      .withIndex("by_needId", (q) => q.eq("needId", need._id))
+      .withIndex("by_needId", (q) => q.eq("needId", slot._id))
       .take(200);
     for (const inquiry of inquiries) {
       await ctx.db.delete(inquiry._id);
     }
-    await ctx.db.delete(need._id);
+    // Unlink any act that was booked against this slot rather than orphaning it.
+    const filled = await ctx.db
+      .query("eventBandParticipations")
+      .withIndex("by_needId", (q) => q.eq("needId", slot._id))
+      .take(100);
+    for (const row of filled) {
+      await unclaimSlot(ctx, row._id);
+    }
+    await ctx.db.delete(slot._id);
   },
 });
 
@@ -182,18 +221,19 @@ export const submitInquiry = mutation({
   handler: async (ctx, args) => {
     const context = await requireBandContext(ctx);
     const need = await ctx.db.get(args.needId);
-    if (!need) throw new Error("This need is no longer available.");
+    if (!need) throw new Error("This slot is no longer available.");
     const event = await ctx.db.get(need.eventId);
     // Same gate as `listOpenNeedsForArtist`: only public, upcoming, uncancelled
     // events that match this artist's type are inquirable.
     if (!isArtistListableEvent(event, Date.now())) {
-      throw new Error("This need is no longer available.");
+      throw new Error("This slot is no longer available.");
     }
     if (!artistTypeMatchesNeed(need.artistType, context.organizationType)) {
-      throw new Error("This need is not looking for your kind of act.");
+      throw new Error("This slot is not looking for your kind of act.");
     }
-    if ((await resolveEventBookedArtistIds(ctx, need.eventId)).length > 0) {
-      throw new Error("This event already has an artist booked.");
+    const { filledSlotIds } = await resolveEventArtistBooking(ctx, need.eventId);
+    if (filledSlotIds.has(need._id)) {
+      throw new Error("This slot is already filled.");
     }
 
     const existing = await ctx.db
@@ -265,7 +305,7 @@ export const listOpenNeedsForArtist = query({
 
     const candidates: Doc<"eventArtistNeeds">[] = [];
     for (const status of ["open", "inquiring"] as const) {
-      // Newest first so a long tail of old needs cannot crowd newer ones out of
+      // Newest first so a long tail of old slots cannot crowd newer ones out of
       // the bounded window below.
       const rows = await ctx.db
         .query("eventArtistNeeds")
@@ -283,6 +323,7 @@ export const listOpenNeedsForArtist = query({
       endAt: number;
       timezone: string;
       venueName: string;
+      label: string;
       artistType: ArtistNeedType;
       genres: string;
       status: ArtistNeedStatus;
@@ -294,15 +335,13 @@ export const listOpenNeedsForArtist = query({
       if (!artistTypeMatchesNeed(need.artistType, context.organizationType)) continue;
       const event = await ctx.db.get(need.eventId);
       if (!isArtistListableEvent(event, now)) continue;
-      if ((await resolveEventBookedArtistIds(ctx, need.eventId)).length > 0) continue;
+      const { filledSlotIds } = await resolveEventArtistBooking(ctx, need.eventId);
+      if (filledSlotIds.has(need._id)) continue;
 
+      const typeLabel = ARTIST_NEED_TYPE_LABELS[need.artistType];
+      const slotLabel = need.label?.trim();
       if (needles.length > 0) {
-        const haystack = [
-          event.title,
-          event.venueName,
-          need.genres,
-          ARTIST_NEED_TYPE_LABELS[need.artistType],
-        ]
+        const haystack = [event.title, event.venueName, need.genres, typeLabel, slotLabel]
           .filter(Boolean)
           .join(" ")
           .toLowerCase();
@@ -324,6 +363,7 @@ export const listOpenNeedsForArtist = query({
         endAt: event.endAt,
         timezone: event.timezone,
         venueName: event.venueName ?? "",
+        label: slotLabel ?? "",
         artistType: need.artistType,
         genres: need.genres ?? "",
         status: need.status,
@@ -357,6 +397,7 @@ export const listMyInquiries = query({
           // portal default rather than formatting with a bogus zone.
           timezone: event?.timezone,
           venueName: event?.venueName ?? "",
+          label: need?.label ?? "",
           artistType: need?.artistType ?? ("no_preference" as const),
           genres: need?.genres ?? "",
           status: inquiry.status,

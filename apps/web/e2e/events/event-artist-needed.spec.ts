@@ -1,9 +1,10 @@
 import { test, expect } from "@playwright/test";
 import { runConvex } from "../helpers/convex";
+import { e2eEnv } from "../helpers/env";
 import { bandAuthFile } from "../helpers/auth";
 
 test.describe("event artist needed", () => {
-  test("staff posts a need, an artist requests to perform, and it flips to inquiring", async ({
+  test("staff opens a slot, an artist requests to perform, and it flips to inquiring", async ({
     page,
     browser,
   }) => {
@@ -15,18 +16,12 @@ test.describe("event artist needed", () => {
 
     await page.goto(`${seeded.eventPath}/artists`);
     await expect(page.getByText("Edit Event").first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText("No open slots")).toBeVisible({ timeout: 20_000 });
 
-    const needCard = page
-      .locator('[data-slot="card"]')
-      .filter({ has: page.getByRole("heading", { name: "Artist Needed" }) })
-      .first();
-    await expect(needCard).toBeVisible({ timeout: 20_000 });
+    await page.getByRole("button", { name: "Add slot" }).click();
+    const slot = page.getByTestId("artist-need-slot").first();
+    await expect(slot).toBeVisible({ timeout: 20_000 });
     await expect(page.getByTestId("artist-need-status")).toHaveText("Open");
-
-    await needCard.getByRole("button", { name: "Post an artist need" }).click();
-    await expect(needCard.getByRole("button", { name: "Save need" })).toBeVisible({
-      timeout: 20_000,
-    });
 
     const bandContext = await browser.newContext({ storageState: bandAuthFile });
     const bandPage = await bandContext.newPage();
@@ -51,6 +46,45 @@ test.describe("event artist needed", () => {
     await expect(page.getByText("We would love to play this show.")).toBeVisible({
       timeout: 20_000,
     });
+
+    await bandContext.close();
+  });
+
+  test("the artist sees their set and soundcheck windows", async ({ browser }) => {
+    test.setTimeout(120_000);
+
+    const band = runConvex("e2eHelpers:ensureBandPayeeUser", {
+      email: e2eEnv.bandEmail,
+      password: e2eEnv.bandPassword,
+      name: e2eEnv.bandName,
+      bandName: e2eEnv.bandOrgName,
+    }) as { organizationId: string };
+
+    const now = Date.now();
+    const showStartsAt = now + 2 * 60 * 60 * 1000;
+    const seeded = runConvex("e2eHelpers:seedUpcomingBandShow", {
+      organizationId: band.organizationId,
+      eventTitle: `E2E Lineup ${Date.now()}`,
+      setStartsAt: showStartsAt + 60 * 60 * 1000,
+      setEndsAt: showStartsAt + 90 * 60 * 1000,
+      soundcheckStartsAt: showStartsAt - 60 * 60 * 1000,
+      soundcheckEndsAt: showStartsAt - 30 * 60 * 1000,
+    }) as { eventTitle: string };
+
+    const bandContext = await browser.newContext({ storageState: bandAuthFile });
+    const bandPage = await bandContext.newPage();
+    await bandPage.goto("/dashboard");
+    await expect(bandPage.getByRole("heading", { name: "Your shows" })).toBeVisible({
+      timeout: 30_000,
+    });
+
+    const card = bandPage
+      .locator("div.rounded-lg.border")
+      .filter({ hasText: seeded.eventTitle })
+      .first();
+    await expect(card).toBeVisible({ timeout: 20_000 });
+    await expect(card.getByText(/Set: /)).toBeVisible({ timeout: 20_000 });
+    await expect(card.getByText(/Soundcheck: /)).toBeVisible({ timeout: 20_000 });
 
     await bandContext.close();
   });
