@@ -146,6 +146,18 @@ function toMs(value: string) {
   return localDateTimeInputToMs(value);
 }
 
+function moveInArray<T>(items: T[], from: number, to: number): T[] {
+  const next = [...items];
+  const [moved] = next.splice(from, 1);
+  if (moved === undefined) return next;
+  next.splice(to, 0, moved);
+  return next;
+}
+
+/** Controls that must keep the mouse instead of starting a card drag. */
+const INTERACTIVE_SELECTOR =
+  'input, textarea, select, button, a, label, [role="combobox"], [role="dialog"], [role="listbox"], [data-slot="popover-trigger"]';
+
 type BandCatalogRow = {
   organizationId: string;
   name?: string;
@@ -239,9 +251,14 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
   const [slotDrafts, setSlotDrafts] = useState<Record<string, SlotDraft>>({});
   const [lineupDrafts, setLineupDrafts] = useState<Record<string, LineupDraft>>({});
   const [placementNames, setPlacementNames] = useState<Record<string, string>>({});
-  const [dragKey, setDragKey] = useState<string | null>(null);
-  // React state is stale inside drag events, so the dragged row lives in a ref.
-  const dragKeyRef = useRef<string | null>(null);
+  // Same drag pattern as the marketing links list: rows are only `draggable`
+  // once a pointer goes down on a non-interactive part of the card, so inputs
+  // and popovers keep the mouse. Order shuffles live while dragging.
+  const [dragArmedKey, setDragArmedKey] = useState<string | null>(null);
+  const [draggingKey, setDraggingKey] = useState<string | null>(null);
+  const dragIndexRef = useRef(-1);
+  const [orderKeys, setOrderKeys] = useState<string[] | null>(null);
+  const orderKeysRef = useRef<string[] | null>(null);
   const [savingSlotId, setSavingSlotId] = useState<string | null>(null);
   const [savingLineupId, setSavingLineupId] = useState<string | null>(null);
   const [addingSlot, setAddingSlot] = useState(false);
@@ -357,6 +374,17 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
     return list;
   }, [bill?.slots, performers]);
 
+  /** Server order, overridden while a drag is shuffling rows. */
+  const visibleRows = useMemo(() => {
+    const keys = orderKeys ?? rows.map((row) => row.key);
+    const byKey = new Map(rows.map((row) => [row.key, row]));
+    const ordered = keys
+      .map((key) => byKey.get(key))
+      .filter((row): row is BillRow => Boolean(row));
+    for (const row of rows) if (!keys.includes(row.key)) ordered.push(row);
+    return ordered;
+  }, [rows, orderKeys]);
+
   function patchSlotDraft(needId: string, values: Partial<SlotDraft>) {
     setSlotDrafts((prev) => {
       const server = bill?.slots.find((slot) => slot.needId === needId);
@@ -460,26 +488,33 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
     }
   }
 
-  function handleDrop(targetKey: string) {
-    const fromKey = dragKeyRef.current;
-    dragKeyRef.current = null;
-    setDragKey(null);
-    const from = rows.findIndex((row) => row.key === fromKey);
-    const to = rows.findIndex((row) => row.key === targetKey);
-    if (!fromKey || from < 0 || to < 0 || from === to) return;
-    const next = [...rows];
-    const [moved] = next.splice(from, 1);
-    if (moved) next.splice(to, 0, moved);
-    void (async () => {
-      try {
-        await reorderSlots({
-          eventId,
-          needIds: next.flatMap((row) => (row.slot ? [row.slot.needId] : [])),
-        });
-      } catch (error) {
-        notify.error(getConvexErrorMessage(error));
-      }
-    })();
+  function reorderLive(from: number, to: number) {
+    if (from === to || from < 0 || to < 0) return;
+    const keys = orderKeysRef.current ?? visibleRows.map((row) => row.key);
+    const next = moveInArray(keys, from, to);
+    orderKeysRef.current = next;
+    setOrderKeys(next);
+    dragIndexRef.current = to;
+  }
+
+  async function handleDragEnd() {
+    const keys = orderKeysRef.current;
+    dragIndexRef.current = -1;
+    setDragArmedKey(null);
+    setDraggingKey(null);
+    orderKeysRef.current = null;
+    setOrderKeys(null);
+    if (!keys) return;
+    const byKey = new Map(rows.map((row) => [row.key, row]));
+    const needIds = keys.flatMap((key) => {
+      const row = byKey.get(key);
+      return row?.slot ? [row.slot.needId] : [];
+    });
+    try {
+      await reorderSlots({ eventId, needIds });
+    } catch (error) {
+      notify.error(getConvexErrorMessage(error));
+    }
   }
 
   /** Give a stray act a named place on the bill. */
@@ -591,12 +626,9 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
           </p>
         ) : null}
 
-        {rows.length > 0 ? (
-          <div
-            className="flex flex-col gap-2"
-            onDragEnd={() => setDragKey(null)}
-          >
-            {rows.map((row) => {
+        {visibleRows.length > 0 ? (
+          <div className="flex flex-col gap-2">
+            {visibleRows.map((row, index) => {
               const { slot, performer } = row;
               const serverSlot = slot ? toSlotDraft(slot) : null;
               const slotDraft = slot ? (slotDrafts[slot.needId] ?? serverSlot) : null;
@@ -618,40 +650,43 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
                 <div
                   key={row.key}
                   data-testid="bill-card"
-                  draggable
+                  draggable={dragArmedKey === row.key}
+                  onPointerDown={(event) => {
+                    if ((event.target as HTMLElement).closest(INTERACTIVE_SELECTOR)) return;
+                    setDragArmedKey(row.key);
+                  }}
+                  onPointerUp={() => setDragArmedKey(null)}
+                  onPointerCancel={() => setDragArmedKey(null)}
                   onDragStart={(event) => {
-                    // The card is the drag handle, but a gesture that starts on
-                    // an input or popover must stay a click: cancelling the drag
-                    // here hands the mouse back to that control.
-                    const target = event.target as HTMLElement;
-                    if (
-                      target.closest(
-                        'input, textarea, select, button, a, label, [role="combobox"], [role="dialog"], [role="listbox"], [data-slot="popover-trigger"]',
-                      )
-                    ) {
-                      event.preventDefault();
-                      return;
-                    }
-                    dragKeyRef.current = row.key;
-                    setDragKey(row.key);
+                    dragIndexRef.current = index;
+                    setDraggingKey(row.key);
+                    event.dataTransfer.effectAllowed = "move";
+                    event.dataTransfer.setData("text/plain", row.key);
                   }}
-                  onDragEnd={() => {
-                    dragKeyRef.current = null;
-                    setDragKey(null);
+                  onDragOver={(event) => {
+                    if (dragIndexRef.current < 0) return;
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = "move";
+                    // Shuffle as you hover so rows move while dragging.
+                    reorderLive(dragIndexRef.current, index);
                   }}
-                  onDragOver={(event) => event.preventDefault()}
-                  onDrop={() => handleDrop(row.key)}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    void handleDragEnd();
+                  }}
+                  onDragEnd={() => void handleDragEnd()}
                   className={`space-y-3 rounded-md border px-3 py-3 text-sm ${
-                    dragKey === row.key ? "opacity-50" : ""
+                    draggingKey === row.key ? "border-border bg-muted/40 opacity-70" : ""
                   } ${slot && !performer ? "border-dashed" : ""}`}
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex min-w-0 flex-1 items-center gap-2">
                       <span
-                        className="cursor-grab text-muted-foreground"
+                        className="flex size-6 shrink-0 touch-none select-none items-center justify-center text-muted-foreground/60"
                         title="Drag to reorder"
+                        aria-hidden
                       >
-                        <DotsSixVerticalIcon className="size-4" />
+                        <DotsSixVerticalIcon className="size-4" weight="bold" />
                       </span>
                       {slot && slotDraft ? (
                         <Input
