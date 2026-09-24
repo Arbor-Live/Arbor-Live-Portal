@@ -14,7 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { DotsSixVerticalIcon } from "@phosphor-icons/react";
+import { CaretDownIcon, CaretUpIcon, DotsSixVerticalIcon } from "@phosphor-icons/react";
 import { ArtistSelect, artistSelectOptions } from "@/components/bands/artist-select";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
 import { DateTimeRangePicker } from "@/components/ui/date-time-picker";
@@ -162,7 +162,7 @@ function moveInArray<T>(items: T[], from: number, to: number): T[] {
 
 /** Controls that must keep the mouse instead of starting a card drag. */
 const INTERACTIVE_SELECTOR =
-  'input, textarea, select, button, a, label, [role="combobox"], [role="dialog"], [role="listbox"], [data-slot="popover-trigger"]';
+  'input, textarea, select, button, a, [contenteditable="true"], [role="combobox"], [role="dialog"], [role="listbox"], [data-slot="popover-trigger"]';
 
 type BandCatalogRow = {
   organizationId: string;
@@ -257,14 +257,13 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
   const [slotDrafts, setSlotDrafts] = useState<Record<string, SlotDraft>>({});
   const [lineupDrafts, setLineupDrafts] = useState<Record<string, LineupDraft>>({});
   const [placementNames, setPlacementNames] = useState<Record<string, string>>({});
-  // Pointer-driven reordering. Native HTML5 drag thrashes when the list
-  // reorders mid-drag, so the whole gesture is ours: pointerdown on a
-  // non-interactive part of a card starts it, moves shuffle live, and the
-  // release persists once.
+  // Pointer-driven reordering. Native HTML5 drag kept half-working, and
+  // shuffling rows mid-gesture makes the target jump under the cursor, so the
+  // drag only highlights a target and moves once on release.
   const [draggingKey, setDraggingKey] = useState<string | null>(null);
-  const [orderKeys, setOrderKeys] = useState<string[] | null>(null);
-  const orderKeysRef = useRef<string[] | null>(null);
+  const [dropIndex, setDropIndex] = useState<number | null>(null);
   const dragKeyRef = useRef<string | null>(null);
+  const dropIndexRef = useRef(-1);
   const rowRefs = useRef(new Map<string, HTMLDivElement>());
   const rowsRef = useRef<BillRow[]>([]);
   const orderedKeysRef = useRef<string[]>([]);
@@ -383,17 +382,6 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
     }
     return list;
   }, [bill?.slots, performers]);
-
-  /** Server order, overridden while a drag is shuffling rows. */
-  const visibleRows = useMemo(() => {
-    const keys = orderKeys ?? rows.map((row) => row.key);
-    const byKey = new Map(rows.map((row) => [row.key, row]));
-    const ordered = keys
-      .map((key) => byKey.get(key))
-      .filter((row): row is BillRow => Boolean(row));
-    for (const row of rows) if (!keys.includes(row.key)) ordered.push(row);
-    return ordered;
-  }, [rows, orderKeys]);
 
   function patchSlotDraft(needId: string, values: Partial<SlotDraft>) {
     setSlotDrafts((prev) => {
@@ -516,57 +504,73 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
   }
 
   function startDrag(event: ReactPointerEvent<HTMLDivElement>, rowKey: string) {
-    // Mouse only — touch dragging would fight page scrolling.
-    if (event.pointerType !== "mouse" || event.button !== 0) return;
+    // Any pointer type: embedded browsers do not always report "mouse".
+    if (event.button !== 0) return;
     if ((event.target as HTMLElement).closest(INTERACTIVE_SELECTOR)) return;
+    event.preventDefault();
     dragKeyRef.current = rowKey;
+    dropIndexRef.current = orderedKeysRef.current.indexOf(rowKey);
     setDraggingKey(rowKey);
+    setDropIndex(dropIndexRef.current);
   }
-  function endDrag() {
-    const dragKey = dragKeyRef.current;
-    dragKeyRef.current = null;
-    setDraggingKey(null);
-    const keys = orderKeysRef.current;
-    orderKeysRef.current = null;
-    setOrderKeys(null);
-    if (!dragKey || !keys) return;
+
+  function needIdsFor(keys: string[]) {
     const byKey = new Map(rowsRef.current.map((row) => [row.key, row]));
-    const needIds = keys.flatMap((key) => {
+    return keys.flatMap((key) => {
       const row = byKey.get(key);
       return row?.slot ? [row.slot.needId] : [];
     });
-    void (async () => {
-      try {
-        await reorderSlots({ eventId, needIds });
-      } catch (error) {
-        notify.error(getConvexErrorMessage(error));
-      }
-    })();
   }
 
-  // The gesture runs on window listeners so it keeps tracking outside the card,
-  // and reads live values through refs rather than a stale render closure.
+  async function persistOrder(needIds: Id<"eventArtistNeeds">[]) {
+    try {
+      await reorderSlots({ eventId, needIds });
+    } catch (error) {
+      notify.error(getConvexErrorMessage(error));
+    }
+  }
+
+  /** Keyboard-free fallback for moving a card, next to the drag. */
+  async function moveRow(rowKey: string, delta: number) {
+    const keys = orderedKeysRef.current;
+    const from = keys.indexOf(rowKey);
+    const to = from + delta;
+    if (from < 0 || to < 0 || to >= keys.length) return;
+    await persistOrder(needIdsFor(moveInArray(keys, from, to)));
+  }
+
+  function endDrag() {
+    const dragKey = dragKeyRef.current;
+    const to = dropIndexRef.current;
+    dragKeyRef.current = null;
+    dropIndexRef.current = -1;
+    setDraggingKey(null);
+    setDropIndex(null);
+    if (!dragKey || to < 0) return;
+    const keys = orderedKeysRef.current;
+    const from = keys.indexOf(dragKey);
+    if (from < 0 || from === to) return;
+    void persistOrder(needIdsFor(moveInArray(keys, from, to)));
+  }
+
   useEffect(() => {
     rowsRef.current = rows;
-    orderedKeysRef.current = visibleRows.map((row) => row.key);
-  }, [rows, visibleRows]);
+    orderedKeysRef.current = rows.map((row) => row.key);
+  }, [rows]);
 
   useEffect(() => {
     endDragRef.current = endDrag;
   });
 
+  // The gesture runs on window listeners so it keeps tracking outside the card,
+  // and reads live values through refs rather than a stale render closure.
   useEffect(() => {
     function onMove(event: PointerEvent) {
-      const dragKey = dragKeyRef.current;
-      if (!dragKey) return;
+      if (!dragKeyRef.current) return;
       const to = rowIndexAtPoint(event.clientY);
-      if (to < 0) return;
-      const keys = orderKeysRef.current ?? orderedKeysRef.current;
-      const from = keys.indexOf(dragKey);
-      if (from < 0 || from === to) return;
-      const next = moveInArray(keys, from, to);
-      orderKeysRef.current = next;
-      setOrderKeys(next);
+      if (to < 0 || to === dropIndexRef.current) return;
+      dropIndexRef.current = to;
+      setDropIndex(to);
     }
     function onUp() {
       endDragRef.current();
@@ -690,9 +694,9 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
           </p>
         ) : null}
 
-        {visibleRows.length > 0 ? (
-          <div className="flex flex-col gap-2">
-            {visibleRows.map((row) => {
+        {rows.length > 0 ? (
+          <div className={`flex flex-col gap-2 ${draggingKey ? "select-none" : ""}`}>
+            {rows.map((row, index) => {
               const { slot, performer } = row;
               const serverSlot = slot ? toSlotDraft(slot) : null;
               const slotDraft = slot ? (slotDrafts[slot.needId] ?? serverSlot) : null;
@@ -720,7 +724,11 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
                   data-testid="bill-card"
                   onPointerDown={(event) => startDrag(event, row.key)}
                   className={`space-y-3 rounded-md border px-3 py-3 text-sm ${
-                    draggingKey === row.key ? "border-border bg-muted/40 opacity-70" : ""
+                    draggingKey === row.key
+                      ? "border-primary/60 bg-muted/40 opacity-70"
+                      : dropIndex === index
+                        ? "border-primary/60 bg-primary/5"
+                        : ""
                   } ${slot && !performer ? "border-dashed" : ""}`}
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -748,14 +756,38 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
                         <p className="truncate font-medium">{performer?.bandName ?? ""}</p>
                       )}
                     </div>
-                    <span
-                      data-testid="artist-need-status"
-                      className={`rounded-md px-2 py-1 text-xs font-medium ${effectiveStatusClass(
-                        slot ? slot.effectiveStatus : "booked",
-                      )}`}
-                    >
-                      {effectiveStatusLabel(slot ? slot.effectiveStatus : "booked")}
-                    </span>
+                    <div className="flex items-center gap-1">
+                      <span
+                        data-testid="artist-need-status"
+                        className={`rounded-md px-2 py-1 text-xs font-medium ${effectiveStatusClass(
+                          slot ? slot.effectiveStatus : "booked",
+                        )}`}
+                      >
+                        {effectiveStatusLabel(slot ? slot.effectiveStatus : "booked")}
+                      </span>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="size-7 p-0"
+                        disabled={index === 0}
+                        title="Move up"
+                        onClick={() => void moveRow(row.key, -1)}
+                      >
+                        <CaretUpIcon className="size-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="size-7 p-0"
+                        disabled={index === rows.length - 1}
+                        title="Move down"
+                        onClick={() => void moveRow(row.key, 1)}
+                      >
+                        <CaretDownIcon className="size-4" />
+                      </Button>
+                    </div>
                   </div>
 
                   {performer ? (
