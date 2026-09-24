@@ -28,12 +28,15 @@ export function UserSelect({
   options,
   placeholder = "Search users...",
   emptyLabel = "Select user",
+  clearable = false,
 }: {
   value: string;
   onChange: (value: string) => void;
   options: UserSelectOption[];
   placeholder?: string;
   emptyLabel?: string;
+  /** Offer an entry that clears the selection. */
+  clearable?: boolean;
 }) {
   return (
     <SearchableSelect
@@ -42,6 +45,7 @@ export function UserSelect({
       options={options}
       placeholder={placeholder}
       emptyLabel={emptyLabel}
+      clearable={clearable}
       contentClassName="min-w-[min(100%,24rem)]"
       renderOption={(option) => (
         <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">

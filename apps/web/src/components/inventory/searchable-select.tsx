@@ -48,7 +48,7 @@ export function SearchableSelect({
   searching = false,
   contentClassName,
   clearable = false,
-  clearLabel = "None",
+  clearLabel = "Clear",
 }: {
   value: string;
   onChange: (value: string) => void;

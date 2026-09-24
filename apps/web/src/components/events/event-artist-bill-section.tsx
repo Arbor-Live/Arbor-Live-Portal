@@ -1465,6 +1465,7 @@ function AddBandForm({
             options={bandOptions}
             placeholder="Search artists…"
             emptyLabel="Select artist"
+            clearable
           />
         </div>
         <div className="space-y-1">
@@ -1693,6 +1694,7 @@ function EventBandPaymentForm({
               options={bandOptions}
               placeholder="Search artists…"
               emptyLabel="Select artist"
+              clearable
             />
           </div>
         ) : null}

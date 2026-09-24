@@ -112,12 +112,15 @@ export function ArtistSelect({
   options,
   placeholder = "Search artists…",
   emptyLabel = "Select artist",
+  clearable = false,
 }: {
   value: string;
   onChange: (value: string) => void;
   options: ArtistSelectOption[];
   placeholder?: string;
   emptyLabel?: string;
+  /** Offer an entry that clears the selection. */
+  clearable?: boolean;
 }) {
   // `100%` resolves to the trigger width inside the positioner, so the old
   // `min(100%, 24rem)` never widened the list. Cap by the real available width
@@ -129,6 +132,7 @@ export function ArtistSelect({
       options={options}
       placeholder={placeholder}
       emptyLabel={emptyLabel}
+      clearable={clearable}
       contentClassName="min-w-[min(24rem,var(--available-width))]"
       renderOption={(option) => (
         <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">

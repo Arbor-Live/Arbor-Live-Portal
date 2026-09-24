@@ -1554,6 +1554,7 @@ export function EventEditor({
                 onChange={setManagerUserId}
                 options={userSelectOptions}
                 emptyLabel="Select event manager"
+                clearable
               />
             </div>
             <div className="space-y-1">
@@ -1563,6 +1564,7 @@ export function EventEditor({
                 onChange={setDayOfLeadUserId}
                 options={userSelectOptions}
                 emptyLabel="Select day-of lead"
+                clearable
               />
             </div>
             <div className="space-y-1 md:col-span-3">
