@@ -18,7 +18,8 @@ test.describe("event artist needed", () => {
     await expect(page.getByText("Edit Event").first()).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText("No positions on the bill yet")).toBeVisible({ timeout: 20_000 });
 
-    await page.getByRole("button", { name: "Add position" }).click();
+    await page.getByRole("button", { name: "Add", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Position" }).click();
     const slot = page.getByTestId("bill-card").first();
     await expect(slot).toBeVisible({ timeout: 20_000 });
     await expect(page.getByTestId("artist-need-status")).toHaveText("Open");
