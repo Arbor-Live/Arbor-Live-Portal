@@ -1791,6 +1791,7 @@ export function EventEditor({
                     onChange={(value) => setSelectedCrewUserId(value)}
                     options={userSelectOptions}
                     emptyLabel="Select crew user"
+                    clearable
                   />
                 </div>
                 <Button
@@ -1901,6 +1902,7 @@ export function EventEditor({
                                   }
                                   options={userSelectOptions}
                                   emptyLabel="Select crew user"
+                                  clearable
                                 />
                               </div>
                             )}
@@ -2046,6 +2048,7 @@ export function EventEditor({
                               }
                               options={userSelectOptions}
                               emptyLabel="Select crew user"
+                              clearable
                             />
                           </div>
                         )}
