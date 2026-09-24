@@ -43,6 +43,7 @@ import { useSessionShell, useSessionViewer } from "@/components/session-shell-pr
 import { EventBandPaymentSection } from "@/components/events/event-band-payment-section";
 import { EventLinkedInvoicesField } from "@/components/events/event-linked-invoices-field";
 import { EventBandRidersSection } from "@/components/events/event-band-riders-section";
+import { EventArtistNeededSection } from "@/components/events/event-artist-needed-section";
 import { EventBriefButton } from "@/components/events/event-brief-button";
 import { EventContactsSection } from "@/components/events/event-contacts-section";
 import { EventMediaSection } from "@/components/events/event-media-section";
@@ -562,9 +563,10 @@ export function EventEditor({
       EVENT_EDITOR_TABS.filter((tab) => {
         if (hideSchedule && tab === "schedule") return false;
         if (hideEquipment && tab === "equipment") return false;
+        if (!eventId && tab === "artists") return false;
         return true;
       }),
-    [hideSchedule, hideEquipment],
+    [hideSchedule, hideEquipment, eventId],
   );
 
   const resolvedActiveTab: EventEditorTabId = visibleTabs.includes(activeTab) ? activeTab : "overview";
@@ -1664,8 +1666,6 @@ export function EventEditor({
         <EventContactsSection eventId={eventId} canEdit={canEdit} />
       ) : null}
 
-      {resolvedActiveTab === "overview" && eventId ? <EventBandRidersSection eventId={eventId} /> : null}
-      {resolvedActiveTab === "overview" && eventId ? <EventBandPaymentSection eventId={eventId} /> : null}
       {resolvedActiveTab === "overview" && eventId ? <EventPostMortemSection eventId={eventId} /> : null}
       {resolvedActiveTab === "overview" && eventId && canEdit ? (
         <EventPostMortemSummary eventId={eventId} />
@@ -1727,6 +1727,14 @@ export function EventEditor({
             ) : null}
           </CardContent>
         </Card>
+      ) : null}
+
+      {resolvedActiveTab === "artists" && eventId ? (
+        <div className="space-y-4">
+          <EventArtistNeededSection eventId={eventId} />
+          <EventBandPaymentSection eventId={eventId} />
+          <EventBandRidersSection eventId={eventId} />
+        </div>
       ) : null}
 
       {resolvedActiveTab === "schedule" ? (

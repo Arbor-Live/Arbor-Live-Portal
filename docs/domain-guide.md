@@ -160,6 +160,16 @@ Event types (drive which editor tabs and quick-add blocks appear):
   `bookingRequestSettings`, or manual swap on the request detail). Inbox
   defaults to open requests (`submitted`/`action_required`/`pending_client`), oldest-first, with a
   days-since-submitted counter.
+- **Artist Needed** (`eventArtistNeeds`, one row per event): an event's open
+  request for a DJ/band — `artistType` (`band` / `dj` / `no_preference`),
+  freeform `genres`, and staff-driven `status` (`open` / `inquiring`). "Booked"
+  is **derived**, never stored: an event counts as booked when it has a
+  non-TBD invoice artist line or an `eventBandParticipations` row
+  (`lib/eventArtistNeeds.ts`). Artists browse open needs from
+  `/dashboard/opportunities` and `submitInquiry` (`eventArtistInquiries`), which
+  flags the need `inquiring` and emails Operations admins
+  (`email/artistNeedInquiryEmails.ts`). Managed on the event editor **Artists**
+  tab, which also holds lineup/payout and riders.
 - **Schedule blocks** (`eventScheduleBlocks`) are the planning unit: typed
   (`setup`/`show`/`strike`/`custom`), snapped to 15-minute increments, may
   overlap (the timeline renders overlaps on separate lanes) and may cross
