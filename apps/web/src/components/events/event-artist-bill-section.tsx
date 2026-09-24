@@ -566,7 +566,7 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
                   </div>
                   <div className="grid gap-2 md:grid-cols-4">
                     <div className="space-y-1">
-                      <Label>Position</Label>
+                      <Label>Name</Label>
                       <Input
                         value={draft.label}
                         onChange={(event) =>
@@ -794,7 +794,7 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
                           />
                         </div>
                         <div className="space-y-1">
-                          <Label>Position</Label>
+                          <Label>Fills</Label>
                           <SearchableSelect
                             value={draft.needId}
                             onChange={(value) =>
