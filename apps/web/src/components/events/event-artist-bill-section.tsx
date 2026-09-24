@@ -618,6 +618,27 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
                 <div
                   key={row.key}
                   data-testid="bill-card"
+                  draggable
+                  onDragStart={(event) => {
+                    // The card is the drag handle, but a gesture that starts on
+                    // an input or popover must stay a click: cancelling the drag
+                    // here hands the mouse back to that control.
+                    const target = event.target as HTMLElement;
+                    if (
+                      target.closest(
+                        'input, textarea, select, button, a, label, [role="combobox"], [role="dialog"], [role="listbox"], [data-slot="popover-trigger"]',
+                      )
+                    ) {
+                      event.preventDefault();
+                      return;
+                    }
+                    dragKeyRef.current = row.key;
+                    setDragKey(row.key);
+                  }}
+                  onDragEnd={() => {
+                    dragKeyRef.current = null;
+                    setDragKey(null);
+                  }}
                   onDragOver={(event) => event.preventDefault()}
                   onDrop={() => handleDrop(row.key)}
                   className={`space-y-3 rounded-md border px-3 py-3 text-sm ${
@@ -626,21 +647,8 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex min-w-0 flex-1 items-center gap-2">
-                      {/*
-                        Only the grip is draggable — making the card itself
-                        draggable swallows clicks in its inputs and popovers.
-                      */}
                       <span
-                        draggable
-                        onDragStart={() => {
-                          dragKeyRef.current = row.key;
-                          setDragKey(row.key);
-                        }}
-                        onDragEnd={() => {
-                          dragKeyRef.current = null;
-                          setDragKey(null);
-                        }}
-                        className="cursor-grab text-muted-foreground active:cursor-grabbing"
+                        className="cursor-grab text-muted-foreground"
                         title="Drag to reorder"
                       >
                         <DotsSixVerticalIcon className="size-4" />
