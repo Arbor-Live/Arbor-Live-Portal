@@ -622,8 +622,8 @@ export const update = mutation({
     expectedTurnout: v.optional(v.number()),
     actualTurnout: v.optional(v.number()),
     budgetUsd: v.optional(v.number()),
-    dayOfLeadUserId: v.optional(v.string()),
-    eventManagerUserId: v.optional(v.string()),
+    dayOfLeadUserId: v.optional(v.union(v.string(), v.null())),
+    eventManagerUserId: v.optional(v.union(v.string(), v.null())),
     crewCostUsd: v.optional(v.number()),
     bandsCostUsd: v.optional(v.number()),
     externalRentalsCostUsd: v.optional(v.number()),
@@ -849,6 +849,20 @@ export const update = mutation({
         ...patch,
         seriesDetached: hasSeries && scope === "this" ? true : existing.seriesDetached,
       });
+    }
+
+    // `patch` ignores `undefined`, so an explicit clear must go through
+    // `replace` to actually drop the field.
+    const clearDayOfLead = args.dayOfLeadUserId === null || args.dayOfLeadUserId === "";
+    const clearManager = args.eventManagerUserId === null || args.eventManagerUserId === "";
+    if (clearDayOfLead || clearManager) {
+      const updated = await ctx.db.get(args.id);
+      if (updated) {
+        const next = { ...updated };
+        if (clearDayOfLead) delete next.dayOfLeadUserId;
+        if (clearManager) delete next.eventManagerUserId;
+        await ctx.db.replace(args.id, next);
+      }
     }
 
     // Additional invoices stay on this occurrence. The primary still propagates

@@ -191,7 +191,9 @@ export const upsertSlot = mutation({
         artistType: args.artistType,
         genres,
         status: args.status,
-        externalArtistName: trimOptional(args.externalArtistName),
+        ...(args.externalArtistName !== undefined
+          ? { externalArtistName: trimOptional(args.externalArtistName) }
+          : {}),
         updatedAt: now,
       });
       return { needId: existing._id };
@@ -286,6 +288,8 @@ export const removeSlot = mutation({
     await requireArborInternalContext(ctx);
     const slot = await ctx.db.get(args.needId);
     if (!slot) return;
+    // Bounded on purpose: a position sees a handful of inquiries, and any
+    // straggler past this is inert once its slot is gone.
     const inquiries = await ctx.db
       .query("eventArtistInquiries")
       .withIndex("by_needId", (q) => q.eq("needId", slot._id))

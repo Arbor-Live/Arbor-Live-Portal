@@ -768,8 +768,9 @@ export function EventEditor({
       additionalHostGroupIds: additionalHostGroupIds
         .filter((id) => id && id !== effectivePrimaryHostGroupId)
         .map((id) => id as Id<"invoiceGroups">),
-      eventManagerUserId: managerUserId || undefined,
-      dayOfLeadUserId: dayOfLeadUserId || undefined,
+      // Send the raw value: "" is an explicit clear, undefined is "unchanged".
+      eventManagerUserId: managerUserId,
+      dayOfLeadUserId,
       bandsCostUsd: Number(bandsCostUsd || "0"),
       externalRentalsCostUsd: Number(externalRentalsCostUsd || "0"),
       otherCostUsd: Number(otherCostUsd || "0"),
@@ -1893,8 +1894,11 @@ export function EventEditor({
                                               ...shift,
                                               userId: value || undefined,
                                               personName:
-                                                userSelectOptions.find((option) => option.value === value)?.label ??
-                                                shift.personName,
+                                                (value
+                                                  ? userSelectOptions.find(
+                                                      (option) => option.value === value,
+                                                    )?.label
+                                                  : "") ?? shift.personName,
                                             }
                                           : shift,
                                       ),
@@ -2040,7 +2044,11 @@ export function EventEditor({
                                           ...row,
                                           userId: value || undefined,
                                           personName:
-                                            userSelectOptions.find((option) => option.value === value)?.label ?? row.personName,
+                                            (value
+                                              ? userSelectOptions.find(
+                                                  (option) => option.value === value,
+                                                )?.label
+                                              : "") ?? row.personName,
                                         }
                                       : row,
                                   ),
