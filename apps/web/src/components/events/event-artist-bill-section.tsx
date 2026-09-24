@@ -531,6 +531,11 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
         soundcheckStartsAt: toMs(draft.soundcheckStart),
         soundcheckEndsAt: toMs(draft.soundcheckEnd),
       });
+      setExternalDrafts((prev) => {
+        const next = { ...prev };
+        delete next[slot.needId];
+        return next;
+      });
       notify.success("Position filled.");
     } catch (error) {
       notify.error(getConvexErrorMessage(error));
@@ -590,6 +595,51 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
     } catch (error) {
       notify.error(getConvexErrorMessage(error));
     }
+  }
+
+  function renderInquiries(slot: SlotRow) {
+    if (slot.inquiries.length === 0) return null;
+    return (
+                      <div className="space-y-2 border-t pt-2">
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                          Inquiries
+                        </p>
+                        <ul className="space-y-2">
+                          {slot.inquiries.map((inquiry) => (
+                            <li
+                              key={inquiry._id}
+                              className="flex items-start justify-between gap-3 rounded-md border px-3 py-2"
+                            >
+                              <div className="min-w-0">
+                                <p className="font-medium">
+                                  {inquiry.name}
+                                  {inquiry.status === "dismissed" ? (
+                                    <span className="ml-2 text-xs font-normal text-muted-foreground">
+                                      Dismissed
+                                    </span>
+                                  ) : null}
+                                </p>
+                                {inquiry.message ? (
+                                  <p className="mt-0.5 text-muted-foreground">
+                                    {inquiry.message}
+                                  </p>
+                                ) : null}
+                              </div>
+                              {inquiry.status === "submitted" ? (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => void onDismissInquiry(inquiry._id)}
+                                >
+                                  Dismiss
+                                </Button>
+                              ) : null}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+    );
   }
 
   async function persistOrder(needIds: Id<"eventArtistNeeds">[]) {
@@ -985,6 +1035,7 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
                     </>
                   ) : slot && externalDraft && isExternal ? (
                     <>
+                      {renderInquiries(slot)}
                       <div className="flex flex-wrap items-end gap-2">
                         <div className="min-w-56 flex-1 space-y-1">
                           <Label>Artist</Label>
@@ -1014,6 +1065,15 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
                           onClick={() => void onClearExternal(slot)}
                         >
                           Reopen
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          disabled={savingSlotId === slot.needId}
+                          onClick={() => void onRemoveSlot(slot)}
+                        >
+                          Remove
                         </Button>
                       </div>
 
@@ -1093,47 +1153,7 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
                         </div>
                       </div>
 
-                      {slot.inquiries.length > 0 ? (
-                        <div className="space-y-2 border-t pt-2">
-                          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                            Inquiries
-                          </p>
-                          <ul className="space-y-2">
-                            {slot.inquiries.map((inquiry) => (
-                              <li
-                                key={inquiry._id}
-                                className="flex items-start justify-between gap-3 rounded-md border px-3 py-2"
-                              >
-                                <div className="min-w-0">
-                                  <p className="font-medium">
-                                    {inquiry.name}
-                                    {inquiry.status === "dismissed" ? (
-                                      <span className="ml-2 text-xs font-normal text-muted-foreground">
-                                        Dismissed
-                                      </span>
-                                    ) : null}
-                                  </p>
-                                  {inquiry.message ? (
-                                    <p className="mt-0.5 text-muted-foreground">
-                                      {inquiry.message}
-                                    </p>
-                                  ) : null}
-                                </div>
-                                {inquiry.status === "submitted" ? (
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => void onDismissInquiry(inquiry._id)}
-                                  >
-                                    Dismiss
-                                  </Button>
-                                ) : null}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      ) : null}
+                      {renderInquiries(slot)}
 
                       <div className="flex flex-wrap items-end gap-2 border-t pt-2">
                         <div className="min-w-56 flex-1 space-y-1">

@@ -75,6 +75,8 @@ export function SortableList<T>({
   const rowRefs = useRef(new Map<string, HTMLDivElement>());
   const idsRef = useRef<string[]>([]);
   const itemsRef = useRef<T[]>([]);
+  // `endDrag` runs from a window listener, so read the predicate through a ref.
+  const draggableRef = useRef<(index: number) => boolean>(() => true);
 
   useEffect(() => {
     itemsRef.current = items;
@@ -135,7 +137,15 @@ export function SortableList<T>({
       setDropIndex(null);
       // A cancelled pointer is not a drop: reset without reordering.
       if (!dropped || !id) return;
-      commit(idsRef.current.indexOf(id), to);
+      const from = idsRef.current.indexOf(id);
+      // Stay inside the contiguous run of draggable rows around the source, so
+      // a position cannot be dropped among rows that are not sortable.
+      if (from < 0 || !draggableRef.current(from)) return;
+      let low = from;
+      while (low - 1 >= 0 && draggableRef.current(low - 1)) low -= 1;
+      let high = from;
+      while (high + 1 < idsRef.current.length && draggableRef.current(high + 1)) high += 1;
+      commit(from, Math.min(Math.max(to, low), high));
     },
     [commit],
   );
@@ -144,6 +154,10 @@ export function SortableList<T>({
     (item: T, index: number) => !disabled && (canDrag?.(item, index) ?? true),
     [disabled, canDrag],
   );
+
+  useEffect(() => {
+    draggableRef.current = (index: number) => draggable(items[index]!, index);
+  });
 
   const move = useCallback(
     (id: string, delta: number) => {

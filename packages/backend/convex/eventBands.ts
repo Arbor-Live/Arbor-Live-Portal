@@ -129,6 +129,9 @@ async function claimSlot(
   if (!slot || slot.eventId !== args.eventId) {
     throw new Error("Slot not found on this event.");
   }
+  if (slot.externalArtistName?.trim()) {
+    throw new Error("This position is filled by an outside artist.");
+  }
   const rivals = await ctx.db
     .query("eventBandParticipations")
     .withIndex("by_needId", (q) => q.eq("needId", args.needId))
