@@ -42,6 +42,14 @@ export function effectiveArtistNeedStatus(
   return booked ? "booked" : status;
 }
 
+/** A slot is booked by a linked act or by an outside act named on the slot. */
+export function slotIsBooked(
+  slot: { _id: Id<"eventArtistNeeds">; externalArtistName?: string },
+  filledSlotIds: ReadonlySet<Id<"eventArtistNeeds">>,
+): boolean {
+  return filledSlotIds.has(slot._id) || Boolean(slot.externalArtistName?.trim());
+}
+
 /** True when `artistType` could satisfy an event looking for `needType`. */
 export function artistTypeMatchesNeed(
   needType: ArtistNeedType,

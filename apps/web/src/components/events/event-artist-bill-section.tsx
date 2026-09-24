@@ -132,6 +132,42 @@ function slotDraftsEqual(a: SlotDraft, b: SlotDraft) {
   );
 }
 
+type ExternalDraft = {
+  name: string;
+  setStart: string;
+  setEnd: string;
+  soundcheckStart: string;
+  soundcheckEnd: string;
+};
+
+function toExternalDraft(slot: {
+  externalArtistName: string;
+  setStartsAt: number | null;
+  setEndsAt: number | null;
+  soundcheckStartsAt: number | null;
+  soundcheckEndsAt: number | null;
+}): ExternalDraft {
+  return {
+    name: slot.externalArtistName,
+    setStart: slot.setStartsAt != null ? toLocalDateTimeInput(slot.setStartsAt) : UNSET,
+    setEnd: slot.setEndsAt != null ? toLocalDateTimeInput(slot.setEndsAt) : UNSET,
+    soundcheckStart:
+      slot.soundcheckStartsAt != null ? toLocalDateTimeInput(slot.soundcheckStartsAt) : UNSET,
+    soundcheckEnd:
+      slot.soundcheckEndsAt != null ? toLocalDateTimeInput(slot.soundcheckEndsAt) : UNSET,
+  };
+}
+
+function externalDraftsEqual(a: ExternalDraft, b: ExternalDraft) {
+  return (
+    a.name === b.name &&
+    a.setStart === b.setStart &&
+    a.setEnd === b.setEnd &&
+    a.soundcheckStart === b.soundcheckStart &&
+    a.soundcheckEnd === b.soundcheckEnd
+  );
+}
+
 function lineupDraftsEqual(a: LineupDraft, b: LineupDraft) {
   return (
     a.setStart === b.setStart &&
@@ -234,11 +270,13 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
   const removeSlot = useMutation(api.eventArtistNeeds.removeSlot);
   const dismissInquiry = useMutation(api.eventArtistNeeds.dismissInquiry);
   const updateLineup = useMutation(api.eventBands.updateParticipationLineup);
+  const updateSlotLineup = useMutation(api.eventArtistNeeds.updateSlotLineup);
   const reorderSlots = useMutation(api.eventArtistNeeds.reorderSlots);
   const { confirm } = useAppDialog();
   const [editingPaymentForOrg, setEditingPaymentForOrg] = useState<string | null>(null);
   const [slotDrafts, setSlotDrafts] = useState<Record<string, SlotDraft>>({});
   const [lineupDrafts, setLineupDrafts] = useState<Record<string, LineupDraft>>({});
+  const [externalDrafts, setExternalDrafts] = useState<Record<string, ExternalDraft>>({});
   const [placementNames, setPlacementNames] = useState<Record<string, string>>({});
   const [savingSlotId, setSavingSlotId] = useState<string | null>(null);
   const [savingLineupId, setSavingLineupId] = useState<string | null>(null);
@@ -429,6 +467,63 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
     }
   }
 
+  function patchExternalDraft(needId: string, values: Partial<ExternalDraft>) {
+    setExternalDrafts((prev) => {
+      const server = bill?.slots.find((slot) => slot.needId === needId);
+      const current = prev[needId] ?? (server ? toExternalDraft(server) : undefined);
+      if (!current) return prev;
+      return { ...prev, [needId]: { ...current, ...values } };
+    });
+  }
+
+  async function onSaveExternal(slot: SlotRow) {
+    const draft = externalDrafts[slot.needId] ?? toExternalDraft(slot);
+    if (!draft.name.trim()) {
+      notify.error("Name the artist.");
+      return;
+    }
+    setSavingSlotId(slot.needId);
+    try {
+      await updateSlotLineup({
+        needId: slot.needId,
+        externalArtistName: draft.name.trim(),
+        setStartsAt: toMs(draft.setStart),
+        setEndsAt: toMs(draft.setEnd),
+        soundcheckStartsAt: toMs(draft.soundcheckStart),
+        soundcheckEndsAt: toMs(draft.soundcheckEnd),
+      });
+      notify.success("Position filled.");
+    } catch (error) {
+      notify.error(getConvexErrorMessage(error));
+    } finally {
+      setSavingSlotId(null);
+    }
+  }
+
+  async function onClearExternal(slot: SlotRow) {
+    setSavingSlotId(slot.needId);
+    try {
+      await updateSlotLineup({
+        needId: slot.needId,
+        externalArtistName: null,
+        setStartsAt: null,
+        setEndsAt: null,
+        soundcheckStartsAt: null,
+        soundcheckEndsAt: null,
+      });
+      setExternalDrafts((prev) => {
+        const next = { ...prev };
+        delete next[slot.needId];
+        return next;
+      });
+      notify.success("Position reopened.");
+    } catch (error) {
+      notify.error(getConvexErrorMessage(error));
+    } finally {
+      setSavingSlotId(null);
+    }
+  }
+
   async function onSaveLineup(performer: PerformerRow, needId: Id<"eventArtistNeeds"> | null) {
     const draft = lineupDrafts[performer.participationId] ?? toLineupDraft(performer);
     setSavingLineupId(performer.participationId);
@@ -606,6 +701,16 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
                   !lineupDraftsEqual(lineupDraft, serverLineup),
               );
               const placed = Boolean(slot && performer);
+              const externalServer = slot ? toExternalDraft(slot) : null;
+              const externalDraft = slot
+                ? (externalDrafts[slot.needId] ?? externalServer)
+                : null;
+              const externalDirty = Boolean(
+                externalDraft &&
+                  externalServer &&
+                  !externalDraftsEqual(externalDraft, externalServer),
+              );
+              const isExternal = Boolean(slot?.externalArtistName.trim());
               return (
                 <>
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -820,6 +925,71 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
                         />
                       ) : null}
                     </>
+                  ) : slot && externalDraft && isExternal ? (
+                    <>
+                      <div className="flex flex-wrap items-end gap-2">
+                        <div className="min-w-56 flex-1 space-y-1">
+                          <Label>Artist</Label>
+                          <Input
+                            value={externalDraft.name}
+                            placeholder="Outside artist"
+                            onChange={(event) =>
+                              patchExternalDraft(slot.needId, { name: event.target.value })
+                            }
+                          />
+                        </div>
+                        {externalDirty ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            disabled={savingSlotId === slot.needId}
+                            onClick={() => void onSaveExternal(slot)}
+                          >
+                            {savingSlotId === slot.needId ? "Saving…" : "Save"}
+                          </Button>
+                        ) : null}
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          disabled={savingSlotId === slot.needId}
+                          onClick={() => void onClearExternal(slot)}
+                        >
+                          Reopen
+                        </Button>
+                      </div>
+
+                      <div className="grid gap-2 md:grid-cols-2">
+                        <div className="space-y-1">
+                          <Label>Set</Label>
+                          <DateTimeRangePicker
+                            startValue={externalDraft.setStart}
+                            endValue={externalDraft.setEnd}
+                            onChange={(next) =>
+                              patchExternalDraft(slot.needId, {
+                                setStart: next.start,
+                                setEnd: next.end,
+                              })
+                            }
+                            placeholder="When they play"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label>Soundcheck</Label>
+                          <DateTimeRangePicker
+                            startValue={externalDraft.soundcheckStart}
+                            endValue={externalDraft.soundcheckEnd}
+                            onChange={(next) =>
+                              patchExternalDraft(slot.needId, {
+                                soundcheckStart: next.start,
+                                soundcheckEnd: next.end,
+                              })
+                            }
+                            placeholder="When to arrive"
+                          />
+                        </div>
+                      </div>
+                    </>
                   ) : slot && slotDraft ? (
                     <>
                       <div className="grid gap-2 md:grid-cols-3">
@@ -902,6 +1072,28 @@ function EventArtistBillPanel({ eventId }: { eventId: Id<"events"> }) {
                           </ul>
                         </div>
                       ) : null}
+
+                      <div className="flex flex-wrap items-end gap-2 border-t pt-2">
+                        <div className="min-w-56 flex-1 space-y-1">
+                          <Label>Or fill with an outside artist</Label>
+                          <Input
+                            value={externalDraft?.name ?? ""}
+                            placeholder="Artist name"
+                            onChange={(event) =>
+                              patchExternalDraft(slot.needId, { name: event.target.value })
+                            }
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={savingSlotId === slot.needId}
+                          onClick={() => void onSaveExternal(slot)}
+                        >
+                          Fill position
+                        </Button>
+                      </div>
 
                       <div className="flex flex-wrap gap-2">
                         {slotDirty ? (

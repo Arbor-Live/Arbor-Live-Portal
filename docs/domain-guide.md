@@ -172,6 +172,10 @@ Event types (drive which editor tabs and quick-add blocks appear):
   - **Run of show** — plain fields on `eventBandParticipations`
     (`setStartsAt` / `setEndsAt`, `soundcheckStartsAt` / `soundcheckEndsAt`)
     until a Run of Show model lands. Artists see both windows on "Your shows".
+  - **Outside acts** — a position can instead be filled by an act that is not on
+    the platform: `eventArtistNeeds.externalArtistName`, with its own set and
+    soundcheck windows on the slot. It counts as booked and stops appearing in
+    the artist portal.
   - **Payout** — the same row, via `EventBandPaymentForm`.
   Artists browse still-open slots from `/dashboard/opportunities` and
   `submitInquiry` (`eventArtistInquiries`), which flags the slot `inquiring`

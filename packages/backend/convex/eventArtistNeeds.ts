@@ -10,6 +10,7 @@ import {
   artistTypeMatchesNeed,
   effectiveArtistNeedStatus,
   resolveEventArtistBooking,
+  slotIsBooked,
   type ArtistNeedStatus,
   type ArtistNeedType,
   type EffectiveArtistNeedStatus,
@@ -102,7 +103,15 @@ export const getForEvent = query({
           artistType: slot.artistType,
           genres: slot.genres ?? "",
           status: slot.status,
-          effectiveStatus: effectiveArtistNeedStatus(slot.status, filledBy.length > 0),
+          effectiveStatus: effectiveArtistNeedStatus(
+            slot.status,
+            slotIsBooked(slot, booking.filledSlotIds),
+          ),
+          externalArtistName: slot.externalArtistName ?? "",
+          setStartsAt: slot.setStartsAt ?? null,
+          setEndsAt: slot.setEndsAt ?? null,
+          soundcheckStartsAt: slot.soundcheckStartsAt ?? null,
+          soundcheckEndsAt: slot.soundcheckEndsAt ?? null,
           filledBy: filledBy.map(describe),
           inquiries: inquiries
             .filter((row) => row.needId === slot._id)
@@ -139,7 +148,7 @@ export const listNeedStatusForEvents = query({
       if (slots.length === 0) continue;
       const { filledSlotIds } = await resolveEventArtistBooking(ctx, eventId);
       for (const slot of slots) {
-        const booked = filledSlotIds.has(slot._id);
+        const booked = slotIsBooked(slot, filledSlotIds);
         out.push({
           eventId,
           artistType: slot.artistType,
@@ -220,6 +229,53 @@ export const reorderSlots = mutation({
   },
 });
 
+/**
+ * Fill a position with an outside act — a name only, no platform organization —
+ * and set its run of show. Uses `replace` because `patch` ignores `undefined`.
+ */
+export const updateSlotLineup = mutation({
+  args: {
+    needId: v.id("eventArtistNeeds"),
+    externalArtistName: v.union(v.string(), v.null()),
+    setStartsAt: v.union(v.number(), v.null()),
+    setEndsAt: v.union(v.number(), v.null()),
+    soundcheckStartsAt: v.union(v.number(), v.null()),
+    soundcheckEndsAt: v.union(v.number(), v.null()),
+  },
+  handler: async (ctx, args) => {
+    await requireArborInternalContext(ctx);
+    const slot = await ctx.db.get(args.needId);
+    if (!slot) throw new Error("Position not found.");
+    if (args.setStartsAt != null && args.setEndsAt != null && args.setEndsAt <= args.setStartsAt) {
+      throw new Error("Set end time must be after the start time.");
+    }
+    if (
+      args.soundcheckStartsAt != null &&
+      args.soundcheckEndsAt != null &&
+      args.soundcheckEndsAt <= args.soundcheckStartsAt
+    ) {
+      throw new Error("Soundcheck end time must be after the start time.");
+    }
+    const name = args.externalArtistName?.trim() || undefined;
+    if (name && (await findActForSlot(ctx, slot._id))) {
+      throw new Error("This position is filled by an artist already on the bill.");
+    }
+    const next: Doc<"eventArtistNeeds"> = { ...slot, updatedAt: Date.now() };
+    if (name) next.externalArtistName = name;
+    else delete next.externalArtistName;
+    if (args.setStartsAt != null) next.setStartsAt = args.setStartsAt;
+    else delete next.setStartsAt;
+    if (args.setEndsAt != null) next.setEndsAt = args.setEndsAt;
+    else delete next.setEndsAt;
+    if (args.soundcheckStartsAt != null) next.soundcheckStartsAt = args.soundcheckStartsAt;
+    else delete next.soundcheckStartsAt;
+    if (args.soundcheckEndsAt != null) next.soundcheckEndsAt = args.soundcheckEndsAt;
+    else delete next.soundcheckEndsAt;
+    await ctx.db.replace(slot._id, next);
+    return null;
+  },
+});
+
 export const removeSlot = mutation({
   args: { needId: v.id("eventArtistNeeds") },
   handler: async (ctx, args) => {
@@ -260,8 +316,7 @@ export const submitInquiry = mutation({
     if (!artistTypeMatchesNeed(need.artistType, context.organizationType)) {
       throw new Error("This slot is not looking for your kind of act.");
     }
-    const filledBy = await findActForSlot(ctx, need._id);
-    if (filledBy) {
+    if (slotIsBooked(need, new Set()) || (await findActForSlot(ctx, need._id))) {
       throw new Error("This slot is already filled.");
     }
 
@@ -364,7 +419,7 @@ export const listOpenNeedsForArtist = query({
       if (!artistTypeMatchesNeed(need.artistType, context.organizationType)) continue;
       const event = await ctx.db.get(need.eventId);
       if (!isArtistListableEvent(event, now)) continue;
-      if (await findActForSlot(ctx, need._id)) continue;
+      if (slotIsBooked(need, new Set()) || (await findActForSlot(ctx, need._id))) continue;
 
       const typeLabel = ARTIST_NEED_TYPE_LABELS[need.artistType];
       const slotLabel = need.label?.trim();

@@ -1336,6 +1336,15 @@ export default defineSchema({
     artistType: v.union(v.literal("band"), v.literal("dj"), v.literal("no_preference")),
     genres: v.optional(v.string()),
     status: v.union(v.literal("open"), v.literal("inquiring")),
+    /**
+     * Set when the position is filled by an act that is not on the platform.
+     * Their run-of-show lives on the slot, since there is no participation.
+     */
+    externalArtistName: v.optional(v.string()),
+    setStartsAt: v.optional(v.number()),
+    setEndsAt: v.optional(v.number()),
+    soundcheckStartsAt: v.optional(v.number()),
+    soundcheckEndsAt: v.optional(v.number()),
     createdByUserId: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
