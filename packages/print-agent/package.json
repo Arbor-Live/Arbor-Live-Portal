@@ -11,8 +11,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "convex": "^1.42.3",
-    "ws": "^8.18.0"
+    "convex": "^1.46.0",
+    "ws": "^8.21.3"
   },
   "devDependencies": {
     "@types/node": "^26.1.2",
