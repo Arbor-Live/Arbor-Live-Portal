@@ -100,6 +100,7 @@ const lineItemInput = v.object({
   packageExclusionDiscountUsd: v.optional(v.number()),
   organizationId: v.optional(v.string()),
   eventId: v.optional(v.id("events")),
+  needId: v.optional(v.id("eventArtistNeeds")),
   memberCount: v.optional(v.number()),
   performanceHours: v.optional(v.number()),
 });
@@ -124,6 +125,8 @@ type LineInput = {
   organizationId?: string;
   /** Artist lines: linked day/event on multi-day bookings. */
   eventId?: Id<"events">;
+  /** Artist lines: the position this line stands for. */
+  needId?: Id<"eventArtistNeeds">;
   /** Artist lines: number of people performing. */
   memberCount?: number;
   /** Artist lines: hours performing. */
@@ -385,9 +388,41 @@ function lineDocToInput(line: Doc<"invoiceLineItems">): LineInput {
     packageExclusionDiscountUsd: line.packageExclusionDiscountUsd,
     organizationId: line.organizationId,
     eventId: line.eventId,
+    needId: line.needId,
     memberCount: line.memberCount,
     performanceHours: line.performanceHours,
   };
+}
+
+
+/**
+ * Keep `eventArtistNeeds` in step with the invoice's artist lines: a line tied
+ * to a day stands for a position there, and an assigned line books it.
+ */
+async function syncArtistSlotsForInvoice(
+  ctx: MutationCtx,
+  invoiceId: Id<"invoices">,
+  now: number,
+) {
+  const lines = await ctx.db
+    .query("invoiceLineItems")
+    .withIndex("by_invoiceId", (q) => q.eq("invoiceId", invoiceId))
+    .take(500);
+
+  for (const line of lines) {
+    if (line.section !== "artist" || !line.eventId) continue;
+    const linked = line.needId ? await ctx.db.get(line.needId) : null;
+    if (linked && linked.eventId === line.eventId) continue;
+    const needId = await ctx.db.insert("eventArtistNeeds", {
+      eventId: line.eventId,
+      label: trimOptional(line.label),
+      artistType: "no_preference",
+      status: "open",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.patch(line._id, { needId, updatedAt: now });
+  }
 }
 
 async function resolveBillableCountAtSave(ctx: MutationCtx, invoiceId: Id<"invoices">) {
@@ -453,6 +488,7 @@ async function replaceLineItems(
       equipmentQuantityBasis: row.equipmentQuantityBasis,
       organizationId: trimOptional(row.organizationId),
       eventId: row.section === "artist" ? row.eventId : undefined,
+      needId: row.section === "artist" ? row.needId : undefined,
       memberCount:
         row.section === "artist" && row.memberCount !== undefined && row.memberCount > 0
           ? row.memberCount
