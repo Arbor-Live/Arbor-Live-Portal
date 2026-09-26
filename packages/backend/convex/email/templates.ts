@@ -42,6 +42,7 @@ import {
   renderQuoteApprovedEmail,
   renderPaymentProofRejectedEmail,
   renderDamageReportAdminEmail,
+  renderArtistNeedInquiryEmail,
   renderWeeklyDigestEmail,
   renderThisWeekAtArborEmail,
 } from "@arbor/email/render";
@@ -88,6 +89,7 @@ import type {
   QuoteApprovedEmailProps,
   PaymentProofRejectedEmailProps,
   DamageReportAdminEmailProps,
+  ArtistNeedInquiryEmailProps,
   WeeklyDigestEmailProps,
   ThisWeekAtArborEmailProps,
 } from "@arbor/email/types";
@@ -191,6 +193,8 @@ export async function renderEmailHtml(template: EmailTemplate, payload: unknown)
       return renderPaymentProofRejectedEmail(payload as PaymentProofRejectedEmailProps);
     case "damage_report_admin":
       return renderDamageReportAdminEmail(payload as DamageReportAdminEmailProps);
+    case "artist_need_inquiry":
+      return renderArtistNeedInquiryEmail(payload as ArtistNeedInquiryEmailProps);
     case "weekly_digest":
       return renderWeeklyDigestEmail(payload as WeeklyDigestEmailProps);
     case "this_week_at_arbor":

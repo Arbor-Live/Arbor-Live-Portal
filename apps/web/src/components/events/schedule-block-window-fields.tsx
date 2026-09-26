@@ -82,6 +82,7 @@ export function ScheduleBlockWindowFields({
           options={blockOptions}
           placeholder={blockPlaceholder}
           emptyLabel={emptyBlockLabel}
+          clearable
         />
       ) : (
         <p className="text-xs text-muted-foreground">

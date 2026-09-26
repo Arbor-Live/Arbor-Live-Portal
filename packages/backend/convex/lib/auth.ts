@@ -441,24 +441,33 @@ export async function listAdminEmailsForVertical(
     participation?: (flags: UserParticipationFlags) => boolean;
   },
 ): Promise<string[]> {
-  const result = await ctx.runQuery(components.betterAuth.adapter.findMany, {
-    model: "user",
-    paginationOpts: { cursor: null, numItems: 500 },
-  });
-  const users = (result?.page ?? []) as AuthUser[];
   const emails = new Set<string>();
+  // Paginate the directory rather than trusting one page: a truncated list
+  // silently drops staff from operational email (artist inquiries, damage
+  // reports, crew applications).
+  let cursor: string | null = null;
+  for (;;) {
+    const result = (await ctx.runQuery(components.betterAuth.adapter.findMany, {
+      model: "user",
+      paginationOpts: { cursor, numItems: 500 },
+    })) as { page?: AuthUser[]; isDone?: boolean; continueCursor?: string } | null;
 
-  for (const user of users) {
-    if (user.role !== "admin" || !user.email) continue;
-    const userId = getUserId(user);
-    if (!userId) continue;
-    const profile = await getUserAdminProfile(ctx, userId);
-    const { verticals } = resolveProfileMembership(profile ?? {});
-    if (!hasVertical(verticals, vertical)) continue;
-    if (options?.participation && !options.participation(resolveParticipationFlags(profile))) {
-      continue;
+    for (const user of result?.page ?? []) {
+      if (user.role !== "admin" || !user.email) continue;
+      const userId = getUserId(user);
+      if (!userId) continue;
+      const profile = await getUserAdminProfile(ctx, userId);
+      const { verticals } = resolveProfileMembership(profile ?? {});
+      if (!hasVertical(verticals, vertical)) continue;
+      if (options?.participation && !options.participation(resolveParticipationFlags(profile))) {
+        continue;
+      }
+      emails.add(user.email.trim().toLowerCase());
     }
-    emails.add(user.email.trim().toLowerCase());
+
+    if (result?.isDone) break;
+    cursor = result?.continueCursor ?? null;
+    if (!cursor) break;
   }
 
   return [...emails];

@@ -100,11 +100,12 @@ test.describe("staff band assignment on event", () => {
     }) as { eventPath: string; eventTitle: string };
 
     const afterCreatedAt = Date.now() - 1_000;
-    await page.goto(seeded.eventPath);
+    await page.goto(`${seeded.eventPath}/artists`);
     await expect(page.getByText("Edit Event").first()).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText("Artists").first()).toBeVisible({ timeout: 20_000 });
 
-    await page.getByRole("button", { name: "Add artist" }).click();
+    await page.getByRole("button", { name: "Add", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Existing artist" }).click();
     await selectSearchableOption(page, "Artist", band.bandName);
     await page.getByRole("button", { name: "Assign artist" }).click();
 
@@ -149,17 +150,15 @@ test.describe("staff band assignment on event", () => {
     }) as { eventPath: string; eventTitle: string };
 
     const afterCreatedAt = Date.now() - 1_000;
-    await page.goto(seeded.eventPath);
+    await page.goto(`${seeded.eventPath}/artists`);
     await expect(page.getByText("Edit Event").first()).toBeVisible({ timeout: 30_000 });
     const bandsCard = page.locator('[data-slot="card"]').filter({
-      has: page.getByText("Artists"),
+      has: page.getByRole("button", { name: "Add", exact: true }),
     });
     await expect(bandsCard).toBeVisible({ timeout: 20_000 });
-    await expect(bandsCard.getByRole("button", { name: "Invite new artist" })).toBeVisible({
-      timeout: 20_000,
-    });
 
-    await bandsCard.getByRole("button", { name: "Invite new artist" }).click();
+    await bandsCard.getByRole("button", { name: "Add", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Invite new artist" }).click();
     await page.locator("#invite-band-artist-name").fill(bandName);
     await page.locator("#invite-band-email").fill(contactEmail);
     await page.getByRole("button", { name: "Send invite" }).click();

@@ -160,6 +160,27 @@ Event types (drive which editor tabs and quick-add blocks appear):
   `bookingRequestSettings`, or manual swap on the request detail). Inbox
   defaults to open requests (`submitted`/`action_required`/`pending_client`), oldest-first, with a
   days-since-submitted counter.
+- **The bill** (event editor **Artists** tab) is one drag-orderable list of
+  *positions* (`eventArtistNeeds.sortOrder`), each with a freeform `label` and
+  either filled by an act or still needed:
+  - **Artist Needed** (`eventArtistNeeds`) — one open **slot** per row, so "two
+    bands and a DJ" is three slots: a `label` (e.g. "Headliner"), `artistType`
+    (`band` / `dj` / `no_preference`), freeform `genres`, and a staff-driven
+    `status` (`open` / `inquiring`). A slot is **booked** when an
+    `eventBandParticipations` row points at it (`needId`) — never by a stored
+    flag, and a slot holds exactly one act (`lib/eventArtistNeeds.ts`).
+  - **Run of show** — plain fields on `eventBandParticipations`
+    (`setStartsAt` / `setEndsAt`, `soundcheckStartsAt` / `soundcheckEndsAt`)
+    until a Run of Show model lands. Artists see both windows on "Your shows".
+  - **Outside acts** — a position can instead be filled by an act that is not on
+    the platform: `eventArtistNeeds.externalArtistName`, with its own set and
+    soundcheck windows on the slot. It counts as booked and stops appearing in
+    the artist portal.
+  - **Payout** — the same row, via `EventBandPaymentForm`.
+  Artists browse still-open slots from `/dashboard/opportunities` and
+  `submitInquiry` (`eventArtistInquiries`), which flags the slot `inquiring`
+  and emails Operations admins (`email/artistNeedInquiryEmails.ts`). Riders sit
+  in their own card below the bill.
 - **Schedule blocks** (`eventScheduleBlocks`) are the planning unit: typed
   (`setup`/`show`/`strike`/`custom`), snapped to 15-minute increments, may
   overlap (the timeline renders overlaps on separate lanes) and may cross
@@ -184,7 +205,7 @@ Event types (drive which editor tabs and quick-add blocks appear):
   their own budgeting and pull lists.
 - Band participation in events is tracked in `eventBandParticipations`
   (headliner/support/other). That row is the canonical **assignment**: staff
-  manage it from the event overview **Artists** section (not Media).
+  manage it from the event editor **Artists** tab (not Media).
   Assigning an artist emails members (`band_assigned`), unlocks event media album
   access, and surfaces the show on the artist home dashboard. Optional
   `eventBandPayments` attach payout details to the same assignment.

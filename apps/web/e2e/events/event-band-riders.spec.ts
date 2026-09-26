@@ -3,7 +3,7 @@ import { runConvex } from "../helpers/convex";
 import { e2eEnv } from "../helpers/env";
 
 test.describe("event technical riders panel", () => {
-  test("shows linked performers' default rider plot on overview", async ({ page }) => {
+  test("shows linked performers' default rider plot on the Artists tab", async ({ page }) => {
     const band = runConvex("e2eHelpers:ensureBandPayeeUser", {
       email: e2eEnv.bandEmail,
       password: e2eEnv.bandPassword,
@@ -21,7 +21,7 @@ test.describe("event technical riders panel", () => {
       riderName: string;
     };
 
-    await page.goto(seeded.eventPath);
+    await page.goto(`${seeded.eventPath}/artists`);
     await expect(page.getByText("Edit Event").first()).toBeVisible({ timeout: 30_000 });
 
     const panel = page.getByTestId("event-band-riders");

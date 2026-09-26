@@ -1,5 +1,6 @@
 "use client";
 
+import { XIcon } from "@phosphor-icons/react";
 import { BoringUserAvatar } from "@/components/account/user-avatar";
 import { StoredAssetImage } from "@/components/files/stored-asset-image";
 import { SearchableSelect, type SearchableSelectOption } from "@/components/inventory/searchable-select";
@@ -81,6 +82,15 @@ export function artistSelectOptions(
 }
 
 function ArtistMark({ option }: { option: ArtistSelectOption }) {
+  // The clear entry is not an artist — show an icon, not a generated avatar.
+  if (!option.value) {
+    return (
+      <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+        <XIcon className="size-3.5" />
+      </span>
+    );
+  }
+
   if (option.avatarUrl) {
     return (
       <StoredAssetImage
@@ -112,12 +122,15 @@ export function ArtistSelect({
   options,
   placeholder = "Search artists…",
   emptyLabel = "Select artist",
+  clearable = false,
 }: {
   value: string;
   onChange: (value: string) => void;
   options: ArtistSelectOption[];
   placeholder?: string;
   emptyLabel?: string;
+  /** Offer an entry that clears the selection. */
+  clearable?: boolean;
 }) {
   // `100%` resolves to the trigger width inside the positioner, so the old
   // `min(100%, 24rem)` never widened the list. Cap by the real available width
@@ -129,6 +142,7 @@ export function ArtistSelect({
       options={options}
       placeholder={placeholder}
       emptyLabel={emptyLabel}
+      clearable={clearable}
       contentClassName="min-w-[min(24rem,var(--available-width))]"
       renderOption={(option) => (
         <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
