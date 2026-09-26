@@ -296,6 +296,75 @@ export const getEventMetaInternal = internalQuery({
   },
 });
 
+/**
+ * Page of events that have event media to mirror into artist albums. Newest
+ * first, keyed off `_creationTime`, so re-running with the returned cursor
+ * walks the whole table. Only events with at least one mirror row and a lineup
+ * are worth scanning; the mirror step skips events with no participations.
+ */
+export const listEventMirrorBackfillTargetsInternal = internalQuery({
+  args: { cursor: v.number(), limit: v.number() },
+  returns: v.object({
+    targets: v.array(v.id("events")),
+    nextCursor: v.union(v.number(), v.null()),
+    isDone: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    const events = await ctx.db
+      .query("events")
+      .order("desc")
+      .paginate({ numItems: args.limit, cursor: args.cursor === 0 ? null : String(args.cursor) });
+
+    const targets: Id<"events">[] = [];
+    for (const event of events.page) {
+      const albumLink = await ctx.db
+        .query("immichAlbumLinks")
+        .withIndex("by_entityType_and_entityId", (q) =>
+          q.eq("entityType", "event").eq("entityId", event._id),
+        )
+        .first();
+      if (!albumLink) continue;
+      const participation = await ctx.db
+        .query("eventBandParticipations")
+        .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
+        .first();
+      if (!participation) continue;
+      targets.push(event._id);
+    }
+
+    return {
+      targets,
+      nextCursor: events.isDone ? null : Number(events.continueCursor),
+      isDone: events.isDone,
+    };
+  },
+});
+
+/** Asset rows already mirrored for an event album (no Immich calls). */
+export const listEventAlbumAssetsInternal = internalQuery({
+  args: { eventId: v.id("events") },
+  returns: v.array(
+    v.object({
+      immichAssetId: v.string(),
+      originalFileName: v.string(),
+      type: assetTypeValue,
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const albumLink = await getCanonicalAlbumLink(ctx, "event", args.eventId);
+    if (!albumLink) return [];
+    const rows = await ctx.db
+      .query("immichAssetRecords")
+      .withIndex("by_albumLinkId", (q) => q.eq("albumLinkId", albumLink._id))
+      .take(500);
+    return rows.map((row) => ({
+      immichAssetId: row.immichAssetId,
+      originalFileName: row.originalFileName,
+      type: row.type,
+    }));
+  },
+});
+
 /** Auth-free naming meta for cron / email ensure-on-send paths. */
 export const getEventAlbumEnsureMetaInternal = internalQuery({
   args: { eventId: v.id("events") },

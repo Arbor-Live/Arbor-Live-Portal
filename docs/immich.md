@@ -37,6 +37,9 @@ event / band  ──►  immichAlbumLinks (Convex)  ──►  Immich album + sh
    When the album is an event album, `addUploadedAssetToAlbum` also mirrors the
    asset into every artist album on the event lineup (ensuring each band album
    exists first), so an artist's album collects photos from all of their events.
+   Media uploaded before the mirror existed is caught up by
+   `immich:runBackfillArtistAlbumMirror` (admin-only; resumable paged action —
+   see below).
 4. **Serve.** Public galleries call `buildSharedAssetUrl(assetId, kind, shareKey)`
    which produces `"{IMMICH_URL}/api/assets/{id}/{thumbnail|original|video/playback}?key={shareKey}"`.
    Staff can deep-link to the Immich UI with `buildImmichAlbumUrl` / `buildImmichShareUrl`.
@@ -101,6 +104,27 @@ Without it, `next/image` will refuse to optimize Immich-hosted images. See
 
 Marketing/public-work galleries reuse the same client through
 `marketingImmich.ts` / `marketingImmichActions.ts`.
+
+### Artist-album mirror backfill
+
+Event media uploaded before the mirror shipped is copied into artist albums by
+`immich:runBackfillArtistAlbumMirror`. It is admin-only and resumable: each page
+scans `MAX_EVENTS_PER_RUN` events (newest first), copies their already-indexed
+event-album assets into each linked artist album, and returns
+`{ eventsScanned, assetsMirrored, nextCursor, isDone }`. It reads from the Convex
+asset index (no Immich list call) and calls `PUT /albums/:id/assets` per asset.
+
+Run it against a deployment with `packages/backend` as the working directory:
+
+```bash
+npx convex run immich:runBackfillArtistAlbumMirror '{}'
+# then continue from where it stopped:
+npx convex run immich:runBackfillArtistAlbumMirror '{"cursor": 25}'
+```
+
+Prefer `--prod` for production (`npx convex run immich:runBackfillArtistAlbumMirror '{}' --prod`).
+Re-running is idempotent per artist album: `recordAssetInternal` skips rows that
+already exist, so a second pass only re-issues the harmless Immich add.
 
 ## Verification
 

@@ -237,6 +237,68 @@ export const backfillAllAlbums = internalAction({
 });
 
 /**
+ * Backfill: copy every asset already in an event album into each linked
+ * artist's album. Runs after the feature shipped so existing event media shows
+ * up in artist albums, which only got mirrored uploads from then on.
+ *
+ * Resumable — each run advances `cursor` by the number of events scanned and
+ * returns the next cursor. Re-run until `isDone` is true. Bounded by
+ * `MAX_EVENTS_PER_RUN` so one invocation stays inside Convex action limits.
+ */
+const MAX_EVENTS_PER_RUN = 25;
+
+export const backfillArtistAlbumMirror = internalAction({
+  args: { cursor: v.optional(v.number()) },
+  returns: v.object({
+    eventsScanned: v.number(),
+    assetsMirrored: v.number(),
+    nextCursor: v.union(v.number(), v.null()),
+    isDone: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    const cursor = args.cursor ?? 0;
+    const page: {
+      targets: Array<Id<"events">>;
+      nextCursor: number | null;
+      isDone: boolean;
+    } = await ctx.runQuery(internal.immichDb.listEventMirrorBackfillTargetsInternal, {
+      cursor,
+      limit: MAX_EVENTS_PER_RUN,
+    });
+
+    let assetsMirrored = 0;
+    let eventsScanned = 0;
+
+    for (const eventId of page.targets) {
+      eventsScanned += 1;
+      const assets: Array<{
+        immichAssetId: string;
+        originalFileName: string;
+        type: "IMAGE" | "VIDEO";
+      }> = await ctx.runQuery(internal.immichDb.listEventAlbumAssetsInternal, { eventId });
+      for (const asset of assets) {
+        try {
+          await mirrorEventAssetToArtistAlbums(ctx, { eventId, ...asset });
+          assetsMirrored += 1;
+        } catch (error) {
+          console.error(
+            `Backfill: failed to mirror asset ${asset.immichAssetId} for event ${eventId}`,
+            error,
+          );
+        }
+      }
+    }
+
+    return {
+      eventsScanned,
+      assetsMirrored,
+      nextCursor: page.nextCursor,
+      isDone: page.isDone,
+    };
+  },
+});
+
+/**
  * An asset uploaded to an event also belongs in each linked artist's album, so
  * an artist's album is the one place with all of their photos. Best-effort per
  * artist: the event album copy is already saved, so one bad artist album must

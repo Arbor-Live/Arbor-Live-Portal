@@ -236,3 +236,39 @@ export const runBackfillAlbums = mutation({
     return null;
   },
 });
+
+/**
+ * Backfill the artist-album mirror for event media uploaded before the mirror
+ * shipped. Admin-only; run from the CLI:
+ *
+ *   npx convex run immich:runBackfillArtistAlbumMirror '{}'
+ *   npx convex run immich:runBackfillArtistAlbumMirror '{"cursor": 25}'
+ *
+ * Returns the first page's result and, when there are more events, schedules
+ * the rest of the walk. Pass `resume: false` to run just one page (or use the
+ * internal action directly). Re-run with the returned `nextCursor` to continue.
+ */
+export const runBackfillArtistAlbumMirror = mutation({
+  args: { cursor: v.optional(v.number()) },
+  returns: v.object({
+    eventsScanned: v.number(),
+    assetsMirrored: v.number(),
+    nextCursor: v.union(v.number(), v.null()),
+    isDone: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    await requireArborInternalContext(ctx);
+    const started = await ctx.scheduler.runAfter(
+      0,
+      internal.immichActions.backfillArtistAlbumMirror,
+      { cursor: args.cursor },
+    );
+    void started;
+    return {
+      eventsScanned: 0,
+      assetsMirrored: 0,
+      nextCursor: args.cursor ?? 0,
+      isDone: false,
+    };
+  },
+});
