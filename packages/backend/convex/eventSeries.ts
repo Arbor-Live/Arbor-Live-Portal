@@ -34,6 +34,7 @@ import {
   resolveEventPrimaryHostLink,
   syncLinkedEventsPrimaryHostFromInvoice,
 } from "./lib/hostOrgs";
+import { eventTeamValue } from "./lib/eventTeams";
 
 const eventTypeValue = v.union(
   v.literal("Crewed Event"),
@@ -41,14 +42,6 @@ const eventTypeValue = v.union(
   v.literal("Dry Hire"),
   v.literal("Dry Rental"),
   v.literal("Services Only"),
-);
-
-const eventTeamValue = v.union(
-  v.literal("Design"),
-  v.literal("Marketing"),
-  v.literal("Lighting"),
-  v.literal("Sound"),
-  v.literal("Operations"),
 );
 
 const rentalFulfillmentModeValue = v.union(v.literal("delivery"), v.literal("will_call"));

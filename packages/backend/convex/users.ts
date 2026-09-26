@@ -46,6 +46,7 @@ import {
   releaseR2KeysIfUnreferenced,
 } from "./lib/r2Lifecycle";
 import {
+  assertDisciplinesMatchVerticals,
   resolveProfileMembership,
   userDisciplineValue,
   userVerticalValue,
@@ -1674,6 +1675,9 @@ export const inviteUserAdmin = mutation({
     if (!adminId) throw new Error("Unable to resolve current admin user.");
     const email = args.email.trim().toLowerCase();
     if (!email) throw new Error("Email is required.");
+    if (args.verticals !== undefined || args.disciplines !== undefined) {
+      assertDisciplinesMatchVerticals(args.verticals ?? [], args.disciplines ?? []);
+    }
     const now = Date.now();
     const expiresAt = now + 14 * 24 * 60 * 60 * 1000;
 
@@ -1688,20 +1692,55 @@ export const inviteUserAdmin = mutation({
       : undefined;
 
     const membershipRole = await normalizeMembershipRole(ctx, args.organizationId, args.role ?? "member");
-    const created = (await ctx.runMutation(components.betterAuth.adapter.create, {
-      input: {
-        model: "invitation",
-        data: {
-          organizationId: args.organizationId,
-          email,
-          role: membershipRole,
-          status: "pending",
-          expiresAt,
-          createdAt: now,
-          inviterId: adminId,
+
+    // Re-inviting an address that already has a pending invitation in this
+    // organization must reuse that row, not mint a second one: the invite list
+    // keys off `invitation`, and `resendInviteAdmin` resolves by email, so a
+    // duplicate leaves stale accept links and an ambiguous resend target.
+    const existingInvites = (await ctx.runQuery(components.betterAuth.adapter.findMany, {
+      model: "invitation",
+      where: [
+        { field: "email", value: email },
+        { connector: "AND", field: "organizationId", value: args.organizationId },
+      ],
+      paginationOpts: { cursor: null, numItems: 50 },
+    })) as { page?: InvitationRow[] } | null;
+    const pendingInvite = (existingInvites?.page ?? []).find((row) => row.status === "pending");
+
+    let invitationId: string;
+    if (pendingInvite) {
+      invitationId = getRecordId(pendingInvite);
+      if (!invitationId) throw new Error("Existing pending invitation is missing an id.");
+      await ctx.runMutation(components.betterAuth.adapter.updateOne, {
+        input: {
+          model: "invitation",
+          where: [{ field: "_id", value: invitationId }],
+          update: {
+            role: membershipRole,
+            status: "pending",
+            expiresAt,
+            createdAt: now,
+          },
         },
-      },
-    })) as InvitationRow;
+      });
+    } else {
+      const created = (await ctx.runMutation(components.betterAuth.adapter.create, {
+        input: {
+          model: "invitation",
+          data: {
+            organizationId: args.organizationId,
+            email,
+            role: membershipRole,
+            status: "pending",
+            expiresAt,
+            createdAt: now,
+            inviterId: adminId,
+          },
+        },
+      })) as InvitationRow;
+      invitationId = getRecordId(created);
+      if (!invitationId) throw new Error("Failed to create invitation.");
+    }
 
     const existingUser = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
       model: "user",
@@ -1746,7 +1785,6 @@ export const inviteUserAdmin = mutation({
       });
     }
 
-    const invitationId = getRecordId(created);
     if (existingUserId) {
       await markInvitationAccepted(ctx, invitationId);
     }
@@ -1796,7 +1834,7 @@ export const resendInviteAdmin = mutation({
     await ctx.runMutation(components.betterAuth.adapter.updateOne, {
       input: {
         model: "invitation",
-        where: [{ field: "email", value: invite.email }],
+        where: [{ field: "_id", value: args.invitationId }],
         update: {
           status: "pending",
           createdAt: now,
@@ -1842,11 +1880,107 @@ async function userExistsForInvite(ctx: MutationCtx | QueryCtx, email: string) {
 }
 
 async function getInvitationById(ctx: MutationCtx | QueryCtx, invitationId: string) {
-  const invite = (await getAllInvitations(ctx)).find(
-    (row) => getRecordId(row) === invitationId,
-  );
+  // Adapter `_id` lookups call `db.get` and throw on anything that is not a
+  // Convex document id. Invitation ids from this app are Convex `_id`s.
+  if (!/^[0-9a-z]{32}$/.test(invitationId)) {
+    throw new Error("Invitation not found.");
+  }
+  const invite = (await ctx.runQuery(components.betterAuth.adapter.findOne, {
+    model: "invitation",
+    where: [{ field: "_id", value: invitationId }],
+  })) as InvitationRow | null;
   if (!invite) throw new Error("Invitation not found.");
   return invite;
+}
+
+const ORGANIZATION_INVITE_EXPIRY_MS = 14 * 24 * 60 * 60 * 1000;
+
+async function findPendingInvitationForOrg(
+  ctx: MutationCtx | QueryCtx,
+  args: { organizationId: string; email: string },
+) {
+  const email = args.email.trim().toLowerCase();
+  // Indexed by email + organizationId. Status is filtered in TS so a cancelled
+  // row for the same address cannot hide a still-pending invitation.
+  const result = await ctx.runQuery(components.betterAuth.adapter.findMany, {
+    model: "invitation",
+    where: [
+      { field: "email", value: email },
+      { connector: "AND", field: "organizationId", value: args.organizationId },
+    ],
+    paginationOpts: { cursor: null, numItems: 50 },
+  });
+  return (
+    ((result?.page ?? []) as InvitationRow[]).find((invite) => invite.status === "pending") ?? null
+  );
+}
+
+async function requirePendingInviteForActiveOrg(
+  ctx: MutationCtx,
+  invitationId: string,
+) {
+  const context = await requireBandContext(ctx);
+  const invite = await getInvitationById(ctx, invitationId);
+  if (invite.organizationId !== context.organizationId) {
+    throw new Error("Invitation not found.");
+  }
+  if (invite.status !== "pending") {
+    throw new Error("Only pending invitations can be updated.");
+  }
+  return invite;
+}
+
+async function resendPendingInvitation(
+  ctx: MutationCtx,
+  invite: InvitationRow,
+  updates?: { bandRole?: string },
+) {
+  const invitationId = getRecordId(invite);
+  const email = (invite.email ?? "").trim().toLowerCase();
+  if (!invitationId) throw new Error("Invitation not found.");
+  if (!email) throw new Error("Invitation is missing email.");
+
+  const now = Date.now();
+  const expiresAt = now + ORGANIZATION_INVITE_EXPIRY_MS;
+  await ctx.runMutation(components.betterAuth.adapter.updateOne, {
+    input: {
+      model: "invitation",
+      where: [{ field: "_id", value: invitationId }],
+      update: {
+        status: "pending",
+        createdAt: now,
+        expiresAt,
+      },
+    },
+  });
+  const pending = await ctx.db
+    .query("pendingUserInvites")
+    .withIndex("by_invitationId", (q) => q.eq("invitationId", invitationId))
+    .unique();
+  await scheduleUserInviteEmail(ctx, {
+    invitationId,
+    email,
+    organizationId: invite.organizationId ?? "",
+    role: invite.role ?? "org_member",
+    bandRole: updates?.bandRole ?? pending?.bandRole,
+    inviterId: invite.inviterId ?? "",
+    expiresAt,
+    teams: pending?.teams,
+    verticals: pending?.verticals as UserVertical[] | undefined,
+    disciplines: pending?.disciplines as UserDiscipline[] | undefined,
+    rateMode: pending?.rateMode,
+    customHourlyRateUsd: pending?.customHourlyRateUsd,
+    payrollMethod: pending?.payrollMethod,
+    inviteKind: pending?.inviteKind,
+    requiresOnboarding: pending?.requiresOnboarding,
+    includeInTimecards: pending?.includeInTimecards,
+    assignableAsCrew: pending?.assignableAsCrew,
+    showOnPublicCrewPage: pending?.showOnPublicCrewPage,
+    gradYear: pending?.gradYear,
+    isExistingUser: await userExistsForInvite(ctx, email),
+    resendKey: String(now),
+  });
+  return { invitationId, email, expiresAt };
 }
 
 export const updateInviteAdmin = mutation({
@@ -1865,6 +1999,19 @@ export const updateInviteAdmin = mutation({
     }
     if (!invite.email || !invite.organizationId) {
       throw new Error("Invitation is missing required details.");
+    }
+
+    if (args.verticals !== undefined || args.disciplines !== undefined) {
+      // Partial updates preserve the stored value for the omitted field, so
+      // validate against it rather than an empty list.
+      const pending = await ctx.db
+        .query("pendingUserInvites")
+        .withIndex("by_invitationId", (q) => q.eq("invitationId", args.invitationId))
+        .unique();
+      assertDisciplinesMatchVerticals(
+        args.verticals ?? ((pending?.verticals ?? []) as UserVertical[]),
+        args.disciplines ?? ((pending?.disciplines ?? []) as UserDiscipline[]),
+      );
     }
 
     const nextRole = await normalizeMembershipRole(
@@ -1930,6 +2077,9 @@ export const createUserAdmin = mutation({
     const email = args.email.trim().toLowerCase();
     if (!email) throw new Error("Email is required.");
     if (args.tempPassword.length < 8) throw new Error("Temporary password must be at least 8 characters.");
+    if (args.verticals !== undefined || args.disciplines !== undefined) {
+      assertDisciplinesMatchVerticals(args.verticals ?? [], args.disciplines ?? []);
+    }
     const now = Date.now();
 
     const crewInvite = await assertArborCrewInviteCompensation(ctx, args.organizationId, {
@@ -2155,6 +2305,12 @@ export const updateUserAdmin = mutation({
     const existingMembership = existingProfile
       ? resolveProfileMembership(existingProfile)
       : { verticals: [], disciplines: [] };
+    if (args.verticals !== undefined || args.disciplines !== undefined) {
+      assertDisciplinesMatchVerticals(
+        args.verticals ?? existingMembership.verticals,
+        args.disciplines ?? existingMembership.disciplines,
+      );
+    }
     await ensureUserProfileDefaults(ctx, args.userId, {
       title: args.title?.trim() ?? existingProfile?.title,
       phone: args.phone ?? existingProfile?.phone,
@@ -2675,6 +2831,10 @@ export const inviteMemberToActiveOrganization = mutation({
     role: externalOrgRoleValue,
     bandRole: v.optional(v.string()),
   },
+  returns: v.object({
+    invitationId: v.string(),
+    resent: v.boolean(),
+  }),
   handler: async (ctx, args) => {
     const context = await requireBandContext(ctx);
     const admin = await requireAuth(ctx);
@@ -2693,8 +2853,27 @@ export const inviteMemberToActiveOrganization = mutation({
     const now = Date.now();
     const email = args.email.trim().toLowerCase();
     if (!email) throw new Error("Email is required.");
+    const existingPending = await findPendingInvitationForOrg(ctx, {
+      organizationId: context.organizationId,
+      email,
+    });
+    if (existingPending) {
+      const existingRole = existingPending.role ?? "org_member";
+      if (args.role !== existingRole) {
+        throw new Error(
+          "This email already has a pending invitation. Remove it before sending a different access level.",
+        );
+      }
+      const submittedBandRole = args.bandRole?.trim();
+      const resent = await resendPendingInvitation(
+        ctx,
+        existingPending,
+        submittedBandRole ? { bandRole: submittedBandRole } : undefined,
+      );
+      return { invitationId: resent.invitationId, resent: true };
+    }
     const bandRole = args.bandRole?.trim() || undefined;
-    const expiresAt = now + 14 * 24 * 60 * 60 * 1000;
+    const expiresAt = now + ORGANIZATION_INVITE_EXPIRY_MS;
     const created = await ctx.runMutation(components.betterAuth.adapter.create, {
       input: {
         model: "invitation",
@@ -2739,7 +2918,30 @@ export const inviteMemberToActiveOrganization = mutation({
       expiresAt,
       isExistingUser: Boolean(existingUserId),
     });
-    return { invitationId };
+    return { invitationId, resent: false };
+  },
+});
+
+export const resendInviteForActiveOrganization = mutation({
+  args: { invitationId: v.string() },
+  returns: v.object({
+    invitationId: v.string(),
+    email: v.string(),
+    expiresAt: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const invite = await requirePendingInviteForActiveOrg(ctx, args.invitationId);
+    return await resendPendingInvitation(ctx, invite);
+  },
+});
+
+export const cancelInviteForActiveOrganization = mutation({
+  args: { invitationId: v.string() },
+  returns: v.object({ ok: v.boolean() }),
+  handler: async (ctx, args) => {
+    await requirePendingInviteForActiveOrg(ctx, args.invitationId);
+    await markInvitationCancelled(ctx, args.invitationId);
+    return { ok: true };
   },
 });
 

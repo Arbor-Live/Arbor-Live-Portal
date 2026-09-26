@@ -2,7 +2,25 @@ import { z } from "zod";
 import { bandPublicListingRefinement } from "@/lib/validations/bands";
 
 export const USER_VERTICAL_OPTIONS = ["Operations", "Crew", "Trivia", "Marketing"] as const;
-export const USER_DISCIPLINE_OPTIONS = ["Sound", "Lights", "Design"] as const;
+export const USER_DISCIPLINE_OPTIONS = [
+  "Sound",
+  "Lights",
+  "Design",
+  "Photography",
+  "Videography",
+] as const;
+
+/** Disciplines a member may hold for each vertical. */
+export const DISCIPLINES_BY_VERTICAL: Record<
+  (typeof USER_VERTICAL_OPTIONS)[number],
+  readonly (typeof USER_DISCIPLINE_OPTIONS)[number][]
+> = {
+  Operations: [],
+  Crew: ["Sound", "Lights", "Photography", "Videography"],
+  Trivia: [],
+  Marketing: ["Design", "Photography", "Videography"],
+};
+
 export const CREW_RATE_MODE_OPTIONS = ["normal", "lead", "custom"] as const;
 export const PAYROLL_METHOD_OPTIONS = ["stanford", "external"] as const;
 export const USER_INVITE_KIND_OPTIONS = ["crew", "advisor"] as const;
@@ -21,6 +39,19 @@ export type UserDisciplineOption = z.infer<typeof userDisciplineOptionSchema>;
 export type CrewRateModeOption = z.infer<typeof crewRateModeSchema>;
 export type PayrollMethodOption = z.infer<typeof payrollMethodSchema>;
 export type UserInviteKindOption = z.infer<typeof userInviteKindSchema>;
+
+/** Every discipline available across the given verticals, in canonical order. */
+export function disciplinesForVerticals(
+  verticals: readonly UserVerticalOption[],
+): UserDisciplineOption[] {
+  const allowed = new Set<UserDisciplineOption>();
+  for (const vertical of verticals) {
+    for (const discipline of DISCIPLINES_BY_VERTICAL[vertical]) {
+      allowed.add(discipline);
+    }
+  }
+  return USER_DISCIPLINE_OPTIONS.filter((discipline) => allowed.has(discipline));
+}
 
 /** @deprecated */
 export const adminTeamOptionSchema = z.enum(ADMIN_TEAM_OPTIONS);

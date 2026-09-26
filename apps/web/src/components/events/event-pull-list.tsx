@@ -202,7 +202,9 @@ export function EventPullList({
       bucket.push(item);
       groups.set(key, bucket);
     }
-    const order = ["Packages", "Lighting", "Sound", "Design", "Marketing", "Operations", "Other"];
+    // `typeCategory` holds an inventory category key (or "Packages"), not a
+    // label, so only these buckets are pinned ahead of alphabetical order.
+    const order = ["Packages", "Other"];
     return [...groups.entries()]
       .sort(([a], [b]) => {
         const ai = order.indexOf(a);

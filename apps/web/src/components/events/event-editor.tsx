@@ -8,15 +8,18 @@ import { EventArtifactUploadField } from "@/components/files/file-upload-field";
 import {
   FilmSlateIcon,
   GearIcon,
+  CameraIcon,
   ClockIcon,
   MegaphoneIcon,
   PackageIcon,
   PaintBrushIcon,
   PlusIcon,
+  QuestionIcon,
   SpeakerHighIcon,
   TrashIcon,
   TruckIcon,
   UserPlusIcon,
+  VideoCameraIcon,
   WrenchIcon,
   type Icon,
 } from "@phosphor-icons/react";
@@ -37,7 +40,7 @@ import { MultiSelectFilter } from "@/components/inventory/multi-select-filter";
 import { VenuePicker } from "@/components/venues/venue-picker";
 import { VenueDetailsButton } from "@/components/venues/venue-details-sheet";
 import { useSessionShell, useSessionViewer } from "@/components/session-shell-provider";
-import { EventBandPaymentSection } from "@/components/events/event-band-payment-section";
+import { EventArtistBillSection } from "@/components/events/event-artist-bill-section";
 import { EventLinkedInvoicesField } from "@/components/events/event-linked-invoices-field";
 import { EventBandRidersSection } from "@/components/events/event-band-riders-section";
 import { EventBriefButton } from "@/components/events/event-brief-button";
@@ -153,7 +156,15 @@ function EventArtifactAttachment({
 type EventType = "Crewed Event" | "Rental with Crew" | "Dry Hire" | "Services Only";
 type StoredEventType = EventType | "Dry Rental";
 type RentalFulfillmentMode = "delivery" | "will_call";
-type EventTeam = "Design" | "Marketing" | "Lighting" | "Sound" | "Operations";
+type EventTeam =
+  | "Design"
+  | "Photography"
+  | "Videography"
+  | "Sound"
+  | "Lighting"
+  | "Promotion"
+  | "Trivia"
+  | "Operations";
 type ShiftDraft = {
   id?: Id<"eventCrewShifts">;
   scheduleBlockId?: Id<"eventScheduleBlocks">;
@@ -171,7 +182,16 @@ type ShiftDraft = {
 };
 
 const EVENT_TYPES: EventType[] = ["Crewed Event", "Rental with Crew", "Dry Hire", "Services Only"];
-const EVENT_TEAMS: EventTeam[] = ["Design", "Marketing", "Lighting", "Sound", "Operations"];
+const EVENT_TEAMS: EventTeam[] = [
+  "Design",
+  "Photography",
+  "Videography",
+  "Sound",
+  "Lighting",
+  "Promotion",
+  "Trivia",
+  "Operations",
+];
 const EVENT_TYPE_ICONS: Record<EventType, Icon> = {
   "Crewed Event": FilmSlateIcon,
   "Rental with Crew": TruckIcon,
@@ -180,9 +200,12 @@ const EVENT_TYPE_ICONS: Record<EventType, Icon> = {
 };
 const TEAM_ICONS: Record<EventTeam, Icon> = {
   Design: PaintBrushIcon,
-  Marketing: MegaphoneIcon,
-  Lighting: GearIcon,
+  Photography: CameraIcon,
+  Videography: VideoCameraIcon,
   Sound: SpeakerHighIcon,
+  Lighting: GearIcon,
+  Promotion: MegaphoneIcon,
+  Trivia: QuestionIcon,
   Operations: WrenchIcon,
 };
 
@@ -497,8 +520,9 @@ export function EventEditor({
       additionalHostGroupIds: (eventData.event.additionalHostGroupIds ?? [])
         .map((id) => String(id))
         .filter((id) => id && id !== (eventData.event.invoiceId ? "" : linkedHostGroupId)),
-      eventManagerUserId: eventData.event.eventManagerUserId || undefined,
-      dayOfLeadUserId: eventData.event.dayOfLeadUserId || undefined,
+      // "" matches buildOverviewPayload for an empty selection.
+      eventManagerUserId: eventData.event.eventManagerUserId || "",
+      dayOfLeadUserId: eventData.event.dayOfLeadUserId || "",
       bandsCostUsd: Number(eventData.event.bandsCostUsd ?? 0),
       externalRentalsCostUsd: Number(eventData.event.externalRentalsCostUsd ?? 0),
       otherCostUsd: Number(eventData.event.otherCostUsd ?? 0),
@@ -539,9 +563,10 @@ export function EventEditor({
       EVENT_EDITOR_TABS.filter((tab) => {
         if (hideSchedule && tab === "schedule") return false;
         if (hideEquipment && tab === "equipment") return false;
+        if (!eventId && tab === "artists") return false;
         return true;
       }),
-    [hideSchedule, hideEquipment],
+    [hideSchedule, hideEquipment, eventId],
   );
 
   const resolvedActiveTab: EventEditorTabId = visibleTabs.includes(activeTab) ? activeTab : "overview";
@@ -744,8 +769,9 @@ export function EventEditor({
       additionalHostGroupIds: additionalHostGroupIds
         .filter((id) => id && id !== effectivePrimaryHostGroupId)
         .map((id) => id as Id<"invoiceGroups">),
-      eventManagerUserId: managerUserId || undefined,
-      dayOfLeadUserId: dayOfLeadUserId || undefined,
+      // Send the raw value: "" is an explicit clear, undefined is "unchanged".
+      eventManagerUserId: managerUserId,
+      dayOfLeadUserId,
       bandsCostUsd: Number(bandsCostUsd || "0"),
       externalRentalsCostUsd: Number(externalRentalsCostUsd || "0"),
       otherCostUsd: Number(otherCostUsd || "0"),
@@ -1530,6 +1556,7 @@ export function EventEditor({
                 onChange={setManagerUserId}
                 options={userSelectOptions}
                 emptyLabel="Select event manager"
+                clearable
               />
             </div>
             <div className="space-y-1">
@@ -1539,6 +1566,7 @@ export function EventEditor({
                 onChange={setDayOfLeadUserId}
                 options={userSelectOptions}
                 emptyLabel="Select day-of lead"
+                clearable
               />
             </div>
             <div className="space-y-1 md:col-span-3">
@@ -1641,8 +1669,6 @@ export function EventEditor({
         <EventContactsSection eventId={eventId} canEdit={canEdit} />
       ) : null}
 
-      {resolvedActiveTab === "overview" && eventId ? <EventBandRidersSection eventId={eventId} /> : null}
-      {resolvedActiveTab === "overview" && eventId ? <EventBandPaymentSection eventId={eventId} /> : null}
       {resolvedActiveTab === "overview" && eventId ? <EventPostMortemSection eventId={eventId} /> : null}
       {resolvedActiveTab === "overview" && eventId && canEdit ? (
         <EventPostMortemSummary eventId={eventId} />
@@ -1706,6 +1732,13 @@ export function EventEditor({
         </Card>
       ) : null}
 
+      {resolvedActiveTab === "artists" && eventId ? (
+        <div className="space-y-4">
+          <EventArtistBillSection eventId={eventId} canEdit={canEdit} />
+          <EventBandRidersSection eventId={eventId} />
+        </div>
+      ) : null}
+
       {resolvedActiveTab === "schedule" ? (
         <fieldset disabled={readOnly} className="contents">
         <Card>
@@ -1760,6 +1793,7 @@ export function EventEditor({
                     onChange={(value) => setSelectedCrewUserId(value)}
                     options={userSelectOptions}
                     emptyLabel="Select crew user"
+                    clearable
                   />
                 </div>
                 <Button
@@ -1861,8 +1895,11 @@ export function EventEditor({
                                               ...shift,
                                               userId: value || undefined,
                                               personName:
-                                                userSelectOptions.find((option) => option.value === value)?.label ??
-                                                shift.personName,
+                                                (value
+                                                  ? userSelectOptions.find(
+                                                      (option) => option.value === value,
+                                                    )?.label
+                                                  : "") ?? shift.personName,
                                             }
                                           : shift,
                                       ),
@@ -1870,6 +1907,7 @@ export function EventEditor({
                                   }
                                   options={userSelectOptions}
                                   emptyLabel="Select crew user"
+                                  clearable
                                 />
                               </div>
                             )}
@@ -2007,7 +2045,11 @@ export function EventEditor({
                                           ...row,
                                           userId: value || undefined,
                                           personName:
-                                            userSelectOptions.find((option) => option.value === value)?.label ?? row.personName,
+                                            (value
+                                              ? userSelectOptions.find(
+                                                  (option) => option.value === value,
+                                                )?.label
+                                              : "") ?? row.personName,
                                         }
                                       : row,
                                   ),
@@ -2015,6 +2057,7 @@ export function EventEditor({
                               }
                               options={userSelectOptions}
                               emptyLabel="Select crew user"
+                              clearable
                             />
                           </div>
                         )}

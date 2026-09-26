@@ -74,11 +74,17 @@ export type EmailTemplate =
   | "quote_approved"
   | "payment_proof_rejected"
   | "damage_report_admin"
+  | "artist_need_inquiry"
   | "weekly_digest"
   | "this_week_at_arbor";
 
 export function eventDashboardUrl(eventId: string) {
   return `${SITE_URL}/dashboard/events/${eventId}`;
+}
+
+/** Deep link to the event editor's Artists tab. */
+export function eventArtistsUrl(eventId: string) {
+  return `${SITE_URL}/dashboard/events/${eventId}/artists`;
 }
 
 export function invoiceDashboardUrl(invoiceId: string) {
@@ -242,6 +248,8 @@ export function subjectForTemplate(template: EmailTemplate, context: string) {
       return `Payment proof needs attention: ${context}`;
     case "damage_report_admin":
       return `New damage report: ${context}`;
+    case "artist_need_inquiry":
+      return `Artist requested to perform: ${context}`;
     case "weekly_digest":
       return `Your Arbor Live week: ${context}`;
     case "this_week_at_arbor":

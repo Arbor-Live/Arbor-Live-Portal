@@ -17,7 +17,7 @@ plan. Opt into shared cloud Dev with `E2E_USE_CLOUD_DEV=1` or
 `CONVEX_AGENT_MODE=cloud`. `E2E_SKIP_BOOT=1` reuses a running stack and warns if
 the URL looks like cloud.
 
-**Last updated:** 2026-09-19 (Batches 1–12 on `main`, Batches 13–14 on `t3code/next-e2e-tests`, Batch 15 on `t3code/auto-print-event-briefs`, Batch 16 in [#255](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/255))
+**Last updated:** 2026-09-23 (artist-org invite resend/remove on `/dashboard/artists`)
 
 ## Batch history
 
@@ -40,6 +40,7 @@ the URL looks like cloud.
 | **14** | on branch | Money long tail: fee definitions and terms templates — the two settings cards on `/dashboard/financial-hub` that feed the invoice editor and the public quote. The fee spec drives CRUD (add/edit default amount/disable/enable/delete) and then the editor: a definition pre-fills the fee-row rate from `defaultAmountUsd` and the persisted line carries `feeDefinitionId`. The terms spec drives CRUD and then attaches a template to a draft invoice, asserting `termsIds` persisted *and* the public quote page renders the combined markdown. (The invoice managers roster spec shipped with this batch was removed — the roster page it covered was deleted as part of the sidebar cleanup that also removed the Managers nav entry.) |
 | **15** | [#248](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/248) | Warehouse print queue: `print-queue.spec.ts` seeds a printer and an event, drives the real enqueue→render path to `ready`, asserts the queue page shows the printer and job and that Reprint queues a second copy, then downloads the brief from the event editor. New seeds: `seedPrinter`, `enqueueBriefForEvent`, `getPrintQueueState`. |
 | **16** | [#255](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/255) | Event editor Brief menu: `View` downloads the brief PDF and `Print` queues it for the warehouse printer; `print-queue.spec.ts` covers both menu actions. Also fixes the print agent matching a bare `ipps` backend scheme instead of a real `ipp://` device URI. |
+| **17** | [#321](https://github.com/Arbor-Live/Arbor-Live-Portal/pull/321) | The bill: one Artists-tab card where each position is either an open slot (name/type/vibe/status + inquiries) or a filled act (set + soundcheck windows, payout). `events/event-artist-needed.spec.ts` opens a position, has a band request to perform from `/dashboard/opportunities`, asserts it flips to inquiring with the message visible to staff, and asserts the band sees their set and soundcheck windows on "Your shows". Also covers the band-only guard on that page. Moved the bill and riders off Overview, so `event-band-riders.spec.ts` and `band-shows-home.spec.ts` now navigate to `/artists`. |
 
 ## Status legend
 
@@ -168,7 +169,8 @@ the URL looks like cloud.
 | Band shows home + assignment | Covered | `bands/band-shows-home.spec.ts` — `/dashboard` Your shows, upcoming chip, e-sign from recent card, staff Assign band → `band_assigned` email |
 | Public `/artists/apply` → admin approve | Covered | `bands/band-application.spec.ts` (Batch 3) |
 | Band payouts admin queue UI | Covered | `bands/band-payouts-queue.spec.ts` — send signature request + mark paid |
-| Band portal beyond e-sign | Partial | Onboarding (Batch 4) + shows home; payee settings still light |
+| Band portal beyond e-sign | Partial | Onboarding (Batch 4) + shows home + artist-page invite resend/remove; payee settings still light |
+| Artist org invite resend / remove (`/dashboard/artists`) | Covered | `bands/artist-invite-lifecycle.spec.ts` — invite → resend same row → remove, dismissed confirm, and refused access-level mismatch |
 | Band org profile admin birdseye (`/users/organizations`) | Covered | `users/band-org-profile.spec.ts` (Batch 12) — admin edits the display name, asserts via `getBandOrganizationProfileByDisplayName` |
 
 ### Marketing and public site
@@ -179,6 +181,7 @@ the URL looks like cloud.
 | Short links CRUD | Covered | `marketing/short-link-crud.spec.ts` (Batch 6); Worker redirect still out of suite |
 | Work/stories publish | Deferred | — |
 | Public directories (`/crew`, `/artists`, `/events`) | Covered | `smoke/public-directories.spec.ts` (Batch 6) |
+| Public event show page (`/events/:id`) newsletter + calendar | Covered | `smoke/public-directories.spec.ts` — Add to calendar menu, Stay in the loop, this-show ICS |
 
 ### Other
 
@@ -213,6 +216,7 @@ the URL looks like cloud.
 | `bands/band-payment-esign.spec.ts` | Band e-sign + helper mark paid |
 | `bands/band-shows-home.spec.ts` | Band Your shows home, assign → email, e-sign from card |
 | `bands/band-application.spec.ts` | Band apply + admin approve (Batch 3) |
+| `bands/artist-invite-lifecycle.spec.ts` | Artist-page pending invite resend + remove, including access-level mismatch |
 | `booking/booking-submit.spec.ts` | Public `/request` wizard submit (Batch 3) |
 | `booking/request-inbox.spec.ts` | Inbox list UX: open view, status filter, all statuses (Batch 13) |
 | `booking/request-staff-actions.spec.ts` | Assignee + staff notes + mark in review (Batch 13) |
@@ -234,7 +238,7 @@ the URL looks like cloud.
 | `timecards/timecard-view.spec.ts` | Crew + admin timecard read path (Batch 6) |
 | `marketing/short-link-crud.spec.ts` | Short link create → delete (Batch 6) |
 | `inventory/lost-found-public.spec.ts` | Public `/e/{assetId}` found + not-found (Batch 6) |
-| `smoke/public-directories.spec.ts` | `/crew`, `/artists`, `/events` render (Batch 6) |
+| `smoke/public-directories.spec.ts` | `/crew`, `/artists`, `/events` render (Batch 6); public event show page newsletter + calendar |
 | `bands/band-payouts-queue.spec.ts` | Send signature request + mark paid from the queue (Batch 6) |
 | `auth/admin-route-guards.spec.ts` | Non-admin refused on the 9 sidebar `adminOnly` routes (Batch 7) |
 | `auth/backend-enforcement.spec.ts` | Convex refuses privileged query/mutation from a crew JWT (Batch 7) |

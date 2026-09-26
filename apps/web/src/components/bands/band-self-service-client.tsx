@@ -6,7 +6,7 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
 import { FormSaveBar } from "@/components/forms";
 import { MarketingLinksEditor } from "@/components/marketing/marketing-links-editor";
-import { Form, FormControl, FormField, FormItem, FormLabel } from "@/components/ui/form";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { TextFormField } from "@/components/forms/text-form-field";
 import { TextareaFormField } from "@/components/forms/textarea-form-field";
 import { Button } from "@/components/ui/button";
@@ -26,7 +26,10 @@ import { BandHeroUploadField } from "@/components/files/file-upload-field";
 import { useResolvedAssetUrl } from "@/components/files/stored-asset-image";
 import { useConvexForm } from "@/hooks/use-convex-form";
 import { useBandPublicSlugAutofill } from "@/hooks/use-band-public-slug-autofill";
+import { getConvexErrorMessage } from "@/lib/convex-error";
 import { formatDate } from "@/lib/format";
+import { notify } from "@/lib/notify";
+import { useAppDialog } from "@/components/ui/app-dialog";
 import {
   bandInviteSchema,
   bandProfileSchema,
@@ -57,10 +60,14 @@ export function BandSelfServiceClient() {
   const pendingInvites = useQuery(api.users.listPendingInvitesForActiveOrganization, {});
   const updateProfile = useMutation(api.users.updateActiveBandProfile);
   const inviteMember = useMutation(api.users.inviteMemberToActiveOrganization);
+  const resendInvite = useMutation(api.users.resendInviteForActiveOrganization);
+  const cancelInvite = useMutation(api.users.cancelInviteForActiveOrganization);
   const updateMemberBandRole = useMutation(api.users.updateMemberBandRole);
+  const { confirm } = useAppDialog();
   const [inviteConfirmation, setInviteConfirmation] = useState<string | null>(null);
   const [bandRoleDrafts, setBandRoleDrafts] = useState<Record<string, string>>({});
   const [bandRoleBusyId, setBandRoleBusyId] = useState<string | null>(null);
+  const [inviteBusyId, setInviteBusyId] = useState<string | null>(null);
 
   const profileForm = useConvexForm<BandProfileFormValues>({
     schema: bandProfileSchema,
@@ -143,20 +150,59 @@ export function BandSelfServiceClient() {
 
   const onInvite = inviteForm.submitMutation(
     async (values) => {
-      await inviteMember({
+      const result = await inviteMember({
         email: values.email.trim(),
         role: values.role,
         bandRole: values.bandRole?.trim() || undefined,
       });
-      return values;
+      return { ...values, resent: result.resent };
     },
     {
       onSuccess: (values) => {
-        setInviteConfirmation(`Invitation sent to ${values.email.trim()}.`);
+        setInviteConfirmation(
+          values.resent
+            ? `Invitation resent to ${values.email.trim()}.`
+            : `Invitation sent to ${values.email.trim()}.`,
+        );
         inviteForm.reset({ email: "", role: values.role, bandRole: "" });
       },
     },
   );
+
+  async function onResendInvite(invite: { invitationId: string; email: string }) {
+    if (inviteBusyId) return;
+    setInviteBusyId(invite.invitationId);
+    try {
+      await resendInvite({ invitationId: invite.invitationId });
+      notify.success(`Invitation resent to ${invite.email}.`);
+    } catch (error) {
+      notify.error(getConvexErrorMessage(error));
+    } finally {
+      setInviteBusyId((current) => (current === invite.invitationId ? null : current));
+    }
+  }
+
+  async function onRemoveInvite(invite: { invitationId: string; email: string }) {
+    if (inviteBusyId) return;
+    setInviteBusyId(invite.invitationId);
+    try {
+      if (
+        !(await confirm({
+          title: `Remove the invitation for ${invite.email}?`,
+          confirmLabel: "Remove",
+          destructive: true,
+        }))
+      ) {
+        return;
+      }
+      await cancelInvite({ invitationId: invite.invitationId });
+      notify.success(`Invitation removed for ${invite.email}.`);
+    } catch (error) {
+      notify.error(getConvexErrorMessage(error));
+    } finally {
+      setInviteBusyId((current) => (current === invite.invitationId ? null : current));
+    }
+  }
 
   async function onSaveBandRole(userId: string, currentBandRole: string) {
     const nextRole = (bandRoleDrafts[userId] ?? currentBandRole).trim();
@@ -269,7 +315,7 @@ export function BandSelfServiceClient() {
             </form>
           </Form>
 
-          <Card>
+          <Card data-testid="artist-team-card">
             <CardHeader>
               <CardTitle>Your team</CardTitle>
               <CardDescription>Invite members and manage portal access.</CardDescription>
@@ -282,7 +328,7 @@ export function BandSelfServiceClient() {
               <Form {...inviteForm}>
                 <form
                   onSubmit={inviteForm.handleSubmit(onInvite)}
-                  className="grid gap-3 border p-3 md:grid-cols-[1fr_1fr_180px_auto] md:items-end"
+                  className="grid gap-3 border p-3 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_9.5rem_auto]"
                 >
                   <TextFormField
                     name="email"
@@ -299,23 +345,24 @@ export function BandSelfServiceClient() {
                     control={inviteForm.control}
                     name="role"
                     render={({ field }) => (
-                      <FormItem>
+                      <FormItem className="min-w-0">
                         <FormLabel>Access level</FormLabel>
                         <Select value={field.value} onValueChange={field.onChange}>
-                          <FormControl>
-                            <SelectTrigger>
+                          <FormControl className="w-full">
+                            <SelectTrigger className="w-full shadow-none">
                               <SelectValue />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="org_member">Member — edit profile & riders</SelectItem>
-                            <SelectItem value="org_admin">Admin — manage team & access</SelectItem>
+                            <SelectItem value="org_member">Member</SelectItem>
+                            <SelectItem value="org_admin">Admin</SelectItem>
                           </SelectContent>
                         </Select>
+                        <FormMessage />
                       </FormItem>
                     )}
                   />
-                  <Button type="submit" disabled={inviteForm.saveStatus === "saving"}>
+                  <Button type="submit" className="md:self-end" disabled={inviteForm.saveStatus === "saving"}>
                     {inviteForm.saveStatus === "saving" ? "Sending…" : "Send invitation"}
                   </Button>
                 </form>
@@ -407,7 +454,8 @@ export function BandSelfServiceClient() {
                 {pendingInvites?.map((invite) => (
                   <div
                     key={invite.invitationId}
-                    className="flex items-center justify-between gap-3 border border-dashed p-3 text-sm"
+                    data-testid={`artist-invite-row-${invite.invitationId}`}
+                    className="flex flex-wrap items-center justify-between gap-3 border border-dashed p-3 text-sm"
                   >
                     <div>
                       <p className="font-medium">{invite.email}</p>
@@ -417,7 +465,26 @@ export function BandSelfServiceClient() {
                         {invite.expiresAt ? formatDate(invite.expiresAt) : "soon"}
                       </p>
                     </div>
-                    <span className="text-xs text-muted-foreground">Pending</span>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={inviteBusyId !== null}
+                        onClick={() => void onResendInvite(invite)}
+                      >
+                        Resend
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={inviteBusyId !== null}
+                        onClick={() => void onRemoveInvite(invite)}
+                      >
+                        Remove
+                      </Button>
+                    </div>
                   </div>
                 ))}
                 {pendingInvites?.length === 0 ? (

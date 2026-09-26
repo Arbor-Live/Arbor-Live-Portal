@@ -877,6 +877,49 @@ export const seedCrewedEventWithSchedule = mutation({
   },
 });
 
+/**
+ * Test-only: a public, listable show so Playwright can hit `/events/:id`
+ * (newsletter + calendar section, per-event ICS).
+ */
+export const seedPublicShowPage = mutation({
+  args: {
+    title: v.optional(v.string()),
+  },
+  returns: v.object({
+    eventId: v.id("events"),
+    title: v.string(),
+    path: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const now = Date.now();
+    const { startAt, endAt } = futureEventWindow(21);
+    const title = args.title?.trim() || `E2E Public Show ${now}`;
+    const eventId = await ctx.db.insert("events", {
+      title,
+      status: "ready",
+      visibility: "public",
+      publicToken: makeToken(),
+      startAt,
+      endAt,
+      timezone: "America/Los_Angeles",
+      spansMultipleDays: false,
+      setupOnly: false,
+      strikeOnly: false,
+      requiresShowWindow: true,
+      venueName: "E2E Memorial Church",
+      eventType: "Crewed Event",
+      createdAt: now,
+      updatedAt: now,
+    });
+    return {
+      eventId,
+      title,
+      path: `/events/${eventId}`,
+    };
+  },
+});
+
 export const seedApprovablePublicQuote = mutation({
   args: {
     clientGroupName: v.optional(v.string()),
@@ -3172,6 +3215,11 @@ export const seedUpcomingBandShow = mutation({
     role: v.optional(
       v.union(v.literal("headliner"), v.literal("support"), v.literal("other")),
     ),
+    /** Run-of-show windows, so artist-facing display can be asserted. */
+    setStartsAt: v.optional(v.number()),
+    setEndsAt: v.optional(v.number()),
+    soundcheckStartsAt: v.optional(v.number()),
+    soundcheckEndsAt: v.optional(v.number()),
   },
   returns: v.object({
     eventId: v.id("events"),
@@ -3211,6 +3259,10 @@ export const seedUpcomingBandShow = mutation({
         eventId,
         organizationId,
         role: args.role ?? "headliner",
+        setStartsAt: args.setStartsAt,
+        setEndsAt: args.setEndsAt,
+        soundcheckStartsAt: args.soundcheckStartsAt,
+        soundcheckEndsAt: args.soundcheckEndsAt,
         createdAt: now,
         updatedAt: now,
       });
@@ -3357,6 +3409,7 @@ export const getLatestCrewApplicationByEmail = query({
       name: v.string(),
       email: v.string(),
       vertical: v.string(),
+      discipline: v.optional(v.string()),
     }),
   ),
   handler: async (ctx, args) => {
@@ -3371,6 +3424,7 @@ export const getLatestCrewApplicationByEmail = query({
       name: match.name,
       email: match.email,
       vertical: match.vertical,
+      discipline: match.discipline,
     };
   },
 });
@@ -3609,6 +3663,7 @@ export const seedSubmittedCrewApplication = mutation({
       email,
       phone: "6505550199",
       heardAboutUs: "E2E test suite",
+      experience: "E2E test suite",
       vertical: "Crew",
       discipline: "Sound",
       crewAvailabilityDays: ["friday"],
@@ -5342,6 +5397,63 @@ export const getInvitationStateByEmail = query({
       pendingPayrollMethod: pending?.payrollMethod ?? null,
       hasPendingToken: Boolean(pending?.token),
     };
+  },
+});
+
+/**
+ * Test-only: every invitation row for an email, newest first.
+ *
+ * `getInvitationStateByEmail` returns only the latest match, so it cannot see a
+ * duplicate. `inviteUserAdmin` must reuse one pending row per
+ * (email, organization) — this is what asserts that.
+ */
+export const listInvitationsByEmail = query({
+  args: { email: v.string() },
+  returns: v.array(
+    v.object({
+      invitationId: v.string(),
+      status: v.string(),
+      role: v.string(),
+      organizationId: v.string(),
+      createdAt: v.number(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    assertE2eHelpersEnabled();
+    const email = args.email.trim().toLowerCase();
+    const result = await ctx.runQuery(components.betterAuth.adapter.findMany, {
+      model: "invitation",
+      paginationOpts: { cursor: null, numItems: 2000 },
+    });
+    const rows = (result?.page ?? []) as Array<{
+      id?: string;
+      _id?: string;
+      email?: string;
+      status?: string;
+      role?: string;
+      organizationId?: string;
+      createdAt?: number;
+    }>;
+    const matches: Array<{
+      invitationId: string;
+      status: string;
+      role: string;
+      organizationId: string;
+      createdAt: number;
+    }> = [];
+    for (const row of rows) {
+      if ((row.email ?? "").toLowerCase() !== email) continue;
+      const invitationId = getId(row);
+      if (!invitationId) continue;
+      matches.push({
+        invitationId,
+        status: row.status ?? "",
+        role: row.role ?? "",
+        organizationId: row.organizationId ?? "",
+        createdAt: row.createdAt ?? 0,
+      });
+    }
+    return matches.sort((a, b) => b.createdAt - a.createdAt);
   },
 });
 

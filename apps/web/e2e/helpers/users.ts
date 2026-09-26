@@ -60,6 +60,22 @@ export function waitForInvitationState(
   return pollConvex<InvitationState>("e2eHelpers:getInvitationStateByEmail", { email }, predicate);
 }
 
+export type InvitationSummary = {
+  invitationId: string;
+  status: string;
+  role: string;
+  organizationId: string;
+  createdAt: number;
+};
+
+/**
+ * Every invitation row for an email. Unlike `waitForInvitationState`, which
+ * returns only the latest match, this exposes duplicates.
+ */
+export function listInvitationsByEmail(email: string) {
+  return runConvex("e2eHelpers:listInvitationsByEmail", { email }) as InvitationSummary[];
+}
+
 /**
  * Open `/dashboard/users/access` and return the seeded user's table row.
  *
