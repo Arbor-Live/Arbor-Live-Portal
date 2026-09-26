@@ -236,6 +236,50 @@ export const backfillAllAlbums = internalAction({
   },
 });
 
+/**
+ * An asset uploaded to an event also belongs in each linked artist's album, so
+ * an artist's album is the one place with all of their photos. Best-effort per
+ * artist: the event album copy is already saved, so one bad artist album must
+ * not fail the others.
+ */
+async function mirrorEventAssetToArtistAlbums(
+  ctx: ActionCtx,
+  args: {
+    eventId: Id<"events">;
+    immichAssetId: string;
+    originalFileName: string;
+    type: "IMAGE" | "VIDEO";
+  },
+) {
+  const artists: Array<{ organizationId: string; displayName: string }> = await ctx.runQuery(
+    internal.immichDb.listEventArtistOrgsInternal,
+    { eventId: args.eventId },
+  );
+
+  for (const artist of artists) {
+    try {
+      const album = await ensureAlbumCore(ctx, {
+        entityType: "band",
+        entityId: artist.organizationId,
+        albumName: `Band: ${artist.displayName}`,
+        description: `Arbor Live Portal band album for ${artist.displayName}`,
+      });
+      await addAssetsToImmichAlbum(album.immichAlbumId, [args.immichAssetId]);
+      await ctx.runMutation(internal.immichDb.recordAssetInternal, {
+        albumLinkId: album.albumLinkId,
+        immichAssetId: args.immichAssetId,
+        originalFileName: args.originalFileName,
+        type: args.type,
+      });
+    } catch (error) {
+      console.error(
+        `Failed to mirror asset ${args.immichAssetId} into artist album ${artist.organizationId}`,
+        error,
+      );
+    }
+  }
+}
+
 export const addUploadedAssetToAlbum = internalAction({
   args: {
     albumLinkId: v.id("immichAlbumLinks"),
@@ -259,6 +303,15 @@ export const addUploadedAssetToAlbum = internalAction({
     await ctx.runAction(internal.immichActions.syncAlbumAssets, {
       albumLinkId: args.albumLinkId,
     });
+
+    if (link.entityType === "event") {
+      await mirrorEventAssetToArtistAlbums(ctx, {
+        eventId: link.entityId as Id<"events">,
+        immichAssetId: args.immichAssetId,
+        originalFileName: args.originalFileName,
+        type: args.type,
+      });
+    }
     return null;
   },
 });

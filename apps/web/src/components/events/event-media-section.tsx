@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useAction, useQuery } from "convex/react";
+import { useAction, usePaginatedQuery, useQuery } from "convex/react";
 import {
   CameraIcon,
   CheckCircleIcon,
@@ -46,7 +46,16 @@ function StatusIcon({ status }: { status: CrewMediaStatus }) {
 
 export function EventMediaSection({ eventId }: { eventId: Id<"events"> }) {
   const viewer = useSessionViewer();
-  const media = useQuery(api.immich.listEventMedia, { eventId });
+  const album = useQuery(api.immich.getEventMediaAlbum, { eventId });
+  const {
+    results: assets,
+    status: assetsStatus,
+    loadMore,
+  } = usePaginatedQuery(
+    api.immich.listEventMediaAssets,
+    { eventId },
+    { initialNumItems: 60 },
+  );
   const ensureUploadAlbum = useAction(api.immichEnsure.ensureUploadAlbum);
 
   const [ensuring, setEnsuring] = useState(false);
@@ -87,8 +96,8 @@ export function EventMediaSection({ eventId }: { eventId: Id<"events"> }) {
             <p className="text-sm text-muted-foreground">Preparing media album…</p>
           ) : (
             <>
-              {media?.album ? (
-                <MediaAlbumLink albumName={media.album.albumName} albumUrl={media.album.albumUrl} />
+              {album ? (
+                <MediaAlbumLink albumName={album.albumName} albumUrl={album.albumUrl} />
               ) : null}
               <MediaUploadDropzone
                 targetType="event"
@@ -98,7 +107,12 @@ export function EventMediaSection({ eventId }: { eventId: Id<"events"> }) {
                   notify.success("Upload complete.");
                 }}
               />
-              <MediaGallery assets={media?.assets ?? []} />
+              <MediaGallery
+                assets={assets}
+                loadMore={() => loadMore(60)}
+                canLoadMore={assetsStatus === "CanLoadMore"}
+                isLoadingMore={assetsStatus === "LoadingMore"}
+              />
             </>
           )}
         </CardContent>

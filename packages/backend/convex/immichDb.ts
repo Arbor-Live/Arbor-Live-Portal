@@ -158,7 +158,9 @@ export const recordAssetInternal = internalMutation({
   handler: async (ctx, args) => {
     const existing = await ctx.db
       .query("immichAssetRecords")
-      .withIndex("by_immichAssetId", (q) => q.eq("immichAssetId", args.immichAssetId))
+      .withIndex("by_albumLinkId_and_immichAssetId", (q) =>
+        q.eq("albumLinkId", args.albumLinkId).eq("immichAssetId", args.immichAssetId),
+      )
       .first();
     if (existing) return null;
     await ctx.db.insert("immichAssetRecords", {
@@ -240,6 +242,37 @@ export const getBandDisplayNameInternal = internalQuery({
   returns: v.string(),
   handler: async (ctx, args) => {
     return await resolveBandDisplayName(ctx, args.organizationId);
+  },
+});
+
+/**
+ * Artist organizations on an event's lineup — the albums that event media
+ * should also flow into so each artist has one central album.
+ */
+export const listEventArtistOrgsInternal = internalQuery({
+  args: { eventId: v.id("events") },
+  returns: v.array(
+    v.object({
+      organizationId: v.string(),
+      displayName: v.string(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const participations = await ctx.db
+      .query("eventBandParticipations")
+      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+      .take(50);
+    const seen = new Set<string>();
+    const artists: Array<{ organizationId: string; displayName: string }> = [];
+    for (const row of participations) {
+      if (seen.has(row.organizationId)) continue;
+      seen.add(row.organizationId);
+      artists.push({
+        organizationId: row.organizationId,
+        displayName: await resolveBandDisplayName(ctx, row.organizationId),
+      });
+    }
+    return artists;
   },
 });
 

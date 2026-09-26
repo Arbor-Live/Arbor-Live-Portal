@@ -384,6 +384,19 @@ Event types (drive which editor tabs and quick-add blocks appear):
   event** tab uses the same Day 1 / Day 2 switcher as the Event tab: each linked
   day has its own album and feedback form, and the tab appears once any linked
   day has ended.
+- Media uploaded to an event is also mirrored into the album of each artist on
+  the event lineup (`immichActions.mirrorEventAssetToArtistAlbums`), so an
+  artist's album is the single home for all of their photos. `immichAssetRecords`
+  is per-album (the same asset may have a row for the event and each artist
+  album); uploads to a band album are not copied back to events.
+- The public booking-request / quote portals let clients add photos in the
+  **After the event** tab for ended events (`publicMedia.ts`,
+  `PublicPostEventSection`). Clients upload straight to Immich through the album
+  share key, but registration flows through `recordMediaUploadByToken`, so those
+  uploads mirror to artist albums too. Token access is scoped to the token's
+  linked invoice events and rate-limited. The client post-event email's album
+  CTA points at the portal (`albumPortalUrl`) so uploads register, falling back
+  to the raw Immich link when no portal token exists.
 
 ## Marketing site
 

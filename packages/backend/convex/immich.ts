@@ -1,31 +1,25 @@
 import { v } from "convex/values";
+import { paginationOptsValidator } from "convex/server";
 import { internal } from "./_generated/api";
-import type { Doc, Id } from "./_generated/dataModel";
-import { mutation, query, type QueryCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
+import { mutation, query } from "./_generated/server";
 import {
   canUploadToAlbum,
   getAlbumLinkForBand,
   getAlbumLinkForEvent,
-  getAlbumLinkIdsForEntity,
   requireAssetAccess,
   requireBandAlbumAccess,
   requireEventMediaAccess,
 } from "./lib/immichAccess";
-import { buildImmichAlbumUrl, buildSharedAssetUrl, getImmichPublicBaseUrl } from "./lib/immichClient";
+import { buildImmichAlbumUrl, getImmichPublicBaseUrl } from "./lib/immichClient";
+import {
+  immichAssetTypeValue,
+  mediaAssetPageValidator,
+  paginateAlbumAssets,
+} from "./lib/immichAssets";
 import { requireArborInternalContext, requireAuth, requireBandContext } from "./lib/auth";
 
 const entityTypeValue = v.union(v.literal("band"), v.literal("event"));
-const assetTypeValue = v.union(v.literal("IMAGE"), v.literal("VIDEO"));
-
-const mediaAssetValidator = v.object({
-  immichAssetId: v.string(),
-  originalFileName: v.string(),
-  type: assetTypeValue,
-  createdAt: v.number(),
-  thumbnailUrl: v.string(),
-  originalUrl: v.string(),
-  playbackUrl: v.optional(v.string()),
-});
 
 const albumLinkValidator = v.object({
   albumLinkId: v.id("immichAlbumLinks"),
@@ -48,49 +42,9 @@ function toAlbumLink(row: {
   };
 }
 
-function toMediaAsset(row: Doc<"immichAssetRecords">, shareKey: string) {
-  return {
-    immichAssetId: row.immichAssetId,
-    originalFileName: row.originalFileName,
-    type: row.type,
-    createdAt: row.createdAt,
-    thumbnailUrl: buildSharedAssetUrl(row.immichAssetId, "thumbnail", shareKey),
-    originalUrl: buildSharedAssetUrl(row.immichAssetId, "original", shareKey),
-    playbackUrl:
-      row.type === "VIDEO"
-        ? buildSharedAssetUrl(row.immichAssetId, "playback", shareKey)
-        : undefined,
-  };
-}
-
-async function listAssetsForAlbumLinks(
-  ctx: QueryCtx,
-  albumLinkIds: Id<"immichAlbumLinks">[],
-  shareKey?: string,
-) {
-  if (!shareKey) return [];
-  const seen = new Set<string>();
-  const assets = [];
-  for (const albumLinkId of albumLinkIds) {
-    const rows = await ctx.db
-      .query("immichAssetRecords")
-      .withIndex("by_albumLinkId", (q) => q.eq("albumLinkId", albumLinkId))
-      .take(500);
-    for (const row of rows) {
-      if (seen.has(row.immichAssetId)) continue;
-      seen.add(row.immichAssetId);
-      assets.push(toMediaAsset(row, shareKey));
-    }
-  }
-  return assets.sort((a, b) => b.createdAt - a.createdAt);
-}
-
-export const listBandMedia = query({
+export const getBandMediaAlbum = query({
   args: { eventId: v.optional(v.id("events")) },
-  returns: v.object({
-    album: v.union(albumLinkValidator, v.null()),
-    assets: v.array(mediaAssetValidator),
-  }),
+  returns: v.union(albumLinkValidator, v.null()),
   handler: async (ctx, args) => {
     const context = await requireBandContext(ctx);
     await requireBandAlbumAccess(ctx, context.organizationId);
@@ -98,54 +52,55 @@ export const listBandMedia = query({
     if (args.eventId) {
       await requireEventMediaAccess(ctx, args.eventId);
       const albumLink = await getAlbumLinkForEvent(ctx, args.eventId);
-      if (!albumLink) {
-        return { album: null, assets: [] };
-      }
-      return {
-        album: toAlbumLink(albumLink),
-        assets: await listAssetsForAlbumLinks(
-          ctx,
-          await getAlbumLinkIdsForEntity(ctx, "event", args.eventId),
-          albumLink.sharedLinkKey,
-        ),
-      };
+      return albumLink ? toAlbumLink(albumLink) : null;
     }
 
     const albumLink = await getAlbumLinkForBand(ctx, context.organizationId);
-    if (!albumLink) {
-      return { album: null, assets: [] };
-    }
-    return {
-      album: toAlbumLink(albumLink),
-      assets: await listAssetsForAlbumLinks(
-        ctx,
-        await getAlbumLinkIdsForEntity(ctx, "band", context.organizationId),
-        albumLink.sharedLinkKey,
-      ),
-    };
+    return albumLink ? toAlbumLink(albumLink) : null;
   },
 });
 
-export const listEventMedia = query({
+export const listBandMediaAssets = query({
+  args: {
+    eventId: v.optional(v.id("events")),
+    paginationOpts: paginationOptsValidator,
+  },
+  returns: mediaAssetPageValidator,
+  handler: async (ctx, args) => {
+    const context = await requireBandContext(ctx);
+    await requireBandAlbumAccess(ctx, context.organizationId);
+
+    let albumLink;
+    if (args.eventId) {
+      await requireEventMediaAccess(ctx, args.eventId);
+      albumLink = await getAlbumLinkForEvent(ctx, args.eventId);
+    } else {
+      albumLink = await getAlbumLinkForBand(ctx, context.organizationId);
+    }
+    return await paginateAlbumAssets(ctx, albumLink, args.paginationOpts);
+  },
+});
+
+export const getEventMediaAlbum = query({
   args: { eventId: v.id("events") },
-  returns: v.object({
-    album: v.union(albumLinkValidator, v.null()),
-    assets: v.array(mediaAssetValidator),
-  }),
+  returns: v.union(albumLinkValidator, v.null()),
   handler: async (ctx, args) => {
     await requireEventMediaAccess(ctx, args.eventId);
     const albumLink = await getAlbumLinkForEvent(ctx, args.eventId);
-    if (!albumLink) {
-      return { album: null, assets: [] };
-    }
-    return {
-      album: toAlbumLink(albumLink),
-      assets: await listAssetsForAlbumLinks(
-        ctx,
-        await getAlbumLinkIdsForEntity(ctx, "event", args.eventId),
-        albumLink.sharedLinkKey,
-      ),
-    };
+    return albumLink ? toAlbumLink(albumLink) : null;
+  },
+});
+
+export const listEventMediaAssets = query({
+  args: {
+    eventId: v.id("events"),
+    paginationOpts: paginationOptsValidator,
+  },
+  returns: mediaAssetPageValidator,
+  handler: async (ctx, args) => {
+    await requireEventMediaAccess(ctx, args.eventId);
+    const albumLink = await getAlbumLinkForEvent(ctx, args.eventId);
+    return await paginateAlbumAssets(ctx, albumLink, args.paginationOpts);
   },
 });
 
@@ -240,7 +195,7 @@ export const recordUploadedAsset = mutation({
     albumLinkId: v.id("immichAlbumLinks"),
     immichAssetId: v.string(),
     originalFileName: v.string(),
-    type: assetTypeValue,
+    type: immichAssetTypeValue,
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -249,7 +204,9 @@ export const recordUploadedAsset = mutation({
     await canUploadToAlbum(ctx, albumLink);
     const existing = await ctx.db
       .query("immichAssetRecords")
-      .withIndex("by_immichAssetId", (q) => q.eq("immichAssetId", args.immichAssetId))
+      .withIndex("by_albumLinkId_and_immichAssetId", (q) =>
+        q.eq("albumLinkId", args.albumLinkId).eq("immichAssetId", args.immichAssetId),
+      )
       .first();
     if (existing) return null;
     await ctx.db.insert("immichAssetRecords", {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useAction, useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { StarIcon } from "@phosphor-icons/react";
 import { api } from "@/lib/convex-api";
@@ -13,6 +13,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { MediaGallery } from "@/components/media/media-gallery";
+import { MediaUploadDropzone } from "@/components/media/media-upload-dropzone";
 import {
   Form,
   FormControl,
@@ -106,6 +108,20 @@ function PublicPostEventDayContent({
 }) {
   const ensureAlbum = useAction(api.eventFeedbackActions.ensureAlbumShareUrlByToken);
   const submit = useMutation(api.eventFeedback.submitByToken);
+  const uploadConfig = useQuery(api.publicMedia.getMediaUploadConfigByToken, {
+    portal,
+    token,
+    eventId: day.eventId,
+  });
+  const {
+    results: assets,
+    status: assetsStatus,
+    loadMore,
+  } = usePaginatedQuery(
+    api.publicMedia.listEventMediaAssetsByToken,
+    { portal, token, eventId: day.eventId },
+    { initialNumItems: 60 },
+  );
   const [hoveredRating, setHoveredRating] = useState(0);
   const [ensuredAlbumUrl, setEnsuredAlbumUrl] = useState<string | undefined>();
 
@@ -149,23 +165,40 @@ function PublicPostEventDayContent({
 
   return (
     <div className="space-y-4">
-      {albumShareUrl ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Photo album</CardTitle>
-            <CardDescription>
-              Photos and videos from {eventTitle}.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+      <Card>
+        <CardHeader>
+          <CardTitle>Photo album</CardTitle>
+          <CardDescription>
+            Photos and videos from {eventTitle}.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {albumShareUrl ? (
             <Button asChild variant="outline">
               <a href={albumShareUrl} target="_blank" rel="noreferrer">
                 View the album
               </a>
             </Button>
-          </CardContent>
-        </Card>
-      ) : null}
+          ) : null}
+          <MediaUploadDropzone
+            targetType="event"
+            targetId={day.eventId}
+            publicAccess={{ portal, token }}
+            disabled={!uploadConfig}
+          />
+          {assetsStatus === "LoadingFirstPage" ? (
+            <p className="text-sm text-muted-foreground">Loading media…</p>
+          ) : (
+            <MediaGallery
+              assets={assets}
+              emptyMessage="No photos or videos yet. Be the first to add some."
+              loadMore={() => loadMore(60)}
+              canLoadMore={assetsStatus === "CanLoadMore"}
+              isLoadingMore={assetsStatus === "LoadingMore"}
+            />
+          )}
+        </CardContent>
+      </Card>
 
       {day.submitted ? (
         <Card>
