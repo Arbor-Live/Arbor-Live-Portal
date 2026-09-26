@@ -36,17 +36,58 @@ function isValidEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 }
 
+export type TraineeScheduleSpan = {
+  /** Earliest setup block. First-8-hours starts here. */
+  earliestSetupStartsAt?: number;
+  /** Earliest schedule block (setup, show, strike, or custom). */
+  earliestBlockStartsAt?: number;
+  /** Latest schedule block end. Entire-event ends here, including strike after the show. */
+  latestBlockEndsAt?: number;
+};
+
+const EIGHT_HOURS_MS = 8 * 3_600_000;
+
+/**
+ * Event `startAt`/`endAt` is the show window. Setup starts before it and strike
+ * ends after it, so "entire event" must span the schedule blocks, not the show.
+ */
 export function resolveTraineePresenceWindow(
   event: Pick<Doc<"events">, "startAt" | "endAt">,
   presenceMode: Exclude<TraineePresenceMode, "schedule_block">,
-  setupBlockStartsAt: number | undefined,
+  span: TraineeScheduleSpan,
 ): { startsAt: number; endsAt: number } {
   if (presenceMode === "entire_event") {
-    return { startsAt: event.startAt, endsAt: event.endAt };
+    return {
+      startsAt: span.earliestBlockStartsAt ?? event.startAt,
+      endsAt: span.latestBlockEndsAt ?? event.endAt,
+    };
   }
-  const windowStart = setupBlockStartsAt ?? event.startAt;
-  const endsAt = Math.min(windowStart + 8 * 3_600_000, event.endAt);
+  const windowStart = span.earliestSetupStartsAt ?? event.startAt;
+  const endsAt = Math.min(windowStart + EIGHT_HOURS_MS, event.endAt);
   return { startsAt: windowStart, endsAt };
+}
+
+export function traineeScheduleSpan(
+  blocks: Array<{ blockType: string; startsAt: number; endsAt: number }>,
+): TraineeScheduleSpan {
+  let earliestSetupStartsAt: number | undefined;
+  let earliestBlockStartsAt: number | undefined;
+  let latestBlockEndsAt: number | undefined;
+  for (const block of blocks) {
+    if (earliestBlockStartsAt === undefined || block.startsAt < earliestBlockStartsAt) {
+      earliestBlockStartsAt = block.startsAt;
+    }
+    if (latestBlockEndsAt === undefined || block.endsAt > latestBlockEndsAt) {
+      latestBlockEndsAt = block.endsAt;
+    }
+    if (
+      block.blockType === "setup" &&
+      (earliestSetupStartsAt === undefined || block.startsAt < earliestSetupStartsAt)
+    ) {
+      earliestSetupStartsAt = block.startsAt;
+    }
+  }
+  return { earliestSetupStartsAt, earliestBlockStartsAt, latestBlockEndsAt };
 }
 
 async function resolveVenueLocation(
@@ -143,10 +184,7 @@ export async function assertTraineeIntroReady(
     .query("eventScheduleBlocks")
     .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", args.eventId))
     .take(500);
-  const setupStarts = blocks
-    .filter((block) => block.blockType === "setup")
-    .map((block) => block.startsAt);
-  const earliestSetup = setupStarts.length > 0 ? Math.min(...setupStarts) : undefined;
+  const span = traineeScheduleSpan(blocks);
 
   let startsAt = 0;
   let endsAt = 0;
@@ -169,7 +207,7 @@ export async function assertTraineeIntroReady(
       missing.push("Trainee shift window (end must be after start)");
     }
   } else if (event.startAt && event.endAt && event.endAt > event.startAt) {
-    const window = resolveTraineePresenceWindow(event, args.presenceMode, earliestSetup);
+    const window = resolveTraineePresenceWindow(event, args.presenceMode, span);
     startsAt = window.startsAt;
     endsAt = window.endsAt;
     if (endsAt <= startsAt) {

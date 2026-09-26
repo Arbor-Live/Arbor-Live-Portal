@@ -1,7 +1,7 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { isValidEmail } from "./bandOrgInvite";
-import { listEventsByInvoiceId } from "./invoiceEvents";
+import { listEventsLinkedToInvoice } from "./invoiceEvents";
 
 /**
  * Public (token-holder) contact edits are intentionally bounded: a client can
@@ -19,7 +19,7 @@ export async function requirePublicEditableEvent(
   if ((invoice.clientApprovalStatus ?? "pending") !== "approved") {
     throw new Error("You can edit contacts once your quote is approved.");
   }
-  const events = await listEventsByInvoiceId(ctx, invoice._id);
+  const events = await listEventsLinkedToInvoice(ctx, invoice._id);
   const event = events.find((row) => row._id === eventId);
   if (!event) throw new Error("Event not found on this quote.");
   return event;

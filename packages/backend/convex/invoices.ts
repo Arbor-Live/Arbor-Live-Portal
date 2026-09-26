@@ -9,14 +9,15 @@ import { loadActiveOrgMemberUserIds } from "./lib/orgMembership";
 import { syncEventStatusForLinkedInvoice, syncLinkedEventStatusFromInvoice } from "./lib/eventStatus";
 import { syncBookingRequestStatusFromInvoice } from "./lib/bookingRequestStatus";
 import { recordInvoiceStatusTransition } from "./lib/statusTransitions";
-import { listEventsByInvoiceId } from "./lib/invoiceEvents";
+import { listAdditionallyLinkedEvents } from "./lib/eventInvoiceLinks";
+import { listEventsByInvoiceId, listEventsLinkedToInvoice } from "./lib/invoiceEvents";
 import {
   addPublicEventContact,
   deletePublicEventContact,
   requirePublicEditableEvent,
 } from "./lib/publicEventContacts";
 import { isSingleSeriesBooking } from "./lib/invoiceArtistDays";
-import { getActivePaymentProofSubmission } from "./lib/paymentProof";
+import { getActivePaymentProofSubmissionForInvoice } from "./lib/paymentProof";
 import { invoiceDueEndMs } from "./lib/invoicePaymentStatus";
 import {
   billingQuantityForEquipmentLine,
@@ -581,7 +582,7 @@ async function recentInvoices(
  */
 async function resolveInvoiceListLabels(ctx: QueryCtx, invoiceId: Id<"invoices">) {
   const series = await findSeriesByInvoiceId(ctx, invoiceId);
-  const linkedEvents = await listEventsByInvoiceId(ctx, invoiceId);
+  const linkedEvents = await listEventsLinkedToInvoice(ctx, invoiceId);
   const primaryEvent = linkedEvents[0];
   const eventCostsUsd = primaryEvent
     ? (primaryEvent.crewCostUsd ?? 0) +
@@ -655,9 +656,7 @@ async function resolveInvoiceListPaymentStatus(
     return { paymentStatus: "paid", daysOverdue: 0 };
   }
   const now = Date.now();
-  const activeSubmission = primaryEvent
-    ? await getActivePaymentProofSubmission(ctx, primaryEvent._id)
-    : null;
+  const activeSubmission = await getActivePaymentProofSubmissionForInvoice(ctx, invoice._id);
   const dueEndMs = invoiceDueEndMs(invoice, primaryEvent?.timezone);
   if (dueEndMs != null && now > dueEndMs) {
     return {
@@ -746,7 +745,15 @@ export const get = query({
       .withIndex("by_invoiceId_and_order", (q) => q.eq("invoiceId", args.id))
       .take(500);
     const series = await resolveSeriesMetadataForInvoice(ctx, args.id);
-    return { invoice, lineItems, series };
+    const additionallyLinkedEvents = (await listAdditionallyLinkedEvents(ctx, args.id)).map(
+      (event) => ({
+        _id: event._id,
+        title: event.title,
+        startAt: event.startAt,
+        endAt: event.endAt,
+      }),
+    );
+    return { invoice, lineItems, series, additionallyLinkedEvents };
   },
 });
 

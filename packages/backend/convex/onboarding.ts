@@ -25,6 +25,8 @@ import {
   ONBOARDING_LINKS,
 } from "./lib/onboardingLinks";
 import {
+  formatCompensationRateLabel,
+  loadInvoiceCrewRateSettings,
   normalizePayrollMethod,
   type PayrollMethod,
 } from "./lib/crewCompensation";
@@ -355,6 +357,14 @@ async function scheduleOnboardingCompletedEmails(
     recipients.add(email.toLowerCase());
   }
 
+  const [rate, settings] = await Promise.all([
+    ctx.db
+      .query("userCompensationRates")
+      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+      .unique(),
+    loadInvoiceCrewRateSettings(ctx),
+  ]);
+
   const payload = {
     crewName: args.name,
     crewEmail: args.email,
@@ -371,6 +381,7 @@ async function scheduleOnboardingCompletedEmails(
           ? `Yes — ${args.otherCampusEmploymentHours ?? 0} hrs/week`
           : "No",
     i9ScheduledByFirstDay: args.i9Acknowledged ? true : undefined,
+    hourlyRateLabel: formatCompensationRateLabel(rate, settings),
     dashboardUsersUrl: `${SITE_URL}/dashboard/users`,
   };
 

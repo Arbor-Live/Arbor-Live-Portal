@@ -72,6 +72,18 @@ test.describe("band onboarding wizard", () => {
     await expect(rateField).toBeVisible({ timeout: 20_000 });
     await rateField.fill(String(hourlyRateUsd));
     await page.getByLabel(/Pickup \(ASSU office\)/i).check();
+
+    // Empty mailing address shows a prompt. Filling it after that used to
+    // leave Next stuck (questionnaire `invalid` blocked the next click).
+    const mailingAddress = page.locator("#band-payee-mailing-address");
+    await mailingAddress.fill("");
+    await next(page);
+    await expect(
+      page.getByRole("alert").filter({
+        hasText: "Enter a mailing address (required for Stanford / GrantEd).",
+      }),
+    ).toBeVisible();
+    await mailingAddress.fill("123 Example St\nPalo Alto, CA 94301");
     await next(page);
 
     // Payout explainer — the last step submits with "Finish setup", not "Next".

@@ -180,6 +180,7 @@ export const seedCrewApplications = mutation({
         email: `e2e.bulk.${args.stamp}.${row.index}@stanford.edu`,
         phone: "6505550199",
         heardAboutUs: "E2E bulk seed",
+        experience: "E2E bulk seed",
         vertical: "Crew",
         discipline: "Sound",
         crewAvailabilityDays: ["friday"],

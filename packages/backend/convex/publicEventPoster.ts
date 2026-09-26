@@ -9,7 +9,7 @@ import {
   parseStoredR2Asset,
   validateMarketingHeroUploadRequest,
 } from "./lib/inventoryUpload";
-import { listEventsByInvoiceId } from "./lib/invoiceEvents";
+import { listEventsLinkedToInvoice } from "./lib/invoiceEvents";
 import { listEventsLinkedToRequest } from "./lib/bookingDayLoad";
 import {
   MAX_ADDITIONAL_LINKS,
@@ -113,7 +113,7 @@ async function resolveQuotePosterTarget(
   }
   if (invoice.status === "void") return null;
 
-  return { events: await listEventsByInvoiceId(ctx, invoice._id), voided: false };
+  return { events: await listEventsLinkedToInvoice(ctx, invoice._id), voided: false };
 }
 
 async function resolvePosterPortalTarget(

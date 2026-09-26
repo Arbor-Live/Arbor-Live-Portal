@@ -171,8 +171,14 @@ function teamTagClass(team: string) {
       return "bg-status-emerald-500/15 text-status-emerald-800 dark:text-status-emerald-200";
     case "Design":
       return "bg-status-rose-500/15 text-status-rose-800 dark:text-status-rose-200";
-    case "Marketing":
+    case "Photography":
+      return "bg-status-sky-500/15 text-status-sky-800 dark:text-status-sky-200";
+    case "Videography":
+      return "bg-status-violet-500/15 text-status-violet-800 dark:text-status-violet-200";
+    case "Promotion":
       return "bg-status-orange-500/15 text-status-orange-800 dark:text-status-orange-200";
+    case "Trivia":
+      return "bg-status-amber-500/15 text-status-amber-800 dark:text-status-amber-200";
     case "Operations":
       return "bg-status-blue-500/15 text-status-blue-800 dark:text-status-blue-200";
     default:

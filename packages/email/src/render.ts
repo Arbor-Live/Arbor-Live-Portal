@@ -6,6 +6,7 @@ import { BookingRequestDeclinedEmail } from "../emails/booking-request-declined"
 import { QuoteApprovedEmail } from "../emails/quote-approved";
 import { PaymentProofRejectedEmail } from "../emails/payment-proof-rejected";
 import { DamageReportAdminEmail } from "../emails/damage-report-admin";
+import { ArtistNeedInquiryEmail } from "../emails/artist-need-inquiry";
 import { EventCancelledEmail } from "../emails/event-cancelled";
 import { PasswordResetEmail } from "../emails/password-reset";
 import { EmailVerificationEmail } from "../emails/email-verification";
@@ -52,6 +53,7 @@ import type {
   QuoteApprovedEmailProps,
   PaymentProofRejectedEmailProps,
   DamageReportAdminEmailProps,
+  ArtistNeedInquiryEmailProps,
   EventEmailProps,
   PasswordResetEmailProps,
   EmailVerificationEmailProps,
@@ -283,6 +285,10 @@ export async function renderPaymentProofRejectedEmail(props: PaymentProofRejecte
 
 export async function renderDamageReportAdminEmail(props: DamageReportAdminEmailProps) {
   return render(DamageReportAdminEmail(props));
+}
+
+export async function renderArtistNeedInquiryEmail(props: ArtistNeedInquiryEmailProps) {
+  return render(ArtistNeedInquiryEmail(props));
 }
 
 export async function renderWeeklyDigestEmail(props: WeeklyDigestEmailProps) {

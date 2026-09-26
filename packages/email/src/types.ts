@@ -270,6 +270,7 @@ export type OnboardingCompletedEmailProps = {
   employmentStartDateLabel?: string;
   otherCampusEmploymentLabel?: string;
   i9ScheduledByFirstDay?: boolean;
+  hourlyRateLabel: string;
   dashboardUsersUrl: string;
 };
 
@@ -455,4 +456,15 @@ export type ThisWeekAtArborEmailProps = {
   /** Public events page for the "see everything" CTA. */
   allEventsUrl: string;
   unsubscribeUrl: string;
+};
+
+export type ArtistNeedInquiryEmailProps = {
+  artistName: string;
+  eventTitle: string;
+  dateRangeLabel: string;
+  venueName?: string;
+  artistTypeLabel: string;
+  genres?: string;
+  message?: string;
+  reviewUrl: string;
 };

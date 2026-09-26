@@ -25,8 +25,10 @@ canonical description of the domain itself.
 - Crew onboarding progress lives in `userOnboarding`; band org setup in
   `organizationOnboarding`. Incomplete crew get a dashboard banner and weekly
   reminder email; assigned bands that have not finished onboarding get a weekly
-  reminder that payouts are blocked until they complete it. Admins see status
-  under Users and can waive.
+  reminder that payouts are blocked until they complete it. When crew finish,
+  admins and HR leadership get an email that includes the effective hourly rate
+  (Normal, Lead, or Custom, resolved the same way as invoice crew pricing).
+  Admins see status under Users and can waive.
 - Arbor Live crew invites (and convert-to-member) require a **compensation rate
   mode** (`normal` / `lead` / `custom`) and a **payroll method**
   (`stanford` / `external`). Normal/Lead resolve live from
@@ -50,30 +52,42 @@ canonical description of the domain itself.
   application email once every required field passes the send gate), or
   `converted` (invite into Arbor Live via the normal member invite path →
   `/accept-invite` → crew onboarding). Crew applicants pick a vertical
-  (`Operations` / `Crew` / `Trivia` / `Marketing`); Crew also picks specialty
-  (`Sound` / `Lights` / `Design` / unsure) and Fri/Sat standing availability
-  (5pm–midnight PT) as a scheduling preference only — not auto-matched to shifts.
+  (`Operations` / `Crew` / `Trivia` / `Marketing`); Crew and Marketing also pick
+  a specialty — Crew: `Sound` / `Lights` / `Photography` / `Videography`,
+  Marketing: `Design` / `Photography` / `Videography` (each with unsure) — and
+  Crew picks Fri/Sat standing availability (5pm–midnight PT) as a scheduling
+  preference only — not auto-matched to shifts.
 - Local UI iteration: `?devPreview=1` (Dev menu) re-opens setup/onboarding
   wizards without redirect — development builds only; see
   [getting-started.md](getting-started.md#dev-preview-wizards).
 - Staff capabilities/teams: verticals `Operations`, `Crew`, `Trivia`,
-  `Marketing` with Crew disciplines `Sound`, `Lights`, `Design`
-  (see `userVerticals.ts` and `userAdminProfiles`).
+  `Marketing`. Specialties are scoped per vertical (`DISCIPLINES_BY_VERTICAL`):
+  Crew — `Sound`, `Lights`, `Photography`, `Videography`; Marketing — `Design`,
+  `Photography`, `Videography`; Operations and Trivia have none. Only **crew
+  specialties** (`CREW_DISCIPLINES`: Sound/Lights/Photography/Videography) fill
+  event availability and appear as eligible crew; Design (Marketing-only) and
+  the specialty-less verticals are excluded (see `userVerticals.ts` and
+  `userAdminProfiles`).
 - **Participation flags** on `userAdminProfiles` (missing ⇒ crew defaults):
   `requiresOnboarding`, `includeInTimecards`, `assignableAsCrew`,
-  `weeklyDigest`, plus existing
+  `weeklyDigest`, `damageReportEmails`, plus existing
   `showOnPublicCrewPage`. Advisors/supervisors use the **Advisor** invite
   preset (no compensation/payroll required): skips crew onboarding, hides from
-  timecard overview and assignable-crew pickers, and stays off the public
-  `/crew` page. Flags remain editable per user in Users admin.
+  timecard overview and assignable-crew pickers, stays off the public
+  `/crew` page, and is omitted from Operations damage-report emails. Flags
+  remain editable per user in Users admin.
 - **Weekly pending-activity digest** (`email/weeklyDigest.ts`, run by the
-  Monday `weeklyJobs` cron): one email per active Arbor user listing their
-  pending availability responses, events that week, timecards, post-event work
-  (review + photos, crew **and** day-of leads / event managers), and — for
-  admins — open booking requests, artist payouts in progress, and outstanding
-  post-mortem reviews. Per-user opt-out is the `weeklyDigest` Participation
-  flag; sections with nothing pending are omitted and users with no pending
-  items get no email.
+  Monday `weeklyJobs` cron): Arbor staff get pending availability, shifts that
+  week, timecards, and post-event work for events they crewed or led (review +
+  photos, and only after the event itself has ended). Portal admins also get
+  open booking requests and artist payouts in progress. Unsubmitted reviews
+  for other people are not listed — a review shows up only when the recipient
+  still owes it. Artist-only members get the email only when one of their
+  bands has a show that week or onboarding still open — not crew post-event
+  work and not the admin queues. Band org admins are Better Auth
+  `role: "admin"`; that is not a portal admin. Per-user opt-out is the
+  `weeklyDigest` Participation flag; empty sections are omitted and users with
+  nothing pending get no email.
 - **Post-event work** (`postMortemFeedback.ts`, `lib/myEventActions.ts`): every
   assigned crew member *and* the day-of lead / event manager reviews each ended
   event — 5⭐ rating + what went well / what could improve + resolving their
@@ -127,6 +141,14 @@ Event types (drive which editor tabs and quick-add blocks appear):
 | `Dry Rental` | Equipment only | Delivery + Return |
 | `Services Only` | No schedule/crew tabs | — |
 
+- **Teams of interest** (`teamsInterested`) are event *needs*, distinct from user
+  verticals/specialties (`userVerticals.ts`): `Design` (poster designer +
+  uploaded poster), `Photography` / `Videography` / `Sound` / `Lighting` (crew
+  shifts), `Promotion` (flyering / outreach), `Trivia`, and `Operations`
+  (coordination / artist sourcing). Availability matching (`lib/crewTeams.ts`)
+  maps crew specialties onto these needs; events with no needs set are visible
+  to all crew. The retired umbrella need `Marketing` was migrated to
+  `Promotion`, and poster work now keys off `Design`.
 - **Timezone:** the whole portal uses Pacific Time (`America/Los_Angeles` /
   `PORTAL_TIMEZONE` in `@arbor/format`). Display, input hydration/save, day
   keys, and FullCalendar grids must go through that package (or
@@ -138,6 +160,27 @@ Event types (drive which editor tabs and quick-add blocks appear):
   `bookingRequestSettings`, or manual swap on the request detail). Inbox
   defaults to open requests (`submitted`/`action_required`/`pending_client`), oldest-first, with a
   days-since-submitted counter.
+- **The bill** (event editor **Artists** tab) is one drag-orderable list of
+  *positions* (`eventArtistNeeds.sortOrder`), each with a freeform `label` and
+  either filled by an act or still needed:
+  - **Artist Needed** (`eventArtistNeeds`) — one open **slot** per row, so "two
+    bands and a DJ" is three slots: a `label` (e.g. "Headliner"), `artistType`
+    (`band` / `dj` / `no_preference`), freeform `genres`, and a staff-driven
+    `status` (`open` / `inquiring`). A slot is **booked** when an
+    `eventBandParticipations` row points at it (`needId`) — never by a stored
+    flag, and a slot holds exactly one act (`lib/eventArtistNeeds.ts`).
+  - **Run of show** — plain fields on `eventBandParticipations`
+    (`setStartsAt` / `setEndsAt`, `soundcheckStartsAt` / `soundcheckEndsAt`)
+    until a Run of Show model lands. Artists see both windows on "Your shows".
+  - **Outside acts** — a position can instead be filled by an act that is not on
+    the platform: `eventArtistNeeds.externalArtistName`, with its own set and
+    soundcheck windows on the slot. It counts as booked and stops appearing in
+    the artist portal.
+  - **Payout** — the same row, via `EventBandPaymentForm`.
+  Artists browse still-open slots from `/dashboard/opportunities` and
+  `submitInquiry` (`eventArtistInquiries`), which flags the slot `inquiring`
+  and emails Operations admins (`email/artistNeedInquiryEmails.ts`). Riders sit
+  in their own card below the bill.
 - **Schedule blocks** (`eventScheduleBlocks`) are the planning unit: typed
   (`setup`/`show`/`strike`/`custom`), snapped to 15-minute increments, may
   overlap (the timeline renders overlaps on separate lanes) and may cross
@@ -162,7 +205,7 @@ Event types (drive which editor tabs and quick-add blocks appear):
   their own budgeting and pull lists.
 - Band participation in events is tracked in `eventBandParticipations`
   (headliner/support/other). That row is the canonical **assignment**: staff
-  manage it from the event overview **Artists** section (not Media).
+  manage it from the event editor **Artists** tab (not Media).
   Assigning an artist emails members (`band_assigned`), unlocks event media album
   access, and surfaces the show on the artist home dashboard. Optional
   `eventBandPayments` attach payout details to the same assignment.
@@ -199,6 +242,13 @@ Event types (drive which editor tabs and quick-add blocks appear):
   from the invoice list or editor (e.g. cancelled events).
   Default due date is first linked event start (Day 1) + 30 days; staff can
   override, then resync.
+- An event can link more than one invoice. `events.invoiceId` is the primary:
+  it drives status, the pull list, the host, and payment reminders. Other
+  invoices are rows in `eventInvoiceLinks` (max 12 per event). The event margin
+  and pipeline booked revenue add those invoices in. An invoice with no primary
+  events still links back to events that list it as additional, and does not
+  own their pull list. Extra invoices stay on the occurrence you edit; a series
+  still shares one primary invoice.
 - Line items live in a child table, sectioned as equipment package/type,
   external rental, artist, crew, fee. Totals are recomputed server-side
   (`recalculateTotals`); equipment pricing is `subsidized`/`nonSubsidized`
@@ -219,7 +269,9 @@ Event types (drive which editor tabs and quick-add blocks appear):
   contacts, download PDF — all token-gated, no login.
 - PDFs are rendered from `@arbor/invoice-document` (`./pdf` export).
 - **Payment proof**: after approval, payers submit payment evidence
-  (`paymentProof*.ts`); staff verify, and cron-driven reminder emails nag
+  (`paymentProof*.ts`). A quote linked as an additional invoice on an event
+  (not only the primary `events.invoiceId`) opens payment the same way, and
+  proof is stored per invoice. Staff verify, and cron-driven reminder emails nag
   outstanding payers only once fewer than 30 days remain until the invoice due
   date (approval-day first reminder + Monday follow-ups via `weeklyJobs`).
 
@@ -328,14 +380,17 @@ Event types (drive which editor tabs and quick-add blocks appear):
   the raw Immich share URL to external clients. Emails that attach the share
   URL, and the public booking-request / quote feedback portal, ensure the event
   album when Immich is configured (`ensureEventAlbumBestEffort` /
-  `ensureAlbumShareUrlByToken`).
+  `ensureAlbumShareUrlByToken`). On multi-day bookings the public **After the
+  event** tab uses the same Day 1 / Day 2 switcher as the Event tab: each linked
+  day has its own album and feedback form, and the tab appears once any linked
+  day has ended.
 
 ## Marketing site
 
 - `marketingDesigns.ts` — event poster assignments and publishing. Upcoming
   poster work covers public/internal events in the next four weeks that have
-  **Marketing** selected under Teams Interested (booking conversions only add
-  Marketing when the client chose the Collaboration production area). Operations
+  **Design** selected under Teams Interested (booking conversions add Design
+  when the client chose the Collaboration production area). Operations
   or Marketing can assign a poster designer from the event editor or design board;
   assignments appear immediately on the board (including internal events). The
   design board filters: assigned to me, unassigned, and all upcoming. Design statuses:

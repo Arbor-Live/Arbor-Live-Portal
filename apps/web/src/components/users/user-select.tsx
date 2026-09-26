@@ -1,5 +1,6 @@
 "use client";
 
+import { XIcon } from "@phosphor-icons/react";
 import { UserAvatar } from "@/components/account/user-avatar";
 import { SearchableSelect, type SearchableSelectOption } from "@/components/inventory/searchable-select";
 
@@ -9,6 +10,14 @@ export type UserSelectOption = SearchableSelectOption & {
 };
 
 function OptionAvatar({ option }: { option: UserSelectOption }) {
+  // The clear entry has no person behind it — an avatar would be nonsense.
+  if (!option.value) {
+    return (
+      <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+        <XIcon className="size-3.5" />
+      </span>
+    );
+  }
   return (
     <UserAvatar
       name={option.label}
@@ -28,12 +37,15 @@ export function UserSelect({
   options,
   placeholder = "Search users...",
   emptyLabel = "Select user",
+  clearable = false,
 }: {
   value: string;
   onChange: (value: string) => void;
   options: UserSelectOption[];
   placeholder?: string;
   emptyLabel?: string;
+  /** Offer an entry that clears the selection. */
+  clearable?: boolean;
 }) {
   return (
     <SearchableSelect
@@ -42,6 +54,7 @@ export function UserSelect({
       options={options}
       placeholder={placeholder}
       emptyLabel={emptyLabel}
+      clearable={clearable}
       contentClassName="min-w-[min(100%,24rem)]"
       renderOption={(option) => (
         <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">

@@ -22,13 +22,13 @@ import { ARTIST_TYPES, ARTIST_TYPE_LABELS } from "@/lib/artist-types";
 import { RequestWizardShell } from "@/components/request/request-wizard-shell";
 import {
   Questionnaire,
-  QuestionnaireError,
   QuestionnaireItem,
   QuestionnaireTitle,
 } from "@/components/ui/questionnaire";
 import {
   handleQuestionnaireEnter,
   MarkStepAnswered,
+  QuestionnaireFieldError,
   QuestionnaireWizardFooter,
   QuestionnaireWizardProgress,
 } from "@/components/ui/questionnaire-wizard";
@@ -548,7 +548,10 @@ export function BandOnboardingWizard() {
     return null;
   }
 
-  const patch = (next: Partial<FormState>) => setForm((prev) => ({ ...prev, ...next }));
+  const patch = (next: Partial<FormState>) => {
+    setFieldError(null);
+    setForm((prev) => ({ ...prev, ...next }));
+  };
 
   const addInviteEmail = () => {
     const email = normalizeEmail(form.inviteDraft);
@@ -661,7 +664,6 @@ export function BandOnboardingWizard() {
               <QuestionnaireItem
                 name="identity"
                 required
-                invalid={currentStep === "identity" && Boolean(fieldError)}
               >
                 <QuestionnaireTitle>
                   {STEP_HEADLINES.identity}
@@ -688,9 +690,9 @@ export function BandOnboardingWizard() {
                   </div>
                 </div>
                 <MarkStepAnswered />
-                <QuestionnaireError className="text-sm">
+                <QuestionnaireFieldError className="text-sm">
                   {currentStep === "identity" ? fieldError : null}
-                </QuestionnaireError>
+                </QuestionnaireFieldError>
               </QuestionnaireItem>
 
               <QuestionnaireItem
@@ -707,7 +709,6 @@ export function BandOnboardingWizard() {
               <QuestionnaireItem
                 name="hero"
                 required
-                invalid={currentStep === "hero" && Boolean(fieldError)}
               >
                 <QuestionnaireTitle>
                   {STEP_HEADLINES.hero}
@@ -744,15 +745,14 @@ export function BandOnboardingWizard() {
                   ) : null}
                 </div>
                 <MarkStepAnswered />
-                <QuestionnaireError className="text-sm">
+                <QuestionnaireFieldError className="text-sm">
                   {currentStep === "hero" ? fieldError : null}
-                </QuestionnaireError>
+                </QuestionnaireFieldError>
               </QuestionnaireItem>
 
               <QuestionnaireItem
                 name="socials"
                 required
-                invalid={currentStep === "socials" && Boolean(fieldError)}
               >
                 <QuestionnaireTitle>
                   {STEP_HEADLINES.socials}
@@ -820,15 +820,14 @@ export function BandOnboardingWizard() {
                   ) : null}
                 </div>
                 <MarkStepAnswered />
-                <QuestionnaireError className="text-sm">
+                <QuestionnaireFieldError className="text-sm">
                   {currentStep === "socials" ? fieldError : null}
-                </QuestionnaireError>
+                </QuestionnaireFieldError>
               </QuestionnaireItem>
 
               <QuestionnaireItem
                 name="members"
                 required
-                invalid={currentStep === "members" && Boolean(fieldError)}
               >
                 <QuestionnaireTitle>
                   {STEP_HEADLINES.members}
@@ -951,15 +950,14 @@ export function BandOnboardingWizard() {
                   ) : null}
                 </div>
                 <MarkStepAnswered />
-                <QuestionnaireError className="text-sm">
+                <QuestionnaireFieldError className="text-sm">
                   {currentStep === "members" ? fieldError : null}
-                </QuestionnaireError>
+                </QuestionnaireFieldError>
               </QuestionnaireItem>
 
               <QuestionnaireItem
                 name="rates"
                 required
-                invalid={currentStep === "rates" && Boolean(fieldError)}
               >
                 <QuestionnaireTitle>
                   {STEP_HEADLINES.rates}
@@ -1046,15 +1044,14 @@ export function BandOnboardingWizard() {
                   </div>
                 </div>
                 <MarkStepAnswered />
-                <QuestionnaireError className="text-sm">
+                <QuestionnaireFieldError className="text-sm">
                   {currentStep === "rates" ? fieldError : null}
-                </QuestionnaireError>
+                </QuestionnaireFieldError>
               </QuestionnaireItem>
 
               <QuestionnaireItem
                 name="payment"
                 required
-                invalid={currentStep === "payment" && Boolean(fieldError)}
               >
                 <QuestionnaireTitle>
                   {STEP_HEADLINES.payment}
@@ -1078,9 +1075,9 @@ export function BandOnboardingWizard() {
                   />
                 </div>
                 <MarkStepAnswered />
-                <QuestionnaireError className="text-sm">
+                <QuestionnaireFieldError className="text-sm">
                   {currentStep === "payment" ? fieldError : null}
-                </QuestionnaireError>
+                </QuestionnaireFieldError>
               </QuestionnaireItem>
               </>
             )}

@@ -18,6 +18,7 @@ const EMPTY: CrewApplicationFormValues = {
   email: "",
   phone: "",
   heardAboutUs: "",
+  experience: "",
   vertical: "Crew",
   discipline: "",
   friday: false,
@@ -33,12 +34,28 @@ const VERTICALS: CrewApplicationFormValues["vertical"][] = [
   "Marketing",
 ];
 
-const DISCIPLINES: Array<{ value: "Sound" | "Lights" | "Design" | "unsure"; label: string }> = [
-  { value: "Sound", label: "Sound" },
-  { value: "Lights", label: "Lights" },
-  { value: "Design", label: "Design" },
-  { value: "unsure", label: "I'm not sure" },
-];
+const SPECIALTY_UNSURE = { value: "unsure" as const, label: "I'm not sure" };
+
+const DISCIPLINES_BY_VERTICAL: Partial<
+  Record<
+    CrewApplicationFormValues["vertical"],
+    Array<{ value: Exclude<CrewApplicationFormValues["discipline"], "">; label: string }>
+  >
+> = {
+  Crew: [
+    { value: "Sound", label: "Sound" },
+    { value: "Lights", label: "Lights" },
+    { value: "Photography", label: "Photography" },
+    { value: "Videography", label: "Videography" },
+    SPECIALTY_UNSURE,
+  ],
+  Marketing: [
+    { value: "Design", label: "Design" },
+    { value: "Photography", label: "Photography" },
+    { value: "Videography", label: "Videography" },
+    SPECIALTY_UNSURE,
+  ],
+};
 
 const POSITIONS: Array<{
   value: CrewApplicationFormValues["stanfordPosition"];
@@ -155,6 +172,19 @@ export function CrewApplicationForm() {
             rows={3}
           />
         </div>
+        <div className="space-y-2">
+          <Label htmlFor="experience">What excites you about joining?</Label>
+          <p className="text-xs text-muted-foreground">
+            Experience is welcome but never required.
+          </p>
+          <OnboardingTextarea
+            id="experience"
+            required
+            value={form.experience}
+            onChange={(event) => patch({ experience: event.target.value })}
+            rows={4}
+          />
+        </div>
       </section>
 
       <section className="space-y-4">
@@ -165,14 +195,17 @@ export function CrewApplicationForm() {
             id="vertical"
             className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
             value={form.vertical}
-            onChange={(event) =>
+            onChange={(event) => {
+              const vertical = event.target.value as CrewApplicationFormValues["vertical"];
+              const options = DISCIPLINES_BY_VERTICAL[vertical] ?? [];
+              const keepDiscipline = options.some((option) => option.value === form.discipline);
               patch({
-                vertical: event.target.value as CrewApplicationFormValues["vertical"],
-                discipline: event.target.value === "Crew" ? form.discipline : "",
-                friday: event.target.value === "Crew" ? form.friday : false,
-                saturday: event.target.value === "Crew" ? form.saturday : false,
-              })
-            }
+                vertical,
+                discipline: keepDiscipline ? form.discipline : "",
+                friday: vertical === "Crew" ? form.friday : false,
+                saturday: vertical === "Crew" ? form.saturday : false,
+              });
+            }}
           >
             {VERTICALS.map((vertical) => (
               <option key={vertical} value={vertical}>
@@ -182,51 +215,52 @@ export function CrewApplicationForm() {
           </select>
         </div>
 
-        {form.vertical === "Crew" ? (
-          <>
-            <div className="space-y-2">
-              <Label htmlFor="discipline">Specialty</Label>
-              <select
-                id="discipline"
-                required
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
-                value={form.discipline}
-                onChange={(event) =>
-                  patch({
-                    discipline: event.target.value as CrewApplicationFormValues["discipline"],
-                  })
-                }
-              >
-                <option value="" disabled>
-                  Select a specialty
+        {(DISCIPLINES_BY_VERTICAL[form.vertical] ?? []).length > 0 ? (
+          <div className="space-y-2">
+            <Label htmlFor="discipline">Specialty</Label>
+            <select
+              id="discipline"
+              required
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
+              value={form.discipline}
+              onChange={(event) =>
+                patch({
+                  discipline: event.target.value as CrewApplicationFormValues["discipline"],
+                })
+              }
+            >
+              <option value="" disabled>
+                Select a specialty
+              </option>
+              {(DISCIPLINES_BY_VERTICAL[form.vertical] ?? []).map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
                 </option>
-                {DISCIPLINES.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+              ))}
+            </select>
+          </div>
+        ) : null}
+
+        {form.vertical === "Crew" ? (
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Standing availability (5pm–midnight PT)</p>
+            <p className="text-xs text-muted-foreground">
+              Tell us which nights you&apos;re usually free — we use this as a preference when
+              scheduling.
+            </p>
+            <div className="flex flex-wrap gap-4">
+              <OnboardingAckCheckbox
+                checked={form.friday}
+                onChange={(checked) => patch({ friday: checked })}
+                label="Friday"
+              />
+              <OnboardingAckCheckbox
+                checked={form.saturday}
+                onChange={(checked) => patch({ saturday: checked })}
+                label="Saturday"
+              />
             </div>
-            <div className="space-y-2">
-              <p className="text-sm font-medium">Standing availability (5pm–midnight PT)</p>
-              <p className="text-xs text-muted-foreground">
-                Tell us which nights you&apos;re usually free — we use this as a preference when
-                scheduling.
-              </p>
-              <div className="flex flex-wrap gap-4">
-                <OnboardingAckCheckbox
-                  checked={form.friday}
-                  onChange={(checked) => patch({ friday: checked })}
-                  label="Friday"
-                />
-                <OnboardingAckCheckbox
-                  checked={form.saturday}
-                  onChange={(checked) => patch({ saturday: checked })}
-                  label="Saturday"
-                />
-              </div>
-            </div>
-          </>
+          </div>
         ) : null}
       </section>
 

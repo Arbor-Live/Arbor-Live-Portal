@@ -1,3 +1,4 @@
+import { formatUsd } from "@arbor/format";
 import type { Doc } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 
@@ -43,6 +44,22 @@ export function resolveUserCompensationHourlyRateUsd(
 ): number {
   if (!rate) return 0;
   return resolveHourlyRateUsdFromMode(rate.rateMode, rate.hourlyRateUsd, settings);
+}
+
+const RATE_MODE_LABEL = {
+  normal: "Normal",
+  lead: "Lead",
+  custom: "Custom",
+} as const satisfies Record<UserCompensationRateMode, string>;
+
+export function formatCompensationRateLabel(
+  rate: Pick<Doc<"userCompensationRates">, "rateMode" | "hourlyRateUsd"> | null | undefined,
+  settings: InvoiceCrewRateSettings,
+): string {
+  if (!rate) return "Not set";
+  const mode = normalizeCompensationRateMode(rate.rateMode);
+  const hourly = resolveUserCompensationHourlyRateUsd(rate, settings);
+  return `${formatUsd(hourly)}/hr · ${RATE_MODE_LABEL[mode]}`;
 }
 
 /** Average of Normal + Lead global rates — used for open-slot cost estimates. */

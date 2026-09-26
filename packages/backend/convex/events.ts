@@ -17,6 +17,13 @@ import {
 } from "./lib/eventStatus";
 import { computeSeriesCostSummary } from "./lib/eventSeriesCosts";
 import { listEventsByInvoiceId } from "./lib/invoiceEvents";
+import {
+  detachInvoiceFromAdditionalLinks,
+  listAdditionalInvoiceIds,
+  loadLinkedInvoiceSummaries,
+  replaceAdditionalInvoiceLinks,
+  splitPrimaryAndAdditional,
+} from "./lib/eventInvoiceLinks";
 import { copyDaySetupToTargets, listSiblingDayEvents } from "./lib/copyDaySetup";
 import { RENTAL_EVENT_TYPES, enrichPullListItems, summarizePullList } from "./eventPullLists";
 import { deleteEventRecord } from "./lib/bookingChainDelete";
@@ -40,6 +47,7 @@ import {
   eventCancelReasonCodeValue,
   recordEventStatusTransition,
 } from "./lib/statusTransitions";
+import { eventTeamValue } from "./lib/eventTeams";
 
 const eventTypeValue = v.union(
   v.literal("Crewed Event"),
@@ -49,13 +57,6 @@ const eventTypeValue = v.union(
   v.literal("Services Only"),
 );
 
-const eventTeamValue = v.union(
-  v.literal("Design"),
-  v.literal("Marketing"),
-  v.literal("Lighting"),
-  v.literal("Sound"),
-  v.literal("Operations"),
-);
 const rentalFulfillmentModeValue = v.union(v.literal("delivery"), v.literal("will_call"));
 
 const seriesEditScopeValue = v.union(v.literal("this"), v.literal("future"), v.literal("all"));
@@ -299,10 +300,13 @@ export const get = query({
       .take(500);
     const canEdit = canEditEventForUser(user, event);
 
+    const linkedInvoices = await loadLinkedInvoiceSummaries(ctx, event);
+
     if (detail === "schedule") {
       return {
         canEdit,
         event: { ...event, status: normalizeEventStatus(event.status) },
+        linkedInvoices,
         series: null,
         blocks,
         shifts,
@@ -335,6 +339,7 @@ export const get = query({
     return {
       canEdit,
       event: { ...event, status: normalizeEventStatus(event.status) },
+      linkedInvoices,
       series:
         event.seriesId !== undefined
           ? await (async () => {
@@ -497,6 +502,7 @@ export const create = mutation({
     status: v.optional(eventStatusValue),
     visibility: v.optional(eventVisibilityValue),
     invoiceId: v.optional(v.id("invoices")),
+    additionalInvoiceIds: v.optional(v.array(v.id("invoices"))),
     startAt: v.number(),
     endAt: v.number(),
     requiresShowWindow: v.optional(v.boolean()),
@@ -533,8 +539,12 @@ export const create = mutation({
       await assertNoOpenMicOverlap(ctx, null, args.startAt, args.endAt);
     }
     const venueLink = await resolveVenueLink(ctx, args.venueId);
+    const invoiceSplit =
+      args.additionalInvoiceIds !== undefined
+        ? splitPrimaryAndAdditional(args.invoiceId, args.additionalInvoiceIds)
+        : { primary: args.invoiceId, additional: [] as Id<"invoices">[] };
     const hostLink = await resolveEventPrimaryHostLink(ctx, {
-      invoiceId: args.invoiceId,
+      invoiceId: invoiceSplit.primary,
       hostGroupId: args.hostGroupId,
     });
     const additionalHostGroupIds = await resolveAdditionalHostGroupIds(
@@ -546,7 +556,7 @@ export const create = mutation({
       title: args.title.trim(),
       status: initialStatus,
       visibility: args.visibility ?? DEFAULT_EVENT_VISIBILITY,
-      invoiceId: args.invoiceId,
+      invoiceId: invoiceSplit.primary,
       publicToken: makePublicToken(),
       startAt: args.startAt,
       endAt: args.endAt,
@@ -579,8 +589,11 @@ export const create = mutation({
       createdAt: now,
       updatedAt: now,
     });
-    if (args.invoiceId) {
-      await syncEventStatusForLinkedInvoice(ctx, eventId, args.invoiceId, initialStatus);
+    if (invoiceSplit.primary) {
+      await syncEventStatusForLinkedInvoice(ctx, eventId, invoiceSplit.primary, initialStatus);
+    }
+    if (args.additionalInvoiceIds !== undefined) {
+      await replaceAdditionalInvoiceLinks(ctx, eventId, invoiceSplit.additional);
     }
     return eventId;
   },
@@ -593,7 +606,8 @@ export const update = mutation({
     title: v.optional(v.string()),
     status: v.optional(eventStatusValue),
     visibility: v.optional(eventVisibilityValue),
-    invoiceId: v.optional(v.id("invoices")),
+    invoiceId: v.optional(v.union(v.id("invoices"), v.null())),
+    additionalInvoiceIds: v.optional(v.array(v.id("invoices"))),
     startAt: v.optional(v.number()),
     endAt: v.optional(v.number()),
     requiresShowWindow: v.optional(v.boolean()),
@@ -608,8 +622,8 @@ export const update = mutation({
     expectedTurnout: v.optional(v.number()),
     actualTurnout: v.optional(v.number()),
     budgetUsd: v.optional(v.number()),
-    dayOfLeadUserId: v.optional(v.string()),
-    eventManagerUserId: v.optional(v.string()),
+    dayOfLeadUserId: v.optional(v.union(v.string(), v.null())),
+    eventManagerUserId: v.optional(v.union(v.string(), v.null())),
     crewCostUsd: v.optional(v.number()),
     bandsCostUsd: v.optional(v.number()),
     externalRentalsCostUsd: v.optional(v.number()),
@@ -636,7 +650,18 @@ export const update = mutation({
       args.rentalFulfillmentMode !== undefined
         ? resolveRentalFulfillmentMode(nextEventType, args.rentalFulfillmentMode)
         : resolveRentalFulfillmentMode(nextEventType, existing.rentalFulfillmentMode);
-    const nextInvoiceId = args.invoiceId !== undefined ? args.invoiceId : existing.invoiceId;
+    let nextInvoiceId = args.invoiceId === undefined ? existing.invoiceId : (args.invoiceId ?? undefined);
+    let nextAdditionalInvoiceIds: Id<"invoices">[] | undefined;
+    if (args.additionalInvoiceIds !== undefined) {
+      const split = splitPrimaryAndAdditional(nextInvoiceId, args.additionalInvoiceIds);
+      nextInvoiceId = split.primary;
+      nextAdditionalInvoiceIds = split.additional;
+    } else if (args.invoiceId === null) {
+      // A clear with no replacement list still needs one primary when extras exist.
+      const split = splitPrimaryAndAdditional(undefined, await listAdditionalInvoiceIds(ctx, args.id));
+      nextInvoiceId = split.primary;
+      nextAdditionalInvoiceIds = split.additional;
+    }
     const nextStatus = normalizeEventStatus(args.status ?? existing.status);
     const prevStatus = normalizeEventStatus(existing.status);
     const now = Date.now();
@@ -664,7 +689,8 @@ export const update = mutation({
         ? await resolveVenueLink(ctx, args.venueId)
         : { venueId: existing.venueId, venueName: existing.venueName, venueAddress: undefined };
     const hostLink = await resolveEventPrimaryHostLink(ctx, {
-      invoiceId: nextInvoiceId,
+      // null means the primary was cleared. undefined would fall back to the old invoice.
+      invoiceId: nextInvoiceId ?? (args.invoiceId === null ? null : undefined),
       hostGroupId: args.hostGroupId,
       existingInvoiceId: existing.invoiceId,
       existingHostGroupId: existing.hostGroupId,
@@ -731,6 +757,11 @@ export const update = mutation({
 
     let affectedOccurrences: SeriesOverviewAffectedOccurrence[] = [{ id: args.id, prevStatus: existing.status, invoiceId: nextInvoiceId }];
 
+    // An explicit clear must drop the field outright: `patch` ignores
+    // `undefined`, and a retained value would propagate to occurrences.
+    const clearDayOfLead = args.dayOfLeadUserId === null || args.dayOfLeadUserId === "";
+    const clearManager = args.eventManagerUserId === null || args.eventManagerUserId === "";
+
     if (hasSeries && existing.seriesId && scope !== "this") {
       const series = await ctx.db.get(existing.seriesId);
       if (!series) throw new Error("Linked event series not found.");
@@ -774,6 +805,15 @@ export const update = mutation({
         ...(args.invoiceId !== undefined ? { invoiceId: nextInvoiceId } : {}),
         updatedAt: now,
       });
+      if (clearDayOfLead || clearManager) {
+        const cleared = await ctx.db.get(existing.seriesId);
+        if (cleared) {
+          const next = { ...cleared };
+          if (clearDayOfLead) delete next.dayOfLeadUserId;
+          if (clearManager) delete next.eventManagerUserId;
+          await ctx.db.replace(existing.seriesId, next);
+        }
+      }
       const updatedSeries = await ctx.db.get(existing.seriesId);
       if (!updatedSeries) throw new Error("Linked event series not found.");
       const overrides: SeriesOverviewOverride = {
@@ -823,6 +863,24 @@ export const update = mutation({
         ...patch,
         seriesDetached: hasSeries && scope === "this" ? true : existing.seriesDetached,
       });
+    }
+
+    if (clearDayOfLead || clearManager) {
+      const updated = await ctx.db.get(args.id);
+      if (updated) {
+        const next = { ...updated };
+        if (clearDayOfLead) delete next.dayOfLeadUserId;
+        if (clearManager) delete next.eventManagerUserId;
+        await ctx.db.replace(args.id, next);
+      }
+    }
+
+    // Additional invoices stay on this occurrence. The primary still propagates
+    // with the series scope above.
+    if (nextAdditionalInvoiceIds !== undefined) {
+      await replaceAdditionalInvoiceLinks(ctx, args.id, nextAdditionalInvoiceIds);
+    } else if (args.invoiceId !== undefined && nextInvoiceId) {
+      await detachInvoiceFromAdditionalLinks(ctx, args.id, nextInvoiceId);
     }
 
     if (prevStatus !== nextStatus) {
@@ -974,6 +1032,12 @@ export const duplicate = mutation({
         createdAt: now,
         updatedAt: now,
       });
+    }
+    const additionalInvoiceIds = (await listAdditionalInvoiceIds(ctx, args.id)).filter(
+      (invoiceId) => invoiceId !== existing.invoiceId,
+    );
+    if (additionalInvoiceIds.length > 0) {
+      await replaceAdditionalInvoiceLinks(ctx, newId, additionalInvoiceIds);
     }
     await syncEventStatusForLinkedInvoice(ctx, newId, existing.invoiceId, "tentative");
     const blocks = await ctx.db

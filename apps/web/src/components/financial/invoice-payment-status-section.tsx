@@ -180,14 +180,6 @@ export function InvoicePaymentStatusSection({ invoiceId }: { invoiceId: Id<"invo
           ) : null}
         </div>
 
-        {!details.eventLinked ? (
-          <Alert>
-            <AlertDescription>
-              Link an event to this invoice before recording or managing payment proof.
-            </AlertDescription>
-          </Alert>
-        ) : null}
-
         <div className="grid gap-2 sm:grid-cols-2">
           <p>
             <span className="font-medium">Total:</span> {formatUsd(details.totalUsd)}

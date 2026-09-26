@@ -50,9 +50,9 @@ export function invoiceDueEndMs(
 
 export function getPaymentDueAt(
   invoice: Pick<Doc<"invoices">, "dueDate" | "approvedAt" | "clientApprovalStatus">,
-  event: Pick<Doc<"events">, "timezone">,
+  event: Pick<Doc<"events">, "timezone"> | null,
 ) {
-  const timezone = event.timezone || EVENT_TIMEZONE;
+  const timezone = event?.timezone || EVENT_TIMEZONE;
   const opensAt = getPaymentProofOpensAt(invoice);
   const dueFromInvoice = invoice.dueDate ? parseDueDateString(invoice.dueDate, timezone) : null;
   if (dueFromInvoice && opensAt != null && dueFromInvoice > opensAt) return dueFromInvoice;

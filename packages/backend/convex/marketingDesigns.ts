@@ -25,7 +25,7 @@ import {
 } from "./lib/marketingLinks";
 import {
   canPublishMarketingDesignVisibility,
-  eventHasMarketingTeamInterest,
+  eventHasDesignTeamInterest,
   isMarketingPosterWorkVisibility,
 } from "./lib/eventVisibility";
 import { schedulePublicEventsSiteRevalidation } from "./lib/scheduleSiteRevalidation";
@@ -52,7 +52,7 @@ type AuthUserRecord = {
 };
 
 function isMarketingPosterEligible(event: Doc<"events">, now: number): boolean {
-  if (!eventHasMarketingTeamInterest(event.teamsInterested)) return false;
+  if (!eventHasDesignTeamInterest(event.teamsInterested)) return false;
   if (!isMarketingPosterWorkVisibility(event.visibility)) return false;
   if (normalizeEventStatus(event.status) === "cancelled") return false;
   return isWithinDays(event.startAt, now, MARKETING_POSTER_WINDOW_DAYS);

@@ -2,12 +2,13 @@ import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import { query, type QueryCtx } from "./_generated/server";
 import {
+  type ActiveOrganizationContext,
+  getActiveOrganizationContextOrNull,
   getUserId,
   requireAdmin,
-  requireArborInternalContext,
   requireAuth,
-  requireBandContext,
 } from "./lib/auth";
+import { isArtistOrganizationType } from "./lib/organizationType";
 import { isBandPayeeComplete, payeeFieldsFromProfile } from "./lib/bandPayments";
 import { listCrewedEventsInRange } from "./lib/crewedEvents";
 import {
@@ -16,6 +17,7 @@ import {
 } from "./lib/crewTeams";
 import {
   getDisciplinesForEventMatching,
+  profileHasCrewSpecialty,
   resolveProfileMembership,
 } from "./lib/userVerticals";
 import { countPendingPostEventWork, listMyPostEventWork } from "./lib/myEventActions";
@@ -63,13 +65,20 @@ export const getNavBadges = query({
   }),
   handler: async (ctx, args) => {
     const user = await requireAuth(ctx);
-    const includeUnconfirmedCrew = Boolean(args.includeUnconfirmedCrew);
+    const orgContext = await getActiveOrganizationContextOrNull(ctx);
+    const orgType = orgContext?.organizationType;
 
-    // Auth gates once up front — helpers below skip re-resolving org/admin.
-    if (args.includeArborInternal) {
-      await requireArborInternalContext(ctx);
-    }
-    if (args.includeAdmin) {
+    // Client flags can lag behind setActiveOrganization; intersect with the
+    // server active org so a stale subscription does not throw mid-switch.
+    const includeUnconfirmedCrew = Boolean(args.includeUnconfirmedCrew);
+    const includeArborInternal =
+      Boolean(args.includeArborInternal) && orgType === "arbor_internal";
+    const includeBand = Boolean(args.includeBand) && isArtistOrganizationType(orgType);
+    const includeAdmin = Boolean(args.includeAdmin);
+    const includeMyEventActions =
+      Boolean(args.includeMyEventActions) && orgType === "arbor_internal";
+
+    if (includeAdmin) {
       await requireAdmin(ctx);
     }
 
@@ -85,20 +94,22 @@ export const getNavBadges = query({
       pendingEquipmentBorrowRequests,
       pendingPostEventWork,
     ] = await Promise.all([
-      args.includeArborInternal
+      includeArborInternal
         ? countMyPendingAvailability(ctx, getUserId(user), args.now)
         : Promise.resolve(0),
-      args.includeArborInternal && args.includeAdmin && includeUnconfirmedCrew
+      includeArborInternal && includeAdmin && includeUnconfirmedCrew
         ? countUnconfirmedCrew(ctx, args.rangeStart, args.rangeEnd)
         : Promise.resolve(0),
-      args.includeArborInternal ? countOpenBookingRequests(ctx) : Promise.resolve(0),
-      args.includeAdmin ? countSubmittedBandApplications(ctx) : Promise.resolve(0),
-      args.includeAdmin ? countSubmittedCrewApplications(ctx) : Promise.resolve(0),
-      args.includeArborInternal ? countPendingDamageReports(ctx) : Promise.resolve(0),
-      args.includeBand ? countPendingBandPaymentActions(ctx) : Promise.resolve(0),
-      args.includeArborInternal ? countQuoteChangesRequested(ctx) : Promise.resolve(0),
-      args.includeAdmin ? countPendingEquipmentBorrowRequests(ctx) : Promise.resolve(0),
-      args.includeArborInternal && args.includeMyEventActions
+      includeArborInternal ? countOpenBookingRequests(ctx) : Promise.resolve(0),
+      includeAdmin ? countSubmittedBandApplications(ctx) : Promise.resolve(0),
+      includeAdmin ? countSubmittedCrewApplications(ctx) : Promise.resolve(0),
+      includeArborInternal ? countPendingDamageReports(ctx) : Promise.resolve(0),
+      includeBand && orgContext
+        ? countPendingBandPaymentActions(ctx, orgContext)
+        : Promise.resolve(0),
+      includeArborInternal ? countQuoteChangesRequested(ctx) : Promise.resolve(0),
+      includeAdmin ? countPendingEquipmentBorrowRequests(ctx) : Promise.resolve(0),
+      includeArborInternal && includeMyEventActions
         ? countMyPendingPostEventWork(ctx, getUserId(user), args.now)
         : Promise.resolve(0),
     ]);
@@ -135,6 +146,7 @@ async function getCurrentUserProfile(ctx: QueryCtx, userId: string) {
 
 async function countMyPendingAvailability(ctx: QueryCtx, userId: string, now: number) {
   const profile = await getCurrentUserProfile(ctx, userId);
+  if (!profileHasCrewSpecialty(profile ?? {})) return 0;
   const userDisciplines = getDisciplinesForEventMatching(
     resolveProfileMembership(profile ?? {}).disciplines,
   );
@@ -249,8 +261,10 @@ async function countQuoteChangesRequested(ctx: QueryCtx) {
   return count;
 }
 
-async function countPendingBandPaymentActions(ctx: QueryCtx) {
-  const bandContext = await requireBandContext(ctx);
+async function countPendingBandPaymentActions(
+  ctx: QueryCtx,
+  bandContext: ActiveOrganizationContext,
+) {
   const user = await requireAuth(ctx);
   const userId = getUserId(user);
   const profile = await ctx.db

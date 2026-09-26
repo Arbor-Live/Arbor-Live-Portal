@@ -17,13 +17,24 @@ import {
   localDateTimeInputToMs,
   toLocalDateTimeInput,
 } from "@/lib/crew-availability";
-
-const USER_VERTICALS = ["Operations", "Crew", "Trivia", "Marketing"] as const;
-const USER_DISCIPLINES = ["Sound", "Lights", "Design"] as const;
+import {
+  USER_VERTICAL_OPTIONS,
+  disciplinesForVerticals,
+  type UserDisciplineOption,
+  type UserVerticalOption,
+} from "@/lib/validations/users";
 
 type StatusFilter = "submitted" | "trainee" | "converted" | "closed" | "all";
 
 type PresenceMode = "entire_event" | "first_8_hours" | "schedule_block";
+
+function earliestBlockStartMs(blocks: Array<{ startsAt: number }>): number | undefined {
+  let earliest: number | undefined;
+  for (const block of blocks) {
+    if (earliest === undefined || block.startsAt < earliest) earliest = block.startsAt;
+  }
+  return earliest;
+}
 
 type ApplicationRow = {
   _id: Id<"crewApplications">;
@@ -32,8 +43,9 @@ type ApplicationRow = {
   email: string;
   phone: string;
   heardAboutUs: string;
-  vertical: (typeof USER_VERTICALS)[number];
-  discipline?: "Sound" | "Lights" | "Design" | "unsure";
+  experience?: string;
+  vertical: UserVerticalOption;
+  discipline?: UserDisciplineOption | "unsure";
   crewAvailabilityDays?: Array<"friday" | "saturday">;
   stanfordPosition: string;
   gradYear?: number;
@@ -63,7 +75,8 @@ function TraineeAssignPanel({
   const [scheduleBlockId, setScheduleBlockId] = useState("");
   const [startsAtInput, setStartsAtInput] = useState("");
   const [endsAtInput, setEndsAtInput] = useState("");
-  // null = not yet manually set; defaults to the event's start time once loaded.
+  // null = not yet manually set. Entire event defaults to the first schedule
+  // block (setup), which is before the show stored on event.startAt.
   const [callTimeOverride, setCallTimeOverride] = useState<string | null>(null);
 
   const eventDetails = useQuery(
@@ -73,9 +86,14 @@ function TraineeAssignPanel({
 
   const scheduleBlocks = eventDetails?.blocks ?? [];
 
+  const defaultCallTimeMs =
+    presenceMode === "entire_event"
+      ? (earliestBlockStartMs(scheduleBlocks) ?? eventDetails?.event?.startAt)
+      : eventDetails?.event?.startAt;
+
   const callTimeInput =
     callTimeOverride ??
-    (eventDetails?.event ? toLocalDateTimeInput(new Date(eventDetails.event.startAt)) : "");
+    (defaultCallTimeMs != null ? toLocalDateTimeInput(new Date(defaultCallTimeMs)) : "");
 
   return (
     <div className="space-y-3 border-t border-border/50 pt-3">
@@ -199,8 +217,12 @@ export function CrewApplicationsAdminClient() {
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  const [convertVerticals, setConvertVerticals] = useState<Record<string, string[]>>({});
-  const [convertDisciplines, setConvertDisciplines] = useState<Record<string, string[]>>({});
+  const [convertVerticals, setConvertVerticals] = useState<
+    Record<string, UserVerticalOption[]>
+  >({});
+  const [convertDisciplines, setConvertDisciplines] = useState<
+    Record<string, UserDisciplineOption[]>
+  >({});
   const [convertRateMode, setConvertRateMode] = useState<
     Record<string, "normal" | "lead" | "custom">
   >({});
@@ -231,24 +253,32 @@ export function CrewApplicationsAdminClient() {
     }
   }
 
-  function toggleVertical(applicationId: string, vertical: string, fallback: string[]) {
-    setConvertVerticals((prev) => {
-      const current = prev[applicationId] ?? fallback;
-      const checked = current.includes(vertical);
-      const next = checked
-        ? current.filter((entry) => entry !== vertical)
-        : [...current, vertical];
-      return { ...prev, [applicationId]: next };
-    });
+  function toggleVertical(
+    applicationId: string,
+    vertical: UserVerticalOption,
+    verticals: UserVerticalOption[],
+    disciplines: UserDisciplineOption[],
+  ) {
+    const next = verticals.includes(vertical)
+      ? verticals.filter((entry) => entry !== vertical)
+      : [...verticals, vertical];
+    setConvertVerticals((prev) => ({ ...prev, [applicationId]: next }));
+    const allowed = new Set(disciplinesForVerticals(next));
+    setConvertDisciplines((prev) => ({
+      ...prev,
+      [applicationId]: disciplines.filter((discipline) => allowed.has(discipline)),
+    }));
   }
 
-  function toggleDiscipline(applicationId: string, discipline: string, fallback: string[]) {
+  function toggleDiscipline(
+    applicationId: string,
+    discipline: UserDisciplineOption,
+    disciplines: UserDisciplineOption[],
+  ) {
     setConvertDisciplines((prev) => {
-      const current = prev[applicationId] ?? fallback;
-      const checked = current.includes(discipline);
-      const next = checked
-        ? current.filter((entry) => entry !== discipline)
-        : [...current, discipline];
+      const next = disciplines.includes(discipline)
+        ? disciplines.filter((entry) => entry !== discipline)
+        : [...disciplines, discipline];
       return { ...prev, [applicationId]: next };
     });
   }
@@ -293,10 +323,16 @@ export function CrewApplicationsAdminClient() {
 
       <div className="space-y-4">
         {(applications ?? []).map((app) => {
-          const verticals = convertVerticals[app._id] ?? [app.vertical];
-          const disciplines =
-            convertDisciplines[app._id] ??
-            (app.discipline && app.discipline !== "unsure" ? [app.discipline] : []);
+          const verticals: UserVerticalOption[] = convertVerticals[app._id] ?? [app.vertical];
+          const disciplineOptions = disciplinesForVerticals(verticals);
+          const storedDisciplines: UserDisciplineOption[] =
+            app.discipline &&
+            app.discipline !== "unsure" &&
+            disciplineOptions.includes(app.discipline)
+              ? [app.discipline]
+              : [];
+          const disciplines: UserDisciplineOption[] =
+            convertDisciplines[app._id] ?? storedDisciplines;
 
           return (
             <article
@@ -380,6 +416,12 @@ export function CrewApplicationsAdminClient() {
                   <dt className="font-medium text-foreground/80">Heard about us</dt>
                   <dd>{app.heardAboutUs}</dd>
                 </div>
+                {app.experience ? (
+                  <div className="sm:col-span-2">
+                    <dt className="font-medium text-foreground/80">What excites them about joining</dt>
+                    <dd className="whitespace-pre-wrap">{app.experience}</dd>
+                  </div>
+                ) : null}
               </dl>
 
               {app.status === "submitted" || app.status === "trainee" ? (
@@ -403,7 +445,7 @@ export function CrewApplicationsAdminClient() {
                   <div className="space-y-2">
                     <Label>Verticals</Label>
                     <div className="flex flex-wrap gap-2">
-                      {USER_VERTICALS.map((vertical) => {
+                      {USER_VERTICAL_OPTIONS.map((vertical) => {
                         const checked = verticals.includes(vertical);
                         return (
                           <Button
@@ -411,7 +453,9 @@ export function CrewApplicationsAdminClient() {
                             type="button"
                             size="sm"
                             variant={checked ? "default" : "secondary"}
-                            onClick={() => toggleVertical(app._id, vertical, verticals)}
+                            onClick={() =>
+                              toggleVertical(app._id, vertical, verticals, disciplines)
+                            }
                           >
                             {vertical}
                           </Button>
@@ -419,25 +463,27 @@ export function CrewApplicationsAdminClient() {
                       })}
                     </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label>Disciplines</Label>
-                    <div className="flex flex-wrap gap-2">
-                      {USER_DISCIPLINES.map((discipline) => {
-                        const checked = disciplines.includes(discipline);
-                        return (
-                          <Button
-                            key={discipline}
-                            type="button"
-                            size="sm"
-                            variant={checked ? "default" : "secondary"}
-                            onClick={() => toggleDiscipline(app._id, discipline, disciplines)}
-                          >
-                            {discipline}
-                          </Button>
-                        );
-                      })}
+                  {disciplineOptions.length > 0 ? (
+                    <div className="space-y-2">
+                      <Label>Disciplines</Label>
+                      <div className="flex flex-wrap gap-2">
+                        {disciplineOptions.map((discipline) => {
+                          const checked = disciplines.includes(discipline);
+                          return (
+                            <Button
+                              key={discipline}
+                              type="button"
+                              size="sm"
+                              variant={checked ? "default" : "secondary"}
+                              onClick={() => toggleDiscipline(app._id, discipline, disciplines)}
+                            >
+                              {discipline}
+                            </Button>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
+                  ) : null}
                   <div className="grid gap-3 md:grid-cols-2">
                     <div className="space-y-2">
                       <Label>Rate</Label>
@@ -507,10 +553,8 @@ export function CrewApplicationsAdminClient() {
                         const rateMode = convertRateMode[app._id] ?? "normal";
                         await convertToMember({
                           applicationId: app._id,
-                          verticals: verticals as Array<
-                            "Operations" | "Crew" | "Trivia" | "Marketing"
-                          >,
-                          disciplines: disciplines as Array<"Sound" | "Lights" | "Design">,
+                          verticals,
+                          disciplines,
                           rateMode,
                           customHourlyRateUsd:
                             rateMode === "custom"

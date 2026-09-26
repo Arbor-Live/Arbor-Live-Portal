@@ -76,6 +76,35 @@ test.describe("band payouts queue", () => {
     expect(email.template).toBe("band_payment_confirmation");
   });
 
+  test("admin can preview the signature request email", async ({ page }) => {
+    test.setTimeout(120_000);
+
+    const seeded = seedPayment("pending_email", "Preview");
+    for (let i = 0; i < 12; i += 1) {
+      seedPayment("pending_email", `Filler${i}`);
+    }
+
+    const card = await openQueueCard(page, /Needs signature request/, seeded.eventTitle);
+    await card.getByRole("button", { name: "Preview email" }).click();
+
+    // Preview opens as a centered dialog so it is visible even when the seeded
+    // payment sits far down a long queue (the inline card it replaced rendered
+    // below every row, off screen).
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText("Signature request email preview")).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(
+      dialog.getByText(`Payment ready for your signature: ${seeded.eventTitle}`),
+    ).toBeVisible();
+    await expect(
+      dialog.getByText(new RegExp(`\\[${seeded.confirmationToken}\\]`)),
+    ).toBeVisible();
+
+    await dialog.getByRole("button", { name: "Close preview" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+  });
+
   test("admin can mark a signed payment paid from the queue", async ({ page }) => {
     test.setTimeout(120_000);
 

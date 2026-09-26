@@ -9,8 +9,16 @@ export type CrewApplicationFormValues = {
   email: string;
   phone: string;
   heardAboutUs: string;
+  experience: string;
   vertical: "Operations" | "Crew" | "Trivia" | "Marketing";
-  discipline: "" | "Sound" | "Lights" | "Design" | "unsure";
+  discipline:
+    | ""
+    | "Sound"
+    | "Lights"
+    | "Design"
+    | "Photography"
+    | "Videography"
+    | "unsure";
   friday: boolean;
   saturday: boolean;
   stanfordPosition: "undergrad" | "coterm" | "masters" | "phd" | "postdoc" | "other";
@@ -37,8 +45,12 @@ export async function submitCrewApplication(
       email: raw.email,
       phone: raw.phone,
       heardAboutUs: raw.heardAboutUs,
+      experience: raw.experience,
       vertical: raw.vertical,
-      discipline: raw.vertical === "Crew" && raw.discipline ? raw.discipline : undefined,
+      discipline:
+        (raw.vertical === "Crew" || raw.vertical === "Marketing") && raw.discipline
+          ? raw.discipline
+          : undefined,
       crewAvailabilityDays: raw.vertical === "Crew" ? crewAvailabilityDays : undefined,
       stanfordPosition: raw.stanfordPosition,
       gradYear: raw.stanfordPosition === "other" ? undefined : gradYear,

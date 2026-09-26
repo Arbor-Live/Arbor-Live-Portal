@@ -5,7 +5,12 @@ import { PayPeriodSummaryWidget } from "@/components/crew-portal/widgets/pay-per
 import { BorrowRequestsWidget } from "@/components/crew-portal/widgets/borrow-requests-widget";
 import type { DashboardWidgetDefinition } from "@/components/dashboard/customizable-widget-dashboard";
 
-export type UserDiscipline = "Sound" | "Lights" | "Design";
+export type UserDiscipline =
+  | "Sound"
+  | "Lights"
+  | "Design"
+  | "Photography"
+  | "Videography";
 
 export type CrewWidget = DashboardWidgetDefinition & {
   disciplines?: UserDiscipline[];

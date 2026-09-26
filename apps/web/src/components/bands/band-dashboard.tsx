@@ -10,12 +10,23 @@ import { BandPaymentSignSheet } from "@/components/bands/band-payment-sign-sheet
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatDateTime, formatUsd } from "@/lib/format";
+import { formatDateTime, formatDateTimeRange, formatUsd } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 type ShowRow = NonNullable<
   ReturnType<typeof useQuery<typeof api.eventBands.listShowsForActiveBand>>
 >[number];
+
+/** A run-of-show window: a range when both ends are set, a single time otherwise. */
+function formatWindow(
+  startAt: number | null,
+  endAt: number | null,
+  timezone: string | undefined,
+) {
+  if (startAt == null) return null;
+  if (endAt == null) return formatDateTime(startAt, "short", timezone);
+  return formatDateTimeRange(startAt, endAt, timezone);
+}
 
 const ROLE_LABELS: Record<ShowRow["role"], string> = {
   headliner: "Headliner",
@@ -45,8 +56,7 @@ function ShowCard({
   show: ShowRow;
   onSign: (paymentId: Id<"eventBandPayments">) => void;
 }) {
-  return (
-    <div className="rounded-lg border px-4 py-3">
+  return (    <div className="rounded-lg border px-4 py-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
           <p className="font-medium">{show.title}</p>
@@ -55,6 +65,18 @@ function ShowCard({
             {show.venueName ? ` · ${show.venueName}` : ""}
           </p>
           <p className="text-xs text-muted-foreground">{ROLE_LABELS[show.role]}</p>
+          {formatWindow(show.setStartsAt, show.setEndsAt, show.timezone) ? (
+            <p className="text-xs">
+              <span className="text-muted-foreground">Set: </span>
+              {formatWindow(show.setStartsAt, show.setEndsAt, show.timezone)}
+            </p>
+          ) : null}
+          {formatWindow(show.soundcheckStartsAt, show.soundcheckEndsAt, show.timezone) ? (
+            <p className="text-xs">
+              <span className="text-muted-foreground">Soundcheck: </span>
+              {formatWindow(show.soundcheckStartsAt, show.soundcheckEndsAt, show.timezone)}
+            </p>
+          ) : null}
         </div>
         <div className="flex flex-col items-end gap-2">
           <span

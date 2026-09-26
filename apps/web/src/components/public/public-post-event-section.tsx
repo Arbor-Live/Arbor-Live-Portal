@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
+import type { FunctionReturnType } from "convex/server";
 import { StarIcon } from "@phosphor-icons/react";
 import { api } from "@/lib/convex-api";
 import {
@@ -31,6 +32,10 @@ import {
 
 export type FeedbackPortal = "request" | "quote";
 
+type FeedbackDay = NonNullable<
+  FunctionReturnType<typeof api.eventFeedback.getStatusByToken>
+>["days"][number];
+
 export function PublicPostEventSection({
   portal,
   token,
@@ -39,18 +44,70 @@ export function PublicPostEventSection({
   token: string;
 }) {
   const status = useQuery(api.eventFeedback.getStatusByToken, { portal, token });
+  const [selectedDay, setSelectedDay] = useState(0);
+
+  useEffect(() => {
+    if (status === undefined) return;
+    if (window.location.hash === "#feedback") {
+      document.getElementById("feedback")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [status]);
+
+  if (status === undefined) return null;
+  if (!status || !status.eventEnded) return null;
+
+  const days = status.days;
+  const firstEndedIndex = Math.max(
+    0,
+    days.findIndex((day) => day.ended),
+  );
+  const dayIndex = days[selectedDay]?.ended ? selectedDay : firstEndedIndex;
+  const selected = days[dayIndex];
+  if (!selected) return null;
+
+  return (
+    <div className="space-y-4" id="feedback">
+      {days.length > 1 ? (
+        <div role="tablist" aria-label="Event day" className="flex flex-wrap gap-2">
+          {days.map((day, index) => (
+            <Button
+              key={day.eventId}
+              type="button"
+              role="tab"
+              size="sm"
+              variant={index === dayIndex ? "default" : "outline"}
+              aria-selected={index === dayIndex}
+              disabled={!day.ended}
+              onClick={() => setSelectedDay(index)}
+            >
+              Day {index + 1}
+            </Button>
+          ))}
+        </div>
+      ) : null}
+      <PublicPostEventDayContent
+        key={selected.eventId}
+        portal={portal}
+        token={token}
+        day={selected}
+      />
+    </div>
+  );
+}
+
+function PublicPostEventDayContent({
+  portal,
+  token,
+  day,
+}: {
+  portal: FeedbackPortal;
+  token: string;
+  day: FeedbackDay;
+}) {
   const ensureAlbum = useAction(api.eventFeedbackActions.ensureAlbumShareUrlByToken);
   const submit = useMutation(api.eventFeedback.submitByToken);
   const [hoveredRating, setHoveredRating] = useState(0);
-  const [ensuredAlbum, setEnsuredAlbum] = useState<{
-    portal: FeedbackPortal;
-    token: string;
-    albumShareUrl: string;
-  } | null>(null);
-  const ensuredAlbumUrl =
-    ensuredAlbum && ensuredAlbum.portal === portal && ensuredAlbum.token === token
-      ? ensuredAlbum.albumShareUrl
-      : undefined;
+  const [ensuredAlbumUrl, setEnsuredAlbumUrl] = useState<string | undefined>();
 
   const form = useConvexForm<EventFeedbackFormValues>({
     schema: eventFeedbackSchema,
@@ -62,6 +119,7 @@ export function PublicPostEventSection({
     await submit({
       portal,
       token,
+      eventId: day.eventId,
       rating: values.rating,
       comments: values.comments.trim(),
     });
@@ -69,22 +127,13 @@ export function PublicPostEventSection({
   });
 
   useEffect(() => {
-    if (status === undefined) return;
-    if (window.location.hash === "#feedback") {
-      document.getElementById("feedback")?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  }, [status]);
-
-  useEffect(() => {
-    if (!status?.eventEnded) return;
-    if (status.albumShareUrl || ensuredAlbumUrl) return;
+    if (!day.ended) return;
+    if (day.albumShareUrl || ensuredAlbumUrl) return;
     let cancelled = false;
-    void ensureAlbum({ portal, token })
+    void ensureAlbum({ portal, token, eventId: day.eventId })
       .then((result) => {
         if (cancelled) return;
-        if (result?.albumShareUrl) {
-          setEnsuredAlbum({ portal, token, albumShareUrl: result.albumShareUrl });
-        }
+        if (result?.albumShareUrl) setEnsuredAlbumUrl(result.albumShareUrl);
       })
       .catch(() => {
         // Immich is optional — leave the album card hidden if ensure fails.
@@ -92,22 +141,20 @@ export function PublicPostEventSection({
     return () => {
       cancelled = true;
     };
-  }, [status?.eventEnded, status?.albumShareUrl, ensuredAlbumUrl, ensureAlbum, portal, token]);
-
-  if (status === undefined) return null;
-  if (!status || !status.eventEnded) return null;
+  }, [day.ended, day.albumShareUrl, day.eventId, ensuredAlbumUrl, ensureAlbum, portal, token]);
 
   const rating = form.watch("rating") ?? 0;
-  const albumShareUrl = status.albumShareUrl ?? ensuredAlbumUrl;
+  const albumShareUrl = day.albumShareUrl ?? ensuredAlbumUrl;
+  const eventTitle = day.eventTitle;
 
   return (
-    <div className="space-y-4" id="feedback">
+    <div className="space-y-4">
       {albumShareUrl ? (
         <Card>
           <CardHeader>
             <CardTitle>Photo album</CardTitle>
             <CardDescription>
-              Photos and videos from {status.eventTitle ?? "your event"}.
+              Photos and videos from {eventTitle}.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -120,12 +167,12 @@ export function PublicPostEventSection({
         </Card>
       ) : null}
 
-      {status.submitted ? (
+      {day.submitted ? (
         <Card>
           <CardHeader>
             <CardTitle>Event feedback</CardTitle>
             <CardDescription>
-              Thanks for your feedback on {status.eventTitle ?? "your event"} — we really
+              Thanks for your feedback on {eventTitle} — we really
               appreciate it.
             </CardDescription>
           </CardHeader>
@@ -133,7 +180,7 @@ export function PublicPostEventSection({
       ) : (
         <Card>
           <CardHeader>
-            <CardTitle>How was {status.eventTitle ?? "your event"}?</CardTitle>
+            <CardTitle>How was {eventTitle}?</CardTitle>
             <CardDescription>
               Your feedback helps us improve how we run events for clients like you.
             </CardDescription>

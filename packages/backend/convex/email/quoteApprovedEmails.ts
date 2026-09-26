@@ -1,6 +1,6 @@
 import type { Doc } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
-import { listEventsByInvoiceId } from "../lib/invoiceEvents";
+import { listEventsLinkedToInvoice } from "../lib/invoiceEvents";
 import {
   EVENT_TIMEZONE,
   formatEventDateRange,
@@ -17,7 +17,7 @@ export async function scheduleQuoteApprovedEmail(
   const managerEmail = args.invoice.managerEmail?.trim().toLowerCase();
   if (!managerEmail) return;
 
-  const linkedEvents = await listEventsByInvoiceId(ctx, args.invoice._id);
+  const linkedEvents = await listEventsLinkedToInvoice(ctx, args.invoice._id);
   const event = linkedEvents[0] ?? null;
   const eventTitle =
     event?.title?.trim() ||

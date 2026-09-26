@@ -266,6 +266,11 @@ export function InvoiceEditor({
     () => linkedEvent?.linkedEvents ?? [],
     [linkedEvent?.linkedEvents],
   );
+  const primaryLinkedEventIds = new Set<string>(linkedDayEvents.map((day) => day._id));
+  if (linkedEvent?._id) primaryLinkedEventIds.add(linkedEvent._id);
+  const otherLinkedEvents = (invoiceData?.additionallyLinkedEvents ?? []).filter(
+    (event) => !primaryLinkedEventIds.has(event._id),
+  );
   const [selectedDayEventIdOverride, setSelectedDayEventIdOverride] = useState<
     Id<"events"> | undefined
   >(undefined);
@@ -302,6 +307,30 @@ export function InvoiceEditor({
       ? { eventIds: linkedDayEvents.map((day) => day._id) }
       : "skip",
   );
+  const artistNeedStatuses = useQuery(
+    api.eventArtistNeeds.listNeedStatusForEvents,
+    linkedEvent && !linkedSeries && linkedDayEvents.length > 0
+      ? { eventIds: linkedDayEvents.map((day) => day._id) }
+      : "skip",
+  );
+  const artistNeedByEventId = useMemo(() => {
+    const map = new Map<
+      string,
+      { artistType: "band" | "dj" | "no_preference"; status: "open" | "inquiring" | "booked"; genres: string }
+    >();
+    for (const row of artistNeedStatuses ?? []) {
+      // One row per slot: an open slot must stay visible even if a later
+      // booked slot for the same event lands in the map.
+      const existing = map.get(row.eventId);
+      if (existing && existing.status !== "booked" && row.status === "booked") continue;
+      map.set(row.eventId, {
+        artistType: row.artistType,
+        status: row.status,
+        genres: row.genres,
+      });
+    }
+    return map;
+  }, [artistNeedStatuses]);
   const sourceRequest = useQuery(
     api.eventRequests.getByLinkedInvoiceId,
     activeInvoiceId ?? invoiceId ? { invoiceId: (activeInvoiceId ?? invoiceId)! } : "skip",
@@ -1568,6 +1597,43 @@ export function InvoiceEditor({
               </DropdownMenuContent>
             </DropdownMenu>
           ) : null}
+          {otherLinkedEvents.length === 1 ? (
+            <Button type="button" variant="outline" size="sm" asChild>
+              <Link
+                href={`/dashboard/events/${otherLinkedEvents[0]._id}`}
+                data-testid="invoice-additional-event-link"
+              >
+                {linkedDayEvents.length === 0 && !linkedEvent ? "Event" : otherLinkedEvents[0].title}
+              </Link>
+            </Button>
+          ) : otherLinkedEvents.length > 1 ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button type="button" variant="outline" size="sm">
+                  {linkedDayEvents.length === 0 && !linkedEvent
+                    ? `Events (${otherLinkedEvents.length})`
+                    : `Also linked (${otherLinkedEvents.length})`}
+                  <CaretDownIcon className="size-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-72">
+                {otherLinkedEvents.map((event) => (
+                  <DropdownMenuItem key={event._id} asChild>
+                    <Link
+                      href={`/dashboard/events/${event._id}`}
+                      data-testid="invoice-additional-event-link"
+                      className="flex flex-col items-start gap-0.5"
+                    >
+                      <span className="font-medium">{event.title}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {formatDateTimeRange(event.startAt, event.endAt)}
+                      </span>
+                    </Link>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : null}
           {activeInvoiceId ? (
             <InvoicePdfDownloadButton
               invoiceId={activeInvoiceId}
@@ -1822,6 +1888,7 @@ export function InvoiceEditor({
                   }))
             }
             defaultEventId={selectedDayEventId}
+            needStatusByEventId={artistNeedByEventId}
           />
           </div>
           <div id="section-crew">
@@ -2862,6 +2929,7 @@ function SectionArtists({
   bands,
   days = [],
   defaultEventId,
+  needStatusByEventId,
 }: {
   rows: ArtistRow[];
   setRows: Dispatch<SetStateAction<ArtistRow[]>>;
@@ -2877,6 +2945,11 @@ function SectionArtists({
   days?: Array<{ _id: string; label: string }>;
   /** Day new rows default to (the selected linked day). */
   defaultEventId?: string;
+  /** Open "Artist Needed" per linked event, to flag unbooked days. */
+  needStatusByEventId?: Map<
+    string,
+    { artistType: "band" | "dj" | "no_preference"; status: "open" | "inquiring" | "booked"; genres: string }
+  >;
 }) {
   const bandOptions = useMemo(
     () => artistSelectOptions(bands, { includeTbd: true }),
@@ -2889,6 +2962,15 @@ function SectionArtists({
     label: day.label,
     keywords: day.label,
   }));
+  const dayLabelByEventId = new Map(days.map((day) => [day._id, day.label]));
+  const artistTypeLabels: Record<"band" | "dj" | "no_preference", string> = {
+    band: "Live band",
+    dj: "DJ",
+    no_preference: "No preference",
+  };
+  const openArtistNeeds = needStatusByEventId
+    ? [...needStatusByEventId.entries()].filter(([, need]) => need.status !== "booked")
+    : [];
   const gridClass = showDayColumn
     ? "min-w-0 gap-2 md:grid-cols-[7rem_minmax(12rem,1.4fr)_minmax(8rem,1fr)_5.5rem_5.5rem_7.5rem_5.5rem] md:min-w-table-xl"
     : ARTIST_ROW_GRID;
@@ -2929,6 +3011,18 @@ function SectionArtists({
         <CardTitle>Artists</CardTitle>
       </CardHeader>
       <CardContent className="space-y-2 overflow-x-auto">
+        {openArtistNeeds.length > 0 ? (
+          <p className="text-xs text-muted-foreground">
+            Open artist need:{" "}
+            {openArtistNeeds
+              .map(([eventId, need]) => {
+                const day = dayLabelByEventId.get(eventId);
+                const detail = `${artistTypeLabels[need.artistType]}${need.genres ? ` · ${need.genres}` : ""}`;
+                return day ? `${day} — ${detail}` : detail;
+              })
+              .join("; ")}
+          </p>
+        ) : null}
         <div className={`hidden text-xs font-medium text-muted-foreground md:grid md:items-end ${gridClass}`}>
           {showDayColumn ? <span>Day</span> : null}
           <span>Artist</span>

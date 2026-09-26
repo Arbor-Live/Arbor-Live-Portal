@@ -112,7 +112,13 @@ const userVerticalValue = v.union(
   v.literal("Marketing"),
 );
 
-const userDisciplineValue = v.union(v.literal("Sound"), v.literal("Lights"), v.literal("Design"));
+const userDisciplineValue = v.union(
+  v.literal("Sound"),
+  v.literal("Lights"),
+  v.literal("Design"),
+  v.literal("Photography"),
+  v.literal("Videography"),
+);
 
 const marketingDesignLinkValue = v.object({
   label: v.string(),
@@ -722,7 +728,8 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_invoiceId", ["invoiceId"])
-    .index("by_invoiceId_and_order", ["invoiceId", "order"]),
+    .index("by_invoiceId_and_order", ["invoiceId", "order"])
+    .index("by_invoiceId_and_section", ["invoiceId", "section"]),
 
   invoiceExports: defineTable({
     invoiceId: v.id("invoices"),
@@ -807,6 +814,7 @@ export default defineSchema({
     title: v.string(),
     status: eventStatusValue,
     visibility: eventVisibilityValue,
+    /** Primary invoice. Further invoices for this event live in `eventInvoiceLinks`. */
     invoiceId: v.optional(v.id("invoices")),
     publicToken: v.optional(v.string()),
     seriesId: v.optional(v.id("eventSeries")),
@@ -898,6 +906,20 @@ export default defineSchema({
     .index("by_dayOfLeadUserId", ["dayOfLeadUserId"])
     .index("by_eventManagerUserId", ["eventManagerUserId"]),
 
+  /**
+   * Invoices linked to an event besides `events.invoiceId`. The primary still
+   * drives status, the pull list, the host, and payment reminders. These rows
+   * are the other bills (deposit + balance, a second host, and so on).
+   */
+  eventInvoiceLinks: defineTable({
+    eventId: v.id("events"),
+    invoiceId: v.id("invoices"),
+    createdAt: v.number(),
+  })
+    .index("by_eventId", ["eventId"])
+    .index("by_invoiceId", ["invoiceId"])
+    .index("by_eventId_and_invoiceId", ["eventId", "invoiceId"]),
+
   userCompensationRates: defineTable({
     userId: v.string(),
     /** Missing/legacy ⇒ treat as custom (use hourlyRateUsd). */
@@ -942,6 +964,8 @@ export default defineSchema({
     assignableAsCrew: v.optional(v.boolean()),
     /** When false, user is skipped by the weekly pending-activity digest email. */
     weeklyDigest: v.optional(v.boolean()),
+    /** When false, user is skipped by Operations damage-report emails. */
+    damageReportEmails: v.optional(v.boolean()),
     calendarInviteEmail: v.optional(v.string()),
     /** Missing/legacy ⇒ stanford payroll. */
     payrollMethod: v.optional(payrollMethodValue),
@@ -1263,12 +1287,69 @@ export default defineSchema({
     eventId: v.id("events"),
     organizationId: v.string(),
     role: eventBandParticipationRoleValue,
+    /**
+     * The `eventArtistNeeds` slot this act fills, when it was booked against one.
+     * Unset for acts added straight to the lineup (e.g. imported from an invoice).
+     */
+    needId: v.optional(v.id("eventArtistNeeds")),
+    /** Lineup ("run of show") windows — plain fields until a Run of Show model lands. */
+    setStartsAt: v.optional(v.number()),
+    setEndsAt: v.optional(v.number()),
+    soundcheckStartsAt: v.optional(v.number()),
+    soundcheckEndsAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_eventId", ["eventId"])
     .index("by_organizationId", ["organizationId"])
-    .index("by_eventId_and_organizationId", ["eventId", "organizationId"]),
+    .index("by_eventId_and_organizationId", ["eventId", "organizationId"])
+    .index("by_needId", ["needId"]),
+
+  /**
+   * "Artist Needed" — one open slot on an event's bill (e.g. "two bands and a
+   * DJ" is three rows). `status` only stores the staff-driven open/inquiring
+   * states; "booked" is derived from an `eventBandParticipations` row pointing
+   * at the slot (see `lib/eventArtistNeeds.ts`).
+   */
+  eventArtistNeeds: defineTable({
+    eventId: v.id("events"),
+    /** Bill order; staff drag cards to set it. */
+    sortOrder: v.optional(v.number()),
+    /** Optional slot name, e.g. "Headliner", "Opener", "Late set". */
+    label: v.optional(v.string()),
+    artistType: v.union(v.literal("band"), v.literal("dj"), v.literal("no_preference")),
+    genres: v.optional(v.string()),
+    status: v.union(v.literal("open"), v.literal("inquiring")),
+    /**
+     * Set when the position is filled by an act that is not on the platform.
+     * Their run-of-show lives on the slot, since there is no participation.
+     */
+    externalArtistName: v.optional(v.string()),
+    setStartsAt: v.optional(v.number()),
+    setEndsAt: v.optional(v.number()),
+    soundcheckStartsAt: v.optional(v.number()),
+    soundcheckEndsAt: v.optional(v.number()),
+    createdByUserId: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_eventId", ["eventId"])
+    .index("by_status", ["status"]),
+
+  /** Artist interest in an `eventArtistNeeds` row; staff review these. */
+  eventArtistInquiries: defineTable({
+    needId: v.id("eventArtistNeeds"),
+    eventId: v.id("events"),
+    organizationId: v.string(),
+    message: v.optional(v.string()),
+    status: v.union(v.literal("submitted"), v.literal("dismissed")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_needId", ["needId"])
+    .index("by_eventId", ["eventId"])
+    .index("by_organizationId", ["organizationId"])
+    .index("by_organizationId_and_needId", ["organizationId", "needId"]),
 
   eventRentalFulfillments: defineTable({
     eventId: v.id("events"),
@@ -1351,6 +1432,7 @@ export default defineSchema({
     includeInTimecards: v.optional(v.boolean()),
     assignableAsCrew: v.optional(v.boolean()),
     showOnPublicCrewPage: v.optional(v.boolean()),
+    damageReportEmails: v.optional(v.boolean()),
     /** Arbor Live crew invites converted from a crew application, when present. */
     gradYear: v.optional(v.number()),
     expiresAt: v.number(),
@@ -1405,6 +1487,7 @@ export default defineSchema({
       v.literal("quote_approved"),
       v.literal("payment_proof_rejected"),
       v.literal("damage_report_admin"),
+      v.literal("artist_need_inquiry"),
       v.literal("weekly_digest"),
       v.literal("this_week_at_arbor"),
     ),
@@ -1661,7 +1744,8 @@ export default defineSchema({
     .index("by_paidAt", ["paidAt"]),
 
   eventPaymentProofSubmissions: defineTable({
-    eventId: v.id("events"),
+    /** Absent when the quote is not the event's primary invoice (follow-up quotes). */
+    eventId: v.optional(v.id("events")),
     invoiceId: v.id("invoices"),
     paymentMethod: paymentProofMethodValue,
     paymentReference: v.string(),
@@ -2002,6 +2086,8 @@ export default defineSchema({
     email: v.string(),
     phone: v.string(),
     heardAboutUs: v.string(),
+    /** Free response: relevant experience, or why they are interested. */
+    experience: v.optional(v.string()),
     vertical: v.union(
       v.literal("Operations"),
       v.literal("Crew"),
@@ -2013,6 +2099,8 @@ export default defineSchema({
         v.literal("Sound"),
         v.literal("Lights"),
         v.literal("Design"),
+        v.literal("Photography"),
+        v.literal("Videography"),
         v.literal("unsure"),
       ),
     ),

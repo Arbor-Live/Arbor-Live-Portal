@@ -17,6 +17,7 @@ export const ensureAlbumShareUrlByToken = action({
   args: {
     portal: portalValue,
     token: v.string(),
+    eventId: v.optional(v.id("events")),
   },
   returns: v.union(
     v.null(),
@@ -36,6 +37,7 @@ export const ensureAlbumShareUrlByToken = action({
       {
         portal: args.portal,
         token: args.token,
+        eventId: args.eventId,
       },
     );
     if (!target) return null;
