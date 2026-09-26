@@ -1,9 +1,12 @@
 "use client";
 
 import { useMutation } from "convex/react";
+import { useState } from "react";
 import type { PatchPlan, SnakeGroup, SnakeId } from "@arbor/show-file";
 import { SNAKE_GROUPS, SNAKE_GROUP_LABEL, SNAKE_SHORT_LABEL } from "@arbor/show-file";
 import { api, type Id } from "@/lib/convex-api";
+import { getConvexErrorMessage } from "@/lib/convex-error";
+import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 
 const SNAKE_IDS: SnakeId[] = ["A", "B"];
@@ -20,13 +23,21 @@ export function SnakePlanControls({
   plan: PatchPlan;
 }) {
   const savePlan = useMutation(api.eventPatchPlan.set);
+  const [saving, setSaving] = useState(false);
 
-  const save = (next: PatchPlan) => {
-    void savePlan({ eventId, plan: next });
+  const save = async (next: PatchPlan) => {
+    setSaving(true);
+    try {
+      await savePlan({ eventId, plan: next });
+    } catch (error) {
+      notify.error(getConvexErrorMessage(error, "Could not save the snake plan."));
+    } finally {
+      setSaving(false);
+    }
   };
 
   const toggleSecondSnake = () => {
-    save(
+    void save(
       plan.secondSnake
         ? { ...plan, secondSnake: false, sides: {} }
         : { ...plan, secondSnake: true },
@@ -34,7 +45,7 @@ export function SnakePlanControls({
   };
 
   const setSide = (group: SnakeGroup, snake: SnakeId) => {
-    save({ ...plan, secondSnake: true, sides: { ...plan.sides, [group]: snake } });
+    void save({ ...plan, secondSnake: true, sides: { ...plan.sides, [group]: snake } });
   };
 
   const scopeScenes = plan.scopeScenes ?? true;
@@ -53,6 +64,7 @@ export function SnakePlanControls({
         <button
           type="button"
           onClick={toggleSecondSnake}
+          disabled={saving}
           className={cn(
             "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
             plan.secondSnake
@@ -80,6 +92,7 @@ export function SnakePlanControls({
                       key={snake}
                       type="button"
                       onClick={() => setSide(group, snake)}
+                      disabled={saving}
                       aria-pressed={active}
                       className={cn(
                         "rounded px-2 py-0.5 text-2xs font-medium transition-colors",
@@ -106,7 +119,8 @@ export function SnakePlanControls({
         </p>
         <button
           type="button"
-          onClick={() => save({ ...plan, scopeScenes: !scopeScenes })}
+          onClick={() => void save({ ...plan, scopeScenes: !scopeScenes })}
+          disabled={saving}
           className={cn(
             "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
             scopeScenes

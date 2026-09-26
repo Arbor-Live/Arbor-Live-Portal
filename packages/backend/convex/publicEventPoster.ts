@@ -21,6 +21,7 @@ import {
 import { schedulePublicEventsSiteRevalidation } from "./lib/scheduleSiteRevalidation";
 import { enforceRateLimit, HOUR_MS } from "./rateLimit";
 import { releaseReplacedR2Reference } from "./lib/r2Lifecycle";
+import { isRequestPublicTokenExpired } from "./lib/requestToken";
 
 const PUBLIC_CLIENT_ACTOR = "public-client";
 
@@ -90,6 +91,7 @@ async function resolveRequestPosterTarget(
     .withIndex("by_publicToken", (q) => q.eq("publicToken", token))
     .unique();
   if (!request) return null;
+  if (isRequestPublicTokenExpired(request)) return null;
   if (await isRequestQuoteVoided(ctx, request)) {
     return { events: [], voided: true };
   }

@@ -295,7 +295,9 @@ export const getInvoiceSyncStatus = query({
   returns: v.object({
     hasInvoice: v.boolean(),
     invoiceId: v.optional(v.id("invoices")),
-    inSync: v.boolean(),
+    /** null = could not verify (the invoice→pull-list mapping threw). */
+    inSync: v.union(v.boolean(), v.null()),
+    verifyError: v.optional(v.string()),
   }),
   handler: async (ctx, args) => {
     await requireAuth(ctx);
@@ -316,8 +318,17 @@ export const getInvoiceSyncStatus = query({
     let expectedRows: ScaffoldRow[];
     try {
       expectedRows = await buildScaffoldRowsFromInvoice(ctx, event.invoiceId, billableOccurrenceCount);
-    } catch {
-      expectedRows = [];
+    } catch (error) {
+      // Do not coerce to [] — that reported a broken mapping as "in sync".
+      return {
+        hasInvoice: true,
+        invoiceId: event.invoiceId,
+        inSync: null,
+        verifyError:
+          error instanceof Error
+            ? error.message
+            : "Could not build expected equipment rows from the invoice.",
+      };
     }
     const expectedByKey = new Map<string, number>();
     for (const row of expectedRows) {
