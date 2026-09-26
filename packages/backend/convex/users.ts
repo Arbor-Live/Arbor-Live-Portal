@@ -2072,11 +2072,6 @@ export const createUserAdmin = mutation({
   },
   handler: async (ctx, args) => {
     const membershipRole = await normalizeMembershipRole(ctx, args.organizationId, args.role);
-    const globalRole = await resolveGlobalRoleForOrganization(
-      ctx,
-      args.organizationId,
-      membershipRole,
-    );
     const adminUser = await requireAdmin(ctx);
     const adminId = getUserId(adminUser) || undefined;
     const email = args.email.trim().toLowerCase();
