@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery } from "convex/react";
-import { StarIcon } from "@phosphor-icons/react";
+import { StarIcon, ChatCircleTextIcon } from "@phosphor-icons/react";
 import { api, type Id } from "@/lib/convex-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PostMortemForm } from "@/components/post-mortem/post-mortem-form";
@@ -39,7 +39,10 @@ export function EventPostMortemSection({ eventId }: { eventId: Id<"events"> }) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Post-event review</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+          <ChatCircleTextIcon className="size-4 text-muted-foreground" />
+          Post-event review
+        </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
           <RatingStars rating={status.rating ?? 0} />
@@ -59,7 +62,10 @@ export function EventPostMortemSection({ eventId }: { eventId: Id<"events"> }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Post-event review</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          <ChatCircleTextIcon className="size-4 text-muted-foreground" />
+          Post-event review
+        </CardTitle>
       </CardHeader>
       <CardContent>
         <PostMortemForm
@@ -87,7 +93,10 @@ export function EventPostMortemSummary({ eventId }: { eventId: Id<"events"> }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Post-event reviews</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          <ChatCircleTextIcon className="size-4 text-muted-foreground" />
+          Post-event reviews
+        </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4 text-sm">
         <div className="flex items-center gap-3">

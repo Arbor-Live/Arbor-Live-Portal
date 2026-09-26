@@ -10,23 +10,17 @@ test.describe("event edit and dry hire", () => {
 
     const nextTitle = `${seeded.title} Updated`;
     await page.goto(seeded.path);
-    await expect(page.getByText("Edit Event").first()).toBeVisible({ timeout: 45_000 });
+    await expect(page.getByTestId("event-workspace")).toBeVisible({ timeout: 45_000 });
 
-    const titleInput = page
-      .locator("div.space-y-1")
-      .filter({ has: page.getByText("Title", { exact: true }) })
-      .getByRole("textbox");
+    const titleInput = page.getByTestId("event-title-input");
     await expect(titleInput).toBeVisible({ timeout: 30_000 });
     await titleInput.fill(nextTitle);
-    await page.getByRole("button", { name: "Save Event" }).first().click();
+    await page.getByRole("button", { name: "Save changes" }).click();
     await expect(page.getByText(/Saved/i).first()).toBeVisible({ timeout: 20_000 });
 
     await page.reload();
-    await expect(page.getByText("Edit Event").first()).toBeVisible({ timeout: 20_000 });
-    const titleAfterReload = page
-      .locator("div.space-y-1")
-      .filter({ has: page.getByText("Title", { exact: true }) })
-      .getByRole("textbox");
+    await expect(page.getByTestId("event-workspace")).toBeVisible({ timeout: 20_000 });
+    const titleAfterReload = page.getByTestId("event-title-input");
     await expect(titleAfterReload).toHaveValue(nextTitle, { timeout: 30_000 });
   });
 
@@ -45,7 +39,7 @@ test.describe("event edit and dry hire", () => {
       .fill(title);
 
     await selectSearchableOption(page, "Event Type", "Dry Hire");
-    await fillDateTimeRangeNearLabel(page, "Start", {
+    await fillDateTimeRangeNearLabel(page, "When", {
       dayLabel,
       startTime: "10:00 AM",
       endTime: "6:00 PM",
@@ -60,7 +54,7 @@ test.describe("event edit and dry hire", () => {
     await expect(quickAdd).toBeVisible({ timeout: 20_000 });
     await expect(quickAdd).toBeEnabled({ timeout: 30_000 });
     await quickAdd.click();
-    await page.getByRole("button", { name: /Save Schedule/ }).first().click();
+    await page.getByRole("button", { name: "Save changes" }).click();
     await expect(page.getByText(/Drop-off Window|Pickup Window|Check-out Window|Return Window/i).first()).toBeVisible({
       timeout: 20_000,
     });

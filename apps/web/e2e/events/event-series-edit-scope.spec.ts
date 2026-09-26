@@ -29,7 +29,7 @@ test.describe("event series edit scope", () => {
       .getByRole("textbox")
       .fill(title);
 
-    await fillDateTimeRangeNearLabel(page, "Start", {
+    await fillDateTimeRangeNearLabel(page, "When", {
       dayLabel,
       startTime: "6:00 PM",
       endTime: "10:00 PM",
@@ -46,7 +46,7 @@ test.describe("event series edit scope", () => {
     await expect(page.getByText("Preview (3 occurrences)")).toBeVisible({ timeout: 20_000 });
     await page.getByRole("button", { name: "Create Series" }).first().click();
     await page.waitForURL(/\/dashboard\/events\/(?!new(?:\/|$))[^/?#]+/, { timeout: 60_000 });
-    await expect(page.getByText("Edit Event").first()).toBeVisible({ timeout: 25_000 });
+    await expect(page.getByTestId("event-workspace")).toBeVisible({ timeout: 25_000 });
 
     const eventId = page.url().replace(/\/$/, "").split("/").pop()!;
     const series = await pollConvex<SeriesState>(

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useQuery } from "convex/react";
+import { MoonStarsIcon, ClipboardTextIcon } from "@phosphor-icons/react";
 import {
   DEFAULT_PATCH_PLAN,
   allocateEventPatch,
@@ -69,7 +70,10 @@ function EventBandRidersPanel({ eventId }: { eventId: Id<"events"> }) {
     <div className="space-y-4" data-testid="event-band-riders">
       <Card>
         <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3 space-y-0">
-          <CardTitle>Night rider</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <MoonStarsIcon className="size-4 text-muted-foreground" />
+            Night rider
+          </CardTitle>
           <div className="flex flex-wrap gap-2">
             <EventNightRiderDownloadButton
               eventId={eventId}
@@ -90,7 +94,10 @@ function EventBandRidersPanel({ eventId }: { eventId: Id<"events"> }) {
 
       <Card>
         <CardHeader>
-          <CardTitle>Artist riders</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <ClipboardTextIcon className="size-4 text-muted-foreground" />
+            Artist riders
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
           {rows.map((row) => (

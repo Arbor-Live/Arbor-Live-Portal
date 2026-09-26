@@ -121,7 +121,7 @@ export function EventScheduleCrewAssignPanel({
       <p className="text-xs text-muted-foreground">
         Auto-assign fills open shift slots first, then spreads yes/partial responders across schedule blocks
         (up to 8 hours per person). Partial crew are placed on each declared window, then other blocks only when
-        no windows were specified. Save schedule & personnel when done.
+        no windows were specified. Save changes when done.
       </p>
 
       {responders.length === 0 ? (

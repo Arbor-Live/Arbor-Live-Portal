@@ -298,10 +298,10 @@ export function timelineBlocksFromSaved(
   );
 }
 
-export function attachShiftsToPersistedBlocks(
-  shifts: EventShiftDraft[],
+export function attachShiftsToPersistedBlocks<T extends EventShiftDraft>(
+  shifts: T[],
   blocks: TimelineBlockDraft[],
-): EventShiftDraft[] {
+): T[] {
   const persistedBlockIdByRef = mapPersistedBlockIdByRef(blocks);
   return shifts.map((shift) => {
     const persistedId =
