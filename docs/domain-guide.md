@@ -135,7 +135,7 @@ canonical description of the domain itself.
 Event page (`/dashboard/events/[id]`) is one workspace: a persistent header
 (title, status, dates, venue, type, host, linked days, series) over six tabs —
 **Overview** (details, people, contacts, files & notes, comments, post-event
-review), **Schedule & Crew**, **Equipment** (pull list), **Lineup** (bill,
+review), **Run of Show** (timeline + crew), **Equipment** (pull list), **Lineup** (bill,
 riders, Open Mic), **Billing** (invoices, hosts, costs, margin — admins and
 Operations only), and **Promo** (visibility, marketing, media). One save bar
 saves every edited event field (only the changed fields are sent) plus the
@@ -150,7 +150,7 @@ Event types (drive which workspace tabs and quick-add blocks appear):
 | `Crewed Event` | Full production with crew | Setup + Show + Strike |
 | `Rental with Crew` | Equipment rental plus crew | Setup + Strike |
 | `Dry Rental` | Equipment only | Delivery + Return |
-| `Services Only` | No Schedule & Crew or Equipment tabs | — |
+| `Services Only` | No Run of Show or Equipment tabs | — |
 
 - **Teams of interest** (`teamsInterested`) are event *needs*, distinct from user
   verticals/specialties (`userVerticals.ts`): `Design` (poster designer +
@@ -180,16 +180,21 @@ Event types (drive which workspace tabs and quick-add blocks appear):
     `status` (`open` / `inquiring`). A slot is **booked** when an
     `eventBandParticipations` row points at it (`needId`) — never by a stored
     flag, and a slot holds exactly one act (`lib/eventArtistNeeds.ts`).
-  - **Run of show** — set and soundcheck times are edited on the Lineup
-    (`setStartsAt` / `setEndsAt`, `soundcheckStartsAt` / `soundcheckEndsAt` on
-    `eventBandParticipations`, or on the slot for an outside act) and mirrored
-    into `soundcheck` / `set` schedule blocks linked by `participationId` /
-    `needId` (`lib/runOfShow.ts`). Those blocks are read-only in the schedule
-    editor — schedule saves never edit or delete them — but crew shifts attach
-    to them, and crew follow a moved block unless their times are custom. A
-    slot's own times only apply while no platform act fills it. Copy day setup,
-    duplicate event, and series templates skip act blocks. Block types also
-    include `doors` and `changeover`. Artists see both windows on "Your shows".
+  - **Run of show** — the event's **Run of Show** tab is one vertical timeline.
+    *Sections* (`setup` / `show` / `strike` / `custom`) carry crew; *moments*
+    (`doors` / `soundcheck` / `set` / `changeover`) sit inside a section and never
+    take crew (crew availability requests list sections only). An act's
+    soundcheck and set are schedule blocks linked by `participationId` / `needId`
+    (`lib/runOfShow.ts`); the Run of Show edits them (`upsertBlocks` with
+    `editsActBlocks`) and writes the times back to the lineup fields
+    (`setStartsAt` … on `eventBandParticipations`, or on the slot for an outside
+    act) that the band dashboard reads. Lineup shows times read-only. "Build run
+    of show" lays out soundchecks (reverse play order by default, ending at
+    doors), doors, sets, and changeovers; changeover rows show the night rider's
+    cable swaps. Warnings cover soundchecks into doors, overlaps, moments outside
+    or past their section, and tight changeovers. A platform act filling a slot
+    inherits the slot's times. Copy day setup, duplicate event, and series
+    templates skip act blocks. Artists see both windows on "Your shows".
   - **Outside acts** — a position can instead be filled by an act that is not on
     the platform: `eventArtistNeeds.externalArtistName`, with its own set and
     soundcheck windows on the slot. It counts as booked and stops appearing in

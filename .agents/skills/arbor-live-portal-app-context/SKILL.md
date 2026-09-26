@@ -74,7 +74,7 @@ Human-readable docs live in `docs/` (`getting-started.md`, `architecture.md`, `d
 - Quick Add intent by event type:
   - `Dry Rental`: Delivery + Return slots
   - `Rental with Crew`: Setup + Strike
-  - `Services Only`: Schedule & Crew and Equipment tabs hidden
+  - `Services Only`: Run of Show and Equipment tabs hidden
   - `Crewed Event`: Setup + Show + Strike
 - If required dates are missing, quick-add controls should be visually disabled/blurred (not error-spammy).
 
@@ -179,11 +179,14 @@ Cursor rule: `.cursor/rules/portal-timezone.mdc` (always applied).
   - One-time hydration per loaded event id; later server changes are adopted only
     for fields the user hasn't edited (see `event-workspace-provider.tsx`).
   - Saves send only changed fields (`buildEventUpdatePatch`) — never the whole form.
-- Run of show: an act's soundcheck/set are schedule blocks mirrored from the lineup
-  (`lib/runOfShow.ts`). Lineup writers must call `syncParticipationBlocks` /
-  `syncNeedBlocks`; anything that deletes or clones blocks must skip act blocks
-  (`isActBlock`). Web drafts mark them `actOwned` and rebase them live — gate that
-  rebase on hydrated *state*, not a ref, or the hydrating render clobbers the draft.
+- Run of show: crew attach to *sections* only (`isSectionBlockType`); moments
+  (doors/soundcheck/set/changeover) never take crew. Act soundcheck/set blocks
+  are edited only by the Run of Show (`upsertBlocks` `editsActBlocks: true`),
+  which writes times back to the lineup fields (`writeBackActTimes`). Anything
+  that deletes or clones blocks must skip act blocks (`isActBlock`). The workspace
+  merges server act-block changes three-way (`mergeServerActBlocks`) — gate it on
+  hydrated *state* (not a ref) and pause it while a save is in flight, or it
+  clobbers or duplicates the draft.
 - Start/end date coupling:
   - End should auto-fill from Start by default, but stop auto-overwriting after user explicitly edits End.
 - Ensure schedule save and personnel save order does not lose `scheduleBlockId` references.

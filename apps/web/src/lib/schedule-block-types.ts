@@ -36,3 +36,20 @@ export const MANUAL_SCHEDULE_BLOCK_TYPES: readonly ScheduleBlockType[] = [
 export function isScheduleBlockType(value: string): value is ScheduleBlockType {
   return (SCHEDULE_BLOCK_TYPES as readonly string[]).includes(value);
 }
+
+/**
+ * Moments happen inside a section (soundchecks during setup, sets during the
+ * show). Crew are scheduled per section, never per moment.
+ */
+export const MOMENT_BLOCK_TYPES: readonly ScheduleBlockType[] = [
+  "doors",
+  "soundcheck",
+  "set",
+  "changeover",
+];
+
+export const SECTION_BLOCK_TYPES: readonly ScheduleBlockType[] = ["setup", "show", "strike", "custom"];
+
+export function isSectionBlockType(type: ScheduleBlockType) {
+  return !MOMENT_BLOCK_TYPES.includes(type);
+}

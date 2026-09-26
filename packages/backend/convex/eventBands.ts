@@ -13,7 +13,12 @@ import {
   payeeFieldsFromProfile,
 } from "./lib/bandPayments";
 import { scheduleBandAssignedEmails } from "./email/bandAssignmentEmails";
-import { deleteActBlocks, syncNeedBlocks, syncParticipationBlocks } from "./lib/runOfShow";
+import {
+  deleteActBlocks,
+  inheritSlotTimes,
+  syncNeedBlocks,
+  syncParticipationBlocks,
+} from "./lib/runOfShow";
 
 const participationRoleValue = v.union(
   v.literal("headliner"),
@@ -174,8 +179,11 @@ export async function upsertEventBandParticipation(
       updatedAt: now,
     });
     if (args.needId) {
-      // Filling a position retires its own run-of-show blocks; a position this
-      // act left gets its own times back.
+      // Filling a position hands its run-of-show times to the act (when the act
+      // has none) and retires the position's own blocks; a position this act
+      // left gets its own times back.
+      await inheritSlotTimes(ctx, existing._id, args.needId);
+      await syncParticipationBlocks(ctx, existing._id);
       await syncNeedBlocks(ctx, args.needId);
       if (existing.needId && existing.needId !== args.needId) {
         await syncNeedBlocks(ctx, existing.needId);
@@ -191,7 +199,11 @@ export async function upsertEventBandParticipation(
     createdAt: now,
     updatedAt: now,
   });
-  if (args.needId) await syncNeedBlocks(ctx, args.needId);
+  if (args.needId) {
+    await inheritSlotTimes(ctx, participationId, args.needId);
+    await syncParticipationBlocks(ctx, participationId);
+    await syncNeedBlocks(ctx, args.needId);
+  }
   await scheduleBandAssignedEmails(ctx, {
     eventId: args.eventId,
     organizationId: args.organizationId,
@@ -559,10 +571,11 @@ export const updateParticipationLineup = mutation({
   args: {
     participationId: v.id("eventBandParticipations"),
     needId: v.union(v.id("eventArtistNeeds"), v.null()),
-    setStartsAt: v.union(v.number(), v.null()),
-    setEndsAt: v.union(v.number(), v.null()),
-    soundcheckStartsAt: v.union(v.number(), v.null()),
-    soundcheckEndsAt: v.union(v.number(), v.null()),
+    /** Omit to keep the current times — the Run of Show owns them now. */
+    setStartsAt: v.optional(v.union(v.number(), v.null())),
+    setEndsAt: v.optional(v.union(v.number(), v.null())),
+    soundcheckStartsAt: v.optional(v.union(v.number(), v.null())),
+    soundcheckEndsAt: v.optional(v.union(v.number(), v.null())),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -590,15 +603,19 @@ export const updateParticipationLineup = mutation({
     const next: Doc<"eventBandParticipations"> = { ...existing, updatedAt: Date.now() };
     if (args.needId) next.needId = args.needId;
     else delete next.needId;
-    if (args.setStartsAt != null) next.setStartsAt = args.setStartsAt;
-    else delete next.setStartsAt;
-    if (args.setEndsAt != null) next.setEndsAt = args.setEndsAt;
-    else delete next.setEndsAt;
-    if (args.soundcheckStartsAt != null) next.soundcheckStartsAt = args.soundcheckStartsAt;
-    else delete next.soundcheckStartsAt;
-    if (args.soundcheckEndsAt != null) next.soundcheckEndsAt = args.soundcheckEndsAt;
-    else delete next.soundcheckEndsAt;
+    for (const field of [
+      "setStartsAt",
+      "setEndsAt",
+      "soundcheckStartsAt",
+      "soundcheckEndsAt",
+    ] as const) {
+      const value = args[field];
+      if (value === undefined) continue;
+      if (value === null) delete next[field];
+      else next[field] = value;
+    }
     await ctx.db.replace(args.participationId, next);
+    if (args.needId) await inheritSlotTimes(ctx, args.participationId, args.needId);
     await syncParticipationBlocks(ctx, args.participationId);
     for (const needId of new Set([existing.needId, args.needId])) {
       if (needId) await syncNeedBlocks(ctx, needId);

@@ -3,16 +3,10 @@
 import Link from "next/link";
 import { useQuery } from "convex/react";
 import { MoonStarsIcon, ClipboardTextIcon } from "@phosphor-icons/react";
-import {
-  DEFAULT_PATCH_PLAN,
-  allocateEventPatch,
-  buildPatchDiffPlan,
-  fileStem,
-  listPhysicalChangeovers,
-  type ShowBandInput,
-} from "@arbor/show-file";
+import { DEFAULT_PATCH_PLAN } from "@arbor/show-file";
 import { api, type Id } from "@/lib/convex-api";
 import { formatDate } from "@/lib/format";
+import { nightRiderPlan } from "@/lib/night-rider-plan";
 import { ArborOnlyGuard } from "@/components/org-context-guard";
 import { StagePlotCanvas } from "@/components/riders/stage-plot-canvas";
 import { RiderPdfDownloadButton } from "@/components/riders/rider-pdf-download-button";
@@ -49,22 +43,7 @@ function EventBandRidersPanel({ eventId }: { eventId: Id<"events"> }) {
     return null;
   }
 
-  const showBands: ShowBandInput[] = rows
-    .filter((row) => row.rider && row.rider.inputs.length > 0)
-    .map((row) => ({
-      bandName: row.bandName,
-      fileStem: fileStem(row.bandName),
-      role: row.role,
-      inputs: row.rider!.inputs,
-      stage: row.rider!.stage,
-      items: row.rider!.items,
-      monitorMixes: row.rider!.monitorMixes,
-      backline: row.rider!.backline,
-    }));
-
-  const allocation = showBands.length > 0 ? allocateEventPatch(showBands, plan) : null;
-  const patchPlan = allocation ? buildPatchDiffPlan(allocation) : null;
-  const changeovers = patchPlan ? listPhysicalChangeovers(patchPlan) : [];
+  const { patchPlan, changeovers } = nightRiderPlan(rows, plan);
 
   return (
     <div className="space-y-4" data-testid="event-band-riders">
@@ -77,11 +56,11 @@ function EventBandRidersPanel({ eventId }: { eventId: Id<"events"> }) {
           <div className="flex flex-wrap gap-2">
             <EventNightRiderDownloadButton
               eventId={eventId}
-              disabled={showBands.length === 0}
+              disabled={!patchPlan}
             />
             <EventShowFileDownloadButton
               eventId={eventId}
-              disabled={showBands.length === 0}
+              disabled={!patchPlan}
             />
           </div>
         </CardHeader>

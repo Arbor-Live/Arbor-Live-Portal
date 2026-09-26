@@ -4,10 +4,10 @@ import { useMemo, useState } from "react";
 import { useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import {
-  CalendarDotsIcon,
   CaretDownIcon,
   ClockIcon,
   LinkBreakIcon,
+  ListChecksIcon,
   PlusIcon,
   RepeatIcon,
   TrashIcon,
@@ -23,14 +23,14 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { DateTimeRangePicker } from "@/components/ui/date-time-picker";
 import { Input } from "@/components/ui/input";
 import { UserSelect, type UserSelectOption } from "@/components/users/user-select";
-import {
-  EventTimelineScheduler,
-  type TimelineBlockDraft,
-} from "@/components/events/event-timeline-scheduler";
+import type { TimelineBlockDraft } from "@/components/events/event-timeline-scheduler";
+import { RunOfShowEditor } from "@/components/events/workspace/run-of-show/run-of-show-editor";
+import { useRunOfShowData } from "@/components/events/workspace/run-of-show/use-run-of-show-data";
+import { isSectionBlockType } from "@/lib/schedule-block-types";
 import { EventScheduleCrewAssignPanel } from "@/components/events/event-availability-summary";
 import {
   buildQuickAddScheduleBlocks,
-  keepActBlocks,
+  sortScheduleBlocksByTime,
   eventTypeHasCrewAssignment,
   reconcileShiftsForReplacedBlocks,
   shiftBelongsToBlock,
@@ -209,10 +209,10 @@ export function ScheduleCrewTab() {
     getBlockRef,
     isShiftUnlinked,
     removeUnlinkedShifts,
-    dayCount,
     userSelectOptions,
   } = useEventWorkspace();
   const [assignUserId, setAssignUserId] = useState("");
+  const runOfShow = useRunOfShowData(eventId);
   const hasCrew = eventTypeHasCrewAssignment(draft.eventType);
 
   const [nowMs] = useState(() => Date.now());
@@ -245,6 +245,9 @@ export function ScheduleCrewTab() {
       : draft.eventType === "Rental with Crew"
         ? "Quick Add: Setup + Strike"
         : "Quick Add: Setup + Show + Strike";
+
+  // Crew are scheduled per section; soundchecks, sets, and other moments sit inside one.
+  const sectionBlocks = blocks.filter((block) => isSectionBlockType(block.blockType));
 
   const unlinkedShifts = shifts
     .map((shift, index) => ({ shift, index }))
@@ -289,36 +292,50 @@ export function ScheduleCrewTab() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <CalendarDotsIcon className="size-4 text-muted-foreground" />
-            Schedule
+            <ListChecksIcon className="size-4 text-muted-foreground" />
+            Run of Show
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <EventTimelineScheduler
-            dayCount={dayCount}
+          <RunOfShowEditor
             blocks={blocks}
-            anchorStartsAt={draft.startAt}
             onChange={(next) => {
               const nextBlocks = withStableBlockRefs(next);
               setBlocks(nextBlocks);
               setShifts((prev) => syncShiftsToBlockTimes(prev, nextBlocks));
             }}
             readOnly={readOnly}
-            quickAddLabel={quickAddLabel}
-            quickAddDisabled={quickAddDisabled}
-            quickAddDisabledReason={quickAddDisabled ? "Set event start and end first." : undefined}
-            onQuickAdd={() => {
-              if (quickAddDisabled) return;
-              const quickAddBlocks = buildQuickAddScheduleBlocks({
-                eventType: draft.eventType,
-                startAt: draft.startAt,
-                endAt: draft.endAt,
-                rentalFulfillmentMode: draft.rentalFulfillmentMode,
-                withStableRefs: withStableBlockRefs,
-              });
-              const nextBlocks = keepActBlocks(blocks, quickAddBlocks);
-              setBlocks(nextBlocks);
-              setShifts((prev) => reconcileShiftsForReplacedBlocks(blocks, nextBlocks, prev));
+            eventStartAt={localDateTimeInputToMs(draft.startAt)}
+            acts={runOfShow.acts}
+            actName={runOfShow.actName}
+            swaps={runOfShow.swaps}
+            crewFor={(block) => {
+              const blockShifts = shifts.filter((shift) => shiftBelongsToBlock(shift, block));
+              return {
+                total: blockShifts.length,
+                filled: blockShifts.filter((shift) => shift.userId || shift.crewApplicationId).length,
+              };
+            }}
+            quickAdd={{
+              label: quickAddLabel,
+              disabled: quickAddDisabled,
+              run: () => {
+                if (quickAddDisabled) return;
+                const quickAddBlocks = buildQuickAddScheduleBlocks({
+                  eventType: draft.eventType,
+                  startAt: draft.startAt,
+                  endAt: draft.endAt,
+                  rentalFulfillmentMode: draft.rentalFulfillmentMode,
+                  withStableRefs: withStableBlockRefs,
+                });
+                // Quick Add rebuilds sections only; the run of show's moments stay.
+                const nextBlocks = sortScheduleBlocksByTime([
+                  ...quickAddBlocks,
+                  ...blocks.filter((block) => !isSectionBlockType(block.blockType)),
+                ]);
+                setBlocks(nextBlocks);
+                setShifts((prev) => reconcileShiftsForReplacedBlocks(blocks, nextBlocks, prev));
+              },
             }}
           />
         </CardContent>
@@ -350,7 +367,7 @@ export function ScheduleCrewTab() {
                 value={assignUserId}
                 onChange={setAssignUserId}
                 options={userSelectOptions}
-                emptyLabel="Pick someone, then add them to blocks below"
+                emptyLabel="Pick someone, then add them to sections below"
                 clearable
               />
             </div>
@@ -378,20 +395,21 @@ export function ScheduleCrewTab() {
           {hasCrew ? (
             <EventScheduleCrewAssignPanel
               eventId={eventId}
-              blocks={blocks}
+              blocks={sectionBlocks}
               shifts={shifts}
               onShiftsChange={setShifts}
               getBlockRef={getBlockRef}
             />
           ) : null}
 
-          {blocks.length === 0 ? (
+          {sectionBlocks.length === 0 ? (
             <p className="border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
-              Add schedule blocks above to start staffing this event.
+              Add sections to the run of show above (setup, show, strike) to start staffing this
+              event.
             </p>
           ) : (
             <div className="space-y-3">
-              {blocks.map((block, blockIndex) => {
+              {sectionBlocks.map((block, blockIndex) => {
                 const blockRef = getBlockRef(block);
                 const blockShifts = shifts
                   .map((shift, index) => ({ shift, index }))
@@ -472,7 +490,7 @@ export function ScheduleCrewTab() {
                 <CollapsibleTrigger className="group flex min-w-0 flex-1 items-center gap-1.5 text-left">
                   <span>
                     {unlinkedShifts.length} shift{unlinkedShifts.length === 1 ? " is" : "s are"} not
-                    linked to a schedule block (common for trainees assigned as entire event / first 8
+                    linked to a section (common for trainees assigned as entire event / first 8
                     hours). They still count as scheduled.
                   </span>
                   <CaretDownIcon className="size-3.5 shrink-0 transition-transform group-data-[state=closed]:-rotate-90" />

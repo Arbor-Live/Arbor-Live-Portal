@@ -295,7 +295,8 @@ export function timelineBlocksFromSaved(
     startsAt: number;
     endsAt: number;
     notes?: string;
-    actOwned?: boolean;
+    participationId?: string;
+    needId?: string;
   }>,
 ): TimelineBlockDraft[] {
   return sortScheduleBlocksByTime(
@@ -313,7 +314,6 @@ type PersistedBlockRow = {
   startsAt: number;
   endsAt: number;
   notes?: string;
-  actOwned?: boolean;
   participationId?: string;
   needId?: string;
 };
@@ -330,7 +330,13 @@ export function blockDraftFromRow(row: PersistedBlockRow, clientId = row._id): T
     endsAt: toLocalDateTimeInput(row.endsAt),
     notes: row.notes ?? "",
   };
-  if (row.actOwned || row.participationId || row.needId) draft.actOwned = true;
+  if (row.participationId) {
+    draft.actOwned = true;
+    draft.participationId = row.participationId;
+  } else if (row.needId) {
+    draft.actOwned = true;
+    draft.needId = row.needId;
+  }
   return draft;
 }
 
@@ -343,7 +349,65 @@ export function keepActBlocks(
 }
 
 function actBlockKey(block: TimelineBlockDraft) {
-  return [block.id, block.blockType, block.label, block.startsAt, block.endsAt].join("|");
+  return [block.id, block.blockType, block.label, block.startsAt, block.endsAt, block.notes].join("|");
+}
+
+type ScheduleState<T> = { blocks: TimelineBlockDraft[]; shifts: T[] };
+
+/**
+ * Three-way merge of act soundcheck/set blocks for an editor that can edit them
+ * (the Run of Show). Server changes land in the baseline; they reach the draft
+ * only where the user has not edited or removed that block locally, so local
+ * edits stay unsaved and win on save. Returns null when nothing changed.
+ */
+export function mergeServerActBlocks<T extends ShiftBlockLink & EventShiftDraft>(
+  state: ScheduleState<T>,
+  baseline: ScheduleState<T>,
+  serverActBlocks: TimelineBlockDraft[],
+): { state: ScheduleState<T>; baseline: ScheduleState<T> } | null {
+  const byId = (blocks: TimelineBlockDraft[]) =>
+    new Map(blocks.filter((block) => block.actOwned && block.id).map((block) => [block.id!, block]));
+  const server = byId(serverActBlocks);
+  const base = byId(baseline.blocks);
+  const local = byId(state.blocks);
+
+  let nextState = state.blocks;
+  let nextBase = baseline.blocks;
+  const removed = new Set<string>();
+  const replace = (blocks: TimelineBlockDraft[], id: string, next: TimelineBlockDraft | null) => {
+    const kept = blocks.filter((block) => block.id !== id);
+    return next ? [...kept, next] : kept;
+  };
+
+  for (const id of new Set([...server.keys(), ...base.keys()])) {
+    const s = server.get(id);
+    const b = base.get(id);
+    const l = local.get(id);
+    if (s && !b) {
+      nextBase = replace(nextBase, id, s);
+      if (!l) nextState = replace(nextState, id, s);
+    } else if (!s && b) {
+      removed.add(id);
+      nextBase = replace(nextBase, id, null);
+      nextState = replace(nextState, id, null);
+    } else if (s && b && actBlockKey(s) !== actBlockKey(b)) {
+      nextBase = replace(nextBase, id, s);
+      if (l && actBlockKey(l) === actBlockKey(b)) nextState = replace(nextState, id, s);
+    }
+  }
+  if (nextState === state.blocks && nextBase === baseline.blocks) return null;
+
+  const unlink = (shifts: T[]) =>
+    shifts.map((shift) =>
+      (shift.scheduleBlockId && removed.has(shift.scheduleBlockId)) ||
+      (shift.scheduleBlockRef && removed.has(shift.scheduleBlockRef))
+        ? { ...shift, scheduleBlockId: undefined, scheduleBlockRef: undefined }
+        : shift,
+    );
+  return {
+    state: { blocks: sortScheduleBlocksByTime(nextState), shifts: unlink(state.shifts) },
+    baseline: { blocks: sortScheduleBlocksByTime(nextBase), shifts: unlink(baseline.shifts) },
+  };
 }
 
 /**

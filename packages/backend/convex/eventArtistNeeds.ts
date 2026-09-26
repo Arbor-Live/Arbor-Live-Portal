@@ -246,10 +246,11 @@ export const updateSlotLineup = mutation({
   args: {
     needId: v.id("eventArtistNeeds"),
     externalArtistName: v.union(v.string(), v.null()),
-    setStartsAt: v.union(v.number(), v.null()),
-    setEndsAt: v.union(v.number(), v.null()),
-    soundcheckStartsAt: v.union(v.number(), v.null()),
-    soundcheckEndsAt: v.union(v.number(), v.null()),
+    /** Omit to keep the current times — the Run of Show owns them now. */
+    setStartsAt: v.optional(v.union(v.number(), v.null())),
+    setEndsAt: v.optional(v.union(v.number(), v.null())),
+    soundcheckStartsAt: v.optional(v.union(v.number(), v.null())),
+    soundcheckEndsAt: v.optional(v.union(v.number(), v.null())),
   },
   handler: async (ctx, args) => {
     await requireArborInternalContext(ctx);
@@ -272,14 +273,17 @@ export const updateSlotLineup = mutation({
     const next: Doc<"eventArtistNeeds"> = { ...slot, updatedAt: Date.now() };
     if (name) next.externalArtistName = name;
     else delete next.externalArtistName;
-    if (args.setStartsAt != null) next.setStartsAt = args.setStartsAt;
-    else delete next.setStartsAt;
-    if (args.setEndsAt != null) next.setEndsAt = args.setEndsAt;
-    else delete next.setEndsAt;
-    if (args.soundcheckStartsAt != null) next.soundcheckStartsAt = args.soundcheckStartsAt;
-    else delete next.soundcheckStartsAt;
-    if (args.soundcheckEndsAt != null) next.soundcheckEndsAt = args.soundcheckEndsAt;
-    else delete next.soundcheckEndsAt;
+    for (const field of [
+      "setStartsAt",
+      "setEndsAt",
+      "soundcheckStartsAt",
+      "soundcheckEndsAt",
+    ] as const) {
+      const value = args[field];
+      if (value === undefined) continue;
+      if (value === null) delete next[field];
+      else next[field] = value;
+    }
     await ctx.db.replace(slot._id, next);
     await syncNeedBlocks(ctx, slot._id);
     return null;

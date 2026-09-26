@@ -226,7 +226,7 @@ export function InvoiceLinkedEventCrewSection({
   useEffect(() => {
     // Only rebase a draft hydrated for this event: in the render that hydrates,
     // `blocks` still holds the previous (or empty) draft.
-    if (!eventData?.event || scheduleEventId !== eventData.event._id) return;
+    if (!eventData?.event || scheduleEventId !== eventData.event._id || saving) return;
     // Lineup edits move an act's soundcheck/set blocks on the server; mirror
     // them here and in the saved signature so they never trigger an autosave.
     const serverActBlocks = eventData.blocks
@@ -245,7 +245,7 @@ export function InvoiceLinkedEventCrewSection({
       );
       return rebased ? JSON.stringify(rebased) : prev;
     });
-  }, [eventData, scheduleEventId, blocks, shifts]);
+  }, [eventData, scheduleEventId, saving, blocks, shifts]);
 
   const persistScheduleDraft = useCallback(
     async (draftBlocks: TimelineBlockDraft[], draftShifts: EventShiftDraft[]) => {

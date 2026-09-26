@@ -29,10 +29,13 @@ export type TimelineBlockDraft = {
   endsAt: string;
   notes: string;
   /**
-   * An act's soundcheck or set, mirrored from the lineup. Read-only here: the
-   * server ignores edits to it, and crew can still be assigned to it.
+   * An act's soundcheck or set. Only the Run of Show edits these; this
+   * horizontal editor shows them read-only and the server ignores its edits.
    */
   actOwned?: boolean;
+  /** The act a soundcheck/set belongs to (at most one is set). */
+  participationId?: string;
+  needId?: string;
 };
 
 const MINUTES_PER_DAY = 24 * 60;
@@ -525,7 +528,7 @@ function ActBlockRow({ block }: { block: TimelineBlockDraft }) {
       </span>
       <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
         <LockSimpleIcon className="size-3.5" aria-hidden />
-        Set in Lineup
+        Set in Run of Show
       </span>
     </div>
   );

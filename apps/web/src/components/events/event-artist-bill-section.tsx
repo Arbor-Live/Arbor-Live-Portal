@@ -28,13 +28,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { DateTimeRangePicker } from "@/components/ui/date-time-picker";
 import { useAppDialog } from "@/components/ui/app-dialog";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { notify } from "@/lib/notify";
 import { ArborOnlyGuard } from "@/components/org-context-guard";
-import { formatUsd } from "@/lib/format";
-import { localDateTimeInputToMs, toLocalDateTimeInput } from "@/lib/crew-availability";
+import { formatTime, formatUsd } from "@/lib/format";
+import { getEventEditorTabPath } from "@/lib/event-editor-tabs";
 import { formatBandPayeePayoutMethod } from "@/lib/band-payout-copy";
 import { resolvePayoutDefaults } from "@/lib/band-payout-defaults";
 import { eventBandOnboardingInviteSchema, eventBandPayoutFieldsSchema } from "@/lib/validations/bands";
@@ -108,36 +107,12 @@ type BillRow = {
   performer?: PerformerRow;
 };
 
-type LineupDraft = {
-  setStart: string;
-  setEnd: string;
-  soundcheckStart: string;
-  soundcheckEnd: string;
-};
-
-const UNSET = "";
-
 function toSlotDraft(slot: SlotRow): SlotDraft {
   return {
     label: slot.label,
     artistType: slot.artistType,
     genres: slot.genres,
     status: slot.status,
-  };
-}
-
-function toLineupDraft(performer: PerformerRow): LineupDraft {
-  return {
-    setStart: performer.setStartsAt != null ? toLocalDateTimeInput(performer.setStartsAt) : UNSET,
-    setEnd: performer.setEndsAt != null ? toLocalDateTimeInput(performer.setEndsAt) : UNSET,
-    soundcheckStart:
-      performer.soundcheckStartsAt != null
-        ? toLocalDateTimeInput(performer.soundcheckStartsAt)
-        : UNSET,
-    soundcheckEnd:
-      performer.soundcheckEndsAt != null
-        ? toLocalDateTimeInput(performer.soundcheckEndsAt)
-        : UNSET,
   };
 }
 
@@ -152,53 +127,14 @@ function slotDraftsEqual(a: SlotDraft, b: SlotDraft) {
 
 type ExternalDraft = {
   name: string;
-  setStart: string;
-  setEnd: string;
-  soundcheckStart: string;
-  soundcheckEnd: string;
 };
 
-function toExternalDraft(slot: {
-  externalArtistName: string;
-  setStartsAt: number | null;
-  setEndsAt: number | null;
-  soundcheckStartsAt: number | null;
-  soundcheckEndsAt: number | null;
-}): ExternalDraft {
-  return {
-    name: slot.externalArtistName,
-    setStart: slot.setStartsAt != null ? toLocalDateTimeInput(slot.setStartsAt) : UNSET,
-    setEnd: slot.setEndsAt != null ? toLocalDateTimeInput(slot.setEndsAt) : UNSET,
-    soundcheckStart:
-      slot.soundcheckStartsAt != null ? toLocalDateTimeInput(slot.soundcheckStartsAt) : UNSET,
-    soundcheckEnd:
-      slot.soundcheckEndsAt != null ? toLocalDateTimeInput(slot.soundcheckEndsAt) : UNSET,
-  };
+function toExternalDraft(slot: { externalArtistName: string }): ExternalDraft {
+  return { name: slot.externalArtistName };
 }
 
 function externalDraftsEqual(a: ExternalDraft, b: ExternalDraft) {
-  return (
-    a.name === b.name &&
-    a.setStart === b.setStart &&
-    a.setEnd === b.setEnd &&
-    a.soundcheckStart === b.soundcheckStart &&
-    a.soundcheckEnd === b.soundcheckEnd
-  );
-}
-
-function lineupDraftsEqual(a: LineupDraft, b: LineupDraft) {
-  return (
-    a.setStart === b.setStart &&
-    a.setEnd === b.setEnd &&
-    a.soundcheckStart === b.soundcheckStart &&
-    a.soundcheckEnd === b.soundcheckEnd
-  );
-}
-
-/** Optional instant; an empty field means "not set". */
-function toMs(value: string) {
-  if (!value.trim()) return null;
-  return localDateTimeInputToMs(value);
+  return a.name === b.name;
 }
 
 type BandCatalogRow = {
@@ -308,7 +244,6 @@ function EventArtistBillPanel({
   const { confirm } = useAppDialog();
   const [editingPaymentForOrg, setEditingPaymentForOrg] = useState<string | null>(null);
   const [slotDrafts, setSlotDrafts] = useState<Record<string, SlotDraft>>({});
-  const [lineupDrafts, setLineupDrafts] = useState<Record<string, LineupDraft>>({});
   const [externalDrafts, setExternalDrafts] = useState<Record<string, ExternalDraft>>({});
   const [placementNames, setPlacementNames] = useState<Record<string, string>>({});
   const [savingSlotId, setSavingSlotId] = useState<string | null>(null);
@@ -437,15 +372,6 @@ function EventArtistBillPanel({
     });
   }
 
-  function patchLineupDraft(participationId: string, values: Partial<LineupDraft>) {
-    setLineupDrafts((prev) => {
-      const server = performers?.find((row) => row.participationId === participationId);
-      const current = prev[participationId] ?? (server ? toLineupDraft(server) : undefined);
-      if (!current) return prev;
-      return { ...prev, [participationId]: { ...current, ...values } };
-    });
-  }
-
   function closeAdd() {
     setAddMode(null);
     setAddTargetNeedId(null);
@@ -551,10 +477,6 @@ function EventArtistBillPanel({
       await updateSlotLineup({
         needId: slot.needId,
         externalArtistName: draft.name.trim(),
-        setStartsAt: toMs(draft.setStart),
-        setEndsAt: toMs(draft.setEnd),
-        soundcheckStartsAt: toMs(draft.soundcheckStart),
-        soundcheckEndsAt: toMs(draft.soundcheckEnd),
       });
       setExternalDrafts((prev) => {
         const next = { ...prev };
@@ -575,10 +497,6 @@ function EventArtistBillPanel({
       await updateSlotLineup({
         needId: slot.needId,
         externalArtistName: null,
-        setStartsAt: null,
-        setEndsAt: null,
-        soundcheckStartsAt: null,
-        soundcheckEndsAt: null,
       });
       setExternalDrafts((prev) => {
         const next = { ...prev };
@@ -600,32 +518,8 @@ function EventArtistBillPanel({
       await updateLineup({
         participationId: performer.participationId,
         needId: null,
-        setStartsAt: performer.setStartsAt ?? null,
-        setEndsAt: performer.setEndsAt ?? null,
-        soundcheckStartsAt: performer.soundcheckStartsAt ?? null,
-        soundcheckEndsAt: performer.soundcheckEndsAt ?? null,
       });
       notify.success("Position reopened.");
-    } catch (error) {
-      notify.error(getConvexErrorMessage(error));
-    } finally {
-      setSavingLineupId(null);
-    }
-  }
-
-  async function onSaveLineup(performer: PerformerRow, needId: Id<"eventArtistNeeds"> | null) {
-    const draft = lineupDrafts[performer.participationId] ?? toLineupDraft(performer);
-    setSavingLineupId(performer.participationId);
-    try {
-      await updateLineup({
-        participationId: performer.participationId,
-        needId,
-        setStartsAt: toMs(draft.setStart),
-        setEndsAt: toMs(draft.setEnd),
-        soundcheckStartsAt: toMs(draft.soundcheckStart),
-        soundcheckEndsAt: toMs(draft.soundcheckEnd),
-      });
-      notify.success("Lineup updated.");
     } catch (error) {
       notify.error(getConvexErrorMessage(error));
     } finally {
@@ -729,10 +623,6 @@ function EventArtistBillPanel({
       await updateLineup({
         participationId: performer.participationId,
         needId,
-        setStartsAt: performer.setStartsAt ?? null,
-        setEndsAt: performer.setEndsAt ?? null,
-        soundcheckStartsAt: performer.soundcheckStartsAt ?? null,
-        soundcheckEndsAt: performer.soundcheckEndsAt ?? null,
       });
       notify.success("Added to the bill.");
     } catch (error) {
@@ -761,9 +651,9 @@ function EventArtistBillPanel({
             Lineup
           </CardTitle>
           <p className="mt-1 text-sm text-muted-foreground">
-            The bill — each position is either filled or still needed. Set the slot, when they
-            play, and the payout on the same row; removing an act also cancels any unpaid payout
-            and media access.
+            The bill — each position is either filled or still needed. Set the slot and the payout
+            on the same row; set and soundcheck times live in the Run of Show. Removing an act also
+            cancels any unpaid payout and media access.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -863,16 +753,6 @@ function EventArtistBillPanel({
               const slotDirty = Boolean(
                 slot && serverSlot && slotDraft && !slotDraftsEqual(slotDraft, serverSlot),
               );
-              const serverLineup = performer ? toLineupDraft(performer) : null;
-              const lineupDraft = performer
-                ? (lineupDrafts[performer.participationId] ?? serverLineup)
-                : null;
-              const lineupDirty = Boolean(
-                performer &&
-                  serverLineup &&
-                  lineupDraft &&
-                  !lineupDraftsEqual(lineupDraft, serverLineup),
-              );
               const placed = Boolean(slot && performer);
               const externalServer = slot ? toExternalDraft(slot) : null;
               const externalDraft = slot
@@ -964,38 +844,11 @@ function EventArtistBillPanel({
                         ) : null}
                       </div>
 
-                      {lineupDraft ? (
-                        <div className="grid gap-2 md:grid-cols-2">
-                          <div className="space-y-1">
-                            <Label>Set</Label>
-                            <DateTimeRangePicker
-                              startValue={lineupDraft.setStart}
-                              endValue={lineupDraft.setEnd}
-                              onChange={(next) =>
-                                patchLineupDraft(performer.participationId, {
-                                  setStart: next.start,
-                                  setEnd: next.end,
-                                })
-                              }
-                              placeholder="When they play"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label>Soundcheck</Label>
-                            <DateTimeRangePicker
-                              startValue={lineupDraft.soundcheckStart}
-                              endValue={lineupDraft.soundcheckEnd}
-                              onChange={(next) =>
-                                patchLineupDraft(performer.participationId, {
-                                  soundcheckStart: next.start,
-                                  soundcheckEnd: next.end,
-                                })
-                              }
-                              placeholder="When to arrive"
-                            />
-                          </div>
-                        </div>
-                      ) : null}
+                      <RunOfShowTimes
+                        eventId={eventId}
+                        set={[performer.setStartsAt, performer.setEndsAt]}
+                        soundcheck={[performer.soundcheckStartsAt, performer.soundcheckEndsAt]}
+                      />
 
                       {performer.payment ? (
                         <p className="text-xs text-muted-foreground">
@@ -1076,18 +929,6 @@ function EventArtistBillPanel({
                             Unassign
                           </Button>
                         ) : null}
-                        {lineupDirty ? (
-                          <Button
-                            type="button"
-                            size="sm"
-                            disabled={savingLineupId === performer.participationId}
-                            onClick={() =>
-                              void onSaveLineup(performer, slot?.needId ?? null)
-                            }
-                          >
-                            {savingLineupId === performer.participationId ? "Saving…" : "Save"}
-                          </Button>
-                        ) : null}
                       </div>
 
                       {editingPaymentForOrg === performer.organizationId ? (
@@ -1153,36 +994,11 @@ function EventArtistBillPanel({
                         </Button>
                       </div>
 
-                      <div className="grid gap-2 md:grid-cols-2">
-                        <div className="space-y-1">
-                          <Label>Set</Label>
-                          <DateTimeRangePicker
-                            startValue={externalDraft.setStart}
-                            endValue={externalDraft.setEnd}
-                            onChange={(next) =>
-                              patchExternalDraft(slot.needId, {
-                                setStart: next.start,
-                                setEnd: next.end,
-                              })
-                            }
-                            placeholder="When they play"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label>Soundcheck</Label>
-                          <DateTimeRangePicker
-                            startValue={externalDraft.soundcheckStart}
-                            endValue={externalDraft.soundcheckEnd}
-                            onChange={(next) =>
-                              patchExternalDraft(slot.needId, {
-                                soundcheckStart: next.start,
-                                soundcheckEnd: next.end,
-                              })
-                            }
-                            placeholder="When to arrive"
-                          />
-                        </div>
-                      </div>
+                      <RunOfShowTimes
+                        eventId={eventId}
+                        set={[slot.setStartsAt, slot.setEndsAt]}
+                        soundcheck={[slot.soundcheckStartsAt, slot.soundcheckEndsAt]}
+                      />
                     </>
                   ) : slot && slotDraft ? (
                     <>
@@ -1955,5 +1771,39 @@ function EventBandPaymentForm({
         </Button>
       </div>
     </div>
+  );
+}
+
+function windowLabel([start, end]: [number | null | undefined, number | null | undefined]) {
+  return start != null && end != null ? `${formatTime(start)} – ${formatTime(end)}` : "Not set";
+}
+
+/** Set and soundcheck times are edited in the Run of Show; the bill just shows them. */
+function RunOfShowTimes({
+  eventId,
+  set,
+  soundcheck,
+}: {
+  eventId: Id<"events">;
+  set: [number | null | undefined, number | null | undefined];
+  soundcheck: [number | null | undefined, number | null | undefined];
+}) {
+  return (
+    <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+      <span>
+        <span className="text-muted-foreground">Set</span>{" "}
+        <span className="tabular-nums">{windowLabel(set)}</span>
+      </span>
+      <span>
+        <span className="text-muted-foreground">Soundcheck</span>{" "}
+        <span className="tabular-nums">{windowLabel(soundcheck)}</span>
+      </span>
+      <Link
+        href={getEventEditorTabPath(eventId, "schedule")}
+        className="text-xs text-primary underline-offset-4 hover:underline"
+      >
+        Edit in Run of Show
+      </Link>
+    </p>
   );
 }

@@ -32,3 +32,13 @@ export const scheduleBlockTypeValue = v.union(
   v.literal("strike"),
   v.literal("custom"),
 );
+
+/**
+ * Moments happen inside a section (soundchecks during setup, sets during the
+ * show). Crew are scheduled per section, never per moment.
+ */
+export const MOMENT_BLOCK_TYPES = ["doors", "soundcheck", "set", "changeover"] as const;
+
+export function isSectionBlockType(type: ScheduleBlockType) {
+  return !(MOMENT_BLOCK_TYPES as readonly string[]).includes(type);
+}

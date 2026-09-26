@@ -23,7 +23,7 @@ import {
   applyShiftTimesOverrideFlags,
   attachShiftsToPersistedBlocks,
   blockDraftFromRow,
-  rebaseActBlocks,
+  mergeServerActBlocks,
   resolveShiftScheduleBlockId,
   shiftBelongsToBlock,
   sortScheduleBlocksByTime,
@@ -55,6 +55,7 @@ import {
   type EventDraft,
   type ShiftDraft,
 } from "@/components/events/workspace/event-draft";
+import { isSectionBlockType } from "@/lib/schedule-block-types";
 
 type SavedSchedule = { blocks: TimelineBlockDraft[]; shifts: ShiftDraft[] };
 
@@ -174,22 +175,26 @@ function useEventWorkspaceState(eventId: Id<"events">, activeTab: EventEditorTab
     // Only rebase a draft hydrated for this event: in the render that hydrates,
     // `blocks` still holds the previous (or empty) draft.
     if (!eventData?.event || scheduleEventId !== eventData.event._id) return;
-    // Lineup edits move an act's soundcheck/set blocks on the server; mirror
-    // them into the schedule draft and its baseline so they never read as unsaved.
+    // Act soundcheck/set blocks change on the server too (another editor, or a
+    // platform act taking over a lineup position); merge those in without
+    // overwriting this user's unsaved Run of Show edits.
     const serverActBlocks = eventData.blocks
       .filter((row) => row.participationId || row.needId)
       .map((row) => blockDraftFromRow(row));
-    const next = rebaseActBlocks({ blocks, shifts }, serverActBlocks);
-    if (!next) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing from the Convex subscription; converges once the draft matches
-    setBlocks(next.blocks);
-    setShifts(next.shifts);
-    setScheduleBaseline((prev) => {
-      if (!prev) return prev;
-      const rebased = rebaseActBlocks(JSON.parse(prev) as SavedSchedule, serverActBlocks);
-      return rebased ? JSON.stringify(rebased) : prev;
-    });
-  }, [eventData, scheduleEventId, blocks, shifts]);
+    // Mid-save, this render's draft can predate the saved ids; merging then would
+    // duplicate newly created blocks. The effect re-runs once the save settles.
+    if (!scheduleBaseline || saveStatus === "saving") return;
+    const merged = mergeServerActBlocks(
+      { blocks, shifts },
+      JSON.parse(scheduleBaseline) as SavedSchedule,
+      serverActBlocks,
+    );
+    if (!merged) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing from the Convex subscription; converges once the baseline matches
+    setBlocks(merged.state.blocks);
+    setShifts(merged.state.shifts);
+    setScheduleBaseline(JSON.stringify(merged.baseline));
+  }, [eventData, scheduleEventId, scheduleBaseline, saveStatus, blocks, shifts]);
 
   const updateDraft = useCallback((patch: Partial<EventDraft>) => {
     setDraft((prev) => ({ ...prev, ...patch }));
@@ -217,8 +222,11 @@ function useEventWorkspaceState(eventId: Id<"events">, activeTab: EventEditorTab
   // A shift is unlinked when it matches no current schedule block — including a
   // stale `scheduleBlockId` left behind when its block was deleted by a backend
   // path that does not relink shifts (e.g. series block regeneration).
+  /** Crew belong to sections; a shift on a moment (soundcheck, set, …) counts as unlinked. */
   function isShiftUnlinked(shift: ShiftDraft) {
-    return !blocks.some((block) => shiftBelongsToBlock(shift, block));
+    return !blocks.some(
+      (block) => isSectionBlockType(block.blockType) && shiftBelongsToBlock(shift, block),
+    );
   }
 
   const changedKeys = useMemo(() => changedDraftKeys(draft, baseline), [draft, baseline]);
@@ -311,6 +319,8 @@ function useEventWorkspaceState(eventId: Id<"events">, activeTab: EventEditorTab
     );
     const savedBlocks = await upsertBlocks({
       eventId,
+      // The Run of Show owns act soundcheck/set blocks.
+      editsActBlocks: true,
       blocks: blocksWithRefs.map((row) => ({
         id: row.id as Id<"eventScheduleBlocks"> | undefined,
         clientId: row.clientId,
@@ -320,6 +330,12 @@ function useEventWorkspaceState(eventId: Id<"events">, activeTab: EventEditorTab
         startsAt: requireLocalDateTimeInputMs(row.startsAt, "block start"),
         endsAt: requireLocalDateTimeInputMs(row.endsAt, "block end"),
         notes: row.notes || undefined,
+        ...(row.id
+          ? {}
+          : {
+              participationId: row.participationId as Id<"eventBandParticipations"> | undefined,
+              needId: row.needId as Id<"eventArtistNeeds"> | undefined,
+            }),
       })),
     });
     // Blocks first so new blocks have ids before shifts reference them.
@@ -492,7 +508,9 @@ function useEventWorkspaceState(eventId: Id<"events">, activeTab: EventEditorTab
         return JSON.stringify({
           blocks: saved.blocks,
           shifts: saved.shifts.filter((shift) =>
-            saved.blocks.some((block) => shiftBelongsToBlock(shift, block)),
+            saved.blocks.some(
+              (block) => isSectionBlockType(block.blockType) && shiftBelongsToBlock(shift, block),
+            ),
           ),
         });
       });

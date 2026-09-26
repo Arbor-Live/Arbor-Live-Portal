@@ -6,10 +6,11 @@ import type { ActBlockType } from "./scheduleBlockTypes";
 
 /**
  * Run of show: an act's soundcheck and set live as `soundcheck` / `set` schedule
- * blocks linked to the act, so crew shifts can attach to them and the brief
- * prints one timeline. For now the lineup still owns the times — its writers
- * call `syncParticipationBlocks` / `syncNeedBlocks`, and the schedule editor
- * treats these blocks as read-only.
+ * blocks linked to the act, so the brief prints one timeline. The Run of Show
+ * editor owns these blocks (`eventSchedule.upsertBlocks` with `editsActBlocks`)
+ * and writes their times back to the lineup fields via `writeBackActTimes`, which
+ * the band dashboard still reads. Lineup-side writers call
+ * `syncParticipationBlocks` / `syncNeedBlocks` to go the other way.
  */
 
 export type ActRef =
@@ -22,6 +23,37 @@ const BLOCK_SUFFIX: Record<ActBlockType, string> = {
   soundcheck: "soundcheck",
   set: "set",
 };
+
+export function actBlockLabel(actName: string, blockType: ActBlockType) {
+  return `${actName} ${BLOCK_SUFFIX[blockType]}`;
+}
+
+export function actRefOf(
+  block: Pick<Doc<"eventScheduleBlocks">, "participationId" | "needId">,
+): ActRef | null {
+  if (block.participationId) return { participationId: block.participationId };
+  if (block.needId) return { needId: block.needId };
+  return null;
+}
+
+export function actKey(act: ActRef) {
+  return "participationId" in act ? `p:${act.participationId}` : `n:${act.needId}`;
+}
+
+/** The act's display name and event, or null when the act is gone. */
+export async function loadAct(ctx: MutationCtx, act: ActRef) {
+  if ("participationId" in act) {
+    const row = await ctx.db.get(act.participationId);
+    if (!row) return null;
+    return { eventId: row.eventId, name: await resolveBandName(ctx, row.organizationId) };
+  }
+  const slot = await ctx.db.get(act.needId);
+  if (!slot) return null;
+  return {
+    eventId: slot.eventId,
+    name: slot.externalArtistName?.trim() || slot.label?.trim() || "TBA",
+  };
+}
 
 export function isActBlock(block: Pick<Doc<"eventScheduleBlocks">, "participationId" | "needId">) {
   return Boolean(block.participationId || block.needId);
@@ -117,7 +149,7 @@ async function syncActBlocks(
       if (current) await deleteScheduleBlock(ctx, current._id, now);
       continue;
     }
-    const label = `${args.actName} ${BLOCK_SUFFIX[blockType]}`;
+    const label = actBlockLabel(args.actName, blockType);
     const dayIndex = pacificDayIndexFromAnchor(event.startAt, window.startsAt);
     if (!current) {
       await ctx.db.insert("eventScheduleBlocks", {
@@ -192,6 +224,71 @@ export async function syncNeedBlocks(ctx: MutationCtx, needId: Id<"eventArtistNe
       set: windowOf(slot.setStartsAt, slot.setEndsAt),
     },
   });
+}
+
+/**
+ * The Run of Show edited this act's blocks: copy their windows onto the lineup
+ * fields (the band dashboard and artist portal still read those). Uses
+ * `replace` because `patch` ignores `undefined` and could not clear a field.
+ */
+export async function writeBackActTimes(ctx: MutationCtx, act: ActRef) {
+  const blocks = await listActBlocks(ctx, act);
+  const windowFor = (type: ActBlockType) => {
+    const block = blocks.find((row) => row.blockType === type);
+    return block ? { startsAt: block.startsAt, endsAt: block.endsAt } : null;
+  };
+  const soundcheck = windowFor("soundcheck");
+  const set = windowFor("set");
+  const apply = <T extends Doc<"eventBandParticipations"> | Doc<"eventArtistNeeds">>(row: T): T => {
+    const next = { ...row, updatedAt: Date.now() };
+    delete next.soundcheckStartsAt;
+    delete next.soundcheckEndsAt;
+    delete next.setStartsAt;
+    delete next.setEndsAt;
+    if (soundcheck) {
+      next.soundcheckStartsAt = soundcheck.startsAt;
+      next.soundcheckEndsAt = soundcheck.endsAt;
+    }
+    if (set) {
+      next.setStartsAt = set.startsAt;
+      next.setEndsAt = set.endsAt;
+    }
+    return next;
+  };
+  if ("participationId" in act) {
+    const row = await ctx.db.get(act.participationId);
+    if (row) await ctx.db.replace(row._id, apply(row));
+    return;
+  }
+  const slot = await ctx.db.get(act.needId);
+  if (slot) await ctx.db.replace(slot._id, apply(slot));
+}
+
+/**
+ * A platform act taking a lineup position inherits the position's run-of-show
+ * times when it has none of its own, so a Run of Show built around an open
+ * slot survives the booking.
+ */
+export async function inheritSlotTimes(
+  ctx: MutationCtx,
+  participationId: Id<"eventBandParticipations">,
+  needId: Id<"eventArtistNeeds">,
+) {
+  const [row, slot] = await Promise.all([ctx.db.get(participationId), ctx.db.get(needId)]);
+  if (!row || !slot) return;
+  const rowHasTimes = row.setStartsAt != null || row.soundcheckStartsAt != null;
+  const slotHasTimes = slot.setStartsAt != null || slot.soundcheckStartsAt != null;
+  if (rowHasTimes || !slotHasTimes) return;
+  const next = { ...row, updatedAt: Date.now() };
+  if (slot.setStartsAt != null && slot.setEndsAt != null) {
+    next.setStartsAt = slot.setStartsAt;
+    next.setEndsAt = slot.setEndsAt;
+  }
+  if (slot.soundcheckStartsAt != null && slot.soundcheckEndsAt != null) {
+    next.soundcheckStartsAt = slot.soundcheckStartsAt;
+    next.soundcheckEndsAt = slot.soundcheckEndsAt;
+  }
+  await ctx.db.replace(row._id, next);
 }
 
 export async function deleteActBlocks(ctx: MutationCtx, act: ActRef) {
