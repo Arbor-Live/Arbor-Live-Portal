@@ -33,7 +33,7 @@ test.describe("event comments and mentions", () => {
     }) as { eventId: string; path: string };
 
     await page.goto(seeded.path);
-    await expect(page.getByText("Edit Event").first()).toBeVisible({ timeout: 45_000 });
+    await expect(page.getByTestId("event-workspace")).toBeVisible({ timeout: 45_000 });
 
     const comments = page.getByTestId("comments");
     await expect(comments).toBeVisible({ timeout: 30_000 });

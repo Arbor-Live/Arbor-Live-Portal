@@ -31,7 +31,7 @@ test.describe("event series", () => {
       .getByRole("textbox")
       .fill(title);
 
-    await fillDateTimeRangeNearLabel(page, "Start", {
+    await fillDateTimeRangeNearLabel(page, "When", {
       dayLabel,
       startTime: "6:00 PM",
       endTime: "10:00 PM",
@@ -50,7 +50,7 @@ test.describe("event series", () => {
 
     await page.getByRole("button", { name: "Create Series" }).first().click();
     await page.waitForURL(/\/dashboard\/events\/(?!new(?:\/|$))[^/?#]+/, { timeout: 60_000 });
-    await expect(page.getByText("Edit Event").first()).toBeVisible({ timeout: 25_000 });
+    await expect(page.getByTestId("event-workspace")).toBeVisible({ timeout: 25_000 });
     await expect(page.getByText(/Recurring · occurrence 1 of 3/)).toBeVisible({
       timeout: 25_000,
     });

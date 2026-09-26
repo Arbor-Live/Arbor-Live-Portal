@@ -6,6 +6,7 @@ import {
   CameraIcon,
   CheckCircleIcon,
   ClockIcon,
+  ImagesIcon,
   MinusCircleIcon,
 } from "@phosphor-icons/react";
 import { api, type Id } from "@/lib/convex-api";
@@ -77,7 +78,10 @@ export function EventMediaSection({ eventId }: { eventId: Id<"events"> }) {
 
       <Card>
         <CardHeader>
-          <CardTitle>Event Media</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <ImagesIcon className="size-4 text-muted-foreground" />
+            Event Media
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">

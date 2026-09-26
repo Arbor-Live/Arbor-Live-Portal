@@ -183,6 +183,11 @@ const nextConfig: NextConfig = {
         destination: "/dashboard/financial-hub/requests/:path*",
         permanent: true,
       },
+      // Event workspace tabs that merged in the redesign.
+      { source: "/dashboard/events/:id/expenses", destination: "/dashboard/events/:id/billing", permanent: true },
+      { source: "/dashboard/events/:id/marketing", destination: "/dashboard/events/:id/promo", permanent: true },
+      { source: "/dashboard/events/:id/media", destination: "/dashboard/events/:id/promo", permanent: true },
+      { source: "/dashboard/events/:id/artifacts", destination: "/dashboard/events/:id", permanent: true },
     ];
   },
   images: {

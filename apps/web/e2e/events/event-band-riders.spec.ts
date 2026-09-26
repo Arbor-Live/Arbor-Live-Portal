@@ -22,7 +22,7 @@ test.describe("event technical riders panel", () => {
     };
 
     await page.goto(`${seeded.eventPath}/artists`);
-    await expect(page.getByText("Edit Event").first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("event-workspace")).toBeVisible({ timeout: 30_000 });
 
     const panel = page.getByTestId("event-band-riders");
     await expect(panel).toBeVisible({ timeout: 30_000 });

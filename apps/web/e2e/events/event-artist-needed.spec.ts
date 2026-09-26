@@ -15,7 +15,7 @@ test.describe("event artist needed", () => {
     }) as { path: string; title: string };
 
     await page.goto(`${seeded.path}/artists`);
-    await expect(page.getByText("Edit Event").first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("event-workspace")).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText("No positions on the bill yet")).toBeVisible({ timeout: 20_000 });
 
     await page.getByRole("button", { name: "Add", exact: true }).click();
@@ -40,7 +40,7 @@ test.describe("event artist needed", () => {
     await expect(bandPage.getByText("Submitted")).toBeVisible({ timeout: 20_000 });
 
     await page.reload();
-    await expect(page.getByText("Edit Event").first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("event-workspace")).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId("artist-need-status")).toHaveText("Inquiring", {
       timeout: 30_000,
     });

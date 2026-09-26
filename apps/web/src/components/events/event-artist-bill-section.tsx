@@ -13,6 +13,7 @@ import {
   CaretUpIcon,
   DotsSixVerticalIcon,
   PlusIcon,
+  MicrophoneStageIcon,
 } from "@phosphor-icons/react";
 import { ArtistSelect, artistSelectOptions } from "@/components/bands/artist-select";
 import {
@@ -755,7 +756,10 @@ function EventArtistBillPanel({
     <Card>
       <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-2">
         <div>
-          <CardTitle>Lineup</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <MicrophoneStageIcon className="size-4 text-muted-foreground" />
+            Lineup
+          </CardTitle>
           <p className="mt-1 text-sm text-muted-foreground">
             The bill — each position is either filled or still needed. Set the slot, when they
             play, and the payout on the same row; removing an act also cancels any unpaid payout

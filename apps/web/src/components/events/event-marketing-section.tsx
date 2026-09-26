@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery } from "convex/react";
+import { PaintBrushIcon } from "@phosphor-icons/react";
 import { api, type Id } from "@/lib/convex-api";
 import { useSessionViewer } from "@/components/session-shell-provider";
 import {
@@ -69,7 +70,10 @@ export function EventMarketingSection({ eventId }: { eventId: Id<"events"> }) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Marketing</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <PaintBrushIcon className="size-4 text-muted-foreground" />
+            Marketing
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">Loading marketing content…</p>
@@ -82,7 +86,10 @@ export function EventMarketingSection({ eventId }: { eventId: Id<"events"> }) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Marketing</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <PaintBrushIcon className="size-4 text-muted-foreground" />
+            Marketing
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">Event not found.</p>
@@ -146,7 +153,10 @@ export function EventMarketingSection({ eventId }: { eventId: Id<"events"> }) {
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle>Marketing</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <PaintBrushIcon className="size-4 text-muted-foreground" />
+            Marketing
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">

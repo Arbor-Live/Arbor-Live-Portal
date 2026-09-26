@@ -63,7 +63,7 @@ test.describe("schedule assign from yes response", () => {
     await expect(page.getByText(e2eEnv.crewName, { exact: true }).first()).toBeVisible();
 
     await allBlocks.click();
-    await page.getByRole("button", { name: /Save Schedule & Personnel/i }).first().click();
+    await page.getByRole("button", { name: "Save changes" }).click();
     await expect(page.getByText(/On schedule/i).first()).toBeVisible({ timeout: 30_000 });
 
     const state = runConvex("e2eHelpers:getEventCrewAssignmentState", {

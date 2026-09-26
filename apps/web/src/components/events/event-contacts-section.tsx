@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
-import { PlusIcon } from "@phosphor-icons/react";
+import { PlusIcon, AddressBookIcon } from "@phosphor-icons/react";
 import { api, type Id } from "@/lib/convex-api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -175,7 +175,10 @@ export function EventContactsSection({
   return (
     <Card data-testid="event-contacts">
       <CardHeader>
-        <CardTitle>Contacts</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          <AddressBookIcon className="size-4 text-muted-foreground" />
+          Contacts
+        </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         {inherited.length ? (
