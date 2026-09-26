@@ -3,6 +3,7 @@ import {
   assetIdLookupCandidates,
   canonicalizeAssetIdTag,
   normalizeAssetScanInput,
+  parseAssetScanInput,
 } from "./asset-scan";
 
 describe("client asset-scan twin", () => {
@@ -15,6 +16,24 @@ describe("client asset-scan twin", () => {
   it("extracts ids from QR URLs without returning the raw link", () => {
     expect(normalizeAssetScanInput("https://arbor.st/e/ALE-0123")).toBe("123");
     expect(normalizeAssetScanInput("https://example.com/x")).toBeNull();
+  });
+
+  it("parses arbor.st short-link slugs without /e/", () => {
+    expect(parseAssetScanInput("https://arbor.st/packout-a")).toEqual({
+      assetId: null,
+      shortLinkSlug: "packout-a",
+    });
+    expect(parseAssetScanInput("https://example.com/other")).toEqual({
+      assetId: null,
+      shortLinkSlug: null,
+    });
+  });
+
+  it("keeps malformed percent-encoded short-link slugs instead of throwing", () => {
+    expect(parseAssetScanInput("https://arbor.st/%E0%A4%A")).toEqual({
+      assetId: null,
+      shortLinkSlug: "%E0%A4%A",
+    });
   });
 
   it("lookup candidates stay on the canonical form", () => {

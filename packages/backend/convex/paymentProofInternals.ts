@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { internalQuery } from "./_generated/server";
+import { isRequestPublicTokenExpired } from "./lib/requestToken";
 
 export const resolvePublicInvoiceId = internalQuery({
   args: {
@@ -14,6 +15,9 @@ export const resolvePublicInvoiceId = internalQuery({
         .withIndex("by_publicApprovalToken", (q) => q.eq("publicApprovalToken", args.token))
         .unique();
       if (!invoice || invoice.status === "void" || invoice.sourceEventRequestId) return null;
+      if (invoice.publicApprovalTokenExpiresAt && invoice.publicApprovalTokenExpiresAt < Date.now()) {
+        return null;
+      }
       return invoice._id;
     }
 
@@ -22,6 +26,7 @@ export const resolvePublicInvoiceId = internalQuery({
       .withIndex("by_publicToken", (q) => q.eq("publicToken", args.token))
       .unique();
     if (!request?.linkedInvoiceId) return null;
+    if (isRequestPublicTokenExpired(request)) return null;
     const invoice = await ctx.db.get(request.linkedInvoiceId);
     if (!invoice || invoice.status === "void" || !invoice.clientReviewReadyAt) return null;
     return invoice._id;

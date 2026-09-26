@@ -72,21 +72,26 @@ export const enqueueForEvent = internalMutation({
     eventId: v.id("events"),
     todayKey: v.string(),
   },
-  returns: v.object({ enqueuedCount: v.number() }),
+  returns: v.object({
+    enqueuedCount: v.number(),
+    skippedClientAlbumCount: v.number(),
+  }),
   handler: async (ctx, args) => {
     const event = await ctx.db.get(args.eventId);
-    if (!event?.invoiceId) return { enqueuedCount: 0 };
+    if (!event?.invoiceId) return { enqueuedCount: 0, skippedClientAlbumCount: 0 };
 
     const invoice = await ctx.db.get(event.invoiceId);
-    if (!invoice) return { enqueuedCount: 0 };
+    if (!invoice) return { enqueuedCount: 0, skippedClientAlbumCount: 0 };
 
     const timezone = event.timezone || EVENT_TIMEZONE;
     const albumLink = await getCanonicalAlbumLink(ctx, "event", event._id);
+    const albumShareUrl = albumLink?.shareUrl?.trim() || undefined;
     // Internal recipients complete their review + photos in the portal; only
     // clients get the raw Immich share link (they have no dashboard account).
     const eventUrl = `${SITE_URL}/dashboard/events/${event._id}`;
 
     let enqueuedCount = 0;
+    let skippedClientAlbumCount = 0;
 
     // Client: only when we can resolve an email address. A missing client
     // email must not block the internal lead/crew emails below.
@@ -103,27 +108,33 @@ export const enqueueForEvent = internalMutation({
     }
 
     if (clientEmail && isValidEmail(clientEmail)) {
-      const portal = await resolvePortalTokenForInvoice(ctx, invoice);
-      const feedbackFormUrl = portal
-        ? `${portal.portal === "request" ? requestTrackingUrl(portal.token) : publicQuoteUrl(portal.token)}#feedback`
-        : undefined;
+      if (!albumShareUrl) {
+        // No album link to share: a "your photos are here" email would be
+        // misleading, so skip it and report the skip instead of sending.
+        skippedClientAlbumCount += 1;
+      } else {
+        const portal = await resolvePortalTokenForInvoice(ctx, invoice);
+        const feedbackFormUrl = portal
+          ? `${portal.portal === "request" ? requestTrackingUrl(portal.token) : publicQuoteUrl(portal.token)}#feedback`
+          : undefined;
 
-      await enqueueEmail(ctx, {
-        template: "post_event_album",
-        to: clientEmail,
-        subject: subjectForTemplate("post_event_album", event.title),
-        eventId: event._id,
-        idempotencyKey: `post_event_album:${event._id}:${args.todayKey}`,
-        payload: {
-          recipientName,
-          eventTitle: event.title,
-          venueName: event.venueName,
-          dateRangeLabel: formatEventDateRange(event.startAt, event.endAt, timezone),
-          albumShareUrl: albumLink?.shareUrl,
-          feedbackFormUrl,
-        },
-      });
-      enqueuedCount += 1;
+        await enqueueEmail(ctx, {
+          template: "post_event_album",
+          to: clientEmail,
+          subject: subjectForTemplate("post_event_album", event.title),
+          eventId: event._id,
+          idempotencyKey: `post_event_album:${event._id}:${args.todayKey}`,
+          payload: {
+            recipientName,
+            eventTitle: event.title,
+            venueName: event.venueName,
+            dateRangeLabel: formatEventDateRange(event.startAt, event.endAt, timezone),
+            albumShareUrl,
+            feedbackFormUrl,
+          },
+        });
+        enqueuedCount += 1;
+      }
     }
 
     const leads = await getEventLeadRecipients(ctx, event._id);
@@ -174,6 +185,6 @@ export const enqueueForEvent = internalMutation({
       enqueuedCount += 1;
     }
 
-    return { enqueuedCount };
+    return { enqueuedCount, skippedClientAlbumCount };
   },
 });
