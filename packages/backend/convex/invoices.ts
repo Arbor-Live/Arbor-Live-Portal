@@ -444,10 +444,16 @@ async function syncArtistSlotsForInvoice(
       continue;
     }
     if (seated?.organizationId === organizationId) continue;
+    const current = await ctx.db
+      .query("eventBandParticipations")
+      .withIndex("by_eventId_and_organizationId", (q) =>
+        q.eq("eventId", line.eventId!).eq("organizationId", organizationId),
+      )
+      .unique();
     await upsertEventBandParticipation(ctx, {
       eventId: line.eventId,
       organizationId,
-      role: "headliner",
+      role: current?.role ?? "headliner",
       needId: slot._id,
     });
   }
@@ -495,6 +501,15 @@ async function replaceLineItems(
   const previousNeedIds = existing.flatMap((row) =>
     row.section === "artist" && row.needId ? [row.needId] : [],
   );
+  // The editor hydrates once, so it posts the same lines without `needId` on
+  // every later save. Reuse the position a line already had (same event and
+  // order) instead of minting a new one and stranding the old.
+  const previousNeedIdByKey = new Map<string, Id<"eventArtistNeeds">>();
+  for (const row of existing) {
+    if (row.section === "artist" && row.needId && row.eventId) {
+      previousNeedIdByKey.set(`${row.eventId}:${row.order}`, row.needId);
+    }
+  }
   for (const row of existing) {
     await ctx.db.delete(row._id);
   }
@@ -519,7 +534,11 @@ async function replaceLineItems(
       equipmentQuantityBasis: row.equipmentQuantityBasis,
       organizationId: trimOptional(row.organizationId),
       eventId: row.section === "artist" ? row.eventId : undefined,
-      needId: row.section === "artist" ? row.needId : undefined,
+      needId:
+        row.section === "artist"
+          ? (row.needId ??
+            (row.eventId ? previousNeedIdByKey.get(`${row.eventId}:${row.order}`) : undefined))
+          : undefined,
       memberCount:
         row.section === "artist" && row.memberCount !== undefined && row.memberCount > 0
           ? row.memberCount
@@ -559,10 +578,8 @@ async function replaceLineItems(
     const inquiries = await ctx.db
       .query("eventArtistInquiries")
       .withIndex("by_needId", (q) => q.eq("needId", needId))
-      .take(200);
-    for (const inquiry of inquiries) {
-      await ctx.db.delete(inquiry._id);
-    }
+      .take(1);
+    if (inquiries.length > 0) continue;
     await ctx.db.delete(needId);
   }
 }

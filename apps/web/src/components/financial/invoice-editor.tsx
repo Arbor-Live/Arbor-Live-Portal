@@ -835,6 +835,7 @@ export function InvoiceEditor({
               people: "1",
               rateUsd: payment.totalUsd.toString(),
               eventId,
+              needId: performer.needId ?? undefined,
             };
           }
           const hours = payment.performanceHours && payment.performanceHours > 0 ? payment.performanceHours : 1;
@@ -847,6 +848,7 @@ export function InvoiceEditor({
             people: String(members),
             rateUsd: rate.toString(),
             eventId,
+            needId: performer.needId ?? undefined,
           };
         }
         const profileRate = rateByOrg.get(performer.organizationId) ?? 0;
@@ -858,6 +860,7 @@ export function InvoiceEditor({
           people: profileMembers > 0 ? profileMembers.toString() : "1",
           rateUsd: profileRate > 0 ? profileRate.toString() : "0",
           eventId,
+          needId: performer.needId ?? undefined,
         };
       }),
     );
