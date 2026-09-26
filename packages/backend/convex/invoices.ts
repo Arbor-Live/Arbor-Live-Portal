@@ -410,10 +410,14 @@ async function syncArtistSlotsForInvoice(
     .withIndex("by_invoiceId", (q) => q.eq("invoiceId", invoiceId))
     .take(500);
 
+  const claimed = new Set<Id<"eventArtistNeeds">>();
   for (const line of lines) {
     if (line.section !== "artist" || !line.eventId) continue;
     const linked = line.needId ? await ctx.db.get(line.needId) : null;
-    let slot = linked && linked.eventId === line.eventId ? linked : null;
+    // A position stands for one line. A duplicate id is treated as unlinked, so
+    // the second line gets its own instead of shadowing the first.
+    let slot =
+      linked && linked.eventId === line.eventId && !claimed.has(linked._id) ? linked : null;
     if (!slot) {
       const needId = await ctx.db.insert("eventArtistNeeds", {
         eventId: line.eventId,
@@ -427,6 +431,7 @@ async function syncArtistSlotsForInvoice(
       slot = await ctx.db.get(needId);
     }
     if (!slot) continue;
+    claimed.add(slot._id);
     // An outside act already fills this position; the line still bills for its
     // own act, and saving an invoice must never fail on that disagreement.
     if (slot.externalArtistName?.trim()) continue;
@@ -585,6 +590,8 @@ async function replaceLineItems(
     if (kept.has(needId)) continue;
     const slot = await ctx.db.get(needId);
     if (!slot) continue;
+    // Filled by an outside act — the line is gone, the booking is not.
+    if (slot.externalArtistName?.trim()) continue;
     const filled = await ctx.db
       .query("eventBandParticipations")
       .withIndex("by_needId", (q) => q.eq("needId", needId))
