@@ -179,6 +179,11 @@ Cursor rule: `.cursor/rules/portal-timezone.mdc` (always applied).
   - One-time hydration per loaded event id; later server changes are adopted only
     for fields the user hasn't edited (see `event-workspace-provider.tsx`).
   - Saves send only changed fields (`buildEventUpdatePatch`) — never the whole form.
+- Run of show: an act's soundcheck/set are schedule blocks mirrored from the lineup
+  (`lib/runOfShow.ts`). Lineup writers must call `syncParticipationBlocks` /
+  `syncNeedBlocks`; anything that deletes or clones blocks must skip act blocks
+  (`isActBlock`). Web drafts mark them `actOwned` and rebase them live — gate that
+  rebase on hydrated *state*, not a ref, or the hydrating render clobbers the draft.
 - Start/end date coupling:
   - End should auto-fill from Start by default, but stop auto-overwriting after user explicitly edits End.
 - Ensure schedule save and personnel save order does not lose `scheduleBlockId` references.

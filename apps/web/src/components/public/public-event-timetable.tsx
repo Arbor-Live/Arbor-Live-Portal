@@ -39,6 +39,10 @@ const BLOCK_STYLES: Record<string, string> = {
   setup: "border-status-amber-500/40 bg-status-amber-500/10",
   show: "border-primary/40 bg-primary/10",
   strike: "border-status-zinc-400/40 bg-status-zinc-500/10",
+  doors: "border-status-slate-500/40 bg-status-slate-500/10",
+  soundcheck: "border-status-sky-500/40 bg-status-sky-500/10",
+  set: "border-status-violet-500/40 bg-status-violet-500/10",
+  changeover: "border-status-orange-500/40 bg-status-orange-500/10",
   custom: "border-border bg-muted",
 };
 

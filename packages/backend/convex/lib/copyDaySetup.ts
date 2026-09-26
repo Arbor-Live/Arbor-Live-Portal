@@ -1,6 +1,7 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { listEventsByInvoiceId } from "./invoiceEvents";
+import { isActBlock } from "./runOfShow";
 
 const MAX_LINKED_DAYS = 50;
 
@@ -55,6 +56,8 @@ async function replaceScheduleAndOpenSlots(
     .withIndex("by_eventId", (q) => q.eq("eventId", targetEventId))
     .take(500);
   for (const row of existingBlocks) {
+    // The target day's own acts keep their soundcheck/set blocks.
+    if (isActBlock(row)) continue;
     await ctx.db.delete(row._id);
   }
 
@@ -67,7 +70,13 @@ async function replaceScheduleAndOpenSlots(
   }
 
   const blockIdMap = new Map<Id<"eventScheduleBlocks">, Id<"eventScheduleBlocks">>();
+  const actBlockIds = new Set<Id<"eventScheduleBlocks">>();
   for (const block of sourceBlocks) {
+    // Another day's lineup is its own; do not copy this day's act blocks.
+    if (isActBlock(block)) {
+      actBlockIds.add(block._id);
+      continue;
+    }
     const newId = await ctx.db.insert("eventScheduleBlocks", {
       eventId: targetEventId,
       blockType: block.blockType,
@@ -84,6 +93,7 @@ async function replaceScheduleAndOpenSlots(
 
   // Copy slot shape (role + hours) only — never assignees.
   for (const shift of sourceShifts) {
+    if (shift.scheduleBlockId && actBlockIds.has(shift.scheduleBlockId)) continue;
     const mappedBlockId = shift.scheduleBlockId
       ? blockIdMap.get(shift.scheduleBlockId)
       : undefined;

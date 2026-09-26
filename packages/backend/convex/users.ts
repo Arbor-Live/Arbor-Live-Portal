@@ -68,6 +68,7 @@ import {
   type UserCompensationRateMode,
 } from "./lib/crewCompensation";
 import { buildUserProfileImageByUserId } from "./lib/userProfileImage";
+import { deleteActBlocks, syncNeedBlocks } from "./lib/runOfShow";
 
 const invitationStatusValue = v.union(
   v.literal("pending"),
@@ -980,6 +981,8 @@ export const deleteArchivedBandOrganizationAdmin = mutation({
       .take(1000);
     for (const row of participations) {
       await ctx.db.delete(row._id);
+      await deleteActBlocks(ctx, { participationId: row._id });
+      if (row.needId) await syncNeedBlocks(ctx, row.needId);
     }
 
     await clearActiveOrgSelections(ctx, args.organizationId);

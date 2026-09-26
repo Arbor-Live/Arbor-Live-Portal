@@ -13,6 +13,7 @@ import {
   payeeFieldsFromProfile,
 } from "./lib/bandPayments";
 import { scheduleBandAssignedEmails } from "./email/bandAssignmentEmails";
+import { deleteActBlocks, syncNeedBlocks, syncParticipationBlocks } from "./lib/runOfShow";
 
 const participationRoleValue = v.union(
   v.literal("headliner"),
@@ -172,6 +173,14 @@ export async function upsertEventBandParticipation(
       ...(args.needId ? { needId: args.needId } : {}),
       updatedAt: now,
     });
+    if (args.needId) {
+      // Filling a position retires its own run-of-show blocks; a position this
+      // act left gets its own times back.
+      await syncNeedBlocks(ctx, args.needId);
+      if (existing.needId && existing.needId !== args.needId) {
+        await syncNeedBlocks(ctx, existing.needId);
+      }
+    }
     return existing._id;
   }
   const participationId = await ctx.db.insert("eventBandParticipations", {
@@ -182,6 +191,7 @@ export async function upsertEventBandParticipation(
     createdAt: now,
     updatedAt: now,
   });
+  if (args.needId) await syncNeedBlocks(ctx, args.needId);
   await scheduleBandAssignedEmails(ctx, {
     eventId: args.eventId,
     organizationId: args.organizationId,
@@ -541,8 +551,8 @@ export const addParticipation = mutation({
 });
 
 /**
- * Set an act's run-of-show windows (set + soundcheck) and which slot it fills.
- * Plain fields until a Run of Show model lands. Uses `replace` because Convex
+ * Set an act's run-of-show windows (set + soundcheck) and which slot it fills,
+ * mirroring the windows into schedule blocks. Uses `replace` because Convex
  * `patch` ignores `undefined` and would never clear a field.
  */
 export const updateParticipationLineup = mutation({
@@ -589,6 +599,10 @@ export const updateParticipationLineup = mutation({
     if (args.soundcheckEndsAt != null) next.soundcheckEndsAt = args.soundcheckEndsAt;
     else delete next.soundcheckEndsAt;
     await ctx.db.replace(args.participationId, next);
+    await syncParticipationBlocks(ctx, args.participationId);
+    for (const needId of new Set([existing.needId, args.needId])) {
+      if (needId) await syncNeedBlocks(ctx, needId);
+    }
     return null;
   },
 });
@@ -711,6 +725,8 @@ export const removeParticipation = mutation({
       .unique();
     if (existing) {
       await ctx.db.delete(existing._id);
+      await deleteActBlocks(ctx, { participationId: existing._id });
+      if (existing.needId) await syncNeedBlocks(ctx, existing.needId);
     }
 
     const payment = await ctx.db
@@ -770,6 +786,8 @@ export const upsertParticipations = mutation({
     for (const row of existing) {
       if (!keepOrgIds.has(row.organizationId)) {
         await ctx.db.delete(row._id);
+        await deleteActBlocks(ctx, { participationId: row._id });
+        if (row.needId) await syncNeedBlocks(ctx, row.needId);
         const payment = await ctx.db
           .query("eventBandPayments")
           .withIndex("by_eventId_and_organizationId", (q) =>

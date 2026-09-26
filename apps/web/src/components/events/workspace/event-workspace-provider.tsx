@@ -22,6 +22,8 @@ import { normalizeEventStatus } from "@/lib/event-status";
 import {
   applyShiftTimesOverrideFlags,
   attachShiftsToPersistedBlocks,
+  blockDraftFromRow,
+  rebaseActBlocks,
   resolveShiftScheduleBlockId,
   shiftBelongsToBlock,
   sortScheduleBlocksByTime,
@@ -84,6 +86,8 @@ function useEventWorkspaceState(eventId: Id<"events">, activeTab: EventEditorTab
   const [blocks, setBlocks] = useState<TimelineBlockDraft[]>([]);
   const [shifts, setShifts] = useState<ShiftDraft[]>([]);
   const [scheduleBaseline, setScheduleBaseline] = useState("");
+  // State (not a ref) so effects in the hydrating render still see the old id.
+  const [scheduleEventId, setScheduleEventId] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
   const [editScopeRequest, setEditScopeRequest] = useState<
@@ -117,18 +121,7 @@ function useEventWorkspaceState(eventId: Id<"events">, activeTab: EventEditorTab
     });
     setDraft(nextDraft);
     setBaseline(nextDraft);
-    const nextBlocks = sortScheduleBlocksByTime(
-      eventData.blocks.map((row) => ({
-        id: row._id,
-        clientId: row._id,
-        blockType: row.blockType,
-        label: row.label,
-        dayIndex: row.dayIndex,
-        startsAt: toLocalDateTimeInput(row.startsAt),
-        endsAt: toLocalDateTimeInput(row.endsAt),
-        notes: row.notes ?? "",
-      })),
-    );
+    const nextBlocks = sortScheduleBlocksByTime(eventData.blocks.map((row) => blockDraftFromRow(row)));
     const nextShifts = applyShiftTimesOverrideFlags(
       eventData.shifts.map((row) => ({
         id: row._id,
@@ -150,6 +143,7 @@ function useEventWorkspaceState(eventId: Id<"events">, activeTab: EventEditorTab
     setBlocks(nextBlocks);
     setShifts(nextShifts);
     setScheduleBaseline(JSON.stringify({ blocks: nextBlocks, shifts: nextShifts }));
+    setScheduleEventId(eventData.event._id);
     setSaveStatus("idle");
     setSaveError(null);
   }, [eventData]);
@@ -175,6 +169,27 @@ function useEventWorkspaceState(eventId: Id<"events">, activeTab: EventEditorTab
     setBaseline((prev) => (prev ? { ...prev, ...rebase } : prev));
     setDraft((prev) => ({ ...prev, ...rebase }));
   }, [eventData, baseline, draft]);
+
+  useEffect(() => {
+    // Only rebase a draft hydrated for this event: in the render that hydrates,
+    // `blocks` still holds the previous (or empty) draft.
+    if (!eventData?.event || scheduleEventId !== eventData.event._id) return;
+    // Lineup edits move an act's soundcheck/set blocks on the server; mirror
+    // them into the schedule draft and its baseline so they never read as unsaved.
+    const serverActBlocks = eventData.blocks
+      .filter((row) => row.participationId || row.needId)
+      .map((row) => blockDraftFromRow(row));
+    const next = rebaseActBlocks({ blocks, shifts }, serverActBlocks);
+    if (!next) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing from the Convex subscription; converges once the draft matches
+    setBlocks(next.blocks);
+    setShifts(next.shifts);
+    setScheduleBaseline((prev) => {
+      if (!prev) return prev;
+      const rebased = rebaseActBlocks(JSON.parse(prev) as SavedSchedule, serverActBlocks);
+      return rebased ? JSON.stringify(rebased) : prev;
+    });
+  }, [eventData, scheduleEventId, blocks, shifts]);
 
   const updateDraft = useCallback((patch: Partial<EventDraft>) => {
     setDraft((prev) => ({ ...prev, ...patch }));

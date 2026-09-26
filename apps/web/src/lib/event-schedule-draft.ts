@@ -7,6 +7,7 @@ import {
 } from "@/lib/crew-availability";
 import { pacificDayIndexFromAnchor, pacificScheduleDayCount } from "@/lib/format";
 import { sortScheduleBlocksByTime } from "@/lib/event-schedule-blocks";
+import { SCHEDULE_BLOCK_TYPES } from "@/lib/schedule-block-types";
 
 export {
   applyScheduleBlockEndChange,
@@ -230,11 +231,23 @@ export function reconcileShiftsForReplacedBlocks<T extends ShiftBlockLink & Even
   shifts: T[],
 ): T[] {
   const blockReplaceMap = new Map<string, TimelineBlockDraft>();
-  const blockTypes: TimelineBlockDraft["blockType"][] = ["setup", "show", "strike", "custom"];
+  // Blocks that survive the replacement (an act's soundcheck/set) keep their crew.
+  const nextRefs = new Set(nextBlocks.map(getBlockRef).filter(Boolean));
+  const kept = previousBlocks.filter((block) => nextRefs.has(getBlockRef(block)));
+  for (const block of kept) {
+    const ref = getBlockRef(block);
+    const next = nextBlocks.find((candidate) => getBlockRef(candidate) === ref);
+    if (ref && next) blockReplaceMap.set(ref, next);
+    if (block.id && next) blockReplaceMap.set(block.id, next);
+  }
+  const replacedPrevious = previousBlocks.filter((block) => !kept.includes(block));
+  const replacementNext = nextBlocks.filter(
+    (block) => !kept.some((keptBlock) => getBlockRef(keptBlock) === getBlockRef(block)),
+  );
 
-  for (const blockType of blockTypes) {
-    const previousOfType = previousBlocks.filter((block) => block.blockType === blockType);
-    const nextOfType = nextBlocks.filter((block) => block.blockType === blockType);
+  for (const blockType of SCHEDULE_BLOCK_TYPES) {
+    const previousOfType = replacedPrevious.filter((block) => block.blockType === blockType);
+    const nextOfType = replacementNext.filter((block) => block.blockType === blockType);
     const pairCount = Math.min(previousOfType.length, nextOfType.length);
     for (let index = 0; index < pairCount; index += 1) {
       const previousBlock = previousOfType[index];
@@ -282,20 +295,90 @@ export function timelineBlocksFromSaved(
     startsAt: number;
     endsAt: number;
     notes?: string;
+    actOwned?: boolean;
   }>,
 ): TimelineBlockDraft[] {
   return sortScheduleBlocksByTime(
-    savedBlocks.map((row) => ({
-      id: row.id,
-      clientId: row.clientId ?? row.id,
-      blockType: row.blockType,
-      label: row.label,
-      dayIndex: row.dayIndex,
-      startsAt: toLocalDateTimeInput(row.startsAt),
-      endsAt: toLocalDateTimeInput(row.endsAt),
-      notes: row.notes ?? "",
-    })),
+    savedBlocks.map((row) =>
+      blockDraftFromRow({ ...row, _id: row.id }, row.clientId ?? row.id),
+    ),
   );
+}
+
+type PersistedBlockRow = {
+  _id: string;
+  blockType: TimelineBlockDraft["blockType"];
+  label: string;
+  dayIndex: number;
+  startsAt: number;
+  endsAt: number;
+  notes?: string;
+  actOwned?: boolean;
+  participationId?: string;
+  needId?: string;
+};
+
+/** One draft shape for loaded and saved blocks, so baseline comparisons line up. */
+export function blockDraftFromRow(row: PersistedBlockRow, clientId = row._id): TimelineBlockDraft {
+  const draft: TimelineBlockDraft = {
+    id: row._id,
+    clientId,
+    blockType: row.blockType,
+    label: row.label,
+    dayIndex: row.dayIndex,
+    startsAt: toLocalDateTimeInput(row.startsAt),
+    endsAt: toLocalDateTimeInput(row.endsAt),
+    notes: row.notes ?? "",
+  };
+  if (row.actOwned || row.participationId || row.needId) draft.actOwned = true;
+  return draft;
+}
+
+/** Quick Add rebuilds staff blocks; an act's soundcheck/set blocks stay put. */
+export function keepActBlocks(
+  previous: TimelineBlockDraft[],
+  next: TimelineBlockDraft[],
+): TimelineBlockDraft[] {
+  return sortScheduleBlocksByTime([...next, ...previous.filter((block) => block.actOwned)]);
+}
+
+function actBlockKey(block: TimelineBlockDraft) {
+  return [block.id, block.blockType, block.label, block.startsAt, block.endsAt].join("|");
+}
+
+/**
+ * Act soundcheck/set blocks are written by the lineup, not this editor. Pull the
+ * server's current set into a schedule draft without touching staff edits: add,
+ * move, and drop act blocks; crew on a moved block follow it unless their times
+ * are custom; crew on a dropped block become unlinked (the server did the same).
+ * Returns null when the draft already matches.
+ */
+export function rebaseActBlocks<T extends ShiftBlockLink & EventShiftDraft>(
+  state: { blocks: TimelineBlockDraft[]; shifts: T[] },
+  serverActBlocks: TimelineBlockDraft[],
+): { blocks: TimelineBlockDraft[]; shifts: T[] } | null {
+  const localAct = state.blocks.filter((block) => block.actOwned);
+  const same =
+    localAct.map(actBlockKey).sort().join("\n") ===
+    serverActBlocks.map(actBlockKey).sort().join("\n");
+  if (same) return null;
+
+  const serverById = new Map(serverActBlocks.map((block) => [block.id, block]));
+  const shifts = state.shifts.map((shift) => {
+    const local = localAct.find((block) => shiftBelongsToBlock(shift, block));
+    if (!local) return shift;
+    const server = local.id ? serverById.get(local.id) : undefined;
+    if (!server) return { ...shift, scheduleBlockId: undefined, scheduleBlockRef: undefined };
+    if (shift.timesOverridden || shiftTimesMatchBlock(shift, server)) return shift;
+    return { ...shift, startsAt: server.startsAt, endsAt: server.endsAt };
+  });
+  return {
+    blocks: sortScheduleBlocksByTime([
+      ...state.blocks.filter((block) => !block.actOwned),
+      ...serverActBlocks,
+    ]),
+    shifts,
+  };
 }
 
 export function attachShiftsToPersistedBlocks<T extends EventShiftDraft>(

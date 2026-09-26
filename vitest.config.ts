@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
 // Root config for the pure workspace packages (`@arbor/format`,
@@ -5,6 +6,10 @@ import { defineConfig } from "vitest/config";
 // `packages/backend/convex` and run with their own `convex-test`/edge-runtime
 // setup, so they are excluded here.
 export default defineConfig({
+  resolve: {
+    // Web lib tests import through the app's `@/` path alias.
+    alias: { "@": fileURLToPath(new URL("./apps/web/src", import.meta.url)) },
+  },
   test: {
     environment: "node",
     include: [

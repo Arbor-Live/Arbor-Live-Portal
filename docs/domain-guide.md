@@ -180,9 +180,16 @@ Event types (drive which workspace tabs and quick-add blocks appear):
     `status` (`open` / `inquiring`). A slot is **booked** when an
     `eventBandParticipations` row points at it (`needId`) — never by a stored
     flag, and a slot holds exactly one act (`lib/eventArtistNeeds.ts`).
-  - **Run of show** — plain fields on `eventBandParticipations`
-    (`setStartsAt` / `setEndsAt`, `soundcheckStartsAt` / `soundcheckEndsAt`)
-    until a Run of Show model lands. Artists see both windows on "Your shows".
+  - **Run of show** — set and soundcheck times are edited on the Lineup
+    (`setStartsAt` / `setEndsAt`, `soundcheckStartsAt` / `soundcheckEndsAt` on
+    `eventBandParticipations`, or on the slot for an outside act) and mirrored
+    into `soundcheck` / `set` schedule blocks linked by `participationId` /
+    `needId` (`lib/runOfShow.ts`). Those blocks are read-only in the schedule
+    editor — schedule saves never edit or delete them — but crew shifts attach
+    to them, and crew follow a moved block unless their times are custom. A
+    slot's own times only apply while no platform act fills it. Copy day setup,
+    duplicate event, and series templates skip act blocks. Block types also
+    include `doors` and `changeover`. Artists see both windows on "Your shows".
   - **Outside acts** — a position can instead be filled by an act that is not on
     the platform: `eventArtistNeeds.externalArtistName`, with its own set and
     soundcheck windows on the slot. It counts as booked and stops appearing in

@@ -48,6 +48,7 @@ import {
   recordEventStatusTransition,
 } from "./lib/statusTransitions";
 import { eventTeamValue } from "./lib/eventTeams";
+import { isActBlock } from "./lib/runOfShow";
 
 const eventTypeValue = v.union(
   v.literal("Crewed Event"),
@@ -1045,6 +1046,8 @@ export const duplicate = mutation({
       .withIndex("by_eventId", (q) => q.eq("eventId", args.id))
       .take(500);
     for (const block of blocks) {
+      // Acts are not duplicated, so neither are their soundcheck/set blocks.
+      if (isActBlock(block)) continue;
       await ctx.db.insert("eventScheduleBlocks", {
         eventId: newId,
         blockType: block.blockType,

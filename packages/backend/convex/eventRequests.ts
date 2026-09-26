@@ -43,6 +43,7 @@ import {
   recordEventRequestStatusTransition,
 } from "./lib/statusTransitions";
 import type { EventTeam } from "./lib/eventTeams";
+import type { ScheduleBlockType } from "./lib/scheduleBlockTypes";
 
 const BOOKING_REQUEST_SETTINGS_KEY = "default";
 
@@ -294,7 +295,7 @@ async function seedScheduleBlocksForConvertedEvent(
   const showEnd = dayPlan.endAt;
   const dayIndexFrom = (startsAt: number) => pacificDayIndexFromAnchor(showStart, startsAt);
   const blocks: Array<{
-    blockType: "setup" | "show" | "strike" | "custom";
+    blockType: ScheduleBlockType;
     label: string;
     dayIndex: number;
     startsAt: number;

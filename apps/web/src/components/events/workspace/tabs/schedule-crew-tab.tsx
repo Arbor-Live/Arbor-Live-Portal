@@ -30,6 +30,7 @@ import {
 import { EventScheduleCrewAssignPanel } from "@/components/events/event-availability-summary";
 import {
   buildQuickAddScheduleBlocks,
+  keepActBlocks,
   eventTypeHasCrewAssignment,
   reconcileShiftsForReplacedBlocks,
   shiftBelongsToBlock,
@@ -47,6 +48,10 @@ const BLOCK_TYPE_STYLES: Record<TimelineBlockDraft["blockType"], string> = {
   setup: "border-status-blue-500/40 bg-status-blue-500/10 text-status-blue-700",
   show: "border-status-emerald-500/40 bg-status-emerald-500/10 text-status-emerald-700",
   strike: "border-status-amber-500/40 bg-status-amber-500/10 text-status-amber-700",
+  doors: "border-status-slate-500/40 bg-status-slate-500/10 text-status-slate-700",
+  soundcheck: "border-status-sky-500/40 bg-status-sky-500/10 text-status-sky-700",
+  set: "border-status-violet-500/40 bg-status-violet-500/10 text-status-violet-700",
+  changeover: "border-status-orange-500/40 bg-status-orange-500/10 text-status-orange-800",
   custom: "border-border bg-muted text-muted-foreground",
 };
 
@@ -304,13 +309,14 @@ export function ScheduleCrewTab() {
             quickAddDisabledReason={quickAddDisabled ? "Set event start and end first." : undefined}
             onQuickAdd={() => {
               if (quickAddDisabled) return;
-              const nextBlocks = buildQuickAddScheduleBlocks({
+              const quickAddBlocks = buildQuickAddScheduleBlocks({
                 eventType: draft.eventType,
                 startAt: draft.startAt,
                 endAt: draft.endAt,
                 rentalFulfillmentMode: draft.rentalFulfillmentMode,
                 withStableRefs: withStableBlockRefs,
               });
+              const nextBlocks = keepActBlocks(blocks, quickAddBlocks);
               setBlocks(nextBlocks);
               setShifts((prev) => reconcileShiftsForReplacedBlocks(blocks, nextBlocks, prev));
             }}

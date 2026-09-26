@@ -18,7 +18,10 @@ import { getAvailabilityNotesForDisplay } from "@/lib/crew-availability";
 import {
   applyShiftTimesOverrideFlags,
   attachShiftsToPersistedBlocks,
+  blockDraftFromRow,
+  rebaseActBlocks,
   buildQuickAddScheduleBlocks,
+  keepActBlocks,
   eventDayCount,
   eventTypeHasCrewAssignment,
   getBlockRef,
@@ -119,6 +122,8 @@ export function InvoiceLinkedEventCrewSection({
   const hydratedEventIdRef = useRef<Id<"events"> | null>(null);
   const scheduleHydratedRef = useRef(false);
   const [lastSavedSignature, setLastSavedSignature] = useState("");
+  // State (not a ref) so effects in the hydrating render still see the old id.
+  const [scheduleEventId, setScheduleEventId] = useState<string | null>(null);
   const [blocks, setBlocks] = useState<TimelineBlockDraft[]>([]);
   const [shifts, setShifts] = useState<EventShiftDraft[]>([]);
   const [selectedCrewUserId, setSelectedCrewUserId] = useState("");
@@ -195,16 +200,7 @@ export function InvoiceLinkedEventCrewSection({
     if (hydratedEventIdRef.current === eventData.event._id) return;
     hydratedEventIdRef.current = eventData.event._id;
     scheduleHydratedRef.current = false;
-    const nextBlocks = eventData.blocks.map((row) => ({
-      id: row._id,
-      clientId: row._id,
-      blockType: row.blockType,
-      label: row.label,
-      dayIndex: row.dayIndex,
-      startsAt: toLocalDateTimeInput(row.startsAt),
-      endsAt: toLocalDateTimeInput(row.endsAt),
-      notes: row.notes ?? "",
-    }));
+    const nextBlocks = eventData.blocks.map((row) => blockDraftFromRow(row));
     const nextShifts = shiftsFromEventRows(eventData.shifts);
     const linkedShifts = applyShiftTimesOverrideFlags(
       attachShiftsToPersistedBlocks(nextShifts, nextBlocks),
@@ -214,6 +210,7 @@ export function InvoiceLinkedEventCrewSection({
     setShifts(linkedShifts);
     scheduleHydratedRef.current = true;
     setLastSavedSignature(JSON.stringify({ blocks: nextBlocks, shifts: linkedShifts }));
+    setScheduleEventId(eventData.event._id);
   }, [eventData]);
 
   useEffect(() => {
@@ -225,6 +222,30 @@ export function InvoiceLinkedEventCrewSection({
       }),
     );
   }, [blocks, shifts, onEventCrewRowsChange, ratesByUserId, defaultCrewHourlyRateUsd]);
+
+  useEffect(() => {
+    // Only rebase a draft hydrated for this event: in the render that hydrates,
+    // `blocks` still holds the previous (or empty) draft.
+    if (!eventData?.event || scheduleEventId !== eventData.event._id) return;
+    // Lineup edits move an act's soundcheck/set blocks on the server; mirror
+    // them here and in the saved signature so they never trigger an autosave.
+    const serverActBlocks = eventData.blocks
+      .filter((row) => row.participationId || row.needId)
+      .map((row) => blockDraftFromRow(row));
+    const next = rebaseActBlocks({ blocks, shifts }, serverActBlocks);
+    if (!next) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing from the Convex subscription; converges once the draft matches
+    setBlocks(next.blocks);
+    setShifts(next.shifts);
+    setLastSavedSignature((prev) => {
+      if (!prev) return prev;
+      const rebased = rebaseActBlocks(
+        JSON.parse(prev) as { blocks: TimelineBlockDraft[]; shifts: EventShiftDraft[] },
+        serverActBlocks,
+      );
+      return rebased ? JSON.stringify(rebased) : prev;
+    });
+  }, [eventData, scheduleEventId, blocks, shifts]);
 
   const persistScheduleDraft = useCallback(
     async (draftBlocks: TimelineBlockDraft[], draftShifts: EventShiftDraft[]) => {
@@ -574,13 +595,14 @@ export function InvoiceLinkedEventCrewSection({
           quickAddDisabledReason={quickAddDisabledReason}
           onQuickAdd={() => {
             if (quickAddDisabled) return;
-            const nextBlocks = buildQuickAddScheduleBlocks({
+            const quickAddBlocks = buildQuickAddScheduleBlocks({
               eventType,
               startAt,
               endAt,
               rentalFulfillmentMode,
               withStableRefs: stableBlocks,
             });
+            const nextBlocks = keepActBlocks(blocks, quickAddBlocks);
             setBlocks(nextBlocks);
             setShifts((prev) => reconcileShiftsForReplacedBlocks(blocks, nextBlocks, prev));
           }}

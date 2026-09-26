@@ -35,6 +35,8 @@ import {
   syncLinkedEventsPrimaryHostFromInvoice,
 } from "./lib/hostOrgs";
 import { eventTeamValue } from "./lib/eventTeams";
+import { isActBlock } from "./lib/runOfShow";
+import { scheduleBlockTypeValue } from "./lib/scheduleBlockTypes";
 
 const eventTypeValue = v.union(
   v.literal("Crewed Event"),
@@ -47,12 +49,7 @@ const eventTypeValue = v.union(
 const rentalFulfillmentModeValue = v.union(v.literal("delivery"), v.literal("will_call"));
 
 const blockTemplateValue = v.object({
-  blockType: v.union(
-    v.literal("setup"),
-    v.literal("show"),
-    v.literal("strike"),
-    v.literal("custom"),
-  ),
+  blockType: scheduleBlockTypeValue,
   label: v.string(),
   dayIndex: v.number(),
   offsetMs: v.number(),
@@ -499,10 +496,13 @@ export const importScheduleFromOccurrence = mutation({
     if (!event || event.seriesId !== args.id) {
       throw new Error("Event is not part of this series.");
     }
-    const blocks = await ctx.db
-      .query("eventScheduleBlocks")
-      .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", args.eventId))
-      .take(500);
+    // An act's soundcheck/set blocks belong to one occurrence's lineup, not the series.
+    const blocks = (
+      await ctx.db
+        .query("eventScheduleBlocks")
+        .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", args.eventId))
+        .take(500)
+    ).filter((block) => !isActBlock(block));
     if (blocks.length === 0) {
       throw new Error("Selected occurrence has no schedule blocks to import.");
     }
@@ -607,10 +607,13 @@ export const importShiftsFromOccurrence = mutation({
     if (!blockTemplates || blockTemplates.length === 0) {
       throw new Error("Import schedule block templates before importing crew shifts.");
     }
-    const blocks = await ctx.db
-      .query("eventScheduleBlocks")
-      .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", args.eventId))
-      .take(500);
+    // An act's soundcheck/set blocks belong to one occurrence's lineup, not the series.
+    const blocks = (
+      await ctx.db
+        .query("eventScheduleBlocks")
+        .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", args.eventId))
+        .take(500)
+    ).filter((block) => !isActBlock(block));
     const shifts = await ctx.db
       .query("eventCrewShifts")
       .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", args.eventId))

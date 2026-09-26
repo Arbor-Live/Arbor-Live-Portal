@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef } from "react";
-import { TrashIcon } from "@phosphor-icons/react";
+import { LockSimpleIcon, TrashIcon } from "@phosphor-icons/react";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
 import { Button } from "@/components/ui/button";
 import { DateTimeRangePicker } from "@/components/ui/date-time-picker";
@@ -12,17 +12,27 @@ import {
   sortScheduleBlocksByTime,
 } from "@/lib/event-schedule-draft";
 import { localDateTimeInputToMs } from "@/lib/crew-availability";
-import { pacificDayIndexFromAnchor } from "@/lib/format";
+import { formatDateTimeRange, pacificDayIndexFromAnchor } from "@/lib/format";
+import {
+  MANUAL_SCHEDULE_BLOCK_TYPES,
+  SCHEDULE_BLOCK_TYPE_LABELS,
+  type ScheduleBlockType,
+} from "@/lib/schedule-block-types";
 
 export type TimelineBlockDraft = {
   id?: string;
   clientId?: string;
-  blockType: "setup" | "show" | "strike" | "custom";
+  blockType: ScheduleBlockType;
   label: string;
   dayIndex: number;
   startsAt: string;
   endsAt: string;
   notes: string;
+  /**
+   * An act's soundcheck or set, mirrored from the lineup. Read-only here: the
+   * server ignores edits to it, and crew can still be assigned to it.
+   */
+  actOwned?: boolean;
 };
 
 const MINUTES_PER_DAY = 24 * 60;
@@ -73,11 +83,19 @@ function startMinutesFromTrackClientX(clientX: number, trackWidth: number, track
   return snapMinutes(clamp(ratio * MINUTES_PER_DAY, 0, MINUTES_PER_DAY - SNAP_MINUTES));
 }
 
+const BLOCK_COLORS: Record<ScheduleBlockType, string> = {
+  setup: "bg-status-blue-500/30 border-status-blue-500",
+  doors: "bg-status-slate-500/30 border-status-slate-500",
+  soundcheck: "bg-status-sky-500/30 border-status-sky-500",
+  show: "bg-status-emerald-500/30 border-status-emerald-500",
+  set: "bg-status-violet-500/30 border-status-violet-500",
+  changeover: "bg-status-orange-500/30 border-status-orange-500",
+  strike: "bg-status-amber-500/30 border-status-amber-500",
+  custom: "bg-muted border-border",
+};
+
 function blockColor(type: TimelineBlockDraft["blockType"]) {
-  if (type === "setup") return "bg-status-blue-500/30 border-status-blue-500";
-  if (type === "show") return "bg-status-emerald-500/30 border-status-emerald-500";
-  if (type === "strike") return "bg-status-amber-500/30 border-status-amber-500";
-  return "bg-muted border-border";
+  return BLOCK_COLORS[type] ?? BLOCK_COLORS.custom;
 }
 
 function dayIndexForStart(anchorStartsAt: string | undefined, startsAt: string, fallback: number) {
@@ -369,7 +387,7 @@ export function EventTimelineScheduler({
                         width: `${Math.max(4, width)}%`,
                       }}
                       onMouseDown={
-                        readOnly
+                        readOnly || block.actOwned
                           ? undefined
                           : (event) => {
                               if (!(event.target instanceof HTMLElement)) return;
@@ -383,14 +401,14 @@ export function EventTimelineScheduler({
                             }
                       }
                     >
-                      {!readOnly ? (
+                      {!readOnly && !block.actOwned ? (
                         <div
                           data-drag-handle="start"
                           className="absolute left-0 top-0 z-10 h-full w-1.5 cursor-ew-resize bg-foreground/20"
                         />
                       ) : null}
                       <span className="truncate leading-7.5">{block.label}</span>
-                      {!readOnly ? (
+                      {!readOnly && !block.actOwned ? (
                         <div
                           data-drag-handle="end"
                           className="absolute right-0 top-0 z-10 h-full w-1.5 cursor-ew-resize bg-foreground/20"
@@ -407,7 +425,10 @@ export function EventTimelineScheduler({
 
       {!readOnly ? (
       <div className="space-y-2">
-        {blocks.map((block, index) => (
+        {blocks.map((block, index) =>
+          block.actOwned ? (
+            <ActBlockRow key={getBlockRef(block) ?? `block-${index}`} block={block} />
+          ) : (
           <div
             key={getBlockRef(block) ?? `block-${index}`}
             className="flex min-w-0 flex-wrap items-center gap-2"
@@ -422,12 +443,10 @@ export function EventTimelineScheduler({
                     ),
                   )
                 }
-                options={[
-                  { value: "setup", label: "setup" },
-                  { value: "show", label: "show" },
-                  { value: "strike", label: "strike" },
-                  { value: "custom", label: "custom" },
-                ]}
+                options={MANUAL_SCHEDULE_BLOCK_TYPES.map((type) => ({
+                  value: type,
+                  label: SCHEDULE_BLOCK_TYPE_LABELS[type].toLowerCase(),
+                }))}
                 placeholder="Search block type..."
                 emptyLabel="Select block type"
               />
@@ -483,9 +502,31 @@ export function EventTimelineScheduler({
               <TrashIcon className="size-4" />
             </Button>
           </div>
-        ))}
+          ),
+        )}
       </div>
       ) : null}
+    </div>
+  );
+}
+
+/** An act's soundcheck/set: shown in place, edited from the lineup. */
+function ActBlockRow({ block }: { block: TimelineBlockDraft }) {
+  const startMs = localDateTimeInputToMs(block.startsAt);
+  const endMs = localDateTimeInputToMs(block.endsAt);
+  return (
+    <div className="flex min-w-0 flex-wrap items-center gap-2 rounded-md border border-dashed px-3 py-2 text-sm">
+      <span className="w-full text-xs font-medium uppercase tracking-wide text-muted-foreground sm:w-24 sm:flex-none">
+        {SCHEDULE_BLOCK_TYPE_LABELS[block.blockType]}
+      </span>
+      <span className="min-w-0 flex-1 truncate font-medium">{block.label}</span>
+      <span className="text-muted-foreground">
+        {startMs != null && endMs != null ? formatDateTimeRange(startMs, endMs) : "—"}
+      </span>
+      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+        <LockSimpleIcon className="size-3.5" aria-hidden />
+        Set in Lineup
+      </span>
     </div>
   );
 }

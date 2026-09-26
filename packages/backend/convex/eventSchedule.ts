@@ -7,13 +7,8 @@ import {
   scheduleSchedulePublishedEmails,
 } from "./email/triggers";
 import { pacificDayIndexFromAnchor } from "@arbor/format";
-
-const blockTypeValue = v.union(
-  v.literal("setup"),
-  v.literal("show"),
-  v.literal("strike"),
-  v.literal("custom"),
-);
+import { deleteScheduleBlock, isActBlock } from "./lib/runOfShow";
+import { scheduleBlockTypeValue, type ScheduleBlockType } from "./lib/scheduleBlockTypes";
 
 export const listByEvent = query({
   args: { eventId: v.id("events") },
@@ -34,7 +29,7 @@ export const upsertBlocks = mutation({
       v.object({
         id: v.optional(v.id("eventScheduleBlocks")),
         clientId: v.optional(v.string()),
-        blockType: blockTypeValue,
+        blockType: scheduleBlockTypeValue,
         label: v.string(),
         dayIndex: v.optional(v.number()), // Derived from startsAt on save; omit from clients.
         startsAt: v.number(),
@@ -61,41 +56,50 @@ export const upsertBlocks = mutation({
       .query("eventScheduleBlocks")
       .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
       .take(500);
-    const existingIds = new Set(existing.map((row) => row._id));
+    const existingById = new Map(existing.map((row) => [row._id, row]));
     for (const block of args.blocks) {
-      if (block.id && !existingIds.has(block.id)) {
+      if (block.id && !existingById.has(block.id)) {
         throw new Error("Schedule block does not belong to this event.");
       }
     }
     const keepIds = new Set(args.blocks.map((b) => b.id).filter(Boolean));
     const now = Date.now();
     for (const row of existing) {
-      if (keepIds.has(row._id)) continue;
-      // Detach shifts from a deleted block instead of leaving a dangling
-      // `scheduleBlockId`: the schedule tab only renders shifts it can match to
-      // a block, so an orphaned reference makes the shift invisible while it
-      // still counts as an open slot. Detached shifts surface as unlinked.
-      const linkedShifts = await ctx.db
-        .query("eventCrewShifts")
-        .withIndex("by_scheduleBlockId", (q) => q.eq("scheduleBlockId", row._id))
-        .take(500);
-      for (const shift of linkedShifts) {
-        await ctx.db.patch(shift._id, { scheduleBlockId: undefined, updatedAt: now });
-      }
-      await ctx.db.delete(row._id);
+      // An act's soundcheck/set blocks are owned by the lineup, so a schedule
+      // save — possibly from an editor loaded before the lineup changed — never
+      // edits or removes them.
+      if (keepIds.has(row._id) || isActBlock(row)) continue;
+      await deleteScheduleBlock(ctx, row._id, now);
     }
 
     const savedBlocks: Array<{
       id: string;
       clientId?: string;
-      blockType: "setup" | "show" | "strike" | "custom";
+      blockType: ScheduleBlockType;
       label: string;
       dayIndex: number;
       startsAt: number;
       endsAt: number;
       notes?: string;
+      /** An act's soundcheck/set block; the client keeps it read-only. */
+      actOwned?: boolean;
     }> = [];
     for (const block of args.blocks) {
+      const actRow = block.id ? existingById.get(block.id) : undefined;
+      if (actRow && isActBlock(actRow)) {
+        savedBlocks.push({
+          id: actRow._id,
+          clientId: block.clientId,
+          blockType: actRow.blockType,
+          label: actRow.label,
+          dayIndex: actRow.dayIndex,
+          startsAt: actRow.startsAt,
+          endsAt: actRow.endsAt,
+          notes: actRow.notes,
+          actOwned: true,
+        });
+        continue;
+      }
       const label = block.label.trim();
       const notes = block.notes?.trim() || undefined;
       // Derived from startsAt vs event start — client day picker removed.
