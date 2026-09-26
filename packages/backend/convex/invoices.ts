@@ -10,6 +10,7 @@ import { syncEventStatusForLinkedInvoice, syncLinkedEventStatusFromInvoice } fro
 import { syncBookingRequestStatusFromInvoice } from "./lib/bookingRequestStatus";
 import { recordInvoiceStatusTransition } from "./lib/statusTransitions";
 import { listAdditionallyLinkedEvents } from "./lib/eventInvoiceLinks";
+import { unclaimSlot, upsertEventBandParticipation } from "./eventBands";
 import { listEventsByInvoiceId, listEventsLinkedToInvoice } from "./lib/invoiceEvents";
 import {
   addPublicEventContact,
@@ -412,16 +413,43 @@ async function syncArtistSlotsForInvoice(
   for (const line of lines) {
     if (line.section !== "artist" || !line.eventId) continue;
     const linked = line.needId ? await ctx.db.get(line.needId) : null;
-    if (linked && linked.eventId === line.eventId) continue;
-    const needId = await ctx.db.insert("eventArtistNeeds", {
+    let slot = linked && linked.eventId === line.eventId ? linked : null;
+    if (!slot) {
+      const needId = await ctx.db.insert("eventArtistNeeds", {
+        eventId: line.eventId,
+        label: trimOptional(line.label),
+        artistType: "no_preference",
+        status: "open",
+        createdAt: now,
+        updatedAt: now,
+      });
+      await ctx.db.patch(line._id, { needId, updatedAt: now });
+      slot = await ctx.db.get(needId);
+    }
+    if (!slot) continue;
+    // An outside act already fills this position; the line still bills for its
+    // own act, and saving an invoice must never fail on that disagreement.
+    if (slot.externalArtistName?.trim()) continue;
+
+    // An act named on the line is booked on the bill too, so it reaches the
+    // lineup, the band dashboard and media rather than only the invoice.
+    const organizationId = line.organizationId?.trim();
+    const seated = await ctx.db
+      .query("eventBandParticipations")
+      .withIndex("by_needId", (q) => q.eq("needId", slot._id))
+      .first();
+    if (!organizationId) {
+      // Back to TBD: the act stays on the bill, but no longer holds the position.
+      if (seated) await unclaimSlot(ctx, seated._id);
+      continue;
+    }
+    if (seated?.organizationId === organizationId) continue;
+    await upsertEventBandParticipation(ctx, {
       eventId: line.eventId,
-      label: trimOptional(line.label),
-      artistType: "no_preference",
-      status: "open",
-      createdAt: now,
-      updatedAt: now,
+      organizationId,
+      role: "headliner",
+      needId: slot._id,
     });
-    await ctx.db.patch(line._id, { needId, updatedAt: now });
   }
 }
 
