@@ -96,6 +96,8 @@ type ArtistRow = {
   rateUsd: string;
   /** Linked day/event this slot belongs to on multi-day bookings. */
   eventId?: string;
+  /** The bill position this line stands for, echoed back on save. */
+  needId?: string;
 };
 type CrewRow = InvoiceCrewRow;
 type FeeRow = { feeDefinitionId: string; label: string; quantity: string; rateUsd: string };
@@ -121,6 +123,7 @@ function artistPersonHours(row: Pick<ArtistRow, "hours" | "people">) {
 function artistRowFromLineItem(row: {
   organizationId?: string | null;
   eventId?: string | null;
+  needId?: string | null;
   label: string;
   quantity: number;
   rateUsd: number;
@@ -135,6 +138,7 @@ function artistRowFromLineItem(row: {
   return {
     organizationId: row.organizationId?.trim() || ARTIST_TBD_VALUE,
     eventId: row.eventId?.trim() || undefined,
+    needId: row.needId?.trim() || undefined,
     label: row.label,
     hours: hasBreakdown ? String(row.performanceHours) : "1",
     // Legacy lines stored people in quantity with no hours breakdown.
@@ -968,6 +972,7 @@ export function InvoiceEditor({
       packageExclusionDiscountUsd?: number;
       organizationId?: string;
       eventId?: Id<"events">;
+      needId?: Id<"eventArtistNeeds">;
       memberCount?: number;
       performanceHours?: number;
     }> = [];
@@ -1039,6 +1044,7 @@ export function InvoiceEditor({
         rateUsd: Number(row.rateUsd || "0"),
         organizationId,
         eventId,
+        needId: row.needId as Id<"eventArtistNeeds"> | undefined,
         memberCount: people > 0 ? people : undefined,
         performanceHours: hours > 0 ? hours : undefined,
       });

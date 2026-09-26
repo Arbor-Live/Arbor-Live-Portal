@@ -6,6 +6,7 @@ import { requireArborInternalContext, requireAuth, requireBandContext, getUserId
 import { inviteEmailToBandOrg, provisionBandOrganization } from "./lib/bandOrgInvite";
 import { scheduleBandEventOnboardingInviteEmail } from "./email/bandEventInviteEmails";
 import { listBandLinkedEvents } from "./lib/eventBandAccess";
+import { syncInvoiceLineForSlot } from "./lib/artistLineSync";
 import {
   bandPaymentHasAgreementPdf,
   bandPaymentStatusLabel,
@@ -172,6 +173,7 @@ export async function upsertEventBandParticipation(
       ...(args.needId ? { needId: args.needId } : {}),
       updatedAt: now,
     });
+    if (args.needId) await syncInvoiceLineForSlot(ctx, args.needId, now);
     return existing._id;
   }
   const participationId = await ctx.db.insert("eventBandParticipations", {
@@ -182,6 +184,7 @@ export async function upsertEventBandParticipation(
     createdAt: now,
     updatedAt: now,
   });
+  if (args.needId) await syncInvoiceLineForSlot(ctx, args.needId, now);
   await scheduleBandAssignedEmails(ctx, {
     eventId: args.eventId,
     organizationId: args.organizationId,
@@ -559,6 +562,7 @@ export const updateParticipationLineup = mutation({
     await requireArborInternalContext(ctx);
     const existing = await ctx.db.get(args.participationId);
     if (!existing) throw new Error("Artist is not linked to this event.");
+    const previousNeedId = existing.needId;
     if (args.setStartsAt != null && args.setEndsAt != null && args.setEndsAt <= args.setStartsAt) {
       throw new Error("Set end time must be after the start time.");
     }
@@ -589,6 +593,11 @@ export const updateParticipationLineup = mutation({
     if (args.soundcheckEndsAt != null) next.soundcheckEndsAt = args.soundcheckEndsAt;
     else delete next.soundcheckEndsAt;
     await ctx.db.replace(args.participationId, next);
+    const now2 = next.updatedAt;
+    if (args.needId) await syncInvoiceLineForSlot(ctx, args.needId, now2);
+    if (previousNeedId && previousNeedId !== args.needId) {
+      await syncInvoiceLineForSlot(ctx, previousNeedId, now2);
+    }
     return null;
   },
 });

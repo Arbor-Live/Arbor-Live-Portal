@@ -17,6 +17,7 @@ import {
 } from "./lib/eventArtistNeeds";
 import { scheduleArtistNeedInquiryEmail } from "./email/artistNeedInquiryEmails";
 import { unclaimSlot } from "./eventBands";
+import { releaseSlotFromInvoice, syncInvoiceLineForSlot } from "./lib/artistLineSync";
 import { normalizeEventStatus } from "./lib/eventStatus";
 
 const MAX_NEED_CANDIDATES = 60;
@@ -278,6 +279,7 @@ export const updateSlotLineup = mutation({
     if (args.soundcheckEndsAt != null) next.soundcheckEndsAt = args.soundcheckEndsAt;
     else delete next.soundcheckEndsAt;
     await ctx.db.replace(slot._id, next);
+    await syncInvoiceLineForSlot(ctx, slot._id, next.updatedAt);
     return null;
   },
 });
@@ -305,6 +307,7 @@ export const removeSlot = mutation({
     for (const row of filled) {
       await unclaimSlot(ctx, row._id);
     }
+    await releaseSlotFromInvoice(ctx, slot._id);
     await ctx.db.delete(slot._id);
   },
 });

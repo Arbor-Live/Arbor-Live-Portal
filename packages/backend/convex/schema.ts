@@ -746,7 +746,8 @@ export default defineSchema({
   })
     .index("by_invoiceId", ["invoiceId"])
     .index("by_invoiceId_and_order", ["invoiceId", "order"])
-    .index("by_invoiceId_and_section", ["invoiceId", "section"]),
+    .index("by_invoiceId_and_section", ["invoiceId", "section"])
+    .index("by_needId", ["needId"]),
 
   invoiceExports: defineTable({
     invoiceId: v.id("invoices"),

@@ -464,6 +464,9 @@ async function replaceLineItems(
     .query("invoiceLineItems")
     .withIndex("by_invoiceId", (q) => q.eq("invoiceId", invoiceId))
     .take(500);
+  const previousNeedIds = existing.flatMap((row) =>
+    row.section === "artist" && row.needId ? [row.needId] : [],
+  );
   for (const row of existing) {
     await ctx.db.delete(row._id);
   }
