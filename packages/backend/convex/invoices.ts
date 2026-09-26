@@ -506,6 +506,37 @@ async function replaceLineItems(
       updatedAt: now,
     });
   }
+
+  await syncArtistSlotsForInvoice(ctx, invoiceId, now);
+
+  // A line the editor dropped takes the position it opened with it, unless the
+  // position has since been filled or carries inquiries of its own.
+  const kept = new Set(
+    (
+      await ctx.db
+        .query("invoiceLineItems")
+        .withIndex("by_invoiceId", (q) => q.eq("invoiceId", invoiceId))
+        .take(500)
+    ).flatMap((row) => (row.needId ? [row.needId] : [])),
+  );
+  for (const needId of previousNeedIds) {
+    if (kept.has(needId)) continue;
+    const slot = await ctx.db.get(needId);
+    if (!slot) continue;
+    const filled = await ctx.db
+      .query("eventBandParticipations")
+      .withIndex("by_needId", (q) => q.eq("needId", needId))
+      .first();
+    if (filled) continue;
+    const inquiries = await ctx.db
+      .query("eventArtistInquiries")
+      .withIndex("by_needId", (q) => q.eq("needId", needId))
+      .take(200);
+    for (const inquiry of inquiries) {
+      await ctx.db.delete(inquiry._id);
+    }
+    await ctx.db.delete(needId);
+  }
 }
 
 export const listManagers = query({
