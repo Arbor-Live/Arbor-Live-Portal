@@ -538,6 +538,15 @@ async function normalizeMembershipRole(
   return "org_member";
 }
 
+/**
+ * Artist-org admin on a membership row. `org_admin` is the role this app
+ * writes. `admin` and `owner` are older Better Auth strings still stored on
+ * some memberships, including the e2e band creator.
+ */
+export function isArtistOrgAdminRole(role: string | undefined): boolean {
+  return role === "org_admin" || role === "admin" || role === "owner";
+}
+
 export async function upsertOrgMembership(
   ctx: MutationCtx,
   args: {
@@ -2473,35 +2482,6 @@ export const setCompensationRate = mutation({
   },
 });
 
-/** @deprecated Prefer setCompensationRate with rateMode. */
-export const setHourlyRate = mutation({
-  args: {
-    userId: v.string(),
-    hourlyRateUsd: v.number(),
-  },
-  handler: async (ctx, args) => {
-    const adminUser = await requireAdmin(ctx);
-    return await upsertUserCompensationRate(ctx, {
-      userId: args.userId,
-      rateMode: "custom",
-      hourlyRateUsd: args.hourlyRateUsd,
-      updatedByUserId: getUserId(adminUser) || undefined,
-    });
-  },
-});
-
-export const setPayrollMethod = mutation({
-  args: {
-    userId: v.string(),
-    payrollMethod: payrollMethodValue,
-  },
-  handler: async (ctx, args) => {
-    await requireAdmin(ctx);
-    await applyPayrollMethodToProfile(ctx, args.userId, args.payrollMethod);
-    return { ok: true };
-  },
-});
-
 export const addUserOrganizationMembershipAdmin = mutation({
   args: {
     userId: v.string(),
@@ -2846,7 +2826,7 @@ export const inviteMemberToActiveOrganization = mutation({
           q.eq("userId", adminId).eq("organizationId", context.organizationId),
         )
         .unique();
-      if (!callerMembership?.active || callerMembership.role !== "org_admin") {
+      if (!callerMembership?.active || !isArtistOrgAdminRole(callerMembership.role)) {
         throw new Error("Only band admins can invite members.");
       }
     }
@@ -2964,10 +2944,7 @@ export const updateMemberBandRole = mutation({
         q.eq("userId", actorId).eq("organizationId", context.organizationId),
       )
       .unique();
-    const isOrgAdmin =
-      actorMembership?.role === "org_admin" ||
-      actorMembership?.role === "admin" ||
-      isAdmin(actor);
+    const isOrgAdmin = isArtistOrgAdminRole(actorMembership?.role) || isAdmin(actor);
     if (actorId !== targetUserId && !isOrgAdmin) {
       throw new Error("Only artist admins can edit another member's role.");
     }

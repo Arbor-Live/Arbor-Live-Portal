@@ -149,19 +149,6 @@ async function enqueuePublishJobs(ctx: MutationCtx, designId: Id<"eventMarketing
 
 const DESIGN_LIST_LIMIT = 200;
 
-export const listForBoard = query({
-  args: {},
-  handler: async (ctx) => {
-    await requireAnyVerticalOrAdmin(ctx, ["Marketing", "Operations"]);
-    const designs = await ctx.db
-      .query("eventMarketingDesigns")
-      .withIndex("by_updatedAt")
-      .order("desc")
-      .take(DESIGN_LIST_LIMIT);
-    return Promise.all(designs.map((design) => serializeDesign(ctx, design)));
-  },
-});
-
 export const listMine = query({
   args: {},
   handler: async (ctx) => {
@@ -237,39 +224,6 @@ export const listUpcomingPosterWork = query({
         };
       }),
     );
-  },
-});
-
-export const getPosterAssignmentForEvent = query({
-  args: { eventId: v.id("events") },
-  handler: async (ctx, args) => {
-    await requireAnyVerticalOrAdmin(ctx, ["Marketing", "Operations"]);
-    const design = (
-      await ctx.db
-        .query("eventMarketingDesigns")
-        .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
-        .take(1)
-    )[0];
-    if (!design) {
-      return {
-        designId: null,
-        assigneeUserId: null,
-        assigneeName: null,
-        status: null,
-        hasPosterImage: false,
-      };
-    }
-    const userByKey = await findAuthUsersByIds(
-      ctx,
-      design.assigneeUserId ? [design.assigneeUserId] : [],
-    );
-    return {
-      designId: design._id,
-      assigneeUserId: design.assigneeUserId ?? null,
-      assigneeName: userDisplayName(userByKey, design.assigneeUserId),
-      status: design.status,
-      hasPosterImage: Boolean(design.imageUrl?.trim()),
-    };
   },
 });
 
