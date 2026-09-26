@@ -85,6 +85,14 @@ type EquipmentRow = {
 };
 type ExternalRentalRow = { provider: string; label: string; quantity: string; rateUsd: string };
 /** `organizationId` empty / TBD sentinel ⇒ band not chosen yet. */
+type InvoiceArtistPosition = {
+  needId: string;
+  label: string;
+  artistType: "band" | "dj" | "no_preference";
+  status: "open" | "inquiring" | "booked";
+  genres: string;
+};
+
 type ArtistRow = {
   organizationId: string;
   label: string;
@@ -317,21 +325,18 @@ export function InvoiceEditor({
       ? { eventIds: linkedDayEvents.map((day) => day._id) }
       : "skip",
   );
-  const artistNeedByEventId = useMemo(() => {
-    const map = new Map<
-      string,
-      { artistType: "band" | "dj" | "no_preference"; status: "open" | "inquiring" | "booked"; genres: string }
-    >();
+  const artistPositionsByEventId = useMemo(() => {
+    const map = new Map<string, InvoiceArtistPosition[]>();
     for (const row of artistNeedStatuses ?? []) {
-      // One row per slot: an open slot must stay visible even if a later
-      // booked slot for the same event lands in the map.
-      const existing = map.get(row.eventId);
-      if (existing && existing.status !== "booked" && row.status === "booked") continue;
-      map.set(row.eventId, {
+      const list = map.get(row.eventId) ?? [];
+      list.push({
+        needId: row.needId,
+        label: row.label,
         artistType: row.artistType,
         status: row.status,
         genres: row.genres,
       });
+      map.set(row.eventId, list);
     }
     return map;
   }, [artistNeedStatuses]);
@@ -1882,7 +1887,7 @@ export function InvoiceEditor({
                   }))
             }
             defaultEventId={selectedDayEventId}
-            needStatusByEventId={artistNeedByEventId}
+            needStatusByEventId={artistPositionsByEventId}
           />
           </div>
           <div id="section-crew">
@@ -2939,11 +2944,8 @@ function SectionArtists({
   days?: Array<{ _id: string; label: string }>;
   /** Day new rows default to (the selected linked day). */
   defaultEventId?: string;
-  /** Open "Artist Needed" per linked event, to flag unbooked days. */
-  needStatusByEventId?: Map<
-    string,
-    { artistType: "band" | "dj" | "no_preference"; status: "open" | "inquiring" | "booked"; genres: string }
-  >;
+  /** The bill's positions per linked event, mirrored on the invoice. */
+  needStatusByEventId?: Map<string, InvoiceArtistPosition[]>;
 }) {
   const bandOptions = useMemo(
     () => artistSelectOptions(bands, { includeTbd: true }),
@@ -2962,8 +2964,10 @@ function SectionArtists({
     dj: "DJ",
     no_preference: "No preference",
   };
-  const openArtistNeeds = needStatusByEventId
-    ? [...needStatusByEventId.entries()].filter(([, need]) => need.status !== "booked")
+  const artistPositions = needStatusByEventId
+    ? [...needStatusByEventId.entries()].flatMap(([eventId, needs]) =>
+        needs.map((need) => ({ eventId, need })),
+      )
     : [];
   const gridClass = showDayColumn
     ? "min-w-0 gap-2 md:grid-cols-[7rem_minmax(12rem,1.4fr)_minmax(8rem,1fr)_5.5rem_5.5rem_7.5rem_5.5rem] md:min-w-table-xl"
@@ -3005,17 +3009,21 @@ function SectionArtists({
         <CardTitle>Artists</CardTitle>
       </CardHeader>
       <CardContent className="space-y-2 overflow-x-auto">
-        {openArtistNeeds.length > 0 ? (
-          <p className="text-xs text-muted-foreground">
-            Open artist need:{" "}
-            {openArtistNeeds
-              .map(([eventId, need]) => {
-                const day = dayLabelByEventId.get(eventId);
-                const detail = `${artistTypeLabels[need.artistType]}${need.genres ? ` · ${need.genres}` : ""}`;
-                return day ? `${day} — ${detail}` : detail;
-              })
-              .join("; ")}
-          </p>
+        {artistPositions.length > 0 ? (
+          <ul className="space-y-0.5 text-xs text-muted-foreground">
+            {artistPositions.map(({ eventId, need }) => {
+              const day = dayLabelByEventId.get(eventId);
+              const name = need.label.trim() || artistTypeLabels[need.artistType];
+              const detail = [name, artistTypeLabels[need.artistType], need.genres, need.status]
+                .filter(Boolean)
+                .join(" · ");
+              return (
+                <li key={need.needId}>
+                  {day ? `${day} — ${detail}` : detail}
+                </li>
+              );
+            })}
+          </ul>
         ) : null}
         <div className={`hidden text-xs font-medium text-muted-foreground md:grid md:items-end ${gridClass}`}>
           {showDayColumn ? <span>Day</span> : null}

@@ -140,6 +140,8 @@ export const listNeedStatusForEvents = query({
     await requireArborInternalContext(ctx);
     const out: Array<{
       eventId: Id<"events">;
+      needId: Id<"eventArtistNeeds">;
+      label: string;
       artistType: ArtistNeedType;
       status: EffectiveArtistNeedStatus;
       genres: string;
@@ -152,6 +154,8 @@ export const listNeedStatusForEvents = query({
         const booked = slotIsBooked(slot, filledSlotIds);
         out.push({
           eventId,
+          needId: slot._id,
+          label: slot.label ?? "",
           artistType: slot.artistType,
           status: effectiveArtistNeedStatus(slot.status, booked),
           genres: slot.genres ?? "",
