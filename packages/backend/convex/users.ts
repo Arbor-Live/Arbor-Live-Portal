@@ -538,6 +538,15 @@ async function normalizeMembershipRole(
   return "org_member";
 }
 
+/**
+ * Artist-org admin on a membership row. `org_admin` is the role this app
+ * writes. `admin` and `owner` are older Better Auth strings still stored on
+ * some memberships, including the e2e band creator.
+ */
+export function isArtistOrgAdminRole(role: string | undefined): boolean {
+  return role === "org_admin" || role === "admin" || role === "owner";
+}
+
 export async function upsertOrgMembership(
   ctx: MutationCtx,
   args: {
@@ -2817,7 +2826,7 @@ export const inviteMemberToActiveOrganization = mutation({
           q.eq("userId", adminId).eq("organizationId", context.organizationId),
         )
         .unique();
-      if (!callerMembership?.active || callerMembership.role !== "org_admin") {
+      if (!callerMembership?.active || !isArtistOrgAdminRole(callerMembership.role)) {
         throw new Error("Only band admins can invite members.");
       }
     }
@@ -2935,10 +2944,7 @@ export const updateMemberBandRole = mutation({
         q.eq("userId", actorId).eq("organizationId", context.organizationId),
       )
       .unique();
-    const isOrgAdmin =
-      actorMembership?.role === "org_admin" ||
-      actorMembership?.role === "admin" ||
-      isAdmin(actor);
+    const isOrgAdmin = isArtistOrgAdminRole(actorMembership?.role) || isAdmin(actor);
     if (actorId !== targetUserId && !isOrgAdmin) {
       throw new Error("Only artist admins can edit another member's role.");
     }
