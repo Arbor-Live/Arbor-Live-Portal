@@ -278,9 +278,14 @@ export function InvoicesListClient() {
                   <DropdownMenuContent align="end" className="w-44">
                     <DropdownMenuItem
                       onSelect={() => {
-                        void duplicateInvoice({ id: invoice._id }).then((result) => {
-                          router.push(`/dashboard/financial-hub/invoices/${result.id}`);
-                        });
+                        void (async () => {
+                          try {
+                            const result = await duplicateInvoice({ id: invoice._id });
+                            router.push(`/dashboard/financial-hub/invoices/${result.id}`);
+                          } catch (error) {
+                            notify.error(getConvexErrorMessage(error, "Could not duplicate the invoice."));
+                          }
+                        })();
                       }}
                     >
                       <CopyIcon className="size-4" />

@@ -17,7 +17,7 @@ test.describe("event create smoke", () => {
       .getByRole("textbox")
       .fill(title);
 
-    await fillDateTimeRangeNearLabel(page, "Start", {
+    await fillDateTimeRangeNearLabel(page, "When", {
       dayLabel,
       startTime: "6:00 PM",
       endTime: "10:00 PM",
@@ -25,13 +25,8 @@ test.describe("event create smoke", () => {
 
     await page.getByRole("button", { name: "Create Event" }).first().click();
     await page.waitForURL(/\/dashboard\/events\/(?!new(?:\/|$))[^/?#]+/, { timeout: 45_000 });
-    await expect(page.getByText("Edit Event").first()).toBeVisible({ timeout: 20_000 });
-    await expect(
-      page
-        .locator("div.space-y-1")
-        .filter({ has: page.getByText("Title", { exact: true }) })
-        .getByRole("textbox"),
-    ).toHaveValue(title);
+    await expect(page.getByTestId("event-workspace")).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId("event-title-input")).toHaveValue(title);
 
     const eventUrl = page.url().replace(/\/$/, "").replace(/\/schedule$/, "");
     await page.goto(`${eventUrl}/schedule`);
@@ -40,7 +35,7 @@ test.describe("event create smoke", () => {
     // Schedule tab hydrates start/end from the event query before Quick Add enables.
     await expect(quickAdd).toBeEnabled({ timeout: 30_000 });
     await quickAdd.click();
-    await page.getByRole("button", { name: /Save Schedule/ }).first().click();
+    await page.getByRole("button", { name: "Save changes" }).click();
     await expect(page.getByText(/Setup|Show|Strike/i).first()).toBeVisible({ timeout: 20_000 });
   });
 });

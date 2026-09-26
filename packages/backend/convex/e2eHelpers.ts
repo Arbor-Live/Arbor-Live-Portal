@@ -2818,7 +2818,7 @@ export const ensureBandPayeeUser = mutation({
       .unique();
     if (existingAppMembership) {
       await ctx.db.patch(existingAppMembership._id, {
-        role: "owner",
+        role: "org_admin",
         active: true,
         updatedAt: now,
       });
@@ -2826,7 +2826,7 @@ export const ensureBandPayeeUser = mutation({
       await ctx.db.insert("userOrganizationMemberships", {
         userId,
         organizationId,
-        role: "owner",
+        role: "org_admin",
         active: true,
         createdAt: now,
         updatedAt: now,

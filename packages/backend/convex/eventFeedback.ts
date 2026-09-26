@@ -9,6 +9,7 @@ import {
 } from "./_generated/server";
 import { listEventsLinkedToInvoice } from "./lib/invoiceEvents";
 import { getCanonicalAlbumLink } from "./lib/immichAlbumLinks";
+import { isRequestPublicTokenExpired } from "./lib/requestToken";
 import { enforceRateLimit, HOUR_MS } from "./rateLimit";
 
 const portalValue = v.union(v.literal("request"), v.literal("quote"));
@@ -42,6 +43,7 @@ export async function resolveInvoiceAndEvents(
       .withIndex("by_publicToken", (q) => q.eq("publicToken", token))
       .unique();
     if (!request?.linkedInvoiceId) return null;
+    if (isRequestPublicTokenExpired(request)) return null;
     invoice = await ctx.db.get(request.linkedInvoiceId);
     if (!invoice || invoice.status === "void" || !invoice.clientReviewReadyAt) return null;
   } else {

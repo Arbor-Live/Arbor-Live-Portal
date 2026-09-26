@@ -67,4 +67,18 @@ crons.cron(
   {},
 );
 
+crons.cron(
+  "prune old email notifications",
+  "30 4 * * *",
+  internal.retention.pruneEmailNotifications,
+  {},
+);
+
+crons.cron(
+  "prune old status transitions",
+  "35 4 * * *",
+  internal.retention.pruneStatusTransitions,
+  {},
+);
+
 export default crons;

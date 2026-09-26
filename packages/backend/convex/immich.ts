@@ -104,42 +104,6 @@ export const listEventMediaAssets = query({
   },
 });
 
-export const verifyAssetAccess = query({
-  args: { immichAssetId: v.string() },
-  returns: v.boolean(),
-  handler: async (ctx, args) => {
-    try {
-      await requireAssetAccess(ctx, args.immichAssetId);
-      return true;
-    } catch {
-      return false;
-    }
-  },
-});
-
-export const getUploadTarget = query({
-  args: {
-    targetType: entityTypeValue,
-    targetId: v.string(),
-  },
-  returns: v.union(albumLinkValidator, v.null()),
-  handler: async (ctx, args) => {
-    await requireAuth(ctx);
-    const albumLink =
-      args.targetType === "band"
-        ? await getAlbumLinkForBand(ctx, args.targetId)
-        : await getAlbumLinkForEvent(ctx, args.targetId as Id<"events">);
-    if (!albumLink) return null;
-    await canUploadToAlbum(ctx, albumLink);
-    return {
-      albumLinkId: albumLink._id,
-      immichAlbumId: albumLink.immichAlbumId,
-      albumName: albumLink.albumName,
-      albumUrl: buildImmichAlbumUrl(albumLink.immichAlbumId),
-    };
-  },
-});
-
 export const getUploadConfig = query({
   args: {
     targetType: entityTypeValue,
@@ -173,20 +137,6 @@ export const getUploadConfig = query({
       uploadUrl: `${immichPublicUrl}/api/assets`,
       shareKey: albumLink.sharedLinkKey,
     };
-  },
-});
-
-export const refreshAlbumMedia = mutation({
-  args: { albumLinkId: v.id("immichAlbumLinks") },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    const albumLink = await ctx.db.get(args.albumLinkId);
-    if (!albumLink) throw new Error("Album not found.");
-    await canUploadToAlbum(ctx, albumLink);
-    await ctx.scheduler.runAfter(0, internal.immichActions.syncAlbumAssets, {
-      albumLinkId: args.albumLinkId,
-    });
-    return null;
   },
 });
 
@@ -225,7 +175,6 @@ export const recordUploadedAsset = mutation({
     return null;
   },
 });
-
 export const runBackfillAlbums = mutation({
   args: {},
   returns: v.null(),
@@ -244,31 +193,20 @@ export const runBackfillAlbums = mutation({
  *   npx convex run immich:runBackfillArtistAlbumMirror '{}'
  *   npx convex run immich:runBackfillArtistAlbumMirror '{"cursor": 25}'
  *
- * Returns the first page's result and, when there are more events, schedules
- * the rest of the walk. Pass `resume: false` to run just one page (or use the
- * internal action directly). Re-run with the returned `nextCursor` to continue.
+ * Schedules the paged action and returns immediately; watch the action logs for
+ * `{ eventsScanned, assetsMirrored, nextCursor, isDone }`. Re-run with the
+ * returned `nextCursor` to continue.
  */
 export const runBackfillArtistAlbumMirror = mutation({
   args: { cursor: v.optional(v.number()) },
-  returns: v.object({
-    eventsScanned: v.number(),
-    assetsMirrored: v.number(),
-    nextCursor: v.union(v.number(), v.null()),
-    isDone: v.boolean(),
-  }),
+  returns: v.null(),
   handler: async (ctx, args) => {
     await requireArborInternalContext(ctx);
-    const started = await ctx.scheduler.runAfter(
+    await ctx.scheduler.runAfter(
       0,
       internal.immichActions.backfillArtistAlbumMirror,
       { cursor: args.cursor },
     );
-    void started;
-    return {
-      eventsScanned: 0,
-      assetsMirrored: 0,
-      nextCursor: args.cursor ?? 0,
-      isDone: false,
-    };
+    return null;
   },
 });

@@ -101,7 +101,7 @@ test.describe("staff band assignment on event", () => {
 
     const afterCreatedAt = Date.now() - 1_000;
     await page.goto(`${seeded.eventPath}/artists`);
-    await expect(page.getByText("Edit Event").first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("event-workspace")).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText("Artists").first()).toBeVisible({ timeout: 20_000 });
 
     await page.getByRole("button", { name: "Add", exact: true }).click();
@@ -151,7 +151,7 @@ test.describe("staff band assignment on event", () => {
 
     const afterCreatedAt = Date.now() - 1_000;
     await page.goto(`${seeded.eventPath}/artists`);
-    await expect(page.getByText("Edit Event").first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("event-workspace")).toBeVisible({ timeout: 30_000 });
     const bandsCard = page.locator('[data-slot="card"]').filter({
       has: page.getByRole("button", { name: "Add", exact: true }),
     });

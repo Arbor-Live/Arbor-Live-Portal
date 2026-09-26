@@ -9,29 +9,6 @@ import {
 } from "./lib/invoiceSeries";
 import { shouldApplySeriesUpdate, type SeriesEditScope } from "./lib/eventSeriesGeneration";
 
-const pullListLineKindValue = v.union(v.literal("type"), v.literal("package"));
-
-const pullListSourceValue = v.union(
-  v.literal("manual"),
-  v.literal("invoice_package"),
-  v.literal("invoice_type"),
-);
-
-const templateItemInput = v.object({
-  id: v.optional(v.id("eventSeriesPullListItems")),
-  lineKind: pullListLineKindValue,
-  typeId: v.optional(v.id("inventoryTypes")),
-  packageId: v.optional(v.id("inventoryPackages")),
-  label: v.optional(v.string()),
-  quantityRequired: v.number(),
-  source: v.optional(pullListSourceValue),
-  sourcePackageId: v.optional(v.id("inventoryPackages")),
-  sourceInvoiceLineKey: v.optional(v.string()),
-  excludedTypeIds: v.optional(v.array(v.id("inventoryTypes"))),
-  sortOrder: v.number(),
-  notes: v.optional(v.string()),
-});
-
 async function listTemplateItems(ctx: QueryCtx | MutationCtx, seriesId: Id<"eventSeries">) {
   const rows = await ctx.db
     .query("eventSeriesPullListItems")
@@ -47,15 +24,6 @@ async function listOccurrencesForSeries(ctx: MutationCtx, seriesId: Id<"eventSer
     .take(200);
   return rows.sort((a, b) => (a.occurrenceIndex ?? 0) - (b.occurrenceIndex ?? 0));
 }
-
-export const listBySeries = query({
-  args: { seriesId: v.id("eventSeries") },
-  handler: async (ctx, args) => {
-    await requireAuth(ctx);
-    await requireArborInternalContext(ctx);
-    return await listTemplateItems(ctx, args.seriesId);
-  },
-});
 
 export const scaffoldFromInvoice = mutation({
   args: {
@@ -296,132 +264,3 @@ async function regenerateFuturePullLists(
 
   return { updatedCount };
 }
-
-export const regenerateFuturePullListsMutation = mutation({
-  args: {
-    seriesId: v.id("eventSeries"),
-    scope: v.union(v.literal("future"), v.literal("all")),
-    fromOccurrenceIndex: v.number(),
-  },
-  returns: v.object({ updatedCount: v.number() }),
-  handler: async (ctx, args) => {
-    await requireAuth(ctx);
-    await requireArborInternalContext(ctx);
-    return await regenerateFuturePullLists(ctx, {
-      seriesId: args.seriesId,
-      scope: args.scope,
-      fromOccurrenceIndex: args.fromOccurrenceIndex,
-      now: Date.now(),
-    });
-  },
-});
-
-export const pullListTemplatesFromOccurrence = mutation({
-  args: {
-    seriesId: v.id("eventSeries"),
-    eventId: v.id("events"),
-    includeInvoiceLines: v.optional(v.boolean()),
-  },
-  handler: async (ctx, args) => {
-    await requireAuth(ctx);
-    await requireArborInternalContext(ctx);
-    const event = await ctx.db.get(args.eventId);
-    if (!event || event.seriesId !== args.seriesId) {
-      throw new Error("Event is not part of this series.");
-    }
-
-    const items = await ctx.db
-      .query("eventPullListItems")
-      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
-      .take(500);
-    const includeInvoice = args.includeInvoiceLines ?? false;
-    const filtered = includeInvoice
-      ? items
-      : items.filter((row) => row.source === "manual");
-
-    const now = Date.now();
-    const existing = await listTemplateItems(ctx, args.seriesId);
-    for (const row of existing) {
-      await ctx.db.delete(row._id);
-    }
-
-    let sortOrder = 0;
-    for (const item of filtered.sort((a, b) => a.sortOrder - b.sortOrder)) {
-      const lineKind = item.packageId ? ("package" as const) : ("type" as const);
-      await ctx.db.insert("eventSeriesPullListItems", {
-        seriesId: args.seriesId,
-        lineKind,
-        typeId: item.typeId,
-        packageId: item.packageId,
-        label: item.label,
-        quantityRequired: item.quantityRequired,
-        source: item.source,
-        sourcePackageId: item.sourcePackageId,
-        sourceInvoiceLineKey: item.sourceInvoiceLineKey,
-        excludedTypeIds: item.excludedTypeIds,
-        sortOrder,
-        notes: item.notes,
-        createdAt: now,
-        updatedAt: now,
-      });
-      sortOrder += 1;
-    }
-
-    return { templateCount: filtered.length };
-  },
-});
-
-export const upsertTemplateItems = mutation({
-  args: {
-    seriesId: v.id("eventSeries"),
-    items: v.array(templateItemInput),
-  },
-  handler: async (ctx, args) => {
-    await requireAuth(ctx);
-    await requireArborInternalContext(ctx);
-    const series = await ctx.db.get(args.seriesId);
-    if (!series) throw new Error("Event series not found.");
-
-    const existing = await listTemplateItems(ctx, args.seriesId);
-    const existingById = new Map(existing.map((row) => [row._id, row]));
-    const keptIds = new Set<Id<"eventSeriesPullListItems">>();
-    const now = Date.now();
-
-    for (const item of args.items) {
-      const quantityRequired = Math.max(0, Math.floor(item.quantityRequired));
-      const source = item.source ?? "manual";
-      const payload = {
-        lineKind: item.lineKind,
-        typeId: item.lineKind === "type" ? item.typeId : undefined,
-        packageId: item.lineKind === "package" ? item.packageId : undefined,
-        label: item.label?.trim() || "Item",
-        quantityRequired,
-        source,
-        sourcePackageId: item.sourcePackageId,
-        sourceInvoiceLineKey: item.sourceInvoiceLineKey,
-        excludedTypeIds: item.lineKind === "package" ? item.excludedTypeIds : undefined,
-        sortOrder: item.sortOrder,
-        notes: item.notes?.trim() || undefined,
-        updatedAt: now,
-      };
-
-      if (item.id && existingById.has(item.id)) {
-        await ctx.db.patch(item.id, payload);
-        keptIds.add(item.id);
-      } else {
-        const id = await ctx.db.insert("eventSeriesPullListItems", {
-          seriesId: args.seriesId,
-          ...payload,
-          createdAt: now,
-        });
-        keptIds.add(id);
-      }
-    }
-
-    for (const row of existing) {
-      if (!keptIds.has(row._id)) {
-        await ctx.db.delete(row._id);
-      }
-    }
-  },
-});

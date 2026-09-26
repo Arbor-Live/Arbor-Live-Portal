@@ -14,7 +14,7 @@ test.describe("linked invoice margin and crew rate copy", () => {
       clientGroupName: `E2E Margin Host ${Date.now()}`,
     }) as { eventId: string; invoiceId: string };
 
-    await page.goto(`/dashboard/events/${seeded.eventId}/expenses`);
+    await page.goto(`/dashboard/events/${seeded.eventId}/billing`);
     await expect(page.getByText("Event Costs").first()).toBeVisible({ timeout: 45_000 });
 
     const margin = page.getByTestId("event-linked-invoice-margin");

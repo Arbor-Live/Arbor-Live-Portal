@@ -126,20 +126,31 @@ canonical description of the domain itself.
 - Hosts: optional primary `hostGroupId` / denormalized `host`, plus optional
   `additionalHostGroupIds` co-hosts on the **event only**. When an event links an
   invoice, primary host is taken from the invoice `groupId` / `clientGroupName`
-  (edit on the invoice Client card). Add co-hosts on the event Overview tab.
+  (edit on the invoice Client card). Add co-hosts on the event **Billing** tab.
   Public marketing pages, quote/event portals, and crew surfaces show primary +
   co-hosts joined (`Host A · Host B`).
 - Invoices carry a single primary host (`groupId` / `clientGroupName` on the
   Client card). They do not store co-hosts.
 
-Event types (drive which editor tabs and quick-add blocks appear):
+Event page (`/dashboard/events/[id]`) is one workspace: a persistent header
+(title, status, dates, venue, type, host, linked days, series) over six tabs —
+**Overview** (details, people, contacts, files & notes, comments, post-event
+review), **Schedule & Crew**, **Equipment** (pull list), **Lineup** (bill,
+riders, Open Mic), **Billing** (invoices, hosts, costs, margin — admins and
+Operations only), and **Promo** (visibility, marketing, media). One save bar
+saves every edited event field (only the changed fields are sent) plus the
+schedule and crew; the pull list and contacts keep their own saves. Old
+`/expenses`, `/marketing`, `/media`, and `/artifacts` URLs redirect. Creating an
+event (`/dashboard/events/new`) is a short essentials-only form.
+
+Event types (drive which workspace tabs and quick-add blocks appear):
 
 | Type | Meaning | Quick-add schedule intent |
 |---|---|---|
 | `Crewed Event` | Full production with crew | Setup + Show + Strike |
 | `Rental with Crew` | Equipment rental plus crew | Setup + Strike |
 | `Dry Rental` | Equipment only | Delivery + Return |
-| `Services Only` | No schedule/crew tabs | — |
+| `Services Only` | No Schedule & Crew or Equipment tabs | — |
 
 - **Teams of interest** (`teamsInterested`) are event *needs*, distinct from user
   verticals/specialties (`userVerticals.ts`): `Design` (poster designer +
@@ -160,7 +171,7 @@ Event types (drive which editor tabs and quick-add blocks appear):
   `bookingRequestSettings`, or manual swap on the request detail). Inbox
   defaults to open requests (`submitted`/`action_required`/`pending_client`), oldest-first, with a
   days-since-submitted counter.
-- **The bill** (event editor **Artists** tab) is one drag-orderable list of
+- **The bill** (event workspace **Lineup** tab) is one drag-orderable list of
   *positions* (`eventArtistNeeds.sortOrder`), each with a freeform `label` and
   either filled by an act or still needed:
   - **Artist Needed** (`eventArtistNeeds`) — one open **slot** per row, so "two
@@ -205,7 +216,7 @@ Event types (drive which editor tabs and quick-add blocks appear):
   their own budgeting and pull lists.
 - Band participation in events is tracked in `eventBandParticipations`
   (headliner/support/other). That row is the canonical **assignment**: staff
-  manage it from the event editor **Artists** tab (not Media).
+  manage it from the event workspace **Lineup** tab (not Promo).
   Assigning an artist emails members (`band_assigned`), unlocks event media album
   access, and surfaces the show on the artist home dashboard. Optional
   `eventBandPayments` attach payout details to the same assignment.
@@ -413,7 +424,7 @@ Event types (drive which editor tabs and quick-add blocks appear):
   (`publicEventPoster.ts`); that sets `ready` so the image and optional
   public description (`caption` / About) go live on the public page
   immediately while Marketing still publishes to Instagram. Staff manage the
-  same fields on the event editor **Marketing** tab.
+  same fields on the event workspace **Promo** tab.
 - `marketingPosts.ts` — case studies and blog posts, Lexical rich text,
   published/featured flags, rendered publicly via `publicMarketing.ts`
   (`/work`). Public crew and artist directories come from

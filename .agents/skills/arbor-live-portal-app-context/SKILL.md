@@ -74,7 +74,7 @@ Human-readable docs live in `docs/` (`getting-started.md`, `architecture.md`, `d
 - Quick Add intent by event type:
   - `Dry Rental`: Delivery + Return slots
   - `Rental with Crew`: Setup + Strike
-  - `Services Only`: schedule/crew tabs hidden
+  - `Services Only`: Schedule & Crew and Equipment tabs hidden
   - `Crewed Event`: Setup + Show + Strike
 - If required dates are missing, quick-add controls should be visually disabled/blurred (not error-spammy).
 
@@ -175,14 +175,16 @@ Cursor rule: `.cursor/rules/portal-timezone.mdc` (always applied).
   statuses instead of one false success.
 
 ## Recent High-Risk Areas
-- Event editor state hydration can overwrite in-progress edits if not guarded.
-  - Prefer one-time hydration per loaded event id.
+- Event workspace state hydration can overwrite in-progress edits if not guarded.
+  - One-time hydration per loaded event id; later server changes are adopted only
+    for fields the user hasn't edited (see `event-workspace-provider.tsx`).
+  - Saves send only changed fields (`buildEventUpdatePatch`) — never the whole form.
 - Start/end date coupling:
   - End should auto-fill from Start by default, but stop auto-overwriting after user explicitly edits End.
 - Ensure schedule save and personnel save order does not lose `scheduleBlockId` references.
 
 ## Files to Inspect First for Event Work
-- `apps/web/src/components/events/event-editor.tsx`
+- `apps/web/src/components/events/workspace/` (provider, header, nav, `tabs/*`, create form)
 - `apps/web/src/components/events/event-timeline-scheduler.tsx`
 - `packages/backend/convex/schema.ts`
 - `packages/backend/convex/events.ts`

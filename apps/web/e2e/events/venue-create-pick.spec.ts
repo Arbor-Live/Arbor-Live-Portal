@@ -22,7 +22,7 @@ test.describe("venue create and pick", () => {
       .getByRole("textbox")
       .fill(eventTitle);
 
-    await fillDateTimeRangeNearLabel(page, "Start", {
+    await fillDateTimeRangeNearLabel(page, "When", {
       dayLabel,
       startTime: "6:00 PM",
       endTime: "10:00 PM",
@@ -43,7 +43,7 @@ test.describe("venue create and pick", () => {
 
     await page.getByRole("button", { name: "Create Event" }).first().click();
     await page.waitForURL(/\/dashboard\/events\/(?!new(?:\/|$))[^/?#]+/, { timeout: 45_000 });
-    await expect(page.getByText("Edit Event").first()).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId("event-workspace")).toBeVisible({ timeout: 20_000 });
 
     const venue = await pollConvex<{
       venueId: string;
