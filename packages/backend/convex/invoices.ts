@@ -504,10 +504,17 @@ async function replaceLineItems(
   // The editor hydrates once, so it posts the same lines without `needId` on
   // every later save. Reuse the position a line already had (same event and
   // order) instead of minting a new one and stranding the old.
-  const previousNeedIdByKey = new Map<string, Id<"eventArtistNeeds">>();
+  const previousLineByKey = new Map<
+    string,
+    { needId: Id<"eventArtistNeeds">; label: string; organizationId?: string }
+  >();
   for (const row of existing) {
     if (row.section === "artist" && row.needId && row.eventId) {
-      previousNeedIdByKey.set(`${row.eventId}:${row.order}`, row.needId);
+      previousLineByKey.set(`${row.eventId}:${row.order}`, {
+        needId: row.needId,
+        label: row.label,
+        organizationId: row.organizationId,
+      });
     }
   }
   for (const row of existing) {
@@ -515,6 +522,18 @@ async function replaceLineItems(
   }
   const now = Date.now();
   for (const row of rows.sort((a, b) => a.order - b.order)) {
+    // Only reuse the previous position when this slot is the same act, so a row
+    // shifting into another's order cannot adopt its position and inquiries.
+    const previous =
+      row.section === "artist" && row.eventId
+        ? previousLineByKey.get(`${row.eventId}:${row.order}`)
+        : undefined;
+    const reusedNeedId =
+      previous &&
+      previous.label === row.label.trim() &&
+      previous.organizationId === trimOptional(row.organizationId)
+        ? previous.needId
+        : undefined;
     await ctx.db.insert("invoiceLineItems", {
       invoiceId,
       section: row.section,
@@ -534,11 +553,7 @@ async function replaceLineItems(
       equipmentQuantityBasis: row.equipmentQuantityBasis,
       organizationId: trimOptional(row.organizationId),
       eventId: row.section === "artist" ? row.eventId : undefined,
-      needId:
-        row.section === "artist"
-          ? (row.needId ??
-            (row.eventId ? previousNeedIdByKey.get(`${row.eventId}:${row.order}`) : undefined))
-          : undefined,
+      needId: row.section === "artist" ? (row.needId ?? reusedNeedId) : undefined,
       memberCount:
         row.section === "artist" && row.memberCount !== undefined && row.memberCount > 0
           ? row.memberCount
