@@ -70,10 +70,7 @@ function DialogContent({
       <DialogOverlay />
       <DialogPrimitive.Content
         data-slot="dialog-content"
-        ref={(node) => {
-          setPortalContainer(node)
-          assignNodeRef(node, ref)
-        }}
+        ref={(node) => assignNodeRef(node, ref)}
         onPointerDownOutside={(event) => {
           preventDismissForPortaledPicker(event)
           onPointerDownOutside?.(event)
@@ -107,6 +104,16 @@ function DialogContent({
               </Button>
             </DialogPrimitive.Close>
           )}
+          {/*
+            Pickers portal here to stay inside the focus trap. Absolutely
+            positioned so an open picker is never a grid row: otherwise the
+            content's gap grows the dialog and its centering shifts it.
+          */}
+          <div
+            ref={setPortalContainer}
+            data-slot="dialog-picker-portal"
+            className="pointer-events-none absolute inset-0 *:pointer-events-auto"
+          />
         </PickerPortalContainerContext.Provider>
       </DialogPrimitive.Content>
     </DialogPortal>
