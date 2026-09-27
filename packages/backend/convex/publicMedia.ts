@@ -75,8 +75,10 @@ export const getMediaUploadConfigByToken = query({
 
 /**
  * Register a file that a public portal client uploaded straight to Immich via
- * the album share key. Recording it here is what drives the artist-album
- * mirror, so public uploads stay in sync without a manual sync step.
+ * the album share key. This only rate-limits and schedules the album-add; the
+ * asset row is written by `addUploadedAssetToAlbum` *after* Immich confirms the
+ * asset belongs in the album, so an unverified client-supplied ID can never
+ * become a gallery record.
  */
 export const recordMediaUploadByToken = mutation({
   args: {
@@ -100,21 +102,8 @@ export const recordMediaUploadByToken = mutation({
       windowMs: HOUR_MS,
     });
 
-    const existing = await ctx.db
-      .query("immichAssetRecords")
-      .withIndex("by_albumLinkId_and_immichAssetId", (q) =>
-        q.eq("albumLinkId", albumLink._id).eq("immichAssetId", args.immichAssetId),
-      )
-      .first();
-    if (existing) return null;
-
-    await ctx.db.insert("immichAssetRecords", {
-      albumLinkId: albumLink._id,
-      immichAssetId: args.immichAssetId,
-      originalFileName: args.originalFileName,
-      type: args.type,
-      createdAt: Date.now(),
-    });
+    // The action re-checks for an existing row and verifies the asset against
+    // Immich before recording it, so no idempotency check is needed here.
     await ctx.scheduler.runAfter(0, internal.immichActions.addUploadedAssetToAlbum, {
       albumLinkId: albumLink._id,
       immichAssetId: args.immichAssetId,

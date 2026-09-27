@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { components } from "./_generated/api";
-import { requireBandContext } from "./lib/auth";
+import { requireArborInternalContext, requireBandContext } from "./lib/auth";
 import { requireEventMediaAccess as requireEventMediaAccessFromImmich } from "./lib/immichAccess";
 import { dedupeAlbumLinksForEntity, getCanonicalAlbumLink } from "./lib/immichAlbumLinks";
 
@@ -303,17 +303,17 @@ export const getEventMetaInternal = internalQuery({
  * are worth scanning; the mirror step skips events with no participations.
  */
 export const listEventMirrorBackfillTargetsInternal = internalQuery({
-  args: { cursor: v.number(), limit: v.number() },
+  args: { cursor: v.union(v.string(), v.null()), limit: v.number() },
   returns: v.object({
     targets: v.array(v.id("events")),
-    nextCursor: v.union(v.number(), v.null()),
+    nextCursor: v.union(v.string(), v.null()),
     isDone: v.boolean(),
   }),
   handler: async (ctx, args) => {
     const events = await ctx.db
       .query("events")
       .order("desc")
-      .paginate({ numItems: args.limit, cursor: args.cursor === 0 ? null : String(args.cursor) });
+      .paginate({ numItems: args.limit, cursor: args.cursor });
 
     const targets: Id<"events">[] = [];
     for (const event of events.page) {
@@ -334,34 +334,51 @@ export const listEventMirrorBackfillTargetsInternal = internalQuery({
 
     return {
       targets,
-      nextCursor: events.isDone ? null : Number(events.continueCursor),
+      nextCursor: events.isDone ? null : events.continueCursor,
       isDone: events.isDone,
     };
   },
 });
 
-/** Asset rows already mirrored for an event album (no Immich calls). */
-export const listEventAlbumAssetsInternal = internalQuery({
-  args: { eventId: v.id("events") },
-  returns: v.array(
-    v.object({
-      immichAssetId: v.string(),
-      originalFileName: v.string(),
-      type: assetTypeValue,
-    }),
-  ),
+/**
+ * One page of an event album's already-mirrored assets (no Immich calls).
+ * Cursor is an opaque Convex string from the previous page; `take(...)` would
+ * silently cap a large album and strand the rest.
+ */
+const MAX_BACKFILL_ASSETS_PER_PAGE = 200;
+
+export const listEventAlbumAssetsPageInternal = internalQuery({
+  args: {
+    eventId: v.id("events"),
+    cursor: v.union(v.string(), v.null()),
+  },
+  returns: v.object({
+    assets: v.array(
+      v.object({
+        immichAssetId: v.string(),
+        originalFileName: v.string(),
+        type: assetTypeValue,
+      }),
+    ),
+    nextCursor: v.union(v.string(), v.null()),
+    isDone: v.boolean(),
+  }),
   handler: async (ctx, args) => {
     const albumLink = await getCanonicalAlbumLink(ctx, "event", args.eventId);
-    if (!albumLink) return [];
-    const rows = await ctx.db
+    if (!albumLink) return { assets: [], nextCursor: null, isDone: true };
+    const page = await ctx.db
       .query("immichAssetRecords")
       .withIndex("by_albumLinkId", (q) => q.eq("albumLinkId", albumLink._id))
-      .take(500);
-    return rows.map((row) => ({
-      immichAssetId: row.immichAssetId,
-      originalFileName: row.originalFileName,
-      type: row.type,
-    }));
+      .paginate({ numItems: MAX_BACKFILL_ASSETS_PER_PAGE, cursor: args.cursor });
+    return {
+      assets: page.page.map((row) => ({
+        immichAssetId: row.immichAssetId,
+        originalFileName: row.originalFileName,
+        type: row.type,
+      })),
+      nextCursor: page.isDone ? null : page.continueCursor,
+      isDone: page.isDone,
+    };
   },
 });
 
@@ -382,6 +399,19 @@ export const getEventAlbumEnsureMetaInternal = internalQuery({
       title: `${event.title} — ${formatPacificDate(event.startAt)}`,
       venueName: event.venueName,
     };
+  },
+});
+
+/**
+ * Action-safe admin gate for the backfill CLI. Actions have no `db`, so the
+ * context check runs here in a query and the action just awaits it.
+ */
+export const requireArborInternalForBackfillInternal = internalQuery({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    await requireArborInternalContext(ctx);
+    return null;
   },
 });
 

@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { paginationOptsValidator } from "convex/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { mutation, query } from "./_generated/server";
+import { action, mutation, query } from "./_generated/server";
 import {
   canUploadToAlbum,
   getAlbumLinkForBand,
@@ -191,22 +191,31 @@ export const runBackfillAlbums = mutation({
  * shipped. Admin-only; run from the CLI:
  *
  *   npx convex run immich:runBackfillArtistAlbumMirror '{}'
- *   npx convex run immich:runBackfillArtistAlbumMirror '{"cursor": 25}'
+ *   npx convex run immich:runBackfillArtistAlbumMirror '{"cursor":"<nextCursor>"}'
  *
- * Schedules the paged action and returns immediately; watch the action logs for
- * `{ eventsScanned, assetsMirrored, nextCursor, isDone }`. Re-run with the
- * returned `nextCursor` to continue.
+ * Runs one page inline and returns it (including `nextCursor`/`isDone`), so the
+ * operator sees progress and can pass the cursor back to continue until done.
  */
-export const runBackfillArtistAlbumMirror = mutation({
-  args: { cursor: v.optional(v.number()) },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    await requireArborInternalContext(ctx);
-    await ctx.scheduler.runAfter(
-      0,
-      internal.immichActions.backfillArtistAlbumMirror,
-      { cursor: args.cursor },
-    );
-    return null;
+export const runBackfillArtistAlbumMirror = action({
+  args: { cursor: v.optional(v.union(v.string(), v.null())) },
+  returns: v.object({
+    eventsScanned: v.number(),
+    assetsMirrored: v.number(),
+    nextCursor: v.union(v.string(), v.null()),
+    isDone: v.boolean(),
+  }),
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
+    eventsScanned: number;
+    assetsMirrored: number;
+    nextCursor: string | null;
+    isDone: boolean;
+  }> => {
+    await ctx.runQuery(internal.immichDb.requireArborInternalForBackfillInternal, {});
+    return await ctx.runAction(internal.immichActions.backfillArtistAlbumMirror, {
+      cursor: args.cursor ?? null,
+    });
   },
 });

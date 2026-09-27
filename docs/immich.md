@@ -30,6 +30,12 @@ event / band  ──►  immichAlbumLinks (Convex)  ──►  Immich album + sh
    booking-request / quote portal clients use the token-scoped equivalent
    (`publicMedia.recordMediaUploadByToken`) from the portal's **After the event**
    tab, so their uploads are registered and mirrored too.
+   > **Note:** the public path is *registration*, not a byte proxy. The browser
+   > still uploads to Immich directly with the album share key, so the
+   > per-token rate limit in `recordMediaUploadByToken` is a best-effort
+   > backstop — a token holder could POST to Immich without calling it. The
+   > share key is a capability by design; hard upload quotas belong at the
+   > Immich/ingress layer, not here.
 3. **Sync the index.** `immichActions.syncAlbumAssets` lists the album's assets
    via `listImmichAlbumAssets` (a paged `POST /search/metadata` with
    `albumIds: [id]`) and reconciles `immichAssetRecords`. `immich.runBackfillAlbums` /
@@ -108,18 +114,22 @@ Marketing/public-work galleries reuse the same client through
 ### Artist-album mirror backfill
 
 Event media uploaded before the mirror shipped is copied into artist albums by
-`immich:runBackfillArtistAlbumMirror`. It is admin-only and resumable: each page
-scans `MAX_EVENTS_PER_RUN` events (newest first), copies their already-indexed
-event-album assets into each linked artist album, and returns
-`{ eventsScanned, assetsMirrored, nextCursor, isDone }`. It reads from the Convex
-asset index (no Immich list call) and calls `PUT /albums/:id/assets` per asset.
+`immich:runBackfillArtistAlbumMirror`. It is admin-only, runs one page inline,
+and is resumable: each page scans `MAX_EVENTS_PER_RUN` events (newest first),
+drains every asset page of each event's album, and copies those assets into each
+linked artist album. It returns
+`{ eventsScanned, assetsMirrored, nextCursor, isDone }` directly, so the operator
+sees progress. It reads from the Convex asset index (no Immich list call) and
+calls `PUT /albums/:id/assets` per asset.
+
+`nextCursor` is an opaque Convex cursor string — pass it back unchanged.
 
 Run it against a deployment with `packages/backend` as the working directory:
 
 ```bash
 npx convex run immich:runBackfillArtistAlbumMirror '{}'
-# then continue from where it stopped:
-npx convex run immich:runBackfillArtistAlbumMirror '{"cursor": 25}'
+# then continue from where it stopped (use the returned nextCursor verbatim):
+npx convex run immich:runBackfillArtistAlbumMirror '{"cursor":"<nextCursor>"}'
 ```
 
 Prefer `--prod` for production (`npx convex run immich:runBackfillArtistAlbumMirror '{}' --prod`).

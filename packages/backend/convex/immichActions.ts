@@ -246,28 +246,33 @@ export const backfillAllAlbums = internalAction({
  * artist's album. Runs after the feature shipped so existing event media shows
  * up in artist albums, which only got mirrored uploads from then on.
  *
- * Resumable — each run advances `cursor` by the number of events scanned and
- * returns the next cursor. Re-run until `isDone` is true. Bounded by
- * `MAX_EVENTS_PER_RUN` so one invocation stays inside Convex action limits.
+ * Resumable via an opaque Convex cursor over the event table. Each event's
+ * album is drained page by page in the same invocation, so a large album is
+ * never truncated. The cursor comes back in the result and must be passed to
+ * the next invocation unchanged; re-run until `isDone` is true.
  */
 const MAX_EVENTS_PER_RUN = 25;
 
 export const backfillArtistAlbumMirror = internalAction({
-  args: { cursor: v.optional(v.number()) },
+  args: { cursor: v.optional(v.union(v.string(), v.null())) },
   returns: v.object({
     eventsScanned: v.number(),
     assetsMirrored: v.number(),
-    nextCursor: v.union(v.number(), v.null()),
+    nextCursor: v.union(v.string(), v.null()),
     isDone: v.boolean(),
   }),
-  handler: async (ctx, args) => {
-    const cursor = args.cursor ?? 0;
+  handler: async (ctx, args): Promise<{
+    eventsScanned: number;
+    assetsMirrored: number;
+    nextCursor: string | null;
+    isDone: boolean;
+  }> => {
     const page: {
       targets: Array<Id<"events">>;
-      nextCursor: number | null;
+      nextCursor: string | null;
       isDone: boolean;
     } = await ctx.runQuery(internal.immichDb.listEventMirrorBackfillTargetsInternal, {
-      cursor,
+      cursor: args.cursor ?? null,
       limit: MAX_EVENTS_PER_RUN,
     });
 
@@ -276,21 +281,36 @@ export const backfillArtistAlbumMirror = internalAction({
 
     for (const eventId of page.targets) {
       eventsScanned += 1;
-      const assets: Array<{
-        immichAssetId: string;
-        originalFileName: string;
-        type: "IMAGE" | "VIDEO";
-      }> = await ctx.runQuery(internal.immichDb.listEventAlbumAssetsInternal, { eventId });
-      for (const asset of assets) {
-        try {
-          await mirrorEventAssetToArtistAlbums(ctx, { eventId, ...asset });
-          assetsMirrored += 1;
-        } catch (error) {
-          console.error(
-            `Backfill: failed to mirror asset ${asset.immichAssetId} for event ${eventId}`,
-            error,
-          );
+      let cursor: string | null = null;
+      let isDone = false;
+      while (!isDone) {
+        const assetsPage: {
+          assets: Array<{
+            immichAssetId: string;
+            originalFileName: string;
+            type: "IMAGE" | "VIDEO";
+          }>;
+          nextCursor: string | null;
+          isDone: boolean;
+        } = await ctx.runQuery(internal.immichDb.listEventAlbumAssetsPageInternal, {
+          eventId,
+          cursor,
+        });
+
+        for (const asset of assetsPage.assets) {
+          try {
+            await mirrorEventAssetToArtistAlbums(ctx, { eventId, ...asset });
+            assetsMirrored += 1;
+          } catch (error) {
+            console.error(
+              `Backfill: failed to mirror asset ${asset.immichAssetId} for event ${eventId}`,
+              error,
+            );
+          }
         }
+
+        cursor = assetsPage.nextCursor;
+        isDone = assetsPage.isDone;
       }
     }
 
@@ -367,10 +387,10 @@ export const addUploadedAssetToAlbum = internalAction({
       originalFileName: args.originalFileName,
       type: args.type,
     });
-    await ctx.runAction(internal.immichActions.syncAlbumAssets, {
-      albumLinkId: args.albumLinkId,
-    });
 
+    // Mirror before the event-album resync: syncAlbumAssets can fail on an
+    // Immich hiccup, and scheduled actions are not retried, so mirroring first
+    // keeps the artist albums in step with the asset we just recorded.
     if (link.entityType === "event") {
       await mirrorEventAssetToArtistAlbums(ctx, {
         eventId: link.entityId as Id<"events">,
@@ -379,6 +399,10 @@ export const addUploadedAssetToAlbum = internalAction({
         type: args.type,
       });
     }
+
+    await ctx.runAction(internal.immichActions.syncAlbumAssets, {
+      albumLinkId: args.albumLinkId,
+    });
     return null;
   },
 });
