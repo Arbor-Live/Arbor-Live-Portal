@@ -65,6 +65,40 @@ export async function resolveGlobalRoleForUser(
   return "member";
 }
 
+/**
+ * Global role from the user's active memberships, with NO legacy exception:
+ * a user with no admin-granting membership resolves to `member`.
+ *
+ * Use when the caller has just changed memberships (add/remove/edit). The
+ * "no memberships keeps admin" rule of `resolveGlobalRoleForUser` is only for
+ * auditing pre-existing rows; applying it after a removal would promote a user
+ * whose last membership was just deleted.
+ */
+export async function resolveGlobalRoleFromActiveMemberships(
+  ctx: QueryCtx | MutationCtx,
+  userId: string,
+): Promise<"admin" | "member"> {
+  const rows = await ctx.db
+    .query("userOrganizationMemberships")
+    .withIndex("by_userId", (q) => q.eq("userId", userId))
+    .take(MAX_USER_ORG_MEMBERSHIPS + 1);
+  if (rows.length > MAX_USER_ORG_MEMBERSHIPS) {
+    throw new Error(
+      `Cannot resolve global role: user has ${rows.length} organization memberships (max ${MAX_USER_ORG_MEMBERSHIPS}).`,
+    );
+  }
+  for (const membership of rows) {
+    if (!membership.active) continue;
+    const role = await resolveGlobalRoleForOrganization(
+      ctx,
+      membership.organizationId,
+      membership.role,
+    );
+    if (role === "admin") return "admin";
+  }
+  return "member";
+}
+
 export function activeMembershipsForGlobalRole(
   existing: Array<{ organizationId: string; role: string; active: boolean }>,
   next: { organizationId: string; role: string },

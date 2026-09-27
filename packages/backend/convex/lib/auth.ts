@@ -204,6 +204,13 @@ export async function requireAuth(
   return user;
 }
 
+/**
+ * Better Auth `role: "admin"`. This is a *cache* of Arbor-internal membership
+ * and has historically been shared by band/DJ org admins, so it is safe only
+ * while every membership write resyncs the role (`syncGlobalRoleFromMemberships`).
+ * For staff identity, prefer `isPortalAdmin`, which derives from memberships.
+ * Never select email recipients by this role — use `listPortalAdminEmails`.
+ */
 export async function requireAdmin(
   ctx: AuthCtx,
 ): Promise<AuthUser> {
@@ -214,6 +221,7 @@ export async function requireAdmin(
   return user;
 }
 
+/** See `requireAdmin` — `role` is a membership cache, not proof of staff. */
 export function isAdmin(user: AuthUser | null | undefined): boolean {
   return Boolean(user && user.role === "admin");
 }
@@ -333,9 +341,11 @@ export async function getActiveOrganizationContextOrNull(
       return await resolveOrganizationContext(ctx, selectedOrganizationId);
     }
 
-    // No membership for the selected active org — allow portal admins to preview
-    // artist orgs (temporary view-as, not a lasting join).
-    if (isAdmin(user)) {
+    // No membership for the selected active org — allow Arbor Live portal admins
+    // to preview artist orgs (temporary view-as, not a lasting join). Gate on
+    // membership, not the raw role, so a band org admin can never preview (and
+    // then operate on) another artist org.
+    if (await isPortalAdmin(ctx, userId)) {
       const preview = await resolveOrganizationContext(ctx, selectedOrganizationId);
       if (preview && isArtistOrganizationType(preview.organizationType)) {
         const profile = await ctx.db
