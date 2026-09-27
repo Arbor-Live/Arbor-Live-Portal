@@ -5,6 +5,12 @@ export const metadata = {
   description: "Sign up to perform at the next Arbor Live open mic.",
 };
 
-export default function PublicOpenMicPage() {
-  return <OpenMicWizard />;
+export default async function PublicOpenMicPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ event?: string | string[] }>;
+}) {
+  // `?event=<id>` comes from an event's Lineup tab and pins the sign-up to it.
+  const { event } = await searchParams;
+  return <OpenMicWizard eventId={typeof event === "string" && event ? event : undefined} />;
 }
