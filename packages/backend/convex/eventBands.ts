@@ -6,6 +6,15 @@ import { requireArborInternalContext, requireAuth, requireBandContext, getUserId
 import { inviteEmailToBandOrg, provisionBandOrganization } from "./lib/bandOrgInvite";
 import { scheduleBandEventOnboardingInviteEmail } from "./email/bandEventInviteEmails";
 import { listBandLinkedEvents } from "./lib/eventBandAccess";
+import { syncInvoiceLineForSlot } from "./lib/artistLineSync";
+import {
+  claimSlot,
+  unclaimSlot,
+  upsertEventBandParticipation,
+} from "./lib/eventBandParticipation";
+
+// Existing callers (and this module) keep importing these from here.
+export { unclaimSlot, upsertEventBandParticipation };
 import {
   bandPaymentHasAgreementPdf,
   bandPaymentStatusLabel,
@@ -104,113 +113,6 @@ function paymentChipLabel(args: {
   }
 }
 
-/**
- * Drop an act's claim on a slot. Uses `replace` because Convex `patch` ignores
- * `undefined` and would leave `needId` in place.
- */
-export async function unclaimSlot(
-  ctx: MutationCtx,
-  participationId: Id<"eventBandParticipations">,
-) {
-  const row = await ctx.db.get(participationId);
-  if (!row || !row.needId) return;
-  const next: Doc<"eventBandParticipations"> = { ...row, updatedAt: Date.now() };
-  delete next.needId;
-  await ctx.db.replace(participationId, next);
-}
-
-/**
- * Give `participationId` the slot, checking it belongs to the event and taking
- * it from anyone else. A slot holds exactly one act.
- */
-async function claimSlot(
-  ctx: MutationCtx,
-  args: {
-    needId: Id<"eventArtistNeeds">;
-    eventId: Id<"events">;
-    participationId?: Id<"eventBandParticipations">;
-  },
-) {
-  const slot = await ctx.db.get(args.needId);
-  if (!slot || slot.eventId !== args.eventId) {
-    throw new Error("Slot not found on this event.");
-  }
-  if (slot.externalArtistName?.trim()) {
-    throw new Error("This position is filled by an outside artist.");
-  }
-  const rivals = await ctx.db
-    .query("eventBandParticipations")
-    .withIndex("by_needId", (q) => q.eq("needId", args.needId))
-    .take(100);
-  for (const rival of rivals) {
-    if (rival._id === args.participationId) continue;
-    await unclaimSlot(ctx, rival._id);
-  }
-}
-
-export async function upsertEventBandParticipation(
-  ctx: MutationCtx,
-  args: {
-    eventId: Id<"events">;
-    organizationId: string;
-    role: "headliner" | "support" | "other";
-    /** Slot this act fills, when booked from an `eventArtistNeeds` row. */
-    needId?: Id<"eventArtistNeeds">;
-  },
-) {
-  const now = Date.now();
-  const existing = await ctx.db
-    .query("eventBandParticipations")
-    .withIndex("by_eventId_and_organizationId", (q) =>
-      q.eq("eventId", args.eventId).eq("organizationId", args.organizationId),
-    )
-    .unique();
-  if (args.needId) {
-    await claimSlot(ctx, {
-      needId: args.needId,
-      eventId: args.eventId,
-      participationId: existing?._id,
-    });
-  }
-  if (existing) {
-    await ctx.db.patch(existing._id, {
-      role: args.role,
-      ...(args.needId ? { needId: args.needId } : {}),
-      updatedAt: now,
-    });
-    if (args.needId) {
-      // Filling a position hands its run-of-show times to the act (when the act
-      // has none) and retires the position's own blocks; a position this act
-      // left gets its own times back.
-      await inheritSlotTimes(ctx, existing._id, args.needId);
-      await syncParticipationBlocks(ctx, existing._id);
-      await syncNeedBlocks(ctx, args.needId);
-      if (existing.needId && existing.needId !== args.needId) {
-        await syncNeedBlocks(ctx, existing.needId);
-      }
-    }
-    return existing._id;
-  }
-  const participationId = await ctx.db.insert("eventBandParticipations", {
-    eventId: args.eventId,
-    organizationId: args.organizationId,
-    role: args.role,
-    needId: args.needId,
-    createdAt: now,
-    updatedAt: now,
-  });
-  if (args.needId) {
-    await inheritSlotTimes(ctx, participationId, args.needId);
-    await syncParticipationBlocks(ctx, participationId);
-    await syncNeedBlocks(ctx, args.needId);
-  }
-  await scheduleBandAssignedEmails(ctx, {
-    eventId: args.eventId,
-    organizationId: args.organizationId,
-    role: args.role,
-  });
-  return participationId;
-}
 
 export const listByEvent = query({
   args: { eventId: v.id("events") },
@@ -649,6 +551,7 @@ export const updateParticipationLineup = mutation({
     await requireArborInternalContext(ctx);
     const existing = await ctx.db.get(args.participationId);
     if (!existing) throw new Error("Artist is not linked to this event.");
+    const previousNeedId = existing.needId;
     if (args.setStartsAt != null && args.setEndsAt != null && args.setEndsAt <= args.setStartsAt) {
       throw new Error("Set end time must be after the start time.");
     }
@@ -684,8 +587,13 @@ export const updateParticipationLineup = mutation({
     await ctx.db.replace(args.participationId, next);
     if (args.needId) await inheritSlotTimes(ctx, args.participationId, args.needId);
     await syncParticipationBlocks(ctx, args.participationId);
-    for (const needId of new Set([existing.needId, args.needId])) {
+    for (const needId of new Set([previousNeedId, args.needId])) {
       if (needId) await syncNeedBlocks(ctx, needId);
+    }
+    const now2 = next.updatedAt;
+    if (args.needId) await syncInvoiceLineForSlot(ctx, args.needId, now2);
+    if (previousNeedId && previousNeedId !== args.needId) {
+      await syncInvoiceLineForSlot(ctx, previousNeedId, now2);
     }
     return null;
   },

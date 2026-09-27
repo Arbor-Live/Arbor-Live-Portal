@@ -200,6 +200,12 @@ Event types (drive which workspace tabs and quick-add blocks appear):
     soundcheck windows on the slot. It counts as booked and stops appearing in
     the artist portal.
   - **Payout** — the same row, via `EventBandPaymentForm`.
+  - **Invoice link** — an artist line tied to a day opens the position it
+    stands for (`invoiceLineItems.needId`), and filling that position fills the
+    line: an internal act sets its `organizationId`, an outside act clears it
+    and takes the line's label. Dropping the line drops the position, unless it
+    is filled or carries inquiries. One way only — positions never create
+    lines.
   Artists browse still-open slots from `/dashboard/opportunities` and
   `submitInquiry` (`eventArtistInquiries`), which flags the slot `inquiring`
   and emails Operations admins (`email/artistNeedInquiryEmails.ts`). Riders sit
