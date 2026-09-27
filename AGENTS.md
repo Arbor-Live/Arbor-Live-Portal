@@ -34,7 +34,12 @@ Convex agent skills for common tasks can be installed by running
 - **Confirms / alerts:** Never use `window.confirm`, `window.alert`, or `window.prompt` in the web app. Use `useAppDialog()` from `@/components/ui/app-dialog` (`confirm` / `alert`). For admin cascade deletes, use `AdminCascadeDeleteDialog`. Playwright helpers for the in-app dialog live in `apps/web/e2e/helpers/auth.ts`.
 - **Awaited status / toasts:** If a control reports success or failure (toast, save bar, inline error), **await** the mutation/query (and any follow-up work that the message claims finished) **before** showing that status. Do not fire-and-forget with `void` around work whose outcome you toast — `onClick={() => void handler()}` is fine only when `handler` itself awaits and catches. Never toast “saved / synced / sent” and then run more work that can still fail; split statuses (e.g. save succeeded, sync failed) instead of one false success.
 - **Tests:** Only run e2e/unit tests when the relevant code has changed.
-- **Admin email recipients (PII):** Band/DJ org admins share Better Auth `role: "admin"` with Arbor Live portal admins, so never select email recipients by `user.role === "admin"` alone. Route admin-wide email through `listPortalAdminEmails` (all Arbor admins) or `listAdminEmailsForVertical` (vertical-scoped) in `packages/backend/convex/lib/auth.ts`; both gate on `isPortalAdmin`. A raw role check leaks student info to artist org admins.
+- **Identity & authorization (PII / privilege):** Band/DJ org admins share Better Auth `role: "admin"` with Arbor Live portal admins, so it is a *cache* of membership, not proof of staff. Never gate staff access **or** select recipients by `role === "admin"`:
+  - Staff checks: `isPortalAdmin` / `resolveGlobalRoleForUser` (`packages/backend/convex/lib/`).
+  - Admin email: `listPortalAdminEmails` or `listAdminEmailsForVertical` (both gate on `isPortalAdmin`); a raw role check leaks student info to artist org admins.
+  - Resync the global role (`syncGlobalRoleFromMemberships`) on every `userOrganizationMemberships` write.
+  - Public/token payloads are explicit projections — never return raw internal rows (crew rates, notes, artifacts).
+  - Full invariants: `docs/architecture.md` → “Invariants (learned the hard way)”.
 
 ## Cursor Cloud specific instructions
 
