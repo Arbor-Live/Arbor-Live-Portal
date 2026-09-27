@@ -463,7 +463,11 @@ function EventArtistBillPanel({
                     </span>
                     <span
                       data-testid="artist-need-status"
-                      className={cn("shrink-0 rounded-md px-2 py-0.5 text-xs font-medium", effectiveStatusClass(status))}
+                      className={cn(
+                        // Fixed width keeps the time and payout columns aligned across rows.
+                        "w-20 shrink-0 rounded-md py-0.5 text-center text-xs font-medium",
+                        effectiveStatusClass(status),
+                      )}
                     >
                       {effectiveStatusLabel(status)}
                     </span>

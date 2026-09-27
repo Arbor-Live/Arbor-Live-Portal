@@ -71,10 +71,7 @@ function SheetContent({
       <SheetPrimitive.Content
         data-slot="sheet-content"
         data-side={side}
-        ref={(node) => {
-          setPortalContainer(node)
-          assignNodeRef(node, ref)
-        }}
+        ref={(node) => assignNodeRef(node, ref)}
         onPointerDownOutside={(event) => {
           preventDismissForPortaledPicker(event)
           onPointerDownOutside?.(event)
@@ -108,6 +105,16 @@ function SheetContent({
               </Button>
             </SheetPrimitive.Close>
           )}
+          {/*
+            Pickers portal here to stay inside the focus trap. Fixed so they
+            sit outside the sheet's scroll area: an unpositioned picker inside
+            a scrolling sheet made focus scroll the sheet sideways.
+          */}
+          <div
+            ref={setPortalContainer}
+            data-slot="sheet-picker-portal"
+            className="pointer-events-none fixed inset-0 *:pointer-events-auto"
+          />
         </PickerPortalContainerContext.Provider>
       </SheetPrimitive.Content>
     </SheetPortal>
