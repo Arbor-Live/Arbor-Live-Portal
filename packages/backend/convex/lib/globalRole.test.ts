@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import {
   activeMembershipsForGlobalRole,
+  resolveGlobalRoleFromActiveMemberships,
   resolveGlobalRoleForExistingUser,
   resolveGlobalRoleForOrganization,
+  resolveGlobalRoleForUser,
 } from "./globalRole";
 
 type OrgType = "arbor_internal" | "band";
@@ -44,6 +46,81 @@ describe("resolveGlobalRoleForOrganization", () => {
     expect(await resolveGlobalRoleForOrganization(ctx, "arbor", "org_admin")).toBe("admin");
     expect(await resolveGlobalRoleForOrganization(ctx, "band", "org_admin")).toBe("member");
     expect(await resolveGlobalRoleForOrganization(ctx, "arbor", "member")).toBe("member");
+  });
+});
+
+describe("resolveGlobalRoleForUser", () => {
+  it("keeps an Arbor-internal admin", async () => {
+    const ctx = fakeCtx({
+      profiles: { arbor: "arbor_internal" },
+      memberships: [{ organizationId: "arbor", role: "org_admin", active: true }],
+    });
+    expect(await resolveGlobalRoleForUser(ctx, "user-1")).toBe("admin");
+  });
+
+  it("demotes a band org admin with only artist memberships", async () => {
+    const ctx = fakeCtx({
+      profiles: { arbor: "arbor_internal", band: "band" },
+      memberships: [{ organizationId: "band", role: "org_admin", active: true }],
+    });
+    expect(await resolveGlobalRoleForUser(ctx, "user-1")).toBe("member");
+  });
+
+  it("keeps a legacy admin with no membership rows", async () => {
+    const ctx = fakeCtx({ profiles: {}, memberships: [] });
+    expect(await resolveGlobalRoleForUser(ctx, "user-1")).toBe("admin");
+  });
+
+  it("demotes a band admin left with only inactive memberships", async () => {
+    const ctx = fakeCtx({
+      profiles: { band: "band" },
+      memberships: [{ organizationId: "band", role: "org_admin", active: false }],
+    });
+    expect(await resolveGlobalRoleForUser(ctx, "user-1")).toBe("member");
+  });
+
+  it("keeps an Arbor admin who is also in a band", async () => {
+    const ctx = fakeCtx({
+      profiles: { arbor: "arbor_internal", band: "band" },
+      memberships: [
+        { organizationId: "band", role: "org_admin", active: true },
+        { organizationId: "arbor", role: "admin", active: true },
+      ],
+    });
+    expect(await resolveGlobalRoleForUser(ctx, "user-1")).toBe("admin");
+  });
+
+  it("refuses a truncated membership list instead of misgrading a role", async () => {
+    const memberships = Array.from({ length: 101 }, (_, index) => ({
+      organizationId: `org-${index}`,
+      role: "member",
+      active: true,
+    }));
+    const ctx = fakeCtx({ profiles: {}, memberships });
+    await expect(resolveGlobalRoleForUser(ctx, "user-1")).rejects.toThrow(/max 100/);
+  });
+});
+
+describe("resolveGlobalRoleFromActiveMemberships", () => {
+  it("keeps an active Arbor-internal admin", async () => {
+    const ctx = fakeCtx({
+      profiles: { arbor: "arbor_internal" },
+      memberships: [{ organizationId: "arbor", role: "org_admin", active: true }],
+    });
+    expect(await resolveGlobalRoleFromActiveMemberships(ctx, "user-1")).toBe("admin");
+  });
+
+  it("resolves to member with no memberships (no legacy exception)", async () => {
+    const ctx = fakeCtx({ profiles: {}, memberships: [] });
+    expect(await resolveGlobalRoleFromActiveMemberships(ctx, "user-1")).toBe("member");
+  });
+
+  it("demotes when the only Arbor membership is inactive", async () => {
+    const ctx = fakeCtx({
+      profiles: { arbor: "arbor_internal" },
+      memberships: [{ organizationId: "arbor", role: "org_admin", active: false }],
+    });
+    expect(await resolveGlobalRoleFromActiveMemberships(ctx, "user-1")).toBe("member");
   });
 });
 

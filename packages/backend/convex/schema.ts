@@ -1292,7 +1292,10 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_albumLinkId", ["albumLinkId"])
-    .index("by_immichAssetId", ["immichAssetId"]),
+    .index("by_immichAssetId", ["immichAssetId"])
+    // An asset is mirrored into every album it belongs to (e.g. an event album
+    // and each linked artist album), so uniqueness is per album, not global.
+    .index("by_albumLinkId_and_immichAssetId", ["albumLinkId", "immichAssetId"]),
 
   eventBandParticipations: defineTable({
     eventId: v.id("events"),

@@ -59,11 +59,14 @@ export function artistDigestIncluded(status: string | null | undefined): boolean
  * Who receives which weekly-digest sections.
  *
  * Artist-only people (band/DJ/etc. members who are not Arbor staff) do not get
- * crew sections or portal-admin queues. Everyone else keeps the staff digest;
- * real portal admins are Arbor members (or legacy admins with no artist org).
+ * crew sections or portal-admin queues. Everyone else keeps the staff digest.
+ *
+ * `isPortalAdmin` is resolved from memberships by the caller (`isPortalAdmin` in
+ * `lib/auth.ts`), never from the raw Better Auth role: band/DJ org admins share
+ * `role: "admin"` with portal admins.
  */
 export function resolveWeeklyDigestAudience(args: {
-  authRole: string | null | undefined;
+  isPortalAdmin: boolean;
   organizations: DigestOrganization[];
   isStaff: boolean;
 }): WeeklyDigestAudience {
@@ -80,7 +83,7 @@ export function resolveWeeklyDigestAudience(args: {
 
   return {
     staffSections: !artistOnly,
-    adminQueues: args.authRole === "admin" && !artistOnly,
+    adminQueues: args.isPortalAdmin && !artistOnly,
     artistOrganizationIds,
   };
 }

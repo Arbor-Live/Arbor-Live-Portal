@@ -29,7 +29,8 @@ const feedbackDayValue = v.object({
   albumShareUrl: v.optional(v.string()),
 });
 
-async function resolveInvoiceAndEvents(
+/** Resolve a booking-request / quote portal token to its invoice + linked events. */
+export async function resolveInvoiceAndEvents(
   ctx: QueryCtx | MutationCtx,
   portal: Portal,
   token: string,

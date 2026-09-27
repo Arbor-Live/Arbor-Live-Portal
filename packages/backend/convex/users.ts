@@ -7,10 +7,12 @@ import type { MutationCtx, QueryCtx } from "./_generated/server";
 import {
   assertAdminMayPreviewOrganization,
   findAuthOrganizationById,
+  findAuthUserById,
   getActiveOrganizationContextOrNull,
   getCurrentUserOrNull,
   getUserId,
   isAdmin,
+  isPortalAdmin,
   requireAdmin,
   requireArborInternalContext,
   requireAuth,
@@ -18,6 +20,7 @@ import {
   type AuthUser,
 } from "./lib/auth";
 import {
+  resolveGlobalRoleFromActiveMemberships,
   resolveGlobalRoleForExistingUser,
   resolveGlobalRoleForOrganization,
 } from "./lib/globalRole";
@@ -583,6 +586,28 @@ export async function upsertOrgMembership(
     active: args.active,
     createdAt: now,
     updatedAt: now,
+  });
+}
+
+/**
+ * Re-derive the Better Auth global role from the user's memberships after an
+ * admin changes them, so an Arbor admin removed from the Arbor org (or added to
+ * it) cannot keep — or miss — portal access. Never promotes a user with no
+ * admin-granting membership.
+ */
+export async function syncGlobalRoleFromMemberships(
+  ctx: MutationCtx,
+  userId: string,
+): Promise<void> {
+  const role = await resolveGlobalRoleFromActiveMemberships(ctx, userId);
+  const user = await findAuthUserById(ctx, userId);
+  if (!user?.email || user.role === role) return;
+  await ctx.runMutation(components.betterAuth.adapter.updateOne, {
+    input: {
+      model: "user",
+      where: [{ field: "email", value: user.email.trim().toLowerCase() }],
+      update: { role, updatedAt: Date.now() },
+    },
   });
 }
 
@@ -1469,7 +1494,7 @@ export const setActiveOrganization = mutation({
       .unique();
     if (membership?.active) {
       // Real membership — allowed for everyone.
-    } else if (isAdmin(user)) {
+    } else if (await isPortalAdmin(ctx, userId)) {
       await assertAdminMayPreviewOrganization(ctx, args.organizationId);
     } else {
       throw new Error("You are not an active member of this organization.");
@@ -2428,6 +2453,11 @@ export const updateUserAdmin = mutation({
           active: membership.active,
         });
       }
+      // An explicit `role` wins; otherwise keep the global role in step with the
+      // memberships just written so access cannot linger after they are removed.
+      if (!args.role) {
+        await syncGlobalRoleFromMemberships(ctx, args.userId);
+      }
     }
     return { ok: true };
   },
@@ -2514,6 +2544,11 @@ export const addUserOrganizationMembershipAdmin = mutation({
       role,
       active: args.active ?? true,
     });
+    // Promote only: a new Arbor admin membership grants portal admin. An artist
+    // membership never demotes an existing/legacy admin here.
+    if (role === "admin") {
+      await syncGlobalRoleFromMemberships(ctx, args.userId);
+    }
     return { id, role };
   },
 });
@@ -2535,6 +2570,9 @@ export const removeUserOrganizationMembershipAdmin = mutation({
       throw new Error("Membership not found.");
     }
     await ctx.db.delete(existing._id);
+    // Removing the last admin-granting membership must demote the global role,
+    // or the removed admin keeps portal access with no membership to justify it.
+    await syncGlobalRoleFromMemberships(ctx, args.userId);
     return { ok: true };
   },
 });

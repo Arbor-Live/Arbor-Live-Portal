@@ -1,30 +1,26 @@
 import { v } from "convex/values";
+import { paginationOptsValidator } from "convex/server";
 import { internal } from "./_generated/api";
-import type { Doc, Id } from "./_generated/dataModel";
-import { mutation, query, type QueryCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
+import { internalAction, mutation, query } from "./_generated/server";
 import {
   canUploadToAlbum,
   getAlbumLinkForBand,
   getAlbumLinkForEvent,
-  getAlbumLinkIdsForEntity,
+  requireAssetAccess,
   requireBandAlbumAccess,
   requireEventMediaAccess,
 } from "./lib/immichAccess";
-import { buildImmichAlbumUrl, buildSharedAssetUrl, getImmichPublicBaseUrl } from "./lib/immichClient";
-import { requireBandContext } from "./lib/auth";
+import { buildImmichAlbumUrl, getImmichPublicBaseUrl } from "./lib/immichClient";
+import {
+  immichAssetTypeValue,
+  mediaAssetPageValidator,
+  paginateAlbumAssets,
+} from "./lib/immichAssets";
+import { requireArborInternalContext, requireAuth, requireBandContext } from "./lib/auth";
+import type { BackfillRunResult } from "./immichActions";
 
 const entityTypeValue = v.union(v.literal("band"), v.literal("event"));
-const assetTypeValue = v.union(v.literal("IMAGE"), v.literal("VIDEO"));
-
-const mediaAssetValidator = v.object({
-  immichAssetId: v.string(),
-  originalFileName: v.string(),
-  type: assetTypeValue,
-  createdAt: v.number(),
-  thumbnailUrl: v.string(),
-  originalUrl: v.string(),
-  playbackUrl: v.optional(v.string()),
-});
 
 const albumLinkValidator = v.object({
   albumLinkId: v.id("immichAlbumLinks"),
@@ -47,49 +43,9 @@ function toAlbumLink(row: {
   };
 }
 
-function toMediaAsset(row: Doc<"immichAssetRecords">, shareKey: string) {
-  return {
-    immichAssetId: row.immichAssetId,
-    originalFileName: row.originalFileName,
-    type: row.type,
-    createdAt: row.createdAt,
-    thumbnailUrl: buildSharedAssetUrl(row.immichAssetId, "thumbnail", shareKey),
-    originalUrl: buildSharedAssetUrl(row.immichAssetId, "original", shareKey),
-    playbackUrl:
-      row.type === "VIDEO"
-        ? buildSharedAssetUrl(row.immichAssetId, "playback", shareKey)
-        : undefined,
-  };
-}
-
-async function listAssetsForAlbumLinks(
-  ctx: QueryCtx,
-  albumLinkIds: Id<"immichAlbumLinks">[],
-  shareKey?: string,
-) {
-  if (!shareKey) return [];
-  const seen = new Set<string>();
-  const assets = [];
-  for (const albumLinkId of albumLinkIds) {
-    const rows = await ctx.db
-      .query("immichAssetRecords")
-      .withIndex("by_albumLinkId", (q) => q.eq("albumLinkId", albumLinkId))
-      .take(500);
-    for (const row of rows) {
-      if (seen.has(row.immichAssetId)) continue;
-      seen.add(row.immichAssetId);
-      assets.push(toMediaAsset(row, shareKey));
-    }
-  }
-  return assets.sort((a, b) => b.createdAt - a.createdAt);
-}
-
-export const listBandMedia = query({
+export const getBandMediaAlbum = query({
   args: { eventId: v.optional(v.id("events")) },
-  returns: v.object({
-    album: v.union(albumLinkValidator, v.null()),
-    assets: v.array(mediaAssetValidator),
-  }),
+  returns: v.union(albumLinkValidator, v.null()),
   handler: async (ctx, args) => {
     const context = await requireBandContext(ctx);
     await requireBandAlbumAccess(ctx, context.organizationId);
@@ -97,54 +53,55 @@ export const listBandMedia = query({
     if (args.eventId) {
       await requireEventMediaAccess(ctx, args.eventId);
       const albumLink = await getAlbumLinkForEvent(ctx, args.eventId);
-      if (!albumLink) {
-        return { album: null, assets: [] };
-      }
-      return {
-        album: toAlbumLink(albumLink),
-        assets: await listAssetsForAlbumLinks(
-          ctx,
-          await getAlbumLinkIdsForEntity(ctx, "event", args.eventId),
-          albumLink.sharedLinkKey,
-        ),
-      };
+      return albumLink ? toAlbumLink(albumLink) : null;
     }
 
     const albumLink = await getAlbumLinkForBand(ctx, context.organizationId);
-    if (!albumLink) {
-      return { album: null, assets: [] };
-    }
-    return {
-      album: toAlbumLink(albumLink),
-      assets: await listAssetsForAlbumLinks(
-        ctx,
-        await getAlbumLinkIdsForEntity(ctx, "band", context.organizationId),
-        albumLink.sharedLinkKey,
-      ),
-    };
+    return albumLink ? toAlbumLink(albumLink) : null;
   },
 });
 
-export const listEventMedia = query({
+export const listBandMediaAssets = query({
+  args: {
+    eventId: v.optional(v.id("events")),
+    paginationOpts: paginationOptsValidator,
+  },
+  returns: mediaAssetPageValidator,
+  handler: async (ctx, args) => {
+    const context = await requireBandContext(ctx);
+    await requireBandAlbumAccess(ctx, context.organizationId);
+
+    let albumLink;
+    if (args.eventId) {
+      await requireEventMediaAccess(ctx, args.eventId);
+      albumLink = await getAlbumLinkForEvent(ctx, args.eventId);
+    } else {
+      albumLink = await getAlbumLinkForBand(ctx, context.organizationId);
+    }
+    return await paginateAlbumAssets(ctx, albumLink, args.paginationOpts);
+  },
+});
+
+export const getEventMediaAlbum = query({
   args: { eventId: v.id("events") },
-  returns: v.object({
-    album: v.union(albumLinkValidator, v.null()),
-    assets: v.array(mediaAssetValidator),
-  }),
+  returns: v.union(albumLinkValidator, v.null()),
   handler: async (ctx, args) => {
     await requireEventMediaAccess(ctx, args.eventId);
     const albumLink = await getAlbumLinkForEvent(ctx, args.eventId);
-    if (!albumLink) {
-      return { album: null, assets: [] };
-    }
-    return {
-      album: toAlbumLink(albumLink),
-      assets: await listAssetsForAlbumLinks(
-        ctx,
-        await getAlbumLinkIdsForEntity(ctx, "event", args.eventId),
-        albumLink.sharedLinkKey,
-      ),
-    };
+    return albumLink ? toAlbumLink(albumLink) : null;
+  },
+});
+
+export const listEventMediaAssets = query({
+  args: {
+    eventId: v.id("events"),
+    paginationOpts: paginationOptsValidator,
+  },
+  returns: mediaAssetPageValidator,
+  handler: async (ctx, args) => {
+    await requireEventMediaAccess(ctx, args.eventId);
+    const albumLink = await getAlbumLinkForEvent(ctx, args.eventId);
+    return await paginateAlbumAssets(ctx, albumLink, args.paginationOpts);
   },
 });
 
@@ -189,7 +146,7 @@ export const recordUploadedAsset = mutation({
     albumLinkId: v.id("immichAlbumLinks"),
     immichAssetId: v.string(),
     originalFileName: v.string(),
-    type: assetTypeValue,
+    type: immichAssetTypeValue,
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -198,7 +155,9 @@ export const recordUploadedAsset = mutation({
     await canUploadToAlbum(ctx, albumLink);
     const existing = await ctx.db
       .query("immichAssetRecords")
-      .withIndex("by_immichAssetId", (q) => q.eq("immichAssetId", args.immichAssetId))
+      .withIndex("by_albumLinkId_and_immichAssetId", (q) =>
+        q.eq("albumLinkId", args.albumLinkId).eq("immichAssetId", args.immichAssetId),
+      )
       .first();
     if (existing) return null;
     await ctx.db.insert("immichAssetRecords", {
@@ -214,6 +173,88 @@ export const recordUploadedAsset = mutation({
       originalFileName: args.originalFileName,
       type: args.type,
     });
+    return null;
+  },
+});
+export const runBackfillAlbums = mutation({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    await requireArborInternalContext(ctx);
+    await ctx.scheduler.runAfter(0, internal.immichActions.backfillAllAlbums, {});
+    await ctx.scheduler.runAfter(0, internal.immichDb.dedupeAllAlbumLinksInternal, {});
+    return null;
+  },
+});
+
+/**
+ * Backfill the artist-album mirror for event media uploaded before the mirror
+ * shipped.
+ *
+ * Deliberately an `internalAction`: it is runnable from `convex run` and the
+ * Convex dashboard without a user identity, and access is gated by the deploy
+ * key (the same authority that can deploy or run any internal function). That
+ * avoids the public-action auth dead end — `convex run` sends no identity, so a
+ * user-gated entry point could not be invoked at all from the CLI or dashboard.
+ *
+ * Runs one bounded page inline and returns it, so the operator sees progress
+ * and can pass the cursors back to continue until `isDone`. See docs/immich.md.
+ */
+export const runBackfillArtistAlbumMirror = internalAction({
+  args: {
+    cursor: v.optional(v.union(v.string(), v.null())),
+    assetCursor: v.optional(v.union(v.string(), v.null())),
+    assetCursorEventId: v.optional(v.union(v.id("events"), v.null())),
+  },
+  returns: v.object({
+    eventsScanned: v.number(),
+    assetsMirrored: v.number(),
+    failedArtistMirrors: v.number(),
+    nextCursor: v.union(v.string(), v.null()),
+    assetCursor: v.union(v.string(), v.null()),
+    assetCursorEventId: v.union(v.id("events"), v.null()),
+    isDone: v.boolean(),
+  }),
+  handler: async (ctx, args): Promise<BackfillRunResult> => {
+    return await ctx.runAction(internal.immichActions.backfillArtistAlbumMirror, {
+      cursor: args.cursor ?? null,
+      assetCursor: args.assetCursor ?? null,
+      assetCursorEventId: args.assetCursorEventId ?? null,
+    });
+  },
+});
+
+/**
+ * One-shot kickoff: walks the whole backfill by re-scheduling itself until the
+ * action reports `isDone`, so a single `convex run`/dashboard call completes
+ * every page. Prefer `runBackfillArtistAlbumMirror` when you want to watch
+ * progress page by page.
+ */
+export const startBackfillArtistAlbumMirror = internalAction({
+  args: {
+    cursor: v.optional(v.union(v.string(), v.null())),
+    assetCursor: v.optional(v.union(v.string(), v.null())),
+    assetCursorEventId: v.optional(v.union(v.id("events"), v.null())),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const result: BackfillRunResult = await ctx.runAction(
+      internal.immichActions.backfillArtistAlbumMirror,
+      {
+        cursor: args.cursor ?? null,
+        assetCursor: args.assetCursor ?? null,
+        assetCursorEventId: args.assetCursorEventId ?? null,
+      },
+    );
+    if (!result.isDone) {
+      // Chain the next page. Scheduled actions are not auto-retried, but each
+      // page is idempotent, so re-invoking the kickoff resumes safely.
+      await ctx.scheduler.runAfter(0, internal.immich.startBackfillArtistAlbumMirror, {
+        cursor: result.nextCursor,
+        assetCursor: result.assetCursor,
+        assetCursorEventId: result.assetCursorEventId,
+      });
+    }
     return null;
   },
 });

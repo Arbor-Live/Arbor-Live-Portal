@@ -17,6 +17,7 @@ import {
   isArtistOrganizationType,
   type ArtistOrganizationType,
 } from "./organizationType";
+import { resolveGlobalRoleForUser } from "./globalRole";
 import {
   hasAnyVertical,
   hasVertical,
@@ -203,6 +204,13 @@ export async function requireAuth(
   return user;
 }
 
+/**
+ * Better Auth `role: "admin"`. This is a *cache* of Arbor-internal membership
+ * and has historically been shared by band/DJ org admins, so it is safe only
+ * while every membership write resyncs the role (`syncGlobalRoleFromMemberships`).
+ * For staff identity, prefer `isPortalAdmin`, which derives from memberships.
+ * Never select email recipients by this role — use `listPortalAdminEmails`.
+ */
 export async function requireAdmin(
   ctx: AuthCtx,
 ): Promise<AuthUser> {
@@ -213,6 +221,7 @@ export async function requireAdmin(
   return user;
 }
 
+/** See `requireAdmin` — `role` is a membership cache, not proof of staff. */
 export function isAdmin(user: AuthUser | null | undefined): boolean {
   return Boolean(user && user.role === "admin");
 }
@@ -332,9 +341,11 @@ export async function getActiveOrganizationContextOrNull(
       return await resolveOrganizationContext(ctx, selectedOrganizationId);
     }
 
-    // No membership for the selected active org — allow portal admins to preview
-    // artist orgs (temporary view-as, not a lasting join).
-    if (isAdmin(user)) {
+    // No membership for the selected active org — allow Arbor Live portal admins
+    // to preview artist orgs (temporary view-as, not a lasting join). Gate on
+    // membership, not the raw role, so a band org admin can never preview (and
+    // then operate on) another artist org.
+    if (await isPortalAdmin(ctx, userId)) {
       const preview = await resolveOrganizationContext(ctx, selectedOrganizationId);
       if (preview && isArtistOrganizationType(preview.organizationType)) {
         const profile = await ctx.db
@@ -433,18 +444,24 @@ export async function requireAnyVerticalOrAdmin(
   return user;
 }
 
-/** Portal admins whose profile includes the given vertical (for staff inbox emails). */
-export async function listAdminEmailsForVertical(
-  ctx: AuthCtx,
-  vertical: UserVertical,
-  options?: {
-    participation?: (flags: UserParticipationFlags) => boolean;
-  },
-): Promise<string[]> {
-  const emails = new Set<string>();
-  // Paginate the directory rather than trusting one page: a truncated list
-  // silently drops staff from operational email (artist inquiries, damage
-  // reports, crew applications).
+/**
+ * True when an admin is an Arbor Live (portal) admin rather than an artist-org
+ * admin. Band/DJ admins share Better Auth `role: "admin"`, so the role alone
+ * is not enough to identify staff.
+ */
+export async function isPortalAdmin(ctx: AuthCtx, userId: string): Promise<boolean> {
+  return (await resolveGlobalRoleForUser(ctx, userId)) === "admin";
+}
+
+/**
+ * Every Arbor Live (portal) admin. This is the one audited gate for admin-wide
+ * email: band/DJ org admins also carry Better Auth `role: "admin"`, so a bare
+ * role check would leak staff email (and any student info in it) to them.
+ * Paginates rather than trusting one page so a truncated directory cannot
+ * silently drop staff.
+ */
+async function listPortalAdminUsers(ctx: AuthCtx): Promise<AuthUser[]> {
+  const admins: AuthUser[] = [];
   let cursor: string | null = null;
   for (;;) {
     const result = (await ctx.runQuery(components.betterAuth.adapter.findMany, {
@@ -456,19 +473,44 @@ export async function listAdminEmailsForVertical(
       if (user.role !== "admin" || !user.email) continue;
       const userId = getUserId(user);
       if (!userId) continue;
-      const profile = await getUserAdminProfile(ctx, userId);
-      const { verticals } = resolveProfileMembership(profile ?? {});
-      if (!hasVertical(verticals, vertical)) continue;
-      if (options?.participation && !options.participation(resolveParticipationFlags(profile))) {
-        continue;
-      }
-      emails.add(user.email.trim().toLowerCase());
+      if (!(await isPortalAdmin(ctx, userId))) continue;
+      admins.push(user);
     }
 
     if (result?.isDone) break;
     cursor = result?.continueCursor ?? null;
     if (!cursor) break;
   }
+  return admins;
+}
 
+/** Emails of Arbor Live (portal) admins only, never artist-org admins. */
+export async function listPortalAdminEmails(ctx: AuthCtx): Promise<string[]> {
+  const emails = new Set<string>();
+  for (const user of await listPortalAdminUsers(ctx)) {
+    if (user.email) emails.add(user.email.trim().toLowerCase());
+  }
+  return [...emails];
+}
+
+/** Portal admins whose profile includes the given vertical (for staff inbox emails). */
+export async function listAdminEmailsForVertical(
+  ctx: AuthCtx,
+  vertical: UserVertical,
+  options?: {
+    participation?: (flags: UserParticipationFlags) => boolean;
+  },
+): Promise<string[]> {
+  const emails = new Set<string>();
+  for (const user of await listPortalAdminUsers(ctx)) {
+    const userId = getUserId(user);
+    const profile = await getUserAdminProfile(ctx, userId);
+    const { verticals } = resolveProfileMembership(profile ?? {});
+    if (!hasVertical(verticals, vertical)) continue;
+    if (options?.participation && !options.participation(resolveParticipationFlags(profile))) {
+      continue;
+    }
+    if (user.email) emails.add(user.email.trim().toLowerCase());
+  }
   return [...emails];
 }

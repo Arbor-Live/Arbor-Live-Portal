@@ -15,6 +15,7 @@ import {
   findAuthOrganizationById,
   getActiveOrganizationContextOrNull,
   getUserId,
+  listPortalAdminEmails,
   requireAdmin,
   requireAuth,
   type AuthUser,
@@ -323,15 +324,6 @@ export async function ensureOnboardingForOrgMembership(
   return orgType;
 }
 
-async function listAdminAuthUsers(ctx: QueryCtx | MutationCtx) {
-  const result = await ctx.runQuery(components.betterAuth.adapter.findMany, {
-    model: "user",
-    paginationOpts: { cursor: null, numItems: 500 },
-  });
-  const users = (result?.page ?? []) as AuthUser[];
-  return users.filter((user) => user.role === "admin" && user.email);
-}
-
 async function scheduleOnboardingCompletedEmails(
   ctx: MutationCtx,
   args: {
@@ -348,10 +340,9 @@ async function scheduleOnboardingCompletedEmails(
     i9Acknowledged?: boolean;
   },
 ) {
-  const admins = await listAdminAuthUsers(ctx);
   const recipients = new Set<string>();
-  for (const admin of admins) {
-    if (admin.email) recipients.add(admin.email.trim().toLowerCase());
+  for (const email of await listPortalAdminEmails(ctx)) {
+    recipients.add(email);
   }
   for (const email of ONBOARDING_LEADERSHIP_EMAILS) {
     recipients.add(email.toLowerCase());

@@ -46,7 +46,7 @@ describe("artistDigestIncluded", () => {
 describe("resolveWeeklyDigestAudience", () => {
   it("does not give band org admins portal queues or crew sections", () => {
     const audience = resolveWeeklyDigestAudience({
-      authRole: "admin",
+      isPortalAdmin: false,
       isStaff: false,
       organizations: [org("band-1", "artist")],
     });
@@ -59,7 +59,7 @@ describe("resolveWeeklyDigestAudience", () => {
 
   it("keeps portal admins on staff sections and admin queues", () => {
     const audience = resolveWeeklyDigestAudience({
-      authRole: "admin",
+      isPortalAdmin: true,
       isStaff: true,
       organizations: [org("arbor", "arbor_internal"), org("band-1", "artist")],
     });
@@ -70,7 +70,7 @@ describe("resolveWeeklyDigestAudience", () => {
 
   it("gives crew who are also in a band both staff and artist sections", () => {
     const audience = resolveWeeklyDigestAudience({
-      authRole: "member",
+      isPortalAdmin: false,
       isStaff: true,
       organizations: [org("arbor", "arbor_internal"), org("band-1", "artist")],
     });
@@ -83,7 +83,7 @@ describe("resolveWeeklyDigestAudience", () => {
 
   it("limits band members to their artist orgs", () => {
     const audience = resolveWeeklyDigestAudience({
-      authRole: "member",
+      isPortalAdmin: false,
       isStaff: false,
       organizations: [org("band-1", "artist"), org("band-2", "artist")],
     });
@@ -94,7 +94,7 @@ describe("resolveWeeklyDigestAudience", () => {
 
   it("still routes a legacy portal admin with no memberships to admin queues", () => {
     const audience = resolveWeeklyDigestAudience({
-      authRole: "admin",
+      isPortalAdmin: true,
       isStaff: false,
       organizations: [],
     });
@@ -104,7 +104,7 @@ describe("resolveWeeklyDigestAudience", () => {
 
   it("does not revive admin queues for a retired band's org admin", () => {
     const audience = resolveWeeklyDigestAudience({
-      authRole: "admin",
+      isPortalAdmin: false,
       isStaff: false,
       organizations: [org("band-1", "artist", false)],
     });
