@@ -13,6 +13,7 @@ import {
   payeeFieldsFromProfile,
 } from "./lib/bandPayments";
 import { scheduleBandAssignedEmails } from "./email/bandAssignmentEmails";
+import { ensureActPosition, returnActTimesToPosition } from "./lib/actPositions";
 import {
   deleteActBlocks,
   inheritSlotTimes,
@@ -188,6 +189,8 @@ export async function upsertEventBandParticipation(
       if (existing.needId && existing.needId !== args.needId) {
         await syncNeedBlocks(ctx, existing.needId);
       }
+    } else {
+      await ensureActPosition(ctx, existing._id);
     }
     return existing._id;
   }
@@ -203,6 +206,8 @@ export async function upsertEventBandParticipation(
     await inheritSlotTimes(ctx, participationId, args.needId);
     await syncParticipationBlocks(ctx, participationId);
     await syncNeedBlocks(ctx, args.needId);
+  } else {
+    await ensureActPosition(ctx, participationId);
   }
   await scheduleBandAssignedEmails(ctx, {
     eventId: args.eventId,
@@ -808,6 +813,7 @@ export const removeParticipation = mutation({
       )
       .unique();
     if (existing) {
+      await returnActTimesToPosition(ctx, existing);
       await ctx.db.delete(existing._id);
       await deleteActBlocks(ctx, { participationId: existing._id });
       if (existing.needId) await syncNeedBlocks(ctx, existing.needId);
@@ -869,6 +875,7 @@ export const upsertParticipations = mutation({
     const keepOrgIds = new Set(args.participations.map((row) => row.organizationId));
     for (const row of existing) {
       if (!keepOrgIds.has(row.organizationId)) {
+        await returnActTimesToPosition(ctx, row);
         await ctx.db.delete(row._id);
         await deleteActBlocks(ctx, { participationId: row._id });
         if (row.needId) await syncNeedBlocks(ctx, row.needId);

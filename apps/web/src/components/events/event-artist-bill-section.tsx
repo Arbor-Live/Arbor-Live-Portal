@@ -1,26 +1,17 @@
 "use client";
 
-import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
-import { api, type Id } from "@/lib/convex-api";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import {
-  CaretDownIcon,
-  CaretUpIcon,
+  CaretRightIcon,
   DotsSixVerticalIcon,
-  PlusIcon,
+  DotsThreeIcon,
   MicrophoneStageIcon,
+  PlusIcon,
 } from "@phosphor-icons/react";
-import { ArtistSelect, artistSelectOptions } from "@/components/bands/artist-select";
-import {
-  SearchableSelect,
-  type SearchableSelectOption,
-} from "@/components/inventory/searchable-select";
-import { SortableList } from "@/components/ui/sortable-list";
+import { api, type Id } from "@/lib/convex-api";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,174 +19,31 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { SortableList } from "@/components/ui/sortable-list";
 import { useAppDialog } from "@/components/ui/app-dialog";
-import { getConvexErrorMessage } from "@/lib/convex-error";
-import { notify } from "@/lib/notify";
 import { ArborOnlyGuard } from "@/components/org-context-guard";
+import { AddToBillDialog } from "@/components/events/lineup/add-to-bill-dialog";
+import {
+  type InvoiceArtistSuggestion,
+  type PerformerRow,
+} from "@/components/events/lineup/lineup-forms";
+import {
+  TYPE_LABELS,
+  effectiveStatusClass,
+  effectiveStatusLabel,
+  rowActName,
+  rowSetWindow,
+  rowStatus,
+  slotTitle,
+  type BillRow,
+  type SlotDraft,
+  type SlotRow,
+} from "@/components/events/lineup/lineup-model";
+import { PositionSheet, type PositionSheetHandlers } from "@/components/events/lineup/position-sheet";
+import { getConvexErrorMessage } from "@/lib/convex-error";
 import { formatTime, formatUsd } from "@/lib/format";
-import { getEventEditorTabPath } from "@/lib/event-editor-tabs";
-import { formatBandPayeePayoutMethod } from "@/lib/band-payout-copy";
-import { resolvePayoutDefaults } from "@/lib/band-payout-defaults";
-import { eventBandOnboardingInviteSchema, eventBandPayoutFieldsSchema } from "@/lib/validations/bands";
-
-type PricingMode = "per_member_hourly" | "fixed_total";
-type ParticipationRole = "headliner" | "support" | "other";
-type ArtistNeedType = "band" | "dj" | "no_preference";
-type ArtistNeedStatus = "open" | "inquiring";
-type EffectiveArtistNeedStatus = ArtistNeedStatus | "booked";
-
-type BillData = NonNullable<ReturnType<typeof useQuery<typeof api.eventArtistNeeds.getForEvent>>>;
-type SlotRow = BillData["slots"][number];
-
-type PerformerRow = NonNullable<
-  ReturnType<typeof useQuery<typeof api.eventBands.listPerformersForEvent>>
->[number];
-
-type PaymentFields = NonNullable<PerformerRow["payment"]>;
-
-const TYPE_OPTIONS = [
-  { value: "band", label: "Live band" },
-  { value: "dj", label: "DJ" },
-  { value: "no_preference", label: "No preference" },
-];
-
-const SLOT_STATUS_OPTIONS = [
-  { value: "open", label: "Open" },
-  { value: "inquiring", label: "Inquiring" },
-];
-
-const TYPE_LABELS: Record<ArtistNeedType, string> = {
-  band: "Live band",
-  dj: "DJ",
-  no_preference: "No preference",
-};
-
-function effectiveStatusLabel(status: EffectiveArtistNeedStatus) {
-  if (status === "booked") return "Booked";
-  if (status === "inquiring") return "Inquiring";
-  return "Open";
-}
-
-function effectiveStatusClass(status: EffectiveArtistNeedStatus) {
-  switch (status) {
-    case "booked":
-      return "bg-status-emerald-500/15 text-status-emerald-800 dark:text-status-emerald-200";
-    case "inquiring":
-      return "bg-status-amber-500/15 text-status-amber-800 dark:text-status-amber-200";
-    default:
-      return "bg-muted text-muted-foreground";
-  }
-}
-
-function slotTitle(slot: { label: string; artistType: ArtistNeedType }) {
-  return slot.label.trim() || TYPE_LABELS[slot.artistType];
-}
-
-type SlotDraft = {
-  label: string;
-  /** Empty means "unset" — saved as `no_preference`. */
-  artistType: ArtistNeedType | "";
-  genres: string;
-  /** Empty means "unset" — saved as `open`. */
-  status: ArtistNeedStatus | "";
-};
-
-/** One card on the bill: a position, with the act that fills it if any. */
-type BillRow = {
-  key: string;
-  slot?: SlotRow;
-  performer?: PerformerRow;
-};
-
-function toSlotDraft(slot: SlotRow): SlotDraft {
-  return {
-    label: slot.label,
-    artistType: slot.artistType,
-    genres: slot.genres,
-    status: slot.status,
-  };
-}
-
-function slotDraftsEqual(a: SlotDraft, b: SlotDraft) {
-  return (
-    a.label === b.label &&
-    a.artistType === b.artistType &&
-    a.genres === b.genres &&
-    a.status === b.status
-  );
-}
-
-type ExternalDraft = {
-  name: string;
-};
-
-function toExternalDraft(slot: { externalArtistName: string }): ExternalDraft {
-  return { name: slot.externalArtistName };
-}
-
-function externalDraftsEqual(a: ExternalDraft, b: ExternalDraft) {
-  return a.name === b.name;
-}
-
-type BandCatalogRow = {
-  organizationId: string;
-  name?: string;
-  displayName?: string;
-  performerHourlyRateUsd?: number;
-  memberCount?: number;
-  bandMembers?: string[];
-};
-
-type InvoiceArtistSuggestion = {
-  organizationId: string;
-  label: string;
-  rateUsd?: number;
-  performanceHours?: number;
-  memberCount?: number;
-};
-
-const PRICING_OPTIONS = [
-  { value: "per_member_hourly", label: "Per member per hour" },
-  { value: "fixed_total", label: "Fixed total" },
-];
-
-const ROLE_OPTIONS = [
-  { value: "headliner", label: "Headliner" },
-  { value: "support", label: "Support" },
-  { value: "other", label: "Other" },
-];
-
-function bandProfileDefaults(bands: BandCatalogRow[] | undefined, organizationId: string) {
-  const band = bands?.find((row) => row.organizationId === organizationId);
-  if (!band) return null;
-  const memberCount =
-    typeof band.memberCount === "number" && band.memberCount > 0
-      ? band.memberCount
-      : (band.bandMembers?.length ?? 0);
-  return {
-    organizationId,
-    performerHourlyRateUsd: band.performerHourlyRateUsd ?? 0,
-    memberCount,
-  };
-}
-
-function applyPayoutDefaultsForOrg(
-  bands: BandCatalogRow[] | undefined,
-  organizationId: string,
-  invoiceLine?: InvoiceArtistSuggestion | null,
-) {
-  return resolvePayoutDefaults({
-    invoiceLine: invoiceLine
-      ? {
-          organizationId: invoiceLine.organizationId,
-          rateUsd: invoiceLine.rateUsd,
-          performanceHours: invoiceLine.performanceHours,
-          memberCount: invoiceLine.memberCount,
-        }
-      : null,
-    bandProfile: bandProfileDefaults(bands, organizationId),
-  });
-}
+import { notify } from "@/lib/notify";
+import { cn } from "@/lib/utils";
 
 export function EventArtistBillSection({
   eventId,
@@ -222,6 +70,7 @@ function EventArtistBillPanel({
   canEdit: boolean;
 }) {
   const performers = useQuery(api.eventBands.listPerformersForEvent, { eventId });
+  const riders = useQuery(api.bandRiders.listForEvent, { eventId });
   const eventDetail = useQuery(api.events.get, { id: eventId });
   const invoiceId = eventDetail?.event.invoiceId ?? eventDetail?.series?.invoiceId;
   const invoiceDetail = useQuery(
@@ -238,22 +87,11 @@ function EventArtistBillPanel({
   const upsertSlot = useMutation(api.eventArtistNeeds.upsertSlot);
   const removeSlot = useMutation(api.eventArtistNeeds.removeSlot);
   const dismissInquiry = useMutation(api.eventArtistNeeds.dismissInquiry);
-  const updateLineup = useMutation(api.eventBands.updateParticipationLineup);
   const updateSlotLineup = useMutation(api.eventArtistNeeds.updateSlotLineup);
   const reorderSlots = useMutation(api.eventArtistNeeds.reorderSlots);
   const { confirm } = useAppDialog();
-  const [editingPaymentForOrg, setEditingPaymentForOrg] = useState<string | null>(null);
-  const [slotDrafts, setSlotDrafts] = useState<Record<string, SlotDraft>>({});
-  const [externalDrafts, setExternalDrafts] = useState<Record<string, ExternalDraft>>({});
-  const [placementNames, setPlacementNames] = useState<Record<string, string>>({});
-  const [savingSlotId, setSavingSlotId] = useState<string | null>(null);
-  const [savingLineupId, setSavingLineupId] = useState<string | null>(null);
-  const [addingSlot, setAddingSlot] = useState(false);
-  const [addMode, setAddMode] = useState<"existing" | "invite" | "outside" | null>(null);
-  const [addTargetNeedId, setAddTargetNeedId] = useState<string | null>(null);
-  const [outsideName, setOutsideName] = useState("");
-  const [addingOutside, setAddingOutside] = useState(false);
-  const [busyOrgId, setBusyOrgId] = useState<string | null>(null);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
   const [importBusy, setImportBusy] = useState(false);
   const [dismissedInvoicePrompt, setDismissedInvoicePrompt] = useState(false);
 
@@ -300,24 +138,6 @@ function EventArtistBillPanel({
     performers.length === 0 &&
     invoiceArtistSuggestions.length > 0;
 
-  const totalBandsCost = useMemo(
-    () =>
-      (performers ?? []).reduce((sum, row) => sum + (row.payment?.totalUsd ?? 0), 0),
-    [performers],
-  );
-
-  async function onRemove(organizationId: string) {
-    setBusyOrgId(organizationId);
-    try {
-      await removeParticipation({ eventId, organizationId });
-      if (editingPaymentForOrg === organizationId) setEditingPaymentForOrg(null);
-    } catch (error) {
-      notify.error(getConvexErrorMessage(error));
-    } finally {
-      setBusyOrgId(null);
-    }
-  }
-
   async function onImportFromInvoice() {
     if (invoiceArtistSuggestions.length === 0) return;
     setImportBusy(true);
@@ -334,9 +154,7 @@ function EventArtistBillPanel({
           ? "Imported artist from invoice — confirm payout details."
           : `Imported ${invoiceArtistSuggestions.length} artists from invoice — confirm payout details.`,
       );
-      setEditingPaymentForOrg(invoiceArtistSuggestions[0]?.organizationId ?? null);
       setDismissedInvoicePrompt(true);
-      setAddMode(null);
     } catch (error) {
       notify.error(getConvexErrorMessage(error));
     } finally {
@@ -344,7 +162,7 @@ function EventArtistBillPanel({
     }
   }
 
-  /** One card per position, in bill order; acts nobody placed trail at the end. */
+  /** One row per position, in bill order; an act without a position trails at the end. */
   const rows = useMemo(() => {
     const byParticipation = new Map<string, PerformerRow>();
     for (const row of performers ?? []) byParticipation.set(row.participationId, row);
@@ -363,223 +181,29 @@ function EventArtistBillPanel({
     return list;
   }, [bill?.slots, performers]);
 
-  function patchSlotDraft(needId: string, values: Partial<SlotDraft>) {
-    setSlotDrafts((prev) => {
-      const server = bill?.slots.find((slot) => slot.needId === needId);
-      const current = prev[needId] ?? (server ? toSlotDraft(server) : undefined);
-      if (!current) return prev;
-      return { ...prev, [needId]: { ...current, ...values } };
-    });
-  }
+  const riderByOrg = useMemo(
+    () => new Map((riders ?? []).map((row) => [row.organizationId, row])),
+    [riders],
+  );
 
-  function closeAdd() {
-    setAddMode(null);
-    setAddTargetNeedId(null);
-  }
+  /** Positions nobody fills yet — what a new act can be booked into. */
+  const openPositions = useMemo(
+    () =>
+      rows.flatMap((row) =>
+        row.slot && !rowActName(row) ? [{ value: row.slot.needId, label: slotTitle(row.slot) }] : [],
+      ),
+    [rows],
+  );
 
-  async function onAddOutside() {
-    const name = outsideName.trim();
-    if (!name) {
-      notify.error("Name the artist.");
-      return;
-    }
-    setAddingOutside(true);
-    try {
-      await upsertSlot({
-        eventId,
-        artistType: "no_preference",
-        status: "open",
-        externalArtistName: name,
-      });
-      notify.success("Outside artist added.");
-      setOutsideName("");
-      setAddMode(null);
-    } catch (error) {
-      notify.error(getConvexErrorMessage(error));
-    } finally {
-      setAddingOutside(false);
-    }
-  }
+  const summary = useMemo(() => {
+    const booked = rows.filter((row) => rowActName(row)).length;
+    const payments = rows.flatMap((row) => (row.performer?.payment ? [row.performer.payment] : []));
+    const total = payments.reduce((sum, payment) => sum + payment.totalUsd, 0);
+    const unpaid = payments.filter((payment) => payment.status !== "paid").length;
+    return { booked, open: rows.length - booked, total, unpaid };
+  }, [rows]);
 
-  async function onAddSlot() {
-    setAddingSlot(true);
-    try {
-      await upsertSlot({ eventId, artistType: "no_preference", status: "open" });
-      notify.success("Position added.");
-    } catch (error) {
-      notify.error(getConvexErrorMessage(error));
-    } finally {
-      setAddingSlot(false);
-    }
-  }
-
-  async function onSaveSlot(slot: SlotRow) {
-    const draft = slotDrafts[slot.needId] ?? toSlotDraft(slot);
-    setSavingSlotId(slot.needId);
-    try {
-      await upsertSlot({
-        eventId,
-        needId: slot.needId,
-        label: draft.label.trim() || undefined,
-        artistType: draft.artistType || "no_preference",
-        genres: draft.genres.trim() || undefined,
-        status: draft.status || "open",
-      });
-      notify.success("Position saved.");
-    } catch (error) {
-      notify.error(getConvexErrorMessage(error));
-    } finally {
-      setSavingSlotId(null);
-    }
-  }
-
-  async function onRemoveSlot(slot: SlotRow) {
-    const ok = await confirm({
-      title: `Remove the ${slotTitle(slot)} position?`,
-      description: "This clears the request and any artist inquiries on it.",
-      destructive: true,
-      confirmLabel: "Remove",
-    });
-    if (!ok) return;
-    setSavingSlotId(slot.needId);
-    try {
-      await removeSlot({ needId: slot.needId });
-      setSlotDrafts((prev) => {
-        const next = { ...prev };
-        delete next[slot.needId];
-        return next;
-      });
-      notify.success("Position removed.");
-    } catch (error) {
-      notify.error(getConvexErrorMessage(error));
-    } finally {
-      setSavingSlotId(null);
-    }
-  }
-
-  function patchExternalDraft(needId: string, values: Partial<ExternalDraft>) {
-    setExternalDrafts((prev) => {
-      const server = bill?.slots.find((slot) => slot.needId === needId);
-      const current = prev[needId] ?? (server ? toExternalDraft(server) : undefined);
-      if (!current) return prev;
-      return { ...prev, [needId]: { ...current, ...values } };
-    });
-  }
-
-  async function onSaveExternal(slot: SlotRow) {
-    const draft = externalDrafts[slot.needId] ?? toExternalDraft(slot);
-    if (!draft.name.trim()) {
-      notify.error("Name the artist.");
-      return;
-    }
-    setSavingSlotId(slot.needId);
-    try {
-      await updateSlotLineup({
-        needId: slot.needId,
-        externalArtistName: draft.name.trim(),
-      });
-      setExternalDrafts((prev) => {
-        const next = { ...prev };
-        delete next[slot.needId];
-        return next;
-      });
-      notify.success("Position filled.");
-    } catch (error) {
-      notify.error(getConvexErrorMessage(error));
-    } finally {
-      setSavingSlotId(null);
-    }
-  }
-
-  async function onClearExternal(slot: SlotRow) {
-    setSavingSlotId(slot.needId);
-    try {
-      await updateSlotLineup({
-        needId: slot.needId,
-        externalArtistName: null,
-      });
-      setExternalDrafts((prev) => {
-        const next = { ...prev };
-        delete next[slot.needId];
-        return next;
-      });
-      notify.success("Position reopened.");
-    } catch (error) {
-      notify.error(getConvexErrorMessage(error));
-    } finally {
-      setSavingSlotId(null);
-    }
-  }
-
-  /** Take the act out of its position without dropping it from the bill. */
-  async function onUnassign(performer: PerformerRow) {
-    setSavingLineupId(performer.participationId);
-    try {
-      await updateLineup({
-        participationId: performer.participationId,
-        needId: null,
-      });
-      notify.success("Position reopened.");
-    } catch (error) {
-      notify.error(getConvexErrorMessage(error));
-    } finally {
-      setSavingLineupId(null);
-    }
-  }
-
-  async function onDismissInquiry(inquiryId: Id<"eventArtistInquiries">) {
-    try {
-      await dismissInquiry({ inquiryId });
-      notify.success("Inquiry dismissed.");
-    } catch (error) {
-      notify.error(getConvexErrorMessage(error));
-    }
-  }
-
-  function renderInquiries(slot: SlotRow) {
-    if (slot.inquiries.length === 0) return null;
-    return (
-                      <div className="space-y-2 border-t pt-2">
-                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                          Inquiries
-                        </p>
-                        <ul className="space-y-2">
-                          {slot.inquiries.map((inquiry) => (
-                            <li
-                              key={inquiry._id}
-                              className="flex items-start justify-between gap-3 rounded-md border px-3 py-2"
-                            >
-                              <div className="min-w-0">
-                                <p className="font-medium">
-                                  {inquiry.name}
-                                  {inquiry.status === "dismissed" ? (
-                                    <span className="ml-2 text-xs font-normal text-muted-foreground">
-                                      Dismissed
-                                    </span>
-                                  ) : null}
-                                </p>
-                                {inquiry.message ? (
-                                  <p className="mt-0.5 text-muted-foreground">
-                                    {inquiry.message}
-                                  </p>
-                                ) : null}
-                              </div>
-                              {inquiry.status === "submitted" ? (
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => void onDismissInquiry(inquiry._id)}
-                                >
-                                  Dismiss
-                                </Button>
-                              ) : null}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-    );
-  }
+  const selectedRow = rows.find((row) => row.key === selectedKey) ?? null;
 
   async function persistOrder(needIds: Id<"eventArtistNeeds">[]) {
     try {
@@ -589,55 +213,84 @@ function EventArtistBillPanel({
     }
   }
 
-  /** Positions nobody fills yet — what a new act can be booked into. */
-  const openPositionOptions = useMemo(
-    () =>
-      rows.flatMap((row) =>
-        row.slot && row.slot.filledBy.length === 0 && !row.slot.externalArtistName.trim()
-          ? [{ value: row.slot.needId, label: slotTitle(row.slot) }]
-          : [],
-      ),
-    [rows],
-  );
-
-  /** Cards in bill order; only positions are persisted, stray acts trail. */
+  /** Rows in bill order; only positions are persisted, an unplaced act trails. */
   function handleReorder(orderedRows: BillRow[]) {
     void persistOrder(orderedRows.flatMap((row) => (row.slot ? [row.slot.needId] : [])));
   }
 
-  /** Give a stray act a named place on the bill. */
-  async function onPlaceAct(performer: PerformerRow) {
-    const name = (placementNames[performer.participationId] ?? "").trim();
-    if (!name) {
-      notify.error("Name this position.");
-      return;
-    }
-    setSavingLineupId(performer.participationId);
+  async function attempt(action: () => Promise<unknown>, success: string) {
     try {
-      const { needId } = await upsertSlot({
-        eventId,
-        label: name,
-        artistType: "no_preference",
-        status: "open",
-      });
-      await updateLineup({
-        participationId: performer.participationId,
-        needId,
-      });
-      notify.success("Added to the bill.");
+      await action();
+      notify.success(success);
     } catch (error) {
       notify.error(getConvexErrorMessage(error));
-    } finally {
-      setSavingLineupId(null);
     }
   }
 
-  if (performers === undefined) {
+  const handlers: PositionSheetHandlers = {
+    saveSlot: (slot: SlotRow, draft: SlotDraft) =>
+      attempt(
+        () =>
+          upsertSlot({
+            eventId,
+            needId: slot.needId,
+            label: draft.label.trim() || undefined,
+            artistType: draft.artistType || "no_preference",
+            genres: draft.genres.trim() || undefined,
+            status: draft.status || "open",
+          }),
+        "Position saved.",
+      ),
+    saveExternal: (slot, name) =>
+      attempt(
+        () => updateSlotLineup({ needId: slot.needId, externalArtistName: name }),
+        "Position filled.",
+      ),
+    reopenExternal: (slot) =>
+      attempt(
+        () => updateSlotLineup({ needId: slot.needId, externalArtistName: null }),
+        "Position reopened.",
+      ),
+    removeAct: async (performer) => {
+      const ok = await confirm({
+        title: `Remove ${performer.bandName}?`,
+        description:
+          "Their position stays open (with its Run of Show times). Any unpaid payout is cancelled and they lose media access.",
+        destructive: true,
+        confirmLabel: "Remove act",
+      });
+      if (!ok) return;
+      await attempt(
+        () => removeParticipation({ eventId, organizationId: performer.organizationId }),
+        `${performer.bandName} removed.`,
+      );
+    },
+    removePosition: async (row) => {
+      const name = rowActName(row) ?? (row.slot ? slotTitle(row.slot) : "this act");
+      const ok = await confirm({
+        title: `Remove ${name} from the bill?`,
+        description: row.performer
+          ? "Removes the act and its position, including its Run of Show times. Any unpaid payout is cancelled."
+          : "Removes the position, its Run of Show times, and any artist inquiries on it.",
+        destructive: true,
+        confirmLabel: "Remove",
+      });
+      if (!ok) return;
+      await attempt(async () => {
+        if (row.performer) {
+          await removeParticipation({ eventId, organizationId: row.performer.organizationId });
+        }
+        if (row.slot) await removeSlot({ needId: row.slot.needId });
+      }, `${name} removed from the bill.`);
+      setSelectedKey(null);
+    },
+    dismissInquiry: (inquiryId) => attempt(() => dismissInquiry({ inquiryId }), "Inquiry dismissed."),
+  };
+
+  if (performers === undefined || bill === undefined) {
     return (
       <Card>
-        <CardContent className="py-6 text-sm text-muted-foreground">
-          Loading artists…
-        </CardContent>
+        <CardContent className="py-6 text-sm text-muted-foreground">Loading lineup…</CardContent>
       </Card>
     );
   }
@@ -645,56 +298,40 @@ function EventArtistBillPanel({
   return (
     <Card>
       <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-2">
-        <div>
+        <div className="space-y-1">
           <CardTitle className="flex items-center gap-2">
             <MicrophoneStageIcon className="size-4 text-muted-foreground" />
             Lineup
           </CardTitle>
-          <p className="mt-1 text-sm text-muted-foreground">
-            The bill — each position is either filled or still needed. Set the slot and the payout
-            on the same row; set and soundcheck times live in the Run of Show. Removing an act also
-            cancels any unpaid payout and media access.
+          <p className="text-sm text-muted-foreground">
+            Top of the bill first. Set and soundcheck times live in the Run of Show.
           </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          {totalBandsCost > 0 ? (
-            <p className="text-sm">
-              <span className="font-medium">Payout total:</span> {formatUsd(totalBandsCost)}
+          {rows.length > 0 ? (
+            <p className="text-sm" data-testid="lineup-summary">
+              {rows.length} position{rows.length === 1 ? "" : "s"} · {summary.booked} booked ·{" "}
+              {summary.open} open
+              {summary.total > 0
+                ? ` · ${formatUsd(summary.total)} in payouts${summary.unpaid > 0 ? ` (${summary.unpaid} unpaid)` : ""}`
+                : ""}
             </p>
           ) : null}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button type="button" size="sm" variant="outline" disabled={addingSlot}>
-                <PlusIcon className="size-4" />
-                Add
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={() => void onAddSlot()}>Position</DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={() => {
-                  setAddTargetNeedId(null);
-                  setAddMode("existing");
-                }}
-              >
-                Existing artist
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => setAddMode("invite")}>
-                Invite new artist
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => setAddMode("outside")}>
-                Outside artist
-              </DropdownMenuItem>
-              {invoiceArtistSuggestions.length > 0 ? (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onSelect={() => void onImportFromInvoice()}>
-                    Import from invoice ({invoiceArtistSuggestions.length})
-                  </DropdownMenuItem>
-                </>
-              ) : null}
-            </DropdownMenuContent>
-          </DropdownMenu>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {invoiceArtistSuggestions.length > 0 && !showInvoiceEmptyPrompt ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={importBusy}
+              onClick={() => void onImportFromInvoice()}
+            >
+              Import from invoice ({invoiceArtistSuggestions.length})
+            </Button>
+          ) : null}
+          <Button type="button" size="sm" onClick={() => setAddOpen(true)}>
+            <PlusIcon className="size-4" />
+            Add to bill
+          </Button>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -732,8 +369,8 @@ function EventArtistBillPanel({
         ) : null}
 
         {rows.length === 0 && !showInvoiceEmptyPrompt ? (
-          <p className="text-sm text-muted-foreground">
-            No positions on the bill yet. Add one per act you are looking for.
+          <p className="border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
+            No one on the bill yet. Add an act, or open a position for artists to ask about.
           </p>
         ) : null}
 
@@ -745,1065 +382,157 @@ function EventArtistBillPanel({
             onReorder={handleReorder}
             rowTestId="bill-card"
             canDrag={(row) => Boolean(row.slot)}
-            rowClassName="space-y-3 rounded-md border px-3 py-3 text-sm"
+            rowClassName="border text-sm"
             renderItem={(row, index, controls) => {
-              const { slot, performer } = row;
-              const serverSlot = slot ? toSlotDraft(slot) : null;
-              const slotDraft = slot ? (slotDrafts[slot.needId] ?? serverSlot) : null;
-              const slotDirty = Boolean(
-                slot && serverSlot && slotDraft && !slotDraftsEqual(slotDraft, serverSlot),
-              );
-              const placed = Boolean(slot && performer);
-              const externalServer = slot ? toExternalDraft(slot) : null;
-              const externalDraft = slot
-                ? (externalDrafts[slot.needId] ?? externalServer)
-                : null;
-              const externalDirty = Boolean(
-                externalDraft &&
-                  externalServer &&
-                  !externalDraftsEqual(externalDraft, externalServer),
-              );
-              const isExternal = Boolean(slot?.externalArtistName.trim());
+              const status = rowStatus(row);
+              const actName = rowActName(row);
+              const [setStart, setEnd] = rowSetWindow(row);
+              const rider = row.performer ? riderByOrg.get(row.performer.organizationId) : undefined;
+              const openInquiries =
+                row.slot?.inquiries.filter((inquiry) => inquiry.status === "submitted").length ?? 0;
               return (
-                <>
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex min-w-0 flex-1 items-center gap-2">
-                      <span
-                        {...controls.handleProps}
-                        className="flex size-6 shrink-0 cursor-grab touch-none select-none items-center justify-center text-muted-foreground/60 active:cursor-grabbing"
-                        title="Drag to reorder"
-                      >
-                        <DotsSixVerticalIcon className="size-4" weight="bold" />
-                      </span>
-                      {slot && slotDraft ? (
-                        <Input
-                          className="h-8 max-w-56 font-medium"
-                          value={slotDraft.label}
-                          placeholder="Name this position"
-                          onChange={(event) =>
-                            patchSlotDraft(slot.needId, { label: event.target.value })
-                          }
-                          onBlur={() => {
-                            if (slotDirty) void onSaveSlot(slot);
-                          }}
-                        />
-                      ) : (
-                        <p className="truncate font-medium">{performer?.bandName ?? ""}</p>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <span
-                        data-testid="artist-need-status"
-                        className={`rounded-md px-2 py-1 text-xs font-medium ${effectiveStatusClass(
-                          slot ? slot.effectiveStatus : "booked",
-                        )}`}
-                      >
-                        {effectiveStatusLabel(slot ? slot.effectiveStatus : "booked")}
-                      </span>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        className="size-7 p-0"
-                        disabled={!controls.canMoveUp}
-                        title="Move up"
-                        onClick={controls.moveUp}
-                      >
-                        <CaretUpIcon className="size-4" />
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        className="size-7 p-0"
-                        disabled={!controls.canMoveDown}
-                        title="Move down"
-                        onClick={controls.moveDown}
-                      >
-                        <CaretDownIcon className="size-4" />
-                      </Button>
-                    </div>
-                  </div>
-
-                  {performer ? (
-                    <>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="font-medium">{performer.bandName}</p>
-                        {performer.payment ? (
-                          <p className="text-muted-foreground">
-                            {formatUsd(performer.payment.totalUsd)} ·{" "}
-                            {performer.payment.statusLabel}
-                          </p>
-                        ) : (
-                          <p className="text-muted-foreground">No payout set</p>
-                        )}
-                        {performer.awaitingOnboarding ? (
-                          <p className="text-status-amber-700 dark:text-status-amber-300">
-                            Onboarding pending
-                          </p>
-                        ) : null}
-                      </div>
-
-                      <RunOfShowTimes
-                        eventId={eventId}
-                        set={[performer.setStartsAt, performer.setEndsAt]}
-                        soundcheck={[performer.soundcheckStartsAt, performer.soundcheckEndsAt]}
-                      />
-
-                      {performer.payment ? (
-                        <p className="text-xs text-muted-foreground">
-                          Payment ID: {performer.payment.confirmationToken}
+                <div className="flex items-center gap-2 pr-1">
+                  <span
+                    {...controls.handleProps}
+                    className="flex size-8 shrink-0 cursor-grab touch-none select-none items-center justify-center text-muted-foreground/60 active:cursor-grabbing"
+                    title="Drag to reorder"
+                  >
+                    <DotsSixVerticalIcon className="size-4" weight="bold" />
+                  </span>
+                  <span className="w-4 shrink-0 text-right text-xs text-muted-foreground tabular-nums">
+                    {index + 1}
+                  </span>
+                  <button
+                    type="button"
+                    className="flex min-w-0 flex-1 items-center gap-3 py-2.5 text-left hover:bg-muted/30"
+                    onClick={() => setSelectedKey(row.key)}
+                  >
+                    <div className="min-w-0 flex-1">
+                      {row.slot?.label.trim() || !actName ? (
+                        <p className="truncate text-2xs font-medium tracking-wide text-muted-foreground uppercase">
+                          {row.slot?.label.trim() || (row.slot ? "Open position" : "No position")}
                         </p>
                       ) : null}
-
-                      <div className="flex flex-wrap items-center gap-2">
-                        {!placed ? (
+                      {actName ? (
+                        <p className="truncate font-medium">{actName}</p>
+                      ) : (
+                        <p className="truncate text-muted-foreground">
+                          Open · {TYPE_LABELS[row.slot?.artistType ?? "no_preference"]}
+                          {row.slot?.genres.trim() ? ` · ${row.slot.genres.trim()}` : ""}
+                        </p>
+                      )}
+                    </div>
+                    <div className="hidden shrink-0 flex-wrap items-center justify-end gap-1.5 sm:flex">
+                      {openInquiries > 0 ? (
+                        <span className="rounded-md bg-status-amber-500/15 px-2 py-0.5 text-xs text-status-amber-800 dark:text-status-amber-200">
+                          {openInquiries} inquir{openInquiries === 1 ? "y" : "ies"}
+                        </span>
+                      ) : null}
+                      {row.performer?.awaitingOnboarding ? (
+                        <span className="rounded-md bg-status-amber-500/15 px-2 py-0.5 text-xs text-status-amber-800 dark:text-status-amber-200">
+                          Onboarding
+                        </span>
+                      ) : null}
+                      {row.performer ? (
+                        <span
+                          className={cn(
+                            "rounded-md px-2 py-0.5 text-xs",
+                            rider?.rider?.status === "published"
+                              ? "bg-muted text-foreground"
+                              : "bg-muted text-muted-foreground",
+                          )}
+                        >
+                          {rider?.rider?.status === "published" ? "Rider" : "No rider"}
+                        </span>
+                      ) : null}
+                    </div>
+                    <span className="hidden w-32 shrink-0 text-right text-xs text-muted-foreground tabular-nums md:block">
+                      {setStart != null && setEnd != null
+                        ? `${formatTime(setStart)} – ${formatTime(setEnd)}`
+                        : "No set time"}
+                    </span>
+                    <span className="hidden w-36 shrink-0 text-right text-xs tabular-nums lg:block">
+                      {row.performer?.payment ? (
+                        <>
+                          {formatUsd(row.performer.payment.totalUsd)}
+                          <span className="text-muted-foreground"> · {row.performer.payment.statusLabel}</span>
+                        </>
+                      ) : row.performer ? (
+                        <span className="text-muted-foreground">No payout</span>
+                      ) : null}
+                    </span>
+                    <span
+                      data-testid="artist-need-status"
+                      className={cn("shrink-0 rounded-md px-2 py-0.5 text-xs font-medium", effectiveStatusClass(status))}
+                    >
+                      {effectiveStatusLabel(status)}
+                    </span>
+                    <CaretRightIcon className="size-4 shrink-0 text-muted-foreground" />
+                  </button>
+                  {canEdit ? (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button type="button" variant="ghost" size="icon-sm" aria-label={`More for ${actName ?? "this position"}`}>
+                          <DotsThreeIcon className="size-4" weight="bold" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onSelect={() => setSelectedKey(row.key)}>Open details</DropdownMenuItem>
+                        <DropdownMenuItem disabled={!controls.canMoveUp} onSelect={controls.moveUp}>
+                          Move up
+                        </DropdownMenuItem>
+                        <DropdownMenuItem disabled={!controls.canMoveDown} onSelect={controls.moveDown}>
+                          Move down
+                        </DropdownMenuItem>
+                        {row.performer?.payment?.status !== "paid" ? (
                           <>
-                            <Input
-                              className="h-8 w-48"
-                              placeholder="Name this position"
-                              value={placementNames[performer.participationId] ?? ""}
-                              onChange={(event) =>
-                                setPlacementNames((prev) => ({
-                                  ...prev,
-                                  [performer.participationId]: event.target.value,
-                                }))
-                              }
-                            />
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              disabled={savingLineupId === performer.participationId}
-                              onClick={() => void onPlaceAct(performer)}
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              variant="destructive"
+                              onSelect={() => void handlers.removePosition(row)}
                             >
-                              Add to bill
-                            </Button>
+                              Remove from bill
+                            </DropdownMenuItem>
                           </>
                         ) : null}
-                        {performer.payment?.status !== "paid" ? (
-                          <>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant={
-                                editingPaymentForOrg === performer.organizationId
-                                  ? "default"
-                                  : "outline"
-                              }
-                              onClick={() =>
-                                setEditingPaymentForOrg(
-                                  editingPaymentForOrg === performer.organizationId
-                                    ? null
-                                    : performer.organizationId,
-                                )
-                              }
-                            >
-                              {editingPaymentForOrg === performer.organizationId
-                                ? "Close"
-                                : performer.payment
-                                  ? "Edit payout"
-                                  : "Add payout"}
-                            </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              disabled={busyOrgId === performer.organizationId}
-                              onClick={() => void onRemove(performer.organizationId)}
-                            >
-                              Remove
-                            </Button>
-                          </>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">Paid</span>
-                        )}
-                        {placed ? (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            disabled={savingLineupId === performer.participationId}
-                            onClick={() => void onUnassign(performer)}
-                          >
-                            Unassign
-                          </Button>
-                        ) : null}
-                      </div>
-
-                      {editingPaymentForOrg === performer.organizationId ? (
-                        <EventBandPaymentForm
-                          key={`${performer.organizationId}-payment`}
-                          eventId={eventId}
-                          organizationId={performer.organizationId}
-                          role={performer.role}
-                          payment={performer.payment}
-                          organizationLocked
-                          excludedOrganizationIds={[]}
-                          invoiceLine={invoiceArtistByOrg.get(performer.organizationId) ?? null}
-                          invoiceDefaultsReady={
-                            !invoiceId ||
-                            (invoiceDetail !== undefined && artistDayScope !== undefined)
-                          }
-                          onSaved={() => setEditingPaymentForOrg(null)}
-                          onCancel={() => setEditingPaymentForOrg(null)}
-                        />
-                      ) : null}
-                    </>
-                  ) : slot && externalDraft && isExternal ? (
-                    <>
-                      {renderInquiries(slot)}
-                      <div className="flex flex-wrap items-end gap-2">
-                        <div className="min-w-56 flex-1 space-y-1">
-                          <Label>Artist</Label>
-                          <Input
-                            value={externalDraft.name}
-                            placeholder="Outside artist"
-                            onChange={(event) =>
-                              patchExternalDraft(slot.needId, { name: event.target.value })
-                            }
-                          />
-                        </div>
-                        {externalDirty ? (
-                          <Button
-                            type="button"
-                            size="sm"
-                            disabled={savingSlotId === slot.needId}
-                            onClick={() => void onSaveExternal(slot)}
-                          >
-                            {savingSlotId === slot.needId ? "Saving…" : "Save"}
-                          </Button>
-                        ) : null}
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          disabled={savingSlotId === slot.needId}
-                          onClick={() => void onClearExternal(slot)}
-                        >
-                          Reopen
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          disabled={savingSlotId === slot.needId}
-                          onClick={() => void onRemoveSlot(slot)}
-                        >
-                          Remove
-                        </Button>
-                      </div>
-
-                      <RunOfShowTimes
-                        eventId={eventId}
-                        set={[slot.setStartsAt, slot.setEndsAt]}
-                        soundcheck={[slot.soundcheckStartsAt, slot.soundcheckEndsAt]}
-                      />
-                    </>
-                  ) : slot && slotDraft ? (
-                    <>
-                      <div className="grid gap-2 md:grid-cols-3">
-                        <div className="space-y-1">
-                          <Label>Looking for</Label>
-                          <SearchableSelect
-                            value={slotDraft.artistType}
-                            onChange={(value) =>
-                              patchSlotDraft(slot.needId, {
-                                artistType: value as ArtistNeedType,
-                              })
-                            }
-                            options={TYPE_OPTIONS}
-                            placeholder="Select type"
-                            emptyLabel="Select type"
-                            clearable
-                            clearLabel="Clear"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label>Genres / vibes</Label>
-                          <Input
-                            value={slotDraft.genres}
-                            onChange={(event) =>
-                              patchSlotDraft(slot.needId, { genres: event.target.value })
-                            }
-                            placeholder="e.g. indie, jazz, house"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label>Status</Label>
-                          <SearchableSelect
-                            value={slotDraft.status}
-                            onChange={(value) =>
-                              patchSlotDraft(slot.needId, { status: value as ArtistNeedStatus })
-                            }
-                            options={SLOT_STATUS_OPTIONS}
-                            placeholder="Select status"
-                            emptyLabel="Select status"
-                            clearable
-                            clearLabel="Clear"
-                          />
-                        </div>
-                      </div>
-
-                      {renderInquiries(slot)}
-
-                      <div className="flex flex-wrap items-end gap-2 border-t pt-2">
-                        <div className="min-w-56 flex-1 space-y-1">
-                          <Label>Or fill with an outside artist</Label>
-                          <Input
-                            value={externalDraft?.name ?? ""}
-                            placeholder="Artist name"
-                            onChange={(event) =>
-                              patchExternalDraft(slot.needId, { name: event.target.value })
-                            }
-                          />
-                        </div>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          disabled={savingSlotId === slot.needId}
-                          onClick={() => void onSaveExternal(slot)}
-                        >
-                          Fill with this name
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          onClick={() => {
-                            setAddTargetNeedId(slot.needId);
-                            setAddMode("existing");
-                          }}
-                        >
-                          Book an artist
-                        </Button>
-                      </div>
-
-                      {addMode === "existing" && addTargetNeedId === slot.needId ? (
-                        <AddBandForm
-                          eventId={eventId}
-                          positionOptions={openPositionOptions}
-                          defaultNeedId={slot.needId}
-                          excludedOrganizationIds={performers.map((row) => row.organizationId)}
-                          onSaved={closeAdd}
-                          onCancel={closeAdd}
-                        />
-                      ) : null}
-
-                      <div className="flex flex-wrap gap-2">
-                        {slotDirty ? (
-                          <Button
-                            type="button"
-                            size="sm"
-                            disabled={savingSlotId === slot.needId}
-                            onClick={() => void onSaveSlot(slot)}
-                          >
-                            {savingSlotId === slot.needId ? "Saving…" : "Save position"}
-                          </Button>
-                        ) : null}
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          disabled={savingSlotId === slot.needId}
-                          onClick={() => void onRemoveSlot(slot)}
-                        >
-                          Remove
-                        </Button>
-                      </div>
-                    </>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   ) : null}
-                </>
+                </div>
               );
             }}
           />
         ) : null}
-
-        {addMode === "existing" && !addTargetNeedId ? (
-          <AddBandForm
-            eventId={eventId}
-            positionOptions={openPositionOptions}
-            excludedOrganizationIds={performers.map((row) => row.organizationId)}
-            onSaved={closeAdd}
-            onCancel={closeAdd}
-          />
-        ) : addMode === "invite" ? (
-          <InviteBandForm
-            eventId={eventId}
-            onSaved={closeAdd}
-            onCancel={closeAdd}
-          />
-        ) : addMode === "outside" ? (
-          <div className="space-y-3 rounded-md border bg-muted/10 p-4">
-            <p className="text-sm font-medium">Outside artist</p>
-            <div className="space-y-1">
-              <Label>Artist</Label>
-              <Input
-                value={outsideName}
-                placeholder="Artist name"
-                onChange={(event) => setOutsideName(event.target.value)}
-              />
-            </div>
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                size="sm"
-                disabled={addingOutside}
-                onClick={() => void onAddOutside()}
-              >
-                Add
-              </Button>
-              <Button type="button" size="sm" variant="ghost" onClick={() => setAddMode(null)}>
-                Cancel
-              </Button>
-            </div>
-          </div>
-        ) : null}
-
       </CardContent>
-    </Card>
-  );
-}
 
-function InviteBandForm({
-  eventId,
-  needId,
-  onSaved,
-  onCancel,
-}: {
-  eventId: Id<"events">;
-  /** Position to fill, when this was started from an open slot. */
-  needId?: Id<"eventArtistNeeds">;
-  onSaved: () => void;
-  onCancel: () => void;
-}) {
-  const inviteBand = useMutation(api.eventBands.inviteBandFromEvent);
-  const [email, setEmail] = useState("");
-  const [artistName, setArtistName] = useState("");
-  const [role, setRole] = useState<ParticipationRole>("headliner");
-  const [pricingMode, setPricingMode] = useState<PricingMode>("per_member_hourly");
-  const [ratePerMemberPerHourUsd, setRatePerMemberPerHourUsd] = useState("150");
-  const [performanceHours, setPerformanceHours] = useState("1");
-  const [memberCount, setMemberCount] = useState("4");
-  const [fixedTotalUsd, setFixedTotalUsd] = useState("0");
-  const [busy, setBusy] = useState(false);
-
-  const computedTotal = useMemo(() => {
-    if (pricingMode === "fixed_total") return Number(fixedTotalUsd || "0");
-    return (
-      Number(ratePerMemberPerHourUsd || "0") *
-      Number(performanceHours || "0") *
-      Number(memberCount || "0")
-    );
-  }, [pricingMode, ratePerMemberPerHourUsd, performanceHours, memberCount, fixedTotalUsd]);
-
-  async function onSubmit() {
-    const parsed = eventBandOnboardingInviteSchema.safeParse({
-      email,
-      artistName,
-      role,
-      pricingMode,
-      ratePerMemberPerHourUsd,
-      performanceHours,
-      memberCount,
-      fixedTotalUsd,
-    });
-    if (!parsed.success) {
-      notify.error(parsed.error.issues[0]?.message ?? "Check the form and try again.");
-      return;
-    }
-    setBusy(true);
-    try {
-      await inviteBand({
-        eventId,
-        needId,
-        email: parsed.data.email,
-        artistName: parsed.data.artistName,
-        role: parsed.data.role,
-        pricingMode: parsed.data.pricingMode,
-        ratePerMemberPerHourUsd:
-          parsed.data.pricingMode === "per_member_hourly"
-            ? parsed.data.ratePerMemberPerHourUsd
-            : undefined,
-        performanceHours: parsed.data.performanceHours,
-        memberCount:
-          parsed.data.pricingMode === "per_member_hourly" ? parsed.data.memberCount : undefined,
-        totalUsd:
-          parsed.data.pricingMode === "fixed_total" ? parsed.data.fixedTotalUsd : computedTotal,
-      });
-      notify.success(`Invite sent to ${parsed.data.email}.`);
-      onSaved();
-    } catch (error) {
-      notify.error(getConvexErrorMessage(error));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="space-y-3 rounded-md border bg-muted/10 p-4">
-      <p className="text-sm font-medium">Invite new artist</p>
-      <div className="grid gap-3 md:grid-cols-2">
-        <div className="space-y-1 md:col-span-2">
-          <Label htmlFor="invite-band-artist-name">Artist name</Label>
-          <Input
-            id="invite-band-artist-name"
-            value={artistName}
-            onChange={(e) => setArtistName(e.target.value)}
-            placeholder="The Redwoods"
-            autoComplete="off"
-          />
-        </div>
-        <div className="space-y-1 md:col-span-2">
-          <Label htmlFor="invite-band-email">Contact email</Label>
-          <Input
-            id="invite-band-email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="artist@stanford.edu"
-            autoComplete="email"
-          />
-        </div>
-        <div className="space-y-1">
-          <Label>Role</Label>
-          <SearchableSelect
-            value={role}
-            onChange={(value) => setRole(value as ParticipationRole)}
-            options={ROLE_OPTIONS}
-            placeholder="Role"
-            emptyLabel="Role"
-          />
-        </div>
-        <div className="space-y-1">
-          <Label>Pricing mode</Label>
-          <SearchableSelect
-            value={pricingMode}
-            onChange={(value) => setPricingMode(value as PricingMode)}
-            options={PRICING_OPTIONS}
-            placeholder="Pricing mode"
-            emptyLabel="Select pricing mode"
-          />
-        </div>
-        <div className="space-y-1">
-          <Label>Performance length (hours)</Label>
-          <Input
-            type="number"
-            min="0"
-            step="0.25"
-            value={performanceHours}
-            onChange={(e) => setPerformanceHours(e.target.value)}
-          />
-        </div>
-        {pricingMode === "per_member_hourly" ? (
-          <>
-            <div className="space-y-1">
-              <Label>Rate per member per hour (USD)</Label>
-              <Input
-                type="number"
-                min="0"
-                step="0.01"
-                value={ratePerMemberPerHourUsd}
-                onChange={(e) => setRatePerMemberPerHourUsd(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>Member count</Label>
-              <Input
-                type="number"
-                min="1"
-                step="1"
-                value={memberCount}
-                onChange={(e) => setMemberCount(e.target.value)}
-              />
-            </div>
-          </>
-        ) : (
-          <div className="space-y-1">
-            <Label>Total payout (USD)</Label>
-            <Input
-              type="number"
-              min="0"
-              step="0.01"
-              value={fixedTotalUsd}
-              onChange={(e) => setFixedTotalUsd(e.target.value)}
-            />
-          </div>
-        )}
-        <div className="rounded-md border px-3 py-2 text-sm md:col-span-2">
-          <span className="font-medium">Computed total:</span> {formatUsd(computedTotal)}
-        </div>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <Button type="button" onClick={() => void onSubmit()} disabled={busy}>
-          {busy ? "Sending…" : "Send invite"}
-        </Button>
-        <Button type="button" variant="outline" onClick={onCancel}>
-          Cancel
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function AddBandForm({
-  eventId,
-  positionOptions,
-  defaultNeedId,
-  excludedOrganizationIds,
-  onSaved,
-  onCancel,
-}: {
-  eventId: Id<"events">;
-  /** Open positions this artist can be booked into. */
-  positionOptions: SearchableSelectOption[];
-  /** Preselected when launched from a position's "Book an artist". */
-  defaultNeedId?: string;
-  excludedOrganizationIds: string[];
-  onSaved: () => void;
-  onCancel: () => void;
-}) {
-  const bands = useQuery(api.users.listBandOrganizationsAdmin, {});
-  const addParticipation = useMutation(api.eventBands.addParticipation);
-  const [organizationId, setOrganizationId] = useState("");
-  const [role, setRole] = useState<ParticipationRole>("headliner");
-  const [needId, setNeedId] = useState(defaultNeedId ?? "");
-  const [busy, setBusy] = useState(false);
-
-  const bandOptions = useMemo(
-    () => artistSelectOptions(bands, { excludeOrganizationIds: excludedOrganizationIds }),
-    [bands, excludedOrganizationIds],
-  );
-
-  async function onSave() {
-    if (!organizationId) {
-      notify.error("Select an artist.");
-      return;
-    }
-    setBusy(true);
-    try {
-      await addParticipation({
-        eventId,
-        organizationId,
-        role,
-        needId: (needId || undefined) as Id<"eventArtistNeeds"> | undefined,
-      });
-      onSaved();
-    } catch (error) {
-      notify.error(getConvexErrorMessage(error));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="space-y-3 rounded-md border bg-muted/10 p-4">
-      <p className="text-sm font-medium">Add artist</p>
-      <div className="grid gap-3 md:grid-cols-2">
-        <div className="space-y-1 md:col-span-2">
-          <Label>Artist</Label>
-          <ArtistSelect
-            value={organizationId}
-            onChange={setOrganizationId}
-            options={bandOptions}
-            placeholder="Search artists…"
-            emptyLabel="Select artist"
-            clearable
-          />
-        </div>
-        <div className="space-y-1">
-          <Label>Role</Label>
-          <SearchableSelect
-            value={role}
-            onChange={(value) => setRole(value as ParticipationRole)}
-            options={ROLE_OPTIONS}
-            placeholder="Role"
-            emptyLabel="Role"
-          />
-        </div>
-        <div className="space-y-1">
-          <Label>Position</Label>
-          <SearchableSelect
-            value={needId}
-            onChange={setNeedId}
-            options={[
-              { value: "", label: "No position" },
-              ...positionOptions,
-            ]}
-            placeholder="Position"
-            emptyLabel="No position"
-          />
-        </div>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <Button type="button" onClick={() => void onSave()} disabled={busy}>
-          {busy ? "Adding…" : "Assign artist"}
-        </Button>
-        <Button type="button" variant="outline" onClick={onCancel}>
-          Cancel
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function EventBandPaymentForm({
-  eventId,
-  organizationId: lockedOrganizationId,
-  role,
-  payment,
-  organizationLocked,
-  excludedOrganizationIds,
-  invoiceLine = null,
-  invoiceDefaultsReady = true,
-  onSaved,
-  onCancel,
-}: {
-  eventId: Id<"events">;
-  organizationId?: string;
-  role: ParticipationRole;
-  payment: PaymentFields | null;
-  organizationLocked?: boolean;
-  excludedOrganizationIds: string[];
-  invoiceLine?: InvoiceArtistSuggestion | null;
-  /** False while the event invoice query is still loading (so invoice line defaults win). */
-  invoiceDefaultsReady?: boolean;
-  onSaved: () => void;
-  onCancel: () => void;
-}) {
-  const bands = useQuery(api.users.listBandOrganizationsAdmin, {});
-  const upsert = useMutation(api.bandPayments.upsertForEvent);
-
-  const [organizationId, setOrganizationId] = useState(lockedOrganizationId ?? "");
-  const resolvedOrgId = organizationLocked
-    ? (lockedOrganizationId ?? "")
-    : organizationId;
-
-  const orgPayee = useQuery(
-    api.bandPayments.getBandPayeeForOrganization,
-    resolvedOrgId ? { organizationId: resolvedOrgId } : "skip",
-  );
-
-  const seedDefaults = applyPayoutDefaultsForOrg(
-    bands as BandCatalogRow[] | undefined,
-    lockedOrganizationId ?? "",
-    invoiceLine,
-  );
-
-  const [pricingMode, setPricingMode] = useState<PricingMode>(
-    payment?.pricingMode ?? seedDefaults.pricingMode,
-  );
-  const [ratePerMemberPerHourUsd, setRatePerMemberPerHourUsd] = useState(
-    payment
-      ? String(payment.ratePerMemberPerHourUsd ?? 0)
-      : seedDefaults.ratePerMemberPerHourUsd,
-  );
-  const [performanceHours, setPerformanceHours] = useState(
-    String(payment?.performanceHours ?? seedDefaults.performanceHours),
-  );
-  const [memberCount, setMemberCount] = useState(
-    String(payment?.memberCount ?? seedDefaults.memberCount),
-  );
-  const [fixedTotalUsd, setFixedTotalUsd] = useState(String(payment?.totalUsd ?? 0));
-  const [busy, setBusy] = useState(false);
-  const [defaultsReadyForOrg, setDefaultsReadyForOrg] = useState(
-    Boolean(payment) || !lockedOrganizationId,
-  );
-
-  if (payment === null && bands && resolvedOrgId && !defaultsReadyForOrg && invoiceDefaultsReady) {
-    const next = applyPayoutDefaultsForOrg(
-      bands as BandCatalogRow[] | undefined,
-      resolvedOrgId,
-      invoiceLine,
-    );
-    setPricingMode(next.pricingMode);
-    setRatePerMemberPerHourUsd(next.ratePerMemberPerHourUsd);
-    setPerformanceHours(next.performanceHours);
-    setMemberCount(next.memberCount);
-    setDefaultsReadyForOrg(true);
-  }
-
-  const bandOptions = useMemo(
-    () => artistSelectOptions(bands, { excludeOrganizationIds: excludedOrganizationIds }),
-    [bands, excludedOrganizationIds],
-  );
-
-  const computedTotal = useMemo(() => {
-    if (pricingMode === "fixed_total") return Number(fixedTotalUsd || "0");
-    return (
-      Number(ratePerMemberPerHourUsd || "0") *
-      Number(performanceHours || "0") *
-      Number(memberCount || "0")
-    );
-  }, [pricingMode, ratePerMemberPerHourUsd, performanceHours, memberCount, fixedTotalUsd]);
-
-  const payeeComplete = orgPayee?.payeeComplete ?? payment?.payeeComplete ?? false;
-
-  async function onSave() {
-    if (!resolvedOrgId) {
-      notify.error("Select an artist.");
-      return;
-    }
-    const payoutParsed = eventBandPayoutFieldsSchema.safeParse({
-      pricingMode,
-      ratePerMemberPerHourUsd,
-      performanceHours,
-      memberCount,
-      fixedTotalUsd,
-    });
-    if (!payoutParsed.success) {
-      notify.error(payoutParsed.error.issues[0]?.message ?? "Check the form and try again.");
-      return;
-    }
-    setBusy(true);
-    try {
-      await upsert({
-        eventId,
-        paymentId: payment?._id,
-        organizationId: resolvedOrgId,
-        role,
-        pricingMode: payoutParsed.data.pricingMode,
-        ratePerMemberPerHourUsd:
-          payoutParsed.data.pricingMode === "per_member_hourly"
-            ? payoutParsed.data.ratePerMemberPerHourUsd
-            : undefined,
-        performanceHours: payoutParsed.data.performanceHours,
-        memberCount:
-          payoutParsed.data.pricingMode === "per_member_hourly"
-            ? payoutParsed.data.memberCount
-            : undefined,
-        totalUsd:
-          payoutParsed.data.pricingMode === "fixed_total"
-            ? payoutParsed.data.fixedTotalUsd
-            : computedTotal,
-      });
-      onSaved();
-    } catch (error) {
-      notify.error(getConvexErrorMessage(error));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const displayPayeeName = payment?.designatedPayeeName ?? orgPayee?.designatedPayeeName ?? "";
-  const displayPayeeEmail = payment?.designatedPayeeEmail ?? orgPayee?.designatedPayeeEmail ?? "";
-  const displayPayeeAddress =
-    payment?.designatedPayeeMailingAddress ?? orgPayee?.designatedPayeeMailingAddress ?? "";
-  const displayPayoutMethod =
-    payment?.designatedPayeePayoutMethod ?? orgPayee?.designatedPayeePayoutMethod;
-
-  return (
-    <div className="space-y-4 rounded-md border bg-muted/10 p-4">
-      <p className="text-sm font-medium">{payment ? "Edit payout" : "Add payout"}</p>
-
-      {payment ? (
-        <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
-          <p>
-            <span className="font-medium">Status:</span> {payment.statusLabel}
-          </p>
-          {payment.eventEnded && payment.status === "draft" ? (
-            <p className="text-muted-foreground">
-              This event has ended and will enter the payout queue on save.
-            </p>
-          ) : null}
-          {payment.status === "pending_onboarding" ? (
-            <p className="text-status-amber-700 dark:text-status-amber-300">
-              Waiting for the artist to finish onboarding before payout can proceed.
-            </p>
-          ) : null}
-          {payment.status === "pending_payee" && !payeeComplete ? (
-            <p className="text-status-amber-700 dark:text-status-amber-300">
-              Waiting for the artist to configure their designated payee before confirmation can be
-              sent.
-            </p>
-          ) : null}
-          {payment.status === "pending_payee" && payeeComplete ? (
-            <p className="text-muted-foreground">
-              Payee is on file for this artist. The payout queue will update automatically, or save
-              this payment to refresh it now.
-            </p>
-          ) : null}
-        </div>
+      <PositionSheet
+        row={selectedRow}
+        onOpenChange={(open) => {
+          if (!open) setSelectedKey(null);
+        }}
+        eventId={eventId}
+        canEdit={canEdit}
+        rider={selectedRow?.performer ? riderByOrg.get(selectedRow.performer.organizationId) : undefined}
+        excludedOrganizationIds={performers.map((row) => row.organizationId)}
+        invoiceLine={
+          selectedRow?.performer
+            ? (invoiceArtistByOrg.get(selectedRow.performer.organizationId) ?? null)
+            : null
+        }
+        invoiceDefaultsReady={
+          !invoiceId || (invoiceDetail !== undefined && artistDayScope !== undefined)
+        }
+        handlers={handlers}
+      />
+      {addOpen ? (
+        <AddToBillDialog
+          open={addOpen}
+          onOpenChange={setAddOpen}
+          eventId={eventId}
+          openPositions={openPositions}
+          excludedOrganizationIds={performers.map((row) => row.organizationId)}
+        />
       ) : null}
-
-      <div className="grid gap-3 md:grid-cols-2">
-        {!organizationLocked ? (
-          <div className="space-y-1 md:col-span-2">
-            <Label>Artist</Label>
-            <ArtistSelect
-              value={organizationId}
-              onChange={(value) => {
-                setOrganizationId(value);
-                if (!payment) {
-                  const next = applyPayoutDefaultsForOrg(
-                    bands as BandCatalogRow[] | undefined,
-                    value,
-                    invoiceLine?.organizationId === value ? invoiceLine : null,
-                  );
-                  setPricingMode(next.pricingMode);
-                  setRatePerMemberPerHourUsd(next.ratePerMemberPerHourUsd);
-                  setPerformanceHours(next.performanceHours);
-                  setMemberCount(next.memberCount);
-                  setDefaultsReadyForOrg(true);
-                }
-              }}
-              options={bandOptions}
-              placeholder="Search artists…"
-              emptyLabel="Select artist"
-              clearable
-            />
-          </div>
-        ) : null}
-
-        <div className="space-y-1">
-          <Label>Pricing mode</Label>
-          <SearchableSelect
-            value={pricingMode}
-            onChange={(value) => setPricingMode(value as PricingMode)}
-            options={PRICING_OPTIONS}
-            placeholder="Pricing mode"
-            emptyLabel="Select pricing mode"
-          />
-        </div>
-
-        <div className="space-y-1">
-          <Label>Performance length (hours)</Label>
-          <Input
-            type="number"
-            min="0"
-            step="0.25"
-            value={performanceHours}
-            onChange={(e) => setPerformanceHours(e.target.value)}
-            disabled={payment?.status === "paid"}
-          />
-        </div>
-
-        {pricingMode === "per_member_hourly" ? (
-          <>
-            <div className="space-y-1">
-              <Label>Rate per member per hour (USD)</Label>
-              <Input
-                type="number"
-                min="0"
-                step="0.01"
-                value={ratePerMemberPerHourUsd}
-                onChange={(e) => setRatePerMemberPerHourUsd(e.target.value)}
-                disabled={payment?.status === "paid"}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>Member count</Label>
-              <Input
-                type="number"
-                min="1"
-                step="1"
-                value={memberCount}
-                onChange={(e) => setMemberCount(e.target.value)}
-                disabled={payment?.status === "paid"}
-              />
-            </div>
-          </>
-        ) : (
-          <div className="space-y-1">
-            <Label>Total payout (USD)</Label>
-            <Input
-              type="number"
-              min="0"
-              step="0.01"
-              value={fixedTotalUsd}
-              onChange={(e) => setFixedTotalUsd(e.target.value)}
-              disabled={payment?.status === "paid"}
-            />
-          </div>
-        )}
-
-        <div className="rounded-md border px-3 py-2 text-sm md:col-span-2">
-          <span className="font-medium">Computed total:</span> {formatUsd(computedTotal)}
-        </div>
-
-        <div className="space-y-2 md:col-span-2">
-          <Label>Designated payee (from artist org profile)</Label>
-          {resolvedOrgId ? (
-            payeeComplete ? (
-              <div className="rounded-md border bg-muted/20 px-3 py-2 text-sm">
-                <p>
-                  <span className="font-medium">Payee:</span> {displayPayeeName} (
-                  {displayPayeeEmail})
-                </p>
-                <p className="mt-1">
-                  <span className="font-medium">Payout method:</span>{" "}
-                  {formatBandPayeePayoutMethod(displayPayoutMethod)}
-                </p>
-                {displayPayeeAddress ? (
-                  <p className="mt-1 whitespace-pre-wrap text-muted-foreground">
-                    {displayPayeeAddress}
-                  </p>
-                ) : null}
-              </div>
-            ) : (
-              <div className="rounded-md border border-dashed px-3 py-3 text-sm">
-                <p className="text-muted-foreground">
-                  This artist has not configured a designated payee with mailing address and payout
-                  method. Confirmation emails cannot be sent until payee info is on file.
-                </p>
-                <Button asChild size="sm" variant="outline" className="mt-2">
-                  <Link href="/dashboard/artists/payments#payee">
-                    Open artist payee settings
-                  </Link>
-                </Button>
-              </div>
-            )
-          ) : (
-            <p className="text-sm text-muted-foreground">Select an artist to view payee details.</p>
-          )}
-        </div>
-      </div>
-
-
-      <div className="flex flex-wrap gap-2">
-        {payment?.status !== "paid" ? (
-          <Button type="button" onClick={() => void onSave()} disabled={busy}>
-            {payment ? "Save payout" : "Save payout"}
-          </Button>
-        ) : null}
-        <Button type="button" variant="outline" onClick={onCancel}>
-          Cancel
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function windowLabel([start, end]: [number | null | undefined, number | null | undefined]) {
-  return start != null && end != null ? `${formatTime(start)} – ${formatTime(end)}` : "Not set";
-}
-
-/** Set and soundcheck times are edited in the Run of Show; the bill just shows them. */
-function RunOfShowTimes({
-  eventId,
-  set,
-  soundcheck,
-}: {
-  eventId: Id<"events">;
-  set: [number | null | undefined, number | null | undefined];
-  soundcheck: [number | null | undefined, number | null | undefined];
-}) {
-  return (
-    <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-      <span>
-        <span className="text-muted-foreground">Set</span>{" "}
-        <span className="tabular-nums">{windowLabel(set)}</span>
-      </span>
-      <span>
-        <span className="text-muted-foreground">Soundcheck</span>{" "}
-        <span className="tabular-nums">{windowLabel(soundcheck)}</span>
-      </span>
-      <Link
-        href={getEventEditorTabPath(eventId, "schedule")}
-        className="text-xs text-primary underline-offset-4 hover:underline"
-      >
-        Edit in Run of Show
-      </Link>
-    </p>
+    </Card>
   );
 }

@@ -22,6 +22,7 @@ import {
 import { consolidatePackageIntoOneIncludedUnit } from "./lib/packageContentMigration";
 import { normalizeCrewLineLabel } from "./lib/normalizeCrewLineLabel";
 import { syncNeedBlocks, syncParticipationBlocks } from "./lib/runOfShow";
+import { ensureActPosition } from "./lib/actPositions";
 
 /**
  * Official @convex-dev/migrations runner.
@@ -622,6 +623,15 @@ export const backfillRunOfShowNeedBlocks = migrations.define({
   },
 });
 
+/** Every act on the bill fills a lineup position; give unslotted acts one. */
+export const giveEveryActAPosition = migrations.define({
+  table: "eventBandParticipations",
+  migrateOne: async (ctx, row) => {
+    if (row.needId) return;
+    await ensureActPosition(ctx, row._id);
+  },
+});
+
 /**
  * never reorder or remove completed ones (reset requires an explicit reset:true).
  */
@@ -652,6 +662,7 @@ const MIGRATION_SERIES = [
   internal.migrations.migrateEventTeamsMarketingToPromotionOnEventSeries,
   internal.migrations.backfillRunOfShowParticipationBlocks,
   internal.migrations.backfillRunOfShowNeedBlocks,
+  internal.migrations.giveEveryActAPosition,
 ] as const;
 
 export const runAll = migrations.runner([...MIGRATION_SERIES]);

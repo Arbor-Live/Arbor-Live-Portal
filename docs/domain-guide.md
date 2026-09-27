@@ -199,7 +199,16 @@ Event types (drive which workspace tabs and quick-add blocks appear):
     the platform: `eventArtistNeeds.externalArtistName`, with its own set and
     soundcheck windows on the slot. It counts as booked and stops appearing in
     the artist portal.
-  - **Payout** — the same row, via `EventBandPaymentForm`.
+  - **Every act fills a position.** Acts added without one get a position at
+    the bottom of the bill (`lib/actPositions.ts`, named from their role);
+    removing an act keeps its position open and hands the act's Run of Show
+    times back to it, so the timeline keeps a placeholder.
+  - **Lineup UI** — one compact row per position (set time, payout, rider,
+    status); details open in a side panel (position settings, fill with a
+    platform act / invite / outside act, payout, inquiries, remove). "Add to
+    bill" is one dialog for existing artist, invite, outside act, or an open
+    position.
+  - **Payout** — from the position's side panel, via `EventBandPaymentForm`.
   Artists browse still-open slots from `/dashboard/opportunities` and
   `submitInquiry` (`eventArtistInquiries`), which flags the slot `inquiring`
   and emails Operations admins (`email/artistNeedInquiryEmails.ts`). Riders sit

@@ -104,13 +104,12 @@ test.describe("staff band assignment on event", () => {
     await expect(page.getByTestId("event-workspace")).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText("Artists").first()).toBeVisible({ timeout: 20_000 });
 
-    await page.getByRole("button", { name: "Add", exact: true }).click();
-    await page.getByRole("menuitem", { name: "Existing artist" }).click();
+    await page.getByRole("button", { name: "Add to bill" }).click();
     await selectSearchableOption(page, "Artist", band.bandName);
     await page.getByRole("button", { name: "Assign artist" }).click();
 
     await expect(page.getByText(band.bandName).first()).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByText("No payout set").first()).toBeVisible();
+    await expect(page.getByText("No payout").first()).toBeVisible();
 
     const email = await pollConvex<{ template: string; to: string; subject: string }>(
       "e2eHelpers:getLatestEmailNotification",
@@ -153,18 +152,18 @@ test.describe("staff band assignment on event", () => {
     await page.goto(`${seeded.eventPath}/artists`);
     await expect(page.getByTestId("event-workspace")).toBeVisible({ timeout: 30_000 });
     const bandsCard = page.locator('[data-slot="card"]').filter({
-      has: page.getByRole("button", { name: "Add", exact: true }),
+      has: page.getByRole("button", { name: "Add to bill" }),
     });
     await expect(bandsCard).toBeVisible({ timeout: 20_000 });
 
-    await bandsCard.getByRole("button", { name: "Add", exact: true }).click();
-    await page.getByRole("menuitem", { name: "Invite new artist" }).click();
+    await bandsCard.getByRole("button", { name: "Add to bill" }).click();
+    await page.getByRole("radio", { name: "Invite by email" }).click();
     await page.locator("#invite-band-artist-name").fill(bandName);
     await page.locator("#invite-band-email").fill(contactEmail);
     await page.getByRole("button", { name: "Send invite" }).click();
 
     await expect(page.getByText(bandName).first()).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByText("Onboarding pending").first()).toBeVisible();
+    await expect(page.getByText("Onboarding").first()).toBeVisible();
     await expect(page.getByText("$600.00").first()).toBeVisible();
 
     const portalInvite = await pollConvex<{ template: string; to: string }>(
