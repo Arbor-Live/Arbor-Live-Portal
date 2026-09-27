@@ -17,6 +17,7 @@ import {
   isArtistOrganizationType,
   type ArtistOrganizationType,
 } from "./organizationType";
+import { resolveGlobalRoleForOrganization } from "./globalRole";
 import {
   hasAnyVertical,
   hasVertical,
@@ -433,18 +434,44 @@ export async function requireAnyVerticalOrAdmin(
   return user;
 }
 
-/** Portal admins whose profile includes the given vertical (for staff inbox emails). */
-export async function listAdminEmailsForVertical(
-  ctx: AuthCtx,
-  vertical: UserVertical,
-  options?: {
-    participation?: (flags: UserParticipationFlags) => boolean;
-  },
-): Promise<string[]> {
-  const emails = new Set<string>();
-  // Paginate the directory rather than trusting one page: a truncated list
-  // silently drops staff from operational email (artist inquiries, damage
-  // reports, crew applications).
+/** A person is not in 100 organizations. Past this, stop scanning memberships. */
+const PORTAL_ADMIN_MEMBERSHIP_CAP = 100;
+
+/**
+ * True when an admin is an Arbor Live (portal) admin rather than an artist-org
+ * admin. Band/DJ admins share Better Auth `role: "admin"`, so the role alone
+ * is not enough to identify staff. Only an admin with no membership rows at
+ * all is treated as a legacy portal admin; an admin left with nothing but
+ * inactive artist memberships (e.g. a removed band admin whose global role was
+ * never recomputed) is rejected.
+ */
+export async function isPortalAdmin(ctx: AuthCtx, userId: string): Promise<boolean> {
+  const memberships = await ctx.db
+    .query("userOrganizationMemberships")
+    .withIndex("by_userId", (q) => q.eq("userId", userId))
+    .take(PORTAL_ADMIN_MEMBERSHIP_CAP);
+  if (memberships.length === 0) return true;
+  for (const membership of memberships) {
+    if (!membership.active) continue;
+    const role = await resolveGlobalRoleForOrganization(
+      ctx,
+      membership.organizationId,
+      membership.role,
+    );
+    if (role === "admin") return true;
+  }
+  return false;
+}
+
+/**
+ * Every Arbor Live (portal) admin. This is the one audited gate for admin-wide
+ * email: band/DJ org admins also carry Better Auth `role: "admin"`, so a bare
+ * role check would leak staff email (and any student info in it) to them.
+ * Paginates rather than trusting one page so a truncated directory cannot
+ * silently drop staff.
+ */
+async function listPortalAdminUsers(ctx: AuthCtx): Promise<AuthUser[]> {
+  const admins: AuthUser[] = [];
   let cursor: string | null = null;
   for (;;) {
     const result = (await ctx.runQuery(components.betterAuth.adapter.findMany, {
@@ -456,19 +483,44 @@ export async function listAdminEmailsForVertical(
       if (user.role !== "admin" || !user.email) continue;
       const userId = getUserId(user);
       if (!userId) continue;
-      const profile = await getUserAdminProfile(ctx, userId);
-      const { verticals } = resolveProfileMembership(profile ?? {});
-      if (!hasVertical(verticals, vertical)) continue;
-      if (options?.participation && !options.participation(resolveParticipationFlags(profile))) {
-        continue;
-      }
-      emails.add(user.email.trim().toLowerCase());
+      if (!(await isPortalAdmin(ctx, userId))) continue;
+      admins.push(user);
     }
 
     if (result?.isDone) break;
     cursor = result?.continueCursor ?? null;
     if (!cursor) break;
   }
+  return admins;
+}
 
+/** Emails of Arbor Live (portal) admins only, never artist-org admins. */
+export async function listPortalAdminEmails(ctx: AuthCtx): Promise<string[]> {
+  const emails = new Set<string>();
+  for (const user of await listPortalAdminUsers(ctx)) {
+    if (user.email) emails.add(user.email.trim().toLowerCase());
+  }
+  return [...emails];
+}
+
+/** Portal admins whose profile includes the given vertical (for staff inbox emails). */
+export async function listAdminEmailsForVertical(
+  ctx: AuthCtx,
+  vertical: UserVertical,
+  options?: {
+    participation?: (flags: UserParticipationFlags) => boolean;
+  },
+): Promise<string[]> {
+  const emails = new Set<string>();
+  for (const user of await listPortalAdminUsers(ctx)) {
+    const userId = getUserId(user);
+    const profile = await getUserAdminProfile(ctx, userId);
+    const { verticals } = resolveProfileMembership(profile ?? {});
+    if (!hasVertical(verticals, vertical)) continue;
+    if (options?.participation && !options.participation(resolveParticipationFlags(profile))) {
+      continue;
+    }
+    if (user.email) emails.add(user.email.trim().toLowerCase());
+  }
   return [...emails];
 }
