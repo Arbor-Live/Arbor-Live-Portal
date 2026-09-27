@@ -56,7 +56,9 @@ export async function dedupeAlbumLinksForEntity(
     for (const asset of assets) {
       const existing = await ctx.db
         .query("immichAssetRecords")
-        .withIndex("by_immichAssetId", (q) => q.eq("immichAssetId", asset.immichAssetId))
+        .withIndex("by_albumLinkId_and_immichAssetId", (q) =>
+          q.eq("albumLinkId", canonical._id).eq("immichAssetId", asset.immichAssetId),
+        )
         .first();
       if (existing && existing._id !== asset._id) {
         await ctx.db.delete(asset._id);

@@ -72,6 +72,38 @@ Dependency direction: `web` depends on `backend` (generated API bindings),
   tokens — double-UUID secrets stored on the row, looked up by index).
   Public functions must never expose PII beyond what the public page needs.
 
+### Invariants (learned the hard way)
+
+These are not style preferences; breaking one is a security bug. The
+crew-onboarding email leak (#335) and the stale artist-org admin role (#336)
+both came from reading a denormalized value as if it were the source of truth.
+
+- **Identity is membership, not a role string.** Better Auth `role: "admin"`
+  is a *cache* of membership and was once shared by band/DJ org admins. Never
+  treat it as "Arbor staff".
+  - Staff / portal-admin checks resolve from memberships: `isPortalAdmin`
+    (`lib/auth.ts`), backed by `resolveGlobalRoleForUser` and
+    `resolveGlobalRoleFromActiveMemberships` (`lib/globalRole.ts`).
+  - **Every write to `userOrganizationMemberships` must resync the global
+    role** via `syncGlobalRoleFromMemberships` (`users.ts`). A removed Arbor
+    admin must not keep `role: "admin"`; a new Arbor admin must gain it. A
+    backfill migration exists (`migrations.recomputeArtistOrgAdminGlobalRoles`)
+    for rows that drifted before the sync existed.
+  - Admin artist-org "preview" (`getActiveOrganizationContextOrNull`,
+    `setActiveOrganization`) is gated on `isPortalAdmin`, so a stale role can
+    never switch into another artist org and act as its owner.
+- **`setupFirstAdmin` is zero-admin only and unauthenticated.** Once any admin
+  exists it must throw; it must never attach a credential account to an
+  existing user.
+- **Admin-wide email is membership-derived.** Use `listPortalAdminEmails`
+  (all Arbor admins) or `listAdminEmailsForVertical` (vertical-scoped); both
+  gate on `isPortalAdmin`. Never select recipients by `role === "admin"`.
+- **Public / token payloads are explicit projections.** Return only the fields
+  the public page renders — never raw internal rows. `loadPublicQuoteView`
+  (`lib/publicQuoteView.ts`) is the reference: it returns `crewRoster`,
+  `scheduleBlocks` and contacts, not `eventCrewShifts` (pay rates, notes) or
+  `eventArtifacts`. Tokens expire and are rate-limited.
+
 ## Web app (`apps/web/src`)
 
 - `app/` — App Router. Key route groups: `dashboard/` (staff app, auth-gated

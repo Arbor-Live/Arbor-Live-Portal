@@ -14,6 +14,7 @@ export function PostEventAlbumEmail({
   venueName,
   dateRangeLabel,
   albumShareUrl,
+  albumPortalUrl,
   eventUrl,
   feedbackFormUrl,
   postMortemUrl,
@@ -23,6 +24,9 @@ export function PostEventAlbumEmail({
   const isLead = audience === "lead";
   const isCrew = audience === "crew";
   const isClient = audience === "client";
+  // Clients upload through the portal so their files mirror to artist albums;
+  // fall back to the raw Immich link only when there is no portal.
+  const clientAlbumUrl = albumPortalUrl ?? albumShareUrl;
 
   const preview = isClient
     ? "Thanks for choosing Arbor Live — share your feedback"
@@ -76,9 +80,9 @@ export function PostEventAlbumEmail({
         </BodyCopy>
       )}
       {isClient ? (
-        albumShareUrl ? (
+        clientAlbumUrl ? (
           <CtaButton
-            href={albumShareUrl}
+            href={clientAlbumUrl}
             label="View & add to the album"
             variant="secondary"
           />

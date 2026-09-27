@@ -34,8 +34,10 @@ export const isSetupAvailable = query({
 });
 
 /**
- * Creates the first admin when none exist. Public (no auth) — gated by
- * "zero admins" only. Idempotent for the same email; never mints a second admin.
+ * Creates the first admin when none exist. Public (no auth) — gated strictly on
+ * "zero admins": once any admin exists this throws, so it can never attach a
+ * credential account to an existing admin (the whole mutation is atomic, so
+ * there is no partial first-run state to resume).
  */
 export const setupFirstAdmin = mutation({
   args: {
@@ -66,11 +68,7 @@ export const setupFirstAdmin = mutation({
       model: "user",
       where: [{ field: "role", value: "admin" }],
     });
-    const existingAdminEmail =
-      existingAdmin && typeof existingAdmin === "object" && "email" in existingAdmin
-        ? (existingAdmin as { email?: string }).email
-        : undefined;
-    if (existingAdmin && existingAdminEmail?.toLowerCase() !== email) {
+    if (existingAdmin) {
       throw new Error("An admin account already exists. Setup is disabled.");
     }
 

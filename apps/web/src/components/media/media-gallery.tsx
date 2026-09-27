@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { MediaViewer } from "@/components/media/media-viewer";
 
@@ -18,12 +19,19 @@ type MediaGalleryProps = {
   assets: MediaGalleryAsset[];
   emptyMessage?: string;
   className?: string;
+  /** Convex pagination controls; when set, a "Load more" button is rendered. */
+  loadMore?: () => void;
+  canLoadMore?: boolean;
+  isLoadingMore?: boolean;
 };
 
 export function MediaGallery({
   assets,
   emptyMessage = "No photos or videos yet.",
   className,
+  loadMore,
+  canLoadMore,
+  isLoadingMore,
 }: MediaGalleryProps) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
@@ -57,6 +65,18 @@ export function MediaGallery({
           </button>
         ))}
       </div>
+      {loadMore && (canLoadMore || isLoadingMore) ? (
+        <div className="flex justify-center pt-1">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={isLoadingMore}
+            onClick={() => loadMore()}
+          >
+            {isLoadingMore ? "Loading…" : "Load more"}
+          </Button>
+        </div>
+      ) : null}
       {activeIndex !== null ? (
         <MediaViewer
           asset={assets[activeIndex]}

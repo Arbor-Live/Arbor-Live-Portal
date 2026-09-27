@@ -241,6 +241,194 @@ export const backfillAllAlbums = internalAction({
   },
 });
 
+/**
+ * Backfill: copy every asset already in an event album into each linked
+ * artist's album. Runs after the feature shipped so existing event media shows
+ * up in artist albums, which only got mirrored uploads from then on.
+ *
+ * Resumable and bounded. Each invocation mirrors at most
+ * `MAX_ASSETS_PER_RUN` assets, walking up to `MAX_EVENTS_PER_RUN` events, and
+ * returns an opaque event `cursor` plus (when it stopped mid-event) an
+ * `assetCursor` scoped to `assetCursorEventId`. Pass all three back unchanged
+ * to continue; re-run until `isDone` is true. Bounding total assets keeps a
+ * single invocation inside Convex's action time limit so the operator always
+ * gets a cursor for the work that finished.
+ */
+const MAX_EVENTS_PER_RUN = 25;
+/**
+ * 200 assets ≈ a few Immich PUTs per second for well under a minute — orders of
+ * magnitude inside the 10-minute action limit. Raise it only with a measurement;
+ * the point is that a single invocation always finishes and returns a cursor.
+ */
+const MAX_ASSETS_PER_RUN = 200;
+
+type BackfillArgs = {
+  cursor?: string | null;
+  assetCursor?: string | null;
+  assetCursorEventId?: Id<"events"> | null;
+};
+
+type BackfillResult = {
+  eventsScanned: number;
+  assetsMirrored: number;
+  failedArtistMirrors: number;
+  nextCursor: string | null;
+  assetCursor: string | null;
+  assetCursorEventId: Id<"events"> | null;
+  isDone: boolean;
+};
+
+/** Shape returned by `runBackfillArtistAlbumMirror` (see `immich.ts`). */
+export type BackfillRunResult = BackfillResult;
+
+export const backfillArtistAlbumMirror = internalAction({
+  args: {
+    cursor: v.optional(v.union(v.string(), v.null())),
+    assetCursor: v.optional(v.union(v.string(), v.null())),
+    assetCursorEventId: v.optional(v.union(v.id("events"), v.null())),
+  },
+  returns: v.object({
+    eventsScanned: v.number(),
+    assetsMirrored: v.number(),
+    failedArtistMirrors: v.number(),
+    nextCursor: v.union(v.string(), v.null()),
+    assetCursor: v.union(v.string(), v.null()),
+    assetCursorEventId: v.union(v.id("events"), v.null()),
+    isDone: v.boolean(),
+  }),
+  handler: async (ctx, args: BackfillArgs): Promise<BackfillResult> => {
+    const page: {
+      targets: Array<Id<"events">>;
+      nextCursor: string | null;
+      isDone: boolean;
+    } = await ctx.runQuery(internal.immichDb.listEventMirrorBackfillTargetsInternal, {
+      cursor: args.cursor ?? null,
+      limit: MAX_EVENTS_PER_RUN,
+    });
+
+    let assetsMirrored = 0;
+    let failedArtistMirrors = 0;
+    let eventsScanned = 0;
+    let resumeAssetCursor = args.assetCursor ?? null;
+    let resumeEventId = args.assetCursorEventId ?? null;
+    // A resumed page re-reads every target up to and including the event we
+    // stopped in. Skip the ones already fully processed so the run advances.
+    let skippingToResumeEvent = resumeEventId !== null;
+
+    for (const eventId of page.targets) {
+      if (skippingToResumeEvent) {
+        if (eventId !== resumeEventId) continue;
+        skippingToResumeEvent = false;
+      }
+      // Resume mid-event only for the event the previous run stopped on; after
+      // that, every event starts from its first asset page.
+      let cursor: string | null = resumeEventId === eventId ? resumeAssetCursor : null;
+      eventsScanned += 1;
+      let isDone = false;
+      while (!isDone) {
+        const assetsPage: {
+          assets: Array<{
+            immichAssetId: string;
+            originalFileName: string;
+            type: "IMAGE" | "VIDEO";
+          }>;
+          nextCursor: string | null;
+          isDone: boolean;
+        } = await ctx.runQuery(internal.immichDb.listEventAlbumAssetsPageInternal, {
+          eventId,
+          cursor,
+        });
+
+        for (const asset of assetsPage.assets) {
+          const failed = await mirrorEventAssetToArtistAlbums(ctx, { eventId, ...asset });
+          assetsMirrored += 1;
+          failedArtistMirrors += failed;
+          if (assetsMirrored >= MAX_ASSETS_PER_RUN) {
+            // Stop inside the *current* event. Return the cursor that reopens
+            // this same event page (args.cursor) — not page.nextCursor, which
+            // points past it and would skip this event's remaining assets on
+            // resume, since assetCursorEventId would not be in the next page's
+            // targets. `skippingToResumeEvent` fast-forwards past this page's
+            // already-done events on the next run.
+            return {
+              eventsScanned,
+              assetsMirrored,
+              failedArtistMirrors,
+              nextCursor: args.cursor ?? null,
+              assetCursor: assetsPage.nextCursor,
+              assetCursorEventId: eventId,
+              isDone: false,
+            };
+          }
+        }
+
+        cursor = assetsPage.nextCursor;
+        isDone = assetsPage.isDone;
+      }
+      resumeAssetCursor = null;
+      resumeEventId = null;
+    }
+
+    return {
+      eventsScanned,
+      assetsMirrored,
+      failedArtistMirrors,
+      nextCursor: page.nextCursor,
+      assetCursor: null,
+      assetCursorEventId: null,
+      isDone: page.isDone,
+    };
+  },
+});
+
+/**
+ * An asset uploaded to an event also belongs in each linked artist's album, so
+ * an artist's album is the one place with all of their photos. Best-effort per
+ * artist: the event album copy is already saved, so one bad artist album must
+ * not fail the others. Returns how many artist albums failed, so the backfill
+ * can report an incomplete mirror instead of silently claiming success.
+ */
+async function mirrorEventAssetToArtistAlbums(
+  ctx: ActionCtx,
+  args: {
+    eventId: Id<"events">;
+    immichAssetId: string;
+    originalFileName: string;
+    type: "IMAGE" | "VIDEO";
+  },
+): Promise<number> {
+  const artists: Array<{ organizationId: string; displayName: string }> = await ctx.runQuery(
+    internal.immichDb.listEventArtistOrgsInternal,
+    { eventId: args.eventId },
+  );
+
+  let failed = 0;
+  for (const artist of artists) {
+    try {
+      const album = await ensureAlbumCore(ctx, {
+        entityType: "band",
+        entityId: artist.organizationId,
+        albumName: `Band: ${artist.displayName}`,
+        description: `Arbor Live Portal band album for ${artist.displayName}`,
+      });
+      await addAssetsToImmichAlbum(album.immichAlbumId, [args.immichAssetId]);
+      await ctx.runMutation(internal.immichDb.recordAssetInternal, {
+        albumLinkId: album.albumLinkId,
+        immichAssetId: args.immichAssetId,
+        originalFileName: args.originalFileName,
+        type: args.type,
+      });
+    } catch (error) {
+      failed += 1;
+      console.error(
+        `Failed to mirror asset ${args.immichAssetId} into artist album ${artist.organizationId}`,
+        error,
+      );
+    }
+  }
+  return failed;
+}
+
 export const addUploadedAssetToAlbum = internalAction({
   args: {
     albumLinkId: v.id("immichAlbumLinks"),
@@ -261,6 +449,19 @@ export const addUploadedAssetToAlbum = internalAction({
       originalFileName: args.originalFileName,
       type: args.type,
     });
+
+    // Mirror before the event-album resync: syncAlbumAssets can fail on an
+    // Immich hiccup, and scheduled actions are not retried, so mirroring first
+    // keeps the artist albums in step with the asset we just recorded.
+    if (link.entityType === "event") {
+      await mirrorEventAssetToArtistAlbums(ctx, {
+        eventId: link.entityId as Id<"events">,
+        immichAssetId: args.immichAssetId,
+        originalFileName: args.originalFileName,
+        type: args.type,
+      });
+    }
+
     await ctx.runAction(internal.immichActions.syncAlbumAssets, {
       albumLinkId: args.albumLinkId,
     });

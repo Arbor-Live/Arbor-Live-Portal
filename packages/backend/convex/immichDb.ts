@@ -158,7 +158,9 @@ export const recordAssetInternal = internalMutation({
   handler: async (ctx, args) => {
     const existing = await ctx.db
       .query("immichAssetRecords")
-      .withIndex("by_immichAssetId", (q) => q.eq("immichAssetId", args.immichAssetId))
+      .withIndex("by_albumLinkId_and_immichAssetId", (q) =>
+        q.eq("albumLinkId", args.albumLinkId).eq("immichAssetId", args.immichAssetId),
+      )
       .first();
     if (existing) return null;
     await ctx.db.insert("immichAssetRecords", {
@@ -243,6 +245,48 @@ export const getBandDisplayNameInternal = internalQuery({
   },
 });
 
+/**
+ * Artist organizations on an event's lineup — the albums that event media
+ * should also flow into so each artist has one central album.
+ *
+ * The cap is a festival-sized lineup (a real bill is single digits). It reads
+ * one row past the cap and throws rather than silently truncating, so an event
+ * that somehow exceeds it fails loudly instead of stranding artist albums.
+ */
+const MAX_EVENT_ARTISTS = 100;
+
+export const listEventArtistOrgsInternal = internalQuery({
+  args: { eventId: v.id("events") },
+  returns: v.array(
+    v.object({
+      organizationId: v.string(),
+      displayName: v.string(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const participations = await ctx.db
+      .query("eventBandParticipations")
+      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+      .take(MAX_EVENT_ARTISTS + 1);
+    if (participations.length > MAX_EVENT_ARTISTS) {
+      throw new Error(
+        `Event ${args.eventId} has more than ${MAX_EVENT_ARTISTS} artist participations; raise MAX_EVENT_ARTISTS before mirroring.`,
+      );
+    }
+    const seen = new Set<string>();
+    const artists: Array<{ organizationId: string; displayName: string }> = [];
+    for (const row of participations) {
+      if (seen.has(row.organizationId)) continue;
+      seen.add(row.organizationId);
+      artists.push({
+        organizationId: row.organizationId,
+        displayName: await resolveBandDisplayName(ctx, row.organizationId),
+      });
+    }
+    return artists;
+  },
+});
+
 export const getEventMetaInternal = internalQuery({
   args: { eventId: v.id("events") },
   returns: v.union(
@@ -259,6 +303,92 @@ export const getEventMetaInternal = internalQuery({
     return {
       title: `${event.title} — ${formatPacificDate(event.startAt)}`,
       venueName: event.venueName,
+    };
+  },
+});
+
+/**
+ * Page of events that have event media to mirror into artist albums. Newest
+ * first, keyed off `_creationTime`, so re-running with the returned cursor
+ * walks the whole table. Only events with at least one mirror row and a lineup
+ * are worth scanning; the mirror step skips events with no participations.
+ */
+export const listEventMirrorBackfillTargetsInternal = internalQuery({
+  args: { cursor: v.union(v.string(), v.null()), limit: v.number() },
+  returns: v.object({
+    targets: v.array(v.id("events")),
+    nextCursor: v.union(v.string(), v.null()),
+    isDone: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    const events = await ctx.db
+      .query("events")
+      .order("desc")
+      .paginate({ numItems: args.limit, cursor: args.cursor });
+
+    const targets: Id<"events">[] = [];
+    for (const event of events.page) {
+      const albumLink = await ctx.db
+        .query("immichAlbumLinks")
+        .withIndex("by_entityType_and_entityId", (q) =>
+          q.eq("entityType", "event").eq("entityId", event._id),
+        )
+        .first();
+      if (!albumLink) continue;
+      const participation = await ctx.db
+        .query("eventBandParticipations")
+        .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
+        .first();
+      if (!participation) continue;
+      targets.push(event._id);
+    }
+
+    return {
+      targets,
+      nextCursor: events.isDone ? null : events.continueCursor,
+      isDone: events.isDone,
+    };
+  },
+});
+
+/**
+ * One page of an event album's already-mirrored assets (no Immich calls).
+ * Cursor is an opaque Convex string from the previous page; `take(...)` would
+ * silently cap a large album and strand the rest.
+ */
+const MAX_BACKFILL_ASSETS_PER_PAGE = 200;
+
+export const listEventAlbumAssetsPageInternal = internalQuery({
+  args: {
+    eventId: v.id("events"),
+    cursor: v.union(v.string(), v.null()),
+  },
+  returns: v.object({
+    assets: v.array(
+      v.object({
+        immichAssetId: v.string(),
+        originalFileName: v.string(),
+        type: assetTypeValue,
+      }),
+    ),
+    nextCursor: v.union(v.string(), v.null()),
+    isDone: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    const albumLink = await getCanonicalAlbumLink(ctx, "event", args.eventId);
+    if (!albumLink) return { assets: [], nextCursor: null, isDone: true };
+    const page = await ctx.db
+      .query("immichAssetRecords")
+      .withIndex("by_albumLinkId", (q) => q.eq("albumLinkId", albumLink._id))
+      .paginate({ numItems: MAX_BACKFILL_ASSETS_PER_PAGE, cursor: args.cursor });
+    return {
+      assets: page.page.map((row) => ({
+        immichAssetId: row.immichAssetId,
+        originalFileName: row.originalFileName,
+        type: row.type,
+      })),
+      nextCursor: page.isDone ? null : page.continueCursor,
+      isDone: page.isDone,
     };
   },
 });
