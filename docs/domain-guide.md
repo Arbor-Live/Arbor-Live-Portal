@@ -171,7 +171,8 @@ Event types (drive which workspace tabs and quick-add blocks appear):
   `bookingRequestSettings`, or manual swap on the request detail). Inbox
   defaults to open requests (`submitted`/`action_required`/`pending_client`), oldest-first, with a
   days-since-submitted counter.
-- **The bill** (event workspace **Lineup** tab) is one drag-orderable list of
+- **The bill** (event workspace **Lineup** tab) is listed in show order (by set
+  time from the Run of Show; acts without a set follow in `sortOrder`), a list of
   *positions* (`eventArtistNeeds.sortOrder`), each with a freeform `label` and
   either filled by an act or still needed:
   - **Artist Needed** (`eventArtistNeeds`) — one open **slot** per row, so "two

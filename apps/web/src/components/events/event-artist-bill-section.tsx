@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import {
   CaretRightIcon,
-  DotsSixVerticalIcon,
   DotsThreeIcon,
   MicrophoneStageIcon,
   PlusIcon,
@@ -19,7 +18,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { SortableList } from "@/components/ui/sortable-list";
 import { useAppDialog } from "@/components/ui/app-dialog";
 import { ArborOnlyGuard } from "@/components/org-context-guard";
 import { AddToBillDialog } from "@/components/events/lineup/add-to-bill-dialog";
@@ -88,7 +86,6 @@ function EventArtistBillPanel({
   const removeSlot = useMutation(api.eventArtistNeeds.removeSlot);
   const dismissInquiry = useMutation(api.eventArtistNeeds.dismissInquiry);
   const updateSlotLineup = useMutation(api.eventArtistNeeds.updateSlotLineup);
-  const reorderSlots = useMutation(api.eventArtistNeeds.reorderSlots);
   const { confirm } = useAppDialog();
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
@@ -178,7 +175,17 @@ function EventArtistBillPanel({
       if (placed.has(performer.participationId)) continue;
       list.push({ key: `act-${performer.participationId}`, performer });
     }
-    return list;
+    // Show order: by set time from the Run of Show. Unscheduled rows follow in
+    // the order they were added (a stable sort keeps the bill's order).
+    return list
+      .map((row, index) => ({ row, index, start: rowSetWindow(row)[0] }))
+      .sort((a, b) => {
+        if (a.start != null && b.start != null) return a.start - b.start || a.index - b.index;
+        if (a.start != null) return -1;
+        if (b.start != null) return 1;
+        return a.index - b.index;
+      })
+      .map(({ row }) => row);
   }, [bill?.slots, performers]);
 
   const riderByOrg = useMemo(
@@ -204,19 +211,6 @@ function EventArtistBillPanel({
   }, [rows]);
 
   const selectedRow = rows.find((row) => row.key === selectedKey) ?? null;
-
-  async function persistOrder(needIds: Id<"eventArtistNeeds">[]) {
-    try {
-      await reorderSlots({ eventId, needIds });
-    } catch (error) {
-      notify.error(getConvexErrorMessage(error));
-    }
-  }
-
-  /** Rows in bill order; only positions are persisted, an unplaced act trails. */
-  function handleReorder(orderedRows: BillRow[]) {
-    void persistOrder(orderedRows.flatMap((row) => (row.slot ? [row.slot.needId] : [])));
-  }
 
   async function attempt(action: () => Promise<unknown>, success: string) {
     try {
@@ -304,7 +298,7 @@ function EventArtistBillPanel({
             Lineup
           </CardTitle>
           <p className="text-sm text-muted-foreground">
-            Top of the bill first. Set and soundcheck times live in the Run of Show.
+            In show order, from set times in the Run of Show. Acts without a set yet come last.
           </p>
           {rows.length > 0 ? (
             <p className="text-sm" data-testid="lineup-summary">
@@ -375,15 +369,8 @@ function EventArtistBillPanel({
         ) : null}
 
         {rows.length > 0 ? (
-          <SortableList
-            items={rows}
-            disabled={!canEdit}
-            getId={(row) => row.key}
-            onReorder={handleReorder}
-            rowTestId="bill-card"
-            canDrag={(row) => Boolean(row.slot)}
-            rowClassName="border text-sm"
-            renderItem={(row, index, controls) => {
+          <ol className="space-y-2">
+            {rows.map((row, index) => {
               const status = rowStatus(row);
               const actName = rowActName(row);
               const [setStart, setEnd] = rowSetWindow(row);
@@ -391,16 +378,16 @@ function EventArtistBillPanel({
               const openInquiries =
                 row.slot?.inquiries.filter((inquiry) => inquiry.status === "submitted").length ?? 0;
               return (
-                <div className="flex items-center gap-2 pr-1">
+                <li
+                  key={row.key}
+                  data-testid="bill-card"
+                  className="flex items-center gap-2 border pr-1 pl-3 text-sm"
+                >
                   <span
-                    {...controls.handleProps}
-                    className="flex size-8 shrink-0 cursor-grab touch-none select-none items-center justify-center text-muted-foreground/60 active:cursor-grabbing"
-                    title="Drag to reorder"
+                    className="w-5 shrink-0 text-right text-xs text-muted-foreground tabular-nums"
+                    title={setStart != null ? "Show order" : "No set time yet"}
                   >
-                    <DotsSixVerticalIcon className="size-4" weight="bold" />
-                  </span>
-                  <span className="w-4 shrink-0 text-right text-xs text-muted-foreground tabular-nums">
-                    {index + 1}
+                    {setStart != null ? index + 1 : "–"}
                   </span>
                   <button
                     type="button"
@@ -482,12 +469,6 @@ function EventArtistBillPanel({
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem onSelect={() => setSelectedKey(row.key)}>Open details</DropdownMenuItem>
-                        <DropdownMenuItem disabled={!controls.canMoveUp} onSelect={controls.moveUp}>
-                          Move up
-                        </DropdownMenuItem>
-                        <DropdownMenuItem disabled={!controls.canMoveDown} onSelect={controls.moveDown}>
-                          Move down
-                        </DropdownMenuItem>
                         {row.performer?.payment?.status !== "paid" ? (
                           <>
                             <DropdownMenuSeparator />
@@ -502,10 +483,10 @@ function EventArtistBillPanel({
                       </DropdownMenuContent>
                     </DropdownMenu>
                   ) : null}
-                </div>
+                </li>
               );
-            }}
-          />
+            })}
+          </ol>
         ) : null}
       </CardContent>
 

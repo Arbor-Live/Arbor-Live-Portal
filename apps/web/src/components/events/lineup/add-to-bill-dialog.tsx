@@ -60,7 +60,7 @@ export function AddToBillDialog({
         <DialogHeader>
           <DialogTitle>Add to bill</DialogTitle>
           <DialogDescription>
-            New acts and positions go to the bottom of the bill; drag to reorder.
+            The bill follows the show order: give an act a set in the Run of Show to place it.
           </DialogDescription>
         </DialogHeader>
         <ToggleGroup

@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
 import type { TimelineBlockDraft } from "@/components/events/event-timeline-scheduler";
+import { localDateTimeInputToMs } from "@/lib/crew-availability";
 import {
   addPacificCalendarDays,
   formatTime,
@@ -22,7 +23,7 @@ import {
   pacificDateKey,
   toPacificDateTimeInput,
 } from "@/lib/format";
-import type { BuildRunOfShowInput, RunOfShowAct } from "@/lib/run-of-show";
+import { actKeyOf, type BuildRunOfShowInput, type RunOfShowAct } from "@/lib/run-of-show";
 
 const DEFAULT_SET_MINUTES = 45;
 const DEFAULT_HEADLINER_MINUTES = 60;
@@ -38,10 +39,30 @@ const DOORS_BEFORE_START_MINUTES = 5;
 const DEFAULT_SOUNDCHECK_MINUTES = 15;
 const HOUR = 60 * 60_000;
 
+/** Acts by their current set time, then unscheduled acts in lineup order. */
+function defaultPlayOrder(acts: RunOfShowAct[], blocks: TimelineBlockDraft[]) {
+  const setStart = new Map<string, number>();
+  for (const block of blocks) {
+    const key = block.blockType === "set" ? actKeyOf(block) : null;
+    const start = key ? localDateTimeInputToMs(block.startsAt) : null;
+    if (key && start != null) setStart.set(key, start);
+  }
+  return acts
+    .map((act, index) => ({ act, index, start: setStart.get(act.key) }))
+    .sort((a, b) => {
+      if (a.start != null && b.start != null) return a.start - b.start || a.index - b.index;
+      if (a.start != null) return -1;
+      if (b.start != null) return 1;
+      return a.index - b.index;
+    })
+    .map(({ act }) => act);
+}
+
 /**
- * Lay out a run of show from the lineup. Play order defaults to the bill read
- * bottom-up (the act at the top of the bill closes the night); soundchecks
- * default to the reverse so the openers' gear stays on stage.
+ * Lay out a run of show from the lineup. Play order defaults to the current show
+ * order (acts' existing set times), then acts without a set in the order they
+ * were added; soundchecks default to the reverse so the openers' gear stays on
+ * stage.
  */
 export function BuildRunOfShowDialog({
   open,
@@ -66,7 +87,7 @@ export function BuildRunOfShowDialog({
   const [soundcheckMinutes, setSoundcheckMinutes] = useState(DEFAULT_SOUNDCHECK_MINUTES);
   const [soundcheckOrder, setSoundcheckOrder] = useState<"reverse" | "same">("reverse");
   const [rows, setRows] = useState<PlayRow[]>(() =>
-    [...acts].reverse().map((act, index, all) => ({
+    defaultPlayOrder(acts, blocks).map((act, index, all) => ({
       act,
       setMinutes: index === all.length - 1 ? DEFAULT_HEADLINER_MINUTES : DEFAULT_SET_MINUTES,
     })),
