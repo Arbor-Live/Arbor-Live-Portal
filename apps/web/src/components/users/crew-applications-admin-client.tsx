@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -13,6 +13,7 @@ import { EventSelect } from "@/components/events/event-select";
 import { ScheduleBlockWindowFields } from "@/components/events/schedule-block-window-fields";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { formatDateTime } from "@/lib/format";
+import { isSectionBlockType } from "@/lib/schedule-block-types";
 import {
   localDateTimeInputToMs,
   toLocalDateTimeInput,
@@ -84,7 +85,11 @@ function TraineeAssignPanel({
     eventId ? { id: eventId as Id<"events"> } : "skip",
   );
 
-  const scheduleBlocks = eventDetails?.blocks ?? [];
+  // Crew are scheduled per section; doors, soundchecks, and sets aren't shifts.
+  const scheduleBlocks = useMemo(
+    () => (eventDetails?.blocks ?? []).filter((block) => isSectionBlockType(block.blockType)),
+    [eventDetails?.blocks],
+  );
 
   const defaultCallTimeMs =
     presenceMode === "entire_event"

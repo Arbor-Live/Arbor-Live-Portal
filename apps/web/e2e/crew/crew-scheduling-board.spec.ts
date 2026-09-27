@@ -57,7 +57,7 @@ test.describe("crew scheduling board", () => {
     await page.waitForURL(new RegExp(`/dashboard/events/${seeded.eventId}/schedule`), {
       timeout: 30_000,
     });
-    await expect(page.getByText("Schedule", { exact: true }).first()).toBeVisible({
+    await expect(page.getByTestId("run-of-show")).toBeVisible({
       timeout: 30_000,
     });
   });

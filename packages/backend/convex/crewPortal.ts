@@ -22,6 +22,7 @@ import {
 import { buildUserProfileImageByUserId } from "./lib/userProfileImage";
 import { normalizeEventStatus } from "./lib/eventStatus";
 import { listMyPostEventWork as listMyPostEventWorkForUser } from "./lib/myEventActions";
+import { isSectionBlockType } from "./lib/scheduleBlockTypes";
 
 const scheduleBlockSummaryValue = v.object({
   _id: v.id("eventScheduleBlocks"),
@@ -131,7 +132,10 @@ export const listMyPendingAvailability = query({
       venueName: event.venueName,
       startAt: event.startAt,
       endAt: event.endAt,
-      scheduleBlocks: (blockPages[index] ?? []).map((block) => ({
+      // Crew are scheduled per section, so availability asks about sections only.
+      scheduleBlocks: (blockPages[index] ?? [])
+        .filter((block) => isSectionBlockType(block.blockType))
+        .map((block) => ({
         _id: block._id,
         blockType: block.blockType,
         label: block.label,

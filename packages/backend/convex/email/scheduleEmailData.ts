@@ -1,6 +1,7 @@
 import { formatDateTimeRange } from "@arbor/format";
 import type { Id } from "../_generated/dataModel";
 import { EVENT_TIMEZONE } from "./constants";
+import { isSectionBlockType, type ScheduleBlockType } from "../lib/scheduleBlockTypes";
 
 type ScheduleBlockLike = {
   _id: Id<"eventScheduleBlocks">;
@@ -56,10 +57,12 @@ export function crewAssignmentFingerprint(shifts: CrewShiftLike[], userId: strin
   return shiftGroupFingerprint(shifts.filter((shift) => shift.userId === userId));
 }
 
+/** Crew work sections (setup, show, strike, custom); doors, soundchecks, and sets don't count. */
 export function userCoversEntireSchedule(
   userShifts: Array<{ scheduleBlockId?: Id<"eventScheduleBlocks"> }>,
-  blocks: Array<{ _id: Id<"eventScheduleBlocks"> }>,
+  allBlocks: Array<{ _id: Id<"eventScheduleBlocks">; blockType: ScheduleBlockType }>,
 ) {
+  const blocks = allBlocks.filter((block) => isSectionBlockType(block.blockType));
   if (blocks.length === 0) return false;
   const assignedBlockIds = new Set(
     userShifts
