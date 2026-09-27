@@ -581,16 +581,29 @@ async function replaceLineItems(
 
   await syncArtistSlotsForInvoice(ctx, invoiceId, now);
 
-  // A line the editor dropped takes the position it opened with it, unless the
-  // position has since been filled or carries inquiries of its own.
-  const kept = new Set(
-    (
-      await ctx.db
-        .query("invoiceLineItems")
-        .withIndex("by_invoiceId", (q) => q.eq("invoiceId", invoiceId))
-        .take(500)
-    ).flatMap((row) => (row.needId ? [row.needId] : [])),
+  // A line the editor dropped — or moved to another day — takes the position it
+  // opened with it, unless that position carries inquiries of its own or the act
+  // is still billed on that day by a surviving line.
+  const surviving = await ctx.db
+    .query("invoiceLineItems")
+    .withIndex("by_invoiceId", (q) => q.eq("invoiceId", invoiceId))
+    .take(500);
+  const kept = new Set(surviving.flatMap((row) => (row.needId ? [row.needId] : [])));
+  const stillBilledOn = new Set(
+    surviving.flatMap((row) =>
+      row.section === "artist" && row.eventId && row.organizationId
+        ? [`${row.eventId}:${row.organizationId}`]
+        : [],
+    ),
   );
+  // The act each departing line claimed its position with, so we can tell the
+  // claim this invoice made from a booking somebody else made.
+  const departedOrgByNeed = new Map<Id<"eventArtistNeeds">, string>();
+  for (const row of existing) {
+    if (row.section === "artist" && row.needId && row.organizationId) {
+      departedOrgByNeed.set(row.needId, row.organizationId);
+    }
+  }
   for (const needId of previousNeedIds) {
     if (kept.has(needId)) continue;
     const slot = await ctx.db.get(needId);
@@ -601,7 +614,19 @@ async function replaceLineItems(
       .query("eventBandParticipations")
       .withIndex("by_needId", (q) => q.eq("needId", needId))
       .first();
-    if (filled) continue;
+    if (filled) {
+      const departedOrg = departedOrgByNeed.get(needId);
+      // A booking for another act is not ours to remove, and an act another
+      // surviving line still bills on this day keeps its seat.
+      if (
+        !departedOrg ||
+        filled.organizationId !== departedOrg ||
+        stillBilledOn.has(`${slot.eventId}:${departedOrg}`)
+      ) {
+        continue;
+      }
+      await ctx.db.delete(filled._id);
+    }
     const inquiries = await ctx.db
       .query("eventArtistInquiries")
       .withIndex("by_needId", (q) => q.eq("needId", needId))
