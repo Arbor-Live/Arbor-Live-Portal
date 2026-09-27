@@ -21,14 +21,14 @@ test.describe("schedule unlinked shifts", () => {
     });
 
     await expect(page.getByText(/open in editor/i).first()).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText(/not linked to a schedule block/i).first()).toBeVisible({
+    await expect(page.getByText(/not linked to a section/i).first()).toBeVisible({
       timeout: 30_000,
     });
 
     await page.getByRole("button", { name: "Delete Unassigned Shifts" }).click();
     await acceptAppDialog(page);
 
-    await expect(page.getByText(/not linked to a schedule block/i)).toHaveCount(0, {
+    await expect(page.getByText(/not linked to a section/i)).toHaveCount(0, {
       timeout: 30_000,
     });
 
