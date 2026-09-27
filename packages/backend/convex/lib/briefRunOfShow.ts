@@ -114,16 +114,18 @@ export function buildBriefRunOfShow(
 
   function shiftRow(shift: BriefShiftRow): EventBriefShift {
     const person = shift.personName?.trim();
+    const assigned = Boolean(person || shift.userId || shift.crewApplicationId);
     const hours = `${formatTime(shift.startsAt)} – ${formatTime(shift.endsAt)}`;
     return {
       role: shift.role.trim() || "Crew",
-      person: person || "Open",
+      // Someone is on it even when no display name was stored with the shift.
+      person: person || (assigned ? "Assigned" : "Open"),
       timeLabel:
         shift.callTime != null && shift.callTime !== shift.startsAt
           ? `Call ${formatTime(shift.callTime)} · ${hours}`
           : hours,
       notes: shift.notes?.trim() || undefined,
-      open: !person && !shift.userId && !shift.crewApplicationId,
+      open: !assigned,
     };
   }
 

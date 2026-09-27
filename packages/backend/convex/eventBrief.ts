@@ -192,7 +192,23 @@ export const getBriefSource = internalQuery({
     const swapsByPair = new Map(
       (nightRider?.changeovers ?? []).map((changeover) => [changeover.title, changeover.lines]),
     );
-    const runOfShowData = buildBriefRunOfShow(blocks, shifts, {
+    // Shifts store a display name when assigned; fill in any that don't from the
+    // portal user or trainee application so the brief never prints a blank.
+    const unnamedUserIds = shifts
+      .filter((shift) => !shift.personName?.trim() && shift.userId)
+      .map((shift) => shift.userId!);
+    const userById = await findAuthUsersByIds(ctx, unnamedUserIds);
+    const namedShifts = await Promise.all(
+      shifts.map(async (shift) => {
+        if (shift.personName?.trim()) return shift;
+        const userName = shift.userId ? userById.get(shift.userId)?.name?.trim() : undefined;
+        const application =
+          !userName && shift.crewApplicationId ? await ctx.db.get(shift.crewApplicationId) : null;
+        const personName = userName || application?.name?.trim();
+        return personName ? { ...shift, personName } : shift;
+      }),
+    );
+    const runOfShowData = buildBriefRunOfShow(blocks, namedShifts, {
       formatTime: (ms) => formatTime(ms, event.timezone),
       formatDate: (ms) => formatDate(ms, event.timezone),
       swaps: (from, to) => swapsByPair.get(`${from} → ${to}`),

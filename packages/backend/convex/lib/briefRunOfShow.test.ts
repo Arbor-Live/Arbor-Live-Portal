@@ -122,4 +122,21 @@ describe("buildBriefRunOfShow", () => {
     // Without the same-day rule, night one's Larks set would pair with night two's Night Owls.
     expect(moments.find((m) => m.typeLabel === "Changeover")!.swaps).toBeUndefined();
   });
+
+  it("marks a shift with an assignee but no stored name as Assigned, not Open", () => {
+    const section = block("show", "Show", "18:00", "22:00");
+    const result = buildBriefRunOfShow(
+      [section],
+      [
+        { scheduleBlockId: section._id, role: "A2", userId: "user-1", startsAt: at("18:00"), endsAt: at("22:00") },
+        { scheduleBlockId: section._id, role: "Trainee", crewApplicationId: "app-1", startsAt: at("18:00"), endsAt: at("22:00") },
+      ],
+      options,
+    );
+    const crew = result.runOfShow[0]!.entries[0]!.section!.crew;
+    expect(crew.map((shift) => [shift.person, shift.open])).toEqual([
+      ["Assigned", false],
+      ["Assigned", false],
+    ]);
+  });
 });
