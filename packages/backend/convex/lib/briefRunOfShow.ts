@@ -87,9 +87,10 @@ function sectionFor(moment: BriefBlockRow, sections: BriefBlockRow[]) {
   return best;
 }
 
-/** The sets either side of a changeover, allowing small gaps. */
-function changeoverActs(changeover: BriefBlockRow, sets: BriefBlockRow[]) {
+/** The sets either side of a changeover on the same day, allowing small gaps. */
+function changeoverActs(changeover: BriefBlockRow, allSets: BriefBlockRow[]) {
   const slack = 5 * MINUTE;
+  const sets = allSets.filter((set) => set.dayIndex === changeover.dayIndex);
   const before = sets
     .filter((set) => set.endsAt <= changeover.startsAt + slack)
     .sort((a, b) => b.endsAt - a.endsAt)[0];

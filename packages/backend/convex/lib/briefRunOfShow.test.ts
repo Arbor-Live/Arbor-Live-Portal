@@ -112,4 +112,14 @@ describe("buildBriefRunOfShow", () => {
     );
     expect(multi.runOfShow.map((d) => d.dayLabel)).toEqual(["Day 1 · 2026-10-14", "Day 2 · 2026-10-15"]);
   });
+
+  it("pairs a changeover only with sets on its own day", () => {
+    const nightOne = block("set", "Larks set", "20:00", "21:00", { needId: "larks" });
+    const changeover = block("changeover", "Changeover", "18:45", "19:00", { dayIndex: 1 });
+    const nightTwo = block("set", "Night Owls set", "19:00", "20:00", { participationId: "owls", dayIndex: 1 });
+    const result = buildBriefRunOfShow([nightOne, changeover, nightTwo], [], options);
+    const moments = result.runOfShow.flatMap((day) => day.entries.flatMap((entry) => entry.moments));
+    // Without the same-day rule, night one's Larks set would pair with night two's Night Owls.
+    expect(moments.find((m) => m.typeLabel === "Changeover")!.swaps).toBeUndefined();
+  });
 });
