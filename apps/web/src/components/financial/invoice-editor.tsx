@@ -85,6 +85,14 @@ type EquipmentRow = {
 };
 type ExternalRentalRow = { provider: string; label: string; quantity: string; rateUsd: string };
 /** `organizationId` empty / TBD sentinel ⇒ band not chosen yet. */
+type InvoiceArtistPosition = {
+  needId: string;
+  label: string;
+  artistType: "band" | "dj" | "no_preference";
+  status: "open" | "inquiring" | "booked";
+  genres: string;
+};
+
 type ArtistRow = {
   organizationId: string;
   label: string;
@@ -96,6 +104,8 @@ type ArtistRow = {
   rateUsd: string;
   /** Linked day/event this slot belongs to on multi-day bookings. */
   eventId?: string;
+  /** The bill position this line stands for, echoed back on save. */
+  needId?: string;
 };
 type CrewRow = InvoiceCrewRow;
 type FeeRow = { feeDefinitionId: string; label: string; quantity: string; rateUsd: string };
@@ -121,6 +131,7 @@ function artistPersonHours(row: Pick<ArtistRow, "hours" | "people">) {
 function artistRowFromLineItem(row: {
   organizationId?: string | null;
   eventId?: string | null;
+  needId?: string | null;
   label: string;
   quantity: number;
   rateUsd: number;
@@ -135,6 +146,7 @@ function artistRowFromLineItem(row: {
   return {
     organizationId: row.organizationId?.trim() || ARTIST_TBD_VALUE,
     eventId: row.eventId?.trim() || undefined,
+    needId: row.needId?.trim() || undefined,
     label: row.label,
     hours: hasBreakdown ? String(row.performanceHours) : "1",
     // Legacy lines stored people in quantity with no hours breakdown.
@@ -313,21 +325,18 @@ export function InvoiceEditor({
       ? { eventIds: linkedDayEvents.map((day) => day._id) }
       : "skip",
   );
-  const artistNeedByEventId = useMemo(() => {
-    const map = new Map<
-      string,
-      { artistType: "band" | "dj" | "no_preference"; status: "open" | "inquiring" | "booked"; genres: string }
-    >();
+  const artistPositionsByEventId = useMemo(() => {
+    const map = new Map<string, InvoiceArtistPosition[]>();
     for (const row of artistNeedStatuses ?? []) {
-      // One row per slot: an open slot must stay visible even if a later
-      // booked slot for the same event lands in the map.
-      const existing = map.get(row.eventId);
-      if (existing && existing.status !== "booked" && row.status === "booked") continue;
-      map.set(row.eventId, {
+      const list = map.get(row.eventId) ?? [];
+      list.push({
+        needId: row.needId,
+        label: row.label,
         artistType: row.artistType,
         status: row.status,
         genres: row.genres,
       });
+      map.set(row.eventId, list);
     }
     return map;
   }, [artistNeedStatuses]);
@@ -826,6 +835,7 @@ export function InvoiceEditor({
               people: "1",
               rateUsd: payment.totalUsd.toString(),
               eventId,
+              needId: performer.needId ?? undefined,
             };
           }
           const hours = payment.performanceHours && payment.performanceHours > 0 ? payment.performanceHours : 1;
@@ -838,6 +848,7 @@ export function InvoiceEditor({
             people: String(members),
             rateUsd: rate.toString(),
             eventId,
+            needId: performer.needId ?? undefined,
           };
         }
         const profileRate = rateByOrg.get(performer.organizationId) ?? 0;
@@ -849,6 +860,7 @@ export function InvoiceEditor({
           people: profileMembers > 0 ? profileMembers.toString() : "1",
           rateUsd: profileRate > 0 ? profileRate.toString() : "0",
           eventId,
+          needId: performer.needId ?? undefined,
         };
       }),
     );
@@ -968,6 +980,7 @@ export function InvoiceEditor({
       packageExclusionDiscountUsd?: number;
       organizationId?: string;
       eventId?: Id<"events">;
+      needId?: Id<"eventArtistNeeds">;
       memberCount?: number;
       performanceHours?: number;
     }> = [];
@@ -1039,6 +1052,7 @@ export function InvoiceEditor({
         rateUsd: Number(row.rateUsd || "0"),
         organizationId,
         eventId,
+        needId: row.needId as Id<"eventArtistNeeds"> | undefined,
         memberCount: people > 0 ? people : undefined,
         performanceHours: hours > 0 ? hours : undefined,
       });
@@ -1888,7 +1902,7 @@ export function InvoiceEditor({
                   }))
             }
             defaultEventId={selectedDayEventId}
-            needStatusByEventId={artistNeedByEventId}
+            needStatusByEventId={artistPositionsByEventId}
           />
           </div>
           <div id="section-crew">
@@ -2945,11 +2959,8 @@ function SectionArtists({
   days?: Array<{ _id: string; label: string }>;
   /** Day new rows default to (the selected linked day). */
   defaultEventId?: string;
-  /** Open "Artist Needed" per linked event, to flag unbooked days. */
-  needStatusByEventId?: Map<
-    string,
-    { artistType: "band" | "dj" | "no_preference"; status: "open" | "inquiring" | "booked"; genres: string }
-  >;
+  /** The bill's positions per linked event, mirrored on the invoice. */
+  needStatusByEventId?: Map<string, InvoiceArtistPosition[]>;
 }) {
   const bandOptions = useMemo(
     () => artistSelectOptions(bands, { includeTbd: true }),
@@ -2968,8 +2979,10 @@ function SectionArtists({
     dj: "DJ",
     no_preference: "No preference",
   };
-  const openArtistNeeds = needStatusByEventId
-    ? [...needStatusByEventId.entries()].filter(([, need]) => need.status !== "booked")
+  const artistPositions = needStatusByEventId
+    ? [...needStatusByEventId.entries()].flatMap(([eventId, needs]) =>
+        needs.map((need) => ({ eventId, need })),
+      )
     : [];
   const gridClass = showDayColumn
     ? "min-w-0 gap-2 md:grid-cols-[7rem_minmax(12rem,1.4fr)_minmax(8rem,1fr)_5.5rem_5.5rem_7.5rem_5.5rem] md:min-w-table-xl"
@@ -3011,17 +3024,21 @@ function SectionArtists({
         <CardTitle>Artists</CardTitle>
       </CardHeader>
       <CardContent className="space-y-2 overflow-x-auto">
-        {openArtistNeeds.length > 0 ? (
-          <p className="text-xs text-muted-foreground">
-            Open artist need:{" "}
-            {openArtistNeeds
-              .map(([eventId, need]) => {
-                const day = dayLabelByEventId.get(eventId);
-                const detail = `${artistTypeLabels[need.artistType]}${need.genres ? ` · ${need.genres}` : ""}`;
-                return day ? `${day} — ${detail}` : detail;
-              })
-              .join("; ")}
-          </p>
+        {artistPositions.length > 0 ? (
+          <ul className="space-y-0.5 text-xs text-muted-foreground">
+            {artistPositions.map(({ eventId, need }) => {
+              const day = dayLabelByEventId.get(eventId);
+              const name = need.label.trim() || artistTypeLabels[need.artistType];
+              const detail = [name, artistTypeLabels[need.artistType], need.genres, need.status]
+                .filter(Boolean)
+                .join(" · ");
+              return (
+                <li key={need.needId}>
+                  {day ? `${day} — ${detail}` : detail}
+                </li>
+              );
+            })}
+          </ul>
         ) : null}
         <div className={`hidden text-xs font-medium text-muted-foreground md:grid md:items-end ${gridClass}`}>
           {showDayColumn ? <span>Day</span> : null}

@@ -139,18 +139,6 @@ export async function loadPublicQuoteView(ctx: QueryCtx, invoice: Doc<"invoices"
         )
       ).flat()
     : [];
-  const eventArtifacts = linkedEvent
-    ? (
-        await Promise.all(
-          eventIds.map((eventId) =>
-            ctx.db
-              .query("eventArtifacts")
-              .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
-              .take(500),
-          ),
-        )
-      ).flat()
-    : [];
   const hostDisplays = await Promise.all(
     linkedEvents.map((event) => loadEventHostDisplay(ctx, event)),
   );
@@ -166,7 +154,6 @@ export async function loadPublicQuoteView(ctx: QueryCtx, invoice: Doc<"invoices"
       const hostDisplay = hostDisplays[index];
       const scheduleBlocks = eventScheduleBlocks.filter((row) => row.eventId === event._id);
       const shifts = eventShifts.filter((row) => row.eventId === event._id);
-      const artifacts = eventArtifacts.filter((row) => row.eventId === event._id);
       const managerContact = event.eventManagerUserId
         ? await resolveUserContact(ctx, event.eventManagerUserId)
         : null;
@@ -223,10 +210,11 @@ export async function loadPublicQuoteView(ctx: QueryCtx, invoice: Doc<"invoices"
           /** Additional contacts the client (or staff) can add and remove. */
           manual: await listManualEventContacts(ctx, event._id),
         },
+        // Public payload is a projection only. Raw `eventCrewShifts` rows carry
+        // internal pay rates and notes, and `eventArtifacts` carry internal
+        // files; neither belongs behind a forwardable quote token.
         crewRoster,
         artists: await getEventArtists(ctx, event._id),
-        shifts,
-        artifacts,
         tbdArtistSlots: tbdArtistSlotsForEvent(event._id),
       };
     }),

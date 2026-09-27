@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
 import { internalMutation } from "../_generated/server";
-import { findAuthUsersByIds, getUserId } from "../lib/auth";
+import { findAuthUsersByIds, getUserId, isPortalAdmin } from "../lib/auth";
 import { resolveParticipationFlags } from "../lib/userParticipation";
 import { buildWeeklyDigest } from "../lib/weeklyDigest";
 import { SITE_URL, reminderDayKey, subjectForTemplate } from "./constants";
@@ -79,7 +79,7 @@ export const sendForUser = internalMutation({
     const digest = await buildWeeklyDigest(ctx, {
       userId: args.userId,
       profile,
-      authRole: user.role,
+      isPortalAdmin: await isPortalAdmin(ctx, args.userId),
       now,
     });
     if (digest.sections.length === 0) return null;

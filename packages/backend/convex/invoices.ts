@@ -10,6 +10,7 @@ import { syncEventStatusForLinkedInvoice, syncLinkedEventStatusFromInvoice } fro
 import { syncBookingRequestStatusFromInvoice } from "./lib/bookingRequestStatus";
 import { recordInvoiceStatusTransition } from "./lib/statusTransitions";
 import { listAdditionallyLinkedEvents } from "./lib/eventInvoiceLinks";
+import { unclaimSlot, upsertEventBandParticipation } from "./eventBands";
 import { listEventsByInvoiceId, listEventsLinkedToInvoice } from "./lib/invoiceEvents";
 import {
   addPublicEventContact,
@@ -100,6 +101,7 @@ const lineItemInput = v.object({
   packageExclusionDiscountUsd: v.optional(v.number()),
   organizationId: v.optional(v.string()),
   eventId: v.optional(v.id("events")),
+  needId: v.optional(v.id("eventArtistNeeds")),
   memberCount: v.optional(v.number()),
   performanceHours: v.optional(v.number()),
 });
@@ -124,6 +126,8 @@ type LineInput = {
   organizationId?: string;
   /** Artist lines: linked day/event on multi-day bookings. */
   eventId?: Id<"events">;
+  /** Artist lines: the position this line stands for. */
+  needId?: Id<"eventArtistNeeds">;
   /** Artist lines: number of people performing. */
   memberCount?: number;
   /** Artist lines: hours performing. */
@@ -385,9 +389,79 @@ function lineDocToInput(line: Doc<"invoiceLineItems">): LineInput {
     packageExclusionDiscountUsd: line.packageExclusionDiscountUsd,
     organizationId: line.organizationId,
     eventId: line.eventId,
+    needId: line.needId,
     memberCount: line.memberCount,
     performanceHours: line.performanceHours,
   };
+}
+
+
+/**
+ * Keep `eventArtistNeeds` in step with the invoice's artist lines: a line tied
+ * to a day stands for a position there, and an assigned line books it.
+ */
+async function syncArtistSlotsForInvoice(
+  ctx: MutationCtx,
+  invoiceId: Id<"invoices">,
+  now: number,
+) {
+  const lines = await ctx.db
+    .query("invoiceLineItems")
+    .withIndex("by_invoiceId", (q) => q.eq("invoiceId", invoiceId))
+    .take(500);
+
+  const claimed = new Set<Id<"eventArtistNeeds">>();
+  for (const line of lines) {
+    if (line.section !== "artist" || !line.eventId) continue;
+    const linked = line.needId ? await ctx.db.get(line.needId) : null;
+    // A position stands for one line. A duplicate id is treated as unlinked, so
+    // the second line gets its own instead of shadowing the first.
+    let slot =
+      linked && linked.eventId === line.eventId && !claimed.has(linked._id) ? linked : null;
+    if (!slot) {
+      const needId = await ctx.db.insert("eventArtistNeeds", {
+        eventId: line.eventId,
+        label: trimOptional(line.label),
+        artistType: "no_preference",
+        status: "open",
+        createdAt: now,
+        updatedAt: now,
+      });
+      await ctx.db.patch(line._id, { needId, updatedAt: now });
+      slot = await ctx.db.get(needId);
+    }
+    if (!slot) continue;
+    claimed.add(slot._id);
+    // An outside act already fills this position; the line still bills for its
+    // own act, and saving an invoice must never fail on that disagreement.
+    if (slot.externalArtistName?.trim()) continue;
+
+    // An act named on the line is booked on the bill too, so it reaches the
+    // lineup, the band dashboard and media rather than only the invoice.
+    const organizationId = line.organizationId?.trim();
+    const seated = await ctx.db
+      .query("eventBandParticipations")
+      .withIndex("by_needId", (q) => q.eq("needId", slot._id))
+      .first();
+    if (!organizationId) {
+      // Back to TBD: the act stays on the bill, but no longer holds the position.
+      if (seated) await unclaimSlot(ctx, seated._id);
+      continue;
+    }
+    if (seated?.organizationId === organizationId) continue;
+    const current = await ctx.db
+      .query("eventBandParticipations")
+      .withIndex("by_eventId_and_organizationId", (q) =>
+        q.eq("eventId", line.eventId!).eq("organizationId", organizationId),
+      )
+      .unique();
+    await upsertEventBandParticipation(ctx, {
+      eventId: line.eventId,
+      organizationId,
+      role: current?.role ?? "headliner",
+      needId: slot._id,
+    });
+  }
 }
 
 async function resolveBillableCountAtSave(ctx: MutationCtx, invoiceId: Id<"invoices">) {
@@ -429,11 +503,42 @@ async function replaceLineItems(
     .query("invoiceLineItems")
     .withIndex("by_invoiceId", (q) => q.eq("invoiceId", invoiceId))
     .take(500);
+  const previousNeedIds = existing.flatMap((row) =>
+    row.section === "artist" && row.needId ? [row.needId] : [],
+  );
+  // The editor hydrates once, so it posts the same lines without `needId` on
+  // every later save. Reuse the position a line already had (same event and
+  // order) instead of minting a new one and stranding the old.
+  const previousLineByKey = new Map<
+    string,
+    { needId: Id<"eventArtistNeeds">; label: string; organizationId?: string }
+  >();
+  for (const row of existing) {
+    if (row.section === "artist" && row.needId && row.eventId) {
+      previousLineByKey.set(`${row.eventId}:${row.order}`, {
+        needId: row.needId,
+        label: row.label,
+        organizationId: row.organizationId,
+      });
+    }
+  }
   for (const row of existing) {
     await ctx.db.delete(row._id);
   }
   const now = Date.now();
   for (const row of rows.sort((a, b) => a.order - b.order)) {
+    // Only reuse the previous position when this slot is the same act, so a row
+    // shifting into another's order cannot adopt its position and inquiries.
+    const previous =
+      row.section === "artist" && row.eventId
+        ? previousLineByKey.get(`${row.eventId}:${row.order}`)
+        : undefined;
+    const reusedNeedId =
+      previous &&
+      previous.label === row.label.trim() &&
+      previous.organizationId === trimOptional(row.organizationId)
+        ? previous.needId
+        : undefined;
     await ctx.db.insert("invoiceLineItems", {
       invoiceId,
       section: row.section,
@@ -453,6 +558,12 @@ async function replaceLineItems(
       equipmentQuantityBasis: row.equipmentQuantityBasis,
       organizationId: trimOptional(row.organizationId),
       eventId: row.section === "artist" ? row.eventId : undefined,
+      // A position only means something next to an event; an unscoped artist row
+      // must not keep one alive.
+      needId:
+        row.section === "artist" && row.eventId
+          ? (row.needId ?? reusedNeedId)
+          : undefined,
       memberCount:
         row.section === "artist" && row.memberCount !== undefined && row.memberCount > 0
           ? row.memberCount
@@ -466,6 +577,62 @@ async function replaceLineItems(
       createdAt: now,
       updatedAt: now,
     });
+  }
+
+  await syncArtistSlotsForInvoice(ctx, invoiceId, now);
+
+  // A line the editor dropped — or moved to another day — takes the position it
+  // opened with it, unless that position carries inquiries of its own or the act
+  // is still billed on that day by a surviving line.
+  const surviving = await ctx.db
+    .query("invoiceLineItems")
+    .withIndex("by_invoiceId", (q) => q.eq("invoiceId", invoiceId))
+    .take(500);
+  const kept = new Set(surviving.flatMap((row) => (row.needId ? [row.needId] : [])));
+  const stillBilledOn = new Set(
+    surviving.flatMap((row) =>
+      row.section === "artist" && row.eventId && row.organizationId
+        ? [`${row.eventId}:${row.organizationId}`]
+        : [],
+    ),
+  );
+  // The act each departing line claimed its position with, so we can tell the
+  // claim this invoice made from a booking somebody else made.
+  const departedOrgByNeed = new Map<Id<"eventArtistNeeds">, string>();
+  for (const row of existing) {
+    if (row.section === "artist" && row.needId && row.organizationId) {
+      departedOrgByNeed.set(row.needId, row.organizationId);
+    }
+  }
+  for (const needId of previousNeedIds) {
+    if (kept.has(needId)) continue;
+    const slot = await ctx.db.get(needId);
+    if (!slot) continue;
+    // Filled by an outside act — the line is gone, the booking is not.
+    if (slot.externalArtistName?.trim()) continue;
+    const filled = await ctx.db
+      .query("eventBandParticipations")
+      .withIndex("by_needId", (q) => q.eq("needId", needId))
+      .first();
+    if (filled) {
+      const departedOrg = departedOrgByNeed.get(needId);
+      // A booking for another act is not ours to remove, and an act another
+      // surviving line still bills on this day keeps its seat.
+      if (
+        !departedOrg ||
+        filled.organizationId !== departedOrg ||
+        stillBilledOn.has(`${slot.eventId}:${departedOrg}`)
+      ) {
+        continue;
+      }
+      await ctx.db.delete(filled._id);
+    }
+    const inquiries = await ctx.db
+      .query("eventArtistInquiries")
+      .withIndex("by_needId", (q) => q.eq("needId", needId))
+      .take(1);
+    if (inquiries.length > 0) continue;
+    await ctx.db.delete(needId);
   }
 }
 
