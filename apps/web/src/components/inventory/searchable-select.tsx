@@ -86,12 +86,13 @@ export function SearchableSelect({
       }
       return options;
     })();
-    if (!clearable) return base;
+    // Offer "Clear" only when there is a selection to clear.
+    if (!clearable || !value) return base;
     return [
       { value: "", label: clearLabel, keywords: "none clear unset empty" },
       ...base.filter((option) => option.value !== ""),
     ];
-  }, [clearable, clearLabel, minQueryLength, options, query, selected, serverBacked]);
+  }, [clearable, clearLabel, minQueryLength, options, query, selected, serverBacked, value]);
 
   const normalizedQuery = query.trim().toLowerCase();
   const canCreate =
