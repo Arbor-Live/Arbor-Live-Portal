@@ -248,7 +248,13 @@ export const getBandDisplayNameInternal = internalQuery({
 /**
  * Artist organizations on an event's lineup — the albums that event media
  * should also flow into so each artist has one central album.
+ *
+ * The cap is a festival-sized lineup (a real bill is single digits). It reads
+ * one row past the cap and throws rather than silently truncating, so an event
+ * that somehow exceeds it fails loudly instead of stranding artist albums.
  */
+const MAX_EVENT_ARTISTS = 100;
+
 export const listEventArtistOrgsInternal = internalQuery({
   args: { eventId: v.id("events") },
   returns: v.array(
@@ -261,7 +267,12 @@ export const listEventArtistOrgsInternal = internalQuery({
     const participations = await ctx.db
       .query("eventBandParticipations")
       .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
-      .take(50);
+      .take(MAX_EVENT_ARTISTS + 1);
+    if (participations.length > MAX_EVENT_ARTISTS) {
+      throw new Error(
+        `Event ${args.eventId} has more than ${MAX_EVENT_ARTISTS} artist participations; raise MAX_EVENT_ARTISTS before mirroring.`,
+      );
+    }
     const seen = new Set<string>();
     const artists: Array<{ organizationId: string; displayName: string }> = [];
     for (const row of participations) {

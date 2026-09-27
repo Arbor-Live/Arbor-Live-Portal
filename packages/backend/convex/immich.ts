@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { paginationOptsValidator } from "convex/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { internalAction, internalMutation, mutation, query } from "./_generated/server";
+import { internalAction, mutation, query } from "./_generated/server";
 import {
   canUploadToAlbum,
   getAlbumLinkForBand,
@@ -209,6 +209,7 @@ export const runBackfillArtistAlbumMirror = internalAction({
   returns: v.object({
     eventsScanned: v.number(),
     assetsMirrored: v.number(),
+    failedArtistMirrors: v.number(),
     nextCursor: v.union(v.string(), v.null()),
     assetCursor: v.union(v.string(), v.null()),
     assetCursorEventId: v.union(v.id("events"), v.null()),
@@ -223,12 +224,37 @@ export const runBackfillArtistAlbumMirror = internalAction({
   },
 });
 
-/** One-shot, fire-and-forget kickoff of the artist-album mirror backfill. */
-export const startBackfillArtistAlbumMirror = internalMutation({
-  args: {},
+/**
+ * One-shot kickoff: walks the whole backfill by re-scheduling itself until the
+ * action reports `isDone`, so a single `convex run`/dashboard call completes
+ * every page. Prefer `runBackfillArtistAlbumMirror` when you want to watch
+ * progress page by page.
+ */
+export const startBackfillArtistAlbumMirror = internalAction({
+  args: {
+    cursor: v.optional(v.union(v.string(), v.null())),
+    assetCursor: v.optional(v.union(v.string(), v.null())),
+    assetCursorEventId: v.optional(v.union(v.id("events"), v.null())),
+  },
   returns: v.null(),
-  handler: async (ctx) => {
-    await ctx.scheduler.runAfter(0, internal.immich.runBackfillArtistAlbumMirror, {});
+  handler: async (ctx, args) => {
+    const result: BackfillRunResult = await ctx.runAction(
+      internal.immichActions.backfillArtistAlbumMirror,
+      {
+        cursor: args.cursor ?? null,
+        assetCursor: args.assetCursor ?? null,
+        assetCursorEventId: args.assetCursorEventId ?? null,
+      },
+    );
+    if (!result.isDone) {
+      // Chain the next page. Scheduled actions are not auto-retried, but each
+      // page is idempotent, so re-invoking the kickoff resumes safely.
+      await ctx.scheduler.runAfter(0, internal.immich.startBackfillArtistAlbumMirror, {
+        cursor: result.nextCursor,
+        assetCursor: result.assetCursor,
+        assetCursorEventId: result.assetCursorEventId,
+      });
+    }
     return null;
   },
 });

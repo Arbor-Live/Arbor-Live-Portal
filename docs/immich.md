@@ -123,10 +123,13 @@ event's album page by page. It reads from the Convex asset index (no Immich list
 call) and calls `PUT /albums/:id/assets` per asset.
 
 It returns
-`{ eventsScanned, assetsMirrored, nextCursor, assetCursor, assetCursorEventId, isDone }`.
+`{ eventsScanned, assetsMirrored, failedArtistMirrors, nextCursor, assetCursor, assetCursorEventId, isDone }`.
 `nextCursor` (event-table) and `assetCursor`/`assetCursorEventId` (mid-event)
 are opaque Convex cursors — pass them back unchanged. When a run stops mid-event,
 `assetCursorEventId` identifies which event `assetCursor` belongs to.
+`failedArtistMirrors` counts artist albums that could not be written; a non-zero
+value means those artists are still missing assets and the run should be
+repeated (mirroring is idempotent).
 
 ```bash
 cd packages/backend
@@ -139,9 +142,11 @@ npx convex run internal.immich.runBackfillArtistAlbumMirror \
 
 Add `--prod` to target production (`... --prod`). From the **Convex dashboard**,
 run the same function via *Functions → internal.immich:runBackfillArtistAlbumMirror*
-(no identity required). To fan the whole walk out in one go, call
-`internal.immich.startBackfillArtistAlbumMirror` once — it schedules the paged
-action fire-and-forget.
+(no identity required).
+
+To finish a large backfill in one call instead of paging by hand, invoke
+`internal.immich.startBackfillArtistAlbumMirror` — it runs a page and
+re-schedules itself, using the returned cursors, until `isDone`.
 
 Re-running is idempotent per artist album: `recordAssetInternal` skips rows that
 already exist, so a second pass only re-issues the harmless Immich add.
