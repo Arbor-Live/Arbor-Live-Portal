@@ -333,9 +333,11 @@ export async function getActiveOrganizationContextOrNull(
       return await resolveOrganizationContext(ctx, selectedOrganizationId);
     }
 
-    // No membership for the selected active org — allow portal admins to preview
-    // artist orgs (temporary view-as, not a lasting join).
-    if (isAdmin(user)) {
+    // No membership for the selected active org — allow Arbor Live portal admins
+    // to preview artist orgs (temporary view-as, not a lasting join). Gate on
+    // membership, not the raw role, so a band org admin can never preview (and
+    // then operate on) another artist org.
+    if (await isPortalAdmin(ctx, userId)) {
       const preview = await resolveOrganizationContext(ctx, selectedOrganizationId);
       if (preview && isArtistOrganizationType(preview.organizationType)) {
         const profile = await ctx.db

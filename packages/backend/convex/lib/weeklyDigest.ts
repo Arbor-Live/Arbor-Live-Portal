@@ -404,15 +404,15 @@ async function buildArtistPayoutsSection(
  * Outstanding reviews for other people stay off this email — the digest only
  * lists a review when the recipient still owes it on an event they worked.
  * Artist-only members get a show this week and unfinished onboarding — not
- * crew post-event work or the admin queues. Band org admins are Better Auth
- * `role: "admin"`, which is not a portal admin.
+ * crew post-event work or the admin queues. `isPortalAdmin` comes from
+ * membership resolution, not the Better Auth role, which band org admins share.
  */
 export async function buildWeeklyDigest(
   ctx: QueryCtx,
   args: {
     userId: string;
     profile: Doc<"userAdminProfiles"> | null;
-    authRole: string | null | undefined;
+    isPortalAdmin: boolean;
     now: number;
   },
 ): Promise<WeeklyDigest> {
@@ -421,7 +421,7 @@ export async function buildWeeklyDigest(
   const isCrew = isStaffMember(membership);
   const organizations = await loadDigestOrganizations(ctx, args.userId);
   const audience: WeeklyDigestAudience = resolveWeeklyDigestAudience({
-    authRole: args.authRole,
+    isPortalAdmin: args.isPortalAdmin,
     organizations,
     isStaff: isCrew,
   });

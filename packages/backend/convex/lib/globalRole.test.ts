@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import {
   activeMembershipsForGlobalRole,
+  resolveGlobalRoleFromActiveMemberships,
   resolveGlobalRoleForExistingUser,
   resolveGlobalRoleForOrganization,
   resolveGlobalRoleForUser,
@@ -97,6 +98,29 @@ describe("resolveGlobalRoleForUser", () => {
     }));
     const ctx = fakeCtx({ profiles: {}, memberships });
     await expect(resolveGlobalRoleForUser(ctx, "user-1")).rejects.toThrow(/max 100/);
+  });
+});
+
+describe("resolveGlobalRoleFromActiveMemberships", () => {
+  it("keeps an active Arbor-internal admin", async () => {
+    const ctx = fakeCtx({
+      profiles: { arbor: "arbor_internal" },
+      memberships: [{ organizationId: "arbor", role: "org_admin", active: true }],
+    });
+    expect(await resolveGlobalRoleFromActiveMemberships(ctx, "user-1")).toBe("admin");
+  });
+
+  it("resolves to member with no memberships (no legacy exception)", async () => {
+    const ctx = fakeCtx({ profiles: {}, memberships: [] });
+    expect(await resolveGlobalRoleFromActiveMemberships(ctx, "user-1")).toBe("member");
+  });
+
+  it("demotes when the only Arbor membership is inactive", async () => {
+    const ctx = fakeCtx({
+      profiles: { arbor: "arbor_internal" },
+      memberships: [{ organizationId: "arbor", role: "org_admin", active: false }],
+    });
+    expect(await resolveGlobalRoleFromActiveMemberships(ctx, "user-1")).toBe("member");
   });
 });
 
