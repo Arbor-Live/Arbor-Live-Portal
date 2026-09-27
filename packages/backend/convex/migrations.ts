@@ -2,7 +2,9 @@ import { Migrations } from "@convex-dev/migrations";
 import { components, internal } from "./_generated/api";
 import type { DataModel, Doc, Id } from "./_generated/dataModel";
 import { internalMutation } from "./_generated/server";
+import { findAuthUserById } from "./lib/auth";
 import { resolveContactNameParts } from "./lib/contactName";
+import { resolveGlobalRoleForUser } from "./lib/globalRole";
 import { normalizeHostOrgName } from "./lib/hostOrgIdentity";
 import { upsertInvoicePerson } from "./lib/invoicePeople";
 import {
@@ -601,6 +603,37 @@ export const migrateEventTeamsMarketingToPromotionOnEventSeries = migrations.def
 });
 
 /**
+ * Demote artist-org admins whose Better Auth `role` is a stale `admin`.
+ *
+ * Before the invite path was fixed (Harden auth, #282), accepting an invite with
+ * `org_admin` set the global role to `admin` for any organization, bands/DJs
+ * included. Those rows still grant portal-wide privileges through `requireAdmin`
+ * and the dashboard, and made every one of them receive Arbor-admin email.
+ *
+ * Reads the role from active memberships (`resolveGlobalRoleForUser`) and only
+ * ever demotes. Legacy admins with no membership rows, and real Arbor admins,
+ * keep `admin`; each deployment's first admin is Arbor-internal, so this cannot
+ * remove the last admin.
+ */
+export const recomputeArtistOrgAdminGlobalRoles = migrations.define({
+  table: "userAdminProfiles",
+  migrateOne: async (ctx, profile) => {
+    const userId = profile.userId?.trim();
+    if (!userId) return;
+    const user = await findAuthUserById(ctx, userId);
+    if (!user || user.role !== "admin" || !user.email) return;
+    if ((await resolveGlobalRoleForUser(ctx, userId)) === "admin") return;
+    await ctx.runMutation(components.betterAuth.adapter.updateOne, {
+      input: {
+        model: "user",
+        where: [{ field: "email", value: user.email.trim().toLowerCase() }],
+        update: { role: "member", updatedAt: Date.now() },
+      },
+    });
+  },
+});
+
+/**
  * never reorder or remove completed ones (reset requires an explicit reset:true).
  */
 const MIGRATION_SERIES = [
@@ -628,6 +661,7 @@ const MIGRATION_SERIES = [
   internal.migrations.dropCrewOnboardingOseHiringForm,
   internal.migrations.migrateEventTeamsMarketingToPromotionOnEvents,
   internal.migrations.migrateEventTeamsMarketingToPromotionOnEventSeries,
+  internal.migrations.recomputeArtistOrgAdminGlobalRoles,
 ] as const;
 
 export const runAll = migrations.runner([...MIGRATION_SERIES]);

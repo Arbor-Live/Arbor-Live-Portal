@@ -28,6 +28,43 @@ export async function resolveGlobalRoleForOrganization(
 /** A person is not in 100 organizations. Past this, refuse a partial role calc. */
 const MAX_USER_ORG_MEMBERSHIPS = 100;
 
+/**
+ * Global role derived from a user's existing memberships alone. Used to audit
+ * (and backfill) the Better Auth role, never to grant a role the memberships do
+ * not already justify.
+ *
+ * `admin` requires an active Arbor-internal membership with an admin role. A
+ * user with no membership rows at all is a legacy admin provisioned before
+ * organizations existed and keeps `admin`; a user left with only artist-org
+ * memberships resolves to `member`, so a band/DJ `org_admin` cannot keep
+ * portal-wide privileges.
+ */
+export async function resolveGlobalRoleForUser(
+  ctx: QueryCtx | MutationCtx,
+  userId: string,
+): Promise<"admin" | "member"> {
+  const rows = await ctx.db
+    .query("userOrganizationMemberships")
+    .withIndex("by_userId", (q) => q.eq("userId", userId))
+    .take(MAX_USER_ORG_MEMBERSHIPS + 1);
+  if (rows.length > MAX_USER_ORG_MEMBERSHIPS) {
+    throw new Error(
+      `Cannot resolve global role: user has ${rows.length} organization memberships (max ${MAX_USER_ORG_MEMBERSHIPS}).`,
+    );
+  }
+  if (rows.length === 0) return "admin";
+  for (const membership of rows) {
+    if (!membership.active) continue;
+    const role = await resolveGlobalRoleForOrganization(
+      ctx,
+      membership.organizationId,
+      membership.role,
+    );
+    if (role === "admin") return "admin";
+  }
+  return "member";
+}
+
 export function activeMembershipsForGlobalRole(
   existing: Array<{ organizationId: string; role: string; active: boolean }>,
   next: { organizationId: string; role: string },
