@@ -108,6 +108,7 @@ import type * as invoicePdfDownload from "../invoicePdfDownload.js";
 import type * as invoiceSettings from "../invoiceSettings.js";
 import type * as invoiceTerms from "../invoiceTerms.js";
 import type * as invoices from "../invoices.js";
+import type * as lib_actPositions from "../lib/actPositions.js";
 import type * as lib_analyticsQuery from "../lib/analyticsQuery.js";
 import type * as lib_analyticsTime from "../lib/analyticsTime.js";
 import type * as lib_artistLineSync from "../lib/artistLineSync.js";
@@ -348,6 +349,7 @@ declare const fullApi: ApiFromModules<{
   invoiceSettings: typeof invoiceSettings;
   invoiceTerms: typeof invoiceTerms;
   invoices: typeof invoices;
+  "lib/actPositions": typeof lib_actPositions;
   "lib/analyticsQuery": typeof lib_analyticsQuery;
   "lib/analyticsTime": typeof lib_analyticsTime;
   "lib/artistLineSync": typeof lib_artistLineSync;

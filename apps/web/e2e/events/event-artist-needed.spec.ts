@@ -16,10 +16,11 @@ test.describe("event artist needed", () => {
 
     await page.goto(`${seeded.path}/artists`);
     await expect(page.getByTestId("event-workspace")).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText("No positions on the bill yet")).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText("No one on the bill yet")).toBeVisible({ timeout: 20_000 });
 
-    await page.getByRole("button", { name: "Add", exact: true }).click();
-    await page.getByRole("menuitem", { name: "Position" }).click();
+    await page.getByRole("button", { name: "Add to bill" }).click();
+    await page.getByRole("radio", { name: "Open position" }).click();
+    await page.getByRole("button", { name: "Add position" }).click();
     const slot = page.getByTestId("bill-card").first();
     await expect(slot).toBeVisible({ timeout: 20_000 });
     await expect(page.getByTestId("artist-need-status")).toHaveText("Open");
@@ -44,6 +45,8 @@ test.describe("event artist needed", () => {
     await expect(page.getByTestId("artist-need-status")).toHaveText("Inquiring", {
       timeout: 30_000,
     });
+    // Inquiries are listed in the position's side panel.
+    await page.getByTestId("bill-card").first().getByRole("button", { name: /Inquiring/ }).click();
     await expect(page.getByText("We would love to play this show.")).toBeVisible({
       timeout: 20_000,
     });

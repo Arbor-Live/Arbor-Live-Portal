@@ -3,6 +3,7 @@ import type { MutationCtx } from "../_generated/server";
 import { scheduleBandAssignedEmails } from "../email/bandAssignmentEmails";
 import { syncInvoiceLineForSlot } from "./artistLineSync";
 import { inheritSlotTimes, syncNeedBlocks, syncParticipationBlocks } from "./runOfShow";
+import { ensureActPosition } from "./actPositions";
 
 /**
  * Drop an act's claim on a slot. Uses `replace` because Convex `patch` ignores
@@ -89,6 +90,8 @@ export async function upsertEventBandParticipation(
         await syncNeedBlocks(ctx, existing.needId);
       }
       await syncInvoiceLineForSlot(ctx, args.needId, now);
+    } else {
+      await ensureActPosition(ctx, existing._id);
     }
     return existing._id;
   }
@@ -105,6 +108,8 @@ export async function upsertEventBandParticipation(
     await syncParticipationBlocks(ctx, participationId);
     await syncNeedBlocks(ctx, args.needId);
     await syncInvoiceLineForSlot(ctx, args.needId, now);
+  } else {
+    await ensureActPosition(ctx, participationId);
   }
   await scheduleBandAssignedEmails(ctx, {
     eventId: args.eventId,

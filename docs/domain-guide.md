@@ -171,7 +171,8 @@ Event types (drive which workspace tabs and quick-add blocks appear):
   `bookingRequestSettings`, or manual swap on the request detail). Inbox
   defaults to open requests (`submitted`/`action_required`/`pending_client`), oldest-first, with a
   days-since-submitted counter.
-- **The bill** (event workspace **Lineup** tab) is one drag-orderable list of
+- **The bill** (event workspace **Lineup** tab) is listed in show order (by set
+  time from the Run of Show; acts without a set follow in `sortOrder`), a list of
   *positions* (`eventArtistNeeds.sortOrder`), each with a freeform `label` and
   either filled by an act or still needed:
   - **Artist Needed** (`eventArtistNeeds`) — one open **slot** per row, so "two
@@ -199,7 +200,16 @@ Event types (drive which workspace tabs and quick-add blocks appear):
     the platform: `eventArtistNeeds.externalArtistName`, with its own set and
     soundcheck windows on the slot. It counts as booked and stops appearing in
     the artist portal.
-  - **Payout** — the same row, via `EventBandPaymentForm`.
+  - **Every act fills a position.** Acts added without one get a position at
+    the bottom of the bill (`lib/actPositions.ts`, named from their role);
+    removing an act keeps its position open and hands the act's Run of Show
+    times back to it, so the timeline keeps a placeholder.
+  - **Lineup UI** — one compact row per position (set time, payout, rider,
+    status); details open in a side panel (position settings, fill with a
+    platform act / invite / outside act, payout, inquiries, remove). "Add to
+    bill" is one dialog for existing artist, invite, outside act, or an open
+    position.
+  - **Payout** — from the position's side panel, via `EventBandPaymentForm`.
   - **Invoice link** — an artist line tied to a day opens the position it
     stands for (`invoiceLineItems.needId`), and filling that position fills the
     line: an internal act sets its `organizationId`, an outside act clears it

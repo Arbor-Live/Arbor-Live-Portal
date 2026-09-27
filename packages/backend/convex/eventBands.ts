@@ -22,6 +22,7 @@ import {
   payeeFieldsFromProfile,
 } from "./lib/bandPayments";
 import { scheduleBandAssignedEmails } from "./email/bandAssignmentEmails";
+import { returnActTimesToPosition } from "./lib/actPositions";
 import {
   deleteActBlocks,
   inheritSlotTimes,
@@ -701,6 +702,60 @@ export const updateParticipationRole = mutation({
   },
 });
 
+/**
+ * Takes an act off the event: returns its times to its position, deletes its
+ * run-of-show blocks, and cancels its unpaid payout. Throws on a paid payout.
+ * Shared with `eventArtistNeeds.removeFromBill` so act and position go together.
+ */
+export async function removeParticipationFromEvent(
+  ctx: MutationCtx,
+  eventId: Id<"events">,
+  organizationId: string,
+) {
+  const existing = await ctx.db
+    .query("eventBandParticipations")
+    .withIndex("by_eventId_and_organizationId", (q) =>
+      q.eq("eventId", eventId).eq("organizationId", organizationId),
+    )
+    .unique();
+  if (existing) {
+    await returnActTimesToPosition(ctx, existing);
+    await ctx.db.delete(existing._id);
+    await deleteActBlocks(ctx, { participationId: existing._id });
+    if (existing.needId) await syncNeedBlocks(ctx, existing.needId);
+  }
+
+  const payment = await ctx.db
+    .query("eventBandPayments")
+    .withIndex("by_eventId_and_organizationId", (q) =>
+      q.eq("eventId", eventId).eq("organizationId", organizationId),
+    )
+    .unique();
+  if (payment && payment.status !== "cancelled") {
+    if (payment.status === "paid") {
+      throw new Error("Cannot remove an artist with a paid payout.");
+    }
+    await ctx.db.patch(payment._id, {
+      status: "cancelled",
+      updatedAt: Date.now(),
+    });
+  }
+
+  const remaining = await ctx.db
+    .query("eventBandPayments")
+    .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
+    .take(50);
+  let total = 0;
+  for (const row of remaining) {
+    if (row.status === "cancelled") continue;
+    total += row.totalUsd;
+  }
+  const event = await ctx.db.get(eventId);
+  if (event) {
+    await ctx.db.patch(eventId, { bandsCostUsd: total });
+  }
+}
+
 export const removeParticipation = mutation({
   args: {
     eventId: v.id("events"),
@@ -709,47 +764,7 @@ export const removeParticipation = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     await requireArborInternalContext(ctx);
-    const existing = await ctx.db
-      .query("eventBandParticipations")
-      .withIndex("by_eventId_and_organizationId", (q) =>
-        q.eq("eventId", args.eventId).eq("organizationId", args.organizationId),
-      )
-      .unique();
-    if (existing) {
-      await ctx.db.delete(existing._id);
-      await deleteActBlocks(ctx, { participationId: existing._id });
-      if (existing.needId) await syncNeedBlocks(ctx, existing.needId);
-    }
-
-    const payment = await ctx.db
-      .query("eventBandPayments")
-      .withIndex("by_eventId_and_organizationId", (q) =>
-        q.eq("eventId", args.eventId).eq("organizationId", args.organizationId),
-      )
-      .unique();
-    if (payment && payment.status !== "cancelled") {
-      if (payment.status === "paid") {
-        throw new Error("Cannot remove an artist with a paid payout.");
-      }
-      await ctx.db.patch(payment._id, {
-        status: "cancelled",
-        updatedAt: Date.now(),
-      });
-    }
-
-    const remaining = await ctx.db
-      .query("eventBandPayments")
-      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
-      .take(50);
-    let total = 0;
-    for (const row of remaining) {
-      if (row.status === "cancelled") continue;
-      total += row.totalUsd;
-    }
-    const event = await ctx.db.get(args.eventId);
-    if (event) {
-      await ctx.db.patch(args.eventId, { bandsCostUsd: total });
-    }
+    await removeParticipationFromEvent(ctx, args.eventId, args.organizationId);
     return null;
   },
 });
@@ -777,6 +792,7 @@ export const upsertParticipations = mutation({
     const keepOrgIds = new Set(args.participations.map((row) => row.organizationId));
     for (const row of existing) {
       if (!keepOrgIds.has(row.organizationId)) {
+        await returnActTimesToPosition(ctx, row);
         await ctx.db.delete(row._id);
         await deleteActBlocks(ctx, { participationId: row._id });
         if (row.needId) await syncNeedBlocks(ctx, row.needId);

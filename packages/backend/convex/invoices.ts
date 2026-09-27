@@ -60,6 +60,7 @@ import {
   netProfitFromInvoiceUsd,
 } from "./lib/invoiceProfit";
 import { deleteActBlocks, syncNeedBlocks } from "./lib/runOfShow";
+import { ensureActPosition, returnActTimesToPosition } from "./lib/actPositions";
 
 const equipmentPricingModeValue = v.union(v.literal("subsidized"), v.literal("nonSubsidized"));
 const crewRateModeValue = v.union(
@@ -448,7 +449,9 @@ async function syncArtistSlotsForInvoice(
       // Back to TBD: the act stays on the bill, but no longer holds the position.
       if (seated) {
         await unclaimSlot(ctx, seated._id);
-        // The open position shows its own run-of-show times again.
+        // Every act fills a position: the act gets its own, and the reopened
+        // one shows its own run-of-show times again.
+        await ensureActPosition(ctx, seated._id);
         await syncNeedBlocks(ctx, slot._id);
       }
       continue;
@@ -630,6 +633,7 @@ async function replaceLineItems(
       ) {
         continue;
       }
+      await returnActTimesToPosition(ctx, filled);
       await ctx.db.delete(filled._id);
       await deleteActBlocks(ctx, { participationId: filled._id });
     }

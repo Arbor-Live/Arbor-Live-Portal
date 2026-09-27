@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query, type QueryCtx } from "./_generated/server";
+import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { getUserId, requireArborInternalContext, requireAuth, requireBandContext } from "./lib/auth";
 import { resolveBandName } from "./lib/bandIdentity";
@@ -16,7 +16,7 @@ import {
   type EffectiveArtistNeedStatus,
 } from "./lib/eventArtistNeeds";
 import { scheduleArtistNeedInquiryEmail } from "./email/artistNeedInquiryEmails";
-import { unclaimSlot } from "./eventBands";
+import { removeParticipationFromEvent, unclaimSlot } from "./eventBands";
 import { releaseSlotFromInvoice, syncInvoiceLineForSlot } from "./lib/artistLineSync";
 import { normalizeEventStatus } from "./lib/eventStatus";
 import { deleteActBlocks, syncNeedBlocks } from "./lib/runOfShow";
@@ -296,32 +296,62 @@ export const updateSlotLineup = mutation({
   },
 });
 
+/** Deletes a position with its inquiries and blocks; a seated act is unlinked, not removed. */
+async function removeSlotRow(ctx: MutationCtx, needId: Id<"eventArtistNeeds">) {
+  const slot = await ctx.db.get(needId);
+  if (!slot) return;
+  // Bounded on purpose: a position sees a handful of inquiries, and any
+  // straggler past this is inert once its slot is gone.
+  const inquiries = await ctx.db
+    .query("eventArtistInquiries")
+    .withIndex("by_needId", (q) => q.eq("needId", slot._id))
+    .take(200);
+  for (const inquiry of inquiries) {
+    await ctx.db.delete(inquiry._id);
+  }
+  // Unlink any act that was booked against this slot rather than orphaning it.
+  const filled = await ctx.db
+    .query("eventBandParticipations")
+    .withIndex("by_needId", (q) => q.eq("needId", slot._id))
+    .take(100);
+  for (const row of filled) {
+    await unclaimSlot(ctx, row._id);
+  }
+  await releaseSlotFromInvoice(ctx, slot._id);
+  await ctx.db.delete(slot._id);
+  await deleteActBlocks(ctx, { needId: slot._id });
+}
+
 export const removeSlot = mutation({
   args: { needId: v.id("eventArtistNeeds") },
   handler: async (ctx, args) => {
     await requireArborInternalContext(ctx);
-    const slot = await ctx.db.get(args.needId);
-    if (!slot) return;
-    // Bounded on purpose: a position sees a handful of inquiries, and any
-    // straggler past this is inert once its slot is gone.
-    const inquiries = await ctx.db
-      .query("eventArtistInquiries")
-      .withIndex("by_needId", (q) => q.eq("needId", slot._id))
-      .take(200);
-    for (const inquiry of inquiries) {
-      await ctx.db.delete(inquiry._id);
+    await removeSlotRow(ctx, args.needId);
+  },
+});
+
+/**
+ * Remove from bill: the act and its position in one transaction, so a failure
+ * (such as a paid payout) leaves both in place.
+ */
+export const removeFromBill = mutation({
+  args: {
+    eventId: v.id("events"),
+    organizationId: v.optional(v.string()),
+    needId: v.optional(v.id("eventArtistNeeds")),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requireArborInternalContext(ctx);
+    if (args.needId) {
+      const slot = await ctx.db.get(args.needId);
+      if (slot && slot.eventId !== args.eventId) throw new Error("That position is on another event.");
     }
-    // Unlink any act that was booked against this slot rather than orphaning it.
-    const filled = await ctx.db
-      .query("eventBandParticipations")
-      .withIndex("by_needId", (q) => q.eq("needId", slot._id))
-      .take(100);
-    for (const row of filled) {
-      await unclaimSlot(ctx, row._id);
+    if (args.organizationId) {
+      await removeParticipationFromEvent(ctx, args.eventId, args.organizationId);
     }
-    await releaseSlotFromInvoice(ctx, slot._id);
-    await ctx.db.delete(slot._id);
-    await deleteActBlocks(ctx, { needId: slot._id });
+    if (args.needId) await removeSlotRow(ctx, args.needId);
+    return null;
   },
 });
 
