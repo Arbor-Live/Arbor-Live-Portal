@@ -20,6 +20,7 @@ import {
   resolveVenueContact,
 } from "./lib/eventContacts";
 import { loadEventHostDisplay } from "./lib/hostOrgs";
+import { buildBriefRunOfShow } from "./lib/briefRunOfShow";
 import { eventDashboardUrl } from "./email/constants";
 
 const STATUS_LABELS: Record<string, string> = {
@@ -188,6 +189,14 @@ export const getBriefSource = internalQuery({
         body: stripMarkdown(artifact.markdown!),
       }));
 
+    const swapsByPair = new Map(
+      (nightRider?.changeovers ?? []).map((changeover) => [changeover.title, changeover.lines]),
+    );
+    const runOfShowData = buildBriefRunOfShow(blocks, shifts, {
+      formatTime: (ms) => formatTime(ms, event.timezone),
+      formatDate: (ms) => formatDate(ms, event.timezone),
+      swaps: (from, to) => swapsByPair.get(`${from} → ${to}`),
+    });
     return {
       title: event.title,
       generatedAtLabel: formatDateTime(Date.now()),
@@ -199,18 +208,7 @@ export const getBriefSource = internalQuery({
       venueAddress: await effectiveAddress(ctx, venue),
       notes: event.notes ?? undefined,
       briefUrl: eventDashboardUrl(String(event._id)),
-      blocks: blocks.map((block) => ({
-        dayLabel: `Day ${block.dayIndex + 1}`,
-        label: block.label,
-        timeLabel: `${formatTime(block.startsAt, event.timezone)} – ${formatTime(block.endsAt, event.timezone)}`,
-        notes: block.notes ?? undefined,
-      })),
-      shifts: shifts.map((shift) => ({
-        role: shift.role,
-        person: shift.personName ?? "Unassigned",
-        timeLabel: `${formatTime(shift.startsAt, event.timezone)} – ${formatTime(shift.endsAt, event.timezone)}`,
-        notes: shift.notes ?? undefined,
-      })),
+      ...runOfShowData,
       assignments: await leadAssignments(ctx, event),
       contacts,
       pullList: pullListItems.map((item) => ({

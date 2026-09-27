@@ -112,11 +112,15 @@ export type {
 } from "./types";
 
 export type {
+  EventBriefAct,
   EventBriefAssignment,
-  EventBriefBlock,
   EventBriefContact,
   EventBriefDocumentData,
   EventBriefInstruction,
+  EventBriefMoment,
   EventBriefPullItem,
+  EventBriefRunOfShowDay,
+  EventBriefRunOfShowEntry,
+  EventBriefSection,
   EventBriefShift,
 } from "./brief-types";
