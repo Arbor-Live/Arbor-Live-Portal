@@ -94,6 +94,7 @@ describe("runOfShowIssues sections", () => {
     const set = block("set", "20:30", "21:30", { participationId: "owls", actOwned: true });
     const issues = runOfShowIssues([show, set], [owls], { actName });
     expect(issues.byRef.get(set.clientId!)).toEqual(["Runs past the end of Show"]);
+    expect(issues.summary).toEqual(["1 item needs a look"]);
   });
 });
 
