@@ -306,7 +306,7 @@ export function timelineBlocksFromSaved(
   );
 }
 
-type PersistedBlockRow = {
+export type PersistedBlockRow = {
   _id: string;
   blockType: TimelineBlockDraft["blockType"];
   label: string;

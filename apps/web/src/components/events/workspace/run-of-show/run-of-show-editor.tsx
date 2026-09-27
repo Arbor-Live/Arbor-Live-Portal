@@ -2,14 +2,10 @@
 
 import { useMemo, useState } from "react";
 import {
-  ArrowsLeftRightIcon,
   CaretDownIcon,
-  DoorOpenIcon,
   LightningIcon,
   MagicWandIcon,
-  MicrophoneStageIcon,
   PlusIcon,
-  SpeakerHighIcon,
   TrashIcon,
   UsersThreeIcon,
   WarningIcon,
@@ -47,49 +43,18 @@ import {
 } from "@/lib/schedule-block-types";
 import { cn } from "@/lib/utils";
 import { BuildRunOfShowDialog } from "@/components/events/workspace/run-of-show/build-run-of-show-dialog";
-
-const TYPE_STYLES: Record<ScheduleBlockType, string> = {
-  setup: "border-status-blue-500/40 bg-status-blue-500/10 text-status-blue-700",
-  show: "border-status-emerald-500/40 bg-status-emerald-500/10 text-status-emerald-700",
-  strike: "border-status-amber-500/40 bg-status-amber-500/10 text-status-amber-700",
-  custom: "border-border bg-muted text-muted-foreground",
-  doors: "border-status-slate-500/40 bg-status-slate-500/10 text-status-slate-700",
-  soundcheck: "border-status-sky-500/40 bg-status-sky-500/10 text-status-sky-700",
-  set: "border-status-violet-500/40 bg-status-violet-500/10 text-status-violet-700",
-  changeover: "border-status-orange-500/40 bg-status-orange-500/10 text-status-orange-800",
-};
-
-const RAIL_STYLES: Record<ScheduleBlockType, string> = {
-  setup: "bg-status-blue-500",
-  show: "bg-status-emerald-500",
-  strike: "bg-status-amber-500",
-  custom: "bg-border",
-  doors: "bg-status-slate-500",
-  soundcheck: "bg-status-sky-500",
-  set: "bg-status-violet-500",
-  changeover: "bg-status-orange-500",
-};
-
-const MOMENT_ICONS = {
-  doors: DoorOpenIcon,
-  soundcheck: SpeakerHighIcon,
-  set: MicrophoneStageIcon,
-  changeover: ArrowsLeftRightIcon,
-} as const;
+import {
+  durationLabel,
+  MOMENT_ICONS,
+  RAIL_STYLES,
+  TypeChip,
+} from "@/components/events/workspace/run-of-show/run-of-show-styles";
 
 const MINUTE = 60_000;
 let clientIdCounter = 0;
 function newClientId() {
   clientIdCounter += 1;
   return `ros-${Date.now().toString(36)}-${clientIdCounter}`;
-}
-
-function durationLabel(start: number, end: number) {
-  const minutes = Math.round((end - start) / MINUTE);
-  const hours = Math.floor(minutes / 60);
-  const rest = minutes % 60;
-  if (hours === 0) return `${rest}m`;
-  return rest === 0 ? `${hours}h` : `${hours}h ${rest}m`;
 }
 
 function refOf(block: TimelineBlockDraft) {
@@ -362,19 +327,6 @@ type RowHandlers = {
   onLabel: (block: TimelineBlockDraft, label: string) => void;
   onRemove: (block: TimelineBlockDraft) => void;
 };
-
-function TypeChip({ type }: { type: ScheduleBlockType }) {
-  return (
-    <span
-      className={cn(
-        "shrink-0 border px-1.5 py-0.5 text-2xs font-semibold tracking-wide uppercase",
-        TYPE_STYLES[type],
-      )}
-    >
-      {SCHEDULE_BLOCK_TYPE_LABELS[type]}
-    </span>
-  );
-}
 
 function IssueList({ issues }: { issues: string[] }) {
   if (issues.length === 0) return null;
