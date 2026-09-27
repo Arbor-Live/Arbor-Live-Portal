@@ -62,7 +62,7 @@ function OpenMicCard() {
             </Link>
             {signupOpen ? (
               <Link
-                href="/open-mic"
+                href={`/open-mic?event=${eventId}`}
                 target="_blank"
                 className="inline-flex items-center gap-1 text-primary hover:underline"
               >

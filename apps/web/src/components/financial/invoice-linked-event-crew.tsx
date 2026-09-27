@@ -24,12 +24,12 @@ import {
   blockDraftFromRow,
   rebaseActBlocks,
   buildQuickAddScheduleBlocks,
-  keepActBlocks,
   eventTypeHasCrewAssignment,
   getBlockRef,
   reconcileShiftsForReplacedBlocks,
   resolveShiftScheduleBlockId,
   shiftBelongsToBlock,
+  sortScheduleBlocksByTime,
   shiftRowKey,
   shiftTimesMatchBlock,
   syncShiftsToBlockTimes,
@@ -621,7 +621,11 @@ export function InvoiceLinkedEventCrewSection({
                 rentalFulfillmentMode,
                 withStableRefs: stableBlocks,
               });
-              const nextBlocks = keepActBlocks(blocks, quickAddBlocks);
+              // Quick Add rebuilds sections only; the run of show's moments stay.
+              const nextBlocks = sortScheduleBlocksByTime([
+                ...quickAddBlocks,
+                ...blocks.filter((block) => !isSectionBlockType(block.blockType)),
+              ]);
               setBlocks(nextBlocks);
               setShifts((prev) => reconcileShiftsForReplacedBlocks(blocks, nextBlocks, prev));
             },
