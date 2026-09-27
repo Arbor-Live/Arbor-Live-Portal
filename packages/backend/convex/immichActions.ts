@@ -311,9 +311,15 @@ export const backfillArtistAlbumMirror = internalAction({
     let eventsScanned = 0;
     let resumeAssetCursor = args.assetCursor ?? null;
     let resumeEventId = args.assetCursorEventId ?? null;
+
     // A resumed page re-reads every target up to and including the event we
     // stopped in. Skip the ones already fully processed so the run advances.
-    let skippingToResumeEvent = resumeEventId !== null;
+    // If that event is no longer a target (album unlinked or participation
+    // removed between runs), fall back to scanning the whole page rather than
+    // skipping it entirely.
+    const resumeEventIsTarget =
+      resumeEventId !== null && page.targets.includes(resumeEventId);
+    let skippingToResumeEvent = resumeEventIsTarget;
 
     for (const eventId of page.targets) {
       if (skippingToResumeEvent) {
@@ -324,6 +330,12 @@ export const backfillArtistAlbumMirror = internalAction({
       // that, every event starts from its first asset page.
       let cursor: string | null = resumeEventId === eventId ? resumeAssetCursor : null;
       eventsScanned += 1;
+
+      // Resolve the event's artist albums once per event, not per asset: each
+      // ensure is an Immich GET/POST, so doing it inside the asset loop turned
+      // one event into (assets × artists) Immich calls.
+      const artistAlbums = await resolveEventArtistAlbums(ctx, eventId);
+
       let isDone = false;
       while (!isDone) {
         const assetsPage: {
@@ -340,26 +352,27 @@ export const backfillArtistAlbumMirror = internalAction({
         });
 
         for (const asset of assetsPage.assets) {
-          const failed = await mirrorEventAssetToArtistAlbums(ctx, { eventId, ...asset });
+          const failed = await mirrorAssetIntoAlbums(ctx, artistAlbums, asset);
           assetsMirrored += 1;
           failedArtistMirrors += failed;
-          if (assetsMirrored >= MAX_ASSETS_PER_RUN) {
-            // Stop inside the *current* event. Return the cursor that reopens
-            // this same event page (args.cursor) — not page.nextCursor, which
-            // points past it and would skip this event's remaining assets on
-            // resume, since assetCursorEventId would not be in the next page's
-            // targets. `skippingToResumeEvent` fast-forwards past this page's
-            // already-done events on the next run.
-            return {
-              eventsScanned,
-              assetsMirrored,
-              failedArtistMirrors,
-              nextCursor: args.cursor ?? null,
-              assetCursor: assetsPage.nextCursor,
-              assetCursorEventId: eventId,
-              isDone: false,
-            };
-          }
+        }
+
+        // Check the cap at page boundaries, never mid-page: the resume cursor
+        // (`assetsPage.nextCursor`) points past the whole page, so returning it
+        // while assets remain unprocessed would silently skip them.
+        if (assetsMirrored >= MAX_ASSETS_PER_RUN && !assetsPage.isDone) {
+          // Stop inside the current event. Reopen this event's target page
+          // (args.cursor) so `assetCursorEventId` is present on resume; the
+          // `skippingToResumeEvent` fast-forward skips this page's done events.
+          return {
+            eventsScanned,
+            assetsMirrored,
+            failedArtistMirrors,
+            nextCursor: args.cursor ?? null,
+            assetCursor: assetsPage.nextCursor,
+            assetCursorEventId: eventId,
+            isDone: false,
+          };
         }
 
         cursor = assetsPage.nextCursor;
@@ -382,46 +395,57 @@ export const backfillArtistAlbumMirror = internalAction({
 });
 
 /**
- * An asset uploaded to an event also belongs in each linked artist's album, so
- * an artist's album is the one place with all of their photos. Best-effort per
- * artist: the event album copy is already saved, so one bad artist album must
- * not fail the others. Returns how many artist albums failed, so the backfill
- * can report an incomplete mirror instead of silently claiming success.
+ * Each linked artist album for an event, with the album created/verified once.
+ * Shared by the backfill and the per-upload mirror so an event's assets reuse
+ * one round of album resolution.
  */
-async function mirrorEventAssetToArtistAlbums(
+async function resolveEventArtistAlbums(
   ctx: ActionCtx,
-  args: {
-    eventId: Id<"events">;
-    immichAssetId: string;
-    originalFileName: string;
-    type: "IMAGE" | "VIDEO";
-  },
-): Promise<number> {
+  eventId: Id<"events">,
+): Promise<Array<{ albumLinkId: Id<"immichAlbumLinks">; immichAlbumId: string }>> {
   const artists: Array<{ organizationId: string; displayName: string }> = await ctx.runQuery(
     internal.immichDb.listEventArtistOrgsInternal,
-    { eventId: args.eventId },
+    { eventId },
   );
-
-  let failed = 0;
+  const albums: Array<{ albumLinkId: Id<"immichAlbumLinks">; immichAlbumId: string }> = [];
   for (const artist of artists) {
+    const album = await ensureAlbumCore(ctx, {
+      entityType: "band",
+      entityId: artist.organizationId,
+      albumName: `Band: ${artist.displayName}`,
+      description: `Arbor Live Portal band album for ${artist.displayName}`,
+    });
+    albums.push({ albumLinkId: album.albumLinkId, immichAlbumId: album.immichAlbumId });
+  }
+  return albums;
+}
+
+/**
+ * Add one already-uploaded asset to each resolved artist album and record it.
+ * Best-effort per artist: the event album copy is already saved, so one bad
+ * artist album must not fail the others. Returns how many artist albums failed
+ * so callers can report an incomplete mirror instead of silently claiming
+ * success.
+ */
+async function mirrorAssetIntoAlbums(
+  ctx: ActionCtx,
+  albums: Array<{ albumLinkId: Id<"immichAlbumLinks">; immichAlbumId: string }>,
+  asset: { immichAssetId: string; originalFileName: string; type: "IMAGE" | "VIDEO" },
+): Promise<number> {
+  let failed = 0;
+  for (const album of albums) {
     try {
-      const album = await ensureAlbumCore(ctx, {
-        entityType: "band",
-        entityId: artist.organizationId,
-        albumName: `Band: ${artist.displayName}`,
-        description: `Arbor Live Portal band album for ${artist.displayName}`,
-      });
-      await addAssetsToImmichAlbum(album.immichAlbumId, [args.immichAssetId]);
+      await addAssetsToImmichAlbum(album.immichAlbumId, [asset.immichAssetId]);
       await ctx.runMutation(internal.immichDb.recordAssetInternal, {
         albumLinkId: album.albumLinkId,
-        immichAssetId: args.immichAssetId,
-        originalFileName: args.originalFileName,
-        type: args.type,
+        immichAssetId: asset.immichAssetId,
+        originalFileName: asset.originalFileName,
+        type: asset.type,
       });
     } catch (error) {
       failed += 1;
       console.error(
-        `Failed to mirror asset ${args.immichAssetId} into artist album ${artist.organizationId}`,
+        `Failed to mirror asset ${asset.immichAssetId} into artist album ${album.albumLinkId}`,
         error,
       );
     }
@@ -454,12 +478,20 @@ export const addUploadedAssetToAlbum = internalAction({
     // Immich hiccup, and scheduled actions are not retried, so mirroring first
     // keeps the artist albums in step with the asset we just recorded.
     if (link.entityType === "event") {
-      await mirrorEventAssetToArtistAlbums(ctx, {
-        eventId: link.entityId as Id<"events">,
+      const eventId = link.entityId as Id<"events">;
+      const artistAlbums = await resolveEventArtistAlbums(ctx, eventId);
+      const failed = await mirrorAssetIntoAlbums(ctx, artistAlbums, {
         immichAssetId: args.immichAssetId,
         originalFileName: args.originalFileName,
         type: args.type,
       });
+      if (failed > 0) {
+        // No retry here (scheduled actions aren't retried) — surface it so a
+        // stuck artist album is visible rather than a silent success.
+        console.error(
+          `Event asset ${args.immichAssetId} failed to mirror into ${failed} artist album(s); re-run the backfill to catch up.`,
+        );
+      }
     }
 
     await ctx.runAction(internal.immichActions.syncAlbumAssets, {
