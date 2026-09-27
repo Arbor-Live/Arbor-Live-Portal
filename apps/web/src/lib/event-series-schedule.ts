@@ -4,9 +4,10 @@ import {
   toLocalDateTimeInput,
 } from "@/lib/crew-availability";
 import { pacificDayIndexFromAnchor, pacificScheduleDayCount } from "@/lib/format";
+import type { ScheduleBlockType } from "@/lib/schedule-block-types";
 
 export type SeriesBlockTemplate = {
-  blockType: "setup" | "show" | "strike" | "custom";
+  blockType: ScheduleBlockType;
   label: string;
   dayIndex: number;
   offsetMs: number;

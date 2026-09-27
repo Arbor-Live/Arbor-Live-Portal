@@ -182,6 +182,8 @@ import type * as lib_r2Lifecycle from "../lib/r2Lifecycle.js";
 import type * as lib_rentalFulfillment from "../lib/rentalFulfillment.js";
 import type * as lib_requestToken from "../lib/requestToken.js";
 import type * as lib_riderSchema from "../lib/riderSchema.js";
+import type * as lib_runOfShow from "../lib/runOfShow.js";
+import type * as lib_scheduleBlockTypes from "../lib/scheduleBlockTypes.js";
 import type * as lib_scheduleSiteRevalidation from "../lib/scheduleSiteRevalidation.js";
 import type * as lib_shortLinkSlug from "../lib/shortLinkSlug.js";
 import type * as lib_shortLinks from "../lib/shortLinks.js";
@@ -420,6 +422,8 @@ declare const fullApi: ApiFromModules<{
   "lib/rentalFulfillment": typeof lib_rentalFulfillment;
   "lib/requestToken": typeof lib_requestToken;
   "lib/riderSchema": typeof lib_riderSchema;
+  "lib/runOfShow": typeof lib_runOfShow;
+  "lib/scheduleBlockTypes": typeof lib_scheduleBlockTypes;
   "lib/scheduleSiteRevalidation": typeof lib_scheduleSiteRevalidation;
   "lib/shortLinkSlug": typeof lib_shortLinkSlug;
   "lib/shortLinks": typeof lib_shortLinks;

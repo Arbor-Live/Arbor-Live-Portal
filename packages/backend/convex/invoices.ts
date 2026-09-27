@@ -59,6 +59,7 @@ import {
   invoicePassThroughUsd,
   netProfitFromInvoiceUsd,
 } from "./lib/invoiceProfit";
+import { deleteActBlocks, syncNeedBlocks } from "./lib/runOfShow";
 
 const equipmentPricingModeValue = v.union(v.literal("subsidized"), v.literal("nonSubsidized"));
 const crewRateModeValue = v.union(
@@ -445,7 +446,11 @@ async function syncArtistSlotsForInvoice(
       .first();
     if (!organizationId) {
       // Back to TBD: the act stays on the bill, but no longer holds the position.
-      if (seated) await unclaimSlot(ctx, seated._id);
+      if (seated) {
+        await unclaimSlot(ctx, seated._id);
+        // The open position shows its own run-of-show times again.
+        await syncNeedBlocks(ctx, slot._id);
+      }
       continue;
     }
     if (seated?.organizationId === organizationId) continue;
@@ -626,13 +631,19 @@ async function replaceLineItems(
         continue;
       }
       await ctx.db.delete(filled._id);
+      await deleteActBlocks(ctx, { participationId: filled._id });
     }
     const inquiries = await ctx.db
       .query("eventArtistInquiries")
       .withIndex("by_needId", (q) => q.eq("needId", needId))
       .take(1);
-    if (inquiries.length > 0) continue;
+    if (inquiries.length > 0) {
+      // The position stays (its inquiries are kept) and is open again.
+      await syncNeedBlocks(ctx, needId);
+      continue;
+    }
     await ctx.db.delete(needId);
+    await deleteActBlocks(ctx, { needId });
   }
 }
 

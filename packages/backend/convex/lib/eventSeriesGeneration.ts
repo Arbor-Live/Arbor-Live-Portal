@@ -10,11 +10,13 @@ import type { MutationCtx } from "../_generated/server";
 import { syncEventCrewCostUsd } from "./crewCost";
 import { detachInvoiceFromAdditionalLinks } from "./eventInvoiceLinks";
 import { syncEventStatusForLinkedInvoice, type EventStatus } from "./eventStatus";
+import { isActBlock } from "./runOfShow";
+import type { ScheduleBlockType } from "./scheduleBlockTypes";
 
 export const EVENT_TIMEZONE = PORTAL_TIMEZONE;
 
 export type EventSeriesBlockTemplate = {
-  blockType: "setup" | "show" | "strike" | "custom";
+  blockType: ScheduleBlockType;
   label: string;
   dayIndex: number;
   offsetMs: number;
@@ -124,10 +126,13 @@ export async function insertShiftsFromTemplates(
   now: number,
 ) {
   if (!shiftTemplates || shiftTemplates.length === 0) return;
-  const blocks = await ctx.db
-    .query("eventScheduleBlocks")
-    .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", eventId))
-    .take(500);
+  // Templates never include an act's soundcheck/set blocks.
+  const blocks = (
+    await ctx.db
+      .query("eventScheduleBlocks")
+      .withIndex("by_eventId_and_startsAt", (q) => q.eq("eventId", eventId))
+      .take(500)
+  ).filter((block) => !isActBlock(block));
   const blockIdByIndex = blockIdsByTemplateIndex(blocks, blockTemplates, occurrenceStartAt);
 
   for (const template of shiftTemplates) {
@@ -254,7 +259,7 @@ export function computeOccurrenceStarts(args: {
 
 export function blocksToTemplates(
   blocks: Array<{
-    blockType: "setup" | "show" | "strike" | "custom";
+    blockType: ScheduleBlockType;
     label: string;
     dayIndex: number;
     startsAt: number;
@@ -321,6 +326,8 @@ export async function replaceScheduleBlocksFromTemplates(
     .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
     .take(500);
   for (const block of existingBlocks) {
+    // An act's soundcheck/set blocks belong to this occurrence's lineup.
+    if (isActBlock(block)) continue;
     await ctx.db.delete(block._id);
   }
   await insertScheduleBlocksFromTemplates(ctx, eventId, occurrenceStartAt, templates, now);

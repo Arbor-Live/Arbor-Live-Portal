@@ -14,7 +14,7 @@ import {
   derivePortalNextSteps,
 } from "@/components/public/public-portal-next-steps";
 import { PublicEventHeader } from "@/components/public/public-event-header";
-import { PublicEventTimetable } from "@/components/public/public-event-timetable";
+import { RunOfShowView } from "@/components/events/workspace/run-of-show/run-of-show-view";
 import { PublicEventCrew } from "@/components/public/public-event-crew";
 import { PublicEventContacts, buildInheritedContactRows } from "@/components/public/public-event-contacts";
 import { PublicQuoteFinancials } from "@/components/public/public-quote-financials";
@@ -268,7 +268,7 @@ export function PublicEventLifecycleClient({ token }: { token: string }) {
                   await deleteEventContact({ token, eventId: selectedEvent.id, contactId });
                 }}
               />
-              <PublicEventTimetable blocks={selectedEvent.scheduleBlocks} />
+              <RunOfShowView blocks={selectedEvent.scheduleBlocks} emptyLabel="The run of show will appear here once it is planned." />
               <PublicEventCrew crew={selectedEvent.crewRoster} />
             </>
           ) : (

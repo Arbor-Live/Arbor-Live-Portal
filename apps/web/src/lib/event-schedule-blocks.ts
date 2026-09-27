@@ -5,11 +5,12 @@ import {
   pacificDateTimeInputToMs,
   toPacificDateTimeInput,
 } from "@arbor/format";
+import type { ScheduleBlockType } from "@/lib/schedule-block-types";
 
 export type ScheduleBlockTimeDraft = {
   id?: string;
   clientId?: string;
-  blockType: "setup" | "show" | "strike" | "custom";
+  blockType: ScheduleBlockType;
   label: string;
   dayIndex: number;
   startsAt: string;

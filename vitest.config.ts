@@ -20,6 +20,7 @@ export default defineConfig({
       "packages/show-file/**/*.test.ts",
       "packages/email/**/*.test.ts",
       "packages/backend/convex/lib/**/*.test.ts",
+      "packages/backend/convex/email/**/*.test.ts",
       "apps/web/src/lib/**/*.test.ts",
       // Server-rendered component smoke tests (no DOM needed).
       "apps/web/src/components/**/*.smoke.test.tsx",

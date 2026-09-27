@@ -24,6 +24,7 @@ import {
 import { resolveParticipationFlags } from "./lib/userParticipation";
 import { buildUserProfileImageByUserId } from "./lib/userProfileImage";
 import { loadEventHostDisplay } from "./lib/hostOrgs";
+import { isSectionBlockType } from "./lib/scheduleBlockTypes";
 
 
 const crewAvailabilityResponseStatusValue = v.union(
@@ -444,6 +445,8 @@ export const listForCrewMember = query({
         startAt: event.startAt,
         endAt: event.endAt,
         scheduleBlocks: blocks
+          // Crew respond per section; soundchecks and sets are moments inside one.
+          .filter((block) => isSectionBlockType(block.blockType))
           .sort((a, b) => a.startsAt - b.startsAt)
           .map((block) => ({
             _id: block._id,

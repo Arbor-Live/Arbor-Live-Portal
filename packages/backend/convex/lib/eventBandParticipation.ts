@@ -2,6 +2,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { scheduleBandAssignedEmails } from "../email/bandAssignmentEmails";
 import { syncInvoiceLineForSlot } from "./artistLineSync";
+import { inheritSlotTimes, syncNeedBlocks, syncParticipationBlocks } from "./runOfShow";
 
 /**
  * Drop an act's claim on a slot. Uses `replace` because Convex `patch` ignores
@@ -77,7 +78,18 @@ export async function upsertEventBandParticipation(
       ...(args.needId ? { needId: args.needId } : {}),
       updatedAt: now,
     });
-    if (args.needId) await syncInvoiceLineForSlot(ctx, args.needId, now);
+    if (args.needId) {
+      // Filling a position hands its run-of-show times to the act (when the act
+      // has none) and retires the position's own blocks; a position this act
+      // left gets its own times back.
+      await inheritSlotTimes(ctx, existing._id, args.needId);
+      await syncParticipationBlocks(ctx, existing._id);
+      await syncNeedBlocks(ctx, args.needId);
+      if (existing.needId && existing.needId !== args.needId) {
+        await syncNeedBlocks(ctx, existing.needId);
+      }
+      await syncInvoiceLineForSlot(ctx, args.needId, now);
+    }
     return existing._id;
   }
   const participationId = await ctx.db.insert("eventBandParticipations", {
@@ -88,7 +100,12 @@ export async function upsertEventBandParticipation(
     createdAt: now,
     updatedAt: now,
   });
-  if (args.needId) await syncInvoiceLineForSlot(ctx, args.needId, now);
+  if (args.needId) {
+    await inheritSlotTimes(ctx, participationId, args.needId);
+    await syncParticipationBlocks(ctx, participationId);
+    await syncNeedBlocks(ctx, args.needId);
+    await syncInvoiceLineForSlot(ctx, args.needId, now);
+  }
   await scheduleBandAssignedEmails(ctx, {
     eventId: args.eventId,
     organizationId: args.organizationId,

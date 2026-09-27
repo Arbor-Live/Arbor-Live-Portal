@@ -9,6 +9,7 @@ import {
 } from "./lib/crewCompensation";
 import { getUserOtForecast } from "./lib/otForecast";
 import { scheduleCrewScheduledEmails } from "./email/triggers";
+import { isSectionBlockType } from "./lib/scheduleBlockTypes";
 
 function hoursBetween(start: number, end: number) {
   return Number(((end - start) / 3_600_000).toFixed(2));
@@ -212,7 +213,10 @@ export const deleteUnassignedShifts = mutation({
       .query("eventScheduleBlocks")
       .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
       .take(500);
-    const blockIds = new Set(blocks.map((block) => block._id));
+    // Crew belong to sections; a shift on a moment (soundcheck, set, …) is unlinked.
+    const blockIds = new Set(
+      blocks.filter((block) => isSectionBlockType(block.blockType)).map((block) => block._id),
+    );
     // Unlinked includes shifts with no block and shifts whose block was deleted
     // (dangling `scheduleBlockId`) — both are invisible on the timeline.
     const unlinked = existing.filter(

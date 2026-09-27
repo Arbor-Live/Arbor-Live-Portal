@@ -75,6 +75,7 @@ import {
   type UserCompensationRateMode,
 } from "./lib/crewCompensation";
 import { buildUserProfileImageByUserId } from "./lib/userProfileImage";
+import { deleteActBlocks, syncNeedBlocks } from "./lib/runOfShow";
 
 const invitationStatusValue = v.union(
   v.literal("pending"),
@@ -1111,7 +1112,13 @@ export const deleteArchivedBandOrganizationAdmin = mutation({
           .query("eventBandParticipations")
           .withIndex("by_organizationId", (q) => q.eq("organizationId", args.organizationId))
           .take(ORG_CHILD_PAGE),
-      (id) => ctx.db.delete(id),
+      async (id) => {
+        const row = await ctx.db.get(id);
+        await ctx.db.delete(id);
+        // The act's run-of-show blocks go with it; its position gets its own times back.
+        await deleteActBlocks(ctx, { participationId: id });
+        if (row?.needId) await syncNeedBlocks(ctx, row.needId);
+      },
     );
     await deleteEveryOrgChild(
       childBudget,

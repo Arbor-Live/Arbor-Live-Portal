@@ -2,6 +2,7 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import { riderContentFields, riderStatusValue } from "./lib/riderSchema";
 import { artistOrganizationTypeValue } from "./lib/organizationType";
+import { scheduleBlockTypeValue } from "./lib/scheduleBlockTypes";
 
 const publicBucketValue = v.union(
   v.literal("lighting"),
@@ -91,12 +92,7 @@ const eventVisibilityValue = v.union(
   v.literal("informational"),
 );
 
-const eventTimelineBlockTypeValue = v.union(
-  v.literal("setup"),
-  v.literal("show"),
-  v.literal("strike"),
-  v.literal("custom"),
-);
+const eventTimelineBlockTypeValue = scheduleBlockTypeValue;
 
 const userTeamValue = v.union(
   v.literal("Sound"),
@@ -1158,11 +1154,20 @@ export default defineSchema({
     startsAt: v.number(),
     endsAt: v.number(),
     notes: v.optional(v.string()),
+    /**
+     * The act a `soundcheck` / `set` block belongs to: a platform act, or a
+     * lineup position filled by an outside act. At most one is set. These
+     * blocks mirror the act's lineup times (see `lib/runOfShow.ts`).
+     */
+    participationId: v.optional(v.id("eventBandParticipations")),
+    needId: v.optional(v.id("eventArtistNeeds")),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_eventId", ["eventId"])
-    .index("by_eventId_and_startsAt", ["eventId", "startsAt"]),
+    .index("by_eventId_and_startsAt", ["eventId", "startsAt"])
+    .index("by_participationId", ["participationId"])
+    .index("by_needId", ["needId"]),
 
   eventExpenseReports: defineTable({
     eventId: v.id("events"),
@@ -1301,7 +1306,10 @@ export default defineSchema({
      * Unset for acts added straight to the lineup (e.g. imported from an invoice).
      */
     needId: v.optional(v.id("eventArtistNeeds")),
-    /** Lineup ("run of show") windows — plain fields until a Run of Show model lands. */
+    /**
+     * Lineup windows. Mirrored into `soundcheck` / `set` schedule blocks by
+     * `lib/runOfShow.ts`; the blocks become the source of truth in a later step.
+     */
     setStartsAt: v.optional(v.number()),
     setEndsAt: v.optional(v.number()),
     soundcheckStartsAt: v.optional(v.number()),

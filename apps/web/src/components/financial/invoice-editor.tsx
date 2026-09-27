@@ -128,6 +128,11 @@ function artistPersonHours(row: Pick<ArtistRow, "hours" | "people">) {
   return hours * people;
 }
 
+/** How a saved artist line and an editor row are matched: label, act, and day. */
+function artistLineKey(label: string, organizationId?: string | null, eventId?: string | null) {
+  return `${label.trim()}|${organizationId ?? ""}|${eventId ?? ""}`;
+}
+
 function artistRowFromLineItem(row: {
   organizationId?: string | null;
   eventId?: string | null;
@@ -1363,6 +1368,49 @@ export function InvoiceEditor({
     invoiceFieldsHydrated &&
     draftSignature !== "" &&
     draftSignature !== lastSavedSignature;
+
+  // Saving gives a new artist line its bill position on the server. Adopt that
+  // id so the next save keeps the same position instead of opening another.
+  const serverArtistNeeds = useMemo(
+    () =>
+      (invoiceData?.lineItems ?? [])
+        .filter((row) => row.section === "artist" && row.needId)
+        .sort((a, b) => a.order - b.order)
+        .map((row) => ({
+          needId: row.needId as string,
+          key: artistLineKey(row.label, row.organizationId, row.eventId),
+        })),
+    [invoiceData?.lineItems],
+  );
+  useEffect(() => {
+    // Only a clean draft: then every row was in the save that produced these
+    // ids, and a row the user added since can't take over a removed row's slot.
+    if (!invoiceFieldsHydrated || isDraftDirty || serverArtistNeeds.length === 0) return;
+    const used = new Set(artists.map((row) => row.needId).filter(Boolean));
+    const free = serverArtistNeeds.filter((need) => !used.has(need.needId));
+    if (free.length === 0 || artists.every((row) => row.needId)) return;
+    const singleDayEventId = linkedDayEvents.length === 1 ? linkedDayEvents[0]!._id : undefined;
+    let adopted = false;
+    const next = artists.map((row) => {
+      if (row.needId) return row;
+      // The same identity the save sent: label, act, and day.
+      const key = artistLineKey(
+        row.label,
+        row.organizationId && row.organizationId !== ARTIST_TBD_VALUE ? row.organizationId : undefined,
+        row.eventId ?? singleDayEventId,
+      );
+      const index = free.findIndex((need) => need.key === key);
+      if (index < 0) return row;
+      const [need] = free.splice(index, 1);
+      adopted = true;
+      return { ...row, needId: need!.needId };
+    });
+    if (!adopted) return;
+    // The id came from the save that made the draft clean, so it stays clean.
+    baselineSignaturePendingRef.current = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- adopt server-assigned ids after a save
+    setArtists(next);
+  }, [artists, invoiceFieldsHydrated, isDraftDirty, linkedDayEvents, serverArtistNeeds]);
 
   useEffect(() => {
     if (!baselineSignaturePendingRef.current || !invoiceFieldsHydrated) return;

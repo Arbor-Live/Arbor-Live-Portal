@@ -22,6 +22,12 @@ import {
   payeeFieldsFromProfile,
 } from "./lib/bandPayments";
 import { scheduleBandAssignedEmails } from "./email/bandAssignmentEmails";
+import {
+  deleteActBlocks,
+  inheritSlotTimes,
+  syncNeedBlocks,
+  syncParticipationBlocks,
+} from "./lib/runOfShow";
 
 const participationRoleValue = v.union(
   v.literal("headliner"),
@@ -526,18 +532,19 @@ export const addParticipation = mutation({
 });
 
 /**
- * Set an act's run-of-show windows (set + soundcheck) and which slot it fills.
- * Plain fields until a Run of Show model lands. Uses `replace` because Convex
+ * Set an act's run-of-show windows (set + soundcheck) and which slot it fills,
+ * mirroring the windows into schedule blocks. Uses `replace` because Convex
  * `patch` ignores `undefined` and would never clear a field.
  */
 export const updateParticipationLineup = mutation({
   args: {
     participationId: v.id("eventBandParticipations"),
     needId: v.union(v.id("eventArtistNeeds"), v.null()),
-    setStartsAt: v.union(v.number(), v.null()),
-    setEndsAt: v.union(v.number(), v.null()),
-    soundcheckStartsAt: v.union(v.number(), v.null()),
-    soundcheckEndsAt: v.union(v.number(), v.null()),
+    /** Omit to keep the current times — the Run of Show owns them now. */
+    setStartsAt: v.optional(v.union(v.number(), v.null())),
+    setEndsAt: v.optional(v.union(v.number(), v.null())),
+    soundcheckStartsAt: v.optional(v.union(v.number(), v.null())),
+    soundcheckEndsAt: v.optional(v.union(v.number(), v.null())),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -566,15 +573,23 @@ export const updateParticipationLineup = mutation({
     const next: Doc<"eventBandParticipations"> = { ...existing, updatedAt: Date.now() };
     if (args.needId) next.needId = args.needId;
     else delete next.needId;
-    if (args.setStartsAt != null) next.setStartsAt = args.setStartsAt;
-    else delete next.setStartsAt;
-    if (args.setEndsAt != null) next.setEndsAt = args.setEndsAt;
-    else delete next.setEndsAt;
-    if (args.soundcheckStartsAt != null) next.soundcheckStartsAt = args.soundcheckStartsAt;
-    else delete next.soundcheckStartsAt;
-    if (args.soundcheckEndsAt != null) next.soundcheckEndsAt = args.soundcheckEndsAt;
-    else delete next.soundcheckEndsAt;
+    for (const field of [
+      "setStartsAt",
+      "setEndsAt",
+      "soundcheckStartsAt",
+      "soundcheckEndsAt",
+    ] as const) {
+      const value = args[field];
+      if (value === undefined) continue;
+      if (value === null) delete next[field];
+      else next[field] = value;
+    }
     await ctx.db.replace(args.participationId, next);
+    if (args.needId) await inheritSlotTimes(ctx, args.participationId, args.needId);
+    await syncParticipationBlocks(ctx, args.participationId);
+    for (const needId of new Set([previousNeedId, args.needId])) {
+      if (needId) await syncNeedBlocks(ctx, needId);
+    }
     const now2 = next.updatedAt;
     if (args.needId) await syncInvoiceLineForSlot(ctx, args.needId, now2);
     if (previousNeedId && previousNeedId !== args.needId) {
@@ -702,6 +717,8 @@ export const removeParticipation = mutation({
       .unique();
     if (existing) {
       await ctx.db.delete(existing._id);
+      await deleteActBlocks(ctx, { participationId: existing._id });
+      if (existing.needId) await syncNeedBlocks(ctx, existing.needId);
     }
 
     const payment = await ctx.db
@@ -761,6 +778,8 @@ export const upsertParticipations = mutation({
     for (const row of existing) {
       if (!keepOrgIds.has(row.organizationId)) {
         await ctx.db.delete(row._id);
+        await deleteActBlocks(ctx, { participationId: row._id });
+        if (row.needId) await syncNeedBlocks(ctx, row.needId);
         const payment = await ctx.db
           .query("eventBandPayments")
           .withIndex("by_eventId_and_organizationId", (q) =>

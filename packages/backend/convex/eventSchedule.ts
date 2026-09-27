@@ -7,13 +7,17 @@ import {
   scheduleSchedulePublishedEmails,
 } from "./email/triggers";
 import { pacificDayIndexFromAnchor } from "@arbor/format";
-
-const blockTypeValue = v.union(
-  v.literal("setup"),
-  v.literal("show"),
-  v.literal("strike"),
-  v.literal("custom"),
-);
+import type { Id } from "./_generated/dataModel";
+import {
+  actBlockLabel,
+  actKey,
+  actRefOf,
+  deleteScheduleBlock,
+  loadAct,
+  writeBackActTimes,
+  type ActRef,
+} from "./lib/runOfShow";
+import { scheduleBlockTypeValue, type ScheduleBlockType } from "./lib/scheduleBlockTypes";
 
 export const listByEvent = query({
   args: { eventId: v.id("events") },
@@ -34,14 +38,23 @@ export const upsertBlocks = mutation({
       v.object({
         id: v.optional(v.id("eventScheduleBlocks")),
         clientId: v.optional(v.string()),
-        blockType: blockTypeValue,
+        blockType: scheduleBlockTypeValue,
         label: v.string(),
         dayIndex: v.optional(v.number()), // Derived from startsAt on save; omit from clients.
         startsAt: v.number(),
         endsAt: v.number(),
         notes: v.optional(v.string()),
+        /** Links a new soundcheck/set to its act. Ignored on existing blocks. */
+        participationId: v.optional(v.id("eventBandParticipations")),
+        needId: v.optional(v.id("eventArtistNeeds")),
       }),
     ),
+    /**
+     * Set by the Run of Show editor, which owns act soundcheck/set blocks. Other
+     * schedule editors leave it unset so they never edit or delete act blocks —
+     * an editor loaded before a Run of Show change cannot overwrite it.
+     */
+    editsActBlocks: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     await requireAuth(ctx);
@@ -61,48 +74,101 @@ export const upsertBlocks = mutation({
       .query("eventScheduleBlocks")
       .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
       .take(500);
-    const existingIds = new Set(existing.map((row) => row._id));
+    const existingById = new Map(existing.map((row) => [row._id, row]));
     for (const block of args.blocks) {
-      if (block.id && !existingIds.has(block.id)) {
+      if (block.id && !existingById.has(block.id)) {
         throw new Error("Schedule block does not belong to this event.");
       }
     }
+    const editsActBlocks = args.editsActBlocks === true;
+
+    // Validate new act blocks: the act is on this event, the type is an act
+    // type, and each act has at most one soundcheck and one set.
+    const actNames = new Map<string, string>();
+    const actSlots = new Set<string>();
+    for (const block of args.blocks) {
+      const row = block.id ? existingById.get(block.id) : undefined;
+      const act = row ? actRefOf(row) : actRefOf(block);
+      if (!act) continue;
+      if (!row && !editsActBlocks) {
+        throw new Error("Add soundchecks and sets from the Run of Show.");
+      }
+      const key = actKey(act);
+      if (!actNames.has(key)) {
+        const loaded = await loadAct(ctx, act);
+        if (!loaded || loaded.eventId !== args.eventId) {
+          throw new Error("That act is not on this event's lineup.");
+        }
+        actNames.set(key, loaded.name);
+      }
+      const blockType = row?.blockType ?? block.blockType;
+      if (blockType !== "soundcheck" && blockType !== "set") {
+        throw new Error("Only soundchecks and sets can belong to an act.");
+      }
+      const slotKey = `${key}:${blockType}`;
+      if (actSlots.has(slotKey)) {
+        throw new Error(`${actNames.get(key)} already has a ${blockType}.`);
+      }
+      actSlots.add(slotKey);
+    }
+
     const keepIds = new Set(args.blocks.map((b) => b.id).filter(Boolean));
+    const touchedActs = new Map<string, ActRef>();
     const now = Date.now();
     for (const row of existing) {
       if (keepIds.has(row._id)) continue;
-      // Detach shifts from a deleted block instead of leaving a dangling
-      // `scheduleBlockId`: the schedule tab only renders shifts it can match to
-      // a block, so an orphaned reference makes the shift invisible while it
-      // still counts as an open slot. Detached shifts surface as unlinked.
-      const linkedShifts = await ctx.db
-        .query("eventCrewShifts")
-        .withIndex("by_scheduleBlockId", (q) => q.eq("scheduleBlockId", row._id))
-        .take(500);
-      for (const shift of linkedShifts) {
-        await ctx.db.patch(shift._id, { scheduleBlockId: undefined, updatedAt: now });
+      const act = actRefOf(row);
+      if (act) {
+        if (!editsActBlocks) continue;
+        touchedActs.set(actKey(act), act);
       }
-      await ctx.db.delete(row._id);
+      await deleteScheduleBlock(ctx, row._id, now);
     }
 
     const savedBlocks: Array<{
       id: string;
       clientId?: string;
-      blockType: "setup" | "show" | "strike" | "custom";
+      blockType: ScheduleBlockType;
       label: string;
       dayIndex: number;
       startsAt: number;
       endsAt: number;
       notes?: string;
+      participationId?: Id<"eventBandParticipations">;
+      needId?: Id<"eventArtistNeeds">;
     }> = [];
     for (const block of args.blocks) {
-      const label = block.label.trim();
+      const row = block.id ? existingById.get(block.id) : undefined;
+      const act = row ? actRefOf(row) : actRefOf(block);
+      if (row && act && !editsActBlocks) {
+        savedBlocks.push({
+          id: row._id,
+          clientId: block.clientId,
+          blockType: row.blockType,
+          label: row.label,
+          dayIndex: row.dayIndex,
+          startsAt: row.startsAt,
+          endsAt: row.endsAt,
+          notes: row.notes,
+          ...act,
+        });
+        continue;
+      }
+      // An act block's type and name come from its act, not the client.
+      const blockType = row && act ? row.blockType : block.blockType;
+      const label =
+        act && (blockType === "soundcheck" || blockType === "set")
+          ? actBlockLabel(actNames.get(actKey(act)) ?? "Act", blockType)
+          : block.label.trim();
       const notes = block.notes?.trim() || undefined;
       // Derived from startsAt vs event start — client day picker removed.
       const dayIndex = pacificDayIndexFromAnchor(event.startAt, block.startsAt);
-      if (block.id) {
-        await ctx.db.patch(block.id, {
-          blockType: block.blockType,
+      if (act) touchedActs.set(actKey(act), act);
+      let id: Id<"eventScheduleBlocks">;
+      if (row) {
+        id = row._id;
+        await ctx.db.patch(row._id, {
+          blockType,
           label,
           dayIndex,
           startsAt: block.startsAt,
@@ -110,39 +176,34 @@ export const upsertBlocks = mutation({
           notes,
           updatedAt: now,
         });
-        savedBlocks.push({
-          id: block.id,
-          clientId: block.clientId,
-          blockType: block.blockType,
-          label,
-          dayIndex,
-          startsAt: block.startsAt,
-          endsAt: block.endsAt,
-          notes,
-        });
       } else {
-        const insertedId = await ctx.db.insert("eventScheduleBlocks", {
+        id = await ctx.db.insert("eventScheduleBlocks", {
           eventId: args.eventId,
-          blockType: block.blockType,
+          blockType,
           label,
           dayIndex,
           startsAt: block.startsAt,
           endsAt: block.endsAt,
           notes,
+          ...(act ?? {}),
           createdAt: now,
           updatedAt: now,
         });
-        savedBlocks.push({
-          id: insertedId,
-          clientId: block.clientId,
-          blockType: block.blockType,
-          label,
-          dayIndex,
-          startsAt: block.startsAt,
-          endsAt: block.endsAt,
-          notes,
-        });
       }
+      savedBlocks.push({
+        id,
+        clientId: block.clientId,
+        blockType,
+        label,
+        dayIndex,
+        startsAt: block.startsAt,
+        endsAt: block.endsAt,
+        notes,
+        ...(act ?? {}),
+      });
+    }
+    for (const act of touchedActs.values()) {
+      await writeBackActTimes(ctx, act);
     }
     if (savedBlocks.length > 0) {
       const fingerprint = scheduleBlocksContentFingerprint(savedBlocks);

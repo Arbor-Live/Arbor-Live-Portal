@@ -67,9 +67,10 @@ function StepSubheader({ text }: { text: string }) {
   );
 }
 
-export function OpenMicWizard() {
+/** `eventId` pins the sign-up to one event (a link from that event's page). */
+export function OpenMicWizard({ eventId }: { eventId?: string } = {}) {
   const marketingSettings = useQuery(api.marketingSettings.get, {});
-  const activeNight = useQuery(api.openMic.getActiveNight, {});
+  const activeNight = useQuery(api.openMic.getActiveNight, eventId ? { eventId } : {});
   const showIntro = marketingSettings?.openMicMarketingBoost === true;
 
   const form = useForm<OpenMicSignupFormValues>({

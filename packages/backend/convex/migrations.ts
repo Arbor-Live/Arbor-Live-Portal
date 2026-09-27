@@ -23,6 +23,7 @@ import {
 } from "./lib/eventTeams";
 import { consolidatePackageIntoOneIncludedUnit } from "./lib/packageContentMigration";
 import { normalizeCrewLineLabel } from "./lib/normalizeCrewLineLabel";
+import { syncNeedBlocks, syncParticipationBlocks } from "./lib/runOfShow";
 
 /**
  * Official @convex-dev/migrations runner.
@@ -634,6 +635,27 @@ export const recomputeArtistOrgAdminGlobalRoles = migrations.define({
 });
 
 /**
+ * Run of show: mirror existing lineup set/soundcheck times into linked
+ * `soundcheck` / `set` schedule blocks. Idempotent — syncing an act that
+ * already has matching blocks writes nothing.
+ */
+export const backfillRunOfShowParticipationBlocks = migrations.define({
+  table: "eventBandParticipations",
+  migrateOne: async (ctx, row) => {
+    if (row.setStartsAt == null && row.soundcheckStartsAt == null) return;
+    await syncParticipationBlocks(ctx, row._id);
+  },
+});
+
+export const backfillRunOfShowNeedBlocks = migrations.define({
+  table: "eventArtistNeeds",
+  migrateOne: async (ctx, row) => {
+    if (row.setStartsAt == null && row.soundcheckStartsAt == null) return;
+    await syncNeedBlocks(ctx, row._id);
+  },
+});
+
+/**
  * never reorder or remove completed ones (reset requires an explicit reset:true).
  */
 const MIGRATION_SERIES = [
@@ -662,6 +684,8 @@ const MIGRATION_SERIES = [
   internal.migrations.migrateEventTeamsMarketingToPromotionOnEvents,
   internal.migrations.migrateEventTeamsMarketingToPromotionOnEventSeries,
   internal.migrations.recomputeArtistOrgAdminGlobalRoles,
+  internal.migrations.backfillRunOfShowParticipationBlocks,
+  internal.migrations.backfillRunOfShowNeedBlocks,
 ] as const;
 
 export const runAll = migrations.runner([...MIGRATION_SERIES]);

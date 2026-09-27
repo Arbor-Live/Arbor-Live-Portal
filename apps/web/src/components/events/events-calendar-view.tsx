@@ -66,6 +66,9 @@ function getBlockPalette(blockType?: string): EventPalette {
   if (blockType === "setup") return { color: "#bfdbfe", contrastColor: "#1e40af" };
   if (blockType === "show") return { color: "#bbf7d0", contrastColor: "#166534" };
   if (blockType === "strike") return { color: "#fde68a", contrastColor: "#92400e" };
+  if (blockType === "doors") return { color: "#e2e8f0", contrastColor: "#334155" };
+  if (blockType === "soundcheck") return { color: "#bae6fd", contrastColor: "#075985" };
+  if (blockType === "changeover") return { color: "#fed7aa", contrastColor: "#9a3412" };
   return { color: "#ddd6fe", contrastColor: "#5b21b6" };
 }
 
