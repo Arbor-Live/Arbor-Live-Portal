@@ -246,27 +246,55 @@ export const backfillAllAlbums = internalAction({
  * artist's album. Runs after the feature shipped so existing event media shows
  * up in artist albums, which only got mirrored uploads from then on.
  *
- * Resumable via an opaque Convex cursor over the event table. Each event's
- * album is drained page by page in the same invocation, so a large album is
- * never truncated. The cursor comes back in the result and must be passed to
- * the next invocation unchanged; re-run until `isDone` is true.
+ * Resumable and bounded. Each invocation mirrors at most
+ * `MAX_ASSETS_PER_RUN` assets, walking up to `MAX_EVENTS_PER_RUN` events, and
+ * returns an opaque event `cursor` plus (when it stopped mid-event) an
+ * `assetCursor` scoped to `assetCursorEventId`. Pass all three back unchanged
+ * to continue; re-run until `isDone` is true. Bounding total assets keeps a
+ * single invocation inside Convex's action time limit so the operator always
+ * gets a cursor for the work that finished.
  */
 const MAX_EVENTS_PER_RUN = 25;
+/**
+ * 200 assets ≈ a few Immich PUTs per second for well under a minute — orders of
+ * magnitude inside the 10-minute action limit. Raise it only with a measurement;
+ * the point is that a single invocation always finishes and returns a cursor.
+ */
+const MAX_ASSETS_PER_RUN = 200;
+
+type BackfillArgs = {
+  cursor?: string | null;
+  assetCursor?: string | null;
+  assetCursorEventId?: Id<"events"> | null;
+};
+
+type BackfillResult = {
+  eventsScanned: number;
+  assetsMirrored: number;
+  nextCursor: string | null;
+  assetCursor: string | null;
+  assetCursorEventId: Id<"events"> | null;
+  isDone: boolean;
+};
+
+/** Shape returned by `runBackfillArtistAlbumMirror` (see `immich.ts`). */
+export type BackfillRunResult = BackfillResult;
 
 export const backfillArtistAlbumMirror = internalAction({
-  args: { cursor: v.optional(v.union(v.string(), v.null())) },
+  args: {
+    cursor: v.optional(v.union(v.string(), v.null())),
+    assetCursor: v.optional(v.union(v.string(), v.null())),
+    assetCursorEventId: v.optional(v.union(v.id("events"), v.null())),
+  },
   returns: v.object({
     eventsScanned: v.number(),
     assetsMirrored: v.number(),
     nextCursor: v.union(v.string(), v.null()),
+    assetCursor: v.union(v.string(), v.null()),
+    assetCursorEventId: v.union(v.id("events"), v.null()),
     isDone: v.boolean(),
   }),
-  handler: async (ctx, args): Promise<{
-    eventsScanned: number;
-    assetsMirrored: number;
-    nextCursor: string | null;
-    isDone: boolean;
-  }> => {
+  handler: async (ctx, args: BackfillArgs): Promise<BackfillResult> => {
     const page: {
       targets: Array<Id<"events">>;
       nextCursor: string | null;
@@ -278,10 +306,14 @@ export const backfillArtistAlbumMirror = internalAction({
 
     let assetsMirrored = 0;
     let eventsScanned = 0;
+    let resumeAssetCursor = args.assetCursor ?? null;
+    let resumeEventId = args.assetCursorEventId ?? null;
 
     for (const eventId of page.targets) {
+      // Resume mid-event only for the event the previous run stopped on; after
+      // that, every event starts from its first asset page.
+      let cursor: string | null = resumeEventId === eventId ? resumeAssetCursor : null;
       eventsScanned += 1;
-      let cursor: string | null = null;
       let isDone = false;
       while (!isDone) {
         const assetsPage: {
@@ -307,17 +339,33 @@ export const backfillArtistAlbumMirror = internalAction({
               error,
             );
           }
+          if (assetsMirrored >= MAX_ASSETS_PER_RUN) {
+            // Stop with a resumable cursor: the event table page is not done,
+            // so hand back both cursors for the next invocation.
+            return {
+              eventsScanned,
+              assetsMirrored,
+              nextCursor: page.nextCursor,
+              assetCursor: assetsPage.nextCursor,
+              assetCursorEventId: eventId,
+              isDone: false,
+            };
+          }
         }
 
         cursor = assetsPage.nextCursor;
         isDone = assetsPage.isDone;
       }
+      resumeAssetCursor = null;
+      resumeEventId = null;
     }
 
     return {
       eventsScanned,
       assetsMirrored,
       nextCursor: page.nextCursor,
+      assetCursor: null,
+      assetCursorEventId: null,
       isDone: page.isDone,
     };
   },

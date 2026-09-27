@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { components } from "./_generated/api";
-import { requireArborInternalContext, requireBandContext } from "./lib/auth";
+import { requireBandContext } from "./lib/auth";
 import { requireEventMediaAccess as requireEventMediaAccessFromImmich } from "./lib/immichAccess";
 import { dedupeAlbumLinksForEntity, getCanonicalAlbumLink } from "./lib/immichAlbumLinks";
 
@@ -399,19 +399,6 @@ export const getEventAlbumEnsureMetaInternal = internalQuery({
       title: `${event.title} — ${formatPacificDate(event.startAt)}`,
       venueName: event.venueName,
     };
-  },
-});
-
-/**
- * Action-safe admin gate for the backfill CLI. Actions have no `db`, so the
- * context check runs here in a query and the action just awaits it.
- */
-export const requireArborInternalForBackfillInternal = internalQuery({
-  args: {},
-  returns: v.null(),
-  handler: async (ctx) => {
-    await requireArborInternalContext(ctx);
-    return null;
   },
 });
 

@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { paginationOptsValidator } from "convex/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { action, mutation, query } from "./_generated/server";
+import { internalAction, internalMutation, mutation, query } from "./_generated/server";
 import {
   canUploadToAlbum,
   getAlbumLinkForBand,
@@ -18,6 +18,7 @@ import {
   paginateAlbumAssets,
 } from "./lib/immichAssets";
 import { requireArborInternalContext, requireAuth, requireBandContext } from "./lib/auth";
+import type { BackfillRunResult } from "./immichActions";
 
 const entityTypeValue = v.union(v.literal("band"), v.literal("event"));
 
@@ -188,34 +189,46 @@ export const runBackfillAlbums = mutation({
 
 /**
  * Backfill the artist-album mirror for event media uploaded before the mirror
- * shipped. Admin-only; run from the CLI:
+ * shipped.
  *
- *   npx convex run immich:runBackfillArtistAlbumMirror '{}'
- *   npx convex run immich:runBackfillArtistAlbumMirror '{"cursor":"<nextCursor>"}'
+ * Deliberately an `internalAction`: it is runnable from `convex run` and the
+ * Convex dashboard without a user identity, and access is gated by the deploy
+ * key (the same authority that can deploy or run any internal function). That
+ * avoids the public-action auth dead end — `convex run` sends no identity, so a
+ * user-gated entry point could not be invoked at all from the CLI or dashboard.
  *
- * Runs one page inline and returns it (including `nextCursor`/`isDone`), so the
- * operator sees progress and can pass the cursor back to continue until done.
+ * Runs one bounded page inline and returns it, so the operator sees progress
+ * and can pass the cursors back to continue until `isDone`. See docs/immich.md.
  */
-export const runBackfillArtistAlbumMirror = action({
-  args: { cursor: v.optional(v.union(v.string(), v.null())) },
+export const runBackfillArtistAlbumMirror = internalAction({
+  args: {
+    cursor: v.optional(v.union(v.string(), v.null())),
+    assetCursor: v.optional(v.union(v.string(), v.null())),
+    assetCursorEventId: v.optional(v.union(v.id("events"), v.null())),
+  },
   returns: v.object({
     eventsScanned: v.number(),
     assetsMirrored: v.number(),
     nextCursor: v.union(v.string(), v.null()),
+    assetCursor: v.union(v.string(), v.null()),
+    assetCursorEventId: v.union(v.id("events"), v.null()),
     isDone: v.boolean(),
   }),
-  handler: async (
-    ctx,
-    args,
-  ): Promise<{
-    eventsScanned: number;
-    assetsMirrored: number;
-    nextCursor: string | null;
-    isDone: boolean;
-  }> => {
-    await ctx.runQuery(internal.immichDb.requireArborInternalForBackfillInternal, {});
+  handler: async (ctx, args): Promise<BackfillRunResult> => {
     return await ctx.runAction(internal.immichActions.backfillArtistAlbumMirror, {
       cursor: args.cursor ?? null,
+      assetCursor: args.assetCursor ?? null,
+      assetCursorEventId: args.assetCursorEventId ?? null,
     });
+  },
+});
+
+/** One-shot, fire-and-forget kickoff of the artist-album mirror backfill. */
+export const startBackfillArtistAlbumMirror = internalMutation({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    await ctx.scheduler.runAfter(0, internal.immich.runBackfillArtistAlbumMirror, {});
+    return null;
   },
 });

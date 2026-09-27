@@ -44,8 +44,8 @@ event / band  ──►  immichAlbumLinks (Convex)  ──►  Immich album + sh
    asset into every artist album on the event lineup (ensuring each band album
    exists first), so an artist's album collects photos from all of their events.
    Media uploaded before the mirror existed is caught up by
-   `immich:runBackfillArtistAlbumMirror` (admin-only; resumable paged action —
-   see below).
+   `internal.immich.runBackfillArtistAlbumMirror` (internal, deploy-key gated;
+   resumable paged action — see below).
 4. **Serve.** Public galleries call `buildSharedAssetUrl(assetId, kind, shareKey)`
    which produces `"{IMMICH_URL}/api/assets/{id}/{thumbnail|original|video/playback}?key={shareKey}"`.
    Staff can deep-link to the Immich UI with `buildImmichAlbumUrl` / `buildImmichShareUrl`.
@@ -114,25 +114,35 @@ Marketing/public-work galleries reuse the same client through
 ### Artist-album mirror backfill
 
 Event media uploaded before the mirror shipped is copied into artist albums by
-`immich:runBackfillArtistAlbumMirror`. It is admin-only, runs one page inline,
-and is resumable: each page scans `MAX_EVENTS_PER_RUN` events (newest first),
-drains every asset page of each event's album, and copies those assets into each
-linked artist album. It returns
-`{ eventsScanned, assetsMirrored, nextCursor, isDone }` directly, so the operator
-sees progress. It reads from the Convex asset index (no Immich list call) and
-calls `PUT /albums/:id/assets` per asset.
+`internal.immich.runBackfillArtistAlbumMirror`. It is an **internal** function:
+runnable from `convex run` and the Convex dashboard with no user identity, gated
+by the deploy key (the same authority that can deploy). It runs one bounded page
+inline and is resumable. Each invocation mirrors at most `MAX_ASSETS_PER_RUN`
+assets across up to `MAX_EVENTS_PER_RUN` events (newest first), draining each
+event's album page by page. It reads from the Convex asset index (no Immich list
+call) and calls `PUT /albums/:id/assets` per asset.
 
-`nextCursor` is an opaque Convex cursor string — pass it back unchanged.
-
-Run it against a deployment with `packages/backend` as the working directory:
+It returns
+`{ eventsScanned, assetsMirrored, nextCursor, assetCursor, assetCursorEventId, isDone }`.
+`nextCursor` (event-table) and `assetCursor`/`assetCursorEventId` (mid-event)
+are opaque Convex cursors — pass them back unchanged. When a run stops mid-event,
+`assetCursorEventId` identifies which event `assetCursor` belongs to.
 
 ```bash
-npx convex run immich:runBackfillArtistAlbumMirror '{}'
-# then continue from where it stopped (use the returned nextCursor verbatim):
-npx convex run immich:runBackfillArtistAlbumMirror '{"cursor":"<nextCursor>"}'
+cd packages/backend
+# start the walk (no identity needed — internal function, deploy-key gated):
+npx convex run internal.immich.runBackfillArtistAlbumMirror '{}'
+# continue from where it stopped, using the returned cursors verbatim:
+npx convex run internal.immich.runBackfillArtistAlbumMirror \
+  '{"cursor":"<nextCursor>","assetCursor":"<assetCursor>","assetCursorEventId":"<assetCursorEventId>"}'
 ```
 
-Prefer `--prod` for production (`npx convex run immich:runBackfillArtistAlbumMirror '{}' --prod`).
+Add `--prod` to target production (`... --prod`). From the **Convex dashboard**,
+run the same function via *Functions → internal.immich:runBackfillArtistAlbumMirror*
+(no identity required). To fan the whole walk out in one go, call
+`internal.immich.startBackfillArtistAlbumMirror` once — it schedules the paged
+action fire-and-forget.
+
 Re-running is idempotent per artist album: `recordAssetInternal` skips rows that
 already exist, so a second pass only re-issues the harmless Immich add.
 
