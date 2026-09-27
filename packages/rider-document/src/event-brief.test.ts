@@ -10,8 +10,23 @@ function baseBrief(overrides: Partial<EventBriefDocumentData> = {}): EventBriefD
     generatedAtLabel: "Mon, Jan 1, 2026 · 9:00 AM PST",
     statusLabel: "Ready",
     whenLabel: "Sat, Jan 3, 2026 · 6:00 PM – 11:00 PM PST",
-    blocks: [{ dayLabel: "Day 1", label: "Setup", timeLabel: "3:00 PM – 5:00 PM" }],
-    shifts: [{ role: "Sound", person: "Alex", timeLabel: "3:00 PM – 11:00 PM" }],
+    runOfShow: [
+      {
+        entries: [
+          {
+            section: {
+              typeLabel: "Setup",
+              label: "Setup",
+              timeLabel: "3:00 PM – 5:00 PM",
+              crew: [{ role: "Sound", person: "Alex", timeLabel: "3:00 PM – 5:00 PM" }],
+            },
+            moments: [],
+          },
+        ],
+      },
+    ],
+    acts: [],
+    otherShifts: [],
     assignments: [{ roleLabel: "Day-of lead", person: "Sam" }],
     contacts: [],
     pullList: [],
@@ -61,6 +76,61 @@ describe("event brief PDF", () => {
         ],
       }),
     );
+    expect(isPdf(buffer)).toBe(true);
+  });
+
+  it("renders a multi-day run of show with nested moments, swaps, acts, and open crew", async () => {
+    const buffer = await renderEventBriefPdfBuffer(
+      baseBrief({
+        acts: [
+          { name: "The Larks", soundcheckLabel: "5:40 PM – 5:55 PM", setLabel: "6:00 PM – 6:45 PM" },
+          { name: "Night Owls", soundcheckLabel: "5:25 PM – 5:40 PM", setLabel: "7:00 PM – 8:00 PM" },
+        ],
+        runOfShow: [
+          {
+            dayLabel: "Day 1 · Sat, Jan 3",
+            entries: [
+              {
+                moments: [
+                  { typeLabel: "Soundcheck", label: "Night Owls", startLabel: "5:25 PM", durationLabel: "15m" },
+                ],
+              },
+              {
+                section: {
+                  typeLabel: "Show",
+                  label: "Show",
+                  timeLabel: "6:00 PM – 11:00 PM",
+                  notes: "All ages",
+                  crew: [
+                    { role: "FOH", person: "Alex", timeLabel: "Call 5:30 PM · 6:00 PM – 11:00 PM" },
+                    { role: "Stagehand", person: "Open", timeLabel: "6:00 PM – 11:00 PM", open: true },
+                  ],
+                },
+                moments: [
+                  { typeLabel: "Set", label: "The Larks", startLabel: "6:00 PM", durationLabel: "45m" },
+                  {
+                    typeLabel: "Changeover",
+                    label: "Changeover to Night Owls",
+                    startLabel: "6:45 PM",
+                    durationLabel: "15m",
+                    swaps: ["A.7 Flex1: Sax → Guitar"],
+                  },
+                  { typeLabel: "Set", label: "Night Owls", startLabel: "7:00 PM", durationLabel: "1h" },
+                ],
+              },
+            ],
+          },
+          { dayLabel: "Day 2 · Sun, Jan 4", entries: [] },
+        ],
+        otherShifts: [{ role: "Runner", person: "Kai", timeLabel: "4:00 PM – 6:00 PM" }],
+        nightRider,
+      }),
+    );
+    expect(isPdf(buffer)).toBe(true);
+  });
+
+  it("renders an event with no run of show yet", async () => {
+    const buffer = await renderEventBriefPdfBuffer(baseBrief({ runOfShow: [] }));
     expect(isPdf(buffer)).toBe(true);
   });
 });

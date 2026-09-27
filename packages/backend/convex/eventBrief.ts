@@ -20,6 +20,7 @@ import {
   resolveVenueContact,
 } from "./lib/eventContacts";
 import { loadEventHostDisplay } from "./lib/hostOrgs";
+import { buildBriefRunOfShow } from "./lib/briefRunOfShow";
 import { eventDashboardUrl } from "./email/constants";
 
 const STATUS_LABELS: Record<string, string> = {
@@ -188,6 +189,30 @@ export const getBriefSource = internalQuery({
         body: stripMarkdown(artifact.markdown!),
       }));
 
+    const swapsByPair = new Map(
+      (nightRider?.changeovers ?? []).map((changeover) => [changeover.title, changeover.lines]),
+    );
+    // Shifts store a display name when assigned; fill in any that don't from the
+    // portal user or trainee application so the brief never prints a blank.
+    const unnamedUserIds = shifts
+      .filter((shift) => !shift.personName?.trim() && shift.userId)
+      .map((shift) => shift.userId!);
+    const userById = await findAuthUsersByIds(ctx, unnamedUserIds);
+    const namedShifts = await Promise.all(
+      shifts.map(async (shift) => {
+        if (shift.personName?.trim()) return shift;
+        const userName = shift.userId ? userById.get(shift.userId)?.name?.trim() : undefined;
+        const application =
+          !userName && shift.crewApplicationId ? await ctx.db.get(shift.crewApplicationId) : null;
+        const personName = userName || application?.name?.trim();
+        return personName ? { ...shift, personName } : shift;
+      }),
+    );
+    const runOfShowData = buildBriefRunOfShow(blocks, namedShifts, {
+      formatTime: (ms) => formatTime(ms, event.timezone),
+      formatDate: (ms) => formatDate(ms, event.timezone),
+      swaps: (from, to) => swapsByPair.get(`${from} → ${to}`),
+    });
     return {
       title: event.title,
       generatedAtLabel: formatDateTime(Date.now()),
@@ -199,18 +224,7 @@ export const getBriefSource = internalQuery({
       venueAddress: await effectiveAddress(ctx, venue),
       notes: event.notes ?? undefined,
       briefUrl: eventDashboardUrl(String(event._id)),
-      blocks: blocks.map((block) => ({
-        dayLabel: `Day ${block.dayIndex + 1}`,
-        label: block.label,
-        timeLabel: `${formatTime(block.startsAt, event.timezone)} – ${formatTime(block.endsAt, event.timezone)}`,
-        notes: block.notes ?? undefined,
-      })),
-      shifts: shifts.map((shift) => ({
-        role: shift.role,
-        person: shift.personName ?? "Unassigned",
-        timeLabel: `${formatTime(shift.startsAt, event.timezone)} – ${formatTime(shift.endsAt, event.timezone)}`,
-        notes: shift.notes ?? undefined,
-      })),
+      ...runOfShowData,
       assignments: await leadAssignments(ctx, event),
       contacts,
       pullList: pullListItems.map((item) => ({

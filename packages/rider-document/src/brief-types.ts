@@ -5,18 +5,55 @@ import type { RiderDocumentData } from "./types";
  * formats times/labels (portal timezone lives there) so this package stays
  * purely presentational and serializable.
  */
-export type EventBriefBlock = {
-  dayLabel: string;
-  label: string;
-  timeLabel: string;
-  notes?: string;
-};
-
 export type EventBriefShift = {
   role: string;
   person: string;
   timeLabel: string;
   notes?: string;
+  /** Nobody is assigned yet. */
+  open?: boolean;
+};
+
+/** Doors, a soundcheck, a set, or a changeover inside a section. */
+export type EventBriefMoment = {
+  typeLabel: string;
+  label: string;
+  startLabel: string;
+  durationLabel: string;
+  notes?: string;
+  /** Changeovers: the night rider's cable swaps between the two acts. */
+  swaps?: string[];
+};
+
+/** Setup, show, strike, or a custom section, with the crew who work it. */
+export type EventBriefSection = {
+  typeLabel: string;
+  label: string;
+  timeLabel: string;
+  notes?: string;
+  crew: EventBriefShift[];
+};
+
+/**
+ * One row of the run of show: a section and the moments inside it, or a
+ * moment that falls outside every section (`section` is absent).
+ */
+export type EventBriefRunOfShowEntry = {
+  section?: EventBriefSection;
+  moments: EventBriefMoment[];
+};
+
+export type EventBriefRunOfShowDay = {
+  /** Present on multi-day events ("Day 2 · Sat, Oct 17"). */
+  dayLabel?: string;
+  entries: EventBriefRunOfShowEntry[];
+};
+
+/** An act on the bill, in show order. */
+export type EventBriefAct = {
+  name: string;
+  soundcheckLabel?: string;
+  setLabel?: string;
 };
 
 export type EventBriefAssignment = {
@@ -57,8 +94,10 @@ export type EventBriefDocumentData = {
   notes?: string;
   /** Authenticated event page, encoded as a QR code on the printed brief. */
   briefUrl?: string;
-  blocks: EventBriefBlock[];
-  shifts: EventBriefShift[];
+  runOfShow: EventBriefRunOfShowDay[];
+  acts: EventBriefAct[];
+  /** Shifts not on a section (no block, or on a doors/soundcheck/set block). */
+  otherShifts: EventBriefShift[];
   assignments: EventBriefAssignment[];
   /**
    * Venue, host billing, band, and manually added event contacts, merged into
