@@ -66,13 +66,3 @@ export function BandArborPrivateFields() {
     </>
   );
 }
-
-/** @deprecated Use BandPublicListingFields + BandArborPrivateFields */
-export function BandListingProfileFields() {
-  return (
-    <>
-      <BandPublicListingFields />
-      <BandArborPrivateFields />
-    </>
-  );
-}

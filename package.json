@@ -34,11 +34,9 @@
     "prepare": "git config core.hooksPath .githooks 2>/dev/null || true && node scripts/link-worktree-env.mjs 2>/dev/null || true && node scripts/worktree-convex.mjs ensure"
   },
   "dependencies": {
-    "convex": "^1.42.3",
-    "papaparse": "^5.5.4"
+    "convex": "^1.42.3"
   },
   "devDependencies": {
-    "@types/papaparse": "^5.5.2",
     "vitest": "^4.1.10"
   }
 }

@@ -27,6 +27,7 @@ import {
 import { enforceRateLimit, HOUR_MS } from "./rateLimit";
 import { allocateRequestNumber } from "./lib/publicReferenceIds";
 import { resolveContactNameParts } from "./lib/contactName";
+import { isRequestPublicTokenExpired } from "./lib/requestToken";
 import {
   buildPublicBookingDayLoad,
   EVENT_TIMEZONE,
@@ -364,9 +365,12 @@ async function seedScheduleBlocksForConvertedEvent(
   }
 }
 
-// Public (unauthenticated) lookup used by the booking wizard. Deliberately
-// returns no PII beyond first name + group names: last name, phone, and
-// contact IDs must never be exposed here.
+// Public (unauthenticated) lookup used by the booking wizard to autofill a
+// returning requester's contact details. Returning last name and phone here is
+// deliberate and accepted: the query only runs for a verified Stanford email,
+// and that person's name/phone are already discoverable in the public Stanford
+// directory. Contact IDs and group billing details beyond name/type are still
+// not exposed.
 export const lookupContactByEmail = query({
   args: { email: v.string() },
   returns: v.union(
@@ -514,6 +518,7 @@ export const getPublicRequestByToken = query({
       .withIndex("by_publicToken", (q) => q.eq("publicToken", args.token))
       .unique();
     if (!request) return null;
+    if (isRequestPublicTokenExpired(request)) return null;
 
     let quote: {
       invoiceNumber: string;
@@ -572,6 +577,7 @@ export const getPublicRequestQuoteByToken = query({
       .withIndex("by_publicToken", (q) => q.eq("publicToken", args.token))
       .unique();
     if (!request?.linkedInvoiceId) return null;
+    if (isRequestPublicTokenExpired(request)) return null;
 
     const invoice = await ctx.db.get(request.linkedInvoiceId);
     if (!invoice || invoice.status === "void" || !invoice.clientReviewReadyAt) return null;
@@ -590,6 +596,7 @@ export const recordPublicQuoteViewByRequestToken = mutation({
       .withIndex("by_publicToken", (q) => q.eq("publicToken", args.token))
       .unique();
     if (!request?.linkedInvoiceId) return null;
+    if (isRequestPublicTokenExpired(request)) return null;
     const invoice = await ctx.db.get(request.linkedInvoiceId);
     if (!invoice || invoice.status === "void" || !invoice.clientReviewReadyAt) return null;
     await incrementPublicQuoteView(ctx, invoice);
@@ -613,6 +620,7 @@ export const approveQuoteByRequestToken = mutation({
       .withIndex("by_publicToken", (q) => q.eq("publicToken", args.token))
       .unique();
     if (!request?.linkedInvoiceId) throw new Error("Quote not found.");
+    if (isRequestPublicTokenExpired(request)) throw new Error("This request link has expired.");
 
     const invoice = await ctx.db.get(request.linkedInvoiceId);
     if (!invoice || invoice.status === "void" || !invoice.clientReviewReadyAt) {
@@ -633,6 +641,7 @@ export const requestQuoteChangesByRequestToken = mutation({
       .withIndex("by_publicToken", (q) => q.eq("publicToken", args.token))
       .unique();
     if (!request?.linkedInvoiceId) throw new Error("Quote not found.");
+    if (isRequestPublicTokenExpired(request)) throw new Error("This request link has expired.");
 
     const invoice = await ctx.db.get(request.linkedInvoiceId);
     if (!invoice || invoice.status === "void" || !invoice.clientReviewReadyAt) {
@@ -658,6 +667,7 @@ export const updatePaymentContactsByRequestToken = mutation({
       .withIndex("by_publicToken", (q) => q.eq("publicToken", args.token))
       .unique();
     if (!request?.linkedInvoiceId) throw new Error("Quote not found.");
+    if (isRequestPublicTokenExpired(request)) throw new Error("This request link has expired.");
 
     const invoice = await ctx.db.get(request.linkedInvoiceId);
     if (!invoice || invoice.status === "void" || !invoice.clientReviewReadyAt) {

@@ -142,10 +142,6 @@ export function OnboardingYesNoChoice({
   );
 }
 
-export function OnboardingFieldLabel({ children }: { children: React.ReactNode }) {
-  return <p className="text-sm font-medium text-foreground">{children}</p>;
-}
-
 export function OnboardingTextarea(
   props: React.TextareaHTMLAttributes<HTMLTextAreaElement>,
 ) {

@@ -23,6 +23,3 @@ export async function fetchPublicQuerySafe<
     return fallback;
   }
 }
-
-/** @deprecated Use fetchPublicQuerySafe */
-export const fetchPublicQueryForStaticParams = fetchPublicQuerySafe;

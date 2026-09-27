@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from "react";
+import type { CSSProperties } from "react";
 import { currency, groupInvoiceSections } from "./format";
 import { invoiceTheme } from "./theme";
 import type { InvoiceDocumentData, InvoiceLineItem } from "./types";
@@ -425,17 +425,3 @@ const tdAmountStyle: CSSProperties = {
   ...tdRightStyle,
   fontWeight: 600,
 };
-
-export function InvoiceDocumentWebShell({
-  children,
-  className,
-}: {
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <div className={className} style={rootStyle}>
-      {children}
-    </div>
-  );
-}

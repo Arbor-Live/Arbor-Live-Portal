@@ -249,15 +249,13 @@ export const listBySubject = query({
       for (const mentionedUserId of row.mentionedUserIds) userIds.add(mentionedUserId);
     }
     const userById = await findAuthUsersByIds(ctx, [...userIds]);
-    // One bounded scan — same pattern as listMentionCandidates — avoids N
-    // serial by_userId lookups on large threads.
-    const profiles = await ctx.db.query("userAdminProfiles").withIndex("by_active").take(2000);
-    const usernameByUserId = new Map<string, string>();
-    for (const profile of profiles) {
-      if (!userIds.has(profile.userId) || !profile.username) continue;
-      usernameByUserId.set(profile.userId, profile.username);
-    }
-    const imageByUserId = await buildUserProfileImageByUserId(ctx, [...userIds], userById);
+    const profileByUserId = await loadAdminProfilesByUserIds(ctx, [...userIds]);
+    const imageByUserId = await buildUserProfileImageByUserId(
+      ctx,
+      [...userIds],
+      userById,
+      profileByUserId,
+    );
     const nameFor = (userId: string) =>
       userById.get(userId)?.name ?? userById.get(userId)?.email ?? "Arbor Live user";
 
@@ -274,7 +272,7 @@ export const listBySubject = query({
       mentionedUsers: row.mentionedUserIds.map((userId) => ({
         userId,
         name: nameFor(userId),
-        username: usernameByUserId.get(userId),
+        username: profileByUserId.get(userId)?.username,
       })),
       canDelete: row.authorUserId === viewerUserId,
       createdAt: row.createdAt,

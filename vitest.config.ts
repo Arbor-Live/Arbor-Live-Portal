@@ -7,7 +7,8 @@ import { defineConfig } from "vitest/config";
 // setup, so they are excluded here.
 export default defineConfig({
   resolve: {
-    // Web lib tests import through the app's `@/` path alias.
+    // Mirror the web app's `@/*` tsconfig path so component smoke tests can
+    // import modules that use it (e.g. `@/lib/utils`).
     alias: { "@": fileURLToPath(new URL("./apps/web/src", import.meta.url)) },
   },
   test: {
