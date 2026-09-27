@@ -58,13 +58,26 @@ const ACTIVE_EVENT_WINDOW_MS = 4 * HOUR_MS;
 /* ------------------------------------------------------------------ */
 
 /** Find the next upcoming Arbor Live event that has the Open Mic add-on
- *  enabled and accepting sign-ups. Returned to the public sign-up wizard. */
+ *  enabled and accepting sign-ups. Returned to the public sign-up wizard.
+ *  With `eventId` (a sign-up link for one event), return that event only if
+ *  it is accepting sign-ups. */
 export const getActiveNight = query({
-  args: {},
+  args: { eventId: v.optional(v.string()) },
   returns: v.union(v.null(), publicEventValue),
-  handler: async (ctx) => {
+  handler: async (ctx, args) => {
     const now = Date.now();
     const since = now - ACTIVE_EVENT_WINDOW_MS;
+    if (args.eventId !== undefined) {
+      // The id comes from a URL; a malformed one just means "not open".
+      const eventId = ctx.db.normalizeId("events", args.eventId);
+      const event = eventId ? await ctx.db.get(eventId) : null;
+      const open =
+        event?.openMicEnabled === true &&
+        (event.openMicStatus === "scheduled" || event.openMicStatus === "live") &&
+        event.startAt >= since;
+      if (!event || !open) return null;
+      return { _id: event._id, title: event.title, startAt: event.startAt, endAt: event.endAt };
+    }
     const events = await ctx.db
       .query("events")
       .withIndex("by_openMicEnabled_and_startAt", (q) =>
