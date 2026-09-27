@@ -214,7 +214,9 @@ export function runOfShowIssues(
     summary.push(`No set time yet: ${missing.map((act) => act.name).join(", ")}`);
   }
   const flagged = byRef.size;
-  if (flagged > 0) summary.push(`${flagged} item${flagged === 1 ? "" : "s"} need a look`);
+  if (flagged > 0) {
+    summary.push(flagged === 1 ? "1 item needs a look" : `${flagged} items need a look`);
+  }
   return { byRef, summary };
 }
 
