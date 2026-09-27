@@ -1364,6 +1364,37 @@ export function InvoiceEditor({
     draftSignature !== "" &&
     draftSignature !== lastSavedSignature;
 
+  // Saving gives a new artist line its bill position on the server. Adopt that
+  // id so the next save keeps the same position instead of opening another.
+  const serverArtistNeeds = useMemo(
+    () =>
+      (invoiceData?.lineItems ?? [])
+        .filter((row) => row.section === "artist" && row.needId)
+        .sort((a, b) => a.order - b.order)
+        .map((row) => ({ needId: row.needId as string, eventId: row.eventId as string | undefined })),
+    [invoiceData?.lineItems],
+  );
+  useEffect(() => {
+    if (!invoiceFieldsHydrated || serverArtistNeeds.length === 0) return;
+    const used = new Set(artists.map((row) => row.needId).filter(Boolean));
+    const free = serverArtistNeeds.filter((need) => !used.has(need.needId));
+    if (free.length === 0 || artists.every((row) => row.needId)) return;
+    let adopted = false;
+    const next = artists.map((row) => {
+      if (row.needId) return row;
+      const index = free.findIndex((need) => !row.eventId || need.eventId === row.eventId);
+      if (index < 0) return row;
+      const [need] = free.splice(index, 1);
+      adopted = true;
+      return { ...row, needId: need!.needId };
+    });
+    if (!adopted) return;
+    // A clean draft stays clean: the id came from the save that made it clean.
+    if (!isDraftDirty) baselineSignaturePendingRef.current = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- adopt server-assigned ids after a save
+    setArtists(next);
+  }, [artists, invoiceFieldsHydrated, isDraftDirty, serverArtistNeeds]);
+
   useEffect(() => {
     if (!baselineSignaturePendingRef.current || !invoiceFieldsHydrated) return;
     if (invoiceId && linkedEvent === undefined && !linkedSeries) return;

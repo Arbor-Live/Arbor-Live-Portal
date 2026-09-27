@@ -6,7 +6,10 @@ import { useMutation, useQuery } from "convex/react";
 import { ClockIcon, PlusIcon, TrashIcon, UserPlusIcon, XIcon } from "@phosphor-icons/react";
 import { api, type Id } from "@/lib/convex-api";
 import { EventScheduleCrewAssignPanel } from "@/components/events/event-availability-summary";
-import { EventTimelineScheduler, type TimelineBlockDraft } from "@/components/events/event-timeline-scheduler";
+import type { TimelineBlockDraft } from "@/components/events/event-timeline-scheduler";
+import { RunOfShowEditor } from "@/components/events/workspace/run-of-show/run-of-show-editor";
+import { useRunOfShowData } from "@/components/events/workspace/run-of-show/use-run-of-show-data";
+import { isSectionBlockType } from "@/lib/schedule-block-types";
 import { UserSelect, type UserSelectOption } from "@/components/users/user-select";
 import { assignableCrewSelectOptions } from "@/lib/user-select-description";
 import { Button } from "@/components/ui/button";
@@ -22,7 +25,6 @@ import {
   rebaseActBlocks,
   buildQuickAddScheduleBlocks,
   keepActBlocks,
-  eventDayCount,
   eventTypeHasCrewAssignment,
   getBlockRef,
   reconcileShiftsForReplacedBlocks,
@@ -138,7 +140,6 @@ export function InvoiceLinkedEventCrewSection({
   );
   const startAt = eventData?.event.startAt ? toLocalDateTimeInput(eventData.event.startAt) : "";
   const endAt = eventData?.event.endAt ? toLocalDateTimeInput(eventData.event.endAt) : "";
-  const dayCount = eventDayCount(startAt, endAt);
   const showCrewTools = eventTypeHasCrewAssignment(eventType);
 
   const viewerUserId = viewer?.userId;
@@ -186,9 +187,15 @@ export function InvoiceLinkedEventCrewSection({
     return map;
   }, [availabilitySummary]);
 
+  const runOfShow = useRunOfShowData(eventId);
+  // Crew work sections; a shift on a doors/soundcheck/set block counts as unlinked.
+  const sectionBlocks = useMemo(
+    () => blocks.filter((block) => isSectionBlockType(block.blockType)),
+    [blocks],
+  );
   const orphanedShifts = useMemo(
-    () => shifts.filter((shift) => !blocks.some((block) => shiftBelongsToBlock(shift, block))),
-    [blocks, shifts],
+    () => shifts.filter((shift) => !sectionBlocks.some((block) => shiftBelongsToBlock(shift, block))),
+    [sectionBlocks, shifts],
   );
 
   function stableBlocks(nextBlocks: TimelineBlockDraft[]) {
@@ -321,7 +328,6 @@ export function InvoiceLinkedEventCrewSection({
   const scheduleDirty = lastSavedSignature !== "" && scheduleSignature !== lastSavedSignature;
 
   const quickAddDisabled = !startAt || !endAt;
-  const quickAddDisabledReason = quickAddDisabled ? "Event start and end are required." : undefined;
   const quickAddLabel =
     eventType === "Dry Hire"
       ? rentalFulfillmentMode === "will_call"
@@ -364,7 +370,9 @@ export function InvoiceLinkedEventCrewSection({
     if (!shouldDelete) return;
     try {
       const result = await deleteUnassignedShifts({ eventId });
-      setShifts((prev) => prev.filter((shift) => blocks.some((block) => shiftBelongsToBlock(shift, block))));
+      setShifts((prev) =>
+        prev.filter((shift) => sectionBlocks.some((block) => shiftBelongsToBlock(shift, block))),
+      );
       onMessage?.(`Deleted ${result.deletedCount} unlinked shift${result.deletedCount === 1 ? "" : "s"}.`);
     } catch (error) {
       notify.error(getConvexErrorMessage(error));
@@ -575,36 +583,48 @@ export function InvoiceLinkedEventCrewSection({
         {showCrewTools ? (
           <EventScheduleCrewAssignPanel
             eventId={eventId}
-            blocks={blocks}
+            blocks={sectionBlocks}
             shifts={shifts}
             onShiftsChange={setShifts}
             getBlockRef={getBlockRef}
           />
         ) : null}
-        <EventTimelineScheduler
-          dayCount={dayCount}
+        <RunOfShowEditor
           blocks={blocks}
-          anchorStartsAt={startAt}
           onChange={(next) => {
             const nextBlocks = stableBlocks(next);
             setBlocks(nextBlocks);
             setShifts((prev) => syncShiftsToBlockTimes(prev, nextBlocks));
           }}
-          quickAddLabel={quickAddLabel}
-          quickAddDisabled={quickAddDisabled}
-          quickAddDisabledReason={quickAddDisabledReason}
-          onQuickAdd={() => {
-            if (quickAddDisabled) return;
-            const quickAddBlocks = buildQuickAddScheduleBlocks({
-              eventType,
-              startAt,
-              endAt,
-              rentalFulfillmentMode,
-              withStableRefs: stableBlocks,
-            });
-            const nextBlocks = keepActBlocks(blocks, quickAddBlocks);
-            setBlocks(nextBlocks);
-            setShifts((prev) => reconcileShiftsForReplacedBlocks(blocks, nextBlocks, prev));
+          readOnly={false}
+          actsEditable={false}
+          eventStartAt={eventData?.event.startAt ?? null}
+          acts={runOfShow.acts}
+          actName={runOfShow.actName}
+          swaps={runOfShow.swaps}
+          crewFor={(block) => {
+            const blockShifts = shifts.filter((shift) => shiftBelongsToBlock(shift, block));
+            return {
+              total: blockShifts.length,
+              filled: blockShifts.filter((shift) => shift.userId).length,
+            };
+          }}
+          quickAdd={{
+            label: quickAddLabel,
+            disabled: quickAddDisabled,
+            run: () => {
+              if (quickAddDisabled) return;
+              const quickAddBlocks = buildQuickAddScheduleBlocks({
+                eventType,
+                startAt,
+                endAt,
+                rentalFulfillmentMode,
+                withStableRefs: stableBlocks,
+              });
+              const nextBlocks = keepActBlocks(blocks, quickAddBlocks);
+              setBlocks(nextBlocks);
+              setShifts((prev) => reconcileShiftsForReplacedBlocks(blocks, nextBlocks, prev));
+            },
           }}
         />
         {showCrewTools ? (
@@ -635,12 +655,12 @@ export function InvoiceLinkedEventCrewSection({
             </div>
             <div className="space-y-2 rounded-md border p-3">
               <p className="text-sm font-medium">Assigned personnel by block</p>
-              {blocks.length === 0 ? (
+              {sectionBlocks.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
-                  Add schedule blocks above, then assign crew shifts to each block.
+                  Add sections above (setup, show, strike), then assign crew shifts to each.
                 </p>
               ) : null}
-              {blocks.map((block, blockIndex) => {
+              {sectionBlocks.map((block, blockIndex) => {
                 const blockRef = getBlockRef(block);
                 const blockShifts = shifts.filter((shift) => shiftBelongsToBlock(shift, block));
                 return (

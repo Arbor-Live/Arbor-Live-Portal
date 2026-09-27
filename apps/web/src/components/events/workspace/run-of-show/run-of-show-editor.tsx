@@ -73,6 +73,7 @@ export function RunOfShowEditor({
   swaps,
   crewFor,
   quickAdd,
+  actsEditable = true,
 }: {
   blocks: TimelineBlockDraft[];
   onChange: (next: TimelineBlockDraft[]) => void;
@@ -84,6 +85,11 @@ export function RunOfShowEditor({
   swaps: SwapLookup;
   crewFor: (block: TimelineBlockDraft) => RunOfShowCrewCount;
   quickAdd: { label: string; disabled: boolean; run: () => void };
+  /**
+   * False where saves don't write act times back to the lineup (the invoice):
+   * soundchecks and sets are shown but only change from the Run of Show tab.
+   */
+  actsEditable?: boolean;
 }) {
   const [buildOpen, setBuildOpen] = useState(false);
   const days = useMemo(() => nestRunOfShow(blocks), [blocks]);
@@ -156,6 +162,7 @@ export function RunOfShowEditor({
     <div className="space-y-4">
       {!readOnly ? (
         <div className="flex flex-wrap items-center gap-2">
+          {actsEditable ? (
           <Button
             type="button"
             size="sm"
@@ -166,6 +173,7 @@ export function RunOfShowEditor({
             <MagicWandIcon className="size-4" />
             Build run of show
           </Button>
+          ) : null}
           <Button
             type="button"
             size="sm"
@@ -270,7 +278,7 @@ export function RunOfShowEditor({
                         key={refOf(moment.block)}
                         moment={moment}
                         blocks={blocks}
-                        readOnly={readOnly}
+                        readOnly={readOnly || (!actsEditable && !!moment.block.actOwned)}
                         issues={issues.byRef.get(refOf(moment.block)) ?? []}
                         actName={actName}
                         swaps={swaps}
@@ -290,7 +298,7 @@ export function RunOfShowEditor({
                     <MomentRow
                       moment={entry.moments[0]!}
                       blocks={blocks}
-                      readOnly={readOnly}
+                      readOnly={readOnly || (!actsEditable && !!entry.moments[0]!.block.actOwned)}
                       issues={issues.byRef.get(refOf(entry.moments[0]!.block)) ?? []}
                       actName={actName}
                       swaps={swaps}

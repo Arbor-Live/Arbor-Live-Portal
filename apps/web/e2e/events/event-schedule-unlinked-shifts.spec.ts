@@ -16,7 +16,7 @@ test.describe("schedule unlinked shifts", () => {
     expect(orphaned.shiftCount).toBeGreaterThan(0);
 
     await page.goto(seeded.schedulePath);
-    await expect(page.getByText("Schedule", { exact: true }).first()).toBeVisible({
+    await expect(page.getByTestId("run-of-show")).toBeVisible({
       timeout: 45_000,
     });
 

@@ -29,7 +29,7 @@ async function waitForScheduleAssignControls(page: Page) {
     await expect(allBlocks).toBeVisible({ timeout: 45_000 });
   } catch {
     await page.reload();
-    await expect(page.getByText("Schedule", { exact: true }).first()).toBeVisible({
+    await expect(page.getByTestId("run-of-show")).toBeVisible({
       timeout: 30_000,
     });
     await expect(allBlocks).toBeVisible({ timeout: 60_000 });
@@ -55,7 +55,7 @@ test.describe("schedule assign from yes response", () => {
     });
 
     await page.goto(seeded.schedulePath);
-    await expect(page.getByText("Schedule", { exact: true }).first()).toBeVisible({
+    await expect(page.getByTestId("run-of-show")).toBeVisible({
       timeout: 30_000,
     });
 
