@@ -718,6 +718,11 @@ export default defineSchema({
      */
     eventId: v.optional(v.id("events")),
     /**
+     * Artist lines: the `eventArtistNeeds` position this line stands for. A TBD
+     * line opens a position; assigning a band books it.
+     */
+    needId: v.optional(v.id("eventArtistNeeds")),
+    /**
      * Artist lines: performers in the group. With `performanceHours` and `rateUsd`
      * (per person per hour), `quantity` is person-hours (people × hours).
      */
@@ -729,7 +734,8 @@ export default defineSchema({
   })
     .index("by_invoiceId", ["invoiceId"])
     .index("by_invoiceId_and_order", ["invoiceId", "order"])
-    .index("by_invoiceId_and_section", ["invoiceId", "section"]),
+    .index("by_invoiceId_and_section", ["invoiceId", "section"])
+    .index("by_needId", ["needId"]),
 
   invoiceExports: defineTable({
     invoiceId: v.id("invoices"),
