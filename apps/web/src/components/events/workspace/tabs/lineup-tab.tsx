@@ -10,6 +10,8 @@ import { EventBandRidersSection } from "@/components/events/event-band-riders-se
 import { Field } from "@/components/events/workspace/event-fields";
 import { useEventWorkspace } from "@/components/events/workspace/event-workspace-provider";
 
+const OPEN_MIC_SIGNUP_CLOSES_AFTER_START_MS = 4 * 60 * 60 * 1000;
+
 function OpenMicCard() {
   const { eventId, eventData, draft, updateDraft } = useEventWorkspace();
   const [now, setNow] = useState(() => Date.now());
@@ -21,13 +23,12 @@ function OpenMicCard() {
   }, []);
 
   const event = eventData?.event;
-  // The runner window (start-1h to end+1h) is open and the add-on is scheduled/live —
-  // i.e. the public sign-up form is accepting entries.
+  // Matches the backend (openMic.ts): the public form accepts sign-ups for a
+  // scheduled/live add-on until 4 hours after the event's start.
   const signupOpen =
     event?.openMicEnabled === true &&
     (event.openMicStatus === "scheduled" || event.openMicStatus === "live") &&
-    now >= event.startAt - 60 * 60 * 1000 &&
-    now <= event.endAt + 60 * 60 * 1000;
+    now <= event.startAt + OPEN_MIC_SIGNUP_CLOSES_AFTER_START_MS;
 
   return (
     <Card>

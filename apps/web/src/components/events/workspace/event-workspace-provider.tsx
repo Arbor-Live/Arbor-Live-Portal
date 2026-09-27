@@ -95,24 +95,33 @@ function useEventWorkspaceState(eventId: Id<"events">, activeTab: EventEditorTab
     ((scope: SeriesEditScope | null) => void) | null
   >(null);
   const hydratedEventIdRef = useRef<string | null>(null);
+  // Bumped to re-hydrate from the server (e.g. after "Reset to series"); a ref
+  // alone cannot re-run the effect once the updated query has already arrived.
+  const [hydrationToken, setHydrationToken] = useState(0);
+  const hydratedTokenRef = useRef(0);
   const localBlockCounterRef = useRef(0);
 
   const linkedInvoiceIdForLookup = (draft.invoiceId || eventData?.event.invoiceId) as
     | Id<"invoices">
     | undefined;
   // Overview shows the quote-approved status hint; Billing shows the primary host and margin.
+  // Loaded on every tab: the global save bar resolves the primary host from it.
   const linkedInvoiceDetail = useQuery(
     api.invoices.get,
-    linkedInvoiceIdForLookup && (activeTab === "overview" || (activeTab === "billing" && canSeeBilling))
-      ? { id: linkedInvoiceIdForLookup }
-      : "skip",
+    linkedInvoiceIdForLookup ? { id: linkedInvoiceIdForLookup } : "skip",
   );
   const linkedInvoice = linkedInvoiceDetail?.invoice ?? null;
 
   useEffect(() => {
     if (!eventData?.event) return;
-    if (hydratedEventIdRef.current === eventData.event._id) return;
+    if (
+      hydratedEventIdRef.current === eventData.event._id &&
+      hydratedTokenRef.current === hydrationToken
+    ) {
+      return;
+    }
     hydratedEventIdRef.current = eventData.event._id;
+    hydratedTokenRef.current = hydrationToken;
     // One-time hydration per loaded event id (guarded by hydratedEventIdRef above) so
     // in-progress edits are never overwritten by a later re-run of this effect.
     const nextDraft = draftFromEvent(eventData.event, {
@@ -144,10 +153,10 @@ function useEventWorkspaceState(eventId: Id<"events">, activeTab: EventEditorTab
     setBlocks(nextBlocks);
     setShifts(nextShifts);
     setScheduleBaseline(JSON.stringify({ blocks: nextBlocks, shifts: nextShifts }));
-    setScheduleEventId(eventData.event._id);
+    setScheduleEventId(`${eventData.event._id}:${hydrationToken}`);
     setSaveStatus("idle");
     setSaveError(null);
-  }, [eventData]);
+  }, [eventData, hydrationToken]);
 
   useEffect(() => {
     if (!eventData?.event || !baseline || hydratedEventIdRef.current !== eventData.event._id) return;
@@ -174,7 +183,7 @@ function useEventWorkspaceState(eventId: Id<"events">, activeTab: EventEditorTab
   useEffect(() => {
     // Only rebase a draft hydrated for this event: in the render that hydrates,
     // `blocks` still holds the previous (or empty) draft.
-    if (!eventData?.event || scheduleEventId !== eventData.event._id) return;
+    if (!eventData?.event || scheduleEventId !== `${eventData.event._id}:${hydrationToken}`) return;
     // Act soundcheck/set blocks change on the server too (another editor, or a
     // platform act taking over a lineup position); merge those in without
     // overwriting this user's unsaved Run of Show edits.
@@ -194,7 +203,7 @@ function useEventWorkspaceState(eventId: Id<"events">, activeTab: EventEditorTab
     setBlocks(merged.state.blocks);
     setShifts(merged.state.shifts);
     setScheduleBaseline(JSON.stringify(merged.baseline));
-  }, [eventData, scheduleEventId, scheduleBaseline, saveStatus, blocks, shifts]);
+  }, [eventData, scheduleEventId, hydrationToken, scheduleBaseline, saveStatus, blocks, shifts]);
 
   const updateDraft = useCallback((patch: Partial<EventDraft>) => {
     setDraft((prev) => ({ ...prev, ...patch }));
@@ -464,8 +473,8 @@ function useEventWorkspaceState(eventId: Id<"events">, activeTab: EventEditorTab
     if (!shouldReset) return;
     try {
       await reattachOccurrence({ eventId });
-      // Allow the load effect to re-hydrate local form state from the restored occurrence.
-      hydratedEventIdRef.current = null;
+      // Re-hydrate local form state from the restored occurrence.
+      setHydrationToken((token) => token + 1);
       notify.success("Occurrence reset to series template.");
     } catch (error) {
       notify.error(getConvexErrorMessage(error, "Failed to reset occurrence."));
@@ -495,6 +504,7 @@ function useEventWorkspaceState(eventId: Id<"events">, activeTab: EventEditorTab
       title: "Delete unassigned legacy shifts?",
       description: "Delete all legacy shifts that are not assigned to any schedule block?",
       destructive: true,
+      confirmLabel: "Delete shifts",
     });
     if (!shouldDelete) return;
     try {
