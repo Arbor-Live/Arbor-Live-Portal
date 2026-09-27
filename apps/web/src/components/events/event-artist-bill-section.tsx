@@ -83,7 +83,7 @@ function EventArtistBillPanel({
   const addParticipation = useMutation(api.eventBands.addParticipation);
   const bill = useQuery(api.eventArtistNeeds.getForEvent, { eventId });
   const upsertSlot = useMutation(api.eventArtistNeeds.upsertSlot);
-  const removeSlot = useMutation(api.eventArtistNeeds.removeSlot);
+  const removeFromBill = useMutation(api.eventArtistNeeds.removeFromBill);
   const dismissInquiry = useMutation(api.eventArtistNeeds.dismissInquiry);
   const updateSlotLineup = useMutation(api.eventArtistNeeds.updateSlotLineup);
   const { confirm } = useAppDialog();
@@ -272,12 +272,16 @@ function EventArtistBillPanel({
         confirmLabel: "Remove",
       });
       if (!ok) return false;
-      const removed = await attempt(async () => {
-        if (row.performer) {
-          await removeParticipation({ eventId, organizationId: row.performer.organizationId });
-        }
-        if (row.slot) await removeSlot({ needId: row.slot.needId });
-      }, `${name} removed from the bill.`);
+      // One mutation, so the act and its position are removed together or not at all.
+      const removed = await attempt(
+        () =>
+          removeFromBill({
+            eventId,
+            organizationId: row.performer?.organizationId,
+            needId: row.slot?.needId,
+          }),
+        `${name} removed from the bill.`,
+      );
       if (removed) setSelectedKey(null);
       return removed;
     },
