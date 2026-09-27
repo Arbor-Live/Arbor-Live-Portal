@@ -216,8 +216,10 @@ function EventArtistBillPanel({
     try {
       await action();
       notify.success(success);
+      return true;
     } catch (error) {
       notify.error(getConvexErrorMessage(error));
+      return false;
     }
   }
 
@@ -269,14 +271,15 @@ function EventArtistBillPanel({
         destructive: true,
         confirmLabel: "Remove",
       });
-      if (!ok) return;
-      await attempt(async () => {
+      if (!ok) return false;
+      const removed = await attempt(async () => {
         if (row.performer) {
           await removeParticipation({ eventId, organizationId: row.performer.organizationId });
         }
         if (row.slot) await removeSlot({ needId: row.slot.needId });
       }, `${name} removed from the bill.`);
-      setSelectedKey(null);
+      if (removed) setSelectedKey(null);
+      return removed;
     },
     dismissInquiry: (inquiryId) => attempt(() => dismissInquiry({ inquiryId }), "Inquiry dismissed."),
   };

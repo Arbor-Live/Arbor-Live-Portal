@@ -46,12 +46,13 @@ import { getEventEditorTabPath } from "@/lib/event-editor-tabs";
 import { cn } from "@/lib/utils";
 
 export type PositionSheetHandlers = {
-  saveSlot: (slot: SlotRow, draft: SlotDraft) => Promise<void>;
-  saveExternal: (slot: SlotRow, name: string) => Promise<void>;
-  reopenExternal: (slot: SlotRow) => Promise<void>;
-  removeAct: (performer: PerformerRow) => Promise<void>;
-  removePosition: (row: BillRow) => Promise<void>;
-  dismissInquiry: (inquiryId: Id<"eventArtistInquiries">) => Promise<void>;
+  saveSlot: (slot: SlotRow, draft: SlotDraft) => Promise<unknown>;
+  saveExternal: (slot: SlotRow, name: string) => Promise<unknown>;
+  reopenExternal: (slot: SlotRow) => Promise<unknown>;
+  removeAct: (performer: PerformerRow) => Promise<unknown>;
+  /** Resolves true once the row is gone; false if cancelled or it failed. */
+  removePosition: (row: BillRow) => Promise<boolean>;
+  dismissInquiry: (inquiryId: Id<"eventArtistInquiries">) => Promise<unknown>;
 };
 
 /** Details for one bill row: the position, the act filling it, payout, and inquiries. */
@@ -140,7 +141,7 @@ function PositionSheetBody({
   const [externalName, setExternalName] = useState(slot?.externalArtistName ?? "");
   const [editingPayout, setEditingPayout] = useState(false);
 
-  async function run(action: () => Promise<void>) {
+  async function run(action: () => Promise<unknown>) {
     setBusy(true);
     try {
       await action();
@@ -325,8 +326,8 @@ function PositionSheetBody({
               disabled={busy}
               onClick={() =>
                 void run(async () => {
-                  await handlers.removePosition(row);
-                  onClose();
+                  // Cancelling the confirm (or a failed removal) keeps the panel open.
+                  if (await handlers.removePosition(row)) onClose();
                 })
               }
             >
