@@ -15,7 +15,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
 import type { TimelineBlockDraft } from "@/components/events/event-timeline-scheduler";
-import { localDateTimeInputToMs } from "@/lib/crew-availability";
 import {
   addPacificCalendarDays,
   formatTime,
@@ -34,13 +33,10 @@ function timeOf(ms: number) {
   return toPacificDateTimeInput(ms).split("T")[1] ?? "";
 }
 
-function firstStartOf(blocks: TimelineBlockDraft[], type: TimelineBlockDraft["blockType"]) {
-  const starts = blocks
-    .filter((block) => block.blockType === type)
-    .map((block) => localDateTimeInputToMs(block.startsAt))
-    .filter((ms): ms is number => ms != null);
-  return starts.length > 0 ? Math.min(...starts) : null;
-}
+/** Defaults: first set at the event start, doors a few minutes before. */
+const DOORS_BEFORE_START_MINUTES = 5;
+const DEFAULT_SOUNDCHECK_MINUTES = 15;
+const HOUR = 60 * 60_000;
 
 /**
  * Lay out a run of show from the lineup. Play order defaults to the bill read
@@ -62,12 +58,12 @@ export function BuildRunOfShowDialog({
   eventStartAt: number;
   onBuild: (input: BuildRunOfShowInput) => void;
 }) {
-  const initialDoors = firstStartOf(blocks, "doors") ?? eventStartAt;
-  const initialFirstSet = firstStartOf(blocks, "set") ?? initialDoors + 30 * 60_000;
-  const [doorsTime, setDoorsTime] = useState(() => timeOf(initialDoors));
-  const [firstSetTime, setFirstSetTime] = useState(() => timeOf(initialFirstSet));
+  const [doorsTime, setDoorsTime] = useState(() =>
+    timeOf(eventStartAt - DOORS_BEFORE_START_MINUTES * 60_000),
+  );
+  const [firstSetTime, setFirstSetTime] = useState(() => timeOf(eventStartAt));
   const [changeoverMinutes, setChangeoverMinutes] = useState(15);
-  const [soundcheckMinutes, setSoundcheckMinutes] = useState(30);
+  const [soundcheckMinutes, setSoundcheckMinutes] = useState(DEFAULT_SOUNDCHECK_MINUTES);
   const [soundcheckOrder, setSoundcheckOrder] = useState<"reverse" | "same">("reverse");
   const [rows, setRows] = useState<PlayRow[]>(() =>
     [...acts].reverse().map((act, index, all) => ({
@@ -76,14 +72,19 @@ export function BuildRunOfShowDialog({
     })),
   );
 
-  const dateKey = pacificDateKey(eventStartAt);
-  const doorsAt = pacificDateAndTimeToMs(dateKey, doorsTime);
-  const firstSetRaw = pacificDateAndTimeToMs(dateKey, firstSetTime);
-  // A first set "earlier" than doors means after midnight.
+  // The first set is on the event's day (a time well before the start means
+  // after midnight); doors are the last occurrence of their time before it.
+  const firstSetRaw = pacificDateAndTimeToMs(pacificDateKey(eventStartAt), firstSetTime);
   const firstSetAt =
-    doorsAt != null && firstSetRaw != null && firstSetRaw < doorsAt
+    firstSetRaw != null && firstSetRaw < eventStartAt - 12 * HOUR
       ? addPacificCalendarDays(firstSetRaw, 1)
       : firstSetRaw;
+  const doorsRaw =
+    firstSetAt != null ? pacificDateAndTimeToMs(pacificDateKey(firstSetAt), doorsTime) : null;
+  const doorsAt =
+    doorsRaw != null && firstSetAt != null && doorsRaw > firstSetAt
+      ? addPacificCalendarDays(doorsRaw, -1)
+      : doorsRaw;
 
   const preview = useMemo(() => {
     if (doorsAt == null || firstSetAt == null || rows.length === 0) return null;
