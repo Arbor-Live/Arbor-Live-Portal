@@ -159,7 +159,7 @@ export function RunOfShowEditor({
   const multiDay = days.length > 1 || (days[0]?.dayIndex ?? 0) > 0;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-testid="run-of-show">
       {!readOnly ? (
         <div className="flex flex-wrap items-center gap-2">
           {actsEditable ? (
@@ -255,7 +255,7 @@ export function RunOfShowEditor({
           No run of show yet. Build it from the lineup, or quick-add the sections crew work in.
         </p>
       ) : (
-        <div className="space-y-5" data-testid="run-of-show">
+        <div className="space-y-5">
           {days.map((day) => (
             <div key={day.dayIndex} className="space-y-2">
               {multiDay ? (
