@@ -558,7 +558,12 @@ async function replaceLineItems(
       equipmentQuantityBasis: row.equipmentQuantityBasis,
       organizationId: trimOptional(row.organizationId),
       eventId: row.section === "artist" ? row.eventId : undefined,
-      needId: row.section === "artist" ? (row.needId ?? reusedNeedId) : undefined,
+      // A position only means something next to an event; an unscoped artist row
+      // must not keep one alive.
+      needId:
+        row.section === "artist" && row.eventId
+          ? (row.needId ?? reusedNeedId)
+          : undefined,
       memberCount:
         row.section === "artist" && row.memberCount !== undefined && row.memberCount > 0
           ? row.memberCount
