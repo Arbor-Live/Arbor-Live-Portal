@@ -23,6 +23,12 @@ type MediaUploadDropzoneProps = {
   disabled?: boolean;
   onUploaded?: () => void;
   className?: string;
+  /**
+   * Public portal (unauthenticated) targets. Routes config lookups and asset
+   * registration through the token-scoped public media functions so uploads
+   * from clients still register with us and mirror to artist albums.
+   */
+  publicAccess?: { portal: "request" | "quote"; token: string };
 };
 
 type UploadItemPhase = "pending" | "uploading" | "saving" | "done" | "failed";
@@ -88,9 +94,11 @@ export function MediaUploadDropzone({
   disabled,
   onUploaded,
   className,
+  publicAccess,
 }: MediaUploadDropzoneProps) {
   const convex = useConvex();
   const recordUploadedAsset = useMutation(api.immich.recordUploadedAsset);
+  const recordMediaUploadByToken = useMutation(api.publicMedia.recordMediaUploadByToken);
   const resolveMyEventMedia = useMutation(
     api.crewPortal.resolveMyEventMedia,
   ).withOptimisticUpdate(optimisticResolveMyEventMedia);
@@ -133,10 +141,21 @@ export function MediaUploadDropzone({
       let successCount = 0;
 
       try {
-        const config = await convex.query(api.immich.getUploadConfig, {
-          targetType,
-          targetId: targetId.trim(),
-        });
+        const config =
+          publicAccess && targetType === "event"
+            ? await convex.query(api.publicMedia.getMediaUploadConfigByToken, {
+                portal: publicAccess.portal,
+                token: publicAccess.token,
+                eventId: targetId.trim() as Id<"events">,
+              })
+            : await convex.query(api.immich.getUploadConfig, {
+                targetType,
+                targetId: targetId.trim(),
+              });
+
+        if (!config) {
+          throw new Error("The album is not ready yet. Try again in a moment.");
+        }
 
         for (let index = 0; index < list.length; index += 1) {
           const file = list[index];
@@ -155,18 +174,29 @@ export function MediaUploadDropzone({
 
             updateItem(item.id, { phase: "saving", loadedBytes: file.size });
 
-            await recordUploadedAsset({
-              albumLinkId: config.albumLinkId as Id<"immichAlbumLinks">,
-              immichAssetId: uploaded.immichAssetId,
-              originalFileName: uploaded.originalFileName,
-              type: uploaded.type,
-            });
-
-            if (targetType === "event") {
-              await resolveMyEventMedia({
+            if (publicAccess && targetType === "event") {
+              await recordMediaUploadByToken({
+                portal: publicAccess.portal,
+                token: publicAccess.token,
                 eventId: targetId.trim() as Id<"events">,
-                status: "uploaded",
+                immichAssetId: uploaded.immichAssetId,
+                originalFileName: uploaded.originalFileName,
+                type: uploaded.type,
               });
+            } else {
+              await recordUploadedAsset({
+                albumLinkId: config.albumLinkId as Id<"immichAlbumLinks">,
+                immichAssetId: uploaded.immichAssetId,
+                originalFileName: uploaded.originalFileName,
+                type: uploaded.type,
+              });
+
+              if (targetType === "event") {
+                await resolveMyEventMedia({
+                  eventId: targetId.trim() as Id<"events">,
+                  status: "uploaded",
+                });
+              }
             }
 
             updateItem(item.id, { phase: "done", loadedBytes: file.size });
@@ -205,7 +235,19 @@ export function MediaUploadDropzone({
         setBusy(false);
       }
     },
-    [convex, disabled, onUploaded, recordUploadedAsset, resolveMyEventMedia, targetId, targetType, updateItem, uploading],
+    [
+      convex,
+      disabled,
+      onUploaded,
+      publicAccess,
+      recordMediaUploadByToken,
+      recordUploadedAsset,
+      resolveMyEventMedia,
+      targetId,
+      targetType,
+      updateItem,
+      uploading,
+    ],
   );
 
   const showProgressPanel = items.length > 0;

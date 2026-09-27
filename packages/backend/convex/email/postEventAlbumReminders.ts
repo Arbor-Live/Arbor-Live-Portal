@@ -114,9 +114,12 @@ export const enqueueForEvent = internalMutation({
         skippedClientAlbumCount += 1;
       } else {
         const portal = await resolvePortalTokenForInvoice(ctx, invoice);
-        const feedbackFormUrl = portal
-          ? `${portal.portal === "request" ? requestTrackingUrl(portal.token) : publicQuoteUrl(portal.token)}#feedback`
+        const albumPortalUrl = portal
+          ? portal.portal === "request"
+            ? requestTrackingUrl(portal.token)
+            : publicQuoteUrl(portal.token)
           : undefined;
+        const feedbackFormUrl = albumPortalUrl ? `${albumPortalUrl}#feedback` : undefined;
 
         await enqueueEmail(ctx, {
           template: "post_event_album",
@@ -130,6 +133,7 @@ export const enqueueForEvent = internalMutation({
             venueName: event.venueName,
             dateRangeLabel: formatEventDateRange(event.startAt, event.endAt, timezone),
             albumShareUrl,
+            albumPortalUrl,
             feedbackFormUrl,
           },
         });

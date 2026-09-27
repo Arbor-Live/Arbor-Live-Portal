@@ -18,6 +18,9 @@ test.describe("post-event portal section", () => {
     await expect(page.getByText("Photo album").first()).toBeVisible({ timeout: 25_000 });
     const albumLink = page.getByRole("link", { name: "View the album" });
     await expect(albumLink).toHaveAttribute("href", seeded.albumShareUrl);
+    await expect(
+      page.getByText("Drag photos or videos here, or choose files to upload."),
+    ).toBeVisible();
 
     await expect(page.getByText(/How was .*\?/).first()).toBeVisible();
     await page.getByRole("button", { name: "4 stars" }).click();

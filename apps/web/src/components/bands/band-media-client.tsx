@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useAction, useQuery } from "convex/react";
+import { useAction, usePaginatedQuery, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -43,14 +43,20 @@ export function BandMediaClient() {
       : null;
   const albumReady = ensureAlbumKey !== null && readyAlbumKey === ensureAlbumKey;
 
-  const media = useQuery(
-    api.immich.listBandMedia,
-    isArtistOrganizationType(activeOrg?.organizationType)
-      ? selectedEventId
-        ? { eventId: selectedEventId as Id<"events"> }
-        : {}
-      : "skip",
-  );
+  const mediaArgs = isArtistOrganizationType(activeOrg?.organizationType)
+    ? selectedEventId
+      ? { eventId: selectedEventId as Id<"events"> }
+      : {}
+    : "skip";
+
+  const album = useQuery(api.immich.getBandMediaAlbum, mediaArgs);
+  const {
+    results: assets,
+    status: assetsStatus,
+    loadMore,
+  } = usePaginatedQuery(api.immich.listBandMediaAssets, mediaArgs, {
+    initialNumItems: 60,
+  });
 
   useEffect(() => {
     if (!ensureAlbumKey) return;
@@ -131,8 +137,8 @@ export function BandMediaClient() {
 
             {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
-            {media?.album ? (
-              <MediaAlbumLink albumName={media.album.albumName} albumUrl={media.album.albumUrl} />
+            {album ? (
+              <MediaAlbumLink albumName={album.albumName} albumUrl={album.albumUrl} />
             ) : null}
 
             <MediaUploadDropzone
@@ -141,16 +147,19 @@ export function BandMediaClient() {
               disabled={!albumReady || !uploadTargetId}
             />
 
-            {media === undefined ? (
+            {assetsStatus === "LoadingFirstPage" ? (
               <p className="text-sm text-muted-foreground">Loading media…</p>
             ) : (
               <MediaGallery
-                assets={media.assets}
+                assets={assets}
                 emptyMessage={
                   selectedEventId
                     ? "No event media yet. Upload photos or videos above."
                     : "No artist media yet. Upload photos or videos above."
                 }
+                loadMore={() => loadMore(60)}
+                canLoadMore={assetsStatus === "CanLoadMore"}
+                isLoadingMore={assetsStatus === "LoadingMore"}
               />
             )}
           </CardContent>

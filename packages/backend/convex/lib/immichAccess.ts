@@ -85,32 +85,34 @@ export async function requireAssetAccess(
   const context = await getActiveOrganizationContextOrNull(ctx);
   if (!context) throw new Error("No active organization context.");
 
-  const assetRecord = await ctx.db
+  const assetRecords = await ctx.db
     .query("immichAssetRecords")
     .withIndex("by_immichAssetId", (q) => q.eq("immichAssetId", immichAssetId))
-    .first();
-  if (!assetRecord) throw new Error("Asset not found.");
-
-  const albumLink = await ctx.db.get(assetRecord.albumLinkId);
-  if (!albumLink) throw new Error("Album not found.");
+    .take(50);
+  if (!assetRecords.length) throw new Error("Asset not found.");
 
   if (context.organizationType === "arbor_internal") return;
 
-  if (albumLink.entityType === "band") {
-    if (context.organizationType === "band" && context.organizationId === albumLink.entityId) {
-      return;
-    }
-    throw new Error("You do not have access to this asset.");
-  }
+  // An asset can live in several albums (e.g. an event album and each linked
+  // artist album); grant access when any of them permits it.
+  for (const assetRecord of assetRecords) {
+    const albumLink = await ctx.db.get(assetRecord.albumLinkId);
+    if (!albumLink) continue;
 
-  if (albumLink.entityType === "event") {
-    if (context.organizationType === "band") {
-      await requireBandEventAccess(
+    if (albumLink.entityType === "band") {
+      if (context.organizationType === "band" && context.organizationId === albumLink.entityId) {
+        return;
+      }
+      continue;
+    }
+
+    if (albumLink.entityType === "event" && context.organizationType === "band") {
+      const linked = await hasBandEventParticipation(
         ctx,
         albumLink.entityId as Id<"events">,
         context.organizationId,
       );
-      return;
+      if (linked) return;
     }
   }
 
