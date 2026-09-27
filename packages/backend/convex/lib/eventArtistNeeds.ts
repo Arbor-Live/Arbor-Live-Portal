@@ -143,6 +143,8 @@ export async function resolveEventArtistBooking(
       .take(200);
     const onLineup = new Set(lineup.map((row) => row.organizationId));
     for (const line of lines) {
+      // An assigned line books the position it stands for.
+      if (line.needId && line.organizationId) filledSlotIds.add(line.needId);
       if (!line.organizationId) continue;
       if (onLineup.has(line.organizationId)) continue;
       if (

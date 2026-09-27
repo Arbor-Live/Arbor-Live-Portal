@@ -210,6 +210,12 @@ Event types (drive which workspace tabs and quick-add blocks appear):
     bill" is one dialog for existing artist, invite, outside act, or an open
     position.
   - **Payout** — from the position's side panel, via `EventBandPaymentForm`.
+  - **Invoice link** — an artist line tied to a day opens the position it
+    stands for (`invoiceLineItems.needId`), and filling that position fills the
+    line: an internal act sets its `organizationId`, an outside act clears it
+    and takes the line's label. Dropping the line drops the position, unless it
+    is filled or carries inquiries. One way only — positions never create
+    lines.
   Artists browse still-open slots from `/dashboard/opportunities` and
   `submitInquiry` (`eventArtistInquiries`), which flags the slot `inquiring`
   and emails Operations admins (`email/artistNeedInquiryEmails.ts`). Riders sit

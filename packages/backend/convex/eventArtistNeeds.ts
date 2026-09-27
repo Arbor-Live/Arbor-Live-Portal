@@ -17,6 +17,7 @@ import {
 } from "./lib/eventArtistNeeds";
 import { scheduleArtistNeedInquiryEmail } from "./email/artistNeedInquiryEmails";
 import { unclaimSlot } from "./eventBands";
+import { releaseSlotFromInvoice, syncInvoiceLineForSlot } from "./lib/artistLineSync";
 import { normalizeEventStatus } from "./lib/eventStatus";
 import { deleteActBlocks, syncNeedBlocks } from "./lib/runOfShow";
 
@@ -140,6 +141,8 @@ export const listNeedStatusForEvents = query({
     await requireArborInternalContext(ctx);
     const out: Array<{
       eventId: Id<"events">;
+      needId: Id<"eventArtistNeeds">;
+      label: string;
       artistType: ArtistNeedType;
       status: EffectiveArtistNeedStatus;
       genres: string;
@@ -152,6 +155,8 @@ export const listNeedStatusForEvents = query({
         const booked = slotIsBooked(slot, filledSlotIds);
         out.push({
           eventId,
+          needId: slot._id,
+          label: slot.label ?? "",
           artistType: slot.artistType,
           status: effectiveArtistNeedStatus(slot.status, booked),
           genres: slot.genres ?? "",
@@ -286,6 +291,7 @@ export const updateSlotLineup = mutation({
     }
     await ctx.db.replace(slot._id, next);
     await syncNeedBlocks(ctx, slot._id);
+    await syncInvoiceLineForSlot(ctx, slot._id, next.updatedAt);
     return null;
   },
 });
@@ -313,6 +319,7 @@ export const removeSlot = mutation({
     for (const row of filled) {
       await unclaimSlot(ctx, row._id);
     }
+    await releaseSlotFromInvoice(ctx, slot._id);
     await ctx.db.delete(slot._id);
     await deleteActBlocks(ctx, { needId: slot._id });
   },
