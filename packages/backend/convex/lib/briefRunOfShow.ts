@@ -115,7 +115,7 @@ export function buildBriefRunOfShow(
     const person = shift.personName?.trim();
     const hours = `${formatTime(shift.startsAt)} – ${formatTime(shift.endsAt)}`;
     return {
-      role: shift.role,
+      role: shift.role.trim() || "Crew",
       person: person || "Open",
       timeLabel:
         shift.callTime != null && shift.callTime !== shift.startsAt
