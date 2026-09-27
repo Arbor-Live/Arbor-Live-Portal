@@ -214,8 +214,9 @@ export function InviteBandForm({
           />
         </div>
         <div className="space-y-1">
-          <Label>Performance length (hours)</Label>
+          <Label htmlFor="invite-band-performance-hours">Performance length (hours)</Label>
           <Input
+            id="invite-band-performance-hours"
             type="number"
             min="0"
             step="0.25"
@@ -226,8 +227,9 @@ export function InviteBandForm({
         {pricingMode === "per_member_hourly" ? (
           <>
             <div className="space-y-1">
-              <Label>Rate per member per hour (USD)</Label>
+              <Label htmlFor="invite-band-rate">Rate per member per hour (USD)</Label>
               <Input
+                id="invite-band-rate"
                 type="number"
                 min="0"
                 step="0.01"
@@ -236,8 +238,9 @@ export function InviteBandForm({
               />
             </div>
             <div className="space-y-1">
-              <Label>Member count</Label>
+              <Label htmlFor="invite-band-members">Member count</Label>
               <Input
+                id="invite-band-members"
                 type="number"
                 min="1"
                 step="1"
@@ -248,8 +251,9 @@ export function InviteBandForm({
           </>
         ) : (
           <div className="space-y-1">
-            <Label>Total payout (USD)</Label>
+            <Label htmlFor="invite-band-total">Total payout (USD)</Label>
             <Input
+              id="invite-band-total"
               type="number"
               min="0"
               step="0.01"
@@ -605,8 +609,9 @@ export function EventBandPaymentForm({
         </div>
 
         <div className="space-y-1">
-          <Label>Performance length (hours)</Label>
+          <Label htmlFor="band-payment-performance-hours">Performance length (hours)</Label>
           <Input
+            id="band-payment-performance-hours"
             type="number"
             min="0"
             step="0.25"
@@ -619,8 +624,9 @@ export function EventBandPaymentForm({
         {pricingMode === "per_member_hourly" ? (
           <>
             <div className="space-y-1">
-              <Label>Rate per member per hour (USD)</Label>
+              <Label htmlFor="band-payment-rate">Rate per member per hour (USD)</Label>
               <Input
+                id="band-payment-rate"
                 type="number"
                 min="0"
                 step="0.01"
@@ -630,8 +636,9 @@ export function EventBandPaymentForm({
               />
             </div>
             <div className="space-y-1">
-              <Label>Member count</Label>
+              <Label htmlFor="band-payment-members">Member count</Label>
               <Input
+                id="band-payment-members"
                 type="number"
                 min="1"
                 step="1"
@@ -643,8 +650,9 @@ export function EventBandPaymentForm({
           </>
         ) : (
           <div className="space-y-1">
-            <Label>Total payout (USD)</Label>
+            <Label htmlFor="band-payment-total">Total payout (USD)</Label>
             <Input
+              id="band-payment-total"
               type="number"
               min="0"
               step="0.01"
