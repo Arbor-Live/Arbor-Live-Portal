@@ -26,7 +26,7 @@ test.describe("schedule unlinked shifts", () => {
     });
 
     await page.getByRole("button", { name: "Delete Unassigned Shifts" }).click();
-    await acceptAppDialog(page);
+    await acceptAppDialog(page, "Delete shifts");
 
     await expect(page.getByText(/not linked to a section/i)).toHaveCount(0, {
       timeout: 30_000,
