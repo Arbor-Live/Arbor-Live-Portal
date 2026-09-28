@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useAction, usePaginatedQuery, useQuery } from "convex/react";
+import { usePaginatedQuery, useQuery } from "convex/react";
 import {
   CameraIcon,
   CheckCircleIcon,
@@ -16,7 +15,7 @@ import { MediaGallery } from "@/components/media/media-gallery";
 import { MediaAlbumLink } from "@/components/media/media-album-link";
 import { MediaUploadDropzone } from "@/components/media/media-upload-dropzone";
 import { useSessionViewer } from "@/components/session-shell-provider";
-import { getConvexErrorMessage } from "@/lib/convex-error";
+import { useMediaAlbum } from "@/hooks/use-media-album";
 import { notify } from "@/lib/notify";
 
 type CrewMediaStatus = "pending" | "uploaded" | "no_media";
@@ -57,29 +56,10 @@ export function EventMediaSection({ eventId }: { eventId: Id<"events"> }) {
     { eventId },
     { initialNumItems: 60 },
   );
-  const ensureUploadAlbum = useAction(api.immichEnsure.ensureUploadAlbum);
-
-  const [ensuring, setEnsuring] = useState(false);
-  const [albumReady, setAlbumReady] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    async function ensure() {
-      setEnsuring(true);
-      try {
-        await ensureUploadAlbum({ targetType: "event", targetId: eventId });
-        if (!cancelled) setAlbumReady(true);
-      } catch (error) {
-        if (!cancelled) notify.error(getConvexErrorMessage(error));
-      } finally {
-        if (!cancelled) setEnsuring(false);
-      }
-    }
-    void ensure();
-    return () => {
-      cancelled = true;
-    };
-  }, [ensureUploadAlbum, eventId]);
+  const {
+    ready: albumReady,
+    error: albumError,
+  } = useMediaAlbum({ targetType: "event", targetId: eventId });
 
   return (
     <div className="space-y-4">
@@ -96,7 +76,9 @@ export function EventMediaSection({ eventId }: { eventId: Id<"events"> }) {
           <p className="text-sm text-muted-foreground">
             Artists assigned on the event overview can view and upload to this album.
           </p>
-          {ensuring ? (
+          {albumError ? (
+            <p className="text-sm text-destructive">{albumError}</p>
+          ) : !albumReady ? (
             <p className="text-sm text-muted-foreground">Preparing media album…</p>
           ) : (
             <>
