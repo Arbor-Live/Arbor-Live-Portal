@@ -666,6 +666,20 @@ export const giveEveryActAPosition = migrations.define({
 });
 
 /**
+ * Standalone quotes approved from their public link before approval finalized
+ * the invoice stayed `status: "draft"` with `clientApprovalStatus: "approved"`,
+ * hiding them from the active invoice list, payment queue, and revenue
+ * analytics. Approval now finalizes; this realigns the existing rows.
+ */
+export const finalizeApprovedDraftInvoices = migrations.define({
+  table: "invoices",
+  migrateOne: async (_ctx, invoice) => {
+    if (invoice.status !== "draft" || invoice.clientApprovalStatus !== "approved") return;
+    return { status: "finalized" as const, updatedAt: Date.now() };
+  },
+});
+
+/**
  * never reorder or remove completed ones (reset requires an explicit reset:true).
  */
 const MIGRATION_SERIES = [
@@ -697,6 +711,7 @@ const MIGRATION_SERIES = [
   internal.migrations.backfillRunOfShowParticipationBlocks,
   internal.migrations.backfillRunOfShowNeedBlocks,
   internal.migrations.giveEveryActAPosition,
+  internal.migrations.finalizeApprovedDraftInvoices,
 ] as const;
 
 export const runAll = migrations.runner([...MIGRATION_SERIES]);
