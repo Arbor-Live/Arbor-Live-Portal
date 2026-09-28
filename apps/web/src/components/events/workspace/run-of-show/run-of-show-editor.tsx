@@ -126,8 +126,11 @@ export function RunOfShowEditor({
     minutes: number,
     act?: RunOfShowAct,
   ) {
+    // A new section follows the last section; a new moment follows the last
+    // moment (so it lands inside the running section).
+    const addingSection = SECTION_BLOCK_TYPES.includes(blockType);
     const ends = blocks
-      .filter((block) => !SECTION_BLOCK_TYPES.includes(block.blockType))
+      .filter((block) => SECTION_BLOCK_TYPES.includes(block.blockType) === addingSection)
       .map((block) => localDateTimeInputToMs(block.endsAt))
       .filter((ms): ms is number => ms != null);
     const start = ends.length > 0 ? Math.max(...ends) : eventStartAt;

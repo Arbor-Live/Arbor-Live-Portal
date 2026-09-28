@@ -582,7 +582,6 @@ function PerformanceTimes({
         label="Set"
         value={set}
         dayKeys={dayKeys}
-        eventStartAt={eventStartAt}
         busy={busy}
         onChange={([setStartsAt, setEndsAt]) => onSave({ setStartsAt, setEndsAt })}
       />
@@ -590,7 +589,6 @@ function PerformanceTimes({
         label="Soundcheck"
         value={soundcheck}
         dayKeys={dayKeys}
-        eventStartAt={eventStartAt}
         busy={busy}
         onChange={([soundcheckStartsAt, soundcheckEndsAt]) =>
           onSave({ soundcheckStartsAt, soundcheckEndsAt })
@@ -619,31 +617,34 @@ function TimeWindowField({
   label,
   value,
   dayKeys,
-  eventStartAt,
   busy,
   onChange,
 }: {
   label: string;
   value: Window;
   dayKeys: string[];
-  eventStartAt?: number;
   busy: boolean;
   onChange: (next: Window) => void;
 }) {
   const [start, end] = value;
   // A draft while typing: nothing saves until both times are filled in.
   const [draft, setDraft] = useState({
-    day: start != null ? dayKeyForStart(start, dayKeys) : (dayKeys[0] ?? ""),
+    day: start != null ? dayKeyForStart(start, dayKeys) : "",
     start: timeOf(start),
     end: timeOf(end),
   });
+  // The event can load after the panel opens (a deep link): until the user
+  // picks a day, use the saved start's day or the event's first day.
+  const day = draft.day || (start != null ? dayKeyForStart(start, dayKeys) : (dayKeys[0] ?? ""));
   const fieldId = `times-${label.toLowerCase()}`;
 
-  // Saves when a field loses focus (or the day changes), not per keystroke:
-  // a save re-renders the section and would otherwise steal focus mid-typing.
+  // Saves when focus leaves the start/end pair (or the day changes), not on
+  // each field: a save re-renders the section, and saving the start alone
+  // would store a half-edited range.
   function commit(next: typeof draft) {
-    if (!next.day || !next.start || !next.end) return;
-    const window = timeWindowToMs(next.day, next.start, next.end, eventStartAt);
+    const nextDay = next.day || day;
+    if (!nextDay || !next.start || !next.end) return;
+    const window = timeWindowToMs(nextDay, next.start, next.end);
     if (!window || (window[0] === start && window[1] === end)) return;
     onChange(window);
   }
@@ -668,7 +669,7 @@ function TimeWindowField({
       <div className="flex flex-wrap items-center gap-2">
         {dayKeys.length > 1 ? (
           <SearchableSelect
-            value={draft.day}
+            value={day}
             onChange={(day) => {
               const next = { ...draft, day };
               setDraft(next);
@@ -679,6 +680,14 @@ function TimeWindowField({
             emptyLabel="Day"
           />
         ) : null}
+        <span
+          className="inline-flex items-center gap-2"
+          onBlur={(event) => {
+            // Moving between start and end stays inside this pair: don't save yet.
+            if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+            commit(draft);
+          }}
+        >
         <Input
           id={`${fieldId}-start`}
           type="time"
@@ -687,7 +696,6 @@ function TimeWindowField({
           aria-label={`${label} start`}
           value={draft.start}
           onChange={(event) => setDraft({ ...draft, start: event.target.value })}
-          onBlur={() => commit(draft)}
         />
         <span className="text-muted-foreground">–</span>
         <Input
@@ -697,8 +705,8 @@ function TimeWindowField({
           aria-label={`${label} end`}
           value={draft.end}
           onChange={(event) => setDraft({ ...draft, end: event.target.value })}
-          onBlur={() => commit(draft)}
         />
+        </span>
       </div>
     </div>
   );

@@ -27,42 +27,39 @@ export function eventDayKeys(eventStartAt: number, eventEndAt?: number): string[
   return keys;
 }
 
+/** Starts before this hour belong to the night before (they're after midnight). */
+const NIGHT_ENDS_HOUR = 6;
+
 /**
- * A set on one of the event's days: `startTime`/`endTime` are `HH:mm`. A start
- * well before the event's start (or, on later days, before 6 AM) is after
- * midnight, so it lands on the next calendar day; an end at or before the
- * start runs past midnight.
+ * A set on one of the event's days: `startTime`/`endTime` are `HH:mm`. One rule
+ * on every day: a start before 6 AM is after midnight, so it lands on the next
+ * calendar day, and an end at or before the start runs past midnight. The same
+ * rule on every day keeps day + time → instant one-to-one, so a saved time
+ * always reopens on the day it was entered for.
  */
 export function timeWindowToMs(
   dayKey: string,
   startTime: string,
   endTime: string,
-  eventStartAt?: number,
 ): [number, number] | null {
   let start = pacificDateAndTimeToMs(dayKey, startTime);
   if (start == null) return null;
-  const dayOpensAt =
-    eventStartAt != null && pacificDateKey(eventStartAt) === dayKey ? eventStartAt : null;
-  const afterMidnight =
-    dayOpensAt != null
-      ? start < dayOpensAt - 12 * HOUR_MS
-      : Number(startTime.slice(0, 2)) < 6;
-  if (afterMidnight) start = addPacificCalendarDays(start, 1);
+  if (Number(startTime.slice(0, 2)) < NIGHT_ENDS_HOUR) start = addPacificCalendarDays(start, 1);
   let end = pacificDateAndTimeToMs(pacificDateKey(start), endTime);
   if (end == null) return null;
   if (end <= start) end = addPacificCalendarDays(end, 1);
   return [start, end];
 }
 
-/**
- * Which event day a saved start belongs to. A start before 6 AM counts toward
- * the night before when that was an event day (a 1 AM set closes that night).
- */
+/** Which event day a saved start was entered for (the inverse of `timeWindowToMs`). */
 export function dayKeyForStart(start: number, dayKeys: string[]): string {
+  const time = toPacificDateTimeInput(start).slice(11, 16);
+  const exact = dayKeys.find((day) => timeWindowToMs(day, time, time)?.[0] === start);
+  if (exact) return exact;
+  // Saved before this rule, or outside the event's days: show the nearest night.
   const key = pacificDateKey(start);
   const previous = pacificDateKey(addPacificCalendarDays(start, -1));
-  const smallHours = Number(toPacificDateTimeInput(start).slice(11, 13)) < 6;
-  if (smallHours && dayKeys.includes(previous)) return previous;
+  if (Number(time.slice(0, 2)) < NIGHT_ENDS_HOUR && dayKeys.includes(previous)) return previous;
   if (dayKeys.includes(key)) return key;
   return dayKeys[0] ?? key;
 }

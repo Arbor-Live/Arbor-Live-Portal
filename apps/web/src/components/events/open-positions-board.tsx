@@ -43,7 +43,8 @@ function countdown(startAt: number, now: number) {
  * and soonest first, each linking to its side panel on the event's Lineup.
  */
 export function OpenPositionsBoard() {
-  const events = useQuery(api.eventArtistNeeds.listOpenPositions, {});
+  const result = useQuery(api.eventArtistNeeds.listOpenPositions, {});
+  const events = result?.events;
   const [range, setRange] = useState<RangeKey>("30");
   const [search, setSearch] = useState("");
   const [now] = useState(() => Date.now());
@@ -67,7 +68,9 @@ export function OpenPositionsBoard() {
           .toLowerCase();
         return needles.every((needle) => haystack.includes(needle));
       });
-      return positions.length ? [{ ...event, openPositions: positions }] : [];
+      // Filled is counted before search narrows the open positions.
+      const filled = event.totalPositions - event.openPositions.length;
+      return positions.length ? [{ ...event, filled, openPositions: positions }] : [];
     });
   }, [events, now, range, search]);
 
@@ -117,11 +120,17 @@ export function OpenPositionsBoard() {
               }${withInquiries ? ` · ${withInquiries} with inquiries to review` : ""}`}
         </p>
       )}
+      {result?.truncated ? (
+        <p className="text-sm text-status-amber-700 dark:text-status-amber-300">
+          Not every upcoming event could be checked, so some open positions may be missing from this
+          list.
+        </p>
+      ) : null}
 
       <div className="space-y-3">
         {visible.map((event) => {
           const due = countdown(event.startAt, now);
-          const filled = event.totalPositions - event.openPositions.length;
+          const filled = event.filled;
           const lineupPath = getEventEditorTabPath(event.eventId, "artists");
           return (
             <section key={event.eventId} className="border" data-testid="open-positions-event">
