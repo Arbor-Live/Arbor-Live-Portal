@@ -1100,23 +1100,22 @@ describe("desk rebuild", () => {
       [2, "Drums"],
     ]);
 
-    // The Vox FX DCA is separate from the family DCAs and takes its own slot.
-    expect(allocation.fxDca).toMatchObject({ name: "Vox FX DCA", dca: 8 });
+    // The Vox FX DCA is separate from the family DCAs and takes the first slot
+    // after them, so it can never collide however many families are present.
+    expect(allocation.fxDca).toMatchObject({ name: "Vox FX DCA", dca: 3 });
 
     const snap = buildNightSnap(loadDefaultTemplate(), allocation);
     const dcas = snap.ae_data.dca as Record<string, { name?: string }>;
     expect(dcas["1"]?.name).toBe("Vocals");
     expect(dcas["2"]?.name).toBe("Drums");
-    // The template's stale "Melody DCA" / "Keys DCA" / "FX DCA" do not survive
-    // (slot 8 is ours now, named Vox FX DCA, not the old "FX DCA").
-    expect(dcas["3"]?.name).toBe("");
+    // The template's stale "Melody DCA" / "Keys DCA" / "FX DCA" do not survive.
     expect(dcas["4"]?.name).toBe("");
     expect(dcas["5"]?.name).toBe("");
-    expect(dcas["8"]?.name).toBe("Vox FX DCA");
+    expect(dcas["3"]?.name).toBe("Vox FX DCA");
     // The vocal FX returns ride that DCA.
     const buses = snap.ae_data.bus as Record<string, { tags?: string }>;
-    expect(buses["13"]?.tags).toBe("#D8");
-    expect(buses["14"]?.tags).toBe("#D8");
+    expect(buses["13"]?.tags).toBe("#D3");
+    expect(buses["14"]?.tags).toBe("#D3");
   });
 
   it("puts PCORR pre and DE-S2 post on the lead, and clears the rest", () => {
@@ -1192,5 +1191,91 @@ describe("desk rebuild", () => {
     // Bus 13/14 are the named Vox/Plate reverb returns — blueprint, kept.
     expect(buses["13"]?.preins).toMatchObject({ on: true, ins: "FX1" });
     expect(buses["14"]?.preins).toMatchObject({ on: true, ins: "FX2" });
+  });
+});
+
+describe("melody compression and reserved DCAs", () => {
+  function bandWith(inputs: ShowBandInput["inputs"]): ShowBandInput {
+    return { bandName: "Layered", fileStem: fileStem("Layered"), role: "headliner", inputs };
+  }
+  const many = (sourceKey: string, count: number, start = 1) =>
+    Array.from({ length: count }, (_, i) =>
+      input({ id: `${sourceKey}${i}`, channel: start + i, source: `${sourceKey} ${i}`, sourceKey }),
+    );
+
+  it("tags every melodic channel into the compressed Melody DCA", () => {
+    // Vocals + drums + 12 guitars: the guitars cannot fit page 1 exploded, so
+    // they compress into one Melody DCA that must actually own them all.
+    const inputs = [
+      ...many("vox.lead", 2),
+      input({ id: "k", channel: 3, source: "Kick", sourceKey: "drum.kick" }),
+      ...many("gtr", 12, 4),
+    ];
+    const allocation = allocateEventPatch([bandWith(inputs)]);
+    const melody = allocation.melodyDca;
+    expect(melody).not.toBeNull();
+
+    const guitars = allocation.ports.filter(
+      (port) => port.used && port.family === "guitar" && port.strip !== null,
+    );
+    expect(guitars.length).toBeGreaterThan(1);
+    for (const guitar of guitars) {
+      expect(guitar.tags).toBe(`#D${melody!.dca}`);
+    }
+    // The Melody DCA is named on the desk.
+    const snap = buildNightSnap(loadDefaultTemplate(), allocation);
+    const dcas = snap.ae_data.dca as Record<string, { name?: string }>;
+    expect(dcas[String(melody!.dca)]?.name).toBe("Melody");
+  });
+
+  it("reserves distinct DCA slots so the FX and Melody DCAs never collide", () => {
+    const inputs = [
+      ...many("vox.lead", 2),
+      ...many("gtr", 12, 3),
+    ];
+    const allocation = allocateEventPatch([bandWith(inputs)]);
+    const slots = [
+      ...allocation.groups.map((group) => group.dca),
+      ...(allocation.fxDca ? [allocation.fxDca.dca] : []),
+      ...(allocation.melodyDca ? [allocation.melodyDca.dca] : []),
+    ];
+    expect(new Set(slots).size).toBe(slots.length);
+  });
+});
+
+describe("USER2 vocal FX returns", () => {
+  it("puts each reverb return on its own USER2 fader once", () => {
+    const allocation = allocateEventPatch([
+      band("Vox Night", "headliner", [
+        input({ id: "v", channel: 1, source: "Lead", sourceKey: "vox.lead" }),
+      ]),
+    ]);
+    const snap = buildNightSnap(loadDefaultTemplate(), allocation);
+    const user2 = (snap.ce_data?.layer?.L?.["7"] ?? {}) as Record<
+      string,
+      { type?: string; i?: number }
+    >;
+    expect(user2.name).toBe("USER2");
+    expect(user2["1"]).toMatchObject({ type: "BUS", i: 13 });
+    expect(user2["2"]).toMatchObject({ type: "BUS", i: 14 });
+    // No duplicate: fader 3 is not another copy of bus 13.
+    expect(user2["3"]?.type).toBe("OFF");
+  });
+});
+
+describe("talkback", () => {
+  it("keeps talkback on strip 40 patched from local input 24", () => {
+    const allocation = allocateEventPatch([
+      band("Solo", "headliner", [
+        input({ id: "v", channel: 1, source: "Lead", sourceKey: "vox.lead" }),
+      ]),
+    ]);
+    const snap = buildNightSnap(loadDefaultTemplate(), allocation);
+    const talkback = snap.ae_data.ch["40"] as {
+      name?: string;
+      in?: { conn?: { grp?: string; in?: number } };
+    };
+    expect(talkback.name).toBe("TALKBACK");
+    expect(talkback.in?.conn).toMatchObject({ grp: "LCL", in: 24 });
   });
 });

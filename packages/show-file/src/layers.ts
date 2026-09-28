@@ -43,6 +43,55 @@ export type LayerInput = {
 };
 
 /**
+ * Whether the melodic frontline must compress into one Melody DCA to keep the
+ * whole show on page 1. Shared with the allocator so the DCA tags and the page
+ * layout always agree — the compressed Melody DCA has to actually own the
+ * melodic channels, or its fader would only ride whichever family sits on that
+ * slot.
+ *
+ * Costs on page 1 (11 usable faders, fader 12 is USB music): the vocals (DCA +
+ * channels), the drums (one DCA), the compressed tracks/utility DCAs, and the
+ * melodic groups either exploded (DCA + channels each) or as one Melody DCA.
+ */
+export function melodyNeedsCompression(args: {
+  groups: DeskGroup[];
+  channels: LayerInput[];
+}): boolean {
+  const channelsIn = (family: RiderSourceFamily) =>
+    args.channels.filter((channel) => channel.group?.id === family);
+  const vocalChannels = channelsIn("vocals").length;
+  const drumChannels = channelsIn("drums").length;
+
+  // Vocals: DCA (when >1) + every channel.
+  let used = vocalChannels > 0 ? vocalChannels + (vocalChannels > 1 ? 1 : 0) : 0;
+  // FX DCA sits on the vocal page.
+  if (vocalChannels > 0) used += 1;
+  // Drums: one DCA when >1, else the single channel.
+  used += drumChannels > 0 ? (drumChannels > 1 ? 1 : drumChannels) : 0;
+  // Tracks/utility: one DCA each when present.
+  used += args.groups.filter(
+    (group) =>
+      (group.id === "playback" || group.id === "utility") &&
+      channelsIn(group.id).length > 0,
+  ).length;
+
+  const melodyGroups = args.groups.filter((group) =>
+    MELODY_FAMILIES.includes(group.id),
+  );
+  const exploded = melodyGroups.reduce((count, group) => {
+    const members = channelsIn(group.id).length;
+    return count + (members > 0 ? members + (members > 1 ? 1 : 0) : 0);
+  }, 0);
+  const melodicPresent = melodyGroups.some(
+    (group) => channelsIn(group.id).length > 0,
+  );
+  const compressed = melodicPresent ? 1 : 0;
+
+  const pageOneRoom = USB_MUSIC_SLOT - 1;
+  return used + exploded > pageOneRoom && used + compressed <= pageOneRoom;
+}
+
+/**
  * Build the USER1 pages for the night.
  *
  * Priority, highest first:
@@ -61,6 +110,8 @@ export function buildLayerPages(args: {
   channels: LayerInput[];
   /** The vocal FX DCA, when the desk has vocal FX returns. */
   fxDca?: { name: string; dca: number } | null;
+  /** The Melody DCA, present only when the melodic frontline is compressed. */
+  melodyDca?: { name: string; dca: number } | null;
 }): { pages: LayerPage[]; overflow: LayerSlot[] } {
   const groupsById = new Map(args.groups.map((group) => [group.id, group]));
   const channelsIn = (id: RiderSourceFamily) =>
@@ -116,25 +167,29 @@ export function buildLayerPages(args: {
     MELODY_FAMILIES.includes(group.id),
   );
   const melodyMembers = melodyGroups.flatMap((group) => channelsIn(group.id));
-
-  // Tracks/utility are collapsed DCAs (below), so they cost one fader each.
   const otherGroups = args.groups.filter(
     (group) => group.id === "playback" || group.id === "utility",
   );
-  const otherSlots = otherGroups.filter((group) => channelsIn(group.id).length > 0)
-    .length;
-  const queued = queue.reduce((count, entry) => count + entry.slots.length, 0);
-  // Page 1 holds 11 usable faders (fader 12 is USB music).
-  const pageOneRoom = USB_MUSIC_SLOT - 1;
 
-  const explodedMelody = melodyGroups.reduce((count, group) => {
-    const members = channelsIn(group.id).length;
-    // DCA only for multi-channel groups, matching the explode rule below.
-    return count + (members > 0 ? members + (members > 1 ? 1 : 0) : 0);
-  }, 0);
-  const melodicFitsPageOne = queued + explodedMelody + otherSlots <= pageOneRoom;
+  // The allocator decides compression (so the DCA tags agree); layers just
+  // lays it out. Its melody DCA is null when we are not compressing.
+  const compress = melodyMembers.length > 0 && Boolean(args.melodyDca);
 
-  if (melodyMembers.length > 0 && melodicFitsPageOne) {
+  if (compress) {
+    queue.push({
+      name: "Melody",
+      slots: [
+        {
+          kind: "dca",
+          name: args.melodyDca!.name,
+          dca: args.melodyDca!.dca,
+        },
+      ],
+    });
+    // The melodic channels are not given faders here — they are still patched
+    // and named on the desk, just not on the compact custom page.
+    spilled.push(...channelSlots(melodyMembers));
+  } else {
     for (const group of melodyGroups) {
       const members = channelsIn(group.id);
       if (members.length === 0) continue;
@@ -142,16 +197,6 @@ export function buildLayerPages(args: {
       const lead: LayerSlot[] = members.length > 1 ? [dcaSlot(group)] : [];
       queue.push({ name: group.label, slots: [...lead, ...channelSlots(members)] });
     }
-  } else if (melodyMembers.length > 0) {
-    // Compress the melodic frontline into one Melody DCA so page 1 still holds
-    // the whole show. The members are not given faders here — they are still
-    // patched and reachable on the desk, just not on the compact custom page.
-    queue.push({
-      name: "Melody",
-      slots: [{ kind: "dca", name: "Melody", dca: melodyGroups[0]?.dca ?? 1 }],
-    });
-    // Anything that did not fit is reported so the brief can list it.
-    spilled.push(...channelSlots(melodyMembers));
   }
 
   // 4) Tracks and utility keep their own collapsed DCA (they are cued as a unit,

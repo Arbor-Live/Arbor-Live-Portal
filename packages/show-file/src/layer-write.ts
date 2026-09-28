@@ -91,18 +91,14 @@ export function writeLayerPages(
   layer[String(LAYER_BANK.user1)] = bank;
 
   // USER2 is the vocal FX page: the reverb returns an engineer rides while
-  // mixing vocals. Only built when the desk actually has those returns.
-  const vocalBuses = pages.length > 0 ? VOCAL_FX_BUSES : [];
+  // mixing vocals. One fader per return, in bus order — no duplicates. Only
+  // built when the desk actually has those returns.
   const user2: DeskBank = { name: "USER2", ofs: 0 };
   for (let slot = 0; slot < LAYER_BANK.slots; slot++) {
     const dst = slot < WING_COMPACT_FADERS ? 1 : 2;
-    const busIndex = slot % VOCAL_FX_BUSES.length;
-    const bus = vocalBuses.length > 0 && slot < vocalBuses.length * 2
-      ? vocalBuses[busIndex]
-      : undefined;
-    user2[String(slot + 1)] = bus
-      ? { type: "BUS", i: bus, dst }
-      : { type: "OFF", i: 0, dst };
+    const bus = pages.length > 0 ? VOCAL_FX_BUSES[slot] : undefined;
+    user2[String(slot + 1)] =
+      bus === undefined ? { type: "OFF", i: 0, dst } : { type: "BUS", i: bus, dst };
   }
   layer[String(USER2_BANK)] = user2;
 

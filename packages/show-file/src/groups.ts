@@ -71,8 +71,8 @@ export type FxDca = {
   buses: number[];
 };
 
-export const VOCAL_FX_DCA_SLOT = 8;
 export const VOCAL_FX_DCA_NAME = "Vox FX DCA";
+export const MELODY_DCA_NAME = "Melody";
 
 /**
  * The named reverb returns the blueprint wires up, in bus order. These are the
@@ -80,14 +80,37 @@ export const VOCAL_FX_DCA_NAME = "Vox FX DCA";
  */
 export const VOCAL_FX_BUSES = [13, 14] as const;
 
-/** The vocal FX DCA, present only when the desk has vocal FX returns. */
-export function vocalFxDcaFor(vocalFxBuses: number[]): FxDca | null {
+/**
+ * The vocal FX DCA, present only when the desk has vocal FX returns. Its slot
+ * is derived from the reserved DCAs already in use so it can never collide with
+ * a family group (families take DCAs 1..N, reserved DCAs follow).
+ */
+export function vocalFxDcaFor(
+  vocalFxBuses: number[],
+  usedSlots: number[],
+): FxDca | null {
   if (vocalFxBuses.length === 0) return null;
   return {
     name: VOCAL_FX_DCA_NAME,
-    dca: VOCAL_FX_DCA_SLOT,
+    dca: firstFreeDca(usedSlots),
     buses: vocalFxBuses,
   };
+}
+
+/** The melody DCA: one master over the melodic frontline when it is compressed. */
+export function melodyDcaFor(usedSlots: number[]): FxDca {
+  return { name: MELODY_DCA_NAME, dca: firstFreeDca(usedSlots), buses: [] };
+}
+
+/**
+ * First DCA slot not already claimed. `usedSlots` must include the bill's family
+ * group slots and any other reserved DCA, so nothing overlaps.
+ */
+export function firstFreeDca(usedSlots: number[]): number {
+  const taken = new Set(usedSlots);
+  let slot = 1;
+  while (taken.has(slot)) slot += 1;
+  return slot;
 }
 
 /**

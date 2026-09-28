@@ -69,8 +69,11 @@ export type SnakeGroup = "vox" | "guitar" | "bass" | "flex" | "keys" | "drums";
 export type PatchPlan = {
   /** Second stage box patched tonight. */
   secondSnake: boolean;
-  /** Group → snake. Anything unset stays on A. */
-  sides: Partial<Record<SnakeGroup, SnakeId>>;
+  /**
+   * Legacy per-group snake picks. Placement is deterministic now (families pack
+   * box A, then overflow to B), so this is accepted for stored plans but unused.
+   */
+  sides?: Partial<Record<SnakeGroup, SnakeId>>;
   /**
    * Scope band scenes down to what changes (default). Off makes every scene a
    * full recall — the escape hatch if a desk ignores the scope block.
@@ -130,6 +133,8 @@ export type EventPatchAllocation = {
   groups: DeskGroup[];
   /** The vocal FX DCA (rides the reverb returns), or null when none. */
   fxDca: FxDca | null;
+  /** The Melody DCA when the melodic frontline is compressed, else null. */
+  melodyDca: FxDca | null;
   /** Fader-bank pages for the surface, in the order an operator reads them. */
   layers: LayerPage[];
   /**

@@ -187,20 +187,25 @@ export const snakeIdValue = v.union(v.literal("A"), v.literal("B"));
 
 /**
  * Wing show-file patch plan for one event: whether the second snake is out
- * tonight and which box each instrument group lands on.
+ * tonight, and whether band scenes scope to changes.
+ *
+ * `sides` is retained for backward compatibility with plans saved before the
+ * patch was family-packed; placement is deterministic now, so it is unused.
  */
 export const patchPlanValue = v.object({
   secondSnake: v.boolean(),
   /** Scope band scenes to what changes (default true). */
   scopeScenes: v.optional(v.boolean()),
-  sides: v.object({
-    vox: v.optional(snakeIdValue),
-    guitar: v.optional(snakeIdValue),
-    bass: v.optional(snakeIdValue),
-    flex: v.optional(snakeIdValue),
-    keys: v.optional(snakeIdValue),
-    drums: v.optional(snakeIdValue),
-  }),
+  sides: v.optional(
+    v.object({
+      vox: v.optional(snakeIdValue),
+      guitar: v.optional(snakeIdValue),
+      bass: v.optional(snakeIdValue),
+      flex: v.optional(snakeIdValue),
+      keys: v.optional(snakeIdValue),
+      drums: v.optional(snakeIdValue),
+    }),
+  ),
 });
 
 const crewAvailabilityResponseStatusValue = v.union(

@@ -49,7 +49,7 @@ export function buildShowPackage(args: {
   eventName: string;
   bands: ShowBandInput[];
   template?: WingSnap;
-  /** Snake choices for the night (second stage box, per-group sides). */
+  /** Snake choices for the night (second stage box). */
   plan?: PatchPlan;
   /** Set false to make every scene a full recall (no snapshot scoping). */
   scope?: boolean;

@@ -1,14 +1,16 @@
 import type { RiderInputChannel } from "@arbor/rider-document";
 import { displayLabel, familyForInput } from "./family";
 import {
+  MELODY_FAMILIES,
   VOCAL_FX_BUSES,
   deskGroupsFor,
+  melodyDcaFor,
   sourceFamilyFor,
   tagsForGroup,
   vocalFxDcaFor,
   type DeskGroup,
 } from "./groups";
-import { buildLayerPages } from "./layers";
+import { buildLayerPages, melodyNeedsCompression } from "./layers";
 import { BOX_CAPACITY, SNAKE_SHORT_LABEL, stripFor } from "./slots";
 import type {
   EventPatchAllocation,
@@ -28,7 +30,7 @@ type Classified = {
 
 type BandInputs = Map<string, Classified[]>;
 
-export const DEFAULT_PATCH_PLAN: PatchPlan = { secondSnake: false, sides: {} };
+export const DEFAULT_PATCH_PLAN: PatchPlan = { secondSnake: false };
 
 /**
  * Night-stable snake, packed in the rider's own channel order.
@@ -124,27 +126,52 @@ export function allocateEventPatch(
     );
   }
 
+  // Reserved DCAs take the first slots after the bill's family groups, so they
+  // can never collide with a family DCA however many families are present.
+  const familySlots = groups.map((group) => group.dca);
+  const fxDca = vocalFxDcaFor([...VOCAL_FX_BUSES], familySlots);
+  const reservedSlots = [...familySlots, ...(fxDca ? [fxDca.dca] : [])];
+
   const ports: PortAssignment[] = [];
   for (const snake of snakes) {
     ports.push(...buildPorts(snake, perSnake.get(snake)!));
   }
 
+  // Decide whether the melodic frontline compresses into one Melody DCA. This
+  // must happen before tags are read, so the compressed channels actually carry
+  // the Melody DCA tag rather than their own family's.
+  const usedChannels = ports
+    .filter((port) => port.used && port.strip !== null)
+    .sort((a, b) => (a.strip ?? 0) - (b.strip ?? 0));
+  const groupById = new Map(groups.map((group) => [group.id, group]));
+  const layerInputs = usedChannels.map((port) => ({
+    name: port.label,
+    strip: port.strip!,
+    family: port.family,
+    group: groupById.get(port.groupId),
+  }));
+  const compressMelody =
+    melodyNeedsCompression({ groups, channels: layerInputs });
+  const melodyDca = compressMelody ? melodyDcaFor(reservedSlots) : null;
+
+  if (melodyDca) {
+    // Retag the melodic channels into the Melody DCA, so its fader rides them.
+    const melodyFamilies = new Set(MELODY_FAMILIES);
+    for (const port of usedChannels) {
+      const group = groupById.get(port.groupId);
+      if (group && melodyFamilies.has(group.id)) {
+        port.tags = `#D${melodyDca.dca}`;
+      }
+    }
+  }
+
   // Desk pages: vocals exploded, drums collapsed, melodic groups while they fit
   // (else one Melody DCA), tracks/utility separate, USB music pinned to fader 12.
-  const groupById = new Map(groups.map((group) => [group.id, group]));
-  const fxDca = vocalFxDcaFor([...VOCAL_FX_BUSES]);
   const { pages: layers, overflow } = buildLayerPages({
     groups,
     fxDca,
-    channels: ports
-      .filter((port) => port.used && port.strip !== null)
-      .sort((a, b) => (a.strip ?? 0) - (b.strip ?? 0))
-      .map((port) => ({
-        name: port.label,
-        strip: port.strip!,
-        family: port.family,
-        group: groupById.get(port.groupId),
-      })),
+    melodyDca,
+    channels: layerInputs,
   });
 
   if (overflow.length > 0) {
@@ -163,6 +190,7 @@ export function allocateEventPatch(
     snakes,
     groups,
     fxDca,
+    melodyDca,
     layers,
     fitsOneBox,
   };

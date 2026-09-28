@@ -225,8 +225,11 @@ function rebuildDcas(
   const byDca = new Map(
     allocation.groups.map((group) => [String(group.dca), group.label]),
   );
-  // The vocal FX DCA is its own group (bus-fed, not family), so name it too.
+  // Reserved DCAs (vocal FX, melody) are their own groups, so name them too.
   if (allocation.fxDca) byDca.set(String(allocation.fxDca.dca), allocation.fxDca.name);
+  if (allocation.melodyDca) {
+    byDca.set(String(allocation.melodyDca.dca), allocation.melodyDca.name);
+  }
   const base = dcas["1"];
   for (const slot of Object.keys(dcas)) {
     const label = byDca.get(slot);
