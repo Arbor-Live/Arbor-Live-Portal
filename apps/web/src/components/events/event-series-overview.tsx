@@ -26,6 +26,7 @@ import {
 } from "@/lib/validations/event";
 import { EventSeriesScheduleEditor } from "@/components/events/event-series-schedule-editor";
 import { EventSeriesShiftEditor } from "@/components/events/event-series-shift-editor";
+import { EventSeriesPositionEditor } from "@/components/events/event-series-position-editor";
 import { useSessionShell, useSessionViewer } from "@/components/session-shell-provider";
 
 function intervalLabel(weeks: number) {
@@ -504,6 +505,13 @@ export function EventSeriesOverview({ seriesId }: { seriesId: Id<"eventSeries"> 
         rentalFulfillmentMode={series.rentalFulfillmentMode}
         blockTemplates={series.blockTemplates}
         shiftTemplates={series.shiftTemplates}
+        occurrences={occurrences}
+        onMessage={notify.success}
+      />
+
+      <EventSeriesPositionEditor
+        seriesId={seriesId}
+        positionTemplates={series.positionTemplates}
         occurrences={occurrences}
         onMessage={notify.success}
       />
