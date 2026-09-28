@@ -609,17 +609,24 @@ function TimeWindowField({
   onChange: (next: Window) => void;
 }) {
   const [start, end] = value;
+  // A draft while editing: picking the start before the end would otherwise be
+  // thrown away (nothing saves until both ends are set and in order).
+  const [draft, setDraft] = useState({
+    start: start != null ? toLocalDateTimeInput(start) : "",
+    end: end != null ? toLocalDateTimeInput(end) : "",
+  });
   return (
     <div className="grid grid-cols-[6rem_1fr_auto] items-center gap-2">
       <span className="text-sm text-muted-foreground">{label}</span>
       <DateTimeRangePicker
-        startValue={start != null ? toLocalDateTimeInput(start) : ""}
-        endValue={end != null ? toLocalDateTimeInput(end) : ""}
+        startValue={draft.start}
+        endValue={draft.end}
         openToDate={openTo}
         placeholder="Not set"
-        onChange={({ start: nextStart, end: nextEnd }) => {
-          const startMs = localDateTimeInputToMs(nextStart);
-          const endMs = localDateTimeInputToMs(nextEnd);
+        onChange={(next) => {
+          setDraft(next);
+          const startMs = localDateTimeInputToMs(next.start);
+          const endMs = localDateTimeInputToMs(next.end);
           // Save once both ends are picked and in order.
           if (startMs == null || endMs == null || endMs <= startMs) return;
           if (startMs === start && endMs === end) return;

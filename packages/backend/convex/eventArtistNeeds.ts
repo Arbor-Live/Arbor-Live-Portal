@@ -512,6 +512,103 @@ export const listOpenNeedsForArtist = query({
   },
 });
 
+/** How far ahead the logistics view looks, and how many events it scans. */
+const OPEN_POSITIONS_HORIZON_MS = 180 * 24 * 60 * 60 * 1000;
+const MAX_OPEN_POSITION_EVENTS = 150;
+
+const openPositionValue = v.object({
+  needId: v.id("eventArtistNeeds"),
+  label: v.string(),
+  artistType: artistNeedTypeValue,
+  genres: v.string(),
+  status: artistNeedStatusValue,
+  inquiryCount: v.number(),
+  setStartsAt: v.optional(v.number()),
+  setEndsAt: v.optional(v.number()),
+});
+
+/**
+ * Logistics: upcoming events (next 180 days, not cancelled) with positions no
+ * act fills yet, soonest first, and how full each bill is.
+ */
+export const listOpenPositions = query({
+  args: {},
+  returns: v.array(
+    v.object({
+      eventId: v.id("events"),
+      title: v.string(),
+      startAt: v.number(),
+      endAt: v.number(),
+      venueName: v.string(),
+      status: v.string(),
+      totalPositions: v.number(),
+      openPositions: v.array(openPositionValue),
+    }),
+  ),
+  handler: async (ctx) => {
+    await requireArborInternalContext(ctx);
+    // A little slack so tonight's show still shows while it's on.
+    const now = Date.now() - 6 * 60 * 60 * 1000;
+    const events = await ctx.db
+      .query("events")
+      .withIndex("by_startAt", (q) => q.gte("startAt", now).lte("startAt", now + OPEN_POSITIONS_HORIZON_MS))
+      .take(MAX_OPEN_POSITION_EVENTS);
+
+    const out = [];
+    for (const event of events) {
+      const status = normalizeEventStatus(event.status);
+      if (status === "cancelled") continue;
+      const positions = await ctx.db
+        .query("eventArtistNeeds")
+        .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
+        .take(100);
+      if (positions.length === 0) continue;
+      const acts = await ctx.db
+        .query("eventBandParticipations")
+        .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
+        .take(50);
+      const filled = new Set(acts.flatMap((act) => (act.needId ? [act.needId] : [])));
+      const open = positions
+        .filter((position) => !slotIsBooked(position, filled))
+        .sort(
+          (a, b) =>
+            (a.setStartsAt ?? Number.POSITIVE_INFINITY) - (b.setStartsAt ?? Number.POSITIVE_INFINITY) ||
+            (a.sortOrder ?? 0) - (b.sortOrder ?? 0),
+        );
+      if (open.length === 0) continue;
+      const openPositions = await Promise.all(
+        open.map(async (position) => {
+          const inquiries = await ctx.db
+            .query("eventArtistInquiries")
+            .withIndex("by_needId", (q) => q.eq("needId", position._id))
+            .take(50);
+          return {
+            needId: position._id,
+            label: position.label?.trim() ?? "",
+            artistType: position.artistType,
+            genres: position.genres ?? "",
+            status: position.status,
+            inquiryCount: inquiries.filter((inquiry) => inquiry.status === "submitted").length,
+            setStartsAt: position.setStartsAt,
+            setEndsAt: position.setEndsAt,
+          };
+        }),
+      );
+      out.push({
+        eventId: event._id,
+        title: event.title,
+        startAt: event.startAt,
+        endAt: event.endAt,
+        venueName: event.venueName ?? "",
+        status,
+        totalPositions: positions.length,
+        openPositions,
+      });
+    }
+    return out;
+  },
+});
+
 export const listMyInquiries = query({
   args: {},
   handler: async (ctx) => {

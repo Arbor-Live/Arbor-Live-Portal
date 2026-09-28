@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
 import {
   CaretRightIcon,
@@ -89,7 +90,12 @@ function EventArtistBillPanel({
   const updateParticipationLineup = useMutation(api.eventBands.updateParticipationLineup);
   const cancelPayment = useMutation(api.bandPayments.cancelPayment);
   const { confirm } = useAppDialog();
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  // `?position=<needId>` (from Open Positions) opens that position's side panel.
+  const searchParams = useSearchParams();
+  const [selectedKey, setSelectedKey] = useState<string | null>(() => {
+    const position = searchParams.get("position");
+    return position ? `slot-${position}` : null;
+  });
   const [addOpen, setAddOpen] = useState(false);
   const [importBusy, setImportBusy] = useState(false);
   const [dismissedInvoicePrompt, setDismissedInvoicePrompt] = useState(false);
