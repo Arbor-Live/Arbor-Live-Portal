@@ -93,7 +93,7 @@ test.describe("public booking submit", () => {
     await expect(adminPage.getByText(request.requestNumber!).first()).toBeVisible({
       timeout: 25_000,
     });
-    await expect(adminPage.getByText("submitted", { exact: true }).first()).toBeVisible();
+    await expect(adminPage.getByTestId("request-status")).toHaveText("Submitted");
     await adminContext.close();
   });
 });

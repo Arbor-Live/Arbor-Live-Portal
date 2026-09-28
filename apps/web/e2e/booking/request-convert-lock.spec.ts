@@ -13,7 +13,7 @@ type Seed = {
 
 /**
  * Once a request is converted (client approved the quote) it is a terminal
- * record for the inbox: the detail page drops the staff actions panel, and
+ * record for the inbox: the detail page drops the staff actions, and
  * `updateStatus` refuses to move it anywhere else — a guard the UI can't
  * exercise because the buttons are gone, so it is asserted through a direct
  * Convex call.
@@ -36,12 +36,16 @@ test.describe("converted booking request lock", () => {
     const path = `/dashboard/financial-hub/requests/${seeded.requestId}`;
     await page.goto(path);
     await expect(page.getByText(seeded.requestNumber).first()).toBeVisible({ timeout: 25_000 });
-    await expect(page.getByText("converted", { exact: true }).first()).toBeVisible({
-      timeout: 25_000,
-    });
-    await expect(page.getByText("Staff actions")).toHaveCount(0);
+    await expect(page.getByTestId("request-status")).toHaveText("Converted", { timeout: 25_000 });
     await expect(page.getByRole("button", { name: "Create quote & tentative event" })).toHaveCount(0);
-    await expect(page.getByRole("link", { name: /Open tentative event/i }).first()).toBeVisible();
+    await expect(page.getByRole("link", { name: "Open event", exact: true })).toBeVisible();
+    await expect(page.getByTestId("request-event-link").first()).toBeVisible();
+
+    // The ⋯ menu keeps the portal link but offers no status changes.
+    await page.getByRole("button", { name: "More request actions" }).click();
+    await expect(page.getByRole("menuitem", { name: "Open client portal" })).toBeVisible();
+    await expect(page.getByRole("menuitem", { name: "Decline request" })).toHaveCount(0);
+    await expect(page.getByRole("menuitem", { name: "Mark action required" })).toHaveCount(0);
   });
 
   test("the backend refuses to update a converted request", async ({ page }) => {

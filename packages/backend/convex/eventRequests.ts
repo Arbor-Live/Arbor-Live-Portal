@@ -1040,6 +1040,26 @@ export const setAssignee = mutation({
   },
 });
 
+/** Internal staff notes, editable in any status (the client never sees them). */
+export const setStaffNotes = mutation({
+  args: {
+    id: v.id("eventRequests"),
+    staffNotes: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    const request = await ctx.db.get(args.id);
+    if (!request) throw new Error("Request not found.");
+    await ctx.db.patch(args.id, {
+      staffNotes: trimOptional(args.staffNotes),
+      updatedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
 export const get = query({
   args: { id: v.id("eventRequests") },
   returns: v.union(

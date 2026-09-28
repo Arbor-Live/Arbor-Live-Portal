@@ -14,17 +14,19 @@ test.describe("booking staff convert", () => {
 
     await page.goto(seeded.path);
     await expect(page.getByText(seeded.requestNumber).first()).toBeVisible({ timeout: 25_000 });
-    await expect(page.getByText("submitted", { exact: true }).first()).toBeVisible();
+    await expect(page.getByTestId("request-status")).toHaveText("Submitted");
 
     await page.getByRole("button", { name: "Create quote & tentative event" }).click();
     await page.waitForURL(/\/dashboard\/financial-hub\/invoices\//, { timeout: 45_000 });
 
     // Leave the invoice editor immediately — assert conversion via helpers + request detail.
     await page.goto(seeded.path);
-    await expect(page.getByText("Action required", { exact: true }).first()).toBeVisible({
+    await expect(page.getByTestId("request-status")).toHaveText("Action required", {
       timeout: 25_000,
     });
-    await expect(page.getByRole("link", { name: /Open tentative event/i }).first()).toBeVisible();
+    // The header's next action is now the quote, and the event is linked beside the status.
+    await expect(page.getByRole("link", { name: "Open quote", exact: true })).toBeVisible();
+    await expect(page.getByTestId("request-event-link").first()).toBeVisible();
 
     const state = await pollConvex<{
       status: string;
