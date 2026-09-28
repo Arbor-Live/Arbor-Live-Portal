@@ -543,6 +543,9 @@ export const regenerateFuturePositions = mutation({
     await requireArborInternalContext(ctx);
     const series = await ctx.db.get(args.id);
     if (!series) throw new Error("Event series not found.");
+    if (!Number.isInteger(args.fromOccurrenceIndex) || args.fromOccurrenceIndex < 0) {
+      throw new Error("Occurrence index must be a non-negative integer.");
+    }
     const templates = args.positionTemplates ?? series.positionTemplates ?? [];
     const now = Date.now();
     if (args.positionTemplates !== undefined) {

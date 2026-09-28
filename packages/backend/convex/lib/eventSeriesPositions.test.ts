@@ -23,7 +23,7 @@ function template(partial: Partial<EventSeriesPositionTemplate> = {}): EventSeri
 }
 
 function slot(partial: Partial<ExistingPositionSlot> = {}): ExistingPositionSlot {
-  return { _id: needId("slot1"), filled: false, ...partial };
+  return { _id: needId("slot1"), locked: false, ...partial };
 }
 
 describe("planPositionTemplateApplication", () => {
@@ -46,12 +46,14 @@ describe("planPositionTemplateApplication", () => {
     expect(plan.removeIds).toEqual([]);
   });
 
-  it("never updates or removes a filled position", () => {
+  it("never updates or removes a position that is filled or inquiring", () => {
     const templates = [template(), template({ templateKey: "key-opener", label: "Opener" })];
+    // `locked` is set for a seated/named act and for `status !== "open"`
+    // (inquiries) — the executor maps both to this flag.
     const existing = [
-      slot({ _id: needId("filled"), templateKey: "key-headliner", filled: true }),
-      // A template that disappeared entirely, but the slot is filled: keep it.
-      slot({ _id: needId("filled-stale"), templateKey: "key-gone", filled: true }),
+      slot({ _id: needId("filled"), templateKey: "key-headliner", locked: true }),
+      // A template that disappeared entirely, but the slot is locked: keep it.
+      slot({ _id: needId("inquiring-stale"), templateKey: "key-gone", locked: true }),
     ];
     const plan = planPositionTemplateApplication(existing, templates);
 

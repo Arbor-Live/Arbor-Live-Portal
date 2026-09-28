@@ -73,8 +73,12 @@ export type ExistingPositionSlot = {
   _id: Id<"eventArtistNeeds">;
   /** Absent on positions staff added by hand (not from the template). */
   templateKey?: string;
-  /** A platform act fills it, or an outside act is named on it. */
-  filled: boolean;
+  /**
+   * Not ours to move or remove: a platform act fills it, an outside act is named
+   * on it, or it has inquiries (`status !== "open"`). Applying carries these
+   * across untouched.
+   */
+  locked: boolean;
 };
 
 export type PositionTemplateAction =
@@ -90,7 +94,8 @@ export type PositionTemplatePlan = {
 /**
  * Decide what applying `templates` does to an occurrence's existing positions.
  * Re-applying with unchanged templates plans the same updates (never a second
- * insert), and a filled position is never updated or removed.
+ * insert), and a locked position (filled, named outside act, or inquiring) is
+ * never updated or removed.
  */
 export function planPositionTemplateApplication(
   existing: readonly ExistingPositionSlot[],
@@ -109,7 +114,7 @@ export function planPositionTemplateApplication(
       actions.push({ kind: "insert", template });
       continue;
     }
-    if (match.filled) continue;
+    if (match.locked) continue;
     actions.push({ kind: "update", template, needId: match._id });
   }
 
@@ -117,7 +122,7 @@ export function planPositionTemplateApplication(
   const removeIds = existing
     .filter(
       (slot) =>
-        slot.templateKey !== undefined && !wanted.has(slot.templateKey) && !slot.filled,
+        slot.templateKey !== undefined && !wanted.has(slot.templateKey) && !slot.locked,
     )
     .map((slot) => slot._id);
   return { actions, removeIds };

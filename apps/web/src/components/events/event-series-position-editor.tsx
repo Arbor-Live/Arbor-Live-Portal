@@ -139,7 +139,7 @@ export function EventSeriesPositionEditor({
       throw new Error("Give every position a name before applying.");
     }
     const parsedFromIndex = Number(values.fromOccurrenceIndex);
-    if (!Number.isFinite(parsedFromIndex) || parsedFromIndex < 0) {
+    if (!Number.isInteger(parsedFromIndex) || parsedFromIndex < 0) {
       throw new Error("Enter a valid occurrence index.");
     }
     const result = await applyPositions({
