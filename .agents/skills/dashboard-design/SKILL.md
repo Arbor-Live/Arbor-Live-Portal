@@ -75,6 +75,8 @@ import { MetaItem, PageHeader, StatusPill } from "@/components/page-header";
   header, plus links like "Recurring · View series".
 - `title`: a string renders the `h1`. For renamable things pass
   `<EditablePageTitle value onChange label />`.
+- `description`: one or two plain sentences under the title saying what the
+  page is for (this replaces the old `CardDescription` in card headers).
 - `meta`: `MetaItem`s (icon + text; pass `onClick` to open a Sheet).
 - `children`: anything under the meta line (a day switcher, a notice).
 - Tones: `neutral | blue | emerald | amber | rose`. Map your domain's statuses
