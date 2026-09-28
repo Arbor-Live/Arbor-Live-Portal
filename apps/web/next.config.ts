@@ -117,6 +117,14 @@ const imageRemotePatterns = [
 ];
 
 const nextConfig: NextConfig = {
+  // The build-time type check pulls every Convex module into the Next type
+  // program (`_generated/api.d.ts` imports them all), which needs more than the
+  // 8 GB on Vercel's standard build machine and OOMs/times out there. Convex
+  // type-checks the backend during `convex deploy`, and the `Typecheck` workflow
+  // checks the app, so skip the redundant pass in the deploy build.
+  typescript: {
+    ignoreBuildErrors: true,
+  },
   transpilePackages: [
     "backend",
     "@arbor/invoice-document",
