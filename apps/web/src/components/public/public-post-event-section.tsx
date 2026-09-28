@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useAction, useMutation, usePaginatedQuery, useQuery } from "convex/react";
+import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { StarIcon } from "@phosphor-icons/react";
 import { api } from "@/lib/convex-api";
@@ -15,6 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { MediaGallery } from "@/components/media/media-gallery";
 import { MediaUploadDropzone } from "@/components/media/media-upload-dropzone";
+import { useMediaAlbum } from "@/hooks/use-media-album";
 import {
   Form,
   FormControl,
@@ -106,7 +107,6 @@ function PublicPostEventDayContent({
   token: string;
   day: FeedbackDay;
 }) {
-  const ensureAlbum = useAction(api.eventFeedbackActions.ensureAlbumShareUrlByToken);
   const submit = useMutation(api.eventFeedback.submitByToken);
   const uploadConfig = useQuery(api.publicMedia.getMediaUploadConfigByToken, {
     portal,
@@ -122,8 +122,12 @@ function PublicPostEventDayContent({
     { portal, token, eventId: day.eventId },
     { initialNumItems: 60 },
   );
+  const album = useMediaAlbum(
+    day.albumShareUrl
+      ? null
+      : { targetType: "event", targetId: day.eventId, publicAccess: { portal, token } },
+  );
   const [hoveredRating, setHoveredRating] = useState(0);
-  const [ensuredAlbumUrl, setEnsuredAlbumUrl] = useState<string | undefined>();
 
   const form = useConvexForm<EventFeedbackFormValues>({
     schema: eventFeedbackSchema,
@@ -142,25 +146,8 @@ function PublicPostEventDayContent({
     form.reset({ rating: 0, comments: "" });
   });
 
-  useEffect(() => {
-    if (!day.ended) return;
-    if (day.albumShareUrl || ensuredAlbumUrl) return;
-    let cancelled = false;
-    void ensureAlbum({ portal, token, eventId: day.eventId })
-      .then((result) => {
-        if (cancelled) return;
-        if (result?.albumShareUrl) setEnsuredAlbumUrl(result.albumShareUrl);
-      })
-      .catch(() => {
-        // Immich is optional — leave the album card hidden if ensure fails.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [day.ended, day.albumShareUrl, day.eventId, ensuredAlbumUrl, ensureAlbum, portal, token]);
-
   const rating = form.watch("rating") ?? 0;
-  const albumShareUrl = day.albumShareUrl ?? ensuredAlbumUrl;
+  const albumShareUrl = day.albumShareUrl ?? album.albumShareUrl;
   const eventTitle = day.eventTitle;
 
   return (

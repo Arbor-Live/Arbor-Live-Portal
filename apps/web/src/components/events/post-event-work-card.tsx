@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PostMortemForm } from "@/components/post-mortem/post-mortem-form";
 import { MediaUploadDropzone } from "@/components/media/media-upload-dropzone";
+import { useMediaAlbum } from "@/hooks/use-media-album";
 import { formatDateTime } from "@/lib/format";
 import { getConvexErrorMessage } from "@/lib/convex-error";
 import { notify } from "@/lib/notify";
@@ -46,6 +47,7 @@ function RatingStars({ rating }: { rating: number }) {
 export function PostEventWorkCard({ row }: { row: PostEventWorkRow }) {
   const submit = useMutation(api.postMortemFeedback.submitForEvent);
   const resolveMedia = useMutation(api.crewPortal.resolveMyEventMedia);
+  const album = useMediaAlbum({ targetType: "event", targetId: row.eventId });
   const [markingNoMedia, setMarkingNoMedia] = useState(false);
 
   async function markNoMedia() {
@@ -117,8 +119,10 @@ export function PostEventWorkCard({ row }: { row: PostEventWorkRow }) {
           <MediaUploadDropzone
             targetType="event"
             targetId={row.eventId}
+            disabled={!album.ready}
             onUploaded={() => notify.success("Upload complete.")}
           />
+          {album.error ? <p className="text-sm text-destructive">{album.error}</p> : null}
         </div>
       </CardContent>
     </Card>

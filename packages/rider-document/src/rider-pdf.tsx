@@ -146,6 +146,14 @@ const styles = StyleSheet.create({
   summaryValue: { fontSize: 12, fontWeight: 700 },
 });
 
+/**
+ * The built-in PDF fonts (Helvetica, Courier) have no arrow glyph, so "Sax →
+ * Guitar" would print as "Sax ’ Guitar". Spell arrows with ASCII instead.
+ */
+export function pdfSafe(text: string) {
+  return text.replace(/→/g, "->");
+}
+
 export function RiderPdfFooter() {
   return (
     <View style={styles.footer} fixed>
@@ -460,13 +468,13 @@ export function RiderPages({ data }: { data: RiderDocumentData }) {
             <Text style={styles.sectionTitle}>Changes between bands</Text>
             {data.changeovers.map((block) => (
               <View key={block.title} style={{ marginBottom: 10 }} wrap={false}>
-                <Text style={styles.changeoverTitle}>{block.title}</Text>
+                <Text style={styles.changeoverTitle}>{pdfSafe(block.title)}</Text>
                 {block.lines.length === 0 ? (
                   <Text style={styles.emptyNote}>No stage swaps for this changeover.</Text>
                 ) : (
                   block.lines.map((line) => (
                     <Text key={line} style={styles.changeoverLine}>
-                      {line}
+                      {pdfSafe(line)}
                     </Text>
                   ))
                 )}

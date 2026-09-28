@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useAction, usePaginatedQuery, useQuery } from "convex/react";
+import { useMemo, useState } from "react";
+import { usePaginatedQuery, useQuery } from "convex/react";
 import { api, type Id } from "@/lib/convex-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -17,7 +17,7 @@ import { MediaAlbumLink } from "@/components/media/media-album-link";
 import { MediaUploadDropzone } from "@/components/media/media-upload-dropzone";
 import { BandOnlyGuard } from "@/components/org-context-guard";
 import { useSessionShell } from "@/components/session-shell-provider";
-import { getConvexErrorMessage } from "@/lib/convex-error";
+import { useMediaAlbum, type MediaAlbumTarget } from "@/hooks/use-media-album";
 import { formatDate } from "@/lib/format";
 import { isArtistOrganizationType } from "@/lib/artist-types";
 
@@ -29,21 +29,12 @@ export function BandMediaClient() {
   const shell = useSessionShell();
   const activeOrg = shell === undefined ? undefined : (shell?.activeOrganization ?? null);
   const linkedEvents = useQuery(api.eventBands.listLinkedEventsForActiveBand, {});
-  const ensureUploadAlbum = useAction(api.immichEnsure.ensureUploadAlbum);
 
   const [selectedEventId, setSelectedEventId] = useState<string>("");
-  const [readyAlbumKey, setReadyAlbumKey] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
-  const ensureAlbumKey =
-    activeOrg && isArtistOrganizationType(activeOrg.organizationType)
-      ? selectedEventId
-        ? `event:${selectedEventId}`
-        : `band:${activeOrg.organizationId}`
-      : null;
-  const albumReady = ensureAlbumKey !== null && readyAlbumKey === ensureAlbumKey;
+  const isArtistOrg = isArtistOrganizationType(activeOrg?.organizationType);
 
-  const mediaArgs = isArtistOrganizationType(activeOrg?.organizationType)
+  const mediaArgs = isArtistOrg
     ? selectedEventId
       ? { eventId: selectedEventId as Id<"events"> }
       : {}
@@ -58,33 +49,16 @@ export function BandMediaClient() {
     initialNumItems: 60,
   });
 
-  useEffect(() => {
-    if (!ensureAlbumKey) return;
-    let cancelled = false;
-    async function ensure() {
-      try {
-        if (!activeOrg?.organizationId) return;
-        if (selectedEventId) {
-          await ensureUploadAlbum({ targetType: "event", targetId: selectedEventId });
-        } else {
-          await ensureUploadAlbum({
-            targetType: "band",
-            targetId: activeOrg.organizationId,
-          });
-        }
-        if (!cancelled) {
-          setReadyAlbumKey(ensureAlbumKey);
-          setError(null);
-        }
-      } catch (ensureError) {
-        if (!cancelled) setError(getConvexErrorMessage(ensureError));
-      }
-    }
-    void ensure();
-    return () => {
-      cancelled = true;
-    };
-  }, [activeOrg?.organizationId, ensureAlbumKey, ensureUploadAlbum, selectedEventId]);
+  const uploadTargetType = selectedEventId ? "event" : "band";
+  const uploadTargetId = selectedEventId || activeOrg?.organizationId || "";
+
+  const albumTarget = useMemo<MediaAlbumTarget | null>(() => {
+    if (!activeOrg || !isArtistOrganizationType(activeOrg.organizationType)) return null;
+    if (selectedEventId) return { targetType: "event", targetId: selectedEventId };
+    return { targetType: "band", targetId: activeOrg.organizationId };
+  }, [activeOrg, selectedEventId]);
+
+  const { ready: albumReady, error } = useMediaAlbum(albumTarget);
 
   const eventOptions = useMemo(
     () =>
@@ -94,9 +68,6 @@ export function BandMediaClient() {
       })),
     [linkedEvents],
   );
-
-  const uploadTargetType = selectedEventId ? "event" : "band";
-  const uploadTargetId = selectedEventId || activeOrg?.organizationId || "";
 
   return (
     <BandOnlyGuard>
@@ -116,7 +87,6 @@ export function BandMediaClient() {
                 value={selectedEventId || "band"}
                 onValueChange={(value) => {
                   setSelectedEventId(value === "band" ? "" : value);
-                  setError(null);
                 }}
               >
                 <SelectTrigger>

@@ -3,7 +3,7 @@ import { inputFamilyLabel, renumberInputs } from "./content";
 import type { RiderInputChannel } from "./types";
 
 function input(id: string, stereo = false): RiderInputChannel {
-  return { id, label: id, channel: 0, stereo } as RiderInputChannel;
+  return { id, label: id, channel: 0, stereo } as unknown as RiderInputChannel;
 }
 
 
