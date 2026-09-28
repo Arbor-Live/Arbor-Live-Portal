@@ -535,7 +535,8 @@ export function FinancialHubBandPayoutsClient() {
             {sort === "waiting" ? " (upcoming by event date, paid newest first)" : ""}.
           </p>
 
-          {activeRows.length === 0 && !needle && (paid?.rows.length ?? 0) === 0 ? (
+          {/* All-time paid count, so older paid history outside the default range stays reachable. */}
+          {activeRows.length === 0 && !needle && (paid?.rows.length ?? 0) === 0 && counts?.paid === 0 ? (
             <p className="border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
               No artist payouts yet. Add one from an event&apos;s Lineup (open the act, then Add payout).
             </p>
