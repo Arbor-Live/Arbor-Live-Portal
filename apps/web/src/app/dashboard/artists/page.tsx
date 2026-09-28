@@ -1,12 +1,7 @@
 "use client";
 
-import {
-  Card,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { BandOrAdminGuard } from "@/components/org-context-guard";
+import { PageHeader } from "@/components/page-header";
 import { BandSelfServiceClient } from "@/components/bands/band-self-service-client";
 import { AdminBandProfileClient } from "@/components/bands/admin-band-profile-client";
 import {
@@ -32,15 +27,10 @@ function BandsAndPerformersBody() {
 export default function BandsAndPerformersPage() {
   return (
     <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>Artists</CardTitle>
-          <CardDescription>
-            Admins can edit any artist&apos;s profile here. Artist organizations manage their own
-            profile, technical riders, and payments under this section.
-          </CardDescription>
-        </CardHeader>
-      </Card>
+      <PageHeader
+        title="Artists"
+        description="Admins can edit any artist's profile here. Artist organizations manage their own profile, technical riders, and payments under this section."
+      />
       <BandOrAdminGuard>
         <BandsAndPerformersBody />
       </BandOrAdminGuard>

@@ -1,10 +1,5 @@
-import {
-  Card,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { BandOrAdminGuard } from "@/components/org-context-guard";
+import { PageHeader } from "@/components/page-header";
 import { RiderEditorClient } from "@/components/riders/rider-editor-client";
 import type { Id } from "@/lib/convex-api";
 
@@ -17,14 +12,11 @@ export default async function BandRiderEditorPage({
 
   return (
     <div className="space-y-4 pb-24">
-      <Card>
-        <CardHeader>
-          <CardTitle>Edit technical rider</CardTitle>
-          <CardDescription>
-            Drag symbols onto the stage. Channels and monitor mixes update as you place gear.
-          </CardDescription>
-        </CardHeader>
-      </Card>
+      <PageHeader
+        back={{ href: "/dashboard/artists/riders", label: "Technical rider" }}
+        title="Edit technical rider"
+        description="Drag symbols onto the stage. Channels and monitor mixes update as you place gear."
+      />
       <BandOrAdminGuard>
         <RiderEditorClient riderId={riderId as Id<"bandRiders">} />
       </BandOrAdminGuard>
