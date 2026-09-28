@@ -32,12 +32,13 @@ test.describe("admin cascade delete of a booking request", () => {
     await page.goto(path);
     await expect(page.getByText(seeded.requestNumber).first()).toBeVisible({ timeout: 25_000 });
 
-    await page.getByRole("button", { name: "Delete request" }).click();
+    await page.getByRole("button", { name: "More request actions" }).click();
+    await page.getByRole("menuitem", { name: "Delete request" }).click();
     await expect(page.getByText("Delete booking request?")).toBeVisible({ timeout: 25_000 });
 
     // The preview lists the linked records before it offers the cascade delete.
-    // Anchored so it only matches the dialog's `<li>` — the detail page's quote
-    // badge renders "Quote ALINV-… · finalized · On request portal" behind it.
+    // Anchored so it only matches the dialog's `<li>` — the detail header's quote
+    // link renders "Quote ALINV-… · Finalized · On request portal" behind it.
     await expect(page.getByText(/^Quote ALINV-[A-Za-z0-9]+$/)).toBeVisible({ timeout: 25_000 });
     await expect(page.getByText(`Event: ${eventName}`)).toBeVisible();
 

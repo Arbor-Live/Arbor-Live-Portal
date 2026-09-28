@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/collapsible";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
 import { formatDateTime, pacificDateKey } from "@/lib/format";
+import { eventRequestStatusLabel } from "@/lib/event-request-status";
 
 const REQUESTS_BASE = "/dashboard/financial-hub/requests";
 
@@ -46,24 +47,6 @@ type RequestRow = {
   convertedEventId?: string;
   convertedEventIds?: string[];
 };
-
-function formatStatusLabel(status: string) {
-  switch (status) {
-    case "submitted":
-      return "Submitted";
-    case "action_required":
-    case "in_review":
-      return "Action required";
-    case "pending_client":
-      return "Pending";
-    case "converted":
-      return "Converted";
-    case "declined":
-      return "Declined";
-    default:
-      return status;
-  }
-}
 
 function statusBadgeClass(status: string) {
   switch (status) {
@@ -123,7 +106,7 @@ function RequestCard({ row }: { row: RequestRow }) {
           <p className="text-xs text-muted-foreground">Event date: {row.eventDateText}</p>
           <div className="mt-2 flex flex-wrap gap-2 text-xs">
             <span className={`rounded-full px-2 py-0.5 ${statusBadgeClass(row.status)}`}>
-              {formatStatusLabel(row.status)}
+              {eventRequestStatusLabel(row.status)}
             </span>
             <span className="rounded bg-muted px-2 py-0.5">Turnout: {row.expectedTurnout}</span>
             <span className="rounded bg-muted px-2 py-0.5">{row.sponsorType}</span>

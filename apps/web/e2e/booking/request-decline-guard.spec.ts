@@ -1,6 +1,7 @@
 import { test, expect, type Browser, type Page } from "@playwright/test";
 import { pollConvex, runConvex } from "../helpers/convex";
 import { callConvexAs } from "../helpers/convexCall";
+import { pickSearchableOption } from "../helpers/select";
 
 type Seed = {
   requestId: string;
@@ -41,11 +42,17 @@ test.describe("booking request decline lifecycle", () => {
   test("declining without a reason is refused, then a real decline sticks", async ({ page }) => {
     await page.goto(seeded.path);
     await expect(page.getByText(seeded.requestNumber).first()).toBeVisible({ timeout: 25_000 });
-    await expect(page.getByText("submitted", { exact: true }).first()).toBeVisible();
+    await expect(page.getByTestId("request-status")).toHaveText("Submitted");
+
+    // Declining lives in a dialog opened from the header's ⋯ menu.
+    await page.getByRole("button", { name: "More request actions" }).click();
+    await page.getByRole("menuitem", { name: "Decline request" }).click();
+    const dialog = page.getByTestId("decline-request-dialog");
+    await expect(dialog).toBeVisible();
 
     // Client-side refusal: no reason selected → nothing is written.
-    await page.getByRole("button", { name: "Decline", exact: true }).click();
-    await expect(page.getByText("Select a decline reason.")).toBeVisible();
+    await dialog.getByRole("button", { name: "Decline request", exact: true }).click();
+    await expect(dialog.getByText("Select a decline reason.")).toBeVisible();
     await assertSubmitted(page, seeded.requestId);
 
     // Server-side refusal: the same call with the UI guard bypassed.
@@ -58,14 +65,18 @@ test.describe("booking request decline lifecycle", () => {
     await assertSubmitted(page, seeded.requestId);
 
     // The real decline.
-    await page.getByLabel("Decline reason").selectOption("capacity");
-    await page.getByLabel("Decline note (optional)").fill("Fully booked that weekend");
-    await page.getByRole("button", { name: "Decline", exact: true }).click();
+    await pickSearchableOption(
+      page,
+      dialog.getByTestId("decline-reason-picker").getByTestId("searchable-select-trigger"),
+      "capacity",
+      "At capacity / unavailable",
+    );
+    await dialog.getByLabel("Decline note (optional)").fill("Fully booked that weekend");
+    await dialog.getByRole("button", { name: "Decline request", exact: true }).click();
 
-    await expect(page.getByText("declined", { exact: true }).first()).toBeVisible({
-      timeout: 25_000,
-    });
-    await expect(page.getByText("At capacity / unavailable")).toBeVisible();
+    await expect(dialog).toHaveCount(0, { timeout: 25_000 });
+    await expect(page.getByTestId("request-status")).toHaveText("Declined", { timeout: 25_000 });
+    await expect(page.getByTestId("request-notes").getByText("At capacity / unavailable")).toBeVisible();
 
     const state = await pollConvex<{
       status: string;
@@ -82,7 +93,7 @@ test.describe("booking request decline lifecycle", () => {
     expect(state.reviewedByUserId).toBeTruthy();
   });
 
-  test("the staff actions panel leaves after decline and the client portal mirrors it", async ({
+  test("the staff actions leave after decline and the client portal mirrors it", async ({
     browser,
     page,
   }: {
@@ -90,11 +101,12 @@ test.describe("booking request decline lifecycle", () => {
     page: Page;
   }) => {
     await page.goto(seeded.path);
-    await expect(page.getByText("declined", { exact: true }).first()).toBeVisible({
-      timeout: 25_000,
-    });
-    await expect(page.getByText("Staff actions")).toHaveCount(0);
+    await expect(page.getByTestId("request-status")).toHaveText("Declined", { timeout: 25_000 });
     await expect(page.getByRole("button", { name: "Create quote & tentative event" })).toHaveCount(0);
+    await page.getByRole("button", { name: "More request actions" }).click();
+    await expect(page.getByRole("menuitem", { name: "Open client portal" })).toBeVisible();
+    await expect(page.getByRole("menuitem", { name: "Decline request" })).toHaveCount(0);
+    await page.keyboard.press("Escape");
 
     // The client's tracking link shows the declined state, not the lifecycle steps.
     const clientContext = await browser.newContext({ storageState: { cookies: [], origins: [] } });

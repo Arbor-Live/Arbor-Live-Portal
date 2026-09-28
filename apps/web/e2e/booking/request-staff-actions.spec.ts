@@ -12,9 +12,9 @@ type Seed = {
 };
 
 /**
- * The request detail's "Staff actions" panel: assignee assignment, staff notes,
- * and the submitted → action_required transition. These are all client-facing
- * staff edits that the convert/decline specs never touch.
+ * The request detail's staff edits: assignee assignment (aside), staff notes
+ * (Notes card), and the submitted → action_required transition (header ⋯ menu).
+ * The convert/decline specs never touch these.
  */
 test.describe("booking request staff actions", () => {
   const stamp = Date.now();
@@ -58,8 +58,10 @@ test.describe("booking request staff actions", () => {
     await page.goto(seeded.path);
     await expect(page.getByText(seeded.requestNumber).first()).toBeVisible({ timeout: 25_000 });
 
-    await page.getByPlaceholder("Internal notes (optional)").fill(notes);
-    await page.getByRole("button", { name: "Mark action required" }).click();
+    // Unsaved notes ride along with the status change.
+    await page.getByLabel("Staff notes").fill(notes);
+    await page.getByRole("button", { name: "More request actions" }).click();
+    await page.getByRole("menuitem", { name: "Mark action required" }).click();
 
     const state = await pollConvex<{
       status: string;
@@ -75,12 +77,33 @@ test.describe("booking request staff actions", () => {
     expect(state.status).toBe("action_required");
     expect(state.reviewedByUserId).toBeTruthy();
 
-    // Reload: the persisted staff notes render in the details, and "Mark
+    // Reload: the persisted staff notes load into the editor, and "Mark
     // action required" only exists for submitted requests.
     await page.reload();
-    await expect(page.getByText(notes).first()).toBeVisible({ timeout: 25_000 });
-    await expect(page.getByRole("button", { name: "Mark action required" })).toHaveCount(0);
-    // The rest of the panel is still editable while action_required.
-    await expect(page.getByPlaceholder("Internal notes (optional)")).toBeVisible();
+    await expect(page.getByTestId("request-status")).toHaveText("Action required", {
+      timeout: 25_000,
+    });
+    await expect(page.getByLabel("Staff notes")).toHaveValue(notes);
+    await page.getByRole("button", { name: "More request actions" }).click();
+    await expect(page.getByRole("menuitem", { name: "Decline request" })).toBeVisible();
+    await expect(page.getByRole("menuitem", { name: "Mark action required" })).toHaveCount(0);
+    await page.keyboard.press("Escape");
+  });
+
+  test("staff notes save on their own, without a status change", async ({ page }) => {
+    const notes = `Called the venue ${stamp}`;
+    await page.goto(seeded.path);
+    await expect(page.getByText(seeded.requestNumber).first()).toBeVisible({ timeout: 25_000 });
+
+    await page.getByLabel("Staff notes").fill(notes);
+    await page.getByRole("button", { name: "Save notes" }).click();
+
+    const state = await pollConvex<{ status: string; staffNotes: string | null }>(
+      "e2eHelpers:getBookingRequestState",
+      { requestId: seeded.requestId },
+      (row) => row?.staffNotes === notes,
+    );
+    expect(state.status).toBe("action_required");
+    await expect(page.getByRole("button", { name: "Save notes" })).toBeDisabled();
   });
 });
