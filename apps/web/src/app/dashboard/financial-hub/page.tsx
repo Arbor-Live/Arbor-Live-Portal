@@ -14,49 +14,46 @@ import {
   FinancialHubRevenueCard,
 } from "@/components/insights/financial-hub-kpi-cards";
 import { AdminOnlyGuard, ArborOnlyGuard } from "@/components/org-context-guard";
+import { PageHeader } from "@/components/page-header";
 
 export default function FinancialHubPage() {
   return (
     <div className="space-y-4">
       <ArborOnlyGuard>
         <AdminOnlyGuard>
-          <Card>
-            <CardHeader>
-              <CardTitle>Ops Center</CardTitle>
-              <CardDescription>
-                Centralize invoices, settlements, and payments across operations.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-wrap gap-2">
-              <Button asChild>
-                <Link href="/dashboard/financial-hub/invoices">Open Invoices</Link>
-              </Button>
-              <Button asChild variant="outline">
-                <Link href="/dashboard/financial-hub/requests">Booking Requests</Link>
-              </Button>
-              <Button asChild variant="outline">
-                <Link href="/dashboard/financial-hub/insights">Insights</Link>
-              </Button>
-              <Button asChild variant="outline">
-                <Link href="/dashboard/financial-hub/organizations">Host Organizations</Link>
-              </Button>
-              <Button asChild variant="outline">
-                <Link href="/dashboard/financial-hub/invoices/new">Create Invoice</Link>
-              </Button>
-              <Button asChild variant="outline">
-                <Link href="/dashboard/financial-hub/payments">Client Payments</Link>
-              </Button>
-              <Button asChild variant="outline">
-                <Link href="/dashboard/financial-hub/artist-payouts">Artist payouts</Link>
-              </Button>
-              <Button asChild variant="outline">
-                <Link href="/dashboard/timecards">Crew Timecards</Link>
-              </Button>
-              <Button asChild variant="outline">
-                <Link href="/dashboard/timecards/mine">My Timecards</Link>
-              </Button>
-            </CardContent>
-          </Card>
+          <PageHeader
+            title="Ops Center"
+            description="Centralize invoices, settlements, and payments across operations."
+          />
+          <div className="flex flex-wrap gap-2">
+            <Button asChild>
+              <Link href="/dashboard/financial-hub/invoices">Open Invoices</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/dashboard/financial-hub/requests">Booking Requests</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/dashboard/financial-hub/insights">Insights</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/dashboard/financial-hub/organizations">Host Organizations</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/dashboard/financial-hub/invoices/new">Create Invoice</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/dashboard/financial-hub/payments">Client Payments</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/dashboard/financial-hub/artist-payouts">Artist payouts</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/dashboard/timecards">Crew Timecards</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/dashboard/timecards/mine">My Timecards</Link>
+            </Button>
+          </div>
           <div className="grid gap-4 md:grid-cols-3">
             <Card>
               <CardHeader>

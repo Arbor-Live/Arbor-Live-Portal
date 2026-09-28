@@ -1,23 +1,14 @@
-import {
-  Card,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { EventsMainPageClient } from "@/components/events/events-main-page-client";
 import { ArborOnlyGuard } from "@/components/org-context-guard";
+import { PageHeader } from "@/components/page-header";
 
 export default function EventsPage() {
   return (
     <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>Events</CardTitle>
-          <CardDescription>
-            Track your event calendar and monitor upcoming event states in one place.
-          </CardDescription>
-        </CardHeader>
-      </Card>
+      <PageHeader
+        title="Events"
+        description="Track your event calendar and monitor upcoming event states in one place."
+      />
       <ArborOnlyGuard>
         <EventsMainPageClient />
       </ArborOnlyGuard>

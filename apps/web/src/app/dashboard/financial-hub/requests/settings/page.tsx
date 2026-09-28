@@ -1,23 +1,15 @@
-import {
-  Card,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { BookingRequestSettingsClient } from "@/components/events/booking-request-settings-client";
 import { ArborOnlyGuard } from "@/components/org-context-guard";
+import { PageHeader } from "@/components/page-header";
 
 export default function BookingRequestSettingsPage() {
   return (
     <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>Booking request settings</CardTitle>
-          <CardDescription>
-            Configure who receives new booking requests in round-robin order.
-          </CardDescription>
-        </CardHeader>
-      </Card>
+      <PageHeader
+        back={{ href: "/dashboard/financial-hub/requests", label: "Booking Requests" }}
+        title="Booking request settings"
+        description="Configure who receives new booking requests in round-robin order."
+      />
       <ArborOnlyGuard>
         <BookingRequestSettingsClient />
       </ArborOnlyGuard>
