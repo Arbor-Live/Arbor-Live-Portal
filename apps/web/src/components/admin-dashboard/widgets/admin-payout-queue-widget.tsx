@@ -44,10 +44,9 @@ export function AdminPayoutQueueWidget() {
           <>
             <div className="grid gap-2 sm:grid-cols-2">
               <QueueStat label="Upcoming" value={counts.upcoming} />
-              <QueueStat label="Pending onboarding" value={counts.needs_onboarding} />
-              <QueueStat label="Needs payee" value={counts.needs_payee} />
-              <QueueStat label="Needs signature request" value={counts.needs_email} />
-              <QueueStat label="Awaiting signature" value={counts.awaiting_reply} />
+              <QueueStat label="Waiting on artist" value={counts.needs_onboarding + counts.needs_payee} />
+              <QueueStat label="Ready to send" value={counts.needs_email} />
+              <QueueStat label="Waiting on signature" value={counts.awaiting_reply} />
               <QueueStat label="Ready to pay" value={counts.ready_to_pay} />
             </div>
             <p className="text-xs text-muted-foreground">

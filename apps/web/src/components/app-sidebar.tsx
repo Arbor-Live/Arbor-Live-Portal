@@ -266,6 +266,7 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
   const quoteChangesRequestedCount = navBadges?.quoteChangesRequested
   const pendingEquipmentBorrowRequestsCount = navBadges?.pendingEquipmentBorrowRequests
   const pendingPostEventWorkCount = navBadges?.pendingPostEventWork
+  const artistPayoutActionsCount = navBadges?.artistPayoutActions
 
   const userName = account?.name ?? "Unknown user"
   const userEmail = account?.email ?? "No email"
@@ -312,6 +313,8 @@ export function AppSidebar({ ...props }: ComponentProps<typeof Sidebar>) {
         return pendingBandPaymentActionsCount ?? 0
       case "/dashboard/financial-hub/invoices":
         return quoteChangesRequestedCount ?? 0
+      case "/dashboard/financial-hub/artist-payouts":
+        return artistPayoutActionsCount ?? 0
       default:
         return 0
     }

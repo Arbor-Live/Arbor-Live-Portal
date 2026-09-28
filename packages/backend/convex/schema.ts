@@ -1729,6 +1729,10 @@ export default defineSchema({
       v.union(v.literal("pickup"), v.literal("delivery")),
     ),
     status: bandPaymentStatusValue,
+    /** When `status` last changed (the payouts pipeline shows "age in stage"). */
+    statusChangedAt: v.optional(v.number()),
+    /** When the payout left `draft` (the event ended and it joined the queue). */
+    promotedAt: v.optional(v.number()),
     confirmationToken: v.string(),
     confirmationEmailSentAt: v.optional(v.number()),
     confirmationEmailNotificationId: v.optional(v.id("emailNotifications")),

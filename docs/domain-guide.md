@@ -322,17 +322,33 @@ Event types (drive which workspace tabs and quick-add blocks appear):
   same overview row.
 - Each band org has a designated payee (name/email/mailing address + linked
   user id on `organizationProfiles`).
+- **Artist payouts** (`/dashboard/financial-hub/artist-payouts`) is a pipeline
+  grouped by who acts next (`lib/band-payout-stages.ts`): **Upcoming** (`draft`)
+  → **Waiting on artist** (`pending_onboarding`, `pending_payee`) → **Ready to
+  send** (`pending_email`) → **Waiting on signature** (`awaiting_confirmation`)
+  → **Ready to pay** (`confirmed`) → **Paid**, split into two blocks
+  (`PAYOUT_GROUPS`): **Action needed** (Ready to send, Ready to pay — Arbor's
+  moves) above **No action needed** (Upcoming, Waiting on artist, Waiting on
+  signature, Paid). Each status has one primary
+  action (send reminder, send signature request with a preview, resend, mark
+  paid) or none; the rest sit in the row's `⋯` menu and the side panel
+  (`?payout=<id>` deep link, activity timeline, link to the act in the Lineup
+  via `?position=` / `?act=<organizationId>`). Ready-to-send and ready-to-pay
+  rows can be selected for batch send (`sendConfirmationEmailBatch`) or batch
+  mark paid (`markPaidBatch`, one transfer number for all or one per row; all
+  or nothing). "Age in stage" reads `statusChangedAt` / `promotedAt`, stamped on
+  every status change (`bandPaymentStatusStamp`), falling back to milestones
+  for older payouts. **Remove payout** cancels with the Lineup's confirm.
 - After an event ends, payments enter the payout queue. Until then they stay
-  **Upcoming** (internal status `draft`) and appear under **Upcoming payouts**
-  in Financial Hub. If the artist has not finished (or waived) org onboarding,
+  **Upcoming** (internal status `draft`). If the artist has not finished (or waived) org onboarding,
   the payment lands in **Pending onboarding**; once onboarded it moves to
   needs-payee or needs-signature request based on payee completeness.
   Completing/waiving artist onboarding refreshes stuck payments immediately.
   **Users → Organizations → Artist Organizations** shows an **Onboarding** chip
   on incomplete orgs (missing steps + send reminder / recheck payouts). Admins
   can **View as artist** to temporarily activate that org (no membership) and
-  see the artist portal; switch back via the sidebar. Payout queue cards for
-  pending-onboarding link there instead of duplicating the checklist.
+  see the artist portal; switch back via the sidebar. The payout side panel for
+  pending-onboarding lists the missing steps and links there.
 - When assigning artists, empty events with invoice artist lines get an
   accept/confirm prompt (plus **Import from invoice** anytime). Payout
   money defaults prefer the invoice artist line (rate, hours, members), then

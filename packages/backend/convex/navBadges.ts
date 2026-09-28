@@ -62,6 +62,8 @@ export const getNavBadges = query({
     quoteChangesRequested: v.number(),
     pendingEquipmentBorrowRequests: v.number(),
     pendingPostEventWork: v.number(),
+    /** Artist payouts waiting on Arbor: ready to send + ready to pay. */
+    artistPayoutActions: v.number(),
   }),
   handler: async (ctx, args) => {
     const user = await requireAuth(ctx);
@@ -93,6 +95,7 @@ export const getNavBadges = query({
       quoteChangesRequested,
       pendingEquipmentBorrowRequests,
       pendingPostEventWork,
+      artistPayoutActions,
     ] = await Promise.all([
       includeArborInternal
         ? countMyPendingAvailability(ctx, getUserId(user), args.now)
@@ -112,6 +115,7 @@ export const getNavBadges = query({
       includeArborInternal && includeMyEventActions
         ? countMyPendingPostEventWork(ctx, getUserId(user), args.now)
         : Promise.resolve(0),
+      includeArborInternal ? countArtistPayoutActions(ctx) : Promise.resolve(0),
     ]);
 
     return {
@@ -125,6 +129,7 @@ export const getNavBadges = query({
       quoteChangesRequested,
       pendingEquipmentBorrowRequests,
       pendingPostEventWork,
+      artistPayoutActions,
     };
   },
 });
@@ -244,6 +249,19 @@ async function countPendingDamageReports(ctx: QueryCtx) {
     .withIndex("by_status", (q) => q.eq("status", "in_progress"))
     .take(BADGE_STATUS_TAKE);
   return open.length + inProgress.length;
+}
+
+/** The payouts page's "Action needed" block: signature requests to send, payouts to pay. */
+async function countArtistPayoutActions(ctx: QueryCtx) {
+  const toSend = await ctx.db
+    .query("eventBandPayments")
+    .withIndex("by_status", (q) => q.eq("status", "pending_email"))
+    .take(BADGE_STATUS_TAKE);
+  const toPay = await ctx.db
+    .query("eventBandPayments")
+    .withIndex("by_status", (q) => q.eq("status", "confirmed"))
+    .take(BADGE_STATUS_TAKE);
+  return toSend.length + toPay.length;
 }
 
 async function countQuoteChangesRequested(ctx: QueryCtx) {

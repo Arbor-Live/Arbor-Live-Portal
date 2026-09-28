@@ -90,11 +90,14 @@ function EventArtistBillPanel({
   const updateParticipationLineup = useMutation(api.eventBands.updateParticipationLineup);
   const cancelPayment = useMutation(api.bandPayments.cancelPayment);
   const { confirm } = useAppDialog();
-  // `?position=<needId>` (from Open Positions) opens that position's side panel.
+  // `?position=<needId>` (from Open Positions) opens that position's side panel;
+  // `?act=<organizationId>` (from Artist payouts) opens the act's row.
   const searchParams = useSearchParams();
   const [selectedKey, setSelectedKey] = useState<string | null>(() => {
     const position = searchParams.get("position");
-    return position ? `slot-${position}` : null;
+    if (position) return `slot-${position}`;
+    const act = searchParams.get("act");
+    return act ? `org-${act}` : null;
   });
   const [addOpen, setAddOpen] = useState(false);
   const [importBusy, setImportBusy] = useState(false);
@@ -218,7 +221,12 @@ function EventArtistBillPanel({
     return { booked, open: rows.length - booked, total, unpaid };
   }, [rows]);
 
-  const selectedRow = rows.find((row) => row.key === selectedKey) ?? null;
+  const selectedRow =
+    rows.find(
+      (row) =>
+        row.key === selectedKey ||
+        (row.performer && selectedKey === `org-${row.performer.organizationId}`),
+    ) ?? null;
 
   async function attempt(action: () => Promise<unknown>, success: string) {
     try {
