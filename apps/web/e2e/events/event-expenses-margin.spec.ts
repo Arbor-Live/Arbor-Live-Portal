@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { runConvex } from "../helpers/convex";
+import { invoiceEditorHeading } from "../helpers/invoice";
 
 /**
  * Linked-invoice surfaces that regressed when overview invoice list queries
@@ -33,10 +34,12 @@ test.describe("linked invoice margin and crew rate copy", () => {
     }) as { invoiceId: string };
 
     await page.goto(`/dashboard/financial-hub/invoices/${seeded.invoiceId}`);
-    await expect(page.getByRole("heading", { name: "Edit Invoice" })).toBeVisible({
+    await expect(invoiceEditorHeading(page)).toBeVisible({
       timeout: 60_000,
     });
 
+    // The run of show sits collapsed under the Crew line group.
+    await page.getByTestId("invoice-crew-schedule-toggle").click();
     const blurb = page.getByTestId("invoice-linked-crew-blurb");
     await expect(blurb).toBeVisible({ timeout: 45_000 });
     const text = (await blurb.innerText()).replace(/\s+/g, " ");

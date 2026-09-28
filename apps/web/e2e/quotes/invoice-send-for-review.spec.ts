@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import { pollConvex, runConvex } from "../helpers/convex";
 import { waitForSentEmail } from "../helpers/email";
 import { e2eEnv } from "../helpers/env";
+import { invoiceEditorHeading } from "../helpers/invoice";
 
 type ReviewState = {
   status: string;
@@ -56,7 +57,7 @@ test.describe("invoice send for client review", () => {
     const secondMessage = `E2E second send ${stamp}`;
 
     await page.goto(seeded.editorPath);
-    await expect(page.getByRole("heading", { name: "Edit Invoice" })).toBeVisible({
+    await expect(invoiceEditorHeading(page)).toBeVisible({
       timeout: 25_000,
     });
 
@@ -168,7 +169,7 @@ test.describe("invoice send for client review", () => {
     const resendMessage = `E2E resend after changes ${stamp}`;
 
     await page.goto(seeded.editorPath);
-    await expect(page.getByRole("heading", { name: "Edit Invoice" })).toBeVisible({
+    await expect(invoiceEditorHeading(page)).toBeVisible({
       timeout: 25_000,
     });
 

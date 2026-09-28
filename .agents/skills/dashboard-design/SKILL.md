@@ -268,7 +268,12 @@ labels (`TAB_ICONS` in `event-workspace-nav.tsx`, `MOMENT_ICONS` in
 | Artist / act | `MicrophoneStageIcon` (Lineup tab, sets); `GuitarIcon` is the Artists *nav* item only |
 | Soundcheck · doors · changeover | `SpeakerHighIcon` · `DoorOpenIcon` · `ArrowsLeftRightIcon` |
 | Equipment | `PackageIcon` |
-| Billing / quote / invoice | `ReceiptIcon`; money totals `CurrencyDollarIcon` |
+| External rental (pass-through gear) | `TruckIcon` |
+| Billing / quote / invoice | `ReceiptIcon`; money totals and fees `CurrencyDollarIcon` |
+| Due date | `CalendarCheckIcon` (meta line) |
+| Extra hours / durations | `ClockIcon` |
+| Terms / notes | `NotePencilIcon` |
+| Settings behind a page (pricing modes, rates) | `SlidersHorizontalIcon` |
 | Promo / marketing | `MegaphoneIcon` |
 | Overview | `SquaresFourIcon` |
 | Event type | the `EVENT_TYPE_ICONS` map in `components/events/workspace/event-draft.ts` (don't hand-pick per page) |

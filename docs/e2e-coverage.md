@@ -473,7 +473,7 @@ asserts sibling occurrences were not modified.
 `events/event-edit-dry-hire.spec.ts` ("quick-add delivery/return") and
 `quotes/invoice-finalize.spec.ts` each failed once in a 104-test local run and
 passed on a targeted re-run. Both die waiting for an element that a click should
-have produced instantly — `Add artist row` only appends to local state — so the
+have produced instantly — the editor's Add line → Artist only appends to local state — so the
 click landed before hydration. That is the dev-mode race
 [`scripts/e2e-run.mjs`](../scripts/e2e-run.mjs) documents when it explains why CI
 builds for production; CI's `retries: 2` absorbs it. Worth hardening if either
