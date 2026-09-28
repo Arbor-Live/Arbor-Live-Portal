@@ -542,6 +542,7 @@ function EventArtistBillPanel({
         }}
         eventId={eventId}
         eventStartAt={eventDetail?.event.startAt}
+        eventEndAt={eventDetail?.event.endAt}
         canEdit={canEdit}
         rider={selectedRow?.performer ? riderByOrg.get(selectedRow.performer.organizationId) : undefined}
         excludedOrganizationIds={performers.map((row) => row.organizationId)}

@@ -44,9 +44,9 @@ import {
   rowSetWindow,
   rowSoundcheckWindow,
 } from "@/components/events/lineup/lineup-model";
-import { formatUsd } from "@/lib/format";
-import { DateTimeRangePicker } from "@/components/ui/date-time-picker";
-import { localDateTimeInputToMs, toLocalDateTimeInput } from "@/lib/crew-availability";
+import { dayKeyForStart, eventDayKeys, timeWindowToMs } from "@/lib/performance-times";
+import { formatDate, formatUsd, pacificDateAndTimeToMs, toPacificDateTimeInput } from "@/lib/format";
+
 import { getEventEditorTabPath } from "@/lib/event-editor-tabs";
 import { cn } from "@/lib/utils";
 
@@ -76,6 +76,7 @@ export function PositionSheet({
   invoiceDefaultsReady,
   handlers,
   eventStartAt,
+  eventEndAt,
 }: {
   row: BillRow | null;
   onOpenChange: (open: boolean) => void;
@@ -86,8 +87,9 @@ export function PositionSheet({
   invoiceLine: InvoiceArtistSuggestion | null;
   invoiceDefaultsReady: boolean;
   handlers: PositionSheetHandlers;
-  /** Opens the time pickers on the event's day. */
+  /** The event's window: performance times are entered as times on its day(s). */
   eventStartAt?: number;
+  eventEndAt?: number;
 }) {
   return (
     <Sheet open={row !== null} onOpenChange={onOpenChange}>
@@ -105,6 +107,7 @@ export function PositionSheet({
             invoiceDefaultsReady={invoiceDefaultsReady}
             handlers={handlers}
             eventStartAt={eventStartAt}
+            eventEndAt={eventEndAt}
             onClose={() => onOpenChange(false)}
           />
         ) : null}
@@ -132,6 +135,7 @@ function PositionSheetBody({
   invoiceDefaultsReady,
   handlers,
   eventStartAt,
+  eventEndAt,
   onClose,
 }: {
   row: BillRow;
@@ -143,6 +147,7 @@ function PositionSheetBody({
   invoiceDefaultsReady: boolean;
   handlers: PositionSheetHandlers;
   eventStartAt?: number;
+  eventEndAt?: number;
   onClose: () => void;
 }) {
   const { slot, performer } = row;
@@ -251,6 +256,7 @@ function PositionSheetBody({
             set={rowSetWindow(row)}
             soundcheck={rowSoundcheckWindow(row)}
             eventStartAt={eventStartAt}
+            eventEndAt={eventEndAt}
             busy={busy}
             onSave={(times) => run(() => handlers.saveTimes(row, times))}
           />
@@ -556,6 +562,7 @@ function PerformanceTimes({
   set,
   soundcheck,
   eventStartAt,
+  eventEndAt,
   busy,
   onSave,
 }: {
@@ -563,23 +570,27 @@ function PerformanceTimes({
   set: Window;
   soundcheck: Window;
   eventStartAt?: number;
+  eventEndAt?: number;
   busy: boolean;
   onSave: (times: ActTimesPatch) => void;
 }) {
-  const openTo = eventStartAt != null ? toLocalDateTimeInput(eventStartAt) : undefined;
+  // Times only: the date comes from the event (a day picker appears on multi-day events).
+  const dayKeys = eventStartAt != null ? eventDayKeys(eventStartAt, eventEndAt) : [];
   return (
     <div className="space-y-3">
       <TimeWindowField
         label="Set"
         value={set}
-        openTo={openTo}
+        dayKeys={dayKeys}
+        eventStartAt={eventStartAt}
         busy={busy}
         onChange={([setStartsAt, setEndsAt]) => onSave({ setStartsAt, setEndsAt })}
       />
       <TimeWindowField
         label="Soundcheck"
         value={soundcheck}
-        openTo={openTo}
+        dayKeys={dayKeys}
+        eventStartAt={eventStartAt}
         busy={busy}
         onChange={([soundcheckStartsAt, soundcheckEndsAt]) =>
           onSave({ soundcheckStartsAt, soundcheckEndsAt })
@@ -595,58 +606,100 @@ function PerformanceTimes({
   );
 }
 
+function timeOf(ms: number | null) {
+  return ms != null ? toPacificDateTimeInput(ms).slice(11, 16) : "";
+}
+
+function dayLabel(dayKey: string, index: number) {
+  const date = pacificDateAndTimeToMs(dayKey, "12:00");
+  return `Day ${index + 1}${date != null ? ` · ${formatDate(date)}` : ""}`;
+}
+
 function TimeWindowField({
   label,
   value,
-  openTo,
+  dayKeys,
+  eventStartAt,
   busy,
   onChange,
 }: {
   label: string;
   value: Window;
-  openTo?: string;
+  dayKeys: string[];
+  eventStartAt?: number;
   busy: boolean;
   onChange: (next: Window) => void;
 }) {
   const [start, end] = value;
-  // A draft while editing: picking the start before the end would otherwise be
-  // thrown away (nothing saves until both ends are set and in order).
+  // A draft while typing: nothing saves until both times are filled in.
   const [draft, setDraft] = useState({
-    start: start != null ? toLocalDateTimeInput(start) : "",
-    end: end != null ? toLocalDateTimeInput(end) : "",
+    day: start != null ? dayKeyForStart(start, dayKeys) : (dayKeys[0] ?? ""),
+    start: timeOf(start),
+    end: timeOf(end),
   });
+  const fieldId = `times-${label.toLowerCase()}`;
+
+  // Saves when a field loses focus (or the day changes), not per keystroke:
+  // a save re-renders the section and would otherwise steal focus mid-typing.
+  function commit(next: typeof draft) {
+    if (!next.day || !next.start || !next.end) return;
+    const window = timeWindowToMs(next.day, next.start, next.end, eventStartAt);
+    if (!window || (window[0] === start && window[1] === end)) return;
+    onChange(window);
+  }
+
   return (
-    <div className="grid grid-cols-[6rem_1fr_auto] items-center gap-2">
-      <span className="text-sm text-muted-foreground">{label}</span>
-      <DateTimeRangePicker
-        startValue={draft.start}
-        endValue={draft.end}
-        openToDate={openTo}
-        placeholder="Not set"
-        onChange={(next) => {
-          setDraft(next);
-          const startMs = localDateTimeInputToMs(next.start);
-          const endMs = localDateTimeInputToMs(next.end);
-          // Save once both ends are picked and in order.
-          if (startMs == null || endMs == null || endMs <= startMs) return;
-          if (startMs === start && endMs === end) return;
-          onChange([startMs, endMs]);
-        }}
-      />
-      {start != null ? (
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          disabled={busy}
-          aria-label={`Clear ${label.toLowerCase()} time`}
-          onClick={() => onChange([null, null])}
-        >
-          Clear
-        </Button>
-      ) : (
-        <span />
-      )}
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <Label htmlFor={`${fieldId}-start`}>{label}</Label>
+        {start != null ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={busy}
+            aria-label={`Clear ${label.toLowerCase()} time`}
+            onClick={() => onChange([null, null])}
+          >
+            Clear
+          </Button>
+        ) : null}
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        {dayKeys.length > 1 ? (
+          <SearchableSelect
+            value={draft.day}
+            onChange={(day) => {
+              const next = { ...draft, day };
+              setDraft(next);
+              commit(next);
+            }}
+            options={dayKeys.map((key, index) => ({ value: key, label: dayLabel(key, index) }))}
+            placeholder="Day"
+            emptyLabel="Day"
+          />
+        ) : null}
+        <Input
+          id={`${fieldId}-start`}
+          type="time"
+          step={300}
+          className="w-32"
+          aria-label={`${label} start`}
+          value={draft.start}
+          onChange={(event) => setDraft({ ...draft, start: event.target.value })}
+          onBlur={() => commit(draft)}
+        />
+        <span className="text-muted-foreground">–</span>
+        <Input
+          type="time"
+          step={300}
+          className="w-32"
+          aria-label={`${label} end`}
+          value={draft.end}
+          onChange={(event) => setDraft({ ...draft, end: event.target.value })}
+          onBlur={() => commit(draft)}
+        />
+      </div>
     </div>
   );
 }
