@@ -300,6 +300,11 @@ export async function approveInvoiceQuote(
   const fromStatus = invoice.clientApprovalStatus ?? "pending";
   const { version: termsVersion } = await loadInvoiceTerms(ctx, invoice);
   await ctx.db.patch(invoice._id, {
+    // A client can approve a standalone quote straight from its public link while
+    // it is still `draft` (unlike request-portal quotes, which are finalized when
+    // sent). Finalize on approval so it is not left as a draft in the list,
+    // payment queue, and revenue analytics.
+    status: "finalized",
     clientApprovalStatus: "approved",
     approvedAt: now,
     clientApprovalSignedName: signedName,
