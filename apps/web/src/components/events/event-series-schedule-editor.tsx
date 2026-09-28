@@ -10,22 +10,19 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
 import { useConvexForm } from "@/hooks/use-convex-form";
-import {
-  EventTimelineScheduler,
-  type TimelineBlockDraft,
-} from "@/components/events/event-timeline-scheduler";
+import type { TimelineBlockDraft } from "@/components/events/event-timeline-scheduler";
+import { RunOfShowEditor } from "@/components/events/workspace/run-of-show/run-of-show-editor";
 import {
   SERIES_EDIT_SCOPE_LABELS,
   type SeriesEditScope,
 } from "@/lib/event-series";
 import {
   buildSeriesQuickAddBlocks,
-  seriesDayCount,
   templatesToTimelineDrafts,
   timelineDraftsToTemplates,
   type SeriesBlockTemplate,
 } from "@/lib/event-series-schedule";
-import { toLocalDateTimeInput } from "@/lib/crew-availability";
+import type { RunOfShowAct } from "@/lib/run-of-show";
 import { formatOccurrencePreview } from "@/lib/event-series";
 import { notify } from "@/lib/notify";
 import {
@@ -61,6 +58,10 @@ function normalizeFulfillment(value: SeriesScheduleEditorProps["rentalFulfillmen
   if (value === "will_call") return "will_call" as const;
   return "delivery" as const;
 }
+
+const NO_ACTS: RunOfShowAct[] = [];
+const noActName = () => undefined;
+const noSwaps = () => undefined;
 
 function blocksFromTemplates(
   blockTemplates: SeriesBlockTemplate[] | undefined,
@@ -100,7 +101,6 @@ export function EventSeriesScheduleEditor({
 
   const resolvedEventType = normalizeEventType(eventType);
   const resolvedFulfillment = normalizeFulfillment(rentalFulfillmentMode);
-  const dayCount = seriesDayCount(anchorStartAt, anchorEndAt);
   const hideSchedule = resolvedEventType === "Services Only";
 
   const initialBlocks = useMemo(
@@ -263,28 +263,36 @@ export function EventSeriesScheduleEditor({
             </div>
           </Form>
 
-          <EventTimelineScheduler
-            dayCount={dayCount}
+          {/* A series has no lineup: the template holds sections, doors, and
+              changeovers; each occurrence adds its own acts' soundchecks and sets. */}
+          <RunOfShowEditor
             blocks={blocks}
-            anchorStartsAt={toLocalDateTimeInput(anchorStartAt)}
             onChange={(next) => {
               setBlocksOverride(withStableBlockRefs(next));
               setBlocksDirty(true);
             }}
-            quickAddLabel={quickAddLabel}
-            quickAddDisabled={false}
-            onQuickAdd={() => {
-              setBlocksOverride(
-                withStableBlockRefs(
-                  buildSeriesQuickAddBlocks({
-                    eventType: resolvedEventType,
-                    rentalFulfillmentMode: resolvedFulfillment,
-                    anchorStartAt,
-                    anchorEndAt,
-                  }),
-                ),
-              );
-              setBlocksDirty(true);
+            readOnly={false}
+            actsEditable={false}
+            eventStartAt={anchorStartAt}
+            acts={NO_ACTS}
+            actName={noActName}
+            swaps={noSwaps}
+            quickAdd={{
+              label: quickAddLabel,
+              disabled: false,
+              run: () => {
+                setBlocksOverride(
+                  withStableBlockRefs(
+                    buildSeriesQuickAddBlocks({
+                      eventType: resolvedEventType,
+                      rentalFulfillmentMode: resolvedFulfillment,
+                      anchorStartAt,
+                      anchorEndAt,
+                    }),
+                  ),
+                );
+                setBlocksDirty(true);
+              },
             }}
           />
 
