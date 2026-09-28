@@ -2,7 +2,8 @@ name: Typecheck
 
 # The Vercel build skips `next build` type checking (it OOMs on the standard
 # build machine; see apps/web/next.config.ts), so this keeps static analysis as
-# a required gate.
+# the gate. Keep this check required on `main` in branch protection — Vercel
+# deploys on push and won't wait for it on its own.
 on:
   pull_request:
     paths:
@@ -40,6 +41,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
