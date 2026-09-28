@@ -10,7 +10,13 @@ import type { MutationCtx } from "../_generated/server";
 import { syncEventCrewCostUsd } from "./crewCost";
 import { detachInvoiceFromAdditionalLinks } from "./eventInvoiceLinks";
 import { syncEventStatusForLinkedInvoice, type EventStatus } from "./eventStatus";
-import { isActBlock } from "./runOfShow";
+import {
+  planPositionTemplateApplication,
+  positionWindowFromTemplate,
+  type EventSeriesPositionTemplate,
+} from "./eventSeriesPositions";
+import { removePositionRow } from "./positionRows";
+import { isActBlock, syncNeedBlocks } from "./runOfShow";
 import type { ScheduleBlockType } from "./scheduleBlockTypes";
 
 export const EVENT_TIMEZONE = PORTAL_TIMEZONE;
@@ -334,6 +340,83 @@ export async function replaceScheduleBlocksFromTemplates(
   await insertScheduleBlocksFromTemplates(ctx, eventId, occurrenceStartAt, templates, now);
 }
 
+/**
+ * Apply the series position templates to one occurrence: add missing open
+ * template positions, move/refresh the open ones, and drop open template
+ * positions whose template is gone. Filled positions (a seated act or a named
+ * outside act) are never touched.
+ */
+export async function applyPositionTemplates(
+  ctx: MutationCtx,
+  eventId: Id<"events">,
+  occurrenceStartAt: number,
+  templates: readonly EventSeriesPositionTemplate[],
+  now: number,
+): Promise<number> {
+  const [slots, participations] = await Promise.all([
+    ctx.db
+      .query("eventArtistNeeds")
+      .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
+      .take(100),
+    ctx.db
+      .query("eventBandParticipations")
+      .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
+      .take(100),
+  ]);
+  const filledIds = new Set(participations.flatMap((row) => (row.needId ? [row.needId] : [])));
+  const plan = planPositionTemplateApplication(
+    slots.map((slot) => ({
+      _id: slot._id,
+      templateKey: slot.templateKey,
+      filled: filledIds.has(slot._id) || Boolean(slot.externalArtistName?.trim()),
+    })),
+    templates,
+  );
+  const orderByKey = new Map(templates.map((template, index) => [template.templateKey, index]));
+
+  for (const needId of plan.removeIds) {
+    await removePositionRow(ctx, needId);
+  }
+
+  for (const action of plan.actions) {
+    const template = action.template;
+    const window = positionWindowFromTemplate(template, occurrenceStartAt);
+    const fields = {
+      sortOrder: orderByKey.get(template.templateKey) ?? 0,
+      label: template.label.trim() || undefined,
+      artistType: template.artistType,
+      genres: template.genres?.trim() || undefined,
+      ...window,
+    };
+    if (action.kind === "insert") {
+      const needId = await ctx.db.insert("eventArtistNeeds", {
+        eventId,
+        templateKey: template.templateKey,
+        status: "open",
+        ...fields,
+        createdAt: now,
+        updatedAt: now,
+      });
+      await syncNeedBlocks(ctx, needId);
+      continue;
+    }
+    const existing = await ctx.db.get(action.needId);
+    if (!existing) continue;
+    // `replace` (not `patch`) so a template that dropped a set/soundcheck
+    // window actually clears the stored times.
+    const next: Doc<"eventArtistNeeds"> = { ...existing, ...fields, updatedAt: now };
+    delete next.setStartsAt;
+    delete next.setEndsAt;
+    delete next.soundcheckStartsAt;
+    delete next.soundcheckEndsAt;
+    Object.assign(next, window);
+    await ctx.db.replace(action.needId, next);
+    await syncNeedBlocks(ctx, action.needId);
+  }
+
+  return plan.actions.length + plan.removeIds.length;
+}
+
 export async function materializeOccurrence(
   ctx: MutationCtx,
   series: Doc<"eventSeries">,
@@ -399,6 +482,7 @@ export async function materializeOccurrence(
   if (series.shiftTemplates && series.shiftTemplates.length > 0) {
     await syncEventCrewCostUsd(ctx, eventId, now);
   }
+  await applyPositionTemplates(ctx, eventId, startAt, series.positionTemplates ?? [], now);
   if (series.invoiceId) {
     await syncEventStatusForLinkedInvoice(ctx, eventId, series.invoiceId, "tentative");
   }

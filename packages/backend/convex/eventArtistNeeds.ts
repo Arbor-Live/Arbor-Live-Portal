@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
+import { mutation, query, type QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
   findAuthUsersByIds,
@@ -32,12 +32,12 @@ import { SITE_URL } from "./email/constants";
 import { scheduleArtistNeedInquiryEmail } from "./email/artistNeedInquiryEmails";
 import {
   removeParticipationFromEvent,
-  unclaimSlot,
   upsertEventBandParticipation,
 } from "./eventBands";
-import { releaseSlotFromInvoice, syncInvoiceLineForSlot } from "./lib/artistLineSync";
+import { syncInvoiceLineForSlot } from "./lib/artistLineSync";
 import { normalizeEventStatus } from "./lib/eventStatus";
-import { deleteActBlocks, syncNeedBlocks, syncParticipationBlocks } from "./lib/runOfShow";
+import { removePositionRow as removeSlotRow } from "./lib/positionRows";
+import { syncNeedBlocks, syncParticipationBlocks } from "./lib/runOfShow";
 
 const MAX_NEED_CANDIDATES = 60;
 
@@ -320,31 +320,6 @@ export const updateSlotLineup = mutation({
 });
 
 /** Deletes a position with its inquiries and blocks; a seated act is unlinked, not removed. */
-async function removeSlotRow(ctx: MutationCtx, needId: Id<"eventArtistNeeds">) {
-  const slot = await ctx.db.get(needId);
-  if (!slot) return;
-  // Bounded on purpose: a position sees a handful of inquiries, and any
-  // straggler past this is inert once its slot is gone.
-  const inquiries = await ctx.db
-    .query("eventArtistInquiries")
-    .withIndex("by_needId", (q) => q.eq("needId", slot._id))
-    .take(200);
-  for (const inquiry of inquiries) {
-    await ctx.db.delete(inquiry._id);
-  }
-  // Unlink any act that was booked against this slot rather than orphaning it.
-  const filled = await ctx.db
-    .query("eventBandParticipations")
-    .withIndex("by_needId", (q) => q.eq("needId", slot._id))
-    .take(100);
-  for (const row of filled) {
-    await unclaimSlot(ctx, row._id);
-  }
-  await releaseSlotFromInvoice(ctx, slot._id);
-  await ctx.db.delete(slot._id);
-  await deleteActBlocks(ctx, { needId: slot._id });
-}
-
 export const removeSlot = mutation({
   args: { needId: v.id("eventArtistNeeds") },
   handler: async (ctx, args) => {
