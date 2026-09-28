@@ -87,10 +87,21 @@ function sectionFor(moment: BriefBlockRow, sections: BriefBlockRow[]) {
   return best;
 }
 
-/** The sets either side of a changeover on the same day, allowing small gaps. */
+/** A changeover pairs with sets this close to it, so two different nights never pair. */
+const CHANGEOVER_REACH = 3 * 60 * MINUTE;
+
+/**
+ * The sets either side of a changeover, allowing small gaps. Bounded by time
+ * rather than dayIndex: a set after midnight is on the next calendar day but the
+ * same night (11 PM set → 12:15 AM changeover → 12:30 AM set).
+ */
 function changeoverActs(changeover: BriefBlockRow, allSets: BriefBlockRow[]) {
   const slack = 5 * MINUTE;
-  const sets = allSets.filter((set) => set.dayIndex === changeover.dayIndex);
+  const sets = allSets.filter(
+    (set) =>
+      set.endsAt >= changeover.startsAt - CHANGEOVER_REACH &&
+      set.startsAt <= changeover.endsAt + CHANGEOVER_REACH,
+  );
   const before = sets
     .filter((set) => set.endsAt <= changeover.startsAt + slack)
     .sort((a, b) => b.endsAt - a.endsAt)[0];

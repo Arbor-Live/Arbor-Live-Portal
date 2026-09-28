@@ -19,7 +19,7 @@ import { scheduleArtistNeedInquiryEmail } from "./email/artistNeedInquiryEmails"
 import { removeParticipationFromEvent, unclaimSlot } from "./eventBands";
 import { releaseSlotFromInvoice, syncInvoiceLineForSlot } from "./lib/artistLineSync";
 import { normalizeEventStatus } from "./lib/eventStatus";
-import { deleteActBlocks, syncNeedBlocks } from "./lib/runOfShow";
+import { deleteActBlocks, syncNeedBlocks, syncParticipationBlocks } from "./lib/runOfShow";
 
 const MAX_NEED_CANDIDATES = 60;
 
@@ -272,24 +272,29 @@ export const updateSlotLineup = mutation({
       throw new Error("Soundcheck end time must be after the start time.");
     }
     const name = args.externalArtistName?.trim() || undefined;
-    if (name && (await findActForSlot(ctx, slot._id))) {
+    const act = await findActForSlot(ctx, slot._id);
+    if (name && act) {
       throw new Error("This position is filled by an artist already on the bill.");
     }
+    const timeFields = ["setStartsAt", "setEndsAt", "soundcheckStartsAt", "soundcheckEndsAt"] as const;
     const next: Doc<"eventArtistNeeds"> = { ...slot, updatedAt: Date.now() };
     if (name) next.externalArtistName = name;
     else delete next.externalArtistName;
-    for (const field of [
-      "setStartsAt",
-      "setEndsAt",
-      "soundcheckStartsAt",
-      "soundcheckEndsAt",
-    ] as const) {
+    // A platform act filling the position owns the times (the Lineup, the Run
+    // of Show and public pages read the act's), so write them there instead.
+    const actTimes: Partial<Record<(typeof timeFields)[number], number | undefined>> = {};
+    for (const field of timeFields) {
       const value = args[field];
       if (value === undefined) continue;
-      if (value === null) delete next[field];
+      if (act) actTimes[field] = value ?? undefined;
+      else if (value === null) delete next[field];
       else next[field] = value;
     }
     await ctx.db.replace(slot._id, next);
+    if (act && Object.keys(actTimes).length > 0) {
+      await ctx.db.patch(act._id, { ...actTimes, updatedAt: next.updatedAt });
+      await syncParticipationBlocks(ctx, act._id);
+    }
     await syncNeedBlocks(ctx, slot._id);
     await syncInvoiceLineForSlot(ctx, slot._id, next.updatedAt);
     return null;
@@ -509,6 +514,117 @@ export const listOpenNeedsForArtist = query({
     }
 
     return out.sort((a, b) => a.startAt - b.startAt);
+  },
+});
+
+/** How far ahead the logistics view looks, and how many events it scans. */
+const OPEN_POSITIONS_HORIZON_MS = 180 * 24 * 60 * 60 * 1000;
+const MAX_OPEN_POSITION_EVENTS = 150;
+const MAX_POSITIONS_PER_EVENT = 100;
+const MAX_ACTS_PER_EVENT = 50;
+const MAX_INQUIRIES_PER_EVENT = 300;
+
+const openPositionValue = v.object({
+  needId: v.id("eventArtistNeeds"),
+  label: v.string(),
+  artistType: artistNeedTypeValue,
+  genres: v.string(),
+  status: artistNeedStatusValue,
+  inquiryCount: v.number(),
+  setStartsAt: v.optional(v.number()),
+  setEndsAt: v.optional(v.number()),
+});
+
+/**
+ * Logistics: upcoming events (next 180 days, not cancelled) with positions no
+ * act fills yet, soonest first, and how full each bill is.
+ */
+export const listOpenPositions = query({
+  args: {},
+  returns: v.object({
+    events: v.array(
+      v.object({
+        eventId: v.id("events"),
+        title: v.string(),
+        startAt: v.number(),
+        endAt: v.number(),
+        venueName: v.string(),
+        status: v.string(),
+        totalPositions: v.number(),
+        openPositions: v.array(openPositionValue),
+      }),
+    ),
+    /** A scan limit was hit, so the list may be missing positions. */
+    truncated: v.boolean(),
+  }),
+  handler: async (ctx) => {
+    await requireArborInternalContext(ctx);
+    // A little slack so tonight's show still shows while it's on.
+    const now = Date.now() - 6 * 60 * 60 * 1000;
+    const events = await ctx.db
+      .query("events")
+      .withIndex("by_startAt", (q) => q.gte("startAt", now).lte("startAt", now + OPEN_POSITIONS_HORIZON_MS))
+      .take(MAX_OPEN_POSITION_EVENTS);
+    let truncated = events.length === MAX_OPEN_POSITION_EVENTS;
+
+    const out = [];
+    for (const event of events) {
+      const status = normalizeEventStatus(event.status);
+      if (status === "cancelled") continue;
+      const positions = await ctx.db
+        .query("eventArtistNeeds")
+        .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
+        .take(MAX_POSITIONS_PER_EVENT);
+      if (positions.length === 0) continue;
+      const acts = await ctx.db
+        .query("eventBandParticipations")
+        .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
+        .take(MAX_ACTS_PER_EVENT);
+      if (positions.length === MAX_POSITIONS_PER_EVENT || acts.length === MAX_ACTS_PER_EVENT) {
+        truncated = true;
+      }
+      const filled = new Set(acts.flatMap((act) => (act.needId ? [act.needId] : [])));
+      const open = positions
+        .filter((position) => !slotIsBooked(position, filled))
+        .sort(
+          (a, b) =>
+            (a.setStartsAt ?? Number.POSITIVE_INFINITY) - (b.setStartsAt ?? Number.POSITIVE_INFINITY) ||
+            (a.sortOrder ?? 0) - (b.sortOrder ?? 0),
+        );
+      if (open.length === 0) continue;
+      // One read per event (not per position) for inquiry counts.
+      const inquiries = await ctx.db
+        .query("eventArtistInquiries")
+        .withIndex("by_eventId", (q) => q.eq("eventId", event._id))
+        .take(MAX_INQUIRIES_PER_EVENT);
+      if (inquiries.length === MAX_INQUIRIES_PER_EVENT) truncated = true;
+      const inquiryCount = new Map<Id<"eventArtistNeeds">, number>();
+      for (const inquiry of inquiries) {
+        if (inquiry.status !== "submitted") continue;
+        inquiryCount.set(inquiry.needId, (inquiryCount.get(inquiry.needId) ?? 0) + 1);
+      }
+      const openPositions = open.map((position) => ({
+        needId: position._id,
+        label: position.label?.trim() ?? "",
+        artistType: position.artistType,
+        genres: position.genres ?? "",
+        status: position.status,
+        inquiryCount: inquiryCount.get(position._id) ?? 0,
+        setStartsAt: position.setStartsAt,
+        setEndsAt: position.setEndsAt,
+      }));
+      out.push({
+        eventId: event._id,
+        title: event.title,
+        startAt: event.startAt,
+        endAt: event.endAt,
+        venueName: event.venueName ?? "",
+        status,
+        totalPositions: positions.length,
+        openPositions,
+      });
+    }
+    return { events: out, truncated };
   },
 });
 

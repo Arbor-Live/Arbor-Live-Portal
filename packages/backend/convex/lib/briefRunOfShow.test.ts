@@ -139,4 +139,17 @@ describe("buildBriefRunOfShow", () => {
       ["Assigned", false],
     ]);
   });
+
+  it("pairs a changeover across midnight on the same night", () => {
+    const late = block("set", "Larks set", "22:00", "23:59", { needId: "larks" });
+    // 12:05–12:30 AM and 12:30–1:30 AM: next calendar day, so dayIndex 1.
+    const changeover = block("changeover", "Changeover", "00:05", "00:30", { dayIndex: 1 });
+    const afterMidnight = block("set", "Night Owls set", "00:30", "01:30", {
+      participationId: "owls",
+      dayIndex: 1,
+    });
+    const result = buildBriefRunOfShow([late, changeover, afterMidnight], [], options);
+    const moments = result.runOfShow.flatMap((day) => day.entries.flatMap((entry) => entry.moments));
+    expect(moments.find((m) => m.typeLabel === "Changeover")!.swaps).toEqual(["A.1 Sax → Gtr"]);
+  });
 });

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
 import {
   CaretRightIcon,
@@ -86,8 +87,15 @@ function EventArtistBillPanel({
   const removeFromBill = useMutation(api.eventArtistNeeds.removeFromBill);
   const dismissInquiry = useMutation(api.eventArtistNeeds.dismissInquiry);
   const updateSlotLineup = useMutation(api.eventArtistNeeds.updateSlotLineup);
+  const updateParticipationLineup = useMutation(api.eventBands.updateParticipationLineup);
+  const cancelPayment = useMutation(api.bandPayments.cancelPayment);
   const { confirm } = useAppDialog();
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  // `?position=<needId>` (from Open Positions) opens that position's side panel.
+  const searchParams = useSearchParams();
+  const [selectedKey, setSelectedKey] = useState<string | null>(() => {
+    const position = searchParams.get("position");
+    return position ? `slot-${position}` : null;
+  });
   const [addOpen, setAddOpen] = useState(false);
   const [importBusy, setImportBusy] = useState(false);
   const [dismissedInvoicePrompt, setDismissedInvoicePrompt] = useState(false);
@@ -284,6 +292,36 @@ function EventArtistBillPanel({
       );
       if (removed) setSelectedKey(null);
       return removed;
+    },
+    saveTimes: (row, times) =>
+      attempt(
+        () =>
+          row.performer
+            ? updateParticipationLineup({
+                participationId: row.performer.participationId,
+                // Keep the act in its position; null here would unseat it.
+                needId: row.slot?.needId ?? null,
+                ...times,
+              })
+            : updateSlotLineup({
+                needId: row.slot!.needId,
+                externalArtistName: row.slot!.externalArtistName.trim() || null,
+                ...times,
+              }),
+        "Times saved.",
+      ),
+    removePayout: async (performer) => {
+      const payment = performer.payment;
+      if (!payment) return false;
+      const ok = await confirm({
+        title: `Remove ${performer.bandName}'s payout?`,
+        description:
+          "Use this when Arbor isn't paying this act (for example, someone else pays them directly). The act stays on the bill, and you can add a payout again later.",
+        destructive: true,
+        confirmLabel: "Remove payout",
+      });
+      if (!ok) return false;
+      return attempt(() => cancelPayment({ paymentId: payment._id }), "Payout removed.");
     },
     dismissInquiry: (inquiryId) => attempt(() => dismissInquiry({ inquiryId }), "Inquiry dismissed."),
   };
@@ -503,6 +541,8 @@ function EventArtistBillPanel({
           if (!open) setSelectedKey(null);
         }}
         eventId={eventId}
+        eventStartAt={eventDetail?.event.startAt}
+        eventEndAt={eventDetail?.event.endAt}
         canEdit={canEdit}
         rider={selectedRow?.performer ? riderByOrg.get(selectedRow.performer.organizationId) : undefined}
         excludedOrganizationIds={performers.map((row) => row.organizationId)}

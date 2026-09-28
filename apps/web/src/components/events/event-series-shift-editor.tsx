@@ -12,13 +12,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/inventory/searchable-select";
 import { useConvexForm } from "@/hooks/use-convex-form";
-import {
-  EventTimelineScheduler,
-  type TimelineBlockDraft,
-} from "@/components/events/event-timeline-scheduler";
+import type { TimelineBlockDraft } from "@/components/events/event-timeline-scheduler";
+import { RunOfShowEditor } from "@/components/events/workspace/run-of-show/run-of-show-editor";
+import type { RunOfShowAct } from "@/lib/run-of-show";
+import { isSectionBlockType } from "@/lib/schedule-block-types";
 import { SERIES_EDIT_SCOPE_LABELS, type SeriesEditScope } from "@/lib/event-series";
 import {
-  seriesDayCount,
   templatesToTimelineDrafts,
   type SeriesBlockTemplate,
 } from "@/lib/event-series-schedule";
@@ -38,7 +37,6 @@ import {
   type SeriesShiftEditorFormValues,
 } from "@/lib/validations/event";
 import { formatOccurrencePreview } from "@/lib/event-series";
-import { toLocalDateTimeInput } from "@/lib/crew-availability";
 import { averageCrewHourlyRateUsd } from "@/lib/crew-rates";
 import { formatUsd } from "@/lib/format";
 import { notify } from "@/lib/notify";
@@ -72,6 +70,10 @@ function normalizeEventType(value: string | undefined) {
   return "Crewed Event" as const;
 }
 
+const NO_ACTS: RunOfShowAct[] = [];
+const noActName = () => undefined;
+const noSwaps = () => undefined;
+
 function blocksFromTemplates(
   blockTemplates: SeriesBlockTemplate[] | undefined,
   anchorStartAt: number,
@@ -85,7 +87,6 @@ function blocksFromTemplates(
 export function EventSeriesShiftEditor({
   seriesId,
   anchorStartAt,
-  anchorEndAt,
   eventType,
   blockTemplates,
   shiftTemplates,
@@ -114,7 +115,6 @@ export function EventSeriesShiftEditor({
   });
 
   const resolvedEventType = normalizeEventType(eventType);
-  const dayCount = seriesDayCount(anchorStartAt, anchorEndAt);
   const hideSchedule = resolvedEventType === "Services Only";
   const defaultHourlyRateUsd = averageCrewHourlyRateUsd({
     normalRateUsd: invoiceSettings?.crewNormalRateUsd,
@@ -149,6 +149,13 @@ export function EventSeriesShiftEditor({
     setShiftsDirty(false);
   }
   const shifts = shiftsOverride ?? initialShifts;
+
+  // Crew work sections; a block that already has shifts stays listed so none are hidden.
+  const crewBlockOptions = blockOptions.filter(
+    (block) =>
+      isSectionBlockType(block.blockType) ||
+      shifts.some((shift) => shift.blockTemplateIndex === block.index),
+  );
 
   useEffect(() => {
     if (form.formState.isDirty) return;
@@ -356,19 +363,27 @@ export function EventSeriesShiftEditor({
                   Edit blocks in the series schedule template. Crew shifts below attach to each block.
                 </p>
               </div>
-              <EventTimelineScheduler
-                dayCount={dayCount}
+              <RunOfShowEditor
                 blocks={timelineBlocks}
-                anchorStartsAt={toLocalDateTimeInput(anchorStartAt)}
                 onChange={() => {}}
-                onQuickAdd={() => {}}
-                quickAddLabel=""
                 readOnly
+                actsEditable={false}
+                eventStartAt={anchorStartAt}
+                acts={NO_ACTS}
+                actName={noActName}
+                swaps={noSwaps}
+                crewFor={(block) => {
+                  // Template shifts are empty slots, filled per occurrence.
+                  const index = timelineBlocks.indexOf(block);
+                  const total = shifts.filter((shift) => shift.blockTemplateIndex === index).length;
+                  return { total, filled: 0 };
+                }}
+                quickAdd={{ label: "", disabled: true, run: () => {} }}
               />
 
               <div className="space-y-2 rounded-md border p-3">
                 <p className="text-sm font-medium">Empty shifts by block</p>
-                {blockOptions.map((block) => {
+                {crewBlockOptions.map((block) => {
                   const blockShifts = shifts.filter((shift) => shift.blockTemplateIndex === block.index);
                   return (
                     <div key={block.index} className="space-y-2 rounded-md border p-2">

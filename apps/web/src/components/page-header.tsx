@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
  *   back link ·························· actions [⋯]
  *   [status pills]
  *   Title
+ *   description
  *   meta · meta · meta
  *   {children, e.g. a day switcher}
  */
@@ -49,6 +50,7 @@ export function PageHeader({
   menuLabel = "More actions",
   pills,
   title,
+  description,
   meta,
   children,
   className,
@@ -63,6 +65,8 @@ export function PageHeader({
   pills?: React.ReactNode;
   /** A string renders the `h1`; pass a node for an editable title. */
   title: React.ReactNode;
+  /** One or two plain sentences under the title: what the page is for. */
+  description?: React.ReactNode;
   /** `MetaItem`s. */
   meta?: React.ReactNode;
   /** Anything under the meta line (day switcher, read-only notice). */
@@ -107,6 +111,7 @@ export function PageHeader({
       <div className="space-y-2">
         {pills ? <div className="flex flex-wrap items-center gap-2">{pills}</div> : null}
         {typeof title === "string" ? <PageTitle>{title}</PageTitle> : title}
+        {description ? <p className="max-w-3xl text-sm text-muted-foreground">{description}</p> : null}
         {meta ? <PageMeta>{meta}</PageMeta> : null}
       </div>
 

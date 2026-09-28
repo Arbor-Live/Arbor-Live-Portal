@@ -80,6 +80,21 @@ export function rowSetWindow(row: BillRow): [number | null, number | null] {
   return [null, null];
 }
 
+/** Soundcheck window: the act's own, or the position's when no platform act fills it. */
+export function rowSoundcheckWindow(row: BillRow): [number | null, number | null] {
+  if (row.performer) return [row.performer.soundcheckStartsAt, row.performer.soundcheckEndsAt];
+  if (row.slot) return [row.slot.soundcheckStartsAt, row.slot.soundcheckEndsAt];
+  return [null, null];
+}
+
+/** Times saved from the side panel; a field left out keeps its current value. */
+export type ActTimesPatch = {
+  setStartsAt?: number | null;
+  setEndsAt?: number | null;
+  soundcheckStartsAt?: number | null;
+  soundcheckEndsAt?: number | null;
+};
+
 export type SlotDraft = {
   label: string;
   /** Empty means "unset" — saved as `no_preference`. */

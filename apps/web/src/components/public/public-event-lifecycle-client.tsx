@@ -253,7 +253,6 @@ export function PublicEventLifecycleClient({ token }: { token: string }) {
               />
               <PublicEventArtists
                 artists={selectedEvent.artists}
-                tbdSlots={selectedEvent.tbdArtistSlots ?? 0}
               />
               <PublicEventContacts
                 manager={selectedEvent.contacts.manager}
