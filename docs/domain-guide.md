@@ -299,8 +299,9 @@ Event types (drive which workspace tabs and quick-add blocks appear):
   their own budgeting and pull lists. A series also carries a **position
   template** (`positionTemplates`): the shape of its bill, applied to each
   occurrence as `eventArtistNeeds` rows tagged with a `templateKey`. Applying
-  adds/moves/removes open template positions and never touches a filled one;
-  re-applying is idempotent.
+  adds/moves/removes open template positions and never touches a position that
+  is filled, named as an outside act, or carrying inquiries; re-applying is
+  idempotent.
 - Band participation in events is tracked in `eventBandParticipations`
   (headliner/support/other). That row is the canonical **assignment**: staff
   manage it from the event workspace **Lineup** tab (not Promo).

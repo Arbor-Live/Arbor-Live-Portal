@@ -343,8 +343,8 @@ export async function replaceScheduleBlocksFromTemplates(
 /**
  * Apply the series position templates to one occurrence: add missing open
  * template positions, move/refresh the open ones, and drop open template
- * positions whose template is gone. Filled positions (a seated act or a named
- * outside act) are never touched.
+ * positions whose template is gone. Positions that are filled by an act, named
+ * as an outside act, or carrying inquiries are never touched.
  */
 export async function applyPositionTemplates(
   ctx: MutationCtx,
@@ -368,7 +368,10 @@ export async function applyPositionTemplates(
     slots.map((slot) => ({
       _id: slot._id,
       templateKey: slot.templateKey,
-      filled: filledIds.has(slot._id) || Boolean(slot.externalArtistName?.trim()),
+      locked:
+        filledIds.has(slot._id) ||
+        Boolean(slot.externalArtistName?.trim()) ||
+        slot.status !== "open",
     })),
     templates,
   );

@@ -64,7 +64,11 @@ function minutesToMs(value: string, fallbackMinutes: number): number | undefined
   const trimmed = value.trim();
   if (!trimmed) return fallbackMinutes * 60_000;
   const minutes = Number(trimmed);
-  return Number.isFinite(minutes) && minutes > 0 ? Math.round(minutes * 60_000) : undefined;
+  // A blank duration already falls back; treat junk/zero/negative the same way
+  // rather than silently storing an open-ended window.
+  return Number.isFinite(minutes) && minutes > 0
+    ? Math.round(minutes * 60_000)
+    : fallbackMinutes * 60_000;
 }
 
 function dayIndexForOffset(offsetMs: number | undefined, soundcheckOffsetMs: number | undefined) {
