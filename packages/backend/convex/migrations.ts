@@ -679,6 +679,24 @@ export const finalizeApprovedDraftInvoices = migrations.define({
   },
 });
 
+/** Event groups: rows predating `kind` are recurring series. */
+export const backfillEventSeriesKind = migrations.define({
+  table: "eventSeries",
+  migrateOne: async (_ctx, series) => {
+    if (series.kind) return;
+    return { kind: "recurring" as const, updatedAt: Date.now() };
+  },
+});
+
+/** Mirror `events.seriesId` into the forward-looking `events.groupId`. */
+export const backfillEventGroupLinks = migrations.define({
+  table: "events",
+  migrateOne: async (_ctx, event) => {
+    if (!event.seriesId || event.groupId) return;
+    return { groupId: event.seriesId, updatedAt: Date.now() };
+  },
+});
+
 /**
  * Backfill `status` on userAdminProfiles from the legacy `active` boolean.
  * `active: false` meant "removed" (banned) which is the new `alumni` state.
@@ -797,6 +815,8 @@ const MIGRATION_SERIES = [
   internal.migrations.backfillUserEmailOptOuts,
   internal.migrations.unsetLegacyUserEmailFlags,
   internal.migrations.unsetLegacyPendingInviteEmailFlags,
+  internal.migrations.backfillEventSeriesKind,
+  internal.migrations.backfillEventGroupLinks,
 ] as const;
 
 export const runAll = migrations.runner([...MIGRATION_SERIES]);

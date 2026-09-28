@@ -434,6 +434,7 @@ export async function materializeOccurrence(
     visibility: "public",
     invoiceId: series.invoiceId,
     seriesId: series._id,
+    groupId: series._id,
     occurrenceIndex,
     seriesDetached: false,
     startAt,

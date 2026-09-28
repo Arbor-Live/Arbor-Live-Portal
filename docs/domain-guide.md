@@ -264,6 +264,10 @@ Event types (drive which workspace tabs and quick-add blocks appear):
   the host for transparency, but Insights *earned revenue* and net profit exclude
   them from Arbor margin (equipment / crew / fees). Matching `bandsCostUsd` /
   `externalRentalsCostUsd` are not double-counted; overruns still reduce profit.
+- **Event groups** are a set of dated events sharing setup and billing; they
+  currently live in the `eventSeries` table, where `kind` is `"recurring"` or
+  `"multi_day"` (absent = recurring). Events link to their group via
+  `groupId` (mirrored from the older `seriesId` while the model migrates).
 - **Event series** (`eventSeries.ts`) generate recurring occurrences and have
   their own budgeting and pull lists. A series also carries a **position
   template** (`positionTemplates`): the shape of its bill, applied to each

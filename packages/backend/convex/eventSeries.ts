@@ -234,6 +234,7 @@ export const create = mutation({
     const seriesId = await ctx.db.insert("eventSeries", {
       title: args.title.trim(),
       status: "active",
+      kind: "recurring",
       anchorStartAt: args.startAt,
       anchorEndAt: args.endAt,
       intervalWeeks: args.intervalWeeks,

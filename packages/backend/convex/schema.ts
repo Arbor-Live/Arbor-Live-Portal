@@ -5,6 +5,7 @@ import { artistOrganizationTypeValue } from "./lib/organizationType";
 import { scheduleBlockTypeValue } from "./lib/scheduleBlockTypes";
 import { userStatusValue } from "./lib/userStatus";
 import { eventSeriesPositionTemplateValue } from "./lib/eventSeriesPositions";
+import { eventGroupKindValue } from "./lib/eventGroups";
 
 const publicBucketValue = v.union(
   v.literal("lighting"),
@@ -762,6 +763,8 @@ export default defineSchema({
   eventSeries: defineTable({
     title: v.string(),
     status: v.union(v.literal("active"), v.literal("paused"), v.literal("ended")),
+    /** Recurring (rule-based) or multi-day (explicit dates). Absent = recurring. */
+    kind: v.optional(eventGroupKindValue),
     anchorStartAt: v.number(),
     anchorEndAt: v.number(),
     intervalWeeks: v.number(),
@@ -837,6 +840,11 @@ export default defineSchema({
     invoiceId: v.optional(v.id("invoices")),
     publicToken: v.optional(v.string()),
     seriesId: v.optional(v.id("eventSeries")),
+    /**
+     * Forward-looking group link (an event group is a `eventSeries` row). Set
+     * alongside `seriesId` so reads can migrate before `seriesId` is dropped.
+     */
+    groupId: v.optional(v.id("eventSeries")),
     occurrenceIndex: v.optional(v.number()),
     seriesDetached: v.optional(v.boolean()),
     startAt: v.number(),
@@ -920,6 +928,7 @@ export default defineSchema({
     .index("by_startAt", ["startAt"])
     .index("by_createdAt", ["createdAt"])
     .index("by_seriesId_and_occurrenceIndex", ["seriesId", "occurrenceIndex"])
+    .index("by_groupId_and_occurrenceIndex", ["groupId", "occurrenceIndex"])
     .index("by_sourceEventRequestId", ["sourceEventRequestId"])
     .index("by_openMicEnabled_and_startAt", ["openMicEnabled", "startAt"])
     .index("by_venueId", ["venueId"])
