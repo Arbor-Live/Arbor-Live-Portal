@@ -1,9 +1,9 @@
 import {
   SNAKE_LABEL,
-  TEMPLATE_SLOTS,
   aes50Label,
   aes50PortFor,
   portLabel,
+  regionForPort,
 } from "./slots";
 import type {
   EventPatchAllocation,
@@ -214,7 +214,7 @@ function toStagePort(
     aes50: aes50Label(port.snake, port.port),
     portLabel: portLabel(port.snake, port.port),
     label: port.label,
-    templateLabel: port.templateLabel,
+    templateLabel: port.label,
     family: port.family,
     stereo: port.stereo,
     phantom: port.phantom,
@@ -224,6 +224,4 @@ function toStagePort(
   };
 }
 
-export function regionForPort(port: number): "vox" | "mid" | "drums" {
-  return TEMPLATE_SLOTS.find((s) => s.port === port)?.region ?? "mid";
-}
+export { regionForPort } from "./slots";

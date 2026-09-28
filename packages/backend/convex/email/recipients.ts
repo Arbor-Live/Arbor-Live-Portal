@@ -1,6 +1,7 @@
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { findAuthUsersByIds } from "../lib/auth";
+import { listShowShifts } from "../lib/showShift";
 
 export type EmailRecipient = {
   email: string;
@@ -120,8 +121,9 @@ export async function getEventLeadRecipients(
 }
 
 /**
- * Everyone assigned to an event (schedule shifts + people assignments) except
- * the day-of lead and event manager, who receive the lead variant instead.
+ * Everyone who worked the event's show shift, except the day-of lead and event
+ * manager, who receive the lead variant instead. Setup/strike-only crew are not
+ * asked for media.
  */
 export async function getEventCrewRecipients(
   ctx: QueryCtx | MutationCtx,
@@ -137,11 +139,7 @@ export async function getEventCrewRecipients(
   );
 
   const crewUserIds: string[] = [];
-  const shifts = await ctx.db
-    .query("eventCrewShifts")
-    .withIndex("by_eventId", (q) => q.eq("eventId", eventId))
-    .take(500);
-  for (const shift of shifts) {
+  for (const shift of await listShowShifts(ctx, eventId)) {
     if (shift.userId && !leadUserIds.has(shift.userId)) crewUserIds.push(shift.userId);
   }
 

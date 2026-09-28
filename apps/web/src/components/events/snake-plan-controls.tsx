@@ -18,9 +18,12 @@ const SNAKE_IDS: SnakeId[] = ["A", "B"];
 export function SnakePlanControls({
   eventId,
   plan,
+  fitsOneBox,
 }: {
   eventId: Id<"events">;
   plan: PatchPlan;
+  /** False when the bill cannot fit on one stage box. */
+  fitsOneBox: boolean;
 }) {
   const savePlan = useMutation(api.eventPatchPlan.set);
   const [saving, setSaving] = useState(false);
@@ -37,12 +40,20 @@ export function SnakePlanControls({
   };
 
   const toggleSecondSnake = () => {
+    // One snake is not an option when the bill cannot fit — the toggle only
+    // ever turns the second box ON in that case.
+    if (plan.secondSnake && !fitsOneBox) return;
     void save(
       plan.secondSnake
         ? { ...plan, secondSnake: false, sides: {} }
         : { ...plan, secondSnake: true },
     );
   };
+
+  // One snake is only offered when the bill fits it. When it does not, the only
+  // control is turning the second box on (or dropping an input).
+  const oneSnakeOnly = fitsOneBox;
+  const showToggle = fitsOneBox || !plan.secondSnake;
 
   const setSide = (group: SnakeGroup, snake: SnakeId) => {
     void save({ ...plan, secondSnake: true, sides: { ...plan.sides, [group]: snake } });
@@ -56,24 +67,34 @@ export function SnakePlanControls({
         <div>
           <p className="text-sm font-medium">Snakes</p>
           <p className="text-xs text-muted-foreground">
-            {plan.secondSnake
-              ? "Both stage boxes out — pick a side per instrument. Anything that overflows moves to the other box automatically."
-              : "One stage box (AES50 A). Turn on the second snake to split the stage."}
+            {!fitsOneBox
+              ? "This bill needs more than one stage box. Drop an input or use two snakes."
+              : plan.secondSnake
+                ? "Both stage boxes out — pick a side per instrument. Anything that overflows moves to the other box automatically."
+                : "One stage box (AES50 A). Turn on the second snake to split the stage."}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={toggleSecondSnake}
-          disabled={saving}
-          className={cn(
-            "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
-            plan.secondSnake
-              ? "bg-foreground text-background"
-              : "bg-muted text-muted-foreground hover:text-foreground",
-          )}
-        >
-          {plan.secondSnake ? "Two snakes" : "One snake"}
-        </button>
+        {showToggle ? (
+          <button
+            type="button"
+            onClick={toggleSecondSnake}
+            disabled={saving}
+            className={cn(
+              "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+              plan.secondSnake
+                ? "bg-foreground text-background"
+                : !oneSnakeOnly
+                  ? "bg-amber/10 text-amber/90 hover:bg-amber/20"
+                  : "bg-muted text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {!oneSnakeOnly
+              ? "Use two snakes"
+              : plan.secondSnake
+                ? "Two snakes"
+                : "One snake"}
+          </button>
+        ) : null}
       </div>
 
       {plan.secondSnake ? (

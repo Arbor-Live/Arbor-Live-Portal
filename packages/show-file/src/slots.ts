@@ -1,54 +1,24 @@
 /**
- * Fixed AES50 A / SD16 / XR18 port layout from Arbor’s Default.snap.
+ * Stage-box / snap geometry.
  *
- * Vox always leads (1–4). Drums always trail (11–16). Mid is guitar / bass /
- * flex / keys. Stereo pairs: Keys 9–10 (breakable), OH 15–16 (always ST).
+ * Every socket owns a channel strip: box socket 1 → strip 1, … 16 → 16, and on
+ * the daisy-chained second box 17 → 17, … 32 → 32. That is the whole story — a
+ * stereo pair is two sockets sharing one strip (the left/odd socket's), and
+ * there is no "socket with no strip" special case to work around.
+ *
+ * The template's Default.snap input names are just a starting hint; the
+ * allocator rewrites the input patch and channel list from the rider with this
+ * same geometry.
  */
 
 import type { SlotFamily, SnakeGroup, SnakeId } from "./types";
 
-export type TemplateSlot = {
-  port: number;
-  family: SlotFamily;
-  defaultLabel: string;
-  stereo: boolean;
-  /**
-   * Channel strip index (1-based) that patches from this AES50 port.
-   * Null for the right half of a stereo pair (no dedicated strip).
-   */
-  strip: number | null;
-  /** Faceplate region for grouping in the UI. */
-  region: "vox" | "mid" | "drums";
-};
-
-export const TEMPLATE_SLOTS: TemplateSlot[] = [
-  { port: 1, family: "vox", defaultLabel: "Vox 1", stereo: false, strip: 1, region: "vox" },
-  { port: 2, family: "vox", defaultLabel: "Vox 2", stereo: false, strip: 2, region: "vox" },
-  { port: 3, family: "vox", defaultLabel: "Vox 3", stereo: false, strip: 3, region: "vox" },
-  { port: 4, family: "vox", defaultLabel: "Vox 4", stereo: false, strip: 4, region: "vox" },
-  { port: 5, family: "guitar", defaultLabel: "Guitar", stereo: false, strip: 5, region: "mid" },
-  { port: 6, family: "bass", defaultLabel: "Bass", stereo: false, strip: 6, region: "mid" },
-  { port: 7, family: "flex", defaultLabel: "Flex1", stereo: false, strip: 7, region: "mid" },
-  { port: 8, family: "flex", defaultLabel: "Flex2", stereo: false, strip: 8, region: "mid" },
-  { port: 9, family: "keys", defaultLabel: "Keys", stereo: true, strip: 9, region: "mid" },
-  { port: 10, family: "keys", defaultLabel: "Keys", stereo: true, strip: null, region: "mid" },
-  { port: 11, family: "kick", defaultLabel: "Kick", stereo: false, strip: 10, region: "drums" },
-  { port: 12, family: "snare", defaultLabel: "Snare", stereo: false, strip: 11, region: "drums" },
-  { port: 13, family: "tom", defaultLabel: "Rack Tom", stereo: false, strip: 12, region: "drums" },
-  { port: 14, family: "tom", defaultLabel: "Floor Tom", stereo: false, strip: 13, region: "drums" },
-  { port: 15, family: "oh", defaultLabel: "OH 48V", stereo: true, strip: 14, region: "drums" },
-  { port: 16, family: "oh", defaultLabel: "OH 48V", stereo: true, strip: null, region: "drums" },
-];
-
-export const PORT_BY_NUMBER = new Map(TEMPLATE_SLOTS.map((slot) => [slot.port, slot]));
-
-/** Mono mid overflow order when flex is full (never steal vox/drums first). */
-export const MID_OVERFLOW_PORTS = [7, 8, 5, 6, 9, 10] as const;
+/** Every socket on the shared AES50 A link, box-relative ports 1–16 per box. */
+export const BOX_CAPACITY = 16;
 
 /**
- * Both stage boxes run the same Default.snap layout. They are **daisy-chained**,
- * so both live on AES50 A: box A is A.1–16, box B is A.17–32. `SnakeId` names
- * the physical box, never an AES50 group.
+ * Both stage boxes are **daisy-chained** on AES50 A: box A is A.1–16, box B is
+ * A.17–32. `SnakeId` names the physical box, never an AES50 group.
  */
 export const SNAKE_IDS: SnakeId[] = ["A", "B"];
 
@@ -69,18 +39,13 @@ export const SNAKE_SHORT_LABEL: Record<SnakeId, string> = {
 };
 
 /**
- * Console strips each box lands on. A keeps Default.snap's 1–14 (a stereo pair
- * shares one strip); `spare` is the extra strip used when a stereo pair breaks
- * and its right-hand socket becomes a mono of its own.
+ * Rig furniture that is not band content. Talkback lives on console strip 40,
+ * always patched from the desk's local input 24, and `cfg.talk.assign` keeps
+ * pointing at strip 40. It never touches the stage boxes, so the allocator does
+ * not reserve any socket for it.
  */
-export const SNAKE_STRIPS: Record<SnakeId, { offset: number; spare: number }> = {
-  A: { offset: 0, spare: 15 },
-  B: { offset: 16, spare: 31 },
-};
-
-export function stripFor(snake: SnakeId, slot: TemplateSlot): number | null {
-  return slot.strip === null ? null : slot.strip + SNAKE_STRIPS[snake].offset;
-}
+export const TALKBACK_STRIP = "40";
+export const TALKBACK_LOCAL_INPUT = 24;
 
 /** Box-relative port (1–16) → socket number on the shared AES50 A link. */
 export function aes50PortFor(snake: SnakeId, port: number): number {
@@ -91,9 +56,14 @@ export function aes50Label(snake: SnakeId, port: number): string {
   return `${AES50_GROUP}.${aes50PortFor(snake, port)}`;
 }
 
+/** Console strip a socket lands on: socket N → strip N, both boxes. */
+export function stripFor(snake: SnakeId, port: number): number {
+  return aes50PortFor(snake, port);
+}
+
 /**
  * How a port reads at the stage box: the number printed on the SD16, with the
- * socket the desk sees in brackets when the box is offset down the chain —
+ * socket the desk sees in brackets when the box sits down the chain —
  * "7 (23)" is port 7 on the second snake, A.23 at the console.
  */
 export function portLabel(snake: SnakeId, port: number): string {
@@ -101,7 +71,18 @@ export function portLabel(snake: SnakeId, port: number): string {
   return socket === port ? String(port) : `${port} (${socket})`;
 }
 
-/** Drums move between boxes as one block — nobody splits a kit across snakes. */
+/** Region a box-relative port sits in, for faceplate grouping. */
+export function regionForPort(port: number): "vox" | "mid" | "drums" {
+  if (port <= 4) return "vox";
+  if (port <= 10) return "mid";
+  return "drums";
+}
+
+/**
+ * Keyboard/desk groups for DCA tags and the snake-split UI. Families roll up
+ * one-to-one with the template's DCA groups: Vox, Drums, Keys, and the melodic
+ * rest. This never decides placement — it only names groups.
+ */
 export function snakeGroupForFamily(family: SlotFamily): SnakeGroup {
   switch (family) {
     case "vox":
@@ -132,3 +113,6 @@ export const SNAKE_GROUP_LABEL: Record<SnakeGroup, string> = {
   keys: "Keys",
   drums: "Drums",
 };
+
+// DCA grouping and per-channel tags live in `groups.ts` — they are derived from
+// the sources actually on the bill, not from a fixed family table.

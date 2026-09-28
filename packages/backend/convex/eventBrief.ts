@@ -2,9 +2,13 @@ import { v } from "convex/values";
 import type { FunctionReturnType } from "convex/server";
 import { formatDate, formatDateTime, formatTime, pacificDateKey } from "@arbor/format";
 import {
+  SNAKE_LABEL,
   allocateEventPatch,
   buildNightRiderDocument,
+  buildStageBoxDiagramModel,
   fileStem,
+  regionForPort,
+  sortBandsForShow,
   type ShowBandInput,
 } from "@arbor/show-file";
 import type { EventBriefAssignment, EventBriefDocumentData } from "@arbor/rider-document";
@@ -167,13 +171,50 @@ export const getBriefSource = internalQuery({
         backline: row.rider!.backline,
       }));
 
+    // Every act's stage plot, in show order — the night rider only carries one.
+    const nightPlots: EventBriefDocumentData["nightPlots"] = sortBandsForShow(bands)
+      .filter((band) => band.stage && (band.items?.length ?? 0) > 0)
+      .map((band) => ({
+        bandName: band.bandName,
+        stage: band.stage!,
+        items: band.items ?? [],
+      }));
+
     let nightRider: EventBriefDocumentData["nightRider"];
+    let nightPatch: EventBriefDocumentData["nightPatch"];
     if (bands.length > 0) {
       const allocation = allocateEventPatch(bands, event.patchPlan ?? undefined);
       nightRider = {
         ...buildNightRiderDocument({ eventName: event.title, allocation, bands }),
         bandName: event.title,
         riderName: "Band inputs & changeover",
+      };
+      const model = buildStageBoxDiagramModel(allocation, event.title);
+      nightPatch = {
+        title: model.title,
+        subtitle: model.subtitle,
+        snakes: model.snakes
+          .map((snake) => ({
+            snake,
+            label: SNAKE_LABEL[snake],
+            ports: model.ports
+              .filter((port) => port.snake === snake)
+              .map((port) => ({
+                snake,
+                port: port.port,
+                portLabel: port.portLabel,
+                strip: port.strip,
+                label: port.label,
+                region: regionForPort(port.port),
+                stereo: port.stereo,
+                phantom: port.phantom,
+                di: port.di,
+                usedBy: port.usedBy,
+              })),
+          }))
+          .filter((box) => box.ports.length > 0),
+        spare: model.spare,
+        warnings: model.warnings,
       };
     }
 
@@ -234,6 +275,8 @@ export const getBriefSource = internalQuery({
       })),
       instructions,
       nightRider,
+      nightPlots,
+      nightPatch,
     };
   },
 });

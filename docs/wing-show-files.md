@@ -10,6 +10,15 @@ Code lives in [`packages/show-file/`](../packages/show-file/); the Events UI is
 `packages/backend/convex/eventShowFileDownload.ts` and
 `eventNightRiderDownload.ts`.
 
+## What the printed brief carries
+
+The event brief (`eventBrief.ts` → `@arbor/rider-document`) embeds the night
+rider's input list and changeovers, a stage plot for **every** act on the bill
+(not just the headliner), and the snake faceplate(s) — Snake A, plus Snake B
+when the second box is enabled — with the `Leave empty` list and any placement
+warnings. The faceplate uses the same allocator output as the show-file
+download, so the printed patch and the desk cannot disagree.
+
 ## The night in one paragraph
 
 Every band on the bill gets one patch, not one each. The allocator takes the
@@ -18,29 +27,94 @@ box, so channel names stay stable all night — Vox 1 is Vox 1 whether the singe
 is Sam or Lee. Load in, recall `Default`, gain and EQ once. From then on each
 band scene only touches what actually changed since the previous set.
 
+## Blueprint vs. content
+
+`templates/Default.snap` is a **blueprint**, not a layout to inherit. It supplies:
+
+- **Effect engine models and params** — PCORR, DE-S2, reverbs. We find engines by
+  model, so adding a second DE-S2 to the blueprint is all it takes to de-ess a
+  second vocal; no code change.
+- **Global desk behaviour** — `ae_globals` / `ce_globals`, `cfg` (solo, talkback,
+  monitors, RTA, meters), GPIO/MIDI/OSC, cards/play/rec.
+
+Everything the bill drives is **rebuilt** and stale leftovers are **cleared**:
+the input patch, channel names/modes/tags, DCA names (blanking any group not on
+the bill), FX inserts, and the surface layers. The template's old "PCORR on
+ch1–4" and "DE-S2 on bus 15" are strays and do not survive a build.
+
+**Talkback is rig furniture.** It is constant: console strip 40, always patched
+from the desk's **local input 24** (`cfg.talk.assign` points at strip 40). It
+never touches the stage boxes, so the allocator does not reserve any socket for
+it.
+
 ## Patch model
 
-Both stage boxes run the same Default.snap layout, so "Flex1 is port 7" holds
-whichever box you are standing at:
+Both stage boxes run the same layout, and families stay grouped so the faceplate
+reads like the DCA groups. The Default.snap homes below are where each family
+starts, not where it must stay — the block grows with the bill and slides to the
+next free sockets, moving to the other snake if the box fills.
 
-Ports below are box-relative; on the second, daisy-chained box add 16 to get the
-socket number.
+Ports are box-relative; on the second, daisy-chained box add 16 for the socket.
 
-| Ports | Region | Homes |
+| Default ports | Region | Families (in packing order) |
 |---|---|---|
 | 1–4 | Vox | Vox 1–4 |
-| 5–10 | Mid | Guitar (5), Bass (6), Flex1/2 (7–8), Keys ST (9–10) |
-| 11–16 | Drums | Kick (11), Snare (12), Rack/Floor Tom (13–14), OH ST+48V (15–16) |
+| 5–10 | Mid | Guitar, Bass, Flex1/2, Keys (stereo pairs) |
+| 11–16 | Drums | Kick, Snare, Rack/Floor Tom, OH ST+48V |
 
 Rules worth knowing:
 
 - **48V only on overheads.** A rider asking for phantom on a kick does not get it.
-- **Keys break to mono.** Keys prefer a stereo pair on 9–10, but drop to mono on
-  9 when the mid needs 10 for another input. A broken pair's right-hand socket
-  gets its own console strip (15 on box A, 31 on box B) — without that the input
-  had nowhere to land and was silently dropped.
-- **Overflow spills into the mid**, then as a last resort onto unused vox/drum
-  monos. Never onto the OH pair.
+- **Inputs pack in the rider's own order.** The night list is the union of every
+  band's channels, merged by role/name and laid out in the order the bands wrote
+  them — not a fixed template. There are no per-family caps: two kicks, three
+  vocals, a dozen playback feeds all just patch.
+- **Stereo is honoured wherever the rider asked for it.** A stereo row takes a
+  legal pair (adjacent, starting on an odd socket: 1-2, 3-4, 5-6 …) while one is
+  free. Only when no legal pair remains does a row collapse to mono, and the
+  allocator names what collapsed.
+- **Every socket owns a channel.** Socket N patches strip N (box A 1–16, box B
+  17–32); a stereo pair shares the odd socket's strip. There are no "strip-less"
+  sockets or spare-strip workarounds.
+- **One snake is only offered when it fits.** If the bill cannot sit on a single
+  16-socket box, the one-snake control disappears and the crew is told to drop an
+  input or run the second snake. `EventPatchAllocation.fitsOneBox` carries this.
+
+### Groups and desk pages
+
+Groups are derived from the sources **actually present**, so a one-vocal bill
+gets no Vocals DCA and a playback-heavy bill gets a Tracks DCA. Each present
+group takes a DCA slot in order (D1, D2, …) and every channel is tagged into it
+(`#D3,#M1,#M3`). The build also names those slots on `ae_data.dca` and blanks
+every slot the bill does not fill, so the template's own DCA names ("Vox DCA",
+"FX DCA") never survive a recall.
+
+The allocator also plans the **surface pages** (WING Compact: one 12-fader
+section, `USER1` holds two pages / 24 slots). Priority, highest first:
+
+1. **Vocals explode** — the DCA then every vocal channel, paged as needed (a
+   lone vocal needs no DCA).
+2. **Drums collapse** to one DCA — the kit is handled as one; no kick/snare
+   faders.
+3. **Melodic groups** (guitar/bass/keys/strings/winds/perc) each get a
+   DCA-and-members page while faders remain; once they run out, whatever is
+   left folds into a single **Melody** DCA.
+4. **Tracks and Utility** keep their own collapsed DCA (cued as a unit, kept out
+   of Melody).
+5. **Fader 12 is reserved** for USB 1/2 walk-in music.
+
+Anything past USER1's 24 slots is still patched and named; it is listed in the
+warnings so it can go on the brief. `buildNightSnap` writes the pages into
+`ce_data.layer.L[6]` (USER1), which ships empty.
+
+The night baseline also re-points **pitch correction** and **de-essing** at the
+vocals. The engines come from the template — PCORR in FX5–FX8, DE-S2 in FX11 —
+and the template had PCORR left on channels 1–4, so the build clears every
+channel insert and re-adds PCORR to the vocal pre insert and DE-S2 to the post
+insert: leads first, then backings, cycling each engine's slots. A vocal past
+the loaded engines simply gets none of that effect — nothing is shared. The
+template's stray de-esser insert on bus 15 is cleared too, while the named
+Vox/Plate reverb returns on buses 13/14 stay as blueprint.
 - **Stereo pairs are one input, drawn as two cells.** The right half mirrors the
   left's tags (ST, DI, 48V) and rides the left's channel strip.
 - **Unused ports are dropped**, not drawn empty. The faceplate lists them as
@@ -57,11 +131,11 @@ in this rig. Box B simply starts 16 sockets further along:
 | Snake A | A.1–16 | 1–14 | 15 |
 | Snake B | A.17–32 | 17–30 | 31 |
 
-Ports are box-relative (1–16) everywhere in the allocator, so the layout table
-above holds for both; `aes50PortFor()` adds the offset when writing a snap.
-Box B's Flex1 is box port 7 → socket **A.23** → console strip 23. Channel strips
-are independent of the link: A keeps Default.snap's own 1–14 mapping so the
-template's layer, DCA and mute-group tags stay with the right instruments.
+Ports are box-relative (1–16) everywhere in the allocator, so the rules above
+hold for both; `aes50PortFor()` adds the offset when writing a snap. Box B's
+port 7 is socket **A.23** → console strip 23. Channel strips are independent of
+the link: box A keeps Default.snap's own 1–14 mapping so the template's layer,
+DCA and mute-group tags stay with the right instruments.
 
 The faceplate is numbered for whoever is patching, not for the desk: cells show
 the number printed on the SD16, with the socket in brackets only when the box
@@ -84,7 +158,9 @@ Leave empty · 2–4 · 6–9 · 12–14 · 1–6 (17–22) · 8 (24) · 11–15
 Off by default. The **Snakes** control on the Night rider card turns on the
 second box and assigns a side per group (Vox, Guitar, Bass, Flex, Keys, Drums).
 Saved on the event as `events.patchPlan`, so the on-screen patch and the
-downloaded show file cannot disagree.
+downloaded show file cannot disagree. When the bill cannot fit on one box the
+one-snake control is hidden and the crew is told to drop an input or use two
+snakes.
 
 If a box overflows, groups move to the other one automatically, least disruptive
 first (keys → flex → guitar → bass → vox), with a warning naming the move. Drums

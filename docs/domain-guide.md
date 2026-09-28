@@ -416,7 +416,11 @@ Event types (drive which workspace tabs and quick-add blocks appear):
   signature-request emails (`resolveEventAlbumShareUrl`). The post-event album
   reminder points internal recipients (lead/crew, who have dashboard accounts)
   at the event **Media** tab so uploads go through the portal, and only sends
-  the raw Immich share URL to external clients. Emails that attach the share
+  the raw Immich share URL to external clients.
+- **Who owes media is the show shift only** (`lib/showShift.ts`): the crew
+  reminder and the admin **Crew media uploads** board both target crew whose
+  shift is linked to the event's `show` section block. Setup/strike-only crew
+  are not asked and are not listed. Events with no `show` block ask no crew. Emails that attach the share
   URL, and the public booking-request / quote feedback portal, ensure the event
   album when Immich is configured (`ensureEventAlbumBestEffort` /
   `ensureAlbumShareUrlByToken`). On multi-day bookings the public **After the

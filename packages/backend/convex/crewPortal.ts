@@ -23,6 +23,7 @@ import { buildUserProfileImageByUserId } from "./lib/userProfileImage";
 import { normalizeEventStatus } from "./lib/eventStatus";
 import { listMyPostEventWork as listMyPostEventWorkForUser } from "./lib/myEventActions";
 import { isSectionBlockType } from "./lib/scheduleBlockTypes";
+import { listShowShifts } from "./lib/showShift";
 
 const scheduleBlockSummaryValue = v.object({
   _id: v.id("eventScheduleBlocks"),
@@ -330,10 +331,8 @@ export const listCrewMediaStatusForEvent = query({
     await requireAdmin(ctx);
     await requireArborInternalContext(ctx);
 
-    const shifts = await ctx.db
-      .query("eventCrewShifts")
-      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
-      .take(500);
+    // Only show-shift crew owe media — the same set the reminder email asks.
+    const shifts = await listShowShifts(ctx, args.eventId);
 
     // First-assigned role per user; shifts without a userId are not eligible
     // to self-report media status (they have no upload flow).

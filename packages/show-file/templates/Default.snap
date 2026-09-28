@@ -3,9 +3,9 @@
   "creator_fw": "VERSION_FULL",
   "creator_sn": "NO_SERIAL",
   "creator_model": "WING-EDIT",
-  "creator_version": "3.3.2",
+  "creator_version": "3.3.3",
   "creator_name": "Wing-Edit",
-  "created": "2026-06-28 19:26:17",
+  "created": "2026-08-28 00:18:50",
   "ae_data": {
     "cfg": {
       "mainlink": "OFF",
@@ -6837,13 +6837,13 @@
           "lf": 64.62566376,
           "lq": 1.339830637,
           "leq": "SHV",
-          "1g": -1.800000191,
+          "1g": -1.799999833,
           "1f": 244.6414032,
           "1q": 2.373499632,
           "2g": 0,
           "2f": 601.3883667,
           "2q": 0.997970223,
-          "3g": 2.700000763,
+          "3g": 2.700000286,
           "3f": 1499.78833,
           "3q": 5.176469803,
           "4g": 0,
@@ -7194,13 +7194,13 @@
           "lf": 64.62566376,
           "lq": 1.339830637,
           "leq": "SHV",
-          "1g": -1.800000191,
+          "1g": -1.799999833,
           "1f": 244.6414032,
           "1q": 2.373499632,
           "2g": 0,
           "2f": 601.3883667,
           "2q": 0.997970223,
-          "3g": 2.700000763,
+          "3g": 2.700000286,
           "3f": 1499.78833,
           "3q": 5.176469803,
           "4g": 0,
@@ -7551,13 +7551,13 @@
           "lf": 64.62566376,
           "lq": 1.339830637,
           "leq": "SHV",
-          "1g": -1.800000191,
+          "1g": -1.799999833,
           "1f": 244.6414032,
           "1q": 2.373499632,
           "2g": 0,
           "2f": 601.3883667,
           "2q": 0.997970223,
-          "3g": 2.700000763,
+          "3g": 2.700000286,
           "3f": 1499.78833,
           "3q": 5.176469803,
           "4g": 0,
@@ -7908,13 +7908,13 @@
           "lf": 64.62566376,
           "lq": 1.339830637,
           "leq": "SHV",
-          "1g": -1.800000191,
+          "1g": -1.799999833,
           "1f": 244.6414032,
           "1q": 2.373499632,
           "2g": 0,
           "2f": 601.3883667,
           "2q": 0.997970223,
-          "3g": 2.700000763,
+          "3g": 2.700000286,
           "3f": 1499.78833,
           "3q": 5.176469803,
           "4g": 0,
@@ -8679,17 +8679,17 @@
           },
           "2": {
             "on": false,
-            "lvl": -1.5,
+            "lvl": -1.500000954,
             "pre": false
           },
           "3": {
             "on": false,
-            "lvl": -6.100002289,
+            "lvl": -6.100001335,
             "pre": false
           },
           "4": {
             "on": false,
-            "lvl": -7.399999619,
+            "lvl": -7.400000095,
             "pre": false
           }
         },
@@ -9745,7 +9745,7 @@
         "main": {
           "1": {
             "on": true,
-            "lvl": 0.100000381,
+            "lvl": 0.099999905,
             "pre": false
           },
           "2": {
@@ -26811,8 +26811,8 @@
           "tap": "BUS"
         },
         "preins": {
-          "on": false,
-          "ins": "NONE"
+          "on": true,
+          "ins": "FX11"
         },
         "main": {
           "1": {
@@ -28725,19 +28725,40 @@
     },
     "fx": {
       "1": {
-        "mdl": "HALL",
+        "mdl": "VSS3",
         "fxmix": 10,
-        "pdel": 50,
-        "size": 50,
-        "dcy": 1.569320321,
-        "mult": 0.946057618,
-        "damp": 5683.258301,
-        "lc": 84.24117279,
-        "hc": 7261.5625,
-        "shp": 50,
-        "sprd": 25,
-        "diff": 25,
-        "mspd": 30
+        "preset": "Medium Vocal Hall",
+        "load": false,
+        "erpdly": 11,
+        "ertype": "CHURCH",
+        "ersize": "LRG",
+        "erpos": "NEAR",
+        "erbal": 0,
+        "erlc": 20,
+        "ercol": 40,
+        "erlvl": -5.999999046,
+        "rvtype": "SMOOTH",
+        "rvwid": "X-WIDE",
+        "rvpdly": 0,
+        "dcy": 1.898234963,
+        "diff": 6,
+        "rvbal": 0,
+        "rvlvl": -5.999999046,
+        "ldcy": 1,
+        "lmdcy": 1,
+        "hmdcy": 1,
+        "hdcy": 1,
+        "hsoft": -50,
+        "lxo": 91.73925781,
+        "mxo": 773.6241455,
+        "hxo": 3775.913818,
+        "lshv": 178.2501984,
+        "lsdmp": 0,
+        "hcut": 6509.235352,
+        "mtype": "C",
+        "mrate": -30,
+        "mwid": 156,
+        "view": false
       },
       "2": {
         "mdl": "PLATE",
@@ -28767,80 +28788,16 @@
         "fxmix": 100
       },
       "5": {
-        "mdl": "PCORR",
-        "fxmix": 100,
-        "spd": 50,
-        "amnt": 10,
-        "a4": 440,
-        "sw_c": false,
-        "sw_db": false,
-        "sw_d": false,
-        "sw_eb": false,
-        "sw_e": false,
-        "sw_f": false,
-        "sw_gb": false,
-        "sw_g": false,
-        "sw_ab": false,
-        "sw_a": false,
-        "sw_bb": false,
-        "sw_b": false
+        "mdl": "NONE"
       },
       "6": {
-        "mdl": "PCORR",
-        "fxmix": 100,
-        "spd": 50,
-        "amnt": 10,
-        "a4": 440,
-        "sw_c": false,
-        "sw_db": false,
-        "sw_d": false,
-        "sw_eb": false,
-        "sw_e": false,
-        "sw_f": false,
-        "sw_gb": false,
-        "sw_g": false,
-        "sw_ab": false,
-        "sw_a": false,
-        "sw_bb": false,
-        "sw_b": false
+        "mdl": "NONE"
       },
       "7": {
-        "mdl": "PCORR",
-        "fxmix": 100,
-        "spd": 50,
-        "amnt": 10,
-        "a4": 440,
-        "sw_c": false,
-        "sw_db": false,
-        "sw_d": false,
-        "sw_eb": false,
-        "sw_e": false,
-        "sw_f": false,
-        "sw_gb": false,
-        "sw_g": false,
-        "sw_ab": false,
-        "sw_a": false,
-        "sw_bb": false,
-        "sw_b": false
+        "mdl": "NONE"
       },
       "8": {
-        "mdl": "PCORR",
-        "fxmix": 100,
-        "spd": 50,
-        "amnt": 10,
-        "a4": 440,
-        "sw_c": false,
-        "sw_db": false,
-        "sw_d": false,
-        "sw_eb": false,
-        "sw_e": false,
-        "sw_f": false,
-        "sw_gb": false,
-        "sw_g": false,
-        "sw_ab": false,
-        "sw_a": false,
-        "sw_bb": false,
-        "sw_b": false
+        "mdl": "NONE"
       },
       "9": {
         "mdl": "UKROCK",
@@ -28869,24 +28826,90 @@
         "cab": true
       },
       "11": {
-        "mdl": "NONE",
-        "fxmix": 100
+        "mdl": "DE-S2",
+        "fxmix": 100,
+        "lo": 0,
+        "hi": 0,
+        "los": 0,
+        "his": 0,
+        "gdr": "f",
+        "mode": "st"
       },
       "12": {
-        "mdl": "NONE",
-        "fxmix": 100
+        "mdl": "PCORR",
+        "fxmix": 100,
+        "spd": 50,
+        "amnt": 10,
+        "a4": 440,
+        "sw_c": false,
+        "sw_db": false,
+        "sw_d": false,
+        "sw_eb": false,
+        "sw_e": false,
+        "sw_f": false,
+        "sw_gb": false,
+        "sw_g": false,
+        "sw_ab": false,
+        "sw_a": false,
+        "sw_bb": false,
+        "sw_b": false
       },
       "13": {
-        "mdl": "NONE",
-        "fxmix": 100
+        "mdl": "PCORR",
+        "fxmix": 100,
+        "spd": 50,
+        "amnt": 10,
+        "a4": 440,
+        "sw_c": false,
+        "sw_db": false,
+        "sw_d": false,
+        "sw_eb": false,
+        "sw_e": false,
+        "sw_f": false,
+        "sw_gb": false,
+        "sw_g": false,
+        "sw_ab": false,
+        "sw_a": false,
+        "sw_bb": false,
+        "sw_b": false
       },
       "14": {
-        "mdl": "NONE",
-        "fxmix": 100
+        "mdl": "PCORR",
+        "fxmix": 100,
+        "spd": 50,
+        "amnt": 10,
+        "a4": 440,
+        "sw_c": false,
+        "sw_db": false,
+        "sw_d": false,
+        "sw_eb": false,
+        "sw_e": false,
+        "sw_f": false,
+        "sw_gb": false,
+        "sw_g": false,
+        "sw_ab": false,
+        "sw_a": false,
+        "sw_bb": false,
+        "sw_b": false
       },
       "15": {
-        "mdl": "NONE",
-        "fxmix": 100
+        "mdl": "PCORR",
+        "fxmix": 100,
+        "spd": 50,
+        "amnt": 10,
+        "a4": 440,
+        "sw_c": false,
+        "sw_db": false,
+        "sw_d": false,
+        "sw_eb": false,
+        "sw_e": false,
+        "sw_f": false,
+        "sw_gb": false,
+        "sw_g": false,
+        "sw_ab": false,
+        "sw_a": false,
+        "sw_bb": false,
+        "sw_b": false
       },
       "16": {
         "mdl": "NONE",
@@ -28895,12 +28918,6 @@
     },
     "cards": {
       "wlive": {
-        "sdlink": "IND",
-        "autoin": "OFF",
-        "meters": true,
-        "auto_stop": "KEEP",
-        "auto_play": "KEEP",
-        "auto_rec": "KEEP",
         "1": {
           "cfg": {
             "rectracks": "32",
@@ -28912,7 +28929,13 @@
             "rectracks": "32",
             "playmode": "PLAY"
           }
-        }
+        },
+        "sdlink": "IND",
+        "autoin": "OFF",
+        "meters": true,
+        "auto_stop": "KEEP",
+        "auto_play": "KEEP",
+        "auto_rec": "KEEP"
       },
       "wmadi": {
         "mode": "SFP1",
@@ -28991,11 +29014,7 @@
     },
     "layer": {
       "L": {
-        "sel": 1,
-        "spidx": 0,
         "1": {
-          "ofs": 0,
-          "name": "CH1-12",
           "1": {
             "type": "CH",
             "i": 1,
@@ -29115,11 +29134,11 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": "CH1-12"
         },
         "2": {
-          "ofs": 0,
-          "name": "CH13-24",
           "1": {
             "type": "CH",
             "i": 13,
@@ -29239,11 +29258,11 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": "CH13-24"
         },
         "3": {
-          "ofs": 0,
-          "name": "CH25-36",
           "1": {
             "type": "CH",
             "i": 25,
@@ -29363,11 +29382,11 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": "CH25-36"
         },
         "4": {
-          "ofs": 0,
-          "name": "CH37-AUX",
           "1": {
             "type": "CH",
             "i": 37,
@@ -29487,11 +29506,11 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": "CH37-AUX"
         },
         "5": {
-          "ofs": 0,
-          "name": "BUSES",
           "1": {
             "type": "BUS",
             "i": 1,
@@ -29611,11 +29630,11 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": "BUSES"
         },
         "6": {
-          "ofs": 0,
-          "name": "USER1",
           "1": {
             "type": "OFF",
             "i": 0,
@@ -29735,11 +29754,11 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": "USER1"
         },
         "7": {
-          "ofs": 0,
-          "name": "USER2",
           "1": {
             "type": "OFF",
             "i": 0,
@@ -29859,15 +29878,15 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
-        }
+          },
+          "ofs": 0,
+          "name": "USER2"
+        },
+        "sel": 1,
+        "spidx": 0
       },
       "C": {
-        "sel": 1,
-        "spidx": 0,
         "1": {
-          "ofs": 0,
-          "name": "DCA",
           "1": {
             "type": "DCA",
             "i": 1,
@@ -29947,11 +29966,11 @@
             "type": "DCA",
             "i": 16,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": "DCA"
         },
         "2": {
-          "ofs": 0,
-          "name": "MAIN",
           "1": {
             "type": "BUS",
             "i": 17,
@@ -30031,11 +30050,11 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": "MAIN"
         },
         "3": {
-          "ofs": 0,
-          "name": "AUX",
           "1": {
             "type": "CH",
             "i": 41,
@@ -30115,11 +30134,11 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": "AUX"
         },
         "4": {
-          "ofs": 0,
-          "name": "BUSES",
           "1": {
             "type": "BUS",
             "i": 1,
@@ -30199,11 +30218,11 @@
             "type": "BUS",
             "i": 16,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": "BUSES"
         },
         "5": {
-          "ofs": 0,
-          "name": "USER1",
           "1": {
             "type": "OFF",
             "i": 0,
@@ -30283,11 +30302,11 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": "USER1"
         },
         "6": {
-          "ofs": 0,
-          "name": "USER2",
           "1": {
             "type": "OFF",
             "i": 0,
@@ -30367,15 +30386,15 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
-        }
+          },
+          "ofs": 0,
+          "name": "USER2"
+        },
+        "sel": 1,
+        "spidx": 0
       },
       "R": {
-        "sel": 1,
-        "spidx": 0,
         "1": {
-          "ofs": 0,
-          "name": "MAIN",
           "1": {
             "type": "BUS",
             "i": 17,
@@ -30455,11 +30474,11 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": "MAIN"
         },
         "2": {
-          "ofs": 0,
-          "name": "DCA",
           "1": {
             "type": "DCA",
             "i": 1,
@@ -30539,11 +30558,11 @@
             "type": "DCA",
             "i": 16,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": "DCA"
         },
         "3": {
-          "ofs": 0,
-          "name": "CH1-40",
           "1": {
             "type": "CH",
             "i": 1,
@@ -30743,11 +30762,11 @@
             "type": "CH",
             "i": 40,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": "CH1-40"
         },
         "4": {
-          "ofs": 0,
-          "name": "AUX",
           "1": {
             "type": "CH",
             "i": 41,
@@ -30827,11 +30846,11 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": "AUX"
         },
         "5": {
-          "ofs": 0,
-          "name": "BUSES",
           "1": {
             "type": "BUS",
             "i": 1,
@@ -30911,11 +30930,11 @@
             "type": "BUS",
             "i": 16,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": "BUSES"
         },
         "6": {
-          "ofs": 0,
-          "name": "USER1",
           "1": {
             "type": "OFF",
             "i": 0,
@@ -30995,11 +31014,11 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": "USER1"
         },
         "7": {
-          "ofs": 0,
-          "name": "USER2",
           "1": {
             "type": "OFF",
             "i": 0,
@@ -31079,15 +31098,15 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
-        }
+          },
+          "ofs": 0,
+          "name": "USER2"
+        },
+        "sel": 1,
+        "spidx": 0
       },
       "CMPCT": {
-        "sel": 1,
-        "spidx": 0,
         "1": {
-          "ofs": 0,
-          "name": "CH1-12",
           "1": {
             "type": "DCA",
             "i": 1,
@@ -31207,11 +31226,11 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": "CH1-12"
         },
         "2": {
-          "ofs": 0,
-          "name": "CH13-24",
           "1": {
             "type": "CH",
             "i": 6,
@@ -31331,11 +31350,11 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": "CH13-24"
         },
         "3": {
-          "ofs": 0,
-          "name": "CH25-36",
           "1": {
             "type": "FX",
             "i": 0,
@@ -31455,11 +31474,11 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": "CH25-36"
         },
         "4": {
-          "ofs": 0,
-          "name": "CH37-AUX",
           "1": {
             "type": "CH",
             "i": 37,
@@ -31579,11 +31598,11 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": "CH37-AUX"
         },
         "5": {
-          "ofs": 0,
-          "name": "BUSES",
           "1": {
             "type": "BUS",
             "i": 1,
@@ -31703,11 +31722,11 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": "BUSES"
         },
         "6": {
-          "ofs": 0,
-          "name": "MAIN/MTX",
           "1": {
             "type": "BUS",
             "i": 17,
@@ -31827,11 +31846,11 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": "MAIN/MTX"
         },
         "7": {
-          "ofs": 0,
-          "name": "DCA",
           "1": {
             "type": "DCA",
             "i": 1,
@@ -31951,11 +31970,11 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": "DCA"
         },
         "8": {
-          "ofs": 0,
-          "name": "USER 1",
           "1": {
             "type": "OFF",
             "i": 0,
@@ -32075,11 +32094,11 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": "USER 1"
         },
         "9": {
-          "ofs": 0,
-          "name": "USER 2",
           "1": {
             "type": "OFF",
             "i": 0,
@@ -32199,15 +32218,15 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
-        }
+          },
+          "ofs": 0,
+          "name": "USER 2"
+        },
+        "sel": 1,
+        "spidx": 0
       },
       "RCK": {
-        "sel": 1,
-        "spidx": 0,
         "1": {
-          "ofs": 0,
-          "name": "CHANNELS",
           "1": {
             "type": "CH",
             "i": 1,
@@ -32407,11 +32426,11 @@
             "type": "CH",
             "i": 40,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": "CHANNELS"
         },
         "2": {
-          "ofs": 0,
-          "name": "AUX",
           "1": {
             "type": "CH",
             "i": 41,
@@ -32491,11 +32510,11 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": "AUX"
         },
         "3": {
-          "ofs": 0,
-          "name": "BUSES",
           "1": {
             "type": "BUS",
             "i": 1,
@@ -32575,11 +32594,11 @@
             "type": "BUS",
             "i": 16,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": "BUSES"
         },
         "4": {
-          "ofs": 0,
-          "name": "MAIN/MTX",
           "1": {
             "type": "BUS",
             "i": 17,
@@ -32659,11 +32678,11 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": "MAIN/MTX"
         },
         "5": {
-          "ofs": 0,
-          "name": "DCA",
           "1": {
             "type": "DCA",
             "i": 1,
@@ -32743,15 +32762,15 @@
             "type": "DCA",
             "i": 16,
             "dst": 1
-          }
-        }
+          },
+          "ofs": 0,
+          "name": "DCA"
+        },
+        "sel": 1,
+        "spidx": 0
       },
       "EXT": {
-        "sel": 1,
-        "spidx": 0,
         "1": {
-          "ofs": 0,
-          "name": "",
           "1": {
             "type": "OFF",
             "i": 0,
@@ -32831,11 +32850,11 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": ""
         },
         "2": {
-          "ofs": 0,
-          "name": "",
           "1": {
             "type": "OFF",
             "i": 0,
@@ -32915,11 +32934,11 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": ""
         },
         "3": {
-          "ofs": 0,
-          "name": "",
           "1": {
             "type": "OFF",
             "i": 0,
@@ -32999,11 +33018,11 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": ""
         },
         "4": {
-          "ofs": 0,
-          "name": "",
           "1": {
             "type": "OFF",
             "i": 0,
@@ -33083,11 +33102,11 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": ""
         },
         "5": {
-          "ofs": 0,
-          "name": "",
           "1": {
             "type": "OFF",
             "i": 0,
@@ -33167,11 +33186,11 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": ""
         },
         "6": {
-          "ofs": 0,
-          "name": "",
           "1": {
             "type": "OFF",
             "i": 0,
@@ -33251,11 +33270,11 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": ""
         },
         "7": {
-          "ofs": 0,
-          "name": "",
           "1": {
             "type": "OFF",
             "i": 0,
@@ -33335,11 +33354,11 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": ""
         },
         "8": {
-          "ofs": 0,
-          "name": "",
           "1": {
             "type": "OFF",
             "i": 0,
@@ -33419,15 +33438,15 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
-        }
+          },
+          "ofs": 0,
+          "name": ""
+        },
+        "sel": 1,
+        "spidx": 0
       },
       "VRT": {
-        "sel": 1,
-        "spidx": 0,
         "1": {
-          "ofs": 0,
-          "name": "",
           "1": {
             "type": "OFF",
             "i": 0,
@@ -33507,11 +33526,11 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": ""
         },
         "2": {
-          "ofs": 0,
-          "name": "",
           "1": {
             "type": "OFF",
             "i": 0,
@@ -33591,11 +33610,11 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": ""
         },
         "3": {
-          "ofs": 0,
-          "name": "",
           "1": {
             "type": "OFF",
             "i": 0,
@@ -33675,11 +33694,11 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": ""
         },
         "4": {
-          "ofs": 0,
-          "name": "",
           "1": {
             "type": "OFF",
             "i": 0,
@@ -33759,11 +33778,11 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": ""
         },
         "5": {
-          "ofs": 0,
-          "name": "",
           "1": {
             "type": "OFF",
             "i": 0,
@@ -33843,11 +33862,11 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": ""
         },
         "6": {
-          "ofs": 0,
-          "name": "",
           "1": {
             "type": "OFF",
             "i": 0,
@@ -33927,11 +33946,11 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": ""
         },
         "7": {
-          "ofs": 0,
-          "name": "",
           "1": {
             "type": "OFF",
             "i": 0,
@@ -34011,11 +34030,11 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": ""
         },
         "8": {
-          "ofs": 0,
-          "name": "",
           "1": {
             "type": "OFF",
             "i": 0,
@@ -34095,15 +34114,15 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
-        }
+          },
+          "ofs": 0,
+          "name": ""
+        },
+        "sel": 1,
+        "spidx": 0
       },
       "WEDIT": {
-        "sel": 1,
-        "spidx": 0,
         "1": {
-          "ofs": 0,
-          "name": "CH 1-12",
           "1": {
             "type": "CH",
             "i": 1,
@@ -34583,11 +34602,11 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": "CH 1-12"
         },
         "2": {
-          "ofs": 0,
-          "name": "CH 13-24",
           "1": {
             "type": "CH",
             "i": 13,
@@ -35067,11 +35086,11 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": "CH 13-24"
         },
         "3": {
-          "ofs": 0,
-          "name": "CH 25-36",
           "1": {
             "type": "CH",
             "i": 25,
@@ -35551,11 +35570,11 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": "CH 25-36"
         },
         "4": {
-          "ofs": 0,
-          "name": "CH 1-40",
           "1": {
             "type": "CH",
             "i": 37,
@@ -36035,11 +36054,11 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": "CH 1-40"
         },
         "5": {
-          "ofs": 0,
-          "name": "AUX",
           "1": {
             "type": "CH",
             "i": 41,
@@ -36519,11 +36538,11 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": "AUX"
         },
         "6": {
-          "ofs": 0,
-          "name": "BUSES",
           "1": {
             "type": "BUS",
             "i": 1,
@@ -37003,11 +37022,11 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": "BUSES"
         },
         "7": {
-          "ofs": 0,
-          "name": "MAIN|MTX",
           "1": {
             "type": "BUS",
             "i": 17,
@@ -37487,11 +37506,11 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": "MAIN|MTX"
         },
         "8": {
-          "ofs": 0,
-          "name": "DCA",
           "1": {
             "type": "DCA",
             "i": 1,
@@ -37971,11 +37990,11 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": "DCA"
         },
         "9": {
-          "ofs": 0,
-          "name": "ALL",
           "1": {
             "type": "CH",
             "i": 1,
@@ -38455,11 +38474,11 @@
             "type": "OFF",
             "i": 20,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": "ALL"
         },
         "10": {
-          "ofs": 0,
-          "name": "USER 1",
           "1": {
             "type": "OFF",
             "i": 0,
@@ -38939,11 +38958,11 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
+          },
+          "ofs": 0,
+          "name": "USER 1"
         },
         "11": {
-          "ofs": 0,
-          "name": "USER 2",
           "1": {
             "type": "OFF",
             "i": 0,
@@ -39423,286 +39442,15 @@
             "type": "OFF",
             "i": 0,
             "dst": 1
-          }
-        }
+          },
+          "ofs": 0,
+          "name": "USER 2"
+        },
+        "sel": 1,
+        "spidx": 0
       }
     },
     "user": {
-      "sel": 1,
-      "mode": "USER",
-      "cmode": "PAN",
-      "gpio": {
-        "1": {
-          "bu": {
-            "mode": "OFF",
-            "name": "GPIO 1"
-          }
-        },
-        "2": {
-          "bu": {
-            "mode": "OFF",
-            "name": "GPIO 2"
-          }
-        },
-        "3": {
-          "bu": {
-            "mode": "OFF",
-            "name": "GPIO 3"
-          }
-        },
-        "4": {
-          "bu": {
-            "mode": "OFF",
-            "name": "GPIO 4"
-          }
-        }
-      },
-      "user": {
-        "1": {
-          "bu": {
-            "mode": "OFF",
-            "name": "",
-            "ledstate": 0
-          },
-          "bd": {
-            "mode": "OFF",
-            "name": "",
-            "ledstate": 0
-          }
-        },
-        "2": {
-          "bu": {
-            "mode": "OFF",
-            "name": "",
-            "ledstate": 0
-          },
-          "bd": {
-            "mode": "OFF",
-            "name": "",
-            "ledstate": 0
-          }
-        },
-        "3": {
-          "bu": {
-            "mode": "OFF",
-            "name": "",
-            "ledstate": 0
-          },
-          "bd": {
-            "mode": "OFF",
-            "name": "",
-            "ledstate": 0
-          }
-        },
-        "4": {
-          "bu": {
-            "mode": "OFF",
-            "name": "",
-            "ledstate": 0
-          },
-          "bd": {
-            "mode": "OFF",
-            "name": "",
-            "ledstate": 0
-          }
-        }
-      },
-      "daw1": {
-        "1": {
-          "bu": {
-            "mode": "DAWBTN",
-            "name": "STOP",
-            "btn": "T1"
-          },
-          "bd": {
-            "mode": "DAWBTN",
-            "name": "REWIND",
-            "btn": "T4"
-          }
-        },
-        "2": {
-          "bu": {
-            "mode": "DAWBTN",
-            "name": "PLAY",
-            "btn": "T2"
-          },
-          "bd": {
-            "mode": "DAWBTN",
-            "name": "FFWD",
-            "btn": "T5"
-          }
-        },
-        "3": {
-          "bu": {
-            "mode": "DAWBTN",
-            "name": "CYCLE",
-            "btn": "T8"
-          },
-          "bd": {
-            "mode": "DAWBTN",
-            "name": "TIME/BEATS",
-            "btn": "OT4"
-          }
-        },
-        "4": {
-          "bu": {
-            "mode": "DAWBTN",
-            "name": "RECORD",
-            "btn": "T3"
-          },
-          "bd": {
-            "mode": "DAWBTN",
-            "name": "|UNDO",
-            "btn": "SY6"
-          }
-        }
-      },
-      "daw2": {
-        "1": {
-          "bu": {
-            "mode": "DAWBTN",
-            "name": "STOP",
-            "btn": "T1"
-          },
-          "bd": {
-            "mode": "DAWBTN",
-            "name": "REWIND/PREV",
-            "btn": "T4"
-          }
-        },
-        "2": {
-          "bu": {
-            "mode": "DAWBTN",
-            "name": "PLAY",
-            "btn": "T2"
-          },
-          "bd": {
-            "mode": "DAWBTN",
-            "name": "FFWD/NEXT",
-            "btn": "T5"
-          }
-        },
-        "3": {
-          "bu": {
-            "mode": "OFF",
-            "name": ""
-          },
-          "bd": {
-            "mode": "OFF",
-            "name": ""
-          }
-        },
-        "4": {
-          "bu": {
-            "mode": "DAWBTN",
-            "name": "RECORD",
-            "btn": "T3"
-          },
-          "bd": {
-            "mode": "DAWBTN",
-            "name": "|EDIT MARKER",
-            "btn": "T6"
-          }
-        }
-      },
-      "daw3": {
-        "1": {
-          "bu": {
-            "mode": "DAWBTN",
-            "name": "STOP",
-            "btn": "T1"
-          },
-          "bd": {
-            "mode": "DAWBTN",
-            "name": "REWIND",
-            "btn": "T4"
-          }
-        },
-        "2": {
-          "bu": {
-            "mode": "DAWBTN",
-            "name": "PLAY",
-            "btn": "T2"
-          },
-          "bd": {
-            "mode": "DAWBTN",
-            "name": "FFWD",
-            "btn": "T5"
-          }
-        },
-        "3": {
-          "bu": {
-            "mode": "DAWBTN",
-            "name": " |TOUCH",
-            "btn": "AU4"
-          },
-          "bd": {
-            "mode": "DAWBTN",
-            "name": "|READ",
-            "btn": "AU1"
-          }
-        },
-        "4": {
-          "bu": {
-            "mode": "DAWBTN",
-            "name": " |LATCH",
-            "btn": "AU5"
-          },
-          "bd": {
-            "mode": "DAWBTN",
-            "name": "|WRITE",
-            "btn": "AU2"
-          }
-        }
-      },
-      "daw4": {
-        "1": {
-          "bu": {
-            "mode": "DAWBTN",
-            "name": "NAME/VALUE",
-            "btn": "OT3"
-          },
-          "bd": {
-            "mode": "DAWBTN",
-            "name": "FLIP",
-            "btn": "OT1"
-          }
-        },
-        "2": {
-          "bu": {
-            "mode": "OFF",
-            "name": "[V-POTS]"
-          },
-          "bd": {
-            "mode": "DAWBTN",
-            "name": "HOLD |SEL",
-            "btn": "SP2"
-          }
-        },
-        "3": {
-          "bu": {
-            "mode": "OFF",
-            "name": "[RECRDY]"
-          },
-          "bd": {
-            "mode": "DAWBTN",
-            "name": "[HOLD+] |SEL",
-            "btn": "SP3"
-          }
-        },
-        "4": {
-          "bu": {
-            "mode": "DAWBTN",
-            "name": "ZOOM",
-            "btn": "N5"
-          },
-          "bd": {
-            "mode": "DAWBTN",
-            "name": "SCRUB",
-            "btn": "T11"
-          }
-        }
-      },
       "1": {
         "1": {
           "led": false,
@@ -40768,6 +40516,281 @@
           "bd": {
             "mode": "OFF",
             "name": ""
+          }
+        }
+      },
+      "sel": 1,
+      "mode": "MGRP",
+      "cmode": "PAN",
+      "gpio": {
+        "1": {
+          "bu": {
+            "mode": "OFF",
+            "name": "GPIO 1"
+          }
+        },
+        "2": {
+          "bu": {
+            "mode": "OFF",
+            "name": "GPIO 2"
+          }
+        },
+        "3": {
+          "bu": {
+            "mode": "OFF",
+            "name": "GPIO 3"
+          }
+        },
+        "4": {
+          "bu": {
+            "mode": "OFF",
+            "name": "GPIO 4"
+          }
+        }
+      },
+      "user": {
+        "1": {
+          "bu": {
+            "mode": "OFF",
+            "name": "",
+            "ledstate": 0
+          },
+          "bd": {
+            "mode": "OFF",
+            "name": "",
+            "ledstate": 0
+          }
+        },
+        "2": {
+          "bu": {
+            "mode": "OFF",
+            "name": "",
+            "ledstate": 0
+          },
+          "bd": {
+            "mode": "OFF",
+            "name": "",
+            "ledstate": 0
+          }
+        },
+        "3": {
+          "bu": {
+            "mode": "OFF",
+            "name": "",
+            "ledstate": 0
+          },
+          "bd": {
+            "mode": "OFF",
+            "name": "",
+            "ledstate": 0
+          }
+        },
+        "4": {
+          "bu": {
+            "mode": "OFF",
+            "name": "",
+            "ledstate": 0
+          },
+          "bd": {
+            "mode": "OFF",
+            "name": "",
+            "ledstate": 0
+          }
+        }
+      },
+      "daw1": {
+        "1": {
+          "bu": {
+            "mode": "DAWBTN",
+            "name": "STOP",
+            "btn": "T1"
+          },
+          "bd": {
+            "mode": "DAWBTN",
+            "name": "REWIND",
+            "btn": "T4"
+          }
+        },
+        "2": {
+          "bu": {
+            "mode": "DAWBTN",
+            "name": "PLAY",
+            "btn": "T2"
+          },
+          "bd": {
+            "mode": "DAWBTN",
+            "name": "FFWD",
+            "btn": "T5"
+          }
+        },
+        "3": {
+          "bu": {
+            "mode": "DAWBTN",
+            "name": "CYCLE",
+            "btn": "T8"
+          },
+          "bd": {
+            "mode": "DAWBTN",
+            "name": "TIME/BEATS",
+            "btn": "OT4"
+          }
+        },
+        "4": {
+          "bu": {
+            "mode": "DAWBTN",
+            "name": "RECORD",
+            "btn": "T3"
+          },
+          "bd": {
+            "mode": "DAWBTN",
+            "name": "|UNDO",
+            "btn": "SY6"
+          }
+        }
+      },
+      "daw2": {
+        "1": {
+          "bu": {
+            "mode": "DAWBTN",
+            "name": "STOP",
+            "btn": "T1"
+          },
+          "bd": {
+            "mode": "DAWBTN",
+            "name": "REWIND/PREV",
+            "btn": "T4"
+          }
+        },
+        "2": {
+          "bu": {
+            "mode": "DAWBTN",
+            "name": "PLAY",
+            "btn": "T2"
+          },
+          "bd": {
+            "mode": "DAWBTN",
+            "name": "FFWD/NEXT",
+            "btn": "T5"
+          }
+        },
+        "3": {
+          "bu": {
+            "mode": "OFF",
+            "name": ""
+          },
+          "bd": {
+            "mode": "OFF",
+            "name": ""
+          }
+        },
+        "4": {
+          "bu": {
+            "mode": "DAWBTN",
+            "name": "RECORD",
+            "btn": "T3"
+          },
+          "bd": {
+            "mode": "DAWBTN",
+            "name": "|EDIT MARKER",
+            "btn": "T6"
+          }
+        }
+      },
+      "daw3": {
+        "1": {
+          "bu": {
+            "mode": "DAWBTN",
+            "name": "STOP",
+            "btn": "T1"
+          },
+          "bd": {
+            "mode": "DAWBTN",
+            "name": "REWIND",
+            "btn": "T4"
+          }
+        },
+        "2": {
+          "bu": {
+            "mode": "DAWBTN",
+            "name": "PLAY",
+            "btn": "T2"
+          },
+          "bd": {
+            "mode": "DAWBTN",
+            "name": "FFWD",
+            "btn": "T5"
+          }
+        },
+        "3": {
+          "bu": {
+            "mode": "DAWBTN",
+            "name": " |TOUCH",
+            "btn": "AU4"
+          },
+          "bd": {
+            "mode": "DAWBTN",
+            "name": "|READ",
+            "btn": "AU1"
+          }
+        },
+        "4": {
+          "bu": {
+            "mode": "DAWBTN",
+            "name": " |LATCH",
+            "btn": "AU5"
+          },
+          "bd": {
+            "mode": "DAWBTN",
+            "name": "|WRITE",
+            "btn": "AU2"
+          }
+        }
+      },
+      "daw4": {
+        "1": {
+          "bu": {
+            "mode": "DAWBTN",
+            "name": "NAME/VALUE",
+            "btn": "OT3"
+          },
+          "bd": {
+            "mode": "DAWBTN",
+            "name": "FLIP",
+            "btn": "OT1"
+          }
+        },
+        "2": {
+          "bu": {
+            "mode": "OFF",
+            "name": "[V-POTS]"
+          },
+          "bd": {
+            "mode": "DAWBTN",
+            "name": "HOLD |SEL",
+            "btn": "SP2"
+          }
+        },
+        "3": {
+          "bu": {
+            "mode": "OFF",
+            "name": "[RECRDY]"
+          },
+          "bd": {
+            "mode": "DAWBTN",
+            "name": "[HOLD+] |SEL",
+            "btn": "SP3"
+          }
+        },
+        "4": {
+          "bu": {
+            "mode": "DAWBTN",
+            "name": "ZOOM",
+            "btn": "N5"
+          },
+          "bd": {
+            "mode": "DAWBTN",
+            "name": "SCRUB",
+            "btn": "T11"
           }
         }
       },
@@ -41144,12 +41167,12 @@
         "RIGHT": "       ",
         "COMPACT": "         ",
         "RACK": "     ",
-        "EXTERN": "",
+        "EXTERN": "        ",
         "VIRTUAL": "        ",
         "WINGEDIT": "",
         "WEDIT": ""
       },
-      "custom": "                      ",
+      "custom": "                               ",
       "setup": "  "
     },
     "daw": {
