@@ -199,3 +199,99 @@ export function bandPaymentHasAgreementPdf(payment: {
   );
   return hasPayeeAgreement && Boolean(payment.confirmationEmailSentAt);
 }
+
+/**
+ * Fields to patch alongside a status change: `statusChangedAt` always, and
+ * `promotedAt` when the payout joins the queue (leaves `draft`, or is created
+ * for an event that already ended). Empty when the status doesn't change.
+ */
+export function bandPaymentStatusStamp(
+  previous: BandPaymentStatus | undefined,
+  next: BandPaymentStatus,
+  nowMs: number,
+): { statusChangedAt?: number; promotedAt?: number } {
+  if (previous === next) return {};
+  const joinsQueue =
+    next !== "draft" &&
+    next !== "cancelled" &&
+    (previous === undefined || previous === "draft" || previous === "cancelled");
+  return joinsQueue ? { statusChangedAt: nowMs, promotedAt: nowMs } : { statusChangedAt: nowMs };
+}
+
+/**
+ * The payouts pipeline's stages, in workflow order. Onboarding and payee info
+ * share one stage because both wait on the artist.
+ */
+export type BandPayoutStage =
+  | "upcoming"
+  | "waiting_on_artist"
+  | "ready_to_send"
+  | "waiting_on_signature"
+  | "ready_to_pay"
+  | "paid";
+
+export const BAND_PAYOUT_STAGES: BandPayoutStage[] = [
+  "upcoming",
+  "waiting_on_artist",
+  "ready_to_send",
+  "waiting_on_signature",
+  "ready_to_pay",
+  "paid",
+];
+
+export function bandPayoutStageForStatus(status: BandPaymentStatus): BandPayoutStage | null {
+  switch (status) {
+    case "draft":
+      return "upcoming";
+    case "pending_onboarding":
+    case "pending_payee":
+      return "waiting_on_artist";
+    case "pending_email":
+      return "ready_to_send";
+    case "awaiting_confirmation":
+      return "waiting_on_signature";
+    case "confirmed":
+      return "ready_to_pay";
+    case "paid":
+      return "paid";
+    case "cancelled":
+      return null;
+  }
+}
+
+/**
+ * When the payout entered its current pipeline stage. Payouts written before
+ * `statusChangedAt` existed fall back to the milestone that put them there
+ * (event end for the post-show queue).
+ */
+export function bandPaymentStageEnteredAt(
+  payment: Pick<
+    Doc<"eventBandPayments">,
+    | "status"
+    | "statusChangedAt"
+    | "promotedAt"
+    | "createdAt"
+    | "confirmationEmailSentAt"
+    | "confirmedAt"
+    | "paidAt"
+  >,
+  eventEndAt: number,
+) {
+  const queuedAt = payment.promotedAt ?? Math.max(eventEndAt, payment.createdAt);
+  switch (payment.status) {
+    case "draft":
+      return payment.createdAt;
+    case "pending_onboarding":
+    case "pending_payee":
+      return queuedAt;
+    case "pending_email":
+      return payment.statusChangedAt ?? queuedAt;
+    case "awaiting_confirmation":
+      return payment.confirmationEmailSentAt ?? payment.statusChangedAt ?? queuedAt;
+    case "confirmed":
+      return payment.confirmedAt ?? payment.statusChangedAt ?? queuedAt;
+    case "paid":
+    case "cancelled":
+      return payment.paidAt ?? payment.statusChangedAt ?? queuedAt;
+  }
+}

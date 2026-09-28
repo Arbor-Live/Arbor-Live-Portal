@@ -3,47 +3,51 @@
 import Link from "next/link";
 import { useQuery } from "convex/react";
 import { api } from "@/lib/convex-api";
+import { TONE_DOT } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
+import {
+  PAYOUT_GROUPS,
+  PAYOUT_STAGE_LABELS,
+  payoutStageCounts,
+  payoutStageTone,
+} from "@/lib/band-payout-stages";
+import { formatUsd } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
+/** The payouts pipeline's stage counts and totals: what needs Arbor, then everything else. */
 export function BandPayoutsSummary() {
   const counts = useQuery(api.bandPayments.getQueueCounts, {});
 
   if (counts === undefined) {
-    return <p className="text-sm text-muted-foreground">Loading payout queue…</p>;
+    return <p className="text-sm text-muted-foreground">Loading payouts…</p>;
   }
 
-  const pendingTotal =
-    counts.needs_onboarding +
-    counts.needs_payee +
-    counts.needs_email +
-    counts.awaiting_reply +
-    counts.ready_to_pay;
+  const byStage = payoutStageCounts(counts);
 
   return (
     <div className="space-y-3">
-      <div className="grid gap-2 text-sm sm:grid-cols-2">
-        <p>
-          <span className="font-medium">Upcoming:</span> {counts.upcoming}
-        </p>
-        <p>
-          <span className="font-medium">Pending onboarding:</span> {counts.needs_onboarding}
-        </p>
-        <p>
-          <span className="font-medium">Needs payee:</span> {counts.needs_payee}
-        </p>
-        <p>
-          <span className="font-medium">Needs signature request:</span> {counts.needs_email}
-        </p>
-        <p>
-          <span className="font-medium">Awaiting signature:</span> {counts.awaiting_reply}
-        </p>
-        <p>
-          <span className="font-medium">Ready to pay:</span> {counts.ready_to_pay}
-        </p>
+      <div className="space-y-3" data-testid="payouts-hub-summary">
+        {PAYOUT_GROUPS.map((group) => (
+          <div key={group.id} className="space-y-1">
+            <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">{group.label}</p>
+            <ul className="divide-y border text-sm">
+              {group.stages.map((stage) => (
+                <li key={stage}>
+                  <Link
+                    href={`/dashboard/financial-hub/artist-payouts#payout-stage-${stage}`}
+                    className="flex items-center gap-2 px-3 py-1.5 hover:bg-muted/30"
+                  >
+                    <span className={cn("size-1.5 shrink-0 rounded-full", TONE_DOT[payoutStageTone(stage)])} aria-hidden />
+                    <span className="min-w-0 flex-1 truncate">{PAYOUT_STAGE_LABELS[stage]}</span>
+                    <span className="w-8 text-right text-muted-foreground tabular-nums">{byStage[stage].count}</span>
+                    <span className="w-20 text-right tabular-nums">{formatUsd(byStage[stage].totalUsd)}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
       </div>
-      <p className="text-sm text-muted-foreground">
-        {pendingTotal} pending payout{pendingTotal === 1 ? "" : "s"} · {counts.paid} paid
-      </p>
       <Button asChild variant="outline" size="sm">
         <Link href="/dashboard/financial-hub/artist-payouts">Open artist payouts</Link>
       </Button>

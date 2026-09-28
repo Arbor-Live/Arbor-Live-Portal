@@ -287,6 +287,8 @@ labels (`TAB_ICONS` in `event-workspace-nav.tsx`, `MOMENT_ICONS` in
 | Error / blocking alert | `WarningCircleIcon` (in `Alert`s) |
 | Done / confirmed | `CheckIcon` |
 | Magic / auto-build | `MagicWandIcon` (Build run of show); quick fill `LightningIcon` |
+| Signature / e-sign | `SignatureIcon` (awaiting signature, artist payouts) |
+| Select rows for a batch action | `Checkbox` (`components/ui/checkbox.tsx`), with a select-all in the group header |
 
 If a concept isn't in the table, search the codebase for how it's already
 drawn (`rg "<.*Icon" -g "*.tsx"`) before choosing, and add new mappings to this

@@ -20,7 +20,10 @@ import {
 } from "./lib/auth";
 import {
   bandPaymentHasAgreementPdf,
+  bandPaymentStageEnteredAt,
   bandPaymentStatusLabel,
+  bandPaymentStatusStamp,
+  bandPayoutStageForStatus,
   computeBandPaymentTotal,
   formatBandPaymentDate,
   formatPerformanceHours,
@@ -70,6 +73,15 @@ const queueValue = v.union(
   v.literal("all_pending"),
 );
 
+const stageValue = v.union(
+  v.literal("upcoming"),
+  v.literal("waiting_on_artist"),
+  v.literal("ready_to_send"),
+  v.literal("waiting_on_signature"),
+  v.literal("ready_to_pay"),
+  v.literal("paid"),
+);
+
 const bandPaymentRowValidator = v.object({
   _id: v.id("eventBandPayments"),
   eventId: v.id("events"),
@@ -113,6 +125,15 @@ const bandPaymentRowValidator = v.object({
     v.null(),
   ),
   onboardingIncompleteSteps: v.array(bandOnboardingIncompleteStepValidator),
+  /** Pipeline stage (null only for cancelled payouts). */
+  stage: v.union(stageValue, v.null()),
+  stageEnteredAt: v.number(),
+  createdAt: v.number(),
+  promotedAt: v.optional(v.number()),
+  eventEndAt: v.number(),
+  paidByName: v.optional(v.string()),
+  /** The Lineup position this act fills, for `?position=` deep links. */
+  lineupNeedId: v.optional(v.id("eventArtistNeeds")),
 });
 
 const bandFacingPaymentRowValidator = v.object({
@@ -264,7 +285,11 @@ async function syncPayeeFromOrganizationForPayment(
     payment.designatedPayeeMailingAddress !== patch.designatedPayeeMailingAddress ||
     payment.designatedPayeePayoutMethod !== patch.designatedPayeePayoutMethod;
   if (needsPatch) {
-    await ctx.db.patch(payment._id, { ...patch, status: nextStatus });
+    await ctx.db.patch(payment._id, {
+      ...patch,
+      status: nextStatus,
+      ...bandPaymentStatusStamp(payment.status, nextStatus, nowMs),
+    });
     return (await ctx.db.get(payment._id))!;
   }
   return payment;
@@ -309,6 +334,12 @@ async function buildBandPaymentRow(
     payment.status === "pending_onboarding"
       ? bandOnboardingIncompleteSteps(onboarding)
       : [];
+  const participation = await ctx.db
+    .query("eventBandParticipations")
+    .withIndex("by_eventId_and_organizationId", (q) =>
+      q.eq("eventId", payment.eventId).eq("organizationId", payment.organizationId),
+    )
+    .first();
   return {
     _id: payment._id,
     eventId: payment.eventId,
@@ -346,6 +377,13 @@ async function buildBandPaymentRow(
     canDownloadAgreementPdf: bandPaymentHasAgreementPdf(payment),
     onboardingStatus,
     onboardingIncompleteSteps,
+    stage: bandPayoutStageForStatus(payment.status),
+    stageEnteredAt: bandPaymentStageEnteredAt(payment, event.endAt),
+    createdAt: payment.createdAt,
+    promotedAt: payment.promotedAt,
+    eventEndAt: event.endAt,
+    paidByName: payment.paidByName,
+    lineupNeedId: participation?.needId,
   };
 }
 
@@ -491,6 +529,16 @@ export const getQueueCounts = query({
     awaiting_reply: v.number(),
     ready_to_pay: v.number(),
     paid: v.number(),
+    /** Payout dollars per queue, same keys as the counts. */
+    totalsUsd: v.object({
+      upcoming: v.number(),
+      needs_onboarding: v.number(),
+      needs_payee: v.number(),
+      needs_email: v.number(),
+      awaiting_reply: v.number(),
+      ready_to_pay: v.number(),
+      paid: v.number(),
+    }),
   }),
   handler: async (ctx) => {
     await requireArborInternalContext(ctx);
@@ -512,6 +560,7 @@ export const getQueueCounts = query({
       ["confirmed", "ready_to_pay"],
       ["paid", "paid"],
     ];
+    const totalsUsd = { ...counts };
     for (const [status, key] of statusKeys) {
       // Count via async iteration so the queue badges stay accurate past 500
       // rows per status. Band-payout cardinality is bounded (events × bands for
@@ -519,14 +568,17 @@ export const getQueueCounts = query({
       // this table ever grows unbounded, switch to a denormalized counter
       // maintained on each status transition.
       let count = 0;
-      for await (const _row of ctx.db
+      let total = 0;
+      for await (const row of ctx.db
         .query("eventBandPayments")
         .withIndex("by_status", (q) => q.eq("status", status))) {
         count += 1;
+        total += row.totalUsd;
       }
       counts[key] = count;
+      totalsUsd[key] = total;
     }
-    return counts;
+    return { ...counts, totalsUsd };
   },
 });
 
@@ -643,6 +695,7 @@ async function upsertEventBandPayment(
     designatedPayeeMailingAddress: payeeSnapshot.designatedPayeeMailingAddress,
     designatedPayeePayoutMethod: payeeSnapshot.designatedPayeePayoutMethod,
     status: nextStatus,
+    ...bandPaymentStatusStamp(existing?.status, nextStatus, now),
     photoAlbumUrl: args.photoAlbumUrl?.trim() || undefined,
     updatedAt: now,
   };
@@ -746,6 +799,72 @@ export const listByQueue = query({
   },
 });
 
+async function buildPipelineRows(ctx: QueryCtx, payments: Doc<"eventBandPayments">[]) {
+  const nowMs = Date.now();
+  const events = new Map<Id<"events">, Doc<"events"> | null>();
+  const rows = [];
+  for (const payment of payments) {
+    if (!events.has(payment.eventId)) {
+      events.set(payment.eventId, await ctx.db.get(payment.eventId));
+    }
+    const event = events.get(payment.eventId);
+    if (!event) continue;
+    rows.push(await buildBandPaymentRow(ctx, payment, event, nowMs));
+  }
+  return rows;
+}
+
+/**
+ * The payouts pipeline: every active payout, upcoming through ready to pay.
+ * Rows carry their stage and when they entered it; the page groups and sorts.
+ */
+export const listPipeline = query({
+  args: {},
+  returns: v.array(bandPaymentRowValidator),
+  handler: async (ctx) => {
+    await requireArborInternalContext(ctx);
+    const payments: Doc<"eventBandPayments">[] = [];
+    for (const status of statusesForQueue("upcoming").concat(statusesForQueue("all_pending"))) {
+      // Same per-status budget as `listByQueue`.
+      payments.push(
+        ...(await ctx.db
+          .query("eventBandPayments")
+          .withIndex("by_status", (q) => q.eq("status", status))
+          .take(200)),
+      );
+    }
+    return await buildPipelineRows(ctx, payments);
+  },
+});
+
+const PAID_PAYOUTS_CAP = 200;
+
+/**
+ * The pipeline's Paid stage: payouts paid since `paidSince`, newest first.
+ * Capped; `truncated` tells the page older payouts in the range are left out.
+ */
+export const listPaidPayouts = query({
+  args: { paidSince: v.optional(v.number()) },
+  returns: v.object({
+    rows: v.array(bandPaymentRowValidator),
+    truncated: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    await requireArborInternalContext(ctx);
+    const paid = await ctx.db
+      .query("eventBandPayments")
+      .withIndex("by_paidAt", (q) => q.gte("paidAt", args.paidSince ?? 0))
+      .order("desc")
+      .take(PAID_PAYOUTS_CAP + 1);
+    const truncated = paid.length > PAID_PAYOUTS_CAP;
+    const rows = await buildPipelineRows(
+      ctx,
+      paid.slice(0, PAID_PAYOUTS_CAP).filter((payment) => payment.status === "paid"),
+    );
+    return { rows, truncated };
+  },
+});
+
 export const syncStalePayeePayments = mutation({
   args: {},
   returns: v.number(),
@@ -817,62 +936,107 @@ export const refreshPendingPaymentsForOrganization = mutation({
   },
 });
 
+/** Send (or resend) one payout's signature request. Shared by the single and batch mutations. */
+async function sendSignatureRequest(
+  ctx: MutationCtx,
+  user: Awaited<ReturnType<typeof requireAuth>>,
+  paymentId: Id<"eventBandPayments">,
+) {
+  const existing = await ctx.db.get(paymentId);
+  if (!existing) throw new Error("Artist payment not found.");
+  const payment = await syncPayeeFromOrganizationForPayment(ctx, existing, Date.now());
+  if (payment.status === "paid" || payment.status === "cancelled") {
+    throw new Error("This payment is no longer active.");
+  }
+  if (payment.status !== "pending_email" && payment.status !== "awaiting_confirmation") {
+    throw new Error("Signature request emails can only be sent from the payment queue.");
+  }
+  const effectivePayee = await getEffectivePayeeForPayment(ctx, payment);
+  if (!isBandPayeeComplete(effectivePayee)) {
+    throw new Error(
+      "Designated payee name, email, mailing address, and payout method are required before sending.",
+    );
+  }
+  if (!effectivePayee.designatedPayeeUserId) {
+    throw new Error("Designated payee must be linked to a member account before sending.");
+  }
+
+  const event = await ctx.db.get(payment.eventId);
+  if (!event) throw new Error("Event not found.");
+
+  const senderUserId = getUserId(user);
+  const senderIdentity = await resolveAuthUserIdentity(ctx, senderUserId);
+  const senderName =
+    senderIdentity?.name ||
+    user.name?.trim() ||
+    user.email?.trim() ||
+    "Arbor staff";
+  const senderEmail = senderIdentity?.email || user.email?.trim() || undefined;
+
+  const idempotencySentAt = payment.confirmationEmailSentAt ?? 0;
+  await ctx.scheduler.runAfter(0, internal.bandPaymentConfirmationActions.deliverConfirmationEmail, {
+    paymentId: payment._id,
+    idempotencySentAt,
+  });
+
+  await ctx.db.patch(payment._id, {
+    designatedPayeeName: effectivePayee.designatedPayeeName,
+    designatedPayeeEmail: effectivePayee.designatedPayeeEmail,
+    designatedPayeeUserId: effectivePayee.designatedPayeeUserId,
+    designatedPayeeMailingAddress: effectivePayee.designatedPayeeMailingAddress,
+    designatedPayeePayoutMethod: effectivePayee.designatedPayeePayoutMethod,
+    status: "awaiting_confirmation",
+    ...bandPaymentStatusStamp(payment.status, "awaiting_confirmation", Date.now()),
+    confirmationEmailSentAt: Date.now(),
+    confirmationSentByUserId: senderUserId || undefined,
+    confirmationSentByName: senderName,
+    confirmationSentByEmail: senderEmail,
+    updatedAt: Date.now(),
+  });
+}
+
 export const sendConfirmationEmail = mutation({
   args: { paymentId: v.id("eventBandPayments") },
   returns: v.null(),
   handler: async (ctx, args) => {
     const user = await requireAuth(ctx);
     await requireArborInternalContext(ctx);
-    const existing = await ctx.db.get(args.paymentId);
-    if (!existing) throw new Error("Artist payment not found.");
-    const payment = await syncPayeeFromOrganizationForPayment(ctx, existing, Date.now());
-    if (payment.status === "paid" || payment.status === "cancelled") {
-      throw new Error("This payment is no longer active.");
-    }
-    if (payment.status !== "pending_email" && payment.status !== "awaiting_confirmation") {
-      throw new Error("Signature request emails can only be sent from the payment queue.");
-    }
-    const effectivePayee = await getEffectivePayeeForPayment(ctx, payment);
-    if (!isBandPayeeComplete(effectivePayee)) {
-      throw new Error(
-        "Designated payee name, email, mailing address, and payout method are required before sending.",
-      );
-    }
-    if (!effectivePayee.designatedPayeeUserId) {
-      throw new Error("Designated payee must be linked to a member account before sending.");
-    }
+    await sendSignatureRequest(ctx, user, args.paymentId);
+    return null;
+  },
+});
 
-    const event = await ctx.db.get(payment.eventId);
-    if (!event) throw new Error("Event not found.");
+const MAX_BATCH_PAYOUTS = 50;
 
-    const senderUserId = getUserId(user);
-    const senderIdentity = await resolveAuthUserIdentity(ctx, senderUserId);
-    const senderName =
-      senderIdentity?.name ||
-      user.name?.trim() ||
-      user.email?.trim() ||
-      "Arbor staff";
-    const senderEmail = senderIdentity?.email || user.email?.trim() || undefined;
+/** Run one payout's step in a batch, naming the artist if it fails (the batch rolls back). */
+async function inBatch(
+  ctx: MutationCtx,
+  paymentId: Id<"eventBandPayments">,
+  step: () => Promise<void>,
+) {
+  try {
+    await step();
+  } catch (error) {
+    const payment = await ctx.db.get(paymentId);
+    const bandName = payment ? await resolveBandName(ctx, payment.organizationId) : "A payout";
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`${bandName}: ${message}`);
+  }
+}
 
-    const idempotencySentAt = payment.confirmationEmailSentAt ?? 0;
-    await ctx.scheduler.runAfter(0, internal.bandPaymentConfirmationActions.deliverConfirmationEmail, {
-      paymentId: payment._id,
-      idempotencySentAt,
-    });
-
-    await ctx.db.patch(payment._id, {
-      designatedPayeeName: effectivePayee.designatedPayeeName,
-      designatedPayeeEmail: effectivePayee.designatedPayeeEmail,
-      designatedPayeeUserId: effectivePayee.designatedPayeeUserId,
-      designatedPayeeMailingAddress: effectivePayee.designatedPayeeMailingAddress,
-      designatedPayeePayoutMethod: effectivePayee.designatedPayeePayoutMethod,
-      status: "awaiting_confirmation",
-      confirmationEmailSentAt: Date.now(),
-      confirmationSentByUserId: senderUserId || undefined,
-      confirmationSentByName: senderName,
-      confirmationSentByEmail: senderEmail,
-      updatedAt: Date.now(),
-    });
+/** Send signature requests for several payouts at once; all or none go out. */
+export const sendConfirmationEmailBatch = mutation({
+  args: { paymentIds: v.array(v.id("eventBandPayments")) },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const user = await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    if (args.paymentIds.length > MAX_BATCH_PAYOUTS) {
+      throw new Error(`Send at most ${MAX_BATCH_PAYOUTS} signature requests at a time.`);
+    }
+    for (const paymentId of new Set(args.paymentIds)) {
+      await inBatch(ctx, paymentId, () => sendSignatureRequest(ctx, user, paymentId));
+    }
     return null;
   },
 });
@@ -994,6 +1158,46 @@ async function sendOnboardingReminderForOrganizationHandler(
   return { enqueuedCount: result.enqueuedCount };
 }
 
+async function markPaymentPaid(
+  ctx: MutationCtx,
+  user: Awaited<ReturnType<typeof requireAuth>>,
+  paymentId: Id<"eventBandPayments">,
+  rawServicePaymentNumber: string,
+) {
+  const payment = await ctx.db.get(paymentId);
+  if (!payment) throw new Error("Artist payment not found.");
+  if (payment.status !== "confirmed") {
+    throw new Error("Artist e-signature is required before marking paid.");
+  }
+
+  const servicePaymentNumber = rawServicePaymentNumber.trim();
+  if (!servicePaymentNumber) throw new Error("Transfer / Service Payment number is required.");
+
+  const event = await ctx.db.get(payment.eventId);
+  if (!event) throw new Error("Event not found.");
+
+  const now = Date.now();
+  const paidByUserId = getUserId(user);
+  const paidByIdentity = await resolveAuthUserIdentity(ctx, paidByUserId);
+  const paidByName =
+    paidByIdentity?.name || user.name?.trim() || user.email?.trim() || "Arbor staff";
+  const paidByEmail = paidByIdentity?.email || user.email?.trim() || undefined;
+
+  await ctx.db.patch(payment._id, {
+    status: "paid",
+    ...bandPaymentStatusStamp(payment.status, "paid", now),
+    servicePaymentNumber,
+    paidAt: now,
+    paidByUserId,
+    paidByName,
+    paidByEmail,
+    updatedAt: now,
+  });
+
+  await scheduleBandPaymentCompletedEmails(ctx, { payment, event, servicePaymentNumber });
+  await ctx.db.patch(payment._id, { bandNotifiedAt: Date.now(), updatedAt: Date.now() });
+}
+
 export const markPaid = mutation({
   args: {
     paymentId: v.id("eventBandPayments"),
@@ -1003,37 +1207,40 @@ export const markPaid = mutation({
   handler: async (ctx, args) => {
     const user = await requireAuth(ctx);
     await requireArborInternalContext(ctx);
-    const payment = await ctx.db.get(args.paymentId);
-    if (!payment) throw new Error("Artist payment not found.");
-    if (payment.status !== "confirmed") {
-      throw new Error("Artist e-signature is required before marking paid.");
+    await markPaymentPaid(ctx, user, args.paymentId, args.servicePaymentNumber);
+    return null;
+  },
+});
+
+/**
+ * Mark several signed payouts paid in one go (after a weekend's transfers).
+ * Each entry carries its own transfer / Service Payment number (the dialog
+ * fills them all with one number, or one per row). All or none are marked.
+ */
+export const markPaidBatch = mutation({
+  args: {
+    payments: v.array(
+      v.object({
+        paymentId: v.id("eventBandPayments"),
+        servicePaymentNumber: v.string(),
+      }),
+    ),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const user = await requireAuth(ctx);
+    await requireArborInternalContext(ctx);
+    if (args.payments.length > MAX_BATCH_PAYOUTS) {
+      throw new Error(`Mark at most ${MAX_BATCH_PAYOUTS} payouts paid at a time.`);
     }
-
-    const servicePaymentNumber = args.servicePaymentNumber.trim();
-    if (!servicePaymentNumber) throw new Error("Transfer / Service Payment number is required.");
-
-    const event = await ctx.db.get(payment.eventId);
-    if (!event) throw new Error("Event not found.");
-
-    const now = Date.now();
-    const paidByUserId = getUserId(user);
-    const paidByIdentity = await resolveAuthUserIdentity(ctx, paidByUserId);
-    const paidByName =
-      paidByIdentity?.name || user.name?.trim() || user.email?.trim() || "Arbor staff";
-    const paidByEmail = paidByIdentity?.email || user.email?.trim() || undefined;
-
-    await ctx.db.patch(payment._id, {
-      status: "paid",
-      servicePaymentNumber,
-      paidAt: now,
-      paidByUserId,
-      paidByName,
-      paidByEmail,
-      updatedAt: now,
-    });
-
-    await scheduleBandPaymentCompletedEmails(ctx, { payment, event, servicePaymentNumber });
-    await ctx.db.patch(payment._id, { bandNotifiedAt: Date.now(), updatedAt: Date.now() });
+    const seen = new Set<Id<"eventBandPayments">>();
+    for (const entry of args.payments) {
+      if (seen.has(entry.paymentId)) continue;
+      seen.add(entry.paymentId);
+      await inBatch(ctx, entry.paymentId, () =>
+        markPaymentPaid(ctx, user, entry.paymentId, entry.servicePaymentNumber),
+      );
+    }
     return null;
   },
 });
@@ -1048,6 +1255,7 @@ export const cancelPayment = mutation({
     if (payment.status === "paid") throw new Error("Paid artist payments cannot be cancelled.");
     await ctx.db.patch(payment._id, {
       status: "cancelled",
+      ...bandPaymentStatusStamp(payment.status, "cancelled", Date.now()),
       updatedAt: Date.now(),
     });
     await syncEventBandsCost(ctx, payment.eventId);
@@ -1114,6 +1322,7 @@ export const promoteEndedPaymentsBatch = internalMutation({
           designatedPayeeMailingAddress: payeeSnapshot.designatedPayeeMailingAddress,
           designatedPayeePayoutMethod: payeeSnapshot.designatedPayeePayoutMethod,
           status: nextStatus,
+          ...bandPaymentStatusStamp(payment.status, nextStatus, now),
           updatedAt: now,
         });
         if (nextStatus === "pending_payee") {
@@ -1161,6 +1370,7 @@ export const promoteEndedPaymentsBatch = internalMutation({
           designatedPayeeMailingAddress: payeeSnapshot.designatedPayeeMailingAddress,
           designatedPayeePayoutMethod: payeeSnapshot.designatedPayeePayoutMethod,
           status: nextStatus,
+          ...bandPaymentStatusStamp(payment.status, nextStatus, now),
           updatedAt: now,
         });
         if (nextStatus === "pending_payee" && payment.status !== "pending_payee") {
@@ -1394,6 +1604,7 @@ export const signPayment = mutation({
 
     await ctx.db.patch(payment._id, {
       status: "confirmed",
+      ...bandPaymentStatusStamp(payment.status, "confirmed", Date.now()),
       confirmedAt: Date.now(),
       signedByUserId: userId,
       signatureTypedName: typedName,

@@ -39,25 +39,32 @@ function seedPayment(status: "pending_email" | "confirmed", label: string): Seed
   }) as SeededPayment;
 }
 
-/** Open a queue tab and return the card for one seeded payment. */
-async function openQueueCard(page: Page, queueLabel: RegExp, eventTitle: string) {
+/** Open the payouts pipeline and return the row for one seeded payment. */
+async function openPayoutRow(page: Page, eventTitle: string) {
   await page.goto("/dashboard/financial-hub/artist-payouts");
-  await expect(page.getByRole("button", { name: /All pending/ })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("payout-pipeline")).toBeVisible({ timeout: 30_000 });
 
-  await page.getByRole("button", { name: queueLabel }).click();
-  const card = page.locator('[data-slot="card"]').filter({ hasText: eventTitle }).first();
-  await expect(card).toBeVisible({ timeout: 30_000 });
-  return card;
+  // Search narrows the pipeline to the seeded payout(s).
+  await page.getByRole("textbox", { name: "Search payouts" }).fill(eventTitle);
+  const row = page.getByTestId("payout-row").filter({ hasText: eventTitle }).first();
+  await expect(row).toBeVisible({ timeout: 30_000 });
+  return row;
 }
 
 test.describe("band payouts queue", () => {
-  test("admin can send a signature request from the queue", async ({ page }) => {
+  test("admin can send a signature request from the pipeline", async ({ page }) => {
     test.setTimeout(120_000);
 
     const seeded = seedPayment("pending_email", "Sig");
 
-    const card = await openQueueCard(page, /Needs signature request/, seeded.eventTitle);
-    await card.getByRole("button", { name: "Send signature request" }).click();
+    const row = await openPayoutRow(page, seeded.eventTitle);
+    await expect(row).toHaveAttribute("data-status", "pending_email");
+    await row.getByRole("button", { name: "Send signature request" }).click();
+
+    // The primary action opens a preview dialog; sending happens from there.
+    const dialog = page.getByTestId("payout-send-dialog");
+    await expect(dialog).toBeVisible({ timeout: 15_000 });
+    await dialog.getByRole("button", { name: "Send signature request" }).click();
 
     const state = await pollConvex<PaymentState>(
       "e2eHelpers:getBandPaymentState",
@@ -84,41 +91,40 @@ test.describe("band payouts queue", () => {
       seedPayment("pending_email", `Filler${i}`);
     }
 
-    const card = await openQueueCard(page, /Needs signature request/, seeded.eventTitle);
-    await card.getByRole("button", { name: "Preview email" }).click();
+    const row = await openPayoutRow(page, seeded.eventTitle);
+    await row.getByRole("button", { name: "Send signature request" }).click();
 
-    // Preview opens as a centered dialog so it is visible even when the seeded
-    // payment sits far down a long queue (the inline card it replaced rendered
-    // below every row, off screen).
-    const dialog = page.getByRole("dialog");
-    await expect(dialog.getByText("Signature request email preview")).toBeVisible({
-      timeout: 15_000,
-    });
+    // The preview is a centered dialog, so it's visible even when the payout
+    // sits far down a long pipeline.
+    const dialog = page.getByTestId("payout-send-dialog");
     await expect(
       dialog.getByText(`Payment ready for your signature: ${seeded.eventTitle}`),
-    ).toBeVisible();
+    ).toBeVisible({ timeout: 15_000 });
     await expect(
       dialog.getByText(new RegExp(`\\[${seeded.confirmationToken}\\]`)),
     ).toBeVisible();
 
-    await dialog.getByRole("button", { name: "Close preview" }).click();
+    await dialog.getByRole("button", { name: "Cancel" }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
+    const state = await runConvex("e2eHelpers:getBandPaymentState", {
+      paymentId: seeded.paymentId,
+    }) as PaymentState;
+    expect(state.status).toBe("pending_email");
   });
 
-  test("admin can mark a signed payment paid from the queue", async ({ page }) => {
+  test("admin can mark a signed payment paid from the pipeline", async ({ page }) => {
     test.setTimeout(120_000);
 
     const seeded = seedPayment("confirmed", "Paid");
     const servicePaymentNumber = `SP-E2E-${String(Date.now()).slice(-6)}`;
 
-    const card = await openQueueCard(page, /Ready to pay/, seeded.eventTitle);
-    await card.getByRole("button", { name: "Mark paid" }).click();
+    const row = await openPayoutRow(page, seeded.eventTitle);
+    await row.getByRole("button", { name: "Mark paid" }).click();
 
-    // Mark paid opens a centered dialog (not an inline card under the queue).
-    const dialog = page.getByRole("dialog");
-    await expect(dialog.getByText("Mark artist payment paid")).toBeVisible({ timeout: 15_000 });
-    await dialog.getByPlaceholder("SP-2026-0042").fill(servicePaymentNumber);
-    await dialog.getByRole("button", { name: "Confirm paid" }).click();
+    const dialog = page.getByTestId("payout-mark-paid-dialog");
+    await expect(dialog).toBeVisible({ timeout: 15_000 });
+    await dialog.getByLabel("Transfer / Service Payment number").fill(servicePaymentNumber);
+    await dialog.getByRole("button", { name: "Mark paid" }).click();
 
     const state = await pollConvex<PaymentState>(
       "e2eHelpers:getBandPaymentState",
@@ -127,5 +133,37 @@ test.describe("band payouts queue", () => {
     );
     expect(state.status).toBe("paid");
     expect(state.servicePaymentNumber).toBe(servicePaymentNumber);
+  });
+
+  test("admin can batch mark payouts paid with one transfer number", async ({ page }) => {
+    test.setTimeout(120_000);
+
+    const batchLabel = `Batch${Date.now()}`;
+    const first = seedPayment("confirmed", `${batchLabel} A`);
+    const second = seedPayment("confirmed", `${batchLabel} B`);
+    const servicePaymentNumber = `SP-E2E-B${String(Date.now()).slice(-6)}`;
+
+    // Both seeded titles contain the batch label, so one search finds both.
+    await openPayoutRow(page, first.eventTitle);
+    await page.getByRole("textbox", { name: "Search payouts" }).fill(batchLabel);
+    const stage = page.getByTestId("payout-stage-ready_to_pay");
+    await expect(stage.getByTestId("payout-row")).toHaveCount(2, { timeout: 30_000 });
+
+    await stage.getByRole("checkbox", { name: "Select all in Ready to pay" }).click();
+    await stage.getByRole("button", { name: "Mark 2 paid" }).click();
+
+    const dialog = page.getByTestId("payout-mark-paid-dialog");
+    await expect(dialog).toBeVisible({ timeout: 15_000 });
+    await dialog.getByLabel("Transfer / Service Payment number").fill(servicePaymentNumber);
+    await dialog.getByRole("button", { name: "Mark 2 paid" }).click();
+
+    for (const seeded of [first, second]) {
+      const state = await pollConvex<PaymentState>(
+        "e2eHelpers:getBandPaymentState",
+        { paymentId: seeded.paymentId },
+        (row) => row?.status === "paid",
+      );
+      expect(state.servicePaymentNumber).toBe(servicePaymentNumber);
+    }
   });
 });
