@@ -4,6 +4,7 @@ import { query } from "./_generated/server";
 import { findAuthUsersByIds, getUserId, requireAdmin, requireArborInternalContext, requireAuth } from "./lib/auth";
 import { isStaffMember, resolveProfileMembership } from "./lib/userVerticals";
 import { resolveParticipationFlags } from "./lib/userParticipation";
+import { resolveUserStatus } from "./lib/userStatus";
 import { buildTimecardPeriodSummaryForUser, buildUserTimecards } from "./lib/userTimecards";
 
 const timecardEventValue = v.object({
@@ -76,11 +77,9 @@ export const listCrewTimecardOverview = query({
     const periodIndex = Math.min(Math.max(args.periodIndex ?? 0, 0), periods.length - 1);
     const period = periods[periodIndex]!;
 
-    const profiles = await ctx.db
-      .query("userAdminProfiles")
-      .withIndex("by_active", (q) => q.eq("active", true))
-      .take(500);
+    const profiles = await ctx.db.query("userAdminProfiles").take(500);
     const crewProfiles = profiles.filter((profile) => {
+      if (resolveUserStatus(profile) !== "active") return false;
       if (!resolveParticipationFlags(profile).includeInTimecards) return false;
       return isStaffMember(resolveProfileMembership(profile));
     });

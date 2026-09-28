@@ -7,6 +7,7 @@ import { SearchableSelect, type SearchableSelectOption } from "@/components/inve
 export type UserSelectOption = SearchableSelectOption & {
   role?: string;
   email?: string;
+  status?: "active" | "inactive" | "alumni";
 };
 
 function OptionAvatar({ option }: { option: UserSelectOption }) {
@@ -62,7 +63,14 @@ export function UserSelect({
             <OptionAvatar option={option as UserSelectOption} />
           </span>
           <div className="min-w-0 flex-1 overflow-hidden">
-            <p className="truncate">{option.label}</p>
+            <div className="flex items-center gap-1.5">
+              <p className="truncate">{option.label}</p>
+              {(option as UserSelectOption).status === "inactive" ? (
+                <span className="shrink-0 rounded bg-status-amber-500/15 px-1.5 py-0.5 text-3xs font-medium uppercase tracking-wide text-status-amber-800 dark:text-status-amber-300">
+                  Inactive
+                </span>
+              ) : null}
+            </div>
             {option.description ? (
               <p className="truncate text-xs text-muted-foreground">{option.description}</p>
             ) : null}

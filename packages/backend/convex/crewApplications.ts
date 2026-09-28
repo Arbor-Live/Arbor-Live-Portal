@@ -593,7 +593,7 @@ export const convertToMember = mutation({
 
     if (existingUserId) {
       await ensureUserProfileDefaults(ctx, existingUserId, {
-        active: true,
+        status: "active",
         verticals,
         disciplines,
         defaultOrganizationId: arborOrg.id,

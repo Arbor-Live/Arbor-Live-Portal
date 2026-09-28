@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { riderContentFields, riderStatusValue } from "./lib/riderSchema";
 import { artistOrganizationTypeValue } from "./lib/organizationType";
 import { scheduleBlockTypeValue } from "./lib/scheduleBlockTypes";
+import { userStatusValue } from "./lib/userStatus";
 
 const publicBucketValue = v.union(
   v.literal("lighting"),
@@ -944,7 +945,10 @@ export default defineSchema({
     title: v.optional(v.string()),
     phone: v.optional(v.string()),
     avatarStorageId: v.optional(v.id("_storage")),
-    active: v.boolean(),
+    /** @deprecated Use `status`. Retained only until the backfill migration runs. */
+    active: v.optional(v.boolean()),
+    /** Portal lifecycle. Optional while the `active` → `status` migration lands. */
+    status: v.optional(userStatusValue),
     /**
      * Short @handle for comment mentions (lowercase letters, digits, underscore).
      * Unique when set; omit/undefined when unset.
@@ -981,7 +985,7 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_userId", ["userId"])
-    .index("by_active", ["active"])
+    .index("by_defaultOrganizationId", ["defaultOrganizationId"])
     .index("by_username", ["username"]),
 
   userOrganizationMemberships: defineTable({

@@ -20,6 +20,7 @@ import {
   resolveProfileMembership,
 } from "./lib/userVerticals";
 import { buildUserProfileImageByUserId } from "./lib/userProfileImage";
+import { resolveUserStatus } from "./lib/userStatus";
 import { normalizeEventStatus } from "./lib/eventStatus";
 import { listMyPostEventWork as listMyPostEventWorkForUser } from "./lib/myEventActions";
 import { isSectionBlockType } from "./lib/scheduleBlockTypes";
@@ -96,6 +97,7 @@ export const listMyPendingAvailability = query({
     await requireArborInternalContext(ctx);
     const userId = getUserId(user);
     const profile = await getCurrentUserProfile(ctx, userId);
+    if (resolveUserStatus(profile) !== "active") return [];
     if (!profileHasCrewSpecialty(profile ?? {})) return [];
     const userDisciplines = getDisciplinesForEventMatching(
       resolveProfileMembership(profile ?? {}).disciplines,

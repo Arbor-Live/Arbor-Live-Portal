@@ -665,7 +665,7 @@ export const saveCrewProfileStep = mutation({
     } else {
       await ctx.db.insert("userAdminProfiles", {
         userId,
-        active: true,
+        status: "active",
         verticals: [],
         disciplines: [],
         phone,
@@ -905,7 +905,7 @@ export const listCrewOnboardingForAdmin = query({
   handler: async (ctx) => {
     await requireAdmin(ctx);
     const rows = await ctx.db.query("userOnboarding").withIndex("by_status").take(2000);
-    const profiles = await ctx.db.query("userAdminProfiles").withIndex("by_active").take(2000);
+    const profiles = await ctx.db.query("userAdminProfiles").take(2000);
     const payrollByUserId = new Map(
       profiles.map((profile) => [profile.userId, normalizePayrollMethod(profile.payrollMethod)]),
     );

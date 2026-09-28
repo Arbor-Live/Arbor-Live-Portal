@@ -197,6 +197,7 @@ import type * as lib_trustedOrigins from "../lib/trustedOrigins.js";
 import type * as lib_userContact from "../lib/userContact.js";
 import type * as lib_userParticipation from "../lib/userParticipation.js";
 import type * as lib_userProfileImage from "../lib/userProfileImage.js";
+import type * as lib_userStatus from "../lib/userStatus.js";
 import type * as lib_userTimecards from "../lib/userTimecards.js";
 import type * as lib_userVerticals from "../lib/userVerticals.js";
 import type * as lib_username from "../lib/username.js";
@@ -440,6 +441,7 @@ declare const fullApi: ApiFromModules<{
   "lib/userContact": typeof lib_userContact;
   "lib/userParticipation": typeof lib_userParticipation;
   "lib/userProfileImage": typeof lib_userProfileImage;
+  "lib/userStatus": typeof lib_userStatus;
   "lib/userTimecards": typeof lib_userTimecards;
   "lib/userVerticals": typeof lib_userVerticals;
   "lib/username": typeof lib_username;

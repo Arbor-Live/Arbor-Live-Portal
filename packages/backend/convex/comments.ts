@@ -8,6 +8,7 @@ import {
   requireAuth,
 } from "./lib/auth";
 import { loadActiveOrgMemberUserIds } from "./lib/orgMembership";
+import { resolveUserStatus } from "./lib/userStatus";
 import {
   buildUserProfileImageByUserId,
   loadAdminProfilesByUserIds,
@@ -60,6 +61,7 @@ export const listMentionCandidates = query({
       name: v.string(),
       email: v.string(),
       username: v.optional(v.string()),
+      status: v.string(),
       pronouns: v.optional(v.string()),
       gradYear: v.optional(v.number()),
       avatarUrl: v.optional(v.string()),
@@ -91,6 +93,7 @@ export const listMentionCandidates = query({
           name: user.name ?? user.email ?? "Arbor Live user",
           email: user.email ?? "",
           username: profile?.username,
+          status: resolveUserStatus(profile),
           pronouns: profile?.pronouns,
           gradYear: profile?.gradYear,
           avatarUrl: imageByUserId.get(userId),

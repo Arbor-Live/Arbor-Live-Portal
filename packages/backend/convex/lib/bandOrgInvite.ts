@@ -71,7 +71,7 @@ export async function inviteEmailToBandOrg(
 
   if (existingUserId) {
     await ensureUserProfileDefaults(ctx, existingUserId, {
-      active: true,
+      status: "active",
       verticals: [],
       disciplines: [],
       defaultOrganizationId: args.preserveDefaultOrganization

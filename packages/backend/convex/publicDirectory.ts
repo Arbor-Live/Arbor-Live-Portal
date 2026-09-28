@@ -6,6 +6,7 @@ import { resolveStoredR2AssetUrl } from "./inventoryR2";
 import { buildArtistLinks } from "./lib/publicArtistProfile";
 import { getUserId, findAuthOrganizationById, type AuthUser } from "./lib/auth";
 import { resolveUserProfileImageUrl } from "./lib/userProfileImage";
+import { resolveUserStatus } from "./lib/userStatus";
 import {
   getPrimaryVertical,
   getSecondaryTags,
@@ -125,11 +126,11 @@ export const listPublicCrew = query({
     );
     if (!activeMemberIds.size) return { sections: [] };
 
-    const profiles = await ctx.db.query("userAdminProfiles").withIndex("by_active").take(2000);
+    const profiles = await ctx.db.query("userAdminProfiles").take(2000);
     const publicProfiles = profiles.filter(
       (profile) =>
         activeMemberIds.has(profile.userId) &&
-        profile.active &&
+        resolveUserStatus(profile) === "active" &&
         profile.showOnPublicCrewPage === true,
     );
     if (!publicProfiles.length) return { sections: [] };

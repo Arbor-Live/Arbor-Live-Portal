@@ -28,7 +28,8 @@ canonical description of the domain itself.
   reminder that payouts are blocked until they complete it. When crew finish,
   admins and HR leadership get an email that includes the effective hourly rate
   (Normal, Lead, or Custom, resolved the same way as invoice crew pricing).
-  Admins see status under Users and can waive.
+  Admins see status under Users and can waive, and can switch a person's payroll
+  method under User details → **Payment method**.
 - Arbor Live crew invites (and convert-to-member) require a **compensation rate
   mode** (`normal` / `lead` / `custom`) and a **payroll method**
   (`stanford` / `external`). Normal/Lead resolve live from
@@ -68,6 +69,19 @@ canonical description of the domain itself.
   event availability and appear as eligible crew; Design (Marketing-only) and
   the specialty-less verticals are excluded (see `userVerticals.ts` and
   `userAdminProfiles`).
+- **User status** (`userAdminProfiles.status`, three states; legacy
+  `active: false` migrated to `alumni`):
+  - `active` — full participation.
+  - `inactive` — real account that can still sign in and reactivate itself from
+    a dashboard banner (`users.reactivateMyAccount`). Skipped by availability
+    targeting and the weekly digest, and hidden from the public `/crew` page,
+    but still assignable to events (shown with an **Inactive** badge in user
+    pickers), kept in the timecard overview, and mentionable in comments.
+  - `alumni` — no dashboard access (Better Auth `banned`). Hidden from every
+    picker, directory, and email; only visible in the Users admin list.
+  Change status with the per-row **Status** select in Users → Access, which
+  confirms and writes `users.setUserStatusAdmin`; it never touches org
+  memberships. Admins can close (alumni) but cannot close their own access.
 - **Participation flags** on `userAdminProfiles` (missing ⇒ crew defaults):
   `requiresOnboarding`, `includeInTimecards`, `assignableAsCrew`,
   `weeklyDigest`, `damageReportEmails`, plus existing

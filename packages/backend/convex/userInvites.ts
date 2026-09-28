@@ -59,7 +59,7 @@ async function ensureUserProfileDefaults(
     .unique();
   if (existing) {
     await ctx.db.patch(existing._id, {
-      active: true,
+      status: "active",
       verticals: args.verticals ?? existing.verticals ?? [],
       disciplines: args.disciplines ?? existing.disciplines ?? [],
       defaultOrganizationId: args.defaultOrganizationId ?? existing.defaultOrganizationId,
@@ -89,7 +89,7 @@ async function ensureUserProfileDefaults(
   }
   await ctx.db.insert("userAdminProfiles", {
     userId,
-    active: true,
+    status: "active",
     verticals: args.verticals ?? [],
     disciplines: args.disciplines ?? [],
     defaultOrganizationId: args.defaultOrganizationId,

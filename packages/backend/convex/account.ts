@@ -121,7 +121,7 @@ export const setMyAvatar = mutation({
     } else {
       await ctx.db.insert("userAdminProfiles", {
         userId,
-        active: true,
+        status: "active",
         verticals: [],
         disciplines: [],
         avatarStorageId: args.storageId,
@@ -201,7 +201,7 @@ export const updateMyProfileDetails = mutation({
       ...(usernameProvided ? { username } : {}),
       pronouns,
       gradYear,
-      active: true,
+      status: "active",
       verticals: [],
       disciplines: [],
       createdAt: now,
