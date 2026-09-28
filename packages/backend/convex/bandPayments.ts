@@ -837,21 +837,31 @@ export const listPipeline = query({
   },
 });
 
-/** The pipeline's Paid stage: payouts paid since `paidSince`, newest first (capped). */
+const PAID_PAYOUTS_CAP = 200;
+
+/**
+ * The pipeline's Paid stage: payouts paid since `paidSince`, newest first.
+ * Capped; `truncated` tells the page older payouts in the range are left out.
+ */
 export const listPaidPayouts = query({
   args: { paidSince: v.optional(v.number()) },
-  returns: v.array(bandPaymentRowValidator),
+  returns: v.object({
+    rows: v.array(bandPaymentRowValidator),
+    truncated: v.boolean(),
+  }),
   handler: async (ctx, args) => {
     await requireArborInternalContext(ctx);
     const paid = await ctx.db
       .query("eventBandPayments")
       .withIndex("by_paidAt", (q) => q.gte("paidAt", args.paidSince ?? 0))
       .order("desc")
-      .take(200);
-    return await buildPipelineRows(
+      .take(PAID_PAYOUTS_CAP + 1);
+    const truncated = paid.length > PAID_PAYOUTS_CAP;
+    const rows = await buildPipelineRows(
       ctx,
-      paid.filter((payment) => payment.status === "paid"),
+      paid.slice(0, PAID_PAYOUTS_CAP).filter((payment) => payment.status === "paid"),
     );
+    return { rows, truncated };
   },
 });
 

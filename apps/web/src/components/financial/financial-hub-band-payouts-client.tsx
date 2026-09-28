@@ -41,13 +41,16 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   BATCH_STAGES,
+  MAX_BATCH_PAYOUTS,
   PAYOUT_GROUPS,
+  PIPELINE_STATUS_CAP,
   PAYOUT_STAGES,
   PAYOUT_STAGE_LABELS,
   PAYOUT_STAGE_WHO,
   payoutAgeLabel,
   payoutLineupHref,
   payoutPrimaryAction,
+  payoutStageCounts,
   payoutStageTone,
   payoutStatusLabel,
   type PayoutGroup,
@@ -150,7 +153,7 @@ export function FinancialHubBandPayoutsClient() {
     void syncStalePayeePayments({});
   }, [syncStalePayeePayments]);
 
-  const allRows = useMemo(() => [...(active ?? []), ...(paid ?? [])], [active, paid]);
+  const allRows = useMemo(() => [...(active ?? []), ...(paid?.rows ?? [])], [active, paid]);
   const needle = search.trim().toLowerCase();
 
   const stages = useMemo(() => {
@@ -295,6 +298,17 @@ export function FinancialHubBandPayoutsClient() {
     const batch = BATCH_STAGES.has(stage);
     const checkedRows = batch ? rows.filter((row) => checked.has(row._id)) : [];
     const collapsed = stage === "paid" && !paidOpen;
+    const overBatchLimit = checkedRows.length > MAX_BATCH_PAYOUTS;
+    // The list reads at most 200 payouts per status; say so when a stage has
+    // more than it shows (exact counts come from getQueueCounts).
+    const exactCount = counts && stage !== "paid" ? payoutStageCounts(counts)[stage].count : null;
+    // Only once the cap is hit, so the two subscriptions briefly disagreeing
+    // after an action doesn't flash a false notice.
+    const hiddenCount =
+      !needle && exactCount !== null && rows.length >= PIPELINE_STATUS_CAP
+        ? Math.max(0, exactCount - rows.length)
+        : 0;
+    const paidTruncated = stage === "paid" && paidOpen && Boolean(paid?.truncated);
     return (
       <section
         key={stage}
@@ -367,10 +381,16 @@ export function FinancialHubBandPayoutsClient() {
               ))}
             </ToggleGroup>
           ) : null}
+          {overBatchLimit ? (
+            <span className="text-xs text-status-amber-700 dark:text-status-amber-300">
+              Select {MAX_BATCH_PAYOUTS} or fewer ({checkedRows.length} selected)
+            </span>
+          ) : null}
           {checkedRows.length > 0 ? (
             <Button
               type="button"
               size="sm"
+              disabled={overBatchLimit}
               onClick={() =>
                 stage === "ready_to_send" ? setSendRows(checkedRows) : setPayRows(checkedRows)
               }
@@ -385,6 +405,17 @@ export function FinancialHubBandPayoutsClient() {
           </span>
         </div>
 
+        {hiddenCount > 0 ? (
+          <p className="border-t px-3 py-2 text-xs text-status-amber-700 dark:text-status-amber-300">
+            Showing {rows.length} of {exactCount}. Search to find the rest, or work through these first.
+          </p>
+        ) : null}
+        {paidTruncated ? (
+          <p className="border-t px-3 py-2 text-xs text-muted-foreground">
+            Showing the {rows.length} most recent payouts in this range. Pick a shorter range to see older
+            ones counted in full.
+          </p>
+        ) : null}
         {collapsed || rows.length === 0 ? null : (
           <ul className="divide-y border-t">
             {rows.map((row) => (
@@ -501,7 +532,7 @@ export function FinancialHubBandPayoutsClient() {
             {sort === "waiting" ? " (upcoming by event date, paid newest first)" : ""}.
           </p>
 
-          {activeRows.length === 0 && !needle && (paid?.length ?? 0) === 0 ? (
+          {activeRows.length === 0 && !needle && (paid?.rows.length ?? 0) === 0 ? (
             <p className="border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
               No artist payouts yet. Add one from an event&apos;s Lineup (open the act, then Add payout).
             </p>

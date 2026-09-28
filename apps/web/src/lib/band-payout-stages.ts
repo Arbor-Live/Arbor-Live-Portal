@@ -156,3 +156,28 @@ export const PAYOUT_GROUPS: PayoutGroup[] = [
     stages: ["upcoming", "waiting_on_artist", "waiting_on_signature", "paid"],
   },
 ];
+
+/** Rows `listPipeline` reads per status (server budget). */
+export const PIPELINE_STATUS_CAP = 200;
+
+/** Most payouts a batch send or batch mark-paid takes (matches the server limit). */
+export const MAX_BATCH_PAYOUTS = 50;
+
+type QueueCounts = FunctionReturnType<typeof api.bandPayments.getQueueCounts>;
+
+/** Exact per-stage counts and totals from `getQueueCounts` (paid covers all time). */
+export function payoutStageCounts(
+  counts: QueueCounts,
+): Record<PayoutStage, { count: number; totalUsd: number }> {
+  return {
+    upcoming: { count: counts.upcoming, totalUsd: counts.totalsUsd.upcoming },
+    waiting_on_artist: {
+      count: counts.needs_onboarding + counts.needs_payee,
+      totalUsd: counts.totalsUsd.needs_onboarding + counts.totalsUsd.needs_payee,
+    },
+    ready_to_send: { count: counts.needs_email, totalUsd: counts.totalsUsd.needs_email },
+    waiting_on_signature: { count: counts.awaiting_reply, totalUsd: counts.totalsUsd.awaiting_reply },
+    ready_to_pay: { count: counts.ready_to_pay, totalUsd: counts.totalsUsd.ready_to_pay },
+    paid: { count: counts.paid, totalUsd: counts.totalsUsd.paid },
+  };
+}

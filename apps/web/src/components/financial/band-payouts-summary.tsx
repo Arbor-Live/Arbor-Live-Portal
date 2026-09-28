@@ -8,8 +8,8 @@ import { Button } from "@/components/ui/button";
 import {
   PAYOUT_GROUPS,
   PAYOUT_STAGE_LABELS,
+  payoutStageCounts,
   payoutStageTone,
-  type PayoutStage,
 } from "@/lib/band-payout-stages";
 import { formatUsd } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -22,17 +22,7 @@ export function BandPayoutsSummary() {
     return <p className="text-sm text-muted-foreground">Loading payouts…</p>;
   }
 
-  const byStage: Record<PayoutStage, { count: number; totalUsd: number }> = {
-    upcoming: { count: counts.upcoming, totalUsd: counts.totalsUsd.upcoming },
-    waiting_on_artist: {
-      count: counts.needs_onboarding + counts.needs_payee,
-      totalUsd: counts.totalsUsd.needs_onboarding + counts.totalsUsd.needs_payee,
-    },
-    ready_to_send: { count: counts.needs_email, totalUsd: counts.totalsUsd.needs_email },
-    waiting_on_signature: { count: counts.awaiting_reply, totalUsd: counts.totalsUsd.awaiting_reply },
-    ready_to_pay: { count: counts.ready_to_pay, totalUsd: counts.totalsUsd.ready_to_pay },
-    paid: { count: counts.paid, totalUsd: counts.totalsUsd.paid },
-  };
+  const byStage = payoutStageCounts(counts);
 
   return (
     <div className="space-y-3">
