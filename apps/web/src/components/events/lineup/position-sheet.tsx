@@ -36,12 +36,17 @@ import {
   toSlotDraft,
   type ArtistNeedStatus,
   type ArtistNeedType,
+  type ActTimesPatch,
   type BillRow,
   type RiderRow,
   type SlotDraft,
   type SlotRow,
+  rowSetWindow,
+  rowSoundcheckWindow,
 } from "@/components/events/lineup/lineup-model";
-import { formatTime, formatUsd } from "@/lib/format";
+import { formatUsd } from "@/lib/format";
+import { DateTimeRangePicker } from "@/components/ui/date-time-picker";
+import { localDateTimeInputToMs, toLocalDateTimeInput } from "@/lib/crew-availability";
 import { getEventEditorTabPath } from "@/lib/event-editor-tabs";
 import { cn } from "@/lib/utils";
 
@@ -50,6 +55,8 @@ export type PositionSheetHandlers = {
   saveExternal: (slot: SlotRow, name: string) => Promise<unknown>;
   reopenExternal: (slot: SlotRow) => Promise<unknown>;
   removeAct: (performer: PerformerRow) => Promise<unknown>;
+  /** Set/soundcheck times for the row's act, or its position when no platform act fills it. */
+  saveTimes: (row: BillRow, times: ActTimesPatch) => Promise<unknown>;
   /** Resolves true once the row is gone; false if cancelled or it failed. */
   removePosition: (row: BillRow) => Promise<boolean>;
   dismissInquiry: (inquiryId: Id<"eventArtistInquiries">) => Promise<unknown>;
@@ -66,6 +73,7 @@ export function PositionSheet({
   invoiceLine,
   invoiceDefaultsReady,
   handlers,
+  eventStartAt,
 }: {
   row: BillRow | null;
   onOpenChange: (open: boolean) => void;
@@ -76,6 +84,8 @@ export function PositionSheet({
   invoiceLine: InvoiceArtistSuggestion | null;
   invoiceDefaultsReady: boolean;
   handlers: PositionSheetHandlers;
+  /** Opens the time pickers on the event's day. */
+  eventStartAt?: number;
 }) {
   return (
     <Sheet open={row !== null} onOpenChange={onOpenChange}>
@@ -92,6 +102,7 @@ export function PositionSheet({
             invoiceLine={invoiceLine}
             invoiceDefaultsReady={invoiceDefaultsReady}
             handlers={handlers}
+            eventStartAt={eventStartAt}
             onClose={() => onOpenChange(false)}
           />
         ) : null}
@@ -118,6 +129,7 @@ function PositionSheetBody({
   invoiceLine,
   invoiceDefaultsReady,
   handlers,
+  eventStartAt,
   onClose,
 }: {
   row: BillRow;
@@ -128,6 +140,7 @@ function PositionSheetBody({
   invoiceLine: InvoiceArtistSuggestion | null;
   invoiceDefaultsReady: boolean;
   handlers: PositionSheetHandlers;
+  eventStartAt?: number;
   onClose: () => void;
 }) {
   const { slot, performer } = row;
@@ -228,6 +241,20 @@ function PositionSheetBody({
         </Section>
       ) : null}
 
+      {slot || performer ? (
+        <Section title="Performance times">
+          <PerformanceTimes
+            key={`${rowSetWindow(row).join()}|${rowSoundcheckWindow(row).join()}`}
+            eventId={eventId}
+            set={rowSetWindow(row)}
+            soundcheck={rowSoundcheckWindow(row)}
+            eventStartAt={eventStartAt}
+            busy={busy}
+            onSave={(times) => run(() => handlers.saveTimes(row, times))}
+          />
+        </Section>
+      ) : null}
+
       <Section title={actName ? "Act" : "Fill this position"}>
         {performer ? (
           <PlatformAct
@@ -262,7 +289,6 @@ function PositionSheetBody({
                 Save name
               </Button>
             ) : null}
-            <RunOfShowTimes eventId={eventId} set={[slot.setStartsAt, slot.setEndsAt]} soundcheck={[slot.soundcheckStartsAt, slot.soundcheckEndsAt]} />
           </div>
         ) : slot ? (
           <FillPosition
@@ -361,11 +387,6 @@ function PlatformAct({
   const paid = performer.payment?.status === "paid";
   return (
     <div className="space-y-4">
-      <RunOfShowTimes
-        eventId={eventId}
-        set={[performer.setStartsAt, performer.setEndsAt]}
-        soundcheck={[performer.soundcheckStartsAt, performer.soundcheckEndsAt]}
-      />
       <dl className="grid grid-cols-[6rem_1fr] gap-x-3 gap-y-1.5 text-sm">
         <dt className="text-muted-foreground">Rider</dt>
         <dd>
@@ -509,34 +530,101 @@ function FillPosition({
   );
 }
 
-function windowLabel([start, end]: [number | null | undefined, number | null | undefined]) {
-  return start != null && end != null ? `${formatTime(start)} – ${formatTime(end)}` : "Not set";
-}
+type Window = [number | null, number | null];
 
-/** Set and soundcheck times are edited in the Run of Show; the bill just shows them. */
-function RunOfShowTimes({
+/**
+ * Set and soundcheck for the position. Saving writes the act's (or the open
+ * position's) times, and the Run of Show's blocks follow.
+ */
+function PerformanceTimes({
   eventId,
   set,
   soundcheck,
+  eventStartAt,
+  busy,
+  onSave,
 }: {
   eventId: Id<"events">;
-  set: [number | null | undefined, number | null | undefined];
-  soundcheck: [number | null | undefined, number | null | undefined];
+  set: Window;
+  soundcheck: Window;
+  eventStartAt?: number;
+  busy: boolean;
+  onSave: (times: ActTimesPatch) => void;
 }) {
+  const openTo = eventStartAt != null ? toLocalDateTimeInput(eventStartAt) : undefined;
   return (
-    <dl className="grid grid-cols-[6rem_1fr] gap-x-3 gap-y-1.5 text-sm">
-      <dt className="text-muted-foreground">Set</dt>
-      <dd className="tabular-nums">{windowLabel(set)}</dd>
-      <dt className="text-muted-foreground">Soundcheck</dt>
-      <dd className="tabular-nums">{windowLabel(soundcheck)}</dd>
-      <dd className="col-start-2">
-        <Link
-          href={getEventEditorTabPath(eventId, "schedule")}
-          className="text-xs text-primary underline-offset-4 hover:underline"
+    <div className="space-y-3">
+      <TimeWindowField
+        label="Set"
+        value={set}
+        openTo={openTo}
+        busy={busy}
+        onChange={([setStartsAt, setEndsAt]) => onSave({ setStartsAt, setEndsAt })}
+      />
+      <TimeWindowField
+        label="Soundcheck"
+        value={soundcheck}
+        openTo={openTo}
+        busy={busy}
+        onChange={([soundcheckStartsAt, soundcheckEndsAt]) =>
+          onSave({ soundcheckStartsAt, soundcheckEndsAt })
+        }
+      />
+      <Link
+        href={getEventEditorTabPath(eventId, "schedule")}
+        className="text-xs text-primary underline-offset-4 hover:underline"
+      >
+        See it in the Run of Show
+      </Link>
+    </div>
+  );
+}
+
+function TimeWindowField({
+  label,
+  value,
+  openTo,
+  busy,
+  onChange,
+}: {
+  label: string;
+  value: Window;
+  openTo?: string;
+  busy: boolean;
+  onChange: (next: Window) => void;
+}) {
+  const [start, end] = value;
+  return (
+    <div className="grid grid-cols-[6rem_1fr_auto] items-center gap-2">
+      <span className="text-sm text-muted-foreground">{label}</span>
+      <DateTimeRangePicker
+        startValue={start != null ? toLocalDateTimeInput(start) : ""}
+        endValue={end != null ? toLocalDateTimeInput(end) : ""}
+        openToDate={openTo}
+        placeholder="Not set"
+        onChange={({ start: nextStart, end: nextEnd }) => {
+          const startMs = localDateTimeInputToMs(nextStart);
+          const endMs = localDateTimeInputToMs(nextEnd);
+          // Save once both ends are picked and in order.
+          if (startMs == null || endMs == null || endMs <= startMs) return;
+          if (startMs === start && endMs === end) return;
+          onChange([startMs, endMs]);
+        }}
+      />
+      {start != null ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          disabled={busy}
+          aria-label={`Clear ${label.toLowerCase()} time`}
+          onClick={() => onChange([null, null])}
         >
-          Edit in Run of Show
-        </Link>
-      </dd>
-    </dl>
+          Clear
+        </Button>
+      ) : (
+        <span />
+      )}
+    </div>
   );
 }

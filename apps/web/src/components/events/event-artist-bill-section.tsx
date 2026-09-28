@@ -86,6 +86,7 @@ function EventArtistBillPanel({
   const removeFromBill = useMutation(api.eventArtistNeeds.removeFromBill);
   const dismissInquiry = useMutation(api.eventArtistNeeds.dismissInquiry);
   const updateSlotLineup = useMutation(api.eventArtistNeeds.updateSlotLineup);
+  const updateParticipationLineup = useMutation(api.eventBands.updateParticipationLineup);
   const { confirm } = useAppDialog();
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
@@ -285,6 +286,23 @@ function EventArtistBillPanel({
       if (removed) setSelectedKey(null);
       return removed;
     },
+    saveTimes: (row, times) =>
+      attempt(
+        () =>
+          row.performer
+            ? updateParticipationLineup({
+                participationId: row.performer.participationId,
+                // Keep the act in its position; null here would unseat it.
+                needId: row.slot?.needId ?? null,
+                ...times,
+              })
+            : updateSlotLineup({
+                needId: row.slot!.needId,
+                externalArtistName: row.slot!.externalArtistName.trim() || null,
+                ...times,
+              }),
+        "Times saved.",
+      ),
     dismissInquiry: (inquiryId) => attempt(() => dismissInquiry({ inquiryId }), "Inquiry dismissed."),
   };
 
@@ -503,6 +521,7 @@ function EventArtistBillPanel({
           if (!open) setSelectedKey(null);
         }}
         eventId={eventId}
+        eventStartAt={eventDetail?.event.startAt}
         canEdit={canEdit}
         rider={selectedRow?.performer ? riderByOrg.get(selectedRow.performer.organizationId) : undefined}
         excludedOrganizationIds={performers.map((row) => row.organizationId)}
