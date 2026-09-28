@@ -302,11 +302,13 @@ export function FinancialHubBandPayoutsClient() {
     // The list reads at most 200 payouts per status; say so when a stage has
     // more than it shows (exact counts come from getQueueCounts).
     const exactCount = counts && stage !== "paid" ? payoutStageCounts(counts)[stage].count : null;
-    // Only once the cap is hit, so the two subscriptions briefly disagreeing
-    // after an action doesn't flash a false notice.
+    // Compare against every loaded row in the stage (not the search-filtered
+    // ones), and only once the cap is hit, so the two subscriptions briefly
+    // disagreeing after an action doesn't flash a false notice.
+    const loadedCount = (active ?? []).filter((row) => row.stage === stage).length;
     const hiddenCount =
-      !needle && exactCount !== null && rows.length >= PIPELINE_STATUS_CAP
-        ? Math.max(0, exactCount - rows.length)
+      exactCount !== null && loadedCount >= PIPELINE_STATUS_CAP
+        ? Math.max(0, exactCount - loadedCount)
         : 0;
     const paidTruncated = stage === "paid" && paidOpen && Boolean(paid?.truncated);
     return (
@@ -407,7 +409,8 @@ export function FinancialHubBandPayoutsClient() {
 
         {hiddenCount > 0 ? (
           <p className="border-t px-3 py-2 text-xs text-status-amber-700 dark:text-status-amber-300">
-            Showing {rows.length} of {exactCount}. Search to find the rest, or work through these first.
+            Only the first {loadedCount} of {exactCount} are loaded, and search covers only those. The
+            other {hiddenCount} appear here as you work through these.
           </p>
         ) : null}
         {paidTruncated ? (
